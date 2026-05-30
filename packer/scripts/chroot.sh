@@ -507,15 +507,21 @@ apt-get install --yes efibootmgr
 # paths it knows about, and an entry is per-disk regardless of whether
 # the ESP content is mirrored. Single-disk variants get a single bare
 # "rEFInd" entry (unchanged).
+#
+# -p 2 is the ESP: provision.sh's layout is 1=bios(EF02), 2=efi(EF00),
+# 3=swap/meta, 4=rpool. Keep these efibootmgr -p values in sync with that
+# order -- a stale -p (e.g. 1, the BIOS-boot partition) registers a boot
+# entry the firmware can't load, so it falls back to the rEFInd->ZBM->kexec
+# chain, which on aarch64 then panics in early paging.
 if [ "$DISKS_COUNT" -eq 1 ]; then
-  efibootmgr -c -d "$DISKS" -p 1 \
+  efibootmgr -c -d "$DISKS" -p 2 \
     -L "rEFInd" \
     -l "\\EFI\\refind\\${REFIND_NAME}"
 else
   idx=0
   # shellcheck disable=SC2086  # word-splitting on DISKS is the point
   for disk in $DISKS; do
-    efibootmgr -c -d "$disk" -p 1 \
+    efibootmgr -c -d "$disk" -p 2 \
       -L "rEFInd (disk ${idx})" \
       -l "\\EFI\\refind\\${REFIND_NAME}"
     idx=$((idx + 1))
@@ -537,7 +543,7 @@ if [ "$ZBM_ARCH" = "aarch64" ]; then
   direct_cmdline="root=zfs:rpool/ROOT/${UBUNTU_NAME} initrd=\\EFI\\Linux\\initrd ${zbm_cmdline}"
 
   if [ "$DISKS_COUNT" -eq 1 ]; then
-    efibootmgr -c -d "$DISKS" -p 1 \
+    efibootmgr -c -d "$DISKS" -p 2 \
       -L "Linux" \
       -l "\\EFI\\Linux\\vmlinuz.efi" \
       --unicode "$direct_cmdline"
@@ -545,7 +551,7 @@ if [ "$ZBM_ARCH" = "aarch64" ]; then
     idx=0
     # shellcheck disable=SC2086  # word-splitting on DISKS is the point
     for disk in $DISKS; do
-      efibootmgr -c -d "$disk" -p 1 \
+      efibootmgr -c -d "$disk" -p 2 \
         -L "Linux (disk ${idx})" \
         -l "\\EFI\\Linux\\vmlinuz.efi" \
         --unicode "$direct_cmdline"
