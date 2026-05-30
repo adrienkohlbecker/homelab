@@ -1,6 +1,7 @@
 - name: Base installation
   hosts: all:!bunk:!fox
   roles:
+    - hwe_kernel
     - bash
     - user
     - cleanup
@@ -22,7 +23,6 @@
     - ssh
     - ntp
     - postfix
-    - hwe_kernel
     - hdparm
     - hd_idle
     - smart
@@ -84,6 +84,7 @@
 - name: External VPS (fox)
   hosts: fox
   roles:
+    - hwe_kernel
     - bash
     - user
     - cleanup
@@ -103,7 +104,6 @@
     - ssh
     - ntp
     - postfix
-    - hwe_kernel
     - podman
     - certbot
     - nginx
