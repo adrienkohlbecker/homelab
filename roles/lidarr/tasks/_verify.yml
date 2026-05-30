@@ -33,8 +33,9 @@
 # stub in gate mode (see _setup.yml), assert a cookieless GET / lands on
 # nginx's error_page 401 =302 redirect to the portal. This is the only
 # probe that fails if `auth: required` is dropped from nginx_site_args
-# (the loopback apikey probes stay green without it); the Host header
-# still exercises the subdomain -> server_name routing.
+# (the loopback apikey probes stay green without it). Asserting the 302
+# returnUrl (rd=) echoes lidarr's own URL proves the Host header routed to
+# lidarr's server_name (not the default vhost) and the request URI survived.
 - name: _verify | Lidarr UI gate redirects unauthenticated requests to Authelia
   uri:
     url: https://localhost/
@@ -47,6 +48,7 @@
   failed_when: >-
     _verify_nginx_gate.status != 302
     or 'auth.' not in (_verify_nginx_gate.location | default(''))
+    or ('rd=https://lidarr.' ~ inventory_hostname ~ '.' ~ domain) not in (_verify_nginx_gate.location | default(''))
 
 # The sqlite_dataset symlink + matching --volume is the role's whole reason
 # for its non-obvious structure: it lands the DBs (and their -wal/-shm
@@ -94,3 +96,46 @@
   loop: "{{ _verify_db_files.results }}"
   loop_control:
     label: "{{ item.item }}"
+
+# config.xml is the role's other fragile contract: lidarr rewrites it on
+# every shutdown, so config.xml.j2's element order + casing must match
+# lidarr's own writeback byte-for-byte or the next converge drifts and
+# restart-churns forever. The idempotence pass can't catch this -- the
+# harness never restarts lidarr between converges, so lidarr never rewrites
+# the file. Force a clean shutdown+restart here, then assert our template
+# still matches what lidarr wrote back.
+- name: _verify | Restart lidarr to force a config.xml writeback
+  systemd:
+    name: lidarr
+    state: restarted
+  become: true
+
+- name: _verify | Lidarr is back up after the restart
+  uri:
+    url: http://127.0.0.1:{{ service_ports.lidarr }}/api/v1/system/status
+    headers:
+      X-Api-Key: "{{ lidarr_api_key }}"
+    status_code: 200
+  register: _verify_http_postrestart
+  retries: 60
+  delay: 2
+  until: _verify_http_postrestart.status == 200
+
+- name: _verify | Render the config.xml our template would write
+  set_fact:
+    _verify_conf_expected: "{{ lookup('template', 'config.xml.j2') | regex_replace('\\n+$', '') }}"
+
+- name: _verify | Read config.xml back after the writeback
+  slurp:
+    src: /mnt/services/lidarr/config.xml
+  register: _verify_conf_ondisk
+  become: true
+
+- name: _verify | Templated config.xml survives lidarr's writeback without drift
+  assert:
+    that:
+      - (_verify_conf_ondisk.content | b64decode) == _verify_conf_expected
+    fail_msg: >-
+      lidarr rewrote config.xml into a form config.xml.j2 no longer matches --
+      its element order/casing drifted from lidarr's writeback, so deploying
+      would restart-churn. Re-capture config.xml.j2 from a running instance.
