@@ -63,16 +63,18 @@ declare -A _netdata_presence_seen_contexts
 declare -A _netdata_presence_seen_collectors
 
 # /api/v2/contexts returns {"contexts":{"<id>":{...},...}}; one-liner
-# pulls just the key set. --max-time bounds a wedged netdata API; on
-# any failure we return non-zero so update() can skip emission rather
-# than emit fake "missing" values.
+# pulls just the key set. --fail makes curl emit nothing and exit non-zero
+# on an HTTP 4xx/5xx (e.g. a 503 mid-reload), so an error body never reaches
+# jq as if it were data; --max-time bounds a wedged netdata API. On any
+# failure the output is empty, so update()'s empty-guard skips the cycle
+# rather than emitting fake "missing" values.
 _netdata_presence_fetch_contexts() {
-  curl -sS --max-time 3 "${netdata_presence_api}/api/v2/contexts" 2>/dev/null |
+  curl -sS --fail --max-time 3 "${netdata_presence_api}/api/v2/contexts" 2>/dev/null |
     jq -r '.contexts | keys[]' 2>/dev/null
 }
 
 _netdata_presence_fetch_charts() {
-  curl -sS --max-time 3 "${netdata_presence_api}/api/v1/charts" 2>/dev/null |
+  curl -sS --fail --max-time 3 "${netdata_presence_api}/api/v1/charts" 2>/dev/null |
     jq -r '.charts | keys[]' 2>/dev/null
 }
 
