@@ -1,18 +1,56 @@
-# Helper writes /etc/systemd/resolved.conf.d/10-custom.conf via the
+# Helper writes /etc/systemd/resolved.conf.d/99-custom.conf via the
 # absolute-mode dropin path (sibling of resolved.conf, not under
 # systemd-resolved.service.d/). Helper does: dir creation, backup,
 # write (copy — src has no .j2 suffix), systemd-analyze verify against
 # systemd-resolved.service, daemon-reload. Restart gate downstream
-# reads the per-unit result fact resolved_conf_d_10_custom_conf_result.
-- name: Render resolved.conf.d/10-custom.conf
+# reads the per-unit result fact resolved_conf_d_99_custom_conf_result.
+# Numbered 99- (not 10-): resolved.conf.d/ merges lexicographically,
+# last-wins, so a high number keeps these settings on top of any
+# lower-numbered drop-in a package or cloud-init might land here.
+- name: Render resolved.conf.d/99-custom.conf
   import_role:
     name: systemd_unit
     tasks_from: dropin
   vars:
     systemd_unit_args:
       for: systemd-resolved.service
-      dest_abs: /etc/systemd/resolved.conf.d/10-custom.conf
-      src: 10-custom.conf
+      dest_abs: /etc/systemd/resolved.conf.d/99-custom.conf
+      src: 99-custom.conf
+  tags:
+    - resolved
+
+# Tombstone the pre-rename drop-in so a host provisioned before the
+# 10-→99- rename doesn't carry two identical files (99- already
+# supersedes it; removing the redundant 10- changes no effective config).
+- name: Remove the superseded 10-custom.conf drop-in
+  file:
+    path: /etc/systemd/resolved.conf.d/10-custom.conf
+    state: absent
+  become: true
+  tags:
+    - resolved
+
+# Guard against a dangling /etc/resolv.conf: systemd-resolved writes
+# /run/systemd/resolve/resolv.conf whenever it is running (independent of
+# DNSStubListener), so an absent target means resolved is masked/dead --
+# fail loudly here rather than silently linking the host into a DNS black
+# hole.
+- name: Stat the resolved-managed resolv.conf
+  stat:
+    path: /run/systemd/resolve/resolv.conf
+  register: resolved_run_resolv_conf
+  become: true
+  tags:
+    - resolved
+
+- name: Assert systemd-resolved is producing its resolv.conf
+  assert:
+    that:
+      - resolved_run_resolv_conf.stat.exists
+    fail_msg: >-
+      /run/systemd/resolve/resolv.conf is missing -- systemd-resolved is not
+      running, so symlinking /etc/resolv.conf to it would black-hole DNS.
+      Check `systemctl status systemd-resolved` before re-running.
   tags:
     - resolved
 
@@ -33,8 +71,12 @@
   tags:
     - resolved
 
+# Order is load-bearing: the resolv.conf symlink above must already point
+# at the upstream-servers file before this restart tears down the
+# 127.0.0.53 stub -- otherwise there's a window where the stub is dead and
+# /etc/resolv.conf still resolves through the now-black-hole stub-resolv.conf.
 - name: Restart systemd-resolved
-  when: (resolved_conf_d_10_custom_conf_result.changed or resolved_resolv_conf.changed)
+  when: (resolved_conf_d_99_custom_conf_result.changed or resolved_resolv_conf.changed)
   systemd:
     name: systemd-resolved
     state: restarted
@@ -46,10 +88,13 @@
 # unit can't start. Doubles as the post-conf liveness assertion: resolved
 # manages /run/systemd/resolve/resolv.conf, so if it's down the host's
 # entire DNS path goes stale. Mirrors roles/journald's closing task.
+# enabled=true pins boot-survival so the resolv.conf symlink target is
+# re-produced on every boot, not just while resolved happens to be running.
 - name: Start systemd-resolved
   systemd:
     name: systemd-resolved
     state: started
+    enabled: true
   become: true
   tags:
     - resolved
