@@ -22,6 +22,9 @@
     - /mnt/services
     - /mnt/scratch
     - /mnt/media
+    # sabnzbd scopes its bind-mount to /mnt/media/Other (the media role
+    # creates this on prod); the container won't start without the source.
+    - /mnt/media/Other
   become: true
 
 - name: _test | Stub sort_ini binary
