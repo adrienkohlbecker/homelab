@@ -13,6 +13,11 @@
     name: media
     tasks_from: network
 
+- name: _setup | Install authelia stub for auth=required tests
+  import_role:
+    name: _test
+    tasks_from: authelia_stub
+
 - name: _test | Setup dependencies
   file:
     path: "{{ item }}"
@@ -20,6 +25,7 @@
     mode: "0755"
   loop:
     - /mnt/services
+    - /mnt/services/sqlite
     - /mnt/scratch
     - /mnt/media
     # sabnzbd scopes its bind-mount to /mnt/media/Other (the media role
