@@ -139,10 +139,12 @@
 # Exposes a per-site fact `<sanitized_subdomain>_site_result` (e.g.
 # `nginxverify_site_result`, `minio_api_site_result`) with a `.changed` bool
 # covering the template, the sites-enabled symlink and the state:absent
-# removal -- callers wire reload/restart triggers off it the same way as
-# conf_d's `<name>_result` and systemd_unit's `<unit>_result` (a second
-# nginx_site call in the same play would otherwise clobber the role-scoped
-# `nginx_static_conf` register).
+# removal. The `_site_result` suffix (not the bare `_result` that conf_d's
+# `<name>_result` and systemd_unit's `<unit>_result` use) keeps a site's fact
+# from colliding with a same-named conf_d/unit fact in the same play; callers
+# wire reload/restart triggers off it the same way (a second nginx_site call in
+# the same play would otherwise clobber the role-scoped `nginx_static_conf`
+# register).
 - name: site | Assert required inputs
   assert:
     that:
@@ -152,17 +154,6 @@
     fail_msg: >-
       nginx_site_args.subdomain is required and must be a non-empty string;
       got {{ nginx_site_args.subdomain | default('<undefined>') }}.
-  tags:
-    - nginx_site
-
-- name: site | Assert subdomain is a safe DNS label
-  assert:
-    that:
-      - nginx_site_args.subdomain is match('^[A-Za-z0-9-]+$')
-    fail_msg: >-
-      nginx_site_args.subdomain must be a single DNS label ([A-Za-z0-9-]) -- it
-      is interpolated into the on-disk config path and the server_name.
-      Got '{{ nginx_site_args.subdomain }}'.
   tags:
     - nginx_site
 
@@ -177,8 +168,68 @@
   tags:
     - nginx_site
 
+# Path-safety runs for BOTH states: a state: absent teardown still interpolates
+# the subdomain into the on-disk paths it removes, so reject path-traversal
+# regardless. Deliberately weaker than the present-only DNS-label assert below --
+# a retired site (e.g. homeassistant's vscode_ha tombstone) may carry a legacy
+# underscore that was a valid name under an older convention, and the tombstone
+# must still be able to remove it. [A-Za-z0-9._-] excludes '/' and control chars;
+# '..' is rejected explicitly.
+- name: site | Assert subdomain is path-safe
+  assert:
+    that:
+      - nginx_site_args.subdomain is match('^[A-Za-z0-9._-]+$')
+      - "'..' not in nginx_site_args.subdomain"
+    fail_msg: >-
+      nginx_site_args.subdomain must be a single path segment ([A-Za-z0-9._-], no
+      '..') -- it is interpolated into the on-disk config paths. Got
+      '{{ nginx_site_args.subdomain }}'.
+  tags:
+    - nginx_site
+
+# Resolve caller defaults once into _nginx_site_* locals (mirrors conf_d.yml), so
+# the condition/state/reload/auth/enable_http defaults live in one place rather
+# than being re-spelled at every gate below and in site.conf.j2. Always set (no
+# when:), so they're defined even when condition is false (the record task reads
+# them) and no stale value leaks into the next nginx_site invocation. Resolved
+# before the value-shape asserts so each can gate on _nginx_site_state.
+#
+# upstream_authorization is "on" only for a non-empty dict. An empty {} (which a
+# caller can legitimately compute when it has no users/tokens configured) is
+# treated as unset so it doesn't render the map, the injected Authorization
+# header, or the cookieless Authorization-bypass shortcut.
+- name: site | Resolve caller defaults
+  set_fact:
+    _nginx_site_condition: "{{ nginx_site_args.condition | default(true) }}"
+    _nginx_site_state: "{{ nginx_site_args.state | default('present') }}"
+    _nginx_site_reload: "{{ nginx_site_args.reload | default(true) }}"
+    _nginx_site_auth: "{{ nginx_site_args.auth | default('none') }}"
+    _nginx_site_enable_http: "{{ (nginx_site_args.enable_http | default(false)) | bool }}"
+    _nginx_site_upstream_auth: "{{ ((nginx_site_args.upstream_authorization | default({})) | length > 0) | bool }}"
+  tags:
+    - nginx_site
+
+# The value-shape asserts below gate on state: present -- a state: absent teardown
+# renders none of these inputs (it only removes files), so validating them would
+# couple a tombstone to input shape it never uses (and reject a legacy subdomain
+# the present-only DNS-label rule no longer allows). Path-safety (above) is the
+# only subdomain check a teardown needs.
+- name: site | Assert subdomain is a safe DNS label
+  when: _nginx_site_state == 'present'
+  assert:
+    that:
+      - nginx_site_args.subdomain is match('^[A-Za-z0-9-]+$')
+    fail_msg: >-
+      nginx_site_args.subdomain must be a single DNS label ([A-Za-z0-9-]) -- it
+      is interpolated into the on-disk config path and the server_name.
+      Got '{{ nginx_site_args.subdomain }}'.
+  tags:
+    - nginx_site
+
 - name: site | Assert bypass token is URL-safe
-  when: nginx_site_args.bypass_query_param is defined
+  when:
+    - _nginx_site_state == 'present'
+    - nginx_site_args.bypass_query_param is defined
   assert:
     that:
       - nginx_site_args.bypass_query_param.value is string
@@ -192,7 +243,9 @@
     - nginx_site
 
 - name: site | Assert proxy_pass is a well-formed URL
-  when: nginx_site_args.proxy_pass is defined
+  when:
+    - _nginx_site_state == 'present'
+    - nginx_site_args.proxy_pass is defined
   assert:
     that:
       - nginx_site_args.proxy_pass is string
@@ -212,9 +265,11 @@
 # `in [...]` test rejects both the coerced booleans and any other value;
 # default('on') keeps each item safe when only one of the pair is supplied.
 - name: site | Assert proxy buffering toggles are quoted on/off
-  when: >-
-    nginx_site_args.proxy_buffering is defined
-    or nginx_site_args.proxy_request_buffering is defined
+  when:
+    - _nginx_site_state == 'present'
+    - >-
+      nginx_site_args.proxy_buffering is defined
+      or nginx_site_args.proxy_request_buffering is defined
   assert:
     that:
       - (nginx_site_args.proxy_buffering | default('on')) in ['on', 'off']
@@ -227,10 +282,12 @@
     - nginx_site
 
 - name: site | Assert CSP overrides are injection-safe
-  when: >-
-    nginx_site_args.csp_additional is defined
-    or nginx_site_args.csp_default_src is defined
-    or nginx_site_args.csp_frame_ancestors is defined
+  when:
+    - _nginx_site_state == 'present'
+    - >-
+      nginx_site_args.csp_additional is defined
+      or nginx_site_args.csp_default_src is defined
+      or nginx_site_args.csp_frame_ancestors is defined
   assert:
     that:
       - (nginx_site_args.csp_additional | default('')) is not search('"')
@@ -243,7 +300,9 @@
     - nginx_site
 
 - name: site | Assert upstream_authorization is injection-safe
-  when: nginx_site_args.upstream_authorization is defined
+  when:
+    - _nginx_site_state == 'present'
+    - nginx_site_args.upstream_authorization is defined
   assert:
     that:
       # Each key/value is rendered inside an nginx "..." string; reject anything
@@ -267,7 +326,9 @@
 # while the per-user token is never injected. Empty {} is unset (see below), so
 # gate on length, matching how the template decides whether the knob is on.
 - name: site | Assert upstream_authorization requires proxy_pass
-  when: (nginx_site_args.upstream_authorization | default({})) | length > 0
+  when:
+    - _nginx_site_state == 'present'
+    - (nginx_site_args.upstream_authorization | default({})) | length > 0
   assert:
     that:
       - nginx_site_args.proxy_pass is defined
@@ -280,10 +341,12 @@
     - nginx_site
 
 - name: site | Assert enable_http is not combined with auth or a bypass token
-  when: nginx_site_args.enable_http | default(false)
+  when:
+    - _nginx_site_state == 'present'
+    - _nginx_site_enable_http
   assert:
     that:
-      - (nginx_site_args.auth | default('none')) != 'required'
+      - _nginx_site_auth != 'required'
       - nginx_site_args.bypass_query_param is not defined
     fail_msg: >-
       enable_http serves :80 in cleartext; do not combine it with `auth: required`
@@ -293,7 +356,9 @@
     - nginx_site
 
 - name: site | Assert authelia_internal_url is set when auth is required
-  when: (nginx_site_args.auth | default('none')) == 'required'
+  when:
+    - _nginx_site_state == 'present'
+    - _nginx_site_auth == 'required'
   assert:
     that:
       - authelia_internal_url is defined
@@ -305,25 +370,6 @@
       lab's; pug/bunk need a per-host override). It is rendered straight into the
       /internal/authelia proxy_pass, so an unset value would only fail later at
       `nginx -t` with a generic message.
-  tags:
-    - nginx_site
-
-# Resolve caller defaults once into _nginx_site_* locals (mirrors conf_d.yml),
-# so the condition/state/reload defaults live in one place rather than being
-# re-spelled at every gate below. Always set (no when:), so they're defined even
-# when condition is false (the record task reads them) and no stale value leaks
-# into the next nginx_site invocation.
-#
-# upstream_authorization is "on" only for a non-empty dict. An empty {} (which a
-# caller can legitimately compute when it has no users/tokens configured) is
-# treated as unset so it doesn't render the map, the injected Authorization
-# header, or the cookieless Authorization-bypass shortcut.
-- name: site | Resolve caller defaults
-  set_fact:
-    _nginx_site_condition: "{{ nginx_site_args.condition | default(true) }}"
-    _nginx_site_state: "{{ nginx_site_args.state | default('present') }}"
-    _nginx_site_reload: "{{ nginx_site_args.reload | default(true) }}"
-    _nginx_site_upstream_auth: "{{ ((nginx_site_args.upstream_authorization | default({})) | length > 0) | bool }}"
   tags:
     - nginx_site
 
@@ -488,9 +534,10 @@
 # Expose the change state under a per-subdomain fact so callers can wire
 # reload/restart triggers off their own vhost without clobbering the
 # role-scoped `nginx_static_conf` register (which a second nginx_site call in
-# the same play would overwrite). Mirrors conf_d's `<name>_result` and
-# systemd_unit's `<unit>_result`. `| bool` keeps it a real boolean under
-# jinja2_native rather than the string "True"/"False".
+# the same play would overwrite). Analogous to conf_d's `<name>_result` and
+# systemd_unit's `<unit>_result`, but suffixed `_site_result` so a site's fact
+# can't collide with a same-named conf_d/unit fact. `| bool` keeps it a real
+# boolean under jinja2_native rather than the string "True"/"False".
 #
 # Recorded unconditionally: under condition: false every write above is skipped,
 # so the registers are undefined and the `| default(false)` guards collapse the
