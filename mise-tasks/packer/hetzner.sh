@@ -114,7 +114,7 @@ for _ in $(seq 1 30); do
   [ "$(sstatus)" = "off" ] && break
   sleep 2
 done
-imgid=$(api POST "/servers/$id/actions/create_image" "$(python3 -c 'import json,sys;print(json.dumps({"type":"snapshot","description":"ubuntu-zfs-"+sys.argv[1],"labels":{"os":"ubuntu-zfs","ubuntu":sys.argv[1]}}))' "$UBUNTU")" | pyget 'd["image"]["id"]')
+imgid=$(api POST "/servers/$id/actions/create_image" "$(python3 -c 'import json,sys;print(json.dumps({"type":"snapshot","description":"ubuntu-zfs-"+sys.argv[1]+"-"+sys.argv[2],"labels":{"os":"ubuntu-zfs","ubuntu":sys.argv[1]}}))' "$UBUNTU" "$(date '+%Y%m%d%H%M%S')")" | pyget 'd["image"]["id"]')
 echo "==> snapshot image id=$imgid (waiting for available)"
 for _ in $(seq 1 120); do
   st=$(api GET "/images/$imgid" | pyget 'd["image"]["status"]')
