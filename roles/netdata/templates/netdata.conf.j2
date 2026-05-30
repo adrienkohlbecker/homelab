@@ -1,0 +1,46 @@
+# Managed by ansible (roles/netdata/templates/netdata.conf.j2).
+#
+# Only the load-bearing overrides live here. netdata overlays this file on its
+# compiled-in defaults, so every option not listed keeps its auto-tuned value
+# -- this is deliberately NOT a wholesale copy of netdata.conf. The package's
+# stock netdata.conf is dpkg-diverted aside (see configure.yml), so this is the
+# only netdata.conf the daemon reads.
+#
+# Keys are non-indented `key = value` so the configparser validate parses cleanly.
+
+[web]
+bind to = 127.0.0.1
+# The nginx vhost fronts netdata with an Authelia bypass keyed on a shared
+# cross-host poll token (see "Configure nginx" in main.yml). nginx proxies from
+# loopback, so netdata's default `allow {management,netdata.conf} from =
+# localhost` would let any token-bearer reach the management API (silence
+# alarms) and dump the full config. Deny both -- nothing legitimate fetches
+# them through the proxy (the operator reads them on-host).
+allow management from = none
+allow netdata.conf from = none
+
+# v2 moved access logging out of [global] into [logs]; `[global] access log` is
+# silently ignored, re-enabling the file. Accesses are logged by nginx.
+[logs]
+access = none
+
+[db]
+update every = 5
+# Drop tier 2 (1h resolution / 2-year retention). Tier 0 + tier 1 still give 14
+# days at 5s + 90 days at 1m, which covers any chart you'd actually look at on a
+# homelab. Saves ~100-150 MiB of per-metric overhead in the main netdata process.
+storage tiers = 2
+
+# ML anomaly detection trains a model per metric. Memory cost grows with metric
+# count and the alerts aren't actionable here.
+[ml]
+enabled = no
+
+# ebpf.plugin loads syscall/process eBPF programs and runs as its own ~300 MiB
+# process. Useful for syscall-level forensics, dead weight if nobody looks at it.
+[plugins]
+ebpf = no
+
+[registry]
+enabled = yes
+registry to announce = https://netdata.{{ inventory_hostname }}.{{ domain }}

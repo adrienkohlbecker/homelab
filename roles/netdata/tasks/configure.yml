@@ -10,66 +10,20 @@
   tags:
     - netdata
 
+# Only the load-bearing overrides are templated; netdata overlays the file on
+# its compiled-in defaults, so this is deliberately not a wholesale netdata.conf
+# (which would freeze the hundreds of auto-tuned [plugin:*] sections). The
+# validate parses the rendered INI so a vault/jinja typo fails the converge
+# rather than being silently accept-then-defaulted by the daemon.
 - name: Configure netdata
-  ini_file:
-    path: /etc/netdata/netdata.conf
-    section: "{{ item.section }}"
-    option: "{{ item.option }}"
-    value: "{{ item.value }}"
+  template:
+    src: netdata.conf.j2
+    dest: /etc/netdata/netdata.conf
     owner: netdata
     group: netdata
     mode: "0644"
-    ignore_spaces: true
     backup: true
-  loop:
-    - section: web
-      option: bind to
-      value: 127.0.0.1
-    # The nginx vhost fronts netdata with an Authelia bypass keyed on a
-    # shared cross-host poll token (see "Configure nginx" below). nginx
-    # proxies from loopback, so netdata's default `allow {management,
-    # netdata.conf} from = localhost` would let any token-bearer reach the
-    # management API (silence alarms) and dump the full config. Deny both --
-    # nothing legitimate fetches them through the proxy (the operator reads
-    # them on-host).
-    - section: web
-      option: allow management from
-      value: none
-    - section: web
-      option: allow netdata.conf from
-      value: none
-    # v2 moved access logging out of [global] into the [logs] section;
-    # `[global] access log` is silently ignored, re-enabling the file.
-    - section: logs
-      option: access
-      value: none # accesses are logged by nginx
-    - section: db
-      option: update every
-      value: 5
-    # Drop tier 2 (1h resolution / 2-year retention). Tier 0 + tier 1
-    # still give 14 days at 5s + 90 days at 1m, which covers any chart
-    # you'd actually look at on a homelab. Saves ~100-150 MiB of
-    # per-metric overhead in the main netdata process.
-    - section: db
-      option: storage tiers
-      value: 2
-    # ML anomaly detection trains a model per metric. Memory cost grows
-    # with metric count and the alerts aren't actionable here.
-    - section: ml
-      option: enabled
-      value: 'no'
-    # ebpf.plugin loads syscall/process eBPF programs and runs as its
-    # own ~300 MiB process. Useful for syscall-level forensics, dead
-    # weight if nobody looks at it.
-    - section: plugins
-      option: ebpf
-      value: 'no'
-    - section: registry
-      option: enabled
-      value: 'yes'
-    - section: registry
-      option: registry to announce
-      value: https://netdata.{{ inventory_hostname }}.{{ domain }}
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, delimiters=("=",)).read(sys.argv[1])' "%s"
   register: netdata_conf
   become: true
   tags:
@@ -97,6 +51,7 @@
       src: prometheus.conf.j2
       dest: go.d/prometheus.conf
       mode: "0600"
+      validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
       restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
   tags:
     - netdata
@@ -172,6 +127,7 @@
     netdata_args:
       src: docker.conf
       dest: go.d/docker.conf
+      validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
       restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
   tags:
     - netdata
@@ -194,6 +150,7 @@
       src: intelgpu.conf
       dest: go.d/intelgpu.conf
       condition: '{{ ansible_architecture == "x86_64" }}'
+      validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
       restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
   tags:
     - netdata
