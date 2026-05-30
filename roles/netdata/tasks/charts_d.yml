@@ -18,7 +18,18 @@
 #   restart     optional bool, default true; restart netdata after a change
 #
 # The dict form prevents inter-call leakage at play-vars scope (see
-# template.yml for the longer rationale; same shape).
+# config.yml for the longer rationale; same shape).
+- name: charts_d | Assert required inputs are set
+  assert:
+    that:
+      - netdata_args.name is defined and netdata_args.name | length > 0
+      - netdata_args.script is defined and netdata_args.script | length > 0
+      - netdata_args.conf is defined and netdata_args.conf | length > 0
+    fail_msg: >-
+      charts_d helper requires netdata_args.name (collector module name),
+      netdata_args.script (chart.sh under the caller's files/), and
+      netdata_args.conf (charts.d conf under the caller's files/ or templates/)
+
 - name: charts_d | Resolve caller defaults for {{ netdata_args.name }}
   set_fact:
     _netdata_charts_d_script: "{{ netdata_args.script }}"

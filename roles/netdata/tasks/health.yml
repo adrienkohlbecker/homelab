@@ -7,18 +7,22 @@
 #         (template, when src ends in .j2)
 #   dest  required; bare filename under /etc/netdata/health.d/
 #   mode  optional, default '0644'
+#   validate optional; a parse-check command (%s = rendered file) run before
+#         the file moves into place. Health configs are a netdata-specific DSL
+#         with no offline parser, so callers usually omit this.
 #
 # Module dispatch mirrors config.yml / systemd_unit/install.yml: *.j2 ->
-# template, anything else -> copy. _module is resolved task-locally so it
-# can't poison the next call.
+# template, anything else -> copy. As in config.yml, the scalar inputs are
+# resolved into _netdata_health_* locals by the set_fact preamble (re-read on
+# every import, so no inter-call leakage); _module and validate stay inline
+# for the same reasons (parse-time task name / pre-`when` module spec, and
+# default(omit) can't survive a fact).
 #
 # No restart/condition opt-out (unlike config.yml): alerts always hot-reload
 # on change because `netdatacli reload-health` is hitless, where a config
 # change needs a daemon restart. The role's health files each define their
 # own complete alarm set, so -- unlike a go.d config -- there's no stock
 # health.d/<dest> worth seeding before the overwrite.
-#
-# The dict form prevents inter-call leakage at play-vars scope (see config.yml).
 - name: health | Ensure netdata directory exists
   file:
     dest: "{{ item }}"
@@ -31,6 +35,15 @@
     - /etc/netdata/health.d/
   become: true
 
+- name: health | Assert required inputs are set
+  assert:
+    that:
+      - netdata_args.src is defined and netdata_args.src | length > 0
+      - netdata_args.dest is defined and netdata_args.dest | length > 0
+    fail_msg: >-
+      health helper requires netdata_args.src (file under the caller's
+      files/ or templates/) and netdata_args.dest (bare filename under health.d/)
+
 - name: health | Assert dest is a safe basename
   assert:
     that:
@@ -39,17 +52,27 @@
       netdata_args.dest must be a bare filename under health.d/
       (got {{ netdata_args.dest }})
 
+- name: health | Resolve caller args for {{ netdata_args.dest }}
+  set_fact:
+    _netdata_health_src: "{{ netdata_args.src }}"
+    _netdata_health_dest: "{{ netdata_args.dest }}"
+    _netdata_health_mode: "{{ netdata_args.mode | default('0644') }}"
+
 - name: health | Setup alert config ({{ _module }})
   vars:
-    _module: "{{ 'template' if netdata_args.src.endswith('.j2') else 'copy' }}"
+    _module: "{{ 'template' if _netdata_health_src.endswith('.j2') else 'copy' }}"
   action: "{{ _module }}"
   args:
-    src: "{{ netdata_args.src }}"
-    dest: /etc/netdata/health.d/{{ netdata_args.dest }}
+    src: "{{ _netdata_health_src }}"
+    dest: /etc/netdata/health.d/{{ _netdata_health_dest }}
     owner: netdata
     group: netdata
-    mode: "{{ netdata_args.mode | default('0644') }}"
+    mode: "{{ _netdata_health_mode }}"
     backup: true
+    # validate stays inline with default(omit) -- routing it through a fact
+    # would break the no-validate callers (omit via set_fact becomes an
+    # undefined fact, not a placeholder).
+    validate: "{{ netdata_args.validate | default(omit) }}"
   register: netdata_alerts_conf
   become: true
 
