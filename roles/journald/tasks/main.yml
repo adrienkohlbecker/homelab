@@ -11,23 +11,37 @@
   tags:
     - journald
 
-# Helper writes /etc/systemd/journald.conf.d/10-custom.conf via the
+# Helper writes /etc/systemd/journald.conf.d/99-custom.conf via the
 # absolute-mode dropin path (sibling of journald.conf, not under
 # systemd-journald.service.d/). Helper does: dir creation, backup,
 # write, systemd-analyze verify systemd-journald.service, daemon-
 # reload. The rendered content has tightly constrained Jinja inputs
 # (journald_storage in [volatile, persistent], zfs_root bool) so a
 # format-level validate is redundant. Restart gate downstream reads
-# the per-unit result fact journald_conf_d_10_custom_conf_result.
-- name: Render journald.conf.d/10-custom.conf
+# the per-unit result fact journald_conf_d_99_custom_conf_result.
+# Numbered 99- (not 10-): journald.conf.d/ merges lexicographically,
+# last-wins, so a high number keeps these settings on top of any
+# lower-numbered drop-in a package or cloud-init might land here.
+- name: Render journald.conf.d/99-custom.conf
   import_role:
     name: systemd_unit
     tasks_from: dropin
   vars:
     systemd_unit_args:
       for: systemd-journald.service
-      dest_abs: /etc/systemd/journald.conf.d/10-custom.conf
-      src: 10-custom.conf.j2
+      dest_abs: /etc/systemd/journald.conf.d/99-custom.conf
+      src: 99-custom.conf.j2
+  tags:
+    - journald
+
+# Tombstone the pre-rename drop-in so a host provisioned before the
+# 10-→99- rename doesn't carry two identical files (99- already
+# supersedes it; removing the redundant 10- changes no effective config).
+- name: Remove the superseded 10-custom.conf drop-in
+  file:
+    path: /etc/systemd/journald.conf.d/10-custom.conf
+    state: absent
+  become: true
   tags:
     - journald
 
@@ -62,7 +76,7 @@
 # socket activation needing coordinated ordering. Steady-state apply
 # (no conf change, socket already disabled) skips the restart.
 - name: Restart systemd-journald.service
-  when: journald_conf_d_10_custom_conf_result.changed or journald_audit_socket.changed
+  when: journald_conf_d_99_custom_conf_result.changed or journald_audit_socket.changed
   systemd:
     name: systemd-journald.service
     state: restarted
