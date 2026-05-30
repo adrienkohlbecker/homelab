@@ -113,6 +113,7 @@ _netdata_presence_collector_chart_prefix() {
 
 netdata_presence_update() {
   local entry name ctx_id present safe expected line _chart_id _mode
+  local contexts_ready=1 charts_ready=1
   local -A api_contexts=()
   local -A api_charts=()
 
@@ -120,20 +121,22 @@ netdata_presence_update() {
     while IFS= read -r line; do
       [ -n "$line" ] && api_contexts[$line]=1
     done < <(_netdata_presence_fetch_contexts)
-    # Empty result + non-empty config -> netdata API hiccup; skip this
-    # cycle. The chart's last_collected_t goes stale and the standard
-    # chart-staleness alarm catches it.
-    [ "${#api_contexts[@]}" -gt 0 ] || return 0
+    # Empty result + non-empty config -> netdata API hiccup. Skip only the
+    # context emissions this cycle (the collector emissions hit a different
+    # endpoint and may still be fine); the chart's last_collected_t goes
+    # stale and the standard chart-staleness alarm catches it.
+    [ "${#api_contexts[@]}" -gt 0 ] || contexts_ready=0
   fi
 
   if [ "${#netdata_presence_collectors[@]}" -gt 0 ]; then
     while IFS= read -r line; do
       [ -n "$line" ] && api_charts[$line]=1
     done < <(_netdata_presence_fetch_charts)
-    [ "${#api_charts[@]}" -gt 0 ] || return 0
+    [ "${#api_charts[@]}" -gt 0 ] || charts_ready=0
   fi
 
   for entry in "${netdata_presence_contexts[@]}"; do
+    [ "$contexts_ready" = 1 ] || break # contexts API fetch failed this cycle; let the chart go stale
     name=${entry%%=*}
     ctx_id=${entry#*=}
     if [ "$name" = "$entry" ] || [ -z "$name" ] || [ -z "$ctx_id" ]; then
@@ -161,6 +164,7 @@ EOF
   done
 
   for entry in "${netdata_presence_collectors[@]}"; do
+    [ "$charts_ready" = 1 ] || break # charts API fetch failed this cycle; let the chart go stale
     [ -n "$entry" ] || continue
     read -r _mode expected <<<"$(_netdata_presence_collector_chart_prefix "$entry")"
     safe=$(_netdata_presence_safe "$entry")
