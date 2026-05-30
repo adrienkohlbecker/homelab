@@ -33,8 +33,9 @@
 # stub in gate mode (see _setup.yml), assert a cookieless GET / lands on
 # nginx's error_page 401 =302 redirect to the portal. This is the only
 # probe that fails if `auth: required` is dropped from nginx_site_args
-# (the loopback apikey probes stay green without it); the Host header
-# still exercises the subdomain -> server_name routing.
+# (the loopback apikey probes stay green without it). Asserting the 302
+# returnUrl (rd=) echoes radarr's own URL proves the Host header routed to
+# radarr's server_name (not the default vhost) and the request URI survived.
 - name: _verify | Radarr UI gate redirects unauthenticated requests to Authelia
   uri:
     url: https://localhost/
@@ -47,6 +48,7 @@
   failed_when: >-
     _verify_nginx_gate.status != 302
     or 'auth.' not in (_verify_nginx_gate.location | default(''))
+    or ('rd=https://radarr.' ~ inventory_hostname ~ '.' ~ domain) not in (_verify_nginx_gate.location | default(''))
 
 # The sqlite_dataset symlink + matching --volume is the role's whole reason
 # for its non-obvious structure: it lands the DBs (and their -wal/-shm
