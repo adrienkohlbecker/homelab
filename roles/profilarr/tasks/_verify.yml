@@ -5,11 +5,11 @@
 # answers 401.
 - name: _verify | Profilarr answers /ping on its loopback port
   uri:
-    url: http://localhost:{{ service_ports.profilarr }}/ping
+    url: http://127.0.0.1:{{ service_ports.profilarr }}/ping
     status_code: 200
     timeout: 10
   register: _verify_loopback
-  retries: 90
+  retries: 30
   delay: 2
   until: _verify_loopback.status == 200
   become: true
