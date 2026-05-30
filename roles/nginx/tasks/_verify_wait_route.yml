@@ -19,7 +19,7 @@
       Host: "{{ _wait_route_host }}"
     validate_certs: false
     follow_redirects: none
-    status_code: [200, 204, 301, 302, 400, 404, 413]
+    status_code: [ 200, 204, 301, 302, 400, 404, 413 ]
   register: nginx_verify_route_ready
   until: nginx_verify_route_ready.status != 404
   retries: 10
