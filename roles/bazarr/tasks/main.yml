@@ -55,6 +55,10 @@
     validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
   register: bazarr_conf
   become: true
+  # On a fresh-host --check run bazarr_user + its config dir are only reported
+  # (their creating tasks are guarded), so an unguarded template with
+  # owner=bazarr would fail resolving the not-yet-created user/dir.
+  when: not (ansible_check_mode and bazarr_user.changed)
   tags:
     - bazarr
 
