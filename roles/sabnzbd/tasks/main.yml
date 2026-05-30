@@ -124,6 +124,13 @@
   tags:
     - sabnzbd
 
+# configparser is a smoke test, not SABnzbd's own ConfigObj parser: it
+# catches a jinja/vault typo that yields a malformed ini before SABnzbd
+# silently rewrites it from defaults (losing all server creds) on a parse
+# failure. The [__top__] prepend hosts the file's leading __encoding__ /
+# __version__ keys, which sit above any section. (autoProcessMedia.cfg gets
+# no validate: its repeated [[movie]]/[[tv]]/[[music]] subsections flatten
+# to duplicate-section errors under configparser.)
 - name: Configure sabnzbd.ini
   template:
     src: sabnzbd.ini.j2
@@ -132,6 +139,7 @@
     group: media
     mode: "0600"
     backup: true
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(allow_no_value=True).read_string("[__top__]\n" + open(sys.argv[1]).read())' "%s"
   register: sabnzbd_conf
   become: true
   tags:
