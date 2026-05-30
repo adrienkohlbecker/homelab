@@ -184,6 +184,7 @@ service_ports:
   # 9090 is the server default. Also minio's MINIO_PROMETHEUS_URL target.
   prometheus: 9090
   radarr: 7878
+  redis: 6379
   # Roundcube webmail (getmail archive viewer), loopback-published; Dovecot's
   # IMAP backend stays internal to the getmail_webmail podman network and so
   # isn't registered here.
