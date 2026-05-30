@@ -92,7 +92,7 @@
     - /mnt/scratch/radarr
     - /mnt/scratch/lidarr
 
-- name: Configure sabnzbd
+- name: Configure sabnzbd.ini
   template:
     src: sabnzbd.ini.j2
     dest: /mnt/services/sabnzbd/sabnzbd.ini
@@ -105,7 +105,7 @@
   tags:
     - sabnzbd
 
-- name: Configure sabnzbd
+- name: Configure nzbToMedia (autoProcessMedia.cfg)
   template:
     src: autoProcessMedia.cfg.j2
     dest: /mnt/services/sabnzbd/autoProcessMedia.cfg
@@ -118,13 +118,17 @@
   tags:
     - sabnzbd
 
-- name: Configure sabnzbd
+# linuxserver's s6 init only runs /custom-cont-init.d scripts owned by root
+# (non-root-owned scripts are skipped with a warning), so the ffmpeg install
+# would silently no-op if this rode the sabnzbd:media ownership the rest of
+# the config files use.
+- name: Install before_start.sh container-init hook
   when: not (ansible_check_mode and sabnzbd_user.changed)
   copy:
     src: before_start.sh
     dest: /mnt/services/sabnzbd/before_start.sh
-    owner: "{{ sabnzbd_user.uid }}"
-    group: "{{ media_group.gid }}"
+    owner: root
+    group: root
     mode: "0755"
     backup: true
   register: sabnzbd_before_start
