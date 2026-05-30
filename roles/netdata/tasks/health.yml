@@ -18,12 +18,15 @@
 # for the same reasons (parse-time task name / pre-`when` module spec, and
 # default(omit) can't survive a fact).
 #
-# No restart/condition opt-out (unlike config.yml): alerts always hot-reload
-# on change because `netdatacli reload-health` is hitless, where a config
-# change needs a daemon restart. The role's health files each define their
-# own complete alarm set, so -- unlike a go.d config -- there's no stock
-# health.d/<dest> worth seeding before the overwrite.
+# Accepts `condition` (gate the whole call) and `restart` (gate the reload)
+# like config.yml/charts_d.yml, for a uniform helper contract. The "restart"
+# here is a hitless `netdatacli reload-health`, not a daemon restart -- a
+# health config change hot-loads where a go.d config needs a restart. The
+# role's health files each define their own complete alarm set, so -- unlike
+# a go.d config -- there's no stock health.d/<dest> worth seeding before the
+# overwrite.
 - name: health | Ensure netdata directory exists
+  when: netdata_args.condition | default(true)
   file:
     dest: "{{ item }}"
     state: directory
@@ -36,6 +39,7 @@
   become: true
 
 - name: health | Assert required inputs are set
+  when: netdata_args.condition | default(true)
   assert:
     that:
       - netdata_args.src is defined and netdata_args.src | length > 0
@@ -45,6 +49,7 @@
       files/ or templates/) and netdata_args.dest (bare filename under health.d/)
 
 - name: health | Assert dest is a safe basename
+  when: netdata_args.condition | default(true)
   assert:
     that:
       - netdata_args.dest is match('^[A-Za-z0-9_.-]+$')
@@ -57,8 +62,11 @@
     _netdata_health_src: "{{ netdata_args.src }}"
     _netdata_health_dest: "{{ netdata_args.dest }}"
     _netdata_health_mode: "{{ netdata_args.mode | default('0644') }}"
+    _netdata_health_condition: "{{ netdata_args.condition | default(true) }}"
+    _netdata_health_restart: "{{ netdata_args.restart | default(true) }}"
 
 - name: health | Setup alert config ({{ _module }})
+  when: _netdata_health_condition
   vars:
     _module: "{{ 'template' if _netdata_health_src.endswith('.j2') else 'copy' }}"
   action: "{{ _module }}"
@@ -77,7 +85,5 @@
   become: true
 
 - name: health | Reload health configuration
-  when: netdata_alerts_conf.changed
-  command: netdatacli reload-health
-  changed_when: true
-  become: true
+  when: _netdata_health_condition and _netdata_health_restart and netdata_alerts_conf.changed
+  import_tasks: reload_health.yml
