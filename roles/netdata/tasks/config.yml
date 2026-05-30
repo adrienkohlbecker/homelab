@@ -9,16 +9,30 @@
 #   mode        optional, default '0644'
 #   condition   optional bool, default true; gates the whole call
 #   restart     optional bool, default true; restart netdata after a change
+#   validate    optional; a parse-check command (%s = rendered file) run
+#               before the file moves into place. go.d configs are YAML, so
+#               pass python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))'
 #
 # Module dispatch mirrors systemd_unit/install.yml: *.j2 -> template (loaded
-# from the caller's templates/), anything else -> copy (from files/). _module
-# is resolved task-locally, never via set_fact, so it can't poison the next
-# call's dispatch.
+# from the caller's templates/), anything else -> copy (from files/).
 #
-# The dict form prevents inter-call leakage at play-vars scope: each
-# import_role pass replaces the whole `netdata_args` value, so a previous
-# caller's mode/condition/restart can't bleed into the next caller that
-# doesn't explicitly override.
+# The scalar inputs are resolved into _netdata_config_* locals by the set_fact
+# preamble below; it runs unconditionally and re-reads the whole netdata_args
+# dict on every import, so a previous caller's values can't bleed into the
+# next. _module and validate stay inline on the action: _module must render in
+# the task name (parse time) and resolve pre-`when` to load the module arg
+# spec, and validate uses default(omit) (omit through set_fact would become an
+# undefined fact, not a placeholder).
+- name: config | Assert required inputs are set
+  when: netdata_args.condition | default(true)
+  assert:
+    that:
+      - netdata_args.src is defined and netdata_args.src | length > 0
+      - netdata_args.dest is defined and netdata_args.dest | length > 0
+    fail_msg: >-
+      config helper requires netdata_args.src (file under the caller's
+      files/ or templates/) and netdata_args.dest (path under /etc/netdata/)
+
 - name: config | Assert dest is a safe relative path
   when: netdata_args.condition | default(true)
   assert:
@@ -29,8 +43,16 @@
       netdata_args.dest must be a safe relative path under /etc/netdata/
       (got {{ netdata_args.dest }})
 
+- name: config | Resolve caller args for {{ netdata_args.dest }}
+  set_fact:
+    _netdata_config_src: "{{ netdata_args.src }}"
+    _netdata_config_dest: "{{ netdata_args.dest }}"
+    _netdata_config_mode: "{{ netdata_args.mode | default('0644') }}"
+    _netdata_config_condition: "{{ netdata_args.condition | default(true) }}"
+    _netdata_config_restart: "{{ netdata_args.restart | default(true) }}"
+
 - name: config | Ensure netdata directory exists
-  when: netdata_args.condition | default(true)
+  when: _netdata_config_condition
   file:
     dest: "{{ item }}"
     state: directory
@@ -39,29 +61,50 @@
     mode: "0755"
   loop:
     - /etc/netdata/
-    - /etc/netdata/{{ netdata_args.dest | dirname }}/
+    - /etc/netdata/{{ _netdata_config_dest | dirname }}/
+  register: netdata_config_dir
   become: true
 
+- name: config | Check for an upstream stock config
+  when: _netdata_config_condition
+  stat:
+    path: /usr/lib/netdata/conf.d/{{ _netdata_config_dest }}
+  register: netdata_config_stock
+  become: true
+
+# Seed the stock config so the role's copy/template overlays it. A dest with
+# no upstream stub (a collector netdata ships no default for) is fine: skip the
+# seed and let the role's own file be authoritative, rather than hard-failing
+# the `cp` on a missing source.
 - name: config | Seed the stock config
-  when: netdata_args.condition | default(true)
-  command: cp /usr/lib/netdata/conf.d/{{ netdata_args.dest }} /etc/netdata/{{ netdata_args.dest }}
+  when:
+    - _netdata_config_condition
+    - netdata_config_stock.stat.exists | default(false)
+  command: cp /usr/lib/netdata/conf.d/{{ _netdata_config_dest }} /etc/netdata/{{ _netdata_config_dest }}
   args:
-    creates: /etc/netdata/{{ netdata_args.dest }}
+    creates: /etc/netdata/{{ _netdata_config_dest }}
   register: netdata_config_seed
   become: true
 
+# Gate the file-write on the directory prerequisite (not the seed): in check
+# mode on a fresh host the dir only "would" exist, so writing into it would
+# fail. The seed is stat-gated above, so it's no longer the fresh-host proxy.
 - name: config | Setup metrics ({{ _module }})
-  when: not (ansible_check_mode and netdata_config_seed.changed) and (netdata_args.condition | default(true))
+  when: not (ansible_check_mode and netdata_config_dir.changed) and _netdata_config_condition
   vars:
-    _module: "{{ 'template' if netdata_args.src.endswith('.j2') else 'copy' }}"
+    _module: "{{ 'template' if _netdata_config_src.endswith('.j2') else 'copy' }}"
   action: "{{ _module }}"
   args:
-    src: "{{ netdata_args.src }}"
-    dest: /etc/netdata/{{ netdata_args.dest }}
+    src: "{{ _netdata_config_src }}"
+    dest: /etc/netdata/{{ _netdata_config_dest }}
     owner: netdata
     group: netdata
-    mode: "{{ netdata_args.mode | default('0644') }}"
+    mode: "{{ _netdata_config_mode }}"
     backup: true
+    # validate stays inline with default(omit) -- routing it through a fact
+    # would break the no-validate callers (omit via set_fact becomes an
+    # undefined fact, not a placeholder).
+    validate: "{{ netdata_args.validate | default(omit) }}"
   register: netdata_config
   become: true
 
@@ -71,7 +114,7 @@
 # race the listener. charts_d.yml keeps its own probe as a backstop for
 # the _setup paths that run before that drop-in is in place.
 - name: config | Restart netdata
-  when: (netdata_args.restart | default(true)) and (netdata_config_seed.changed or netdata_config.changed)
+  when: _netdata_config_restart and (netdata_config_seed.changed or netdata_config.changed)
   systemd:
     name: netdata
     state: restarted
