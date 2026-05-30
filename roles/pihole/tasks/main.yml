@@ -146,12 +146,12 @@
 # then surfaces that as ServiceName in HyperDX, minting a fresh facet
 # per run. --replace covers the rare case where a prior run was SIGKILL'd
 # before --rm fired and the named container lingers.
-# --dns: don't inherit the host's resolv.conf, which points at
-# 127.0.0.1 -> pihole. From inside this container 127.0.0.1 is a black
-# hole (no FTL runs here), and even with the host IP, pihole may be
-# mid-restart when this task fires during ansible converge. The update
-# only resolves public adlist URLs, so an external resolver is fine and
-# breaks the circular dependency.
+# --dns: don't inherit the host's resolv.conf. It points at the
+# DHCP-supplied pihole address (a LAN IP -- the keepalived VIP / host IP
+# pihole publishes :53 on, not a local stub), which may be mid-restart
+# when this task fires during ansible converge. The update only resolves
+# public adlist URLs, so an external resolver is fine and breaks the
+# circular dependency.
 - name: Compute list update command
   set_fact:
     pihole_list_update_cmd: /usr/bin/podman run --rm --replace --name pihole_list_update --quiet --dns={{ bootstrap_dns_resolver }} --volume /mnt/services/sqlite/pihole:/etc/pihole --entrypoint "/usr/bin/php" --env BLOCKLISTS_URL="{{ pihole_adlists | join(' ') }}" --env WHITELIST_URL="{{ pihole_whitelists | join(' ') }}" docker.io/jacklul/pihole:2025.10.0 /usr/local/sbin/pihole-updatelists --no-gravity --no-reload --env
