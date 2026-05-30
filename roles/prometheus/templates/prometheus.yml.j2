@@ -1,6 +1,4 @@
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
   # Disambiguate series if both box and lab are ever scraped together.
   external_labels:
     host: '{{ inventory_hostname }}'
@@ -15,6 +13,9 @@ scrape_configs:
       - targets: ['127.0.0.1:{{ service_ports.prometheus }}']
 
 {% if minio_enabled | default(false) %}
+  # minio runs after prometheus in site.yml, so on a first-boot converge
+  # this target is down until MinIO binds; it recovers on the next scrape.
+  # (MinIO's console reads these metrics back from prometheus.)
   - job_name: 'minio'
     metrics_path: /minio/v2/metrics/cluster
     static_configs:
