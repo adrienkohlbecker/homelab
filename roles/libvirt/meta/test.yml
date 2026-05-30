@@ -1,0 +1,5 @@
+# Release-divergent: < 26 (jammy/noble) installs the qemu-kvm transitional
+# metapackage and lacks the swtpm driver; resolute+ installs qemu-system and
+# pulls swtpm. resolute exercises both gates (noble == jammy here).
+ubuntu:
+  - resolute

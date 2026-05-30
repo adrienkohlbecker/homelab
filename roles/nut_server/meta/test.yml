@@ -1,0 +1,7 @@
+# Three distinct per-release behaviours: jammy uses the nut-driver unit, noble+
+# uses nut-driver@eaton, and resolute+ additionally runs the upsd config
+# validate (nut 2.8+) that jammy/noble's nut lacks. Both noble and resolute
+# diverge from the jammy default cell, so both get a cell.
+ubuntu:
+  - noble
+  - resolute

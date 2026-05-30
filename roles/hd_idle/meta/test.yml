@@ -1,0 +1,6 @@
+# Release-divergent: jammy/noble ship hd-idle 1.05 (C, forking daemon) and take
+# the foreground-run + HD_IDLE_OPTS workaround; resolute+ ships the Go rewrite
+# (Type=simple, START_HD_IDLE handling) and takes the native path. resolute is
+# the only release that diverges from the jammy default cell.
+ubuntu:
+  - resolute

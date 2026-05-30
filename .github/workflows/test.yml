@@ -136,30 +136,37 @@ jobs:
           SPEC: ${{ matrix.spec }}
         run: |
           set -euo pipefail
-          role=${SPEC%%:*}
-          variant=${SPEC##*:}
+          # SPEC is "role:variant" (release defaults to jammy) or
+          # "role:variant:ubuntu" for a release cell (detect emits
+          # "<role>:box:<codename>" for release-gated roles). Splitting on ":"
+          # into three fields handles both -- the third is empty for the
+          # two-segment form, so default it to jammy.
+          IFS=: read -r role variant ubuntu <<<"$SPEC"
+          ubuntu=${ubuntu:-jammy}
           # Persist for the on-failure artifact step. $GITHUB_ENV is
           # read between steps regardless of this step's exit status,
           # so a test failure still gives the artifact step a name.
           {
             echo "ROLE=$role"
             echo "VARIANT=$variant"
+            echo "UBUNTU=$ubuntu"
           } >>"$GITHUB_ENV"
-          test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /scratch
+          test/testrole.py "$role" --machine "$variant" --ubuntu "$ubuntu" --timeout 1500 --workdir-parent /scratch
       - name: Upload harness output on failure
         if: failure()
         uses: actions/upload-artifact@v7
         # actions/upload-artifact@v7 requires unique artifact names per
-        # run; ROLE + VARIANT come from the parsed SPEC so the name is
-        # plain alnum/underscores/hyphens and unique per matrix cell.
+        # run; ROLE + VARIANT + UBUNTU come from the parsed SPEC so the name
+        # is plain alnum/underscores/hyphens and unique per matrix cell --
+        # including two release cells that share a variant (role:box:noble
+        # and role:box:resolute would otherwise both be testout-role-box).
         with:
-          name: testout-${{ env.ROLE }}-${{ env.VARIANT }}
+          name: testout-${{ env.ROLE }}-${{ env.VARIANT }}-${{ env.UBUNTU }}
           # The harness names files <machine>.<ubuntu>.<role>.<kind>.ansi
           # (machine.py: prefix = f"{machine}.{ubuntu_name}.{role}"), so the
-          # glob needs the ubuntu-codename segment -- the earlier
-          # <variant>.<role>.* dropped it and matched nothing (zero uploads).
+          # glob pins all three segments.
           path: |
-            test/out/${{ env.VARIANT }}.*.${{ env.ROLE }}.*
+            test/out/${{ env.VARIANT }}.${{ env.UBUNTU }}.${{ env.ROLE }}.*
             /scratch/**
           retention-days: 30
           if-no-files-found: warn

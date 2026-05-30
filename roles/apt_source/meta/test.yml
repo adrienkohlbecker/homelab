@@ -1,0 +1,6 @@
+# Release-divergent: < 26 (jammy/noble) configures the repo via apt_key +
+# apt_repository; >= 26 (resolute) fetches the key and uses deb822_repository.
+# resolute is the only release that exercises the deb822 branch (noble == jammy
+# here), so it's the single extra cell.
+ubuntu:
+  - resolute

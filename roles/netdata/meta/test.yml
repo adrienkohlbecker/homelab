@@ -1,0 +1,5 @@
+# Release-divergent: the install path branches at major version 26 -- jammy/noble
+# (< 26) take the apt-repo branch, resolute (>= 26) takes the >= 26 branch.
+# resolute is the only divergent release.
+ubuntu:
+  - resolute
