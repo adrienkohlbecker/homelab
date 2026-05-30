@@ -105,20 +105,6 @@
   tags:
     - netdata
 
-- name: Disable analytics
-  file:
-    path: /etc/netdata/.opt-out-from-anonymous-statistics
-    state: touch
-    access_time: preserve
-    modification_time: preserve
-    owner: netdata
-    group: netdata
-    mode: "0644"
-  register: netdata_optout
-  become: true
-  tags:
-    - netdata
-
 - name: Configure docker metrics
   import_role:
     name: netdata
@@ -247,6 +233,6 @@
     systemd_unit_args:
       src: netdata
       condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
-      restart: "{{ netdata_conf.changed or netdata_cloud_conf.changed or netdata_optout.changed or netdata_health_alarm_notify.changed or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed or netdata_godconf_copy.changed or netdata_godconf_pihole.changed }}"
+      restart: "{{ netdata_conf.changed or netdata_cloud_conf.changed or netdata_health_alarm_notify.changed or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed or netdata_godconf_copy.changed or netdata_godconf_pihole.changed }}"
   tags:
     - netdata
