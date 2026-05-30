@@ -329,7 +329,7 @@ fi
 
 # Update fstab
 
-echo "$EFI_DEVICE /boot/efi vfat defaults 0 0" >>/etc/fstab
+echo "$EFI_DEVICE /boot/efi vfat defaults,umask=0077 0 0" >>/etc/fstab
 echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 
 # Pull all available modules into initramfs (rather than just the
