@@ -41,7 +41,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/redis:/data \
     --user {{ redis_user.uid }}:{{ redis_user.group }} \
     --network redis \
-    --publish 127.0.0.1:6379:6379/tcp \
+    --publish 127.0.0.1:{{ service_ports.redis }}:6379/tcp \
     --health-cmd '["sh","-c","redis-cli ping | grep PONG"]' \
     --health-startup-cmd '["sh","-c","redis-cli ping | grep PONG"]' \
     --health-startup-interval "1s" \
