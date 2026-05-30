@@ -11,7 +11,7 @@
 # (not import_tasks) so the per-item nginx_site_args re-evaluates each loop;
 # unifi (special CSP, no auth) and the retired otgw (tombstone) differ and
 # stay as standalone calls below.
-- name: Configure device-proxy nginx sites
+- name: Configure device-proxy nginx proxies
   include_tasks:
     file: site.yml
     apply:
@@ -23,6 +23,7 @@
       proxy_pass: "{{ site.proxy_pass }}"
       reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
       auth: required
+      state: "{{ 'present' if site.subdomain in nginx_static_proxies else 'absent' }}"
   loop:
     - { subdomain: marantz, proxy_pass: "https://{{ external_ips.marantz }}:10443/" }
     - { subdomain: printer, proxy_pass: "http://{{ external_ips.printer }}:80/" }
@@ -39,7 +40,7 @@
 # proxies): the UniFi controller ships its own login, and fronting it with
 # Authelia breaks the mobile app / API clients. The vhost still gets TLS,
 # HSTS and CSP.
-- name: Configure nginx static sites (unifi)
+- name: Configure nginx static proxies (unifi)
   import_tasks: site.yml
   vars:
     nginx_site_args:
@@ -48,18 +49,6 @@
       csp_additional: connect-src api.mapbox.com ui.com *.ui.com {{ nginx_csp_default }}
       csp_default_src: ui.com *.ui.com
       reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
-  tags:
-    - nginx
-
-# otgw was the OpenTherm Gateway at 10.123.4.3; device decommissioned
-# (the IP now belongs to a Philips AC0850). Kept as a tombstone so a
-# fresh install also removes the retired site.
-- name: Configure nginx static sites (otgw — retired)
-  import_tasks: site.yml
-  vars:
-    nginx_site_args:
-      subdomain: otgw
-      state: absent
-      reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
+      state: "{{ 'present' if 'unifi' in nginx_static_proxies else 'absent' }}"
   tags:
     - nginx

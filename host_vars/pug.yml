@@ -135,3 +135,11 @@ z2m_start_service: false
 # shared prod config in group_vars/prod.yml; only the advertised routes here.
 tailscale_advertise_routes: "10.123.0.0/21"
 tailscale_advertise_exit_node: true
+
+nginx_static_proxies:
+  - marantz
+  - printer
+  - siglent
+  - ups
+  - tubeszb
+  - unifi
