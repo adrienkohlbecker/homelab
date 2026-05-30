@@ -1,0 +1,65 @@
+# Post-converge functional checks for the resolved role. Invoked only by
+# the test harness (test/testrole.py / testall.py) against a qemu VM,
+# never by site.yml or --tags. Converge success only proves the unit
+# started, and the helper's `systemd-analyze verify` validates the parent
+# systemd-resolved.service, not the drop-in's keys (resolved silently
+# ignores unknown/typo'd directives) -- these assert the drop-in's effects
+# actually took hold at runtime. External-name resolution is deliberately
+# NOT asserted: the qemu fixture egresses via SLIRP where UDP DNS is lossy
+# under load, so a query timeout would be a flake, not a regression.
+
+- name: _verify | The systemd-resolved unit is active  # noqa: command-instead-of-module -- is-active query, not a state change
+  command: systemctl is-active systemd-resolved
+  changed_when: false
+  become: true
+
+- name: _verify | Stat /etc/resolv.conf
+  stat:
+    path: /etc/resolv.conf
+  register: resolved_verify_symlink
+  become: true
+
+- name: _verify | The resolv.conf symlink targets the upstream-servers file, not the dead stub
+  assert:
+    that:
+      - resolved_verify_symlink.stat.islnk | default(false)
+      - resolved_verify_symlink.stat.lnk_target == '/run/systemd/resolve/resolv.conf'
+    fail_msg: >-
+      /etc/resolv.conf is not a symlink to /run/systemd/resolve/resolv.conf
+      (got {{ resolved_verify_symlink.stat.lnk_target | default('a regular file') }});
+      with DNSStubListener=no, stub-resolv.conf (127.0.0.53) would be a black hole.
+
+# Wire-level proof DNSStubListener=no took effect: with the stub up,
+# systemd-resolved binds 127.0.0.53:53 (TCP+UDP). ss listing it means the
+# directive was ignored and the stub is still holding the loopback :53.
+- name: _verify | List listening TCP/UDP sockets
+  command: ss -Hlntu
+  register: resolved_verify_listeners
+  changed_when: false
+  become: true
+
+- name: _verify | The 127.0.0.53 stub listener is gone
+  assert:
+    that:
+      - resolved_verify_listeners.stdout is not search('127.0.0.53')
+    fail_msg: >-
+      systemd-resolved is still listening on 127.0.0.53
+      (DNSStubListener=no did not take effect): {{ resolved_verify_listeners.stdout }}
+
+# resolvectl's Global "Protocols" line shows the effective per-stack state;
+# -mDNS / -LLMNR confirm MulticastDNS=no and LLMNR=no are live, i.e.
+# resolved has ceded 5353/5355 to avahi as the drop-in intends.
+- name: _verify | Read resolvectl global status
+  command: resolvectl status
+  register: resolved_verify_status
+  changed_when: false
+  become: true
+
+- name: _verify | Global mDNS and LLMNR are disabled
+  assert:
+    that:
+      - resolved_verify_status.stdout is search('-mDNS')
+      - resolved_verify_status.stdout is search('-LLMNR')
+    fail_msg: >-
+      resolvectl does not report -mDNS/-LLMNR in its Global Protocols line
+      (MulticastDNS=no / LLMNR=no not live): {{ resolved_verify_status.stdout }}
