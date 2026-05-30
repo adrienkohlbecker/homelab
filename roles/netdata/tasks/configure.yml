@@ -102,7 +102,7 @@
     tasks_from: config
   vars:
     netdata_args:
-      src: docker.conf
+      src: docker.conf.j2
       dest: go.d/docker.conf
       validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
       restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
@@ -168,15 +168,34 @@
   tags:
     - netdata
 
-# netdata reads container stats over the rootful podman API socket.
-# Caution: podman-socket membership is host-root-equivalent (a member can
-# `podman run --privileged -v /:/host`); accepted here for netdata's
-# collection on these single-operator hosts.
-- name: Add user to podman-socket group
-  user:
-    name: netdata
-    groups: podman-socket
-    append: true
+# netdata's docker collector reads container stats through the read-only
+# socket_proxy (tcp loopback; see roles/socket_proxy + docker.conf.j2), so it
+# no longer needs rw on /run/podman/podman.sock. Actively drop any
+# podman-socket membership left from before the proxy: gpasswd -d is the only
+# clean "remove from one supplementary group" primitive (the user module can
+# only rewrite the whole list). Gated on actual membership so it's idempotent
+# and a no-op on hosts without the group (e.g. the box test fixture).
+- name: Read the podman-socket group membership
+  getent:
+    database: group
+    key: podman-socket
+    # Don't fail when the group is absent (e.g. the box test fixture); the
+    # key then maps to None and the drop below is skipped.
+    fail_key: false
+  register: netdata_podman_socket_grp
+  become: true
+  tags:
+    - netdata
+
+- name: Drop netdata from the podman-socket group (now reads via socket_proxy)
+  vars:
+    # getent_group[<name>] = [passwd, gid, members]; members CSV at [2]. The
+    # `, true` default replaces the None fail_key gives when the group is absent.
+    _members: "{{ (netdata_podman_socket_grp.ansible_facts.getent_group['podman-socket'] | default(['', '', ''], true))[2] }}"
+  when: "'netdata' in _members.split(',')"
+  command: gpasswd -d netdata podman-socket
+  register: netdata_podman_socket_drop
+  changed_when: true
   become: true
   tags:
     - netdata
@@ -207,6 +226,6 @@
     systemd_unit_args:
       src: netdata
       condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
-      restart: "{{ netdata_conf.changed or netdata_cloud_conf.changed or netdata_health_alarm_notify.changed or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed or netdata_godconf_copy.changed or netdata_godconf_pihole.changed }}"
+      restart: "{{ netdata_conf.changed or netdata_cloud_conf.changed or netdata_health_alarm_notify.changed or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed or netdata_godconf_copy.changed or netdata_godconf_pihole.changed or (netdata_podman_socket_drop.changed | default(false)) }}"
   tags:
     - netdata

@@ -1,0 +1,9 @@
+# vim:ft=yaml
+# Reads container metrics through the read-only socket_proxy (tcp loopback)
+# rather than directly over /run/podman/podman.sock -- so netdata holds no rw
+# (host-root-equivalent) access to the container-create API. See
+# roles/socket_proxy.
+jobs:
+  - name: local
+    address: 'tcp://127.0.0.1:{{ service_ports.socket_proxy }}'
+    autodetection_retry: 60
