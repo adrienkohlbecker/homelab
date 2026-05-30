@@ -7,7 +7,7 @@ server {
 {% if nginx_ipv6 | default(false) %}
   listen              [::]:443 ssl{{ _http2_listen }};
 {% endif %}
-{% if nginx_site_args.enable_http | default(false) %}
+{% if _nginx_site_enable_http %}
   # Cleartext :80 in this same server block (no http->https redirect). The
   # security headers below are emitted here too: HSTS over :80 is a no-op
   # browsers ignore per RFC 6797, the rest are harmless. Only for upstreams
@@ -64,7 +64,7 @@ server {
       log_not_found off;
   }
 
-{% set _auth_enabled = nginx_site_args.auth | default('none') == 'required' %}
+{% set _auth_enabled = _nginx_site_auth == 'required' %}
 {% if _auth_enabled %}
   # Authelia forward-auth: every browser hit to this site is subrequested
   # against Authelia's /api/authz/auth-request endpoint. 200 -> allow; 401
@@ -114,6 +114,10 @@ server {
     }
 {% endif %}
     proxy_pass {{ authelia_internal_url }};
+    # HTTP/1.1 to the auth endpoint (matches `location /`): the default 1.0
+    # disables chunked transfer and keepalive on the subrequest fired for every
+    # authenticated request.
+    proxy_http_version 1.1;
     # Bound the auth subrequest so a transient gap on the path to Authelia
     # (notably fox reaching lab's Authelia over wg0) fails fast instead of
     # stalling on nginx's 60s default -- a sub-second blip otherwise becomes a
@@ -278,7 +282,7 @@ server {
   {{ nginx_site_args.server_conf | trim | indent(2) }}
 {% endif %}
 }
-{% if not (nginx_site_args.enable_http | default(false)) %}
+{% if not _nginx_site_enable_http %}
 
 server {
     listen      80;
