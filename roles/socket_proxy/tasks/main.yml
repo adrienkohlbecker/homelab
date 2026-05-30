@@ -1,0 +1,25 @@
+# Read-only Docker-API proxy fronting the rootful podman socket, so netdata's
+# docker collector can read container metrics over tcp loopback without the
+# host-root-equivalent podman-socket group membership. See the .service.j2
+# header for the trust rationale. Deployed wherever podman + netdata co-locate
+# (site.yml), ordered before netdata so its docker collector finds the proxy.
+- name: Install socket_proxy service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: socket_proxy.service.j2
+  tags:
+    - socket_proxy
+
+- name: Enable socket_proxy service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: socket_proxy
+      restart: "{{ socket_proxy_service_result.changed }}"
+  tags:
+    - socket_proxy

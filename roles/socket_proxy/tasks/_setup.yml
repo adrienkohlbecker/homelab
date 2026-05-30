@@ -1,0 +1,9 @@
+# socket_proxy fronts the rootful podman socket; box_deps pre-bakes podman
+# (packer/seed_deps.yml) but make sure the socket unit is up so the proxy can
+# bind-mount /run/podman/podman.sock at container start.
+- name: _setup | Ensure the rootful podman socket is running
+  systemd:
+    name: podman.socket
+    enabled: true
+    state: started
+  become: true

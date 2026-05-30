@@ -1,0 +1,43 @@
+# Functional verification of the read-only filter: the GET sections netdata's
+# docker collector needs answer 200, while write requests and denied sections
+# are blocked. The proxy fronts the host's rootful podman socket (box_deps
+# pre-bakes podman).
+- name: _verify | The socket_proxy unit is loaded and active
+  systemd:
+    name: socket_proxy
+  register: _verify_socket_proxy_unit
+  failed_when: >-
+    _verify_socket_proxy_unit.status.LoadState != "loaded"
+    or _verify_socket_proxy_unit.status.ActiveState != "active"
+  become: true
+
+- name: _verify | Allowed GET /version returns 200
+  uri:
+    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/version
+    status_code: 200
+  register: _verify_socket_proxy_version
+  retries: 15
+  delay: 2
+  until: _verify_socket_proxy_version.status == 200
+
+- name: _verify | Allowed GET /containers/json returns 200
+  uri:
+    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/json?all=true
+    status_code: 200
+
+# POST is denied by default (read-only). A blocked write must 403, not reach
+# the socket -- this is the whole point of the proxy.
+- name: _verify | Write POST /containers/create is blocked (403)
+  uri:
+    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/create
+    method: POST
+    body_format: json
+    body: {}
+    status_code: 403
+
+# A section we never enabled (SECRETS) must be denied too, proving the filter
+# is default-deny rather than allow-all.
+- name: _verify | Denied GET /secrets is blocked (403)
+  uri:
+    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/secrets
+    status_code: 403

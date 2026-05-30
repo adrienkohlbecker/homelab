@@ -189,6 +189,10 @@ service_ports:
   # isn't registered here.
   roundcube: 8002
   seerr: 5055
+  # docker-socket-proxy: read-only Docker-API filter (loopback) that fronts
+  # /run/podman/podman.sock so netdata's docker collector reads container
+  # metrics without the rw (host-root-equivalent) podman-socket membership.
+  socket_proxy: 2375
   sonarr: 8989
   transmission_bt: 51413
   wireguard: 51820
