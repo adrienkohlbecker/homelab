@@ -2,3 +2,9 @@
 # into box_deps (see packer/seed_deps.yml), so route there to skip
 # ~140s of backports + podman + nginx install on every test run.
 machine: box_deps
+
+# Release-divergent: the tmpfiles.d validate adds `systemd-tmpfiles --dry-run`
+# on noble+ (systemd 250+) that jammy (249) lacks. The noble cell validates
+# that branch (on plain box, since box_deps is jammy-only).
+ubuntu:
+  - noble

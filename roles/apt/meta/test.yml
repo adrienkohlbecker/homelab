@@ -1,0 +1,5 @@
+# Release-divergent: jammy writes a legacy /etc/apt/sources.list; noble+ writes
+# deb822 .sources and drops the legacy file. The noble cell exercises the
+# non-jammy deb822 branch (resolute takes the same path, so it adds no coverage).
+ubuntu:
+  - noble

@@ -1,0 +1,7 @@
+# Three distinct per-release install paths: jammy pins podman + its userspace
+# stack from noble-backports; noble installs the same stack natively (no backport
+# pin); resolute drops the iptables compat package and takes the >= 26 branch.
+# Both noble and resolute exercise paths the jammy default cell doesn't.
+ubuntu:
+  - noble
+  - resolute

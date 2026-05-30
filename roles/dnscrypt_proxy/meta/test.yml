@@ -1,0 +1,6 @@
+# Release-divergent: the config template branches on the release -- jammy's
+# 2.0.45 uses the singular fallback_resolver, noble+ (2.1.x) uses the plural
+# bootstrap_resolvers. The noble cell covers the non-jammy branch (resolute
+# renders identically).
+ubuntu:
+  - noble

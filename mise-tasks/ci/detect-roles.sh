@@ -18,7 +18,20 @@
 #       push (local preview, empty dispatch) uses HEAD~1. CI_BASE_REF wins.
 #
 # Outputs (to $GITHUB_OUTPUT, or stdout when $GITHUB_OUTPUT is unset):
-#   matrix=<JSON array of {role, variant}>  -- input to fromJson() in workflow.
+#   matrix=<JSON array of "role:variant" strings>  -- input to fromJson() in
+#                                              the workflow. A role that gates
+#                                              behaviour on the Ubuntu release
+#                                              also emits "role:box:<codename>"
+#                                              entries (three segments) for each
+#                                              release in its meta/test.yml
+#                                              `ubuntu:` list; the two-segment
+#                                              form defaults the release to jammy.
+#                                              On the change-detection path those
+#                                              release cells also propagate onto
+#                                              the changed role's consumers, so a
+#                                              change to a release-gated helper
+#                                              validates its dependents on that
+#                                              release too.
 #   packer_changed=true|false               -- whether the change touches
 #                                              packer/ or mise-tasks/packer/
 #                                              (gates ci.yml's packer call,
@@ -95,12 +108,16 @@ is_minimal_role() {
   grep -qx -- "$1" <<<"$MINIMAL_ROLES"
 }
 
-# Per-role default machine, from roles/<role>/meta/test.yml's `machine:`
-# key. Falls back to "box" when the file is absent or doesn't declare
-# the field. Built once via a single python3 invocation rather than
-# per-role to avoid ~50ms python startup * N roles. The mise lint
-# task `lint:test-meta` validates the machine value against
-# MACHINE_CHOICES at PR time, so detect-roles doesn't re-check.
+# Per-role test metadata, from roles/<role>/meta/test.yml:
+#   machine: the default machine variant (falls back to "box" when absent).
+#   ubuntu:  extra Ubuntu release codenames to also test the role on (a role
+#            whose behaviour diverges by release lists noble/resolute here;
+#            each adds a `<role>:box:<codename>` cell -- see build_matrix).
+# Built once via a single python3 invocation rather than per-role to avoid
+# ~50ms python startup * N roles. Emitted as tab-separated typed lines
+# (`machine\t<role>\t<value>` / `ubuntu\t<role>\t<space-joined codenames>`) so
+# the two lookups below can awk them apart. The mise lint task `lint:test-meta`
+# validates both fields at PR time, so detect-roles doesn't re-check.
 # read -d '' returns 1 at EOF (no NUL delimiter in a heredoc), so `|| true`
 # keeps it from tripping errexit; PY ends up holding the whole script body.
 read -r -d '' PY <<'EOF' || true
@@ -115,14 +132,23 @@ for meta in sorted(Path("roles").glob("*/meta/test.yml")):
         sys.exit(f"error: parsing {meta}: {e}")
     machine = data.get("machine")
     if machine is not None:
-        print(f"{role}={machine}")
+        print(f"machine\t{role}\t{machine}")
+    releases = data.get("ubuntu") or []
+    if releases:
+        print(f"ubuntu\t{role}\t{' '.join(releases)}")
 EOF
-ROLE_MACHINE=$(python3 -c "$PY")
+ROLE_META=$(python3 -c "$PY")
 
 default_machine_for() {
   local role=$1 m
-  m=$(grep -E "^${role}=" <<<"$ROLE_MACHINE" | head -1 | cut -d= -f2-)
+  m=$(awk -F'\t' -v r="$role" '$1 == "machine" && $2 == r {print $3; exit}' <<<"$ROLE_META")
   echo "${m:-box}"
+}
+
+# Extra Ubuntu release codenames a role declares (space-separated; empty when
+# none). Each becomes a `<role>:box:<codename>` cell in build_matrix.
+release_ubuntu_for() {
+  awk -F'\t' -v r="$1" '$1 == "ubuntu" && $2 == r {print $3}' <<<"$ROLE_META"
 }
 
 # ---------------------------------------------------------------------------
@@ -232,36 +258,67 @@ emit() {
     echo "packer_sources=$PACKER_SOURCES_JSON"
     echo "packer_sources_box=$PACKER_SOURCES_BOX_JSON"
     echo "packer_sources_extra=$PACKER_SOURCES_EXTRA_JSON"
+    echo "packer_ubuntu_box=$PACKER_UBUNTU_BOX_JSON"
+    echo "packer_ubuntu_extra=$PACKER_UBUNTU_EXTRA_JSON"
   fi
 }
 
-# Build a JSON array of "role:variant" strings from a newline-separated
+# Build a JSON array of "role:variant" specs from a newline-separated
 # role list. Each role gets a "role:<default>" entry (default from the
 # role's meta/test.yml `machine:` key, falling back to "box"); roles in
 # MINIMAL_ROLES additionally get a "role:minimal" entry. lab/pug
 # variants stay available via the harness for on-demand debug +
 # nightly, but they don't fan out from push CI.
 #
+# A role that declares meta/test.yml `ubuntu:` also gets one
+# "role:box:<codename>" entry per release listed (the releases its behaviour
+# gates for). These three-segment specs always use the box machine -- it's the
+# only image packer builds per-release (box_deps is jammy-only) -- so a
+# box_deps-default role still gets its jammy box_deps cell above plus these box
+# release cells. The workflow defaults the absent third segment to jammy.
+#
+# $2 (optional) is a newline-separated list of extra "role:box:<codename>"
+# specs to fold in. The change-detection path uses it to PROPAGATE a changed
+# release-gated role's cells onto its consumers: editing apt_source's >= 26
+# deb822 path should validate the roles that import apt_source on resolute too,
+# not just apt_source's own standalone cell. Empty for --all / dispatch (no
+# dependency expansion). The combined output is sorted + de-duplicated, since a
+# role can pick up the same release cell from its own meta and via propagation.
+#
 # Flat strings (not {role, variant} objects) keep workflow parsing
-# simple: a single ${SPEC%%:*} / ${SPEC##*:} pair in bash gets both
+# simple: an `IFS=: read role variant ubuntu` triple in bash gets all
 # fields. The original constraint (Gitea Actions 1.21.x not expanding
 # ${{ matrix.<obj>.<field> }}) is gone on GitHub Actions, but the flat
 # form is still ergonomically lighter than nested-object matrix entries.
 build_matrix() {
-  local roles=$1
-  local entries=()
+  local roles=$1 extra=${2:-}
+  local specs=""
   while IFS= read -r role; do
     [ -z "$role" ] && continue
-    entries+=("\"$role:$(default_machine_for "$role")\"")
+    specs+=$'\n'"$role:$(default_machine_for "$role")"
     if is_minimal_role "$role"; then
-      entries+=("\"$role:minimal\"")
+      specs+=$'\n'"$role:minimal"
     fi
+    # Word-splitting on the space-separated codenames is the point; empty
+    # (no `ubuntu:` declared) yields no iterations.
+    # shellcheck disable=SC2046
+    for codename in $(release_ubuntu_for "$role"); do
+      specs+=$'\n'"$role:box:$codename"
+    done
   done <<<"$roles"
-  if [ ${#entries[@]} -eq 0 ]; then
+  if [ -n "$extra" ]; then
+    specs+=$'\n'"$extra"
+  fi
+  # Drop blank lines, sort -u (dedup own-meta vs propagated cells), then JSON-
+  # encode -- jq -R reads each line as a string, `[inputs]` slurps them into an
+  # array. Guard the empty case: an empty here-string is still one blank line,
+  # which would otherwise become [""].
+  local sorted
+  sorted=$(printf '%s\n' "$specs" | grep -v '^$' | sort -u || true)
+  if [ -z "$sorted" ]; then
     echo "[]"
   else
-    local IFS=,
-    echo "[${entries[*]}]"
+    jq -cnR '[inputs]' <<<"$sorted"
   fi
 }
 
@@ -281,11 +338,12 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}
     exit 0
   fi
   # Comma-separated list. Each token is `role` (variant defaulted, with
-  # minimal escalation applied if the role is in ci-minimal-roles.txt) or
-  # `role:variant` (exact, no escalation -- user said what they wanted).
-  # `role:lab` / `role:pug` are valid as explicit tokens but are not
-  # auto-emitted on push fan-out; they exist for on-demand manual runs.
-  # Output entries are "role:variant" strings; see build_matrix() for why.
+  # minimal + release escalation applied -- the latter from meta/test.yml's
+  # `ubuntu:` list, same as the push fan-out) or `role:variant` (exact, no
+  # escalation -- user said what they wanted). `role:lab` / `role:pug` are
+  # valid as explicit tokens but are not auto-emitted on push fan-out; they
+  # exist for on-demand manual runs. Output entries are "role:variant" (or
+  # "role:box:<codename>" for release cells) strings; see build_matrix() for why.
   entries=()
   IFS=',' read -ra tokens <<<"$INPUTS_ROLES"
   for token in "${tokens[@]}"; do
@@ -309,6 +367,10 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}
       if is_minimal_role "$role"; then
         entries+=("\"$role:minimal\"")
       fi
+      # shellcheck disable=SC2046
+      for codename in $(release_ubuntu_for "$role"); do
+        entries+=("\"$role:box:$codename\"")
+      done
     fi
   done
   if [ ${#entries[@]} -eq 0 ]; then
@@ -557,6 +619,11 @@ fi
 DIRECT=$(echo "$CHANGED" | grep -oE "$ROLE_PATH_RE" | sed 's|^roles/||' | sort -u || true)
 
 ROLES=""
+# Propagated release cells ("<consumer>:box:<codename>"), newline-separated --
+# a changed release-gated role's release set fanned out onto its consumers
+# (build_matrix de-dups + sorts). Stays empty when no changed role declares
+# `ubuntu:`.
+RELEASE_CELLS=""
 # A packer change rebuilds the qcow2 tree, so test roles/_packer against it.
 if [ "$packer_changed" = true ]; then
   ROLES="_packer"
@@ -576,6 +643,23 @@ for role in $DIRECT; do
       ROLES="$ROLES $consumer"
     fi
   done
+  # Propagate the changed role's declared release cells onto every consumer
+  # that imports it: a change to a release-gated helper (e.g. apt_source's
+  # >= 26 deb822 branch) validates its dependents on that release, not just
+  # the helper's own standalone release cell. The changed role itself is
+  # already covered by build_matrix's per-role release_ubuntu_for; this fans
+  # the same releases out to its consumers. `expanded` already includes the
+  # role itself, so the self-cell it adds is a harmless dedup'd duplicate.
+  releases=$(release_ubuntu_for "$role")
+  if [ -n "$releases" ] && [ -n "$expanded" ]; then
+    log "  propagating release cells [$releases] from '$role' to its consumers"
+    for consumer in $expanded; do
+      in_universe "$consumer" || continue
+      for codename in $releases; do
+        RELEASE_CELLS="$RELEASE_CELLS"$'\n'"$consumer:box:$codename"
+      done
+    done
+  fi
 done
 
 ROLES_DEDUPED=$(echo "$ROLES" | tr ' ' '\n' | grep -v '^$' | sort -u || true)
@@ -584,4 +668,4 @@ if [ -n "$ROLES_DEDUPED" ]; then
 else
   log "no role-relevant changes; matrix will be empty"
 fi
-emit "$(build_matrix "$ROLES_DEDUPED")" "$packer_changed" "$ci_image_changed"
+emit "$(build_matrix "$ROLES_DEDUPED" "$RELEASE_CELLS")" "$packer_changed" "$ci_image_changed"
