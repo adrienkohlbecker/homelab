@@ -1,3 +1,16 @@
+- name: Assert seerr_api_key is provided
+  assert:
+    that:
+      - seerr_api_key is defined
+      - (seerr_api_key | default('')) | length > 0
+    fail_msg: >-
+      seerr_api_key is required (vaulted in group_vars/{prod,test}.yml). Without it
+      settings.json renders an empty apiKey, overwriting the key seerr
+      self-generates on first boot on every converge, and any API client wired to
+      the configured key silently breaks.
+  tags:
+    - seerr
+
 - name: Set up seerr system user, group, and config dir
   import_role:
     name: service_user
@@ -59,6 +72,10 @@
   vars:
     seerr_settings_json: "{{ _seerr_settings_b64['content'] | default('e30=') | b64decode | from_json }}"
   become: true
+  # On a fresh-host --check run seerr_user + its config dir are only reported
+  # (their creating tasks are guarded), so an unguarded copy with owner=seerr
+  # would fail resolving the not-yet-created user/dir.
+  when: not (ansible_check_mode and seerr_user.changed)
   tags:
     - seerr
 
