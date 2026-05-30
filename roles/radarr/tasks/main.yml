@@ -1,3 +1,16 @@
+- name: Assert radarr_api_key is provided
+  assert:
+    that:
+      - radarr_api_key is defined
+      - (radarr_api_key | default('')) | length > 0
+    fail_msg: >-
+      radarr_api_key is required (vaulted in group_vars/{prod,test}.yml). Without it
+      config.xml renders an empty <ApiKey>, radarr self-generates a random key on
+      boot, and every intra-stack X-Api-Key consumer (bazarr, seerr, ...) silently
+      breaks.
+  tags:
+    - radarr
+
 - name: Add media group
   import_role:
     name: media
@@ -49,6 +62,12 @@
   # Render via copy:content + regex_replace because radarr rewrites
   # config.xml on shutdown without a trailing newline; a plain template:
   # leaves us drifting forever.
+  #
+  # ApiKey is templated (not a FILE__/type=mount secret) because radarr reads
+  # its key only from config.xml -- it has no *_FILE or env override. And
+  # AuthenticationRequired stays Enabled (not DisabledForLocalAddresses): the
+  # podman-network API path (radarr.dns.podman, bypassing nginx/Authelia) must
+  # stay X-Api-Key-gated, so auth can't be relaxed for local addresses.
   copy:
     content: "{{ lookup('template', 'config.xml.j2') | regex_replace('\\n+$', '') }}"
     dest: /mnt/services/radarr/config.xml
