@@ -36,6 +36,7 @@
     netdata_args:
       src: systemdunits.conf
       dest: go.d/systemdunits.conf
+      validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
       restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
   tags:
     - netdata
@@ -92,75 +93,7 @@
   tags:
     - netdata
 
-- name: Install fail2ban metrics  # noqa: var-naming[no-role-prefix]
-  import_role:
-    name: fail2ban
-    tasks_from: netdata
-  vars:
-    netdata_restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
-  tags:
-    - netdata
-
-- name: Install smart metrics  # noqa: var-naming[no-role-prefix]
-  import_role:
-    name: smart
-    tasks_from: netdata
-  vars:
-    netdata_restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
-  tags:
-    - netdata
-
-- name: Install hdparm metrics
-  import_role:
-    name: hdparm
-    tasks_from: netdata
-  tags:
-    - netdata
-
-- name: Install zfs metrics
-  import_role:
-    name: zfs
-    tasks_from: netdata
-  tags:
-    - netdata
-
-- name: Install systemd_timer metrics
-  import_role:
-    name: systemd_timer
-    tasks_from: netdata
-  tags:
-    - netdata
-
-- name: Install netdata_presence metrics
-  import_role:
-    name: netdata
-    tasks_from: presence
-  tags:
-    - netdata
-
-- name: Install lm_sensors metrics  # noqa: var-naming[no-role-prefix]
-  import_role:
-    name: lm_sensors
-    tasks_from: netdata
-  vars:
-    netdata_restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
-  tags:
-    - netdata
-
-- name: Install certbot metrics  # noqa: var-naming[no-role-prefix]
-  import_role:
-    name: certbot
-    tasks_from: netdata
-  vars:
-    netdata_restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
-  tags:
-    - netdata
-
-- name: Install nginx metrics  # noqa: var-naming[no-role-prefix]
-  import_role:
-    name: nginx
-    tasks_from: netdata
-  vars:
-    netdata_restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
+- name: Wire sibling-role metrics
+  import_tasks: metrics.yml
   tags:
     - netdata
