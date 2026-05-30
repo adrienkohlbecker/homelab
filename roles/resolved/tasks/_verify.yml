@@ -46,20 +46,62 @@
       systemd-resolved is still listening on 127.0.0.53
       (DNSStubListener=no did not take effect): {{ resolved_verify_listeners.stdout }}
 
-# resolvectl's Global "Protocols" line shows the effective per-stack state;
-# -mDNS / -LLMNR confirm MulticastDNS=no and LLMNR=no are live, i.e.
-# resolved has ceded 5353/5355 to avahi as the drop-in intends.
+# resolved cedes UDP 5353 (mDNS) and TCP+UDP 5355 (LLMNR) when
+# MulticastDNS=no / LLMNR=no take effect; the same ss capture proves the
+# sockets are gone -- wire-level corroboration of the resolvectl check
+# below. avahi (which owns 5353 in prod) is not part of the resolved test
+# fixture, so on this VM 5353 is simply free; a listener here means
+# resolved ignored the drop-in.
+- name: _verify | The mDNS (5353) and LLMNR (5355) sockets are gone
+  assert:
+    that:
+      - "':5353' not in resolved_verify_listeners.stdout"
+      - "':5355' not in resolved_verify_listeners.stdout"
+    fail_msg: >-
+      systemd-resolved is still bound to :5353 or :5355 (MulticastDNS=no /
+      LLMNR=no did not take effect): {{ resolved_verify_listeners.stdout }}
+
+# resolvectl status prints a Global block first (driven by resolved.conf.d/)
+# then one block per link (driven by networkd). The drop-in controls the
+# Global default, so scope the assertion to the FIRST "Protocols:" line --
+# matching -mDNS/-LLMNR anywhere in the output would green even if the
+# Global line showed +mDNS while some per-link line happened to read -mDNS,
+# masking a drop-in resolved silently ignored.
 - name: _verify | Read resolvectl global status
   command: resolvectl status
   register: resolved_verify_status
   changed_when: false
   become: true
 
+- name: _verify | Isolate the Global Protocols line
+  set_fact:
+    resolved_verify_global_protocols: >-
+      {{ resolved_verify_status.stdout_lines
+         | select('search', 'Protocols:') | list | first | default('') }}
+
 - name: _verify | Global mDNS and LLMNR are disabled
   assert:
     that:
-      - resolved_verify_status.stdout is search('-mDNS')
-      - resolved_verify_status.stdout is search('-LLMNR')
+      - "'-mDNS' in resolved_verify_global_protocols"
+      - "'-LLMNR' in resolved_verify_global_protocols"
     fail_msg: >-
-      resolvectl does not report -mDNS/-LLMNR in its Global Protocols line
-      (MulticastDNS=no / LLMNR=no not live): {{ resolved_verify_status.stdout }}
+      resolvectl Global Protocols line does not report -mDNS/-LLMNR
+      (MulticastDNS=no / LLMNR=no not live): {{ resolved_verify_global_protocols }}
+
+# Prove the resolver path is live end-to-end, not merely that the unit is
+# active: localhost resolves from resolved's built-in RFC 6761 synthesis,
+# entirely on-host, so there's no SLIRP-UDP flake (external names stay
+# deliberately unasserted per the header).
+- name: _verify | Resolve localhost through resolved
+  command: resolvectl query localhost
+  register: resolved_verify_query
+  changed_when: false
+  become: true
+
+- name: _verify | The localhost query returns the loopback address
+  assert:
+    that:
+      - "'127.0.0.1' in resolved_verify_query.stdout"
+    fail_msg: >-
+      resolvectl query localhost did not return 127.0.0.1 -- the resolver
+      path is not answering: {{ resolved_verify_query.stdout }}
