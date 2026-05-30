@@ -155,6 +155,8 @@ netdata_contexts:
   system_cpu: system.cpu              # always-live chart, baseline
   ghost: foo.does_not_exist           # never-existed chart, probes the "missing-chart" gap
 netdata_collectors:
+  # Real, always-live collector (the role configures go.d/systemdunits.conf); mirrors prod and exercises the present=1 instanced-prefix path
+  - go.d:collector:systemdunits:service-units
   - go.d:collector:fake_plugin:fake_job  # never-existed collector; exercises the netdata_collector_missing alert path
 # Empty fixture values for zfs_alerts_override.conf.j2 (box has no ZFS pools
 # and blocklists no mounts from the diskspace alert); real hosts set these in

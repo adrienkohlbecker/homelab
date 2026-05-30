@@ -5,10 +5,13 @@
 #     system_cpu: system.cpu             (real chart, always live)
 #     ghost: foo.does_not_exist          (never-existed chart)
 #   netdata_collectors:
-#     - go.d:collector:fake_plugin:fake_job  (never-existed collector)
-# So the collector emits a 1 for system_cpu and 0 for ghost +
-# fake_plugin:fake_job, and the health templates fan out across the
-# resulting charts.
+#     - go.d:collector:systemdunits:service-units  (real, always-live -- the role configures it)
+#     - go.d:collector:fake_plugin:fake_job        (never-existed collector)
+# So the collector emits present=1 for system_cpu + systemdunits and
+# present=0 for ghost + fake_plugin:fake_job, and the health templates fan
+# out across the resulting charts. systemdunits is the present=1 witness for
+# the collector prefix match (instanced mode, plugin != job) -- not just the
+# trivial present=0 path; fake_plugin:fake_job is the present=0 witness.
 
 - name: _verify | Netdata.service is loaded and active
   systemd:
@@ -49,6 +52,7 @@
         "ghost=foo.does_not_exist"
       )
       netdata_presence_collectors=(
+        "go.d:collector:systemdunits:service-units"
         "go.d:collector:fake_plugin:fake_job"
       )
     dest: /etc/netdata/charts.d/netdata_presence.conf
@@ -78,6 +82,7 @@
     _verify_charts.status == 200
     and 'netdata_presence.context_system_cpu' in (_verify_charts.content | from_json).charts.keys()
     and 'netdata_presence.context_ghost' in (_verify_charts.content | from_json).charts.keys()
+    and 'netdata_presence.collector_go_d_collector_systemdunits_service_units' in (_verify_charts.content | from_json).charts.keys()
     and 'netdata_presence.collector_go_d_collector_fake_plugin_fake_job' in (_verify_charts.content | from_json).charts.keys()
 
 # `points=1` defaults to a 1-second window; with update_every=5s that
@@ -97,6 +102,19 @@
     and 'present' in (_verify_system_cpu_data.json.labels | default([]))
     and (_verify_system_cpu_data.json.data | default([])) | length > 0
     and _verify_system_cpu_data.json.data[0][_verify_system_cpu_data.json.labels.index('present')] | int == 1
+
+- name: _verify | Systemdunits collector resolves to present=1
+  uri:
+    url: http://localhost:19999/api/v1/data?chart=netdata_presence.collector_go_d_collector_systemdunits_service_units&points=1&after=-30&format=json
+    return_content: true
+  register: _verify_systemdunits_data
+  retries: 30
+  delay: 2
+  until: >-
+    _verify_systemdunits_data.status == 200
+    and 'present' in (_verify_systemdunits_data.json.labels | default([]))
+    and (_verify_systemdunits_data.json.data | default([])) | length > 0
+    and _verify_systemdunits_data.json.data[0][_verify_systemdunits_data.json.labels.index('present')] | int == 1
 
 - name: _verify | Ghost context resolves to present=0
   uri:
