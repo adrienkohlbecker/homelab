@@ -5,12 +5,12 @@
 # The producer's whole job is to be reachable at redis.dns.podman over the
 # `redis` network -- the path paperless uses. A throwaway peer container (not
 # `podman exec` into redis itself) is what exercises aardvark-dns cross-container
-# resolution.
+# resolution. redis requires a password, so the peer authenticates with -a.
 - name: _verify | Reachable at redis.dns.podman over the network
   shell: |
     set -euo pipefail
     podman run --rm --network redis {{ redis_image }} \
-      redis-cli -h redis.dns.podman -p 6379 ping | grep PONG
+      redis-cli -h redis.dns.podman -p 6379 -a {{ redis_password }} --no-auth-warning ping | grep PONG
   args:
     executable: /bin/bash
   become: true
@@ -20,13 +20,24 @@
   delay: 2
   changed_when: false
 
+# An unauthenticated connection must be refused -- proves requirepass is actually
+# enforced, not merely configured.
+- name: _verify | Unauthenticated connection is refused
+  command: >-
+    podman run --rm --network redis {{ redis_image }}
+    redis-cli -h redis.dns.podman -p 6379 ping
+  become: true
+  register: redis_noauth
+  changed_when: false
+  failed_when: "'NOAUTH' not in (redis_noauth.stdout + redis_noauth.stderr)"
+
 # The loopback publish is the operator/netdata path (host_vars/lab.yml's
 # go.d:collector:redis:local scrapes 127.0.0.1:{{ service_ports.redis }}). A
 # container on the host netns reaches the published port the same way netdata does.
 - name: _verify | Reachable on the host loopback publish
   command: >-
     podman run --rm --network host {{ redis_image }}
-    redis-cli -h 127.0.0.1 -p {{ service_ports.redis }} ping
+    redis-cli -h 127.0.0.1 -p {{ service_ports.redis }} -a {{ redis_password }} --no-auth-warning ping
   become: true
   register: redis_loopback_ping
   failed_when: "'PONG' not in redis_loopback_ping.stdout"
@@ -38,7 +49,7 @@
 - name: _verify | Write a key before restart
   command: >-
     podman run --rm --network redis {{ redis_image }}
-    redis-cli -h redis.dns.podman -p 6379 set homelab:verify survived
+    redis-cli -h redis.dns.podman -p 6379 -a {{ redis_password }} --no-auth-warning set homelab:verify survived
   become: true
   changed_when: false
 
@@ -52,7 +63,7 @@
   shell: |
     set -euo pipefail
     podman run --rm --network redis {{ redis_image }} \
-      redis-cli -h redis.dns.podman -p 6379 get homelab:verify
+      redis-cli -h redis.dns.podman -p 6379 -a {{ redis_password }} --no-auth-warning get homelab:verify
   args:
     executable: /bin/bash
   become: true
@@ -66,6 +77,6 @@
 - name: _verify | Clear the test key
   command: >-
     podman run --rm --network redis {{ redis_image }}
-    redis-cli -h redis.dns.podman -p 6379 del homelab:verify
+    redis-cli -h redis.dns.podman -p 6379 -a {{ redis_password }} --no-auth-warning del homelab:verify
   become: true
   changed_when: false
