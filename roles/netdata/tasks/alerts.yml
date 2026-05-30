@@ -177,11 +177,15 @@
     _disks: "{{ netdata_disks_unsilenced_check.content | b64decode }}"
   assert:
     that:
-      # Same stanza-anchored shape as the replace regexes above: each
-      # template must resolve to a `to: sysadmin` stanza. Zero matches means
-      # the un-silence missed -- fail here, not during an actual disk-fill.
-      - _disks | regex_findall('(?ms)^\s*template:\s+out_of_disk_space_time\s(?:(?!^\s*template:).)*?^\s*to:\s+sysadmin') | length >= 1
-      - _disks | regex_findall('(?ms)^\s*template:\s+out_of_disk_inodes_time\s(?:(?!^\s*template:).)*?^\s*to:\s+sysadmin') | length >= 1
+      # Same stanza-anchored shape and whitespace classes as the replace
+      # regexes above (\s* around `template:`/`to:`), so a no-space upstream
+      # variant the replace flips can't then false-fail this assert. The one
+      # deliberate divergence: `\s` after the name instead of \b -- \b in a
+      # `that:` conditional is re-escaped to a backspace by ansible 2.20, so
+      # we consume the trailing newline instead. Zero matches means the
+      # un-silence missed -- fail here, not during an actual disk-fill.
+      - _disks | regex_findall('(?ms)^\s*template:\s*out_of_disk_space_time\s(?:(?!^\s*template:).)*?^\s*to:\s*sysadmin') | length >= 1
+      - _disks | regex_findall('(?ms)^\s*template:\s*out_of_disk_inodes_time\s(?:(?!^\s*template:).)*?^\s*to:\s*sysadmin') | length >= 1
     fail_msg: >-
       disks.conf out_of_disk_space_time / out_of_disk_inodes_time no longer
       resolve to a `to: sysadmin` stanza -- upstream likely renamed or
@@ -248,7 +252,9 @@
     _timex: "{{ netdata_timex_unsilenced_check.content | b64decode }}"
   assert:
     that:
-      - _timex | regex_findall('(?ms)^\s*alarm:\s+system_clock_sync_state\s(?:(?!^\s*alarm:|^\s*template:).)*?^\s*to:\s+sysadmin') | length >= 1
+      # \s* around `alarm:`/`to:` matches the replace regex's classes; `\s`
+      # (not \b) after the name dodges ansible 2.20 re-escaping \b in `that:`.
+      - _timex | regex_findall('(?ms)^\s*alarm:\s*system_clock_sync_state\s(?:(?!^\s*alarm:|^\s*template:).)*?^\s*to:\s*sysadmin') | length >= 1
     fail_msg: >-
       timex.conf system_clock_sync_state no longer resolves to a
       `to: sysadmin` stanza -- upstream likely renamed/restructured it,
