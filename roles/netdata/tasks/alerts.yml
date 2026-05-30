@@ -151,9 +151,7 @@
 
 - name: Reload netdata health after disks.conf edits
   when: netdata_disks_staged.changed or netdata_disks_space_unsilenced.changed or netdata_disks_inodes_unsilenced.changed
-  command: netdatacli reload-health
-  changed_when: true
-  become: true
+  import_tasks: reload_health.yml
   tags:
     - netdata
 
@@ -230,9 +228,7 @@
 
 - name: Reload netdata health after timex.conf edits
   when: netdata_timex_staged.changed or netdata_timex_unsilenced.changed
-  command: netdatacli reload-health
-  changed_when: true
-  become: true
+  import_tasks: reload_health.yml
   tags:
     - netdata
 

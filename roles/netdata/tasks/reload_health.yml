@@ -1,0 +1,8 @@
+# Hot-reload netdata's health configuration (hitless -- no daemon restart).
+# Standalone entrypoint so the health helper (health.yml) and the
+# disks/timex un-silence edits in alerts.yml share one definition of the
+# reload command. The caller gates the import with its own `when:`.
+- name: reload_health | Reload netdata health configuration
+  command: netdatacli reload-health
+  changed_when: true
+  become: true
