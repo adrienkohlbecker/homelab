@@ -3,6 +3,7 @@
 # netdata_presence_check. Contexts use a flat "name=context_id" array
 # (bash 4 doesn't portably export associative arrays through `source`);
 # collectors are go.d:collector:<plugin>:<job> ids.
+netdata_presence_api="http://127.0.0.1:{{ service_ports.netdata }}"
 netdata_presence_contexts=(
 {% for name, ctx in (netdata_contexts | default({})).items() %}
   "{{ name }}={{ ctx }}"

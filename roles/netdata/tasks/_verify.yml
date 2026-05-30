@@ -73,7 +73,7 @@
 # instead of letting `until:` retry.
 - name: _verify | Wait for both context-presence charts to register
   uri:
-    url: http://localhost:19999/api/v1/charts
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/charts
     return_content: true
   register: _verify_charts
   retries: 30
@@ -92,7 +92,7 @@
 # cleanly rather than raising and aborting the retry loop.
 - name: _verify | System_cpu context resolves to present=1
   uri:
-    url: http://localhost:19999/api/v1/data?chart=netdata_presence.context_system_cpu&points=1&after=-30&format=json
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.context_system_cpu&points=1&after=-30&format=json
     return_content: true
   register: _verify_system_cpu_data
   retries: 30
@@ -105,7 +105,7 @@
 
 - name: _verify | Systemdunits collector resolves to present=1
   uri:
-    url: http://localhost:19999/api/v1/data?chart=netdata_presence.collector_go_d_collector_systemdunits_service_units&points=1&after=-30&format=json
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.collector_go_d_collector_systemdunits_service_units&points=1&after=-30&format=json
     return_content: true
   register: _verify_systemdunits_data
   retries: 30
@@ -118,7 +118,7 @@
 
 - name: _verify | Ghost context resolves to present=0
   uri:
-    url: http://localhost:19999/api/v1/data?chart=netdata_presence.context_ghost&points=1&after=-30&format=json
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.context_ghost&points=1&after=-30&format=json
     return_content: true
   register: _verify_ghost_data
   retries: 30
@@ -131,7 +131,7 @@
 
 - name: _verify | Fake_plugin:fake_job collector resolves to present=0
   uri:
-    url: http://localhost:19999/api/v1/data?chart=netdata_presence.collector_go_d_collector_fake_plugin_fake_job&points=1&after=-30&format=json
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.collector_go_d_collector_fake_plugin_fake_job&points=1&after=-30&format=json
     return_content: true
   register: _verify_fake_collector_data
   retries: 30
@@ -148,7 +148,7 @@
 # failed. Verify the labels are set as expected.
 - name: _verify | System_cpu chart carries context labels + shared context
   uri:
-    url: http://localhost:19999/api/v1/chart?chart=netdata_presence.context_system_cpu
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=netdata_presence.context_system_cpu
     return_content: true
   register: _verify_system_cpu_chart
 - name: _verify | Assert system_cpu labels + context
@@ -163,7 +163,7 @@
 
 - name: _verify | Fake collector chart carries collector label + shared context
   uri:
-    url: http://localhost:19999/api/v1/chart?chart=netdata_presence.collector_go_d_collector_fake_plugin_fake_job
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=netdata_presence.collector_go_d_collector_fake_plugin_fake_job
     return_content: true
   register: _verify_fake_collector_chart
 - name: _verify | Assert collector label + context
@@ -183,7 +183,7 @@
 #      to silently drop because foo.does_not_exist isn't in the registry.
 - name: _verify | Fetch alarms
   uri:
-    url: http://localhost:19999/api/v1/alarms?all
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
     return_content: true
   register: _verify_alarms
   retries: 10
@@ -222,7 +222,7 @@
 # `until` is the assertion -- fail fast at the deadline if it never registers.
 - name: _verify | Un-silenced disk-fill alarm is live in the daemon
   uri:
-    url: http://localhost:19999/api/v1/alarms?all
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
     return_content: true
   register: _verify_diskfill_alarm
   retries: 15

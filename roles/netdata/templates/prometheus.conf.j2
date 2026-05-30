@@ -5,7 +5,7 @@ jobs:
   # records mean fluent-bit gave up after exhausting retries against
   # OpenObserve/HyperDX -- silent log loss otherwise.
   - name: fluentbit
-    url: http://127.0.0.1:2020/api/v1/metrics/prometheus
+    url: http://127.0.0.1:{{ service_ports.fluentbit }}/api/v1/metrics/prometheus
     autodetection_retry: 60
 
 {% if prometheus_enabled|default(false) %}

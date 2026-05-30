@@ -130,7 +130,7 @@
     - _netdata_charts_d_condition
     - _netdata_charts_d_restart_result.changed | default(false)
   uri:
-    url: http://127.0.0.1:19999/api/v1/info
+    url: http://127.0.0.1:{{ service_ports.netdata }}/api/v1/info
     status_code: 200
   register: _netdata_charts_d_api_probe
   retries: 60
