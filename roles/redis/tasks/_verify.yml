@@ -1,0 +1,71 @@
+- name: _verify | Resolve the redis image for peer-container probes
+  set_fact:
+    redis_image: docker.io/redis:7.4
+
+# The producer's whole job is to be reachable at redis.dns.podman over the
+# `redis` network -- the path paperless uses. A throwaway peer container (not
+# `podman exec` into redis itself) is what exercises aardvark-dns cross-container
+# resolution.
+- name: _verify | Reachable at redis.dns.podman over the network
+  shell: |
+    set -euo pipefail
+    podman run --rm --network redis {{ redis_image }} \
+      redis-cli -h redis.dns.podman -p 6379 ping | grep PONG
+  args:
+    executable: /bin/bash
+  become: true
+  register: redis_dns_ping
+  until: redis_dns_ping.rc == 0
+  retries: 15
+  delay: 2
+  changed_when: false
+
+# The loopback publish is the operator/netdata path (host_vars/lab.yml's
+# go.d:collector:redis:local scrapes 127.0.0.1:{{ service_ports.redis }}). A
+# container on the host netns reaches the published port the same way netdata does.
+- name: _verify | Reachable on the host loopback publish
+  command: >-
+    podman run --rm --network host {{ redis_image }}
+    redis-cli -h 127.0.0.1 -p {{ service_ports.redis }} ping
+  become: true
+  register: redis_loopback_ping
+  failed_when: "'PONG' not in redis_loopback_ping.stdout"
+  changed_when: false
+
+# RDB (--save 60 1) persists on clean shutdown because a save point is
+# configured; the nightly zfs_autosnapshot stop/start relies on that. Prove a
+# key survives a restart (Type=notify blocks until healthy again).
+- name: _verify | Write a key before restart
+  command: >-
+    podman run --rm --network redis {{ redis_image }}
+    redis-cli -h redis.dns.podman -p 6379 set homelab:verify survived
+  become: true
+  changed_when: false
+
+- name: _verify | Restart redis
+  systemd:
+    name: redis
+    state: restarted
+  become: true
+
+- name: _verify | Key survived the restart
+  shell: |
+    set -euo pipefail
+    podman run --rm --network redis {{ redis_image }} \
+      redis-cli -h redis.dns.podman -p 6379 get homelab:verify
+  args:
+    executable: /bin/bash
+  become: true
+  register: redis_persist
+  until: redis_persist.rc == 0 and 'survived' in redis_persist.stdout
+  retries: 15
+  delay: 2
+  changed_when: false
+
+# Clear the test key so a re-run against a --keep VM starts clean.
+- name: _verify | Clear the test key
+  command: >-
+    podman run --rm --network redis {{ redis_image }}
+    redis-cli -h redis.dns.podman -p 6379 del homelab:verify
+  become: true
+  changed_when: false
