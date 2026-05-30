@@ -77,6 +77,12 @@
   tags:
     - sabnzbd
 
+# Per-category download targets: sabnzbd drops completed tv/movie/music
+# jobs here (the [[tv]]/[[movie]]/[[music]] category dirs in sabnzbd.ini)
+# and sonarr/radarr/lidarr import out of them over the shared /mnt/scratch
+# mount. Ownership is split across roles by convention -- sabnzbd creates
+# the dirs, each *arr app (own uid, media group) reads/moves from them -- so
+# the 0775 group-write is load-bearing, not cosmetic.
 - name: Create storage directories
   file:
     dest: "{{ item }}"
@@ -249,12 +255,16 @@
     nginx_site_args:
       subdomain: sabnzbd
       proxy_pass: http://127.0.0.1:{{ service_ports.sabnzbd }}/
-      # PR 5 tail: Authelia is the sole UI gate. sabnzbd's
-      # misc/username + misc/password are empty (and api_key is
-      # used only by the autoProcessMedia hook), so no double-click.
-      # The *arr leg uses sabnzbd.dns.podman:8080 over the media
-      # podman network and bypasses nginx entirely, so api_key
-      # consumers aren't broken by the cookie gate.
+      # Authelia is the sole UI gate: sabnzbd's misc/username +
+      # misc/password are empty, so there's no second login. sabnzbd binds
+      # host = :: inside the container (sabnzbd.ini), so the *arr leg reaches
+      # it at sabnzbd.dns.podman:8080 over the media podman network carrying
+      # api_key, bypassing nginx entirely. Don't "harden" that bind to
+      # 127.0.0.1 -- it would break the *arr path, which never traverses the
+      # loopback --publish. The flip side: api_key is a full admin credential
+      # reachable in cleartext by ANY container on the flat media network,
+      # not just the *arr apps. Accepted under the single-operator model; the
+      # lever to tighten is a narrower network, not the cookie gate.
       auth: required
   tags:
     - sabnzbd
