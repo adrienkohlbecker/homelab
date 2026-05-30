@@ -3,3 +3,10 @@
 # resolute is the only divergent release.
 ubuntu:
   - resolute
+# _setup.yml imports _test/nginx + _test/authelia_stub and the _verify path
+# exercises the full nginx+Authelia front (token bypass, redacted access
+# log), so route to box_deps where nginx is pre-baked (packer/seed_deps.yml)
+# to skip the apt-backports + nginx install on every test run. netdata itself
+# isn't pre-baked -- the saving is the shared nginx bringup, same as the
+# keepalived_exporter / fluentbit consumers of the same _setup pattern.
+machine: box_deps
