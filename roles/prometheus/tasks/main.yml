@@ -65,6 +65,7 @@
     - prometheus
 
 - name: Copy the configuration
+  when: not (ansible_check_mode and prometheus_apt.changed)
   template:
     src: prometheus.yml.j2
     dest: /etc/prometheus/prometheus.yml
