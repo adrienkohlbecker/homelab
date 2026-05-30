@@ -42,6 +42,25 @@
   tags:
     - netdata
 
+# Drop-in override that blocks `systemctl start/restart netdata` on the HTTP
+# API answering: netdata's Type=notify signals READY=1 before the listener is
+# fully accepting connections, so a bare restart returns "early" and a
+# following `netdatacli reload-health` would race the listener coming up.
+# Installed here -- ahead of the first go.d config write below -- so the very
+# first start (the config-helper restart on a fresh install, where the package
+# was held by policy_rc_d) is already API-gated, not just the later "Enable
+# netdata service" step. Mirrors the podman --health-startup-cmd pattern.
+- name: Install netdata service override
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      src: override.conf
+      for: netdata.service
+  tags:
+    - netdata
+
 - name: Configure prometheus metrics
   import_role:
     name: netdata
@@ -200,23 +219,6 @@
     backup: true
   register: netdata_debugfs_mount
   become: true
-  tags:
-    - netdata
-
-# Drop-in override that blocks `systemctl start/restart netdata` on the
-# HTTP API answering. Without it, downstream `netdatacli reload-health`
-# in health_copy/health_template races against /run/netdata/netdata.pipe
-# coming up — Type=notify's READY=1 fires before the listener is fully
-# accepting connections. Installed before "Enable netdata service" so
-# the first start (and every subsequent restart) is synchronous.
-- name: Install netdata service override
-  import_role:
-    name: systemd_unit
-    tasks_from: dropin
-  vars:
-    systemd_unit_args:
-      src: override.conf
-      for: netdata.service
   tags:
     - netdata
 
