@@ -739,6 +739,108 @@
       state: absent on a never-created site reported changed=true; a tombstone
       call on a fresh host must be a clean no-op or it fires a spurious reload.
 
+# A site retired under an older naming convention can carry an underscore (e.g.
+# homeassistant's vscode_ha tombstone), which is not a valid DNS label. A state:
+# absent teardown must still accept it -- the DNS-label assert is gated to
+# present, so only the weaker path-safety check applies -- or the tombstone
+# breaks the consuming role's converge on every host not yet cleaned.
+- name: _verify | A state:absent on an underscore (legacy) subdomain is accepted
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: nginx_verify_legacy
+      state: absent
+
+- name: _verify | The underscore tombstone reported no change
+  assert:
+    that:
+      - not nginx_verify_legacy_site_result.changed
+    fail_msg: >-
+      state: absent on an underscore subdomain reported changed=true or tripped
+      the DNS-label assert; a legacy tombstone (e.g. vscode_ha) must be a clean
+      no-op.
+
+# condition: false gates change application but must still DEFINE the per-site
+# result fact (so a caller wiring a reload off <sub>_site_result doesn't hit an
+# undefined var on a host where condition gated the site off) and must write
+# nothing to disk. Neither contract is exercised by the create tests above.
+- name: _verify | Configure a vhost with condition false
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: nginxverifycond
+      proxy_pass: http://127.0.0.1:18080/
+      condition: false
+
+- name: _verify | Condition false still defines the result fact as unchanged
+  assert:
+    that:
+      - nginxverifycond_site_result is defined
+      - not nginxverifycond_site_result.changed
+    fail_msg: >-
+      condition: false must still define <sub>_site_result (changed=false), or a
+      caller wiring a reload off it crashes on the host where condition gated the
+      site off; got {{ nginxverifycond_site_result | default('<undefined>') }}.
+
+- name: _verify | Condition false wrote no vhost to disk
+  stat:
+    path: /etc/nginx/sites-available/nginxverifycond
+  register: nginx_verify_cond_file
+  become: true
+  failed_when: nginx_verify_cond_file.stat.exists
+
+# reload: false installs the vhost config-only (write + symlink + in-place nginx
+# -t) but does NOT reload, so the running nginx keeps its old config -- the
+# pre-warm-an-unready-upstream contract. Prove it: the file lands and validates
+# (a broken render would have failed the helper's nginx -t regardless of reload),
+# yet a :80 probe still falls through to the default server (404) because no
+# reload made the vhost live. No _verify_wait_route here -- it would poll for a
+# route that, by design, never appears without a reload.
+- name: _verify | Configure a vhost with reload false
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: nginxverifyreload
+      proxy_pass: http://127.0.0.1:18080/
+      reload: false
+
+- name: _verify | Reload false wrote and enabled the vhost on disk
+  stat:
+    path: "{{ item }}"
+  register: nginx_verify_reload_files
+  become: true
+  failed_when: not nginx_verify_reload_files.stat.exists
+  loop:
+    - /etc/nginx/sites-available/nginxverifyreload
+    - /etc/nginx/sites-enabled/nginxverifyreload
+
+- name: _verify | Reload false leaves the vhost not yet served (default server 404)
+  uri:
+    url: "http://{{ ansible_default_ipv4.address }}/"
+    headers:
+      Host: "nginxverifyreload.{{ inventory_hostname }}.{{ domain }}"
+    follow_redirects: none
+    status_code: 404
+  register: nginx_verify_reload_probe
+  failed_when: nginx_verify_reload_probe.status != 404
+
+# Tear down the reload:false vhost (with a reload this time) so it doesn't leak
+# into later probes; the condition:false call wrote nothing, so nothing to remove.
+- name: _verify | Remove the reload-false vhost
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: nginxverifyreload
+      state: absent
+
 # state: absent — tear down the transient vhosts via the helper and confirm both
 # the symlink and the config are gone. This is the contract the otgw / vscode_ha
 # tombstones rely on to stay decommissioned on a fresh install. include_tasks
@@ -797,6 +899,126 @@
 # nginx's draining old workers (which still hold the removed vhost) and follows
 # their 308 to an https URL the snakeoil cert doesn't cover. The stat above is
 # the deterministic check that the state: absent contract removed both files.
+
+# conf_d state: absent -- the tombstone path (mirrors site.yml's retired-site
+# handling) is otherwise untested. Two contracts: a tombstone for a never-created
+# drop must be a clean no-op (changed=false, or it fires a spurious host-wide
+# reload every converge), and a create-then-remove must delete the file.
+- name: _verify | A conf_d state:absent on a never-created drop is a no-op
+  import_role:
+    name: nginx
+    tasks_from: conf_d
+  vars:
+    nginx_conf_d_args:
+      name: _test_nginx_verify_absent.conf
+      state: absent
+
+- name: _verify | The never-created conf_d removal reported no change
+  assert:
+    that:
+      - not _test_nginx_verify_absent_conf_result.changed
+    fail_msg: >-
+      conf_d state: absent on a never-created drop reported changed=true; a
+      tombstone on a fresh host must be a clean no-op or it fires a spurious
+      reload every converge.
+
+- name: _verify | Create a conf_d drop to remove
+  import_role:
+    name: nginx
+    tasks_from: conf_d
+  vars:
+    nginx_conf_d_args:
+      name: _test_nginx_verify_absent.conf
+      content: "# nginx _verify conf_d absent-path fixture\n"
+
+- name: _verify | The conf_d drop exists before removal
+  stat:
+    path: /etc/nginx/conf.d/_test_nginx_verify_absent.conf
+  register: nginx_verify_confd_present
+  become: true
+  failed_when: not nginx_verify_confd_present.stat.exists
+
+- name: _verify | Remove the conf_d drop via state absent
+  import_role:
+    name: nginx
+    tasks_from: conf_d
+  vars:
+    nginx_conf_d_args:
+      name: _test_nginx_verify_absent.conf
+      state: absent
+
+- name: _verify | The removed conf_d drop is gone
+  stat:
+    path: /etc/nginx/conf.d/_test_nginx_verify_absent.conf
+  register: nginx_verify_confd_gone
+  become: true
+  failed_when: nginx_verify_confd_gone.stat.exists
+
+# conf_d src: (file) input -- _verify otherwise only drives conf_d with `content`
+# (the broken-drop and absent tests). The src branch is exercised in prod by
+# install.yml's status.conf drop but never asserted here, so a regression in the
+# src/content default(omit) dance would pass every test. Drop a fixture file by
+# src, confirm its content actually landed, then remove it.
+- name: _verify | Install a conf_d drop via the src (file) input
+  import_role:
+    name: nginx
+    tasks_from: conf_d
+  vars:
+    nginx_conf_d_args:
+      name: _test_nginx_verify_src.conf
+      src: _test_verify_drop.conf
+
+- name: _verify | Read the src-dropped conf_d file
+  slurp:
+    path: /etc/nginx/conf.d/_test_nginx_verify_src.conf
+  register: nginx_verify_src_drop
+  become: true
+
+- name: _verify | The src-dropped conf_d file carries the fixture content
+  assert:
+    that:
+      - "'__nginx_verify_src_marker__' in (nginx_verify_src_drop.content | b64decode)"
+    fail_msg: >-
+      The conf_d src: input did not copy the fixture content;
+      /etc/nginx/conf.d/_test_nginx_verify_src.conf is missing the marker.
+
+- name: _verify | Remove the src-dropped conf_d file
+  import_role:
+    name: nginx
+    tasks_from: conf_d
+  vars:
+    nginx_conf_d_args:
+      name: _test_nginx_verify_src.conf
+      state: absent
+
+# src and content are mutually exclusive (conf_d asserts exactly one). Drive the
+# assert to its failure direction; the helper's failure is expected, so catch it
+# and confirm it was THIS assert that fired (not some unrelated error).
+- name: _verify | Both src and content together fail the mutual-exclusion assert
+  block:
+    - name: _verify | Configure a conf_d drop with both src and content
+      import_role:
+        name: nginx
+        tasks_from: conf_d
+      vars:
+        nginx_conf_d_args:
+          name: _test_nginx_verify_both.conf
+          src: _test_verify_drop.conf
+          content: "# both set -- must be rejected\n"
+
+    - name: _verify | Passing both src and content must fail (unexpected success)
+      fail:
+        msg: >-
+          conf_d accepted both src and content; the mutual-exclusion assert
+          should have failed.
+  rescue:
+    - name: _verify | The failure was the src/content mutual-exclusion assert
+      assert:
+        that:
+          - "'exactly one of src/content' in (ansible_failed_task.name | default(''))"
+        fail_msg: >-
+          Expected the src/content mutual-exclusion assert to fail, but a
+          different task failed: {{ ansible_failed_task.name | default('<unknown>') }}.
 
 # conf_d rollback — feed the helper a syntactically broken drop and confirm the
 # place-validate-rollback removes it. A broken file left under conf.d/ would
