@@ -155,6 +155,12 @@ service_ports:
   # fan2go_api comment above refers to.
   minio_api: 9199
   minio_console: 9001
+  # netdata's local HTTP API + dashboard, loopback-bound (netdata.conf
+  # [web] bind to = 127.0.0.1); nginx fronts it on the netdata subdomain
+  # behind Authelia. The netdata_presence collector and the readiness
+  # probe also hit it. (The static files/ healthcheck drop-in keeps the
+  # 19999 literal -- it's not templated; 19999 is netdata's fixed default.)
+  netdata: 19999
   # Host-side loopback publish; Nexus's own listener is 8081 inside the
   # container.
   nexus: 8082
