@@ -142,6 +142,33 @@
     and (_verify_fake_collector_data.json.data | default([])) | length > 0
     and _verify_fake_collector_data.json.data[0][_verify_fake_collector_data.json.labels.index('present')] | int == 0
 
+# Unit-test the collector chart-prefix derivation directly. The live
+# present=1 path above only exercises 'instanced' mode (systemdunits,
+# plugin != job); 'exact' mode (plugin == job -- nvme, fail2ban, zfspool,
+# the dominant prod shape) and the non-go.d skip have no always-live witness
+# on the box fixture, so assert the pure derivation function here. Sourcing
+# the collector is side-effect-free (no curl/error at load time).
+- name: _verify | Assert the collector chart-prefix derivation (exact + instanced + skip)
+  shell: |
+    source /usr/libexec/netdata/charts.d/netdata_presence.chart.sh
+    fail=0
+    check() {
+      got=$(_netdata_presence_collector_chart_prefix "$1")
+      if [ "$got" != "$2" ]; then
+        echo "FAIL: prefix('$1') = '$got', expected '$2'"
+        fail=1
+      fi
+    }
+    check "go.d:collector:nvme:nvme" "exact nvme"
+    check "go.d:collector:fail2ban:fail2ban" "exact fail2ban"
+    check "go.d:collector:systemdunits:service-units" "instanced systemdunits_service-units"
+    check "go.d:collector:prometheus:keepalived_exporter_local" "instanced prometheus_keepalived_exporter_local"
+    check "not-go.d:foo:bar:baz" ""
+    exit $fail
+  args:
+    executable: /bin/bash
+  changed_when: false
+
 # Each chart carries CLABELs (context+context_id for context charts,
 # collector for collector charts); the alert templates use ${label:foo}
 # in their summary/info so the alert text identifies which entry
