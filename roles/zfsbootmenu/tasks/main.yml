@@ -13,8 +13,8 @@
 - name: Download zfsbootmenu
   when: not (ansible_check_mode and zfsbootmenu_zbm_directory.changed)
   get_url:
-    url: "{{ mirror_github }}/zbm-dev/zfsbootmenu/releases/download/v3.0.1/zfsbootmenu-recovery-x86_64-v3.0.1-linux6.1.EFI"
-    checksum: sha256:3d4c55147964fdbc2b0042535d9ee117dc51bee82af045040d26ae9dfb9bdf0d
+    url: "{{ mirror_github }}/zbm-dev/zfsbootmenu/releases/download/v3.1.0/zfsbootmenu-recovery-x86_64-v3.1.0-linux6.12.EFI"
+    checksum: sha256:9910458dfe7fc2895214922e22b6ae2513cd0f5a43d4d3c5526eee26e69a2198
     dest: /boot/efi/EFI/ZBM/VMLINUZ.EFI
     mode: "0755"
     owner: root
