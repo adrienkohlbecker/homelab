@@ -44,10 +44,12 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name sabnzbd \
+    --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="sabnzbd" \
     --env PUID={{ sabnzbd_user.uid }} \
     --env PGID={{ media_group.gid }} \
+    --env UMASK=002 \
     --env TZ={{ system_timezone }} \
     --volume /mnt/services/sabnzbd:/config \
     --volume /mnt/services/sqlite/sabnzbd:/mnt/services/sqlite/sabnzbd \
