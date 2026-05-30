@@ -50,6 +50,26 @@
     or 'auth.' not in (_verify_nginx_gate.location | default(''))
     or ('rd=https://radarr.' ~ inventory_hostname ~ '.' ~ domain) not in (_verify_nginx_gate.location | default(''))
 
+# The --network media join + radarr.dns.podman FQDN is how intra-stack peers
+# (bazarr, seerr, ...) reach radarr with X-Api-Key, bypassing nginx. The
+# loopback/nginx probes above don't exercise it -- a dropped `--network media`
+# strands that path while leaving them green. Probe from a throwaway container
+# on the media network: a keyless GET that must 401 proves aardvark resolves
+# the FQDN, radarr listens, and apikey enforcement is reached over that path
+# (no key on argv keeps it out of the test VM's journald/ps).
+- name: _verify | Radarr is reachable intra-stack at radarr.dns.podman over the media network
+  command: >-
+    podman run --rm --network media --entrypoint /usr/bin/curl
+    docker.io/linuxserver/radarr:5.26.2
+    -s -o /dev/null -w %{http_code}
+    http://radarr.dns.podman:7878/api/v3/system/status
+  become: true
+  register: _verify_dns_podman
+  until: _verify_dns_podman.rc == 0 and _verify_dns_podman.stdout == "401"
+  retries: 15
+  delay: 2
+  changed_when: false
+
 # The sqlite_dataset symlink + matching --volume is the role's whole reason
 # for its non-obvious structure: it lands the DBs (and their -wal/-shm
 # siblings) on the 4K-recordsize sqlite dataset. The HTTP probes above pass
@@ -96,6 +116,22 @@
   loop: "{{ _verify_db_files.results }}"
   loop_control:
     label: "{{ item.item }}"
+
+# config_dir_group: media (see main.yml) exists to stop ansible flapping
+# /mnt/services/radarr's gid back to `radarr` against linuxserver's startup
+# chown to PUID:PGID=radarr:media. Assert the dir landed group `media` so a
+# regression in that setting surfaces here, not as a silent per-converge flap.
+- name: _verify | Stat the radarr config dir
+  stat:
+    path: /mnt/services/radarr
+  register: _verify_config_dir
+  become: true
+
+- name: _verify | Radarr config dir is group media
+  assert:
+    that:
+      - _verify_config_dir.stat.gr_name == "media"
+    fail_msg: "/mnt/services/radarr is not group media (gr_name={{ _verify_config_dir.stat.gr_name }})"
 
 # config.xml is the role's other fragile contract: radarr rewrites it on
 # every shutdown, so config.xml.j2's element order + casing must match
