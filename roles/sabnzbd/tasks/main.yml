@@ -158,17 +158,19 @@
   tags:
     - sabnzbd
 
-# linuxserver's s6 init only runs /custom-cont-init.d scripts owned by root
-# (non-root-owned scripts are skipped with a warning), so the ffmpeg install
-# would silently no-op if this rode the sabnzbd:media ownership the rest of
-# the config files use.
+# Owned sabnzbd:media to match what linuxserver's s6 init chowns /config
+# (= /mnt/services/sabnzbd, where this file lives) to on every container
+# start; root:root here flaps the owner back every converge. The hook still
+# runs as root inside the container (custom-cont-init executes before the
+# privilege drop), so the apk install works regardless of the file's owner
+# -- _verify asserts ffprobe ends up installed.
 - name: Install before_start.sh container-init hook
   when: not (ansible_check_mode and sabnzbd_user.changed)
   copy:
     src: before_start.sh
     dest: /mnt/services/sabnzbd/before_start.sh
-    owner: root
-    group: root
+    owner: sabnzbd
+    group: media
     mode: "0755"
     backup: true
   register: sabnzbd_before_start
