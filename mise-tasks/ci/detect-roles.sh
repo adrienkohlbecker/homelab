@@ -42,6 +42,15 @@
 #                                              split lets test depend on box
 #                                              alone (box + box_deps are the
 #                                              only images push-CI tests use).
+#   packer_ubuntu_box=<JSON array>          -- Ubuntu release codenames the
+#                                              packer_box call crosses its source
+#                                              matrix with: all supported releases
+#                                              by default (box validates the build
+#                                              per-release), or a single pinned
+#                                              release from INPUTS_UBUNTU.
+#   packer_ubuntu_extra=<JSON array>        -- same for packer_extra: jammy only
+#                                              by default (pug/lab/hetzner track
+#                                              prod), or the pinned release.
 #
 # A changed role is also expanded via ci:role-deps into the set of roles
 # that import it (its consumers) -- so editing a helper like systemd_unit or
@@ -185,9 +194,26 @@ PACKER_SOURCES_JSON=$(jq -cn --arg s "${INPUTS_SOURCES:-}" \
 PACKER_SOURCES_BOX_JSON=$(jq -cn --argjson all "$PACKER_SOURCES_JSON" '$all | map(select(. == "box"))')
 PACKER_SOURCES_EXTRA_JSON=$(jq -cn --argjson all "$PACKER_SOURCES_JSON" '$all | map(select(. != "box"))')
 
+# Ubuntu release matrix per packer call (crossed with the source matrix in
+# packer-build.yml). box validates across every supported release so a packer
+# change that breaks a release-specific path -- resolute's sudo-rs swap, ZBM on
+# a newer kernel, deb822 apt sources -- surfaces at packer-change time via each
+# release's verify-boot post-processor. pug/lab/hetzner track prod, which is
+# jammy, so they stay single-release (and box_deps, seeded only off jammy box,
+# is the lone image push-CI test cells consume). A dispatch that pins `ubuntu`
+# (INPUTS_UBUNTU, ci.yml's `ubuntu` input) rebuilds just that release for both
+# calls; empty (a push, or a no-arg dispatch) takes the defaults below.
+if [ -n "${INPUTS_UBUNTU:-}" ]; then
+  PACKER_UBUNTU_BOX_JSON=$(jq -cn --arg u "$INPUTS_UBUNTU" '[$u]')
+  PACKER_UBUNTU_EXTRA_JSON=$PACKER_UBUNTU_BOX_JSON
+else
+  PACKER_UBUNTU_BOX_JSON='["jammy","noble","resolute"]'
+  PACKER_UBUNTU_EXTRA_JSON='["jammy"]'
+fi
+
 emit() {
   local matrix=$1 packer_changed=${2:-false} ci_image_changed=${3:-false}
-  log "result: matrix=$matrix packer_changed=$packer_changed ci_image_changed=$ci_image_changed packer_sources=$PACKER_SOURCES_JSON (box=$PACKER_SOURCES_BOX_JSON extra=$PACKER_SOURCES_EXTRA_JSON)"
+  log "result: matrix=$matrix packer_changed=$packer_changed ci_image_changed=$ci_image_changed packer_sources=$PACKER_SOURCES_JSON (box=$PACKER_SOURCES_BOX_JSON extra=$PACKER_SOURCES_EXTRA_JSON) packer_ubuntu=(box=$PACKER_UBUNTU_BOX_JSON extra=$PACKER_UBUNTU_EXTRA_JSON)"
   if [ -n "${GITHUB_OUTPUT:-}" ]; then
     {
       echo "matrix=$matrix"
@@ -196,6 +222,8 @@ emit() {
       echo "packer_sources=$PACKER_SOURCES_JSON"
       echo "packer_sources_box=$PACKER_SOURCES_BOX_JSON"
       echo "packer_sources_extra=$PACKER_SOURCES_EXTRA_JSON"
+      echo "packer_ubuntu_box=$PACKER_UBUNTU_BOX_JSON"
+      echo "packer_ubuntu_extra=$PACKER_UBUNTU_EXTRA_JSON"
     } >>"$GITHUB_OUTPUT"
   else
     echo "matrix=$matrix"
