@@ -16,6 +16,13 @@
   tags:
     - resolved
 
+# systemd-resolved writes the DHCP-supplied upstream servers into
+# resolv.conf, not stub-resolv.conf (which is only 127.0.0.53 -- dead now
+# that the stub listener is off). Pointing /etc/resolv.conf here hands the
+# host those servers directly. No owner/group/mode: with follow: true
+# (the file-module default) they'd chase the link to its transient
+# /run target and re-chown it every run -- a symlink has no meaningful
+# perms of its own.
 - name: Update resolv conf symlink
   file:
     src: /run/systemd/resolve/resolv.conf
@@ -31,6 +38,18 @@
   systemd:
     name: systemd-resolved
     state: restarted
+  become: true
+  tags:
+    - resolved
+
+# state=started is idempotent (no-op when active) and fails loudly if the
+# unit can't start. Doubles as the post-conf liveness assertion: resolved
+# manages /run/systemd/resolve/resolv.conf, so if it's down the host's
+# entire DNS path goes stale. Mirrors roles/journald's closing task.
+- name: Start systemd-resolved
+  systemd:
+    name: systemd-resolved
+    state: started
   become: true
   tags:
     - resolved
