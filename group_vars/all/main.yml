@@ -189,6 +189,11 @@ service_ports:
   # IMAP backend stays internal to the getmail_webmail podman network and so
   # isn't registered here.
   roundcube: 8002
+  # SABnzbd, loopback-published; nginx fronts it on the sabnzbd subdomain
+  # behind authelia. Only the host-side --publish maps to this; the
+  # container's internal listener stays on 8080 (sabnzbd.ini port), as does
+  # the *arr leg at sabnzbd.dns.podman:8080.
+  sabnzbd: 8080
   seerr: 5055
   # docker-socket-proxy: read-only Docker-API filter (loopback) that fronts
   # /run/podman/podman.sock so netdata's docker collector reads container

@@ -222,7 +222,7 @@
   vars:
     nginx_site_args:
       subdomain: sabnzbd
-      proxy_pass: http://127.0.0.1:8080/
+      proxy_pass: http://127.0.0.1:{{ service_ports.sabnzbd }}/
       # PR 5 tail: Authelia is the sole UI gate. sabnzbd's
       # misc/username + misc/password are empty (and api_key is
       # used only by the autoProcessMedia hook), so no double-click.
