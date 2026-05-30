@@ -78,6 +78,26 @@
   tags:
     - prometheus
 
+# The packaged unit orders only on network-online.target, but the TSDB
+# now lives under /mnt/services (a ZFS dataset on zfs_root hosts). Order
+# after the mount so prometheus can't open the TSDB before the dataset
+# is mounted (else it writes into the underlying root dir, shadowed once
+# ZFS mounts over it), and join zfs_autosnapshot.target so it's quiesced
+# around the nightly snapshot -- matching every other /mnt/services
+# consumer (roles/redis, minio, mosquitto, ...). An ordering-only change
+# is picked up by the helper's daemon-reload, so it doesn't feed restart:.
+- name: Install prometheus service override
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      src: override_service.conf.j2
+      for: prometheus.service
+      condition: "{{ zfs_root }}"
+  tags:
+    - prometheus
+
 - name: Enable prometheus service
   import_role:
     name: systemd_unit
