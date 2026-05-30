@@ -53,8 +53,11 @@
 # write it under a different host uid silently. The size check proves the
 # container wrote a real DB through the symlink, not the empty placeholder the
 # sqlite_dataset helper pre-creates on a cold host (also profilarr-owned, so it
-# would satisfy the ownership check alone).
-- name: _verify | Profilarr SQLite DB is owned by profilarr and non-empty
+# would satisfy the ownership check alone). The world-readable assertion proves
+# --env UMASK=027 took effect -- the DB holds every synced *arr instance's API
+# key, so a silently-ignored UMASK (mode 0644) must fail here, not slip past the
+# owner check.
+- name: _verify | Profilarr SQLite DB is profilarr-owned, owner-private, non-empty
   stat:
     path: /mnt/services/sqlite/profilarr/profilarr.db
   register: _verify_db_owner
@@ -62,5 +65,6 @@
     not _verify_db_owner.stat.exists
     or _verify_db_owner.stat.islnk
     or _verify_db_owner.stat.pw_name != 'profilarr'
+    or _verify_db_owner.stat.roth
     or _verify_db_owner.stat.size == 0
   become: true
