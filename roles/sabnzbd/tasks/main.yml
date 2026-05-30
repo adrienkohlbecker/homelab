@@ -158,37 +158,33 @@
   tags:
     - sabnzbd
 
-- name: Read installed nzbToMedia version
-  ansible.builtin.slurp:
-    src: /opt/nzbToMedia/.version
-  register: sabnzbd_nzbtomedia_installed
-  failed_when: false
-  changed_when: false
-  tags:
-    - sabnzbd
-
-- name: Download nzbToMedia
-  when:
-    - not (ansible_check_mode and sabnzbd_user.changed)
-    - (sabnzbd_nzbtomedia_installed.content | default('') | b64decode | trim) != '12.1.13'
+# Version-stamped sentinel gates the fetch: the marker name carries the
+# version, so a pin bump removes the match and re-extracts (overwriting the
+# stable-named scripts) while an unchanged version is a no-op. The unarchive
+# downloads + extracts in one step (remote_src tarball, no git needed), and
+# `creates:` short-circuits it entirely once the sentinel is present.
+- name: Download and extract nzbToMedia
+  when: not (ansible_check_mode and sabnzbd_user.changed)
   ansible.builtin.unarchive:
     src: "{{ mirror_github }}/clinton-hall/nzbToMedia/archive/refs/tags/12.1.13.tar.gz"
     dest: /opt/nzbToMedia
     remote_src: true
     extra_opts:
       - --strip-components=1
+    creates: /opt/nzbToMedia/.installed-12.1.13
+  register: sabnzbd_nzbtomedia_extract
   become: true
   become_user: sabnzbd
   tags:
     - sabnzbd
 
-- name: Write nzbToMedia version stamp  # noqa: require-backup
+- name: Stamp installed nzbToMedia version  # noqa: require-backup
   when:
     - not (ansible_check_mode and sabnzbd_user.changed)
-    - (sabnzbd_nzbtomedia_installed.content | default('') | b64decode | trim) != '12.1.13'
-  ansible.builtin.copy:
-    content: "12.1.13"
-    dest: /opt/nzbToMedia/.version
+    - sabnzbd_nzbtomedia_extract is changed
+  file:
+    path: /opt/nzbToMedia/.installed-12.1.13
+    state: touch
     owner: sabnzbd
     group: media
     mode: "0644"
