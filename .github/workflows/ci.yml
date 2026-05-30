@@ -31,9 +31,9 @@ on:
         required: false
         default: ''
       ubuntu:
-        description: 'Ubuntu codename'
+        description: 'Ubuntu codename to pin the packer build to. Empty = box builds every supported release (jammy/noble/resolute), pug/lab/hetzner build jammy.'
         required: false
-        default: jammy
+        default: ''
 
 defaults:
   run:
@@ -65,6 +65,11 @@ jobs:
       packer_sources: ${{ steps.detect.outputs.packer_sources }}
       packer_sources_box: ${{ steps.detect.outputs.packer_sources_box }}
       packer_sources_extra: ${{ steps.detect.outputs.packer_sources_extra }}
+      # The Ubuntu release matrix each packer call crosses its source matrix
+      # with. box spans every supported release (per-release build validation);
+      # extra (pug/lab/hetzner) stays jammy. A dispatch `ubuntu` pins both.
+      packer_ubuntu_box: ${{ steps.detect.outputs.packer_ubuntu_box }}
+      packer_ubuntu_extra: ${{ steps.detect.outputs.packer_ubuntu_extra }}
     steps:
       - uses: actions/checkout@v6
         with: { fetch-depth: 50 }
@@ -76,6 +81,10 @@ jobs:
           # The `sources` dispatch input. On a push it's empty (-> full set);
           # a dispatch that sets it (and not roles) is a packer-only rebuild.
           INPUTS_SOURCES: ${{ inputs.sources }}
+          # The `ubuntu` dispatch input. Empty on a push (and by default) ->
+          # box builds every supported release; a dispatch that pins it rebuilds
+          # just that release. detect folds it into packer_ubuntu_box/extra.
+          INPUTS_UBUNTU: ${{ inputs.ubuntu }}
           # detect-roles queries the Actions API for the last green push run
           # as its diff base; GITHUB_TOKEN is not auto-exported to steps.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -126,7 +135,10 @@ jobs:
     secrets: inherit
     with:
       sources_matrix: ${{ needs.detect.outputs.packer_sources_box }}
-      ubuntu: ${{ inputs.ubuntu }}
+      # box crosses its source matrix with every supported release (or the
+      # single pinned one): a packer change is validated per-release via each
+      # build's verify-boot. box_deps is still seeded only off jammy box.
+      ubuntu_matrix: ${{ needs.detect.outputs.packer_ubuntu_box }}
 
   packer_extra:
     # Rebuild the non-box images (pug / lab / hetzner). `needs: packer_box`
@@ -146,7 +158,8 @@ jobs:
     secrets: inherit
     with:
       sources_matrix: ${{ needs.detect.outputs.packer_sources_extra }}
-      ubuntu: ${{ inputs.ubuntu }}
+      # pug/lab/hetzner track prod (jammy) -- single release (or the pinned one).
+      ubuntu_matrix: ${{ needs.detect.outputs.packer_ubuntu_extra }}
 
   test:
     # Runs after packer_box and ci-image so test cells read a freshly-published

@@ -15,11 +15,11 @@ on:
         description: 'JSON array of packer sources to build, from ci.yml''s detect (e.g. ["box","pug"]).'
         type: string
         required: true
-      ubuntu:
-        description: 'Ubuntu codename'
+      ubuntu_matrix:
+        description: 'JSON array of Ubuntu codenames to build each source for, crossed with sources_matrix (e.g. ["jammy","noble","resolute"] for box, ["jammy"] for pug/lab/hetzner).'
         type: string
         required: false
-        default: jammy
+        default: '["jammy"]'
 
 # Shared with test-nightly.yml (and any concurrent test read) so packer
 # can't rewrite the qcow2 tree mid-test. Packer-build is the ONLY
@@ -38,11 +38,11 @@ defaults:
 
 jobs:
   build:
-    # One job per source, from the JSON matrix detect computed (folded in from
-    # the old `prepare` job). Packer spawns one qemu VM per cell -- lands on the
-    # lab-vm pool. See notes/concurrency_rework.md for the pool model: lab-vm =
-    # 4 runners that take VM workloads (packer-build + test-role); lab = 2
-    # runners that take everything else.
+    # One job per (source, ubuntu) cell, from the two JSON matrices detect
+    # computed (folded in from the old `prepare` job). Packer spawns one qemu VM
+    # per cell -- lands on the lab-vm pool. See notes/concurrency_rework.md for
+    # the pool model: lab-vm = 4 runners that take VM workloads (packer-build +
+    # test-role); lab = 2 runners that take everything else.
     #
     # `hetzner` builds the rpool disk image (its verify-boot post-processor is
     # excepted -- the cloud-init-only image has no harness machine spec), then
@@ -50,9 +50,9 @@ jobs:
     # via `mise run packer:hetzner` (HCLOUD_TOKEN from a repo secret). Feature
     # branches build the disk but skip the publish -- see that step below.
     #
-    # Why one job per source instead of packer's internal parallel builds in a
+    # Why one job per cell instead of packer's internal parallel builds in a
     # single job: each build VM then occupies one lab-vm runner slot, and
-    # fail-fast:false keeps one source's failure from cancelling its siblings
+    # fail-fast:false keeps one cell's failure from cancelling its siblings
     # (the old single-invocation model tore them all down).
     #
     # max-parallel:1 serialises the matrix. The runner-pool cap (4 lab-vm
@@ -61,13 +61,23 @@ jobs:
     # the extra matrix (lab/pug/hetzner) running 3-up thrashed swap and qemu
     # died mid-build ("unexpected EOF"). Serial builds keep one 4GB VM in
     # flight at a time -- slower on packer-changed runs, but no OOM. The box
-    # call carries a single source so the cap is a no-op there; the test
-    # matrix (which only needs packer_box) still runs concurrently alongside.
+    # call now carries one source across N releases (jammy/noble/resolute), so
+    # the cap serialises those release builds too; the test matrix (which only
+    # needs jammy box/box_deps) still runs concurrently alongside. timeout is
+    # per-cell (90 min), so the extra release cells don't eat the box cell's
+    # budget -- only the lab-qemu-artifacts group's wall-clock grows.
     strategy:
       fail-fast: false
       max-parallel: 1
+      # source x ubuntu. box is called with all supported releases so a packer
+      # change is build-validated per-release (each cell's verify-boot boots the
+      # image); pug/lab/hetzner are called with just jammy (prod's release). The
+      # cross is shaped entirely by the two input arrays detect computed -- box's
+      # call carries one source and N releases, extra's carries M sources and one
+      # release, so neither produces a cell the other shouldn't build.
       matrix:
         source: ${{ fromJSON(inputs.sources_matrix) }}
+        ubuntu: ${{ fromJSON(inputs.ubuntu_matrix) }}
     runs-on: [ self-hosted, lab-vm ]
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
@@ -92,12 +102,12 @@ jobs:
         # would fail with a plugin-version mismatch.
         run: mise run packer:init
       - name: Build
-        # Pass the matrix source + ubuntu input through env vars rather
+        # Pass the matrix source + ubuntu codename through env vars rather
         # than substituting them straight into the shell command -- a
         # misbehaving input could otherwise break out of the args list.
         env:
           PACKER_SOURCE: ${{ matrix.source }}
-          PACKER_UBUNTU: ${{ inputs.ubuntu }}
+          PACKER_UBUNTU: ${{ matrix.ubuntu }}
         run: |
           set -euo pipefail
           args=("$PACKER_SOURCE")
@@ -108,17 +118,17 @@ jobs:
       - name: Publish Hetzner snapshot
         # Turn the rpool disk this cell just built into a Hetzner Cloud snapshot
         # (mise run packer:hetzner: temp cpx22 -> rescue -> dd onto /dev/sda ->
-        # create_image, then prune all but the 2 newest). Master only: a
+        # create_image, then prune all but the 2 newest). Master + jammy only: a
         # snapshot is a project-global resource that terraform's
-        # data.hcloud_image selects by most_recent, so a feature-branch publish
-        # could silently become fox's next boot image. HCLOUD_TOKEN is a repo
-        # secret set manually via `gh secret set` (kept out of terraform state --
-        # see terraform/github.tf); hetzner.sh skips its op re-exec when the
-        # token is already resolved.
+        # data.hcloud_image selects by most_recent, so a feature-branch -- or
+        # off-release -- publish could silently become fox's next boot image
+        # (fox runs a jammy root). HCLOUD_TOKEN is a repo secret set manually via
+        # `gh secret set` (kept out of terraform state -- see terraform/github.tf);
+        # hetzner.sh skips its op re-exec when the token is already resolved.
         # Reads the disk built by the step above from the shared qemu volume.
-        if: matrix.source == 'hetzner' && github.ref == 'refs/heads/master'
+        if: matrix.source == 'hetzner' && matrix.ubuntu == 'jammy' && github.ref == 'refs/heads/master'
         env:
-          PACKER_UBUNTU: ${{ inputs.ubuntu }}
+          PACKER_UBUNTU: ${{ matrix.ubuntu }}
           # Handed to hetzner.sh as HCLOUD_TOKEN_CI, not HCLOUD_TOKEN: mise.toml's
           # [env] re-injects the op:// ref over a plain HCLOUD_TOKEN before the
           # script runs, which would clobber this resolved secret and send the
@@ -136,11 +146,14 @@ jobs:
         # reflink-copy of box's artifacts, boots them via launch.py
         # --commit, applies packer/seed_deps.yml (podman + nginx +
         # backports), then atomically publishes the result. ~5 min on
-        # top of the 15-30 min box build. Only the box cell seeds it --
-        # the other sources leave box's existing artifact untouched.
-        if: matrix.source == 'box'
+        # top of the 15-30 min box build. Only the jammy box cell seeds it:
+        # box_deps is the substrate push-CI test cells run on, and those run
+        # against jammy box/box_deps -- nothing consumes a noble/resolute
+        # box_deps, so seeding one would be wasted minutes and failure surface.
+        # The other sources leave box's existing artifact untouched.
+        if: matrix.source == 'box' && matrix.ubuntu == 'jammy'
         env:
-          PACKER_UBUNTU: ${{ inputs.ubuntu }}
+          PACKER_UBUNTU: ${{ matrix.ubuntu }}
           # seed-deps boots box and runs `ansible-playbook --limit box`,
           # which loads the test-vaulted host_vars/box.yml -- so it needs
           # the test vault password (same as test.yml's test-role). Without
