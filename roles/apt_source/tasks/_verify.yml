@@ -135,6 +135,7 @@
         - name: _verify | Import apt_source with a bogus key_id (expected to fail)
           import_role:
             name: apt_source
+            tasks_from: configure
           vars:
             apt_source_args:
               name: apt_source_badkey_probe
@@ -174,6 +175,7 @@
     - name: _verify | Remove the source via state absent
       import_role:
         name: apt_source
+        tasks_from: configure
       vars:
         apt_source_args: "{{ apt_source_tombstone_args }}"
 
