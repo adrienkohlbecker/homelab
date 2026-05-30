@@ -30,6 +30,10 @@ Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
 TimeoutSec=120
+# Exceed the container's --stop-timeout (120s) so a slow graceful shutdown --
+# during which sonarr writes config.xml back -- finishes before systemd's stop
+# deadline SIGKILLs it and skips the writeback.
+TimeoutStopSec=180
 RestartSec=5
 Type=notify
 NotifyAccess=all
@@ -57,8 +61,8 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/scratch:/scratch \
     --network media \
     --publish 127.0.0.1:{{ service_ports.sonarr }}:8989/tcp \
-    --health-cmd         '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8989/ping"]' \
-    --health-startup-cmd '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8989/ping"]' \
+    --health-cmd         '["curl","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8989/ping"]' \
+    --health-startup-cmd '["curl","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8989/ping"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \

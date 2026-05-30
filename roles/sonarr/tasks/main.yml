@@ -1,3 +1,16 @@
+- name: Assert sonarr_api_key is provided
+  assert:
+    that:
+      - sonarr_api_key is defined
+      - (sonarr_api_key | default('')) | length > 0
+    fail_msg: >-
+      sonarr_api_key is required (vaulted in group_vars/{prod,test}.yml). Without it
+      config.xml renders an empty <ApiKey>, sonarr self-generates a random key on
+      boot, and every intra-stack X-Api-Key consumer (bazarr, seerr, ...) silently
+      breaks.
+  tags:
+    - sonarr
+
 - name: Add media group
   import_role:
     name: media
@@ -61,6 +74,10 @@
   # ansible.cfg sets [diff] always=True + verbosity=1, so without this the
   # rendered <ApiKey> would print to the operator/CI log on write & rotation.
   become: true
+  # On a fresh-host --check run sonarr_user + its config dir are only reported
+  # (their creating tasks are guarded), so an unguarded copy with owner=sonarr
+  # would fail resolving the not-yet-created user/dir.
+  when: not (ansible_check_mode and sonarr_user.changed)
   tags:
     - sonarr
 
