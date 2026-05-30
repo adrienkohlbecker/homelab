@@ -14,18 +14,29 @@
     - sabnzbd_verify_version.status == 200
     - sabnzbd_verify_version.json.version is defined
 
+# before_start.sh (the /custom-cont-init.d hook) installs ffmpeg at init so
+# nzbToMedia's check_media has ffprobe. Confirm the hook actually ran:
+# nothing else exercises it, and it proves a non-root-owned custom-init
+# script executes in this image (the file rides the sabnzbd:media ownership
+# the container chowns /config to, not root).
+- name: _verify | The before_start hook installed ffprobe in the container
+  command: podman exec sabnzbd ffprobe -version
+  register: sabnzbd_verify_ffprobe
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: sabnzbd_verify_ffprobe.rc == 0
+  become: true
+
 # Negative probe: an authenticated mode (queue) WITHOUT the key must be
-# refused. SABnzbd answers HTTP 200 with an error body rather than 401, so
-# assert on the body. Pairs with the auth'd probe below -- together they
-# prove the api_key we templated is both required and the one the running
-# container accepted, not just a string we wrote to disk.
+# refused -- SABnzbd answers HTTP 403. Pairs with the auth'd probe below:
+# together they prove the api_key we templated is both required and the one
+# the running container accepted, not just a string we wrote to disk.
 - name: _verify | SABnzbd refuses an authenticated call without the api_key
   uri:
     url: "http://127.0.0.1:{{ service_ports.sabnzbd }}/api?mode=queue&output=json"
-    status_code: 200
-    return_content: true
+    status_code: 403
   register: sabnzbd_verify_noauth
-  failed_when: (sabnzbd_verify_noauth.json.status | default(true)) != false
 
 # Authenticated probe with our key. SABnzbd takes the api_key only as a
 # query param (no header form), so it lands in the URL -- fine on the
