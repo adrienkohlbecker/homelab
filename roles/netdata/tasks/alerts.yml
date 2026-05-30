@@ -257,3 +257,66 @@
       leaving the clock-desync alert silenced. Re-check the un-silence regex.
   tags:
     - netdata
+
+# Same staging+replace pattern as disks/timex above, for go.d.plugin.conf's
+# plugin_data_collection_status template -- netdata's built-in "this go.d
+# collector is running but its polls are failing" alarm (lookup: average -30s
+# of failed; warn: $this == 1; delay: down 1m), shipped `to: silent`.
+# Un-silencing it closes the O2 gap: netdata_presence.chart.sh catches a job
+# that never instantiated any chart; this catches a job that instantiated but
+# is now failing to collect. The 30s-average lookup + 1m delay keep it
+# non-flappy, and a job that never autodetects emits no status chart, so the
+# idle prometheus jobs on hosts where the target is absent don't alarm.
+# go.d.plugin.conf ships exactly one template, so the stanza anchoring is
+# defensive against a future upstream addition.
+- name: Stage upstream go.d.plugin.conf into /etc/netdata/health.d
+  command: cp /usr/lib/netdata/conf.d/health.d/go.d.plugin.conf /etc/netdata/health.d/go.d.plugin.conf
+  args:
+    creates: /etc/netdata/health.d/go.d.plugin.conf
+  register: netdata_godplugin_staged
+  become: true
+  tags:
+    - netdata
+
+- name: Un-silence plugin_data_collection_status
+  when: not (ansible_check_mode and netdata_godplugin_staged.changed)
+  replace:
+    path: /etc/netdata/health.d/go.d.plugin.conf
+    regexp: '(?ms)(^\s*template:\s*plugin_data_collection_status\b(?:(?!^\s*template:).)*?^\s*to:\s*)silent'
+    replace: '\1sysadmin'
+    backup: true
+  register: netdata_godplugin_unsilenced
+  become: true
+  tags:
+    - netdata
+
+- name: Reload netdata health after go.d.plugin.conf edits
+  when: netdata_godplugin_staged.changed or netdata_godplugin_unsilenced.changed
+  import_tasks: reload_health.yml
+  tags:
+    - netdata
+
+# Fail-closed, same rationale as the disks/timex asserts above.
+- name: Slurp the un-silenced go.d.plugin.conf
+  when: not ansible_check_mode
+  slurp:
+    src: /etc/netdata/health.d/go.d.plugin.conf
+  register: netdata_godplugin_unsilenced_check
+  become: true
+  tags:
+    - netdata
+
+- name: Assert the data-collection-failure alarm routes to sysadmin
+  when: not ansible_check_mode
+  vars:
+    _godplugin: "{{ netdata_godplugin_unsilenced_check.content | b64decode }}"
+  assert:
+    that:
+      # \s (not \b) after the name dodges ansible 2.20 re-escaping \b in `that:`.
+      - _godplugin | regex_findall('(?ms)^\s*template:\s*plugin_data_collection_status\s(?:(?!^\s*template:).)*?^\s*to:\s*sysadmin') | length >= 1
+    fail_msg: >-
+      go.d.plugin.conf plugin_data_collection_status no longer resolves to a
+      `to: sysadmin` stanza -- upstream likely renamed/restructured it, leaving
+      the collector-failure alert silenced. Re-check the un-silence regex.
+  tags:
+    - netdata

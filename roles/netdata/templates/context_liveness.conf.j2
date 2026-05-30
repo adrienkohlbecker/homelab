@@ -30,11 +30,10 @@ template: liveness_{{ name }}
       to: sysadmin
 
 {% endfor %}
-{# This file does not yet define collector_stale / collector_failing
-   templates binding to `netdata.plugin_data_collection_status` (the
-   per-collector liveness chart netdata exposes since 2.x). Adding them is
-   a deferred follow-up -- O2 in notes/netdata_v2_migration_analysis.md;
-   re-add the matching assertions in _verify.yml at the same time. The
-   netdata_presence machinery covers the configured-but-never-instantiated
-   case meanwhile (and uniquely, since that chart only appears once a job
-   has run). #}
+{# The running-but-failing collector case (a go.d job that instantiated
+   charts but whose polls now fail) is covered by un-silencing netdata's
+   stock `plugin_data_collection_status` template (to: silent -> sysadmin, in
+   alerts.yml) rather than re-declaring it here -- it ships with the right
+   lookup/warn/delay already. The netdata_presence machinery covers the
+   complementary configured-but-never-instantiated case (uniquely, since the
+   status chart only appears once a job has run). #}
