@@ -126,6 +126,27 @@ if [ "$UBUNTU_NAME" != "jammy" ]; then
   echo 'Acquire::Retries::Delay "true";' >>/etc/apt/apt.conf.d/80-retries
 fi
 
+# apt-get update exits 0 even when one component's Packages index fails to
+# download (a Nexus restart, a dropped packet on the build NIC): the partial
+# index then makes the install below fail with a baffling "Unable to locate
+# package" for whatever the missed component held (e.g. universe). Error-Mode
+# =any turns a failed fetch into a non-zero exit; the loop retries with
+# backoff so a brief blip is absorbed instead of poisoning the install. jammy
+# apt can't do Acquire::Retries::Delay (set above), so the inter-attempt wait
+# lives here. Fail loudly only once the attempts are spent.
+apt_update() {
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if apt-get update -o APT::Update::Error-Mode=any; then
+      return 0
+    fi
+    echo "apt-get update attempt ${attempt} failed; retrying in $((attempt * 5))s" >&2
+    sleep "$((attempt * 5))"
+  done
+  echo "apt-get update failed after 5 attempts" >&2
+  return 1
+}
+
 # Install helpers
 
 # The cloud base image ships a primed /var/lib/apt/lists whose cached base
@@ -135,7 +156,7 @@ fi
 # (debootstrap, zfsutils-linux, ...). Wipe the dir so update re-fetches every
 # index cleanly -- the same guard write_sources_list applies in chroot.sh.
 find /var/lib/apt/lists -type f -delete
-apt-get update
+apt_update
 apt-get install --yes arch-install-scripts debootstrap gdisk zfsutils-linux
 
 # Generate /etc/hostid

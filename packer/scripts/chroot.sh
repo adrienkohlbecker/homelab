@@ -66,6 +66,25 @@ if [ "$UBUNTU_NAME" != "jammy" ]; then
   echo 'Acquire::Retries::Delay "true";' >>/etc/apt/apt.conf.d/80-retries
 fi
 
+# apt-get update exits 0 even when one component's Packages index fails to
+# download (Nexus restart, dropped packet), leaving a partial cache that makes
+# a later install fail with a baffling "Unable to locate package". Error-Mode
+# =any turns a failed fetch into a non-zero exit; the loop retries with backoff
+# so a brief blip is absorbed (jammy apt can't do Acquire::Retries::Delay set
+# above, so the wait lives here). Same helper as provision.sh's build-VM apt.
+apt_update() {
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if apt-get update -o APT::Update::Error-Mode=any; then
+      return 0
+    fi
+    echo "apt-get update attempt ${attempt} failed; retrying in $((attempt * 5))s" >&2
+    sleep "$((attempt * 5))"
+  done
+  echo "apt-get update failed after 5 attempts" >&2
+  return 1
+}
+
 # Configure apt. Called twice: once now with the build-time mirror
 # ($UBUNTU_MIRROR, defaults to Nexus), and once at the very end with
 # the upstream pair so the shipped image points at canonical Ubuntu
@@ -181,7 +200,7 @@ EOF
 
 # Update the repository cache
 
-apt-get update
+apt_update
 
 # Update system
 
@@ -676,7 +695,7 @@ write_sources_list "$UBUNTU_MIRROR_UPSTREAM" "$UBUNTU_MIRROR_SECURITY_UPSTREAM"
 # coherent cache: a role doing `apt: pkg:` with cache_valid_time set
 # (hwe_kernel in packer/seed_deps.yml) skips its own update and would
 # otherwise find no candidate.
-apt-get update
+apt_update
 
 # Drop the downloaded .deb cache (build-only, ~hundreds of MB) so it doesn't
 # ride into every deployment. Clears /var/cache/apt/archives only — the
