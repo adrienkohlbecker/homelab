@@ -205,6 +205,7 @@ healthchecks_smtp_from: changeme
 healthchecks_smtp_password: changeme
 gitea_runner_registration_token: changeme
 spouse_samba_password: changeme
+redis_password: 732b15eba0d087aee392ca791335eb609d09838605327b44
 paperless_secret_key: changeme
 z2m_network_key: changeme
 jellyfin_api_token: changeme
