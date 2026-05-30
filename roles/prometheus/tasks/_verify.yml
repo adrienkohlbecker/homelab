@@ -83,13 +83,26 @@
 
 # The role's reload: path (SIGHUP via the packaged unit's ExecReload) is the
 # one operationally-distinct behavior here -- a config-only change must be
-# picked up hitlessly, not restart the process. Exercise it: capture the PID,
-# reload (fails loudly if the unit ever loses ExecReload), and assert the
-# process survived and the config reloaded cleanly.
+# picked up hitlessly, not restart the process. Exercise it: capture the PID
+# and the live last-reload timestamp, reload (fails loudly if the unit ever
+# loses ExecReload), and assert the process survived and the timestamp moved
+# forward. Read the timestamp off the live /metrics endpoint, NOT /api/v1/query
+# -- the query API serves the self-scraped TSDB copy, which only refreshes once
+# per scrape_interval (1m) and so lags a just-fired reload by up to that long.
+# The bare prometheus_config_last_reload_successful gauge is 1 from the startup
+# load, so asserting on it would pass even if the SIGHUP were a no-op; the
+# success timestamp advancing proves a fresh reload actually happened.
 - name: _verify | Capture prometheus status before reload
   systemd:
     name: prometheus
   register: _verify_svc_before
+  become: true
+
+- name: _verify | Capture live config-reload timestamp before reload
+  uri:
+    url: http://127.0.0.1:{{ service_ports.prometheus }}/metrics
+    return_content: true
+  register: _verify_metrics_before
   become: true
 
 - name: _verify | Reload prometheus (SIGHUP via ExecReload)
@@ -99,23 +112,38 @@
   register: _verify_svc_after
   become: true
 
-- name: _verify | Query config-reload metric
+# SIGHUP is async -- systemd's ExecReload returns before prometheus finishes
+# re-reading, so poll (bounded) the live timestamp until it moves past the
+# pre-reload sample rather than racing a single read.
+- name: _verify | Live config-reload timestamp advanced after reload
   uri:
-    url: http://127.0.0.1:{{ service_ports.prometheus }}/api/v1/query?query=prometheus_config_last_reload_successful
+    url: http://127.0.0.1:{{ service_ports.prometheus }}/metrics
     return_content: true
-  register: _verify_reload_metric
+  register: _verify_metrics_after
+  retries: 10
+  delay: 1
+  vars:
+    _verify_reload_ts_before: >-
+      {{ _verify_metrics_before.content
+         | regex_findall('prometheus_config_last_reload_success_timestamp_seconds ([0-9.eE+-]+)')
+         | first }}
+    _verify_reload_ts_after: >-
+      {{ _verify_metrics_after.content
+         | regex_findall('prometheus_config_last_reload_success_timestamp_seconds ([0-9.eE+-]+)')
+         | first }}
+  until:
+    - _verify_metrics_after.status == 200
+    - _verify_reload_ts_after | float > _verify_reload_ts_before | float
   become: true
 
-- name: _verify | Config reloaded hitlessly (same PID, reload succeeded)
+- name: _verify | Prometheus survived the reload (same PID, hitless)
   assert:
     that:
       - _verify_svc_before.status.MainPID | int > 0
       - _verify_svc_after.status.MainPID == _verify_svc_before.status.MainPID
-      - _verify_reload_metric.json.data.result[0].value[1] == "1"
     fail_msg: >-
-      expected a hitless SIGHUP reload: MainPID before={{ _verify_svc_before.status.MainPID | default('?') }}
-      after={{ _verify_svc_after.status.MainPID | default('?') }},
-      prometheus_config_last_reload_successful={{ _verify_reload_metric.json.data.result[0].value[1] | default('?') }}
+      reload was not hitless: MainPID before={{ _verify_svc_before.status.MainPID | default('?') }}
+      after={{ _verify_svc_after.status.MainPID | default('?') }}
   become: true
 
 # auth:required puts Authelia in front; a cookie-less GET / must land on
