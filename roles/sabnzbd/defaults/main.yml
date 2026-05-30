@@ -1,0 +1,7 @@
+# Optional, host-overridable. defaults/main.yml sits below host_vars in
+# ansible's precedence ladder, so a host with a different uplink overrides
+# this in its host_vars (cf. the no-required-defaults rule in CLAUDE.md).
+
+# Caps SABnzbd's aggregate download rate (sabnzbd.ini bandwidth_max). The
+# default is lab's uplink ceiling.
+sabnzbd_bandwidth_max: "93M"
