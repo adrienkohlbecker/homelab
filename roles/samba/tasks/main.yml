@@ -135,15 +135,22 @@
   tags:
     - samba
 
-- name: Enable nmbd service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: nmbd
-      condition: "{{ not (ansible_check_mode and samba_apt.changed) }}"
-      restart: "{{ samba_cfg.changed }}"
+# nmbd (NetBIOS name service / LAN browsing) is intentionally not run:
+# clients reach SMB3 directly over TCP 445 and discover shares via the
+# avahi mDNS advert below. Mask it so neither a prior enable (lab ran it
+# before this) nor a package reconfigure can bring the legacy NetBIOS
+# listener back. smbd has no dependency on nmbd, so this is safe.
+- name: Mask the unused nmbd service
+  # In check mode against a host without samba yet installed, nmbd.service
+  # doesn't exist (the package install above only reported it would happen),
+  # so the systemd module errors with "Could not find the requested service".
+  when: not (ansible_check_mode and samba_apt.changed)
+  systemd:
+    name: nmbd
+    state: stopped
+    enabled: false
+    masked: true
+  become: true
   tags:
     - samba
 

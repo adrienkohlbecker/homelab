@@ -262,6 +262,13 @@ server min protocol = SMB3_11
 ; built-in responder to avoid two publishers racing for the same record.
 multicast dns register = no
 
+; nmbd is not run (masked by this role) -- no NetBIOS name service or LAN
+; browsing. Clients reach SMB3 directly over TCP 445 and discover shares via
+; the avahi mDNS advert. Turn off smbd's own NetBIOS layer and drop the legacy
+; 139 session port so only 445 is served.
+disable netbios = yes
+smb ports = 445
+
 ; work better with macs, see https://wiki.samba.org/index.php/Configure_Samba_to_Work_Better_with_Mac_OS_X
 vfs objects = fruit streams_xattr
 ; resource forks in ZFS xattrs (xattr=sa), not ._AppleDouble sidecar files;
