@@ -25,7 +25,9 @@
   retries: 30
   delay: 2
   until: _sonarr_http.status == 200
-  failed_when: (_sonarr_http.json | default({})) | length == 0
+  failed_when: >-
+    (_sonarr_http.json | default({})) | length == 0
+    or (_sonarr_http.json | default({})).authentication | default('') != "external"
 
 # The vhost is `auth: required`, so the real browser access pattern is an
 # Authelia-gated UI -- the API path above is reached intra-stack via
@@ -78,6 +80,17 @@
   retries: 15
   delay: 2
   until: _verify_dns_podman.rc == 0 and _verify_dns_podman.stdout == "401"
+
+# Scratch is the pipeline bridge between the download client (sabnzbd) and
+# sonarr's import process. A dropped --volume line strands imports silently --
+# a wife-acceptance-factor failure that only surfaces when new episodes stop
+# appearing. The loopback/API probes above stay green without it.
+- name: _verify | Scratch volume is mounted inside the container
+  command: >-
+    podman exec sonarr
+    test -d /scratch/sonarr
+  become: true
+  changed_when: false
 
 # The sqlite_dataset symlink + matching --volume is the role's whole reason
 # for its non-obvious structure: it lands the DBs (and their -wal/-shm
