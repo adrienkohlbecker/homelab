@@ -19,6 +19,7 @@
 #
 # autobackup:bak=true tags both datasets for zfs-autobackup; the picker filters
 # with `-s local` (see _verify.yml's header for why source matters).
+# Order is load-bearing: ZFS requires parent datasets to exist before children.
 services_datasets:
   - dataset: rpool/services
     mountpoint: /mnt/services
