@@ -42,7 +42,7 @@
       - _verify_dir.stat.isdir
       - _verify_dir.stat.pw_name == 'service_user_test'
       - _verify_dir.stat.gr_name == 'service_user_test'
-      - _verify_dir.stat.mode == '0755'
+      - _verify_dir.stat.mode == '0750'
 
 - name: _verify | Cleanup test config dir
   file:

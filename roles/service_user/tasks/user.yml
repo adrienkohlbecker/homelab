@@ -1,6 +1,9 @@
 # Inputs: caller passes a single dict `service_user_args` with keys
 #   name              required; system group + user name and config dir basename
-#   extra_groups      optional list, default []; appended to the user
+#   extra_groups      optional list, default []; appended to the user.
+#                     The groups must already exist on the host -- create
+#                     them before this import (e.g. jellyfin imports the
+#                     media/render groups first).
 #   createhome        optional bool, default false; usually only true when the
 #                     service writes into $HOME (gitea_runner, github_runner)
 #   shell             optional, default '/usr/sbin/nologin'
@@ -15,22 +18,48 @@
 #                     start. Pass "0755" to make the path world-traversable
 #                     (files inside keep their own modes, so this doesn't
 #                     widen actual read access).
-#   config_dir        optional bool, default true; false opts out of the
-#                     /mnt/services/<name> dir for stateless services
+#   config_dir        optional bool, default true; false skips creating and
+#                     owning /mnt/services/<name> -- the caller creates any
+#                     state dirs it needs itself.
 #   config_dir_group  optional, default <name>; override the dir's group
 #                     when the running container chowns its bind-mount to
 #                     a shared group (e.g. linuxserver/* images with
 #                     PGID=media recursively chown /config on startup,
 #                     and ansible flaps the gid every run otherwise).
-#   config_dir_mode   optional, default "0755"; tighten the /mnt/services/<name>
-#                     dir when it holds a secret a co-tenant group shouldn't
-#                     read (e.g. plex's Preferences.xml carries the server
-#                     token, so it uses "0750").
+#   config_dir_mode   optional, default "0750"; /mnt/services/<name> holds
+#                     service state (configs, DBs, secrets), so it is
+#                     owner+group only by default. Loosen to "0755" when a
+#                     co-tenant needs world traversal, or tighten to "0700"
+#                     to drop group read (redis/plex do -- dump.rdb /
+#                     Preferences.xml carry secrets config_dir_group
+#                     shouldn't see).
 #
 # The dict form prevents inter-call leakage at play-vars scope: each
 # import_role pass replaces the whole `service_user_args` value, so a
 # previous caller's createhome / extra_groups / etc. can't bleed into
 # the next caller that doesn't explicitly override.
+#
+# Outputs: registers `<name>_user` (the ansible.builtin.user result) so
+# callers can template {{ <name>_user.uid }} (int) and {{ <name>_user.group }}
+# (the primary gid as an int -- safe in podman --user / --uidmap) into unit
+# files. The fact key replaces non-identifier chars in name with '_'
+# (name='foo-bar' -> foo_bar_user). In --check mode on a host where the user
+# does not exist yet the user task only reports the create, so .uid/.group
+# are undefined -- gate consumers with
+# `when: not (ansible_check_mode and <name>_user.changed)`.
+- name: "Validate inputs for {{ service_user_args.name | default('<unset>') }}"
+  assert:
+    that:
+      - service_user_args.name is defined
+      - service_user_args.name is string
+      # name becomes the group/user name, the /mnt/services/<name> basename,
+      # and (via regex_replace below) the <name>_user fact key -- so it must
+      # be a valid identifier. Same guard as roles/podman_secret + roles/linger.
+      - service_user_args.name is match('^[a-z_][a-z0-9_-]*$')
+    fail_msg: >-
+      service_user_args needs name (a valid identifier matching
+      [a-z_][a-z0-9_-]*); got name={{ service_user_args.name | default('<unset>') }}
+
 - name: Resolve caller defaults for {{ service_user_args.name }}
   set_fact:
     _service_user_name: "{{ service_user_args.name }}"
@@ -41,15 +70,15 @@
     _service_user_home_mode: "{{ service_user_args.home_mode | default(None) }}"
     _service_user_config_dir: "{{ service_user_args.config_dir | default(true) }}"
     _service_user_config_dir_group: "{{ service_user_args.config_dir_group | default(service_user_args.name) }}"
-    _service_user_config_dir_mode: "{{ service_user_args.config_dir_mode | default('0755') }}"
+    _service_user_config_dir_mode: "{{ service_user_args.config_dir_mode | default('0750') }}"
 
-- name: "Add group {{ _service_user_name }}"
+- name: "Add group {{ service_user_args.name }}"
   group:
     name: "{{ _service_user_name }}"
     system: true
   become: true
 
-- name: "Add user {{ _service_user_name }}"
+- name: "Add user {{ service_user_args.name }}"
   user:
     name: "{{ _service_user_name }}"
     group: "{{ _service_user_name }}"
@@ -57,6 +86,9 @@
     append: true
     createhome: "{{ _service_user_createhome }}"
     system: true
+    # nologin + system already lock the account; pin the password field to
+    # '!' so the locked state is explicit and survives a future relaxation.
+    password: "!"
     shell: "{{ _service_user_shell }}"
     home: "{{ _service_user_home }}"
   become: true
@@ -74,7 +106,7 @@
 # is unchanged; hyphenated names (name='foo-bar') resolve to
 # foo_bar_user. Same pattern as roles/systemd_unit/tasks/install.yml's
 # per-unit fact.
-- name: Record user record for {{ _service_user_name }}
+- name: Record user record for {{ service_user_args.name }}
   set_fact:
     "{{ _service_user_name | regex_replace('[^A-Za-z0-9_]', '_') }}_user": "{{ service_user_result }}"
 
@@ -82,7 +114,7 @@
 # asked for a specific mode. Idempotent: ansible's file module reports
 # changed only when the mode actually differs. Gated on createhome so
 # we don't try to chmod the placeholder /nonexistent.
-- name: "Set home directory mode for {{ _service_user_name }}"
+- name: "Set home directory mode for {{ service_user_args.name }}"
   when:
     - _service_user_createhome
     - _service_user_home_mode is not none
@@ -99,7 +131,7 @@
 # config_dir: false. The helper still owns user/group/uid capture; callers
 # that don't bind-mount /mnt/services/<svc> anywhere shouldn't be carrying
 # an empty dir.
-- name: Create configuration directory for {{ _service_user_name }}
+- name: Create configuration directory for {{ service_user_args.name }}
   when:
     - _service_user_config_dir
     - not (ansible_check_mode and service_user_result.changed)
