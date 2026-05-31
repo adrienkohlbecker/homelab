@@ -1,3 +1,16 @@
+- name: Assert backup sources are configured
+  assert:
+    that:
+      - zfs_autobackup_sources is defined
+      - zfs_autobackup_sources is iterable
+      - zfs_autobackup_sources is not string
+      - zfs_autobackup_sources is not mapping
+    fail_msg: >-
+      zfs_autobackup_sources must be a list of { host, dest_dataset } dicts in
+      host_vars (the onsite pulls this host runs). Use [] for a source-only host.
+  tags:
+    - zfs_autobackup
+
 - name: Install zfs autobackup dependencies
   apt:
     package:
