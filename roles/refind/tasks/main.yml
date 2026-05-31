@@ -9,6 +9,7 @@
       - mdadm
       - refind
     cache_valid_time: 3600
+  register: refind_apt
   become: true
   tags:
     - refind
@@ -29,6 +30,65 @@
     fail_msg: >-
       /boot/efi/EFI/ZBM/VMLINUZ.EFI is missing — the zfsbootmenu role must run
       before refind; it provides the image this role's menuentry boots.
+  tags:
+    - refind
+
+- name: Create the rEFInd + firmware-fallback directories on the ESP
+  when:
+    - ansible_architecture == 'x86_64'
+    - not (ansible_check_mode and refind_apt.changed)
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /boot/efi/EFI/refind
+    - /boot/efi/EFI/BOOT
+  become: true
+  tags:
+    - refind
+
+# Own the rEFInd binary on the ESP. We copy it straight from the package rather
+# than run refind-install, which would also register an NVRAM boot entry — boot
+# order / per-disk entries are managed by hand at bootstrap, not by this role.
+# The second copy lands at the firmware fallback path \EFI\BOOT\BOOT<arch>.EFI so
+# a host whose NVRAM was wiped (CMOS clear, BIOS update, "Restore Defaults")
+# still boots rEFInd off the ESP. No backup: true — /boot/efi is vfat and
+# backup_local's ownership-preserving chown fails on FAT.
+#
+# x86_64 only: prod is all-x86, where the package ships
+# /usr/share/refind/refind_x64.efi. The arm64 test box has no aa64 binary at that
+# path and boots via the EFI-stub path (the excluded arm64 branch), so there's
+# nothing for this to own there. CI exercises this on the x86 box runner.
+- name: Install the rEFInd binary on the ESP  # noqa: require-backup
+  when:
+    - ansible_architecture == 'x86_64'
+    - not (ansible_check_mode and refind_apt.changed)
+  copy:
+    src: "/usr/share/refind/{{ refind_efi_binary }}"
+    dest: "/boot/efi/EFI/refind/{{ refind_efi_binary }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - refind
+
+- name: Install the firmware-fallback rEFInd binary  # noqa: require-backup
+  when:
+    - ansible_architecture == 'x86_64'
+    - not (ansible_check_mode and refind_apt.changed)
+  copy:
+    src: "/usr/share/refind/{{ refind_efi_binary }}"
+    dest: "/boot/efi/EFI/BOOT/{{ refind_fallback_binary }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
   tags:
     - refind
 
