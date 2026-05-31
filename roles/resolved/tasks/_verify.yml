@@ -29,6 +29,34 @@
       (got {{ resolved_verify_symlink.stat.lnk_target | default('a regular file') }});
       with DNSStubListener=no, stub-resolv.conf (127.0.0.53) would be a black hole.
 
+# The role's actual contract: the symlink must hand the host a real LAN
+# resolver, not the dead 127.0.0.53 stub. A symlink pointing at a resolv.conf
+# that still listed only 127.0.0.53 would pass the target check above yet
+# black-hole DNS. Read the file on-host (no SLIRP-UDP query) and assert a
+# present, non-stub nameserver.
+- name: _verify | Read the resolved-managed resolv.conf
+  slurp:
+    src: /run/systemd/resolve/resolv.conf
+  register: resolved_verify_resolv_conf
+  become: true
+
+- name: _verify | Isolate the nameserver lines
+  set_fact:
+    resolved_verify_nameservers: >-
+      {{ (resolved_verify_resolv_conf.content | b64decode).splitlines()
+         | select('match', '^nameserver ') | list }}
+
+- name: _verify | The resolv.conf nameserver is a non-stub LAN upstream
+  assert:
+    that:
+      - resolved_verify_nameservers | length > 0
+      - >-
+        resolved_verify_nameservers
+        | select('search', '127\.0\.0\.53') | list | length == 0
+    fail_msg: >-
+      /run/systemd/resolve/resolv.conf has no usable upstream nameserver
+      (or still lists the dead 127.0.0.53 stub): {{ resolved_verify_nameservers }}
+
 # Wire-level proof DNSStubListener=no took effect: with the stub up,
 # systemd-resolved binds 127.0.0.53:53 (TCP+UDP). ss listing it means the
 # directive was ignored and the stub is still holding the loopback :53.
@@ -41,7 +69,7 @@
 - name: _verify | The 127.0.0.53 stub listener is gone
   assert:
     that:
-      - resolved_verify_listeners.stdout is not search('127.0.0.53')
+      - resolved_verify_listeners.stdout is not search('127\.0\.0\.53')
     fail_msg: >-
       systemd-resolved is still listening on 127.0.0.53
       (DNSStubListener=no did not take effect): {{ resolved_verify_listeners.stdout }}
@@ -93,7 +121,7 @@
 # entirely on-host, so there's no SLIRP-UDP flake (external names stay
 # deliberately unasserted per the header).
 - name: _verify | Resolve localhost through resolved
-  command: resolvectl query localhost
+  command: resolvectl query --cache=no localhost
   register: resolved_verify_query
   changed_when: false
   become: true
