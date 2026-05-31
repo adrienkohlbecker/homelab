@@ -48,23 +48,25 @@
   register: sabnzbd_verify_auth
   failed_when: sabnzbd_verify_auth.json.queue is not defined
 
-# Exercise the nginx-proxied path too. A regression in the nginx_site
-# wiring (typo'd subdomain, broken proxy_pass) would pass the loopback
-# probes silently. The authelia stub (always_200) admits the subrequest.
-- name: _verify | SABnzbd answers via the nginx vhost
+# The vhost is `auth: required`, so a cookieless request must be bounced to
+# Authelia rather than proxied through. With the stub in gate mode (see
+# _setup.yml), assert a cookieless GET / lands on nginx's error_page 401 =302
+# redirect to the portal. This is the only probe that fails if `auth: required`
+# is dropped from nginx_site_args -- the loopback probes above stay green
+# without it (and mode=version is unauthenticated, so it can't prove the gate
+# either). The Host header still exercises the subdomain -> server_name routing.
+- name: _verify | SABnzbd UI gate redirects unauthenticated requests to Authelia
   uri:
-    url: "https://localhost/api?mode=version&output=json"
+    url: https://localhost/
     headers:
       Host: "sabnzbd.{{ inventory_hostname }}.{{ domain }}"
     validate_certs: false
-    status_code: 200
-    return_content: true
-  register: sabnzbd_verify_nginx
-  retries: 30
-  delay: 2
-  until:
-    - sabnzbd_verify_nginx.status == 200
-    - sabnzbd_verify_nginx.json.version is defined
+    follow_redirects: none
+    status_code: 302
+  register: sabnzbd_verify_nginx_gate
+  failed_when: >-
+    sabnzbd_verify_nginx_gate.status != 302
+    or 'auth.' not in (sabnzbd_verify_nginx_gate.location | default(''))
 
 # The history-DB symlink + matching --volume is the role's whole reason for
 # its non-obvious structure: it lands history1.db (and its -wal/-shm
