@@ -37,5 +37,9 @@
     - /mnt/services
     - /mnt/services/sqlite
     - /mnt/scratch
+    # radarr scopes its bind-mount to /mnt/scratch/radarr (the category dir
+    # sabnzbd creates on prod, before radarr starts); the container won't
+    # start without the source. Create it here for the isolated test.
+    - /mnt/scratch/radarr
     - /mnt/media
   become: true

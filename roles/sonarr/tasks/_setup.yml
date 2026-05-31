@@ -37,5 +37,9 @@
     - /mnt/services
     - /mnt/services/sqlite
     - /mnt/scratch
+    # sonarr scopes its bind-mount to /mnt/scratch/sonarr (the category dir
+    # sabnzbd creates on prod, before sonarr starts); the container won't
+    # start without the source. Create it here for the isolated test.
+    - /mnt/scratch/sonarr
     - /mnt/media
   become: true
