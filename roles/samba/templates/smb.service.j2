@@ -1,0 +1,29 @@
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+ <name replace-wildcards="yes">%h</name>
+ <service>
+   <type>_smb._tcp</type>
+   <port>445</port>
+ </service>
+ {# model= gives macOS Finder a sensible server icon instead of the generic
+    monitor; aligned with fruit:model in smb.conf. #}
+ <service>
+   <type>_device-info._tcp</type>
+   <port>0</port>
+   <txt-record>model={{ samba_avahi_model | default('MacSamba') }}</txt-record>
+ </service>
+{% set tm_shares = smb_shares | default([]) | selectattr('time_machine', 'defined') | selectattr('time_machine') | list %}
+{% if tm_shares | length > 0 %}
+ {# Advertise Time Machine targets so macOS auto-discovers them; each share
+    flagged time_machine: true becomes one dkN entry. #}
+ <service>
+   <type>_adisk._tcp</type>
+   <port>9</port>
+   <txt-record>sys=waMa=0,adVF=0x100</txt-record>
+{% for share in tm_shares %}
+   <txt-record>dk{{ loop.index0 }}=adVN={{ share.name }},adVF=0x82</txt-record>
+{% endfor %}
+ </service>
+{% endif %}
+</service-group>
