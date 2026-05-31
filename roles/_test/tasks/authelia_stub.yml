@@ -14,9 +14,10 @@
 #       tests). The bypass `if` short-circuits BEFORE reaching the
 #       stub, so positive-path tests still see 200 from upstream.
 #       Like real Authelia, gate mode also returns a Location header
-#       pointing at the portal, so the parent's modern redirect
-#       (auth_request_set $redirection_url $upstream_http_location;
-#       error_page 401 =302 $redirection_url) has a target to 302 to.
+#       pointing at the portal with a ?rd=<original-url> returnUrl, so the
+#       parent's modern redirect (auth_request_set $redirection_url
+#       $upstream_http_location; error_page 401 =302 $redirection_url) has a
+#       target to 302 to that routes back to the requested vhost.
 #   authed: returns 200 plus a `Remote-User` header (value from
 #       authelia_stub_user, default nginxverifyuser), like Authelia on a
 #       successful auth. Lets a test exercise the auth-passes paths --
@@ -42,8 +43,14 @@
           location = /api/authz/auth-request {
         {% if (authelia_stub_mode | default('always_200')) == 'gate' %}
             # `always` so add_header applies to the 401 the way real Authelia
-            # emits the portal redirect in its Location response header.
-            add_header Location "https://auth.{{ inventory_hostname }}.{{ domain }}/" always;
+            # emits the portal redirect in its Location response header. Like
+            # real Authelia, carry the returnUrl as ?rd=<original-url> so the
+            # parent's error_page 401 =302 lands on a portal URL that routes
+            # back to the requested vhost. $http_x_original_url is the
+            # X-Original-URL the site's /internal/authelia subrequest forwards
+            # ($scheme://$host$request_uri) -- so this also exercises that
+            # forward-auth wiring, not just the bare redirect.
+            add_header Location "https://auth.{{ inventory_hostname }}.{{ domain }}/?rd=$http_x_original_url" always;
             return 401;
         {% elif (authelia_stub_mode | default('always_200')) == 'authed' %}
             # authed: 200 with a Remote-User header, like Authelia on a
