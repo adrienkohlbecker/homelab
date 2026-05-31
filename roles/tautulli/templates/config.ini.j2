@@ -154,17 +154,12 @@ pms_logs_line_cap = 1000
 pms_name = DockerPlex
 pms_name_override = ""
 pms_platform = Linux
-{# Tautulli verifies Plex Pass status against plex.tv on startup and #}
-{# rewrites pms_plexpass back to the result. Prod has a real token so #}
-{# auth succeeds and the daemon writes 1; the qemu test fixture has no #}
-{# plex.tv account so auth 401s and the daemon writes 0. Seed the same #}
-{# value the daemon will end at so the second converge is idempotent. #}
-pms_plexpass = {{ 0 if qemu_test else 1 }}
+pms_plexpass = 0
 pms_port = 32400
 pms_ssl = 0
 pms_token = {{ tautulli_pms_token }}
 pms_update_channel = plex
-pms_update_distro = debian
+pms_update_distro = ""
 pms_update_distro_build = linux-x86
 {# Tautulli's daemon rewrites pms_url on every restart to                #}
 {# http://<pms_ip>:<pms_port> whenever pms_url_manual=0 (the default), so #}
