@@ -15,10 +15,7 @@
 
 - name: _test | Setup dependencies
   file:
-    path: "{{ item }}"
+    path: /mnt/services
     state: directory
     mode: "0755"
-  loop:
-    - /mnt/services
-    - /mnt/media
   become: true
