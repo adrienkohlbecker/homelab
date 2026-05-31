@@ -50,6 +50,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: sh -n %s
   when: not (ansible_check_mode and smart_apt.changed)
   register: smart_smartmontools_cfg
   become: true
