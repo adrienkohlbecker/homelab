@@ -47,6 +47,9 @@ ExecStart=/usr/bin/podman run \
     --env IMAGES=1 \
     --env INFO=1 \
     --env EVENTS=0 \
+    --env POST=0 \
+    --env EXEC=0 \
+    --env DISABLE_IPV6=1 \
     --publish 127.0.0.1:{{ service_ports.socket_proxy }}:2375/tcp \
     --health-cmd '["sh","-c","wget -q -O /dev/null http://localhost:2375/version"]' \
     --health-startup-cmd '["sh","-c","wget -q -O /dev/null http://localhost:2375/version"]' \
