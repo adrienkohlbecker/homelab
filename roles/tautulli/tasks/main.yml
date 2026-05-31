@@ -115,7 +115,7 @@
     name: sort_ini
     tasks_from: path
   vars:
-    sort_ini_path: /mnt/services/tautulli/config.ini
-    sort_ini_escaped_path: mnt-services-tautulli-config.ini
+    sort_ini_args:
+      path: /mnt/services/tautulli/config.ini
   tags:
     - tautulli
