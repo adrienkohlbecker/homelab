@@ -22,6 +22,11 @@ Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
 TimeoutSec=120
+# Exceed the container's --stop-timeout (120s) so a slow graceful shutdown --
+# during which seerr writes settings.json back (the slurp-merge idempotence
+# below depends on that writeback) -- finishes before systemd's stop deadline
+# SIGKILLs it and skips the writeback.
+TimeoutStopSec=180
 RestartSec=5
 Type=notify
 NotifyAccess=all
@@ -33,6 +38,8 @@ ExecStartPre=/bin/rm -f %t/%n.ctr-id
 # uidmap routes that to host `seerr`; +0 is reserved for a hypothetical
 # in-container root step that this image never performs (kept for symmetry
 # with the canonical pattern in CLAUDE.md "Container User Namespacing").
+# --init runs a PID-1 reaper: seerr (Node) spawns child processes and a bare
+# node as PID 1 would leak their zombies.
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \
@@ -42,6 +49,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name seerr \
+    --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="seerr" \
     --user 1000:1000 \
