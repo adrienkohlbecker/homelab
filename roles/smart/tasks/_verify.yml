@@ -24,6 +24,7 @@
       - "'-l selftest' in _conf"
       - "'-m root' in _conf"
       - "'-M test' in _conf"
+      - "'-M diminishing' in _conf"
       - "'-n standby,q' in _conf"
     fail_msg: "rendered /etc/smartd.conf missing expected directives:\n{{ _conf }}"
 
@@ -63,6 +64,9 @@
       - "'diversion of /etc/default/smartmontools' in _verify_default_divert.stdout"
     fail_msg: "dpkg-divert not active for /etc/default/smartmontools: {{ _verify_default_divert.stdout }}"
 
+- name: _verify | Deploy smart netdata collector config
+  import_tasks: netdata.yml
+
 - name: _verify | Start netdata
   systemd:
     name: netdata
@@ -82,5 +86,5 @@
     that:
       - _parsed.jobs | length > 0
       - _parsed.jobs[0].name == 'smartctl'
-      - _parsed.jobs[0].poll_devices_every == 1800
+      - _parsed.jobs[0].poll_devices_every == 300
     fail_msg: "deployed /etc/netdata/go.d/smartctl.conf:\n{{ _smart_smartctl_conf.content | b64decode }}"
