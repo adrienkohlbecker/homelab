@@ -1,3 +1,7 @@
+# No reboot here, unlike the console/zfsbootmenu _verify which reboot to observe
+# next-boot state: rEFInd re-parses refind.conf + theme.conf off the ESP fresh
+# at every boot, so the on-disk files this role writes ARE the observable
+# end-state — there is no next-boot transform to test.
 - name: _verify | Stat installed theme files
   stat:
     path: "/boot/efi/EFI/refind/themes/refind-theme-regular/{{ item }}"
