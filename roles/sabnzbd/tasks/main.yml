@@ -148,13 +148,18 @@
   tags:
     - sabnzbd
 
+# Anchor each capture to its own [[server]] block: [^\[]*? stops at the next
+# section header, so a server whose usage_at_start line is ever missing falls
+# through to its baseline literal instead of bleeding into the following
+# server's counter. Dots are escaped (literal, not any-char); | int both keeps
+# the rendered value a bare integer and rejects a non-digit scrape.
 - name: Preserve per-server usage counters across converges
   vars:
     _ini: "{{ sabnzbd_existing_ini.content | default('') | b64decode }}"
   set_fact:
-    sabnzbd_newsdemon_usage_at_start: "{{ (_ini | regex_search('\\[\\[eu.newsdemon.com\\]\\][\\s\\S]*?usage_at_start = (\\d+)', '\\1') or ['0']) | first }}"
-    sabnzbd_newsgroupdirect_usage_at_start: "{{ (_ini | regex_search('\\[\\[news-ssl.newsgroupdirect.com\\]\\][\\s\\S]*?usage_at_start = (\\d+)', '\\1') or ['3147984888738']) | first }}"
-    sabnzbd_usenetfarm_usage_at_start: "{{ (_ini | regex_search('\\[\\[news.usenet.farm\\]\\][\\s\\S]*?usage_at_start = (\\d+)', '\\1') or ['4857142225255']) | first }}"
+    sabnzbd_newsdemon_usage_at_start: "{{ ((_ini | regex_search('\\[\\[eu\\.newsdemon\\.com\\]\\][^\\[]*?usage_at_start = (\\d+)', '\\1') or ['0']) | first) | int }}"
+    sabnzbd_newsgroupdirect_usage_at_start: "{{ ((_ini | regex_search('\\[\\[news-ssl\\.newsgroupdirect\\.com\\]\\][^\\[]*?usage_at_start = (\\d+)', '\\1') or ['3147984888738']) | first) | int }}"
+    sabnzbd_usenetfarm_usage_at_start: "{{ ((_ini | regex_search('\\[\\[news\\.usenet\\.farm\\]\\][^\\[]*?usage_at_start = (\\d+)', '\\1') or ['4857142225255']) | first) | int }}"
   tags:
     - sabnzbd
 
