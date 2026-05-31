@@ -61,6 +61,20 @@
       service_user_args needs name (a valid identifier matching
       [a-z_][a-z0-9_-]*); got name={{ service_user_args.name | default('<unset>') }}
 
+# Catch incoherent home options up front rather than silently no-op'ing.
+- name: "Validate home options for {{ service_user_args.name }}"
+  assert:
+    quiet: true
+    that:
+      # home_mode is applied only by the home-dir file task below, which is
+      # gated on createhome -- so home_mode without createhome is silently
+      # ignored. Fail loudly instead of letting the mode vanish.
+      - service_user_args.home_mode is not defined or (service_user_args.createhome | default(false)) | bool
+    fail_msg: >-
+      Incoherent home options for {{ service_user_args.name }}: home_mode
+      needs createhome: true, and createhome needs a real home (not the
+      /nonexistent sentinel).
+
 - name: Resolve caller defaults for {{ service_user_args.name }}
   set_fact:
     _service_user_name: "{{ service_user_args.name }}"
