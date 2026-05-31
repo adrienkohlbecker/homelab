@@ -51,7 +51,7 @@
     owner: root
     group: root
     mode: "0644"
-    validate: bash -n %s
+    validate: sh -n %s
   register: boot_cmdline_grub_present
   become: true
 
