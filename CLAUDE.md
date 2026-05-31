@@ -203,6 +203,8 @@ When in doubt, ask. **Bridge to ack:** before requesting ack for a mutating chan
 
 Axis-collapse rationale + ZBM-aarch64 workaround in [notes/test_environment_design.md](notes/test_environment_design.md).
 
+**Packer images exist only for the qemu test fixtures.** Prod hosts (`lab`/`pug`/`bunk`/`fox`) are configured by ansible from a stock Ubuntu install — no image bakes in their setup, and `packer/scripts/chroot.sh` is the test-fixture analogue of bootstrap/role logic, not a source of truth for prod. The rEFInd binary + per-disk NVRAM boot entries are currently established by hand at prod bootstrap (not yet role-owned). When a role and chroot.sh both write boot state (refind.conf, ZBM images) they are hand-synced twins — change both.
+
 | Variant     | Disks                                                       | Use case                                                          |
 |-------------|-------------------------------------------------------------|-------------------------------------------------------------------|
 | `minimal`   | Vanilla cloud image, ext4                                   | Stranger-baseline; opt-in via `machines:` in `meta/test.yml`      |
