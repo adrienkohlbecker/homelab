@@ -485,9 +485,10 @@ dont_scan_dirs /EFI/ZBM
 # boot stays non-interactive.
 #
 # Twin of the converge-time roles/refind/files/refind.conf, kept in sync by
-# hand. This image-build config boots Components mode (loader + separate
-# initrd); the role's boots the single-file UKI (loader VMLINUZ.EFI, no
-# initrd). The entry title and default_selection must match across both.
+# hand. Only the entry title and default_selection are load-bearing and must
+# match across both. This image-build config boots Components mode (loader +
+# separate initrd); the role's boots the single-file UKI. See that role file
+# for the full enumeration of intended (do-not-reconcile) differences.
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/${ZBM_KERNEL}
     initrd /EFI/ZBM/initramfs-bootmenu.img
