@@ -157,18 +157,20 @@
 # -d nvme,0xffffffff : use broadcast namespace id instead of namespace pointed to by symlink
 
 # TODO: once all hosts are on noble (smartmontools >= 7.4), simplify DEFAULT to -a
-DEFAULT -H -f -t -l error -l selftest -C 197+ -U 198+ -n standby,q -m root -M exec /usr/share/smartmontools/smartd-runner -M test -o on -S on -s (L/../01/./04:024|S/../.././02) -I 194 -I 190 -I 231 -I 9
+DEFAULT -H -f -t -l error -l selftest -C 197+ -U 198+ -n standby,q -m root -M exec /usr/share/smartmontools/smartd-runner -M test -M diminishing -o on -S on -s (L/../01/./04:024|S/../.././02) -I 194 -I 190 -I 231 -I 9
 
 {% set qualifying_devs = ansible_devices.values() | map(attribute='links') | map(attribute='ids') | select | map('sort') | map('first') | select('match', '^(nvme|ata)-') | sort %}
 {% for dev in qualifying_devs %}
-{% if dev.startswith('nvme-') %}
-/dev/disk/by-id/{{ dev }} -d nvme,0xffffffff -W 0,60,80 -l error
+{% if not dev | regex_search('^[a-zA-Z0-9_.:-]+$') %}
+{{ _unsafe_device_id | mandatory('device id contains unsafe characters: ' ~ dev) }}
+{% elif dev.startswith('nvme-') %}
+/dev/disk/by-id/{{ dev }} -d nvme,0xffffffff -W 0,60,80 -l error -l selftest
 {% elif dev.startswith('ata-') %}
 {#- Crucial MX500 firmware spuriously flaps Current_Pending_Sector (197)
     and Offline_Uncorrectable (198) to 1 and back to 0 with no real media
     defect (Reallocated_Sector_Ct stays 0) — a well-documented firmware
     bug. -C 0 -U 0 disables those two reports for MX500 drives only;
     DEFAULT's -H, selftest, and reallocated-count tracking still apply. #}
-/dev/disk/by-id/{{ dev }} -d ata -W 0,50,55 -l error -l scterc,70,70{{ ' -C 0 -U 0' if dev | regex_search('CT\\d+MX500SSD') else '' }}
+/dev/disk/by-id/{{ dev }} -d ata -e security-freeze -W 0,50,55 -l error -l selftest -l xerror -l scterc,70,70{{ ' -C 0 -U 0' if dev | regex_search('CT\\d+MX500SSD') else '' }}
 {% endif %}
 {% endfor %}

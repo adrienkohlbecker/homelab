@@ -6,6 +6,7 @@
     netdata_args:
       src: smartctl.conf
       dest: go.d/smartctl.conf
+      validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
       restart: "{{ smart_netdata_restart | default(true) }}"
   tags:
     - smart
