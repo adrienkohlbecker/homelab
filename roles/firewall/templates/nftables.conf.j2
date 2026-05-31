@@ -58,7 +58,6 @@ table inet homelab {
     counter igmp_accept {}
     counter wireguard_accept {}
     counter mosh_accept {}
-    counter netbios_accept {}
     counter forward_nonsyn {}
     counter forward_catchall {}
     counter input_unscoped_tcp {}
@@ -91,10 +90,10 @@ table inet homelab {
     #
     # mac_mgmt (macvlan child of $WAN_IFACE in mode bridge) is included
     # on hosts that run the macvlan role: L2 broadcasts to $WAN_IFACE --
-    # nmbd's NetBIOS announcements to .255, keepalived gratuitous ARPs --
-    # also get delivered to mac_mgmt, and without this pair would hit the
-    # catch-all log+drop (~400 lines/day on pug). Trust scope is the same
-    # as eth0+HOME_LAN: mac_mgmt sits on the same physical L2.
+    # keepalived gratuitous ARPs, ambient LAN NetBIOS to .255 -- also get
+    # delivered to mac_mgmt, and without this pair would hit the catch-all
+    # log+drop (~400 lines/day on pug). Trust scope is the same as
+    # eth0+HOME_LAN: mac_mgmt sits on the same physical L2.
     set lan_admin_pairs {
         typeof iifname . ip saddr
         flags interval, constant
@@ -254,15 +253,6 @@ table inet homelab {
         iifname "wg0" ip saddr $WG_SUBNET tcp dport {{ service_ports.authelia }} counter name "input_authelia_wg" accept comment "Authelia forward-auth (wireguard peers)"
 {% endif %}
 
-        # NetBIOS for nmbd (137 = name service, 138 = datagram). Same
-        # admin scope as Samba — these are the legacy SMB browsing
-        # broadcasts and only make sense from trusted LAN/wireguard.
-        # Most of the volume is lab's own nmbd announcements coming
-        # back through INPUT via broadcast loopback on both eth0
-        # (10.123.0.2) and wg0 (10.123.64.2); the rest is real SMB
-        # clients (MBP, pug) doing name resolution.
-        iifname . ip saddr @lan_admin_pairs udp dport { 137, 138 } counter name "netbios_accept" accept comment "NetBIOS (nmbd, admin)"
-
         # Container access to NUT: homeassistant's NUT integration
         # connects from its podman bridge IP (currently the mosquitto
         # bridge) to lab's LAN IP at 3493. The admin rule above scopes
@@ -320,21 +310,18 @@ table inet homelab {
         #   57621 — Spotify Connect LAN discovery (Adrien's MBP)
         udp dport { 67, 1900, 5351, 10001, 57621 } counter name "input_silenced" drop comment "input silenced LAN noise"
 
-        # NetBIOS broadcast that misses the netbios_accept (iif . saddr)
-        # scope above was the #2 catch-all log consumer (~400/day). Benign
-        # and already dropped by the catch-all; silencing it here with its
-        # own counter keeps the rate-limited log slot free for genuinely
-        # interesting drops (e.g. WAN scans) while staying visible via
-        # `nft list table inet homelab`. Mostly duplicate copies of trusted
-        # hosts' .255 announcements that the kernel also fans out to the
-        # vrrp.<vrid> vmac macvlan (same L2); nmbd already processed the
-        # eth0/mac_mgmt copy and binds only eth0 (bind interfaces only), so
-        # the vmac dupes are redundant. Accepting them (adding the vmac to
-        # lan_admin_pairs) would only make nmbd double-process — drop is
-        # correct. (IGMP — the #1 log consumer — is handled by an accept
-        # rule above, not here: lab is a multicast subscriber and must
-        # answer the snooping querier.)
-        udp dport { 137, 138 } counter name "input_silenced_netbios" drop comment "NetBIOS broadcast noise (fall-through / vmac dupes)"
+        # NetBIOS (137 = name service, 138 = datagram) was the #2 catch-all
+        # log consumer (~400/day). This host no longer runs nmbd (the samba
+        # role masks it; SMB3 is served direct on 445), so nothing here should
+        # answer NetBIOS -- drop all of it. Benign ambient LAN noise: other
+        # hosts' .255 announcements (the MBP, the Synology NASes) that the
+        # kernel also fans out to the vrrp.<vrid> vmac macvlan (same L2).
+        # Silencing it with its own counter keeps the rate-limited log slot
+        # free for genuinely interesting drops (e.g. WAN scans) while staying
+        # visible via `nft list table inet homelab`. (IGMP — the #1 log
+        # consumer — is handled by an accept rule above, not here: lab is a
+        # multicast subscriber and must answer the snooping querier.)
+        udp dport { 137, 138 } counter name "input_silenced_netbios" drop comment "NetBIOS broadcast noise (no local nmbd)"
 
         # Catch-all: log+drop UDP and non-TCP/UDP protocols silently
         # to avoid ICMP amplification (every spoofed UDP probe would

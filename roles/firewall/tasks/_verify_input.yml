@@ -81,11 +81,11 @@
   become: true
 
 # --- probe_wg group (wireguard-source positives) ---------------------
-# Admin services (mosh/samba/nut/NetBIOS) use the concatenated set
+# Admin services (mosh/samba/nut) use the concatenated set
 # lan_admin_pairs to require an (iif, saddr) *intersection* — wg0 only
 # accepts $WG_SUBNET saddrs, $WAN_IFACE only accepts $HOME_LAN. The
 # rig ingresses everything on wg0, so probe_wg (in $WG_SUBNET) is the
-# positive case for all four services. mDNS rides the same group as a
+# positive case for all three services. mDNS rides the same group as a
 # saddr-scope negative (wg saddr fails the iif=WAN + saddr=$HOME_LAN
 # requirement on the saddr half). The $WAN_IFACE+$HOME_LAN positive
 # half can't be probed (slirp doesn't preserve source IP), so half of
@@ -115,15 +115,6 @@
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
   changed_when: false
   failed_when: false
-  become: true
-
-# NetBIOS uses the same lan_admin_pairs (iif, saddr) intersection.
-# Positive case from wg-source via wg0; the home_LAN-via-wg0 mismatch
-# is structurally identical and already covered by the Samba probes.
-- name: _verify_input | INPUT — NetBIOS (137/udp) reachable from wireguard source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_wg }} 10.99.0.1 137
-  args: { executable: /bin/bash }
-  changed_when: false
   become: true
 
 # mDNS rule requires iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously.
