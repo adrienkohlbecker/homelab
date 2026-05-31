@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import stat
 import sys
 import tempfile
 
@@ -7,9 +8,10 @@ USAGE = "USAGE:\n\tsort_ini.py file.ini"
 
 
 def sort_ini(fname):
-    """sort .ini file: sorts sections and in each section sorts keys"""
+    """sort .ini file: sorts sections and in each section sorts keys.
+    Blank lines and comments are discarded; only suitable for app-rewritten configs."""
     try:
-        with open(fname) as f:
+        with open(fname, encoding="utf-8") as f:
             original = f.read()
     except FileNotFoundError:
         return
@@ -51,13 +53,17 @@ def sort_ini(fname):
             parts.extend(subvals)
     sorted_output = "\n".join(parts) + "\n"
 
-    if sorted_output == original:
+    normalized = "\n".join(l.strip() for l in original.splitlines() if l.strip()) + "\n"
+    if sorted_output == normalized:
         return
 
+    st = os.stat(fname)
     dirn = os.path.dirname(fname)
     fd, tmp = tempfile.mkstemp(dir=dirn)
     try:
-        with os.fdopen(fd, "w") as f:
+        os.fchmod(fd, stat.S_IMODE(st.st_mode))
+        os.fchown(fd, st.st_uid, st.st_gid)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(sorted_output)
         os.replace(tmp, fname)
     except BaseException:
@@ -65,8 +71,9 @@ def sort_ini(fname):
         raise
 
 
-if len(sys.argv) < 2:
-    print(USAGE, file=sys.stderr)
-    sys.exit(1)
-else:
-    sort_ini(sys.argv[1])
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print(USAGE, file=sys.stderr)
+        sys.exit(1)
+    else:
+        sort_ini(sys.argv[1])

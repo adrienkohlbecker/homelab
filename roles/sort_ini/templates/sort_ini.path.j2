@@ -1,10 +1,8 @@
 [Unit]
-Description=Monitor {{ sort_ini_path }} file for changes
+Description=Monitor {{ sort_ini_args.path }} file for changes
 
 [Path]
-PathModified={{ sort_ini_path }}
-TriggerLimitIntervalSec=5s
-TriggerLimitBurst=5
+PathModified={{ sort_ini_args.path }}
 
 [Install]
 WantedBy=multi-user.target

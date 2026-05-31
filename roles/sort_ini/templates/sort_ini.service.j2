@@ -1,8 +1,9 @@
 [Unit]
-Description=Sort ini file {{ sort_ini_path }}
+Description=Sort ini file {{ sort_ini_args.path }}
 
 [Service]
 Type=oneshot
 RemainAfterExit=false
-ExecStart=/usr/local/bin/sort_ini {{ sort_ini_path }}
+ExecStart=/usr/local/bin/sort_ini {{ sort_ini_args.path }}
+TimeoutStartSec=60s
 SyslogIdentifier=%N
