@@ -107,3 +107,26 @@
       - not sabnzbd_verify_db_file.stat.islnk
       - (sabnzbd_verify_db_file.stat.size | int) > 0
     fail_msg: "history1.db on the dataset is missing or empty (stat={{ sabnzbd_verify_db_file.stat }})"
+
+# autoProcessMedia.cfg is rendered with no validate: (its repeated subsections
+# break configparser) and carries four cross-role credentials nothing else
+# exercises. Confirm each templated key landed in the file -- a renamed/unset
+# var would leave an empty value and silently break nzbToMedia's handoff to the
+# *arr apps. Substring checks (not regex) sidestep the repeated-section parse.
+- name: _verify | Read the rendered autoProcessMedia.cfg
+  slurp:
+    src: /mnt/services/sabnzbd/autoProcessMedia.cfg
+  register: sabnzbd_verify_apm
+  become: true
+
+- name: _verify | Rendered autoProcessMedia.cfg carries the post-processing credentials
+  vars:
+    _apm: "{{ sabnzbd_verify_apm.content | b64decode }}"
+  assert:
+    that:
+      - sabnzbd_api_key in _apm
+      - radarr_api_key in _apm
+      - sonarr_api_key in _apm
+      - lidarr_api_key in _apm
+      - omdb_api_key in _apm
+    fail_msg: "autoProcessMedia.cfg is missing a rendered api key (sabnzbd/radarr/sonarr/lidarr/omdb)"
