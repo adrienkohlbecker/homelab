@@ -1,0 +1,26 @@
+- name: _verify | Speedtest answers on its loopback port
+  uri:
+    url: http://localhost:{{ service_ports.speedtest }}/
+    status_code: 200
+    return_content: true
+  register: speedtest_verify_loopback
+  retries: 60
+  delay: 2
+  until:
+    - speedtest_verify_loopback.status == 200
+    - "'LibreSpeed' in speedtest_verify_loopback.content"
+  become: true
+
+- name: _verify | Unauthenticated hit redirects to Authelia
+  uri:
+    url: https://localhost/
+    headers:
+      Host: speedtest.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: speedtest_verify_auth
+  failed_when: >-
+    speedtest_verify_auth.status != 302
+    or ("auth." not in (speedtest_verify_auth.location | default("")))
+  become: true
