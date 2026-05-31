@@ -97,16 +97,27 @@
     - gitea_runner
 
 # Mint a one-shot registration token in qemu_test only; prod's token
-# comes from vault as gitea_runner_registration_token. `creates:`
-# matches the Register task below so the mint is also skipped once
-# .runner exists, keeping idempotence cheap. --config gets app.ini so
-# gitea doesn't refuse with "Gitea is not supposed to be run as root"
-# (I_AM_BEING_UNSAFE_RUNNING_AS_ROOT lives in app.ini, not env).
-- name: Get registration token (test)
+# comes from vault as gitea_runner_registration_token. --config gets
+# app.ini so gitea doesn't refuse with "Gitea is not supposed to be run
+# as root" (I_AM_BEING_UNSAFE_RUNNING_AS_ROOT lives in app.ini, not env).
+#
+# The stat + when: replaces the old `creates:` guard. `creates:` runs
+# under `become_user: git`, but /mnt/services/gitea_runner/ is owned by
+# gitea_runner with mode 0750 — the git user can't traverse it, so
+# `creates:` never sees .runner and the command re-runs every converge.
+- name: Check if runner is already registered
   when: qemu_test
+  stat:
+    path: /mnt/services/gitea_runner/.runner
+  register: _gitea_runner_dotrunner
+  become: true
+  tags:
+    - gitea_runner
+
+- name: Get registration token (test)
+  when: qemu_test and not _gitea_runner_dotrunner.stat.exists
   command: /usr/local/bin/gitea --config /etc/gitea/app.ini actions generate-runner-token
-  args:
-    creates: /mnt/services/gitea_runner/.runner
+  changed_when: true
   register: gitea_runner_test_token
   become: true
   become_user: git

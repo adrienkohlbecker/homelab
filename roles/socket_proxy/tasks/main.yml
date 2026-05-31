@@ -20,6 +20,7 @@
   vars:
     systemd_unit_args:
       src: socket_proxy
+      condition: "{{ not (ansible_check_mode and socket_proxy_service_result.changed) }}"
       restart: "{{ socket_proxy_service_result.changed }}"
   tags:
     - socket_proxy

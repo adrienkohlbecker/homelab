@@ -50,7 +50,7 @@
   # carry `auth: required`; the auth_request needs something answering
   # on 127.0.0.1:{{ service_ports.authelia }}.
   import_role:
-    name: _setup
+    name: test
     tasks_from: authelia_stub
 
 # Simulate a host provisioned before nginx dropped www-data from ssl-cert, so

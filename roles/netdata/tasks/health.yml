@@ -68,7 +68,7 @@
 - name: health | Setup alert config ({{ _module }})
   when: _netdata_health_condition
   vars:
-    _module: "{{ 'template' if _netdata_health_src.endswith('.j2') else 'copy' }}"
+    _module: "{{ 'template' if (_netdata_health_src | default('')).endswith('.j2') else 'copy' }}"
   action: "{{ _module }}"
   args:
     src: "{{ _netdata_health_src }}"
