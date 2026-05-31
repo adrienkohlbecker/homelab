@@ -13,7 +13,8 @@
       mountpoint: "{{ item.mountpoint }}"
       owner: root
       group: root
-      extra_properties: "{{ item.extra_properties }}"
+      mode: '0755'
+      extra_properties: "{{ item.extra_properties | default({}) }}"
 
 - name: _dataset | Configure dataset
   include_role:
