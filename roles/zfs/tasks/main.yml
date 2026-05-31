@@ -64,48 +64,18 @@
   tags:
     - zfs
 
-- name: Create /etc/default/grub.d directory
-  when: grub_bootloader
-  file:
-    dest: /etc/default/grub.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - zfs
-
+# init_on_alloc=0 — the kernel's page-zeroing-on-alloc default taxes ZFS's
+# alloc-heavy ARC. The boot cmdline engine threads it into grub.d
+# (GRUB_CMDLINE_LINUX_DEFAULT) or the ZBM property per the host's bootloader.
 - name: Disable init_on_alloc
-  when: grub_bootloader
-  copy:
-    dest: /etc/default/grub.d/99-zfs.cfg
-    content: "GRUB_CMDLINE_LINUX_DEFAULT=\"$GRUB_CMDLINE_LINUX_DEFAULT init_on_alloc=0\"\n"
-    backup: true
-    owner: root
-    group: root
-    mode: "0644"
-  register: zfs_grub_cfg
-  become: true
-  tags:
-    - zfs
-
-- name: Disable init_on_alloc
-  when: not grub_bootloader
   import_role:
-    name: zfsbootmenu
+    name: boot
     tasks_from: cmdline
   vars:
-    zfsbootmenu_cmdline_file: zfs
-    zfsbootmenu_cmdline_contents: init_on_alloc=0
-  tags:
-    - zfs
-
-- name: Update grub
-  when: grub_bootloader and zfs_grub_cfg.changed
-  command: update-grub
-  changed_when: true
-  become: true
+    boot_cmdline_args:
+      name: zfs
+      contents: init_on_alloc=0
+      grub_scope: default
   tags:
     - zfs
 
