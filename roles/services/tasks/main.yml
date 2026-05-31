@@ -1,45 +1,15 @@
-- name: Create env.d directory
-  file:
-    dest: /etc/env.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0700"
-  become: true
-  tags:
-    - services
-
-- name: Create zfs filesystem
-  when: zfs_root
-  zfs:
-    name: rpool/services
-    state: present
-    extra_zfs_properties:
-      mountpoint: /mnt/services
-      autobackup:bak: "true"
-  become: true
-  tags:
-    - services
-
-- name: Create data dir
-  file:
-    dest: /mnt/services
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - services
-
-- name: Set up mount service for rpool/services
-  when: zfs_root
+- name: Configure services dataset
   import_role:
-    name: zfs_mount
-    tasks_from: unit
+    name: zfs
+    tasks_from: dataset
   vars:
-    zfs_mount_dataset: rpool/services
-    zfs_mount_mountpoint: /mnt/services
+    zfs_dataset_args:
+      dataset: rpool/services
+      mountpoint: /mnt/services
+      owner: root
+      group: root
+      extra_properties:
+        'autobackup:bak': 'true'
   tags:
     - services
 
@@ -49,37 +19,27 @@
 # only 4K to the snapshot diff instead of 128K at the parent's default.
 # Compression is sacrificed (a 4K record can't compress below the 4K
 # ashift=12 sector floor) but snapshot growth is the binding constraint.
-- name: Create zfs filesystem for sqlite
-  when: zfs_root
-  zfs:
-    name: rpool/services/sqlite
-    state: present
-    extra_zfs_properties:
-      mountpoint: /mnt/services/sqlite
-      'autobackup:bak': "true"
-      recordsize: "4096"
-  become: true
-  tags:
-    - services
-
-- name: Create sqlite data dir
-  file:
-    dest: /mnt/services/sqlite
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - services
-
-- name: Set up mount service for rpool/services/sqlite
-  when: zfs_root
+# Not the 64K-record/64K-page pairing OpenZFS suggests for databases: the
+# apps run SQLite at its stock 4K page size, and snapshot growth (not
+# throughput) is what we optimise for here.
+# atime=off kills the write-per-read on these DB files. primarycache and
+# logbias stay at their ZFS defaults deliberately -- the apps keep only a
+# small in-process SQLite page cache, so ARC still earns its keep on cold
+# reads (primarycache=metadata would starve it), and the small synchronous
+# commits want logbias=latency, not throughput.
+- name: Configure sqlite dataset
   import_role:
-    name: zfs_mount
-    tasks_from: unit
+    name: zfs
+    tasks_from: dataset
   vars:
-    zfs_mount_dataset: rpool/services/sqlite
-    zfs_mount_mountpoint: /mnt/services/sqlite
+    zfs_dataset_args:
+      dataset: rpool/services/sqlite
+      mountpoint: /mnt/services/sqlite
+      owner: root
+      group: root
+      extra_properties:
+        'autobackup:bak': 'true'
+        recordsize: '4096'
+        atime: 'off'
   tags:
     - services
