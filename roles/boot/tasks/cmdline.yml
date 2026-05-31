@@ -66,6 +66,7 @@
 - name: cmdline | Update grub
   when: >-
     grub_bootloader
+    and not ansible_check_mode
     and ((boot_cmdline_grub_present is defined and boot_cmdline_grub_present.changed)
          or (boot_cmdline_grub_absent is defined and boot_cmdline_grub_absent.changed))
   command: update-grub
