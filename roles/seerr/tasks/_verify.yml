@@ -16,6 +16,30 @@
     - _verify_loopback.json.version is defined
   become: true
 
+# apiKey-wiring check -- the role's central promise is that settings.json
+# carries the configured apiKey (the assert at the top of main.yml exists
+# precisely because a blank key silently breaks every API client). A live
+# api-call check is impossible here: a pre-setup-wizard seerr has no admin
+# user, so even a *valid* X-Api-Key 403s on every authenticated route. So read
+# the key back from the file seerr rewrote on boot instead -- had seerr rejected
+# or regenerated our key (the regression we care about), this wouldn't match.
+- name: _verify | Read back the settings.json seerr persisted
+  slurp:
+    src: /mnt/services/seerr/settings.json
+  register: _verify_settings_content
+  become: true
+
+- name: _verify | Seerr persisted the configured apiKey
+  vars:
+    _seerr_persisted: "{{ _verify_settings_content.content | b64decode | from_json }}"
+  assert:
+    that:
+      - _seerr_persisted.main.apiKey == (seerr_api_key | string)
+    fail_msg: >-
+      settings.json on disk carries a different apiKey than the configured
+      seerr_api_key -- seerr regenerated or rejected the rendered key.
+  become: true
+
 # nginx Host-header probe -- exercises the full reverse-proxy chain so
 # a typo in nginx_site_args / proxy_pass fails here too. trustProxy is
 # set in settings.json so the upstream X-Forwarded-* headers from nginx
