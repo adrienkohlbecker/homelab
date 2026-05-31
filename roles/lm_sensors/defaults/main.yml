@@ -2,14 +2,14 @@
 # host_vars in ansible's precedence ladder and would mask per-host
 # overrides. The empty default keeps the role a clean no-op on hosts with
 # no sensors (localhost, minimal, any host that doesn't opt in) -- an empty
-# sensor_modules drives main.yml's removal arm instead of tripping the assert.
+# lm_sensors_modules drives main.yml's removal arm instead of tripping the assert.
 #
-# sensor_modules: hwmon kernel module names to load at boot + live (derive
+# lm_sensors_modules: hwmon kernel module names to load at boot + live (derive
 #                 per host with `sudo sensors-detect`).
-# sensor_relabel: optional go.d relabel map; consumed only by netdata.yml.
+# lm_sensors_relabel: optional go.d relabel map; consumed only by netdata.yml.
 #                 See roles/lm_sensors/templates/sensors.conf.j2 for the shape.
-# noqa var-naming[no-role-prefix]: sensor_modules/sensor_relabel are the
+# noqa var-naming[no-role-prefix]: lm_sensors_modules/lm_sensors_relabel are the
 # established un-prefixed cross-host interface (set in host_vars), not
 # role-internal vars -- same exemption netdata's metrics installs use.
-sensor_modules: [] # noqa: var-naming[no-role-prefix]
-sensor_relabel: [] # noqa: var-naming[no-role-prefix]
+lm_sensors_modules: []
+lm_sensors_relabel: []

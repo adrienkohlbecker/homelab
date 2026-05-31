@@ -120,7 +120,7 @@
     # be reloaded. The systemd module also fails its dbus lookup with
     # "Could not find the requested service nginx" when nginx was only
     # would-installed in the same check-mode pass (e.g. fresh bootstrap
-    # via roles/_test); the rescue path then mislabels the failure as
+    # via roles/test); the rescue path then mislabels the failure as
     # an nginx -t error. Real applies still reload because the install
     # task above already started the service by the time we reach here.
     - name: conf_d | Reload nginx for {{ nginx_conf_d_args.name }}

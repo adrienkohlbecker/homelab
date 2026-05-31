@@ -42,5 +42,5 @@
 
     - name: Install nginx + snakeoil cert at letsencrypt paths
       import_role:
-        name: _test
+        name: test
         tasks_from: nginx

@@ -143,22 +143,22 @@
 # real CSP record. csp_blocked_uri is only populated by flatten_csp.lua.
 - name: _verify | OTLP-end-to-end | wait for ClickHouse row matching marker
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query_wait
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "OTLP-end-to-end | wait for CSP row"
       sql: "SELECT count() FROM default.otel_logs WHERE LogAttributes['csp_blocked_uri'] LIKE '%{{ fluentbit_otlp_csp_marker }}%'"
       retries: 60
       delay: 2
-      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
 
 - name: _verify | OTLP-end-to-end | fetch CSP row as JSON
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "OTLP-end-to-end | fetch CSP row"
       sql: >-
         SELECT
@@ -181,7 +181,7 @@
 
 - name: _verify | OTLP-end-to-end | assert landed row shape
   vars:
-    row: "{{ _test_clickhouse_result.stdout | from_json }}"
+    row: "{{ test_clickhouse_result.stdout | from_json }}"
   assert:
     that:
       # Body shape: "CSP <effective> blocked <uri> on <doc> {<json>}".
@@ -232,10 +232,10 @@
 # satisfy the count.
 - name: _verify | Journald path | wait for ClickHouse row matching marker
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query_wait
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "journald path | wait for row"
       sql: >-
         SELECT count() FROM default.otel_logs
@@ -243,14 +243,14 @@
           AND ServiceName = 'fluentbit_verify_journald'
       retries: 60
       delay: 2
-      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
 
 - name: _verify | Journald path | fetch row as JSON
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "journald path | fetch row"
       sql: >-
         SELECT
@@ -274,7 +274,7 @@
 # bug stuck around precisely because nothing here checked.
 - name: _verify | Journald path | assert lua filter output
   vars:
-    row: "{{ _test_clickhouse_result.stdout | from_json }}"
+    row: "{{ test_clickhouse_result.stdout | from_json }}"
   assert:
     that:
       - "row.SeverityText == 'error'"
@@ -304,10 +304,10 @@
 
 - name: _verify | Nginx tail | wait for ClickHouse row matching marker
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query_wait
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "nginx tail | wait for row"
       sql: >-
         SELECT count() FROM default.otel_logs
@@ -315,14 +315,14 @@
           AND ServiceName = 'nginx_access'
       retries: 60
       delay: 2
-      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
 
 - name: _verify | Nginx tail | fetch row as JSON
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "nginx tail | fetch row"
       sql: >-
         SELECT
@@ -339,7 +339,7 @@
 
 - name: _verify | Nginx tail | assert lua filter output
   vars:
-    row: "{{ _test_clickhouse_result.stdout | from_json }}"
+    row: "{{ test_clickhouse_result.stdout | from_json }}"
   assert:
     that:
       - "row.SeverityText == 'info'"
@@ -366,10 +366,10 @@
 
 - name: _verify | Journald warn | wait for ClickHouse row matching marker
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query_wait
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "journald warn | wait"
       sql: >-
         SELECT count() FROM default.otel_logs
@@ -377,14 +377,14 @@
           AND ServiceName = 'fluentbit_verify_warn'
       retries: 60
       delay: 2
-      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
 
 - name: _verify | Journald warn | fetch row
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "journald warn | fetch"
       sql: >-
         SELECT
@@ -400,7 +400,7 @@
 
 - name: _verify | Journald warn | assert severity classification
   vars:
-    row: "{{ _test_clickhouse_result.stdout | from_json }}"
+    row: "{{ test_clickhouse_result.stdout | from_json }}"
   assert:
     that:
       - "row.SeverityText == 'warn'"
@@ -436,10 +436,10 @@
 
 - name: _verify | Multiline | wait for joined traceback row
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query_wait
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "multiline | wait"
       sql: >-
         SELECT count() FROM default.otel_logs
@@ -448,14 +448,14 @@
           AND ServiceName = 'fluentbit_verify_multiline'
       retries: 60
       delay: 2
-      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
 
 - name: _verify | Multiline | fetch row
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "multiline | fetch"
       sql: >-
         SELECT Body, ServiceName
@@ -469,7 +469,7 @@
 
 - name: _verify | Multiline | assert traceback joined
   vars:
-    row: "{{ _test_clickhouse_result.stdout | from_json }}"
+    row: "{{ test_clickhouse_result.stdout | from_json }}"
   assert:
     that:
       - "'Traceback' in row.Body"
@@ -505,10 +505,10 @@
 
 - name: _verify | Mitogen | wait for ClickHouse row matching marker
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query_wait
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "mitogen | wait for row"
       sql: >-
         SELECT count() FROM default.otel_logs
@@ -516,14 +516,14 @@
           AND ServiceName = 'mitogen'
       retries: 60
       delay: 2
-      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
 
 - name: _verify | Mitogen | fetch row
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "mitogen | fetch"
       sql: >-
         SELECT Body, ServiceName
@@ -536,7 +536,7 @@
 
 - name: _verify | Mitogen | assert collapse fired
   vars:
-    row: "{{ _test_clickhouse_result.stdout | from_json }}"
+    row: "{{ test_clickhouse_result.stdout | from_json }}"
   assert:
     that:
       - "row.ServiceName == 'mitogen'"
@@ -572,10 +572,10 @@
 
 - name: _verify | Podman_unnamed | wait for ClickHouse row matching marker
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query_wait
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "podman_unnamed | wait for row"
       sql: >-
         SELECT count() FROM default.otel_logs
@@ -583,14 +583,14 @@
           AND ServiceName = 'podman_unnamed'
       retries: 60
       delay: 2
-      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
 
 - name: _verify | Podman_unnamed | fetch row
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "podman_unnamed | fetch"
       sql: >-
         SELECT Body, ServiceName
@@ -603,7 +603,7 @@
 
 - name: _verify | Podman_unnamed | assert libpod-conmon fallback fired
   vars:
-    row: "{{ _test_clickhouse_result.stdout | from_json }}"
+    row: "{{ test_clickhouse_result.stdout | from_json }}"
   assert:
     that:
       - "row.ServiceName == 'podman_unnamed'"
@@ -644,10 +644,10 @@
 
 - name: _verify | Podman_healthcheck | wait for ClickHouse row matching cid
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query_wait
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "podman_healthcheck | wait for row"
       sql: >-
         SELECT count() FROM default.otel_logs
@@ -655,14 +655,14 @@
           AND ServiceName = 'podman_healthcheck'
       retries: 60
       delay: 2
-      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
 
 - name: _verify | Podman_healthcheck | fetch row
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query
   vars:
-    _fluentbit_test_args:
+    test_args:
       label: "podman_healthcheck | fetch"
       sql: >-
         SELECT
@@ -680,7 +680,7 @@
 
 - name: _verify | Podman_healthcheck | assert rewrite shape
   vars:
-    row: "{{ _test_clickhouse_result.stdout | from_json }}"
+    row: "{{ test_clickhouse_result.stdout | from_json }}"
   assert:
     that:
       - "row.ServiceName == 'podman_healthcheck'"

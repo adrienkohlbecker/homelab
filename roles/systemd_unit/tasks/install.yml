@@ -32,7 +32,7 @@
 # keys in a single set_fact concurrently — a key can't read a sibling
 # defined in the same task. Primitives (caller-var defaulting) first,
 # derived facts (scope/dir) second.
-- name: Resolve caller defaults for {{ systemd_unit_args.src }}  # noqa: var-naming[no-role-prefix]
+- name: Resolve caller defaults for {{ systemd_unit_args.src }}
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
@@ -53,14 +53,14 @@
                    else (systemd_unit_args.dest
                          | default(systemd_unit_args.src | regex_replace('\.j2$', '')))) }}
 
-- name: Derive install scope for {{ systemd_unit_args.src }}  # noqa: var-naming[no-role-prefix]
+- name: Derive install scope for {{ systemd_unit_args.src }}
   set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
 
 # Third layer: needs _systemd_unit_dir + _systemd_unit_name from above,
 # which set_fact evaluates concurrently within a single task.
-- name: Derive install path for {{ systemd_unit_args.src }}  # noqa: var-naming[no-role-prefix]
+- name: Derive install path for {{ systemd_unit_args.src }}
   set_fact:
     _systemd_unit_path: "{{ systemd_unit_args.dest_abs | default(_systemd_unit_dir ~ '/' ~ _systemd_unit_name) }}"
 
@@ -91,7 +91,7 @@
     - _systemd_unit_scope == 'user'
   stat:
     path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
-  register: _systemd_unit_linger  # noqa: var-naming[no-role-prefix]
+  register: _systemd_unit_linger
   failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
 
 # Refuse to overwrite a masked unit. `systemctl mask` creates a /dev/null
@@ -105,7 +105,7 @@
   when: _systemd_unit_condition
   stat:
     path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}"
-  register: _systemd_unit_mask  # noqa: var-naming[no-role-prefix]
+  register: _systemd_unit_mask
   become: true
 
 - name: Refuse to overwrite masked unit

@@ -16,7 +16,7 @@
 
 # nginx-vhost probe -- exercises the proxied path, not just loopback. A
 # regression in the nginx_site wiring (typo'd subdomain, broken proxy_pass)
-# would pass the loopback probe above silently. The _test authelia_stub admits
+# would pass the loopback probe above silently. The test authelia_stub admits
 # the auth_request subrequest, so the request reaches profilarr and /ping
 # answers 200.
 - name: _verify | Profilarr answers /ping through the nginx vhost

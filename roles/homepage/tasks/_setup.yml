@@ -5,7 +5,7 @@
 
 - name: _setup | Install nginx
   import_role:
-    name: _test
+    name: test
     tasks_from: nginx
 
 # homepage uses nginx_site_args.auth=required, so the /alerts/ and root
@@ -15,7 +15,7 @@
 # wiring in nginx without bringing up the full authelia role.
 - name: _setup | Install authelia stub for auth=required tests
   import_role:
-    name: _test
+    name: test
     tasks_from: authelia_stub
 
 - name: _setup | Setup dependencies

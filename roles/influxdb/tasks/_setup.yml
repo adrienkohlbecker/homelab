@@ -5,7 +5,7 @@
 
 - name: _setup | Install nginx
   import_role:
-    name: _test
+    name: test
     tasks_from: nginx
 
 # Stand in for the real Authelia. `gate` mode returns 401 on every
@@ -16,10 +16,10 @@
 # test (Authorization: Token <admin-token>) still reaches InfluxDB.
 - name: _setup | Install authelia stub in gate mode
   import_role:
-    name: _test
+    name: test
     tasks_from: authelia_stub
   vars:
-    _influxdb_authelia_stub_mode: gate
+    test_authelia_stub_mode: gate
 
 - name: _setup | Create /mnt/services
   file:

@@ -1,5 +1,5 @@
 # The harness runs main.yml (apt + modules-load + live modprobe) on its own
-# with box's test _lm_sensors_sensor_modules; this file asserts that took effect, then
+# with box's test lm_sensors_modules; this file asserts that took effect, then
 # exercises the netdata collector arm (normally invoked from
 # roles/netdata/tasks/main.yml).
 #
@@ -10,7 +10,7 @@
 # the copy helper seeds from. Live charting therefore can't be verified here
 # (it's observed on prod); instead we verify modules load for real, and that
 # netdata.yml renders + deploys a valid go.d config including the relabel
-# template path (host_vars/box.yml feeds a test sensor_relabel).
+# template path (host_vars/box.yml feeds a test lm_sensors_relabel).
 
 - name: _verify | Read the modules-load.d file
   slurp:
@@ -18,17 +18,17 @@
   register: _lm_sensors_modload
   become: true
 
-- name: _verify | Assert it lists exactly _lm_sensors_sensor_modules
+- name: _verify | Assert it lists exactly lm_sensors_modules
   assert:
     that:
-      - (_lm_sensors_modload.content | b64decode).split() == _lm_sensors_sensor_modules
+      - (_lm_sensors_modload.content | b64decode).split() == lm_sensors_modules
     fail_msg: >-
       /etc/modules-load.d/lm_sensors.conf = {{ _lm_sensors_modload.content | b64decode | trim }};
-      expected {{ _lm_sensors_sensor_modules }}
+      expected {{ lm_sensors_modules }}
 
 - name: _verify | Assert each module is loaded in the running kernel
   command: grep -qw {{ item | replace('-', '_') }} /proc/modules
-  loop: "{{ _lm_sensors_sensor_modules }}"
+  loop: "{{ lm_sensors_modules }}"
   changed_when: false
   become: true
 
@@ -60,7 +60,7 @@
     force: false
   become: true
 
-# No netdata_restart set here -- relies on netdata.yml's default(true), which
+# No lm_sensors_netdata_restart set here -- relies on netdata.yml's default(true), which
 # is exactly finding 9's standalone-invocation fix.
 - name: _verify | Install lm_sensors netdata collector
   import_tasks: netdata.yml
@@ -95,7 +95,7 @@
 
 - name: _verify | Switch to an empty module list
   set_fact:
-    _lm_sensors_sensor_modules: []
+    lm_sensors_modules: []
 
 - name: _verify | Re-run the role's module-management tasks
   import_tasks: main.yml

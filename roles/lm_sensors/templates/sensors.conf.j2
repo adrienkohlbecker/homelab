@@ -2,16 +2,16 @@
 # netdata go.d sensors collector. The collector auto-discovers every hwmon
 # chip, so the bare job below is all that's needed to graph them. Charts are
 # named after the chip/feature (e.g. coretemp-isa-0000 -> temp2), which is
-# cryptic; set `sensor_relabel` in host_vars to give specific sensors a
+# cryptic; set `lm_sensors_relabel` in host_vars to give specific sensors a
 # friendly label (chip identifiers and feature names differ per host -- run
-# `sensors` to list them). It's an optional companion to `sensor_modules`;
+# `sensors` to list them). It's an optional companion to `lm_sensors_modules`;
 # empty/unset means no relabeling. Shape:
-#   sensor_relabel:
+#   lm_sensors_relabel:
 #     - chip: coretemp-isa-*      # chip pattern (glob)
 #       sensors:
 #         - name: temp1           # feature name as `sensors` reports it
 #           label: CPU Package
-{% set relabel = sensor_relabel | default([]) %}
+{% set relabel = lm_sensors_relabel | default([]) %}
 jobs:
   - name: sensors
     autodetection_retry: 60

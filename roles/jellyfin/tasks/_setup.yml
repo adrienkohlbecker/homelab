@@ -10,7 +10,7 @@
 
 - name: _setup | Install nginx
   import_role:
-    name: _test
+    name: test
     tasks_from: nginx
 
 - name: _setup | Ensure /mnt/services, /mnt/scratch, and /mnt/media exist
@@ -27,5 +27,5 @@
 
 - name: _setup | Fake HW transcoding fixture (no GPU in QEMU)
   import_role:
-    name: _test
+    name: test
     tasks_from: fake_render_device

@@ -68,7 +68,7 @@
     label: "{{ item.item }}"
 
 # HW transcoding wiring smoke. On box the device is a phantom set up by
-# _test/tasks/fake_render_device.yml (open() returns ENXIO), so anything
+# test/tasks/fake_render_device.yml (open() returns ENXIO), so anything
 # that actually probes VAAPI would fall back to software. The checks
 # below verify the ansible-side templating reached the container:
 # (1) the device is visible inside the container, (2) the container has

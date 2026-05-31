@@ -5,5 +5,5 @@
 # inside _verify, not here.
 - name: _setup | Install nginx
   import_role:
-    name: _test
+    name: test
     tasks_from: nginx

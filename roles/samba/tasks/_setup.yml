@@ -1,4 +1,4 @@
-- name: _test | Install dependencies
+- name: _setup | Install dependencies
   apt:
     pkg:
       - avahi-daemon

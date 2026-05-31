@@ -1,5 +1,5 @@
 - hosts: all
   tasks:
     - import_role:
-        name: _test
+        name: test
         tasks_from: mirrors

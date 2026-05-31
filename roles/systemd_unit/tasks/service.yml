@@ -44,14 +44,14 @@
 # extract_podman_image module silently returns [] for anything else
 # after blindly appending `.service` to the name. Bare names (no
 # extension) are treated as services by the role's convention.
-- name: service | Resolve caller defaults for {{ systemd_unit_args.src }}  # noqa: var-naming[no-role-prefix]
+- name: service | Resolve caller defaults for {{ systemd_unit_args.src }}
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
     _systemd_unit_start: "{{ systemd_unit_args.start | default(true) }}"
     _systemd_unit_name: "{{ systemd_unit_args.dest | default(systemd_unit_args.src) }}"
 
-- name: service | Derive scope and unit type for {{ systemd_unit_args.src }}  # noqa: var-naming[no-role-prefix]
+- name: service | Derive scope and unit type for {{ systemd_unit_args.src }}
   set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_is_service: "{{ _systemd_unit_name.endswith('.service') or '.' not in _systemd_unit_name }}"
@@ -68,7 +68,7 @@
     - _systemd_unit_scope == 'user'
   stat:
     path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
-  register: _systemd_unit_linger  # noqa: var-naming[no-role-prefix]
+  register: _systemd_unit_linger
   failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
 
 - name: Enable the service
@@ -77,7 +77,7 @@
     name: "{{ _systemd_unit_name }}"
     enabled: true
     scope: "{{ _systemd_unit_scope }}"
-  register: _systemd_unit_enable  # noqa: var-naming[no-role-prefix]
+  register: _systemd_unit_enable
   become: true
   become_user: "{{ _systemd_unit_user }}"
 

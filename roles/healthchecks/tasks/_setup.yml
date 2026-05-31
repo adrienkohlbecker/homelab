@@ -5,7 +5,7 @@
 
 - name: _setup | Install nginx
   import_role:
-    name: _test
+    name: test
     tasks_from: nginx
 
 # healthchecks uses nginx_site_args.auth=required with a sibling
@@ -13,10 +13,10 @@
 # distinguish "UI 302s to portal" from "ping path bypasses".
 - name: _setup | Install authelia stub in gate mode
   import_role:
-    name: _test
+    name: test
     tasks_from: authelia_stub
   vars:
-    _healthchecks_authelia_stub_mode: gate
+    test_authelia_stub_mode: gate
 
 - name: _setup | Create /mnt/services parent
   file:

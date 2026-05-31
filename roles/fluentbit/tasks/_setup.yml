@@ -1,6 +1,6 @@
 - name: _setup | Install nginx (for the tail input paths to resolve)
   import_role:
-    name: _test
+    name: test
     tasks_from: nginx
 
 # fluentbit's _verify exercises the CSP-through-OTLP path end-to-end:

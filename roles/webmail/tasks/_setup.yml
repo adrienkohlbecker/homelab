@@ -1,6 +1,6 @@
 - name: _setup | Install nginx
   import_role:
-    name: _test
+    name: test
     tasks_from: nginx
 
 - name: _setup | Install podman
@@ -10,10 +10,10 @@
 
 - name: _setup | Install authelia stub for auth=required tests
   import_role:
-    name: _test
+    name: test
     tasks_from: authelia_stub
   vars:
-    _webmail_authelia_stub_mode: gate
+    test_authelia_stub_mode: gate
 
 - name: _setup | Ensure /mnt/services exists
   file:

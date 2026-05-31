@@ -37,14 +37,14 @@ _PHASE_TIMINGS: list[tuple[str, float]] = []
 # (sources.list still pointing at upstream URLs from chroot.sh's final
 # write_sources_list call), either because the role itself is what
 # transitions that state (apt -> rewrites sources to nexus) or because
-# the role asserts that packer shipped the right thing (_packer ->
+# the role asserts that packer shipped the right thing (packer ->
 # verifies chroot.sh's upstream reset landed). Running the mirrors
 # prelude first would rewrite sources to nexus before _verify sees the
 # image, masking both kinds of regression. DNS for nexus.lab.fahm.fr
 # resolves via the host resolver chain on-LAN (CI runner, lab dev
 # hosts); off-LAN dev work can pass --upstream-mirrors as the escape
 # hatch.
-_SKIP_MIRRORS_PRELUDE_ROLES = frozenset({"apt", "_packer"})
+_SKIP_MIRRORS_PRELUDE_ROLES = frozenset({"apt", "packer"})
 
 
 @contextlib.asynccontextmanager

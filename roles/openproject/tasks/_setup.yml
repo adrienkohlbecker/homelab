@@ -3,14 +3,14 @@
     name: podman
     tasks_from: install
 
-- name: _test | Install nginx
+- name: _setup | Install nginx
   import_role:
-    name: _test
+    name: test
     tasks_from: nginx
 
 - name: _setup | Install authelia stub in gate mode
   import_role:
-    name: _test
+    name: test
     tasks_from: authelia_stub
   vars:
-    _openproject_authelia_stub_mode: gate
+    test_authelia_stub_mode: gate

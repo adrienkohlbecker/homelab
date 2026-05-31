@@ -72,12 +72,12 @@ class RequireBackup(AnsibleLintRule):
             # Exempt test-only hooks: _verify.yml, _verify_*.yml, _setup.yml.
             if file.path.name.startswith(("_verify", "_setup")):
                 return False
-            # Exempt test-fixture roles (roles/_test, roles/_packer) — their
+            # Exempt test-fixture roles (roles/test, roles/packer) — their
             # writes target throwaway VMs, same rationale as _verify/_setup.
             parts = file.path.parts
             if "roles" in parts:
                 role = parts.index("roles") + 1
-                if role < len(parts) and parts[role].startswith("_"):
+                if role < len(parts) and parts[role] in [ "test", "packer" ]:
                     return False
 
         backup = task["action"].get("backup", None)

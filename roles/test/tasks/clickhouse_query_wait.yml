@@ -4,13 +4,13 @@
 # Ansible 2.19+ while the one-shot fetch keeps a literal conditional.
 #
 # Inputs (single dict, replaced wholesale per call):
-#   _test_args.sql      SQL string. Stdin'd to curl so quotes / square
+#   test_args.sql      SQL string. Stdin'd to curl so quotes / square
 #                       brackets stay human-readable.
-#   _test_args.label    Short tag for the task name (default "query").
-#   _test_args.retries  Poll count (default 30).
-#   _test_args.delay    Seconds between polls (default 2).
-#   _test_args.until    Predicate evaluated against
-#                       _test_clickhouse_result each iteration. Required;
+#   test_args.label    Short tag for the task name (default "query").
+#   test_args.retries  Poll count (default 30).
+#   test_args.delay    Seconds between polls (default 2).
+#   test_args.until    Predicate evaluated against
+#                       test_clickhouse_result each iteration. Required;
 #                       the helper has no sensible default for what
 #                       "ready" means in caller-specific data.
 #
@@ -20,15 +20,15 @@
 # condition.
 #
 # Output:
-#   _test_clickhouse_result.stdout: response from the final iteration.
-- name: "_test | clickhouse_query_wait | {{ _test_args.label | default('query') }}"
+#   test_clickhouse_result.stdout: response from the final iteration.
+- name: "test | Clickhouse_query_wait | {{ test_args.label | default('query') }}"
   command:
     cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
-    stdin: "{{ _test_args.sql }}"
-  register: _test_clickhouse_result  # noqa: var-naming[no-role-prefix]
+    stdin: "{{ test_args.sql }}"
+  register: test_clickhouse_result
   changed_when: false
   failed_when: false
-  retries: "{{ _test_args.retries | default(30) }}"
-  delay: "{{ _test_args.delay | default(2) }}"
-  until: "{{ _test_args.until }}"
+  retries: "{{ test_args.retries | default(30) }}"
+  delay: "{{ test_args.delay | default(2) }}"
+  until: "{{ test_args.until }}"
   become: true

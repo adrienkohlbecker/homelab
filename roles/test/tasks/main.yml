@@ -1,4 +1,4 @@
-# `testrole.py _test` exercises both fixtures end-to-end: the mirrors
+# `testrole.py test` exercises both fixtures end-to-end: the mirrors
 # fixture is applied by the harness's pre-role mirrors playbook
 # (test/playbooks/_mirrors.yml) before site.yml runs; the nginx fixture
 # (snakeoil certs + roles/nginx tasks_from: install) is imported here

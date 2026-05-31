@@ -30,7 +30,7 @@ swap_zram:
   size: 8G
 
 # Derived from `sudo sensors-detect` on the host; re-run after hardware changes.
-sensor_modules:
+lm_sensors_modules:
   - drivetemp
   - coretemp
   - nct6775

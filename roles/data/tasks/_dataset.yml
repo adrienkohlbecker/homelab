@@ -6,8 +6,6 @@
 # `vars:` dict referencing {{ item }} on include_role triggers a
 # parse-time templating warning. Set the consumed role's input fact
 # (zfs_dataset_args) directly.
-# noqa: var-naming[no-role-prefix] -- zfs_dataset_args is the consumed
-# role's required input name, not a data role-internal var.
 - name: _dataset | Build zfs_dataset_args
   set_fact:
     zfs_dataset_args:  # noqa: var-naming[no-role-prefix]

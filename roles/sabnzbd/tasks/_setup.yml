@@ -1,6 +1,6 @@
-- name: _test | Install nginx
+- name: _setup | Install nginx
   import_role:
-    name: _test
+    name: test
     tasks_from: nginx
 
 - name: _setup | Install podman
@@ -15,15 +15,12 @@
 
 - name: _setup | Install authelia stub in gate mode for auth=required tests
   import_role:
-    name: _test
+    name: test
     tasks_from: authelia_stub
   vars:
-    # authelia_stub_mode is _test's input var, so it can't carry a sabnzbd_
-    # prefix. no-role-prefix is experimental -- a silent warning in the
-    # sibling gate-mode roles, but it fires firmly in this role's play scope.
-    authelia_stub_mode: gate  # noqa: var-naming[no-role-prefix]
+    test_authelia_stub_mode: gate
 
-- name: _test | Setup dependencies
+- name: _setup | Setup dependencies
   file:
     path: "{{ item }}"
     state: directory
@@ -38,7 +35,7 @@
     - /mnt/media/Other
   become: true
 
-- name: _test | Stub sort_ini binary
+- name: _setup | Stub sort_ini binary
   file:
     src: /usr/bin/tail
     dest: /usr/local/bin/sort_ini

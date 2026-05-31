@@ -97,7 +97,7 @@
 # no-op'ing forever. A bare `creates:` gate on privkey.pem fires
 # regardless of cert content.
 #
-# Snakeoils from roles/nginx/_setup.yml and roles/_test/nginx.yml write
+# Snakeoils from roles/nginx/_setup.yml and roles/test/nginx.yml write
 # to /etc/letsencrypt/live/<dom>/privkey.pem; _setup.yml is test-only
 # (never invoked by site.yml) so prod is unaffected, but a future
 # composed harness fixture applying those snakeoils before this role
