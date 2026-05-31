@@ -1,0 +1,14 @@
+# nzbToMedia post-processing scripts (clinton-hall/nzbToMedia), extracted to
+# /opt/nzbToMedia and invoked by SABnzbd's category scripts. Bumping = edit the
+# version + sha256 in lockstep, then re-apply; the version-stamped sentinel
+# (.installed-<version>) re-extracts on a bump and no-ops otherwise.
+#
+# Pure-Python, so a single url/sha256 rather than the per-arch split other
+# artifacts use. URL adjacent to its sha256 per CLAUDE.md "Centralize
+# downloadable artifact metadata". sha256 computed from the verified download.
+# NOTE: this pins GitHub's auto-generated tag tarball, whose checksum can shift
+# if GitHub re-compresses it -- a mismatch then fails the fetch loudly (the
+# point), at which point recompute and re-pin.
+sabnzbd_nzbtomedia_version: "12.1.13"
+sabnzbd_nzbtomedia_url: "{{ mirror_github }}/clinton-hall/nzbToMedia/archive/refs/tags/12.1.13.tar.gz"
+sabnzbd_nzbtomedia_sha256: "769e2941d5ba7fcaaa3348294df97d1be3fabe8fe6b0c9710df2059fde28a21d"
