@@ -70,6 +70,9 @@
       # gated on createhome -- so home_mode without createhome is silently
       # ignored. Fail loudly instead of letting the mode vanish.
       - service_user_args.home_mode is not defined or (service_user_args.createhome | default(false)) | bool
+      # createhome with the default home would materialize /nonexistent (a
+      # sentinel several system tools special-case) as a real directory.
+      - not (service_user_args.createhome | default(false) | bool) or (service_user_args.home | default('/nonexistent')) != '/nonexistent'
     fail_msg: >-
       Incoherent home options for {{ service_user_args.name }}: home_mode
       needs createhome: true, and createhome needs a real home (not the
