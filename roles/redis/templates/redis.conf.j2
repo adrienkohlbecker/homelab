@@ -20,11 +20,19 @@ maxmemory 450mb
 maxmemory-policy noeviction
 
 # Disable the admin command surface a consumer never needs. With one shared
-# password an otherwise-compromised consumer could `CONFIG SET dir` + `SAVE`
-# to write an arbitrary RDB anywhere redis can (a file-write RCE), or load a
-# module. paperless needs only ordinary data + Celery commands. An empty
-# replacement name disables the command; ACLs are the modern alternative but
-# overkill for a single shared-password broker.
+# password an otherwise-compromised consumer could `CONFIG SET dir` + `SAVE` to
+# write an arbitrary RDB anywhere redis can (a file-write RCE), load a module,
+# `REPLICAOF` an attacker host to wipe-and-replace the broker, or burn CPU with
+# a Lua `EVAL` script. paperless's Celery transport (kombu) needs only ordinary
+# list/pubsub data commands. An empty replacement name disables the command;
+# ACLs are the modern alternative but overkill for a single shared-password
+# broker.
 rename-command CONFIG ""
 rename-command DEBUG ""
 rename-command MODULE ""
+rename-command REPLICAOF ""
+rename-command SLAVEOF ""
+rename-command EVAL ""
+rename-command EVALSHA ""
+rename-command FUNCTION ""
+rename-command SCRIPT ""
