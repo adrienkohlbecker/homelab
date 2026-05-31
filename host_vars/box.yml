@@ -152,6 +152,8 @@ pihole_keepalived_priority: 5
 
 prometheus_enabled: true
 
+redis_enabled: true
+
 minio_enabled: true
 minio_buckets:
   - test
