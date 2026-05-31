@@ -30,6 +30,10 @@ Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
 TimeoutSec=120
+# Exceed the container's `--stop-timeout 120` so systemd doesn't SIGKILL the
+# cgroup at the moment podman's graceful-stop window closes -- that race would
+# truncate SABnzbd's flush of history1.db onto the 4K sqlite dataset.
+TimeoutStopSec=150
 RestartSec=5
 Type=notify
 NotifyAccess=all
