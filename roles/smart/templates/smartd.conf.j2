@@ -156,20 +156,20 @@
 # -I 9 : Do not log Power_On_Hours changes
 # -d nvme,0xffffffff : use broadcast namespace id instead of namespace pointed to by symlink
 
-# TODO: once in noble (smartmontools 7.4, re-enable default arguments with -a and error log checking on nvme)
+# TODO: once all hosts are on noble (smartmontools >= 7.4), simplify DEFAULT to -a
 DEFAULT -H -f -t -l selftest -C 197+ -U 198+ -n standby -m root -M exec /usr/share/smartmontools/smartd-runner -o on -S on -s (L/../01/./04:024|S/../.././02) -I 194 -I 190 -I 231 -I 9
 
-{% for dev in ansible_devices.values() | map(attribute='links') | map(attribute='ids') | select | map('first') | sort %}
+{% for dev in ansible_devices.values() | map(attribute='links') | map(attribute='ids') | select | map('sort') | map('first') | sort %}
 {% if dev.startswith('nvme-') %}
-/dev/disk/by-id/{{ dev }} -d nvme,0xffffffff -W 0,60,80
+/dev/disk/by-id/{{ dev }} -d nvme,0xffffffff -W 0,60,80 -l error
 {% elif dev.startswith('ata-') %}
 {#- Crucial MX500 firmware spuriously flaps Current_Pending_Sector (197)
     and Offline_Uncorrectable (198) to 1 and back to 0 with no real media
     defect (Reallocated_Sector_Ct stays 0) — a well-documented firmware
     bug. -C 0 -U 0 disables those two reports for MX500 drives only;
     DEFAULT's -H, selftest, and reallocated-count tracking still apply. #}
-/dev/disk/by-id/{{ dev }} -d ata -W 0,50,55 -l error{{ ' -C 0 -U 0' if 'MX500' in dev else '' }}
+/dev/disk/by-id/{{ dev }} -d ata -W 0,50,55 -l error -l scterc,70,70{{ ' -C 0 -U 0' if dev | regex_search('CT\\d+MX500SSD') else '' }}
 {% endif %}
 {% endfor %}
 
-DEVICESCAN -d auto
+DEVICESCAN
