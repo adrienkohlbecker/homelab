@@ -1,0 +1,25 @@
+# Create-only SMB account provisioning, shared by the samba and spouse roles.
+# Caller passes a single dict:
+#   samba_smbpasswd_args: { name: <login>, password: <vaulted secret> }
+#
+# Create-only by design: the pdbedit guard leaves an already-provisioned
+# account untouched, so rotating the password in the vault does NOT re-set the
+# on-disk SMB password -- run `smbpasswd <user>` by hand to rotate.
+#
+# Password + username are passed via the environment (never interpolated into
+# the bash string), so a value containing a single quote or shell metacharacter
+# can't break out of the command or land in the process arg list -- only on
+# stdin, which smbpasswd -s reads (new password, then confirmation).
+- name: Provision SMB account for {{ samba_smbpasswd_args.name }}
+  shell: |
+    set -euo pipefail
+    pdbedit --user="$SMB_USER" > /dev/null 2>&1 \
+      || printf '%s\n%s\n' "$SMB_PASSWORD" "$SMB_PASSWORD" | smbpasswd -s -a "$SMB_USER"
+  args:
+    executable: /bin/bash
+  environment:
+    SMB_USER: "{{ samba_smbpasswd_args.name }}"
+    SMB_PASSWORD: "{{ samba_smbpasswd_args.password }}"
+  register: samba_smbpasswd
+  changed_when: "'Added user' in samba_smbpasswd.stdout"
+  become: true

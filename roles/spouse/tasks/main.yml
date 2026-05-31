@@ -20,11 +20,12 @@
     - spouse
 
 - name: Configure spouse samba user
-  shell: set -euo pipefail; (pdbedit --user={{ spouse_firstname }} 2>&1 > /dev/null) || (echo '{{ spouse_samba_password }}'; echo '{{ spouse_samba_password }}') | smbpasswd -s -a {{ spouse_firstname }}
-  args:
-    executable: /bin/bash
-  register: spouse_smbpasswd
-  changed_when: "'Added user' in spouse_smbpasswd.stdout"
-  become: true
+  import_role:
+    name: samba
+    tasks_from: smbpasswd
+  vars:
+    samba_smbpasswd_args:
+      name: "{{ spouse_firstname }}"
+      password: "{{ spouse_samba_password }}"
   tags:
     - spouse
