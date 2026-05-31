@@ -6,12 +6,16 @@
 # while never being set locally. For the sqlite child this is load-bearing: an
 # inherited recordsize would test-pass yet silently defeat the 4K-page tuning
 # the ~10 SQLite consumer roles depend on. `zfs get` source must be `local`,
-# not just right.
+# not just right -- zfs-autobackup's picker filters with `-s local`
+# (roles/zfs_autobackup/templates/zfs_autosnapshot.sh.j2:14), so an inherited
+# autobackup:bak=true would test-pass but never get backed up.
 #
-# Expected values are hardcoded here, independent of main.yml, so this catches
-# a main.yml regression rather than rubber-stamping whatever it set.
+# Expected values come from services_datasets (vars/main.yml), shared with
+# main.yml: the assertions track whatever both halves agree on, and the owner
+# probe keeps the role's "I created this dir as root" contract honest.
 
 - name: _verify | Datasets exist
+  when: zfs_root
   command:
     argv:
       - zfs
@@ -19,14 +23,15 @@
       - -H
       - -o
       - name
-      - "{{ item }}"
+      - "{{ item.dataset }}"
   changed_when: false
-  loop:
-    - rpool/services
-    - rpool/services/sqlite
+  loop: "{{ services_datasets }}"
+  loop_control:
+    label: "{{ item.dataset }}"
   become: true
 
 - name: _verify | Mountpoint property set locally with expected value
+  when: zfs_root
   command:
     argv:
       - zfs
@@ -42,36 +47,43 @@
   failed_when: >-
     (services_verify_mountpoint.stdout.split('\t') | first | trim) != 'local'
     or (services_verify_mountpoint.stdout.split('\t') | last | trim) != item.mountpoint
-  loop:
-    - { dataset: rpool/services, mountpoint: /mnt/services }
-    - { dataset: rpool/services/sqlite, mountpoint: /mnt/services/sqlite }
+  loop: "{{ services_datasets }}"
   loop_control:
-    label: "{{ item.dataset }}"
+    label: "{{ item.dataset }} mountpoint={{ item.mountpoint }}"
   become: true
 
 - name: _verify | Datasets mounted at mountpoint
+  when: zfs_root
   command:
     argv:
       - findmnt
       - --first-only
       - --noheadings
+      - --mountpoint
+      - "{{ item.mountpoint }}"
       - --output
       - SOURCE
-      - "{{ item.mountpoint }}"
   register: services_verify_findmnt
   changed_when: false
   failed_when: services_verify_findmnt.stdout | trim != item.dataset
-  loop:
-    - { dataset: rpool/services, mountpoint: /mnt/services }
-    - { dataset: rpool/services/sqlite, mountpoint: /mnt/services/sqlite }
+  loop: "{{ services_datasets }}"
+  loop_control:
+    label: "{{ item.mountpoint }} <- {{ item.dataset }}"
+  become: true
+
+- name: _verify | Flatten datasets x expected properties
+  when: zfs_root
+  set_fact:
+    services_verify_props: >-
+      {{ services_verify_props | default([])
+         + (item.extra_properties | dict2items
+            | map('combine', {'dataset': item.dataset}) | list) }}
+  loop: "{{ services_datasets }}"
   loop_control:
     label: "{{ item.dataset }}"
-  become: true
 
-- name: _verify | Parent extra property set locally with expected value
-  vars:
-    services_expected_properties:
-      'autobackup:bak': 'true'
+- name: _verify | Extra property set locally with expected value
+  when: zfs_root
   command:
     argv:
       - zfs
@@ -81,51 +93,62 @@
       - -o
       - source,value
       - "{{ item.key }}"
-      - rpool/services
-  register: services_verify_parent_prop
+      - "{{ item.dataset }}"
+  register: services_verify_prop
   changed_when: false
   failed_when: >-
-    (services_verify_parent_prop.stdout.split('\t') | first | trim) != 'local'
-    or (services_verify_parent_prop.stdout.split('\t') | last | trim) != item.value
-  loop: "{{ services_expected_properties | dict2items }}"
+    (services_verify_prop.stdout.split('\t') | first | trim) != 'local'
+    or (services_verify_prop.stdout.split('\t') | last | trim) != item.value
+  loop: "{{ services_verify_props | default([]) }}"
   loop_control:
-    label: "rpool/services {{ item.key }}={{ item.value }}"
+    label: "{{ item.dataset }} {{ item.key }}={{ item.value }}"
   become: true
 
-- name: _verify | Sqlite extra property set locally with expected value
-  vars:
-    services_sqlite_expected_properties:
-      'autobackup:bak': 'true'
-      recordsize: '4096'
-      atime: 'off'
-  command:
-    argv:
-      - zfs
-      - get
-      - -H
-      - -p
-      - -o
-      - source,value
-      - "{{ item.key }}"
-      - rpool/services/sqlite
-  register: services_verify_sqlite_prop
-  changed_when: false
+- name: _verify | Mountpoint owned by root
+  when: zfs_root
+  stat:
+    path: "{{ item.mountpoint }}"
+  register: services_verify_owner
   failed_when: >-
-    (services_verify_sqlite_prop.stdout.split('\t') | first | trim) != 'local'
-    or (services_verify_sqlite_prop.stdout.split('\t') | last | trim) != item.value
-  loop: "{{ services_sqlite_expected_properties | dict2items }}"
+    not services_verify_owner.stat.exists
+    or services_verify_owner.stat.pw_name != 'root'
+    or services_verify_owner.stat.gr_name != 'root'
+  loop: "{{ services_datasets }}"
   loop_control:
-    label: "rpool/services/sqlite {{ item.key }}={{ item.value }}"
+    label: "{{ item.mountpoint }} owner=root:root"
+
+- name: _verify | Mountpoint is writable
+  when: zfs_root
+  file:
+    path: "{{ item.mountpoint }}/.verify_probe"
+    state: touch
+    mode: '0600'
+  changed_when: false
+  loop: "{{ services_datasets }}"
+  loop_control:
+    label: "{{ item.mountpoint }}/.verify_probe"
+  become: true
+
+- name: _verify | Remove write probe
+  when: zfs_root
+  file:
+    path: "{{ item.mountpoint }}/.verify_probe"
+    state: absent
+  changed_when: false
+  loop: "{{ services_datasets }}"
+  loop_control:
+    label: "{{ item.mountpoint }}/.verify_probe"
   become: true
 
 - name: _verify | Mount status units are active
+  when: zfs_root
   command:
     argv:
       - systemctl
       - is-active
-      - "{{ item }}"
+      - "zfs_mount{{ item.mountpoint | replace('/', '_') }}.service"
   changed_when: false
-  loop:
-    - zfs_mount_mnt_services.service
-    - zfs_mount_mnt_services_sqlite.service
+  loop: "{{ services_datasets }}"
+  loop_control:
+    label: "zfs_mount{{ item.mountpoint | replace('/', '_') }}.service"
   become: true
