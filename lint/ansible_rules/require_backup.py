@@ -77,7 +77,7 @@ class RequireBackup(AnsibleLintRule):
             parts = file.path.parts
             if "roles" in parts:
                 role = parts.index("roles") + 1
-                if role < len(parts) and parts[role] in [ "test", "packer" ]:
+                if role < len(parts) and parts[role] in ["test", "packer"]:
                     return False
 
         backup = task["action"].get("backup", None)
