@@ -19,6 +19,12 @@ loglevel warning
 maxmemory 450mb
 maxmemory-policy noeviction
 
+# maxmemory bounds the dataset but NOT per-client connection buffers, which are
+# accounted separately. Cap them too so a slow or stuck Celery consumer can't
+# grow its output buffer past the container and OOM the host -- the same
+# failure mode maxmemory above defends against.
+maxmemory-clients 10%
+
 # Disable the admin command surface a consumer never needs. With one shared
 # password an otherwise-compromised consumer could `CONFIG SET dir` + `SAVE` to
 # write an arbitrary RDB anywhere redis can (a file-write RCE), load a module,
