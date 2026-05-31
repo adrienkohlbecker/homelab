@@ -195,6 +195,9 @@ service_ports:
   # container's internal listener stays on 8080 (sabnzbd.ini port), as does
   # the *arr leg at sabnzbd.dns.podman:8080.
   sabnzbd: 8080
+  # SMB over TCP (microsoft-ds). Operator-reachable: macOS clients connect
+  # here, and the avahi advert + firewall admin-scope rule consume it.
+  samba: 445
   seerr: 5055
   # docker-socket-proxy: read-only Docker-API filter (loopback) that fronts
   # /run/podman/podman.sock so netdata's docker collector reads container

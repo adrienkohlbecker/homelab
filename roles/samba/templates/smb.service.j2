@@ -4,7 +4,7 @@
  <name replace-wildcards="yes">%h</name>
  <service>
    <type>_smb._tcp</type>
-   <port>445</port>
+   <port>{{ service_ports.samba }}</port>
  </service>
  {# No _device-info._tcp here: the avahi role owns that record (model=
     avahi_device_model), so publishing a second one from samba would race
