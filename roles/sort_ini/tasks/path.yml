@@ -1,3 +1,8 @@
+- name: path | Derive escaped path
+  set_fact:
+    sort_ini_path: "{{ sort_ini_args.path }}"
+    sort_ini_escaped_path: "{{ sort_ini_args.path | regex_replace('^/', '') | replace('/', '-') }}"
+
 - name: path | Install sort_ini service
   import_role:
     name: systemd_unit
@@ -6,13 +11,6 @@
     systemd_unit_args:
       src: sort_ini.service.j2
       dest: sort_ini_{{ sort_ini_escaped_path }}.service
-
-- name: path | Enable sort_ini.service
-  when: not (ansible_check_mode and systemd_unit_file.changed)
-  systemd:
-    name: sort_ini_{{ sort_ini_escaped_path }}.service
-    enabled: true
-  become: true
 
 - name: path | Install sort_ini.path
   import_role:
