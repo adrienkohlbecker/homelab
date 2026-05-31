@@ -1,0 +1,64 @@
+- name: _verify | Script is installed and executable
+  stat:
+    path: /usr/local/bin/sort_ini
+  register: _verify_script_stat
+  failed_when: >-
+    not _verify_script_stat.stat.exists
+    or _verify_script_stat.stat.mode != "0755"
+
+- name: _verify | Path unit is active # noqa: command-instead-of-module
+  command: systemctl is-active sort_ini_tmp-sort_ini_test-test.ini.path
+  changed_when: false
+
+- name: _verify | Write unsorted INI to test file
+  copy:
+    content: |
+      [zebra]
+      key_b = 2
+      key_a = 1
+      [alpha]
+      key_z = 26
+      key_m = 13
+    dest: /tmp/sort_ini_test/test.ini
+    mode: "0644"
+  become: true
+
+- name: _verify | Run sort_ini directly on test file
+  command: /usr/local/bin/sort_ini /tmp/sort_ini_test/test.ini
+  changed_when: false
+
+- name: _verify | Read sorted output
+  slurp:
+    src: /tmp/sort_ini_test/test.ini
+  register: _verify_sorted
+
+- name: _verify | Assert sections are sorted alphabetically
+  assert:
+    that:
+      - _verify_sorted.content | b64decode == _verify_expected
+  vars:
+    _verify_expected: |
+      [alpha]
+      key_m = 13
+      key_z = 26
+      [zebra]
+      key_a = 1
+      key_b = 2
+
+- name: _verify | Re-run sort_ini is idempotent (skip-if-unchanged)
+  command: /usr/local/bin/sort_ini /tmp/sort_ini_test/test.ini
+  changed_when: false
+
+- name: _verify | File unchanged after idempotent run
+  slurp:
+    src: /tmp/sort_ini_test/test.ini
+  register: _verify_second
+
+- name: _verify | Assert idempotent output matches
+  assert:
+    that:
+      - _verify_second.content == _verify_sorted.content
+
+- name: _verify | Missing file exits cleanly (exit 0)
+  command: /usr/local/bin/sort_ini /tmp/sort_ini_test/nonexistent.ini
+  changed_when: false
