@@ -37,3 +37,8 @@ Requires=zfs_mount_mnt_{{ top }}.service
 After=zfs_mount_mnt_{{ top }}.service
 {% endif %}
 {% endfor %}
+After=zfs_autosnapshot.target
+PartOf=zfs_autosnapshot.target
+
+[Install]
+WantedBy=zfs_autosnapshot.target

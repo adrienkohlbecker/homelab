@@ -37,6 +37,7 @@
 # This can be either the interface name or an IP address/netmask;
 # interface names are normally preferred
    interfaces = 127.0.0.0/8 {{ default_interface }}{% if not qemu_test %} {{ (wireguard_peers|selectattr('name', 'eq', inventory_hostname)|first).address }}/18{% endif %}
+{# /18 matches the wireguard mesh allocation (10.123.0.0/18). #}
 
 # Only bind to the named interfaces and/or networks; you must use the
 # 'interfaces' option above to use this.
@@ -58,7 +59,7 @@
 
 # We want Samba to only log to /var/log/samba/log.{smbd,nmbd}.
 # Append syslog@1 if you want important messages to be sent to syslog too.
-   logging = file
+   logging = file systemd@0
 
 # Do something sensible when Samba crashes: mail the admin a backtrace
    panic action = /usr/share/samba/panic-action %d
@@ -171,6 +172,7 @@
 #   anonymous connections to the IPC$ share in general. Setting guest ok = yes on any
 #   share will remove the security advantage.
    restrict anonymous = 2
+   access based share enum = yes
 
 #======================= Share Definitions =======================
 
@@ -270,17 +272,22 @@ disable netbios = yes
 smb ports = 445
 
 ; work better with macs, see https://wiki.samba.org/index.php/Configure_Samba_to_Work_Better_with_Mac_OS_X
-vfs objects = fruit streams_xattr
+vfs objects = catia fruit streams_xattr
+; map macOS-illegal characters to Unicode PUA so filenames with : * ? etc.
+; created on Linux remain visible and functional in Finder.
+catia:mappings = 0x22:0xf022,0x2a:0xf02a,0x2f:0xf02f,0x3a:0xf03a,0x3c:0xf03c,0x3e:0xf03e,0x3f:0xf03f,0x5c:0xf05c,0x7c:0xf07c
 ; resource forks in ZFS xattrs (xattr=sa), not ._AppleDouble sidecar files;
 ; deliberately diverges from the upstream default of "file".
 fruit:resource = xattr
 fruit:metadata = stream
 fruit:model = MacSamba
 fruit:posix_rename = yes
-fruit:veto_appledouble = no
+fruit:veto_appledouble = yes
 fruit:nfs_aces = no
 fruit:wipe_intentionally_left_blank_rfork = yes
 fruit:delete_empty_adfiles = yes
+kernel oplocks = yes
+use sendfile = yes
 
 [homes]
 writeable = yes
@@ -290,8 +297,6 @@ browseable = no
 valid users = %S
 create mask = 0700
 directory mask = 0700
-kernel oplocks = yes
-use sendfile = yes
 ea support = yes
 {% for share in smb_shares %}
 

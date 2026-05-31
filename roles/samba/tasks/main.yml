@@ -113,6 +113,18 @@
   tags:
     - samba
 
+- name: Re-enable smbd to pick up new WantedBy targets
+  when:
+    - not (ansible_check_mode and samba_apt.changed)
+    - (smb_shares | default([])) | length > 0
+    - samba_smbd_override.changed
+  systemd:
+    name: smbd
+    enabled: true
+  become: true
+  tags:
+    - samba
+
 # A host that drops all its shares must shed the override too, or smbd keeps a
 # boot dependency on zfs_mount units that may no longer exist.
 - name: Remove smbd zfs-mount override when no shares
