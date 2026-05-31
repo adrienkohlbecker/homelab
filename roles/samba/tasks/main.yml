@@ -170,15 +170,13 @@
   tags:
     - samba
 
-# Create-only: the pdbedit guard means an already-provisioned user is left
-# untouched, so rotating samba_password in the vault does NOT re-set the
-# on-disk SMB password -- run `smbpasswd <user>` by hand to rotate.
 - name: Configure Samba user
-  shell: set -euo pipefail; (pdbedit --user={{ ansible_user_id }} > /dev/null 2>&1) || (echo '{{ samba_password }}'; echo '{{ samba_password }}') | smbpasswd -s -a {{ ansible_user_id }}
-  args:
-    executable: /bin/bash
-  register: samba_smbpasswd
-  changed_when: "'Added user' in samba_smbpasswd.stdout"
-  become: true
+  import_role:
+    name: samba
+    tasks_from: smbpasswd
+  vars:
+    samba_smbpasswd_args:
+      name: "{{ ansible_user_id }}"
+      password: "{{ samba_password }}"
   tags:
     - samba
