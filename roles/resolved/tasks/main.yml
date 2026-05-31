@@ -4,9 +4,9 @@
 # write (copy — src has no .j2 suffix), systemd-analyze verify against
 # systemd-resolved.service, daemon-reload. Restart gate downstream
 # reads the per-unit result fact resolved_conf_d_99_custom_conf_result.
-# Numbered 99- (not 10-): resolved.conf.d/ merges lexicographically,
-# last-wins, so a high number keeps these settings on top of any
-# lower-numbered drop-in a package or cloud-init might land here.
+# Numbered 99-: resolved.conf.d/ merges lexicographically, last-wins,
+# so a high number keeps these settings on top of any lower-numbered
+# drop-in a package or cloud-init might land here.
 - name: Render resolved.conf.d/99-custom.conf
   import_role:
     name: systemd_unit
@@ -19,9 +19,9 @@
   tags:
     - resolved
 
-# Tombstone the pre-rename drop-in so a host provisioned before the
-# 10-→99- rename doesn't carry two identical files (99- already
-# supersedes it; removing the redundant 10- changes no effective config).
+# Remove any 10-custom.conf left by an earlier convention: resolved.conf.d
+# merges last-wins, so a stray lower-numbered copy is redundant (99- already
+# supersedes it) and removing it changes no effective config.
 - name: Remove the superseded 10-custom.conf drop-in
   file:
     path: /etc/systemd/resolved.conf.d/10-custom.conf
@@ -66,35 +66,33 @@
     src: /run/systemd/resolve/resolv.conf
     dest: /etc/resolv.conf
     state: link
+    force: true
   become: true
   register: resolved_resolv_conf
   tags:
     - resolved
 
-# Order is load-bearing: the resolv.conf symlink above must already point
-# at the upstream-servers file before this restart tears down the
-# 127.0.0.53 stub -- otherwise there's a window where the stub is dead and
-# /etc/resolv.conf still resolves through the now-black-hole stub-resolv.conf.
-- name: Restart systemd-resolved
-  when: (resolved_conf_d_99_custom_conf_result.changed or resolved_resolv_conf.changed)
-  systemd:
-    name: systemd-resolved
-    state: restarted
-  become: true
-  tags:
-    - resolved
-
-# state=started is idempotent (no-op when active) and fails loudly if the
-# unit can't start. Doubles as the post-conf liveness assertion: resolved
-# manages /run/systemd/resolve/resolv.conf, so if it's down the host's
-# entire DNS path goes stale. Mirrors roles/journald's closing task.
-# enabled=true pins boot-survival so the resolv.conf symlink target is
-# re-produced on every boot, not just while resolved happens to be running.
-- name: Start systemd-resolved
-  systemd:
-    name: systemd-resolved
-    state: started
-    enabled: true
-  become: true
+# Enable + start (an idempotent liveness assertion: resolved manages
+# /run/systemd/resolve/resolv.conf, so if it's down the host's entire DNS
+# path goes stale) + restart-on-change, via the systemd_unit helper -- which
+# also clears a StartLimitBurst rate-limit lockout (DNS is load-bearing and
+# can crash-loop) and matches the avahi daemon-conf idiom. enabled=true
+# (helper default) pins boot-survival so the symlink target is re-produced
+# on every boot, not just while resolved happens to be running.
+#
+# Order is load-bearing: the helper restarts at the end of this import,
+# which sits after the resolv.conf symlink task above -- so the symlink
+# already points at the upstream-servers file before the restart tears down
+# the 127.0.0.53 stub. Without that order there's a window where the stub is
+# dead and /etc/resolv.conf still resolves through the now-black-hole
+# stub-resolv.conf.
+- name: Enable, start, and restart-on-change systemd-resolved
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: systemd-resolved
+      restart: "{{ resolved_conf_d_99_custom_conf_result.changed or resolved_resolv_conf.changed }}"
   tags:
     - resolved
