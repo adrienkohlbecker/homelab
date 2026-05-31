@@ -14,6 +14,7 @@
 - name: Divert smartd.conf
   community.general.dpkg_divert:
     path: /etc/smartd.conf
+  when: not (ansible_check_mode and smart_apt.changed)
   become: true
   tags:
     - smart
@@ -26,6 +27,8 @@
     group: root
     mode: "0644"
     backup: true
+    validate: 'sh -c ''grep -q "^DEFAULT " "$1" && grep -q "^DEVICESCAN" "$1"'' _ %s'
+  when: not (ansible_check_mode and smart_apt.changed)
   register: smart_smartd_cfg
   become: true
   tags:
@@ -34,6 +37,7 @@
 - name: Divert default smartmontools
   community.general.dpkg_divert:
     path: /etc/default/smartmontools
+  when: not (ansible_check_mode and smart_apt.changed)
   become: true
   tags:
     - smart
@@ -46,6 +50,7 @@
     group: root
     mode: "0644"
     backup: true
+  when: not (ansible_check_mode and smart_apt.changed)
   register: smart_smartmontools_cfg
   become: true
   tags:
@@ -59,6 +64,6 @@
     systemd_unit_args:
       src: smartmontools
       condition: "{{ not (ansible_check_mode and smart_apt.changed) }}"
-      restart: "{{ smart_smartd_cfg.changed or smart_smartmontools_cfg.changed }}"
+      restart: "{{ smart_apt.changed or smart_smartd_cfg.changed or smart_smartmontools_cfg.changed }}"
   tags:
     - smart
