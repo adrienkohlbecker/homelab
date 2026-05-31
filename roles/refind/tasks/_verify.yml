@@ -5,7 +5,7 @@
     - LICENSE
     - theme.conf
     - icons/128-48/os_ubuntu.png
-    - ".installed-{{ refind_theme_version }}"
+    - ".installed-{{ refind_theme_artifact.sha256 }}"
   register: _refind_verify_present
   become: true
 

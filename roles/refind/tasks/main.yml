@@ -131,10 +131,12 @@
   tags:
     - refind
 
-# Allowlist (not denylist) what lands on the ESP: extract only the icon/font
-# assets the theme.conf references plus LICENSE. A future pinned-commit bump
-# then cannot smuggle an active file (.efi/.conf/script) onto the boot
-# partition, regardless of what the upstream tree adds.
+# Allowlist (not denylist) what lands on the ESP: extract only the PNG icon/
+# font assets theme.conf references, plus LICENSE. Matching by *.png extension
+# (not by directory) is load-bearing — it means a future pinned-commit bump
+# cannot smuggle an active file (.efi/.conf/script) onto the boot partition,
+# whatever the upstream tree adds under icons/ or fonts/. --wildcards-match-slash
+# lets the globs reach the nested size dirs (icons/128-48/, ...).
 - name: Unpack refind theme
   when: not (ansible_check_mode and refind_theme_dir.changed)
   unarchive:
@@ -144,21 +146,22 @@
     extra_opts:
       - --strip-components=1
       - --wildcards
-      - "*/icons"
-      - "*/fonts"
+      - --wildcards-match-slash
+      - "*/icons/*.png"
+      - "*/fonts/*.png"
       - "*/LICENSE"
-    creates: "/boot/efi/EFI/refind/themes/refind-theme-regular/.installed-{{ refind_theme_version }}"
+    creates: "/boot/efi/EFI/refind/themes/refind-theme-regular/.installed-{{ refind_theme_artifact.sha256 }}"
   become: true
   register: refind_theme_unpack
   tags:
     - refind
 
-- name: Stamp installed theme version
+- name: Stamp installed theme checksum
   when:
     - not (ansible_check_mode and refind_theme_dir.changed)
     - refind_theme_unpack is changed
   file:
-    path: "/boot/efi/EFI/refind/themes/refind-theme-regular/.installed-{{ refind_theme_version }}"
+    path: "/boot/efi/EFI/refind/themes/refind-theme-regular/.installed-{{ refind_theme_artifact.sha256 }}"
     state: touch
     owner: root
     group: root
