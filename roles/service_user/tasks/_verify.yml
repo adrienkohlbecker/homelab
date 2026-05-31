@@ -1,196 +1,173 @@
-- name: _verify | Provision a test service user
-  import_role:
-    name: service_user
-    tasks_from: user
-  vars:
-    service_user_args:
-      name: service_user_test
+# All scenarios run inside one block so the always: teardown removes every
+# fixture even when a scenario asserts mid-way -- otherwise a failure on a
+# --keep VM leaks service_user_test* users/groups/dirs that the next manual
+# re-run then stats against stale state.
+- name: _verify | All service_user scenarios
+  block:
+    - name: _verify | Provision a test service user
+      import_role:
+        name: service_user
+        tasks_from: user
+      vars:
+        service_user_args:
+          name: service_user_test
 
-- name: _verify | User record fact is exposed
-  assert:
-    that:
-      - service_user_test_user is defined
-      - service_user_test_user.uid is defined
-      - service_user_test_user.group is defined
+    - name: _verify | User record fact is exposed
+      assert:
+        that:
+          - service_user_test_user is defined
+          - service_user_test_user.uid is defined
+          - service_user_test_user.group is defined
 
-- name: _verify | System user exists with the expected attributes
-  command: getent passwd service_user_test
-  register: _verify_passwd
-  changed_when: false
-  become: true
+    - name: _verify | System user exists with the expected attributes
+      command: getent passwd service_user_test
+      register: _verify_passwd
+      changed_when: false
+      become: true
 
-- name: _verify | Passwd entry is a system user with nologin shell and /nonexistent home
-  assert:
-    that:
-      # passwd fields: name:passwd:uid:gid:gecos:home:shell -- split rather
-      # than substring-match so a wrong home and a wrong shell are
-      # distinguishable in the failure.
-      - _verify_passwd.stdout.split(':')[5] == '/nonexistent'
-      - _verify_passwd.stdout.split(':')[6] == '/usr/sbin/nologin'
+    - name: _verify | Passwd entry is a system user with nologin shell and /nonexistent home
+      assert:
+        that:
+          # passwd fields: name:passwd:uid:gid:gecos:home:shell -- split rather
+          # than substring-match so a wrong home and a wrong shell are
+          # distinguishable in the failure.
+          - _verify_passwd.stdout.split(':')[5] == '/nonexistent'
+          - _verify_passwd.stdout.split(':')[6] == '/usr/sbin/nologin'
 
-- name: _verify | System group exists
-  command: getent group service_user_test
-  changed_when: false
-  become: true
+    - name: _verify | System group exists
+      command: getent group service_user_test
+      changed_when: false
+      become: true
 
-- name: _verify | Config directory exists with correct ownership
-  stat:
-    path: /mnt/services/service_user_test
-  register: _verify_dir
-  become: true
+    - name: _verify | Config directory exists with correct ownership
+      stat:
+        path: /mnt/services/service_user_test
+      register: _verify_dir
+      become: true
 
-- name: _verify | Dir attributes
-  assert:
-    that:
-      - _verify_dir.stat.exists
-      - _verify_dir.stat.isdir
-      - _verify_dir.stat.pw_name == 'service_user_test'
-      - _verify_dir.stat.gr_name == 'service_user_test'
-      - _verify_dir.stat.mode == '0750'
+    - name: _verify | Dir attributes
+      assert:
+        that:
+          - _verify_dir.stat.exists
+          - _verify_dir.stat.isdir
+          - _verify_dir.stat.pw_name == 'service_user_test'
+          - _verify_dir.stat.gr_name == 'service_user_test'
+          - _verify_dir.stat.mode == '0750'
 
-- name: _verify | Cleanup test config dir
-  file:
-    path: /mnt/services/service_user_test
-    state: absent
-  become: true
+    # Second scenario: createhome + home_mode override. Confirms the helper
+    # chmods the home dir to the caller-requested mode instead of relying
+    # on /etc/login.defs HOME_MODE. Exercised by github_runner today to
+    # work around a crun-bind-mount-stat EACCES under 0750.
+    - name: _verify | Provision a test user with createhome + home_mode override
+      import_role:
+        name: service_user
+        tasks_from: user
+      vars:
+        service_user_args:
+          name: service_user_test_home
+          home: /tmp/service_user_test_home
+          createhome: true
+          home_mode: "0755"
+          config_dir: false
 
-- name: _verify | Cleanup test user
-  user:
-    name: service_user_test
-    state: absent
-    remove: true
-    force: true
-  become: true
+    - name: _verify | Home dir landed at the requested mode
+      stat:
+        path: /tmp/service_user_test_home
+      register: _verify_home
+      become: true
 
-- name: _verify | Cleanup test group
-  group:
-    name: service_user_test
-    state: absent
-  become: true
+    - name: _verify | Home dir attributes
+      assert:
+        that:
+          - _verify_home.stat.exists
+          - _verify_home.stat.isdir
+          - _verify_home.stat.pw_name == 'service_user_test_home'
+          - _verify_home.stat.gr_name == 'service_user_test_home'
+          - _verify_home.stat.mode == '0755'
 
-# Second scenario: createhome + home_mode override. Confirms the helper
-# chmods the home dir to the caller-requested mode instead of relying
-# on /etc/login.defs HOME_MODE. Exercised by github_runner today to
-# work around a crun-bind-mount-stat EACCES under 0750.
-- name: _verify | Provision a test user with createhome + home_mode override
-  import_role:
-    name: service_user
-    tasks_from: user
-  vars:
-    service_user_args:
-      name: service_user_test_home
-      home: /tmp/service_user_test_home
-      createhome: true
-      home_mode: "0755"
-      config_dir: false
+    # Third scenario: a hyphenated name (the only path that exercises the
+    # regex_replace fact-key sanitization, foo-bar -> foo_bar_user), plus
+    # extra_groups / config_dir_group / config_dir_mode overrides and an
+    # assertion that the exposed .group is a numeric gid (callers feed it into
+    # podman --user / --uidmap as an integer).
+    - name: _verify | Create a pre-existing group for the override test
+      group:
+        name: service_user_test_grp
+        system: true
+      become: true
 
-- name: _verify | Home dir landed at the requested mode
-  stat:
-    path: /tmp/service_user_test_home
-  register: _verify_home
-  become: true
+    - name: _verify | Provision a hyphenated-name user with arg overrides
+      import_role:
+        name: service_user
+        tasks_from: user
+      vars:
+        service_user_args:
+          name: service-user-test-hyphen
+          extra_groups: [ service_user_test_grp ]
+          config_dir_group: service_user_test_grp
+          config_dir_mode: "0700"
 
-- name: _verify | Home dir attributes
-  assert:
-    that:
-      - _verify_home.stat.exists
-      - _verify_home.stat.isdir
-      - _verify_home.stat.pw_name == 'service_user_test_home'
-      - _verify_home.stat.gr_name == 'service_user_test_home'
-      - _verify_home.stat.mode == '0755'
+    - name: _verify | Sanitized fact key is exposed with a numeric gid
+      assert:
+        that:
+          - service_user_test_hyphen_user is defined
+          - service_user_test_hyphen_user.uid is defined
+          - service_user_test_hyphen_user.group is defined
+          - service_user_test_hyphen_user.group | string is match('^[0-9]+$')
 
-- name: _verify | Cleanup home_mode test home dir
-  file:
-    path: /tmp/service_user_test_home
-    state: absent
-  become: true
+    - name: _verify | Membership reflects extra_groups
+      command: id -nG service-user-test-hyphen
+      register: _verify_hyphen_groups
+      changed_when: false
+      become: true
 
-- name: _verify | Cleanup home_mode test user
-  user:
-    name: service_user_test_home
-    state: absent
-    remove: true
-    force: true
-  become: true
+    - name: _verify | Config dir honors config_dir_group + config_dir_mode
+      stat:
+        path: /mnt/services/service-user-test-hyphen
+      register: _verify_hyphen_dir
+      become: true
 
-- name: _verify | Cleanup home_mode test group
-  group:
-    name: service_user_test_home
-    state: absent
-  become: true
+    - name: _verify | Override dir + membership attributes
+      assert:
+        that:
+          # both the primary group and the extra group must be present, which
+          # proves the user task appends rather than replaces membership.
+          - "'service-user-test-hyphen' in _verify_hyphen_groups.stdout.split()"
+          - "'service_user_test_grp' in _verify_hyphen_groups.stdout.split()"
+          - _verify_hyphen_dir.stat.exists
+          - _verify_hyphen_dir.stat.gr_name == 'service_user_test_grp'
+          - _verify_hyphen_dir.stat.mode == '0700'
 
-# Third scenario: a hyphenated name (the only path that exercises the
-# regex_replace fact-key sanitization, foo-bar -> foo_bar_user), plus
-# extra_groups / config_dir_group / config_dir_mode overrides and an
-# assertion that the exposed .group is a numeric gid (callers feed it into
-# podman --user / --uidmap as an integer).
-- name: _verify | Create a pre-existing group for the override test
-  group:
-    name: service_user_test_grp
-    system: true
-  become: true
+  always:
+    - name: _verify | Tear down test users
+      user:
+        name: "{{ item }}"
+        state: absent
+        remove: true
+        force: true
+      become: true
+      loop:
+        - service_user_test
+        - service_user_test_home
+        - service-user-test-hyphen
 
-- name: _verify | Provision a hyphenated-name user with arg overrides
-  import_role:
-    name: service_user
-    tasks_from: user
-  vars:
-    service_user_args:
-      name: service-user-test-hyphen
-      extra_groups: [ service_user_test_grp ]
-      config_dir_group: service_user_test_grp
-      config_dir_mode: "0700"
+    - name: _verify | Tear down test groups
+      group:
+        name: "{{ item }}"
+        state: absent
+      become: true
+      loop:
+        - service_user_test
+        - service_user_test_home
+        - service-user-test-hyphen
+        - service_user_test_grp
 
-- name: _verify | Sanitized fact key is exposed with a numeric gid
-  assert:
-    that:
-      - service_user_test_hyphen_user is defined
-      - service_user_test_hyphen_user.uid is defined
-      - service_user_test_hyphen_user.group is defined
-      - service_user_test_hyphen_user.group | string is match('^[0-9]+$')
-
-- name: _verify | Membership reflects extra_groups
-  command: id -nG service-user-test-hyphen
-  register: _verify_hyphen_groups
-  changed_when: false
-  become: true
-
-- name: _verify | Config dir honors config_dir_group + config_dir_mode
-  stat:
-    path: /mnt/services/service-user-test-hyphen
-  register: _verify_hyphen_dir
-  become: true
-
-- name: _verify | Override dir + membership attributes
-  assert:
-    that:
-      - "'service_user_test_grp' in _verify_hyphen_groups.stdout"
-      - _verify_hyphen_dir.stat.exists
-      - _verify_hyphen_dir.stat.gr_name == 'service_user_test_grp'
-      - _verify_hyphen_dir.stat.mode == '0700'
-
-- name: _verify | Cleanup hyphen test config dir
-  file:
-    path: /mnt/services/service-user-test-hyphen
-    state: absent
-  become: true
-
-- name: _verify | Cleanup hyphen test user
-  user:
-    name: service-user-test-hyphen
-    state: absent
-    remove: true
-    force: true
-  become: true
-
-- name: _verify | Cleanup hyphen test user group
-  group:
-    name: service-user-test-hyphen
-    state: absent
-  become: true
-
-- name: _verify | Cleanup pre-existing override test group
-  group:
-    name: service_user_test_grp
-    state: absent
-  become: true
+    - name: _verify | Tear down test config + home dirs
+      file:
+        path: "{{ item }}"
+        state: absent
+      become: true
+      loop:
+        - /mnt/services/service_user_test
+        - /tmp/service_user_test_home
+        - /mnt/services/service-user-test-hyphen
