@@ -22,7 +22,11 @@
 - name: _verify | Passwd entry is a system user with nologin shell and /nonexistent home
   assert:
     that:
-      - "':/nonexistent:/usr/sbin/nologin' in _verify_passwd.stdout"
+      # passwd fields: name:passwd:uid:gid:gecos:home:shell -- split rather
+      # than substring-match so a wrong home and a wrong shell are
+      # distinguishable in the failure.
+      - _verify_passwd.stdout.split(':')[5] == '/nonexistent'
+      - _verify_passwd.stdout.split(':')[6] == '/usr/sbin/nologin'
 
 - name: _verify | System group exists
   command: getent group service_user_test
