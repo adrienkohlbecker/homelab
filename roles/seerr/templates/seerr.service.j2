@@ -34,10 +34,12 @@ SyslogIdentifier=%N
 
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 # `USER node:node` is baked into the v3 image, so the entrypoint runs as
-# in-container uid/gid 1000 from the start (no privilege drop). The +1000
-# uidmap routes that to host `seerr`; +0 is reserved for a hypothetical
-# in-container root step that this image never performs (kept for symmetry
-# with the canonical pattern in CLAUDE.md "Container User Namespacing").
+# in-container uid/gid 1000 from the start (no privilege drop). The base
+# 0:0:65536 range maps the userns the usual way (container root -> host root,
+# never exercised here since nothing runs as uid 0); the +1000 override then
+# routes the baked-in node user to host `seerr` so the bind-mounted config is
+# owned by a real host user. There is deliberately no +0 override: the image
+# never runs as in-container root, so there is no root step to remap.
 # --init runs a PID-1 reaper: seerr (Node) spawns child processes and a bare
 # node as PID 1 would leak their zombies.
 ExecStart=/usr/bin/podman run \
