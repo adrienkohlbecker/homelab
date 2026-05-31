@@ -1,0 +1,3 @@
+# Single source of truth for the image tag: consumed by the unit template and
+# the _verify peer-probe containers.
+redis_image: docker.io/redis:7.4

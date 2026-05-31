@@ -1,7 +1,3 @@
-- name: _verify | Resolve the redis image for peer-container probes
-  set_fact:
-    redis_image: docker.io/redis:7.4
-
 # The producer's whole job is to be reachable at redis.dns.podman over the
 # `redis` network -- the path paperless uses. A throwaway peer container (not
 # `podman exec` into redis itself) is what exercises aardvark-dns cross-container
