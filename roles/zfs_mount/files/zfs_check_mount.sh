@@ -16,8 +16,8 @@ if [ "$OUTPUT" != "$DATASET filesystem yes $MOUNTPOINT off on" ]; then
   exit 1
 fi
 
-OUTPUT=$(mount | grep -c "on $MOUNTPOINT type zfs")
+OUTPUT=$(findmnt --mountpoint "$MOUNTPOINT" --noheadings --types zfs | wc -l)
 if [ "$OUTPUT" != "1" ]; then
-  echo >&2 "Error: Multiple ($OUTPUT) active mounts at $MOUNTPOINT, are two datasets active at the same time?"
+  echo >&2 "Error: Expected exactly 1 zfs mount at $MOUNTPOINT, found $OUTPUT"
   exit 1
 fi
