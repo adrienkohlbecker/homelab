@@ -483,6 +483,11 @@ dont_scan_dirs /EFI/ZBM
 # console arg in org.zfsbootmenu:commandline; this extends that to the
 # otherwise-silent bootmenu stage. zbm.skip still bypasses the menu so the
 # boot stays non-interactive.
+#
+# Twin of the converge-time roles/refind/files/refind.conf, kept in sync by
+# hand. This image-build config boots Components mode (loader + separate
+# initrd); the role's boots the single-file UKI (loader VMLINUZ.EFI, no
+# initrd). The entry title and default_selection must match across both.
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/${ZBM_KERNEL}
     initrd /EFI/ZBM/initramfs-bootmenu.img
