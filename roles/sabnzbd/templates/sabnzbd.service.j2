@@ -55,10 +55,11 @@ ExecStart=/usr/bin/podman run \
     --env PGID={{ media_group.gid }} \
     --env UMASK=002 \
     --env TZ={{ system_timezone }} \
+    --env DOCKER_MODS=linuxserver/mods:universal-package-install \
+    --env INSTALL_PACKAGES=ffmpeg \
     --volume /mnt/services/sabnzbd:/config \
     --volume /mnt/services/sqlite/sabnzbd:/mnt/services/sqlite/sabnzbd \
     --volume /mnt/services/sabnzbd/autoProcessMedia.cfg:/opt/nzbToMedia/autoProcessMedia.cfg \
-    --volume /mnt/services/sabnzbd/before_start.sh:/custom-cont-init.d/before_start.sh:ro \
     --volume /mnt/media/Other:/media/Other \
     --volume /mnt/scratch:/scratch \
     --volume /opt/nzbToMedia:/opt/nzbToMedia \
