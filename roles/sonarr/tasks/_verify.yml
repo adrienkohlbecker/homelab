@@ -34,13 +34,23 @@
 # nginx's error_page 401 =302 redirect to the portal. This is the only
 # probe that fails if `auth: required` is dropped from nginx_site_args
 # (the loopback apikey probes stay green without it). Asserting the 302
-# returnUrl (rd=) echoes sonarr's own URL proves the Host header routed to
-# sonarr's server_name (not the default vhost) and the request URI survived.
+# returnUrl (rd=) echoes sonarr's own URL proves SNI routed to sonarr's
+# server_name (not the default vhost) and the request URI survived.
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the sonarr vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 sonarr.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 - name: _verify | Sonarr UI gate redirects unauthenticated requests to Authelia
   uri:
-    url: https://localhost/
-    headers:
-      Host: "sonarr.{{ inventory_hostname }}.{{ domain }}"
+    url: https://sonarr.{{ inventory_hostname }}.{{ domain }}/
     validate_certs: false
     follow_redirects: none
     status_code: 302
@@ -49,6 +59,25 @@
     _sonarr_nginx_gate.status != 302
     or 'auth.' not in (_sonarr_nginx_gate.location | default(''))
     or ('rd=https://sonarr.' ~ inventory_hostname ~ '.' ~ domain) not in (_sonarr_nginx_gate.location | default(''))
+
+# Media-network join probe. Intra-stack peers (bazarr, seerr, sabnzbd) reach
+# sonarr at sonarr.dns.podman:8989 with X-Api-Key, bypassing nginx entirely.
+# The loopback/nginx probes above don't exercise that path -- a dropped
+# `--network media` strands it while leaving them green. Probe from inside the
+# running container: aardvark only answers *.dns.podman when the container
+# actually joined `media`, so a keyless GET returning 401 proves DNS resolution
+# + apikey enforcement over that path.
+- name: _verify | Sonarr is reachable intra-stack at sonarr.dns.podman over the media network
+  command: >-
+    podman exec sonarr
+    curl -s -o /dev/null -w '%{http_code}'
+    http://sonarr.dns.podman:8989/api/v3/system/status
+  become: true
+  register: _verify_dns_podman
+  changed_when: false
+  retries: 15
+  delay: 2
+  until: _verify_dns_podman.rc == 0 and _verify_dns_podman.stdout == "401"
 
 # The sqlite_dataset symlink + matching --volume is the role's whole reason
 # for its non-obvious structure: it lands the DBs (and their -wal/-shm
