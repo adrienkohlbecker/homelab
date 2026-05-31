@@ -49,6 +49,7 @@
 # `when: not (ansible_check_mode and <name>_user.changed)`.
 - name: "Validate inputs for {{ service_user_args.name | default('<unset>') }}"
   assert:
+    quiet: true
     that:
       - service_user_args.name is defined
       - service_user_args.name is string
