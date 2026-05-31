@@ -1,14 +1,14 @@
 # Force a "no HWE meta-package installed" starting state so the role's
 # converge phase performs a real apt install (the packer-baked images
 # ship linux-generic-hwe-* preinstalled per packer/scripts/chroot.sh:
-# 189-196, which would otherwise mask a broken apt task as a no-op and
-# prevent _verify from observing the reboot signal).
+# 189-196, which would otherwise mask a broken apt task as a no-op).
+# _verify then proves the install ran by asserting the meta-package is
+# present again.
 #
 # We remove only the HWE meta-packages -- dpkg refuses to purge the
 # running kernel image, but that's fine: the meta-packages are what
 # the role's apt task targets, and removing them is what makes
-# converge's install register as `changed: true` and fire the
-# "Ask to reboot" touch task.
+# converge's install register as `changed: true` and reboot into it.
 
 - name: _setup | Remove HWE meta-package + autoremove
   apt:
@@ -18,10 +18,4 @@
     autoremove: true
     purge: true
     update_cache: true
-  become: true
-
-- name: _setup | Clear reboot-required so converge's signal is observable
-  file:
-    path: /var/run/reboot-required
-    state: absent
   become: true
