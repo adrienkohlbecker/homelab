@@ -1,5 +1,5 @@
 - name: Base installation
-  hosts: all:!bunk:!fox
+  hosts: box,lab,pug,fox
   roles:
     - hwe_kernel
     - bash
@@ -8,21 +8,41 @@
     - hostname
     - apt
     - apt_upgrade
+    - swap
     - netplan
     - wireguard
     - locale
     - console
     - timezone
-    - subid
     - unattended_upgrades
     - logrotate
     - journald
-    - resolved
-    - firewall
     - fail2ban
     - ssh
     - ntp
     - postfix
+    - zfs
+    - zfs_autobackup
+    - zfs_mount
+    - zfsbootmenu
+    - refind
+    - podman
+    - services
+    - certbot
+    - nginx
+    - csplogger
+    - netdata
+    - fluentbit
+
+- name: External VPS (fox)
+  hosts: box,fox
+  roles:
+    - headscale
+
+- name: Lab and Pug
+  hosts: box,lab,pug
+  roles:
+    - firewall
     - hdparm
     - hd_idle
     - smart
@@ -30,87 +50,24 @@
     - fancontrol
     - fan2go
     - powertop
-    - zfs
     - ssh_root
-    - zfs_autobackup
-    - zfs_mount
-    - swap
-    - podman
     - macvlan
     - avahi
     - samba
-    - certbot
-    - nginx
-    - services
-    - zfsbootmenu
-    - refind
     - static_curl
-
-- name: Add more services
-  hosts: all:!bunk:!fox
-  roles:
     - kdump
     - eaton_ipp
-    - netdata
-    - fluentbit
     - wolweb
-    - csplogger
     - keepalived
     - keepalived_exporter
     - nut_server
     - nut_monitor
+    - resolved
     - dnscrypt_proxy
     - pihole
     - docker_client
-
-# fox: off-home Hetzner Cloud VPS hosting the Headscale control plane. Excluded
-# from the all:!bunk base plays above because it isn't a home host -- no ZFS, no
-# home LAN/VLANs -- so it runs only this curated minimal set. fox IS on the wg0
-# backbone, scoped: lab/pug dial OUT to it (keepalive_from in wireguard_peers)
-# so no inbound is reintroduced at home, peers route only fox/32, and fox
-# reaches just lab/pug's wg /32s -- enough for netdata's Authelia forward-auth,
-# not the home LAN. Deliberately omitted vs the base play: netplan (Hetzner
-# cloud-init owns eth0 -- running the full role would clobber the VM's net
-# config; the private NIC alone is brought up by the additive hetzner_private_net
-# role instead),
-# firewall (the home nftables template is WAN/VLAN/wg-specific; fox relies on
-# its Hetzner Cloud firewall), resolved/pihole/dnscrypt (home DNS), the
-# zfs/boot + hardware/UPS/sensor roles (cloud VM), macvlan/avahi/samba
-# (home LAN), keepalived (no VIP), static_curl (not needed). The swap role
-# IS run (zram-only here; the disk overflow is a ZFS-root-cutover concern).
-# headscale's own
-# vhost is auth: none; netdata's is auth: required and reaches lab's Authelia
-# over wg0.
-- name: External VPS (fox)
-  hosts: fox
-  roles:
-    - hwe_kernel
-    - bash
-    - user
-    - cleanup
-    - hostname
-    - apt
-    - apt_upgrade
-    - swap
-    - hetzner_private_net
-    - wireguard
-    - locale
-    - console
-    - timezone
-    - unattended_upgrades
-    - logrotate
-    - journald
-    - fail2ban
-    - ssh
-    - ntp
-    - postfix
-    - podman
-    - certbot
-    - nginx
-    - services
-    - headscale
-    - fluentbit
-    - netdata
+    - subid
+    - tailscale
 
 - name: Lab roles
   hosts: box,lab
@@ -157,19 +114,8 @@
     - nexus
     - homepage
 
-# Mesh clients (tailscale subnet routers + home exit nodes). Ordered AFTER the
-# "External VPS (fox)" play on purpose: both `tailscale up` (registration) and
-# the delegated `headscale nodes approve-routes` step need the headscale control
-# plane on fox already converged and answering. lab/pug only -- bunk runs
-# Tailscale from DSM Package Center (operator runbook), and fox is the control
-# server, not a client. See notes/headscale_mesh_redesign.md §C.
-- name: Mesh clients
-  hosts: lab,pug
-  roles:
-    - tailscale
-
 - name: Reboot check
-  hosts: all:!bunk
+  hosts: box,lab,pug,fox
   tasks:
     - name: Check if a reboot is required
       stat:

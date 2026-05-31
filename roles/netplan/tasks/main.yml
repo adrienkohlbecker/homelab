@@ -1,3 +1,26 @@
+- name: End the role if netplan is not defined
+  meta: end_role
+  when: netplan is undefined
+  tags:
+    - netplan
+
+- name: Assert netplan host var defines at least one device stanza
+  # A `netplan` that renders to `network: {version: 2}` with no
+  # interfaces — whether empty, or a mapping carrying only top-level
+  # keys like `renderer` and no device type — is accepted silently by
+  # netplan: networkd ends up with no .network files in /run and the
+  # host loses configured networking on next apply. Fail loudly before
+  # the template runs.
+  assert:
+    that:
+      - netplan is defined
+      - netplan is mapping
+      - netplan | length > 0
+      - netplan.keys() | list | intersect(['ethernets', 'modems', 'wifis', 'bonds', 'bridges', 'vlans', 'vrfs', 'tunnels']) | length > 0
+    fail_msg: "host_vars must define a `netplan` mapping with at least one device stanza (ethernets/bonds/bridges/vlans/...); see host_vars/lab.yml for the schema"
+  tags:
+    - netplan
+
 - name: Install netplan
   apt:
     pkg:
@@ -59,23 +82,6 @@
   vars:
     systemd_unit_args:
       src: netplan_rollback.timer
-  tags:
-    - netplan
-
-- name: Assert netplan host var defines at least one device stanza
-  # A `netplan` that renders to `network: {version: 2}` with no
-  # interfaces — whether empty, or a mapping carrying only top-level
-  # keys like `renderer` and no device type — is accepted silently by
-  # netplan: networkd ends up with no .network files in /run and the
-  # host loses configured networking on next apply. Fail loudly before
-  # the template runs.
-  assert:
-    that:
-      - netplan is defined
-      - netplan is mapping
-      - netplan | length > 0
-      - netplan.keys() | list | intersect(['ethernets', 'modems', 'wifis', 'bonds', 'bridges', 'vlans', 'vrfs', 'tunnels']) | length > 0
-    fail_msg: "host_vars must define a `netplan` mapping with at least one device stanza (ethernets/bonds/bridges/vlans/...); see host_vars/lab.yml for the schema"
   tags:
     - netplan
 
@@ -162,7 +168,7 @@
   # apply` still exits 0, leaving the NIC misconfigured -- the 2026-05-10
   # failure class. `netplan generate` compiles the merged YAML to the
   # networkd backend and errors loudly on a bad schema without touching a
-  # live link. Same idiom as roles/hetzner_private_net.
+  # live link.
   command: netplan generate
   become: true
   changed_when: false
