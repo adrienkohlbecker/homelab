@@ -236,12 +236,16 @@ homepage_netdata_hosts:
   - fox
 
 smb_shares:
+  # media is deliberately readable+writable by every authenticated SMB user
+  # (ak + spouse): a household media library, group-owned via the media group.
+  # The absent `valid users` is intentional -- don't add one without revisiting
+  # who should reach the library. Inline keys (not an `opts` block) to match the
+  # other shares.
   - name: media
     path: /mnt/media
-    opts: |
-      force group = media
-      force create mode = 0664
-      force directory mode = 0775
+    force group: media
+    force create mode: "0664"
+    force directory mode: "0775"
   - name: data
     path: /mnt/data
     valid users: ak

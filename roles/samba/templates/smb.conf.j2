@@ -290,11 +290,17 @@ ea support = yes
 
 [{{ share.name }}]
 path = {{ share.path }}
-{# Render every per-share key (valid users, read only, force group, ...) as
-   its own smb.conf directive. `opts` stays a multiline escape hatch for raw
-   blocks; `name`/`path` are handled above. Without this, keys like
-   `valid users` are silently dropped and the share falls back to the global
-   default (any authenticated user). #}
+{# smb_shares entry schema:
+     name             -> [section] header (rendered above)
+     path             -> path = (rendered above)
+     time_machine     -> emits `fruit:time machine = yes` (rendered below)
+     opts             -> verbatim multiline escape hatch for raw blocks
+     <anything else>  -> rendered here as a literal smb.conf directive, so the
+                         key must be the exact parameter name with spaces
+                         ("valid users", "force group"), never underscores.
+   A share with no `valid users` is reachable by EVERY authenticated SMB user
+   (the global default); set it per-share to restrict. Without this loop such
+   keys would be dropped and the share would fall back to that default. #}
 {% for key, value in share.items() if key not in ['name', 'path', 'opts', 'time_machine'] %}
 {{ key }} = {{ value }}
 {% endfor %}
