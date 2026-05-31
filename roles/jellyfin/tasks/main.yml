@@ -58,9 +58,13 @@
     group: root
     mode: "0644"
     backup: true
+    # --dry-run (validate without the --create side effect) landed in systemd
+    # 256, so only resolute (26.04, systemd 259) has it -- jammy (249) and noble
+    # (255) both lack it and error on the flag. Gate on major >= 26, not the
+    # codename; noble falls back to plain --create like jammy.
     validate: >-
       systemd-tmpfiles
-      {{ '--dry-run' if ansible_distribution_release not in ['jammy'] else '' }}
+      {{ '--dry-run' if ansible_distribution_major_version | int >= 26 else '' }}
       --create %s
   become: true
   tags:
