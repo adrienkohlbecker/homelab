@@ -60,6 +60,22 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 
 ## Repo Conventions
 
+### Role layering (`site.yml`)
+
+`site.yml` is ordered as a **layer ladder** — a role's converge position *is* its layer, and each layer builds on the guarantees of the ones above. Two bands:
+
+- **Base machine install** (`hosts: box,lab,pug,fox`) — runs on every managed host. Sub-bands top-to-bottom: *host base* (OS, networking, access, system services), *storage & boot* (`zfs`/`zfs_mount`/`zfs_autobackup`/`zfsbootmenu`/`refind`), *service platform* (`podman`, `services`, `certbot`, `nginx`), *observability* (`csplogger`/`netdata`/`fluentbit`). Roles within the host-base band are mutually independent — order there is immaterial.
+- **Services** — host-scoped plays (`External VPS (fox)`, `Lab and Pug`, `Lab roles`) that assume the full platform above is already in place.
+
+**Where does a new role go?** Walk down the ladder, stop at the first layer whose guarantees you need:
+
+- needs only a booted OS → host base.
+- needs ZFS datasets/snapshots → after the storage band.
+- needs podman / `/mnt/services` / nginx-TLS → after the platform band (this is the base⇄service watershed).
+- it's an app only a subset of hosts run → a service play, scoped by host capability.
+
+Everything in the base bands runs on *every* ZFS-root host (fox included); everything below is host-scoped. Keep dataset *producers* (`scratch`/`data`/`media`, `services`) ahead of their consumers so converge order reads dependency-before-consumer.
+
 ### Role conventions
 
 **Load-bearing idioms** — these break silently if missed:
