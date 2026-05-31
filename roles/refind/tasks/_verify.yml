@@ -66,10 +66,9 @@
       refind.conf boots /EFI/ZBM/VMLINUZ.EFI but it is absent from the ESP —
       the zfsbootmenu role must run before refind.
 
-# x86_64 only — the role installs the binary only there (see tasks/main.yml). The
-# arm64 box boots the EFI-stub path and has no aa64 binary to assert.
+# Both arches: the role owns the binary on x86 (refind_x64.efi) and arm64
+# (refind_aa64.efi) alike, so assert it on whichever arch the fixture is.
 - name: _verify | Stat the rEFInd binary + firmware fallback on the ESP
-  when: ansible_architecture == 'x86_64'
   stat:
     path: "/boot/efi/EFI/{{ item }}"
   loop:
@@ -79,7 +78,6 @@
   become: true
 
 - name: _verify | ESP carries the rEFInd binary + firmware fallback
-  when: ansible_architecture == 'x86_64'
   assert:
     that: item.stat.exists
     fail_msg: "rEFInd binary/fallback missing on the ESP: EFI/{{ item.item }}"

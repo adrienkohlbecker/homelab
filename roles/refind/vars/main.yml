@@ -7,6 +7,7 @@ refind_theme_artifact:
   sha256: 4f4cf0a496d26c6da73299320ae9a3f00dd32be916b6abfd35dfab2d62368f5a
 
 # rEFInd EFI binary + firmware-fallback names, keyed by arch. The refind package
-# ships both under /usr/share/refind/; x64 on Intel/AMD, aa64 on arm64 (test box).
+# ships the arch's binary under /usr/share/refind/refind/; x64 on Intel/AMD, aa64
+# on arm64 (the test box).
 refind_efi_binary: "{{ 'refind_aa64.efi' if ansible_architecture == 'aarch64' else 'refind_x64.efi' }}"
 refind_fallback_binary: "{{ 'BOOTAA64.EFI' if ansible_architecture == 'aarch64' else 'BOOTX64.EFI' }}"
