@@ -12,13 +12,13 @@
 # image already assigns that gid to another system group (groupmod: GID '998'
 # already exists). Let the module reuse an existing render group or pick a
 # free system gid.
-- name: test | Fake render | Create render group
+- name: Test | Fake render | Create render group
   group:
     name: render
     system: true
   become: true
 
-- name: test | Fake render | Ensure /dev/dri exists
+- name: Test | Fake render | Ensure /dev/dri exists
   file:
     path: /dev/dri
     state: directory
@@ -27,13 +27,13 @@
     mode: "0755"
   become: true
 
-- name: test | Fake render | Create fake renderD128 char device
+- name: Test | Fake render | Create fake renderD128 char device
   command: mknod /dev/dri/renderD128 c 226 128
   args:
     creates: /dev/dri/renderD128
   become: true
 
-- name: test | Fake render | Set device ownership
+- name: Test | Fake render | Set device ownership
   file:
     path: /dev/dri/renderD128
     owner: root

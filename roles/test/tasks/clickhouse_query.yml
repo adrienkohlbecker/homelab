@@ -15,7 +15,7 @@
 # literal in the role file, which Ansible 2.19's trust check requires
 # (default-from-filter conditionals that reference a register'd module
 # result fail with "Encountered untrusted template or expression").
-- name: "test | Clickhouse_query | {{ test_args.label | default('query') }}"
+- name: "Test | Clickhouse_query | {{ test_args.label | default('query') }}"
   command:
     cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
     stdin: "{{ test_args.sql }}"

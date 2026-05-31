@@ -10,7 +10,7 @@
 # in tasks/_verify.yml, which the harness invokes after the
 # idempotence check. On the `minimal` variant the role short-circuits
 # (it boots the upstream Ubuntu cloud image, not a packer build).
-- name: packer | Role-apply is a no-op (assertions live in _verify.yml)
+- name: Packer | Role-apply is a no-op (assertions live in _verify.yml)
   ansible.builtin.debug:
     msg: >-
       packer has no convergence work; run `testrole.py packer

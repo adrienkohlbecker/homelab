@@ -21,7 +21,7 @@
 #
 # Output:
 #   test_clickhouse_result.stdout: response from the final iteration.
-- name: "test | Clickhouse_query_wait | {{ test_args.label | default('query') }}"
+- name: "Test | Clickhouse_query_wait | {{ test_args.label | default('query') }}"
   command:
     cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
     stdin: "{{ test_args.sql }}"
