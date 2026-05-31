@@ -48,7 +48,7 @@
     group: root
     mode: "0644"
     backup: true
-    validate: bash -n %s
+    validate: sh -n %s
   register: boot_initramfs_modules
   become: true
   tags:
