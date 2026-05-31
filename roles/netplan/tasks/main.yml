@@ -1,188 +1,166 @@
-- name: End the role if netplan is not defined
-  meta: end_role
-  when: netplan is undefined
+# fox runs this role from the shared Base play but defines no `netplan`
+# host var -- it keeps the Hetzner cloud-init networking. Gate the whole
+# role on `netplan is defined`: `meta: end_role` does NOT short-circuit a
+# role invoked via a play's `roles:` keyword (it only ends dynamically-
+# included roles), so it can't carry this gate. Without it the cloud-init
+# cleanup task below would delete fox's only network config.
+- name: Configure host networking via netplan
+  when: netplan is defined
   tags:
     - netplan
+  block:
+    - name: Assert netplan host var defines at least one device stanza
+      # A `netplan` that renders to `network: {version: 2}` with no
+      # interfaces — whether empty, or a mapping carrying only top-level
+      # keys like `renderer` and no device type — is accepted silently by
+      # netplan: networkd ends up with no .network files in /run and the
+      # host loses configured networking on next apply. Fail loudly before
+      # the template runs.
+      assert:
+        that:
+          - netplan is mapping
+          - netplan | length > 0
+          - netplan.keys() | list | intersect(['ethernets', 'modems', 'wifis', 'bonds', 'bridges', 'vlans', 'vrfs', 'tunnels']) | length > 0
+        fail_msg: "host_vars must define a `netplan` mapping with at least one device stanza (ethernets/bonds/bridges/vlans/...); see host_vars/lab.yml for the schema"
 
-- name: Assert netplan host var defines at least one device stanza
-  # A `netplan` that renders to `network: {version: 2}` with no
-  # interfaces — whether empty, or a mapping carrying only top-level
-  # keys like `renderer` and no device type — is accepted silently by
-  # netplan: networkd ends up with no .network files in /run and the
-  # host loses configured networking on next apply. Fail loudly before
-  # the template runs.
-  assert:
-    that:
-      - netplan is defined
-      - netplan is mapping
-      - netplan | length > 0
-      - netplan.keys() | list | intersect(['ethernets', 'modems', 'wifis', 'bonds', 'bridges', 'vlans', 'vrfs', 'tunnels']) | length > 0
-    fail_msg: "host_vars must define a `netplan` mapping with at least one device stanza (ethernets/bonds/bridges/vlans/...); see host_vars/lab.yml for the schema"
-  tags:
-    - netplan
+    - name: Install netplan
+      apt:
+        pkg:
+          - netplan.io
+        cache_valid_time: 3600
+      become: true
 
-- name: Install netplan
-  apt:
-    pkg:
-      - netplan.io
-    cache_valid_time: 3600
-  become: true
-  tags:
-    - netplan
+    - name: Mask networkd-dispatcher (unused, only emits podman-veth-churn noise)
+      # systemd-networkd emits a D-Bus PropertiesChanged for every link state
+      # change, including podman's ephemeral veth/bridge interfaces. networkd-
+      # dispatcher subscribes to all of them and shells out to `networkctl
+      # status <iface>`, which races and fails ("Interface vethN not found")
+      # once the short-lived veth is gone, and trips a spurious sd_notify
+      # rejection ("reception only permitted for main PID"). We ship zero hooks
+      # in any of its */.d dirs, so the daemon does no useful work on these
+      # hosts — masking removes the noise at the source with nothing lost.
+      # Unmask is the prerequisite if a future role ever drops a dispatcher hook.
+      systemd:
+        name: networkd-dispatcher.service
+        state: stopped
+        masked: true
+      become: true
 
-- name: Mask networkd-dispatcher (unused, only emits podman-veth-churn noise)
-  # systemd-networkd emits a D-Bus PropertiesChanged for every link state
-  # change, including podman's ephemeral veth/bridge interfaces. networkd-
-  # dispatcher subscribes to all of them and shells out to `networkctl
-  # status <iface>`, which races and fails ("Interface vethN not found")
-  # once the short-lived veth is gone, and trips a spurious sd_notify
-  # rejection ("reception only permitted for main PID"). We ship zero hooks
-  # in any of its */.d dirs, so the daemon does no useful work on these
-  # hosts — masking removes the noise at the source with nothing lost.
-  # Unmask is the prerequisite if a future role ever drops a dispatcher hook.
-  systemd:
-    name: networkd-dispatcher.service
-    state: stopped
-    masked: true
-  become: true
-  tags:
-    - netplan
+    - name: Install rollback script
+      copy:
+        src: netplan_rollback.sh
+        dest: /usr/local/bin/netplan_rollback
+        owner: root
+        group: root
+        mode: "0755"
+        backup: true
+        validate: bash -n %s
+      become: true
 
-- name: Install rollback script
-  copy:
-    src: netplan_rollback.sh
-    dest: /usr/local/bin/netplan_rollback
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-    validate: bash -n %s
-  become: true
-  tags:
-    - netplan
+    # Installed as raw unit files via systemd_unit, not through the
+    # systemd_timer helper: that helper requires OnCalendar and emits a cadence
+    # job with an [Install] section, whereas this is a runtime-armed deadline
+    # timer (OnActiveSec, no calendar, never enabled) — the helper doesn't fit.
+    - name: Install netplan_rollback.service
+      import_role:
+        name: systemd_unit
+        tasks_from: install
+      vars:
+        systemd_unit_args:
+          src: netplan_rollback.service
 
-# Installed as raw unit files via systemd_unit, not through the
-# systemd_timer helper: that helper requires OnCalendar and emits a cadence
-# job with an [Install] section, whereas this is a runtime-armed deadline
-# timer (OnActiveSec, no calendar, never enabled) — the helper doesn't fit.
-- name: Install netplan_rollback.service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: netplan_rollback.service
-  tags:
-    - netplan
+    - name: Install netplan_rollback.timer
+      import_role:
+        name: systemd_unit
+        tasks_from: install
+      vars:
+        systemd_unit_args:
+          src: netplan_rollback.timer
 
-- name: Install netplan_rollback.timer
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: netplan_rollback.timer
-  tags:
-    - netplan
+    - name: Remove stale rollback artifacts from a prior auto-rollback
+      # A fired rollback keeps the presumed-broken config aside as
+      # /etc/netplan.rollback_failed (and, if interrupted mid-swap,
+      # /etc/netplan.restoring) for console recovery. Reaching a healthy
+      # converge means the box recovered, so clear them: prune_ansible_backups
+      # doesn't match these paths, and a future wifis: PSK shouldn't linger in
+      # cleartext outside backup rotation.
+      file:
+        path: "{{ item }}"
+        state: absent
+      become: true
+      loop:
+        - /etc/netplan.rollback_failed
+        - /etc/netplan.restoring
 
-- name: Remove stale rollback artifacts from a prior auto-rollback
-  # A fired rollback keeps the presumed-broken config aside as
-  # /etc/netplan.rollback_failed (and, if interrupted mid-swap,
-  # /etc/netplan.restoring) for console recovery. Reaching a healthy
-  # converge means the box recovered, so clear them: prune_ansible_backups
-  # doesn't match these paths, and a future wifis: PSK shouldn't linger in
-  # cleartext outside backup rotation.
-  file:
-    path: "{{ item }}"
-    state: absent
-  become: true
-  loop:
-    - /etc/netplan.rollback_failed
-    - /etc/netplan.restoring
-  tags:
-    - netplan
+    # Snapshot BEFORE the template runs so /run/netplan_prev captures the
+    # genuine *previous* /etc/netplan, not the just-rendered new one. Two
+    # downstream consumers read this:
+    #   - `netplan apply --state` reads it to tear down virtual devices
+    #     (the iot VLAN, future bonds/bridges) removed from the new config;
+    #     it does NOT restrict the networkd restart scope.
+    #   - the netplan_rollback.timer mv's it over /etc/netplan if we
+    #     don't reconnect post-apply.
+    # Unconditional so the snapshot is always available; the apply block
+    # below is what's gated on netplan_cfg.changed.
+    - name: Wipe any stale /run/netplan_prev
+      file:
+        path: /run/netplan_prev
+        state: absent
+      become: true
+      changed_when: false
 
-# Snapshot BEFORE the template runs so /run/netplan_prev captures the
-# genuine *previous* /etc/netplan, not the just-rendered new one. Two
-# downstream consumers read this:
-#   - `netplan apply --state` reads it to tear down virtual devices
-#     (the iot VLAN, future bonds/bridges) removed from the new config;
-#     it does NOT restrict the networkd restart scope.
-#   - the netplan_rollback.timer mv's it over /etc/netplan if we
-#     don't reconnect post-apply.
-# Unconditional so the snapshot is always available; the apply block
-# below is what's gated on netplan_cfg.changed.
-- name: Wipe any stale /run/netplan_prev
-  file:
-    path: /run/netplan_prev
-    state: absent
-  become: true
-  changed_when: false
-  tags:
-    - netplan
+    - name: Snapshot current /etc/netplan to /run/netplan_prev  # noqa: require-backup
+      copy:
+        src: /etc/netplan/
+        dest: /run/netplan_prev/
+        remote_src: true
+        mode: preserve
+        # mode: preserve keeps the 0600 files, but the snapshot dir itself would
+        # otherwise inherit a lax source-dir mode; pin it 0700 so /run/netplan_prev
+        # is no more readable than /etc/netplan (a future wifis: PSK would land here).
+        directory_mode: "0700"
+      become: true
+      changed_when: false
 
-- name: Snapshot current /etc/netplan to /run/netplan_prev  # noqa: require-backup
-  copy:
-    src: /etc/netplan/
-    dest: /run/netplan_prev/
-    remote_src: true
-    mode: preserve
-    # mode: preserve keeps the 0600 files, but the snapshot dir itself would
-    # otherwise inherit a lax source-dir mode; pin it 0700 so /run/netplan_prev
-    # is no more readable than /etc/netplan (a future wifis: PSK would land here).
-    directory_mode: "0700"
-  become: true
-  changed_when: false
-  tags:
-    - netplan
+    - name: Configure netplan
+      template:
+        src: config.yaml.j2
+        dest: /etc/netplan/01-netcfg.yaml
+        owner: root
+        group: root
+        mode: "0600"
+        backup: true
+        validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
+      become: true
+      register: netplan_cfg
 
-- name: Configure netplan
-  template:
-    src: config.yaml.j2
-    dest: /etc/netplan/01-netcfg.yaml
-    owner: root
-    group: root
-    mode: "0600"
-    backup: true
-    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-  become: true
-  register: netplan_cfg
-  tags:
-    - netplan
+    - name: Cleanup config added by cloud-init and installer
+      file:
+        path: "{{ item }}"
+        state: absent
+      become: true
+      register: netplan_cleanup
+      loop:
+        - /etc/netplan/00-installer-config.yaml
+        - /etc/netplan/50-cloud-init.yaml
 
-- name: Cleanup config added by cloud-init and installer
-  file:
-    path: "{{ item }}"
-    state: absent
-  become: true
-  register: netplan_cleanup
-  loop:
-    - /etc/netplan/00-installer-config.yaml
-    - /etc/netplan/50-cloud-init.yaml
-  tags:
-    - netplan
+    - name: Validate the netplan schema before applying
+      # The template's `validate:` only checks YAML syntax; a misspelled key
+      # (dchp4, use_dns) parses fine but netplan silently drops it and `netplan
+      # apply` still exits 0, leaving the NIC misconfigured -- the 2026-05-10
+      # failure class. `netplan generate` compiles the merged YAML to the
+      # networkd backend and errors loudly on a bad schema without touching a
+      # live link.
+      command: netplan generate
+      become: true
+      changed_when: false
+      when: (netplan_cfg.changed or netplan_cleanup.changed) and not ansible_check_mode
 
-- name: Validate the netplan schema before applying
-  # The template's `validate:` only checks YAML syntax; a misspelled key
-  # (dchp4, use_dns) parses fine but netplan silently drops it and `netplan
-  # apply` still exits 0, leaving the NIC misconfigured -- the 2026-05-10
-  # failure class. `netplan generate` compiles the merged YAML to the
-  # networkd backend and errors loudly on a bad schema without touching a
-  # live link.
-  command: netplan generate
-  become: true
-  changed_when: false
-  when: (netplan_cfg.changed or netplan_cleanup.changed) and not ansible_check_mode
-  tags:
-    - netplan
-
-# Apply tasks extracted to apply.yml so _verify can invoke the same
-# path with a deliberately-broken /etc/netplan and exercise the
-# rollback timer end-to-end.
-# Gated on `not ansible_check_mode` because all of this is destructive.
-- name: Apply netplan safely
-  import_tasks: apply.yml
-  when: (netplan_cfg.changed or netplan_cleanup.changed) and not ansible_check_mode
-  become: true
-  tags:
-    - netplan
+    # Apply tasks extracted to apply.yml so _verify can invoke the same
+    # path with a deliberately-broken /etc/netplan and exercise the
+    # rollback timer end-to-end.
+    # Gated on `not ansible_check_mode` because all of this is destructive.
+    - name: Apply netplan safely
+      import_tasks: apply.yml
+      when: (netplan_cfg.changed or netplan_cleanup.changed) and not ansible_check_mode
+      become: true
