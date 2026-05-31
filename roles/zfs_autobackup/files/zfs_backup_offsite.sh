@@ -45,4 +45,10 @@ f_trace rsync \
   --exclude /var/lib/containers \
   --exclude /home/ak/.local/share/containers \
   --exclude /var/crash \
-  "${MOUNTPOINT%"/"}/.zfs/snapshot/$LAST_SNAPSHOT/" "ak@$OFFSITE_IP:/volume1/Backup/$(hostname -s)/$DESTPATH"
+  "${MOUNTPOINT%"/"}/.zfs/snapshot/$LAST_SNAPSHOT/" "ak@$OFFSITE_IP:$DESTPATH"
+
+# The destination is relative on purpose. bunk forces this key through rrsync
+# (command="rrsync -wo /volume1/Backup/<host>"), which chdirs into that per-host
+# root and resolves the path against it -- so "$DESTPATH" lands in
+# /volume1/Backup/<host>/. An absolute path would get the restricted root
+# prepended (double-pathed) and rejected. See host_vars/bunk.yml.

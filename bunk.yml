@@ -2,6 +2,50 @@
   hosts: bunk
   strategy: linear
   tasks:
+    # --- Offsite backup rsync wrapper (rrsync) -----------------------------
+    # Each source host (lab/pug/fox) pushes its bak-tagged datasets here nightly
+    # via roles/zfs_autobackup's offsite step. Their root keys (in the
+    # authorized_keys task below) carry a forced command= that runs this wrapper,
+    # confining each source write-only to /volume1/Backup/<host> -- a compromised
+    # source can neither read another host's backups nor escape its own dir, and
+    # bunk's own Synology snapshots cover an in-dir --delete. DSM ships no perl,
+    # so this is the Python rrsync (rsync >= 3.2.4); ~ak/bin lives on the data
+    # volume so it survives a DSM OS update (unlike /usr/local). Runs as ak.
+    - name: Create ak's bin directory
+      file:
+        path: "{{ ansible_user_dir }}/bin"
+        state: directory
+        mode: "0755"
+      tags:
+        - offsite_rrsync
+
+    # py_compile (run on bunk) parses the script, catching a truncated copy.
+    - name: Install the rrsync wrapper
+      copy:
+        src: "{{ playbook_dir }}/roles/zfs_autobackup/files/rrsync"
+        dest: "{{ ansible_user_dir }}/bin/rrsync"
+        mode: "0755"
+        backup: true
+        validate: /usr/bin/python3 -m py_compile %s
+      tags:
+        - offsite_rrsync
+
+    # rrsync refuses to run if its restricted root is missing, so the per-source
+    # roots must pre-exist (lab/pug already do; fox is new). ak creates and owns
+    # them; 0755 tightens the live dirs (currently 0777) without locking anyone
+    # relevant out -- the data was already world-readable.
+    - name: Create the per-source offsite backup roots
+      file:
+        path: "/volume1/Backup/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - lab
+        - pug
+        - fox
+      tags:
+        - offsite_rrsync
+
     # bunk is DSM, so roles/user (which manages this fleet-wide) doesn't run
     # here. Mirror its authorized_keys task: the fleet login key (ssh_public_keys)
     # plus bunk's backup-rsync keys (ssh_public_keys_additional in host_vars).
