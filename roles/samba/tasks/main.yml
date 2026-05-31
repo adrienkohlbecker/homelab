@@ -16,6 +16,26 @@
   tags:
     - samba
 
+- name: Assert smb_shares directive keys are well-formed
+  assert:
+    that:
+      # smb.conf parameter names use spaces, never underscores ("valid users",
+      # "force group", ...), so an underscore in a passthrough directive key is
+      # always a typo (e.g. valid_users) -- it renders an unknown parameter
+      # smbd silently ignores, leaving the share on the global default (any
+      # authenticated user). Structural keys handled by the template are exempt.
+      - >-
+        (smb_shares | default([])) | map('dict2items') | flatten
+        | rejectattr('key', 'in', ['name', 'path', 'opts', 'time_machine'])
+        | selectattr('key', 'search', '_') | list | length == 0
+    fail_msg: >-
+      An smb_shares entry has a directive key containing '_' (e.g. valid_users
+      instead of `valid users`). smb.conf parameters use spaces; the typo would
+      render a directive smbd ignores, silently leaving the share open to every
+      authenticated user.
+  tags:
+    - samba
+
 - name: Install samba package
   apt:
     pkg:
