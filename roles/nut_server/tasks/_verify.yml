@@ -69,17 +69,28 @@
   changed_when: false
   become: true
 
+# The CGI probe must hit the vhost by its real FQDN, not https://localhost/
+# with a Host header: TLS SNI follows the URL host, so a localhost SNI matches
+# no server_name and nginx answers with an unrecognized_name TLS alert. jammy's
+# OpenSSL tolerates that warning, but noble/resolute's OpenSSL 3.x treat it as
+# fatal -- the probe then fails with status -1 (TLSV1_UNRECOGNIZED_NAME).
+# Mapping the FQDN to loopback makes SNI match the served vhost on every release.
+# Test-only mutation; the box is torn down after.
+- name: _verify | Map the nut vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 nut.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 # The CGI status page: nginx 301s / -> /upsstats.cgi, proxied to nut-cgi over
 # the fcgiwrap socket (auto-enabled by the package). The site is auth=required,
 # so _setup's authelia_stub (always_200) admits the auth_request subrequest.
-# Hit via the Host header so DNS isn't needed; snakeoil cert -> validate_certs.
-# Broad status_code list lets a transient 502 (fcgiwrap warming) retry; the
-# `until` pins the success on a real 200.
+# Snakeoil cert -> validate_certs: false. Broad status_code list lets a
+# transient 502 (fcgiwrap warming) retry; the `until` pins success on a real 200.
 - name: _verify | NUT CGI status page is served through nginx + fcgiwrap
   uri:
-    url: https://localhost/upsstats.cgi?host=eaton@localhost
-    headers:
-      Host: "nut.{{ inventory_hostname }}.{{ domain }}"
+    url: https://nut.{{ inventory_hostname }}.{{ domain }}/upsstats.cgi?host=eaton@localhost
     validate_certs: false
     return_content: true
     status_code: [ 200, 301, 302, 401, 403, 502, 503 ]
