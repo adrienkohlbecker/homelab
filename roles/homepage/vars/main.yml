@@ -42,4 +42,4 @@ homepage_bookmarks:
     - { name: Home Assistant, abbr: HA, sub: homeassistant, icon: home-assistant }
     - { name: Filebrowser,    abbr: FB, sub: filebrowser,   icon: filebrowser-quantum }
     - { name: Roundcube,      abbr: RC, sub: roundcube,     icon: roundcube }
-    - { name: Speedtest,      abbr: ST, sub: speedtest,     icon: speedtest-tracker }
+    - { name: Speedtest,      abbr: ST, sub: speedtest,     icon: librespeed }
