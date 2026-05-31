@@ -138,6 +138,29 @@
           - _verify_hyphen_dir.stat.gr_name == 'service_user_test_grp'
           - _verify_hyphen_dir.stat.mode == '0700'
 
+    # Fourth scenario: a non-default shell (gitea passes /bin/bash). Confirms
+    # the shell arg reaches the passwd record instead of the nologin default.
+    - name: _verify | Provision a test user with a non-default shell
+      import_role:
+        name: service_user
+        tasks_from: user
+      vars:
+        service_user_args:
+          name: service_user_test_shell
+          shell: /bin/bash
+          config_dir: false
+
+    - name: _verify | Shell user passwd record
+      command: getent passwd service_user_test_shell
+      register: _verify_shell_passwd
+      changed_when: false
+      become: true
+
+    - name: _verify | Shell field reflects the override
+      assert:
+        that:
+          - _verify_shell_passwd.stdout.split(':')[6] == '/bin/bash'
+
   always:
     - name: _verify | Tear down test users
       user:
@@ -150,6 +173,7 @@
         - service_user_test
         - service_user_test_home
         - service-user-test-hyphen
+        - service_user_test_shell
 
     - name: _verify | Tear down test groups
       group:
@@ -160,6 +184,7 @@
         - service_user_test
         - service_user_test_home
         - service-user-test-hyphen
+        - service_user_test_shell
         - service_user_test_grp
 
     - name: _verify | Tear down test config + home dirs
