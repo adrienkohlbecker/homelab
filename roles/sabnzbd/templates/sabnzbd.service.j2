@@ -61,7 +61,10 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/sqlite/sabnzbd:/mnt/services/sqlite/sabnzbd \
     --volume /mnt/services/sabnzbd/autoProcessMedia.cfg:/opt/nzbToMedia/autoProcessMedia.cfg \
     --volume /mnt/media/Other:/media/Other \
-    --volume /mnt/scratch:/scratch \
+    --volume /mnt/scratch/sabnzbd:/scratch/sabnzbd \
+    --volume /mnt/scratch/sonarr:/scratch/sonarr \
+    --volume /mnt/scratch/radarr:/scratch/radarr \
+    --volume /mnt/scratch/lidarr:/scratch/lidarr \
     --volume /opt/nzbToMedia:/opt/nzbToMedia \
     --network media \
     --publish 127.0.0.1:{{ service_ports.sabnzbd }}:8080/tcp \
