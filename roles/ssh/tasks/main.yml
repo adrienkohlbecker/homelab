@@ -1,3 +1,12 @@
+- name: Install openssh-server
+  apt:
+    package:
+      - openssh-server
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - ssh
+
 - name: Configure sshd
   copy:
     src: sshd_config
