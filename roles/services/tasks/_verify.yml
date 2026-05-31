@@ -1,0 +1,131 @@
+# Functional verify for the datasets created by main.yml.
+#
+# An idempotent converge is not evidence extra_properties actually landed --
+# community.general.zfs treats a property whose source is not local|received|-
+# as absent, so a value silently inherited from the parent reads back correct
+# while never being set locally. For the sqlite child this is load-bearing: an
+# inherited recordsize would test-pass yet silently defeat the 4K-page tuning
+# the ~10 SQLite consumer roles depend on. `zfs get` source must be `local`,
+# not just right.
+#
+# Expected values are hardcoded here, independent of main.yml, so this catches
+# a main.yml regression rather than rubber-stamping whatever it set.
+
+- name: _verify | Datasets exist
+  command:
+    argv:
+      - zfs
+      - list
+      - -H
+      - -o
+      - name
+      - "{{ item }}"
+  changed_when: false
+  loop:
+    - rpool/services
+    - rpool/services/sqlite
+  become: true
+
+- name: _verify | Mountpoint property set locally with expected value
+  command:
+    argv:
+      - zfs
+      - get
+      - -H
+      - -p
+      - -o
+      - source,value
+      - mountpoint
+      - "{{ item.dataset }}"
+  register: services_verify_mountpoint
+  changed_when: false
+  failed_when: >-
+    (services_verify_mountpoint.stdout.split('\t') | first | trim) != 'local'
+    or (services_verify_mountpoint.stdout.split('\t') | last | trim) != item.mountpoint
+  loop:
+    - { dataset: rpool/services, mountpoint: /mnt/services }
+    - { dataset: rpool/services/sqlite, mountpoint: /mnt/services/sqlite }
+  loop_control:
+    label: "{{ item.dataset }}"
+  become: true
+
+- name: _verify | Datasets mounted at mountpoint
+  command:
+    argv:
+      - findmnt
+      - --first-only
+      - --noheadings
+      - --output
+      - SOURCE
+      - "{{ item.mountpoint }}"
+  register: services_verify_findmnt
+  changed_when: false
+  failed_when: services_verify_findmnt.stdout | trim != item.dataset
+  loop:
+    - { dataset: rpool/services, mountpoint: /mnt/services }
+    - { dataset: rpool/services/sqlite, mountpoint: /mnt/services/sqlite }
+  loop_control:
+    label: "{{ item.dataset }}"
+  become: true
+
+- name: _verify | Parent extra property set locally with expected value
+  vars:
+    services_expected_properties:
+      'autobackup:bak': 'true'
+  command:
+    argv:
+      - zfs
+      - get
+      - -H
+      - -p
+      - -o
+      - source,value
+      - "{{ item.key }}"
+      - rpool/services
+  register: services_verify_parent_prop
+  changed_when: false
+  failed_when: >-
+    (services_verify_parent_prop.stdout.split('\t') | first | trim) != 'local'
+    or (services_verify_parent_prop.stdout.split('\t') | last | trim) != item.value
+  loop: "{{ services_expected_properties | dict2items }}"
+  loop_control:
+    label: "rpool/services {{ item.key }}={{ item.value }}"
+  become: true
+
+- name: _verify | Sqlite extra property set locally with expected value
+  vars:
+    services_sqlite_expected_properties:
+      'autobackup:bak': 'true'
+      recordsize: '4096'
+      atime: 'off'
+  command:
+    argv:
+      - zfs
+      - get
+      - -H
+      - -p
+      - -o
+      - source,value
+      - "{{ item.key }}"
+      - rpool/services/sqlite
+  register: services_verify_sqlite_prop
+  changed_when: false
+  failed_when: >-
+    (services_verify_sqlite_prop.stdout.split('\t') | first | trim) != 'local'
+    or (services_verify_sqlite_prop.stdout.split('\t') | last | trim) != item.value
+  loop: "{{ services_sqlite_expected_properties | dict2items }}"
+  loop_control:
+    label: "rpool/services/sqlite {{ item.key }}={{ item.value }}"
+  become: true
+
+- name: _verify | Mount status units are active
+  command:
+    argv:
+      - systemctl
+      - is-active
+      - "{{ item }}"
+  changed_when: false
+  loop:
+    - zfs_mount_mnt_services.service
+    - zfs_mount_mnt_services_sqlite.service
+  become: true
