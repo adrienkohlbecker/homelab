@@ -134,6 +134,79 @@
       instance.
   become: true
 
+# Populated-state shape contract. The byte-for-byte assert above only ever runs
+# against a fresh, never-connected settings.json -- no Plex/Jellyfin peer is
+# deployed in the test, so the slurp-preserved branches that fire only once the
+# daemon owns data (the multi-line jellyfin libraries loop + SSO fields, a
+# populated migrations ledger, bumped plex lastScan, the wizard-completed flags)
+# never get exercised here, yet those are the fragile ones. Synthesize a
+# plausible post-bootstrap writeback by injecting daemon-owned values onto the
+# fresh on-disk file (re-slurped above as _verify_shape_b64), render the
+# template against it, then feed that render back in and assert the two renders
+# are byte-identical (a fixed point) and that every injected daemon value
+# survived. A template that drops, reorders, or reformats a daemon-written key
+# diverges on the second render or loses the value -- the exact churn-and-
+# restart regression a connected instance would hit on the next converge.
+- name: _verify | Synthetic post-bootstrap daemon-owned values
+  set_fact:
+    _verify_pop_overrides:
+      main:
+        mediaServerType: 2
+      public:
+        initialized: true
+      plex:
+        libraries:
+          - { id: "10", name: Live Music, enabled: true, type: movie, lastScan: 1717000000000 }
+          - { id: "1", name: Movies, enabled: true, type: movie, lastScan: 1717000000000 }
+          - { id: "2", name: TV Shows, enabled: true, type: show, lastScan: 1717000000000 }
+      jellyfin:
+        ip: jellyfin.dns.podman
+        port: 8096
+        useSsl: false
+        urlBase: ""
+        serverId: srv-abc123
+        apiKey: jelly-test-key
+        libraries:
+          - { id: f1, name: Films, enabled: true, type: movie }
+          - { id: s1, name: Shows, enabled: false, type: show }
+      migrations:
+        - "0007_migrate_arr_tags"
+        - "0008_migrate_blacklist_to_blocklist"
+        - "0099_synthetic_upgrade"
+
+- name: _verify | Render the template against the synthetic post-bootstrap state
+  vars:
+    seerr_settings_json: "{{ (_verify_shape_b64.content | b64decode | from_json) | combine(_verify_pop_overrides, recursive=True) }}"
+  set_fact:
+    _verify_pop_render1: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
+
+- name: _verify | Re-render feeding the populated render back in
+  vars:
+    seerr_settings_json: "{{ _verify_pop_render1 | from_json }}"
+  set_fact:
+    _verify_pop_render2: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
+
+- name: _verify | The populated render is a stable fixed point preserving daemon-owned fields
+  vars:
+    _parsed: "{{ _verify_pop_render1 | from_json }}"
+  assert:
+    that:
+      - _verify_pop_render1 == _verify_pop_render2
+      - _parsed.jellyfin.ip == 'jellyfin.dns.podman'
+      - _parsed.jellyfin.apiKey == 'jelly-test-key'
+      - (_parsed.jellyfin.libraries | length) == 2
+      - (_parsed.plex.libraries | length) == 3
+      - _parsed.plex.libraries[0].lastScan == 1717000000000
+      - "'0099_synthetic_upgrade' in _parsed.migrations"
+      - _parsed.main.mediaServerType == 2
+      - _parsed.public.initialized
+    fail_msg: >-
+      the template did not stably reproduce a populated post-bootstrap
+      settings.json: a daemon-owned field (jellyfin SSO/libraries, plex
+      lastScan, migrations ledger, wizard flags) was dropped, reordered, or
+      reformatted, which would diff-churn and restart seerr on the converge
+      after the operator connects Plex/Jellyfin.
+
 # Corrupt-file rescue, end-to-end. main.yml treats an unparseable settings.json
 # as {} (the rescue block) so a truncated/partial write from a crashed daemon
 # doesn't wedge every future converge. Exercise it: clobber the file with
