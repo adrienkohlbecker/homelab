@@ -114,3 +114,79 @@
     name: service_user_test_home
     state: absent
   become: true
+
+# Third scenario: a hyphenated name (the only path that exercises the
+# regex_replace fact-key sanitization, foo-bar -> foo_bar_user), plus
+# extra_groups / config_dir_group / config_dir_mode overrides and an
+# assertion that the exposed .group is a numeric gid (callers feed it into
+# podman --user / --uidmap as an integer).
+- name: _verify | Create a pre-existing group for the override test
+  group:
+    name: service_user_test_grp
+    system: true
+  become: true
+
+- name: _verify | Provision a hyphenated-name user with arg overrides
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: service-user-test-hyphen
+      extra_groups: [ service_user_test_grp ]
+      config_dir_group: service_user_test_grp
+      config_dir_mode: "0700"
+
+- name: _verify | Sanitized fact key is exposed with a numeric gid
+  assert:
+    that:
+      - service_user_test_hyphen_user is defined
+      - service_user_test_hyphen_user.uid is defined
+      - service_user_test_hyphen_user.group is defined
+      - service_user_test_hyphen_user.group | string is match('^[0-9]+$')
+
+- name: _verify | Membership reflects extra_groups
+  command: id -nG service-user-test-hyphen
+  register: _verify_hyphen_groups
+  changed_when: false
+  become: true
+
+- name: _verify | Config dir honors config_dir_group + config_dir_mode
+  stat:
+    path: /mnt/services/service-user-test-hyphen
+  register: _verify_hyphen_dir
+  become: true
+
+- name: _verify | Override dir + membership attributes
+  assert:
+    that:
+      - "'service_user_test_grp' in _verify_hyphen_groups.stdout"
+      - _verify_hyphen_dir.stat.exists
+      - _verify_hyphen_dir.stat.gr_name == 'service_user_test_grp'
+      - _verify_hyphen_dir.stat.mode == '0700'
+
+- name: _verify | Cleanup hyphen test config dir
+  file:
+    path: /mnt/services/service-user-test-hyphen
+    state: absent
+  become: true
+
+- name: _verify | Cleanup hyphen test user
+  user:
+    name: service-user-test-hyphen
+    state: absent
+    remove: true
+    force: true
+  become: true
+
+- name: _verify | Cleanup hyphen test user group
+  group:
+    name: service-user-test-hyphen
+    state: absent
+  become: true
+
+- name: _verify | Cleanup pre-existing override test group
+  group:
+    name: service_user_test_grp
+    state: absent
+  become: true
