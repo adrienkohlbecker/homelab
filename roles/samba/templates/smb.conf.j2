@@ -251,7 +251,7 @@
 client signing = required
 client ipc signing = required
 client smb encrypt = required
-server signing = mandatory
+server signing = required
 server smb encrypt = required
 
 ; use modern protocol only
@@ -288,6 +288,9 @@ fruit:wipe_intentionally_left_blank_rfork = yes
 fruit:delete_empty_adfiles = yes
 kernel oplocks = yes
 use sendfile = yes
+; load-bearing for fruit:metadata = stream -- extended attributes store resource
+; forks and Finder metadata; must be on for every share including [homes].
+ea support = yes
 
 [homes]
 writeable = yes
@@ -297,7 +300,6 @@ browseable = no
 valid users = %S
 create mask = 0700
 directory mask = 0700
-ea support = yes
 {% for share in smb_shares %}
 
 [{{ share.name }}]
