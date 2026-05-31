@@ -2,7 +2,9 @@
   assert:
     that:
       - redis_password is defined
-      - redis_password | length > 0
+      # default('') so a wholly-undefined var fails into the fail_msg below
+      # rather than raising a raw "undefined variable" jinja error here.
+      - redis_password | default('') | length > 0
     fail_msg: >-
       redis_password must be set in host_vars/group_vars (it is a required
       input; role vars sit above host_vars and must not default it).
