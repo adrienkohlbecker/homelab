@@ -20,6 +20,11 @@
   delay: 2
   until: _socket_proxy_version.status == 200
 
+- name: _verify | Allowed GET /_ping returns 200
+  uri:
+    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/_ping
+    status_code: 200
+
 - name: _verify | Allowed GET /containers/json returns 200
   uri:
     url: http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/json?all=true
@@ -30,6 +35,11 @@
   assert:
     that:
       - _verify_socket_proxy_containers.json | length > 0
+
+- name: _verify | Allowed GET /containers/<id>/stats returns 200 (netdata data-plane)
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/{{ _verify_socket_proxy_containers.json[0].Id }}/stats?stream=false&one-shot=true"
+    status_code: 200
 
 - name: _verify | Allowed GET /images/json returns 200
   uri:
