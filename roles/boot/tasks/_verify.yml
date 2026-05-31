@@ -102,6 +102,7 @@
     that:
       - "'console=tty0' in _cmdline"
       - "'console=ttyS0' in _cmdline"
+      - "'earlycon=' in _cmdline"
     fail_msg: >-
       /proc/cmdline does not carry the base console args after reboot — the
       ZBM property may not have propagated: {{ _cmdline }}
