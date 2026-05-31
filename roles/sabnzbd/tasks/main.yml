@@ -105,11 +105,12 @@
 
 # Per-category download targets: sabnzbd drops completed tv/movie/music
 # jobs here (the [[tv]]/[[movie]]/[[music]] category dirs in sabnzbd.ini)
-# and sonarr/radarr/lidarr import out of them over the shared /mnt/scratch
-# mount. Ownership is split across roles by convention -- sabnzbd creates
-# the dirs, each *arr app (own uid, media group) reads/moves from them -- so
-# the 0775 group-write is load-bearing, not cosmetic.
+# and sonarr/radarr/lidarr import out of them, each mounting only its own
+# /mnt/scratch/<name>. Ownership is split across roles by convention --
+# sabnzbd creates the dirs, each *arr app (own uid, media group) reads/moves
+# from them -- so the 0775 group-write is load-bearing, not cosmetic.
 - name: Create storage directories
+  when: not (ansible_check_mode and sabnzbd_user.changed)
   file:
     dest: "{{ item }}"
     state: directory
@@ -184,45 +185,20 @@
   tags:
     - sabnzbd
 
-# Owned sabnzbd:media to match what linuxserver's s6 init chowns /config
-# (= /mnt/services/sabnzbd, where this file lives) to on every container
-# start; root:root here flaps the owner back every converge. The hook still
-# runs as root inside the container (custom-cont-init executes before the
-# privilege drop), so the apk install works regardless of the file's owner
-# -- _verify asserts ffprobe ends up installed.
-- name: Install before_start.sh container-init hook
+# Download scratch dir (the unit bind-mounts /mnt/scratch/sabnzbd) and the
+# nzbToMedia code dir the unarchive below populates -- both sabnzbd:media 0755.
+- name: Create scratch and nzbToMedia directories
   when: not (ansible_check_mode and sabnzbd_user.changed)
-  copy:
-    src: before_start.sh
-    dest: /mnt/services/sabnzbd/before_start.sh
-    owner: sabnzbd
-    group: media
-    mode: "0755"
-    backup: true
-  register: sabnzbd_before_start
-  become: true
-  tags:
-    - sabnzbd
-
-- name: Create scratch directory
   file:
-    dest: /mnt/scratch/sabnzbd
+    dest: "{{ item }}"
     state: directory
     owner: sabnzbd
     group: media
     mode: "0755"
   become: true
-  tags:
-    - sabnzbd
-
-- name: Create nzbToMedia directory
-  file:
-    dest: /opt/nzbToMedia
-    state: directory
-    owner: sabnzbd
-    group: media
-    mode: "0755"
-  become: true
+  loop:
+    - /mnt/scratch/sabnzbd
+    - /opt/nzbToMedia
   tags:
     - sabnzbd
 
@@ -279,7 +255,7 @@
     systemd_unit_args:
       src: sabnzbd
       condition: "{{ not (ansible_check_mode and (sabnzbd_service_result.changed or sabnzbd_user.changed)) }}"
-      restart: "{{ sabnzbd_service_result.changed or sabnzbd_conf.changed or sabnzbd_media_conf.changed or sabnzbd_before_start.changed or media_group.changed }}"
+      restart: "{{ sabnzbd_service_result.changed or sabnzbd_conf.changed or sabnzbd_media_conf.changed or media_group.changed }}"
   tags:
     - sabnzbd
 

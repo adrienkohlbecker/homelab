@@ -14,12 +14,11 @@
     - sabnzbd_verify_version.status == 200
     - sabnzbd_verify_version.json.version is defined
 
-# before_start.sh (the /custom-cont-init.d hook) installs ffmpeg at init so
-# nzbToMedia's check_media has ffprobe. Confirm the hook actually ran:
-# nothing else exercises it, and it proves a non-root-owned custom-init
-# script executes in this image (the file rides the sabnzbd:media ownership
-# the container chowns /config to, not root).
-- name: _verify | The before_start hook installed ffprobe in the container
+# The universal-package-install Docker Mod (DOCKER_MODS in the unit) installs
+# ffmpeg at init so nzbToMedia's check_media (autoProcessMedia.cfg) has ffprobe.
+# Confirm it landed: nothing else exercises the mod, and a missing ffprobe
+# silently degrades post-processing.
+- name: _verify | The universal-package-install mod installed ffprobe in the container
   command: podman exec sabnzbd ffprobe -version
   register: sabnzbd_verify_ffprobe
   changed_when: false
