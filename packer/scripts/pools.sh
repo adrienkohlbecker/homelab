@@ -116,7 +116,9 @@ create_tank_mouse() {
   done
   udevadm settle
   if ! zpool list -H tank >/dev/null 2>&1; then
-    zpool create -f -o autotrim=off "${ZPOOL_OPTS[@]}" \
+    # autotrim=on matches lab prod (and the zfs role asserts it via
+    # zfs_pool_properties); mouse below stays at the default off.
+    zpool create -f -o autotrim=on "${ZPOOL_OPTS[@]}" \
       tank raidz2 "${tm1}1" "${tm2}1" "$tank3" "$tank4"
   fi
   if ! zpool list -H mouse >/dev/null 2>&1; then
