@@ -1,0 +1,94 @@
+# Functional verify for the scratch dataset created by main.yml.
+#
+# An idempotent converge is not evidence extra_properties actually landed --
+# community.general.zfs treats a property whose source is not local|received|-
+# as absent, so a value silently inherited from the parent reads back correct
+# while never being set locally. For scratch this is load-bearing: an inherited
+# autobackup:bak=true would test-pass yet get the throwaway dataset backed up,
+# defeating the whole point. `zfs get` source must be `local`, not just right.
+#
+# Expected values are hardcoded here, independent of main.yml, so this catches
+# a main.yml regression rather than rubber-stamping whatever it set.
+
+- name: _verify | Dataset exists
+  command:
+    argv:
+      - zfs
+      - list
+      - -H
+      - -o
+      - name
+      - "{{ zfs_dozer_filesystem }}/scratch"
+  changed_when: false
+  become: true
+
+- name: _verify | Mountpoint property set locally with expected value
+  command:
+    argv:
+      - zfs
+      - get
+      - -H
+      - -p
+      - -o
+      - source,value
+      - mountpoint
+      - "{{ zfs_dozer_filesystem }}/scratch"
+  register: scratch_verify_mountpoint
+  changed_when: false
+  failed_when: >-
+    (scratch_verify_mountpoint.stdout.split('\t') | first | trim) != 'local'
+    or (scratch_verify_mountpoint.stdout.split('\t') | last | trim) != '/mnt/scratch'
+  become: true
+
+- name: _verify | Dataset mounted at mountpoint
+  command:
+    argv:
+      - findmnt
+      - --noheadings
+      - --output
+      - SOURCE
+      - /mnt/scratch
+  register: scratch_verify_findmnt
+  changed_when: false
+  failed_when: scratch_verify_findmnt.stdout | trim != zfs_dozer_filesystem ~ '/scratch'
+  become: true
+
+- name: _verify | Extra property set locally with expected value
+  vars:
+    scratch_expected_properties:
+      'autobackup:bak': 'false'
+      'com.sun:auto-snapshot': 'false'
+      sync: disabled
+      redundant_metadata: most
+      logbias: throughput
+      atime: 'off'
+      setuid: 'off'
+      devices: 'off'
+  command:
+    argv:
+      - zfs
+      - get
+      - -H
+      - -p
+      - -o
+      - source,value
+      - "{{ item.key }}"
+      - "{{ zfs_dozer_filesystem }}/scratch"
+  register: scratch_verify_prop
+  changed_when: false
+  failed_when: >-
+    (scratch_verify_prop.stdout.split('\t') | first | trim) != 'local'
+    or (scratch_verify_prop.stdout.split('\t') | last | trim) != item.value
+  loop: "{{ scratch_expected_properties | dict2items }}"
+  loop_control:
+    label: "{{ zfs_dozer_filesystem }}/scratch {{ item.key }}={{ item.value }}"
+  become: true
+
+- name: _verify | Mount status unit is active
+  command:
+    argv:
+      - systemctl
+      - is-active
+      - zfs_mount_mnt_scratch.service
+  changed_when: false
+  become: true
