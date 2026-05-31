@@ -1,6 +1,11 @@
-- name: _verify | Assert smartmontools unit is enabled  # noqa: command-instead-of-module
-  command: systemctl is-enabled smartmontools
-  changed_when: false
+- name: _verify | Assert smartmontools unit is enabled and state is expected
+  systemd:
+    name: smartmontools
+  register: _verify_smart_unit
+  failed_when: >-
+    _verify_smart_unit.status.UnitFileState != "enabled"
+    or (_verify_smart_unit.status.ActiveState != "inactive"
+        and _verify_smart_unit.status.ActiveState != "active")
   become: true
 
 - name: _verify | Read rendered smartd.conf
@@ -15,10 +20,24 @@
   assert:
     that:
       - "'DEFAULT ' in _conf"
-      - "'DEVICESCAN' in _conf"
+      - "'-l error' in _conf"
       - "'-l selftest' in _conf"
       - "'-m root' in _conf"
+      - "'-M test' in _conf"
+      - "'-n standby,q' in _conf"
     fail_msg: "rendered /etc/smartd.conf missing expected directives:\n{{ _conf }}"
+
+- name: _verify | Count per-device lines in rendered config
+  vars:
+    _conf: "{{ _verify_smartd_conf.content | b64decode }}"
+    _conf_device_count: "{{ _conf | regex_findall('/dev/disk/by-id/') | length }}"
+    _facts_device_count: "{{ ansible_devices.values() | map(attribute='links') | map(attribute='ids') | select | map('sort') | map('first') | select('match', '^(nvme|ata)-') | list | length }}"
+  assert:
+    that:
+      - _conf_device_count == _facts_device_count
+    fail_msg: >-
+      per-device line count mismatch: config has {{ _conf_device_count }}
+      but ansible_devices has {{ _facts_device_count }} qualifying devices
 
 - name: _verify | Assert smartd.conf dpkg divert is active  # noqa: command-instead-of-module
   command: dpkg-divert --list /etc/smartd.conf
@@ -32,14 +51,23 @@
       - "'diversion of /etc/smartd.conf' in _smart_smartd_divert.stdout"
     fail_msg: "dpkg-divert not active for /etc/smartd.conf: {{ _smart_smartd_divert.stdout }}"
 
+- name: _verify | Assert /etc/default/smartmontools dpkg divert is active  # noqa: command-instead-of-module
+  command: dpkg-divert --list /etc/default/smartmontools
+  register: _verify_default_divert
+  changed_when: false
+  become: true
+
+- name: _verify | Assert default divert entry exists
+  assert:
+    that:
+      - "'diversion of /etc/default/smartmontools' in _verify_default_divert.stdout"
+    fail_msg: "dpkg-divert not active for /etc/default/smartmontools: {{ _verify_default_divert.stdout }}"
+
 - name: _verify | Start netdata
   systemd:
     name: netdata
     state: started
   become: true
-
-- name: _verify | Deploy netdata smartctl collector config
-  import_tasks: netdata.yml
 
 - name: _verify | Read deployed smartctl collector config
   slurp:
@@ -54,4 +82,5 @@
     that:
       - _parsed.jobs | length > 0
       - _parsed.jobs[0].name == 'smartctl'
+      - _parsed.jobs[0].poll_devices_every == 1800
     fail_msg: "deployed /etc/netdata/go.d/smartctl.conf:\n{{ _smart_smartctl_conf.content | b64decode }}"
