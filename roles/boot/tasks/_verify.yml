@@ -49,9 +49,9 @@
   become: true
 
 # The 'default' fragment carries the base console args; without it the
-# ZBM-kexec'd kernel boots with no console= at all. earlycon= is arch-agnostic
-# (uart8250 on x86, pl011 on arm64), so this proves the fragment landed
-# regardless of which serial value the host got.
+# ZBM-kexec'd kernel boots with no console= at all. The earlycon and serial
+# values are arch-specific (uart8250+ttyS0 on x86, pl011+ttyAMA0 on arm64),
+# so the checks below match the arch-agnostic prefix only.
 - name: _verify | Read the assembled ZBM commandline
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
   register: _boot_verify_cmdline
@@ -59,10 +59,12 @@
   become: true
 
 - name: _verify | Commandline carries the base console args
+  vars:
+    _serial: "{{ (ansible_architecture == 'aarch64') | ternary('ttyAMA0', 'ttyS0') }}"
   assert:
     that:
       - "'console=tty0' in _boot_verify_cmdline.stdout"
-      - "'console=ttyS0' in _boot_verify_cmdline.stdout"
+      - "'console=' ~ _serial in _boot_verify_cmdline.stdout"
       - "'earlycon=' in _boot_verify_cmdline.stdout"
     fail_msg: >-
       org.zfsbootmenu:commandline is missing the base console args the 'default'
