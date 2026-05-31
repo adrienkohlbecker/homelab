@@ -36,6 +36,8 @@ ExecStart=/usr/bin/podman run \
     --name speedtest \
     --log-driver journald \
     --log-opt tag="speedtest" \
+    --security-opt=no-new-privileges \
+    --user {{ speedtest_user.uid }}:{{ speedtest_user.group }} \
     --env MODE=standalone \
     --env WEBPORT=2807 \
     --publish 127.0.0.1:2807:2807/tcp \
