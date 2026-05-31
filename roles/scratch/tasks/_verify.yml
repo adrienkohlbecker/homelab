@@ -44,6 +44,7 @@
   command:
     argv:
       - findmnt
+      - --first-only
       - --noheadings
       - --output
       - SOURCE
@@ -51,6 +52,26 @@
   register: scratch_verify_findmnt
   changed_when: false
   failed_when: scratch_verify_findmnt.stdout | trim != zfs_dozer_filesystem ~ '/scratch'
+  become: true
+
+# The property check above proves setuid/devices=off is set local on the
+# dataset; this proves the live mount actually carries the nosuid/nodev flags
+# that derive from them, so the archive-hardening intent is verified at the
+# mount layer rather than just at the property layer.
+- name: _verify | Mount enforces nosuid/nodev
+  command:
+    argv:
+      - findmnt
+      - --first-only
+      - --noheadings
+      - --output
+      - OPTIONS
+      - /mnt/scratch
+  register: scratch_verify_options
+  changed_when: false
+  failed_when: >-
+    'nosuid' not in scratch_verify_options.stdout
+    or 'nodev' not in scratch_verify_options.stdout
   become: true
 
 - name: _verify | Extra property set locally with expected value
