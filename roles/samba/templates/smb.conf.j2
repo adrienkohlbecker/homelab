@@ -259,6 +259,8 @@ server min protocol = SMB3_11
 
 ; work better with macs, see https://wiki.samba.org/index.php/Configure_Samba_to_Work_Better_with_Mac_OS_X
 vfs objects = fruit streams_xattr
+; resource forks in ZFS xattrs (xattr=sa), not ._AppleDouble sidecar files;
+; deliberately diverges from the upstream default of "file".
 fruit:resource = xattr
 fruit:metadata = stream
 fruit:model = MacSamba
@@ -271,6 +273,11 @@ fruit:delete_empty_adfiles = yes
 [homes]
 writeable = yes
 browseable = no
+; scope each home to its owner -- browseable=no only hides it from the
+; share list, valid users=%S is what actually restricts access.
+valid users = %S
+create mask = 0700
+directory mask = 0700
 kernel oplocks = yes
 use sendfile = yes
 ea support = yes
@@ -278,6 +285,21 @@ ea support = yes
 
 [{{ share.name }}]
 path = {{ share.path }}
+{# Render every per-share key (valid users, read only, force group, ...) as
+   its own smb.conf directive. `opts` stays a multiline escape hatch for raw
+   blocks; `name`/`path` are handled above. Without this, keys like
+   `valid users` are silently dropped and the share falls back to the global
+   default (any authenticated user). #}
+{% for key, value in share.items() if key not in ['name', 'path', 'opts', 'time_machine'] %}
+{{ key }} = {{ value }}
+{% endfor %}
+{% if share.time_machine | default(false) %}
+fruit:time machine = yes
+{% endif %}
+{% if 'writeable' not in share and 'writable' not in share and 'read only' not in share %}
 writeable = yes
-{% if 'opts' in share %}{{ share.opts }}{% endif %}
+{% endif %}
+{% if 'opts' in share %}
+{{ share.opts }}
+{% endif %}
 {% endfor %}
