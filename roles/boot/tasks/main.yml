@@ -13,6 +13,7 @@
 # hosts so a grub-booted host is never touched.
 - name: Hold grub packages
   when: not grub_bootloader
+  check_mode: false
   command: apt-mark hold grub*
   register: boot_grub_hold
   changed_when: >-
