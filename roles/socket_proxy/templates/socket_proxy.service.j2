@@ -8,14 +8,15 @@
 # VERSION/PING are on by default; EVENTS is explicitly disabled). The proxy
 # itself necessarily holds
 # the socket access -- it is the deliberate isolation boundary, a tiny audited
-# HAProxy rather than the full netdata daemon.
+# HAProxy rather than the full netdata daemon. No --user: the bind-mounted
+# podman socket is root-owned (0660) and the proxy needs read access.
 [Unit]
 Description=socket_proxy
 After=network-online.target
 Wants=network-online.target
 After=podman.socket
 Requires=podman.socket
-StartLimitInterval=600
+StartLimitIntervalSec=600
 StartLimitBurst=3
 
 [Service]
@@ -37,6 +38,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name socket_proxy \
+    --init \
     --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="socket_proxy" \
