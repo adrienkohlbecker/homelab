@@ -8,11 +8,19 @@
 # fixture (no `mode =`: that directive is nut 2.8+ and the box image is jammy).
 
 # Installing nut-snmp pulls nut-server, which may auto-start the packaged upsd;
-# stop it so our own foreground upsd can bind 127.0.0.1:3493.
-- name: _verify | Stop the packaged nut-server
+# stop it so our own foreground upsd can bind 127.0.0.1:3493. On nut 2.8
+# (noble/resolute) upsd is socket-activated, so the .socket must be stopped
+# too -- stopping only the .service lets the next connection respawn upsd, and
+# the foreground `upsd` below then aborts with "A previous upsd instance is
+# already running". Stop the socket first so it can't re-activate; both are
+# failed_when:false since the .socket is absent on jammy's 2.7.4.
+- name: _verify | Stop the packaged nut-server (service + socket activation)
   systemd:
-    name: nut-server
+    name: "{{ item }}"
     state: stopped
+  loop:
+    - nut-server.socket
+    - nut-server.service
   failed_when: false
   become: true
 
@@ -47,10 +55,14 @@
       ups.model: evolution500
   become: true
 
+# pkill + remove the pidfile before the foreground start: a socket-activated
+# upsd that hasn't fully exited (or a stale /run/nut/upsd.pid it left behind)
+# also trips the "already running" abort on 2.8.
 - name: _verify | Start the dummy-ups driver and a fresh upsd
   shell: |
     upsdrvctl -u root stop 2>/dev/null || true
     pkill -x upsd 2>/dev/null || true
+    rm -f /run/nut/upsd.pid 2>/dev/null || true
     upsdrvctl -u root start eaton
     upsd -u root
   args:
