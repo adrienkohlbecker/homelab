@@ -68,3 +68,11 @@
     fail_msg: >-
       vm.swappiness is {{ _swap_verify_swappiness.content | b64decode | trim }},
       expected {{ swap_swappiness | default(100) }}.
+
+# tmpfs /tmp applies at next boot, so assert the next-boot state (enabled), not a
+# live mount — matches how the role leaves it without forcing a reboot.
+- name: _verify | Tmpfs /tmp is enabled via tmp.mount  # noqa: command-instead-of-module
+  command: systemctl is-enabled tmp.mount
+  changed_when: false
+  register: _swap_verify_tmp_mount
+  failed_when: _swap_verify_tmp_mount.stdout not in ['enabled', 'enabled-runtime', 'static']
