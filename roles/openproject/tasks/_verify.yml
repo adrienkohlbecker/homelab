@@ -57,17 +57,15 @@
 
 # The rotation gate (tasks/check_secret_key_rotation.yml) is the role's
 # load-bearing safety net. Prove the REAL gate fires (not a copy of its
-# predicate): drift the stored label to simulate a vault rotation, run the gate,
-# confirm it aborts (rescue catches the fail), then restore the label so a later
-# converge stays idempotent.
+# predicate): drift the stored secret VALUE to simulate a vault rotation, run
+# the gate, confirm it aborts (rescue catches the fail), then restore the
+# correct value so a later converge stays idempotent.
 - name: _verify | SECRET_KEY_BASE rotation gate aborts on a drifted store
   block:
-    - name: _verify | Drift the stored secret label (simulate a vault rotation)
+    - name: _verify | Drift the stored secret value (simulate a vault rotation)
       containers.podman.podman_secret:
         name: openproject_secret_key
-        data: "{{ openproject_secret_key }}"
-        labels:
-          data_sha256: drifted-on-purpose
+        data: "{{ openproject_secret_key }}-drifted"
         force: true
       become: true
 
@@ -83,12 +81,10 @@
           set_fact:
             _verify_gate_fired: true
   always:
-    - name: _verify | Restore the correct stored secret label
+    - name: _verify | Restore the correct stored secret value
       containers.podman.podman_secret:
         name: openproject_secret_key
         data: "{{ openproject_secret_key }}"
-        labels:
-          data_sha256: "{{ openproject_secret_key | hash('sha256') }}"
         force: true
       become: true
 
