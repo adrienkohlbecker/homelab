@@ -1,3 +1,7 @@
+# This role maintains rEFInd's on-ESP config + theme. It runs after the
+# zfsbootmenu role (site.yml order), which downloads /EFI/ZBM/VMLINUZ.EFI — the
+# image the menuentry below boots. The assert makes that ordering dependency
+# fail loud rather than writing a config that points at a missing loader.
 - name: Install refind
   apt:
     package:
@@ -6,6 +10,25 @@
       - refind
     cache_valid_time: 3600
   become: true
+  tags:
+    - refind
+
+- name: Stat the ZFSBootMenu loader
+  when: not ansible_check_mode
+  stat:
+    path: /boot/efi/EFI/ZBM/VMLINUZ.EFI
+  register: refind_zbm_loader
+  become: true
+  tags:
+    - refind
+
+- name: ZFSBootMenu must run before refind
+  when: not ansible_check_mode
+  assert:
+    that: refind_zbm_loader.stat.exists
+    fail_msg: >-
+      /boot/efi/EFI/ZBM/VMLINUZ.EFI is missing — the zfsbootmenu role must run
+      before refind; it provides the image this role's menuentry boots.
   tags:
     - refind
 
@@ -36,26 +59,37 @@
   get_url:
     url: "{{ refind_theme_artifact.url }}"
     checksum: "sha256:{{ refind_theme_artifact.sha256 }}"
+    # Download cache: persists deliberately. get_url re-verifies the sha256 and
+    # skips the fetch when the file already matches, so this is the idempotence
+    # mechanism — deleting it would force a re-download on every converge.
     dest: /var/cache/refind-theme.tar.gz
     owner: root
     group: root
     mode: "0644"
   become: true
+  register: refind_theme_download
+  retries: 3
+  delay: 2
+  until: refind_theme_download is succeeded
   tags:
     - refind
 
+# Allowlist (not denylist) what lands on the ESP: extract only the icon/font
+# assets the theme.conf references plus LICENSE. A future pinned-commit bump
+# then cannot smuggle an active file (.efi/.conf/script) onto the boot
+# partition, regardless of what the upstream tree adds.
 - name: Unpack refind theme
   when: not (ansible_check_mode and refind_theme_dir.changed)
   unarchive:
     src: /var/cache/refind-theme.tar.gz
     dest: /boot/efi/EFI/refind/themes/refind-theme-regular
     remote_src: true
-    extra_opts: [ --strip-components=1 ]
-    exclude:
-      - src
-      - .gitignore
-      - .devcontainer
-      - install.sh
+    extra_opts:
+      - --strip-components=1
+      - --wildcards
+      - "*/icons"
+      - "*/fonts"
+      - "*/LICENSE"
     creates: "/boot/efi/EFI/refind/themes/refind-theme-regular/.installed-{{ refind_theme_version }}"
   become: true
   register: refind_theme_unpack
@@ -102,8 +136,11 @@
   tags:
     - refind
 
+# Only the boot config warrants a reboot. rEFInd re-reads the theme + its
+# theme.conf fresh from the ESP at every boot, so a theme change takes effect
+# at the next natural boot without forcing one.
 - name: Ask to reboot
-  when: refind_conf.changed or refind_theme_conf.changed or refind_theme_unpack.changed
+  when: refind_conf.changed
   file:
     path: /var/run/reboot-required
     state: touch
