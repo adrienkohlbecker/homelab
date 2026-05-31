@@ -41,14 +41,16 @@ block_undelegated = true
 # getaddrinfo, which on these hosts walks /etc/resolv.conf -> pihole ->
 # dnscrypt: circular. Force the bootstrap resolver instead. Steady-state
 # lookups use IP-keyed stamps from the cached list and don't hit this path.
-# 2.0.45 (jammy) uses fallback_resolver (singular); 2.1.x+ (noble and later)
-# replaced it with bootstrap_resolvers (plural, list). Release-gated so the
-# jammy host stays working and a future noble bump doesn't silently ignore
-# the bootstrap pin -- which would re-introduce the pihole->dnscrypt->
-# getaddrinfo cycle the next sources-refresh tries to break.
+# fallback_resolver (singular) was renamed bootstrap_resolvers (plural list)
+# in dnscrypt-proxy 2.1.x. Ubuntu ships 2.0.45 through both jammy (22.04) and
+# noble (24.04), and 2.1.x only from resolute (26.04) on -- so gate on the
+# major version >= 26, NOT the codename (noble renders like jammy here, not
+# like resolute). Passing the wrong key is fatal: dnscrypt-proxy -check
+# rejects an unknown key outright, failing the template validate. Same >= 26
+# threshold roles/apt_source uses for its deb822 fork.
 # Future hardening: hardcode download.dnscrypt.info's A record in /etc/hosts
 # to remove the cleartext UDP/53 bootstrap query entirely.
-{% if ansible_distribution_release == 'jammy' %}
+{% if ansible_distribution_major_version | int < 26 %}
 fallback_resolver = '9.9.9.11:53'
 {% else %}
 bootstrap_resolvers = ['9.9.9.11:53', '8.8.8.8:53']
