@@ -14,22 +14,6 @@
 # main.yml: the assertions track whatever both halves agree on, and the owner
 # probe keeps the role's "I created this dir as root" contract honest.
 
-- name: _verify | Datasets exist
-  when: zfs_root
-  command:
-    argv:
-      - zfs
-      - list
-      - -H
-      - -o
-      - name
-      - "{{ item.dataset }}"
-  changed_when: false
-  loop: "{{ services_datasets }}"
-  loop_control:
-    label: "{{ item.dataset }}"
-  become: true
-
 - name: _verify | Mountpoint property set locally with expected value
   when: zfs_root
   command:
@@ -38,15 +22,15 @@
       - get
       - -H
       - -p
+      - -s
+      - local
       - -o
-      - source,value
+      - value
       - mountpoint
       - "{{ item.dataset }}"
   register: services_verify_mountpoint
   changed_when: false
-  failed_when: >-
-    (services_verify_mountpoint.stdout.split('\t') | first | trim) != 'local'
-    or (services_verify_mountpoint.stdout.split('\t') | last | trim) != item.mountpoint
+  failed_when: services_verify_mountpoint.stdout | trim != item.mountpoint
   loop: "{{ services_datasets }}"
   loop_control:
     label: "{{ item.dataset }} mountpoint={{ item.mountpoint }}"
@@ -59,24 +43,29 @@
       - findmnt
       - --first-only
       - --noheadings
+      - --source
+      - "{{ item.dataset }}"
       - --mountpoint
       - "{{ item.mountpoint }}"
-      - --output
-      - SOURCE
-  register: services_verify_findmnt
+      - --types
+      - zfs
   changed_when: false
-  failed_when: services_verify_findmnt.stdout | trim != item.dataset
   loop: "{{ services_datasets }}"
   loop_control:
     label: "{{ item.mountpoint }} <- {{ item.dataset }}"
   become: true
 
+- name: _verify | Reset property accumulator
+  when: zfs_root
+  set_fact:
+    services_verify_props: []
+
 - name: _verify | Flatten datasets x expected properties
   when: zfs_root
   set_fact:
     services_verify_props: >-
-      {{ services_verify_props | default([])
-         + (item.extra_properties | dict2items
+      {{ services_verify_props
+         + (item.extra_properties | default({}) | dict2items
             | map('combine', {'dataset': item.dataset}) | list) }}
   loop: "{{ services_datasets }}"
   loop_control:
@@ -90,16 +79,16 @@
       - get
       - -H
       - -p
+      - -s
+      - local
       - -o
-      - source,value
+      - value
       - "{{ item.key }}"
       - "{{ item.dataset }}"
   register: services_verify_prop
   changed_when: false
-  failed_when: >-
-    (services_verify_prop.stdout.split('\t') | first | trim) != 'local'
-    or (services_verify_prop.stdout.split('\t') | last | trim) != item.value
-  loop: "{{ services_verify_props | default([]) }}"
+  failed_when: services_verify_prop.stdout | trim != item.value
+  loop: "{{ services_verify_props }}"
   loop_control:
     label: "{{ item.dataset }} {{ item.key }}={{ item.value }}"
   become: true
@@ -111,33 +100,32 @@
   register: services_verify_owner
   failed_when: >-
     not services_verify_owner.stat.exists
+    or not services_verify_owner.stat.isdir
     or services_verify_owner.stat.pw_name != 'root'
     or services_verify_owner.stat.gr_name != 'root'
+    or services_verify_owner.stat.mode != '0755'
   loop: "{{ services_datasets }}"
   loop_control:
     label: "{{ item.mountpoint }} owner=root:root"
 
-- name: _verify | Mountpoint is writable
+- name: _verify | Dataset is not readonly
   when: zfs_root
-  file:
-    path: "{{ item.mountpoint }}/.verify_probe"
-    state: touch
-    mode: '0600'
+  command:
+    argv:
+      - zfs
+      - get
+      - -H
+      - -p
+      - -o
+      - value
+      - readonly
+      - "{{ item.dataset }}"
+  register: services_verify_readonly
   changed_when: false
+  failed_when: services_verify_readonly.stdout | trim != 'off'
   loop: "{{ services_datasets }}"
   loop_control:
-    label: "{{ item.mountpoint }}/.verify_probe"
-  become: true
-
-- name: _verify | Remove write probe
-  when: zfs_root
-  file:
-    path: "{{ item.mountpoint }}/.verify_probe"
-    state: absent
-  changed_when: false
-  loop: "{{ services_datasets }}"
-  loop_control:
-    label: "{{ item.mountpoint }}/.verify_probe"
+    label: "{{ item.dataset }} readonly=off"
   become: true
 
 - name: _verify | Mount status units are active
@@ -146,9 +134,9 @@
     argv:
       - systemctl
       - is-active
-      - "zfs_mount{{ item.mountpoint | replace('/', '_') }}.service"
+      - "zfs_mount{{ item.mountpoint | regex_replace('^/$', '/root') | replace('/', '_') }}.service"
   changed_when: false
   loop: "{{ services_datasets }}"
   loop_control:
-    label: "zfs_mount{{ item.mountpoint | replace('/', '_') }}.service"
+    label: "zfs_mount{{ item.mountpoint | regex_replace('^/$', '/root') | replace('/', '_') }}.service"
   become: true
