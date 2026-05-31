@@ -34,7 +34,6 @@
     - refind
 
 - name: Create the rEFInd + firmware-fallback directories on the ESP
-  when: not (ansible_check_mode and refind_apt.changed)
   file:
     path: "{{ item }}"
     state: directory
