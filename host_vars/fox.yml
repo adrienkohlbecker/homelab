@@ -22,14 +22,13 @@ zfs_has_bpool: false
 
 rand_order: 4
 
-# fox is a backup SOURCE only: lab pulls fox's bak-tagged datasets nightly
-# (lab's zfs_autobackup_sources lists fox -> tank/fox). fox runs no onsite pull
-# of its own, and the offsite-to-bunk step is disabled because fox routes only
-# the wg /32s of lab/pug/box/bunk, not the bonniers subnet where bunk's rsync
-# endpoint lives -- fox's data reaches home via lab's pull instead. The key
-# below authorizes root@lab on fox's zfs_autobackup user so that pull works.
+# fox runs no onsite pull of its own (empty sources) -- it is a leaf source
+# that lab pulls (lab's zfs_autobackup_sources lists fox -> tank/fox). It still
+# snapshots locally and rsyncs its bak-tagged datasets offsite to bunk: fox
+# reaches bunk's rsync endpoint (external_ips.bunk) over wg0 because wg.conf
+# grants cross-site peers the physical /32, same path lab/pug use. The key
+# below authorizes root@lab on fox's zfs_autobackup user so lab's pull works.
 zfs_autobackup_sources: []
-zfs_autobackup_offsite_enabled: false
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
 
 # zram-only swap on this 4G VM: compression roughly doubles usable memory

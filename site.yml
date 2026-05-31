@@ -26,6 +26,7 @@
     - journald
     - fail2ban
     - ssh
+    - ssh_root
     - ntp
     - postfix
     # Storage & boot substrate -- ZFS datasets/snapshots and the bootloader.
@@ -63,7 +64,6 @@
     - fancontrol
     - fan2go
     - powertop
-    - ssh_root
     - macvlan
     - avahi
     - samba

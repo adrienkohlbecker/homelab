@@ -11,12 +11,10 @@ f_rescue f_trace zfs_backup_local
 {% for src in zfs_autobackup_sources %}
 f_rescue f_trace zfs_backup_onsite "{{ external_ips[src.host] }}" "{{ src.dest_dataset }}"
 {% endfor %}
-{% if zfs_autobackup_offsite_enabled %}
 # sync each dataset to offsite synology
 for dataset in $(zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'); do
   f_rescue f_trace zfs_backup_offsite "{{ external_ips.bunk }}" "$dataset"
 done
-{% endif %}
 
 # fail if any of the above failed
 if [ $f_failed -ne 0 ]; then
