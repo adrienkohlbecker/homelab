@@ -1,0 +1,57 @@
+- name: _verify | Assert smartmontools unit is enabled  # noqa: command-instead-of-module
+  command: systemctl is-enabled smartmontools
+  changed_when: false
+  become: true
+
+- name: _verify | Read rendered smartd.conf
+  slurp:
+    src: /etc/smartd.conf
+  register: _smart_smartd_conf
+  become: true
+
+- name: _verify | Assert smartd.conf contains required directives
+  vars:
+    _conf: "{{ _smart_smartd_conf.content | b64decode }}"
+  assert:
+    that:
+      - "'DEFAULT ' in _conf"
+      - "'DEVICESCAN' in _conf"
+      - "'-l selftest' in _conf"
+      - "'-m root' in _conf"
+    fail_msg: "rendered /etc/smartd.conf missing expected directives:\n{{ _conf }}"
+
+- name: _verify | Assert smartd.conf dpkg divert is active  # noqa: command-instead-of-module
+  command: dpkg-divert --list /etc/smartd.conf
+  register: _smart_smartd_divert
+  changed_when: false
+  become: true
+
+- name: _verify | Assert divert entry exists
+  assert:
+    that:
+      - "'diversion of /etc/smartd.conf' in _smart_smartd_divert.stdout"
+    fail_msg: "dpkg-divert not active for /etc/smartd.conf: {{ _smart_smartd_divert.stdout }}"
+
+- name: _verify | Start netdata
+  systemd:
+    name: netdata
+    state: started
+  become: true
+
+- name: _verify | Deploy netdata smartctl collector config
+  import_tasks: netdata.yml
+
+- name: _verify | Read deployed smartctl collector config
+  slurp:
+    src: /etc/netdata/go.d/smartctl.conf
+  register: _smart_smartctl_conf
+  become: true
+
+- name: _verify | Assert smartctl collector config is valid
+  vars:
+    _parsed: "{{ _smart_smartctl_conf.content | b64decode | from_yaml }}"
+  assert:
+    that:
+      - _parsed.jobs | length > 0
+      - _parsed.jobs[0].name == 'smartctl'
+    fail_msg: "deployed /etc/netdata/go.d/smartctl.conf:\n{{ _smart_smartctl_conf.content | b64decode }}"
