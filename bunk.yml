@@ -2,6 +2,20 @@
   hosts: bunk
   strategy: linear
   tasks:
+    # bunk is DSM, so roles/user (which manages this fleet-wide) doesn't run
+    # here. Mirror its authorized_keys task: the fleet login key (ssh_public_keys)
+    # plus bunk's backup-rsync keys (ssh_public_keys_additional in host_vars).
+    # exclusive so a key removed from the vars is actually revoked -- this is the
+    # single source of truth for who can log in as ak. Runs as ak (no become):
+    # it manages ak's own ~/.ssh/authorized_keys.
+    - name: Manage ak's authorized keys
+      authorized_key:
+        user: "{{ ansible_user_id }}"
+        key: "{{ (ssh_public_keys + '\n' + (ssh_public_keys_additional | default(''))) | trim }}"
+        exclusive: true
+      tags:
+        - authorized_keys
+
     - name: Copy wireguard configuration
       template:
         src: "{{ playbook_dir }}/roles/wireguard/templates/wg.conf.j2"
