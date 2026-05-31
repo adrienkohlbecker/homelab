@@ -6,10 +6,10 @@
   uri:
     url: http://localhost:{{ service_ports.bazarr }}/api/system/status
     status_code: 401
-  register: _verify_http_unauth
+  register: _bazarr_http_unauth
   retries: 30
   delay: 2
-  until: _verify_http_unauth.status == 401
+  until: _bazarr_http_unauth.status == 401
 
 # Authenticated probe -- proves the apikey we templated into config.yaml is
 # the one the running container accepted, not just one we wrote to disk.
@@ -21,11 +21,11 @@
       X-API-KEY: "{{ bazarr_api_key }}"
     status_code: 200
     return_content: true
-  register: _verify_http
+  register: _bazarr_http
   retries: 30
   delay: 2
-  until: _verify_http.status == 200
-  failed_when: (_verify_http.json.data | default({})) | length == 0
+  until: _bazarr_http.status == 200
+  failed_when: (_bazarr_http.json.data | default({})) | length == 0
 
 # The vhost is `auth: required`, so the real browser access pattern is an
 # Authelia-gated UI -- the API path above is reached intra-stack via
@@ -44,8 +44,8 @@
     validate_certs: false
     follow_redirects: none
     status_code: 302
-  register: _verify_nginx_gate
+  register: _bazarr_nginx_gate
   failed_when: >-
-    _verify_nginx_gate.status != 302
-    or 'auth.' not in (_verify_nginx_gate.location | default(''))
-    or ('rd=https://bazarr.' ~ inventory_hostname ~ '.' ~ domain) not in (_verify_nginx_gate.location | default(''))
+    _bazarr_nginx_gate.status != 302
+    or 'auth.' not in (_bazarr_nginx_gate.location | default(''))
+    or ('rd=https://bazarr.' ~ inventory_hostname ~ '.' ~ domain) not in (_bazarr_nginx_gate.location | default(''))

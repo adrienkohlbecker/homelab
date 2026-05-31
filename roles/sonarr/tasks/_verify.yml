@@ -6,10 +6,10 @@
   uri:
     url: http://127.0.0.1:{{ service_ports.sonarr }}/api/v3/system/status
     status_code: 401
-  register: _verify_http_unauth
+  register: _sonarr_http_unauth
   retries: 30
   delay: 2
-  until: _verify_http_unauth.status == 401
+  until: _sonarr_http_unauth.status == 401
 
 # Authenticated probe -- proves the apikey we templated into config.xml is
 # the one the running container accepted, not just one we wrote to disk.
@@ -21,11 +21,11 @@
       X-Api-Key: "{{ sonarr_api_key }}"
     status_code: 200
     return_content: true
-  register: _verify_http
+  register: _sonarr_http
   retries: 30
   delay: 2
-  until: _verify_http.status == 200
-  failed_when: (_verify_http.json | default({})) | length == 0
+  until: _sonarr_http.status == 200
+  failed_when: (_sonarr_http.json | default({})) | length == 0
 
 # The vhost is `auth: required`, so the real browser access pattern is an
 # Authelia-gated UI -- the API path above is reached intra-stack via
@@ -44,11 +44,11 @@
     validate_certs: false
     follow_redirects: none
     status_code: 302
-  register: _verify_nginx_gate
+  register: _sonarr_nginx_gate
   failed_when: >-
-    _verify_nginx_gate.status != 302
-    or 'auth.' not in (_verify_nginx_gate.location | default(''))
-    or ('rd=https://sonarr.' ~ inventory_hostname ~ '.' ~ domain) not in (_verify_nginx_gate.location | default(''))
+    _sonarr_nginx_gate.status != 302
+    or 'auth.' not in (_sonarr_nginx_gate.location | default(''))
+    or ('rd=https://sonarr.' ~ inventory_hostname ~ '.' ~ domain) not in (_sonarr_nginx_gate.location | default(''))
 
 # The sqlite_dataset symlink + matching --volume is the role's whole reason
 # for its non-obvious structure: it lands the DBs (and their -wal/-shm
@@ -64,7 +64,7 @@
   loop:
     - sonarr.db
     - logs.db
-  register: _verify_db_links
+  register: _sonarr_db_links
   become: true
 
 - name: _verify | Sonarr DBs are symlinks onto the sqlite dataset
@@ -73,7 +73,7 @@
       - item.stat.islnk
       - item.stat.lnk_target == "/mnt/services/sqlite/sonarr/" ~ item.item
     fail_msg: "{{ item.item }} is not a symlink onto the sqlite dataset (stat={{ item.stat }})"
-  loop: "{{ _verify_db_links.results }}"
+  loop: "{{ _sonarr_db_links.results }}"
   loop_control:
     label: "{{ item.item }}"
 
@@ -83,7 +83,7 @@
   loop:
     - sonarr.db
     - logs.db
-  register: _verify_db_files
+  register: _sonarr_db_files
   become: true
 
 - name: _verify | Sonarr wrote real, non-empty DBs onto the dataset
@@ -93,7 +93,7 @@
       - not item.stat.islnk
       - item.stat.size > 0
     fail_msg: "{{ item.item }} on the dataset is missing or empty (stat={{ item.stat }})"
-  loop: "{{ _verify_db_files.results }}"
+  loop: "{{ _sonarr_db_files.results }}"
   loop_control:
     label: "{{ item.item }}"
 
@@ -116,25 +116,25 @@
     headers:
       X-Api-Key: "{{ sonarr_api_key }}"
     status_code: 200
-  register: _verify_http_postrestart
+  register: _sonarr_http_postrestart
   retries: 60
   delay: 2
-  until: _verify_http_postrestart.status == 200
+  until: _sonarr_http_postrestart.status == 200
 
 - name: _verify | Render the config.xml our template would write
   set_fact:
-    _verify_conf_expected: "{{ lookup('template', 'config.xml.j2') | regex_replace('\\n+$', '') }}"
+    _sonarr_conf_expected: "{{ lookup('template', 'config.xml.j2') | regex_replace('\\n+$', '') }}"
 
 - name: _verify | Read config.xml back after the writeback
   slurp:
     src: /mnt/services/sonarr/config.xml
-  register: _verify_conf_ondisk
+  register: _sonarr_conf_ondisk
   become: true
 
 - name: _verify | Templated config.xml survives sonarr's writeback without drift
   assert:
     that:
-      - (_verify_conf_ondisk.content | b64decode) == _verify_conf_expected
+      - (_sonarr_conf_ondisk.content | b64decode) == _sonarr_conf_expected
     fail_msg: >-
       sonarr rewrote config.xml into a form config.xml.j2 no longer matches --
       its element order/casing drifted from sonarr's writeback, so deploying

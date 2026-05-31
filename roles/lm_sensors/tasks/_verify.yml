@@ -1,5 +1,5 @@
 # The harness runs main.yml (apt + modules-load + live modprobe) on its own
-# with box's test sensor_modules; this file asserts that took effect, then
+# with box's test _lm_sensors_sensor_modules; this file asserts that took effect, then
 # exercises the netdata collector arm (normally invoked from
 # roles/netdata/tasks/main.yml).
 #
@@ -12,36 +12,36 @@
 # netdata.yml renders + deploys a valid go.d config including the relabel
 # template path (host_vars/box.yml feeds a test sensor_relabel).
 
-- name: _verify | read the modules-load.d file
+- name: _verify | Read the modules-load.d file
   slurp:
     path: /etc/modules-load.d/lm_sensors.conf
-  register: _verify_modload
+  register: _lm_sensors_modload
   become: true
 
-- name: _verify | assert it lists exactly sensor_modules
+- name: _verify | Assert it lists exactly _lm_sensors_sensor_modules
   assert:
     that:
-      - (_verify_modload.content | b64decode).split() == sensor_modules
+      - (_lm_sensors_modload.content | b64decode).split() == _lm_sensors_sensor_modules
     fail_msg: >-
-      /etc/modules-load.d/lm_sensors.conf = {{ _verify_modload.content | b64decode | trim }};
-      expected {{ sensor_modules }}
+      /etc/modules-load.d/lm_sensors.conf = {{ _lm_sensors_modload.content | b64decode | trim }};
+      expected {{ _lm_sensors_sensor_modules }}
 
-- name: _verify | assert each module is loaded in the running kernel
+- name: _verify | Assert each module is loaded in the running kernel
   command: grep -qw {{ item | replace('-', '_') }} /proc/modules
-  loop: "{{ sensor_modules }}"
+  loop: "{{ _lm_sensors_sensor_modules }}"
   changed_when: false
   become: true
 
 # install.yml uses policy_rc_d=101 so apt won't auto-start netdata; prod
 # starts it in netdata's main.yml after configuration. The test path skips
 # that, so start the daemon here before installing the collector.
-- name: _verify | start netdata
+- name: _verify | Start netdata
   systemd:
     name: netdata
     state: started
   become: true
 
-- name: _verify | ensure netdata go.d conf.d dir exists
+- name: _verify | Ensure netdata go.d conf.d dir exists
   file:
     path: /usr/lib/netdata/conf.d/go.d
     state: directory
@@ -52,7 +52,7 @@
 # it with our render. prod (x86_64) ships it; the arm64 test box doesn't, so
 # seed a stub (force:false leaves the real file untouched on x86_64) to
 # exercise the same code path. Content is irrelevant -- it gets overwritten.
-- name: _verify | seed stub stock sensors.conf (arm64 build omits it)
+- name: _verify | Seed stub stock sensors.conf (arm64 build omits it)
   copy:
     content: "jobs:\n  - name: sensors\n"
     dest: /usr/lib/netdata/conf.d/go.d/sensors.conf
@@ -62,70 +62,70 @@
 
 # No netdata_restart set here -- relies on netdata.yml's default(true), which
 # is exactly finding 9's standalone-invocation fix.
-- name: _verify | install lm_sensors netdata collector
+- name: _verify | Install lm_sensors netdata collector
   import_tasks: netdata.yml
 
-- name: _verify | read the deployed go.d sensors config
+- name: _verify | Read the deployed go.d sensors config
   slurp:
     path: /etc/netdata/go.d/sensors.conf
-  register: _verify_godconf
+  register: _lm_sensors_godconf
   become: true
 
-- name: _verify | assert it is valid YAML and rendered the relabel map
+- name: _verify | Assert it is valid YAML and rendered the relabel map
   vars:
-    _parsed: "{{ _verify_godconf.content | b64decode | from_yaml }}"
+    _parsed: "{{ _lm_sensors_godconf.content | b64decode | from_yaml }}"
   assert:
     that:
       - _parsed.jobs | length > 0
       - _parsed.jobs[0].name == 'sensors'
       - _parsed.jobs[0].relabel[0].chip == 'lm-sensors-test-0'
       - _parsed.jobs[0].relabel[0].sensors[0].label == 'Verify Probe'
-    fail_msg: "deployed /etc/netdata/go.d/sensors.conf:\n{{ _verify_godconf.content | b64decode }}"
+    fail_msg: "deployed /etc/netdata/go.d/sensors.conf:\n{{ _lm_sensors_godconf.content | b64decode }}"
 
 # Exercise the empty-list removal arm (usage scenario 2): re-running with no
 # modules must drop the modules-load.d file and live-unload the dropped
 # module. 'dummy' isn't in use here, so modprobe -r removes it cleanly and no
 # reboot is flagged; a pinned module would stay loaded and flag a reboot
 # instead (the fallback path -- see main.yml's unload comment).
-- name: _verify | clear any pre-existing reboot-required sentinel
+- name: _verify | Clear any pre-existing reboot-required sentinel
   file:
     path: /var/run/reboot-required
     state: absent
   become: true
 
-- name: _verify | switch to an empty module list
+- name: _verify | Switch to an empty module list
   set_fact:
-    sensor_modules: []
+    _lm_sensors_sensor_modules: []
 
-- name: _verify | re-run the role's module-management tasks
+- name: _verify | Re-run the role's module-management tasks
   import_tasks: main.yml
 
-- name: _verify | stat the modules-load.d file after removal
+- name: _verify | Stat the modules-load.d file after removal
   stat:
     path: /etc/modules-load.d/lm_sensors.conf
-  register: _verify_modload_after
+  register: _lm_sensors_modload_after
   become: true
 
-- name: _verify | check whether the dropped module is still loaded
+- name: _verify | Check whether the dropped module is still loaded
   command: grep -qw dummy /proc/modules
-  register: _verify_dummy_loaded
+  register: _lm_sensors_dummy_loaded
   changed_when: false
   failed_when: false
   become: true
 
-- name: _verify | stat the reboot-required sentinel
+- name: _verify | Stat the reboot-required sentinel
   stat:
     path: /var/run/reboot-required
-  register: _verify_reboot_after
+  register: _lm_sensors_reboot_after
   become: true
 
-- name: _verify | assert removal dropped the file and live-unloaded the module
+- name: _verify | Assert removal dropped the file and live-unloaded the module
   assert:
     that:
-      - not _verify_modload_after.stat.exists
-      - _verify_dummy_loaded.rc != 0
-      - not _verify_reboot_after.stat.exists
+      - not _lm_sensors_modload_after.stat.exists
+      - _lm_sensors_dummy_loaded.rc != 0
+      - not _lm_sensors_reboot_after.stat.exists
     fail_msg: >-
-      empty-list removal arm: modules-load.d exists={{ _verify_modload_after.stat.exists }},
-      dummy still loaded={{ _verify_dummy_loaded.rc == 0 }},
-      reboot-required exists={{ _verify_reboot_after.stat.exists }}
+      empty-list removal arm: modules-load.d exists={{ _lm_sensors_modload_after.stat.exists }},
+      dummy still loaded={{ _lm_sensors_dummy_loaded.rc == 0 }},
+      reboot-required exists={{ _lm_sensors_reboot_after.stat.exists }}

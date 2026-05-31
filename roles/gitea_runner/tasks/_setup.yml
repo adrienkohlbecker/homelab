@@ -77,10 +77,10 @@
   uri:
     url: http://localhost:3000/api/v1/version
     status_code: 200
-  register: _test_gitea_ready
+  register: _gitea_runner_test_gitea_ready
   retries: 30
   delay: 1
-  until: _test_gitea_ready.status == 200
+  until: _gitea_runner_test_gitea_ready.status == 200
 
 # Admin user for _verify.yml's API checks against
 # /api/v1/admin/actions/runners. Basic auth keeps the verify side
@@ -93,10 +93,10 @@
     /usr/local/bin/gitea --config /etc/gitea/app.ini admin user create
     --username testadmin --password testadminpw --email testadmin@example.com
     --admin --must-change-password=false
-  register: _test_admin_create
+  register: _gitea_runner_test_admin_create
   failed_when:
-    - _test_admin_create.rc != 0
-    - "'already exists' not in _test_admin_create.stderr"
-  changed_when: _test_admin_create.rc == 0
+    - _gitea_runner_test_admin_create.rc != 0
+    - "'already exists' not in _gitea_runner_test_admin_create.stderr"
+  changed_when: _gitea_runner_test_admin_create.rc == 0
   become: true
   become_user: git

@@ -11,7 +11,7 @@
     name: _test
     tasks_from: authelia_stub
   vars:
-    authelia_stub_mode: gate
+    _prometheus_authelia_stub_mode: gate
 
 # The role relocates the TSDB under /mnt/services; prod gets the parent
 # from the services role/dataset, but the test fixture has no services role.

@@ -64,7 +64,7 @@
   changed_when: false
 
 - name: _verify_input | INPUT — wireguard (51820/udp) rejected when ingressing on wg0  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_nonscope }} 10.99.0.1 51820
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 10.99.0.1 51820
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -91,19 +91,19 @@
 # half can't be probed (slirp doesn't preserve source IP), so half of
 # each rule's contract is asserted via JSON shape only.
 - name: _verify_input | Bind probe_wg on extns veth (wireguard-source probes)
-  command: ip -n extns addr replace {{ probe_wg }}/32 dev veth_ext
+  command: ip -n extns addr replace {{ _firewall_probe_wg }}/32 dev veth_ext
   changed_when: true
   become: true
 
 - name: _verify_input | INPUT — mosh (60000/udp) reachable from wireguard source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_wg }} 10.99.0.1 60000
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_wg }} 10.99.0.1 60000
   args: { executable: /bin/bash }
   changed_when: false
   become: true
 
 - name: _verify_input | INPUT — Samba (445/tcp) reachable from wireguard source
   command: >
-    ip netns exec extns curl --interface {{ probe_wg }}
+    ip netns exec extns curl --interface {{ _firewall_probe_wg }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
   changed_when: false
   failed_when: false
@@ -111,7 +111,7 @@
 
 - name: _verify_input | INPUT — nut (3493/tcp) reachable from wireguard source
   command: >
-    ip netns exec extns curl --interface {{ probe_wg }}
+    ip netns exec extns curl --interface {{ _firewall_probe_wg }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
   changed_when: false
   failed_when: false
@@ -121,7 +121,7 @@
 # Positive case from wg-source via wg0; the home_LAN-via-wg0 mismatch
 # is structurally identical and already covered by the Samba probes.
 - name: _verify_input | INPUT — NetBIOS (137/udp) reachable from wireguard source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_wg }} 10.99.0.1 137
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_wg }} 10.99.0.1 137
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -129,7 +129,7 @@
 # mDNS rule requires iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously.
 # wg saddr fails the saddr half — counter must not increment.
 - name: _verify_input | INPUT — mDNS (5353/udp) sent from wg saddr (saddr scope rejects)  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_wg }} 10.99.0.1 5353
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_wg }} 10.99.0.1 5353
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -151,19 +151,19 @@
 # would let these through. mDNS rides the same group as the iif-half
 # negative (home saddr on wg0 fails the iif=$WAN_IFACE requirement).
 - name: _verify_input | Bind probe_home on extns veth (home_LAN-source probes)
-  command: ip -n extns addr replace {{ probe_home }}/32 dev veth_ext
+  command: ip -n extns addr replace {{ _firewall_probe_home }}/32 dev veth_ext
   changed_when: true
   become: true
 
 - name: _verify_input | INPUT — mosh (60000/udp) rejected from home_LAN source via wg0 (iif/saddr mismatch)  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_home }} 10.99.0.1 60000
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_home }} 10.99.0.1 60000
   args: { executable: /bin/bash }
   changed_when: false
   become: true
 
 - name: _verify_input | INPUT — Samba (445/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
   command: >
-    ip netns exec extns curl --interface {{ probe_home }}
+    ip netns exec extns curl --interface {{ _firewall_probe_home }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
   changed_when: false
   failed_when: false
@@ -171,14 +171,14 @@
 
 - name: _verify_input | INPUT — nut (3493/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
   command: >
-    ip netns exec extns curl --interface {{ probe_home }}
+    ip netns exec extns curl --interface {{ _firewall_probe_home }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
   changed_when: false
   failed_when: false
   become: true
 
 - name: _verify_input | INPUT — mDNS (5353/udp) sent from home_LAN saddr via wg0 (iif scope rejects)  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_home }} 10.99.0.1 5353
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_home }} 10.99.0.1 5353
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -189,14 +189,14 @@
 # rule must reject it. No bind task: the primary alias is in place
 # from the netns setup above.
 - name: _verify_input | INPUT — mosh (60000/udp) rejected from non-scope source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_nonscope }} 10.99.0.1 60000
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 10.99.0.1 60000
   args: { executable: /bin/bash }
   changed_when: false
   become: true
 
 - name: _verify_input | INPUT — Samba (445/tcp) rejected from non-scope source
   command: >
-    ip netns exec extns curl --interface {{ probe_nonscope }}
+    ip netns exec extns curl --interface {{ _firewall_probe_nonscope }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
   changed_when: false
   failed_when: false
@@ -204,14 +204,14 @@
 
 - name: _verify_input | INPUT — nut (3493/tcp) rejected from non-scope source
   command: >
-    ip netns exec extns curl --interface {{ probe_nonscope }}
+    ip netns exec extns curl --interface {{ _firewall_probe_nonscope }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
   changed_when: false
   failed_when: false
   become: true
 
 - name: _verify_input | INPUT — dnscrypt (5053/udp) rejected from non-scope source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_nonscope }} 10.99.0.1 {{ service_ports.dnscrypt_proxy }}
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 10.99.0.1 {{ service_ports.dnscrypt_proxy }}
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -226,26 +226,26 @@
 # the ~2 TCP drops/day pihole used to see when falling back to TCP on
 # UDP-truncated responses.
 - name: _verify_input | Bind probe_podman on extns veth (default-bridge-source probes)
-  command: ip -n extns addr replace {{ probe_podman }}/32 dev veth_ext
+  command: ip -n extns addr replace {{ _firewall_probe_podman }}/32 dev veth_ext
   changed_when: true
   become: true
 
 - name: _verify_input | INPUT — dnscrypt (5053/udp) reachable from container source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_podman }} 10.99.0.1 {{ service_ports.dnscrypt_proxy }}
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_podman }} 10.99.0.1 {{ service_ports.dnscrypt_proxy }}
   args: { executable: /bin/bash }
   changed_when: false
   become: true
 
 - name: _verify_input | INPUT — dnscrypt (5053/tcp) reachable from container source
   command: >
-    ip netns exec extns curl --interface {{ probe_podman }}
+    ip netns exec extns curl --interface {{ _firewall_probe_podman }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.dnscrypt_proxy }}/
   changed_when: false
   failed_when: false
   become: true
 
 - name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from default-bridge source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_podman }} 10.99.0.1 5333
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_podman }} 10.99.0.1 5333
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -260,20 +260,20 @@
 # NUT integration is the other consumer from this subnet, matching
 # the separate `ip saddr $PODMAN_POOL tcp dport 3493 accept` rule.
 - name: _verify_input | Bind probe_podman_pool on extns veth (non-default-bridge-source probes)
-  command: ip -n extns addr replace {{ probe_podman_pool }}/32 dev veth_ext
+  command: ip -n extns addr replace {{ _firewall_probe_podman_pool }}/32 dev veth_ext
   changed_when: true
   become: true
 
 - name: _verify_input | INPUT — nut (3493/tcp) reachable from podman_bridge_pool source
   command: >
-    ip netns exec extns curl --interface {{ probe_podman_pool }}
+    ip netns exec extns curl --interface {{ _firewall_probe_podman_pool }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:3493/
   changed_when: false
   failed_when: false
   become: true
 
 - name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from non-default-bridge source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_podman_pool }} 10.99.0.1 5333
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_podman_pool }} 10.99.0.1 5333
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -287,7 +287,7 @@
 # (e.g. `ip protocol 112` ↔ `ip protocol vrrp`).
 - name: _verify_input | INPUT — get nft ruleset (JSON, for VRRP scope check)
   command: nft -j list table inet homelab
-  register: nft_ruleset_vrrp
+  register: _firewall_nft_ruleset_vrrp
   changed_when: false
   become: true
 
@@ -302,7 +302,7 @@
     # nft uses for the standalone counter *declaration* at the head
     # of the table, not for references inside rule expressions.
     # `contains` on the exact reference dict finds the matching rule.
-    nft_rules: "{{ (nft_ruleset_vrrp.stdout | from_json).nftables
+    nft_rules: "{{ (_firewall_nft_ruleset_vrrp.stdout | from_json).nftables
                    | selectattr('rule', 'defined')
                    | map(attribute='rule')
                    | list }}"

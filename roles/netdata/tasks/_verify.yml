@@ -16,10 +16,10 @@
 - name: _verify | Netdata.service is loaded and active
   systemd:
     name: netdata
-  register: _verify_unit
+  register: _netdata_unit
   failed_when: >-
-    _verify_unit.status.LoadState != "loaded"
-    or _verify_unit.status.ActiveState != "active"
+    _netdata_unit.status.LoadState != "loaded"
+    or _netdata_unit.status.ActiveState != "active"
   become: true
 
 # netdata is the only flat-repo (trailing-slash suite, no components) + glob-pin
@@ -75,15 +75,15 @@
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/charts
     return_content: true
-  register: _verify_charts
+  register: _netdata_charts
   retries: 30
   delay: 2
   until: >-
-    _verify_charts.status == 200
-    and 'netdata_presence.context_system_cpu' in (_verify_charts.content | from_json).charts.keys()
-    and 'netdata_presence.context_ghost' in (_verify_charts.content | from_json).charts.keys()
-    and 'netdata_presence.collector_go_d_collector_systemdunits_service_units' in (_verify_charts.content | from_json).charts.keys()
-    and 'netdata_presence.collector_go_d_collector_fake_plugin_fake_job' in (_verify_charts.content | from_json).charts.keys()
+    _netdata_charts.status == 200
+    and 'netdata_presence.context_system_cpu' in (_netdata_charts.content | from_json).charts.keys()
+    and 'netdata_presence.context_ghost' in (_netdata_charts.content | from_json).charts.keys()
+    and 'netdata_presence.collector_go_d_collector_systemdunits_service_units' in (_netdata_charts.content | from_json).charts.keys()
+    and 'netdata_presence.collector_go_d_collector_fake_plugin_fake_job' in (_netdata_charts.content | from_json).charts.keys()
 
 # `points=1` defaults to a 1-second window; with update_every=5s that
 # misses 4 polls out of 5. `&after=-30` widens to 30s so a healthy
@@ -94,53 +94,53 @@
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.context_system_cpu&points=1&after=-30&format=json
     return_content: true
-  register: _verify_system_cpu_data
+  register: _netdata_system_cpu_data
   retries: 30
   delay: 2
   until: >-
-    _verify_system_cpu_data.status == 200
-    and 'present' in (_verify_system_cpu_data.json.labels | default([]))
-    and (_verify_system_cpu_data.json.data | default([])) | length > 0
-    and _verify_system_cpu_data.json.data[0][_verify_system_cpu_data.json.labels.index('present')] | int == 1
+    _netdata_system_cpu_data.status == 200
+    and 'present' in (_netdata_system_cpu_data.json.labels | default([]))
+    and (_netdata_system_cpu_data.json.data | default([])) | length > 0
+    and _netdata_system_cpu_data.json.data[0][_netdata_system_cpu_data.json.labels.index('present')] | int == 1
 
 - name: _verify | Systemdunits collector resolves to present=1
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.collector_go_d_collector_systemdunits_service_units&points=1&after=-30&format=json
     return_content: true
-  register: _verify_systemdunits_data
+  register: _netdata_systemdunits_data
   retries: 30
   delay: 2
   until: >-
-    _verify_systemdunits_data.status == 200
-    and 'present' in (_verify_systemdunits_data.json.labels | default([]))
-    and (_verify_systemdunits_data.json.data | default([])) | length > 0
-    and _verify_systemdunits_data.json.data[0][_verify_systemdunits_data.json.labels.index('present')] | int == 1
+    _netdata_systemdunits_data.status == 200
+    and 'present' in (_netdata_systemdunits_data.json.labels | default([]))
+    and (_netdata_systemdunits_data.json.data | default([])) | length > 0
+    and _netdata_systemdunits_data.json.data[0][_netdata_systemdunits_data.json.labels.index('present')] | int == 1
 
 - name: _verify | Ghost context resolves to present=0
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.context_ghost&points=1&after=-30&format=json
     return_content: true
-  register: _verify_ghost_data
+  register: _netdata_ghost_data
   retries: 30
   delay: 2
   until: >-
-    _verify_ghost_data.status == 200
-    and 'present' in (_verify_ghost_data.json.labels | default([]))
-    and (_verify_ghost_data.json.data | default([])) | length > 0
-    and _verify_ghost_data.json.data[0][_verify_ghost_data.json.labels.index('present')] | int == 0
+    _netdata_ghost_data.status == 200
+    and 'present' in (_netdata_ghost_data.json.labels | default([]))
+    and (_netdata_ghost_data.json.data | default([])) | length > 0
+    and _netdata_ghost_data.json.data[0][_netdata_ghost_data.json.labels.index('present')] | int == 0
 
 - name: _verify | Fake_plugin:fake_job collector resolves to present=0
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.collector_go_d_collector_fake_plugin_fake_job&points=1&after=-30&format=json
     return_content: true
-  register: _verify_fake_collector_data
+  register: _netdata_fake_collector_data
   retries: 30
   delay: 2
   until: >-
-    _verify_fake_collector_data.status == 200
-    and 'present' in (_verify_fake_collector_data.json.labels | default([]))
-    and (_verify_fake_collector_data.json.data | default([])) | length > 0
-    and _verify_fake_collector_data.json.data[0][_verify_fake_collector_data.json.labels.index('present')] | int == 0
+    _netdata_fake_collector_data.status == 200
+    and 'present' in (_netdata_fake_collector_data.json.labels | default([]))
+    and (_netdata_fake_collector_data.json.data | default([])) | length > 0
+    and _netdata_fake_collector_data.json.data[0][_netdata_fake_collector_data.json.labels.index('present')] | int == 0
 
 # Unit-test the collector chart-prefix derivation directly. The live
 # present=1 path above only exercises 'instanced' mode (systemdunits,
@@ -177,30 +177,30 @@
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=netdata_presence.context_system_cpu
     return_content: true
-  register: _verify_system_cpu_chart
+  register: _netdata_system_cpu_chart
 - name: _verify | Assert system_cpu labels + context
   assert:
     that:
-      - _verify_system_cpu_chart.json.context == "netdata_presence.context"
-      - _verify_system_cpu_chart.json.chart_labels.context | default('') == "system_cpu"
-      - _verify_system_cpu_chart.json.chart_labels.context_id | default('') == "system.cpu"
+      - _netdata_system_cpu_chart.json.context == "netdata_presence.context"
+      - _netdata_system_cpu_chart.json.chart_labels.context | default('') == "system_cpu"
+      - _netdata_system_cpu_chart.json.chart_labels.context_id | default('') == "system.cpu"
     fail_msg: >-
-      chart {{ _verify_system_cpu_chart.json.id }} context={{ _verify_system_cpu_chart.json.context }}
-      labels={{ _verify_system_cpu_chart.json.chart_labels | default({}) }}
+      chart {{ _netdata_system_cpu_chart.json.id }} context={{ _netdata_system_cpu_chart.json.context }}
+      labels={{ _netdata_system_cpu_chart.json.chart_labels | default({}) }}
 
 - name: _verify | Fake collector chart carries collector label + shared context
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=netdata_presence.collector_go_d_collector_fake_plugin_fake_job
     return_content: true
-  register: _verify_fake_collector_chart
+  register: _netdata_fake_collector_chart
 - name: _verify | Assert collector label + context
   assert:
     that:
-      - _verify_fake_collector_chart.json.context == "netdata_presence.collector"
-      - _verify_fake_collector_chart.json.chart_labels.collector | default('') == "go.d:collector:fake_plugin:fake_job"
+      - _netdata_fake_collector_chart.json.context == "netdata_presence.collector"
+      - _netdata_fake_collector_chart.json.chart_labels.collector | default('') == "go.d:collector:fake_plugin:fake_job"
     fail_msg: >-
-      chart {{ _verify_fake_collector_chart.json.id }} context={{ _verify_fake_collector_chart.json.context }}
-      labels={{ _verify_fake_collector_chart.json.chart_labels | default({}) }}
+      chart {{ _netdata_fake_collector_chart.json.id }} context={{ _netdata_fake_collector_chart.json.context }}
+      labels={{ _netdata_fake_collector_chart.json.chart_labels | default({}) }}
 
 # Two alert template fan-outs to assert here:
 #   1) netdata_context_missing / netdata_collector_missing (presence alerts)
@@ -212,14 +212,14 @@
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
     return_content: true
-  register: _verify_alarms
+  register: _netdata_alarms
   retries: 10
   delay: 2
-  until: _verify_alarms.status == 200
+  until: _netdata_alarms.status == 200
 
 - name: _verify | Presence alerts instantiated against the new charts
   vars:
-    _keys: "{{ (_verify_alarms.content | from_json).alarms.keys() | list }}"
+    _keys: "{{ (_netdata_alarms.content | from_json).alarms.keys() | list }}"
   assert:
     that:
       - _keys | select('search', 'netdata_presence.context_system_cpu.netdata_context_missing') | list | length > 0
@@ -232,7 +232,7 @@
 
 - name: _verify | Liveness_system_cpu present, liveness_ghost absent
   vars:
-    _keys: "{{ (_verify_alarms.content | from_json).alarms.keys() | list }}"
+    _keys: "{{ (_netdata_alarms.content | from_json).alarms.keys() | list }}"
   assert:
     that:
       - _keys | select('search', 'liveness_system_cpu') | list | length > 0
@@ -251,12 +251,12 @@
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
     return_content: true
-  register: _verify_diskfill_alarm
+  register: _netdata_diskfill_alarm
   retries: 15
   delay: 2
   until: >-
-    _verify_diskfill_alarm.status == 200
-    and ((_verify_diskfill_alarm.content | from_json).alarms.keys() | list
+    _netdata_diskfill_alarm.status == 200
+    and ((_netdata_diskfill_alarm.content | from_json).alarms.keys() | list
          | select('search', 'out_of_disk_space_time') | list | length > 0)
 
 # Prove the un-silenced stock collector-failure alarm
@@ -269,12 +269,12 @@
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
     return_content: true
-  register: _verify_godplugin_alarm
+  register: _netdata_godplugin_alarm
   retries: 15
   delay: 2
   until: >-
-    _verify_godplugin_alarm.status == 200
-    and ((_verify_godplugin_alarm.content | from_json).alarms.values() | list
+    _netdata_godplugin_alarm.status == 200
+    and ((_netdata_godplugin_alarm.content | from_json).alarms.values() | list
          | selectattr('name', 'equalto', 'plugin_data_collection_status')
          | rejectattr('recipient', 'equalto', 'silent') | list | length > 0)
 
@@ -316,10 +316,10 @@
       Host: netdata.{{ inventory_hostname }}.{{ domain }}
     validate_certs: false
     status_code: 200
-  register: _verify_netdata_bypass
+  register: _netdata_bypass
   failed_when: >-
-    _verify_netdata_bypass.status != 200
-    or "version" not in (_verify_netdata_bypass.json | default({}))
+    _netdata_bypass.status != 200
+    or "version" not in (_netdata_bypass.json | default({}))
   become: true
 
 - name: _verify | Browser hit without auth redirects to Authelia
@@ -330,10 +330,10 @@
     validate_certs: false
     follow_redirects: none
     status_code: 302
-  register: _verify_netdata_no_auth
+  register: _netdata_no_auth
   failed_when: >-
-    _verify_netdata_no_auth.status != 302
-    or ("auth." not in (_verify_netdata_no_auth.location | default("")))
+    _netdata_no_auth.status != 302
+    or ("auth." not in (_netdata_no_auth.location | default("")))
   become: true
 
 - name: _verify | Browser hit with wrong auth_token redirects to Authelia
@@ -344,10 +344,10 @@
     validate_certs: false
     follow_redirects: none
     status_code: 302
-  register: _verify_netdata_wrong_token
+  register: _netdata_wrong_token
   failed_when: >-
-    _verify_netdata_wrong_token.status != 302
-    or ("auth." not in (_verify_netdata_wrong_token.location | default("")))
+    _netdata_wrong_token.status != 302
+    or ("auth." not in (_netdata_wrong_token.location | default("")))
   become: true
 
 # Bounded retry rather than a fixed `pause` + single read: nginx buffers
@@ -356,17 +356,17 @@
 # then a separate hard assert catches a literal-token leak immediately.
 - name: _verify | Wait for the redacted auth_token request to reach the access log
   command: tail -n 200 /var/log/nginx/access.log
-  register: _verify_netdata_nginx_log
+  register: _netdata_nginx_log
   changed_when: false
   become: true
   retries: 10
   delay: 1
-  until: '"auth_token=REDACTED" in _verify_netdata_nginx_log.stdout'
+  until: '"auth_token=REDACTED" in _netdata_nginx_log.stdout'
 
 - name: _verify | Assert the literal auth_token never appears in the access log
   assert:
     that:
-      - netdata_alerts_token not in _verify_netdata_nginx_log.stdout
+      - netdata_alerts_token not in _netdata_nginx_log.stdout
     fail_msg: >-
       The literal auth_token leaked into the nginx access log -- the
       $request_safe map should have redacted it to auth_token=REDACTED.
@@ -378,12 +378,12 @@
 - name: _verify | Slurp rendered x509check config
   slurp:
     src: /etc/netdata/go.d/x509check.conf
-  register: _verify_x509check
+  register: _netdata_x509check
   become: true
 
 - name: _verify | X509check renders structurally-valid YAML pointing at the host cert
   vars:
-    _x509check: "{{ _verify_x509check.content | b64decode | from_yaml }}"
+    _x509check: "{{ _netdata_x509check.content | b64decode | from_yaml }}"
     _expected_source: "file:///etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem"
   assert:
     that:

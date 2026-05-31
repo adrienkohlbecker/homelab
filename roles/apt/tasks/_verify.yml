@@ -9,19 +9,19 @@
 - name: _verify | Read apt's parsed retry config
   command: apt-config dump Acquire::Retries
   changed_when: false
-  register: _verify_apt_retries
+  register: _apt_retries
 
 - name: _verify | Apt parses Acquire::Retries=3
   assert:
     that:
-      - '''Acquire::Retries "3";'' in _verify_apt_retries.stdout_lines'
+      - '''Acquire::Retries "3";'' in _apt_retries.stdout_lines'
     fail_msg: apt didn't load Acquire::Retries=3 from 80-retries.
 
 - name: _verify | Apt parses Acquire::Retries::Delay on noble+ only
   assert:
     that:
       - >-
-        ('Acquire::Retries::Delay "true";' in _verify_apt_retries.stdout_lines)
+        ('Acquire::Retries::Delay "true";' in _apt_retries.stdout_lines)
         == (ansible_distribution_release != "jammy")
     fail_msg: >-
       Acquire::Retries::Delay presence in apt's parsed config
@@ -36,7 +36,7 @@
   find:
     paths: /var/lib/apt/lists/
     patterns: "{{ _verify_mirror_prefix }}_dists_{{ item.suite }}_main_*"
-  register: _verify_apt_lists
+  register: _apt_lists
   vars:
     _verify_mirror_prefix: "{{ item.mirror | regex_replace('^https?://', '') | regex_replace('/+$', '') | regex_replace('/', '_') }}"
   loop:
@@ -52,7 +52,7 @@
     that:
       - item.matched > 0
     fail_msg: "No /var/lib/apt/lists/ entries for {{ item.item.mirror }} {{ item.item.suite }}."
-  loop: "{{ _verify_apt_lists.results }}"
+  loop: "{{ _apt_lists.results }}"
   loop_control:
     label: "{{ item.item.mirror }} {{ item.item.suite }}"
 

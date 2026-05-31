@@ -1,10 +1,10 @@
 - name: _verify | Homeassistant unit is loaded and active
   systemd:
     name: homeassistant
-  register: _verify_unit
+  register: _homeassistant_unit
   failed_when: >-
-    _verify_unit.status.LoadState != "loaded"
-    or _verify_unit.status.ActiveState != "active"
+    _homeassistant_unit.status.LoadState != "loaded"
+    or _homeassistant_unit.status.ActiveState != "active"
   become: true
 
 # HA falls back to "recovery mode" -- ignoring configuration.yaml entirely
@@ -23,9 +23,9 @@
       - -b
       - --no-pager
       - --grep=Activating recovery mode
-  register: _verify_recovery_mode
+  register: _homeassistant_recovery_mode
   changed_when: false
-  failed_when: '"Activating recovery mode" in _verify_recovery_mode.stdout'
+  failed_when: '"Activating recovery mode" in _homeassistant_recovery_mode.stdout'
   become: true
 
 # Functional probe of HA itself. /manifest.json is the same endpoint
@@ -36,10 +36,10 @@
   uri:
     url: http://localhost:{{ service_ports.homeassistant }}/manifest.json
     status_code: 200
-  register: _verify_http
+  register: _homeassistant_http
   retries: 60
   delay: 2
-  until: _verify_http.status == 200
+  until: _homeassistant_http.status == 200
 
 # Exercise the nginx-proxied path too. A regression in the nginx_site
 # wiring (typo'd subdomain, broken proxy_pass, CSP rewriting the
@@ -51,10 +51,10 @@
       Host: "homeassistant.{{ inventory_hostname }}.{{ domain }}"
     validate_certs: false
     status_code: 200
-  register: _verify_http_nginx
+  register: _homeassistant_http_nginx
   retries: 30
   delay: 2
-  until: _verify_http_nginx.status == 200
+  until: _homeassistant_http_nginx.status == 200
 
 # /config/zigbee.db must be a symlink to /config/db/zigbee.db inside the
 # container so SQLite's WAL placement lands on the sqlite dataset bind
@@ -62,9 +62,9 @@
 # exist (ZHA only writes it once configured); the link should.
 - name: _verify | ZHA zigbee.db symlink resolves inside the container
   command: podman exec homeassistant readlink /config/zigbee.db
-  register: _verify_zigbee_link
+  register: _homeassistant_zigbee_link
   changed_when: false
-  failed_when: _verify_zigbee_link.stdout | trim != '/config/db/zigbee.db'
+  failed_when: _homeassistant_zigbee_link.stdout | trim != '/config/db/zigbee.db'
   become: true
 
 # HA's mac_iot IP isn't pinned (vars/main.yml) — assert it
@@ -82,9 +82,9 @@
     podman inspect homeassistant
     --format
     {% raw %}'{{ .NetworkSettings.Networks.mac_iot.IPAddress }}'{% endraw %}
-  register: _verify_macvlan_ip
+  register: _homeassistant_macvlan_ip
   changed_when: false
-  failed_when: not (_verify_macvlan_ip.stdout | trim | ansible.utils.ipaddr(_expected_range))
+  failed_when: not (_homeassistant_macvlan_ip.stdout | trim | ansible.utils.ipaddr(_expected_range))
   become: true
 
 # The unit's ExecStartPost (pin_default_route.sh) down-ranks HA's mac_iot
@@ -95,9 +95,9 @@
 # "bridge wins" preference -- that's checked by hand on lab after deploy.
 - name: _verify | Homeassistant retains off-subnet egress (route not stranded)
   command: podman exec homeassistant ip route get 1.1.1.1
-  register: _verify_ha_egress
+  register: _homeassistant_ha_egress
   changed_when: false
-  failed_when: _verify_ha_egress.rc != 0 or 'dev ' not in _verify_ha_egress.stdout
+  failed_when: _homeassistant_ha_egress.rc != 0 or 'dev ' not in _homeassistant_ha_egress.stdout
   become: true
 
 # pin_default_route.sh's down-rank branch only fires when >1 default route
@@ -144,7 +144,7 @@
     {% endraw %}
   args:
     executable: /bin/bash
-  register: _verify_route_downrank
+  register: _homeassistant_route_downrank
   changed_when: false
   become: true
 
@@ -164,11 +164,11 @@
       - -b
       - --no-pager
       - --grep=custom integration hacs
-  register: _verify_hacs_loaded
+  register: _homeassistant_hacs_loaded
   changed_when: false
   retries: 30
   delay: 4
-  until: _verify_hacs_loaded.stdout | length > 0
+  until: _homeassistant_hacs_loaded.stdout | length > 0
   become: true
 
 # Influxdb bootstrap artifacts. The main.yml tasks create user, bucket,
@@ -178,21 +178,21 @@
 # breaks --json output.
 - name: _verify | Influxdb homeassistant user exists
   command: podman exec influxdb influx user list --name homeassistant --json
-  register: _verify_influxdb_user
+  register: _homeassistant_influxdb_user
   changed_when: false
-  failed_when: (_verify_influxdb_user.stdout | from_json | length) == 0
+  failed_when: (_homeassistant_influxdb_user.stdout | from_json | length) == 0
   become: true
 
 - name: _verify | Influxdb homeassistant bucket exists
   command: podman exec influxdb influx bucket list --name homeassistant --json
-  register: _verify_influxdb_bucket
+  register: _homeassistant_influxdb_bucket
   changed_when: false
-  failed_when: (_verify_influxdb_bucket.stdout | from_json | length) == 0
+  failed_when: (_homeassistant_influxdb_bucket.stdout | from_json | length) == 0
   become: true
 
 - name: _verify | Cache influxdb homeassistant bucket record
   set_fact:
-    _verify_influxdb_bucket_rec: "{{ (_verify_influxdb_bucket.stdout | from_json | first) }}"
+    _homeassistant_influxdb_bucket_rec: "{{ (_homeassistant_influxdb_bucket.stdout | from_json | first) }}"
 
 # `influx auth list --json` emits permissions as bare strings (e.g.
 # `write:orgs/<orgid>/buckets/<bucketid>`), not dicts. Match the
@@ -202,13 +202,13 @@
 # false-positive here.
 - name: _verify | Influxdb write-auth on homeassistant bucket exists
   command: podman exec influxdb influx auth list --user homeassistant --json
-  register: _verify_influxdb_auth
+  register: _homeassistant_influxdb_auth
   changed_when: false
   failed_when: >-
-    (_verify_influxdb_auth.stdout | from_json)
+    (_homeassistant_influxdb_auth.stdout | from_json)
     | selectattr('permissions', 'defined')
     | map(attribute='permissions') | flatten
-    | select('search', '^write:orgs/' ~ _verify_influxdb_bucket_rec.orgID ~ '/buckets/' ~ _verify_influxdb_bucket_rec.id ~ '$')
+    | select('search', '^write:orgs/' ~ _homeassistant_influxdb_bucket_rec.orgID ~ '/buckets/' ~ _homeassistant_influxdb_bucket_rec.id ~ '$')
     | list | length == 0
   become: true
 
@@ -220,7 +220,7 @@
 - name: _verify | Stat sqlite DBs
   stat:
     path: /mnt/services/sqlite/homeassistant/{{ item }}
-  register: _verify_sqlite_dbs
+  register: _homeassistant_sqlite_dbs
   loop:
     - home-assistant_v2.db
     - zigbee.db
@@ -230,10 +230,10 @@
 
 - name: _verify | Sqlite DBs are in WAL mode (when present)
   command: sqlite3 -readonly /mnt/services/sqlite/homeassistant/{{ item.item }} 'PRAGMA journal_mode;'
-  register: _verify_sqlite_wal
+  register: _homeassistant_sqlite_wal
   changed_when: false
-  failed_when: (_verify_sqlite_wal.stdout | trim) != 'wal'
-  loop: "{{ _verify_sqlite_dbs.results }}"
+  failed_when: (_homeassistant_sqlite_wal.stdout | trim) != 'wal'
+  loop: "{{ _homeassistant_sqlite_dbs.results }}"
   loop_control:
     label: "{{ item.item }}"
   when: item.stat.exists

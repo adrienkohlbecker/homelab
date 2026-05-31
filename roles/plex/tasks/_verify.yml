@@ -11,11 +11,11 @@
     url: http://localhost:{{ service_ports.plex }}/identity
     status_code: 200
     return_content: true
-  register: _verify_http
+  register: _plex_http
   retries: 30
   delay: 2
-  until: _verify_http.status == 200
-  failed_when: not (_verify_http.content is search('machineIdentifier'))
+  until: _plex_http.status == 200
+  failed_when: not (_plex_http.content is search('machineIdentifier'))
 
 # Exercise the nginx-proxied path — catches a typo'd subdomain or
 # proxy_pass regression the loopback probe would miss.
@@ -27,11 +27,11 @@
     validate_certs: false
     status_code: 200
     return_content: true
-  register: _verify_http_nginx
+  register: _plex_http_nginx
   retries: 30
   delay: 2
-  until: _verify_http_nginx.status == 200
-  failed_when: not (_verify_http_nginx.content is search('machineIdentifier'))
+  until: _plex_http_nginx.status == 200
+  failed_when: not (_plex_http_nginx.content is search('machineIdentifier'))
 
 # A port answering proves Plex is up, but the unit reaching `active` is the
 # stronger claim: with Type=notify + --sdnotify=healthy, `active` means the
@@ -41,8 +41,8 @@
 - name: _verify | Plex unit reached active via the sdnotify=healthy gate
   systemd:
     name: plex.service
-  register: _verify_active
-  failed_when: _verify_active.status.ActiveState != "active"
+  register: _plex_active
+  failed_when: _plex_active.status.ActiveState != "active"
   become: true
 
 # CHANGE_CONFIG_DIR_OWNERSHIP=false skips the entrypoint's recursive chown,
@@ -115,9 +115,9 @@
       - touch
       - "{{ item }}/.verify_ro_probe"
   loop: "{{ ['/media'] + (plex_extra_library_binds | map(attribute='dest') | list) }}"
-  register: _verify_ro
+  register: _plex_ro
   changed_when: false
-  failed_when: _verify_ro.rc == 0
+  failed_when: _plex_ro.rc == 0
   become: true
 
 # SQLite bind round-trip: a host-side sentinel under the dedicated 4K
@@ -161,15 +161,15 @@
 - name: _verify | Confirm /dev/dri/renderD128 inside container
   when: has_transcoding_acceleration
   command: podman exec plex stat -c %n /dev/dri/renderD128
-  register: _verify_dri_in_container
+  register: _plex_dri_in_container
   changed_when: false
-  failed_when: _verify_dri_in_container.stdout != '/dev/dri/renderD128'
+  failed_when: _plex_dri_in_container.stdout != '/dev/dri/renderD128'
   become: true
 
 - name: _verify | Confirm render gid in container supplementary groups
   when: has_transcoding_acceleration
   command: podman exec plex id -G
-  register: _verify_container_groups
+  register: _plex_container_groups
   changed_when: false
-  failed_when: getent_group.render[1] not in _verify_container_groups.stdout.split()
+  failed_when: getent_group.render[1] not in _plex_container_groups.stdout.split()
   become: true

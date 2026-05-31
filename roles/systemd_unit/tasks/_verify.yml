@@ -30,19 +30,19 @@
 - name: _verify | Extract image from normal unit
   extract_podman_image:
     name: extract_podman_image_test
-  register: _verify_normal
+  register: _systemd_unit_normal
   become: true
 
 - name: _verify | Normal unit yields the single image and no unresolved argvs
   assert:
     that:
-      - _verify_normal.images == ["docker.io/library/alpine:3.19"]
-      - _verify_normal.unresolved == []
+      - _systemd_unit_normal.images == ["docker.io/library/alpine:3.19"]
+      - _systemd_unit_normal.unresolved == []
       # No User= declared → systemd's bus reports the empty string. The
       # service.yml pre-pull task treats "" and "root" identically (root-
       # scoped pull into /var/lib/containers/storage), so the empty-string
       # case must round-trip cleanly.
-      - _verify_normal.user == ""
+      - _systemd_unit_normal.user == ""
 
 - name: _verify | Replace with a non-podman unit
   copy:
@@ -71,14 +71,14 @@
 - name: _verify | Non-podman unit returns empty images and no unresolved argvs
   extract_podman_image:
     name: extract_podman_image_test
-  register: _verify_nonpodman
+  register: _systemd_unit_nonpodman
   become: true
 
 - name: _verify | Non-podman unit yields empty result
   assert:
     that:
-      - _verify_nonpodman.images == []
-      - _verify_nonpodman.unresolved == []
+      - _systemd_unit_nonpodman.images == []
+      - _systemd_unit_nonpodman.unresolved == []
 
 - name: _verify | Replace with a podman argv that has no positional image
   copy:
@@ -107,16 +107,16 @@
 - name: _verify | Unresolvable podman argv fails the play
   extract_podman_image:
     name: extract_podman_image_test
-  register: _verify_unresolvable
+  register: _systemd_unit_unresolvable
   become: true
   ignore_errors: true
 
 - name: _verify | Unresolvable case surfaces a fail with the expected msg
   assert:
     that:
-      - _verify_unresolvable.failed
-      - "'no resolvable image' in _verify_unresolvable.msg"
-      - _verify_unresolvable.argvs | length == 1
+      - _systemd_unit_unresolvable.failed
+      - "'no resolvable image' in _systemd_unit_unresolvable.msg"
+      - _systemd_unit_unresolvable.argvs | length == 1
 
 # User= round-trip: a unit that declares User=<x> must surface that name
 # via the module's `user` return so service.yml can route the pre-pull
@@ -150,15 +150,15 @@
 - name: _verify | Extract from User=nobody unit
   extract_podman_image:
     name: extract_podman_image_test
-  register: _verify_user
+  register: _systemd_unit_user
   become: true
 
 - name: _verify | User= populated unit surfaces the username
   assert:
     that:
-      - _verify_user.images == ["docker.io/library/alpine:3.19"]
-      - _verify_user.user == "nobody"
-      - _verify_user.unresolved == []
+      - _systemd_unit_user.images == ["docker.io/library/alpine:3.19"]
+      - _systemd_unit_user.user == "nobody"
+      - _systemd_unit_user.unresolved == []
 
 - name: _verify | Cleanup test unit file
   file:
@@ -193,13 +193,13 @@
     - name: _verify | Stat verify_ok service after first install
       stat:
         path: /etc/systemd/system/systemd_unit_verify_ok.service
-      register: _verify_ok_stat
+      register: _systemd_unit_ok_stat
     - name: _verify | Assert verify_ok result and file exist after first install
       assert:
         that:
           - systemd_unit_verify_ok_service_result is defined
           - systemd_unit_verify_ok_service_result.changed
-          - _verify_ok_stat.stat.exists
+          - _systemd_unit_ok_stat.stat.exists
 
 - name: _verify | Re-install same template is idempotent
   import_role:
@@ -247,10 +247,10 @@
     - name: _verify | Stat verify_bad path after expected rescue
       stat:
         path: /etc/systemd/system/systemd_unit_verify_bad.service
-      register: _verify_bad_stat
+      register: _systemd_unit_bad_stat
     - name: _verify | Assert fresh bad unit was deleted by rescue
       assert:
-        that: not _verify_bad_stat.stat.exists
+        that: not _systemd_unit_bad_stat.stat.exists
 
 # Mask guardrail: `systemctl mask` lives as a symlink to /dev/null at the
 # unit path, and operator intent is "do not start this." The install
@@ -283,12 +283,12 @@
     - name: _verify | Stat mask-test path after expected install refusal
       stat:
         path: /etc/systemd/system/systemd_unit_mask_test.service
-      register: _verify_masked_stat
+      register: _systemd_unit_masked_stat
     - name: _verify | Assert mask symlink survived the install refusal
       assert:
         that:
-          - _verify_masked_stat.stat.islnk
-          - _verify_masked_stat.stat.lnk_target == '/dev/null'
+          - _systemd_unit_masked_stat.stat.islnk
+          - _systemd_unit_masked_stat.stat.lnk_target == '/dev/null'
 
 - name: _verify | Unmask + remove mask-test fixture
   file:
@@ -325,13 +325,13 @@
     - name: _verify | Stat verify_copy_ok service after copy-path install
       stat:
         path: /etc/systemd/system/systemd_unit_verify_copy_ok.service
-      register: _verify_copy_stat
+      register: _systemd_unit_copy_stat
     - name: _verify | Assert verify_copy_ok result and file exist after install
       assert:
         that:
           - systemd_unit_verify_copy_ok_service_result is defined
           - systemd_unit_verify_copy_ok_service_result.changed
-          - _verify_copy_stat.stat.exists
+          - _systemd_unit_copy_stat.stat.exists
 
 # Drop-in entrypoint smoke test. dropin.yml derives dest as
 # <unit>.d/override.conf and verify as the parent unit, so the override
@@ -351,15 +351,15 @@
     - name: _verify | Stat drop-in override.conf path
       stat:
         path: /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/override.conf
-      register: _verify_dropin_stat
+      register: _systemd_unit_dropin_stat
     - name: _verify | Assert drop-in carries the expected Environment line
       command: grep -qF Environment=DROPIN_TEST=1 /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/override.conf
       changed_when: false
     - name: _verify | Assert drop-in is a regular file (not a symlink)
       assert:
         that:
-          - _verify_dropin_stat.stat.exists
-          - not _verify_dropin_stat.stat.islnk
+          - _systemd_unit_dropin_stat.stat.exists
+          - not _systemd_unit_dropin_stat.stat.islnk
 
 - name: _verify | Cleanup drop-in directory
   file:
@@ -404,13 +404,13 @@
     - name: _verify | Stat verify_ok path after remove
       stat:
         path: /etc/systemd/system/systemd_unit_verify_ok.service
-      register: _verify_removed_stat
+      register: _systemd_unit_removed_stat
     - name: _verify | Assert verify_ok result shows changed and file is gone
       assert:
         that:
           - systemd_unit_verify_ok_service_result is defined
           - systemd_unit_verify_ok_service_result.changed
-          - not _verify_removed_stat.stat.exists
+          - not _systemd_unit_removed_stat.stat.exists
 
 - name: _verify | Re-remove same unit is idempotent
   import_role:
@@ -451,12 +451,12 @@
     - name: _verify | Stat mask-test path after expected refusal
       stat:
         path: /etc/systemd/system/systemd_unit_remove_mask_test.service
-      register: _verify_remove_masked_stat
+      register: _systemd_unit_remove_masked_stat
     - name: _verify | Assert mask is still intact after refusal
       assert:
         that:
-          - _verify_remove_masked_stat.stat.islnk
-          - _verify_remove_masked_stat.stat.lnk_target == '/dev/null'
+          - _systemd_unit_remove_masked_stat.stat.islnk
+          - _systemd_unit_remove_masked_stat.stat.lnk_target == '/dev/null'
 
 - name: _verify | Unmask + remove the mask-test fixture
   file:

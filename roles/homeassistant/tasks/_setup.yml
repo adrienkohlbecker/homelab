@@ -23,8 +23,8 @@
     fi
   args:
     executable: /bin/bash
-  register: iot_setup
-  changed_when: '"created" in iot_setup.stdout'
+  register: _homeassistant_iot_setup
+  changed_when: '"created" in _homeassistant_iot_setup.stdout'
   become: true
 
 # Provision the mac_iot iface + podman network from host_vars'

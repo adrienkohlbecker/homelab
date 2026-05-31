@@ -162,7 +162,7 @@
 
     - name: _verify | Count the pasta connector helper
       command: pgrep -u {{ ansible_user_id }} -c -f pasta
-      register: _verify_pasta_count
+      register: _podman_pasta_count
       changed_when: false
       # pgrep -c exits 1 (and prints 0) when there are no matches; the
       # assert below is the real gate, so don't fail on the empty count.
@@ -170,26 +170,26 @@
 
     - name: _verify | Count any leftover slirp4netns helper
       command: pgrep -u {{ ansible_user_id }} -c -f slirp4netns
-      register: _verify_slirp_count
+      register: _podman_slirp_count
       changed_when: false
       failed_when: false
 
     - name: _verify | Read the container's routing table
       command: podman exec net_verify ip route
-      register: _verify_container_route
+      register: _podman_container_route
       changed_when: false
 
     - name: _verify | Assert pasta (not slirp4netns) backs the container with egress wired
       assert:
         that:
-          - _verify_pasta_count.stdout | int > 0
-          - _verify_slirp_count.stdout | int == 0
-          - '"default" in _verify_container_route.stdout'
+          - _podman_pasta_count.stdout | int > 0
+          - _podman_slirp_count.stdout | int == 0
+          - '"default" in _podman_container_route.stdout'
         fail_msg: >-
           Expected pasta to back the rootless container with a default
-          route. pasta procs={{ _verify_pasta_count.stdout }},
-          slirp4netns procs={{ _verify_slirp_count.stdout }},
-          container routes={{ _verify_container_route.stdout }}.
+          route. pasta procs={{ _podman_pasta_count.stdout }},
+          slirp4netns procs={{ _podman_slirp_count.stdout }},
+          container routes={{ _podman_container_route.stdout }}.
   always:
     - name: _verify | Remove the net-verify container
       environment:

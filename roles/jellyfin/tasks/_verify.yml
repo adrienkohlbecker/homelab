@@ -7,11 +7,11 @@
     url: http://localhost:{{ service_ports.jellyfin }}/System/Info/Public
     status_code: 200
     return_content: true
-  register: _verify_http
+  register: _jellyfin_http
   retries: 30
   delay: 2
-  until: _verify_http.status == 200
-  failed_when: not ((_verify_http.json.ProductName | default('')) is search('^Jellyfin'))
+  until: _jellyfin_http.status == 200
+  failed_when: not ((_jellyfin_http.json.ProductName | default('')) is search('^Jellyfin'))
 
 # Map the vhost FQDN to loopback so SNI matches the served certificate.
 # Probing https://localhost with a Host: header leaves SNI=localhost, which
@@ -33,11 +33,11 @@
     validate_certs: false
     status_code: 200
     return_content: true
-  register: _verify_http_nginx
+  register: _jellyfin_http_nginx
   retries: 30
   delay: 2
-  until: _verify_http_nginx.status == 200
-  failed_when: not ((_verify_http_nginx.json.ProductName | default('')) is search('^Jellyfin'))
+  until: _jellyfin_http_nginx.status == 200
+  failed_when: not ((_jellyfin_http_nginx.json.ProductName | default('')) is search('^Jellyfin'))
 
 # SQLite wiring: the symlinks at /config/data/<name>.db MUST resolve
 # through to the dedicated /mnt/services/sqlite/ dataset (the role's
@@ -48,7 +48,7 @@
   stat:
     path: "/mnt/services/jellyfin/data/{{ item }}"
     follow: false
-  register: _verify_symlinks
+  register: _jellyfin_symlinks
   become: true
   loop:
     - library.db
@@ -63,7 +63,7 @@
       /mnt/services/jellyfin/data/{{ item.item }} should be a symlink
       pointing into /mnt/services/sqlite/jellyfin/, but is
       {{ 'a regular file' if not item.stat.islnk else 'pointing at ' ~ item.stat.lnk_target }}.
-  loop: "{{ _verify_symlinks.results }}"
+  loop: "{{ _jellyfin_symlinks.results }}"
   loop_control:
     label: "{{ item.item }}"
 
@@ -90,17 +90,17 @@
 - name: _verify | Confirm /dev/dri/renderD128 inside container
   when: has_transcoding_acceleration
   command: podman exec jellyfin stat -c %n /dev/dri/renderD128
-  register: _verify_dri_in_container
+  register: _jellyfin_dri_in_container
   changed_when: false
-  failed_when: _verify_dri_in_container.stdout != '/dev/dri/renderD128'
+  failed_when: _jellyfin_dri_in_container.stdout != '/dev/dri/renderD128'
   become: true
 
 - name: _verify | Confirm render gid in container supplementary groups
   when: has_transcoding_acceleration
   command: podman exec jellyfin id -G
-  register: _verify_container_groups
+  register: _jellyfin_container_groups
   changed_when: false
-  failed_when: getent_group.render[1] not in _verify_container_groups.stdout.split()
+  failed_when: getent_group.render[1] not in _jellyfin_container_groups.stdout.split()
   become: true
 
 # Functional transcode probe: lavfi testsrc → libx264 → HLS segments on
@@ -127,9 +127,9 @@
 
 - name: _verify | Confirm transcode produced a non-empty playlist
   command: podman exec jellyfin stat -c %s /config/transcodes/_verify.m3u8
-  register: _verify_ffmpeg_output
+  register: _jellyfin_ffmpeg_output
   changed_when: false
-  failed_when: (_verify_ffmpeg_output.stdout | int) == 0
+  failed_when: (_jellyfin_ffmpeg_output.stdout | int) == 0
   become: true
 
 # --- SSO plugin ---------------------------------------------------------
@@ -143,7 +143,7 @@
 - name: _verify | Stat SSO plugin files
   stat:
     path: "/mnt/services/jellyfin/plugins/sso/{{ item }}"
-  register: _verify_sso_files
+  register: _jellyfin_sso_files
   become: true
   loop:
     - SSO-Auth.dll
@@ -156,7 +156,7 @@
     that:
       - item.stat.exists
     fail_msg: "SSO plugin file missing: {{ item.item }}"
-  loop: "{{ _verify_sso_files.results }}"
+  loop: "{{ _jellyfin_sso_files.results }}"
   loop_control:
     label: "{{ item.item }}"
 
@@ -169,7 +169,7 @@
 # still readable.
 - name: _verify | Read jellyfin container logs
   command: podman logs jellyfin
-  register: _verify_jf_logs
+  register: _jellyfin_jf_logs
   changed_when: false
   become: true
 
@@ -177,7 +177,7 @@
   assert:
     that:
       - >-
-        (_verify_jf_logs.stdout ~ _verify_jf_logs.stderr)
+        (_jellyfin_jf_logs.stdout ~ _jellyfin_jf_logs.stderr)
         is search('Loaded plugin: SSO-Auth ' ~ jellyfin_sso_plugin_version)
     fail_msg: >-
       Jellyfin did not log loading SSO-Auth {{ jellyfin_sso_plugin_version }}.
@@ -188,14 +188,14 @@
 - name: _verify | Read seeded branding.xml
   slurp:
     src: /mnt/services/jellyfin/config/branding.xml
-  register: _verify_branding
+  register: _jellyfin_branding
   become: true
 
 - name: _verify | Assert SSO login button seeded with this host
   assert:
     that:
       - >-
-        (_verify_branding.content | b64decode)
+        (_jellyfin_branding.content | b64decode)
         is search('jellyfin\.' ~ inventory_hostname ~ '\.' ~ domain ~ '/sso/OID/start/authelia')
     fail_msg: >-
       branding.xml is missing the SSO login-button form for

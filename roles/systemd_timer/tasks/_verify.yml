@@ -37,10 +37,10 @@
   uri:
     url: http://127.0.0.1:19999/api/v1/info
     status_code: 200
-  register: _verify_netdata_api
+  register: _systemd_timer_netdata_api
   retries: 60
   delay: 2
-  until: _verify_netdata_api.status == 200
+  until: _systemd_timer_netdata_api.status == 200
 
 # ============================================================
 # Contract 1+2: install/remove and stderr_priority (monitor:false)
@@ -64,37 +64,37 @@
 
 - name: _verify | Read service Result property  # noqa: command-instead-of-module
   command: systemctl show -p Result --value _verify_timer.service
-  register: _verify_timer_result
+  register: _systemd_timer_timer_result
   changed_when: false
   become: true
 
 - name: _verify | Read the file the service wrote
   slurp:
     src: /tmp/_verify_timer.out
-  register: _verify_timer_out
+  register: _systemd_timer_timer_out
   become: true
 
 - name: _verify | Read timer ActiveState  # noqa: command-instead-of-module
   command: systemctl show -p ActiveState --value _verify_timer.timer
-  register: _verify_timer_active
+  register: _systemd_timer_timer_active
   changed_when: false
   become: true
 
 - name: _verify | Functional assertions for state=present
   assert:
     that:
-      - _verify_timer_result.stdout == 'success'
-      - (_verify_timer_out.content | b64decode) == "CRON_VERIFY_OK\n"
-      - _verify_timer_active.stdout == 'active'
+      - _systemd_timer_timer_result.stdout == 'success'
+      - (_systemd_timer_timer_out.content | b64decode) == "CRON_VERIFY_OK\n"
+      - _systemd_timer_timer_active.stdout == 'active'
 
 - name: "_verify | Stat netdata metadata file (should NOT exist for monitor: false)"
   stat:
     path: /etc/netdata/charts.d/systemd_timers.d/_verify_timer.conf
-  register: _verify_timer_meta
+  register: _systemd_timer_timer_meta
 - name: _verify | Assert no metadata written for monitor=false
   assert:
     that:
-      - not _verify_timer_meta.stat.exists
+      - not _systemd_timer_timer_meta.stat.exists
 
 - name: _verify | Remove the fixture timer
   import_role:
@@ -110,12 +110,12 @@
   loop:
     - service
     - timer
-  register: _verify_timer_files
+  register: _systemd_timer_timer_files
   become: true
 
 - name: _verify | Systemctl status for the removed timer  # noqa: command-instead-of-module
   command: systemctl status _verify_timer.timer
-  register: _verify_timer_status
+  register: _systemd_timer_timer_status
   changed_when: false
   failed_when: false
   become: true
@@ -123,9 +123,9 @@
 - name: _verify | Assertions for state=absent
   assert:
     that:
-      - not _verify_timer_files.results[0].stat.exists
-      - not _verify_timer_files.results[1].stat.exists
-      - _verify_timer_status.rc != 0
+      - not _systemd_timer_timer_files.results[0].stat.exists
+      - not _systemd_timer_timer_files.results[1].stat.exists
+      - _systemd_timer_timer_status.rc != 0
 
 - name: _verify | Cleanup fixture output
   file:
@@ -136,7 +136,7 @@
 # ----- stderr_priority -----
 - name: _verify | Capture pre-run timestamp for journal filter
   command: date +%s
-  register: _verify_stderr_t0
+  register: _systemd_timer_stderr_t0
   changed_when: false
 
 - name: "_verify | Install stderr-test timer (monitor: false)"
@@ -164,16 +164,16 @@
 - name: _verify | Read journal at priority err for the stderr unit
   command: >-
     journalctl -u _verify_timer_stderr.service -p err
-    --since=@{{ _verify_stderr_t0.stdout }} --no-pager --output=cat
-  register: _verify_stderr_journal_err
+    --since=@{{ _systemd_timer_stderr_t0.stdout }} --no-pager --output=cat
+  register: _systemd_timer_stderr_journal_err
   changed_when: false
   become: true
 
 - name: _verify | Functional assertions for stderr_priority
   assert:
     that:
-      - "'STDERR_VERIFY_LINE' in _verify_stderr_journal_err.stdout"
-      - "'STDOUT_VERIFY_LINE' not in _verify_stderr_journal_err.stdout"
+      - "'STDERR_VERIFY_LINE' in _systemd_timer_stderr_journal_err.stdout"
+      - "'STDOUT_VERIFY_LINE' not in _systemd_timer_stderr_journal_err.stdout"
 
 - name: _verify | Remove the stderr fixture timer
   import_role:
@@ -221,30 +221,30 @@
 - name: _verify | Read knobs fixture output
   slurp:
     src: /tmp/_verify_timer_knobs.out
-  register: _verify_knobs_out
+  register: _systemd_timer_knobs_out
   become: true
 
 - name: _verify | Read systemctl show properties for knobs fixture  # noqa: command-instead-of-module
   command: >-
     systemctl show -p AccuracyUSec,ProtectSystem,ProtectHome
     _verify_timer_knobs.timer _verify_timer_knobs.service
-  register: _verify_knobs_show
+  register: _systemd_timer_knobs_show
   changed_when: false
   become: true
 
 - name: _verify | Functional + property assertions for new knobs
   vars:
-    _stdout: "{{ (_verify_knobs_out.content | b64decode).rstrip() }}"
+    _stdout: "{{ (_systemd_timer_knobs_out.content | b64decode).rstrip() }}"
   assert:
     that:
       - _stdout == "ENV_KEY=knob_value|ENV_OTHER=value with spaces, and a comma"
-      - "'AccuracyUSec=1s' in _verify_knobs_show.stdout"
-      - "'ProtectSystem=strict' in _verify_knobs_show.stdout"
-      - "'ProtectHome=yes' in _verify_knobs_show.stdout"
+      - "'AccuracyUSec=1s' in _systemd_timer_knobs_show.stdout"
+      - "'ProtectSystem=strict' in _systemd_timer_knobs_show.stdout"
+      - "'ProtectHome=yes' in _systemd_timer_knobs_show.stdout"
     fail_msg: |
       Knobs fixture failed.
       stdout: {{ _stdout }}
-      systemctl show: {{ _verify_knobs_show.stdout }}
+      systemctl show: {{ _systemd_timer_knobs_show.stdout }}
 
 - name: _verify | Remove the knobs fixture timer
   import_role:

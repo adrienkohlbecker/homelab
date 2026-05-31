@@ -7,13 +7,13 @@
     status_code: 200
     return_content: true
     timeout: 10
-  register: _verify_loopback
+  register: _seerr_loopback
   retries: 90
   delay: 2
   until:
-    - _verify_loopback.status == 200
-    - _verify_loopback.json is defined
-    - _verify_loopback.json.version is defined
+    - _seerr_loopback.status == 200
+    - _seerr_loopback.json is defined
+    - _seerr_loopback.json.version is defined
   become: true
 
 # apiKey-wiring check -- the role's central promise is that settings.json
@@ -26,12 +26,12 @@
 - name: _verify | Read back the settings.json seerr persisted
   slurp:
     src: /mnt/services/seerr/settings.json
-  register: _verify_settings_content
+  register: _seerr_settings_content
   become: true
 
 - name: _verify | Seerr persisted the configured apiKey
   vars:
-    _seerr_persisted: "{{ _verify_settings_content.content | b64decode | from_json }}"
+    _seerr_persisted: "{{ _seerr_settings_content.content | b64decode | from_json }}"
   assert:
     that:
       # Guard `main` first: a partial parse (or a regression that drops the
@@ -55,11 +55,11 @@
       Host: seerr.{{ inventory_hostname }}.{{ domain }}
     validate_certs: false
     return_content: true
-  register: _verify_nginx
+  register: _seerr_nginx
   failed_when: >-
-    _verify_nginx.status != 200
-    or _verify_nginx.json is not defined
-    or _verify_nginx.json.version is not defined
+    _seerr_nginx.status != 200
+    or _seerr_nginx.json is not defined
+    or _seerr_nginx.json.version is not defined
   become: true
 
 # Uidmap regression detector. seerr's `USER node:node` (in-container uid
@@ -71,10 +71,10 @@
 - name: _verify | Seerr writes settings.json as host seerr user
   stat:
     path: /mnt/services/seerr/settings.json
-  register: _verify_settings_owner
+  register: _seerr_settings_owner
   failed_when: >-
-    not _verify_settings_owner.stat.exists
-    or _verify_settings_owner.stat.pw_name != 'seerr'
+    not _seerr_settings_owner.stat.exists
+    or _seerr_settings_owner.stat.pw_name != 'seerr'
   become: true
 
 # Negative-auth probe. /api/v1/status (probed above) is the only unauthenticated
@@ -100,11 +100,11 @@
     podman exec seerr
     wget -q -T 5 -O /dev/null http://seerr.dns.podman:5055/api/v1/status
   become: true
-  register: _verify_media_dns
+  register: _seerr_media_dns
   changed_when: false
   retries: 15
   delay: 2
-  until: _verify_media_dns.rc == 0
+  until: _seerr_media_dns.rc == 0
 
 # Canonical-shape contract. Unlike radarr (which rewrites config.xml on every
 # shutdown), seerr only writes settings.json when a setting actually changes --
@@ -117,16 +117,16 @@
 - name: _verify | Re-slurp settings.json for the shape-match render
   slurp:
     src: /mnt/services/seerr/settings.json
-  register: _verify_shape_b64
+  register: _seerr_shape_b64
   become: true
 
 - name: _verify | The template reproduces the on-disk settings.json byte-for-byte
   vars:
-    seerr_settings_json: "{{ _verify_shape_b64.content | b64decode | from_json }}"
+    seerr_settings_json: "{{ _seerr_shape_b64.content | b64decode | from_json }}"
     _rendered: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
   assert:
     that:
-      - (_verify_shape_b64.content | b64decode) == _rendered
+      - (_seerr_shape_b64.content | b64decode) == _rendered
     fail_msg: >-
       settings.json.j2 no longer reproduces the on-disk file -- seerr persisted a
       shape (key set or order) the template does not emit, so a converge would
@@ -141,7 +141,7 @@
 # populated migrations ledger, bumped plex lastScan, the wizard-completed flags)
 # never get exercised here, yet those are the fragile ones. Synthesize a
 # plausible post-bootstrap writeback by injecting daemon-owned values onto the
-# fresh on-disk file (re-slurped above as _verify_shape_b64), render the
+# fresh on-disk file (re-slurped above as _seerr_shape_b64), render the
 # template against it, then feed that render back in and assert the two renders
 # are byte-identical (a fixed point) and that every injected daemon value
 # survived. A template that drops, reorders, or reformats a daemon-written key
@@ -149,7 +149,7 @@
 # restart regression a connected instance would hit on the next converge.
 - name: _verify | Synthetic post-bootstrap daemon-owned values
   set_fact:
-    _verify_pop_overrides:
+    _seerr_pop_overrides:
       main:
         mediaServerType: 2
       public:
@@ -176,22 +176,22 @@
 
 - name: _verify | Render the template against the synthetic post-bootstrap state
   vars:
-    seerr_settings_json: "{{ (_verify_shape_b64.content | b64decode | from_json) | combine(_verify_pop_overrides, recursive=True) }}"
+    seerr_settings_json: "{{ (_seerr_shape_b64.content | b64decode | from_json) | combine(_seerr_pop_overrides, recursive=True) }}"
   set_fact:
-    _verify_pop_render1: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
+    _seerr_pop_render1: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
 
 - name: _verify | Re-render feeding the populated render back in
   vars:
-    seerr_settings_json: "{{ _verify_pop_render1 | from_json }}"
+    seerr_settings_json: "{{ _seerr_pop_render1 | from_json }}"
   set_fact:
-    _verify_pop_render2: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
+    _seerr_pop_render2: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
 
 - name: _verify | The populated render is a stable fixed point preserving daemon-owned fields
   vars:
-    _parsed: "{{ _verify_pop_render1 | from_json }}"
+    _parsed: "{{ _seerr_pop_render1 | from_json }}"
   assert:
     that:
-      - _verify_pop_render1 == _verify_pop_render2
+      - _seerr_pop_render1 == _seerr_pop_render2
       - _parsed.jellyfin.ip == 'jellyfin.dns.podman'
       - _parsed.jellyfin.apiKey == 'jelly-test-key'
       - (_parsed.jellyfin.libraries | length) == 2
@@ -231,24 +231,24 @@
   uri:
     url: http://localhost:{{ service_ports.seerr }}/api/v1/status
     status_code: 200
-  register: _verify_rescue_http
+  register: _seerr_rescue_http
   retries: 90
   delay: 2
   until:
-    - _verify_rescue_http.status == 200
-    - _verify_rescue_http.json is defined
-    - _verify_rescue_http.json.version is defined
+    - _seerr_rescue_http.status == 200
+    - _seerr_rescue_http.json is defined
+    - _seerr_rescue_http.json.version is defined
   become: true
 
 - name: _verify | Read back the rescued settings.json
   slurp:
     src: /mnt/services/seerr/settings.json
-  register: _verify_rescued
+  register: _seerr_rescued
   become: true
 
 - name: _verify | The rescue rewrote a valid canonical file with our apiKey
   vars:
-    _rescued: "{{ _verify_rescued.content | b64decode | from_json }}"
+    _rescued: "{{ _seerr_rescued.content | b64decode | from_json }}"
   assert:
     that:
       - _rescued.main is defined

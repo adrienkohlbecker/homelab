@@ -7,10 +7,10 @@
 - name: _verify | Openproject pgdata is owned by openproject_pg (container-written PG_VERSION)
   stat:
     path: /mnt/services/openproject/pgdata/PG_VERSION
-  register: _verify_pgdata
+  register: _openproject_pgdata
   failed_when: >-
-    not _verify_pgdata.stat.exists
-    or _verify_pgdata.stat.pw_name != 'openproject_pg'
+    not _openproject_pgdata.stat.exists
+    or _openproject_pgdata.stat.pw_name != 'openproject_pg'
   become: true
 
 # assets/files is created by the in-container app (uid 1000) at first boot --
@@ -19,10 +19,10 @@
 - name: _verify | Openproject assets/files is owned by openproject (container-written)
   stat:
     path: /mnt/services/openproject/assets/files
-  register: _verify_assets
+  register: _openproject_assets
   failed_when: >-
-    not _verify_assets.stat.exists
-    or _verify_assets.stat.pw_name != 'openproject'
+    not _openproject_assets.stat.exists
+    or _openproject_assets.stat.pw_name != 'openproject'
   become: true
 
 # /health_checks/database is the endpoint the unit's steady-state --health-cmd
@@ -34,10 +34,10 @@
     url: http://127.0.0.1:{{ service_ports.openproject }}/health_checks/database
     status_code: 200
     timeout: 10
-  register: _verify_health
+  register: _openproject_health
   retries: 60
   delay: 5
-  until: _verify_health.status == 200
+  until: _openproject_health.status == 200
   become: true
 
 # Confirm the vhost refuses unauthenticated requests. auth: required wires
@@ -75,11 +75,11 @@
           import_tasks: check_secret_key_rotation.yml
         - name: _verify | Record that the gate did not fire
           set_fact:
-            _verify_gate_fired: false
+            _openproject_gate_fired: false
       rescue:
         - name: _verify | Record that the gate fired
           set_fact:
-            _verify_gate_fired: true
+            _openproject_gate_fired: true
   always:
     - name: _verify | Restore the correct stored secret value
       containers.podman.podman_secret:
@@ -90,5 +90,5 @@
 
 - name: _verify | Assert the rotation gate aborted
   assert:
-    that: _verify_gate_fired | default(false) | bool
+    that: _openproject_gate_fired | default(false) | bool
     fail_msg: SECRET_KEY_BASE drift was not detected -- the rotation gate is broken

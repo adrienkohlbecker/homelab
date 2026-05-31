@@ -40,7 +40,7 @@
         argv:
           - sha256sum
           - /tmp/deb_install_test/test_1.0-1.deb
-      register: _verify_v1_sha
+      register: _deb_install_v1_sha
       changed_when: false
 
 - name: _verify | Install v1 (fresh)
@@ -52,7 +52,7 @@
       name: deb-install-test
       version: "1.0-1"
       url: "file:///tmp/deb_install_test/test_1.0-1.deb"
-      sha256: "{{ _verify_v1_sha.stdout.split() | first }}"
+      sha256: "{{ _deb_install_v1_sha.stdout.split() | first }}"
 
 - name: _verify | Query status after fresh install
   command:
@@ -61,7 +61,7 @@
       - -W
       - -f=${db:Status-Status} ${Version}
       - deb-install-test
-  register: _verify_after_v1
+  register: _deb_install_after_v1
   changed_when: false
   become: true
 
@@ -69,10 +69,10 @@
   assert:
     that:
       - deb_install_test_deb_changed | bool
-      - _verify_after_v1.stdout == "installed 1.0-1"
+      - _deb_install_after_v1.stdout == "installed 1.0-1"
     fail_msg: >-
       fresh install: fact={{ deb_install_test_deb_changed | default('UNSET') }}
-      dpkg={{ _verify_after_v1.stdout }}
+      dpkg={{ _deb_install_after_v1.stdout }}
 
 - name: _verify | Re-install v1 (same pin, expected no-op)
   import_role:
@@ -83,7 +83,7 @@
       name: deb-install-test
       version: "1.0-1"
       url: "file:///tmp/deb_install_test/test_1.0-1.deb"
-      sha256: "{{ _verify_v1_sha.stdout.split() | first }}"
+      sha256: "{{ _deb_install_v1_sha.stdout.split() | first }}"
 
 - name: _verify | Re-running the same pin closed the gate (fact false)
   assert:
@@ -139,7 +139,7 @@
         argv:
           - sha256sum
           - /tmp/deb_install_test/test_2.0-1.deb
-      register: _verify_v2_sha
+      register: _deb_install_v2_sha
       changed_when: false
 
 - name: _verify | Install v2 (version bump)
@@ -151,7 +151,7 @@
       name: deb-install-test
       version: "2.0-1"
       url: "file:///tmp/deb_install_test/test_2.0-1.deb"
-      sha256: "{{ _verify_v2_sha.stdout.split() | first }}"
+      sha256: "{{ _deb_install_v2_sha.stdout.split() | first }}"
 
 - name: _verify | Query status after the bump
   command:
@@ -160,7 +160,7 @@
       - -W
       - -f=${db:Status-Status} ${Version}
       - deb-install-test
-  register: _verify_after_v2
+  register: _deb_install_after_v2
   changed_when: false
   become: true
 
@@ -168,10 +168,10 @@
   assert:
     that:
       - deb_install_test_deb_changed | bool
-      - _verify_after_v2.stdout == "installed 2.0-1"
+      - _deb_install_after_v2.stdout == "installed 2.0-1"
     fail_msg: >-
       version bump: fact={{ deb_install_test_deb_changed | default('UNSET') }}
-      dpkg={{ _verify_after_v2.stdout }}
+      dpkg={{ _deb_install_after_v2.stdout }}
 
 - name: _verify | Remove (keep config files) to reach config-files state
   command:
@@ -189,16 +189,16 @@
       - -W
       - -f=${db:Status-Status} ${Version}
       - deb-install-test
-  register: _verify_after_remove
+  register: _deb_install_after_remove
   changed_when: false
   become: true
 
 - name: _verify | Status word is config-files, not installed
   assert:
     that:
-      - _verify_after_remove.stdout == "config-files 2.0-1"
+      - _deb_install_after_remove.stdout == "config-files 2.0-1"
     fail_msg: >-
-      expected config-files state, got {{ _verify_after_remove.stdout }}
+      expected config-files state, got {{ _deb_install_after_remove.stdout }}
 
 - name: _verify | Re-install v2 over the config-files state
   import_role:
@@ -209,7 +209,7 @@
       name: deb-install-test
       version: "2.0-1"
       url: "file:///tmp/deb_install_test/test_2.0-1.deb"
-      sha256: "{{ _verify_v2_sha.stdout.split() | first }}"
+      sha256: "{{ _deb_install_v2_sha.stdout.split() | first }}"
 
 - name: _verify | A config-files package reinstalls (status gate, not version)
   assert:
@@ -224,13 +224,13 @@
 - name: _verify | Stat the staged file after a successful install
   stat:
     path: /var/cache/deb-install-test.deb
-  register: _verify_staged_after_install
+  register: _deb_install_staged_after_install
   become: true
 
 - name: _verify | A successful install cleaned up its staged .deb
   assert:
     that:
-      - not _verify_staged_after_install.stat.exists
+      - not _deb_install_staged_after_install.stat.exists
     fail_msg: >-
       expected /var/cache/deb-install-test.deb removed after install, still present
 
@@ -250,23 +250,23 @@
       name: deb-install-test
       version: "2.0-1"
       url: "file:///tmp/deb_install_test/test_2.0-1.deb"
-      sha256: "{{ _verify_v2_sha.stdout.split() | first }}"
+      sha256: "{{ _deb_install_v2_sha.stdout.split() | first }}"
 
 - name: _verify | Stat the staged file after the current-pin check-mode run
   stat:
     path: /var/cache/deb-install-test.deb
-  register: _verify_staged_checkmode_current
+  register: _deb_install_staged_checkmode_current
   become: true
 
 - name: _verify | Check mode kept the gate closed and staged nothing
   assert:
     that:
       - not (deb_install_test_deb_changed | bool)
-      - not _verify_staged_checkmode_current.stat.exists
+      - not _deb_install_staged_checkmode_current.stat.exists
     fail_msg: >-
       check mode on a current package must close the gate and stage nothing;
       fact={{ deb_install_test_deb_changed }}
-      staged_exists={{ _verify_staged_checkmode_current.stat.exists }}
+      staged_exists={{ _deb_install_staged_checkmode_current.stat.exists }}
 
 # Check mode on a not-installed package must mutate nothing: the block runs but
 # apt only dry-runs (no check_mode: false override), so nothing installs -- while
@@ -281,7 +281,7 @@
       name: deb-install-check
       version: "2.0-1"
       url: "file:///tmp/deb_install_test/test_2.0-1.deb"
-      sha256: "{{ _verify_v2_sha.stdout.split() | first }}"
+      sha256: "{{ _deb_install_v2_sha.stdout.split() | first }}"
 
 - name: _verify | Query the fresh package after the check-mode run
   command:
@@ -290,26 +290,26 @@
       - -W
       - -f=${db:Status-Status} ${Version}
       - deb-install-check
-  register: _verify_checkmode_query
+  register: _deb_install_checkmode_query
   changed_when: false
-  failed_when: _verify_checkmode_query.rc not in [0, 1]
+  failed_when: _deb_install_checkmode_query.rc not in [0, 1]
   become: true
 
 - name: _verify | Stat the fresh staged file after the check-mode run
   stat:
     path: /var/cache/deb-install-check.deb
-  register: _verify_staged_checkmode_fresh
+  register: _deb_install_staged_checkmode_fresh
   become: true
 
 - name: _verify | Check mode installed nothing and staged nothing
   assert:
     that:
-      - _verify_checkmode_query.stdout == ""
-      - not _verify_staged_checkmode_fresh.stat.exists
+      - _deb_install_checkmode_query.stdout == ""
+      - not _deb_install_staged_checkmode_fresh.stat.exists
     fail_msg: >-
       check mode must not install or leave a staged .deb; dpkg={{
-      _verify_checkmode_query.stdout }}
-      staged_exists={{ _verify_staged_checkmode_fresh.stat.exists }}
+      _deb_install_checkmode_query.stdout }}
+      staged_exists={{ _deb_install_staged_checkmode_fresh.stat.exists }}
 
 # The assert gate must reject malformed args rather than proceed. A non-hex
 # sha256 trips the assert; rescue catches the failure so the play continues.
@@ -327,21 +327,21 @@
           sha256: "not-a-valid-sha256"
     - name: _verify | Reached past the assert (gate did NOT fire)
       set_fact:
-        _verify_bad_args_passed: true
+        _deb_install_bad_args_passed: true
   rescue:
     - name: _verify | The assert gate fired as expected
       set_fact:
-        _verify_bad_args_rejected: true
+        _deb_install_bad_args_rejected: true
 
 - name: _verify | Malformed args were rejected, not acted on
   assert:
     that:
-      - _verify_bad_args_rejected | default(false)
-      - not (_verify_bad_args_passed | default(false))
+      - _deb_install_bad_args_rejected | default(false)
+      - not (_deb_install_bad_args_passed | default(false))
     fail_msg: >-
       expected the assert gate to reject a non-hex sha256; rejected={{
-      _verify_bad_args_rejected | default(false) }} proceeded={{
-      _verify_bad_args_passed | default(false) }}
+      _deb_install_bad_args_rejected | default(false) }} proceeded={{
+      _deb_install_bad_args_passed | default(false) }}
 
 # A download that succeeds but whose apt install fails must still clean up the
 # staged file (the always: block). A correctly-checksummed non-deb downloads
@@ -360,7 +360,7 @@
         argv:
           - sha256sum
           - /tmp/deb_install_test/bogus.bin
-      register: _verify_bogus_sha
+      register: _deb_install_bogus_sha
       changed_when: false
 
 - name: _verify | Install the bogus deb (download ok, apt rejects it)
@@ -374,27 +374,27 @@
           name: deb-install-bogus
           version: "9.9"
           url: "file:///tmp/deb_install_test/bogus.bin"
-          sha256: "{{ _verify_bogus_sha.stdout.split() | first }}"
+          sha256: "{{ _deb_install_bogus_sha.stdout.split() | first }}"
   rescue:
     - name: _verify | The bogus install failed as expected
       set_fact:
-        _verify_bogus_failed: true
+        _deb_install_bogus_failed: true
 
 - name: _verify | Stat the bogus staged file after the failure
   stat:
     path: /var/cache/deb-install-bogus.deb
-  register: _verify_staged_bogus
+  register: _deb_install_staged_bogus
   become: true
 
 - name: _verify | A failed install propagated and still cleaned up
   assert:
     that:
-      - _verify_bogus_failed | default(false)
-      - not _verify_staged_bogus.stat.exists
+      - _deb_install_bogus_failed | default(false)
+      - not _deb_install_staged_bogus.stat.exists
     fail_msg: >-
       expected a failed install to propagate and remove
-      /var/cache/deb-install-bogus.deb; failed={{ _verify_bogus_failed | default(false) }}
-      staged_exists={{ _verify_staged_bogus.stat.exists }}
+      /var/cache/deb-install-bogus.deb; failed={{ _deb_install_bogus_failed | default(false) }}
+      staged_exists={{ _deb_install_staged_bogus.stat.exists }}
 
 - name: _verify | Purge the test package and clean up
   become: true

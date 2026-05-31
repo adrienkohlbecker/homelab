@@ -8,63 +8,63 @@
 
 - name: _verify | Read running hostname
   command: hostname
-  register: _verify_hostname
+  register: _hostname_hostname
   changed_when: false
 
 - name: _verify | Read /etc/hostname
   slurp:
     src: /etc/hostname
-  register: _verify_etc_hostname
+  register: _hostname_etc_hostname
 
 - name: _verify | Read static hostname (systemd)
   # The transient kernel hostname can match by DHCP coincidence even when
   # the static (persistent) name is wrong — only the static value survives
   # a reboot, so assert on it directly.
   command: hostnamectl --static
-  register: _verify_hostnamectl_static
+  register: _hostname_hostnamectl_static
   changed_when: false
 
 - name: _verify | Hostname state matches inventory
   assert:
     quiet: true
     that:
-      - _verify_hostname.stdout == inventory_hostname
-      - (_verify_etc_hostname.content | b64decode).strip() == inventory_hostname
-      - _verify_hostnamectl_static.stdout == inventory_hostname
+      - _hostname_hostname.stdout == inventory_hostname
+      - (_hostname_etc_hostname.content | b64decode).strip() == inventory_hostname
+      - _hostname_hostnamectl_static.stdout == inventory_hostname
     fail_msg: |
       Hostname state mismatch:
-        running: {{ _verify_hostname.stdout }}
-        /etc/hostname: {{ (_verify_etc_hostname.content | b64decode).strip() }}
-        static:  {{ _verify_hostnamectl_static.stdout }}
+        running: {{ _hostname_hostname.stdout }}
+        /etc/hostname: {{ (_hostname_etc_hostname.content | b64decode).strip() }}
+        static:  {{ _hostname_hostnamectl_static.stdout }}
         expected: {{ inventory_hostname }}
 
 - name: _verify | Resolve inventory_hostname short form
   command: getent -s files ahosts {{ inventory_hostname }}
-  register: _verify_getent_short
+  register: _hostname_getent_short
   changed_when: false
 
 - name: _verify | Resolve localhost over IPv6
   command: getent -s files ahostsv6 localhost
-  register: _verify_getent_localhost
+  register: _hostname_getent_localhost
   changed_when: false
 
 - name: _verify | /etc/hosts resolution matches expectation
   assert:
     quiet: true
     that:
-      - "'127.0.1.1' in _verify_getent_short.stdout"
-      - "'::1' in _verify_getent_localhost.stdout"
+      - "'127.0.1.1' in _hostname_getent_short.stdout"
+      - "'::1' in _hostname_getent_localhost.stdout"
     fail_msg: |
       /etc/hosts resolution mismatch:
-        short → {{ _verify_getent_short.stdout | replace('\n', ' / ') }}
-        v6    → {{ _verify_getent_localhost.stdout | replace('\n', ' / ') }}
+        short → {{ _hostname_getent_short.stdout | replace('\n', ' / ') }}
+        v6    → {{ _hostname_getent_localhost.stdout | replace('\n', ' / ') }}
 
 - name: _verify | Resolve etc_hosts_entries to configured IPs
   when: etc_hosts_entries | default({}) | length > 0
   command: getent -s files ahosts {{ item.key }}
   loop: "{{ etc_hosts_entries | default({}) | dict2items }}"
-  register: _verify_etc_hosts_entries
+  register: _hostname_etc_hosts_entries
   changed_when: false
   failed_when:
-    - _verify_etc_hosts_entries.rc != 0
-    - item.value not in _verify_etc_hosts_entries.stdout
+    - _hostname_etc_hosts_entries.rc != 0
+    - item.value not in _hostname_etc_hosts_entries.stdout

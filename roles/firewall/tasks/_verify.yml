@@ -30,18 +30,18 @@
 # wireguard interface — exercising rules that key on -i wg0.
 - name: _verify | Derive probe source IPs from subnet vars
   set_fact:
-    probe_home: "{{ site_subnets.home | ansible.utils.ipmath(250) }}"
-    probe_wg: "{{ wireguard_subnet | ansible.utils.ipmath(250) }}"
-    probe_podman: "{{ podman_default_network | ansible.utils.ipmath(250) }}"
-    probe_podman_pool: "{{ podman_bridge_pool | ansible.utils.ipmath(250) }}"
+    _firewall_probe_home: "{{ site_subnets.home | ansible.utils.ipmath(250) }}"
+    _firewall_probe_wg: "{{ wireguard_subnet | ansible.utils.ipmath(250) }}"
+    _firewall_probe_podman: "{{ podman_default_network | ansible.utils.ipmath(250) }}"
+    _firewall_probe_podman_pool: "{{ podman_bridge_pool | ansible.utils.ipmath(250) }}"
     # Non-scope source: in-subnet on the netns veth (10.99.0.0/24, see
     # the topology header above) but outside any allowlisted saddr —
     # used by the OOS negative probes (samba, nut, mosh, dnscrypt).
-    probe_nonscope: 10.99.0.2
+    _firewall_probe_nonscope: 10.99.0.2
     # Container target for crafted-packet probes — an unused IP in
     # podman_default_network; not a real container, just a destination
     # the FORWARD chain's iif=wg0/oif=podman0 path resolves to.
-    probe_container_dest: "{{ podman_default_network | ansible.utils.ipmath(2) }}"
+    _firewall_probe_container_dest: "{{ podman_default_network | ansible.utils.ipmath(2) }}"
 
 - name: _verify | Set up netns/veth test rig
   import_tasks: _verify_rig.yml

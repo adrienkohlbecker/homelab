@@ -6,10 +6,10 @@
   uri:
     url: http://127.0.0.1:{{ service_ports.radarr }}/api/v3/system/status
     status_code: 401
-  register: _verify_http_unauth
+  register: _radarr_http_unauth
   retries: 30
   delay: 2
-  until: _verify_http_unauth.status == 401
+  until: _radarr_http_unauth.status == 401
 
 # Authenticated probe -- proves the apikey we templated into config.xml is
 # the one the running container accepted, not just one we wrote to disk.
@@ -21,11 +21,11 @@
       X-Api-Key: "{{ radarr_api_key }}"
     status_code: 200
     return_content: true
-  register: _verify_http
+  register: _radarr_http
   retries: 30
   delay: 2
-  until: _verify_http.status == 200
-  failed_when: (_verify_http.json | default({})) | length == 0
+  until: _radarr_http.status == 200
+  failed_when: (_radarr_http.json | default({})) | length == 0
 
 # The vhost is `auth: required`, so the real browser access pattern is an
 # Authelia-gated UI -- the API path above is reached intra-stack via
@@ -44,11 +44,11 @@
     validate_certs: false
     follow_redirects: none
     status_code: 302
-  register: _verify_nginx_gate
+  register: _radarr_nginx_gate
   failed_when: >-
-    _verify_nginx_gate.status != 302
-    or 'auth.' not in (_verify_nginx_gate.location | default(''))
-    or ('rd=https://radarr.' ~ inventory_hostname ~ '.' ~ domain) not in (_verify_nginx_gate.location | default(''))
+    _radarr_nginx_gate.status != 302
+    or 'auth.' not in (_radarr_nginx_gate.location | default(''))
+    or ('rd=https://radarr.' ~ inventory_hostname ~ '.' ~ domain) not in (_radarr_nginx_gate.location | default(''))
 
 # The --network media join + radarr.dns.podman FQDN is how intra-stack peers
 # (bazarr, seerr, ...) reach radarr with X-Api-Key, bypassing nginx. The
@@ -64,8 +64,8 @@
     -s -o /dev/null -w %{http_code}
     http://radarr.dns.podman:7878/api/v3/system/status
   become: true
-  register: _verify_dns_podman
-  until: _verify_dns_podman.rc == 0 and _verify_dns_podman.stdout == "401"
+  register: _radarr_dns_podman
+  until: _radarr_dns_podman.rc == 0 and _radarr_dns_podman.stdout == "401"
   retries: 15
   delay: 2
   changed_when: false
@@ -84,7 +84,7 @@
   loop:
     - radarr.db
     - logs.db
-  register: _verify_db_links
+  register: _radarr_db_links
   become: true
 
 - name: _verify | Radarr DBs are symlinks onto the sqlite dataset
@@ -93,7 +93,7 @@
       - item.stat.islnk
       - item.stat.lnk_target == "/mnt/services/sqlite/radarr/" ~ item.item
     fail_msg: "{{ item.item }} is not a symlink onto the sqlite dataset (stat={{ item.stat }})"
-  loop: "{{ _verify_db_links.results }}"
+  loop: "{{ _radarr_db_links.results }}"
   loop_control:
     label: "{{ item.item }}"
 
@@ -103,7 +103,7 @@
   loop:
     - radarr.db
     - logs.db
-  register: _verify_db_files
+  register: _radarr_db_files
   become: true
 
 - name: _verify | Radarr wrote real, non-empty DBs onto the dataset
@@ -113,7 +113,7 @@
       - not item.stat.islnk
       - item.stat.size > 0
     fail_msg: "{{ item.item }} on the dataset is missing or empty (stat={{ item.stat }})"
-  loop: "{{ _verify_db_files.results }}"
+  loop: "{{ _radarr_db_files.results }}"
   loop_control:
     label: "{{ item.item }}"
 
@@ -124,14 +124,14 @@
 - name: _verify | Stat the radarr config dir
   stat:
     path: /mnt/services/radarr
-  register: _verify_config_dir
+  register: _radarr_config_dir
   become: true
 
 - name: _verify | Radarr config dir is group media
   assert:
     that:
-      - _verify_config_dir.stat.gr_name == "media"
-    fail_msg: "/mnt/services/radarr is not group media (gr_name={{ _verify_config_dir.stat.gr_name }})"
+      - _radarr_config_dir.stat.gr_name == "media"
+    fail_msg: "/mnt/services/radarr is not group media (gr_name={{ _radarr_config_dir.stat.gr_name }})"
 
 # config.xml is the role's other fragile contract: radarr rewrites it on
 # every shutdown, so config.xml.j2's element order + casing must match
@@ -152,25 +152,25 @@
     headers:
       X-Api-Key: "{{ radarr_api_key }}"
     status_code: 200
-  register: _verify_http_postrestart
+  register: _radarr_http_postrestart
   retries: 60
   delay: 2
-  until: _verify_http_postrestart.status == 200
+  until: _radarr_http_postrestart.status == 200
 
 - name: _verify | Render the config.xml our template would write
   set_fact:
-    _verify_conf_expected: "{{ lookup('template', 'config.xml.j2') | regex_replace('\\n+$', '') }}"
+    _radarr_conf_expected: "{{ lookup('template', 'config.xml.j2') | regex_replace('\\n+$', '') }}"
 
 - name: _verify | Read config.xml back after the writeback
   slurp:
     src: /mnt/services/radarr/config.xml
-  register: _verify_conf_ondisk
+  register: _radarr_conf_ondisk
   become: true
 
 - name: _verify | Templated config.xml survives radarr's writeback without drift
   assert:
     that:
-      - (_verify_conf_ondisk.content | b64decode) == _verify_conf_expected
+      - (_radarr_conf_ondisk.content | b64decode) == _radarr_conf_expected
     fail_msg: >-
       radarr rewrote config.xml into a form config.xml.j2 no longer matches --
       its element order/casing drifted from radarr's writeback, so deploying

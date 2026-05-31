@@ -8,10 +8,10 @@
     url: http://127.0.0.1:{{ service_ports.profilarr }}/ping
     status_code: 200
     timeout: 10
-  register: _verify_loopback
+  register: _profilarr_loopback
   retries: 30
   delay: 2
-  until: _verify_loopback.status == 200
+  until: _profilarr_loopback.status == 200
   become: true
 
 # nginx-vhost probe -- exercises the proxied path, not just loopback. A
@@ -27,10 +27,10 @@
     validate_certs: false
     status_code: 200
     timeout: 10
-  register: _verify_nginx
+  register: _profilarr_nginx
   retries: 30
   delay: 2
-  until: _verify_nginx.status == 200
+  until: _profilarr_nginx.status == 200
   become: true
 
 # Symlink-relocation probe -- proves the /config/profilarr.db symlink resolves
@@ -41,11 +41,11 @@
   stat:
     path: /mnt/services/profilarr/profilarr.db
     follow: false
-  register: _verify_db_link
+  register: _profilarr_db_link
   failed_when: >-
-    not _verify_db_link.stat.exists
-    or not _verify_db_link.stat.islnk
-    or _verify_db_link.stat.lnk_target != '/mnt/services/sqlite/profilarr/profilarr.db'
+    not _profilarr_db_link.stat.exists
+    or not _profilarr_db_link.stat.islnk
+    or _profilarr_db_link.stat.lnk_target != '/mnt/services/sqlite/profilarr/profilarr.db'
   become: true
 
 # Ownership + content probe -- profilarr creates the DB as the in-container
@@ -60,11 +60,11 @@
 - name: _verify | Profilarr SQLite DB is profilarr-owned, owner-private, non-empty
   stat:
     path: /mnt/services/sqlite/profilarr/profilarr.db
-  register: _verify_db_owner
+  register: _profilarr_db_owner
   failed_when: >-
-    not _verify_db_owner.stat.exists
-    or _verify_db_owner.stat.islnk
-    or _verify_db_owner.stat.pw_name != 'profilarr'
-    or _verify_db_owner.stat.roth
-    or _verify_db_owner.stat.size == 0
+    not _profilarr_db_owner.stat.exists
+    or _profilarr_db_owner.stat.islnk
+    or _profilarr_db_owner.stat.pw_name != 'profilarr'
+    or _profilarr_db_owner.stat.roth
+    or _profilarr_db_owner.stat.size == 0
   become: true

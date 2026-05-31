@@ -2,10 +2,10 @@
   uri:
     url: http://localhost:{{ service_ports.homepage }}/api/healthcheck
     status_code: 200
-  register: _verify_http
+  register: _homepage_http
   retries: 30
   delay: 2
-  until: _verify_http.status == 200
+  until: _homepage_http.status == 200
   become: true
 
 - name: _verify | Homepage answers through nginx via Host header
@@ -30,21 +30,21 @@
     validate_certs: false
     return_content: true
     status_code: 200
-  register: _verify_alerts_html
+  register: _homepage_alerts_html
   retries: 30
   delay: 2
-  until: _verify_alerts_html.status == 200
+  until: _homepage_alerts_html.status == 200
   become: true
 
 - name: _verify | Homepage_alerts HTML carries the iframe-resize script
   assert:
     that:
-      - "'frameElement' in _verify_alerts_html.content"
+      - "'frameElement' in _homepage_alerts_html.content"
     fail_msg: "Expected the same-origin iframe-resize script (frameElement) in the rendered HTML"
 
 - name: _verify | Homepage_alerts HTML names every configured host
   assert:
-    that: item in _verify_alerts_html.content
+    that: item in _homepage_alerts_html.content
     fail_msg: "Host {{ item }} missing from rendered HTML"
   loop: "{{ homepage_netdata_hosts }}"
 
@@ -60,11 +60,11 @@
   when: inventory_hostname == 'box'
   assert:
     that:
-      - '"<div class=\"err\">" in _verify_alerts_html.content'
+      - '"<div class=\"err\">" in _homepage_alerts_html.content'
     fail_msg: >-
       Expected a per-host <div class="err"> rendered on box (no real netdata
       reachable from the test fixture). HTML content was:
-      {{ _verify_alerts_html.content }}
+      {{ _homepage_alerts_html.content }}
 
 # Hot-reload proof: the role intentionally skips restart on YAML config
 # edits because gethomepage watches /app/config. If a future image bump
@@ -95,8 +95,8 @@
     url: "http://localhost:{{ service_ports.homepage }}/api/bookmarks"
     return_content: true
     status_code: 200
-  register: _verify_hotreload
+  register: _homepage_hotreload
   retries: 60
   delay: 2
-  until: "'HomepageVerifySentinel' in _verify_hotreload.content"
+  until: "'HomepageVerifySentinel' in _homepage_hotreload.content"
   become: true

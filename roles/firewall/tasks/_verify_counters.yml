@@ -6,7 +6,7 @@
 
 - name: _verify_counters | Capture nftables counters after crafted-packet probes
   command: nft -j list table inet homelab
-  register: counters_after_crafted
+  register: _firewall_counters_after_crafted
   changed_when: false
   become: true
 
@@ -19,13 +19,13 @@
 - name: _verify_counters | Sysctl — nf_conntrack_tcp_loose=0 persisted in sysctl.d
   slurp:
     src: /etc/sysctl.d/90-firewall-hardening.conf
-  register: sysctl_persist
+  register: _firewall_sysctl_persist
   become: true
 
 - name: _verify_counters | Sysctl — nf_conntrack module pinned in modules-load.d
   slurp:
     src: /etc/modules-load.d/30-firewall-hardening.conf
-  register: modload_persist
+  register: _firewall_modload_persist
   become: true
 
 - name: _verify_counters | Sysctl — assert persistence
@@ -35,8 +35,8 @@
       # spaces; the earlier assertion expected `key = value` (the
       # canonical sysctl(8) parse-tolerant form) and missed the
       # actual on-disk shape. Compare against the no-spaces form.
-      - "'net.netfilter.nf_conntrack_tcp_loose=0' in (sysctl_persist.content | b64decode)"
-      - "'nf_conntrack' in (modload_persist.content | b64decode)"
+      - "'net.netfilter.nf_conntrack_tcp_loose=0' in (_firewall_sysctl_persist.content | b64decode)"
+      - "'nf_conntrack' in (_firewall_modload_persist.content | b64decode)"
     fail_msg: >-
       Either /etc/sysctl.d/90-firewall-hardening.conf doesn't pin
       nf_conntrack_tcp_loose=0, or /etc/modules-load.d/30-firewall-
@@ -49,7 +49,7 @@
 - name: _verify_counters | Reboot signal — /var/run/reboot-required exists
   stat:
     path: /var/run/reboot-required
-  register: reboot_required_stat
+  register: _firewall_reboot_required_stat
   become: true
 
 # Require recent mtime so a stale file from a prior --keep'd run
@@ -59,8 +59,8 @@
 - name: _verify_counters | Reboot signal — assert reboot was signaled this run
   assert:
     that:
-      - reboot_required_stat.stat.exists
-      - reboot_required_stat.stat.mtime > (ansible_date_time.epoch | int) - 3600
+      - _firewall_reboot_required_stat.stat.exists
+      - _firewall_reboot_required_stat.stat.mtime > (ansible_date_time.epoch | int) - 3600
     fail_msg: >-
       /var/run/reboot-required is missing or stale (mtime older than
       1 hour). With nf_conntrack not pre-loaded, the conntrack sysctl
@@ -75,7 +75,7 @@
 # `rule.expr` also have a `counter` key but no `family`).
 - name: _verify_counters | Counter-checked rules each fired the expected number of times
   vars:
-    nft_counters: "{{ (counters_after_crafted.stdout | from_json).nftables
+    nft_counters: "{{ (_firewall_counters_after_crafted.stdout | from_json).nftables
                       | selectattr('counter', 'defined')
                       | map(attribute='counter')
                       | selectattr('family', 'defined') | list }}"

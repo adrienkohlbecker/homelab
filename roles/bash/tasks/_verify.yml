@@ -5,15 +5,15 @@
     echo "ok"
   args:
     executable: /bin/bash
-  register: _verify_require_root_ok
+  register: _bash_require_root_ok
   changed_when: false
   become: true
 
 - name: _verify | F_require_root root assertions
   assert:
     that:
-      - _verify_require_root_ok.rc == 0
-      - "'ok' in _verify_require_root_ok.stdout"
+      - _bash_require_root_ok.rc == 0
+      - "'ok' in _bash_require_root_ok.stdout"
 
 - name: _verify | F_require_root fails as non-root
   shell: |
@@ -24,7 +24,7 @@
     '
   args:
     executable: /bin/bash
-  register: _verify_require_root_fail
+  register: _bash_require_root_fail
   changed_when: false
   failed_when: false
   become: true
@@ -32,9 +32,9 @@
 - name: _verify | F_require_root non-root assertions
   assert:
     that:
-      - _verify_require_root_fail.rc == 1
-      - "'I require root' in _verify_require_root_fail.stderr"
-      - "'should-not-run' not in _verify_require_root_fail.stdout"
+      - _bash_require_root_fail.rc == 1
+      - "'I require root' in _bash_require_root_fail.stderr"
+      - "'should-not-run' not in _bash_require_root_fail.stdout"
 
 - name: _verify | F_rescue continues past failures and records them in f_failed
   shell: |
@@ -45,16 +45,16 @@
     echo "f_failed=$f_failed"
   args:
     executable: /bin/bash
-  register: _verify_f_rescue
+  register: _bash_f_rescue
   changed_when: false
 
 - name: _verify | F_rescue assertions
   assert:
     that:
-      - _verify_f_rescue.rc == 0
-      - "'f_failed=2' in _verify_f_rescue.stdout"
-      - "'Error: false failed with exit 1' in _verify_f_rescue.stderr"
-      - "'Error: ls /nonexistent-path-for-verify failed with exit' in _verify_f_rescue.stderr"
+      - _bash_f_rescue.rc == 0
+      - "'f_failed=2' in _bash_f_rescue.stdout"
+      - "'Error: false failed with exit 1' in _bash_f_rescue.stderr"
+      - "'Error: ls /nonexistent-path-for-verify failed with exit' in _bash_f_rescue.stderr"
 
 # f_rescue must not mutate the caller's errexit state. Caller disables -e,
 # calls f_rescue, then inspects $- to confirm -e is still off. Catches a
@@ -71,14 +71,14 @@
     esac
   args:
     executable: /bin/bash
-  register: _verify_f_rescue_errexit
+  register: _bash_f_rescue_errexit
   changed_when: false
 
 - name: _verify | F_rescue errexit-preservation assertion
   assert:
     that:
-      - _verify_f_rescue_errexit.rc == 0
-      - "'errexit=off' in _verify_f_rescue_errexit.stdout"
+      - _bash_f_rescue_errexit.rc == 0
+      - "'errexit=off' in _bash_f_rescue_errexit.stdout"
 
 - name: _verify | F_trace echoes the shell-quoted command to stdout then runs it
   shell: |
@@ -86,7 +86,7 @@
     f_trace echo hello "two words"
   args:
     executable: /bin/bash
-  register: _verify_f_trace
+  register: _bash_f_trace
   changed_when: false
 
 # The `$ <cmd>` banner is a plain printf (not redirected to >&2), so it lands
@@ -94,9 +94,9 @@
 - name: _verify | F_trace assertions
   assert:
     that:
-      - _verify_f_trace.rc == 0
-      - "'$ echo hello' in _verify_f_trace.stdout"
-      - "'hello two words' in _verify_f_trace.stdout"
+      - _bash_f_trace.rc == 0
+      - "'$ echo hello' in _bash_f_trace.stdout"
+      - "'hello two words' in _bash_f_trace.stdout"
 
 - name: _verify | ERR trap fires on errexit with file:line:func breadcrumb
   shell: |
@@ -105,18 +105,18 @@
     echo unreached
   args:
     executable: /bin/bash
-  register: _verify_err_trap
+  register: _bash_err_trap
   changed_when: false
   failed_when: false
 
 - name: _verify | ERR trap fires assertions
   assert:
     that:
-      - _verify_err_trap.rc == 1
-      - "'unreached' not in _verify_err_trap.stdout"
-      - "'ERR: ' in _verify_err_trap.stderr"
-      - "'false (exit 1)' in _verify_err_trap.stderr"
-      - "'in main' in _verify_err_trap.stderr"
+      - _bash_err_trap.rc == 1
+      - "'unreached' not in _bash_err_trap.stdout"
+      - "'ERR: ' in _bash_err_trap.stderr"
+      - "'false (exit 1)' in _bash_err_trap.stderr"
+      - "'in main' in _bash_err_trap.stderr"
 
 # Regression check: f_rescue uses `if "$@"; then ... else ...`, and
 # commands in if-conditions are exempt from ERR per bash semantics.
@@ -129,13 +129,13 @@
     echo "after-rescue"
   args:
     executable: /bin/bash
-  register: _verify_err_trap_rescue
+  register: _bash_err_trap_rescue
   changed_when: false
 
 - name: _verify | ERR trap non-firing under f_rescue assertions
   assert:
     that:
-      - _verify_err_trap_rescue.rc == 0
-      - "'after-rescue' in _verify_err_trap_rescue.stdout"
-      - "'ERR: ' not in _verify_err_trap_rescue.stderr"
-      - "'Error: false failed' in _verify_err_trap_rescue.stderr"
+      - _bash_err_trap_rescue.rc == 0
+      - "'after-rescue' in _bash_err_trap_rescue.stdout"
+      - "'ERR: ' not in _bash_err_trap_rescue.stderr"
+      - "'Error: false failed' in _bash_err_trap_rescue.stderr"

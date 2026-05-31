@@ -13,4 +13,4 @@
     name: _test
     tasks_from: authelia_stub
   vars:
-    authelia_stub_mode: gate
+    _openproject_authelia_stub_mode: gate

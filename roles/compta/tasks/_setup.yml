@@ -22,4 +22,4 @@
     name: _test
     tasks_from: authelia_stub
   vars:
-    authelia_stub_mode: gate
+    _compta_authelia_stub_mode: gate

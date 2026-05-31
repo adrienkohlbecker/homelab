@@ -6,25 +6,25 @@
 
 - name: _verify | Tailscale backend is Running (registered with headscale)
   command: tailscale status --json
-  register: _verify_status
+  register: _tailscale_status
   changed_when: false
   retries: 5
   delay: 2
   until: >-
-    _verify_status.rc == 0
-    and (_verify_status.stdout | from_json).BackendState == 'Running'
+    _tailscale_status.rc == 0
+    and (_tailscale_status.stdout | from_json).BackendState == 'Running'
   become: true
 
 - name: _verify | This node appears in headscale's node list
   command: podman exec headscale headscale nodes list -o json
-  register: _verify_nodes
+  register: _tailscale_nodes
   changed_when: false
   become: true
 
 - name: _verify | Resolve the registered node + its approved routes
   set_fact:
-    _verify_node: >-
-      {{ (_verify_nodes.stdout | from_json)
+    _tailscale_node: >-
+      {{ (_tailscale_nodes.stdout | from_json)
          | selectattr('given_name', 'equalto', ansible_hostname | lower)
          | list | first | default({}) }}
 
@@ -34,29 +34,29 @@
 - name: _verify | The node registered and every advertised route was approved
   assert:
     that:
-      - _verify_node.id is defined
+      - _tailscale_node.id is defined
       - >-
         ((tailscale_advertise_routes.split(','))
          + (tailscale_advertise_exit_node | ternary(['0.0.0.0/0', '::/0'], [])))
-        | difference(_verify_node.approved_routes | default([])) | length == 0
+        | difference(_tailscale_node.approved_routes | default([])) | length == 0
     fail_msg: >-
       headscale node for {{ ansible_hostname | lower }} is missing, or its
       advertised subnet/exit routes were not all approved.
-      approved={{ _verify_node.approved_routes | default([]) }}
+      approved={{ _tailscale_node.approved_routes | default([]) }}
 
 # The forwarding sysctls are what make the approved subnet route / exit node
 # actually pass traffic -- assert the role set them (live value, not just the
 # file on disk).
 - name: _verify | IPv4 forwarding is enabled
   command: sysctl -n net.ipv4.ip_forward
-  register: _verify_ipv4_fwd
+  register: _tailscale_ipv4_fwd
   changed_when: false
-  failed_when: _verify_ipv4_fwd.stdout | trim != '1'
+  failed_when: _tailscale_ipv4_fwd.stdout | trim != '1'
   become: true
 
 - name: _verify | IPv6 forwarding is enabled
   command: sysctl -n net.ipv6.conf.all.forwarding
-  register: _verify_ipv6_fwd
+  register: _tailscale_ipv6_fwd
   changed_when: false
-  failed_when: _verify_ipv6_fwd.stdout | trim != '1'
+  failed_when: _tailscale_ipv6_fwd.stdout | trim != '1'
   become: true
