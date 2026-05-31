@@ -1,3 +1,14 @@
+- name: Assert redis password is provided
+  assert:
+    that:
+      - redis_password is defined
+      - redis_password | length > 0
+    fail_msg: >-
+      redis_password must be set in host_vars/group_vars (it is a required
+      input; role vars sit above host_vars and must not default it).
+  tags:
+    - redis
+
 # Per-service podman network with DNS enabled, so consumers (paperless)
 # can reach redis at `redis.dns.podman` on the same named bridge. Avoids
 # the resolute-broken "publish on bridge gateway" pattern: netavark
