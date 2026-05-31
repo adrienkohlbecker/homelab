@@ -1,2 +1,6 @@
-options zfs zfs_arc_min={{zfs_arc_min}}
-options zfs zfs_arc_max={{zfs_arc_max}}
+{% if zfs_arc_min | default(0) | int > 0 %}
+options zfs zfs_arc_min={{ zfs_arc_min }}
+{% endif %}
+{% if zfs_arc_max | default(0) | int > 0 %}
+options zfs zfs_arc_max={{ zfs_arc_max }}
+{% endif %}
