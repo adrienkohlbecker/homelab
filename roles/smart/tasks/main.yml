@@ -27,7 +27,7 @@
     group: root
     mode: "0644"
     backup: true
-    validate: 'sh -c ''grep -q "^DEFAULT " "$1" && grep -q "^DEVICESCAN" "$1"'' _ %s'
+    validate: 'grep -q "^DEFAULT " %s'
   when: not (ansible_check_mode and smart_apt.changed)
   register: smart_smartd_cfg
   become: true
