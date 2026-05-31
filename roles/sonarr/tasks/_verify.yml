@@ -97,6 +97,22 @@
   loop_control:
     label: "{{ item.item }}"
 
+# config_dir_group: media (see main.yml) exists to stop ansible flapping
+# /mnt/services/sonarr's gid back to `sonarr` against linuxserver's startup
+# chown to PUID:PGID=sonarr:media. Assert the dir landed group `media` so a
+# regression in that setting surfaces here, not as a silent per-converge flap.
+- name: _verify | Stat the sonarr config dir
+  stat:
+    path: /mnt/services/sonarr
+  register: _verify_config_dir
+  become: true
+
+- name: _verify | Sonarr config dir is group media
+  assert:
+    that:
+      - _verify_config_dir.stat.gr_name == "media"
+    fail_msg: "/mnt/services/sonarr is not group media (gr_name={{ _verify_config_dir.stat.gr_name }})"
+
 # config.xml is the role's other fragile contract: sonarr rewrites it on
 # every shutdown, so config.xml.j2's element order + casing must match
 # sonarr's own writeback byte-for-byte or the next converge drifts and
@@ -139,3 +155,19 @@
       sonarr rewrote config.xml into a form config.xml.j2 no longer matches --
       its element order/casing drifted from sonarr's writeback, so deploying
       would restart-churn. Re-capture config.xml.j2 from a running instance.
+
+- name: _verify | config.xml ownership survived writeback
+  stat:
+    path: /mnt/services/sonarr/config.xml
+  register: _verify_conf_stat
+  become: true
+
+- name: _verify | config.xml is still owned sonarr:media mode 0600
+  assert:
+    that:
+      - _verify_conf_stat.stat.pw_name == "sonarr"
+      - _verify_conf_stat.stat.gr_name == "media"
+      - _verify_conf_stat.stat.mode == "0600"
+    fail_msg: >-
+      sonarr's writeback changed config.xml ownership/mode from the ansible-applied
+      sonarr:media 0600 (stat={{ _verify_conf_stat.stat }})

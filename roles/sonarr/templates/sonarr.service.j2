@@ -29,7 +29,7 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
-TimeoutSec=120
+TimeoutStartSec=120
 # Exceed the container's --stop-timeout (120s) so a slow graceful shutdown --
 # during which sonarr writes config.xml back -- finishes before systemd's stop
 # deadline SIGKILLs it and skips the writeback.
@@ -65,7 +65,6 @@ ExecStart=/usr/bin/podman run \
     --health-startup-cmd '["curl","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8989/ping"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
-    --health-start-period "100s" \
     --stop-timeout 120 \
     docker.io/linuxserver/sonarr:4.0.15
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id

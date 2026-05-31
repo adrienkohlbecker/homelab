@@ -25,7 +25,7 @@
   vars:
     test_authelia_stub_mode: gate
 
-- name: _setup | Setup dependencies
+- name: _setup | Ensure /mnt/services, /mnt/scratch, and /mnt/media exist
   file:
     path: "{{ item }}"
     state: directory
