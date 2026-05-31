@@ -58,6 +58,10 @@
   ansible.posix.sysctl:
     name: vm.overcommit_memory
     value: '1'
+    # Namespace into /etc/sysctl.d/ rather than the shared /etc/sysctl.conf so
+    # the value is attributable to this role and removable with it (matching
+    # roles/swap, roles/keepalived, roles/wireguard).
+    sysctl_file: /etc/sysctl.d/30-redis.conf
   become: true
   tags:
     - redis
