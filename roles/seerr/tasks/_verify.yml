@@ -34,6 +34,10 @@
     _seerr_persisted: "{{ _verify_settings_content.content | b64decode | from_json }}"
   assert:
     that:
+      # Guard `main` first: a partial parse (or a regression that drops the
+      # block) should fail with this curated message, not a raw Jinja
+      # "dict object has no attribute main" traceback.
+      - _seerr_persisted.main is defined
       - _seerr_persisted.main.apiKey == (seerr_api_key | string)
     fail_msg: >-
       settings.json on disk carries a different apiKey than the configured
@@ -71,4 +75,113 @@
   failed_when: >-
     not _verify_settings_owner.stat.exists
     or _verify_settings_owner.stat.pw_name != 'seerr'
+  become: true
+
+# Negative-auth probe. /api/v1/status (probed above) is the only unauthenticated
+# route; /api/v1/* settings sit behind isAuthenticated() (server/routes/index.ts
+# + server/middleware/auth.ts), which 401s a request with no session cookie
+# ("cookie 'connect.sid' required"). Asserting the 401 proves the auth
+# middleware is actually wired in front of the protected API -- a regression
+# that dropped the gate would let this return 200.
+- name: _verify | Seerr rejects unauthenticated access to a protected API route
+  uri:
+    url: http://localhost:{{ service_ports.seerr }}/api/v1/settings/main
+    status_code: 401
+  become: true
+
+# Media-network join probe. seerr reaches plex/radarr/sonarr/tautulli over
+# *.dns.podman on the `media` network; no peer is deployed in the test, so
+# resolve seerr by its own name from inside the container -- aardvark only
+# answers *.dns.podman when the container actually joined `media`, so a dropped
+# `--network media` makes this wget fail while the loopback/nginx probes (the
+# published-port path, independent of the custom network) stay green.
+- name: _verify | Seerr is joined to the media network (aardvark resolves .dns.podman)
+  command: >-
+    podman exec seerr
+    wget -q -T 5 -O /dev/null http://seerr.dns.podman:5055/api/v1/status
+  become: true
+  register: _verify_media_dns
+  changed_when: false
+  retries: 15
+  delay: 2
+  until: _verify_media_dns.rc == 0
+
+# Canonical-shape contract. Unlike radarr (which rewrites config.xml on every
+# shutdown), seerr only writes settings.json when a setting actually changes --
+# the migrator skips the write when settingsBefore == settingsAfter -- so a
+# restart wouldn't force a writeback to diff against. Assert the inverse
+# directly instead: fed the on-disk file as its slurp input, the template must
+# reproduce that file byte-for-byte. A drift (seerr persisted a key we drop, or
+# a different key order) makes the render diverge from disk and surfaces here,
+# which the converge/idempotence passes can mask if seerr never rewrote.
+- name: _verify | Re-slurp settings.json for the shape-match render
+  slurp:
+    src: /mnt/services/seerr/settings.json
+  register: _verify_shape_b64
+  become: true
+
+- name: _verify | The template reproduces the on-disk settings.json byte-for-byte
+  vars:
+    seerr_settings_json: "{{ _verify_shape_b64.content | b64decode | from_json }}"
+    _rendered: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
+  assert:
+    that:
+      - (_verify_shape_b64.content | b64decode) == _rendered
+    fail_msg: >-
+      settings.json.j2 no longer reproduces the on-disk file -- seerr persisted a
+      shape (key set or order) the template does not emit, so a converge would
+      diff-churn and restart seerr. Re-capture the canonical shape from a running
+      instance.
+  become: true
+
+# Corrupt-file rescue, end-to-end. main.yml treats an unparseable settings.json
+# as {} (the rescue block) so a truncated/partial write from a crashed daemon
+# doesn't wedge every future converge. Exercise it: clobber the file with
+# invalid JSON, re-run the role, and assert it recovered a valid canonical file
+# carrying our apiKey. Runs last because it re-converges (and restarts seerr);
+# _verify is test-only and destructive-OK (the VM is torn down after), so
+# corrupting live state here is in-contract.
+- name: _verify | Corrupt settings.json to exercise the rescue path
+  copy:
+    content: '{"clientId": "x", "main": {"apiKey": "trunc'
+    dest: /mnt/services/seerr/settings.json
+    owner: seerr
+    group: seerr
+    mode: "0644"
+  become: true
+
+- name: _verify | Re-run the role against the corrupt settings.json
+  import_role:
+    name: seerr
+
+- name: _verify | Seerr answers again after the rescue re-converge
+  uri:
+    url: http://localhost:{{ service_ports.seerr }}/api/v1/status
+    status_code: 200
+  register: _verify_rescue_http
+  retries: 90
+  delay: 2
+  until:
+    - _verify_rescue_http.status == 200
+    - _verify_rescue_http.json is defined
+    - _verify_rescue_http.json.version is defined
+  become: true
+
+- name: _verify | Read back the rescued settings.json
+  slurp:
+    src: /mnt/services/seerr/settings.json
+  register: _verify_rescued
+  become: true
+
+- name: _verify | The rescue rewrote a valid canonical file with our apiKey
+  vars:
+    _rescued: "{{ _verify_rescued.content | b64decode | from_json }}"
+  assert:
+    that:
+      - _rescued.main is defined
+      - _rescued.main.apiKey == (seerr_api_key | string)
+    fail_msg: >-
+      after corrupting settings.json and re-converging, the file did not recover
+      to a valid canonical shape carrying seerr_api_key -- the rescue block in
+      main.yml (treat unparseable as {}) regressed.
   become: true
