@@ -20,12 +20,12 @@
 - name: _verify | Slurp /etc/subgid
   slurp:
     src: /etc/subgid
-  register: _verify_subgid
+  register: _github_runner_subgid
   become: true
 
 - name: _verify | Github_runner has the 65536 base range + kvm single-gid range
   vars:
-    _subgid_lines: "{{ (_verify_subgid.content | b64decode).splitlines() }}"
+    _subgid_lines: "{{ (_github_runner_subgid.content | b64decode).splitlines() }}"
     _kvm_gid: "{{ ansible_facts.getent_group.kvm[1] }}"
   assert:
     that:
@@ -41,8 +41,8 @@
   systemd:
     name: podman.socket
     scope: user
-  register: _verify_podman_sock
-  failed_when: _verify_podman_sock.status.ActiveState != "active"
+  register: _github_runner_podman_sock
+  failed_when: _github_runner_podman_sock.status.ActiveState != "active"
   become: true
   become_user: github_runner
 
@@ -52,15 +52,15 @@
 - name: _verify | Canonical /opt/actions-runner/run.sh is executable
   stat:
     path: /opt/actions-runner/run.sh
-  register: _verify_canonical_runsh
-  failed_when: not _verify_canonical_runsh.stat.exists or not _verify_canonical_runsh.stat.executable
+  register: _github_runner_canonical_runsh
+  failed_when: not _github_runner_canonical_runsh.stat.exists or not _github_runner_canonical_runsh.stat.executable
   become: true
 
 - name: _verify | Canonical bin/Runner.Listener is present
   stat:
     path: /opt/actions-runner/bin/Runner.Listener
-  register: _verify_canonical_listener
-  failed_when: not _verify_canonical_listener.stat.exists
+  register: _github_runner_canonical_listener
+  failed_when: not _github_runner_canonical_listener.stat.exists
   become: true
 
 # Per-instance binary hard links: stat both the canonical and per-
@@ -77,24 +77,24 @@
     - name: _verify | Stat canonical run.sh
       stat:
         path: /opt/actions-runner/run.sh
-      register: _verify_can_inode
+      register: _github_runner_can_inode
       become: true
     - name: _verify | Stat per-instance run.sh
       stat:
         path: /opt/actions-runner/{{ _instance }}/run.sh
-      register: _verify_inst_inode
+      register: _github_runner_inst_inode
       become: true
     - name: _verify | Assert canonical and per-instance run.sh share an inode
       assert:
         that:
-          - _verify_inst_inode.stat.exists
-          - _verify_inst_inode.stat.executable
-          - _verify_inst_inode.stat.inode == _verify_can_inode.stat.inode
+          - _github_runner_inst_inode.stat.exists
+          - _github_runner_inst_inode.stat.executable
+          - _github_runner_inst_inode.stat.inode == _github_runner_can_inode.stat.inode
         fail_msg: >-
           /opt/actions-runner/{{ _instance }}/run.sh is missing or its
           inode differs from canonical. Canonical inode:
-          {{ _verify_can_inode.stat.inode }}, per-instance inode:
-          {{ _verify_inst_inode.stat.inode | default('absent') }}. cp -al
+          {{ _github_runner_can_inode.stat.inode }}, per-instance inode:
+          {{ _github_runner_inst_inode.stat.inode | default('absent') }}. cp -al
           in _register.yml should have hard-linked them.
 
 # /var/run/docker.sock symlink. tmpfiles.d sets the L rule for the
@@ -109,10 +109,10 @@
   stat:
     path: /var/run/docker.sock
     follow: false
-  register: _verify_docker_sock
+  register: _github_runner_docker_sock
   failed_when:
-    - not _verify_docker_sock.stat.islnk
-      or _verify_docker_sock.stat.lnk_target != '/run/user/' ~ _gr_uid ~ '/podman/podman.sock'
+    - not _github_runner_docker_sock.stat.islnk
+      or _github_runner_docker_sock.stat.lnk_target != '/run/user/' ~ _gr_uid ~ '/podman/podman.sock'
   become: true
 
 # Per-instance unit loads (renders cleanly, parses cleanly). Under
@@ -123,8 +123,8 @@
 - name: _verify | Github_runner@<instance>.service loads
   systemd:
     name: github_runner@{{ item.repo }}_{{ item.suffix }}.service
-  register: _verify_unit_load
-  failed_when: _verify_unit_load.status.LoadState != "loaded"
+  register: _github_runner_unit_load
+  failed_when: _github_runner_unit_load.status.LoadState != "loaded"
   loop: "{{ github_runner_instances }}"
   loop_control:
     label: "{{ item.repo }}_{{ item.suffix }}"
@@ -172,11 +172,11 @@
 - name: _verify | Wait for the unit to reach active
   systemd:
     name: github_runner@{{ github_runner_instances[0].repo }}_{{ github_runner_instances[0].suffix }}.service
-  register: _verify_unit_smoke
-  until: _verify_unit_smoke.status.ActiveState == "active"
+  register: _github_runner_unit_smoke
+  until: _github_runner_unit_smoke.status.ActiveState == "active"
   retries: 10
   delay: 2
-  failed_when: _verify_unit_smoke.status.ActiveState != "active"
+  failed_when: _github_runner_unit_smoke.status.ActiveState != "active"
   become: true
 
 # Tear down the stub: stop the unit so the sleep process exits and the

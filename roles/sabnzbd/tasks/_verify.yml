@@ -7,12 +7,12 @@
     url: "http://127.0.0.1:{{ service_ports.sabnzbd }}/api?mode=version&output=json"
     status_code: 200
     return_content: true
-  register: _verify_version
+  register: _sabnzbd_version
   retries: 30
   delay: 2
   until:
-    - _verify_version.status == 200
-    - _verify_version.json.version is defined
+    - _sabnzbd_version.status == 200
+    - _sabnzbd_version.json.version is defined
 
 # The universal-package-install Docker Mod (DOCKER_MODS in the unit) installs
 # ffmpeg at init so nzbToMedia's check_media (autoProcessMedia.cfg) has ffprobe.
@@ -20,11 +20,11 @@
 # silently degrades post-processing.
 - name: _verify | The universal-package-install mod installed ffprobe in the container
   command: podman exec sabnzbd ffprobe -version
-  register: _verify_ffprobe
+  register: _sabnzbd_ffprobe
   changed_when: false
   retries: 30
   delay: 2
-  until: _verify_ffprobe.rc == 0
+  until: _sabnzbd_ffprobe.rc == 0
   become: true
 
 # The category scripts SABnzbd invokes (script_dir=/opt/nzbToMedia in
@@ -40,7 +40,7 @@
     /opt/nzbToMedia/nzbToRadarr.py
     /opt/nzbToMedia/nzbToNzbDrone.py
     /opt/nzbToMedia/nzbToLidarr.py
-  register: _verify_nzbtomedia
+  register: _sabnzbd_nzbtomedia
   changed_when: false
   become: true
 
@@ -52,7 +52,7 @@
   uri:
     url: "http://127.0.0.1:{{ service_ports.sabnzbd }}/api?mode=queue&output=json"
     status_code: 403
-  register: _verify_http_unauth
+  register: _sabnzbd_http_unauth
 
 # Authenticated probe with our key. SABnzbd takes the api_key only as a
 # query param (no header form), so it lands in the URL -- fine on the
@@ -62,8 +62,8 @@
     url: "http://127.0.0.1:{{ service_ports.sabnzbd }}/api?mode=queue&output=json&apikey={{ sabnzbd_api_key }}"
     status_code: 200
     return_content: true
-  register: _verify_http
-  failed_when: _verify_http.json.queue is not defined
+  register: _sabnzbd_http
+  failed_when: _sabnzbd_http.json.queue is not defined
 
 # The vhost is `auth: required`, so a cookieless request must be bounced to
 # Authelia rather than proxied through. With the stub in gate mode (see
@@ -80,10 +80,10 @@
     validate_certs: false
     follow_redirects: none
     status_code: 302
-  register: _verify_nginx_gate
+  register: _sabnzbd_nginx_gate
   failed_when: >-
-    _verify_nginx_gate.status != 302
-    or 'auth.' not in (_verify_nginx_gate.location | default(''))
+    _sabnzbd_nginx_gate.status != 302
+    or 'auth.' not in (_sabnzbd_nginx_gate.location | default(''))
 
 # The history-DB symlink + matching --volume is the role's whole reason for
 # its non-obvious structure: it lands history1.db (and its -wal/-shm
@@ -95,35 +95,35 @@
 - name: _verify | Stat the history DB symlink
   stat:
     path: /mnt/services/sabnzbd/admin/history1.db
-  register: _verify_db_link
+  register: _sabnzbd_db_link
   become: true
 
 - name: _verify | History DB is a symlink onto the sqlite dataset
   assert:
     that:
-      - _verify_db_link.stat.islnk
-      - _verify_db_link.stat.lnk_target == "/mnt/services/sqlite/sabnzbd/history1.db"
-    fail_msg: "history1.db is not a symlink onto the sqlite dataset (stat={{ _verify_db_link.stat }})"
+      - _sabnzbd_db_link.stat.islnk
+      - _sabnzbd_db_link.stat.lnk_target == "/mnt/services/sqlite/sabnzbd/history1.db"
+    fail_msg: "history1.db is not a symlink onto the sqlite dataset (stat={{ _sabnzbd_db_link.stat }})"
 
 - name: _verify | Stat the dataset-side history DB
   stat:
     path: /mnt/services/sqlite/sabnzbd/history1.db
-  register: _verify_db_file
+  register: _sabnzbd_db_file
   retries: 15
   delay: 2
   until:
-    - _verify_db_file.stat.exists
-    - not _verify_db_file.stat.islnk
-    - (_verify_db_file.stat.size | default(0) | int) > 0
+    - _sabnzbd_db_file.stat.exists
+    - not _sabnzbd_db_file.stat.islnk
+    - (_sabnzbd_db_file.stat.size | default(0) | int) > 0
   become: true
 
 - name: _verify | SABnzbd wrote a real, non-empty history DB onto the dataset
   assert:
     that:
-      - _verify_db_file.stat.exists
-      - not _verify_db_file.stat.islnk
-      - (_verify_db_file.stat.size | int) > 0
-    fail_msg: "history1.db on the dataset is missing or empty (stat={{ _verify_db_file.stat }})"
+      - _sabnzbd_db_file.stat.exists
+      - not _sabnzbd_db_file.stat.islnk
+      - (_sabnzbd_db_file.stat.size | int) > 0
+    fail_msg: "history1.db on the dataset is missing or empty (stat={{ _sabnzbd_db_file.stat }})"
 
 # autoProcessMedia.cfg is rendered with no validate: (its repeated subsections
 # break configparser) and carries four cross-role credentials nothing else
@@ -133,12 +133,12 @@
 - name: _verify | Read the rendered autoProcessMedia.cfg
   slurp:
     src: /mnt/services/sabnzbd/autoProcessMedia.cfg
-  register: _verify_apm
+  register: _sabnzbd_apm
   become: true
 
 - name: _verify | Rendered autoProcessMedia.cfg carries the post-processing credentials
   vars:
-    _apm: "{{ _verify_apm.content | b64decode }}"
+    _apm: "{{ _sabnzbd_apm.content | b64decode }}"
   assert:
     that:
       - sabnzbd_api_key in _apm
@@ -170,12 +170,12 @@
 - name: _verify | Re-read the ini after the re-converge
   slurp:
     src: /mnt/services/sabnzbd/sabnzbd.ini
-  register: _verify_usage_ini
+  register: _sabnzbd_usage_ini
   become: true
 
 - name: _verify | The seeded usage_at_start survived the re-render
   vars:
-    _ini: "{{ _verify_usage_ini.content | b64decode }}"
+    _ini: "{{ _sabnzbd_usage_ini.content | b64decode }}"
   assert:
     that:
       - (_ini | regex_search('\\[\\[eu\\.newsdemon\\.com\\]\\][^\\[]*?usage_at_start = (\\d+)', '\\1') | first) == '987654321'

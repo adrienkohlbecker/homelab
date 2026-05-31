@@ -7,10 +7,10 @@
   uri:
     url: http://localhost:{{ service_ports.kuma }}/
     status_code: 200
-  register: _verify_loopback
+  register: _kuma_loopback
   retries: 5
   delay: 1
-  until: _verify_loopback.status == 200
+  until: _kuma_loopback.status == 200
   become: true
 
 # nginx auth-gate probe -- the UI subdomain is `auth: required`, so a
@@ -24,10 +24,10 @@
     validate_certs: false
     follow_redirects: none
     status_code: 302
-  register: _verify_nginx_gate
+  register: _kuma_nginx_gate
   failed_when: >-
-    _verify_nginx_gate.status != 302
-    or 'auth.' not in (_verify_nginx_gate.location | default(''))
+    _kuma_nginx_gate.status != 302
+    or 'auth.' not in (_kuma_nginx_gate.location | default(''))
   become: true
 
 # /api/push/ bypass -- exercises the sibling location carved out for
@@ -45,10 +45,10 @@
     validate_certs: false
     follow_redirects: none
     status_code: [ 200, 404 ]
-  register: _verify_push_bypass
+  register: _kuma_push_bypass
   failed_when: >-
-    _verify_push_bypass.status == 302
-    or (_verify_push_bypass.json | default({})).get('msg') != 'Monitor not found or not active.'
+    _kuma_push_bypass.status == 302
+    or (_kuma_push_bypass.json | default({})).get('msg') != 'Monitor not found or not active.'
   become: true
 
 # Symlink contract -- the role promises /mnt/services/kuma/kuma.db is a
@@ -59,11 +59,11 @@
   stat:
     path: /mnt/services/kuma/kuma.db
     follow: false
-  register: _verify_symlink
+  register: _kuma_symlink
   failed_when: >-
-    not _verify_symlink.stat.exists
-    or not _verify_symlink.stat.islnk
-    or _verify_symlink.stat.lnk_target != '/mnt/services/sqlite/kuma/kuma.db'
+    not _kuma_symlink.stat.exists
+    or not _kuma_symlink.stat.islnk
+    or _kuma_symlink.stat.lnk_target != '/mnt/services/sqlite/kuma/kuma.db'
   become: true
 
 # Uid regression detector -- kuma runs as the kuma host uid directly
@@ -74,10 +74,10 @@
 - name: _verify | Kuma sqlite DB is owned by kuma
   stat:
     path: /mnt/services/sqlite/kuma/kuma.db
-  register: _verify_db_owner
+  register: _kuma_db_owner
   failed_when: >-
-    not _verify_db_owner.stat.exists
-    or _verify_db_owner.stat.pw_name != 'kuma'
+    not _kuma_db_owner.stat.exists
+    or _kuma_db_owner.stat.pw_name != 'kuma'
   become: true
 
 # disableAuth guard probe -- main.yml must never flip disableAuth on an
@@ -91,11 +91,11 @@
     sqlite3 -readonly /mnt/services/sqlite/kuma/kuma.db
     "SELECT (SELECT count(*) FROM user),
             coalesce((SELECT value FROM setting WHERE key='disableAuth'), 'unset');"
-  register: _verify_disableauth
+  register: _kuma_disableauth
   changed_when: false
   failed_when: >-
-    (_verify_disableauth.stdout.split('|')[0] | int) == 0
-    and _verify_disableauth.stdout.split('|')[1] | trim == 'true'
+    (_kuma_disableauth.stdout.split('|')[0] | int) == 0
+    and _kuma_disableauth.stdout.split('|')[1] | trim == 'true'
   become: true
 
 # Functional WAL probe -- the entire point of the dedicated 4K-recordsize
@@ -105,9 +105,9 @@
 # pattern. Read-only probe, doesn't lock.
 - name: _verify | Kuma sqlite is in WAL journal mode
   command: sqlite3 -readonly /mnt/services/sqlite/kuma/kuma.db 'PRAGMA journal_mode;'
-  register: _verify_wal
+  register: _kuma_wal
   changed_when: false
-  failed_when: _verify_wal.stdout | trim != 'wal'
+  failed_when: _kuma_wal.stdout | trim != 'wal'
   become: true
 
 # Positive seed path -- the empty-table guard above proves the seed is
@@ -135,9 +135,9 @@
          ON CONFLICT(key) DO UPDATE SET value='true', type='general'
            WHERE setting.value != 'true';
          SELECT changes();"
-      register: _verify_seed_first
+      register: _kuma_seed_first
       changed_when: false
-      failed_when: (_verify_seed_first.stdout | trim) != '1'
+      failed_when: (_kuma_seed_first.stdout | trim) != '1'
       become: true
 
     - name: _verify | Second seed pass is a no-op (changes()=0)
@@ -148,9 +148,9 @@
          ON CONFLICT(key) DO UPDATE SET value='true', type='general'
            WHERE setting.value != 'true';
          SELECT changes();"
-      register: _verify_seed_second
+      register: _kuma_seed_second
       changed_when: false
-      failed_when: (_verify_seed_second.stdout | trim) != '0'
+      failed_when: (_kuma_seed_second.stdout | trim) != '0'
       become: true
   always:
     - name: _verify | Drop the synthetic DB

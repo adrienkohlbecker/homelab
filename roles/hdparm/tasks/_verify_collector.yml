@@ -122,16 +122,16 @@
   uri:
     url: http://localhost:19999/api/v1/charts
     return_content: true
-  register: _verify_charts
+  register: _hdparm_charts
   retries: 30
   delay: 2
   until: >-
-    _verify_charts.status == 200
-    and 'hdparm._verify_ghost' in (_verify_charts.content | from_json).charts.keys()
-    and 'hdparm._verify_active' in (_verify_charts.content | from_json).charts.keys()
-    and 'hdparm._verify_standby' in (_verify_charts.content | from_json).charts.keys()
-    and 'hdparm._verify_sleeping' in (_verify_charts.content | from_json).charts.keys()
-    and 'zfs_scan.any_in_progress' in (_verify_charts.content | from_json).charts.keys()
+    _hdparm_charts.status == 200
+    and 'hdparm._verify_ghost' in (_hdparm_charts.content | from_json).charts.keys()
+    and 'hdparm._verify_active' in (_hdparm_charts.content | from_json).charts.keys()
+    and 'hdparm._verify_standby' in (_hdparm_charts.content | from_json).charts.keys()
+    and 'hdparm._verify_sleeping' in (_hdparm_charts.content | from_json).charts.keys()
+    and 'zfs_scan.any_in_progress' in (_hdparm_charts.content | from_json).charts.keys()
 
 # `points=1` with no &after defaults to a 1-second window; with our
 # update_every=5s that misses 4 polls out of 5. `&after=-30` widens to
@@ -143,16 +143,16 @@
   uri:
     url: http://localhost:19999/api/v1/data?chart=hdparm._verify_ghost&points=1&after=-30&format=json
     return_content: true
-  register: _verify_ghost_data
+  register: _hdparm_ghost_data
   retries: 30
   delay: 2
   until: >-
-    _verify_ghost_data.status == 200
-    and 'collector_error' in (_verify_ghost_data.json.labels | default([]))
-    and 'active' in _verify_ghost_data.json.labels
-    and (_verify_ghost_data.json.data | default([])) | length > 0
-    and _verify_ghost_data.json.data[0][_verify_ghost_data.json.labels.index('collector_error')] | int == 1
-    and _verify_ghost_data.json.data[0][_verify_ghost_data.json.labels.index('active')] | int == 0
+    _hdparm_ghost_data.status == 200
+    and 'collector_error' in (_hdparm_ghost_data.json.labels | default([]))
+    and 'active' in _hdparm_ghost_data.json.labels
+    and (_hdparm_ghost_data.json.data | default([])) | length > 0
+    and _hdparm_ghost_data.json.data[0][_hdparm_ghost_data.json.labels.index('collector_error')] | int == 1
+    and _hdparm_ghost_data.json.data[0][_hdparm_ghost_data.json.labels.index('active')] | int == 0
 
 # Exercise the three known-state parse arms via the shim. The case
 # statement in hdparm_update() is whitespace-fragile (literal
@@ -163,15 +163,15 @@
   uri:
     url: "http://localhost:19999/api/v1/data?chart=hdparm._verify_{{ item }}&points=1&after=-30&format=json"
     return_content: true
-  register: _verify_state_data
+  register: _hdparm_state_data
   retries: 30
   delay: 2
   until: >-
-    _verify_state_data.status == 200
-    and item in (_verify_state_data.json.labels | default([]))
-    and (_verify_state_data.json.data | default([])) | length > 0
-    and _verify_state_data.json.data[0][_verify_state_data.json.labels.index(item)] | int == 1
-    and _verify_state_data.json.data[0][_verify_state_data.json.labels.index('collector_error')] | int == 0
+    _hdparm_state_data.status == 200
+    and item in (_hdparm_state_data.json.labels | default([]))
+    and (_hdparm_state_data.json.data | default([])) | length > 0
+    and _hdparm_state_data.json.data[0][_hdparm_state_data.json.labels.index(item)] | int == 1
+    and _hdparm_state_data.json.data[0][_hdparm_state_data.json.labels.index('collector_error')] | int == 0
   loop:
     - active
     - standby
@@ -185,15 +185,15 @@
   uri:
     url: http://localhost:19999/api/v1/chart?chart=hdparm._verify_ghost
     return_content: true
-  register: _verify_ghost_chart
+  register: _hdparm_ghost_chart
 - name: _verify | Assert device label and shared context
   assert:
     that:
-      - _verify_ghost_chart.json.context == "hdparm.power_state"
-      - _verify_ghost_chart.json.chart_labels.device | default('') == "_verify_ghost"
+      - _hdparm_ghost_chart.json.context == "hdparm.power_state"
+      - _hdparm_ghost_chart.json.chart_labels.device | default('') == "_verify_ghost"
     fail_msg: >-
-      chart {{ _verify_ghost_chart.json.id }} context={{ _verify_ghost_chart.json.context }}
-      labels={{ _verify_ghost_chart.json.chart_labels | default({}) }}
+      chart {{ _hdparm_ghost_chart.json.id }} context={{ _hdparm_ghost_chart.json.context }}
+      labels={{ _hdparm_ghost_chart.json.chart_labels | default({}) }}
 
 # The health templates bind on context (`on: hdparm.power_state`), so
 # they should instantiate against the new chart with alarm names
@@ -204,16 +204,16 @@
   uri:
     url: http://localhost:19999/api/v1/alarms?all
     return_content: true
-  register: _verify_alarms
+  register: _hdparm_alarms
   retries: 10
   delay: 2
   until: >-
-    _verify_alarms.status == 200
-    and (_verify_alarms.content | from_json).alarms.keys() | list
+    _hdparm_alarms.status == 200
+    and (_hdparm_alarms.content | from_json).alarms.keys() | list
         | select('search', 'hdparm._verify_ghost.hdparm_drive_collector_error') | list | length > 0
 - name: _verify | All three alert templates instantiated
   vars:
-    _keys: "{{ (_verify_alarms.content | from_json).alarms.keys() | list }}"
+    _keys: "{{ (_hdparm_alarms.content | from_json).alarms.keys() | list }}"
   assert:
     that:
       - _keys | select('search', 'hdparm._verify_ghost.hdparm_drive_active') | list | length > 0

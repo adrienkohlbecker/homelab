@@ -56,13 +56,13 @@
       esac
     done
     exit 0
-  register: scsi_debug_block
+  register: _hd_idle_scsi_debug_block
   changed_when: false
   become: true
-  failed_when: scsi_debug_block.stdout_lines | length != 1
+  failed_when: _hd_idle_scsi_debug_block.stdout_lines | length != 1
 
 - name: _setup | Flag scsi_debug device as rotational (jammy 5.15 lacks the module param)
-  shell: "echo 1 > /sys/block/{{ scsi_debug_block.stdout }}/queue/rotational"
+  shell: "echo 1 > /sys/block/{{ _hd_idle_scsi_debug_block.stdout }}/queue/rotational"
   become: true
   changed_when: true
 

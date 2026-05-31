@@ -40,15 +40,15 @@
 
 - name: _verify_lifecycle | ExecStop drop-in — list tables after stop
   command: nft list tables
-  register: tables_after_stop
+  register: _firewall_tables_after_stop
   changed_when: false
   become: true
 
 - name: _verify_lifecycle | ExecStop drop-in — sentinel survived, homelab deleted
   assert:
     that:
-      - "'table ip firewall_verify_sentinel' in tables_after_stop.stdout"
-      - "'table inet homelab' not in tables_after_stop.stdout"
+      - "'table ip firewall_verify_sentinel' in _firewall_tables_after_stop.stdout"
+      - "'table inet homelab' not in _firewall_tables_after_stop.stdout"
     fail_msg: >-
       ExecStop drop-in didn't scope correctly: sentinel table should
       survive a stop (it didn't) and inet homelab should be gone (it
@@ -66,7 +66,7 @@
 
 - name: _verify_lifecycle | ExecStop drop-in — homelab table restored after start
   command: nft list tables
-  register: tables_after_start
+  register: _firewall_tables_after_start
   changed_when: false
-  failed_when: "'table inet homelab' not in tables_after_start.stdout"
+  failed_when: "'table inet homelab' not in _firewall_tables_after_start.stdout"
   become: true

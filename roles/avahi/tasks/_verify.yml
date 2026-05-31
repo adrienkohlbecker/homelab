@@ -8,12 +8,12 @@
 # by several seconds on cold start (esp. in QEMU).
 - name: _verify | Host's own .local name resolves via mDNS on the wire
   command: getent ahosts {{ ansible_hostname }}.local
-  register: _verify_resolve
+  register: _avahi_resolve
   retries: 20
   delay: 2
   until:
-    - _verify_resolve.rc == 0
-    - ansible_default_ipv4.address in _verify_resolve.stdout
+    - _avahi_resolve.rc == 0
+    - ansible_default_ipv4.address in _avahi_resolve.stdout
   changed_when: false
 
 # Confirms avahi joined the mDNS multicast group (224.0.0.251) on
@@ -26,12 +26,12 @@
 # could still mask via the kernel's loopback path for local queries.
 - name: _verify | Avahi joined 224.0.0.251 on the pinned iface
   command: ip -j maddr show dev {{ default_interface }}
-  register: _verify_maddr
+  register: _avahi_maddr
   changed_when: false
   failed_when: >-
-    _verify_maddr.rc != 0
+    _avahi_maddr.rc != 0
     or '224.0.0.251' not in
-       ((_verify_maddr.stdout | from_json | first).maddr
+       ((_avahi_maddr.stdout | from_json | first).maddr
         | selectattr('family', 'defined')
         | selectattr('family', 'equalto', 'inet')
         | map(attribute='address') | list)
@@ -52,12 +52,12 @@
 # enforcement; this probe is functional-positive only.
 - name: _verify | Device-info service is announced on the pinned iface with the configured model
   command: avahi-browse -prt _device-info._tcp
-  register: _verify_browse
+  register: _avahi_browse
   retries: 20
   delay: 2
   until:
-    - _verify_browse.rc == 0
-    - _verify_browse.stdout_lines
+    - _avahi_browse.rc == 0
+    - _avahi_browse.stdout_lines
         | select('match', '^=;' + default_interface + ';IPv4;' + ansible_hostname + ';')
         | select('search', '"model=' + avahi_device_model + '"')
         | list | length > 0

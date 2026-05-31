@@ -7,15 +7,15 @@
 - name: _verify | Node is installed and runnable
   command: node --version
   changed_when: false
-  register: _verify_node_version
+  register: _nodejs_node_version
 
 - name: _verify | Node reports the pinned major version {{ nodejs_major }}
   assert:
     that:
-      - _verify_node_version.stdout is match('v' ~ nodejs_major ~ '[.]')
+      - _nodejs_node_version.stdout is match('v' ~ nodejs_major ~ '[.]')
     fail_msg: >-
       Expected node v{{ nodejs_major }}.x, got
-      stdout={{ _verify_node_version.stdout | default('') }}
+      stdout={{ _nodejs_node_version.stdout | default('') }}
 
 # Bare command, not an assert: a missing/broken npm fails on non-zero exit,
 # and any bundled npm trivially reports an X.Y.Z, so asserting the shape adds

@@ -72,7 +72,7 @@
     # Existence only -- this does NOT prove `admins` grants admin:* (a typo'd
     # action would still register and pass `policy info`); the admin grant is
     # exercised manually via the OIDC login path (see below).
-    - name: _verify | useronly + admins IAM policies exist
+    - name: _verify | Useronly + admins IAM policies exist
       command: mcli admin policy info default {{ item }}
       changed_when: false
       loop:

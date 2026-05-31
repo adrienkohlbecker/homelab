@@ -1,13 +1,13 @@
 - name: _verify | Curl_static --version runs successfully
   command: /usr/local/bin/curl_static --version
   changed_when: false
-  register: _verify_curl_version
+  register: _static_curl_curl_version
 
 - name: _verify | Curl_static reports the expected version
   assert:
     that:
-      - _verify_curl_version.stdout is search('^curl ' ~ (static_curl_version | regex_escape) ~ ' ')
-    fail_msg: "curl_static --version output didn't start with 'curl {{ static_curl_version }} ': {{ _verify_curl_version.stdout }}"
+      - _static_curl_curl_version.stdout is search('^curl ' ~ (static_curl_version | regex_escape) ~ ' ')
+    fail_msg: "curl_static --version output didn't start with 'curl {{ static_curl_version }} ': {{ _static_curl_curl_version.stdout }}"
 
 # The whole reason this role exists is "a curl that runs inside
 # distroless containers with no libc". `ldd` on a fully-static binary
@@ -24,13 +24,13 @@
   command: ldd /usr/local/bin/curl_static
   changed_when: false
   failed_when: false
-  register: _verify_curl_ldd
+  register: _static_curl_curl_ldd
 
 - name: _verify | Assert curl_static reports no dynamic libraries
   assert:
     that:
-      - "'=>' not in _verify_curl_ldd.stdout"
+      - "'=>' not in _static_curl_curl_ldd.stdout"
     fail_msg: >-
       curl_static is not fully statically linked.
-      ldd stdout: {{ _verify_curl_ldd.stdout | default('') }}
-      ldd stderr: {{ _verify_curl_ldd.stderr | default('') }}
+      ldd stdout: {{ _static_curl_curl_ldd.stdout | default('') }}
+      ldd stderr: {{ _static_curl_curl_ldd.stderr | default('') }}

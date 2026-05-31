@@ -119,7 +119,7 @@
 
 - name: _verify | Scenario 5 — rootless podman environment
   set_fact:
-    _verify_rootless_env:
+    _podman_secret_rootless_env:
       XDG_RUNTIME_DIR: "/run/user/{{ getent_passwd['podman_secret_rootless'][1] }}"
       DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ getent_passwd['podman_secret_rootless'][1] }}/bus"
 
@@ -174,21 +174,21 @@
 - name: _verify | Scenario 5 — secret present in the rootless user's store
   containers.podman.podman_secret_info:
     name: podman_secret_rootless_test
-  register: _verify_rootless_info
+  register: _podman_secret_rootless_info
   become: true
   become_user: podman_secret_rootless
-  environment: "{{ _verify_rootless_env }}"
+  environment: "{{ _podman_secret_rootless_env }}"
 
 - name: _verify | Scenario 5 — secret absent from root's store
   containers.podman.podman_secret_info:
-  register: _verify_root_secrets
+  register: _podman_secret_root_secrets
   become: true
 
 - name: _verify | Scenario 5 — assert rootless targeting
   assert:
     that:
-      - _verify_rootless_info.secrets | length == 1
-      - _verify_root_secrets.secrets | selectattr('Spec.Name', 'eq', 'podman_secret_rootless_test') | list | length == 0
+      - _podman_secret_rootless_info.secrets | length == 1
+      - _podman_secret_root_secrets.secrets | selectattr('Spec.Name', 'eq', 'podman_secret_rootless_test') | list | length == 0
 
 - name: _verify | Scenario 5 — cleanup rootless secret
   containers.podman.podman_secret:
@@ -196,7 +196,7 @@
     state: absent
   become: true
   become_user: podman_secret_rootless
-  environment: "{{ _verify_rootless_env }}"
+  environment: "{{ _podman_secret_rootless_env }}"
 
 # Scenario 6 — the state=absent tombstone path: create a secret, then remove
 # it through the helper and confirm it reports removed (_rotated) and is gone
@@ -222,14 +222,14 @@
 
 - name: _verify | Scenario 6 — list secrets after removal
   containers.podman.podman_secret_info:
-  register: _verify_tombstone_after
+  register: _podman_secret_tombstone_after
   become: true
 
 - name: _verify | Scenario 6 — assert removed and gone from the store
   assert:
     that:
       - podman_secret_tombstone_rotated
-      - _verify_tombstone_after.secrets | selectattr('Spec.Name', 'eq', 'podman_secret_tombstone') | list | length == 0
+      - _podman_secret_tombstone_after.secrets | selectattr('Spec.Name', 'eq', 'podman_secret_tombstone') | list | length == 0
 
 # Scenario 7 — the validation guards must fail loudly, not silently pass a bad
 # input down to an opaque module/template error. These exercise the assert/guard

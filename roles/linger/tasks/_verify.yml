@@ -15,7 +15,7 @@
     system: true
     create_home: false
     shell: /usr/sbin/nologin
-  register: _verify_user
+  register: _linger_user
   become: true
 
 - name: _verify | Drive the helper
@@ -25,18 +25,18 @@
   vars:
     linger_args:
       name: linger_test
-      uid: "{{ _verify_user.uid }}"
+      uid: "{{ _linger_user.uid }}"
 
 - name: _verify | Linger sentinel exists
   stat:
     path: /var/lib/systemd/linger/linger_test
-  register: _verify_sentinel
+  register: _linger_sentinel
   become: true
 
 - name: _verify | Assert sentinel and per-user fact were exposed
   assert:
     that:
-      - _verify_sentinel.stat.exists
+      - _linger_sentinel.stat.exists
       - linger_test_lingered is defined
       - linger_test_lingered
 
@@ -44,10 +44,10 @@
 # (a live bus for rootless podman / user-scope timers); failed_when makes
 # the probe its own assertion.
 - name: _verify | User manager is active  # noqa: command-instead-of-module -- is-active query, not a state change
-  command: systemctl is-active user@{{ _verify_user.uid }}.service
-  register: _verify_active
+  command: systemctl is-active user@{{ _linger_user.uid }}.service
+  register: _linger_active
   changed_when: false
-  failed_when: _verify_active.stdout | trim != 'active'
+  failed_when: _linger_active.stdout | trim != 'active'
   become: true
 
 # An active manager alone doesn't prove the user's runtime environment is
@@ -58,8 +58,8 @@
 # but it depends on dbus-user-session, which the minimal box fixture lacks.)
 - name: _verify | XDG_RUNTIME_DIR is provisioned
   stat:
-    path: /run/user/{{ _verify_user.uid }}
-  register: _verify_runtime_dir
+    path: /run/user/{{ _linger_user.uid }}
+  register: _linger_runtime_dir
   become: true
 
 # Prove it is linger keeping the manager up, not a live login session:
@@ -67,19 +67,19 @@
 # for it while user@<uid>.service is nonetheless active.
 - name: _verify | List active sessions
   command: loginctl list-sessions --no-legend --no-pager
-  register: _verify_sessions
+  register: _linger_sessions
   changed_when: false
   become: true
 
 - name: _verify | Assert runtime dir present and manager is lingering, not session-backed
   assert:
     that:
-      - _verify_runtime_dir.stat.exists
-      - _verify_runtime_dir.stat.isdir
+      - _linger_runtime_dir.stat.exists
+      - _linger_runtime_dir.stat.isdir
       # Exact token match on the whitespace-split output (the USER column is
       # its own field), so a substring like a hypothetical linger_test_2
       # can't false-match the way `is search('linger_test')` would.
-      - "'linger_test' not in _verify_sessions.stdout.split()"
+      - "'linger_test' not in _linger_sessions.stdout.split()"
 
 - name: _verify | Drive the helper again (idempotence)
   import_role:
@@ -88,7 +88,7 @@
   vars:
     linger_args:
       name: linger_test
-      uid: "{{ _verify_user.uid }}"
+      uid: "{{ _linger_user.uid }}"
 
 - name: _verify | Assert the re-run was a no-op
   assert:
@@ -103,27 +103,27 @@
   vars:
     linger_args:
       name: linger_test
-      uid: "{{ _verify_user.uid }}"
+      uid: "{{ _linger_user.uid }}"
 
 # disable.yml stops the user manager before dropping the marker; prove the
 # stop actually took effect (is-active returns "inactive" + non-zero here).
 - name: _verify | User manager is no longer active after disable  # noqa: command-instead-of-module -- is-active query, not a state change
-  command: systemctl is-active user@{{ _verify_user.uid }}.service
-  register: _verify_inactive
+  command: systemctl is-active user@{{ _linger_user.uid }}.service
+  register: _linger_inactive
   changed_when: false
-  failed_when: _verify_inactive.stdout | trim == 'active'
+  failed_when: _linger_inactive.stdout | trim == 'active'
   become: true
 
 - name: _verify | Confirm the linger marker is gone after disable
   stat:
     path: /var/lib/systemd/linger/linger_test
-  register: _verify_sentinel_gone
+  register: _linger_sentinel_gone
   become: true
 
 - name: _verify | Assert disable-linger removed the marker
   assert:
     that:
-      - not _verify_sentinel_gone.stat.exists
+      - not _linger_sentinel_gone.stat.exists
 
 - name: _verify | Remove fixture user
   user:

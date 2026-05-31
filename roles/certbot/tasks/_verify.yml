@@ -11,7 +11,7 @@
   loop:
     - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem
     - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
-  register: _verify_certs
+  register: _certbot_certs
   become: true
 
 - name: _verify | Cert files exist
@@ -19,7 +19,7 @@
     that:
       - item.stat.exists
     fail_msg: "missing cert at {{ item.item }}"
-  loop: "{{ _verify_certs.results }}"
+  loop: "{{ _certbot_certs.results }}"
   loop_control:
     label: "{{ item.item }}"
 
@@ -33,7 +33,7 @@
     valid_at:
       now: "+0s"
       week_out: "+7d"
-  register: _verify_cert_info
+  register: _certbot_cert_info
   become: true
 
 - name: _verify | Certificate SANs cover host + wildcard + extras, valid for at least 7d
@@ -41,17 +41,17 @@
     _verify_extras_expected: "{{ certbot_extra_sans | map('regex_replace', '^', 'DNS:') | list }}"
   assert:
     that:
-      - ("DNS:" + inventory_hostname + "." + domain) in _verify_cert_info.subject_alt_name
-      - ("DNS:*." + inventory_hostname + "." + domain) in _verify_cert_info.subject_alt_name
-      - _verify_extras_expected | difference(_verify_cert_info.subject_alt_name) | length == 0
-      - _verify_cert_info.valid_at.now
-      - _verify_cert_info.valid_at.week_out
+      - ("DNS:" + inventory_hostname + "." + domain) in _certbot_cert_info.subject_alt_name
+      - ("DNS:*." + inventory_hostname + "." + domain) in _certbot_cert_info.subject_alt_name
+      - _verify_extras_expected | difference(_certbot_cert_info.subject_alt_name) | length == 0
+      - _certbot_cert_info.valid_at.now
+      - _certbot_cert_info.valid_at.week_out
     fail_msg: >-
       cert missing host+wildcard+extras SANs or expiring soon
-      (SANs={{ _verify_cert_info.subject_alt_name }},
+      (SANs={{ _certbot_cert_info.subject_alt_name }},
       extras_expected={{ _verify_extras_expected }},
-      not_after={{ _verify_cert_info.not_after }},
-      valid_at={{ _verify_cert_info.valid_at }})
+      not_after={{ _certbot_cert_info.not_after }},
+      valid_at={{ _certbot_cert_info.valid_at }})
 
 # Distinguishes a real CA-issued cert from a self-signed snakeoil
 # left in place by a sibling role's _setup at the same paths.
@@ -60,10 +60,10 @@
 - name: _verify | Certificate is not self-signed
   assert:
     that:
-      - _verify_cert_info.issuer != _verify_cert_info.subject
+      - _certbot_cert_info.issuer != _certbot_cert_info.subject
     fail_msg: >-
       cert is self-signed (likely a snakeoil)
-      (issuer={{ _verify_cert_info.issuer }}, subject={{ _verify_cert_info.subject }})
+      (issuer={{ _certbot_cert_info.issuer }}, subject={{ _certbot_cert_info.subject }})
 
 # Renewals only happen if certbot.timer is enabled+active. The
 # systemd module returns the full unit status dict so a single
@@ -71,35 +71,35 @@
 - name: _verify | Inspect certbot.timer
   systemd:
     name: certbot.timer
-  register: _verify_timer
+  register: _certbot_timer
   become: true
 
 - name: _verify | Certbot.timer is loaded, enabled, and active
   assert:
     that:
-      - _verify_timer.status.LoadState == "loaded"
-      - _verify_timer.status.UnitFileState == "enabled"
-      - _verify_timer.status.ActiveState == "active"
+      - _certbot_timer.status.LoadState == "loaded"
+      - _certbot_timer.status.UnitFileState == "enabled"
+      - _certbot_timer.status.ActiveState == "active"
     fail_msg: >-
       certbot.timer not in expected state
-      (LoadState={{ _verify_timer.status.LoadState }},
-      UnitFileState={{ _verify_timer.status.UnitFileState }},
-      ActiveState={{ _verify_timer.status.ActiveState }})
+      (LoadState={{ _certbot_timer.status.LoadState }},
+      UnitFileState={{ _certbot_timer.status.UnitFileState }},
+      ActiveState={{ _certbot_timer.status.ActiveState }})
 
 - name: _verify | Stat cloudflare credentials file
   stat:
     path: /etc/letsencrypt/cloudflare.ini
-  register: _verify_cf
+  register: _certbot_cf
   become: true
 
 - name: _verify | Cloudflare credentials are 0600 root:root
   assert:
     that:
-      - _verify_cf.stat.exists
-      - _verify_cf.stat.mode == "0600"
-      - _verify_cf.stat.pw_name == "root"
-      - _verify_cf.stat.gr_name == "root"
-    fail_msg: "cloudflare.ini has wrong perms or owner ({{ _verify_cf.stat }})"
+      - _certbot_cf.stat.exists
+      - _certbot_cf.stat.mode == "0600"
+      - _certbot_cf.stat.pw_name == "root"
+      - _certbot_cf.stat.gr_name == "root"
+    fail_msg: "cloudflare.ini has wrong perms or owner ({{ _certbot_cf.stat }})"
 
 # The whole rationale for --deploy-hook (over renewal-hooks/deploy/)
 # is that it's persisted into renewal/<name>.conf at issuance time
@@ -109,19 +109,19 @@
 - name: _verify | Slurp renewal config
   slurp:
     src: /etc/letsencrypt/renewal/{{ inventory_hostname }}.{{ domain }}.conf
-  register: _verify_renewal
+  register: _certbot_renewal
   become: true
 
 - name: _verify | Renewal config persists the nginx-reload deploy hook
   vars:
-    _verify_renewal_text: "{{ _verify_renewal.content | b64decode }}"
+    _verify_renewal_text: "{{ _certbot_renewal.content | b64decode }}"
   assert:
     that:
       - "'renew_hook' in _verify_renewal_text"
       - "'systemctl reload nginx' in _verify_renewal_text"
     fail_msg: >-
       deploy-hook missing from renewal config
-      (file={{ _verify_renewal.source }},
+      (file={{ _certbot_renewal.source }},
       excerpt={{ _verify_renewal_text | regex_search('renew_hook[^\n]*') | default('<no renew_hook line>') }})
 
 # Directory perms are load-bearing: wildcard SAN + lax dir mode = any
@@ -136,7 +136,7 @@
   loop:
     - live
     - archive
-  register: _verify_le_dirs
+  register: _certbot_le_dirs
   become: true
 
 - name: _verify | LE storage directories are 0750 root:ssl-cert
@@ -147,7 +147,7 @@
       - item.stat.pw_name == "root"
       - item.stat.gr_name == "ssl-cert"
     fail_msg: "{{ item.item }} has wrong perms or owner ({{ item.stat }})"
-  loop: "{{ _verify_le_dirs.results }}"
+  loop: "{{ _certbot_le_dirs.results }}"
   loop_control:
     label: "{{ item.item }}"
 

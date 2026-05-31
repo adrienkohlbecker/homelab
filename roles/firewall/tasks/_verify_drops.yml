@@ -31,7 +31,7 @@
   become: true
 
 - name: _verify_drops | Forward — TCP-ACK (no SYN) from extns to a container hits the non-SYN drop
-  command: ip netns exec extns hping3 -A -p 32400 -c 1 --quiet {{ probe_container_dest }}
+  command: ip netns exec extns hping3 -A -p 32400 -c 1 --quiet {{ _firewall_probe_container_dest }}
   changed_when: false
   failed_when: false
   become: true
@@ -42,10 +42,10 @@
 # and the scoped allows all not matching, the packet falls through
 # to the trailing counter-drop.
 - name: _verify_drops | Forward — direct-to-container TCP-SYN with no DNAT hits the catch-all drop
-  command: ip netns exec extns curl --connect-timeout 2 --max-time 3 -sf http://{{ probe_container_dest }}:80/
-  register: probe_forward_drop
+  command: ip netns exec extns curl --connect-timeout 2 --max-time 3 -sf http://{{ _firewall_probe_container_dest }}:80/
+  register: _firewall_probe_forward_drop
   changed_when: false
-  failed_when: probe_forward_drop.rc == 0
+  failed_when: _firewall_probe_forward_drop.rc == 0
   become: true
 
 # ICMP echo flood with varying IDs — must vary ICMP-id per packet to
@@ -104,7 +104,7 @@
 # Catch-all (UDP to a port with no rule, no listener, no scope match)
 # — falls through to the trailing counter-drop.
 - name: _verify_drops | Input — UDP to unscoped 18181 hits the catch-all drop  # noqa: risky-shell-pipe
-  shell: echo ping | ip netns exec extns nc -u -w 1 -s {{ probe_nonscope }} 10.99.0.1 18181
+  shell: echo ping | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 10.99.0.1 18181
   args: { executable: /bin/bash }
   changed_when: false
   failed_when: false

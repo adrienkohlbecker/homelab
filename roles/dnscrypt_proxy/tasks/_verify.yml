@@ -23,10 +23,10 @@
 - name: _verify | Dnscrypt-proxy.socket is loaded and active
   systemd:
     name: dnscrypt-proxy.socket
-  register: _verify_socket
+  register: _dnscrypt_proxy_socket
   failed_when: >-
-    _verify_socket.status.LoadState != "loaded"
-    or _verify_socket.status.ActiveState != "active"
+    _dnscrypt_proxy_socket.status.LoadState != "loaded"
+    or _dnscrypt_proxy_socket.status.ActiveState != "active"
   become: true
 
 # Pre-probe: the .service unit should be inactive before any client
@@ -36,8 +36,8 @@
 - name: _verify | Dnscrypt-proxy.service is inactive before first query
   systemd:
     name: dnscrypt-proxy.service
-  register: _verify_service_pre
-  failed_when: _verify_service_pre.status.ActiveState != "inactive"
+  register: _dnscrypt_proxy_service_pre
+  failed_when: _dnscrypt_proxy_service_pre.status.ActiveState != "inactive"
   become: true
 
 # Retry under ansible: socket activation only triggers when the first
@@ -62,10 +62,10 @@
       - +short
       - +time=2
       - +tries=1
-  register: _verify_probe_udp
+  register: _dnscrypt_proxy_probe_udp
   retries: 15
   delay: 2
-  until: _verify_probe_udp.rc == 0 and _verify_probe_udp.stdout != ''
+  until: _dnscrypt_proxy_probe_udp.rc == 0 and _dnscrypt_proxy_probe_udp.stdout != ''
   changed_when: false
 
 # TCP path: the override binds ListenStream alongside ListenDatagram, and
@@ -86,17 +86,17 @@
       - +short
       - +time=2
       - +tries=1
-  register: _verify_probe_tcp
+  register: _dnscrypt_proxy_probe_tcp
   retries: 5
   delay: 2
-  until: _verify_probe_tcp.rc == 0 and _verify_probe_tcp.stdout != ''
+  until: _dnscrypt_proxy_probe_tcp.rc == 0 and _dnscrypt_proxy_probe_tcp.stdout != ''
   changed_when: false
 
 - name: _verify | Dnscrypt-proxy.service was woken by socket activation
   systemd:
     name: dnscrypt-proxy.service
-  register: _verify_service_post
-  failed_when: _verify_service_post.status.ActiveState != "active"
+  register: _dnscrypt_proxy_service_post
+  failed_when: _dnscrypt_proxy_service_post.status.ActiveState != "active"
   become: true
 
 # Anonymized DNSCrypt -- two layers:
@@ -114,10 +114,10 @@
 #    the supports-relay flag and queries to it silently fall back to direct.
 - name: _verify | Dnscrypt-proxy registered anonymized routes at startup
   command: journalctl --no-pager -u dnscrypt-proxy.service
-  register: _verify_journal_startup
+  register: _dnscrypt_proxy_journal_startup
   changed_when: false
   become: true
-  failed_when: "'Anonymized DNS: routing' not in _verify_journal_startup.stdout"
+  failed_when: "'Anonymized DNS: routing' not in _dnscrypt_proxy_journal_startup.stdout"
 
 # +time=5 (not the original +time=2) because the relay round-trip
 # (dct-fr/dnscry.pt-paris-ipv4 → upstream → back) occasionally spikes
@@ -136,9 +136,9 @@
 
 - name: _verify | Both pinned servers had a query traverse a relay
   command: journalctl --no-pager -u dnscrypt-proxy.service
-  register: _verify_journal_relay
+  register: _dnscrypt_proxy_journal_relay
   changed_when: false
   become: true
   failed_when:
-    - "'Anonymizing queries for [dct-fr]' not in _verify_journal_relay.stdout
-       or 'Anonymizing queries for [dnscry.pt-paris-ipv4]' not in _verify_journal_relay.stdout"
+    - "'Anonymizing queries for [dct-fr]' not in _dnscrypt_proxy_journal_relay.stdout
+       or 'Anonymizing queries for [dnscry.pt-paris-ipv4]' not in _dnscrypt_proxy_journal_relay.stdout"

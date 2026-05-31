@@ -5,27 +5,27 @@
 
 - name: _verify | Gitea-runner binary version matches gitea_runner_version
   command: gitea-runner --version
-  register: _verify_version
+  register: _gitea_runner_version
   changed_when: false
   # Substring-match would let pin 1.0.3 be satisfied by 1.0.30. regex_search
   # extracts the first semver-shaped token from `gitea-runner version X.Y.Z`
   # and equates it exactly.
-  failed_when: (_verify_version.stdout | regex_search('\d+\.\d+\.\d+')) != gitea_runner_version
+  failed_when: (_gitea_runner_version.stdout | regex_search('\d+\.\d+\.\d+')) != gitea_runner_version
   become: true
 
 - name: _verify | Gitea_runner config file exists
   stat:
     path: /mnt/services/gitea_runner/config.yml
-  register: _verify_config_file
-  failed_when: not _verify_config_file.stat.exists
+  register: _gitea_runner_config_file
+  failed_when: not _gitea_runner_config_file.stat.exists
   become: true
 
 - name: _verify | .runner is valid JSON and carries templated name + labels
   slurp:
     src: /mnt/services/gitea_runner/.runner
-  register: _verify_runner_b64
+  register: _gitea_runner_runner_b64
   vars:
-    _runner_data: "{{ _verify_runner_b64.content | b64decode | from_json }}"
+    _runner_data: "{{ _gitea_runner_runner_b64.content | b64decode | from_json }}"
   # Asserts the role's per-apply rewrite contract: .runner is valid JSON,
   # the name field matches inventory_hostname (so gitea sees this host's
   # entry under the expected name), and the labels list matches
@@ -46,10 +46,10 @@
 - name: _verify | Gitea_runner.service is loaded and active
   systemd:
     name: gitea_runner
-  register: _verify_unit
+  register: _gitea_runner_unit
   failed_when: >-
-    _verify_unit.status.LoadState != "loaded"
-    or _verify_unit.status.ActiveState != "active"
+    _gitea_runner_unit.status.LoadState != "loaded"
+    or _gitea_runner_unit.status.ActiveState != "active"
   become: true
 
 # The metrics endpoint exposes /healthz on the same listener as /metrics
@@ -61,10 +61,10 @@
   uri:
     url: "http://127.0.0.1:{{ service_ports.gitea_runner_metrics }}/healthz"
     status_code: 200
-  register: _verify_healthz
+  register: _gitea_runner_healthz
   retries: 30
   delay: 2
-  until: _verify_healthz.status | default(0) == 200
+  until: _gitea_runner_healthz.status | default(0) == 200
   become: true
 
 # Functional end-to-end check via gitea's documented admin API rather
@@ -90,9 +90,9 @@
     password: testadminpw
     force_basic_auth: true
     status_code: 200
-  register: _verify_runners_api
+  register: _gitea_runner_runners_api
   vars:
-    _matched_runner: "{{ (_verify_runners_api.json.runners | default([]) | selectattr('name', 'equalto', inventory_hostname) | list | first) | default({}) }}"
+    _matched_runner: "{{ (_gitea_runner_runners_api.json.runners | default([]) | selectattr('name', 'equalto', inventory_hostname) | list | first) | default({}) }}"
   retries: 15
   delay: 2
   # status_code: 200 already gates retries on the response code; only
@@ -105,7 +105,7 @@
   when: qemu_test
   vars:
     _expected_label_names: "{{ gitea_runner_labels | map('regex_replace', ':.*$', '') | list | sort }}"
-    _matched_runner: "{{ (_verify_runners_api.json.runners | default([]) | selectattr('name', 'equalto', inventory_hostname) | list | first) | default({}) }}"
+    _matched_runner: "{{ (_gitea_runner_runners_api.json.runners | default([]) | selectattr('name', 'equalto', inventory_hostname) | list | first) | default({}) }}"
     _actual_label_names: "{{ _matched_runner.labels | default([]) | map(attribute='name') | list | sort }}"
   assert:
     that:
@@ -133,7 +133,7 @@
     --username testadmin
     --token-name runner_smoke_{{ ansible_date_time.epoch }}
     --scopes all --raw
-  register: _verify_admin_token
+  register: _gitea_runner_admin_token
   changed_when: false
   become: true
   become_user: git
@@ -144,7 +144,7 @@
     url: http://127.0.0.1:3000/api/v1/user/repos
     method: POST
     url_username: testadmin
-    url_password: "{{ _verify_admin_token.stdout | trim }}"
+    url_password: "{{ _gitea_runner_admin_token.stdout | trim }}"
     force_basic_auth: true
     body_format: json
     body:
@@ -169,7 +169,7 @@
     url: http://127.0.0.1:3000/api/v1/repos/testadmin/runner_smoke/contents/.gitea/workflows/smoke.yml
     method: POST
     url_username: testadmin
-    url_password: "{{ _verify_admin_token.stdout | trim }}"
+    url_password: "{{ _gitea_runner_admin_token.stdout | trim }}"
     force_basic_auth: true
     body_format: json
     body:
@@ -187,12 +187,12 @@
   uri:
     url: http://127.0.0.1:3000/api/v1/repos/testadmin/runner_smoke/actions/runs
     url_username: testadmin
-    url_password: "{{ _verify_admin_token.stdout | trim }}"
+    url_password: "{{ _gitea_runner_admin_token.stdout | trim }}"
     force_basic_auth: true
     status_code: 200
-  register: _verify_runs
+  register: _gitea_runner_runs
   vars:
-    _latest_run: "{{ (_verify_runs.json.workflow_runs | default([]) | first) | default({}) }}"
+    _latest_run: "{{ (_gitea_runner_runs.json.workflow_runs | default([]) | first) | default({}) }}"
   until:
     - _latest_run.status | default('') == 'completed'
     - _latest_run.conclusion | default('') == 'success'
@@ -202,7 +202,7 @@
 - name: _verify | Assert smoke workflow run succeeded (test only)
   when: qemu_test
   vars:
-    _latest_run: "{{ (_verify_runs.json.workflow_runs | default([]) | first) | default({}) }}"
+    _latest_run: "{{ (_gitea_runner_runs.json.workflow_runs | default([]) | first) | default({}) }}"
   assert:
     that:
       - _latest_run.status | default('') == 'completed'

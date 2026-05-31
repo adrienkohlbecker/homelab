@@ -21,7 +21,7 @@
 
     - name: _verify | System user exists with the expected attributes
       command: getent passwd service_user_test
-      register: _verify_passwd
+      register: _service_user_passwd
       changed_when: false
       become: true
 
@@ -31,8 +31,8 @@
           # passwd fields: name:passwd:uid:gid:gecos:home:shell -- split rather
           # than substring-match so a wrong home and a wrong shell are
           # distinguishable in the failure.
-          - _verify_passwd.stdout.split(':')[5] == '/nonexistent'
-          - _verify_passwd.stdout.split(':')[6] == '/usr/sbin/nologin'
+          - _service_user_passwd.stdout.split(':')[5] == '/nonexistent'
+          - _service_user_passwd.stdout.split(':')[6] == '/usr/sbin/nologin'
 
     - name: _verify | System group exists
       command: getent group service_user_test
@@ -42,17 +42,17 @@
     - name: _verify | Config directory exists with correct ownership
       stat:
         path: /mnt/services/service_user_test
-      register: _verify_dir
+      register: _service_user_dir
       become: true
 
     - name: _verify | Dir attributes
       assert:
         that:
-          - _verify_dir.stat.exists
-          - _verify_dir.stat.isdir
-          - _verify_dir.stat.pw_name == 'service_user_test'
-          - _verify_dir.stat.gr_name == 'service_user_test'
-          - _verify_dir.stat.mode == '0750'
+          - _service_user_dir.stat.exists
+          - _service_user_dir.stat.isdir
+          - _service_user_dir.stat.pw_name == 'service_user_test'
+          - _service_user_dir.stat.gr_name == 'service_user_test'
+          - _service_user_dir.stat.mode == '0750'
 
     # Second scenario: createhome + home_mode override. Confirms the helper
     # chmods the home dir to the caller-requested mode instead of relying
@@ -73,17 +73,17 @@
     - name: _verify | Home dir landed at the requested mode
       stat:
         path: /tmp/service_user_test_home
-      register: _verify_home
+      register: _service_user_home
       become: true
 
     - name: _verify | Home dir attributes
       assert:
         that:
-          - _verify_home.stat.exists
-          - _verify_home.stat.isdir
-          - _verify_home.stat.pw_name == 'service_user_test_home'
-          - _verify_home.stat.gr_name == 'service_user_test_home'
-          - _verify_home.stat.mode == '0755'
+          - _service_user_home.stat.exists
+          - _service_user_home.stat.isdir
+          - _service_user_home.stat.pw_name == 'service_user_test_home'
+          - _service_user_home.stat.gr_name == 'service_user_test_home'
+          - _service_user_home.stat.mode == '0755'
 
     # Third scenario: a hyphenated name (the only path that exercises the
     # regex_replace fact-key sanitization, foo-bar -> foo_bar_user), plus
@@ -117,14 +117,14 @@
 
     - name: _verify | Membership reflects extra_groups
       command: id -nG service-user-test-hyphen
-      register: _verify_hyphen_groups
+      register: _service_user_hyphen_groups
       changed_when: false
       become: true
 
     - name: _verify | Config dir honors config_dir_group + config_dir_mode
       stat:
         path: /mnt/services/service-user-test-hyphen
-      register: _verify_hyphen_dir
+      register: _service_user_hyphen_dir
       become: true
 
     - name: _verify | Override dir + membership attributes
@@ -132,11 +132,11 @@
         that:
           # both the primary group and the extra group must be present, which
           # proves the user task appends rather than replaces membership.
-          - "'service-user-test-hyphen' in _verify_hyphen_groups.stdout.split()"
-          - "'service_user_test_grp' in _verify_hyphen_groups.stdout.split()"
-          - _verify_hyphen_dir.stat.exists
-          - _verify_hyphen_dir.stat.gr_name == 'service_user_test_grp'
-          - _verify_hyphen_dir.stat.mode == '0700'
+          - "'service-user-test-hyphen' in _service_user_hyphen_groups.stdout.split()"
+          - "'service_user_test_grp' in _service_user_hyphen_groups.stdout.split()"
+          - _service_user_hyphen_dir.stat.exists
+          - _service_user_hyphen_dir.stat.gr_name == 'service_user_test_grp'
+          - _service_user_hyphen_dir.stat.mode == '0700'
 
     # Fourth scenario: a non-default shell (gitea passes /bin/bash). Confirms
     # the shell arg reaches the passwd record instead of the nologin default.
@@ -152,14 +152,14 @@
 
     - name: _verify | Shell user passwd record
       command: getent passwd service_user_test_shell
-      register: _verify_shell_passwd
+      register: _service_user_shell_passwd
       changed_when: false
       become: true
 
     - name: _verify | Shell field reflects the override
       assert:
         that:
-          - _verify_shell_passwd.stdout.split(':')[6] == '/bin/bash'
+          - _service_user_shell_passwd.stdout.split(':')[6] == '/bin/bash'
 
   always:
     - name: _verify | Tear down test users

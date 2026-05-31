@@ -70,18 +70,18 @@
 # only fails loudly. ICMP rather than HTTP because extns has no
 # listener bound to its veth IP.
 - name: _verify_forward | FORWARD — container egress to non-WAN iface (wg0) reachable
-  command: podman exec firewall_verify_httpd ping -c 1 -W 3 {{ probe_nonscope }}
+  command: podman exec firewall_verify_httpd ping -c 1 -W 3 {{ _firewall_probe_nonscope }}
   changed_when: false
   become: true
 
 # Wireguard-source-egress MASQUERADE — exercises -s wireguard_subnet
-# -j MASQUERADE. extns alias {{ probe_wg }} sits in wireguard_subnet;
+# -j MASQUERADE. extns alias {{ _firewall_probe_wg }} sits in wireguard_subnet;
 # egress hits FORWARD wg0→WAN ACCEPT, then the matching POSTROUTING
 # rule MASQUERADEs to the host's egress IP. slirp NATs again on the
 # qemu side, reply round-trips back via wg0. IP literal (1.1.1.1)
 # avoids needing DNS inside the netns (no /etc/resolv.conf there).
 - name: _verify_forward | POSTROUTING — wireguard-source egress through MASQUERADE works
-  command: ip netns exec extns curl --interface {{ probe_wg }} --connect-timeout 5 --max-time 10 -sI http://1.1.1.1/
+  command: ip netns exec extns curl --interface {{ _firewall_probe_wg }} --connect-timeout 5 --max-time 10 -sI http://1.1.1.1/
   changed_when: false
   become: true
 

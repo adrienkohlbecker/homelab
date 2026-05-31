@@ -6,22 +6,22 @@
 - name: _verify | Nexus data dir is owned by nexus
   stat:
     path: /mnt/services/nexus/data
-  register: _verify_data_dir
-  failed_when: not _verify_data_dir.stat.exists or _verify_data_dir.stat.pw_name != 'nexus'
+  register: _nexus_data_dir
+  failed_when: not _nexus_data_dir.stat.exists or _nexus_data_dir.stat.pw_name != 'nexus'
   become: true
 
 - name: _verify | Nexus user dir is owned by nexus
   stat:
     path: /mnt/services/nexus/user
-  register: _verify_user_dir
-  failed_when: not _verify_user_dir.stat.exists or _verify_user_dir.stat.pw_name != 'nexus'
+  register: _nexus_user_dir
+  failed_when: not _nexus_user_dir.stat.exists or _nexus_user_dir.stat.pw_name != 'nexus'
   become: true
 
 - name: _verify | Nexus blob store dir is owned by nexus
   stat:
     path: /mnt/scratch/nexus
-  register: _verify_blob_dir
-  failed_when: not _verify_blob_dir.stat.exists or _verify_blob_dir.stat.pw_name != 'nexus'
+  register: _nexus_blob_dir
+  failed_when: not _nexus_blob_dir.stat.exists or _nexus_blob_dir.stat.pw_name != 'nexus'
   become: true
 
 # Functional probe over the published loopback port. status/writable returns
@@ -36,10 +36,10 @@
     url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/status/writable
     status_code: 200
     timeout: 5
-  register: _verify_status
+  register: _nexus_status
   retries: 60
   delay: 2
-  until: _verify_status.status == 200
+  until: _nexus_status.status == 200
 
 # The dir-ownership checks above stat paths the role itself chowned, so they
 # pass even if the +200 uidmap regressed. This one stats a path Nexus wrote
@@ -48,8 +48,8 @@
 - name: _verify | A Nexus-written path is owned by nexus (exercises the uidmap)
   stat:
     path: /mnt/services/nexus/data/log
-  register: _verify_written
-  failed_when: not _verify_written.stat.exists or _verify_written.stat.pw_name != 'nexus'
+  register: _nexus_written
+  failed_when: not _nexus_written.stat.exists or _nexus_written.stat.pw_name != 'nexus'
   become: true
 
 # End-to-end through the nginx vhost -- the production ingress every fleet
@@ -65,10 +65,10 @@
       Host: "nexus.{{ inventory_hostname }}.{{ domain }}"
     status_code: [ 200, 302, 307 ]
     timeout: 5
-  register: _verify_nginx
+  register: _nexus_nginx
   retries: 30
   delay: 2
-  until: _verify_nginx.status in [ 200, 302, 307 ]
+  until: _nexus_nginx.status in [ 200, 302, 307 ]
 
 # The docker-registry mirror is an nginx rewrite (roles/nexus main.yml
 # server_conf): podman emits /v2/repository/<repo>/<image>/... and nginx
@@ -82,7 +82,7 @@
 - name: _verify | Read the bootstrap admin password
   slurp:
     src: /mnt/services/nexus/data/admin.password
-  register: _verify_admin_password
+  register: _nexus_admin_password
   become: true
 
 - name: _verify | Create a throwaway docker hosted repo
@@ -90,7 +90,7 @@
     url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/repositories/docker/hosted
     method: POST
     url_username: admin
-    url_password: "{{ _verify_admin_password.content | b64decode }}"
+    url_password: "{{ _nexus_admin_password.content | b64decode }}"
     force_basic_auth: true
     body_format: json
     body:
@@ -117,13 +117,13 @@
     url: https://localhost/v2/repository/test_docker_mirror/
     validate_certs: false
     url_username: admin
-    url_password: "{{ _verify_admin_password.content | b64decode }}"
+    url_password: "{{ _nexus_admin_password.content | b64decode }}"
     force_basic_auth: true
     headers:
       Host: "nexus.{{ inventory_hostname }}.{{ domain }}"
     status_code: [ 200, 401, 403 ]  # docker v2 auth challenge; a 404 would mean the rewrite is missing
     timeout: 5
-  register: _verify_docker_rewrite
+  register: _nexus_docker_rewrite
   retries: 5
   delay: 2
-  until: (_verify_docker_rewrite.docker_distribution_api_version | default('')) == 'registry/2.0'
+  until: (_nexus_docker_rewrite.docker_distribution_api_version | default('')) == 'registry/2.0'

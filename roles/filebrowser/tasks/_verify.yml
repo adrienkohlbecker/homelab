@@ -15,21 +15,21 @@
     validate_certs: false
     return_content: true
     status_code: 200
-  register: _verify_root
+  register: _filebrowser_root
   retries: 3
   delay: 2
-  until: _verify_root.status == 200
+  until: _filebrowser_root.status == 200
 
 - name: _verify | Root listing carries the Index header
   assert:
     that:
-      - "'Index of /' in _verify_root.content"
+      - "'Index of /' in _filebrowser_root.content"
 
 - name: _verify | Root listing reflects every tree mount flag (both directions)
   assert:
     that:
-      - "(not item.enabled) or ('href=\"' ~ item.name ~ '/\"') in _verify_root.content"
-      - "item.enabled or ('href=\"' ~ item.name ~ '/\"') not in _verify_root.content"
+      - "(not item.enabled) or ('href=\"' ~ item.name ~ '/\"') in _filebrowser_root.content"
+      - "item.enabled or ('href=\"' ~ item.name ~ '/\"') not in _filebrowser_root.content"
   loop: "{{ _filebrowser_trees }}"
   loop_control:
     label: "{{ item.name }}"
@@ -37,8 +37,8 @@
 - name: _verify | Root listing carries the sub_filter-injected theme link and viewport
   assert:
     that:
-      - "'<link rel=\"stylesheet\" href=\"/.theme.css\">' in _verify_root.content"
-      - "'width=device-width,initial-scale=1' in _verify_root.content"
+      - "'<link rel=\"stylesheet\" href=\"/.theme.css\">' in _filebrowser_root.content"
+      - "'width=device-width,initial-scale=1' in _filebrowser_root.content"
 
 - name: _verify | /.theme.css is reachable as text/css
   uri:
@@ -47,8 +47,8 @@
       Host: filebrowser.{{ inventory_hostname }}.{{ domain }}
     validate_certs: false
     status_code: 200
-  register: _verify_theme
-  failed_when: _verify_theme.status != 200 or 'text/css' not in (_verify_theme.content_type | default(''))
+  register: _filebrowser_theme
+  failed_when: _filebrowser_theme.status != 200 or 'text/css' not in (_filebrowser_theme.content_type | default(''))
 
 - name: _verify | Per-tree autoindex renders when enabled
   when: item.enabled
@@ -59,8 +59,8 @@
     validate_certs: false
     return_content: true
     status_code: 200
-  register: _verify_tree
-  failed_when: _verify_tree.status != 200 or ('Index of /' ~ item.name ~ '/') not in _verify_tree.content
+  register: _filebrowser_tree
+  failed_when: _filebrowser_tree.status != 200 or ('Index of /' ~ item.name ~ '/') not in _filebrowser_tree.content
   loop: "{{ _filebrowser_trees }}"
   loop_control:
     label: "{{ item.name }}"

@@ -8,12 +8,12 @@
     headers:
       Host: influxdb.{{ inventory_hostname }}.{{ domain }}
     return_content: true
-  register: _verify_loopback
+  register: _influxdb_loopback
   retries: 30
   delay: 2
   until:
-    - _verify_loopback.status == 200
-    - _verify_loopback.json.status | default('') == 'pass'
+    - _influxdb_loopback.status == 200
+    - _influxdb_loopback.json.status | default('') == 'pass'
   become: true
 
 # Authelia gate probe -- the influxdb subdomain runs `auth: required`,
@@ -28,10 +28,10 @@
     validate_certs: false
     follow_redirects: none
     status_code: 302
-  register: _verify_gate
+  register: _influxdb_gate
   failed_when: >-
-    _verify_gate.status != 302
-    or 'auth.' not in (_verify_gate.location | default(''))
+    _influxdb_gate.status != 302
+    or 'auth.' not in (_influxdb_gate.location | default(''))
   become: true
 
 # Mint the bootstrap admin token: DOCKER_INFLUXDB_INIT_MODE=setup makes
@@ -50,7 +50,7 @@
       - --user
       - "{{ influxdb_root_user }}"
       - --json
-  register: _verify_admin_auth
+  register: _influxdb_admin_auth
   changed_when: false
   become: true
 
@@ -62,7 +62,7 @@
 # proxy_pass wiring (a typo in nginx_site_args would fail this too).
 - name: _verify | Influxdb /health reachable via nginx with bypass-on-Authorization
   vars:
-    _admin_token: "{{ (_verify_admin_auth.stdout | from_json | first).token }}"
+    _admin_token: "{{ (_influxdb_admin_auth.stdout | from_json | first).token }}"
   uri:
     url: https://localhost/health
     headers:
@@ -70,10 +70,10 @@
       Authorization: Token {{ _admin_token }}
     validate_certs: false
     return_content: true
-  register: _verify_nginx
+  register: _influxdb_nginx
   failed_when: >-
-    _verify_nginx.status != 200
-    or _verify_nginx.json.status | default('') != 'pass'
+    _influxdb_nginx.status != 200
+    or _influxdb_nginx.json.status | default('') != 'pass'
   become: true
 
 # Service-native CLI liveness -- catches a regression where /health
@@ -172,7 +172,7 @@
           - "{{ _verify_token }}"
           - >-
             from(bucket:"verify_bucket") |> range(start:-1m)
-      register: _verify_neg_query
+      register: _influxdb_neg_query
       changed_when: false
       failed_when: false
       become: true
@@ -180,7 +180,7 @@
     - name: _verify | Write-bucket-only token cannot read (auth scope enforced)
       assert:
         that:
-          - _verify_neg_query.rc != 0
+          - _influxdb_neg_query.rc != 0
         fail_msg: >-
           Write-bucket token successfully read from verify_bucket --
           bucket.yml's --write-bucket invocation appears to grant read
@@ -227,11 +227,11 @@
 - name: _verify | Influxdb data and config dirs are owned by influxdb
   stat:
     path: /mnt/services/influxdb/{{ item }}
-  register: _verify_dir_owner
+  register: _influxdb_dir_owner
   loop:
     - data
     - config
   failed_when: >-
-    not _verify_dir_owner.stat.exists
-    or _verify_dir_owner.stat.pw_name != 'influxdb'
+    not _influxdb_dir_owner.stat.exists
+    or _influxdb_dir_owner.stat.pw_name != 'influxdb'
   become: true

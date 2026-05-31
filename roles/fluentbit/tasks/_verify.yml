@@ -1,10 +1,10 @@
 - name: _verify | Fluent-bit.service is loaded and active
   systemd:
     name: fluent-bit
-  register: _verify_unit
+  register: _fluentbit_unit
   failed_when: >-
-    _verify_unit.status.LoadState != "loaded"
-    or _verify_unit.status.ActiveState != "active"
+    _fluentbit_unit.status.LoadState != "loaded"
+    or _fluentbit_unit.status.ActiveState != "active"
   become: true
 
 - name: _verify | State-directory perms | stat
@@ -13,7 +13,7 @@
   loop:
     - /var/lib/fluent-bit
     - /var/lib/fluent-bit/storage
-  register: _verify_state_dirs
+  register: _fluentbit_state_dirs
   become: true
 
 - name: _verify | State-directory perms | assert 0700 root:root
@@ -25,7 +25,7 @@
       - item.stat.pw_name == 'root'
       - item.stat.gr_name == 'root'
     fail_msg: "fluent-bit state dir leaked perms: {{ item.stat.path }} mode={{ item.stat.mode }} owner={{ item.stat.pw_name }}:{{ item.stat.gr_name }}"
-  loop: "{{ _verify_state_dirs.results }}"
+  loop: "{{ _fluentbit_state_dirs.results }}"
   loop_control:
     label: "{{ item.stat.path }}"
 
@@ -39,10 +39,10 @@
   uri:
     url: "http://127.0.0.1:{{ service_ports.fluentbit }}/api/v1/uptime"
     status_code: 200
-  register: _verify_uptime
+  register: _fluentbit_uptime
   retries: 6
   delay: 2
-  until: _verify_uptime.status == 200
+  until: _fluentbit_uptime.status == 200
   become: true
 
 # End-to-end CSP-through-OTLP shape assertion. POST a marked CSP report
@@ -146,7 +146,7 @@
     name: _test
     tasks_from: clickhouse_query_wait
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "OTLP-end-to-end | wait for CSP row"
       sql: "SELECT count() FROM default.otel_logs WHERE LogAttributes['csp_blocked_uri'] LIKE '%{{ fluentbit_otlp_csp_marker }}%'"
       retries: 60
@@ -158,7 +158,7 @@
     name: _test
     tasks_from: clickhouse_query
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "OTLP-end-to-end | fetch CSP row"
       sql: >-
         SELECT
@@ -235,7 +235,7 @@
     name: _test
     tasks_from: clickhouse_query_wait
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "journald path | wait for row"
       sql: >-
         SELECT count() FROM default.otel_logs
@@ -250,7 +250,7 @@
     name: _test
     tasks_from: clickhouse_query
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "journald path | fetch row"
       sql: >-
         SELECT
@@ -307,7 +307,7 @@
     name: _test
     tasks_from: clickhouse_query_wait
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "nginx tail | wait for row"
       sql: >-
         SELECT count() FROM default.otel_logs
@@ -322,7 +322,7 @@
     name: _test
     tasks_from: clickhouse_query
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "nginx tail | fetch row"
       sql: >-
         SELECT
@@ -369,7 +369,7 @@
     name: _test
     tasks_from: clickhouse_query_wait
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "journald warn | wait"
       sql: >-
         SELECT count() FROM default.otel_logs
@@ -384,7 +384,7 @@
     name: _test
     tasks_from: clickhouse_query
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "journald warn | fetch"
       sql: >-
         SELECT
@@ -439,7 +439,7 @@
     name: _test
     tasks_from: clickhouse_query_wait
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "multiline | wait"
       sql: >-
         SELECT count() FROM default.otel_logs
@@ -455,7 +455,7 @@
     name: _test
     tasks_from: clickhouse_query
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "multiline | fetch"
       sql: >-
         SELECT Body, ServiceName
@@ -508,7 +508,7 @@
     name: _test
     tasks_from: clickhouse_query_wait
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "mitogen | wait for row"
       sql: >-
         SELECT count() FROM default.otel_logs
@@ -523,7 +523,7 @@
     name: _test
     tasks_from: clickhouse_query
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "mitogen | fetch"
       sql: >-
         SELECT Body, ServiceName
@@ -575,7 +575,7 @@
     name: _test
     tasks_from: clickhouse_query_wait
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "podman_unnamed | wait for row"
       sql: >-
         SELECT count() FROM default.otel_logs
@@ -590,7 +590,7 @@
     name: _test
     tasks_from: clickhouse_query
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "podman_unnamed | fetch"
       sql: >-
         SELECT Body, ServiceName
@@ -647,7 +647,7 @@
     name: _test
     tasks_from: clickhouse_query_wait
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "podman_healthcheck | wait for row"
       sql: >-
         SELECT count() FROM default.otel_logs
@@ -662,7 +662,7 @@
     name: _test
     tasks_from: clickhouse_query
   vars:
-    _test_args:
+    _fluentbit_test_args:
       label: "podman_healthcheck | fetch"
       sql: >-
         SELECT

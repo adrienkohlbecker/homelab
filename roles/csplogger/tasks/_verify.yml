@@ -66,14 +66,14 @@
     # inventory_hostname segment, so this probe would fail if the
     # allowlist regex ever regressed back to per-host scoping.
     csplogger_verify_origin: "https://verify.{{ domain }}"
-    csp_legacy_body:
+    _csplogger_csp_legacy_body:
       csp-report:
         blocked-uri: "https://_verify.example/"
         document-uri: "https://_verify.example/"
         original-policy: "default-src 'self'"
         referrer: ""
         violated-directive: "script-src"
-    csp_reporting_api_body:
+    _csplogger_csp_reporting_api_body:
       - type: "csp-violation"
         age: 0
         url: "https://_verify.example/"
@@ -112,13 +112,13 @@
       headers:
         Origin: "{{ csplogger_verify_origin }}"
         Content-Type: application/csp-report
-      body: "{{ csp_legacy_body }}"
+      body: "{{ _csplogger_csp_legacy_body }}"
       status_code: 204
     - name: Reporting-API Content-Type accepted
       headers:
         Origin: "{{ csplogger_verify_origin }}"
         Content-Type: application/reports+json
-      body: "{{ csp_reporting_api_body }}"
+      body: "{{ _csplogger_csp_reporting_api_body }}"
       status_code: 204
     # Content-Type allowlist: friendly Origin but a non-CSP Content-Type
     # (e.g. application/json -- the value the upstream rewrite normalises
@@ -129,7 +129,7 @@
       headers:
         Origin: "{{ csplogger_verify_origin }}"
         Content-Type: application/json
-      body: "{{ csp_legacy_body }}"
+      body: "{{ _csplogger_csp_legacy_body }}"
       status_code: 415
     # Body-size cap. CSP reports are tiny; the cap stops a runaway site CSP
     # or hostile poster from chewing bandwidth. Needs friendly Origin +
@@ -144,7 +144,7 @@
         Origin: "{{ csplogger_verify_origin }}"
         Content-Type: application/csp-report
       body:
-        csp-report: "{{ csp_legacy_body['csp-report'] | combine({'script-sample': 'A' * 40000}) }}"
+        csp-report: "{{ _csplogger_csp_legacy_body['csp-report'] | combine({'script-sample': 'A' * 40000}) }}"
       status_code: 413
     - name: GET /log rejected with 405 (POST/OPTIONS only)
       method: GET
@@ -170,7 +170,7 @@
       Content-Type: application/csp-report
     validate_certs: false
     body_format: json
-    body: "{{ csp_legacy_body }}"
+    body: "{{ _csplogger_csp_legacy_body }}"
     status_code: 204
   register: csplogger_verify_foreign
   failed_when: >-

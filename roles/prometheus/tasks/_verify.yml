@@ -3,10 +3,10 @@
 - name: _verify | Prometheus /-/ready on loopback port
   uri:
     url: http://127.0.0.1:{{ service_ports.prometheus }}/-/ready
-  register: _verify_ready
+  register: _prometheus_ready
   retries: 30
   delay: 2
-  until: _verify_ready.status == 200
+  until: _prometheus_ready.status == 200
   become: true
 
 # Self-scrape target must report healthy -- proves the rendered config
@@ -17,13 +17,13 @@
   uri:
     url: http://127.0.0.1:{{ service_ports.prometheus }}/api/v1/targets?state=active
     return_content: true
-  register: _verify_targets
+  register: _prometheus_targets
   retries: 30
   delay: 2
   until:
-    - _verify_targets.status == 200
+    - _prometheus_targets.status == 200
     - >-
-      _verify_targets.json.data.activeTargets
+      _prometheus_targets.json.data.activeTargets
       | selectattr('labels.job', 'eq', 'prometheus')
       | selectattr('health', 'eq', 'up')
       | list | length > 0
@@ -37,7 +37,7 @@
   when: minio_enabled | default(false)
   vars:
     _verify_minio_targets: >-
-      {{ _verify_targets.json.data.activeTargets
+      {{ _prometheus_targets.json.data.activeTargets
          | selectattr('labels.job', 'eq', 'minio')
          | selectattr('scrapeUrl', 'search', '/minio/v2/metrics/cluster$')
          | list }}
@@ -47,7 +47,7 @@
     fail_msg: >-
       expected an active scrape target job=minio hitting
       /minio/v2/metrics/cluster; active scrape URLs:
-      {{ _verify_targets.json.data.activeTargets | map(attribute='scrapeUrl') | list }}
+      {{ _prometheus_targets.json.data.activeTargets | map(attribute='scrapeUrl') | list }}
   become: true
 
 # Listen-address must be loopback-only (the service_ports contract + the
@@ -56,7 +56,7 @@
 # refuse regardless of bind address -- a false-confidence tautology.
 - name: _verify | Capture listening sockets
   command: ss -Htln
-  register: _verify_bind
+  register: _prometheus_bind
   changed_when: false
   become: true
 
@@ -69,7 +69,7 @@
     # backslash-free on purpose (ansible re-processes \-escapes inside
     # conditionals); [^ ] stands in for \S, the trailing space/end alt for \b.
     _verify_port_addrs: >-
-      {{ _verify_bind.stdout
+      {{ _prometheus_bind.stdout
          | regex_findall('([^ ]+):' ~ service_ports.prometheus ~ '(?: |$)')
          | unique | sort }}
   assert:
@@ -78,7 +78,7 @@
     fail_msg: >-
       prometheus must listen on 127.0.0.1:{{ service_ports.prometheus }} only;
       addresses bound to the port: {{ _verify_port_addrs }};
-      ss reported: {{ _verify_bind.stdout }}
+      ss reported: {{ _prometheus_bind.stdout }}
   become: true
 
 # The role's reload: path (SIGHUP via the packaged unit's ExecReload) is the
@@ -95,21 +95,21 @@
 - name: _verify | Capture prometheus status before reload
   systemd:
     name: prometheus
-  register: _verify_svc_before
+  register: _prometheus_svc_before
   become: true
 
 - name: _verify | Capture live config-reload timestamp before reload
   uri:
     url: http://127.0.0.1:{{ service_ports.prometheus }}/metrics
     return_content: true
-  register: _verify_metrics_before
+  register: _prometheus_metrics_before
   become: true
 
 - name: _verify | Reload prometheus (SIGHUP via ExecReload)
   systemd:
     name: prometheus
     state: reloaded
-  register: _verify_svc_after
+  register: _prometheus_svc_after
   become: true
 
 # SIGHUP is async -- systemd's ExecReload returns before prometheus finishes
@@ -119,31 +119,31 @@
   uri:
     url: http://127.0.0.1:{{ service_ports.prometheus }}/metrics
     return_content: true
-  register: _verify_metrics_after
+  register: _prometheus_metrics_after
   retries: 10
   delay: 1
   vars:
     _verify_reload_ts_before: >-
-      {{ _verify_metrics_before.content
+      {{ _prometheus_metrics_before.content
          | regex_findall('prometheus_config_last_reload_success_timestamp_seconds ([0-9.eE+-]+)')
          | first }}
     _verify_reload_ts_after: >-
-      {{ _verify_metrics_after.content
+      {{ _prometheus_metrics_after.content
          | regex_findall('prometheus_config_last_reload_success_timestamp_seconds ([0-9.eE+-]+)')
          | first }}
   until:
-    - _verify_metrics_after.status == 200
+    - _prometheus_metrics_after.status == 200
     - _verify_reload_ts_after | float > _verify_reload_ts_before | float
   become: true
 
 - name: _verify | Prometheus survived the reload (same PID, hitless)
   assert:
     that:
-      - _verify_svc_before.status.MainPID | int > 0
-      - _verify_svc_after.status.MainPID == _verify_svc_before.status.MainPID
+      - _prometheus_svc_before.status.MainPID | int > 0
+      - _prometheus_svc_after.status.MainPID == _prometheus_svc_before.status.MainPID
     fail_msg: >-
-      reload was not hitless: MainPID before={{ _verify_svc_before.status.MainPID | default('?') }}
-      after={{ _verify_svc_after.status.MainPID | default('?') }}
+      reload was not hitless: MainPID before={{ _prometheus_svc_before.status.MainPID | default('?') }}
+      after={{ _prometheus_svc_after.status.MainPID | default('?') }}
   become: true
 
 # auth:required puts Authelia in front; a cookie-less GET / must land on
@@ -157,12 +157,12 @@
     validate_certs: false
     follow_redirects: none
     status_code: 302
-  register: _verify_gate
+  register: _prometheus_gate
   # Pin the redirect to the Authelia portal host and require the returnUrl
   # to route back to the prometheus vhost -- a bare 'auth.' substring would
   # also accept an unrelated 302 to any URL that merely contains it.
   failed_when: >-
-    _verify_gate.status != 302
-    or not (_verify_gate.location | default('')).startswith('https://auth.' ~ authelia_cookie_domain ~ '/')
-    or ('rd=https://prometheus.' ~ inventory_hostname ~ '.' ~ domain) not in (_verify_gate.location | default(''))
+    _prometheus_gate.status != 302
+    or not (_prometheus_gate.location | default('')).startswith('https://auth.' ~ authelia_cookie_domain ~ '/')
+    or ('rd=https://prometheus.' ~ inventory_hostname ~ '.' ~ domain) not in (_prometheus_gate.location | default(''))
   become: true

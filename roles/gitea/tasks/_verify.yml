@@ -5,10 +5,10 @@
   uri:
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/healthz
     status_code: 200
-  register: _verify_healthz
+  register: _gitea_healthz
   retries: 30
   delay: 2
-  until: _verify_healthz.status == 200
+  until: _gitea_healthz.status == 200
 
 # Asserts the running gitea matches the version pinned in vars/main.yml
 # -- catches "binary updated, unit not restarted" and bad-download cases.
@@ -16,13 +16,13 @@
   uri:
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/version
     status_code: 200
-  register: _verify_version
+  register: _gitea_version
   # Substring-match would let pin 1.26.1 be satisfied by 1.26.10. Strip
   # any `+build` metadata (gitea returns `1.26.1+gitea-dev` for non-
   # release builds) and equate exactly.
   failed_when: >-
-    _verify_version.json.version is not defined
-    or _verify_version.json.version.split('+')[0] != gitea_version
+    _gitea_version.json.version is not defined
+    or _gitea_version.json.version.split('+')[0] != gitea_version
 
 # Reverse-proxy chain probe -- a typo'd subdomain or broken
 # nginx_site_args would pass the loopback probe above silently.
@@ -40,10 +40,10 @@
 - name: _verify | Gitea sqlite database exists and is owned by git
   stat:
     path: /mnt/services/sqlite/gitea/gitea.db
-  register: _verify_sqlite
+  register: _gitea_sqlite
   failed_when: >-
-    not _verify_sqlite.stat.exists
-    or _verify_sqlite.stat.pw_name != 'git'
+    not _gitea_sqlite.stat.exists
+    or _gitea_sqlite.stat.pw_name != 'git'
   become: true
 
 # Ask gitea to audit its own state. check-db-version catches a
@@ -89,11 +89,11 @@
     GITEA_WORK_DIR: /mnt/services/gitea
   become: true
   become_user: git
-  register: _verify_user_create
-  changed_when: _verify_user_create.rc == 0
+  register: _gitea_user_create
+  changed_when: _gitea_user_create.rc == 0
   failed_when: >-
-    _verify_user_create.rc != 0
-    and "already exists" not in _verify_user_create.stderr
+    _gitea_user_create.rc != 0
+    and "already exists" not in _gitea_user_create.stderr
 
 # gitea 1.26+ rejects HTTP basic auth for /api/v1/* with "token is
 # required" -- need a real access token. --raw prints just the token
@@ -110,7 +110,7 @@
     GITEA_WORK_DIR: /mnt/services/gitea
   become: true
   become_user: git
-  register: _verify_token
+  register: _gitea_token
   changed_when: false
 
 # Status 201 on first run, 409 on a --keep re-run. gitea accepts the
@@ -122,7 +122,7 @@
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/user/repos
     method: POST
     url_username: verify
-    url_password: "{{ _verify_token.stdout | trim }}"
+    url_password: "{{ _gitea_token.stdout | trim }}"
     force_basic_auth: true
     body_format: json
     body:
@@ -133,7 +133,7 @@
 
 - name: _verify | Git clone the throwaway repo over HTTP  # noqa: latest[git]
   git:
-    repo: "http://verify:{{ _verify_token.stdout | trim }}@127.0.0.1:{{ service_ports.gitea }}/verify/functional_test.git"
+    repo: "http://verify:{{ _gitea_token.stdout | trim }}@127.0.0.1:{{ service_ports.gitea }}/verify/functional_test.git"
     dest: /tmp/gitea_verify_clone
   environment:
     GIT_TERMINAL_PROMPT: "0"
@@ -154,14 +154,14 @@
     executable: /bin/bash
   environment:
     GIT_TERMINAL_PROMPT: "0"
-  register: _verify_push
+  register: _gitea_push
   changed_when: true
 
 - name: _verify | Confirm pushed file is fetchable through the API
   uri:
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/repos/verify/functional_test/contents/stamp.txt
     url_username: verify
-    url_password: "{{ _verify_token.stdout | trim }}"
+    url_password: "{{ _gitea_token.stdout | trim }}"
     force_basic_auth: true
     status_code: 200
 
@@ -180,7 +180,7 @@
 - name: _verify | Slurp throwaway SSH pubkey
   slurp:
     src: /tmp/gitea_verify_ssh_key.pub
-  register: _verify_ssh_pubkey
+  register: _gitea_ssh_pubkey
 
 # 201 on first run, 422 on a --keep re-run (gitea rejects a duplicate
 # key fingerprint regardless of title).
@@ -189,12 +189,12 @@
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/user/keys
     method: POST
     url_username: verify
-    url_password: "{{ _verify_token.stdout | trim }}"
+    url_password: "{{ _gitea_token.stdout | trim }}"
     force_basic_auth: true
     body_format: json
     body:
       title: "verify_{{ ansible_date_time.epoch }}"
-      key: "{{ _verify_ssh_pubkey.content | b64decode | trim }}"
+      key: "{{ _gitea_ssh_pubkey.content | b64decode | trim }}"
     status_code: [ 201, 422 ]
 
 - name: _verify | Git ls-remote over SSH (exercises gitea-serv + authorized_keys)  # noqa: command-instead-of-module
@@ -216,18 +216,18 @@
     GITEA_WORK_DIR: /mnt/services/gitea
   become: true
   become_user: git
-  register: _verify_auth_list
+  register: _gitea_auth_list
   changed_when: false
   failed_when: >-
-    _verify_auth_list.rc != 0
-    or 'ID' not in _verify_auth_list.stdout
-    or 'Name' not in _verify_auth_list.stdout
+    _gitea_auth_list.rc != 0
+    or 'ID' not in _gitea_auth_list.stdout
+    or 'Name' not in _gitea_auth_list.stdout
 
 - name: _verify | Authelia OIDC source registered (prod only)
   when: not qemu_test
   assert:
     that:
-      - _verify_auth_list.stdout_lines | select('search', '\sauthelia\s+OAuth2\s+true\b') | list | length == 1
+      - _gitea_auth_list.stdout_lines | select('search', '\sauthelia\s+OAuth2\s+true\b') | list | length == 1
     fail_msg: |
       `gitea admin auth list` does not show an active OAuth2 source
       named "authelia". Check the add-oauth task in main.yml -- a

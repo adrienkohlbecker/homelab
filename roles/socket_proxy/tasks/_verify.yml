@@ -5,20 +5,20 @@
 - name: _verify | The socket_proxy unit is loaded and active
   systemd:
     name: socket_proxy
-  register: _verify_socket_proxy_unit
+  register: _socket_proxy_unit
   failed_when: >-
-    _verify_socket_proxy_unit.status.LoadState != "loaded"
-    or _verify_socket_proxy_unit.status.ActiveState != "active"
+    _socket_proxy_unit.status.LoadState != "loaded"
+    or _socket_proxy_unit.status.ActiveState != "active"
   become: true
 
 - name: _verify | Allowed GET /version returns 200
   uri:
     url: http://127.0.0.1:{{ service_ports.socket_proxy }}/version
     status_code: 200
-  register: _verify_socket_proxy_version
+  register: _socket_proxy_version
   retries: 15
   delay: 2
-  until: _verify_socket_proxy_version.status == 200
+  until: _socket_proxy_version.status == 200
 
 - name: _verify | Allowed GET /containers/json returns 200
   uri:

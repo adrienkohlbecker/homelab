@@ -51,10 +51,10 @@
   uri:
     url: http://localhost:{{ service_ports.headscale }}/health
     status_code: 200
-  register: _setup_health
+  register: _tailscale_health
   retries: 10
   delay: 2
-  until: _setup_health.status == 200
+  until: _tailscale_health.status == 200
   become: true
 
 # The role's remaining test wiring is plain group_vars/host_vars (login_server,

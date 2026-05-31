@@ -36,12 +36,12 @@
 - name: _verify | Read console-setup config
   slurp:
     src: /etc/default/console-setup
-  register: _verify_console_content
+  register: _console_content
   become: true
 
 - name: _verify | Config carries expected directives
   vars:
-    _content: "{{ _verify_console_content.content | b64decode }}"
+    _content: "{{ _console_content.content | b64decode }}"
   assert:
     that:
       # Exactly one un-commented line starts with `KEY=`, and it
@@ -61,12 +61,12 @@
 - name: _verify | Read keyboard config
   slurp:
     src: /etc/default/keyboard
-  register: _verify_console_keyboard_content
+  register: _console_keyboard_content
   become: true
 
 - name: _verify | Keyboard config carries expected directives
   vars:
-    _content: "{{ _verify_console_keyboard_content.content | b64decode }}"
+    _content: "{{ _console_keyboard_content.content | b64decode }}"
   assert:
     that:
       - _content | regex_findall('^' ~ item.split('=')[0] ~ '=.*$', multiline=True) | length == 1
@@ -84,7 +84,7 @@
 # terminal and works fine from ansible's ssh session.
 - name: _verify | Read live VT keymap
   command: dumpkeys
-  register: _verify_console_dumpkeys
+  register: _console_dumpkeys
   changed_when: false
   become: true
 
@@ -96,7 +96,7 @@
     # backspace escape and never matches. regex_findall | length mirrors the
     # config-directive checks above.
     that:
-      - _verify_console_dumpkeys.stdout | regex_findall('^\s*keycode\s+16\s*=\s*\+?a\s*$', multiline=True) | length > 0
+      - _console_dumpkeys.stdout | regex_findall('^\s*keycode\s+16\s*=\s*\+?a\s*$', multiline=True) | length > 0
     fail_msg: >-
       Live VT keymap doesn't look like French AZERTY:
       keycode 16 did not map to 'a'.
@@ -119,20 +119,20 @@
 - name: _verify | Stat current kernel's initrd
   stat:
     path: /boot/initrd.img-{{ ansible_kernel }}
-  register: _verify_console_initrd_stat
+  register: _console_initrd_stat
   become: true
 
 - name: _verify | List current kernel's initrd contents
-  when: _verify_console_initrd_stat.stat.exists
+  when: _console_initrd_stat.stat.exists
   command: lsinitramfs /boot/initrd.img-{{ ansible_kernel }}
-  register: _verify_console_initrd
+  register: _console_initrd
   changed_when: false
   become: true
 
 - name: _verify | Initrd bundles console-setup + keyboard configs
-  when: _verify_console_initrd_stat.stat.exists
+  when: _console_initrd_stat.stat.exists
   assert:
-    that: item in _verify_console_initrd.stdout_lines
+    that: item in _console_initrd.stdout_lines
     fail_msg: "initrd missing: {{ item }}"
   loop:
     - etc/default/console-setup
@@ -147,17 +147,17 @@
 # probe available from a headless test.
 - name: _verify | Console_noblank.service is enabled  # noqa: command-instead-of-module
   command: systemctl is-enabled console_noblank.service
-  register: _verify_noblank_enabled
+  register: _console_noblank_enabled
   changed_when: false
   failed_when:
-    - _verify_noblank_enabled.rc != 0 or _verify_noblank_enabled.stdout not in ['enabled', 'static']
+    - _console_noblank_enabled.rc != 0 or _console_noblank_enabled.stdout not in ['enabled', 'static']
   become: true
 
 - name: _verify | Console_noblank.service is active  # noqa: command-instead-of-module
   command: systemctl is-active console_noblank.service
-  register: _verify_noblank_active
+  register: _console_noblank_active
   changed_when: false
-  failed_when: _verify_noblank_active.stdout | trim != 'active'
+  failed_when: _console_noblank_active.stdout | trim != 'active'
   become: true
 
 # Persistent-config checks: confirm the next-boot cmdline source
@@ -166,30 +166,30 @@
 - name: _verify | ZBM commandline includes consoleblank=0
   when: not grub_bootloader
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
-  register: _verify_console_zbm_cmdline
+  register: _console_zbm_cmdline
   changed_when: false
-  failed_when: "'consoleblank=0' not in _verify_console_zbm_cmdline.stdout"
+  failed_when: "'consoleblank=0' not in _console_zbm_cmdline.stdout"
   become: true
 
 - name: _verify | GRUB cmdline file includes consoleblank=0
   when: grub_bootloader
   slurp:
     src: /etc/default/grub.d/99-console.cfg
-  register: _verify_console_grub_cfg
-  failed_when: "'consoleblank=0' not in (_verify_console_grub_cfg.content | b64decode)"
+  register: _console_grub_cfg
+  failed_when: "'consoleblank=0' not in (_console_grub_cfg.content | b64decode)"
   become: true
 
 - name: _verify | Read rendered /boot/grub/grub.cfg
   when: grub_bootloader
   slurp:
     src: /boot/grub/grub.cfg
-  register: _verify_console_grub_rendered
+  register: _console_grub_rendered
   become: true
 
 - name: _verify | Every grub.cfg linux entry includes consoleblank=0
   when: grub_bootloader
   vars:
-    _grub: "{{ _verify_console_grub_rendered.content | b64decode }}"
+    _grub: "{{ _console_grub_rendered.content | b64decode }}"
     _all_linux: "{{ _grub | regex_findall('^\\s*linux\\s.*$', multiline=True) }}"
     _with_blank: "{{ _grub | regex_findall('^\\s*linux\\s.*consoleblank=0.*$', multiline=True) }}"
   assert:
@@ -215,6 +215,6 @@
   when: ansible_architecture != 'aarch64'
   slurp:
     src: /sys/module/kernel/parameters/consoleblank
-  register: _verify_consoleblank
-  failed_when: (_verify_consoleblank.content | b64decode | trim) != '0'
+  register: _console_consoleblank
+  failed_when: (_console_consoleblank.content | b64decode | trim) != '0'
   become: true

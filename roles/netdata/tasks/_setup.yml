@@ -12,4 +12,4 @@
     name: _test
     tasks_from: authelia_stub
   vars:
-    authelia_stub_mode: gate
+    _netdata_authelia_stub_mode: gate

@@ -72,7 +72,7 @@
 
 - name: _verify | Assert metadata files exist with the right period_secs
   command: cat /etc/netdata/charts.d/systemd_timers.d/{{ item }}.conf
-  register: _verify_meta
+  register: _systemd_timer_meta
   changed_when: false
   loop:
     - _verify_timer_recent
@@ -83,7 +83,7 @@
     that:
       - "'period_secs=3600' in item.stdout"
     fail_msg: "metadata missing period_secs=3600: {{ item.stdout }}"
-  loop: "{{ _verify_meta.results }}"
+  loop: "{{ _systemd_timer_meta.results }}"
   loop_control:
     label: "{{ item.item }}"
 
@@ -94,42 +94,42 @@
   uri:
     url: http://localhost:19999/api/v1/charts
     return_content: true
-  register: _verify_charts
+  register: _systemd_timer_charts
   retries: 30
   delay: 2
   until: >-
-    _verify_charts.status == 200
-    and 'systemd_timers._verify_timer_recent' in (_verify_charts.content | from_json).charts.keys()
-    and 'systemd_timers._verify_timer_overdue' in (_verify_charts.content | from_json).charts.keys()
+    _systemd_timer_charts.status == 200
+    and 'systemd_timers._verify_timer_recent' in (_systemd_timer_charts.content | from_json).charts.keys()
+    and 'systemd_timers._verify_timer_overdue' in (_systemd_timer_charts.content | from_json).charts.keys()
 
 - name: _verify | Recent fixture reports overdue=0
   uri:
     url: http://localhost:19999/api/v1/data?chart=systemd_timers._verify_timer_recent&points=1&after=-30&format=json
     return_content: true
-  register: _verify_recent_data
+  register: _systemd_timer_recent_data
   retries: 30
   delay: 2
   until: >-
-    _verify_recent_data.status == 200
-    and 'overdue' in (_verify_recent_data.json.labels | default([]))
-    and 'age_secs' in _verify_recent_data.json.labels
-    and (_verify_recent_data.json.data | default([])) | length > 0
-    and _verify_recent_data.json.data[0][_verify_recent_data.json.labels.index('overdue')] | int == 0
-    and _verify_recent_data.json.data[0][_verify_recent_data.json.labels.index('age_secs')] | int < 600
+    _systemd_timer_recent_data.status == 200
+    and 'overdue' in (_systemd_timer_recent_data.json.labels | default([]))
+    and 'age_secs' in _systemd_timer_recent_data.json.labels
+    and (_systemd_timer_recent_data.json.data | default([])) | length > 0
+    and _systemd_timer_recent_data.json.data[0][_systemd_timer_recent_data.json.labels.index('overdue')] | int == 0
+    and _systemd_timer_recent_data.json.data[0][_systemd_timer_recent_data.json.labels.index('age_secs')] | int < 600
 
 - name: _verify | Overdue fixture reports overdue=1
   uri:
     url: http://localhost:19999/api/v1/data?chart=systemd_timers._verify_timer_overdue&points=1&after=-30&format=json
     return_content: true
-  register: _verify_overdue_data
+  register: _systemd_timer_overdue_data
   retries: 30
   delay: 2
   until: >-
-    _verify_overdue_data.status == 200
-    and 'overdue' in (_verify_overdue_data.json.labels | default([]))
-    and (_verify_overdue_data.json.data | default([])) | length > 0
-    and _verify_overdue_data.json.data[0][_verify_overdue_data.json.labels.index('overdue')] | int == 1
-    and _verify_overdue_data.json.data[0][_verify_overdue_data.json.labels.index('age_secs')] | int > 7200
+    _systemd_timer_overdue_data.status == 200
+    and 'overdue' in (_systemd_timer_overdue_data.json.labels | default([]))
+    and (_systemd_timer_overdue_data.json.data | default([])) | length > 0
+    and _systemd_timer_overdue_data.json.data[0][_systemd_timer_overdue_data.json.labels.index('overdue')] | int == 1
+    and _systemd_timer_overdue_data.json.data[0][_systemd_timer_overdue_data.json.labels.index('age_secs')] | int > 7200
 
 # Alert binds on context systemd.timer_lag; netdata keys the instance
 # as <chart_id>.<template_name>, e.g.
@@ -138,17 +138,17 @@
   uri:
     url: http://localhost:19999/api/v1/alarms?all
     return_content: true
-  register: _verify_alarms
+  register: _systemd_timer_alarms
   retries: 30
   delay: 2
   until: >-
-    _verify_alarms.status == 200
-    and (_verify_alarms.content | from_json).alarms.keys() | list
+    _systemd_timer_alarms.status == 200
+    and (_systemd_timer_alarms.content | from_json).alarms.keys() | list
         | select('search', 'systemd_timers._verify_timer_overdue.systemd_timer_overdue') | list | length > 0
 
 - name: _verify | Assert overdue alert instantiated against both fixtures
   vars:
-    _keys: "{{ (_verify_alarms.content | from_json).alarms.keys() | list }}"
+    _keys: "{{ (_systemd_timer_alarms.content | from_json).alarms.keys() | list }}"
   assert:
     that:
       - _keys | select('search', 'systemd_timers._verify_timer_recent.systemd_timer_overdue') | list | length > 0
@@ -183,12 +183,12 @@
   loop:
     - _verify_timer_recent
     - _verify_timer_overdue
-  register: _verify_meta_after
+  register: _systemd_timer_meta_after
 - name: _verify | Assert metadata cleaned up
   assert:
     that:
       - not item.stat.exists
     fail_msg: "metadata for {{ item.item }} still present"
-  loop: "{{ _verify_meta_after.results }}"
+  loop: "{{ _systemd_timer_meta_after.results }}"
   loop_control:
     label: "{{ item.item }}"

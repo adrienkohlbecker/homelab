@@ -18,12 +18,12 @@
 # after enable; status returns error before the daemon is ready.
 - name: _verify | Fail2ban-client status lists the sshd jail
   command: fail2ban-client status
-  register: _verify_status
+  register: _fail2ban_status
   retries: 15
   delay: 2
   until:
-    - _verify_status.rc == 0
-    - "'sshd' in _verify_status.stdout"
+    - _fail2ban_status.rc == 0
+    - "'sshd' in _fail2ban_status.stdout"
   changed_when: false
   become: true
 
@@ -36,7 +36,7 @@
 # or wireguard_subnet that would silently shrink the whitelist.
 - name: _verify | Fail2ban-client knows the configured ignoreip
   command: fail2ban-client get sshd ignoreip
-  register: _verify_ignoreip
+  register: _fail2ban_ignoreip
   changed_when: false
   become: true
 
@@ -46,14 +46,14 @@
 - name: _verify | Configured ignoreip includes all expected entries
   assert:
     that:
-      - "'127.0.0.0/8' in _verify_ignoreip.stdout"
-      - "'::1' in _verify_ignoreip.stdout"
-      - site_subnets.home in _verify_ignoreip.stdout
-      - wireguard_subnet in _verify_ignoreip.stdout
+      - "'127.0.0.0/8' in _fail2ban_ignoreip.stdout"
+      - "'::1' in _fail2ban_ignoreip.stdout"
+      - site_subnets.home in _fail2ban_ignoreip.stdout
+      - wireguard_subnet in _fail2ban_ignoreip.stdout
     fail_msg: >-
       sshd jail ignoreip missing expected entries; check empty
       interpolation of site_subnets.home or wireguard_subnet.
-      Got: {{ _verify_ignoreip.stdout }}
+      Got: {{ _fail2ban_ignoreip.stdout }}
 
 # Function check for backend=systemd: the daemon's status output
 # names the active backend (`Journal matches:` for systemd vs.
@@ -74,20 +74,20 @@
 # leave the BanManager-via-CLI path to the synthetic-ban below.
 - name: _verify | Sshd jail uses the systemd journal backend
   command: fail2ban-client status sshd
-  register: _verify_status_sshd
+  register: _fail2ban_status_sshd
   changed_when: false
   become: true
 
 - name: _verify | Journal backend is engaged with our journalmatch
   assert:
     that:
-      - "'Journal matches:' in _verify_status_sshd.stdout"
-      - "'_COMM=sshd' in _verify_status_sshd.stdout"
+      - "'Journal matches:' in _fail2ban_status_sshd.stdout"
+      - "'_COMM=sshd' in _fail2ban_status_sshd.stdout"
     fail_msg: >-
       sshd jail status missing the journal backend's "Journal matches:"
       line or our pinned `_COMM=sshd` filter. Backend may have silently
       reverted to file-mode (auto-mode without /var/log/auth.log present
-      means zero failure detection). Got: {{ _verify_status_sshd.stdout }}
+      means zero failure detection). Got: {{ _fail2ban_status_sshd.stdout }}
 
 # Proves the sendmail-whois-lines.local override was parsed and the
 # inherited start/stop notification handlers are neutralized -- queried
@@ -97,7 +97,7 @@
 # expansion that the synthetic-ban path below already exercises).
 - name: _verify | Sendmail action start/stop handlers are empty
   command: fail2ban-client get sshd action sendmail-whois-lines {{ item }}
-  register: _verify_mail_handlers
+  register: _fail2ban_mail_handlers
   changed_when: false
   become: true
   loop:
@@ -113,7 +113,7 @@
       override did not take precedence over sendmail-common.conf, so
       "started/stopped on <host>" emails will still fire. Got:
       {{ item.stdout }}
-  loop: "{{ _verify_mail_handlers.results }}"
+  loop: "{{ _fail2ban_mail_handlers.results }}"
   loop_control:
     label: "{{ item.item }}"
 
@@ -125,11 +125,11 @@
 
 - name: _verify | Banned IP appears in inet f2b-table
   command: nft list table inet f2b-table
-  register: _verify_f2b_table
+  register: _fail2ban_f2b_table
   changed_when: false
   failed_when: >-
-    _verify_f2b_table.rc != 0
-    or '192.0.2.1' not in _verify_f2b_table.stdout
+    _fail2ban_f2b_table.rc != 0
+    or '192.0.2.1' not in _fail2ban_f2b_table.stdout
   become: true
 
 # Negative assertion: the iptables-nft compat `ip filter` table either
@@ -137,9 +137,9 @@
 # does, the banaction override silently reverted to iptables-multiport.
 - name: _verify | Iptables-nft compat path is NOT used
   command: nft list table ip filter
-  register: _verify_ip_filter
+  register: _fail2ban_ip_filter
   changed_when: false
-  failed_when: _verify_ip_filter.rc == 0 and 'chain f2b-' in _verify_ip_filter.stdout
+  failed_when: _fail2ban_ip_filter.rc == 0 and 'chain f2b-' in _fail2ban_ip_filter.stdout
   become: true
 
 - name: _verify | Unban the synthetic IP
@@ -149,7 +149,7 @@
 
 - name: _verify | Banned IP is gone from inet f2b-table
   command: nft list table inet f2b-table
-  register: _verify_f2b_after
+  register: _fail2ban_f2b_after
   changed_when: false
-  failed_when: "'192.0.2.1' in _verify_f2b_after.stdout"
+  failed_when: "'192.0.2.1' in _fail2ban_f2b_after.stdout"
   become: true

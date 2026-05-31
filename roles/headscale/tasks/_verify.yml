@@ -5,10 +5,10 @@
   uri:
     url: http://localhost:{{ service_ports.headscale }}/health
     status_code: 200
-  register: _verify_loopback
+  register: _headscale_loopback
   retries: 5
   delay: 1
-  until: _verify_loopback.status == 200
+  until: _headscale_loopback.status == 200
   become: true
 
 # Metrics probe -- fox's netdata prometheus collector scrapes this loopback
@@ -20,11 +20,11 @@
     url: http://localhost:{{ service_ports.headscale_metrics }}/metrics
     status_code: 200
     return_content: true
-  register: _verify_metrics
-  failed_when: "'headscale_' not in (_verify_metrics.content | default(''))"
+  register: _headscale_metrics
+  failed_when: "'headscale_' not in (_headscale_metrics.content | default(''))"
   retries: 5
   delay: 1
-  until: _verify_metrics.status | default(0) == 200
+  until: _headscale_metrics.status | default(0) == 200
   become: true
 
 # nginx vhost probe -- the control endpoint is public (auth: none), so a plain
@@ -46,10 +46,10 @@
 - name: _verify | Headscale data dir is owned by headscale
   stat:
     path: /mnt/services/headscale/data
-  register: _verify_data_owner
+  register: _headscale_data_owner
   failed_when: >-
-    not _verify_data_owner.stat.exists
-    or _verify_data_owner.stat.pw_name != 'headscale'
+    not _headscale_data_owner.stat.exists
+    or _headscale_data_owner.stat.pw_name != 'headscale'
   become: true
 
 # Symlink contract -- the role promises data/db.sqlite is a symlink onto the
@@ -60,11 +60,11 @@
   stat:
     path: /mnt/services/headscale/data/db.sqlite
     follow: false
-  register: _verify_db_symlink
+  register: _headscale_db_symlink
   failed_when: >-
-    not _verify_db_symlink.stat.exists
-    or not _verify_db_symlink.stat.islnk
-    or _verify_db_symlink.stat.lnk_target != '/mnt/services/sqlite/headscale/db.sqlite'
+    not _headscale_db_symlink.stat.exists
+    or not _headscale_db_symlink.stat.islnk
+    or _headscale_db_symlink.stat.lnk_target != '/mnt/services/sqlite/headscale/db.sqlite'
   become: true
 
 # Functional API round-trip -- exercises the real control path end to end:
@@ -75,16 +75,16 @@
 # proves the read path below.
 - name: _verify | Create a throwaway headscale user (gRPC write path)
   command: podman exec headscale headscale users create test-harness
-  register: _verify_user_create
+  register: _headscale_user_create
   changed_when: false
   failed_when: false
   become: true
 
 - name: _verify | The throwaway user round-trips back through list
   command: podman exec headscale headscale users list
-  register: _verify_user_list
+  register: _headscale_user_list
   changed_when: false
-  failed_when: "'test-harness' not in _verify_user_list.stdout"
+  failed_when: "'test-harness' not in _headscale_user_list.stdout"
   become: true
 
 # Tie the symlink-shape check above to an observed write: the gRPC user-create
@@ -94,8 +94,8 @@
 - name: _verify | The gRPC write landed on the sqlite dataset (real DB on-disk)
   stat:
     path: /mnt/services/sqlite/headscale/db.sqlite
-  register: _verify_db_real
-  failed_when: not _verify_db_real.stat.exists or _verify_db_real.stat.size == 0
+  register: _headscale_db_real
+  failed_when: not _headscale_db_real.stat.exists or _headscale_db_real.stat.size == 0
   become: true
 
 # Dual-stack STUN publish -- fox is a dual-stack relay, so the embedded DERP
@@ -112,9 +112,9 @@
 # netcheck` from a v6-capable client after deploy.
 - name: _verify | Host publishes DERP STUN on IPv6 ([::]:3478)
   command: ss -ulnH
-  register: _verify_stun_listen
+  register: _headscale_stun_listen
   changed_when: false
-  failed_when: "('[::]:' ~ service_ports.headscale_stun) not in _verify_stun_listen.stdout"
+  failed_when: "('[::]:' ~ service_ports.headscale_stun) not in _headscale_stun_listen.stdout"
   become: true
 
 # netavark's firewall driver is iptables on jammy/noble (see roles/podman
@@ -127,7 +127,7 @@
   shell: set -o pipefail; ip6tables -t nat -S | grep -- "--dport {{ service_ports.headscale_stun }} -j DNAT"
   args:
     executable: /bin/bash
-  register: _verify_stun_dnat
+  register: _headscale_stun_dnat
   changed_when: false
   when: ansible_distribution_release in ['jammy', 'noble']
   become: true
@@ -136,7 +136,7 @@
   shell: set -o pipefail; nft list ruleset | grep -- "{{ service_ports.headscale_stun }}" | grep -iq "dnat"
   args:
     executable: /bin/bash
-  register: _verify_stun_dnat_nft
+  register: _headscale_stun_dnat_nft
   changed_when: false
   when: ansible_distribution_release not in ['jammy', 'noble']
   become: true
@@ -154,9 +154,9 @@
 # flow is checked in the field after deploy.
 - name: _verify | Headscale.service is active (boot-time OIDC discovery succeeded)  # noqa: command-instead-of-module
   command: systemctl is-active headscale.service
-  register: _verify_hs_active
+  register: _headscale_hs_active
   changed_when: false
-  failed_when: _verify_hs_active.stdout | trim != 'active'
+  failed_when: _headscale_hs_active.stdout | trim != 'active'
   become: true
 
 # Read the rendered config from the host (the distroless headscale image has no
@@ -164,11 +164,11 @@
 # read-only into the container.
 - name: _verify | Rendered config enabled OIDC + PKCE against the mock issuer
   command: cat /mnt/services/headscale/config.yaml
-  register: _verify_hs_oidc_cfg
+  register: _headscale_hs_oidc_cfg
   changed_when: false
   failed_when: >-
-    'http://10.166.0.10:8090/oidc' not in _verify_hs_oidc_cfg.stdout
-    or 'pkce:' not in _verify_hs_oidc_cfg.stdout
+    'http://10.166.0.10:8090/oidc' not in _headscale_hs_oidc_cfg.stdout
+    or 'pkce:' not in _headscale_hs_oidc_cfg.stdout
   become: true
 
 # Exercise the ACL SIGHUP reload's fail-soft contract (tasks/main.yml): a
@@ -204,9 +204,9 @@
 # check than `systemctl is-active`, which could read 'active' mid crash-restart.)
 - name: _verify | Server survived the bad reload and still serves (fail-soft)
   command: podman exec headscale headscale users list
-  register: _verify_failsoft_list
+  register: _headscale_failsoft_list
   changed_when: false
   retries: 5
   delay: 1
-  until: _verify_failsoft_list.rc == 0
+  until: _headscale_failsoft_list.rc == 0
   become: true

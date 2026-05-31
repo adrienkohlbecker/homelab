@@ -24,10 +24,10 @@
         url: https://localhost:{{ service_ports.eaton_ipp }}/
         validate_certs: false
         status_code: [ 200, 301, 302, 303, 401, 403 ]
-      register: _verify_http_direct
+      register: _eaton_ipp_http_direct
       retries: 15
       delay: 2
-      until: _verify_http_direct is succeeded
+      until: _eaton_ipp_http_direct is succeeded
 
     # Hit the nginx route via Host header so DNS isn't required.
     # Snakeoil certs in test → validate_certs: false.
@@ -38,7 +38,7 @@
           Host: "ipp.{{ inventory_hostname }}.{{ domain }}"
         validate_certs: false
         status_code: [ 200, 301, 302, 303, 401, 403 ]
-      register: _verify_http_nginx
+      register: _eaton_ipp_http_nginx
       retries: 5
       delay: 2
-      until: _verify_http_nginx is succeeded
+      until: _eaton_ipp_http_nginx is succeeded

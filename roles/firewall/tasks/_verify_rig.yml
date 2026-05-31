@@ -71,14 +71,14 @@
     fi
     ip addr replace 10.99.0.1/24 dev wg0
     ip link set wg0 up
-    ip -n extns addr replace {{ probe_nonscope }}/24 dev veth_ext
+    ip -n extns addr replace {{ _firewall_probe_nonscope }}/24 dev veth_ext
     ip -n extns link set veth_ext up
     ip -n extns link set lo up
     ip -n extns route replace default via 10.99.0.1
-    ip route replace {{ probe_home }}/32 dev wg0
-    ip route replace {{ probe_wg }}/32 dev wg0
-    ip route replace {{ probe_podman }}/32 dev wg0
-    ip route replace {{ probe_podman_pool }}/32 dev wg0
+    ip route replace {{ _firewall_probe_home }}/32 dev wg0
+    ip route replace {{ _firewall_probe_wg }}/32 dev wg0
+    ip route replace {{ _firewall_probe_podman }}/32 dev wg0
+    ip route replace {{ _firewall_probe_podman_pool }}/32 dev wg0
   args:
     executable: /bin/bash
   changed_when: true

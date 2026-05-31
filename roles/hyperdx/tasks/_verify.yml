@@ -5,26 +5,26 @@
 - name: _verify | Hyperdx config dir is owned by hyperdx
   stat:
     path: /mnt/services/hyperdx
-  register: _verify_config_dir
-  failed_when: not _verify_config_dir.stat.exists or _verify_config_dir.stat.pw_name != 'hyperdx'
+  register: _hyperdx_config_dir
+  failed_when: not _hyperdx_config_dir.stat.exists or _hyperdx_config_dir.stat.pw_name != 'hyperdx'
   become: true
 
 - name: _verify | Hyperdx clickhouse data dir is owned by hyperdx_clickhouse
   stat:
     path: /mnt/services/hyperdx/clickhouse
-  register: _verify_ch_dir
+  register: _hyperdx_ch_dir
   failed_when: >-
-    not _verify_ch_dir.stat.exists
-    or _verify_ch_dir.stat.pw_name != 'hyperdx_clickhouse'
+    not _hyperdx_ch_dir.stat.exists
+    or _hyperdx_ch_dir.stat.pw_name != 'hyperdx_clickhouse'
   become: true
 
 - name: _verify | Hyperdx clickhouse log dir is owned by hyperdx_clickhouse
   stat:
     path: /mnt/services/hyperdx/clickhouse_logs
-  register: _verify_ch_log_dir
+  register: _hyperdx_ch_log_dir
   failed_when: >-
-    not _verify_ch_log_dir.stat.exists
-    or _verify_ch_log_dir.stat.pw_name != 'hyperdx_clickhouse'
+    not _hyperdx_ch_log_dir.stat.exists
+    or _hyperdx_ch_log_dir.stat.pw_name != 'hyperdx_clickhouse'
   become: true
 
 # Functional probe instead of "db dir is non-empty" -- the file tree is
@@ -43,22 +43,22 @@
       - hyperdx
       - --eval
       - db.serverStatus().ok
-  register: _verify_mongo
+  register: _hyperdx_mongo
   changed_when: false
-  failed_when: _verify_mongo.rc != 0 or (_verify_mongo.stdout | trim) != '1'
+  failed_when: _hyperdx_mongo.rc != 0 or (_hyperdx_mongo.stdout | trim) != '1'
   retries: 30
   delay: 2
-  until: _verify_mongo.rc == 0 and (_verify_mongo.stdout | trim) == '1'
+  until: _hyperdx_mongo.rc == 0 and (_hyperdx_mongo.stdout | trim) == '1'
   become: true
 
 - name: _verify | Hyperdx UI answers on its loopback port
   uri:
     url: http://localhost:{{ service_ports.hyperdx }}/
     status_code: [ 200, 302, 307 ]
-  register: _verify_http
+  register: _hyperdx_http
   retries: 60
   delay: 2
-  until: _verify_http.status in [ 200, 302, 307 ]
+  until: _hyperdx_http.status in [ 200, 302, 307 ]
 
 # Confirm UI '/' is gated by an auth layer. In prod (Authelia deployed)
 # the `auth: required` directive in main.yml wires Authelia's
@@ -123,10 +123,10 @@
                   body:
                     stringValue: hyperdx _verify probe (nginx)
     status_code: 200
-  register: _verify_otlp_nginx
+  register: _hyperdx_otlp_nginx
   retries: 150
   delay: 2
-  until: _verify_otlp_nginx.status == 200
+  until: _hyperdx_otlp_nginx.status == 200
 
 # Negative-path: a syntactically-valid but wrong Bearer must be rejected
 # by the collector's bearertokenauth extension (hitting 4318 directly so
@@ -168,7 +168,7 @@
     name: _test
     tasks_from: clickhouse_query_wait
   vars:
-    _test_args:
+    _hyperdx_test_args:
       label: count_verify_probes
       sql: SELECT count() FROM default.otel_logs WHERE ServiceName = 'hyperdx_verify_probe_nginx'
       retries: 30
@@ -197,5 +197,5 @@
     test "$(echo "$codes" | grep -c 429)" -ge 1
   args:
     executable: /bin/bash
-  register: _verify_rate_limit
+  register: _hyperdx_rate_limit
   changed_when: false
