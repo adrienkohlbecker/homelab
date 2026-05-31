@@ -115,8 +115,14 @@ hdparm_settings: {}
 
 rand_order: 2
 
-zfs_autobackup_source_host: pug
-zfs_autobackup_dest_dataset: tank/pug
+# Onsite pulls lab runs nightly: pug (LAN) plus fox (the Hetzner VPS, reached
+# over wg0 at external_ips.fox). zfs_autobackup_ssh_public_key below is the
+# reverse direction -- the key pug uses to pull lab.
+zfs_autobackup_sources:
+  - host: pug
+    dest_dataset: tank/pug
+  - host: fox
+    dest_dataset: tank/fox
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDp277oY86WuDWYdU4Xr8eBUMAZ7L089F5SjBhmZzRS8 root@pug
 
 fan2go_enabled: true

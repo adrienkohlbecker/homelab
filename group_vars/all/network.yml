@@ -32,6 +32,10 @@ external_ips:
   pug:     "{{ network.hosts.pug.physical }}"
   box:     "{{ network.hosts.box.physical }}"
   bunk:    "{{ network.hosts.bunk.physical }}"
+  # fox's wg address, not its physical: its physical (Hetzner private net) is
+  # unreachable from home -- home hosts reach fox only over wg0. Consumed by the
+  # zfs_autobackup onsite pull (lab -> fox).
+  fox:     "{{ network.hosts.fox.wireguard }}"
   udm:     "{{ network.sites.home.gateway }}"
   eaton:   "{{ network.static_leases.eaton_ups.ip }}"
   marantz: "{{ network.static_leases.marantz_receiver.ip }}"

@@ -1,0 +1,7 @@
+# Offsite rsync to the Synology (bunk) runs once per autobackup:bak=true
+# dataset. Optional + host-overridable (defaults/ sits below host_vars): set
+# false on hosts that can't reach bunk's rsync endpoint. fox routes only the
+# wg /32s of lab/pug/box/bunk (not the bonniers subnet where external_ips.bunk
+# lives), so its offsite step would fail every night -- fox's data reaches
+# home via lab's onsite pull instead.
+zfs_autobackup_offsite_enabled: true
