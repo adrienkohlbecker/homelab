@@ -16,6 +16,20 @@
   tags:
     - samba
 
+- name: Assert smb_shares names are well-formed identifiers
+  assert:
+    that:
+      - >-
+        (smb_shares | default([])) | map(attribute='name')
+        | reject('match', '^[a-zA-Z0-9][a-zA-Z0-9_ -]*$') | list | length == 0
+    fail_msg: >-
+      An smb_shares entry has a name containing characters that are not
+      alphanumeric, spaces, hyphens, or underscores (or starts with a
+      non-alphanumeric character). Share names render as INI section headers
+      in smb.conf; invalid characters could break parsing.
+  tags:
+    - samba
+
 - name: Assert smb_shares directive keys are well-formed
   assert:
     that:
@@ -77,50 +91,30 @@
 # units don't exist yet (the data/media roles in a later play create them); the
 # override is installed for boot-time effect only — no smbd restart on change, so a
 # subsequent reboot (with all coordinator units present) is what activates it.
-- name: Create smbd override directory
-  when: (smb_shares | default([])) | length > 0
-  file:
-    dest: /etc/systemd/system/smbd.service.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - samba
-
 - name: Install smbd zfs-mount dependency override
-  when: (smb_shares | default([])) | length > 0
-  template:
-    src: smbd_zfs_mounts_override.conf.j2
-    dest: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: samba_smbd_override
-  become: true
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      src: smbd_zfs_mounts_override.conf.j2
+      for: smbd.service
+      dest_abs: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
+      condition: "{{ smb_shares | length > 0 }}"
   tags:
     - samba
 
-- name: Reload systemd after smbd override
-  when:
-    - (smb_shares | default([])) | length > 0
-    - samba_smbd_override.changed
-  systemd:
-    daemon_reload: true
-  become: true
-  tags:
-    - samba
-
-- name: Re-enable smbd to pick up new WantedBy targets
+# `systemctl reenable` (disable + enable) re-processes all [Install] sections
+# including drop-ins. The systemd module's `enabled: true` is a no-op when the
+# unit is already enabled, so new WantedBy= targets from the override would
+# never get their symlinks created until a manual reenable or reboot.
+- name: Re-enable smbd to pick up new WantedBy targets  # noqa: command-instead-of-module
   when:
     - not (ansible_check_mode and samba_apt.changed)
-    - (smb_shares | default([])) | length > 0
-    - samba_smbd_override.changed
-  systemd:
-    name: smbd
-    enabled: true
+    - smb_shares | length > 0
+    - smbd_service_d_zfs_mounts_conf_result.changed
+  command: systemctl reenable smbd
+  changed_when: true
   become: true
   tags:
     - samba
@@ -128,7 +122,7 @@
 # A host that drops all its shares must shed the override too, or smbd keeps a
 # boot dependency on zfs_mount units that may no longer exist.
 - name: Remove smbd zfs-mount override when no shares
-  when: (smb_shares | default([])) | length == 0
+  when: smb_shares | length == 0
   file:
     dest: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
     state: absent
@@ -139,7 +133,7 @@
 
 - name: Reload systemd after smbd override removal
   when:
-    - (smb_shares | default([])) | length == 0
+    - smb_shares | length == 0
     - samba_smbd_override_removed.changed
   systemd:
     daemon_reload: true
