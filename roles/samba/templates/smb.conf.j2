@@ -257,6 +257,11 @@ client ipc min protocol = SMB3_11
 client min protocol = SMB3_11
 server min protocol = SMB3_11
 
+; deliberate non-default (Samba >= 4.9 registers by default): avahi owns the
+; _smb._tcp mDNS advert via /etc/avahi/services/smb.service, so silence smbd's
+; built-in responder to avoid two publishers racing for the same record.
+multicast dns register = no
+
 ; work better with macs, see https://wiki.samba.org/index.php/Configure_Samba_to_Work_Better_with_Mac_OS_X
 vfs objects = fruit streams_xattr
 ; resource forks in ZFS xattrs (xattr=sa), not ._AppleDouble sidecar files;
