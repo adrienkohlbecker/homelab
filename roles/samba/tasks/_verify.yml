@@ -1,0 +1,66 @@
+# Functional contract: smbd/nmbd are up, the rendered config exposes the
+# configured share with its access restriction, an authenticated client can
+# reach it, and an anonymous client cannot. The smbtest share (host_vars/box.yml,
+# valid users = the login user, time_machine: true) is the vehicle.
+
+- name: _verify | Services smbd and nmbd are active  # noqa: command-instead-of-module -- is-active query, not a state change
+  command: systemctl is-active {{ item }}
+  loop:
+    - smbd
+    - nmbd
+  register: samba_active
+  changed_when: false
+  become: true
+
+- name: _verify | Dump the running config
+  command: testparm -s
+  register: samba_testparm
+  changed_when: false
+  become: true
+
+# Proves the critical per-share-key fix: the smbtest share renders, and its
+# `valid users` restriction is present (the regression that silently dropped it
+# would leave the share world-accessible with this line absent).
+- name: _verify | Config exposes the share with its valid-users restriction
+  assert:
+    that:
+      - "'[smbtest]' in samba_testparm.stdout"
+      - "'[homes]' in samba_testparm.stdout"
+      - samba_testparm.stdout is search('valid users = ' ~ ansible_user_id)
+      - samba_testparm.stdout is search('fruit:time machine = yes')
+    fail_msg: >-
+      testparm output is missing the smbtest share, its valid-users line, or the
+      Time Machine directive -- per-share key rendering is broken.
+
+- name: _verify | Authenticated client can list shares
+  command: smbclient -L localhost -U {{ ansible_user_id }}%{{ samba_password }}
+  register: samba_smbclient_list
+  changed_when: false
+  become: true
+
+- name: _verify | Share smbtest is reachable to its valid user
+  command: smbclient //localhost/smbtest -U {{ ansible_user_id }}%{{ samba_password }} -c ls
+  register: samba_smbclient_share
+  changed_when: false
+  become: true
+
+# restrict anonymous = 2 + map to guest = never must refuse an unauthenticated
+# connection -- proves the hardening is enforced, not merely configured.
+- name: _verify | Anonymous access is refused
+  command: smbclient -L localhost -N
+  register: samba_anon
+  changed_when: false
+  failed_when: samba_anon.rc == 0
+  become: true
+
+- name: _verify | The zfs-mount override is installed for a share-bearing host
+  stat:
+    path: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
+  register: samba_override_stat
+  become: true
+
+- name: _verify | Assert the override exists
+  assert:
+    that:
+      - samba_override_stat.stat.exists
+    fail_msg: smbd zfs-mount override missing despite a configured share.

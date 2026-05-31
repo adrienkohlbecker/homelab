@@ -2,6 +2,24 @@
   apt:
     pkg:
       - avahi-daemon
+      # In prod the avahi role provides these (xmllint + the avahi DTD) before
+      # samba runs; the testrole runs samba alone, so stage them here for the
+      # smb.service validate step.
+      - libxml2-utils
+      # smbclient is a separate package from the samba server; _verify uses it
+      # to exercise the live share over the wire.
+      - smbclient
     install_recommends: false
     cache_valid_time: 3600
+  become: true
+
+# The smbtest share box gets under test (host_vars/box.yml) points here; create
+# it owned by the SMB login user so the valid-users / write path is exercisable.
+- name: _test | Create test share directory
+  file:
+    path: /srv/smbtest
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    mode: "0755"
   become: true
