@@ -1,3 +1,12 @@
+{#
+  Byte-exact template: the rendered bytes must equal what seerr persists via
+  JSON.stringify(_, null, 1), or every converge diff-churns and restarts seerr
+  (enforced by the _verify byte-for-byte shape-match). Whitespace is therefore
+  load-bearing -- this leans on ansible's default trim_blocks (which strips the
+  newline after each block/comment tag) and main.yml strips the single trailing
+  newline JSON.stringify omits. Don't add a jinja whitespace-control header or
+  hand-reflow the loops without re-running the _verify shape-match assert.
+#}
 {
  "clientId": "{{ seerr_client_id }}",
  "sessionSecret": "{{ seerr_session_secret }}",
@@ -364,21 +373,26 @@
   migration self-gates: it returns early if its own name is already in this
   array, otherwise it transforms settings and pushes its name. So the ledger
   -- not the migrator -- is what makes a migration a no-op. We render the full
-  post-migration canonical shape already, so we seed the names of the two
-  migrations that gate PURELY on ledger membership (0007 arr-tags, 0008
-  blacklist->blocklist) to stop them re-transforming our already-canonical
-  shape on a fresh install. 0001-0006 gate on the presence of old keys, so
-  they self-skip against canonical data and need no seed. Slurp-preserve on
-  every converge: once booted seerr owns the array and appends whatever new
-  migration an upgrade ships, and the daemon's value then wins. The seed
-  tracks the v3.2.0 migration tail -- on an image bump, re-check which
-  ledger-gated migrations exist and update the seed to match.
+  post-migration canonical shape already, so an empty ledger on a brand-new
+  host lets the ledger-gated migrations (0007 arr-tags, 0008 blacklist->
+  blocklist) run once against our already-canonical data -- a no-op transform
+  that only appends their names -- and seerr writes the populated ledger back
+  on first boot. Slurp-preserve takes over from there: once booted seerr owns
+  the array and appends whatever new migration an upgrade ships, and the
+  daemon's value wins. Seeding [] (rather than tracking the current migration
+  tail) costs one extra first-boot writeback+restart but drops the per-image-
+  bump chore of re-auditing which migrations are ledger-gated. 0001-0006 gate
+  on the presence of old keys, so they self-skip against canonical data anyway.
 #}
-{% set _migrations = seerr_settings_json | json_query('migrations') | default(['0007_migrate_arr_tags', '0008_migrate_blacklist_to_blocklist'], true) %}
+{% set _migrations = seerr_settings_json | json_query('migrations') | default([], true) %}
+{% if _migrations %}
  "migrations": [
 {% for _m in _migrations %}
   {{ _m | to_json }}{% if not loop.last %},{% endif %}
 
 {% endfor %}
  ]
+{% else %}
+ "migrations": []
+{% endif %}
 }
