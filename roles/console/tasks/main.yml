@@ -110,61 +110,29 @@
   tags:
     - console
 
-- name: Create /etc/default/grub.d directory
-  when: grub_bootloader
-  file:
-    dest: /etc/default/grub.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - console
-
-- name: Set GRUB cmdline (consoleblank=0)
-  when: grub_bootloader
-  copy:
-    dest: /etc/default/grub.d/99-console.cfg
-    # GRUB_CMDLINE_LINUX (not _DEFAULT) so the recovery menuentry also
-    # carries consoleblank=0 — recovery boot is exactly the walk-up
-    # debug case where a blanking timer is most unwelcome.
-    content: "GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX consoleblank=0\"\n"
-    backup: true
-    owner: root
-    group: root
-    mode: "0644"
-  register: console_grub_cfg
-  become: true
-  tags:
-    - console
-
-- name: Set ZBM cmdline (consoleblank=0)
-  when: not grub_bootloader
+# consoleblank=0 — disable the VT idle-blank timer so an early-boot panic stays
+# on screen instead of blanking. grub_scope: all (GRUB_CMDLINE_LINUX, not
+# _DEFAULT) so the recovery menuentry carries it too — recovery boot is exactly
+# the walk-up debug case where a blanking timer is most unwelcome. grub_name
+# keeps the historical grub filename (99-console.cfg) distinct from the ZBM
+# fragment name.
+- name: Set consoleblank=0 kernel arg
   import_role:
-    name: zfsbootmenu
+    name: boot
     tasks_from: cmdline
   vars:
-    zfsbootmenu_cmdline_file: consoleblank
-    zfsbootmenu_cmdline_contents: consoleblank=0
+    boot_cmdline_args:
+      name: consoleblank
+      grub_name: console
+      contents: consoleblank=0
+      grub_scope: all
   tags:
     - console
 
-- name: Update grub
-  when: grub_bootloader and console_grub_cfg.changed
-  command: update-grub
-  changed_when: true
-  become: true
-  tags:
-    - console
-
-# The ZBM-cmdline path touches /var/run/reboot-required inside
-# roles/zfsbootmenu/tasks/cmdline.yml; this task covers the other
-# three change sources locally.
+# The cmdline engine touches /var/run/reboot-required for the consoleblank arg on
+# either bootloader; this covers the console-setup / keyboard file changes.
 - name: Ask to reboot
-  when: >-
-    console_cfg.changed or console_keyboard_cfg.changed
-    or (grub_bootloader and console_grub_cfg.changed)
+  when: console_cfg.changed or console_keyboard_cfg.changed
   file:
     path: /var/run/reboot-required
     state: touch

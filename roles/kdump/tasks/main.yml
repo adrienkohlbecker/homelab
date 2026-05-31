@@ -249,11 +249,12 @@
 - name: Reserve crashkernel memory in ZBM commandline
   when: not grub_bootloader
   import_role:
-    name: zfsbootmenu
+    name: boot
     tasks_from: cmdline
   vars:
-    zfsbootmenu_cmdline_file: crashkernel
-    zfsbootmenu_cmdline_contents: 'crashkernel=512M,high crashkernel=128M,low'
+    boot_cmdline_args:
+      name: crashkernel
+      contents: 'crashkernel=512M,high crashkernel=128M,low'
   tags:
     - kdump
 

@@ -1,0 +1,139 @@
+# Shared kernel-cmdline engine. A feature role contributes one named fragment:
+#
+#   import_role: { name: boot, tasks_from: cmdline }
+#   vars:
+#     boot_cmdline_args:
+#       name: <fragment>          # /etc/zfsbootmenu/<name> on ZBM hosts
+#       contents: <args>          # '' removes the fragment
+#       grub_scope: default|all   # GRUB_CMDLINE_LINUX_DEFAULT vs _LINUX (recovery
+#                                 #   too); default 'default'. Ignored on ZBM.
+#       grub_name: <stem>         # grub.d/99-<stem>.cfg; defaults to name. Lets a
+#                                 #   fragment keep distinct grub/ZBM filenames.
+#
+# and the engine dispatches to whichever bootloader the host runs (grub_bootloader):
+#   grub  -> /etc/default/grub.d/99-<grub_name>.cfg  (+ update-grub)
+#   ZBM   -> /etc/zfsbootmenu/<name>, reassembled into org.zfsbootmenu:commandline
+# Both paths touch /var/run/reboot-required on change so the site.yml reboot
+# check applies the new cmdline. A caller gates the whole import with
+# `when: not grub_bootloader` for a ZBM-only fragment (e.g. crashkernel, where
+# grub hosts get the value from the kdump-tools package's own grub.d snippet).
+
+# ---- grub hosts ----
+- name: cmdline | Create /etc/default/grub.d directory
+  when: grub_bootloader
+  file:
+    dest: /etc/default/grub.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: cmdline | Write grub fragment
+  when: grub_bootloader and boot_cmdline_args.contents | length > 0
+  vars:
+    _boot_grub_var: "{{ 'GRUB_CMDLINE_LINUX' if (boot_cmdline_args.grub_scope | default('default')) == 'all' else 'GRUB_CMDLINE_LINUX_DEFAULT' }}"
+  copy:
+    dest: "/etc/default/grub.d/99-{{ boot_cmdline_args.grub_name | default(boot_cmdline_args.name) }}.cfg"
+    content: "{{ _boot_grub_var }}=\"${{ _boot_grub_var }} {{ boot_cmdline_args.contents }}\"\n"
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  register: boot_cmdline_grub_present
+  become: true
+
+- name: cmdline | Remove grub fragment
+  when: grub_bootloader and boot_cmdline_args.contents | length == 0
+  file:
+    path: "/etc/default/grub.d/99-{{ boot_cmdline_args.grub_name | default(boot_cmdline_args.name) }}.cfg"
+    state: absent
+  register: boot_cmdline_grub_absent
+  become: true
+
+- name: cmdline | Update grub
+  when: >-
+    grub_bootloader
+    and ((boot_cmdline_grub_present is defined and boot_cmdline_grub_present.changed)
+         or (boot_cmdline_grub_absent is defined and boot_cmdline_grub_absent.changed))
+  command: update-grub
+  changed_when: true
+  become: true
+
+# ---- ZBM hosts ----
+- name: cmdline | Create zfsbootmenu etc directory
+  when: not grub_bootloader
+  file:
+    dest: /etc/zfsbootmenu
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: cmdline | Write fragment
+  when: not grub_bootloader and boot_cmdline_args.contents | length > 0
+  copy:
+    dest: /etc/zfsbootmenu/{{ boot_cmdline_args.name }}
+    content: "{{ boot_cmdline_args.contents }}\n"
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+  register: boot_cmdline_zbm_present
+  become: true
+
+- name: cmdline | Remove fragment
+  when: not grub_bootloader and boot_cmdline_args.contents | length == 0
+  file:
+    path: /etc/zfsbootmenu/{{ boot_cmdline_args.name }}
+    state: absent
+  register: boot_cmdline_zbm_absent
+  become: true
+
+- name: cmdline | Get fragments
+  when: not grub_bootloader
+  find:
+    paths: /etc/zfsbootmenu
+    file_type: file
+    excludes:
+      - "*~" # ansible backups
+  register: boot_cmdline_files
+  become: true
+
+- name: cmdline | Read fragments
+  when: not grub_bootloader
+  slurp:
+    src: "{{ item }}"
+  loop: "{{ boot_cmdline_files.files | map(attribute='path') }}"
+  register: boot_cmdline_slurped
+  become: true
+
+- name: cmdline | Set commandline
+  when: not grub_bootloader and zfs_root
+  zfs:
+    name: rpool/ROOT
+    state: present
+    extra_zfs_properties:
+      'org.zfsbootmenu:commandline': "{% for f in boot_cmdline_slurped.results %}{{ f['content'] | b64decode | replace('\n', ' ') | trim }}{% if not loop.last %} {% endif %}{% endfor %}"
+  become: true
+  register: boot_cmdline_properties
+
+# community.general.zfs reports `changed: false` even when it actually runs
+# `zfs set` (both pre/post reads happen after the set applied, so they match);
+# fall back to the file-write tasks' changed flag so a fresh fragment still
+# triggers the reboot ask.
+- name: cmdline | Ask to reboot
+  when: >-
+    (boot_cmdline_grub_present is defined and boot_cmdline_grub_present.changed)
+    or (boot_cmdline_grub_absent is defined and boot_cmdline_grub_absent.changed)
+    or (boot_cmdline_zbm_present is defined and boot_cmdline_zbm_present.changed)
+    or (boot_cmdline_zbm_absent is defined and boot_cmdline_zbm_absent.changed)
+    or (boot_cmdline_properties is defined and boot_cmdline_properties.changed)
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
