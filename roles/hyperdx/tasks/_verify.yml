@@ -165,15 +165,15 @@
 # pipeline silently dropped on the way through.
 - name: _verify | Probe row reached otel_logs in ClickHouse
   import_role:
-    name: _test
+    name: test
     tasks_from: clickhouse_query_wait
   vars:
-    _hyperdx_test_args:
+    test_args:
       label: count_verify_probes
       sql: SELECT count() FROM default.otel_logs WHERE ServiceName = 'hyperdx_verify_probe_nginx'
       retries: 30
       delay: 2
-      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) >= 1"
+      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) >= 1"
 
 # Confirm the per-IP rate-limit on /v1/logs actually engages. Fires 30
 # parallel POSTs at /v1/logs (zone hyperdx_otlp = 10r/s burst 20

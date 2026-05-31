@@ -3,7 +3,7 @@
     name: netdata
     tasks_from: install
 
-- name: _test | Install dependencies
+- name: _setup | Install dependencies
   apt:
     pkg:
       - ssl-cert
@@ -13,7 +13,7 @@
 
 # Lay snakeoil at the letsencrypt paths nginx.conf.j2 references before
 # the nginx install below validates that config.
-- name: _test | Generate certificates
+- name: _setup | Generate certificates
   shell: |
     set -euo pipefail
 
@@ -50,7 +50,7 @@
   # carry `auth: required`; the auth_request needs something answering
   # on 127.0.0.1:{{ service_ports.authelia }}.
   import_role:
-    name: _test
+    name: _setup
     tasks_from: authelia_stub
 
 # Simulate a host provisioned before nginx dropped www-data from ssl-cert, so

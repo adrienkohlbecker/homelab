@@ -1,6 +1,6 @@
 # Assertions for the mirrors fixture. Not auto-invoked by the harness;
 # run manually with `ansible-playbook -i hosts.ini -l <host>
-# roles/_test/tasks/_verify.yml` (or wire into test/playbooks/_mirrors.yml).
+# roles/test/tasks/_verify.yml` (or wire into test/playbooks/_mirrors.yml).
 #
 # Two branches:
 #   - nexus_url set → check apt/podman/pip/uv all point at Nexus, and that
@@ -14,27 +14,27 @@
   loop:
     - /etc/apt/sources.list
     - /etc/apt/sources.list.d/ubuntu.sources
-  register: _verify_apt_sources
+  register: test_apt_sources
 
 - name: _verify | Read apt sources (jammy legacy)
   when: ansible_distribution_release == "jammy"
   ansible.builtin.slurp:
     src: /etc/apt/sources.list
-  register: _verify_apt_legacy
+  register: test_verify_apt_legacy
 
 - name: _verify | Read apt sources (noble+ deb822)
   when: ansible_distribution_release != "jammy"
   ansible.builtin.slurp:
     src: /etc/apt/sources.list.d/ubuntu.sources
-  register: _verify_apt_deb822
+  register: test_apt_deb822
 
 - name: _verify | Apt sources point at Nexus
   when: nexus_url | length > 0
   ansible.builtin.assert:
     that:
       - >-
-        nexus_url in (_verify_apt_legacy.content | default('') | b64decode)
-        or nexus_url in (_verify_apt_deb822.content | default('') | b64decode)
+        nexus_url in (test_verify_apt_legacy.content | default('') | b64decode)
+        or nexus_url in (test_apt_deb822.content | default('') | b64decode)
     fail_msg: "apt sources don't reference {{ nexus_url }}"
 
 - name: _verify | Apt sources point at upstream when no nexus
@@ -42,40 +42,40 @@
   ansible.builtin.assert:
     that:
       - >-
-        ('archive.ubuntu.com' in (_verify_apt_legacy.content | default('') | b64decode))
-        or ('ports.ubuntu.com' in (_verify_apt_legacy.content | default('') | b64decode))
-        or ('archive.ubuntu.com' in (_verify_apt_deb822.content | default('') | b64decode))
-        or ('ports.ubuntu.com' in (_verify_apt_deb822.content | default('') | b64decode))
+        ('archive.ubuntu.com' in (test_verify_apt_legacy.content | default('') | b64decode))
+        or ('ports.ubuntu.com' in (test_verify_apt_legacy.content | default('') | b64decode))
+        or ('archive.ubuntu.com' in (test_apt_deb822.content | default('') | b64decode))
+        or ('ports.ubuntu.com' in (test_apt_deb822.content | default('') | b64decode))
     fail_msg: "apt sources don't reference upstream archive/ports"
 
 - name: _verify | Legacy /etc/apt/sources.list is absent on noble+
   when: ansible_distribution_release != "jammy"
   ansible.builtin.assert:
     that:
-      - not (_verify_apt_sources.results[0].stat.exists)
+      - not (test_apt_sources.results[0].stat.exists)
     fail_msg: "/etc/apt/sources.list should be removed on noble+ (deb822 only)"
 
 - name: _verify | Stat podman registry mirror config
   ansible.builtin.stat:
     path: /etc/containers/registries.conf.d/homelab-mirrors.conf
-  register: _verify_registries
+  register: test_registries
 
 - name: _verify | Read podman registry mirror config
   when:
     - nexus_url | length > 0
-    - _verify_registries.stat.exists
+    - test_registries.stat.exists
   ansible.builtin.slurp:
     src: /etc/containers/registries.conf.d/homelab-mirrors.conf
-  register: _verify_registries_content
+  register: test_registries_content
 
 - name: _verify | Podman registry mirrors reference Nexus
   when: nexus_url | length > 0
   ansible.builtin.assert:
     that:
-      - _verify_registries.stat.exists
-      - "'docker.io' in (_verify_registries_content.content | b64decode)"
-      - "'ghcr.io' in (_verify_registries_content.content | b64decode)"
-      - nexus_url in (_verify_registries_content.content | b64decode)
+      - test_registries.stat.exists
+      - "'docker.io' in (test_registries_content.content | b64decode)"
+      - "'ghcr.io' in (test_registries_content.content | b64decode)"
+      - nexus_url in (test_registries_content.content | b64decode)
     fail_msg: "registries.conf.d/homelab-mirrors.conf missing or doesn't mirror docker.io+ghcr.io to {{ nexus_url }}"
 
 - name: _verify | Stat pip and uv configs
@@ -84,32 +84,32 @@
   loop:
     - /etc/pip.conf
     - /etc/uv/uv.toml
-  register: _verify_pip_uv
+  register: test_pip_uv
 
 - name: _verify | Read pip config
   when:
     - nexus_url | length > 0
-    - _verify_pip_uv.results[0].stat.exists
+    - test_pip_uv.results[0].stat.exists
   ansible.builtin.slurp:
     src: /etc/pip.conf
-  register: _verify_pip_content
+  register: test_pip_content
 
 - name: _verify | Read uv config
   when:
     - nexus_url | length > 0
-    - _verify_pip_uv.results[1].stat.exists
+    - test_pip_uv.results[1].stat.exists
   ansible.builtin.slurp:
     src: /etc/uv/uv.toml
-  register: _verify_uv_content
+  register: test_uv_content
 
 - name: _verify | Pip and uv configs reference Nexus pypi mirror
   when: nexus_url | length > 0
   ansible.builtin.assert:
     that:
-      - _verify_pip_uv.results[0].stat.exists
-      - _verify_pip_uv.results[1].stat.exists
-      - mirror_pypi in (_verify_pip_content.content | b64decode)
-      - mirror_pypi in (_verify_uv_content.content | b64decode)
+      - test_pip_uv.results[0].stat.exists
+      - test_pip_uv.results[1].stat.exists
+      - mirror_pypi in (test_pip_content.content | b64decode)
+      - mirror_pypi in (test_uv_content.content | b64decode)
     fail_msg: "/etc/pip.conf or /etc/uv/uv.toml missing or doesn't reference {{ mirror_pypi }}"
 
 - name: _verify | Resolve etc_hosts_entries to configured IPs
@@ -118,11 +118,11 @@
     - etc_hosts_entries | default({}) | length > 0
   ansible.builtin.command: getent hosts {{ item.key }}
   loop: "{{ etc_hosts_entries | default({}) | dict2items }}"
-  register: _verify_getent
+  register: test_getent
   changed_when: false
   failed_when:
-    - _verify_getent.rc != 0
-    - item.value not in _verify_getent.stdout
+    - test_getent.rc != 0
+    - item.value not in test_getent.stdout
 
 - name: _verify | Apt update reaches configured mirror
   ansible.builtin.apt:
@@ -139,35 +139,35 @@
     - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem
     - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/chain.pem
     - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
-  register: _verify_letsencrypt
+  register: test_letsencrypt
 
 - name: _verify | Letsencrypt cert files exist
   ansible.builtin.assert:
     that:
       - item.stat.exists
     fail_msg: "missing cert at {{ item.item }}"
-  loop: "{{ _verify_letsencrypt.results }}"
+  loop: "{{ test_letsencrypt.results }}"
   loop_control:
     label: "{{ item.item }}"
 
 - name: _verify | Read /etc/nginx/nginx.conf
   ansible.builtin.slurp:
     src: /etc/nginx/nginx.conf
-  register: _verify_nginx_conf
+  register: test_nginx_conf
 
 - name: _verify | Nginx.conf contains expected directives
   ansible.builtin.assert:
     that:
-      - "'/etc/letsencrypt/live/' in (_verify_nginx_conf.content | b64decode)"
-      - "'$connection_upgrade' in (_verify_nginx_conf.content | b64decode)"
-      - "'$request_safe' in (_verify_nginx_conf.content | b64decode)"
+      - "'/etc/letsencrypt/live/' in (test_nginx_conf.content | b64decode)"
+      - "'$connection_upgrade' in (test_nginx_conf.content | b64decode)"
+      - "'$request_safe' in (test_nginx_conf.content | b64decode)"
     fail_msg: "/etc/nginx/nginx.conf doesn't look like prod's nginx.conf.j2 render"
 
 - name: _verify | Nginx is active
   ansible.builtin.systemd:
     name: nginx
-  register: _verify_nginx_unit
+  register: test_nginx_unit
   failed_when:
-    - _verify_nginx_unit.status.LoadState != "loaded"
-    - _verify_nginx_unit.status.ActiveState != "active"
+    - test_nginx_unit.status.LoadState != "loaded"
+    - test_nginx_unit.status.ActiveState != "active"
   become: true

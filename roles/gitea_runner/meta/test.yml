@@ -1,4 +1,4 @@
 # _setup.yml imports podman/install (after migrating off raw apt) and
-# _test/nginx (via the gitea role). box_deps pre-bakes both, saving
+# test/nginx (via the gitea role). box_deps pre-bakes both, saving
 # ~140s of backports + podman + nginx install per test run.
 machine: box_deps

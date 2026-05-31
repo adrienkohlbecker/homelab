@@ -48,7 +48,7 @@ Roles map 1:1 to a service or a system concern; the order in `site.yml` reflects
 - **Container / web stack**: `podman`, `samba`, `certbot`, `nginx`, `services`
 - **Monitoring & infra services**: `eaton_ipp`, `netdata`, `wolweb`, `csplogger`, `keepalived` (+ `keepalived_exporter`), `custom_exporter`, `nut_server` / `nut_monitor`, `dnscrypt_proxy`, `pihole`, `docker_client`
 - **Lab-only services** (run on `lab`/`box`): `libvirt`, `prometheus`, `minio`, `influxdb`, `scratch`, `data`, `media`, `jellyfin`, `sonarr` / `radarr` / `bazarr` / `headphones` / `overseerr` / `plex` / `tautulli`, `sort_ini`, `sabnzbd`, `transmission`, `gitea` (+ `gitea_runner`, `nodejs`), `getmail`, `compta`, `speedtest`, `filebrowser`, `mosquitto`, `z2m`, `homeassistant`, `kuma`, `healthchecks`, `spouse`, `redis`, `paperless`, `profilarr`, `openproject`, `nexus`
-- **Helpers** (imported by other roles, not used directly): `service_user`, `podman_secret`, `systemd_unit`, `usergroup_immediate`, `_test`
+- **Helpers** (imported by other roles, not used directly): `service_user`, `podman_secret`, `systemd_unit`, `usergroup_immediate`, `test`
 
 Helper-role contracts and per-role conventions (artifact URL+sha colocation, test hooks `_setup.yml` / `_verify.yml`, `qemu_test` gating, the check-mode-user idiom, the `service_ports:` registry) are documented in **AGENTS.md**.
 

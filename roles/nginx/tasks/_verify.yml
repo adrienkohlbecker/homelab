@@ -82,10 +82,10 @@
 # 204 before reaching the stub, so it still sees 200 from the upstream.
 - name: _verify | Install Authelia stub in gate mode
   import_role:
-    name: _test
+    name: test
     tasks_from: authelia_stub
   vars:
-    _nginx_authelia_stub_mode: gate
+    test_authelia_stub_mode: gate
 
 # Bounded readiness probe (fail-fast, per the harness flake contract): the stub
 # re-install reloaded nginx, so poll its endpoint until the gate 401 lands
@@ -365,10 +365,10 @@
 # gate-mode tests above can't reach.
 - name: _verify | Switch the Authelia stub to authed mode
   import_role:
-    name: _test
+    name: test
     tasks_from: authelia_stub
   vars:
-    _nginx_authelia_stub_mode: authed
+    test_authelia_stub_mode: authed
 
 - name: _verify | Wait for the Authelia authed stub to answer 200
   uri:
@@ -910,13 +910,13 @@
     tasks_from: conf_d
   vars:
     nginx_conf_d_args:
-      name: _test_nginx_verify_absent.conf
+      name: test_nginx_verify_absent.conf
       state: absent
 
 - name: _verify | The never-created conf_d removal reported no change
   assert:
     that:
-      - not _test_nginx_verify_absent_conf_result.changed
+      - not test_nginx_verify_absent_conf_result.changed
     fail_msg: >-
       conf_d state: absent on a never-created drop reported changed=true; a
       tombstone on a fresh host must be a clean no-op or it fires a spurious
@@ -928,12 +928,12 @@
     tasks_from: conf_d
   vars:
     nginx_conf_d_args:
-      name: _test_nginx_verify_absent.conf
+      name: test_nginx_verify_absent.conf
       content: "# nginx _verify conf_d absent-path fixture\n"
 
 - name: _verify | The conf_d drop exists before removal
   stat:
-    path: /etc/nginx/conf.d/_test_nginx_verify_absent.conf
+    path: /etc/nginx/conf.d/test_nginx_verify_absent.conf
   register: nginx_verify_confd_present
   become: true
   failed_when: not nginx_verify_confd_present.stat.exists
@@ -944,12 +944,12 @@
     tasks_from: conf_d
   vars:
     nginx_conf_d_args:
-      name: _test_nginx_verify_absent.conf
+      name: test_nginx_verify_absent.conf
       state: absent
 
 - name: _verify | The removed conf_d drop is gone
   stat:
-    path: /etc/nginx/conf.d/_test_nginx_verify_absent.conf
+    path: /etc/nginx/conf.d/test_nginx_verify_absent.conf
   register: nginx_verify_confd_gone
   become: true
   failed_when: nginx_verify_confd_gone.stat.exists
@@ -965,12 +965,12 @@
     tasks_from: conf_d
   vars:
     nginx_conf_d_args:
-      name: _test_nginx_verify_src.conf
-      src: _test_verify_drop.conf
+      name: test_nginx_verify_src.conf
+      src: test_verify_drop.conf
 
 - name: _verify | Read the src-dropped conf_d file
   slurp:
-    path: /etc/nginx/conf.d/_test_nginx_verify_src.conf
+    path: /etc/nginx/conf.d/test_nginx_verify_src.conf
   register: nginx_verify_src_drop
   become: true
 
@@ -980,7 +980,7 @@
       - "'__nginx_verify_src_marker__' in (nginx_verify_src_drop.content | b64decode)"
     fail_msg: >-
       The conf_d src: input did not copy the fixture content;
-      /etc/nginx/conf.d/_test_nginx_verify_src.conf is missing the marker.
+      /etc/nginx/conf.d/test_nginx_verify_src.conf is missing the marker.
 
 - name: _verify | Remove the src-dropped conf_d file
   import_role:
@@ -988,7 +988,7 @@
     tasks_from: conf_d
   vars:
     nginx_conf_d_args:
-      name: _test_nginx_verify_src.conf
+      name: test_nginx_verify_src.conf
       state: absent
 
 # src and content are mutually exclusive (conf_d asserts exactly one). Drive the
@@ -1002,8 +1002,8 @@
         tasks_from: conf_d
       vars:
         nginx_conf_d_args:
-          name: _test_nginx_verify_both.conf
-          src: _test_verify_drop.conf
+          name: test_nginx_verify_both.conf
+          src: test_verify_drop.conf
           content: "# both set -- must be rejected\n"
 
     - name: _verify | Passing both src and content must fail (unexpected success)
@@ -1032,7 +1032,7 @@
         tasks_from: conf_d
       vars:
         nginx_conf_d_args:
-          name: _test_nginx_verify_broken.conf
+          name: test_nginx_verify_broken.conf
           content: "nginx_verify_broken_directive on;"
 
     - name: _verify | Broken conf.d drop must fail validation (unexpected success)
@@ -1043,7 +1043,7 @@
   rescue:
     - name: _verify | Broken conf.d drop was rolled back (file absent)
       stat:
-        path: /etc/nginx/conf.d/_test_nginx_verify_broken.conf
+        path: /etc/nginx/conf.d/test_nginx_verify_broken.conf
       register: nginx_verify_broken_drop
       become: true
       failed_when: nginx_verify_broken_drop.stat.exists

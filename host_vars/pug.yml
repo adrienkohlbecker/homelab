@@ -11,7 +11,7 @@ zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set
 zfs_has_bpool: false
 
 # Derived from `sudo sensors-detect` on the host; re-run after hardware changes.
-sensor_modules:
+lm_sensors_modules:
   - drivetemp
   - coretemp
   - nct6775

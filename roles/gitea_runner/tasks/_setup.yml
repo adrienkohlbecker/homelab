@@ -6,7 +6,7 @@
 # /mnt/services is a ZFS mountpoint so this isn't an issue; in the
 # fixture it's a regular dir created lazily by whichever role drills
 # first.
-- name: _test | Ensure /mnt/services is world-traversable
+- name: _setup | Ensure /mnt/services is world-traversable
   file:
     path: /mnt/services
     state: directory
@@ -19,7 +19,7 @@
 # rather than raw `apt: pkg: podman` -- the imported role also brings
 # aardvark-dns + netavark on the same noble pin, which matches what
 # prod hosts run and what box_deps pre-bakes for a fast _setup.
-- name: _test | Install podman with prod-shape storage layout
+- name: _setup | Install podman with prod-shape storage layout
   import_role:
     name: podman
     tasks_from: install
@@ -28,7 +28,7 @@
 # (newuidmap / newgidmap) — what rootless podman shells out to for
 # /etc/subuid + /etc/subgid — is a Depends of noble's podman 4.9 and
 # lands automatically via podman/install, so it doesn't need listing.
-- name: _test | Install gitea_runner dependencies
+- name: _setup | Install gitea_runner dependencies
   apt:
     pkg:
       - git
@@ -42,7 +42,7 @@
 # byte-for-byte -- earlier versions hand-wrote a single lineinfile
 # entry, which drifts from the role's idempotent ordering and from any
 # future extra-subgid passthrough the role grows.
-- name: _test | Apply subid role for gitea_runner
+- name: _setup | Apply subid role for gitea_runner
   import_role:
     name: subid
   vars:
@@ -52,16 +52,16 @@
 # Install nginx + snakeoil certs ahead of roles/gitea, which configures
 # an nginx site at gitea.<host>.<domain>. Mirrors how gitea/_setup.yml
 # brings nginx in for the gitea role's own harness.
-- name: _test | Install nginx (snakeoil + base config)
+- name: _setup | Install nginx (snakeoil + base config)
   import_role:
-    name: _test
+    name: test
     tasks_from: nginx
 
 # Use the prod gitea role end-to-end. Stubs keep the template
 # idempotent across harness phases without needing vault material in
 # test scope; gitea won't sign anything load-bearing in the fixture's
 # lifetime.
-- name: _test | Install + start gitea via the prod role
+- name: _setup | Install + start gitea via the prod role
   import_role:
     name: gitea
   vars:
@@ -73,7 +73,7 @@
     gitea_smtp_from: "testadmin@example.com"
     gitea_smtp_password: "test-smtp-password-stub"
 
-- name: _test | Wait for gitea API to be reachable
+- name: _setup | Wait for gitea API to be reachable
   uri:
     url: http://localhost:3000/api/v1/version
     status_code: 200
@@ -88,7 +88,7 @@
 # leave the test fixture (password is hard-coded since the fixture
 # itself is throwaway). `already exists` is the idempotent re-run
 # path; everything else fails loudly.
-- name: _test | Create gitea admin user
+- name: _setup | Create gitea admin user
   command: >-
     /usr/local/bin/gitea --config /etc/gitea/app.ini admin user create
     --username testadmin --password testadminpw --email testadmin@example.com

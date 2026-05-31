@@ -180,7 +180,7 @@ FULL_UNIVERSE_PATTERNS=(
 )
 FULL_UNIVERSE_RE="^($(join_re "${FULL_UNIVERSE_PATTERNS[@]}"))\$"
 
-# Packer inputs: rebuild the qcow2 tree (packer_changed) + add the _packer
+# Packer inputs: rebuild the qcow2 tree (packer_changed) + add the packer
 # cell. Prefix match -- any file under these dirs.
 PACKER_PATH_PATTERNS=(
   'packer/'            # image build definitions + provisioning scripts
@@ -577,7 +577,7 @@ log "comparing ${BASE:0:12}..$(git rev-parse --short HEAD): $(echo "$CHANGED" | 
 #
 # packer_changed: any packer/ or mise-tasks/packer/ change rebuilds the
 # qcow2 tree via ci.yml's packer call (ordered before test, needs: packer).
-# The _packer cell, added below on the role path, re-exercises roles/_packer
+# The packer cell, added below on the role path, re-exercises roles/packer
 # against the rebuilt image.
 packer_changed=false
 if echo "$CHANGED" | grep -qE "$PACKER_PATHS_RE"; then
@@ -624,9 +624,9 @@ ROLES=""
 # (build_matrix de-dups + sorts). Stays empty when no changed role declares
 # `ubuntu:`.
 RELEASE_CELLS=""
-# A packer change rebuilds the qcow2 tree, so test roles/_packer against it.
+# A packer change rebuilds the qcow2 tree, so test roles/packer against it.
 if [ "$packer_changed" = true ]; then
-  ROLES="_packer"
+  ROLES="packer"
 fi
 for role in $DIRECT; do
   if in_universe "$role"; then

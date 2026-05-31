@@ -227,7 +227,7 @@ apt-mark hold 'grub*'
 # applied in packer/seed_deps.yml via the `hwe_kernel` role -- baked
 # into box_deps, not box, so the lightweight box variant stays on the
 # GA kernel for roles whose _verify exercises kernel-management
-# machinery (roles/_packer) or simply doesn't need HWE.
+# machinery (roles/packer) or simply doesn't need HWE.
 apt-get install --yes linux-generic
 
 # Install required packages

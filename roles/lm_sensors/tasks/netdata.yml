@@ -1,5 +1,5 @@
 # Invoked from roles/netdata/tasks/main.yml after netdata is installed --
-# don't call this before the netdata role has run. netdata_restart is set
+# don't call this before the netdata role has run. lm_sensors_netdata_restart is set
 # by that caller; default it so a standalone import (or _verify) still works.
 
 # The shared netdata `template` helper carries no validate: -- it also writes
@@ -9,9 +9,9 @@
 # We check sensor_relabel directly rather than the rendered template: the
 # template always emits one job (so a `jobs | length` check is tautological),
 # and a missing `sensors` key crashes the render before any parse runs.
-- name: Assert sensor_relabel is well-formed before rendering the collector config
+- name: Assert lm_sensors_relabel is well-formed before rendering the collector config
   vars:
-    _relabel: "{{ sensor_relabel | default([]) }}"
+    _relabel: "{{ lm_sensors_relabel | default([]) }}"
     _sensors: "{{ _relabel | map(attribute='sensors', default=[]) | flatten }}"
   assert:
     that:
@@ -21,7 +21,7 @@
       - _sensors | selectattr('name', 'undefined') | list | length == 0
       - _sensors | selectattr('label', 'undefined') | list | length == 0
     fail_msg: >-
-      sensor_relabel entries each need a `chip` and a non-empty `sensors` list
+      lm_sensors_relabel entries each need a `chip` and a non-empty `sensors` list
       of {name, label} dicts. Got: {{ _relabel }}
   tags:
     - lm_sensors
@@ -34,6 +34,6 @@
     netdata_args:
       src: sensors.conf.j2
       dest: go.d/sensors.conf
-      restart: "{{ netdata_restart | default(true) }}"
+      restart: "{{ lm_sensors_netdata_restart | default(true) }}"
   tags:
     - lm_sensors

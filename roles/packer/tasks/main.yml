@@ -1,8 +1,8 @@
-# _packer is a verify-only role: it asserts state that
+# packer is a verify-only role: it asserts state that
 # packer/scripts/{provision,chroot}.sh produce on the shipped image
 # (ESP layout, rEFInd config, ZBM artifacts, the aarch64 EFI-stub
 # direct-boot path + kernel-install hook). Regressions in those
-# scripts surface as a failed `testrole.py _packer --machine
+# scripts surface as a failed `testrole.py packer --machine
 # <variant>` rather than as a silent boot anomaly that only shows up
 # the next time someone rebuilds the test image.
 #
@@ -10,8 +10,8 @@
 # in tasks/_verify.yml, which the harness invokes after the
 # idempotence check. On the `minimal` variant the role short-circuits
 # (it boots the upstream Ubuntu cloud image, not a packer build).
-- name: _packer | role-apply is a no-op (assertions live in _verify.yml)
+- name: packer | Role-apply is a no-op (assertions live in _verify.yml)
   ansible.builtin.debug:
     msg: >-
-      _packer has no convergence work; run `testrole.py _packer
+      packer has no convergence work; run `testrole.py packer
       --machine <box|lab|pug>` to exercise tasks/_verify.yml.

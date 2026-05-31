@@ -148,7 +148,7 @@
   become: true
 
 # HW transcoding wiring smoke. On box the device is a phantom from
-# _test/fake_render_device.yml, so this proves the template's --device
+# test/fake_render_device.yml, so this proves the template's --device
 # and --group-add reached the container, not that VAAPI works.
 # _verify runs as a separate playbook, so re-lookup the render gid.
 - name: _verify | Re-lookup render gid for assertions

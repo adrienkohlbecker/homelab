@@ -1,4 +1,4 @@
-- name: _test | Install dependencies
+- name: _setup | Install dependencies
   apt:
     pkg:
       - samba
@@ -6,7 +6,7 @@
     cache_valid_time: 3600
   become: true
 
-- name: _test | Setup dependencies
+- name: _setup | Setup dependencies
   shell: |
     set -euo pipefail
     mkdir /mnt/data

@@ -187,7 +187,7 @@
 # via the systemd_timer helper. monitor: false because sub-minute cadences
 # don't map to netdata's overdue-detector hourly/daily/weekly/monthly buckets;
 # systemd_service_unit_failed_state catches a wedged timer independently.
-- name: Install and enable homepage_alerts timer  # noqa: var-naming[no-role-prefix]
+- name: Install and enable homepage_alerts timer
   import_role:
     name: systemd_timer
     tasks_from: install
@@ -196,7 +196,7 @@
     # host, comma-joined. Whichever host this is running on is queried via
     # loopback (skips nginx + TLS), with the public FQDN as the click-through
     # target; other hosts use the FQDN for both.
-    homepage_alerts_netdata_hosts_env: >-
+    systemd_timer_homepage_alerts_netdata_hosts_env: >-
       {%- set ents = [] -%}
       {%- for h in homepage_netdata_hosts -%}
       {%- set q = 'http://localhost:19999=' if h == inventory_hostname else '' -%}
@@ -222,7 +222,7 @@
       # even on a chatty agent with the bulk alarm_log fetch.
       timeout_start_sec: 25s
       environment:
-        NETDATA_HOSTS: "{{ homepage_alerts_netdata_hosts_env }}"
+        NETDATA_HOSTS: "{{ systemd_timer_homepage_alerts_netdata_hosts_env }}"
         OUTPUT_DIR: /var/www/homepage_alerts
         # Forwards the URL-param bypass token to cross-host netdata
         # queries; loopback queries (the homepage host's own netdata)

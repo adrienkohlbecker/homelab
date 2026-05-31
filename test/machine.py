@@ -649,7 +649,7 @@ class Machine:
             packer_dest_dir.mkdir(exist_ok=True)
             packer_src.copy_into(packer_dest_dir)
 
-        # Copy the static role-agnostic playbooks (site / _setup / _test /
+        # Copy the static role-agnostic playbooks (site / _setup /
         # _verify / _mirrors) into the workdir so ansible loads
         # group_vars/host_vars from this directory and the playbooks
         # reference `{{ _role_under_test }}` injected via -e in

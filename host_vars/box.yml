@@ -70,11 +70,11 @@ zfs_has_minio_mount: false
 # single module that loads cleanly anywhere, purely to exercise the
 # modules-load + live-modprobe path (_verify asserts it landed and loaded).
 # Keyed on _role_under_test so every other role tested on box keeps [].
-sensor_modules: "{{ ['dummy'] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
+lm_sensors_modules: "{{ ['dummy'] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
 # Test relabel entry exercised by lm_sensors/_verify.yml (finding 11's
 # go.d template path); only set under the lm_sensors test, like the modules
-# above. main.yml ignores sensor_relabel -- it's consumed only by netdata.yml.
-sensor_relabel: "{{ [{'chip': 'lm-sensors-test-0', 'sensors': [{'name': 'temp1', 'label': 'Verify Probe'}]}] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
+# above. main.yml ignores lm_sensors_relabel -- it's consumed only by netdata.yml.
+lm_sensors_relabel: "{{ [{'chip': 'lm-sensors-test-0', 'sensors': [{'name': 'temp1', 'label': 'Verify Probe'}]}] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
 
 # Two blocks on the same en* parent: exercises the multi-block iteration
 # in main.yml's loop, distinct MAC seeds across sibling blocks, and two
@@ -194,7 +194,7 @@ gitea_runner_labels:
 # Flipped to true so jellyfin + plex tests exercise the HW-transcoding
 # code path (device passthrough, --group-add wiring, getent lookup) via
 # the fake render group + phantom /dev/dri/renderD128 created by
-# roles/_test/tasks/fake_render_device.yml. No real GPU in QEMU — the
+# roles/test/tasks/fake_render_device.yml. No real GPU in QEMU — the
 # runtime VAAPI probe inside the container falls back to software, but
 # the ansible-side machinery and container's view of /dev get covered.
 has_transcoding_acceleration: true
