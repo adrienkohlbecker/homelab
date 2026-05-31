@@ -3,7 +3,7 @@
     name: media
     tasks_from: group
 
-- name: _setup | Install nginx
+- name: _test | Install nginx
   import_role:
     name: _test
     tasks_from: nginx
@@ -28,7 +28,7 @@
     # sibling gate-mode roles, but it fires firmly in this role's play scope.
     authelia_stub_mode: gate  # noqa: var-naming[no-role-prefix]
 
-- name: _setup | Ensure /mnt/services, /mnt/scratch, and /mnt/media exist
+- name: _test | Ensure /mnt/services, /mnt/scratch, and /mnt/media exist
   file:
     path: "{{ item }}"
     state: directory
