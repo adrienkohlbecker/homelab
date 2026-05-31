@@ -39,12 +39,16 @@
 # the image boots on bare-metal controllers/NICs the builder didn't have
 # (lab/pug carry server-class HBAs). MODULES=most is the default on these images
 # already; pin it so a regression to 'dep' can't silently strand a boot.
+# conf.d overrides the main initramfs.conf and survives package upgrades.
 - name: Build a portable initramfs (MODULES=most)
-  lineinfile:
-    path: /etc/initramfs-tools/initramfs.conf
-    regexp: '^MODULES='
-    line: MODULES=most
+  copy:
+    dest: /etc/initramfs-tools/conf.d/modules-most
+    content: "MODULES=most\n"
+    owner: root
+    group: root
+    mode: "0644"
     backup: true
+    validate: bash -n %s
   register: boot_initramfs_modules
   become: true
   tags:

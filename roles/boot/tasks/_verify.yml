@@ -1,15 +1,34 @@
 # Functional checks for the boot role. The converge proves the tasks exit-code
 # cleanly; these assert the end-state they're responsible for.
+#
+# Reboot first so /proc/cmdline reflects the role's writes. Same pattern as
+# console/_verify.yml. Skipped on aarch64 — EDK2 aarch64 has a known reboot
+# bug on this image and the test box bypasses ZBM entirely.
+- name: _verify | Reboot to apply boot-chain changes
+  when: ansible_architecture != 'aarch64'
+  reboot:
+    reboot_timeout: 600
+  become: true
 
-# Outcome of the grub hold: no grub package is in installed state (a held-but-
-# not-installed package reads not-installed, which is what we want). dpkg state
-# is mirror-independent, unlike `apt list`. Mirrors roles/_packer/_verify.
+# Verify the hold is in place (dpkg Want=hold) rather than just checking
+# "no grub installed" which is a tautology on test fixtures that never had
+# grub. Also assert none are installed, which is the hold's intended effect.
 - name: _verify | Dpkg install status for grub*
-  command: dpkg-query -W -f='${binary:Package} ${db:Status-Status}\n' 'grub*'
+  command: dpkg-query -W -f='${binary:Package} ${db:Status-Want} ${db:Status-Status}\n' 'grub*'
   changed_when: false
-  failed_when: false # exits 1 when the pattern matches nothing
+  failed_when: false
   register: _boot_verify_grub_status
   become: true
+
+- name: _verify | At least one grub package is held
+  assert:
+    that: >-
+      _boot_verify_grub_status.stdout_lines
+      | select('search', '\\shold\\s')
+      | list | length > 0
+    fail_msg: >-
+      No grub-prefixed package has dpkg Want=hold — apt-mark hold grub*
+      did not take effect: {{ _boot_verify_grub_status.stdout_lines }}
 
 - name: _verify | No grub package is installed
   assert:
@@ -22,8 +41,8 @@
       rEFInd at boot. Offending: {{ _boot_verify_grub_status.stdout_lines
                                     | select('search', '\\sinstalled$') | list }}
 
-- name: _verify | MODULES=most is pinned in initramfs.conf
-  command: grep -qxF MODULES=most /etc/initramfs-tools/initramfs.conf
+- name: _verify | MODULES=most is pinned in initramfs conf.d
+  command: grep -qxF MODULES=most /etc/initramfs-tools/conf.d/modules-most
   changed_when: false
   register: _boot_verify_modules
   failed_when: _boot_verify_modules.rc != 0
@@ -43,7 +62,30 @@
   assert:
     that:
       - "'console=tty0' in _boot_verify_cmdline.stdout"
+      - "'console=ttyS0' in _boot_verify_cmdline.stdout"
       - "'earlycon=' in _boot_verify_cmdline.stdout"
     fail_msg: >-
       org.zfsbootmenu:commandline is missing the base console args the 'default'
       fragment should set: {{ _boot_verify_cmdline.stdout }}
+
+# /proc/cmdline exposes the args the running kernel actually booted with.
+# Post-reboot this proves the ZBM property propagated through the boot chain,
+# not just that the ZFS property was set. Skipped on aarch64 (no reboot above).
+- name: _verify | Read the running kernel's cmdline
+  when: ansible_architecture != 'aarch64'
+  slurp:
+    src: /proc/cmdline
+  register: _boot_verify_proc_cmdline
+  become: true
+
+- name: _verify | Running kernel booted with the base console args
+  when: ansible_architecture != 'aarch64'
+  vars:
+    _cmdline: "{{ _boot_verify_proc_cmdline.content | b64decode }}"
+  assert:
+    that:
+      - "'console=tty0' in _cmdline"
+      - "'console=ttyS0' in _cmdline"
+    fail_msg: >-
+      /proc/cmdline does not carry the base console args after reboot — the
+      ZBM property may not have propagated: {{ _cmdline }}

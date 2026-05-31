@@ -18,6 +18,17 @@
 # `when: not grub_bootloader` for a ZBM-only fragment (e.g. crashkernel, where
 # grub hosts get the value from the kdump-tools package's own grub.d snippet).
 
+- name: cmdline | Validate inputs
+  assert:
+    that:
+      - boot_cmdline_args is defined
+      - boot_cmdline_args.name is defined
+      - boot_cmdline_args.contents is defined
+      - boot_cmdline_args.grub_scope | default('default') in ['default', 'all']
+    fail_msg: >-
+      boot_cmdline_args requires 'name' and 'contents';
+      optional 'grub_scope' must be 'default' or 'all'
+
 # ---- grub hosts ----
 - name: cmdline | Create /etc/default/grub.d directory
   when: grub_bootloader
@@ -40,6 +51,7 @@
     owner: root
     group: root
     mode: "0644"
+    validate: bash -n %s
   register: boot_cmdline_grub_present
   become: true
 
@@ -97,7 +109,13 @@
     paths: /etc/zfsbootmenu
     file_type: file
     excludes:
-      - "*~" # ansible backups
+      - "*~"
+      - "*.swp"
+      - "*.swo"
+      - "*.bak"
+      - "*.orig"
+      - "*.tmp"
+      - ".*"
   register: boot_cmdline_files
   become: true
 
@@ -105,7 +123,7 @@
   when: not grub_bootloader
   slurp:
     src: "{{ item }}"
-  loop: "{{ boot_cmdline_files.files | map(attribute='path') }}"
+  loop: "{{ boot_cmdline_files.files | sort(attribute='path') | map(attribute='path') }}"
   register: boot_cmdline_slurped
   become: true
 
