@@ -1,26 +1,52 @@
+# The unit's --sdnotify=healthy gates systemd active on the in-container
+# healthcheck, so HTTP is already up when _verify fires. Short retry
+# covers the tiny race between active transition and this task.
 - name: _verify | Speedtest answers on its loopback port
   uri:
     url: http://localhost:{{ service_ports.speedtest }}/
     status_code: 200
     return_content: true
-  register: speedtest_verify_loopback
-  retries: 60
-  delay: 2
+  register: _verify_loopback
+  retries: 5
+  delay: 1
   until:
-    - speedtest_verify_loopback.status == 200
-    - "'LibreSpeed' in speedtest_verify_loopback.content"
+    - _verify_loopback.status == 200
+    - "'LibreSpeed' in _verify_loopback.content"
+  become: true
+
+# Upload smoke-test -- exercises the client_max_body_size "0" and
+# proxy_request_buffering "off" wiring that was added to fix 413 errors
+# on fast connections (fe253810f). A regression in either setting breaks
+# the speed test's upload measurement. LibreSpeed's /backend/empty.php
+# discards the body and returns 200.
+- name: _verify | Upload endpoint accepts a POST body
+  uri:
+    url: http://localhost:{{ service_ports.speedtest }}/backend/empty.php
+    method: POST
+    body: "{{ 'x' * 65536 }}"
+    status_code: 200
+  become: true
+
+# Map the vhost FQDN to loopback so the SNI matches the server_name --
+# keeps SNI correct on every release. Test-only mutation; box is torn down.
+- name: _verify | Map the speedtest vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 speedtest.{{ inventory_hostname }}.{{ domain }}"
+    state: present
   become: true
 
 - name: _verify | Unauthenticated hit redirects to Authelia
   uri:
-    url: https://localhost/
-    headers:
-      Host: speedtest.{{ inventory_hostname }}.{{ domain }}
+    url: https://speedtest.{{ inventory_hostname }}.{{ domain }}/
     validate_certs: false
     follow_redirects: none
     status_code: 302
-  register: speedtest_verify_auth
+  register: _verify_nginx_gate
+  retries: 10
+  delay: 1
+  until: _verify_nginx_gate.status == 302
   failed_when: >-
-    speedtest_verify_auth.status != 302
-    or ("auth." not in (speedtest_verify_auth.location | default("")))
+    _verify_nginx_gate.status != 302
+    or 'https://auth.' not in (_verify_nginx_gate.location | default(''))
   become: true
