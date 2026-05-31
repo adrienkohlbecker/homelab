@@ -14,9 +14,9 @@
 provider "hcloud" {}
 
 variable "hetzner_location" {
-  description = "Hetzner location for the fox VPS (hel1 -- nbg1/fsn1 had no available instance)."
+  description = "Hetzner location for the fox VPS."
   type        = string
-  default     = "hel1"
+  default     = "nbg1"
 }
 
 variable "hetzner_network_zone" {
@@ -143,7 +143,7 @@ data "hcloud_image" "fox" {
 
 resource "hcloud_server" "fox" {
   name        = "fox"
-  server_type = "cx23"
+  server_type = "cpx22"
   image       = data.hcloud_image.fox.id
   location    = var.hetzner_location
   ssh_keys    = [hcloud_ssh_key.laptop.name]
