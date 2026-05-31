@@ -7,6 +7,19 @@ ansible_become_pass: !vault |
           6536346630343466330a613962646132343064616666353961373064366238306637633265653431
           39373839306164653938393333326531336134333430623131363937306232383132
 
+# Backup-rsync keys layered on top of the fleet login key (ssh_public_keys) by
+# the authorized_keys task in bunk.yml. The nightly zfs_autobackup offsite step
+# runs `rsync ... ak@bunk:/volume1/Backup/<host>/` as root on each source host,
+# so each source's root key (the one roles/ssh_root generates, root@<host>) must
+# be authorized here. Unrestricted, matching the pre-existing setup -- DSM ships
+# no rrsync, so there's no wrapper to scope a forced command= to one backup dir
+# (hardening that is a SOMEDAY follow-up). Keep each entry in sync with that
+# host's actual root key (roles/ssh_root generates root@<host>).
+ssh_public_keys_additional: |
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDp277oY86WuDWYdU4Xr8eBUMAZ7L089F5SjBhmZzRS8 root@pug
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIy+WyCjsDKf9oee1U/WIJSvDGdKir6mjI/uXO7c6mGB root@fox
+
 # Tailscale mesh: bunk is the Bonniers subnet router + exit node, enrolled into
 # headscale by the standalone bunk.yml playbook (`mise run ansible:bunk --tags
 # tailscale`), NOT site.yml -- bunk is DSM (no apt), so the tailscale role's
