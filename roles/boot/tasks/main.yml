@@ -77,14 +77,12 @@
   tags:
     - boot
 
-# Base kernel console args — the single source of truth chroot.sh sets via
-# `zfs set` at image build, reproduced so an ansible-from-stock-Ubuntu host boots
-# with the same console. tty0 keeps VGA output; ttyS0 is last so it's the primary
-# /dev/console (kernel printk + a serial getty for headless boxes); earlycon
-# narrates before the real driver registers its console. Prod is all x86_64;
-# aarch64 (the test box) needs a different serial (pl011 vs 8250) but its default
-# boot bypasses ZBM (the excluded arm64 EFI-stub branch) and never reads this
-# property, so the x86 value is correct for every host that does.
+# Base kernel console args — the twin of the `zfs set` in chroot.sh, reproduced
+# so an ansible-from-stock-Ubuntu host boots with the same console. tty0 keeps
+# VGA output; the serial console is last so it's the primary /dev/console (kernel
+# printk + a serial getty for headless boxes); earlycon narrates before the real
+# driver registers. The serial hardware differs per arch: 8250 COM1 at io 0x3f8
+# on x86_64, pl011 at mmio 0x9000000 on aarch64.
 - name: Set the base console command line
   when: not grub_bootloader
   import_role:
@@ -93,6 +91,9 @@
   vars:
     boot_cmdline_args:
       name: default
-      contents: console=tty0 earlycon=uart8250,io,0x3f8 console=ttyS0,115200
+      contents: >-
+        {{ (ansible_architecture == 'aarch64')
+           | ternary('console=tty0 earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200',
+                     'console=tty0 earlycon=uart8250,io,0x3f8 console=ttyS0,115200') }}
   tags:
     - boot
