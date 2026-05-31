@@ -132,13 +132,18 @@
   register: boot_cmdline_slurped
   become: true
 
+- name: cmdline | Assemble commandline
+  when: not grub_bootloader and zfs_root
+  set_fact:
+    _boot_assembled_cmdline: "{% for f in boot_cmdline_slurped.results %}{{ f['content'] | b64decode | replace('\n', ' ') | trim }}{% if not loop.last %} {% endif %}{% endfor %}"
+
 - name: cmdline | Set commandline
   when: not grub_bootloader and zfs_root
   zfs:
     name: rpool/ROOT
     state: present
     extra_zfs_properties:
-      'org.zfsbootmenu:commandline': "{% for f in boot_cmdline_slurped.results %}{{ f['content'] | b64decode | replace('\n', ' ') | trim }}{% if not loop.last %} {% endif %}{% endfor %}"
+      'org.zfsbootmenu:commandline': "{{ _boot_assembled_cmdline }}"
   become: true
   register: boot_cmdline_properties
 
