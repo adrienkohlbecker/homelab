@@ -1,6 +1,5 @@
 - name: path | Derive escaped path
   set_fact:
-    sort_ini_path: "{{ sort_ini_args.path }}"
     sort_ini_escaped_path: "{{ sort_ini_args.path | regex_replace('^/', '') | replace('/', '-') }}"
 
 - name: path | Install sort_ini service

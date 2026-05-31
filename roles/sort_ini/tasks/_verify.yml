@@ -26,6 +26,7 @@
 - name: _verify | Run sort_ini directly on test file
   command: /usr/local/bin/sort_ini /tmp/sort_ini_test/test.ini
   changed_when: false
+  become: true
 
 - name: _verify | Read sorted output
   slurp:
@@ -36,6 +37,9 @@
   assert:
     that:
       - _verify_sorted.content | b64decode == _verify_expected
+    fail_msg: >-
+      Sorted output does not match expected.
+      Got: {{ _verify_sorted.content | b64decode | trim }}
   vars:
     _verify_expected: |
       [alpha]
@@ -45,20 +49,99 @@
       key_a = 1
       key_b = 2
 
+- name: _verify | Stat file before idempotent re-run
+  stat:
+    path: /tmp/sort_ini_test/test.ini
+  register: _verify_mtime_before
+
 - name: _verify | Re-run sort_ini is idempotent (skip-if-unchanged)
   command: /usr/local/bin/sort_ini /tmp/sort_ini_test/test.ini
   changed_when: false
+  become: true
 
-- name: _verify | File unchanged after idempotent run
-  slurp:
-    src: /tmp/sort_ini_test/test.ini
-  register: _verify_second
+- name: _verify | Stat file after idempotent re-run
+  stat:
+    path: /tmp/sort_ini_test/test.ini
+  register: _verify_mtime_after
 
-- name: _verify | Assert idempotent output matches
+- name: _verify | Assert file was not rewritten (mtime unchanged)
   assert:
     that:
-      - _verify_second.content == _verify_sorted.content
+      - _verify_mtime_after.stat.mtime == _verify_mtime_before.stat.mtime
+    fail_msg: >-
+      File was rewritten despite being already sorted
+      (mtime {{ _verify_mtime_before.stat.mtime }} -> {{ _verify_mtime_after.stat.mtime }})
+
+- name: _verify | Sort INI with subsections
+  command: /usr/local/bin/sort_ini /tmp/sort_ini_test/subsections.ini
+  changed_when: false
+  become: true
+
+- name: _verify | Read sorted subsection output
+  slurp:
+    src: /tmp/sort_ini_test/subsections.ini
+  register: _verify_subsections
+
+- name: _verify | Assert subsections are sorted within their parent section
+  assert:
+    that:
+      - _verify_subsections.content | b64decode == _verify_subsections_expected
+    fail_msg: >-
+      Subsection sorting does not match expected.
+      Got: {{ _verify_subsections.content | b64decode | trim }}
+  vars:
+    _verify_subsections_expected: |
+      [categories]
+      [[books]]
+      dir = /books
+      [[movies]]
+      dir = /movies
+      [servers]
+      [[alpha]]
+      host = alpha.example.com
+      port = 119
+      [[beta]]
+      host = beta.example.com
+      port = 563
 
 - name: _verify | Missing file exits cleanly (exit 0)
   command: /usr/local/bin/sort_ini /tmp/sort_ini_test/nonexistent.ini
   changed_when: false
+
+- name: _verify | Write unsorted INI to trigger path watcher
+  copy:
+    content: |
+      [zebra]
+      key_b = 2
+      key_a = 1
+      [alpha]
+      key_z = 26
+      key_m = 13
+    dest: /tmp/sort_ini_test/test.ini
+    mode: "0644"
+  become: true
+
+- name: _verify | Wait for path watcher to trigger sort
+  pause:
+    seconds: 6
+
+- name: _verify | Read file after path-triggered sort
+  slurp:
+    src: /tmp/sort_ini_test/test.ini
+  register: _verify_triggered
+
+- name: _verify | Assert path watcher sorted the file
+  assert:
+    that:
+      - _verify_triggered.content | b64decode == _verify_expected
+    fail_msg: >-
+      Path watcher did not sort the file.
+      Got: {{ _verify_triggered.content | b64decode | trim }}
+  vars:
+    _verify_expected: |
+      [alpha]
+      key_m = 13
+      key_z = 26
+      [zebra]
+      key_a = 1
+      key_b = 2

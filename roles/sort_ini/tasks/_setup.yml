@@ -1,3 +1,12 @@
+- name: _setup | Deploy sort_ini script for systemd verify
+  copy:
+    src: sort_ini.py
+    dest: /usr/local/bin/sort_ini
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 - name: _setup | Create test directory
   file:
     path: /tmp/sort_ini_test
@@ -15,6 +24,25 @@
       key_z = 26
       key_m = 13
     dest: /tmp/sort_ini_test/test.ini
+    mode: "0644"
+  become: true
+
+- name: _setup | Seed unsorted INI with subsections
+  copy:
+    content: |
+      [servers]
+      [[beta]]
+      host = beta.example.com
+      port = 563
+      [[alpha]]
+      host = alpha.example.com
+      port = 119
+      [categories]
+      [[movies]]
+      dir = /movies
+      [[books]]
+      dir = /books
+    dest: /tmp/sort_ini_test/subsections.ini
     mode: "0644"
   become: true
 
