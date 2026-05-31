@@ -293,7 +293,10 @@ path = {{ share.path }}
 {# smb_shares entry schema:
      name             -> [section] header (rendered above)
      path             -> path = (rendered above)
-     time_machine     -> emits `fruit:time machine = yes` (rendered below)
+     time_machine          -> emits `fruit:time machine = yes` (rendered below)
+     time_machine_max_size -> emits `fruit:time machine max size = <value>`,
+                              capping the backup so it can't fill the dataset
+                              (e.g. "1T"); only meaningful with time_machine
      opts             -> verbatim multiline escape hatch for raw blocks
      <anything else>  -> rendered here as a literal smb.conf directive, so the
                          key must be the exact parameter name with spaces
@@ -301,11 +304,14 @@ path = {{ share.path }}
    A share with no `valid users` is reachable by EVERY authenticated SMB user
    (the global default); set it per-share to restrict. Without this loop such
    keys would be dropped and the share would fall back to that default. #}
-{% for key, value in share.items() if key not in ['name', 'path', 'opts', 'time_machine'] %}
+{% for key, value in share.items() if key not in ['name', 'path', 'opts', 'time_machine', 'time_machine_max_size'] %}
 {{ key }} = {{ value }}
 {% endfor %}
 {% if share.time_machine | default(false) %}
 fruit:time machine = yes
+{% if share.time_machine_max_size is defined %}
+fruit:time machine max size = {{ share.time_machine_max_size }}
+{% endif %}
 {% endif %}
 {% if 'writeable' not in share and 'writable' not in share and 'read only' not in share %}
 writeable = yes

@@ -28,9 +28,11 @@
       - "'[homes]' in samba_testparm.stdout"
       - samba_testparm.stdout is search('valid users = ' ~ ansible_user_id)
       - samba_testparm.stdout is search('fruit:time machine = yes')
+      - samba_testparm.stdout is search('fruit:time machine max size = 1T')
     fail_msg: >-
-      testparm output is missing the smbtest share, its valid-users line, or the
-      Time Machine directive -- per-share key rendering is broken.
+      testparm output is missing the smbtest share, its valid-users line, or a
+      Time Machine directive (enabled / max size) -- per-share key rendering is
+      broken.
 
 - name: _verify | Authenticated client can list shares
   command: smbclient -L localhost -U {{ ansible_user_id }}%{{ samba_password }}
