@@ -24,8 +24,11 @@
     log_git = 0
     # Set to the directory to search for executables if not in default system path
     sys_path = ""
-    # Set to the directory where your ffmpeg/ffprobe executables are located
-    ffmpeg_path = ""
+    # Set to the directory where your ffmpeg/ffprobe executables are located.
+    # The universal-package-install Docker Mod (DOCKER_MODS in the unit) apt-
+    # installs ffmpeg to /usr/bin; pin it so check_media's ffprobe lookup
+    # doesn't silently depend on PATH discovery.
+    ffmpeg_path = /usr/bin
     # Enable/Disable media file checking using ffprobe.
     check_media = 1
     # Required media audio language for media to be deemed valid. Leave blank to disregard media audio language check.
@@ -91,7 +94,7 @@
         enabled = 1
         apikey = {{ radarr_api_key }}
         host = radarr.dns.podman
-        port = 7878
+        port = {{ service_ports.radarr }}
         ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
         web_root = ""
         ssl = 0
@@ -237,7 +240,7 @@
         enabled = 1
         apikey = {{ sonarr_api_key }}
         host = sonarr.dns.podman
-        port = 8989
+        port = {{ service_ports.sonarr }}
         username = ""
         password = ""
         ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
@@ -399,7 +402,7 @@
     clientAgent = sabnzbd
     ###### SabNZBD (You must edit this if you're using nzbToMedia.py with SabNZBD)
     sabnzbd_host = http://localhost
-    sabnzbd_port = 8080
+    sabnzbd_port = {{ service_ports.sabnzbd }}
     sabnzbd_apikey = {{ sabnzbd_api_key }}
     ###### Enter the default path to your default download directory (non-category downloads). this directory is protected by safe_mode.
     default_downloadDirectory = /media/Other
