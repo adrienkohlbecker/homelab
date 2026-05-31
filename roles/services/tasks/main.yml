@@ -1,45 +1,11 @@
-- name: Configure services dataset
-  import_role:
-    name: zfs
-    tasks_from: dataset
-  vars:
-    zfs_dataset_args:
-      dataset: rpool/services
-      mountpoint: /mnt/services
-      owner: root
-      group: root
-      extra_properties:
-        'autobackup:bak': 'true'
-  tags:
-    - services
-
-# Carve a child dataset with recordsize=4K for SQLite-heavy services
-# (pihole-FTL, HA recorder). Matches SQLite's default page_size=4096
-# exactly: 1× write amplification, and each modified page contributes
-# only 4K to the snapshot diff instead of 128K at the parent's default.
-# Compression is sacrificed (a 4K record can't compress below the 4K
-# ashift=12 sector floor) but snapshot growth is the binding constraint.
-# Not the 64K-record/64K-page pairing OpenZFS suggests for databases: the
-# apps run SQLite at its stock 4K page size, and snapshot growth (not
-# throughput) is what we optimise for here.
-# atime=off kills the write-per-read on these DB files. primarycache and
-# logbias stay at their ZFS defaults deliberately -- the apps keep only a
-# small in-process SQLite page cache, so ARC still earns its keep on cold
-# reads (primarycache=metadata would starve it), and the small synchronous
-# commits want logbias=latency, not throughput.
-- name: Configure sqlite dataset
-  import_role:
-    name: zfs
-    tasks_from: dataset
-  vars:
-    zfs_dataset_args:
-      dataset: rpool/services/sqlite
-      mountpoint: /mnt/services/sqlite
-      owner: root
-      group: root
-      extra_properties:
-        'autobackup:bak': 'true'
-        recordsize: '4096'
-        atime: 'off'
+- name: Configure services datasets
+  include_tasks:
+    file: _dataset.yml
+    apply:
+      tags:
+        - services
+  loop: "{{ services_datasets }}"
+  loop_control:
+    label: "{{ item.dataset }}"
   tags:
     - services
