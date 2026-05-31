@@ -33,6 +33,7 @@
     - zfs
     - zfs_mount
     - zfs_autobackup
+    - boot
     - zfsbootmenu
     - refind
     # Service platform -- container runtime, /mnt/services, web/TLS front door.

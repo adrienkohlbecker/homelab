@@ -1,0 +1,93 @@
+# Cross-cutting boot setup. This role owns the kernel-cmdline engine
+# (tasks/cmdline.yml, imported by zfs/console/kdump to contribute a fragment to
+# whichever bootloader the host uses) plus the boot-chain config below that no
+# feature role owns. It runs on the ZBM hosts; grub hosts drive their cmdline
+# through the same engine via the console role and need none of these tasks.
+# Bootloader install + image staging stay role-owned (zfsbootmenu, refind);
+# disk/ESP creation stays one-time bootstrap.
+
+# We boot via rEFInd -> ZFSBootMenu, never grub. linux-generic Recommends a
+# grub-* alternation; hold the whole grub family so a later kernel upgrade can't
+# pull it in to fight the rEFInd boot path. apt-mark expands the glob, so this
+# covers future grub sub-packages without an enumerated list. Gated to non-grub
+# hosts so a grub-booted host is never touched.
+- name: Hold grub packages
+  when: not grub_bootloader
+  command: apt-mark hold grub*
+  register: boot_grub_hold
+  changed_when: >-
+    boot_grub_hold.stdout_lines
+    | reject('search', 'already')
+    | select('search', 'set on hold')
+    | list | length > 0
+  become: true
+  tags:
+    - boot
+
+# fsck.vfat (ESP integrity) + mkdosfs. The ESP itself is created at bootstrap,
+# but the tooling belongs with the role that owns the boot chain.
+- name: Install ESP filesystem tools
+  apt:
+    package:
+      - dosfstools
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - boot
+
+# Pull all modules into the initramfs (not just the build host's loaded set) so
+# the image boots on bare-metal controllers/NICs the builder didn't have
+# (lab/pug carry server-class HBAs). MODULES=most is the default on these images
+# already; pin it so a regression to 'dep' can't silently strand a boot.
+- name: Build a portable initramfs (MODULES=most)
+  lineinfile:
+    path: /etc/initramfs-tools/initramfs.conf
+    regexp: '^MODULES='
+    line: MODULES=most
+    backup: true
+  register: boot_initramfs_modules
+  become: true
+  tags:
+    - boot
+
+- name: Update initramfs
+  when:
+    - boot_initramfs_modules.changed
+    - not ansible_check_mode
+  command: update-initramfs -u -k all
+  changed_when: true
+  become: true
+  tags:
+    - boot
+
+- name: Ask to reboot
+  when: boot_initramfs_modules.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - boot
+
+# Base kernel console args — the single source of truth chroot.sh sets via
+# `zfs set` at image build, reproduced so an ansible-from-stock-Ubuntu host boots
+# with the same console. tty0 keeps VGA output; ttyS0 is last so it's the primary
+# /dev/console (kernel printk + a serial getty for headless boxes); earlycon
+# narrates before the real driver registers its console. Prod is all x86_64;
+# aarch64 (the test box) needs a different serial (pl011 vs 8250) but its default
+# boot bypasses ZBM (the excluded arm64 EFI-stub branch) and never reads this
+# property, so the x86 value is correct for every host that does.
+- name: Set the base console command line
+  when: not grub_bootloader
+  import_role:
+    name: boot
+    tasks_from: cmdline
+  vars:
+    boot_cmdline_args:
+      name: default
+      contents: console=tty0 earlycon=uart8250,io,0x3f8 console=ttyS0,115200
+  tags:
+    - boot

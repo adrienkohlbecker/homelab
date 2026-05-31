@@ -1,0 +1,49 @@
+# Functional checks for the boot role. The converge proves the tasks exit-code
+# cleanly; these assert the end-state they're responsible for.
+
+# Outcome of the grub hold: no grub package is in installed state (a held-but-
+# not-installed package reads not-installed, which is what we want). dpkg state
+# is mirror-independent, unlike `apt list`. Mirrors roles/_packer/_verify.
+- name: _verify | Dpkg install status for grub*
+  command: dpkg-query -W -f='${binary:Package} ${db:Status-Status}\n' 'grub*'
+  changed_when: false
+  failed_when: false # exits 1 when the pattern matches nothing
+  register: _boot_verify_grub_status
+  become: true
+
+- name: _verify | No grub package is installed
+  assert:
+    that: >-
+      _boot_verify_grub_status.stdout_lines
+      | select('search', '\\sinstalled$')
+      | list | length == 0
+    fail_msg: >-
+      A grub-prefixed package is installed despite the hold — it will fight
+      rEFInd at boot. Offending: {{ _boot_verify_grub_status.stdout_lines
+                                    | select('search', '\\sinstalled$') | list }}
+
+- name: _verify | MODULES=most is pinned in initramfs.conf
+  command: grep -qxF MODULES=most /etc/initramfs-tools/initramfs.conf
+  changed_when: false
+  register: _boot_verify_modules
+  failed_when: _boot_verify_modules.rc != 0
+  become: true
+
+# The 'default' fragment carries the base console args; without it the
+# ZBM-kexec'd kernel boots with no console= at all. earlycon= is arch-agnostic
+# (uart8250 on x86, pl011 on arm64), so this proves the fragment landed
+# regardless of which serial value the host got.
+- name: _verify | Read the assembled ZBM commandline
+  command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
+  register: _boot_verify_cmdline
+  changed_when: false
+  become: true
+
+- name: _verify | Commandline carries the base console args
+  assert:
+    that:
+      - "'console=tty0' in _boot_verify_cmdline.stdout"
+      - "'earlycon=' in _boot_verify_cmdline.stdout"
+    fail_msg: >-
+      org.zfsbootmenu:commandline is missing the base console args the 'default'
+      fragment should set: {{ _boot_verify_cmdline.stdout }}
