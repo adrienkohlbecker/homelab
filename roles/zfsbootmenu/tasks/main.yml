@@ -24,16 +24,49 @@
   tags:
     - zfsbootmenu
 
-- name: Check if backup exists
+- name: Stat the backup ZFSBootMenu image
   stat:
     path: /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
+    checksum_algorithm: sha256
   register: zfsbootmenu_efi_backup
   become: true
   tags:
     - zfsbootmenu
 
-- name: Create backup the first time only  # noqa: require-backup
-  when: not (ansible_check_mode and (zfsbootmenu_zbm_directory.changed or zfsbootmenu_efi.changed)) and not zfsbootmenu_efi_backup.stat.exists and not qemu_test_minimal
+- name: Stat the running ZFSBootMenu image
+  stat:
+    path: /boot/efi/EFI/ZBM/VMLINUZ.EFI
+    checksum_algorithm: sha256
+  register: zfsbootmenu_efi_current
+  become: true
+  tags:
+    - zfsbootmenu
+
+- name: Stat the reboot-required breadcrumb
+  stat:
+    path: /var/run/reboot-required
+  register: zfsbootmenu_reboot_pending
+  become: true
+  tags:
+    - zfsbootmenu
+
+# Promote the running ZBM to the backup loader, but only once it has actually
+# booted. The gate: this run did not just re-download it (zfsbootmenu_efi) AND
+# no reboot is pending — the download task below sets /var/run/reboot-required
+# on a new image, and that tmpfs flag is cleared by the reboot, so its absence
+# means the running system booted the current primary. A broken update never
+# reaches that state, so VMLINUZ-BACKUP.EFI always holds a version that booted
+# — the recovery target of refind's "(backup)" submenuentry. reboot-required is
+# shared, so an unrelated pending reboot defers promotion one cycle, which is
+# safe (the backup just stays known-good a little longer).
+- name: Promote the running ZBM to backup once it has booted  # noqa: require-backup
+  when:
+    - not (ansible_check_mode and (zfsbootmenu_zbm_directory.changed or zfsbootmenu_efi.changed))
+    - not qemu_test_minimal
+    - not zfsbootmenu_efi.changed
+    - not zfsbootmenu_reboot_pending.stat.exists
+    - zfsbootmenu_efi_current.stat.exists
+    - zfsbootmenu_efi_current.stat.checksum != (zfsbootmenu_efi_backup.stat.checksum | default(''))
   copy:
     src: /boot/efi/EFI/ZBM/VMLINUZ.EFI
     dest: /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI

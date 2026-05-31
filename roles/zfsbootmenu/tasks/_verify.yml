@@ -1,0 +1,47 @@
+# Exercises the boot-proof backup promotion: converge leaves the breadcrumb
+# /var/run/reboot-required set (new image), so the promotion is deliberately
+# deferred. Clearing that breadcrumb (what a real boot does) then re-converging
+# promotes the now-booted primary to VMLINUZ-BACKUP.EFI — the path no
+# non-rebooting test would reach.
+#
+# A real reboot is the faithful trigger and runs on x86_64 (every prod host).
+# The aarch64 box can't reboot under _verify (EDK2 firmware reload bug — same
+# reason console/_verify skips it), so there we replicate the reboot's only
+# promotion-relevant effect, clearing the tmpfs breadcrumb, directly.
+- name: _verify | Reboot to clear the reboot-required breadcrumb
+  when: ansible_architecture != 'aarch64'
+  reboot:
+    reboot_timeout: 300
+  become: true
+
+- name: _verify | Simulate the post-boot breadcrumb clear on aarch64
+  when: ansible_architecture == 'aarch64'
+  file:
+    path: /var/run/reboot-required
+    state: absent
+  become: true
+
+- name: _verify | Re-converge to promote the booted ZBM to backup
+  import_role:
+    name: zfsbootmenu
+
+- name: _verify | Stat primary and backup ZBM images
+  stat:
+    path: "/boot/efi/EFI/ZBM/{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - VMLINUZ.EFI
+    - VMLINUZ-BACKUP.EFI
+  register: _zfsbootmenu_verify_images
+  become: true
+
+- name: _verify | Backup was promoted to match the booted primary
+  vars:
+    _primary: "{{ _zfsbootmenu_verify_images.results[0].stat }}"
+    _backup: "{{ _zfsbootmenu_verify_images.results[1].stat }}"
+  assert:
+    that:
+      - _primary.exists
+      - _backup.exists
+      - _primary.checksum == _backup.checksum
+    fail_msg: "VMLINUZ-BACKUP.EFI was not promoted to match the booted VMLINUZ.EFI"
