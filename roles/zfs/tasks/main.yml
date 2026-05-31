@@ -205,6 +205,25 @@
   tags:
     - zfs
 
+# The core ZFS boot services come enabled via the package's systemd preset on
+# any root-on-ZFS host (it wouldn't boot otherwise) — enable them explicitly so
+# an ansible-from-stock-Ubuntu host owns the state rather than inheriting it.
+- name: Enable core ZFS boot services
+  when:
+    - zfs_root
+    - not (ansible_check_mode and zfs_apt.changed)
+  systemd:
+    name: "{{ item }}"
+    enabled: true
+  loop:
+    - zfs.target
+    - zfs-import.target
+    - zfs-import-cache
+    - zfs-mount
+  become: true
+  tags:
+    - zfs
+
 - name: Set properties on root dataset
   when: zfs_root
   community.general.zfs:
