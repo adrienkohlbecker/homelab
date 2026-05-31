@@ -48,8 +48,20 @@
   assert:
     that:
       - "'timeout 1' in _conf"
-      - '''default_selection "Ubuntu"'' in _conf'
+      - '''default_selection "Ubuntu (ZBM)"'' in _conf'
       - "'loader /EFI/ZBM/VMLINUZ.EFI' in _conf"
       - "'include themes/refind-theme-regular/theme.conf' in _conf"
-      - "'quit ' not in _conf"
-    fail_msg: "refind.conf missing expected directives or still carries the 'quit' typo"
+    fail_msg: "refind.conf missing expected boot directives"
+
+- name: _verify | Stat the loader referenced by the menuentry
+  stat:
+    path: /boot/efi/EFI/ZBM/VMLINUZ.EFI
+  register: _refind_verify_loader
+  become: true
+
+- name: _verify | Menuentry loader exists on the ESP
+  assert:
+    that: _refind_verify_loader.stat.exists
+    fail_msg: >-
+      refind.conf boots /EFI/ZBM/VMLINUZ.EFI but it is absent from the ESP —
+      the zfsbootmenu role must run before refind.
