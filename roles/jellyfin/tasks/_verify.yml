@@ -13,13 +13,23 @@
   until: _verify_http.status == 200
   failed_when: not ((_verify_http.json.ProductName | default('')) is search('^Jellyfin'))
 
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); jammy's OpenSSL 1.1 only warns. Hitting the FQDN directly
+# keeps SNI correct on every release. Test-only mutation; box is torn down.
+- name: _verify | Map the jellyfin vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 jellyfin.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 # Exercise the nginx-proxied path -- catches typo'd subdomain or
 # proxy_pass regressions that the loopback probe would miss.
 - name: _verify | Jellyfin /System/Info/Public via nginx vhost
   uri:
-    url: https://localhost/System/Info/Public
-    headers:
-      Host: "jellyfin.{{ inventory_hostname }}.{{ domain }}"
+    url: https://jellyfin.{{ inventory_hostname }}.{{ domain }}/System/Info/Public
     validate_certs: false
     status_code: 200
     return_content: true
