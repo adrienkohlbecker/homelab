@@ -30,6 +30,10 @@ ssh_public_keys: |
 zfs_arc_min: 268435456
 zfs_arc_max: 536870912
 zfs_trim_pools: []
+# rpool is created autotrim=on by provision.sh (SSD-backed single disk); the
+# zfs role asserts it. apoc/tank/mouse don't exist on the single-disk box.
+zfs_pool_properties:
+  - { pool: rpool, name: autotrim, value: "on" }
 zfs_mount_cache_datasets: [] # must list one dataset per pool. canmount must be set to "on" on this dataset
 zfs_has_bpool: false
 # Box ships single-disk rpool only (no apoc/dozer/tank/mouse). Repoint

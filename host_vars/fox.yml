@@ -16,6 +16,12 @@ zfs_arc_min: 0
 zfs_arc_max: 536870912
 zfs_trim_pools:
   - rpool
+# rpool carries autoexpand=on (chroot.sh sets it so the 20G image grows into
+# cpx22's larger disk on first boot) + autotrim=on; both are set live, the zfs
+# role asserts them.
+zfs_pool_properties:
+  - { pool: rpool, name: autotrim, value: "on" }
+  - { pool: rpool, name: autoexpand, value: "on" }
 zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
   - rpool/ROOT/jammy
 zfs_has_bpool: false

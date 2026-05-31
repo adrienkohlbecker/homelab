@@ -1,0 +1,22 @@
+# ZFS role _verify: assert the pool-level properties the role manages are live
+# on the pool, reading them straight from `zpool get`. testrole.py / testall.py
+# only (qemu); never site.yml or --tags zfs against prod.
+
+- name: _verify | Read managed pool properties
+  command: zpool get -H -o value {{ item.name }} {{ item.pool }}
+  loop: "{{ zfs_pool_properties }}"
+  loop_control:
+    label: "{{ item.pool }} {{ item.name }}"
+  changed_when: false
+  register: _zfs_verify_props
+  become: true
+
+- name: _verify | Managed pool properties are applied
+  assert:
+    that: item.stdout | trim == item.item.value
+    fail_msg: >-
+      {{ item.item.pool }} {{ item.item.name }} is
+      {{ item.stdout | trim }}, expected {{ item.item.value }}.
+  loop: "{{ _zfs_verify_props.results }}"
+  loop_control:
+    label: "{{ item.item.pool }} {{ item.item.name }}"
