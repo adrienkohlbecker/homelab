@@ -172,18 +172,6 @@
   tags:
     - zfs
 
-# TODO this is a zpool property
-# - name: Set autotrim=on on trim datasets
-#   community.general.zfs:
-#     name: "{{ item }}"
-#     state: present
-#     extra_zfs_properties:
-#       'autotrim': 'on'
-#   loop: "{{ zfs_trim_pools }}"
-#   become: true
-#   tags:
-#     - zfs
-
 - name: Enable zed
   when: not (ansible_check_mode and zfs_apt.changed)
   systemd:
@@ -220,6 +208,40 @@
     - zfs-import.target
     - zfs-import-cache
     - zfs-mount
+  become: true
+  tags:
+    - zfs
+
+# Assert the pool-level properties the install set at creation (autotrim=on on
+# the SSD-backed pools; autoexpand=on on a grow-on-first-boot Hetzner rpool) so
+# an ansible-from-stock-Ubuntu host owns them rather than inheriting them from
+# the bootstrap scripts. Read-then-set via `zpool get`/`set` rather than
+# community.general.zpool: that module can create AND destroy pools -- too sharp
+# an edge to point at the prod pools holding every household dataset. `zpool set`
+# can only change a property (it cannot lose a pool), and the get-guard gives
+# correct idempotence without it.
+- name: Read current pool properties
+  when: zfs_root
+  command: zpool get -H -o value {{ item.name }} {{ item.pool }}
+  loop: "{{ zfs_pool_properties }}"
+  loop_control:
+    label: "{{ item.pool }} {{ item.name }}"
+  register: zfs_pool_prop_current
+  changed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - zfs
+
+- name: Set pool properties
+  when:
+    - zfs_root
+    - item.stdout | trim != item.item.value
+  command: zpool set {{ item.item.name }}={{ item.item.value }} {{ item.item.pool }}
+  loop: "{{ zfs_pool_prop_current.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.pool }} {{ item.item.name }}={{ item.item.value }}"
+  changed_when: true
   become: true
   tags:
     - zfs
