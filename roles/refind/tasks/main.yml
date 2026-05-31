@@ -169,6 +169,31 @@
   tags:
     - refind
 
+- name: Find stale theme sentinels
+  when: not (ansible_check_mode and refind_theme_dir.changed)
+  find:
+    paths: /boot/efi/EFI/refind/themes/refind-theme-regular
+    patterns: ".installed-*"
+    hidden: true
+    excludes:
+      - ".installed-{{ refind_theme_artifact.sha256 }}"
+  become: true
+  register: refind_stale_sentinels
+  tags:
+    - refind
+
+- name: Remove stale theme sentinels
+  when: not (ansible_check_mode and refind_theme_dir.changed)
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ refind_stale_sentinels.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  become: true
+  tags:
+    - refind
+
 # No backup: true on these two — /boot/efi is vfat, and backup_local's chown
 # to preserve ownership fails on FAT, so a backup can't be written on the ESP.
 - name: Configure refind  # noqa: require-backup
@@ -191,7 +216,6 @@
     group: root
     mode: "0644"
   become: true
-  register: refind_theme_conf
   tags:
     - refind
 

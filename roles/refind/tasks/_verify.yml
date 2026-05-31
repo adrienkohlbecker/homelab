@@ -85,6 +85,19 @@
   assert:
     that: item.stat.exists
     fail_msg: "rEFInd binary/fallback missing on the ESP: EFI/{{ item.item }}"
-  loop: "{{ _refind_verify_binaries.results | default([]) }}"
+  loop: "{{ _refind_verify_binaries.results }}"
   loop_control:
     label: "{{ item.item }}"
+
+- name: _verify | Stat distro default config
+  stat:
+    path: /boot/refind_linux.conf
+  register: _refind_verify_default_conf
+  become: true
+
+- name: _verify | Distro default config was removed
+  assert:
+    that: not _refind_verify_default_conf.stat.exists
+    fail_msg: >-
+      /boot/refind_linux.conf should have been removed by the role —
+      its presence can cause unexpected auto-detected kernel entries.
