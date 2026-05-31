@@ -116,6 +116,10 @@
       - "*.bak"
       - "*.orig"
       - "*.tmp"
+      - "*.dpkg-old"
+      - "*.dpkg-new"
+      - "*.dpkg-dist"
+      - "*.ucf-old"
       - ".*"
   register: boot_cmdline_files
   become: true
