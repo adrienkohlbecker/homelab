@@ -55,10 +55,12 @@ http {
     # Logging. $request includes the full request line ("GET /path?q=1
     # HTTP/1.1"), which would leak any URL-param secret a site uses (see
     # nginx_site_args.bypass_query_param in roles/nginx/tasks/site.yml).
-    # Redact `auth_token=...` from the request line before logging so
-    # the token doesn't land on disk. Generic enough to cover any future
-    # site using the same param name. If another site picks a different
-    # param name, extend this map.
+    # Redact credential query params from the request line before logging so
+    # they don't land on disk. `auth_token` covers the Token-authed machine
+    # clients; `apikey` covers SABnzbd's admin key (it takes the key only as a
+    # query param). nginx uses the first matching arm, so a request carrying
+    # both only gets its auth_token redacted -- fine, no site mixes them. If
+    # another site picks a different param name, extend this map.
     #
     # Two stages so a duplicated auth_token (rejected 400 in location / but
     # still written to the access log before the 400) has its SECOND copy
@@ -72,6 +74,7 @@ http {
     # $args has no such suffix, hence the difference; keep both as they are.
     map $request $request_safe_stage1 {
         "~*^(.*?[?&])auth_token=[^& ]*(.*)$"  "$1auth_token=REDACTED$2";
+        "~*^(.*?[?&])apikey=[^& ]*(.*)$"      "$1apikey=REDACTED$2";
         default                                $request;
     }
     map $request_safe_stage1 $request_safe {
