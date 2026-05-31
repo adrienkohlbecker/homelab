@@ -1,3 +1,21 @@
+- name: Assert required samba inputs are provided
+  assert:
+    that:
+      # default('') so a wholly-undefined var fails into fail_msg rather than
+      # raising a raw "undefined variable" jinja error here.
+      - samba_password | default('') | length > 0
+      - smb_shares is defined
+      # default([]) so an undefined smb_shares fails on the line above rather
+      # than raising a raw undefined error in these rejectattr filters.
+      - (smb_shares | default([])) | rejectattr('name', 'defined') | list | length == 0
+      - (smb_shares | default([])) | rejectattr('path', 'defined') | list | length == 0
+    fail_msg: >-
+      samba_password must be set (vaulted) and every smb_shares entry needs a
+      name + path. These are required inputs; role vars sit above host_vars and
+      must not default them.
+  tags:
+    - samba
+
 - name: Install samba package
   apt:
     pkg:
@@ -17,7 +35,7 @@
     group: root
     mode: "0644"
     backup: true
-    validate: testparm %s
+    validate: testparm -s %s
   register: samba_cfg
   become: true
   tags:
@@ -75,6 +93,28 @@
   tags:
     - samba
 
+# A host that drops all its shares must shed the override too, or smbd keeps a
+# boot dependency on zfs_mount units that may no longer exist.
+- name: Remove smbd zfs-mount override when no shares
+  when: (smb_shares | default([])) | length == 0
+  file:
+    dest: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
+    state: absent
+  register: samba_smbd_override_removed
+  become: true
+  tags:
+    - samba
+
+- name: Reload systemd after smbd override removal
+  when:
+    - (smb_shares | default([])) | length == 0
+    - samba_smbd_override_removed.changed
+  systemd:
+    daemon_reload: true
+  become: true
+  tags:
+    - samba
+
 - name: Enable nmbd service
   import_role:
     name: systemd_unit
@@ -87,14 +127,19 @@
   tags:
     - samba
 
-- name: Copy avahi smb service
-  copy:
-    src: smb.service
+# Best-effort mDNS advert: avahi-daemon is owned by the `avahi` role (runs
+# just before this one in site.yml). If it isn't running, the advert lands on
+# disk but isn't published -- discovery then depends on avahi being managed
+# elsewhere, not on this role.
+- name: Install avahi smb service
+  template:
+    src: smb.service.j2
     dest: /etc/avahi/services/smb.service
     mode: "0644"
     owner: root
     group: root
     backup: true
+    validate: xmllint --noout --dtdvalid /usr/share/avahi/avahi-service.dtd %s
   become: true
   register: samba_avahi_smb
   tags:
@@ -125,8 +170,11 @@
   tags:
     - samba
 
+# Create-only: the pdbedit guard means an already-provisioned user is left
+# untouched, so rotating samba_password in the vault does NOT re-set the
+# on-disk SMB password -- run `smbpasswd <user>` by hand to rotate.
 - name: Configure Samba user
-  shell: set -euo pipefail; (pdbedit --user={{ ansible_user_id }} 2>&1 > /dev/null) || (echo '{{ samba_password }}'; echo '{{ samba_password }}') | smbpasswd -s -a {{ ansible_user_id }}
+  shell: set -euo pipefail; (pdbedit --user={{ ansible_user_id }} > /dev/null 2>&1) || (echo '{{ samba_password }}'; echo '{{ samba_password }}') | smbpasswd -s -a {{ ansible_user_id }}
   args:
     executable: /bin/bash
   register: samba_smbpasswd
