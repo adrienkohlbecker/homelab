@@ -37,7 +37,7 @@
   vars:
     service_user_args:
       name: redis
-      # Tighten the config dir: it holds dump.rdb. Helper default is 0755.
+      # Tighten the config dir: it holds dump.rdb. Helper default is 0750.
       config_dir_mode: "0700"
   tags:
     - redis
