@@ -34,6 +34,25 @@
       Time Machine directive (enabled / max size) -- per-share key rendering is
       broken.
 
+# testparm -v dumps the EFFECTIVE value of every parameter (incl. defaults), so
+# this catches a silently-dropped hardening directive: a typo'd `server smb
+# encrypt` would fall back to the default here rather than `required`. Samba
+# accepts-then-defaults on an unknown key, so grepping the rendered file isn't
+# enough -- assert against the resolved value.
+- name: _verify | Dump the effective config including defaults
+  command: testparm -v -s
+  register: samba_testparm_verbose
+  changed_when: false
+  become: true
+
+- name: _verify | Mandatory SMB3 encryption is in force
+  assert:
+    that:
+      - samba_testparm_verbose.stdout is search('server smb encrypt = required')
+    fail_msg: >-
+      testparm -v does not report `server smb encrypt = required` -- mandatory
+      encryption was silently dropped to its default.
+
 - name: _verify | Authenticated client can list shares
   command: smbclient -L localhost -U {{ ansible_user_id }}%{{ samba_password }}
   register: samba_smbclient_list
@@ -45,6 +64,35 @@
   register: samba_smbclient_share
   changed_when: false
   become: true
+
+# A read-only `ls` against a freshly-created empty dir proves little; the share
+# exists to be written to (the Time Machine path). argv form keeps the
+# space-bearing `put` command one token without quoting.
+- name: _verify | Valid user can write through the share
+  command:
+    argv:
+      - smbclient
+      - //localhost/smbtest
+      - -U
+      - "{{ ansible_user_id }}%{{ samba_password }}"
+      - -c
+      - put /etc/hostname probe.dat
+  changed_when: false
+  become: true
+
+- name: _verify | The written file landed on the backing directory
+  stat:
+    path: /srv/smbtest/probe.dat
+  register: samba_probe_stat
+  become: true
+
+- name: _verify | Assert the write reached disk
+  assert:
+    that:
+      - samba_probe_stat.stat.exists
+    fail_msg: >-
+      smbclient put reported success but probe.dat is absent under /srv/smbtest
+      -- the write path (vfs fruit/streams_xattr stack) is broken.
 
 # restrict anonymous = 2 + map to guest = never must refuse an unauthenticated
 # connection -- proves the hardening is enforced, not merely configured.
