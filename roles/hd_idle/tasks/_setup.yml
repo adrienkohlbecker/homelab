@@ -5,11 +5,15 @@
 # branch of templates/hd-idle.j2 emits zero -a entries -- and the
 # loop in _verify.yml asserts nothing.
 #
-# scsi_debug ships in linux-modules-extra-<release>, which the lab
-# chroot.sh deliberately skips via --no-install-recommends on
-# linux-generic. Install it here on demand. modprobe gives us a real
-# /dev/sdN with a /sys/block/sdN/device/ chain (so ansible reports
-# virtual=0) and udev-created /dev/disk/by-id/scsi-* symlinks.
+# scsi_debug lives in linux-modules-extra-<abi> on jammy/noble, which the lab
+# chroot.sh deliberately skips via --no-install-recommends on linux-generic --
+# so install it here on demand. resolute (26.04) consolidated kernel packaging
+# and ships no linux-modules-extra-<abi> at all: scsi_debug moved into the base
+# linux-modules-<abi> already installed with the running kernel, so the on-
+# demand install is both impossible (no such package) and unnecessary there.
+# Gate it to < 26; resolute+ just modprobe straight from the base package.
+# modprobe gives us a real /dev/sdN with a /sys/block/sdN/device/ chain (so
+# ansible reports virtual=0) and udev-created /dev/disk/by-id/scsi-* symlinks.
 #
 # scsi_debug devices default to queue/rotational=0 (treated as an
 # in-memory SSD). The module's `rotational=` param only exists on
@@ -25,6 +29,7 @@
 # destroys the VM at end of test.
 
 - name: _setup | Install linux-modules-extra to make scsi_debug available
+  when: ansible_distribution_major_version | int < 26
   apt:
     pkg: "linux-modules-extra-{{ ansible_kernel }}"
     cache_valid_time: 3600
