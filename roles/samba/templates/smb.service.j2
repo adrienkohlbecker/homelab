@@ -6,13 +6,11 @@
    <type>_smb._tcp</type>
    <port>445</port>
  </service>
- {# model= gives macOS Finder a sensible server icon instead of the generic
-    monitor; aligned with fruit:model in smb.conf. #}
- <service>
-   <type>_device-info._tcp</type>
-   <port>0</port>
-   <txt-record>model={{ samba_avahi_model | default('MacSamba') }}</txt-record>
- </service>
+ {# No _device-info._tcp here: the avahi role owns that record (model=
+    avahi_device_model), so publishing a second one from samba would race
+    it with a conflicting model string. The macOS Finder server icon for an
+    SMB connection comes from fruit:model in smb.conf, delivered in-band
+    over the AAPL extension -- independent of this mDNS advert. #}
 {% set tm_shares = smb_shares | default([]) | selectattr('time_machine', 'defined') | selectattr('time_machine') | list %}
 {% if tm_shares | length > 0 %}
  {# Advertise Time Machine targets so macOS auto-discovers them; each share
