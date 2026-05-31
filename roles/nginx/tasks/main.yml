@@ -19,11 +19,11 @@
         - nginx
   vars:
     nginx_site_args:
-      subdomain: "{{ site.subdomain }}"
-      proxy_pass: "{{ site.proxy_pass }}"
+      subdomain: "{{ nginx_site.subdomain }}"
+      proxy_pass: "{{ nginx_site.proxy_pass }}"
       reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
       auth: required
-      state: "{{ 'present' if site.subdomain in nginx_static_proxies else 'absent' }}"
+      state: "{{ 'present' if nginx_site.subdomain in nginx_static_proxies else 'absent' }}"
   loop:
     - { subdomain: marantz, proxy_pass: "https://{{ external_ips.marantz }}:10443/" }
     - { subdomain: printer, proxy_pass: "http://{{ external_ips.printer }}:80/" }
@@ -31,8 +31,8 @@
     - { subdomain: ups, proxy_pass: "https://{{ external_ips.eaton }}:443/" }
     - { subdomain: tubeszb, proxy_pass: "http://{{ external_ips.tubeszb }}:80/" }
   loop_control:
-    label: "{{ site.subdomain }}"
-    loop_var: site
+    label: "{{ nginx_site.subdomain }}"
+    loop_var: nginx_site
   tags:
     - nginx
 
