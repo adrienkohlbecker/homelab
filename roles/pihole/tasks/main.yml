@@ -234,6 +234,7 @@
       src: pihole.conf.j2
       dest: go.d/pihole.conf
       mode: "0600"
+      condition: "{{ ansible_architecture == 'x86_64' }}"
   tags:
     - pihole
 

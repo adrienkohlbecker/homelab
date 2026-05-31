@@ -92,7 +92,7 @@
 - name: config | Setup metrics ({{ _module }})
   when: not (ansible_check_mode and netdata_config_dir.changed) and _netdata_config_condition
   vars:
-    _module: "{{ 'template' if _netdata_config_src.endswith('.j2') else 'copy' }}"
+    _module: "{{ 'template' if (_netdata_config_src | default('')).endswith('.j2') else 'copy' }}"
   action: "{{ _module }}"
   args:
     src: "{{ _netdata_config_src }}"
