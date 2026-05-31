@@ -1,13 +1,25 @@
-- name: Assert seerr_api_key is provided
+- name: Assert seerr secrets are provided
   assert:
+    # `| string` before `| length`: some of these vault to bare numbers
+    # (e.g. a numeric sessionSecret/clientId), and `| length` raises on an int.
     that:
       - seerr_api_key is defined
-      - (seerr_api_key | default('')) | length > 0
+      - (seerr_api_key | default('') | string) | length > 0
+      - seerr_session_secret is defined
+      - (seerr_session_secret | default('') | string) | length > 0
+      - seerr_vapid_private is defined
+      - (seerr_vapid_private | default('') | string) | length > 0
+      - seerr_vapid_public is defined
+      - (seerr_vapid_public | default('') | string) | length > 0
+      - seerr_client_id is defined
+      - (seerr_client_id | default('') | string) | length > 0
     fail_msg: >-
-      seerr_api_key is required (vaulted in group_vars/{prod,test}.yml). Without it
-      settings.json renders an empty apiKey, overwriting the key seerr
-      self-generates on first boot on every converge, and any API client wired to
-      the configured key silently breaks.
+      seerr_api_key / seerr_session_secret / seerr_vapid_private /
+      seerr_vapid_public / seerr_client_id are all required (vaulted in
+      group_vars/{prod,test}.yml). Without any of them settings.json renders the
+      key empty, overwriting what seerr self-generates on first boot on every
+      converge: an empty apiKey breaks API clients, an empty sessionSecret/vapid
+      pair invalidates every logged-in session and push subscription.
   tags:
     - seerr
 
@@ -18,9 +30,18 @@
   vars:
     service_user_args:
       name: seerr
+      # settings.json holds many secrets (apiKey, sessionSecret, vapidPrivate,
+      # SMTP password, telegram token, *arr/plex/tautulli keys) at mode 0644
+      # (matching seerr's own umask, to avoid a mode-flip restart loop). The
+      # parent dir is the real access gate, so tighten it from the 0755 default.
+      config_dir_mode: "0750"
   tags:
     - seerr
 
+# seerr's DB path is a whole directory (/app/config/db), so we bind-mount this
+# dir straight onto the sqlite dataset in the unit -- not the sqlite_dataset
+# helper, which symlinks a single fixed DB *file* (radarr's /config/*.db) and
+# refuses a dangling-symlink cold start. A directory mountpoint sidesteps that.
 - name: Create sqlite directory
   when: not (ansible_check_mode and seerr_user.changed)
   file:
@@ -53,6 +74,23 @@
   tags:
     - seerr
 
+# `failed_when: false` on the slurp handles a *missing* file (fresh host); a
+# *corrupt* one (truncated/partial write from a crashed daemon) still parses to
+# an exception in from_json and would wedge every future converge. Treat an
+# unparseable file as fresh ({}) so the render rewrites it from canonical shape,
+# rather than aborting the host's whole converge until manual repair.
+- name: Parse existing settings.json
+  tags:
+    - seerr
+  block:
+    - name: Parse existing settings.json
+      set_fact:
+        seerr_settings_json: "{{ _seerr_settings_b64['content'] | default('e30=') | b64decode | from_json }}"
+  rescue:
+    - name: Treat corrupt settings.json as fresh
+      set_fact:
+        seerr_settings_json: {}
+
 - name: Render settings.json
   copy:
     # JSON.stringify(_, null, 1) writes no trailing newline; the template
@@ -63,14 +101,13 @@
     group: seerr
     # Mode matches what seerr writes on every save (container umask 0022).
     # Enforcing 0600 here would create a mode-flip → restart loop on every
-    # converge. Effective access control is via the parent directory's
-    # ownership (seerr:seerr); single-tenant homelab threat model.
+    # converge. Effective access control is the parent dir (seerr:seerr 0750,
+    # set via service_user config_dir_mode above), which blocks other-read of
+    # this secret-bearing file; single-tenant homelab threat model.
     mode: "0644"
     backup: true
     validate: python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "%s"
   register: seerr_settings_result
-  vars:
-    seerr_settings_json: "{{ _seerr_settings_b64['content'] | default('e30=') | b64decode | from_json }}"
   become: true
   # On a fresh-host --check run seerr_user + its config dir are only reported
   # (their creating tasks are guarded), so an unguarded copy with owner=seerr
@@ -98,7 +135,7 @@
     systemd_unit_args:
       src: seerr
       condition: "{{ not (ansible_check_mode and (seerr_service_result.changed or seerr_user.changed)) }}"
-      restart: "{{ seerr_service_result.changed or seerr_settings_result.changed or media_group.changed }}"
+      restart: "{{ seerr_service_result.changed or seerr_settings_result.changed or seerr_user.changed }}"
   tags:
     - seerr
 
@@ -109,6 +146,8 @@
   vars:
     nginx_site_args:
       subdomain: seerr
+      # No auth: -- seerr does its own Plex/Jellyfin SSO + local login, so an
+      # nginx forward-auth gate would double-prompt end users (mirrors jellyfin).
       proxy_pass: http://127.0.0.1:{{ service_ports.seerr }}/
       csp_default_src: plex.tv *.plex.tv
       csp_additional: img-src plex.tv *.plex.tv *.gravatar.com *.tmdb.org {{ nginx_csp_default }}; font-src plex.tv *.plex.tv fonts.gstatic.com {{ nginx_csp_default }}
