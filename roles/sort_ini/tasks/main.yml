@@ -6,6 +6,7 @@
     group: root
     mode: "0755"
     backup: true
+    validate: python3 -c 'import sys; compile(open(sys.argv[1]).read(), sys.argv[1], "exec")' "%s"
   become: true
   tags:
     - sort_ini
