@@ -12,6 +12,15 @@
 # at fox.fahm.fr (public A -> reserved primary IP).
 
 zfs_root: true
+zfs_arc_min: 0
+zfs_arc_max: 536870912
+zfs_trim_pools:
+  - rpool
+zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
+  - rpool/ROOT/jammy
+zfs_has_bpool: false
+
+rand_order: 4
 
 # fox is a backup SOURCE only: lab pulls fox's bak-tagged datasets nightly
 # (lab's zfs_autobackup_sources lists fox -> tank/fox). fox runs no onsite pull
