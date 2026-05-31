@@ -194,21 +194,37 @@
   become: true
   register: apt_source_resolute_prereqs
 
-# Fetch the key into the same scoped keyring the jammy path uses, so
-# signed_by= below references a local file. get_url defaults to force: no,
-# so it fetches once and stays idempotent (matching jammy's apt_key import).
-- name: Fetch repository key for {{ apt_source_args.name }}
+# Fetch the key, then dearmor it into the same scoped keyring the jammy path
+# uses, so signed_by= below references a local binary keyring. apt keys the
+# deb822 signed-by file format on its SUFFIX: a .gpg path must hold a BINARY
+# OpenPGP keyring -- an armored key saved verbatim there is rejected as
+# NO_PUBKEY at apt-get update. docker and netdata both serve armored keys, so
+# dearmor to match the binary keyring jammy's apt_key import writes, keeping
+# one shared /usr/share/keyrings/<name>.gpg across both release paths. The
+# armored .asc is the get_url idempotence anchor (force: no -> fetched once);
+# it is inert (apt only reads what signed_by points at) and the tombstone
+# sweeps it.
+- name: Fetch repository key (armored) for {{ apt_source_args.name }}
   when:
     - apt_source_is_deb822
     - apt_source_present
   get_url:
     url: "{{ apt_source_args.key_url }}"
-    dest: /usr/share/keyrings/{{ apt_source_args.name }}.gpg
+    dest: /usr/share/keyrings/{{ apt_source_args.name }}.asc
     owner: root
     group: root
     mode: "0644"
   become: true
   register: apt_source_key_resolute
+
+- name: Dearmor the repository key into the scoped keyring for {{ apt_source_args.name }}
+  when:
+    - apt_source_is_deb822
+    - apt_source_present
+    - apt_source_key_resolute is changed
+  command: gpg --batch --yes --dearmor --output /usr/share/keyrings/{{ apt_source_args.name }}.gpg /usr/share/keyrings/{{ apt_source_args.name }}.asc
+  changed_when: true
+  become: true
 
 # deb822_repository trusts whatever signed_by serves without checking it
 # against key_id, so re-assert the fingerprint here -- a swapped key on a
@@ -311,11 +327,16 @@
     state: absent
   become: true
 
+# Remove both the binary keyring and the armored .asc the deb822 path stages
+# alongside it (a no-op on the jammy path, which never writes the .asc).
 - name: Remove keyring for {{ apt_source_args.name }}
   when: not apt_source_present
   file:
-    path: /usr/share/keyrings/{{ apt_source_args.name }}.gpg
+    path: "/usr/share/keyrings/{{ apt_source_args.name }}.{{ item }}"
     state: absent
+  loop:
+    - gpg
+    - asc
   become: true
 
 # Includes the per-branch prereqs (gpg on jammy, python3-debian on resolute)
