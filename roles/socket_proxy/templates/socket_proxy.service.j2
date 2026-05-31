@@ -5,7 +5,8 @@
 # instead of joining the podman-socket group, so a netdata compromise can't
 # reach the container-create API. POST is denied by default (read-only); only
 # the GET sections the collector needs are enabled (CONTAINERS/IMAGES/INFO;
-# VERSION/PING/EVENTS are on by default). The proxy itself necessarily holds
+# VERSION/PING are on by default; EVENTS is explicitly disabled). The proxy
+# itself necessarily holds
 # the socket access -- it is the deliberate isolation boundary, a tiny audited
 # HAProxy rather than the full netdata daemon.
 [Unit]
@@ -19,6 +20,7 @@ StartLimitBurst=3
 
 [Service]
 Environment=PODMAN_SYSTEMD_UNIT=%n
+Delegate=yes
 Restart=always
 TimeoutSec=120
 RestartSec=5
@@ -35,13 +37,14 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name socket_proxy \
-    --init \
+    --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="socket_proxy" \
     --volume /run/podman/podman.sock:/var/run/docker.sock:ro \
     --env CONTAINERS=1 \
     --env IMAGES=1 \
     --env INFO=1 \
+    --env EVENTS=0 \
     --publish 127.0.0.1:{{ service_ports.socket_proxy }}:2375/tcp \
     --health-cmd '["sh","-c","wget -q -O /dev/null http://localhost:2375/version"]' \
     --health-startup-cmd '["sh","-c","wget -q -O /dev/null http://localhost:2375/version"]' \
