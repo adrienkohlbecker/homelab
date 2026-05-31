@@ -17,10 +17,17 @@
       - sabnzbd_smtp_username | default('') | length > 0
       - sabnzbd_smtp_password | default('') | length > 0
       - sabnzbd_smtp_from | default('') | length > 0
+      # The *arr/omdb keys render into autoProcessMedia.cfg (nzbToMedia's
+      # handoff to the import apps). A renamed/unset key renders an empty
+      # value there with no parse error -- silently breaking post-processing.
+      - radarr_api_key | default('') | length > 0
+      - sonarr_api_key | default('') | length > 0
+      - lidarr_api_key | default('') | length > 0
+      - omdb_api_key | default('') | length > 0
     fail_msg: >-
       sabnzbd requires its api/nzb keys, the three Usenet provider credentials,
-      and SMTP creds set in group_vars/host_vars (see group_vars/prod.yml and
-      group_vars/test.yml).
+      SMTP creds, and the radarr/sonarr/lidarr/omdb api keys set in
+      group_vars/host_vars (see group_vars/prod.yml and group_vars/test.yml).
   tags:
     - sabnzbd
 
