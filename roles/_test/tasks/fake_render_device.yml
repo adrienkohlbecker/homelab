@@ -6,11 +6,16 @@
 # -hwaccel vaapi) falls back to software. The point is to exercise the
 # ansible-side templating and the container's view of /dev + supplementary
 # groups, not the runtime codec path.
+# Don't pin the gid: jellyfin reads the render gid dynamically (getent ->
+# --group-add), and the device below is owned by group NAME, so the exact
+# number is never load-bearing. Pinning 998 collides on noble, whose base
+# image already assigns that gid to another system group (groupmod: GID '998'
+# already exists). Let the module reuse an existing render group or pick a
+# free system gid.
 - name: _test fake render | Create render group
   group:
     name: render
     system: true
-    gid: 998
   become: true
 
 - name: _test fake render | Ensure /dev/dri exists
