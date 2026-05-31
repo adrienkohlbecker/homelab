@@ -31,6 +31,7 @@ jobs:
         # the timestamps to walk; the default fetch-depth of 1 only has
         # HEAD's commit metadata.
         with: { fetch-depth: 0 }
+      - run: uv sync --locked
       - id: gate
         run: |
           set -euo pipefail
