@@ -1,0 +1,27 @@
+- name: _setup | Create test directory
+  file:
+    path: /tmp/sort_ini_test
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: _setup | Seed unsorted test INI
+  copy:
+    content: |
+      [zebra]
+      key_b = 2
+      key_a = 1
+      [alpha]
+      key_z = 26
+      key_m = 13
+    dest: /tmp/sort_ini_test/test.ini
+    mode: "0644"
+  become: true
+
+- name: _setup | Install test path watcher
+  import_role:
+    name: sort_ini
+    tasks_from: path
+  vars:
+    sort_ini_args:
+      path: /tmp/sort_ini_test/test.ini
