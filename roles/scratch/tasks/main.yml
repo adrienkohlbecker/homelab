@@ -1,34 +1,45 @@
-- name: Create zfs filesystem
-  when: zfs_root
-  zfs:
-    name: '{{ zfs_dozer_filesystem }}/scratch'
-    state: present
-    extra_zfs_properties:
-      mountpoint: /mnt/scratch
-      'autobackup:bak': 'false'
-      sync: disabled
-  become: true
+- name: Assert required inputs are set
+  assert:
+    that:
+      - zfs_dozer_filesystem | default('') | length > 0
+    fail_msg: >-
+      scratch requires zfs_dozer_filesystem in host_vars/group_vars. A
+      mistyped or unset value renders to an empty string and would create a
+      dataset literally named /scratch at the pool root -- check for
+      non-empty, not just defined.
   tags:
     - scratch
 
-- name: Create mount point
-  file:
-    dest: /mnt/scratch
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - scratch
-
-- name: Set up mount service for dozer/scratch
-  when: zfs_root
+# Scratch holds disposable, reconstructible data (CI runner workdirs, Nexus
+# blob cache, qemu artifacts, *arr/transmission unpack temp), so the dataset
+# is tuned to shed durability and snapshot/metadata overhead, and to refuse
+# to honour dangerous bits in externally-sourced extracted archives:
+#   autobackup:bak / com.sun:auto-snapshot=false  excluded from every snapshot tool
+#   sync=disabled            no fsync durability -- crash-loss of recent writes is fine
+#   redundant_metadata=most  drop the per-block second copy but keep the pool-
+#                            critical metadata redundant (a corrupt block stays
+#                            recoverable rather than nuking the whole dataset)
+#   logbias=throughput       keep any sync writes off the pool SLOG/ZIL
+#   atime=off                no write-per-read on a read-heavy tree
+#   setuid/devices=off       ignore setuid bits and device nodes dropped by unpackers
+- name: Configure scratch dataset
   import_role:
-    name: zfs_mount
-    tasks_from: unit
+    name: zfs
+    tasks_from: dataset
   vars:
-    zfs_mount_dataset: '{{ zfs_dozer_filesystem }}/scratch'
-    zfs_mount_mountpoint: /mnt/scratch
+    zfs_dataset_args:
+      dataset: '{{ zfs_dozer_filesystem }}/scratch'
+      mountpoint: /mnt/scratch
+      owner: root
+      group: root
+      extra_properties:
+        'autobackup:bak': 'false'
+        'com.sun:auto-snapshot': 'false'
+        sync: disabled
+        redundant_metadata: most
+        logbias: throughput
+        atime: 'off'
+        setuid: 'off'
+        devices: 'off'
   tags:
     - scratch
