@@ -1,6 +1,13 @@
-- name: Base installation
+# Roles are ordered as a layer ladder: each section builds on the guarantees
+# of the ones above it. "Base machine install" (host base -> storage -> service
+# platform -> observability) runs on every managed host; the service plays below
+# are host-scoped and assume the full platform is already in place. See CLAUDE.md
+# "Role layering" for the rule on where a new role belongs.
+- name: Base machine install
   hosts: box,lab,pug,fox
   roles:
+    # Host base -- OS, networking, remote access, system services. These roles
+    # are mutually independent, so the order within this band is immaterial.
     - hwe_kernel
     - bash
     - user
@@ -21,19 +28,24 @@
     - ssh
     - ntp
     - postfix
+    # Storage & boot substrate -- ZFS datasets/snapshots and the bootloader.
     - zfs
-    - zfs_autobackup
     - zfs_mount
+    - zfs_autobackup
     - zfsbootmenu
     - refind
+    # Service platform -- container runtime, /mnt/services, web/TLS front door.
     - podman
     - services
     - certbot
     - nginx
+    # Observability.
     - csplogger
     - netdata
     - fluentbit
 
+# Services -- host-scoped, built on the platform above. A role belongs here
+# (not in Base machine install) when only a subset of hosts run it.
 - name: External VPS (fox)
   hosts: box,fox
   roles:
@@ -73,12 +85,14 @@
   hosts: box,lab
   roles:
     - libvirt
-    - prometheus
-    - minio
-    - influxdb
+    # Storage dataset producers -- placed before the apps that mount
+    # /mnt/{scratch,data,media}.
     - scratch
     - data
     - media
+    - prometheus
+    - minio
+    - influxdb
     - jellyfin
     - sort_ini
     - sabnzbd
