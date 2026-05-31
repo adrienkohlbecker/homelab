@@ -34,33 +34,36 @@
   "locale": "en",
   "youtubeUrl": ""
  },
+{#
+  plex.libraries[] is daemon-owned once Plex is connected: seerr discovers and
+  rewrites the set (ids/names/types) and bumps each lastScan on every plex scan.
+  Seed the operator's three curated libraries (pre-enabled) for a fresh install,
+  then slurp-preserve so a library add/rename/disable/rescan in Plex doesn't
+  diff-churn and restart seerr on the next converge. Mirrors jellyfin.libraries
+  below; the per-key emit order (id/name/enabled/type/lastScan) matches seerr's
+  own JSON.stringify writeback so the rendered bytes stay stable.
+#}
+{% set _plex_libs = seerr_settings_json | json_query('plex.libraries') | default([
+  {'id': '10', 'name': 'Live Music', 'enabled': true, 'type': 'movie', 'lastScan': 0},
+  {'id': '1', 'name': 'Movies', 'enabled': true, 'type': 'movie', 'lastScan': 0},
+  {'id': '2', 'name': 'TV Shows', 'enabled': true, 'type': 'show', 'lastScan': 0}
+], true) %}
  "plex": {
   "name": "DockerPlex",
   "ip": "plex.dns.podman",
   "port": 32400,
   "useSsl": false,
   "libraries": [
+{% for _lib in _plex_libs %}
    {
-    "id": "10",
-    "name": "Live Music",
-    "enabled": true,
-    "type": "movie",
-    "lastScan": {{ seerr_settings_json | json_query("plex.libraries[?id=='10'].lastScan | [0]") or 0 }}
-   },
-   {
-    "id": "1",
-    "name": "Movies",
-    "enabled": true,
-    "type": "movie",
-    "lastScan": {{ seerr_settings_json | json_query("plex.libraries[?id=='1'].lastScan | [0]") or 0 }}
-   },
-   {
-    "id": "2",
-    "name": "TV Shows",
-    "enabled": true,
-    "type": "show",
-    "lastScan": {{ seerr_settings_json | json_query("plex.libraries[?id=='2'].lastScan | [0]") or 0 }}
-   }
+    "id": {{ _lib.id | to_json }},
+    "name": {{ _lib.name | to_json }},
+    "enabled": {{ _lib.enabled | string | lower }},
+    "type": {{ _lib.type | to_json }},
+    "lastScan": {{ _lib.lastScan | default(0, true) }}
+   }{% if not loop.last %},{% endif %}
+
+{% endfor %}
   ],
   "webAppUrl": "https://plex.{{ inventory_hostname }}.{{ domain }}/web/index.html",
   "machineId": "{{ plex_machine_id }}"
@@ -356,11 +359,20 @@
   "apiRequestTimeout": 10000
  },
 {#
-  migrations[] is seerr's applied-migration bookkeeping -- it appends an entry
-  as each migration runs, so a hardcoded list would diff-churn (and restart
-  seerr every converge) the moment an upgrade ships a new one. Slurp-preserve
-  it instead; the default below is only the fresh-install seed before seerr has
-  written its own, after which the slurp picks up whatever the daemon recorded.
+  migrations[] is seerr's applied-settings-migration ledger. The migrator runs
+  every file in server/lib/settings/migrations/* on each boot, but each
+  migration self-gates: it returns early if its own name is already in this
+  array, otherwise it transforms settings and pushes its name. So the ledger
+  -- not the migrator -- is what makes a migration a no-op. We render the full
+  post-migration canonical shape already, so we seed the names of the two
+  migrations that gate PURELY on ledger membership (0007 arr-tags, 0008
+  blacklist->blocklist) to stop them re-transforming our already-canonical
+  shape on a fresh install. 0001-0006 gate on the presence of old keys, so
+  they self-skip against canonical data and need no seed. Slurp-preserve on
+  every converge: once booted seerr owns the array and appends whatever new
+  migration an upgrade ships, and the daemon's value then wins. The seed
+  tracks the v3.2.0 migration tail -- on an image bump, re-check which
+  ledger-gated migrations exist and update the seed to match.
 #}
 {% set _migrations = seerr_settings_json | json_query('migrations') | default(['0007_migrate_arr_tags', '0008_migrate_blacklist_to_blocklist'], true) %}
  "migrations": [
