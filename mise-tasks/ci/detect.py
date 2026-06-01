@@ -353,10 +353,7 @@ def nightly_actually_tested(
     data = _gh_api_get(url, token, retries=0)
     if data is None:
         return False
-    return any(
-        j.get("name") != "gate" and j.get("conclusion") == "success"
-        for j in data.get("jobs", [])
-    )
+    return any(j.get("name") != "gate" and j.get("conclusion") == "success" for j in data.get("jobs", []))
 
 
 def newest_green_ancestor(
@@ -396,20 +393,12 @@ def newest_green_ancestor(
             rid = run.get("id", 0)
             if not sha:
                 continue
-            if not (
-                (path == CI_WORKFLOW and event == "push") or path == NIGHTLY_WORKFLOW
-            ):
+            if not ((path == CI_WORKFLOW and event == "push") or path == NIGHTLY_WORKFLOW):
                 continue
-            if path == NIGHTLY_WORKFLOW and not nightly_actually_tested(
-                rid, repo=repo, api_url=api_url, token=token
-            ):
-                log_fn(
-                    f"    skip {sha[:12]} ({created}): nightly skipped its matrix (gate-only)"
-                )
+            if path == NIGHTLY_WORKFLOW and not nightly_actually_tested(rid, repo=repo, api_url=api_url, token=token):
+                log_fn(f"    skip {sha[:12]} ({created}): nightly skipped its matrix (gate-only)")
                 continue
-            if is_ancestor_of_head(
-                sha, head_sha, repo=repo, api_url=api_url, token=token
-            ):
+            if is_ancestor_of_head(sha, head_sha, repo=repo, api_url=api_url, token=token):
                 log_fn(f"  green ancestor: {sha[:12]} ({created}, {Path(path).stem})")
                 return sha
             log_fn(f"    skip {sha[:12]} ({created}): not an ancestor of HEAD")
@@ -443,9 +432,7 @@ def resolve_green_base(
         log_fn=log_fn,
     )
     if sha is None and ref_name != default_branch:
-        log_fn(
-            f"  none on '{ref_name}'; falling back to default branch '{default_branch}'"
-        )
+        log_fn(f"  none on '{ref_name}'; falling back to default branch '{default_branch}'")
         sha = newest_green_ancestor(
             default_branch,
             head_sha=head_sha,
@@ -500,11 +487,7 @@ def list_testable_roles() -> list[str]:
     roles_dir = Path("roles")
     if not roles_dir.exists():
         return []
-    return sorted(
-        d.name
-        for d in roles_dir.iterdir()
-        if d.is_dir() and (d / "tasks" / "main.yml").exists()
-    )
+    return sorted(d.name for d in roles_dir.iterdir() if d.is_dir() and (d / "tasks" / "main.yml").exists())
 
 
 def _read_role_meta(role: str) -> dict:
@@ -700,9 +683,7 @@ def _cmd_run(args: list[str]) -> int:
         return _emit_result(_matrix_json("--dispatch", inputs_roles), "false", "false")
 
     if event == "workflow_dispatch" and inputs_sources:
-        log(
-            f"mode: workflow_dispatch sources='{inputs_sources}' (packer-only, empty test matrix)"
-        )
+        log(f"mode: workflow_dispatch sources='{inputs_sources}' (packer-only, empty test matrix)")
         return _emit_result("[]", "true", "false")
 
     head_sha = os.environ.get("GITHUB_SHA", "")
@@ -772,9 +753,7 @@ def _cmd_run(args: list[str]) -> int:
         log("full-universe paths changed:")
         for p in classification.full_universe_paths:
             log(f"     {p}")
-        return full_universe(
-            "full-universe path changed", packer=packer_str, ci_image=ci_image_str
-        )
+        return full_universe("full-universe path changed", packer=packer_str, ci_image=ci_image_str)
 
     universe = set(list_testable_roles())
     roles: set[str] = set()
@@ -796,9 +775,7 @@ def _cmd_run(args: list[str]) -> int:
                 roles.add(consumer)
         releases = release_ubuntu_for(role)
         if releases and consumers:
-            log(
-                f"  propagating release cells [{' '.join(releases)}] from '{role}' to its consumers"
-            )
+            log(f"  propagating release cells [{' '.join(releases)}] from '{role}' to its consumers")
             for consumer in consumers:
                 if consumer not in universe:
                     continue

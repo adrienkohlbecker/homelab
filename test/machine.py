@@ -1388,9 +1388,17 @@ class QemuMachine(Machine):
         """
 
         args = [
-            "qemu-img", "create", "-f", "qcow2",
-            "-o", "lazy_refcounts=on",
-            "-b", src, "-F", backing_fmt or self._packer_disk_format, dest,
+            "qemu-img",
+            "create",
+            "-f",
+            "qcow2",
+            "-o",
+            "lazy_refcounts=on",
+            "-b",
+            src,
+            "-F",
+            backing_fmt or self._packer_disk_format,
+            dest,
         ]
         if size:
             args.append(size)

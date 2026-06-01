@@ -63,7 +63,9 @@ class TestResolveDefaultMachine:
 
 class TestQemuUserNetArgs:
     def test_returns_empty_for_unknown_machine(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(machine, "_load_test_topology", lambda: {"hosts": {}, "partitions": {"physical": {"cidr": "10.234.0.0/16"}}})
+        monkeypatch.setattr(
+            machine, "_load_test_topology", lambda: {"hosts": {}, "partitions": {"physical": {"cidr": "10.234.0.0/16"}}}
+        )
         assert machine.qemu_user_net_args("nonexistent") == ""
 
     def test_returns_string_for_known_machine(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -85,7 +87,9 @@ class TestQemuUserNetArgs:
 
 class TestPasstAddressArgs:
     def test_returns_empty_for_unknown_machine(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(machine, "_load_test_topology", lambda: {"hosts": {}, "partitions": {"physical": {"cidr": "10.234.0.0/16"}}})
+        monkeypatch.setattr(
+            machine, "_load_test_topology", lambda: {"hosts": {}, "partitions": {"physical": {"cidr": "10.234.0.0/16"}}}
+        )
         assert machine.passt_address_args("nonexistent") == []
 
     def test_returns_flags_for_known_machine(self, monkeypatch: pytest.MonkeyPatch) -> None:
