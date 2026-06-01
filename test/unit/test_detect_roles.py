@@ -22,6 +22,7 @@ REPO_ROOT = DETECT_ROLES_SH.parent.parent.parent
 
 def _run_bash(script: str, *, env: dict | None = None, cwd: Path | None = None) -> subprocess.CompletedProcess:
     merged_env = {**os.environ, **(env or {})}
+    merged_env.pop("GITHUB_OUTPUT", None)
     return subprocess.run(
         ["bash", "-c", script],
         capture_output=True,
