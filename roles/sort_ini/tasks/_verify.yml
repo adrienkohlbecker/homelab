@@ -1,10 +1,10 @@
 - name: _verify | Script is installed and executable
   stat:
     path: /usr/local/bin/sort_ini
-  register: _verify_script_stat
+  register: _sort_ini_script_stat
   failed_when: >-
-    not _verify_script_stat.stat.exists
-    or _verify_script_stat.stat.mode != "0755"
+    not _sort_ini_script_stat.stat.exists
+    or _sort_ini_script_stat.stat.mode != "0755"
 
 - name: _verify | Path unit is active # noqa: command-instead-of-module
   command: systemctl is-active sort_ini_tmp-sort_ini_test-test.ini.path
@@ -31,17 +31,17 @@
 - name: _verify | Read sorted output
   slurp:
     src: /tmp/sort_ini_test/test.ini
-  register: _verify_sorted
+  register: _sort_ini_sorted
 
 - name: _verify | Assert sections are sorted alphabetically
   assert:
     that:
-      - _verify_sorted.content | b64decode == _verify_expected
+      - _sort_ini_sorted.content | b64decode == _sort_ini_expected
     fail_msg: >-
       Sorted output does not match expected.
-      Got: {{ _verify_sorted.content | b64decode | trim }}
+      Got: {{ _sort_ini_sorted.content | b64decode | trim }}
   vars:
-    _verify_expected: |
+    _sort_ini_expected: |
       [alpha]
       key_m = 13
       key_z = 26
@@ -52,7 +52,7 @@
 - name: _verify | Stat file before idempotent re-run
   stat:
     path: /tmp/sort_ini_test/test.ini
-  register: _verify_mtime_before
+  register: _sort_ini_mtime_before
 
 - name: _verify | Re-run sort_ini is idempotent (skip-if-unchanged)
   command: /usr/local/bin/sort_ini /tmp/sort_ini_test/test.ini
@@ -62,15 +62,15 @@
 - name: _verify | Stat file after idempotent re-run
   stat:
     path: /tmp/sort_ini_test/test.ini
-  register: _verify_mtime_after
+  register: _sort_ini_mtime_after
 
 - name: _verify | Assert file was not rewritten (mtime unchanged)
   assert:
     that:
-      - _verify_mtime_after.stat.mtime == _verify_mtime_before.stat.mtime
+      - _sort_ini_mtime_after.stat.mtime == _sort_ini_mtime_before.stat.mtime
     fail_msg: >-
       File was rewritten despite being already sorted
-      (mtime {{ _verify_mtime_before.stat.mtime }} -> {{ _verify_mtime_after.stat.mtime }})
+      (mtime {{ _sort_ini_mtime_before.stat.mtime }} -> {{ _sort_ini_mtime_after.stat.mtime }})
 
 - name: _verify | Sort INI with subsections
   command: /usr/local/bin/sort_ini /tmp/sort_ini_test/subsections.ini
@@ -80,17 +80,17 @@
 - name: _verify | Read sorted subsection output
   slurp:
     src: /tmp/sort_ini_test/subsections.ini
-  register: _verify_subsections
+  register: _sort_ini_subsections
 
 - name: _verify | Assert subsections are sorted within their parent section
   assert:
     that:
-      - _verify_subsections.content | b64decode == _verify_subsections_expected
+      - _sort_ini_subsections.content | b64decode == _sort_ini_subsections_expected
     fail_msg: >-
       Subsection sorting does not match expected.
-      Got: {{ _verify_subsections.content | b64decode | trim }}
+      Got: {{ _sort_ini_subsections.content | b64decode | trim }}
   vars:
-    _verify_subsections_expected: |
+    _sort_ini_subsections_expected: |
       [categories]
       [[books]]
       dir = /books
@@ -124,12 +124,12 @@
 - name: _verify | Wait for path watcher to sort the file
   slurp:
     src: /tmp/sort_ini_test/test.ini
-  register: _verify_triggered
-  until: _verify_triggered.content | b64decode == _verify_expected
+  register: _sort_ini_triggered
+  until: _sort_ini_triggered.content | b64decode == _sort_ini_expected
   retries: 15
   delay: 1
   vars:
-    _verify_expected: |
+    _sort_ini_expected: |
       [alpha]
       key_m = 13
       key_z = 26
