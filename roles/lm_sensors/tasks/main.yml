@@ -12,6 +12,7 @@
 - name: Install lm-sensors
   apt:
     pkg:
+      - i2c-tools
       - lm-sensors
     policy_rc_d: 101
     cache_valid_time: 3600
