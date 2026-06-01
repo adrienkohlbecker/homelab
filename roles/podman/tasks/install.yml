@@ -18,7 +18,7 @@
 
 # man-db is dragged in so systemd-analyze's man-page reference check
 # passes when verifying our units; python3-tomli backs the TOML
-# `validate:` on the storage.conf write below (jammy ships python 3.10,
+# `validate:` on the storage.conf write above (jammy ships python 3.10,
 # whose stdlib has no tomllib).
 #
 # Older releases need iptables: netavark's iptables firewall_driver
@@ -42,11 +42,79 @@
   tags:
     - podman
 
+# Drop-ins under /etc/containers/storage.conf.d/ aren't loaded in rootless
+# mode on podman 4.9, so we have to write the main file directly. The driver
+# is set explicitly to silence the "A driver was picked automatically"
+# warning when containers-common's default storage.conf is absent.
+#
+# runroot and graphroot must be set explicitly even though they match the
+# upstream defaults: containers/storage's TOML loader unconditionally
+# overwrites these fields from the parsed config, so leaving them blank
+# clobbers the rootful defaults with empty strings and breaks rootful
+# podman with "runroot must be set". Rootless ignores both — its codepath
+# rebuilds a fresh options struct from XDG_RUNTIME_DIR and
+# rootless_storage_path.
+# Lives in install.yml (not main.yml) so consumers that import only
+# `tasks_from: install` (homeassistant/healthchecks/nexus _setup.yml)
+# also get the storage config.
+#
+# Runs on every podman host, not just zfs_root: graphroot is
+# /var/lib/containers/storage regardless of whether that path is the podman
+# zvol (zfs_root) or the plain root filesystem, and the fuse-overlayfs shim
+# is a kernel<5.19 concern (not a ZFS one) -- a non-zfs host on an old kernel
+# running a --uidmap image would still hit the chown-by-maps lchown(dev/
+# console) EIO without it. The zvol create/mount tasks below stay gated on
+# zfs_root (the backing); the storage config itself is universal.
+#
+# ORDERING: must be written before any podman command runs. The storage
+# database is lazily initialized on first access; if it's created before
+# this file exists, the DB stores driver="" (auto-detect) while the config
+# says driver="overlay" — podman then refuses to start with "database
+# graph driver does not match". On zfs_root hosts the zvol mount masks
+# this by wiping the stale DB, but on non-ZFS hosts (minimal) it persists.
+- name: install | Configure podman storage
+  vars:
+    # Native overlay learned idmapped-mount support in kernel 5.19.
+    # On older kernels (jammy stock = 5.15) a --uidmap container start
+    # falls through to the storage-chown-by-maps copy-up — walk the
+    # layer and lchown every file to the host uid — which EIOs on
+    # device nodes baked into the layer (dev/console/dev/null in the
+    # linuxserver/* base images) and aborts the start. fuse-overlayfs
+    # implements idmap in userspace and skips the kernel chown-by-maps
+    # path entirely, so it works under 5.15. Bare-metal lab/pug ride HWE
+    # 6.x and the native idmapped-mount probe succeeds there, so they
+    # don't need the userspace shim.
+    _podman_storage_needs_fuse_overlayfs: "{{ ansible_facts.kernel is version('5.19', '<') }}"
+  copy:
+    dest: /etc/containers/storage.conf
+    content: |
+      [storage]
+      driver = "overlay"
+      runroot = "/run/containers/storage"
+      graphroot = "/var/lib/containers/storage"
+      rootless_storage_path = "/var/lib/containers/rootless/$USER"
+      {% if _podman_storage_needs_fuse_overlayfs %}
+
+      [storage.options.overlay]
+      mount_program = "/usr/bin/fuse-overlayfs"
+      {% endif %}
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    # Parse as TOML so a jinja typo in the fuse-overlayfs branch fails
+    # here; containers/storage otherwise accepts-then-defaults a broken
+    # file and breaks rootful podman with "runroot must be set".
+    validate: python3 -c 'import tomli, sys; tomli.load(open(sys.argv[1], "rb"))' %s
+  become: true
+  tags:
+    - podman
+
 # /etc/containers/containers.conf is for user overrides; the package ships
 # defaults at /usr/share/containers/containers.conf and won't create the
 # /etc/ copy. We write a small overlay holding only the keys the homelab
 # pins -- podman layers it over the package defaults. A `copy:` with a
-# templated `content:` (mirroring the storage.conf write below) carries a
+# templated `content:` (mirroring the storage.conf write above) carries a
 # TOML `validate:` so a jinja/vault typo fails here rather than being
 # silently accepted-then-defaulted by containers/common.
 #
@@ -371,63 +439,3 @@
   tags:
     - podman
 
-# Drop-ins under /etc/containers/storage.conf.d/ aren't loaded in rootless
-# mode on podman 4.9, so we have to write the main file directly. The driver
-# is set explicitly to silence the "A driver was picked automatically"
-# warning when containers-common's default storage.conf is absent.
-#
-# runroot and graphroot must be set explicitly even though they match the
-# upstream defaults: containers/storage's TOML loader unconditionally
-# overwrites these fields from the parsed config, so leaving them blank
-# clobbers the rootful defaults with empty strings and breaks rootful
-# podman with "runroot must be set". Rootless ignores both — its codepath
-# rebuilds a fresh options struct from XDG_RUNTIME_DIR and
-# rootless_storage_path.
-# Lives in install.yml (not main.yml) so consumers that import only
-# `tasks_from: install` (homeassistant/healthchecks/nexus _setup.yml)
-# also get the storage config.
-#
-# Runs on every podman host, not just zfs_root: graphroot is
-# /var/lib/containers/storage regardless of whether that path is the podman
-# zvol (zfs_root) or the plain root filesystem, and the fuse-overlayfs shim
-# is a kernel<5.19 concern (not a ZFS one) -- a non-zfs host on an old kernel
-# running a --uidmap image would still hit the chown-by-maps lchown(dev/
-# console) EIO without it. The zvol create/mount tasks above stay gated on
-# zfs_root (the backing); the storage config itself is universal.
-- name: install | Configure podman storage
-  vars:
-    # Native overlay learned idmapped-mount support in kernel 5.19.
-    # On older kernels (jammy stock = 5.15) a --uidmap container start
-    # falls through to the storage-chown-by-maps copy-up — walk the
-    # layer and lchown every file to the host uid — which EIOs on
-    # device nodes baked into the layer (dev/console/dev/null in the
-    # linuxserver/* base images) and aborts the start. fuse-overlayfs
-    # implements idmap in userspace and skips the kernel chown-by-maps
-    # path entirely, so it works under 5.15. Bare-metal lab/pug ride HWE
-    # 6.x and the native idmapped-mount probe succeeds there, so they
-    # don't need the userspace shim.
-    _podman_storage_needs_fuse_overlayfs: "{{ ansible_facts.kernel is version('5.19', '<') }}"
-  copy:
-    dest: /etc/containers/storage.conf
-    content: |
-      [storage]
-      driver = "overlay"
-      runroot = "/run/containers/storage"
-      graphroot = "/var/lib/containers/storage"
-      rootless_storage_path = "/var/lib/containers/rootless/$USER"
-      {% if _podman_storage_needs_fuse_overlayfs %}
-
-      [storage.options.overlay]
-      mount_program = "/usr/bin/fuse-overlayfs"
-      {% endif %}
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    # Parse as TOML so a jinja typo in the fuse-overlayfs branch fails
-    # here; containers/storage otherwise accepts-then-defaults a broken
-    # file and breaks rootful podman with "runroot must be set".
-    validate: python3 -c 'import tomli, sys; tomli.load(open(sys.argv[1], "rb"))' %s
-  become: true
-  tags:
-    - podman
