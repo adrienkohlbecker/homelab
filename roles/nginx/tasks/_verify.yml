@@ -4,9 +4,11 @@
 # TLS termination + Host routing, the security headers, the Authelia 401->302
 # redirect, the bypass-token short-circuit (+ token strip and access-log
 # redaction), the http->https redirect, the default-server catch-all, and
-# stub_status's loopback binding. Probe idiom (https://localhost + Host header
-# + validate_certs:false) lifted from roles/compta/tasks/_verify.yml; the
-# upstream stub via systemd-run is the roles/csplogger pattern. The VM is fresh
+# stub_status's loopback binding. Probe idiom: map test FQDNs to loopback in
+# /etc/hosts, then probe https://<fqdn>/ (validate_certs:false) so TLS SNI
+# matches the vhost on every OpenSSL version (noble/resolute 3.x reject
+# SNI=localhost with TLSV1_UNRECOGNIZED_NAME). The upstream stub via
+# systemd-run is the roles/csplogger pattern. The VM is fresh
 # per harness run and _verify runs after the idempotence check, so standing up
 # fixtures here is safe (no when: qemu_test gate needed).
 
@@ -14,6 +16,34 @@
   set_fact:
     nginx_verify_host: "nginxverify.{{ inventory_hostname }}.{{ domain }}"
     nginx_verify_token: nginx-verify-token
+
+# TLS SNI follows the URL host, not the Host header. On noble/resolute (OpenSSL
+# 3.x), an SNI of `localhost` that matches no server_name triggers a fatal
+# TLSV1_UNRECOGNIZED_NAME. Map every test-vhost FQDN to loopback so probes can
+# use the real FQDN in the URL, making SNI match the vhost on every release.
+- name: _verify | Map test vhost FQDNs to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 {{ item }}"
+    state: present
+  loop:
+    - "{{ nginx_verify_host }}"
+    - "nginxverifyempty.{{ inventory_hostname }}.{{ domain }}"
+    - "nginxverifyauth.{{ inventory_hostname }}.{{ domain }}"
+    - "nginxverifyloc.{{ inventory_hostname }}.{{ domain }}"
+    - "nginxverifyserverconf.{{ inventory_hostname }}.{{ domain }}"
+    - "nginxverifybody.{{ inventory_hostname }}.{{ domain }}"
+    - "nginxverifybuffering.{{ inventory_hostname }}.{{ domain }}"
+    - "nginxverifycsp.{{ inventory_hostname }}.{{ domain }}"
+    - "nginxverifyplain.{{ inventory_hostname }}.{{ domain }}"
+  become: true
+
+- name: _verify | Map the IPv6 test vhost to ::1 so the probe reaches [::]:443
+  lineinfile:
+    path: /etc/hosts
+    line: "::1 nginxverifyipv6.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
 
 # www-data was dropped from ssl-cert (install.yml): nginx's master loads the
 # cert+key as root and the workers inherit the context, so the workers never
@@ -120,9 +150,7 @@
 
 - name: _verify | Unauthenticated request redirects to the Authelia portal (302)
   uri:
-    url: https://localhost/
-    headers:
-      Host: "{{ nginx_verify_host }}"
+    url: "https://{{ nginx_verify_host }}/"
     validate_certs: false
     follow_redirects: none
     status_code: 302
@@ -133,9 +161,7 @@
 
 - name: _verify | Wrong bypass token still redirects to Authelia (302)
   uri:
-    url: https://localhost/?auth_token=wrong_value_must_not_match
-    headers:
-      Host: "{{ nginx_verify_host }}"
+    url: "https://{{ nginx_verify_host }}/?auth_token=wrong_value_must_not_match"
     validate_certs: false
     follow_redirects: none
     status_code: 302
@@ -146,9 +172,7 @@
 
 - name: _verify | Correct bypass token short-circuits auth and reaches the upstream (200)
   uri:
-    url: https://localhost/?auth_token={{ nginx_verify_token }}
-    headers:
-      Host: "{{ nginx_verify_host }}"
+    url: "https://{{ nginx_verify_host }}/?auth_token={{ nginx_verify_token }}"
     validate_certs: false
     return_content: true
     status_code: 200
@@ -174,9 +198,7 @@
 # token; the probe must reach the upstream stub, the token must not.
 - name: _verify | Fire a bypass request carrying a probe marker
   uri:
-    url: https://localhost/?auth_token={{ nginx_verify_token }}&probe=__nginx_verify_marker__
-    headers:
-      Host: "{{ nginx_verify_host }}"
+    url: "https://{{ nginx_verify_host }}/?auth_token={{ nginx_verify_token }}&probe=__nginx_verify_marker__"
     validate_certs: false
     status_code: 200
 
@@ -214,9 +236,7 @@
 # netdata poller) and the edge where stripping must clear $args entirely.
 - name: _verify | Bypass with auth_token as the sole query param reaches the upstream (200)
   uri:
-    url: https://localhost/?auth_token={{ nginx_verify_token }}
-    headers:
-      Host: "{{ nginx_verify_host }}"
+    url: "https://{{ nginx_verify_host }}/?auth_token={{ nginx_verify_token }}"
     validate_certs: false
     return_content: true
     status_code: 200
@@ -237,9 +257,7 @@
 # can't smuggle a second copy past the strip.
 - name: _verify | Duplicated auth_token is rejected with 400
   uri:
-    url: "https://localhost/?auth_token={{ nginx_verify_token }}&auth_token=smuggled"
-    headers:
-      Host: "{{ nginx_verify_host }}"
+    url: "https://{{ nginx_verify_host }}/?auth_token={{ nginx_verify_token }}&auth_token=smuggled"
     validate_certs: false
     status_code: 400
   register: nginx_verify_dup
@@ -250,9 +268,7 @@
 # &-anchored $args strip, forwarding the raw token to the upstream. Rejected.
 - name: _verify | A ?-smuggled auth_token is rejected with 400 (not forwarded)
   uri:
-    url: "https://localhost/?probe=1?auth_token={{ nginx_verify_token }}"
-    headers:
-      Host: "{{ nginx_verify_host }}"
+    url: "https://{{ nginx_verify_host }}/?probe=1?auth_token={{ nginx_verify_token }}"
     validate_certs: false
     status_code: 400
   register: nginx_verify_smuggle
@@ -263,9 +279,7 @@
 # single-stage redaction would leak it; the two-stage map must redact both.
 - name: _verify | Fire a duplicated auth_token with the real token second
   uri:
-    url: "https://localhost/?auth_token=decoy_first&auth_token={{ nginx_verify_token }}&dupmark=__nginx_verify_dup_marker__"
-    headers:
-      Host: "{{ nginx_verify_host }}"
+    url: "https://{{ nginx_verify_host }}/?auth_token=decoy_first&auth_token={{ nginx_verify_token }}&dupmark=__nginx_verify_dup_marker__"
     validate_certs: false
     status_code: 400
   register: nginx_verify_dup2
@@ -317,9 +331,8 @@
 
 - name: _verify | Empty upstream_authorization does not arm the Authorization bypass
   uri:
-    url: https://localhost/
+    url: "https://nginxverifyempty.{{ inventory_hostname }}.{{ domain }}/"
     headers:
-      Host: "nginxverifyempty.{{ inventory_hostname }}.{{ domain }}"
       Authorization: Token should-not-bypass
     validate_certs: false
     follow_redirects: none
@@ -406,9 +419,7 @@
 
 - name: _verify | Authenticated browser user is admitted and identity-forwarded
   uri:
-    url: https://localhost/
-    headers:
-      Host: "nginxverifyauth.{{ inventory_hostname }}.{{ domain }}"
+    url: "https://nginxverifyauth.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     status_code: 200
   register: nginx_verify_inj
@@ -447,9 +458,8 @@
 
 - name: _verify | Cookieless machine client's own Authorization passes through unmodified
   uri:
-    url: https://localhost/
+    url: "https://nginxverifyauth.{{ inventory_hostname }}.{{ domain }}/"
     headers:
-      Host: "nginxverifyauth.{{ inventory_hostname }}.{{ domain }}"
       Authorization: Token machine-xyz
     validate_certs: false
     status_code: 200
@@ -488,9 +498,7 @@
 
 - name: _verify | A location_conf keeps the security headers AND its own header
   uri:
-    url: https://localhost/
-    headers:
-      Host: "nginxverifyloc.{{ inventory_hostname }}.{{ domain }}"
+    url: "https://nginxverifyloc.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     status_code: 200
   register: nginx_verify_loc
@@ -524,9 +532,7 @@
 
 - name: _verify | A server_conf snippet adds a working sibling location
   uri:
-    url: https://localhost/sidecar
-    headers:
-      Host: "nginxverifyserverconf.{{ inventory_hostname }}.{{ domain }}"
+    url: "https://nginxverifyserverconf.{{ inventory_hostname }}.{{ domain }}/sidecar"
     validate_certs: false
     return_content: true
     status_code: 200
@@ -557,11 +563,9 @@
 
 - name: _verify | A body over client_max_body_size is rejected with 413
   uri:
-    url: https://localhost/
+    url: "https://nginxverifybody.{{ inventory_hostname }}.{{ domain }}/"
     method: POST
     body: "{{ 'x' * 4096 }}"
-    headers:
-      Host: "nginxverifybody.{{ inventory_hostname }}.{{ domain }}"
     validate_certs: false
     status_code: 413
   register: nginx_verify_body
@@ -590,9 +594,7 @@
 
 - name: _verify | The proxy-buffering vhost serves the proxied response
   uri:
-    url: https://localhost/
-    headers:
-      Host: "nginxverifybuffering.{{ inventory_hostname }}.{{ domain }}"
+    url: "https://nginxverifybuffering.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     return_content: true
     status_code: 200
@@ -625,9 +627,7 @@
 
 - name: _verify | CSP override tokens all appear in the Content-Security-Policy header
   uri:
-    url: https://localhost/
-    headers:
-      Host: "nginxverifycsp.{{ inventory_hostname }}.{{ domain }}"
+    url: "https://nginxverifycsp.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     status_code: 200
   register: nginx_verify_cspov
@@ -671,9 +671,7 @@
 
 - name: _verify | A csp_passthrough vhost emits no Content-Security-Policy header
   uri:
-    url: https://localhost/
-    headers:
-      Host: "nginxverifyplain.{{ inventory_hostname }}.{{ domain }}"
+    url: "https://nginxverifyplain.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     status_code: 200
   register: nginx_verify_csp
@@ -702,13 +700,10 @@
   import_tasks: _verify_wait_route.yml
   vars:
     _wait_route_host: "nginxverifyipv6.{{ inventory_hostname }}.{{ domain }}"
-    _wait_route_url: "https://[::1]/"
 
 - name: _verify | The [::]:443 listener serves the vhost over ::1
   uri:
-    url: "https://[::1]/"
-    headers:
-      Host: "nginxverifyipv6.{{ inventory_hostname }}.{{ domain }}"
+    url: "https://nginxverifyipv6.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     return_content: true
     status_code: 200
