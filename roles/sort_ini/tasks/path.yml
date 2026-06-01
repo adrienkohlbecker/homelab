@@ -20,6 +20,10 @@
       src: sort_ini.path.j2
       dest: sort_ini_{{ sort_ini_escaped_path }}.path
 
+- name: path | Record path unit install result
+  set_fact:
+    _sort_ini_path_unit_changed: "{{ systemd_unit_file.changed }}"
+
 - name: path | Enable sort_ini.path
   import_role:
     name: systemd_unit
@@ -27,5 +31,5 @@
   vars:
     systemd_unit_args:
       src: sort_ini_{{ sort_ini_escaped_path }}.path
-      condition: "{{ not (ansible_check_mode and systemd_unit_file.changed) }}"
-      restart: "{{ systemd_unit_file.changed }}"
+      condition: "{{ not (ansible_check_mode and _sort_ini_path_unit_changed) }}"
+      restart: "{{ _sort_ini_path_unit_changed }}"

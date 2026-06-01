@@ -121,22 +121,13 @@
     mode: "0644"
   become: true
 
-- name: _verify | Wait for path watcher to trigger sort
-  pause:
-    seconds: 6
-
-- name: _verify | Read file after path-triggered sort
+- name: _verify | Wait for path watcher to sort the file
   slurp:
     src: /tmp/sort_ini_test/test.ini
   register: _verify_triggered
-
-- name: _verify | Assert path watcher sorted the file
-  assert:
-    that:
-      - _verify_triggered.content | b64decode == _verify_expected
-    fail_msg: >-
-      Path watcher did not sort the file.
-      Got: {{ _verify_triggered.content | b64decode | trim }}
+  until: _verify_triggered.content | b64decode == _verify_expected
+  retries: 15
+  delay: 1
   vars:
     _verify_expected: |
       [alpha]
