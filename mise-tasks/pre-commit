@@ -1,10 +1,14 @@
-#!/bin/bash
+#!/usr/bin/env bash
+#MISE description="Pre-commit hook: guard notes submodule consistency"
+#MISE hide=true
 set -euo pipefail
 
 # Guard the notes submodule against two common mistakes:
 #   1. Committing while notes/ has uncommitted changes (dirty worktree).
 #   2. Committing when the notes pointer has drifted but is not staged,
 #      so the parent silently records a stale gitlink.
+#
+# Wired via: mise generate git-pre-commit --write
 
 # Skip when notes/ is not initialized (fresh clone without --recurse).
 [ -d "notes/.git" ] || [ -f "notes/.git" ] || exit 0
