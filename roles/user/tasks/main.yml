@@ -23,7 +23,6 @@
       - git-lfs
       - gparted
       - htop
-      - i7z
       - iotop
       - iperf3
       - iputils-arping
@@ -59,6 +58,16 @@
       - usbutils
       - vim
       - zsh
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - user
+
+- name: Install amd64-only packages
+  when: ansible_architecture == "x86_64"
+  apt:
+    pkg:
+      - i7z
     cache_valid_time: 3600
   become: true
   tags:
