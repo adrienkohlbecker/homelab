@@ -27,7 +27,7 @@ permissions:
 # test-role cell resolves its container: block -- no cross-workflow
 # sentinel needed (that's what the old wait-for-ci-image poll did).
 concurrency:
-  group: ci-image
+  group: ci-image-${{ github.ref }}
   cancel-in-progress: false
 
 defaults:
