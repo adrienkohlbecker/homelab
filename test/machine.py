@@ -222,7 +222,13 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         # nginx + snakeoil cert via packer/seed_deps.yml. Roles opt in
         # via roles/<role>/meta/test.yml's `machine: box_deps`. Reuses
         # host_vars/box.yml because inventory_host stays box.
+        # 5 GiB: box_deps roles pull large container images and run them
+        # during converge (HA alone is 2.4 GB on disk, ~1 GB RSS at
+        # startup); the expanded nginx_site assert+validate chain runs
+        # concurrently with the container startup, and 4 GiB is no
+        # longer enough headroom.
         packer_image="box_deps",
+        memory_mb=5120,
         os_disk_count=1,
     ),
     "lab": QemuMachineSpec(
