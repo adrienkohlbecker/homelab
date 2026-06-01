@@ -10,10 +10,12 @@ USAGE = "USAGE:\n\tsort_ini.py file.ini"
 def sort_ini(fname):
     """sort .ini file: sorts sections and in each section sorts keys.
     Blank lines and comments are discarded; only suitable for app-rewritten configs."""
+    fname = os.path.realpath(fname)
     try:
         with open(fname, encoding="utf-8") as f:
             original = f.read()
     except FileNotFoundError:
+        print(f"sort_ini: {fname}: not found, skipping", file=sys.stderr)
         return
 
     lines = original.splitlines()
@@ -59,15 +61,18 @@ def sort_ini(fname):
 
     st = os.stat(fname)
     dirn = os.path.dirname(fname)
-    fd, tmp = tempfile.mkstemp(dir=dirn)
+    fd, tmp = tempfile.mkstemp(dir=dirn, prefix=".sort_ini_")
     try:
-        os.fchmod(fd, stat.S_IMODE(st.st_mode))
-        os.fchown(fd, st.st_uid, st.st_gid)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
+            os.fchmod(f.fileno(), stat.S_IMODE(st.st_mode))
+            os.fchown(f.fileno(), st.st_uid, st.st_gid)
             f.write(sorted_output)
         os.replace(tmp, fname)
     except BaseException:
-        os.unlink(tmp)
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
         raise
 
 
