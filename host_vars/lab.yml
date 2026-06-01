@@ -6,8 +6,8 @@ fluentbit_otlp_local: true  # hyperdx receiver runs here
 ssh_public_keys_additional: |
   command="rrsync /mnt/data/MacbookPro/",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-x11-forwarding ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGoV1GKxsIUqLzdCBrFsNDNJomw8NF3d8EwcJACkm1Qk rsync_to_lab
 
-zfs_arc_min: 1073741824   # 1 GiB — let ARC shrink under pressure so libvirt VMs can wire
-zfs_arc_max: 8589934592   # 8 GiB — ARC can refill when the VM is off; c_max isn't the blocker
+zfs_arc_min: 1073741824   # 1 GiB — let ARC shrink under pressure so qemu VMs can wire
+zfs_arc_max: 4294967296   # 4 GiB — halved from 8 to free headroom for 6 concurrent CI VMs
 zfs_trim_pools:
   - rpool
   - dozer
@@ -274,7 +274,7 @@ plex_extra_library_binds:
   - { src: /mnt/data/Musique/Records, dest: /records }
 
 # Pool partitioning for the CI concurrency rework: lab-vm runners take
-# packer-build + test-role jobs (capped at 4 concurrent VMs by pool
+# packer-build + test-role jobs (capped at 6 concurrent VMs by pool
 # size); lab runners take everything else (lint, ci-image, detect,
 # notify, wait-for-*). Pools are disjoint -- a `runs-on: [self-hosted,
 # lab]` job won't land on a lab-vm runner and vice versa, so VM jobs
@@ -284,6 +284,8 @@ github_runner_instances:
   - { repo: homelab, suffix: vm2,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
   - { repo: homelab, suffix: vm3,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
   - { repo: homelab, suffix: vm4,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
+  - { repo: homelab, suffix: vm5,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
+  - { repo: homelab, suffix: vm6,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
   - { repo: homelab, suffix: gen1, owner: adrienkohlbecker, labels: "self-hosted,lab" }
   - { repo: homelab, suffix: gen2, owner: adrienkohlbecker, labels: "self-hosted,lab" }
   - { repo: homelab, suffix: gen3, owner: adrienkohlbecker, labels: "self-hosted,lab" }

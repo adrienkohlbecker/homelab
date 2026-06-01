@@ -24,7 +24,7 @@ on:
         required: true
 
 # Concurrency: no workflow- or job-level group on test-role any more.
-# The cap on concurrent VMs comes from the runner pool (4 lab-vm
+# The cap on concurrent VMs comes from the runner pool (6 lab-vm
 # runners on lab; see host_vars/lab.yml's github_runner_instances), and
 # the packer-vs-test mutex is enforced by a brief flock around packer's
 # install post-processor + the harness's overlay-create/qemu-launch
@@ -47,7 +47,7 @@ jobs:
   # notes/concurrency_rework.md.)
 
   test-role:
-    # Lands on the lab-vm pool (4 runners) -- the cap on concurrent
+    # Lands on the lab-vm pool (6 runners) -- the cap on concurrent
     # qemu VMs is exactly the pool size. Packer-build and test-role
     # share the pool; packer-build's qcow2 publish is brief-flock'd
     # against test-role's overlay-create + qemu launch (see step 4 of
@@ -94,10 +94,10 @@ jobs:
         --group-add 1
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
         --volume /mnt/scratch/qemu/cloud-images:/mnt/scratch/qemu/cloud-images:rw
-        --volume /mnt/scratch/github_runner/scratch/${{ github.run_id }}-${{ strategy.job-index }}:/scratch:rw
+        --volume /mnt/ci-scratch/${{ github.run_id }}-${{ strategy.job-index }}:/scratch:rw
     strategy:
       fail-fast: false
-      # No max-parallel: the lab-vm pool (4 runners on lab; see
+      # No max-parallel: the lab-vm pool (6 runners on lab; see
       # host_vars/lab.yml) is the sole cap on concurrent VMs, for both the
       # push and nightly callers. A single run may use the whole pool; a
       # second concurrent run just queues behind it -- fine for one

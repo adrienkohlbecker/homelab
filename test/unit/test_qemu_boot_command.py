@@ -53,8 +53,8 @@ def test_default_x86_64_no_keep_no_direct_boot(
     assert cmd[machine_idx + 1] == "type=q35,accel=hvf,usb=on"
 
     # Sizing flows from QemuMachineSpec; the factory's default machine is
-    # "minimal" which is sized down to 2048M / 4 vcpus.
-    assert cmd[cmd.index("-smp") + 1] == "4,sockets=1,cores=4"
+    # "minimal" which is sized down to 2048M / 2 vcpus.
+    assert cmd[cmd.index("-smp") + 1] == "2,sockets=1,cores=2"
     assert cmd[cmd.index("-m") + 1] == "2048M"
     assert cmd[cmd.index("-cpu") + 1] == "host"
     # -name distinguishes parallel runs in ps/pgrep output.

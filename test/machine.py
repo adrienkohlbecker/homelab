@@ -188,13 +188,13 @@ class QemuMachineSpec(NamedTuple):
     # (packer_image=None), where the cloud-image branch returns early.
     os_disk_count: int = 0
     # Guest RAM in MiB and vcpu count, plumbed into qemu's -m / -smp.
-    # Defaults match the historical 4096M / 8-vcpu sizing so existing
-    # variants are unchanged; minimal trims to 2048/4 since the cloud-
-    # image variant has no zpool to feed. -smp emits a single-socket
-    # layout (sockets=1,cores=vcpus), the conventional shape for a guest
-    # on a non-NUMA hypervisor.
+    # 4 vCPUs keeps 6 concurrent VMs at 24 logical cores (1.2× oversub
+    # on the i5-13500's 20 threads) — converge is I/O-bound so this
+    # doesn't bottleneck. -smp emits a single-socket layout
+    # (sockets=1,cores=vcpus), the conventional shape for a guest on a
+    # non-NUMA hypervisor.
     memory_mb: int = 4096
-    vcpus: int = 8
+    vcpus: int = 4
 
 
 QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
@@ -203,7 +203,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         inventory_host="minimal",
         packer_image=None,
         memory_mb=2048,
-        vcpus=4,
+        vcpus=2,
     ),
     "box": QemuMachineSpec(
         ssh_user="vagrant",
@@ -1374,9 +1374,18 @@ class QemuMachine(Machine):
         overrides it: its backing file is Ubuntu's cloud image, always qcow2
         regardless of host platform, so passing the packer format would tell
         qemu to read the qcow2 as raw and the guest would see a corrupt disk.
+
+        lazy_refcounts defers refcount-table updates so cluster writes don't
+        block on metadata flushes — safe because overlays are ephemeral (a
+        refcount leak on crash just means a slightly larger file, which we
+        delete anyway).
         """
 
-        args = ["qemu-img", "create", "-f", "qcow2", "-b", src, "-F", backing_fmt or self._packer_disk_format, dest]
+        args = [
+            "qemu-img", "create", "-f", "qcow2",
+            "-o", "lazy_refcounts=on",
+            "-b", src, "-F", backing_fmt or self._packer_disk_format, dest,
+        ]
         if size:
             args.append(size)
         await run_command(args)
@@ -1462,7 +1471,8 @@ class QemuMachine(Machine):
     def _virtio_drive(self, path: str, format: str = "qcow2") -> str:
         """Return a virtio drive string with sensible cache/discard flags."""
 
-        return f"file={path},if=virtio,cache=unsafe,discard=unmap,format={format},detect-zeroes=unmap"
+        aio = "io_uring" if platform.system() == "Linux" else "threads"
+        return f"file={path},if=virtio,cache=unsafe,aio={aio},discard=unmap,format={format},detect-zeroes=unmap"
 
     async def _uefi_drives(self) -> list[str]:
         """UEFI pflash code+vars pair, honouring efi_code/efi_vars overrides.
