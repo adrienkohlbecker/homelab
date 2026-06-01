@@ -764,7 +764,7 @@
 
     - name: _verify | Reboot to pick up the swapped kernel
       ansible.builtin.reboot:
-        reboot_timeout: 300
+        reboot_timeout: 120
       become: true
 
     - name: _verify | Capture uname -r after reboot

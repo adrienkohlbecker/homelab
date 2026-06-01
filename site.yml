@@ -141,6 +141,7 @@
 
     - name: Restart machine
       reboot:
+        reboot_timeout: 120
       throttle: 1
       become: true
       when: reboot_required.stat.exists
