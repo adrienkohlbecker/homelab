@@ -26,21 +26,20 @@
 # start with status 125. Booting 6.8 first lets the store initialize
 # natively (.has-mount-program=false), exactly as prod (lab/pug) does.
 # ZBM selects the new 6.8 (newest) on the reboot; the qemu hostfwd
-# survives a guest reboot so ansible reconnects.
+# survives a guest reboot so ansible reconnects. The reboot helper
+# re-gathers facts on the way back, so the podman role's storage.conf
+# gate (mount_program when kernel < 5.19) later reads 6.8 and renders
+# the native, prod-equivalent store rather than re-adding fuse.
 - name: Reboot machine under new kernel
-  reboot:
-  throttle: 1
-  become: true
-  when: hwe_kernel_apt.changed
-  tags:
-    - hwe_kernel
-
-# The reboot module doesn't refresh facts, so ansible_facts.kernel
-# would still read 5.15 and the podman role's storage.conf gate
-# (mount_program when kernel < 5.19) would re-add fuse. Re-gather so it
-# sees 6.8 and renders the native, prod-equivalent storage.conf.
-- name: Re-gather facts so the kernel version reflects the HWE reboot
-  setup:
+  import_role:
+    name: reboot
+    tasks_from: reboot
+  vars:
+    reboot_args:
+      condition: "{{ hwe_kernel_apt.changed }}"
+      # New kernel may rebuild the initramfs / re-import the pool on
+      # first boot, so allow longer than the 120s default.
+      timeout: 300
   tags:
     - hwe_kernel
 

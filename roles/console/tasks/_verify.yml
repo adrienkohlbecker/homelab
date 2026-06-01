@@ -28,10 +28,12 @@
 # below still prove the role wrote the next-boot config correctly,
 # which is the load-bearing contract on x86_64 prod hosts.
 - name: _verify | Reboot to apply role changes
-  when: ansible_architecture != 'aarch64'
-  reboot:
-    reboot_timeout: 120
-  become: true
+  import_role:
+    name: reboot
+    tasks_from: reboot
+  vars:
+    reboot_args:
+      condition: "{{ ansible_architecture != 'aarch64' }}"
 
 - name: _verify | Read console-setup config
   slurp:

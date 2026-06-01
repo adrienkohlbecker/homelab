@@ -1,0 +1,68 @@
+# Reboot helper — drop-in for ansible's `reboot:` module, which wedges
+# under mitogen (the strategy this repo runs under; see ansible.cfg).
+# Invoke with `import_role: { name: reboot, tasks_from: reboot }` and a
+# `reboot_args` dict. (main.yml is a deliberate no-op so the standalone
+# `reboot:box` CI cell converges without rebooting; tasks/_verify.yml
+# exercises the real path.)
+#
+# The module records the boot id, reboots, reset_connection, then polls
+# the boot id via a *become-elevated* command until it changes. After
+# the SSH sever mitogen reconnects the transport but doesn't cleanly
+# rebuild the elevated sudo.root child context (stderr: "ContextService
+# ()... refcount was 0. shutdown_all called?"), so the poll never sees
+# a fresh boot id and the module spins to its timeout — even though the
+# host is back and SSH-serving within seconds.
+#
+# Instead: fire the reboot fire-and-forget (async, poll: 0) and probe
+# the recovery with wait_for_connection, which tests only the transport
+# (no become), so there is no sudo context to wedge. Then re-gather
+# facts so callers reading ansible_facts after the reboot see the
+# post-reboot values (running kernel, mounts, ...) without a manual
+# setup task. Same recovery mechanism roles/netplan/tasks/_verify.yml
+# relies on across an SSH sever under mitogen.
+#
+# Inputs: caller passes a single dict `reboot_args` (all keys optional):
+#   condition  when-gate for the whole block; default true. Pass the
+#              caller guard (reboot_required.stat.exists,
+#              ansible_architecture != 'aarch64', ...).
+#   pre_delay  seconds to sleep before issuing the reboot so ansible
+#              detaches the async job before SSH drops; default 2.
+#   delay      wait_for_connection delay before the first probe; default
+#              15. Must outlast the window between firing the reboot and
+#              SSH actually going down, else the probe matches the
+#              still-up pre-reboot connection.
+#   timeout    wait_for_connection timeout seconds; default 120. Raise
+#              for slow boots (new kernel, full ZFS import).
+#   throttle   host-parallelism cap; default 1. The reboot is async, so
+#              throttle only serializes the wait phase — for strict
+#              one-host-at-a-time fleet reboots set play-level `serial:`
+#              at the call site (serial is play-scope; it can't live in
+#              a role or block). Canonical: the "Reboot check" play in
+#              site.yml.
+
+- name: Reboot the host and wait for it to return
+  when: (reboot_args | default({})).condition | default(true)
+  block:
+    - name: Trigger reboot
+      become: true
+      vars:
+        _reboot_pre_delay: "{{ (reboot_args | default({})).pre_delay | default(2) | int }}"
+      shell: |
+        set -euo pipefail
+        sleep {{ _reboot_pre_delay }}
+        systemctl reboot
+      args:
+        executable: /bin/bash
+      async: 1
+      poll: 0
+      changed_when: false
+      throttle: "{{ (reboot_args | default({})).throttle | default(1) | int }}"
+
+    - name: Wait for the host to come back after reboot
+      wait_for_connection:
+        delay: "{{ (reboot_args | default({})).delay | default(15) | int }}"
+        timeout: "{{ (reboot_args | default({})).timeout | default(120) | int }}"
+      throttle: "{{ (reboot_args | default({})).throttle | default(1) | int }}"
+
+    - name: Re-gather facts so they reflect the post-reboot state
+      setup:

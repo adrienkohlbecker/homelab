@@ -36,11 +36,17 @@
   failed_when: "'crashkernel=' not in (kdump_verify_grub_cfg.content | b64decode)"
   become: true
 
+# Reboot so the post-reboot checks below test the kernel the cmdline
+# write actually selected. aarch64 bypasses ZBM (EFI-stub cmdline baked
+# at image-build time) so the crashkernel= write wouldn't reach the
+# running kernel — skip the reboot there.
 - name: _verify | Reboot to exercise crashkernel reservation
-  when: ansible_architecture != 'aarch64'
-  reboot:
-    reboot_timeout: 120
-  become: true
+  import_role:
+    name: reboot
+    tasks_from: reboot
+  vars:
+    reboot_args:
+      condition: "{{ ansible_architecture != 'aarch64' }}"
 
 - name: _verify | Crashkernel reservation is non-zero post-reboot
   when: ansible_architecture != 'aarch64'
