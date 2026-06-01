@@ -27,12 +27,16 @@ cache = false
 # both pinned servers seeing traffic.
 lb_strategy = 'random'
 
-# Cut pointless egress: no IPv6 on these hosts (firewall is IPv4-only), and
-# bare hostnames + non-delegated TLDs (the wpad / .local / typo-domain class
+# Bare hostnames + non-delegated TLDs (the wpad / .local / typo-domain class
 # from containers and systemd-resolved fallback) can never be answered by a
 # public resolver. Synthesize the empty replies locally instead of routing
 # them through a relay+resolver round-trip.
-block_ipv6 = true
+#
+# block_ipv6 is deliberately OFF: its synthetic unsigned responses fail
+# pihole's DNSSEC validation (SERVFAIL), and musl-static binaries (uv, rust
+# CLIs) treat the AAAA SERVFAIL as fatal rather than falling back to A
+# records. The extra relay round-trip for AAAA is negligible.
+block_ipv6 = false
 block_unqualified = true
 block_undelegated = true
 
