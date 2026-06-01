@@ -20,10 +20,20 @@
     name: reboot
     tasks_from: reboot
 
-- name: _verify | Capture boot id after reboot
+# Read the post-reboot boot id through `become` on purpose. The reboot
+# severs SSH; mitogen recovers the transport on its own (wait_for_
+# connection / setup inside the helper are become-less), but the first
+# *elevated* task after the reboot is what rebuilds the sudo.root child
+# context — and that is exactly where the helper used to wedge before it
+# learned to reset_connection. A plain (become-less) read here would
+# recover regardless and pass even with the fix removed, i.e. a
+# tautology. Reading it elevated makes this the real regression guard:
+# without the helper's reset_connection this task times out.
+- name: _verify | Capture boot id after reboot (elevated — exercises the sudo context)
   command: cat /proc/sys/kernel/random/boot_id
   register: _reboot_verify_boot_id_after
   changed_when: false
+  become: true
 
 - name: _verify | Boot id changed — the host actually rebooted and came back
   assert:
