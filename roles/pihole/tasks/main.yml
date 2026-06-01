@@ -206,9 +206,22 @@
 
 # Rebuild gravity right after a list-update so a freshly-edited adlist set
 # takes effect immediately, rather than waiting for pi-hole's in-container
-# gravity cron. The Enable task's `state: restarted` blocks on
-# --sdnotify=healthy, so any same-converge restart has already left the
-# container healthy by the time we reach here.
+# gravity cron. The list-update writes to gravity.db on the shared volume;
+# FTL detects the change and exits, so pihole.service is typically mid-restart
+# by this point. Wait for systemd to bring it back healthy before exec'ing.
+- name: Wait for pihole.service to recover after list update
+  when: pihole_list_update.changed
+  systemd:
+    name: pihole
+    state: started
+  register: pihole_post_list_update
+  until: pihole_post_list_update.status.ActiveState == 'active'
+  retries: 10
+  delay: 3
+  become: true
+  tags:
+    - pihole
+
 - name: Trigger gravity update
   when: pihole_list_update.changed
   command: /usr/bin/podman exec pihole pihole -g

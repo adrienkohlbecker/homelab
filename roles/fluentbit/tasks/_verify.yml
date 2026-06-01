@@ -680,15 +680,16 @@
 
 - name: _verify | Podman_healthcheck | assert rewrite shape
   vars:
-    row: "{{ test_clickhouse_result.stdout | from_json }}"
+    row: "{{ test_clickhouse_result.stdout | default('{}', true) | from_json }}"
   assert:
     that:
+      - "test_clickhouse_result.stdout | length > 0"
       - "row.ServiceName == 'podman_healthcheck'"
       - "row.container_id_full == fluentbit_otlp_healthcheck_cid"
       - "row.container_id_short == fluentbit_otlp_healthcheck_cid[:12]"
       - "row.unit_field == fluentbit_otlp_healthcheck_cid ~ '.service'"
       - "fluentbit_otlp_healthcheck_cid in row.Body"
-    fail_msg: "podman_healthcheck rewrite did not fire: {{ row }}"
+    fail_msg: "podman_healthcheck rewrite did not fire (stdout={{ test_clickhouse_result.stdout }}): {{ row }}"
 
 # No probe for the svc.<empty> -> SYSLOG_IDENTIFIER fallback branch:
 # the path covers records that reach journald with _TRANSPORT=kernel

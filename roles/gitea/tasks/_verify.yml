@@ -200,7 +200,7 @@
 - name: _verify | Git ls-remote over SSH (exercises gitea-serv + authorized_keys)  # noqa: command-instead-of-module
   command: git ls-remote ssh://git@127.0.0.1:22/verify/functional_test.git HEAD
   environment:
-    GIT_SSH_COMMAND: ssh -i /tmp/gitea_verify_ssh_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes
+    GIT_SSH_COMMAND: ssh -i /tmp/gitea_verify_ssh_key -o IdentitiesOnly=yes -o IdentityAgent=none -o PreferredAuthentications=publickey -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes
     GIT_TERMINAL_PROMPT: "0"
   changed_when: false
 
