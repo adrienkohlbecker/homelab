@@ -1,3 +1,36 @@
+- name: dest | Build SSH target list for backup peers
+  set_fact:
+    _zfs_autobackup_ssh_targets: >-
+      {{
+        ((zfs_autobackup_sources | map(attribute='host') | map('extract', external_ips) | list)
+        + [external_ips.bunk])
+        | unique
+      }}
+  tags:
+    - zfs_autobackup
+
+- name: dest | Scan SSH host keys from backup peers
+  when: not qemu_test
+  command: ssh-keyscan -T 5 {{ item }}
+  loop: "{{ _zfs_autobackup_ssh_targets }}"
+  changed_when: false
+  register: _zfs_autobackup_keyscan
+  tags:
+    - zfs_autobackup
+
+- name: dest | Register SSH host keys for backup peers
+  when: not qemu_test
+  known_hosts:
+    path: /root/.ssh/known_hosts
+    name: "{{ item.item }}"
+    key: "{{ item.stdout }}"
+  loop: "{{ _zfs_autobackup_keyscan.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  become: true
+  tags:
+    - zfs_autobackup
+
 - name: dest | Copy the sync script
   file:
     path: /usr/local/bin/zfs_autosync
