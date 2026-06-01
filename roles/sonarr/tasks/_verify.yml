@@ -75,11 +75,11 @@
     curl -s -o /dev/null -w '%{http_code}'
     http://sonarr.dns.podman:8989/api/v3/system/status
   become: true
-  register: _verify_dns_podman
+  register: _sonarr_dns_podman
   changed_when: false
   retries: 15
   delay: 2
-  until: _verify_dns_podman.rc == 0 and _verify_dns_podman.stdout == "401"
+  until: _sonarr_dns_podman.rc == 0 and _sonarr_dns_podman.stdout == "401"
 
 # Scratch is the pipeline bridge between the download client (sabnzbd) and
 # sonarr's import process. A dropped --volume line strands imports silently --
@@ -146,14 +146,14 @@
 - name: _verify | Stat the sonarr config dir
   stat:
     path: /mnt/services/sonarr
-  register: _verify_config_dir
+  register: _sonarr_config_dir
   become: true
 
 - name: _verify | Sonarr config dir is group media
   assert:
     that:
-      - _verify_config_dir.stat.gr_name == "media"
-    fail_msg: "/mnt/services/sonarr is not group media (gr_name={{ _verify_config_dir.stat.gr_name }})"
+      - _sonarr_config_dir.stat.gr_name == "media"
+    fail_msg: "/mnt/services/sonarr is not group media (gr_name={{ _sonarr_config_dir.stat.gr_name }})"
 
 # config.xml is the role's other fragile contract: sonarr rewrites it on
 # every shutdown, so config.xml.j2's element order + casing must match
@@ -198,18 +198,18 @@
       its element order/casing drifted from sonarr's writeback, so deploying
       would restart-churn. Re-capture config.xml.j2 from a running instance.
 
-- name: _verify | config.xml ownership survived writeback
+- name: _verify | Config.xml ownership survived writeback
   stat:
     path: /mnt/services/sonarr/config.xml
-  register: _verify_conf_stat
+  register: _sonarr_conf_stat
   become: true
 
-- name: _verify | config.xml is still owned sonarr:media mode 0600
+- name: _verify | Config.xml is still owned sonarr:media mode 0600
   assert:
     that:
-      - _verify_conf_stat.stat.pw_name == "sonarr"
-      - _verify_conf_stat.stat.gr_name == "media"
-      - _verify_conf_stat.stat.mode == "0600"
+      - _sonarr_conf_stat.stat.pw_name == "sonarr"
+      - _sonarr_conf_stat.stat.gr_name == "media"
+      - _sonarr_conf_stat.stat.mode == "0600"
     fail_msg: >-
       sonarr's writeback changed config.xml ownership/mode from the ansible-applied
-      sonarr:media 0600 (stat={{ _verify_conf_stat.stat }})
+      sonarr:media 0600 (stat={{ _sonarr_conf_stat.stat }})
