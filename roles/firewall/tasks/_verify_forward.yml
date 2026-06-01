@@ -49,12 +49,18 @@
 # just confirms egress isn't disrupted by the sysctls or by something
 # else in our table. The container-source and wg-source MASQUERADE
 # rules are exercised by the two POSTROUTING probes below.
-# IP-literal avoids SLIRP's flaky UDP DNS resolver.
+# IP-literal avoids SLIRP's flaky UDP DNS resolver. Retries cover the
+# transient window where SLIRP's TCP egress is not yet routable (getaddrinfo
+# on the numeric IP returns EAI_AGAIN).
 - name: _verify_forward | Egress — outbound HTTP from host works
   uri:
     url: http://1.1.1.1/
     timeout: 10
-    status_code: [200, 301]
+    status_code: [-1, 200, 301]
+  register: _firewall_egress_result
+  until: _firewall_egress_result.status != -1
+  retries: 5
+  delay: 2
   become: true
 
 # Container-egress MASQUERADE — exercises -s podman_default_network

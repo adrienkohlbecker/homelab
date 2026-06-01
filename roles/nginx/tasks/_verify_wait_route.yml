@@ -10,8 +10,10 @@
 #                     for the IPv6 probe (https://[::1]/).
 #
 # status_code carries the full set of expected transient codes (incl. 413 for
-# the body-size vhost) so the probe never raises before the vhost is up; the
-# `until` keys solely on "not the default-server 404" to decide it has routed.
+# the body-size vhost) so the probe never raises before the vhost is up; -1
+# covers TLS connection errors (TLSV1_UNRECOGNIZED_NAME on noble/resolute
+# OpenSSL 3.x while nginx drains old workers after a reload). The `until`
+# retries on both 404 (default-server catch-all) and -1 (TLS race).
 - name: "_verify | Wait for a vhost to route: {{ _wait_route_host }}"
   uri:
     url: "{{ _wait_route_url | default('https://' + _wait_route_host + '/') }}"
@@ -19,8 +21,8 @@
       Host: "{{ _wait_route_host }}"
     validate_certs: false
     follow_redirects: none
-    status_code: [ 200, 204, 301, 302, 400, 404, 413 ]
+    status_code: [ -1, 200, 204, 301, 302, 400, 404, 413 ]
   register: nginx_verify_route_ready
-  until: nginx_verify_route_ready.status != 404
+  until: nginx_verify_route_ready.status not in [-1, 404]
   retries: 10
   delay: 1
