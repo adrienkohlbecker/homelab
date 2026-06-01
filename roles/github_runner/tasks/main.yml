@@ -111,8 +111,8 @@
     tasks_from: dataset
   vars:
     zfs_dataset_args:
-      dataset: rpool/ci-scratch
-      mountpoint: /mnt/ci-scratch
+      dataset: rpool/ci_scratch
+      mountpoint: /mnt/ci_scratch
       owner: github_runner
       group: github_runner
       extra_properties:

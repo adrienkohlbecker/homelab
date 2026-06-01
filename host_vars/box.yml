@@ -59,6 +59,7 @@ swap_zram:
 # consumer role's _verify writes matching fixture content.
 zfs_has_services_mount: false
 zfs_has_scratch_mount: false
+zfs_has_ci_scratch_mount: false
 zfs_has_media_mount: false
 zfs_has_data_mount: false
 zfs_has_brumath_mount: false
