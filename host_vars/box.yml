@@ -24,11 +24,11 @@ fluentbit_otlp_local: true  # hyperdx receiver runs here
 ssh_public_keys: |
   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key
 
-# ARC sizing stays modest -- the test VM only has 4 GiB RAM, so the
-# lab-prod 8 GiB cap would be a no-op anyway. Production sizing is in
-# lab.yml; this is just enough headroom for ZFS to not thrash.
-zfs_arc_min: 536870912
-zfs_arc_max: 1073741824
+# ARC sizing: test VMs run large containers (HA alone peaks at ~1 GiB
+# RSS during startup) so every MiB freed from ARC is headroom for
+# podman. 256/512 MiB is enough for ZFS to not thrash on a test workload.
+zfs_arc_min: 268435456
+zfs_arc_max: 536870912
 zfs_trim_pools: []
 zfs_mount_cache_datasets: [] # must list one dataset per pool. canmount must be set to "on" on this dataset
 zfs_has_bpool: false
