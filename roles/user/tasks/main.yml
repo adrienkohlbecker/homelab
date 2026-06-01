@@ -13,34 +13,46 @@
       - attr
       - btop
       - ccze
+      - cloud-image-utils
       - curl
       - dnsutils
+      - edac-utils
+      - fatrace
       - fdupes
       - git
+      - git-delta
       - git-lfs
       - gparted
       - htop
+      - i7z
       - iotop
       - iperf3
+      - iputils-arping
       - jq
       - lsof
       - make
       - man-db
+      - mitmproxy
       - moreutils
       - mosh
+      - mutt
       - ncdu
       - nmon
       - nnn
       - nvme-cli
       - pandoc
+      - parallel
+      - parted
       - pass
       - progress
+      - psmisc
       - rsync
       - screen
       - socat
       - strace
       - stress
       - sysstat
+      - tcpdump
       - telnet
       - tig
       - tmux
