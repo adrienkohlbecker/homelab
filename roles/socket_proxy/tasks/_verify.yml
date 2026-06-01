@@ -19,32 +19,38 @@
   retries: 15
   delay: 2
   until: _socket_proxy_version.status == 200
+  become: true
 
 - name: _verify | Allowed GET /_ping returns 200
   uri:
     url: http://127.0.0.1:{{ service_ports.socket_proxy }}/_ping
     status_code: 200
+  become: true
 
 - name: _verify | Allowed GET /containers/json returns 200
   uri:
-    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/json?all=true
+    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/json
     status_code: 200
   register: _verify_socket_proxy_containers
+  become: true
 
 - name: _verify | /containers/json body is non-empty (proxy reaches the socket)
   assert:
     that:
       - _verify_socket_proxy_containers.json | length > 0
+  become: true
 
 - name: _verify | Allowed GET /containers/<id>/stats returns 200 (netdata data-plane)
   uri:
-    url: "http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/{{ _verify_socket_proxy_containers.json[0].Id }}/stats?stream=false&one-shot=true"
+    url: "http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/{{ _verify_socket_proxy_containers.json[0].Id }}/stats?stream=false"
     status_code: 200
+  become: true
 
 - name: _verify | Allowed GET /images/json returns 200
   uri:
     url: http://127.0.0.1:{{ service_ports.socket_proxy }}/images/json
     status_code: 200
+  become: true
 
 - name: _verify | Allowed GET /info returns 200
   uri:
@@ -60,6 +66,7 @@
     body_format: json
     body: {"Image": "alpine"}
     status_code: 403
+  become: true
 
 - name: _verify | Write DELETE /containers/test is blocked (403)
   uri:
@@ -73,9 +80,11 @@
   uri:
     url: http://127.0.0.1:{{ service_ports.socket_proxy }}/secrets
     status_code: 403
+  become: true
 
 # EVENTS is explicitly disabled (--env EVENTS=0); verify it is blocked.
 - name: _verify | Disabled GET /events is blocked (403)
   uri:
     url: http://127.0.0.1:{{ service_ports.socket_proxy }}/events
     status_code: 403
+  become: true
