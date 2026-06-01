@@ -132,7 +132,7 @@ resource "nexus_repository_apt_proxy" "this" {
   }
   http_client {
     blocked    = false
-    auto_block = true
+    auto_block = false
   }
   proxy {
     remote_url       = each.value
@@ -158,7 +158,7 @@ resource "nexus_repository_pypi_proxy" "pypi" {
   }
   http_client {
     blocked    = false
-    auto_block = true
+    auto_block = false
   }
   proxy {
     remote_url       = "https://pypi.org/"
@@ -186,7 +186,7 @@ resource "nexus_repository_raw_proxy" "this" {
   }
   http_client {
     blocked    = false
-    auto_block = true
+    auto_block = false
   }
   proxy {
     remote_url       = each.value
@@ -384,7 +384,7 @@ resource "nexus_repository_docker_proxy" "this" {
   }
   http_client {
     blocked    = false
-    auto_block = true
+    auto_block = false
   }
   proxy {
     remote_url       = each.value.remote_url
