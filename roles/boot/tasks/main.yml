@@ -6,6 +6,13 @@
 # Bootloader install + image staging stay role-owned (zfsbootmenu, refind);
 # disk/ESP creation stays one-time bootstrap.
 
+- name: Assert grub_bootloader is set
+  assert:
+    that: grub_bootloader is defined
+    fail_msg: boot requires grub_bootloader (bool) in host/group vars.
+  tags:
+    - boot
+
 # We boot via rEFInd -> ZFSBootMenu, never grub. linux-generic Recommends a
 # grub-* alternation; hold the whole grub family so a later kernel upgrade can't
 # pull it in to fight the rEFInd boot path. dpkg-query expands the glob; then
@@ -36,6 +43,7 @@
   apt:
     package:
       - dosfstools
+      - initramfs-tools
     cache_valid_time: 3600
   become: true
   tags:
@@ -64,7 +72,7 @@
   when:
     - boot_initramfs_modules.changed
     - not ansible_check_mode
-  command: update-initramfs -u -k all
+  command: update-initramfs -v -u -k all
   changed_when: true
   become: true
   tags:
