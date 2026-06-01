@@ -1,0 +1,7 @@
+# Release-divergent: every task in pin.yml gates on
+# ansible_distribution_major_version == "22" — jammy pins and upgrades from
+# noble-backports; noble+ no-ops entirely. The noble cell exercises the skip
+# path and propagates to consumers (ntp) that lack their own release cells.
+# Resolute takes the same no-op path as noble.
+ubuntu:
+  - noble
