@@ -140,11 +140,9 @@
   become: true
   register: boot_cmdline_properties
 
-# community.general.zfs reports `changed: false` even when it actually runs
-# `zfs set` (both pre/post reads happen after the set applied, so they match).
-# Read back to detect manual drift (an operator or debug session edited the
-# property directly); this fires a reboot ask that the module's own changed
-# flag would miss.
+# Read back to detect manual drift — an operator or debug session may have
+# edited the property directly. This fires a reboot ask the module's own
+# changed flag would miss.
 - name: cmdline | Detect property drift
   when: not grub_bootloader and zfs_root and not ansible_check_mode
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
