@@ -1,8 +1,9 @@
 """Unit tests for mise-tasks/ci/detect-roles.sh.
 
-Tests the emit() bucket-split logic (jq) and path-classification regexes.
-The script is bash, so we test via subprocess against a harness that sources
-the real script's functions, or by running the regexes through grep.
+Tests path-classification regexes (via grep against bash EREs), packer
+source/ubuntu matrix computation, and end-to-end mode dispatch.
+Bucket splitting and packer matrix are now handled by detect.py and
+tested in test_detect.py.
 """
 
 import json
@@ -39,111 +40,6 @@ def _parse_emit_output(stdout: str) -> dict[str, str]:
             key, _, val = line.partition("=")
             result[key] = val
     return result
-
-
-# ---------------------------------------------------------------------------
-# emit() bucket splitting
-# ---------------------------------------------------------------------------
-
-
-class TestEmitBucketSplit:
-    """Test the jq-based matrix splitting inside emit().
-
-    We source just enough of detect-roles.sh to define emit(), then call it
-    with crafted matrix JSON and verify the per-bucket outputs.
-    """
-
-    @staticmethod
-    def _run_emit(matrix_json: str, packer: str = "false", ci_image: str = "false") -> dict[str, str]:
-        script = f"""
-set -euo pipefail
-PACKER_SOURCES_JSON='["box"]'
-PACKER_SOURCES_BOX_JSON='["box"]'
-PACKER_SOURCES_EXTRA_JSON='[]'
-PACKER_UBUNTU_BOX_JSON='["jammy"]'
-PACKER_UBUNTU_EXTRA_JSON='["jammy"]'
-log() {{ :; }}
-emit() {{
-  local matrix=$1 packer_changed=${{2:-false}} ci_image_changed=${{3:-false}}
-  local matrix_noble matrix_resolute matrix_minimal matrix_jammy
-  matrix_noble=$(jq -c '[.[] | select(split(":") | length == 3 and (.[1] == "box" or .[1] == "box_deps") and .[2] == "noble")]' <<<"$matrix")
-  matrix_resolute=$(jq -c '[.[] | select(split(":") | length == 3 and (.[1] == "box" or .[1] == "box_deps") and .[2] == "resolute")]' <<<"$matrix")
-  matrix_minimal=$(jq -c '[.[] | select(split(":") | .[1] | . != "box" and . != "box_deps")]' <<<"$matrix")
-  matrix_jammy=$(jq -c '[.[] | select(split(":") | (.[1] == "box" or .[1] == "box_deps") and (length < 3 or (.[2] != "noble" and .[2] != "resolute")))]' <<<"$matrix")
-  echo "matrix=$matrix"
-  echo "matrix_jammy=$matrix_jammy"
-  echo "matrix_noble=$matrix_noble"
-  echo "matrix_resolute=$matrix_resolute"
-  echo "matrix_minimal=$matrix_minimal"
-  echo "packer_changed=$packer_changed"
-  echo "ci_image_changed=$ci_image_changed"
-}}
-emit '{matrix_json}' {packer} {ci_image}
-"""
-        result = _run_bash(script)
-        assert result.returncode == 0, f"emit failed: {result.stderr}"
-        return _parse_emit_output(result.stdout)
-
-    def test_jammy_box_cells(self) -> None:
-        m = json.dumps(["alpha:box", "beta:box_deps"])
-        out = self._run_emit(m)
-        jammy = json.loads(out["matrix_jammy"])
-        assert sorted(jammy) == ["alpha:box", "beta:box_deps"]
-        assert json.loads(out["matrix_noble"]) == []
-        assert json.loads(out["matrix_resolute"]) == []
-        assert json.loads(out["matrix_minimal"]) == []
-
-    def test_noble_cells(self) -> None:
-        m = json.dumps(["netdata:box_deps:noble", "zfs:box:noble"])
-        out = self._run_emit(m)
-        noble = json.loads(out["matrix_noble"])
-        assert sorted(noble) == ["netdata:box_deps:noble", "zfs:box:noble"]
-        assert json.loads(out["matrix_jammy"]) == []
-
-    def test_resolute_cells(self) -> None:
-        m = json.dumps(["podman:box:resolute", "netdata:box_deps:resolute"])
-        out = self._run_emit(m)
-        resolute = json.loads(out["matrix_resolute"])
-        assert sorted(resolute) == ["netdata:box_deps:resolute", "podman:box:resolute"]
-
-    def test_minimal_cells(self) -> None:
-        m = json.dumps(["cleanup:minimal", "cleanup:box"])
-        out = self._run_emit(m)
-        minimal = json.loads(out["matrix_minimal"])
-        assert minimal == ["cleanup:minimal"]
-        jammy = json.loads(out["matrix_jammy"])
-        assert jammy == ["cleanup:box"]
-
-    def test_mixed_matrix(self) -> None:
-        m = json.dumps([
-            "alpha:box",
-            "beta:box_deps",
-            "cleanup:minimal",
-            "netdata:box_deps:noble",
-            "podman:box:resolute",
-        ])
-        out = self._run_emit(m)
-        assert sorted(json.loads(out["matrix_jammy"])) == ["alpha:box", "beta:box_deps"]
-        assert json.loads(out["matrix_noble"]) == ["netdata:box_deps:noble"]
-        assert json.loads(out["matrix_resolute"]) == ["podman:box:resolute"]
-        assert json.loads(out["matrix_minimal"]) == ["cleanup:minimal"]
-
-    def test_empty_matrix(self) -> None:
-        out = self._run_emit("[]")
-        for key in ("matrix_jammy", "matrix_noble", "matrix_resolute", "matrix_minimal"):
-            assert json.loads(out[key]) == []
-
-    def test_packer_and_ci_image_flags_pass_through(self) -> None:
-        out = self._run_emit("[]", packer="true", ci_image="true")
-        assert out["packer_changed"] == "true"
-        assert out["ci_image_changed"] == "true"
-
-    def test_lab_pug_go_to_minimal_bucket(self) -> None:
-        m = json.dumps(["somerole:lab", "anotherrole:pug"])
-        out = self._run_emit(m)
-        minimal = json.loads(out["matrix_minimal"])
-        assert sorted(minimal) == ["anotherrole:pug", "somerole:lab"]
-        assert json.loads(out["matrix_jammy"]) == []
 
 
 # ---------------------------------------------------------------------------
@@ -277,84 +173,6 @@ class TestPathRegexes:
 # ---------------------------------------------------------------------------
 # Packer source matrix
 # ---------------------------------------------------------------------------
-
-
-class TestPackerSources:
-    @staticmethod
-    def _run_packer_sources(inputs_sources: str = "") -> dict[str, list]:
-        script = f"""
-set -euo pipefail
-INPUTS_SOURCES='{inputs_sources}'
-PACKER_SOURCES_JSON=$(jq -cn --arg s "${{INPUTS_SOURCES:-}}" \\
-  '($s | split(" ") | map(select(. != ""))) as $l
-   | if ($l | length) == 0 then ["box", "pug", "lab", "hetzner"] else $l end')
-PACKER_SOURCES_BOX_JSON=$(jq -cn --argjson all "$PACKER_SOURCES_JSON" '$all | map(select(. == "box"))')
-PACKER_SOURCES_EXTRA_JSON=$(jq -cn --argjson all "$PACKER_SOURCES_JSON" '$all | map(select(. != "box"))')
-echo "sources=$PACKER_SOURCES_JSON"
-echo "box=$PACKER_SOURCES_BOX_JSON"
-echo "extra=$PACKER_SOURCES_EXTRA_JSON"
-"""
-        result = _run_bash(script)
-        assert result.returncode == 0, result.stderr
-        parsed = _parse_emit_output(result.stdout)
-        return {k: json.loads(v) for k, v in parsed.items()}
-
-    def test_default_full_set(self) -> None:
-        out = self._run_packer_sources()
-        assert out["sources"] == ["box", "pug", "lab", "hetzner"]
-        assert out["box"] == ["box"]
-        assert out["extra"] == ["pug", "lab", "hetzner"]
-
-    def test_explicit_sources(self) -> None:
-        out = self._run_packer_sources("lab pug")
-        assert out["sources"] == ["lab", "pug"]
-        assert out["box"] == []
-        assert out["extra"] == ["lab", "pug"]
-
-    def test_box_only(self) -> None:
-        out = self._run_packer_sources("box")
-        assert out["sources"] == ["box"]
-        assert out["box"] == ["box"]
-        assert out["extra"] == []
-
-
-# ---------------------------------------------------------------------------
-# Packer ubuntu matrix
-# ---------------------------------------------------------------------------
-
-
-class TestPackerUbuntu:
-    @staticmethod
-    def _run_packer_ubuntu(inputs_ubuntu: str = "") -> dict[str, list]:
-        env = {}
-        if inputs_ubuntu:
-            env["INPUTS_UBUNTU"] = inputs_ubuntu
-        script = """
-set -euo pipefail
-if [ -n "${INPUTS_UBUNTU:-}" ]; then
-  PACKER_UBUNTU_BOX_JSON=$(jq -cn --arg u "$INPUTS_UBUNTU" '[$u]')
-  PACKER_UBUNTU_EXTRA_JSON=$PACKER_UBUNTU_BOX_JSON
-else
-  PACKER_UBUNTU_BOX_JSON='["jammy","noble","resolute"]'
-  PACKER_UBUNTU_EXTRA_JSON='["jammy"]'
-fi
-echo "box=$PACKER_UBUNTU_BOX_JSON"
-echo "extra=$PACKER_UBUNTU_EXTRA_JSON"
-"""
-        result = _run_bash(script, env=env)
-        assert result.returncode == 0, result.stderr
-        parsed = _parse_emit_output(result.stdout)
-        return {k: json.loads(v) for k, v in parsed.items()}
-
-    def test_default_releases(self) -> None:
-        out = self._run_packer_ubuntu()
-        assert out["box"] == ["jammy", "noble", "resolute"]
-        assert out["extra"] == ["jammy"]
-
-    def test_pinned_release(self) -> None:
-        out = self._run_packer_ubuntu("noble")
-        assert out["box"] == ["noble"]
-        assert out["extra"] == ["noble"]
 
 
 # ---------------------------------------------------------------------------
