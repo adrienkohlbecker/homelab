@@ -234,17 +234,23 @@
 
 # Ubuntu's golang-github-containers-common (0.57.4 -- the newest in either
 # jammy or noble, and already pinned forward by the backport list above)
-# ships a default seccomp profile that predates the fchmodat2 syscall
-# (added in kernel 6.6). On the HWE 6.x kernel, GNU tar 1.35+ routes
-# directory chmods through fchmodat2; the profile's default SCMP_ACT_ERRNO
-# then blocks it (EPERM), so any image whose entrypoint extracts+chmods its
-# tree at boot breaks -- roundcube's webroot was the first casualty (every
-# dir stayed 0700 -> apache 403). libseccomp 2.5.3 already resolves the
-# name; only the profile's allow-list lacks it, so backporting libseccomp
-# wouldn't help. Derive an augmented profile (live default + fchmodat2) and
-# make it podman's default. Purely additive -- no existing container that
-# already starts can regress. Picked up at the next container (re)create;
-# no daemon reload needed. Full writeup: notes/podman_seccomp_fchmodat2.md.
+# ships a default seccomp profile that predates several syscalls the fleet
+# needs on the HWE 6.x kernel:
+#
+#   fchmodat2 (kernel 6.6): GNU tar 1.35+ routes directory chmods through
+#     it; the profile's SCMP_ACT_ERRNO blocks it (EPERM), breaking any
+#     image whose entrypoint extracts+chmods (roundcube 403 was the first
+#     casualty). Full writeup: notes/podman_seccomp_fchmodat2.md.
+#
+#   io_uring_setup/enter/register (kernel 5.1): QEMU aio=io_uring inside
+#     CI job containers needs the syscall family unblocked; without it the
+#     VM exits immediately with "failed to init linux io_uring ring".
+#
+# libseccomp 2.5.3 resolves the names; only the profile's allow-list
+# lacks them, so backporting libseccomp wouldn't help. Derive an augmented
+# profile (live default + missing syscalls) and make it podman's default.
+# Purely additive -- no existing container that already starts can regress.
+# Picked up at the next container (re)create; no daemon reload needed.
 #
 # Gated on `not (ansible_check_mode and podman_apt.changed)`: the stock
 # profile ships with golang-github-containers-common, pulled in by the
@@ -262,7 +268,7 @@
   tags:
     - podman
 
-- name: install | Install seccomp profile with fchmodat2 allowed
+- name: install | Install augmented seccomp profile
   when: not (ansible_check_mode and podman_apt.changed)
   template:
     src: seccomp.json.j2
