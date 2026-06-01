@@ -296,6 +296,15 @@
     state: restarted
   become: true
 
+# Map the netdata vhost FQDN to loopback for SNI-correct probing: noble/resolute
+# OpenSSL 3.x rejects SNI=localhost with TLSV1_UNRECOGNIZED_NAME.
+- name: _verify | Map the netdata vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 netdata.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 # --- nginx Authelia gate + URL-token bypass for cross-host polling ---
 # Browser path through `https://netdata.<host>.<domain>` is gated
 # by Authelia forward-auth; lab's homepage_alerts timer (and any
@@ -311,9 +320,7 @@
 # nginx helper, not service-specific, so we don't duplicate it here.
 - name: _verify | Netdata reachable through nginx with auth_token bypass
   uri:
-    url: https://localhost/api/v1/info?auth_token={{ netdata_alerts_token }}
-    headers:
-      Host: netdata.{{ inventory_hostname }}.{{ domain }}
+    url: "https://netdata.{{ inventory_hostname }}.{{ domain }}/api/v1/info?auth_token={{ netdata_alerts_token }}"
     validate_certs: false
     status_code: 200
   register: _netdata_bypass
@@ -324,9 +331,7 @@
 
 - name: _verify | Browser hit without auth redirects to Authelia
   uri:
-    url: https://localhost/
-    headers:
-      Host: netdata.{{ inventory_hostname }}.{{ domain }}
+    url: "https://netdata.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     follow_redirects: none
     status_code: 302
@@ -338,9 +343,7 @@
 
 - name: _verify | Browser hit with wrong auth_token redirects to Authelia
   uri:
-    url: https://localhost/?auth_token=wrong_value_must_not_match
-    headers:
-      Host: netdata.{{ inventory_hostname }}.{{ domain }}
+    url: "https://netdata.{{ inventory_hostname }}.{{ domain }}/?auth_token=wrong_value_must_not_match"
     validate_certs: false
     follow_redirects: none
     status_code: 302
