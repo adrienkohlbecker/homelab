@@ -55,7 +55,7 @@ def sort_ini(fname):
             parts.extend(subvals)
     sorted_output = "\n".join(parts) + "\n"
 
-    normalized = "\n".join(l.strip() for l in original.splitlines() if l.strip()) + "\n"
+    normalized = "\n".join(line.strip() for line in original.splitlines() if line.strip()) + "\n"
     if sorted_output == normalized:
         return
 
