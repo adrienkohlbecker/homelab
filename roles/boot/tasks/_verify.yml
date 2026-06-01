@@ -5,7 +5,7 @@
 # console/_verify.yml. Skipped on aarch64 — EDK2 aarch64 has a known reboot
 # bug on this image and the test box bypasses ZBM entirely.
 - name: _verify | Reboot to apply boot-chain changes
-  when: ansible_architecture != 'aarch64'
+  when: not grub_bootloader and ansible_architecture != 'aarch64'
   reboot:
     reboot_timeout: 600
   become: true
@@ -14,6 +14,7 @@
 # "no grub installed" which is a tautology on test fixtures that never had
 # grub. Also assert none are installed, which is the hold's intended effect.
 - name: _verify | Dpkg install status for grub*
+  when: not grub_bootloader
   command: dpkg-query -W -f='${binary:Package} ${db:Status-Want} ${db:Status-Status}\n' 'grub*'
   changed_when: false
   failed_when: false
@@ -21,6 +22,7 @@
   become: true
 
 - name: _verify | At least one grub package is held
+  when: not grub_bootloader
   assert:
     that: >-
       _boot_verify_grub_status.stdout_lines
@@ -31,6 +33,7 @@
       did not take effect: {{ _boot_verify_grub_status.stdout_lines }}
 
 - name: _verify | No grub package is installed
+  when: not grub_bootloader
   assert:
     that: >-
       _boot_verify_grub_status.stdout_lines
@@ -67,12 +70,14 @@
 # values are arch-specific (uart8250+ttyS0 on x86, pl011+ttyAMA0 on arm64),
 # so the checks below match the arch-agnostic prefix only.
 - name: _verify | Read the assembled ZBM commandline
+  when: not grub_bootloader
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
   register: _boot_verify_cmdline
   changed_when: false
   become: true
 
 - name: _verify | Commandline carries the base console args
+  when: not grub_bootloader
   vars:
     _serial: "{{ (ansible_architecture == 'aarch64') | ternary('ttyAMA0', 'ttyS0') }}"
   assert:
@@ -88,14 +93,14 @@
 # Post-reboot this proves the ZBM property propagated through the boot chain,
 # not just that the ZFS property was set. Skipped on aarch64 (no reboot above).
 - name: _verify | Read the running kernel's cmdline
-  when: ansible_architecture != 'aarch64'
+  when: not grub_bootloader and ansible_architecture != 'aarch64'
   slurp:
     src: /proc/cmdline
   register: _boot_verify_proc_cmdline
   become: true
 
 - name: _verify | Running kernel booted with the base console args
-  when: ansible_architecture != 'aarch64'
+  when: not grub_bootloader and ansible_architecture != 'aarch64'
   vars:
     _cmdline: "{{ _boot_verify_proc_cmdline.content | b64decode }}"
   assert:

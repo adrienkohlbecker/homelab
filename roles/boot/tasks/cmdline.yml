@@ -18,16 +18,19 @@
 # `when: not grub_bootloader` for a ZBM-only fragment (e.g. crashkernel, where
 # grub hosts get the value from the kdump-tools package's own grub.d snippet).
 
-- name: cmdline | Validate inputs
+- name: cmdline | Validate inputs ({{ boot_cmdline_args.name }})
   assert:
     that:
       - boot_cmdline_args is defined
       - boot_cmdline_args.name is defined
       - boot_cmdline_args.contents is defined
       - boot_cmdline_args.grub_scope | default('default') in ['default', 'all']
+      - grub_bootloader is defined
+      - grub_bootloader or (zfs_root is defined and zfs_root)
     fail_msg: >-
       boot_cmdline_args requires 'name' and 'contents';
-      optional 'grub_scope' must be 'default' or 'all'
+      optional 'grub_scope' must be 'default' or 'all'.
+      grub_bootloader must be defined; non-grub hosts require zfs_root=true
 
 # ---- grub hosts ----
 - name: cmdline | Create /etc/default/grub.d directory
@@ -40,7 +43,7 @@
     mode: "0755"
   become: true
 
-- name: cmdline | Write grub fragment
+- name: cmdline | Write grub fragment ({{ boot_cmdline_args.name }})
   when: grub_bootloader and boot_cmdline_args.contents | length > 0
   vars:
     _boot_grub_var: "{{ 'GRUB_CMDLINE_LINUX' if (boot_cmdline_args.grub_scope | default('default')) == 'all' else 'GRUB_CMDLINE_LINUX_DEFAULT' }}"
@@ -55,7 +58,7 @@
   register: boot_cmdline_grub_present
   become: true
 
-- name: cmdline | Remove grub fragment
+- name: cmdline | Remove grub fragment ({{ boot_cmdline_args.name }})
   when: grub_bootloader and boot_cmdline_args.contents | length == 0
   file:
     path: "/etc/default/grub.d/99-{{ boot_cmdline_args.grub_name | default(boot_cmdline_args.name) }}.cfg"
@@ -63,7 +66,7 @@
   register: boot_cmdline_grub_absent
   become: true
 
-- name: cmdline | Update grub
+- name: cmdline | Update grub ({{ boot_cmdline_args.name }})
   when: >-
     grub_bootloader
     and not ansible_check_mode
@@ -84,7 +87,7 @@
     mode: "0755"
   become: true
 
-- name: cmdline | Write fragment
+- name: cmdline | Write fragment ({{ boot_cmdline_args.name }})
   when: not grub_bootloader and boot_cmdline_args.contents | length > 0
   copy:
     dest: /etc/zfsbootmenu/{{ boot_cmdline_args.name }}
@@ -96,7 +99,7 @@
   register: boot_cmdline_zbm_present
   become: true
 
-- name: cmdline | Remove fragment
+- name: cmdline | Remove fragment ({{ boot_cmdline_args.name }})
   when: not grub_bootloader and boot_cmdline_args.contents | length == 0
   file:
     path: /etc/zfsbootmenu/{{ boot_cmdline_args.name }}
@@ -109,18 +112,8 @@
   find:
     paths: /etc/zfsbootmenu
     file_type: file
-    excludes:
-      - "*~"
-      - "*.swp"
-      - "*.swo"
-      - "*.bak"
-      - "*.orig"
-      - "*.tmp"
-      - "*.dpkg-old"
-      - "*.dpkg-new"
-      - "*.dpkg-dist"
-      - "*.ucf-old"
-      - ".*"
+    patterns: '^[a-z][a-z0-9_-]*$'
+    use_regex: true
   register: boot_cmdline_files
   become: true
 
@@ -148,16 +141,24 @@
   register: boot_cmdline_properties
 
 # community.general.zfs reports `changed: false` even when it actually runs
-# `zfs set` (both pre/post reads happen after the set applied, so they match);
-# fall back to the file-write tasks' changed flag so a fresh fragment still
-# triggers the reboot ask.
-- name: cmdline | Ask to reboot
+# `zfs set` (both pre/post reads happen after the set applied, so they match).
+# Read back to detect manual drift (an operator or debug session edited the
+# property directly); this fires a reboot ask that the module's own changed
+# flag would miss.
+- name: cmdline | Detect property drift
+  when: not grub_bootloader and zfs_root and not ansible_check_mode
+  command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
+  register: boot_cmdline_readback
+  changed_when: boot_cmdline_readback.stdout | trim != _boot_assembled_cmdline
+  become: true
+- name: cmdline | Ask to reboot ({{ boot_cmdline_args.name }})
   when: >-
     (boot_cmdline_grub_present is defined and boot_cmdline_grub_present.changed)
     or (boot_cmdline_grub_absent is defined and boot_cmdline_grub_absent.changed)
     or (boot_cmdline_zbm_present is defined and boot_cmdline_zbm_present.changed)
     or (boot_cmdline_zbm_absent is defined and boot_cmdline_zbm_absent.changed)
     or (boot_cmdline_properties is defined and boot_cmdline_properties.changed)
+    or (boot_cmdline_readback is defined and boot_cmdline_readback.changed)
   file:
     path: /var/run/reboot-required
     state: touch
