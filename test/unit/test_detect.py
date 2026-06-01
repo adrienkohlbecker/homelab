@@ -286,11 +286,21 @@ class TestSplitMatrixBuckets:
         assert result.resolute == ["netdata:box_deps:resolute", "podman:box:resolute"]
 
     def test_minimal_cells(self) -> None:
-        result = detect.split_matrix_buckets(
-            ["cleanup:minimal", "somerole:lab", "anotherrole:pug"]
-        )
-        assert result.minimal == ["anotherrole:pug", "cleanup:minimal", "somerole:lab"]
+        result = detect.split_matrix_buckets(["cleanup:minimal"])
+        assert result.minimal == ["cleanup:minimal"]
         assert result.jammy == []
+        assert result.lab == []
+        assert result.pug == []
+
+    def test_lab_cells(self) -> None:
+        result = detect.split_matrix_buckets(["zfs:lab", "zfs:lab:noble"])
+        assert result.lab == ["zfs:lab", "zfs:lab:noble"]
+        assert result.minimal == []
+
+    def test_pug_cells(self) -> None:
+        result = detect.split_matrix_buckets(["swap:pug"])
+        assert result.pug == ["swap:pug"]
+        assert result.minimal == []
 
     def test_mixed_matrix(self) -> None:
         specs = [
@@ -299,16 +309,20 @@ class TestSplitMatrixBuckets:
             "cleanup:minimal",
             "netdata:box_deps:noble",
             "podman:box:resolute",
+            "zfs:lab",
+            "swap:pug",
         ]
         result = detect.split_matrix_buckets(specs)
         assert result.jammy == ["alpha:box", "beta:box_deps"]
         assert result.noble == ["netdata:box_deps:noble"]
         assert result.resolute == ["podman:box:resolute"]
         assert result.minimal == ["cleanup:minimal"]
+        assert result.lab == ["zfs:lab"]
+        assert result.pug == ["swap:pug"]
 
     def test_empty_matrix(self) -> None:
         result = detect.split_matrix_buckets([])
-        assert result == detect.MatrixBuckets([], [], [], [])
+        assert result == detect.MatrixBuckets([], [], [], [], [], [])
 
     def test_box_deps_jammy_no_release(self) -> None:
         result = detect.split_matrix_buckets(["redis:box_deps"])
@@ -318,10 +332,11 @@ class TestSplitMatrixBuckets:
         result = detect.split_matrix_buckets(["redis:box_deps:noble"])
         assert result.noble == ["redis:box_deps:noble"]
 
-    def test_lab_pug_go_to_minimal(self) -> None:
+    def test_lab_pug_separate_buckets(self) -> None:
         result = detect.split_matrix_buckets(["somerole:lab", "anotherrole:pug"])
-        assert result.minimal == ["anotherrole:pug", "somerole:lab"]
-        assert result.jammy == []
+        assert result.lab == ["somerole:lab"]
+        assert result.pug == ["anotherrole:pug"]
+        assert result.minimal == []
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +349,9 @@ class TestComputePackerSources:
         result = detect.compute_packer_sources()
         assert result.all == ["box", "pug", "lab", "hetzner"]
         assert result.box == ["box"]
-        assert result.extra == ["pug", "lab", "hetzner"]
+        assert result.lab == ["lab"]
+        assert result.pug == ["pug"]
+        assert result.hetzner == ["hetzner"]
 
     def test_empty_string(self) -> None:
         result = detect.compute_packer_sources("")
@@ -344,19 +361,24 @@ class TestComputePackerSources:
         result = detect.compute_packer_sources("lab pug")
         assert result.all == ["lab", "pug"]
         assert result.box == []
-        assert result.extra == ["lab", "pug"]
+        assert result.lab == ["lab"]
+        assert result.pug == ["pug"]
+        assert result.hetzner == []
 
     def test_box_only(self) -> None:
         result = detect.compute_packer_sources("box")
         assert result.all == ["box"]
         assert result.box == ["box"]
-        assert result.extra == []
+        assert result.lab == []
+        assert result.pug == []
+        assert result.hetzner == []
 
     def test_preserves_order(self) -> None:
         result = detect.compute_packer_sources("hetzner box lab")
         assert result.all == ["hetzner", "box", "lab"]
         assert result.box == ["box"]
-        assert result.extra == ["hetzner", "lab"]
+        assert result.lab == ["lab"]
+        assert result.hetzner == ["hetzner"]
 
 
 # ---------------------------------------------------------------------------
@@ -368,22 +390,26 @@ class TestComputePackerUbuntu:
     def test_default_releases(self) -> None:
         result = detect.compute_packer_ubuntu()
         assert result.box == ["jammy", "noble", "resolute"]
-        assert result.extra == ["jammy"]
+        assert result.lab == ["jammy", "noble", "resolute"]
+        assert result.pug == ["jammy", "noble", "resolute"]
+        assert result.hetzner == ["jammy"]
 
     def test_empty_string(self) -> None:
         result = detect.compute_packer_ubuntu("")
         assert result.box == ["jammy", "noble", "resolute"]
-        assert result.extra == ["jammy"]
+        assert result.hetzner == ["jammy"]
 
     def test_pinned_release(self) -> None:
         result = detect.compute_packer_ubuntu("noble")
         assert result.box == ["noble"]
-        assert result.extra == ["noble"]
+        assert result.lab == ["noble"]
+        assert result.pug == ["noble"]
+        assert result.hetzner == ["noble"]
 
     def test_pinned_resolute(self) -> None:
         result = detect.compute_packer_ubuntu("resolute")
         assert result.box == ["resolute"]
-        assert result.extra == ["resolute"]
+        assert result.lab == ["resolute"]
 
 
 # ---------------------------------------------------------------------------
@@ -1307,11 +1333,12 @@ class TestCmdClassify:
 
 class TestCmdSplitBuckets:
     def test_basic_split(self, capsys: pytest.CaptureFixture) -> None:
-        rc = detect._cmd_split_buckets([json.dumps(["alpha:box", "beta:minimal"])])
+        rc = detect._cmd_split_buckets([json.dumps(["alpha:box", "beta:minimal", "zfs:lab"])])
         assert rc == 0
         result = json.loads(capsys.readouterr().out)
         assert result["jammy"] == ["alpha:box"]
         assert result["minimal"] == ["beta:minimal"]
+        assert result["lab"] == ["zfs:lab"]
 
     def test_no_args_returns_error(self) -> None:
         rc = detect._cmd_split_buckets([])
@@ -1324,6 +1351,8 @@ class TestCmdPackerSources:
         assert rc == 0
         result = json.loads(capsys.readouterr().out)
         assert result["all"] == ["box", "pug", "lab", "hetzner"]
+        assert result["lab"] == ["lab"]
+        assert result["pug"] == ["pug"]
 
     def test_explicit(self, capsys: pytest.CaptureFixture) -> None:
         rc = detect._cmd_packer_sources(["lab pug"])
@@ -1331,6 +1360,8 @@ class TestCmdPackerSources:
         result = json.loads(capsys.readouterr().out)
         assert result["all"] == ["lab", "pug"]
         assert result["box"] == []
+        assert result["lab"] == ["lab"]
+        assert result["pug"] == ["pug"]
 
 
 class TestCmdPackerUbuntu:
@@ -1339,14 +1370,16 @@ class TestCmdPackerUbuntu:
         assert rc == 0
         result = json.loads(capsys.readouterr().out)
         assert result["box"] == ["jammy", "noble", "resolute"]
-        assert result["extra"] == ["jammy"]
+        assert result["lab"] == ["jammy", "noble", "resolute"]
+        assert result["pug"] == ["jammy", "noble", "resolute"]
+        assert result["hetzner"] == ["jammy"]
 
     def test_pinned(self, capsys: pytest.CaptureFixture) -> None:
         rc = detect._cmd_packer_ubuntu(["noble"])
         assert rc == 0
         result = json.loads(capsys.readouterr().out)
         assert result["box"] == ["noble"]
-        assert result["extra"] == ["noble"]
+        assert result["lab"] == ["noble"]
 
 
 class TestCmdEmit:
@@ -1370,6 +1403,8 @@ class TestCmdEmit:
         assert json.loads(out["matrix_minimal"]) == ["beta:minimal"]
         assert json.loads(out["matrix_noble"]) == []
         assert json.loads(out["matrix_resolute"]) == []
+        assert json.loads(out["matrix_lab"]) == []
+        assert json.loads(out["matrix_pug"]) == []
         assert out["packer_changed"] == "false"
         assert out["ci_image_changed"] == "false"
 
@@ -1401,7 +1436,8 @@ class TestCmdEmit:
         out = self._parse_kv(capsys.readouterr().out)
         assert json.loads(out["packer_sources"]) == ["lab", "pug"]
         assert json.loads(out["packer_sources_box"]) == []
-        assert json.loads(out["packer_sources_extra"]) == ["lab", "pug"]
+        assert json.loads(out["packer_sources_lab"]) == ["lab"]
+        assert json.loads(out["packer_sources_pug"]) == ["pug"]
 
     def test_packer_ubuntu_default(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -1411,7 +1447,9 @@ class TestCmdEmit:
         assert rc == 0
         out = self._parse_kv(capsys.readouterr().out)
         assert json.loads(out["packer_ubuntu_box"]) == ["jammy", "noble", "resolute"]
-        assert json.loads(out["packer_ubuntu_extra"]) == ["jammy"]
+        assert json.loads(out["packer_ubuntu_lab"]) == ["jammy", "noble", "resolute"]
+        assert json.loads(out["packer_ubuntu_pug"]) == ["jammy", "noble", "resolute"]
+        assert json.loads(out["packer_ubuntu_hetzner"]) == ["jammy"]
 
     def test_packer_ubuntu_pinned(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -1421,7 +1459,7 @@ class TestCmdEmit:
         assert rc == 0
         out = self._parse_kv(capsys.readouterr().out)
         assert json.loads(out["packer_ubuntu_box"]) == ["noble"]
-        assert json.loads(out["packer_ubuntu_extra"]) == ["noble"]
+        assert json.loads(out["packer_ubuntu_lab"]) == ["noble"]
 
     def test_github_output_file(
         self,
@@ -1439,6 +1477,7 @@ class TestCmdEmit:
         kv = self._parse_kv(content)
         assert json.loads(kv["matrix_jammy"]) == ["alpha:box"]
         assert json.loads(kv["packer_sources"]) == ["box", "pug", "lab", "hetzner"]
+        assert json.loads(kv["packer_sources_lab"]) == ["lab"]
 
     def test_log_to_stderr(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -1458,6 +1497,8 @@ class TestCmdEmit:
                 "cleanup:minimal",
                 "net:box_deps:noble",
                 "apt:box:resolute",
+                "zfs:lab",
+                "swap:pug",
             ]
         )
         rc = detect._cmd_emit(["--matrix", matrix])
@@ -1467,6 +1508,8 @@ class TestCmdEmit:
         assert json.loads(out["matrix_noble"]) == ["net:box_deps:noble"]
         assert json.loads(out["matrix_resolute"]) == ["apt:box:resolute"]
         assert json.loads(out["matrix_minimal"]) == ["cleanup:minimal"]
+        assert json.loads(out["matrix_lab"]) == ["zfs:lab"]
+        assert json.loads(out["matrix_pug"]) == ["swap:pug"]
 
 
 # ---------------------------------------------------------------------------

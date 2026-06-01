@@ -1,6 +1,7 @@
 # box exercises zram + zvol (ZFS-backed); minimal exercises zram-only
-# on ext4 (no zvol, no partition). The two cells cover the zvol-gated
-# and zvol-absent paths.
+# on ext4 (no zvol, no partition); pug exercises zram + raw-partition swap
+# (the only host with swap_partition — fstab + swapon path in main.yml).
 machines:
   box:
   minimal:
+  pug:

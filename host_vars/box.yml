@@ -179,10 +179,28 @@ netdata_diskspace_blocklist: []
 homepage_netdata_hosts:
   - box
 
-smb_shares: []
+# Test shares so samba's smb.conf.j2 renders actual [share] blocks and the
+# smbd_zfs_mounts_override.conf.j2 template exercises its loop. Paths don't
+# need to exist for smbd to start (it just can't serve files). The override
+# template gates on zfs_has_*_mount (all false on box), so it renders an
+# empty [Unit] section regardless of paths used here.
+smb_shares:
+  - name: test_share
+    path: /tmp/samba_test
+    opts: |
+      guest ok = yes
+      read only = yes
 
 subid_users:
   - gitea_runner
+
+# Exercise the extra-subgid-groups loop in the subid role (getent lookup +
+# template rendering). On prod lab this maps the kvm gid into
+# github_runner's userns; here we map the disk group into gitea_runner's
+# userns as a harmless equivalent. Without this, the loop body never fires.
+subid_extra_subgid_groups:
+  - user: gitea_runner
+    group: disk
 
 # Override gitea_runner_labels (group_vars/all.yml defaults to the
 # docker-based runner-images) to a `:host` runner so the _verify

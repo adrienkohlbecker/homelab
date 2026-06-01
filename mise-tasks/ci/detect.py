@@ -114,6 +114,8 @@ class MatrixBuckets(NamedTuple):
     noble: list[str]
     resolute: list[str]
     minimal: list[str]
+    lab: list[str]
+    pug: list[str]
 
 
 def split_matrix_buckets(specs: list[str]) -> MatrixBuckets:
@@ -123,19 +125,27 @@ def split_matrix_buckets(specs: list[str]) -> MatrixBuckets:
       box/box_deps + no release or jammy  ->  jammy
       box/box_deps + noble                ->  noble
       box/box_deps + resolute             ->  resolute
-      anything else (minimal/lab/pug)     ->  minimal
+      lab                                 ->  lab   (needs packer_lab)
+      pug                                 ->  pug   (needs packer_pug)
+      anything else (minimal)             ->  minimal
     """
     jammy: list[str] = []
     noble: list[str] = []
     resolute: list[str] = []
     minimal: list[str] = []
+    lab: list[str] = []
+    pug: list[str] = []
 
     for spec in specs:
         parts = spec.split(":")
         machine = parts[1] if len(parts) >= 2 else ""
         release = parts[2] if len(parts) >= 3 else ""
 
-        if machine not in ("box", "box_deps"):
+        if machine == "lab":
+            lab.append(spec)
+        elif machine == "pug":
+            pug.append(spec)
+        elif machine not in ("box", "box_deps"):
             minimal.append(spec)
         elif release == "noble":
             noble.append(spec)
@@ -149,6 +159,8 @@ def split_matrix_buckets(specs: list[str]) -> MatrixBuckets:
         noble=sorted(noble),
         resolute=sorted(resolute),
         minimal=sorted(minimal),
+        lab=sorted(lab),
+        pug=sorted(pug),
     )
 
 
@@ -157,14 +169,16 @@ def split_matrix_buckets(specs: list[str]) -> MatrixBuckets:
 # ---------------------------------------------------------------------------
 
 ALL_PACKER_SOURCES = ["box", "pug", "lab", "hetzner"]
-ALL_PACKER_UBUNTU_BOX = ["jammy", "noble", "resolute"]
-DEFAULT_PACKER_UBUNTU_EXTRA = ["jammy"]
+ALL_PACKER_UBUNTU_RELEASES = ["jammy", "noble", "resolute"]
+DEFAULT_PACKER_UBUNTU_HETZNER = ["jammy"]
 
 
 class PackerSources(NamedTuple):
     all: list[str]
     box: list[str]
-    extra: list[str]
+    lab: list[str]
+    pug: list[str]
+    hetzner: list[str]
 
 
 def compute_packer_sources(inputs_sources: str = "") -> PackerSources:
@@ -176,26 +190,37 @@ def compute_packer_sources(inputs_sources: str = "") -> PackerSources:
     return PackerSources(
         all=sources,
         box=[s for s in sources if s == "box"],
-        extra=[s for s in sources if s != "box"],
+        lab=[s for s in sources if s == "lab"],
+        pug=[s for s in sources if s == "pug"],
+        hetzner=[s for s in sources if s == "hetzner"],
     )
 
 
 class PackerUbuntu(NamedTuple):
     box: list[str]
-    extra: list[str]
+    lab: list[str]
+    pug: list[str]
+    hetzner: list[str]
 
 
 def compute_packer_ubuntu(inputs_ubuntu: str = "") -> PackerUbuntu:
     """Compute packer Ubuntu release matrix from dispatch input.
 
-    Pinned release applies to both calls.  Empty returns the defaults:
-    box validates all releases, extra stays jammy-only.
+    Pinned release applies to all sources.  Empty returns defaults:
+    box/lab/pug build all releases, hetzner stays jammy-only.
     """
     if inputs_ubuntu:
-        return PackerUbuntu(box=[inputs_ubuntu], extra=[inputs_ubuntu])
+        return PackerUbuntu(
+            box=[inputs_ubuntu],
+            lab=[inputs_ubuntu],
+            pug=[inputs_ubuntu],
+            hetzner=[inputs_ubuntu],
+        )
     return PackerUbuntu(
-        box=list(ALL_PACKER_UBUNTU_BOX),
-        extra=list(DEFAULT_PACKER_UBUNTU_EXTRA),
+        box=list(ALL_PACKER_UBUNTU_RELEASES),
+        lab=list(ALL_PACKER_UBUNTU_RELEASES),
+        pug=list(ALL_PACKER_UBUNTU_RELEASES),
+        hetzner=list(DEFAULT_PACKER_UBUNTU_HETZNER),
     )
 
 
@@ -586,13 +611,19 @@ def _cmd_emit(args: list[str]) -> int:
         ("matrix_noble", json.dumps(buckets.noble)),
         ("matrix_resolute", json.dumps(buckets.resolute)),
         ("matrix_minimal", json.dumps(buckets.minimal)),
+        ("matrix_lab", json.dumps(buckets.lab)),
+        ("matrix_pug", json.dumps(buckets.pug)),
         ("packer_changed", opts.packer_changed),
         ("ci_image_changed", opts.ci_image_changed),
         ("packer_sources", json.dumps(packer.all)),
         ("packer_sources_box", json.dumps(packer.box)),
-        ("packer_sources_extra", json.dumps(packer.extra)),
+        ("packer_sources_lab", json.dumps(packer.lab)),
+        ("packer_sources_pug", json.dumps(packer.pug)),
+        ("packer_sources_hetzner", json.dumps(packer.hetzner)),
         ("packer_ubuntu_box", json.dumps(ubuntu.box)),
-        ("packer_ubuntu_extra", json.dumps(ubuntu.extra)),
+        ("packer_ubuntu_lab", json.dumps(ubuntu.lab)),
+        ("packer_ubuntu_pug", json.dumps(ubuntu.pug)),
+        ("packer_ubuntu_hetzner", json.dumps(ubuntu.hetzner)),
     ]
 
     log_parts = [
@@ -600,14 +631,20 @@ def _cmd_emit(args: list[str]) -> int:
         f"(jammy={json.dumps(buckets.jammy)}"
         f" noble={json.dumps(buckets.noble)}"
         f" resolute={json.dumps(buckets.resolute)}"
-        f" minimal={json.dumps(buckets.minimal)})",
+        f" minimal={json.dumps(buckets.minimal)}"
+        f" lab={json.dumps(buckets.lab)}"
+        f" pug={json.dumps(buckets.pug)})",
         f"packer_changed={opts.packer_changed}",
         f"ci_image_changed={opts.ci_image_changed}",
         f"packer_sources={json.dumps(packer.all)}"
         f" (box={json.dumps(packer.box)}"
-        f" extra={json.dumps(packer.extra)})",
+        f" lab={json.dumps(packer.lab)}"
+        f" pug={json.dumps(packer.pug)}"
+        f" hetzner={json.dumps(packer.hetzner)})",
         f"packer_ubuntu=(box={json.dumps(ubuntu.box)}"
-        f" extra={json.dumps(ubuntu.extra)})",
+        f" lab={json.dumps(ubuntu.lab)}"
+        f" pug={json.dumps(ubuntu.pug)}"
+        f" hetzner={json.dumps(ubuntu.hetzner)})",
     ]
     print(f"[detect-roles] result: {' '.join(log_parts)}", file=sys.stderr)
 
