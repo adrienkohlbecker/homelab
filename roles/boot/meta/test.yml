@@ -1,0 +1,4 @@
+# Box uses zfs boot path, minimal uses the grub boot path
+machines:
+  box:
+  minimal:
