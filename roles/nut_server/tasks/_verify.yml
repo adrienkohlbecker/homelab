@@ -43,15 +43,18 @@
 # (noble/resolute) upsd is socket-activated, so the .socket must be stopped
 # too -- stopping only the .service lets the next connection respawn upsd, and
 # the foreground `upsd` below then aborts with "A previous upsd instance is
-# already running". Stop the socket first so it can't re-activate; both are
-# failed_when:false since the .socket is absent on jammy's 2.7.4.
-# Placed after the config writes so nut-driver-enumerator (2.8) cannot
-# re-activate the service in between.
-- name: _verify | Stop the packaged nut-server (service + socket activation)
+# already running". The nut-driver-enumerator.path unit watches ups.conf for
+# changes and can re-activate the service between the config writes above and
+# the manual start below, so stop the enumerator chain first.
+# failed_when:false since the .socket and enumerator units are absent on
+# jammy's 2.7.4.
+- name: _verify | Stop all NUT units that could respawn upsd
   systemd:
     name: "{{ item }}"
     state: stopped
   loop:
+    - nut-driver-enumerator.path
+    - nut-driver-enumerator.service
     - nut-server.socket
     - nut-server.service
   failed_when: false
@@ -59,12 +62,23 @@
 
 # pkill + remove the pidfile before the foreground start: a socket-activated
 # upsd that hasn't fully exited (or a stale /run/nut/upsd.pid it left behind)
-# also trips the "already running" abort on 2.8.
+# also trips the "already running" abort on 2.8. The bounded wait (5s) prevents
+# a stale process from turning into a hang.
 - name: _verify | Start the dummy-ups driver and a fresh upsd
   shell: |
+    set -euo pipefail
     upsdrvctl -u root stop 2>/dev/null || true
     pkill -x upsd 2>/dev/null || true
-    while pgrep -x upsd >/dev/null 2>&1; do sleep 0.2; done
+    tries=0
+    while pgrep -x upsd >/dev/null 2>&1; do
+      sleep 0.2
+      tries=$((tries + 1))
+      if [ "$tries" -ge 25 ]; then
+        pkill -9 -x upsd 2>/dev/null || true
+        sleep 0.5
+        break
+      fi
+    done
     rm -f /run/nut/upsd.pid 2>/dev/null || true
     upsdrvctl -u root start eaton
     upsd -u root
