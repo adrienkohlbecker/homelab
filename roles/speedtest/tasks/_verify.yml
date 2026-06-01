@@ -6,12 +6,12 @@
     url: http://localhost:{{ service_ports.speedtest }}/
     status_code: 200
     return_content: true
-  register: _verify_loopback
+  register: _speedtest_loopback
   retries: 5
   delay: 1
   until:
-    - _verify_loopback.status == 200
-    - "'LibreSpeed' in _verify_loopback.content"
+    - _speedtest_loopback.status == 200
+    - "'LibreSpeed' in _speedtest_loopback.content"
   become: true
 
 # Upload smoke-test -- exercises the client_max_body_size "0" and
