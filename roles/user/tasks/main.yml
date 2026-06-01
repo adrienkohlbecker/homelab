@@ -11,8 +11,10 @@
   apt:
     pkg:
       - attr
+      - btop
       - ccze
       - curl
+      - dnsutils
       - fdupes
       - git
       - git-lfs
