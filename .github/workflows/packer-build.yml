@@ -41,8 +41,8 @@ jobs:
     # One job per (source, ubuntu) cell, from the two JSON matrices detect
     # computed (folded in from the old `prepare` job). Packer spawns one qemu VM
     # per cell -- lands on the lab-vm pool. See notes/concurrency_rework.md for
-    # the pool model: lab-vm = 4 runners that take VM workloads (packer-build +
-    # test-role); lab = 2 runners that take everything else.
+    # the pool model: lab-vm = 6 runners that take VM workloads (packer-build +
+    # test-role); lab = 4 runners that take everything else.
     #
     # `hetzner` builds the rpool disk image (its verify-boot post-processor is
     # excepted -- the cloud-init-only image has no harness machine spec), then
@@ -55,7 +55,7 @@ jobs:
     # fail-fast:false keeps one cell's failure from cancelling its siblings
     # (the old single-invocation model tore them all down).
     #
-    # max-parallel:1 serialises the matrix. The runner-pool cap (4 lab-vm
+    # max-parallel:1 serialises the matrix. The runner-pool cap (6 lab-vm
     # slots) does NOT bound RAM: lab runs prod + the CI containers and leaves
     # only ~3GB free, but each build VM wants 4GB (packer/qemu.pkr.hcl), so
     # the extra matrix (lab/pug/hetzner) running 3-up thrashed swap and qemu

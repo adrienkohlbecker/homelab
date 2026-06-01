@@ -100,19 +100,31 @@
   tags:
     - github_runner
 
-# Top-level scratch dir consumed by workflow container.options for the
-# CI test harness's --workdir-parent. Each cell mounts a unique subdir
-# embedding github.run_id + strategy.job-index so concurrent test cells
-# don't share workspace parents. tmpfiles.d below reaps idle subdirs.
-- name: Create top-level scratch directory
-  when: not (ansible_check_mode and github_runner_user.changed)
-  file:
-    dest: /mnt/scratch/github_runner/scratch
-    state: directory
-    owner: github_runner
-    group: github_runner
-    mode: "0755"
-  become: true
+# NVMe-backed dataset for CI test workdirs (qcow2 overlays + ansible
+# state). Overlays are the write-hot path during converge -- putting
+# them on rpool (NVMe) instead of dozer/scratch (SATA SSD) cuts I/O
+# latency for the 6 concurrent VMs. recordsize=64K matches qcow2's
+# default cluster size so each cluster write maps 1:1 to a ZFS record.
+- name: Create NVMe-backed CI scratch dataset
+  import_role:
+    name: zfs
+    tasks_from: dataset
+  vars:
+    zfs_dataset_args:
+      dataset: rpool/ci-scratch
+      mountpoint: /mnt/ci-scratch
+      owner: github_runner
+      group: github_runner
+      extra_properties:
+        'autobackup:bak': 'false'
+        'com.sun:auto-snapshot': 'false'
+        recordsize: 65536
+        sync: disabled
+        redundant_metadata: most
+        logbias: throughput
+        atime: 'off'
+        setuid: 'off'
+        devices: 'off'
   tags:
     - github_runner
 

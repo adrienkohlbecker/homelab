@@ -237,7 +237,7 @@ source "qemu" "ubuntu" {
   accelerator        = "${local.arch_cfg.accelerator}"
   boot_wait          = "2s"
   cpu_model          = "host"
-  cores              = 8
+  cores              = 4
   sockets            = 1
   disk_cache         = "unsafe"
   disk_compression   = false

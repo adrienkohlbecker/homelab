@@ -4,4 +4,4 @@
 # the prod lab host uses this default. -XX:+ExitOnOutOfMemoryError makes a
 # heap-exhausted JVM exit so Restart=always recovers it, instead of limping
 # while status/writable still returns 200.
-nexus_jvm_params: -Xms2G -Xmx2G -XX:MaxDirectMemorySize=1g -XX:+ExitOnOutOfMemoryError
+nexus_jvm_params: -Xms1G -Xmx1G -XX:MaxDirectMemorySize=512m -XX:+ExitOnOutOfMemoryError
