@@ -1,0 +1,6 @@
+# Removes /etc/netplan/50-cloud-init.yaml and installer-generated configs,
+# which only exist on the vanilla cloud image (minimal). Box starts with
+# a clean netplan state from packer.
+machines:
+  box:
+  minimal:

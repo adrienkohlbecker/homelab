@@ -1,8 +1,8 @@
 # minimal: the vanilla Ubuntu cloud image test fixture. ext4, no
 # ZFS, snapd + cloud-init preinstalled. Push CI fans out to this
-# variant for roles in .github/ci-minimal-roles.txt (currently just
-# `cleanup`, which exercises the snap-removal path only when snapd
-# is actually present).
+# variant for roles that list `minimal:` in their machines: dict
+# in meta/test.yml — exercises GRUB paths (vs ZBM on box), cloud-init
+# cleanup, non-ZFS compression toggles, and snap removal.
 qemu_test: true
 qemu_test_minimal: true
 
@@ -23,5 +23,10 @@ netplan:
       wakeonlan: true
       dhcp4: true
       dhcp6: false
+
+# zram-only swap (no zvol, no partition on ext4). 2G deliberately differs
+# from the generator's default so _verify proves the config drove the size.
+swap_zram:
+  size: 2G
 
 has_transcoding_acceleration: false

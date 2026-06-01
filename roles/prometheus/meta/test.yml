@@ -2,4 +2,5 @@
 # into box_deps (see packer/seed_deps.yml), so route there to skip its
 # install on every test run. prometheus is a plain apt package (not
 # podman), so box_deps' pre-baked podman just goes unused.
-machine: box_deps
+machines:
+  box_deps:

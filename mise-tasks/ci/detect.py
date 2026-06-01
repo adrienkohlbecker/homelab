@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
-"""CI change-detection logic — Python equivalents of detect-roles.sh data transforms.
+"""CI change-detection pipeline.
 
-Pure functions that classify changed files, split the matrix into per-packer
-buckets, compute packer source/ubuntu matrices, and propagate release cells.
+Complete change-detection logic: mode dispatch, green-base resolution via the
+GitHub API, changed-file classification, role-deps expansion, release-cell
+propagation, matrix bucket splitting, and output emission.
 
-detect-roles.sh retains the shell implementation; this module provides
-testable Python equivalents that can replace the bash+jq inline over time.
+Called from detect-roles.sh (a thin exec wrapper) via ``python3 detect.py run``.
 """
 
 import json
 import os
 import re
+import subprocess
 import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
 from typing import NamedTuple
 
 # ---------------------------------------------------------------------------
@@ -19,8 +25,7 @@ from typing import NamedTuple
 # ---------------------------------------------------------------------------
 
 # Full-universe triggers: a change to any of these can't be attributed to
-# specific roles, so the full universe is tested.  Keep in sync with
-# FULL_UNIVERSE_PATTERNS in detect-roles.sh.
+# specific roles, so the full universe is tested.
 FULL_UNIVERSE_PATTERNS: list[str] = [
     r"group_vars/all/[^/]+\.(yml|yaml)",
     r"group_vars/test\.yml",
@@ -202,15 +207,16 @@ def compute_packer_ubuntu(inputs_ubuntu: str = "") -> PackerUbuntu:
 def propagate_release_cells(
     direct_roles: list[str],
     consumers: dict[str, list[str]],
-    default_machines: dict[str, str],
+    role_machines: dict[str, list[str]],
     role_releases: dict[str, list[str]],
     universe: set[str],
 ) -> list[str]:
-    """Propagate release cells from changed roles onto their consumers.
+    """Propagate release + machine cells from changed roles onto their consumers.
 
     For each direct role that declares ubuntu releases in meta/test.yml,
     emit ``consumer:machine:codename`` specs for every consumer that
-    imports it and is in the testable universe.
+    imports it and is in the testable universe.  The consumer's own
+    machines: dict determines which machines get release cells.
     """
     extra: set[str] = set()
     for role in direct_roles:
@@ -223,11 +229,297 @@ def propagate_release_cells(
         for consumer in role_consumers:
             if consumer not in universe:
                 continue
-            machine = default_machines.get(consumer, "box")
-            for codename in releases:
-                extra.add(f"{consumer}:{machine}:{codename}")
+            machines = role_machines.get(consumer, ["box"])
+            for machine in machines:
+                for codename in releases:
+                    extra.add(f"{consumer}:{machine}:{codename}")
 
     return sorted(extra)
+
+
+# ---------------------------------------------------------------------------
+# Git helpers
+# ---------------------------------------------------------------------------
+
+
+def _git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *args], capture_output=True, text=True, check=check)
+
+
+def git_diff_files(base: str, head: str = "HEAD") -> list[str]:
+    result = _git("diff", "--name-only", base, head)
+    return [line for line in result.stdout.strip().splitlines() if line]
+
+
+def git_rev_parse(ref: str) -> str | None:
+    result = _git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", check=False)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def git_rev_parse_short(ref: str) -> str:
+    result = _git("rev-parse", "--short", ref, check=False)
+    return result.stdout.strip() if result.returncode == 0 else ref[:12]
+
+
+def git_fetch_commit(sha: str) -> bool:
+    result = _git("fetch", "--no-tags", "--quiet", "origin", sha, check=False)
+    return result.returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# GitHub API
+# ---------------------------------------------------------------------------
+
+CI_WORKFLOW = ".github/workflows/ci.yml"
+NIGHTLY_WORKFLOW = ".github/workflows/test-nightly.yml"
+
+
+def _gh_api_get(
+    url: str,
+    token: str,
+    *,
+    retries: int = 4,
+    retry_delay: float = 2.0,
+) -> dict | None:
+    """GET a GitHub REST API endpoint with retries.  Returns parsed JSON or None."""
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    req = urllib.request.Request(url, headers=headers)
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read())
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError):
+            if attempt < retries:
+                time.sleep(retry_delay)
+            else:
+                return None
+    return None
+
+
+def is_ancestor_of_head(
+    sha: str,
+    head_sha: str,
+    *,
+    repo: str,
+    api_url: str,
+    token: str,
+) -> bool:
+    """True when sha is an ancestor of head_sha (via the compare API)."""
+    url = f"{api_url}/repos/{repo}/compare/{sha}...{head_sha}"
+    data = _gh_api_get(url, token, retries=0)
+    if data is None:
+        return False
+    return data.get("status", "") in ("ahead", "identical")
+
+
+def nightly_actually_tested(
+    run_id: int,
+    *,
+    repo: str,
+    api_url: str,
+    token: str,
+) -> bool:
+    """True when a nightly run actually ran tests (not just the gate job)."""
+    url = f"{api_url}/repos/{repo}/actions/runs/{run_id}/jobs?per_page=100"
+    data = _gh_api_get(url, token, retries=0)
+    if data is None:
+        return False
+    return any(
+        j.get("name") != "gate" and j.get("conclusion") == "success"
+        for j in data.get("jobs", [])
+    )
+
+
+def newest_green_ancestor(
+    branch: str,
+    *,
+    head_sha: str,
+    repo: str,
+    api_url: str,
+    token: str,
+    log_fn,
+) -> str | None:
+    """Find the newest green CI/nightly run on branch that is an ancestor of head_sha."""
+    log_fn(f"  searching green ci/nightly runs on '{branch}'...")
+    page = 1
+    while True:
+        params = urllib.parse.urlencode(
+            {
+                "branch": branch,
+                "status": "success",
+                "per_page": 100,
+                "page": page,
+            }
+        )
+        url = f"{api_url}/repos/{repo}/actions/runs?{params}"
+        data = _gh_api_get(url, token)
+        if data is None:
+            log_fn(f"  runs query failed on '{branch}' (page {page})")
+            return None
+        runs = data.get("workflow_runs", [])
+        if not runs:
+            break
+        for run in runs:
+            path = run.get("path", "")
+            event = run.get("event", "")
+            sha = run.get("head_sha", "")
+            created = run.get("created_at", "")
+            rid = run.get("id", 0)
+            if not sha:
+                continue
+            if not (
+                (path == CI_WORKFLOW and event == "push") or path == NIGHTLY_WORKFLOW
+            ):
+                continue
+            if path == NIGHTLY_WORKFLOW and not nightly_actually_tested(
+                rid, repo=repo, api_url=api_url, token=token
+            ):
+                log_fn(
+                    f"    skip {sha[:12]} ({created}): nightly skipped its matrix (gate-only)"
+                )
+                continue
+            if is_ancestor_of_head(
+                sha, head_sha, repo=repo, api_url=api_url, token=token
+            ):
+                log_fn(f"  green ancestor: {sha[:12]} ({created}, {Path(path).stem})")
+                return sha
+            log_fn(f"    skip {sha[:12]} ({created}): not an ancestor of HEAD")
+        page += 1
+    log_fn(f"  no green ancestor on '{branch}'")
+    return None
+
+
+def resolve_green_base(
+    *,
+    token: str,
+    repo: str,
+    ref_name: str,
+    head_sha: str,
+    api_url: str = "https://api.github.com",
+    default_branch: str = "master",
+    log_fn,
+) -> str | None:
+    """Resolve the diff base to the newest green ancestor run."""
+    if not token:
+        log_fn("  no GITHUB_TOKEN -- cannot query run history")
+        return None
+    if not repo or not ref_name or not head_sha:
+        return None
+    sha = newest_green_ancestor(
+        ref_name,
+        head_sha=head_sha,
+        repo=repo,
+        api_url=api_url,
+        token=token,
+        log_fn=log_fn,
+    )
+    if sha is None and ref_name != default_branch:
+        log_fn(
+            f"  none on '{ref_name}'; falling back to default branch '{default_branch}'"
+        )
+        sha = newest_green_ancestor(
+            default_branch,
+            head_sha=head_sha,
+            repo=repo,
+            api_url=api_url,
+            token=token,
+            log_fn=log_fn,
+        )
+    return sha
+
+
+# ---------------------------------------------------------------------------
+# Role dependency map
+# ---------------------------------------------------------------------------
+
+
+def _walk_tasks(tasks, role: str, inv: dict) -> None:
+    """Recurse a task list, collecting import/include_role references."""
+    if not isinstance(tasks, list):
+        return
+    for t in tasks:
+        if not isinstance(t, dict):
+            continue
+        for k in ("import_role", "include_role"):
+            body = t.get(k)
+            if isinstance(body, dict) and "name" in body:
+                inv[body["name"]].add(role)
+        for nest in ("block", "rescue", "always"):
+            if nest in t:
+                _walk_tasks(t[nest], role, inv)
+
+
+def build_role_deps_map() -> dict[str, list[str]]:
+    """Build helper -> [consumers] inverse dependency map."""
+    import yaml as _yaml
+    from collections import defaultdict
+
+    inv: dict[str, set[str]] = defaultdict(set)
+    for task_file in sorted(Path("roles").glob("*/tasks/*.yml")):
+        role = task_file.parts[-3]
+        try:
+            with task_file.open() as fh:
+                tasks = _yaml.safe_load(fh)
+        except Exception:
+            continue
+        _walk_tasks(tasks, role, inv)
+    return {k: sorted(v) for k, v in inv.items()}
+
+
+def list_testable_roles() -> list[str]:
+    """Roles with tasks/main.yml (the testable universe)."""
+    roles_dir = Path("roles")
+    if not roles_dir.exists():
+        return []
+    return sorted(
+        d.name
+        for d in roles_dir.iterdir()
+        if d.is_dir() and (d / "tasks" / "main.yml").exists()
+    )
+
+
+def _read_role_meta(role: str) -> dict:
+    import yaml as _yaml
+
+    meta_path = Path(f"roles/{role}/meta/test.yml")
+    if not meta_path.exists():
+        return {}
+    try:
+        return _yaml.safe_load(meta_path.read_text()) or {}
+    except Exception:
+        return {}
+
+
+def machines_for(role: str) -> dict:
+    return _read_role_meta(role).get("machines") or {"box": None}
+
+
+def default_machine_for(role: str) -> str:
+    return next(iter(machines_for(role)))
+
+
+def release_ubuntu_for(role: str) -> list[str]:
+    return _read_role_meta(role).get("ubuntu") or []
+
+
+# ---------------------------------------------------------------------------
+# Matrix generation (delegates to test/matrix.py)
+# ---------------------------------------------------------------------------
+
+
+def _matrix_json(*args: str) -> str:
+    """Call test/matrix.py --json and return stdout."""
+    result = subprocess.run(
+        ["python3", "test/matrix.py", "--json", *args],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -270,8 +562,7 @@ def _cmd_packer_ubuntu(args: list[str]) -> int:
 def _cmd_emit(args: list[str]) -> int:
     """Emit all CI outputs: matrix buckets, packer sources/ubuntu, flags.
 
-    Called by detect-roles.sh's emit() wrapper.  Writes key=value lines to
-    $GITHUB_OUTPUT (CI) or stdout (local).
+    Writes key=value lines to $GITHUB_OUTPUT (CI) or stdout (local).
     """
     from argparse import ArgumentParser
 
@@ -332,12 +623,175 @@ def _cmd_emit(args: list[str]) -> int:
     return 0
 
 
+def _emit_result(matrix: str, packer_changed: str, ci_image_changed: str) -> int:
+    """Emit CI outputs via _cmd_emit with current env for sources/ubuntu."""
+    return _cmd_emit(
+        [
+            "--matrix",
+            matrix,
+            "--packer-changed",
+            packer_changed,
+            "--ci-image-changed",
+            ci_image_changed,
+            "--inputs-sources",
+            os.environ.get("INPUTS_SOURCES", ""),
+            "--inputs-ubuntu",
+            os.environ.get("INPUTS_UBUNTU", ""),
+        ]
+    )
+
+
+def _cmd_run(args: list[str]) -> int:
+    """Full change-detection pipeline — replaces detect-roles.sh."""
+
+    def log(msg):
+        print(f"[detect-roles] {msg}", file=sys.stderr)
+
+    if "--all" in args:
+        log("mode: --all (full universe)")
+        return _emit_result(_matrix_json("--all"), "false", "false")
+
+    event = os.environ.get("GITHUB_EVENT_NAME", "")
+    inputs_roles = os.environ.get("INPUTS_ROLES", "")
+    inputs_sources = os.environ.get("INPUTS_SOURCES", "")
+
+    if event == "workflow_dispatch" and inputs_roles:
+        log(f"mode: workflow_dispatch roles='{inputs_roles}'")
+        if inputs_roles == "ALL":
+            log("roles=ALL -> full universe")
+            return _emit_result(_matrix_json("--all"), "false", "false")
+        return _emit_result(_matrix_json("--dispatch", inputs_roles), "false", "false")
+
+    if event == "workflow_dispatch" and inputs_sources:
+        log(
+            f"mode: workflow_dispatch sources='{inputs_sources}' (packer-only, empty test matrix)"
+        )
+        return _emit_result("[]", "true", "false")
+
+    head_sha = os.environ.get("GITHUB_SHA", "")
+    ref_name = os.environ.get("GITHUB_REF_NAME", "")
+    github_ref = os.environ.get("GITHUB_REF", "")
+    token = os.environ.get("GITHUB_TOKEN", "")
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    api_url = os.environ.get("GITHUB_API_URL", "https://api.github.com")
+    default_branch = os.environ.get("CI_DEFAULT_BRANCH", "master")
+
+    log(
+        f"mode: change detection (event={event or 'local'}, "
+        f"branch={ref_name or '?'}, sha={head_sha[:12] if head_sha else '?'})"
+    )
+
+    def full_universe(reason, packer="false", ci_image="false"):
+        log(f"{reason} -> testing the FULL universe")
+        return _emit_result(_matrix_json("--all"), packer, ci_image)
+
+    ci_base_ref = os.environ.get("CI_BASE_REF", "")
+    if ci_base_ref:
+        base_ref = ci_base_ref
+        log(f"diff base: {base_ref} (CI_BASE_REF override)")
+    elif event == "push":
+        green = resolve_green_base(
+            token=token,
+            repo=repo,
+            ref_name=ref_name,
+            head_sha=head_sha,
+            api_url=api_url,
+            default_branch=default_branch,
+            log_fn=log,
+        )
+        if not green:
+            return full_universe("no green ancestor run found", packer="true")
+        if git_rev_parse(green) is None:
+            log(f"  base {green[:12]} outside shallow checkout; fetching the commit")
+            git_fetch_commit(green)
+        if git_rev_parse(green) is None:
+            return full_universe(f"green run {green[:12]} unreachable", packer="true")
+        base_ref = green
+        log(f"diff base: {green[:12]} (last green ci run)")
+    else:
+        base_ref = "HEAD~1"
+        log("diff base: HEAD~1 (non-push: local/preview)")
+
+    base = git_rev_parse(base_ref)
+    if base is None:
+        return full_universe(f"base ref '{base_ref}' does not resolve", packer="true")
+
+    changed = git_diff_files(base)
+    head_short = git_rev_parse_short("HEAD")
+    log(f"comparing {base[:12]}..{head_short}: {len(changed)} file(s) changed")
+
+    is_master_push = event == "push" and github_ref == "refs/heads/master"
+    classification = classify_changed_files(changed, is_master_push=is_master_push)
+
+    packer_str = "true" if classification.packer_changed else "false"
+    ci_image_str = "true" if classification.ci_image_changed else "false"
+
+    if classification.packer_changed:
+        log("packer inputs changed -> packer_changed=true")
+    if classification.ci_image_changed:
+        log("ci-image inputs changed (master push) -> ci_image_changed=true")
+
+    if classification.full_universe_paths:
+        log("full-universe paths changed:")
+        for p in classification.full_universe_paths:
+            log(f"     {p}")
+        return full_universe(
+            "full-universe path changed", packer=packer_str, ci_image=ci_image_str
+        )
+
+    universe = set(list_testable_roles())
+    roles: set[str] = set()
+    release_cells: list[str] = []
+
+    if classification.packer_changed:
+        roles.add("packer")
+
+    deps_map = build_role_deps_map()
+
+    for role in classification.direct_roles:
+        if role in universe:
+            roles.add(role)
+        consumers = deps_map.get(role, [])
+        if consumers:
+            log(f"role '{role}' changed -> consumers: {' '.join(consumers)}")
+        for consumer in consumers:
+            if consumer in universe:
+                roles.add(consumer)
+        releases = release_ubuntu_for(role)
+        if releases and consumers:
+            log(
+                f"  propagating release cells [{' '.join(releases)}] from '{role}' to its consumers"
+            )
+            for consumer in consumers:
+                if consumer not in universe:
+                    continue
+                machines = list(machines_for(consumer))
+                for machine in machines:
+                    for codename in releases:
+                        release_cells.append(f"{consumer}:{machine}:{codename}")
+
+    roles_sorted = sorted(roles)
+    if roles_sorted:
+        log(f"roles to test: {' '.join(roles_sorted)}")
+    else:
+        log("no role-relevant changes; matrix will be empty")
+
+    matrix_args: list[str] = []
+    if release_cells:
+        matrix_args.extend(["--extra", *release_cells, "--"])
+    matrix_args.extend(roles_sorted)
+    matrix = _matrix_json(*matrix_args)
+
+    return _emit_result(matrix, packer_str, ci_image_str)
+
+
 _COMMANDS = {
     "classify": _cmd_classify,
     "split-buckets": _cmd_split_buckets,
     "packer-sources": _cmd_packer_sources,
     "packer-ubuntu": _cmd_packer_ubuntu,
     "emit": _cmd_emit,
+    "run": _cmd_run,
 }
 
 

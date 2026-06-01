@@ -1,0 +1,6 @@
+# box exercises zram + zvol (ZFS-backed); minimal exercises zram-only
+# on ext4 (no zvol, no partition). The two cells cover the zvol-gated
+# and zvol-absent paths.
+machines:
+  box:
+  minimal:

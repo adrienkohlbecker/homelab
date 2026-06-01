@@ -2,6 +2,13 @@
 # stack from noble-backports; noble installs the same stack natively (no backport
 # pin); resolute drops the iptables compat package and takes the >= 26 branch.
 # Both noble and resolute exercise paths the jammy default cell doesn't.
+#
+# zfs_root hosts get a dedicated zvol + ext4 graphroot; non-ZFS hosts use the
+# plain root filesystem with fuse-overlayfs. The minimal cell exercises the
+# non-zvol storage path.
+machines:
+  box:
+  minimal:
 ubuntu:
   - noble
   - resolute

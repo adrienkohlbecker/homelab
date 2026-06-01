@@ -1,0 +1,5 @@
+# Removes /etc/sudoers.d/90-cloud-init-users, which only exists on the
+# vanilla cloud image (minimal). Box has no cloud-init residue.
+machines:
+  box:
+  minimal:

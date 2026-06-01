@@ -1,0 +1,6 @@
+# _verify assertions gate on zfs_root (dataset properties, mountpoint
+# inheritance). The minimal cell exercises the non-ZFS skip path and
+# validates the gates don't error on ext4.
+machines:
+  box:
+  minimal:

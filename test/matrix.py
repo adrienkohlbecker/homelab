@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Test matrix generation — single source of truth for CI and local runs.
 
-Reads roles/*/meta/test.yml and .github/ci-minimal-roles.txt to produce the
-(machine, ubuntu, role) cell list that both test/testall.py and
-mise-tasks/ci/detect-roles.sh consume.
+Reads roles/*/meta/test.yml to produce the (machine, ubuntu, role) cell list
+that both test/testall.py and mise-tasks/ci/detect-roles.sh consume.
 
 CLI (for detect-roles.sh):
   python3 test/matrix.py --json --all                        # full universe
@@ -23,8 +22,6 @@ from typing import NamedTuple
 
 import yaml
 
-MINIMAL_ROLES_FILE = Path(".github/ci-minimal-roles.txt")
-
 # Canonical copies live in test/machine.py alongside the QEMU specs; keep in
 # sync (lint:test-meta validates meta/test.yml against both).
 UBUNTU_RELEASES: dict[str, str] = {
@@ -33,6 +30,7 @@ UBUNTU_RELEASES: dict[str, str] = {
     "resolute": "26.04",
 }
 DEFAULT_UBUNTU = "jammy"
+DEFAULT_MACHINES = {"box": None}
 
 
 class TestCell(NamedTuple):
@@ -51,17 +49,6 @@ def list_testable_roles() -> list[str]:
     return [d.name for d in sorted(roles_dir.iterdir()) if d.is_dir() and (d / "tasks" / "main.yml").exists()]
 
 
-def read_minimal_roles() -> frozenset[str]:
-    """Roles that get a (minimal, jammy) cell on top of their default."""
-    if not MINIMAL_ROLES_FILE.exists():
-        return frozenset()
-    return frozenset(
-        line.strip()
-        for line in MINIMAL_ROLES_FILE.read_text().splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    )
-
-
 def _read_role_meta(role: str) -> dict:
     meta_path = Path(f"roles/{role}/meta/test.yml")
     if not meta_path.exists():
@@ -73,9 +60,18 @@ def _read_role_meta(role: str) -> dict:
         sys.exit(1)
 
 
+def machines_for(role: str) -> dict:
+    """Test machines from meta/test.yml (falls back to {'box': None}).
+
+    Returns the machines: dict.  First key is the primary machine (used
+    for release cells); additional keys get only a base cell.
+    """
+    return _read_role_meta(role).get("machines") or dict(DEFAULT_MACHINES)
+
+
 def default_machine_for(role: str) -> str:
-    """Default test machine from meta/test.yml (falls back to 'box')."""
-    return _read_role_meta(role).get("machine", "box")
+    """Primary test machine — first key in machines: (falls back to 'box')."""
+    return next(iter(machines_for(role)))
 
 
 def release_ubuntu_for(role: str) -> list[str]:
@@ -83,21 +79,18 @@ def release_ubuntu_for(role: str) -> list[str]:
     return _read_role_meta(role).get("ubuntu") or []
 
 
-def build_role_cells(role: str, minimal_roles: frozenset[str]) -> list[TestCell]:
+def build_role_cells(role: str) -> list[TestCell]:
     """Expand a single role into its test cells.
 
-    - Default cell: (meta machine or box, jammy, role)
-    - Minimal cell if in ci-minimal-roles.txt: (minimal, jammy, role)
-    - Release cell per ubuntu in meta/test.yml: (default machine, codename, role)
-      Uses the role's default machine so a box_deps role gets box_deps:resolute
-      (box_deps is seeded per-release).
+    - One base cell per machine in machines: (machine, jammy, role)
+    - Release cell per (machine, ubuntu) cross-product for each ubuntu
+      in meta/test.yml: (machine, codename, role).
     """
-    machine = default_machine_for(role)
-    cells = [TestCell(machine, DEFAULT_UBUNTU, role)]
-    if role in minimal_roles:
-        cells.append(TestCell("minimal", DEFAULT_UBUNTU, role))
+    machines = machines_for(role)
+    cells = [TestCell(m, DEFAULT_UBUNTU, role) for m in machines]
     for codename in release_ubuntu_for(role):
-        cells.append(TestCell(machine, codename, role))
+        for m in machines:
+            cells.append(TestCell(m, codename, role))
     return cells
 
 
@@ -110,10 +103,9 @@ def build_test_matrix(
     extra_cells: additional cells to merge (used by CI's release-cell
     propagation from changed helper roles to their consumers).
     """
-    minimal_roles = read_minimal_roles()
     cells: set[TestCell] = set()
     for role in roles:
-        cells.update(build_role_cells(role, minimal_roles))
+        cells.update(build_role_cells(role))
     if extra_cells:
         cells.update(extra_cells)
     return sorted(cells)
@@ -144,12 +136,11 @@ def ci_spec_to_cell(spec: str) -> TestCell:
 def _build_dispatch_matrix(dispatch_input: str) -> list[TestCell]:
     """Parse a comma-separated dispatch input into cells.
 
-    Tokens without colons are expanded via build_role_cells (with minimal
+    Tokens without colons are expanded via build_role_cells (with machine
     + release escalation). Tokens with colons are exact CI specs (no
     escalation — the user said what they wanted).
     """
     universe = set(list_testable_roles())
-    minimal_roles = read_minimal_roles()
     cells: list[TestCell] = []
     for token in dispatch_input.split(","):
         token = token.strip()
@@ -165,7 +156,7 @@ def _build_dispatch_matrix(dispatch_input: str) -> list[TestCell]:
         if ":" in token:
             cells.append(ci_spec_to_cell(token))
         else:
-            cells.extend(build_role_cells(token, minimal_roles))
+            cells.extend(build_role_cells(token))
     return cells
 
 
@@ -173,7 +164,7 @@ def main() -> int:
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Generate the test matrix from meta/test.yml + ci-minimal-roles.txt",
+        description="Generate the test matrix from roles/*/meta/test.yml",
     )
     parser.add_argument("roles", nargs="*", help="Roles to expand")
     parser.add_argument("--json", action="store_true", help="Output CI-format JSON array")
