@@ -165,7 +165,7 @@ jobs:
       ubuntu_matrix: '["noble"]'
 
   packer_resolute:
-    needs: [ detect, ci-image, packer_noble ]
+    needs: [ detect, ci-image, packer_jammy ]
     if: |
       always()
       && needs.detect.result == 'success'
@@ -180,12 +180,12 @@ jobs:
       ubuntu_matrix: '["resolute"]'
 
   packer_extra:
-    # Rebuild the non-box images (pug / lab / hetzner). Chained after
-    # packer_resolute so all box builds run first (test_jammy starts as soon
-    # as packer_jammy finishes while these still build). always() so a box
+    # Rebuild the non-box images (pug / lab / hetzner). Waits for all box
+    # release builds (jammy/noble/resolute) so test_jammy can start as soon
+    # as packer_jammy finishes while these still build. always() so a box
     # failure doesn't skip the other images. Its result (incl. the Hetzner
     # publish) gates the overall run conclusion but never test_*.
-    needs: [ detect, ci-image, packer_resolute ]
+    needs: [ detect, ci-image, packer_jammy, packer_noble, packer_resolute ]
     if: |
       always()
       && needs.detect.result == 'success'
