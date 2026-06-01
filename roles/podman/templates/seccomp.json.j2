@@ -1,11 +1,23 @@
 {#- Stock podman seccomp profile (slurped at deploy time from
-    /usr/share/containers/seccomp.json) with the fchmodat2 syscall appended
+    /usr/share/containers/seccomp.json) with additional syscalls appended
     to its allow list. These Jinja comments are stripped from the rendered
-    file, so the output is pure JSON. Rationale: notes/podman_seccomp_fchmodat2.md. -#}
+    file, so the output is pure JSON.
+
+    fchmodat2: kernel 6.6+, GNU tar 1.35+ routes directory chmods through it.
+      Rationale: notes/podman_seccomp_fchmodat2.md.
+
+    io_uring_setup/enter/register: kernel 5.1+, QEMU aio=io_uring inside
+      CI job containers needs the syscall family unblocked.
+-#}
 {%- set _profile = podman_seccomp_stock.content | b64decode | from_json -%}
+{%- set _additions = ['fchmodat2', 'io_uring_setup', 'io_uring_enter', 'io_uring_register'] -%}
 {%- for _block in _profile.syscalls -%}
-{%-   if _block.action == 'SCMP_ACT_ALLOW' and 'fchmodat' in _block.names and 'fchmodat2' not in _block.names -%}
-{%-     set _ = _block.names.append('fchmodat2') -%}
+{%-   if _block.action == 'SCMP_ACT_ALLOW' and 'fchmodat' in _block.names -%}
+{%-     for _sc in _additions -%}
+{%-       if _sc not in _block.names -%}
+{%-         set _ = _block.names.append(_sc) -%}
+{%-       endif -%}
+{%-     endfor -%}
 {%-   endif -%}
 {%- endfor -%}
 {{ _profile | to_nice_json }}

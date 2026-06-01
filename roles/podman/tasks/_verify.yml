@@ -71,25 +71,29 @@
     - 'seccomp_profile = "/etc/containers/seccomp-fchmodat2.json"'
 
 # The seccomp augmentation is the role's reason for shipping a custom
-# profile; box's 5.15 kernel predates the fchmodat2 syscall so it can't be
+# profile; box's 5.15 kernel predates fchmodat2/io_uring so they can't be
 # exercised functionally here, but assert the rendered profile actually
-# allows it -- a future stock-profile shape change that made the template's
-# match no-op would otherwise revive the silent breakage (roundcube 403).
+# allows them -- a future stock-profile shape change that made the
+# template's match no-op would otherwise revive the silent breakage.
 - name: _verify | Read the rendered seccomp profile
   slurp:
     src: /etc/containers/seccomp-fchmodat2.json
   become: true
   register: podman_seccomp_rendered
 
-- name: _verify | Default seccomp profile allows fchmodat2
+- name: _verify | Default seccomp profile allows augmented syscalls
   vars:
     _profile: "{{ podman_seccomp_rendered.content | b64decode | from_json }}"
+    _allowed: "{{ _profile.syscalls | selectattr('action', 'eq', 'SCMP_ACT_ALLOW') | map(attribute='names') | flatten }}"
   assert:
     that:
-      - "'fchmodat2' in (_profile.syscalls | selectattr('action', 'eq', 'SCMP_ACT_ALLOW') | map(attribute='names') | flatten)"
+      - "'fchmodat2' in _allowed"
+      - "'io_uring_setup' in _allowed"
+      - "'io_uring_enter' in _allowed"
+      - "'io_uring_register' in _allowed"
     fail_msg: >-
-      /etc/containers/seccomp-fchmodat2.json does not allow fchmodat2 --
-      the template's `fchmodat` match found nothing to extend.
+      /etc/containers/seccomp-fchmodat2.json is missing augmented syscalls --
+      the template's match found nothing to extend.
 
 # Inter-container DNS is the load-bearing reason netavark + dns_bind_port are
 # pinned: a peer resolves another container by its <name>.dns.podman FQDN via
