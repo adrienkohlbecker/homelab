@@ -13,13 +13,25 @@
 # a fresh boot id and the module spins to its timeout — even though the
 # host is back and SSH-serving within seconds.
 #
-# Instead: fire the reboot fire-and-forget (async, poll: 0) and probe
-# the recovery with wait_for_connection, which tests only the transport
-# (no become), so there is no sudo context to wedge. Then re-gather
-# facts so callers reading ansible_facts after the reboot see the
+# Instead: fire the reboot fire-and-forget (async, poll: 0), then
+# meta: reset_connection so mitogen tears down its whole context tree
+# (the now-dead ssh stream AND the stale sudo.root child) and rebuilds
+# from scratch on the next task. wait_for_connection then re-establishes
+# the transport (it tests only the transport, no become), and setup
+# re-gathers facts so callers reading ansible_facts after the reboot see
 # post-reboot values (running kernel, mounts, ...) without a manual
-# setup task. Same recovery mechanism roles/netplan/tasks/_verify.yml
-# relies on across an SSH sever under mitogen.
+# setup task.
+#
+# The reset is load-bearing. wait_for_connection + setup are become-less
+# and recover on their own, but without the reset mitogen carries the
+# severed sudo.root context into the caller's first become task after
+# the reboot and wedges it there — the same "Connection timed out", just
+# one task downstream. A fast local fixture (the box VM) happens to
+# rebuild the sudo context cleanly even without the reset, so it passes
+# either way; the jammy x86_64 CI minimal cell does not, and times out.
+# roles/netplan/tasks/apply.yml uses the same reset_connection +
+# wait_for_connection recipe to recover its become tasks across an SSH
+# sever on that same CI fixture (netplan:minimal is green).
 #
 # Inputs: caller passes a single dict `reboot_args` (all keys optional):
 #   condition  when-gate for the whole block; default true. Pass the
@@ -57,6 +69,14 @@
       poll: 0
       changed_when: false
       throttle: "{{ (reboot_args | default({})).throttle | default(1) | int }}"
+
+    - name: Reset the connection so mitogen rebuilds its context tree
+      # Drops mitogen's dead ssh stream + stale sudo.root child so the
+      # caller's first become task post-reboot builds a clean context
+      # instead of inheriting the severed one (see the header rationale).
+      # Honours the block-level when:, mirroring the conditional reset in
+      # roles/netplan/tasks/apply.yml.
+      meta: reset_connection
 
     - name: Wait for the host to come back after reboot
       wait_for_connection:
