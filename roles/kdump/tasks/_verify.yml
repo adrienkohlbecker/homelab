@@ -39,7 +39,7 @@
 - name: _verify | Reboot to exercise crashkernel reservation
   when: ansible_architecture != 'aarch64'
   reboot:
-    reboot_timeout: 600
+    reboot_timeout: 120
   become: true
 
 - name: _verify | Crashkernel reservation is non-zero post-reboot

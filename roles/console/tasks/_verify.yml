@@ -30,7 +30,7 @@
 - name: _verify | Reboot to apply role changes
   when: ansible_architecture != 'aarch64'
   reboot:
-    reboot_timeout: 600
+    reboot_timeout: 120
   become: true
 
 - name: _verify | Read console-setup config
