@@ -83,10 +83,17 @@ class TestShellStrictModeRegex:
 # ---------------------------------------------------------------------------
 
 
-_FILE_WRITE_MODULES = frozenset({
-    "copy", "template", "replace", "lineinfile",
-    "blockinfile", "assemble", "ini_file",
-})
+_FILE_WRITE_MODULES = frozenset(
+    {
+        "copy",
+        "template",
+        "replace",
+        "lineinfile",
+        "blockinfile",
+        "assemble",
+        "ini_file",
+    }
+)
 
 
 class TestRequireBackupModuleSet:
@@ -129,7 +136,10 @@ class TestTestMetaValidation:
     def test_all_meta_files_valid(self) -> None:
         """Run test-meta.py against the real repo — catches typos in machine/ubuntu."""
         result = subprocess.run(
-            [sys.executable, str(Path(__file__).resolve().parent.parent.parent / "mise-tasks" / "lint" / "test-meta.py")],
+            [
+                sys.executable,
+                str(Path(__file__).resolve().parent.parent.parent / "mise-tasks" / "lint" / "test-meta.py"),
+            ],
             capture_output=True,
             text=True,
             cwd=str(Path(__file__).resolve().parent.parent.parent),

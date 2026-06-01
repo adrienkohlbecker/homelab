@@ -105,7 +105,8 @@ class TestTerminateSubprocess:
     def test_immediate_kill(self) -> None:
         async def _run() -> None:
             proc = await asyncio.create_subprocess_exec(
-                "sleep", "60",
+                "sleep",
+                "60",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -117,12 +118,15 @@ class TestTerminateSubprocess:
     def test_grace_period_with_sigint(self) -> None:
         async def _run() -> None:
             proc = await asyncio.create_subprocess_exec(
-                "sleep", "60",
+                "sleep",
+                "60",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
             await utils.terminate_subprocess(
-                proc, grace_seconds=1.0, initial_signal=signal.SIGINT,
+                proc,
+                grace_seconds=1.0,
+                initial_signal=signal.SIGINT,
             )
             assert proc.returncode is not None
 
@@ -138,7 +142,9 @@ class TestTerminateSubprocess:
             await proc.wait()
             with pytest.raises(ValueError, match="grace_seconds must be > 0"):
                 await utils.terminate_subprocess(
-                    proc, grace_seconds=0, initial_signal=signal.SIGINT,
+                    proc,
+                    grace_seconds=0,
+                    initial_signal=signal.SIGINT,
                 )
 
         asyncio.run(_run())

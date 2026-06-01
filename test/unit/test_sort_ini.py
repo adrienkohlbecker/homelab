@@ -55,6 +55,7 @@ class TestSortIni:
     def test_usage_on_no_args(self) -> None:
         result = subprocess.run(
             [sys.executable, str(_SORT_INI_PATH)],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         assert "USAGE" in result.stdout

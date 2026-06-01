@@ -6,8 +6,6 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-import pytest
-
 # role-deps.py lives outside the pythonpath; import it by path.
 _ROLE_DEPS_PATH = Path(__file__).resolve().parent.parent.parent / "mise-tasks" / "ci" / "role-deps.py"
 
@@ -153,9 +151,7 @@ class TestCli:
         roles = tmp_path / "roles"
         task_dir = roles / "homepage" / "tasks"
         task_dir.mkdir(parents=True)
-        (task_dir / "main.yml").write_text(
-            "- block:\n  - import_role:\n      name: nginx\n"
-        )
+        (task_dir / "main.yml").write_text("- block:\n  - import_role:\n      name: nginx\n")
         task_dir2 = roles / "nginx" / "tasks"
         task_dir2.mkdir(parents=True)
         (task_dir2 / "main.yml").write_text("---\n")

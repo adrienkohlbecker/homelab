@@ -77,12 +77,20 @@ class TestNormalize:
         payload = {
             "alarms": {
                 "chart.warn": {
-                    "id": 1, "name": "warn", "chart": "c1",
-                    "status": "WARNING", "value_string": "50%", "last_status_change": 100,
+                    "id": 1,
+                    "name": "warn",
+                    "chart": "c1",
+                    "status": "WARNING",
+                    "value_string": "50%",
+                    "last_status_change": 100,
                 },
                 "chart.crit": {
-                    "id": 2, "name": "crit", "chart": "c2",
-                    "status": "CRITICAL", "value_string": "90%", "last_status_change": 200,
+                    "id": 2,
+                    "name": "crit",
+                    "chart": "c2",
+                    "status": "CRITICAL",
+                    "value_string": "90%",
+                    "last_status_change": 200,
                 },
             }
         }
@@ -120,8 +128,22 @@ class TestNormalize:
     def test_alphabetical_within_same_status(self) -> None:
         payload = {
             "alarms": {
-                "z.alarm": {"status": "WARNING", "id": 1, "name": "z", "chart": "c", "value_string": "1", "last_status_change": 0},
-                "a.alarm": {"status": "WARNING", "id": 2, "name": "a", "chart": "c", "value_string": "1", "last_status_change": 0},
+                "z.alarm": {
+                    "status": "WARNING",
+                    "id": 1,
+                    "name": "z",
+                    "chart": "c",
+                    "value_string": "1",
+                    "last_status_change": 0,
+                },
+                "a.alarm": {
+                    "status": "WARNING",
+                    "id": 2,
+                    "name": "a",
+                    "chart": "c",
+                    "value_string": "1",
+                    "last_status_change": 0,
+                },
             }
         }
         result = ag.normalize(payload)
@@ -144,9 +166,11 @@ class TestLatestTransitionByAlarm:
         assert result == {1: "tid-new"}
 
     def test_dict_envelope_format(self) -> None:
-        log = {"data": [
-            {"alarm_id": 1, "unique_id": 10, "transition_id": "tid-a"},
-        ]}
+        log = {
+            "data": [
+                {"alarm_id": 1, "unique_id": 10, "transition_id": "tid-a"},
+            ]
+        }
         result = ag.latest_transition_by_alarm(log)
         assert result == {1: "tid-a"}
 
@@ -181,8 +205,12 @@ class TestLatestTransitionByAlarm:
 class TestAlarmHref:
     def test_with_transition_id(self) -> None:
         alarm = {
-            "id": 42, "name": "cpu_high", "chart": "system.cpu",
-            "status": "WARNING", "value": "85", "when": 1700000000,
+            "id": 42,
+            "name": "cpu_high",
+            "chart": "system.cpu",
+            "status": "WARNING",
+            "value": "85",
+            "when": 1700000000,
             "transition_id": "abc-123",
         }
         href = ag.alarm_href("https://netdata.lab.fahm.fr", "lab", alarm)
@@ -262,13 +290,22 @@ class TestFormatValue:
 
 class TestRenderHtml:
     def test_renders_host_section(self) -> None:
-        hosts = [{
-            "name": "lab", "click_url": "https://nd",
-            "alarms": [{
-                "name": "cpu", "chart": "system.cpu", "status": "WARNING",
-                "value": "85%", "href": "https://nd/alert", "transition_id": "t1",
-            }],
-        }]
+        hosts = [
+            {
+                "name": "lab",
+                "click_url": "https://nd",
+                "alarms": [
+                    {
+                        "name": "cpu",
+                        "chart": "system.cpu",
+                        "status": "WARNING",
+                        "value": "85%",
+                        "href": "https://nd/alert",
+                        "transition_id": "t1",
+                    }
+                ],
+            }
+        ]
         html = ag.render_html(hosts, "2024-01-01T00:00:00+00:00")
         assert "lab" in html
         assert "cpu" in html
@@ -292,26 +329,43 @@ class TestRenderHtml:
         assert "Updated 2024-06-01T12:00:00+00:00" in html
 
     def test_critical_has_icon(self) -> None:
-        hosts = [{
-            "name": "lab", "click_url": "https://nd",
-            "alarms": [{
-                "name": "x", "chart": "c", "status": "CRITICAL",
-                "value": "99%", "href": "#", "transition_id": "",
-            }],
-        }]
+        hosts = [
+            {
+                "name": "lab",
+                "click_url": "https://nd",
+                "alarms": [
+                    {
+                        "name": "x",
+                        "chart": "c",
+                        "status": "CRITICAL",
+                        "value": "99%",
+                        "href": "#",
+                        "transition_id": "",
+                    }
+                ],
+            }
+        ]
         html = ag.render_html(hosts, "now")
         assert "status-icon" in html
         assert 'class="alarm CRITICAL"' in html
 
     def test_html_escaping(self) -> None:
-        hosts = [{
-            "name": "<b>bad</b>",
-            "click_url": "https://nd",
-            "alarms": [{
-                "name": "x<y", "chart": "a&b", "status": "WARNING",
-                "value": "1>0", "href": "#", "transition_id": "",
-            }],
-        }]
+        hosts = [
+            {
+                "name": "<b>bad</b>",
+                "click_url": "https://nd",
+                "alarms": [
+                    {
+                        "name": "x<y",
+                        "chart": "a&b",
+                        "status": "WARNING",
+                        "value": "1>0",
+                        "href": "#",
+                        "transition_id": "",
+                    }
+                ],
+            }
+        ]
         html = ag.render_html(hosts, "now")
         assert "<b>bad</b>" not in html
         assert "&lt;b&gt;bad&lt;/b&gt;" in html

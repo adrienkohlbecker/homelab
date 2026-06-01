@@ -7,7 +7,9 @@ without needing systemd D-Bus or a running podman.
 import importlib
 from pathlib import Path
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent.parent / "roles" / "systemd_unit" / "library" / "extract_podman_image.py"
+_MODULE_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "roles" / "systemd_unit" / "library" / "extract_podman_image.py"
+)
 
 
 def _load():
@@ -97,12 +99,18 @@ class TestFindImage:
 
     def test_multiple_flags(self) -> None:
         argv = [
-            "podman", "run",
-            "--rm", "-d",
-            "--name", "mycontainer",
-            "--network", "mynet",
-            "-v", "/host:/container",
-            "--env", "FOO=bar",
+            "podman",
+            "run",
+            "--rm",
+            "-d",
+            "--name",
+            "mycontainer",
+            "--network",
+            "mynet",
+            "-v",
+            "/host:/container",
+            "--env",
+            "FOO=bar",
             "ghcr.io/org/image:latest",
         ]
         assert epi.find_image(argv, self.FLAGS_NO_VALUE) == "ghcr.io/org/image:latest"
@@ -117,13 +125,18 @@ class TestFindImage:
 
     def test_mixed_equals_and_space(self) -> None:
         argv = [
-            "podman", "run",
+            "podman",
+            "run",
             "--user=1000:1000",
-            "--env", "A=1",
-            "--publish", "8080:80",
+            "--env",
+            "A=1",
+            "--publish",
+            "8080:80",
             "-d",
             "nginx:alpine",
-            "nginx", "-g", "daemon off;",
+            "nginx",
+            "-g",
+            "daemon off;",
         ]
         assert epi.find_image(argv, self.FLAGS_NO_VALUE) == "nginx:alpine"
 
@@ -138,20 +151,30 @@ class TestFindImage:
 
     def test_realistic_service_line(self) -> None:
         argv = [
-            "/usr/bin/podman", "run",
-            "--name", "transmission",
+            "/usr/bin/podman",
+            "run",
+            "--name",
+            "transmission",
             "--replace",
             "--rm",
             "--sdnotify=healthy",
             "--log-driver=journald",
-            "--network", "slirp4netns:allow_host_loopback=true",
-            "--user", "1001:1001",
-            "--volume", "/mnt/services/transmission:/config",
-            "--publish", "127.0.0.1:9091:9091",
-            "--health-cmd", "curl -sf http://localhost:9091",
-            "--health-startup-cmd", "curl -sf http://localhost:9091",
-            "--health-startup-interval", "1s",
-            "--health-startup-retries", "30",
+            "--network",
+            "slirp4netns:allow_host_loopback=true",
+            "--user",
+            "1001:1001",
+            "--volume",
+            "/mnt/services/transmission:/config",
+            "--publish",
+            "127.0.0.1:9091:9091",
+            "--health-cmd",
+            "curl -sf http://localhost:9091",
+            "--health-startup-cmd",
+            "curl -sf http://localhost:9091",
+            "--health-startup-interval",
+            "1s",
+            "--health-startup-retries",
+            "30",
             "lscr.io/linuxserver/transmission:4.0.6",
         ]
         flags_no_value = {"--replace", "--rm", "-d", "--detach", "--init"}

@@ -179,9 +179,39 @@ class TestGetFailedRoles:
         with log.open("w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=testall.JOBLOG_FIELDS, delimiter="\t")
             w.writeheader()
-            w.writerow({"Role": "nginx", "Ubuntu": "jammy", "Machine": "box", "Runtime": "10", "Exitval": "0", "PeakKB": "0", "Started": ""})
-            w.writerow({"Role": "podman", "Ubuntu": "jammy", "Machine": "box", "Runtime": "20", "Exitval": "1", "PeakKB": "0", "Started": ""})
-            w.writerow({"Role": "zfs", "Ubuntu": "noble", "Machine": "lab", "Runtime": "30", "Exitval": "125", "PeakKB": "0", "Started": ""})
+            w.writerow(
+                {
+                    "Role": "nginx",
+                    "Ubuntu": "jammy",
+                    "Machine": "box",
+                    "Runtime": "10",
+                    "Exitval": "0",
+                    "PeakKB": "0",
+                    "Started": "",
+                }
+            )
+            w.writerow(
+                {
+                    "Role": "podman",
+                    "Ubuntu": "jammy",
+                    "Machine": "box",
+                    "Runtime": "20",
+                    "Exitval": "1",
+                    "PeakKB": "0",
+                    "Started": "",
+                }
+            )
+            w.writerow(
+                {
+                    "Role": "zfs",
+                    "Ubuntu": "noble",
+                    "Machine": "lab",
+                    "Runtime": "30",
+                    "Exitval": "125",
+                    "PeakKB": "0",
+                    "Started": "",
+                }
+            )
         failed = testall.get_failed_roles()
         assert len(failed) == 2
         assert testall.MachineRole("box", "jammy", "podman") in failed
@@ -193,7 +223,17 @@ class TestGetFailedRoles:
         with log.open("w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=testall.JOBLOG_FIELDS, delimiter="\t")
             w.writeheader()
-            w.writerow({"Role": "nginx", "Ubuntu": "jammy", "Machine": "box", "Runtime": "10", "Exitval": "0", "PeakKB": "0", "Started": ""})
+            w.writerow(
+                {
+                    "Role": "nginx",
+                    "Ubuntu": "jammy",
+                    "Machine": "box",
+                    "Runtime": "10",
+                    "Exitval": "0",
+                    "PeakKB": "0",
+                    "Started": "",
+                }
+            )
         assert testall.get_failed_roles() == []
 
     def test_missing_log(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
