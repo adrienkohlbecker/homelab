@@ -94,7 +94,7 @@ jobs:
         --group-add 1
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
         --volume /mnt/scratch/qemu/cloud-images:/mnt/scratch/qemu/cloud-images:rw
-        --volume /mnt/ci-scratch/${{ github.run_id }}-${{ strategy.job-index }}:/scratch:rw
+        --volume /mnt/ci_scratch/${{ github.run_id }}-${{ strategy.job-index }}:/scratch:rw
     strategy:
       fail-fast: false
       # No max-parallel: the lab-vm pool (6 runners on lab; see

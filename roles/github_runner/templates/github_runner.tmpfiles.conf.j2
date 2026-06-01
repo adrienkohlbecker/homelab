@@ -1,5 +1,5 @@
 # Reap idle per-cell test workdirs created by the CI workflows. Each
-# cell bind-mounts a unique subdir under /mnt/ci-scratch (host path
+# cell bind-mounts a unique subdir under /mnt/ci_scratch (host path
 # embeds github.run_id + strategy.job-index; see
 # .github/workflows/test.yml). Cleanup mechanics: `e` cleans files
 # older than the Age field, then recursively removes empty subdirs that
@@ -27,7 +27,7 @@
 # binaries, etc.), keeping it from ever expiring.
 #
 # Type Path                                              Mode UID GID Age   Argument
-e      /mnt/ci-scratch                                    -    -   -   ~1d
+e      /mnt/ci_scratch                                    -    -   -   ~1d
 e      /mnt/scratch/github_runner/workdir_*/_temp        -    -   -   ~7d
 e      /mnt/scratch/github_runner/workdir_*/_actions     -    -   -   ~30d
 
