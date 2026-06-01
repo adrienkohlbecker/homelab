@@ -28,15 +28,14 @@ from typing import NamedTuple
 from tabulate import tabulate
 
 from machine import (
-    DEFAULT_UBUNTU,
     MACHINE_CHOICES,
     OUT_DIR,
     PEAK_KB_SENTINEL_PREFIX,
     UBUNTU_RELEASES,
     imagedir_for_host,
-    resolve_default_machine,
     sweep_stale_workdirs,
 )
+from matrix import build_test_matrix, list_testable_roles
 from utils import cancel_on_signal, colorize, terminate_subprocess
 
 LOG_FILE = Path("test/out.tsv")
@@ -110,17 +109,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--machines",
         type=str,
-        default="box",
+        default=None,
         metavar="X",
-        help="Comma-separated list of machine profiles (default: box)",
+        help="Comma-separated machine filter; only run cells matching these machines "
+        "(default: all machines from meta/test.yml + ci-minimal-roles.txt)",
     )
 
     parser.add_argument(
         "--ubuntu",
         type=str,
-        default=DEFAULT_UBUNTU,
+        default=None,
         metavar="X",
-        help=f"Comma-separated list of Ubuntu codenames (default: {DEFAULT_UBUNTU})",
+        help="Comma-separated Ubuntu codename filter; only run cells matching these releases "
+        "(default: all releases from meta/test.yml)",
     )
 
     parser.add_argument(
@@ -183,19 +184,6 @@ def setup_output_dir(machine_roles: list[MachineRole]) -> None:
         prefix = f"{mr.machine}.{mr.ubuntu_name}.{mr.role}"
         for suffix in ("output", "journal", "boot"):
             (OUT_DIR / f"{prefix}.{suffix}.ansi").unlink(missing_ok=True)
-
-
-def list_roles() -> list[str]:
-    """Return roles that define tasks/main.yml."""
-    roles_dir = Path("roles")
-    if not roles_dir.exists():
-        return []
-
-    return [
-        role_dir.name
-        for role_dir in sorted(roles_dir.iterdir())
-        if role_dir.is_dir() and (role_dir / "tasks" / "main.yml").exists()
-    ]
 
 
 def get_failed_roles() -> list[MachineRole]:
@@ -496,7 +484,7 @@ def main() -> int:
         return 1
 
     if args.retry_failed:
-        if args.machines != "box" or args.ubuntu != DEFAULT_UBUNTU:
+        if args.machines is not None or args.ubuntu is not None:
             print(
                 "Warning: --machines/--ubuntu are ignored with --retry-failed; "
                 "the machine and ubuntu of each rerun come from the prior joblog",
@@ -507,54 +495,45 @@ def main() -> int:
             print(f"No failed roles recorded in {LOG_FILE}", file=sys.stderr)
             return 0
     else:
-        machines = [m.strip() for m in args.machines.split(",") if m.strip()]
-        if not machines:
-            print("Error: No machines provided to --machines", file=sys.stderr)
-            return 1
-        for m in machines:
-            if m not in MACHINE_CHOICES:
-                print(
-                    f"Error: unknown machine profile '{m}'; valid: {list(MACHINE_CHOICES)}",
-                    file=sys.stderr,
-                )
-                return 1
-
-        ubuntus = [u.strip() for u in args.ubuntu.split(",") if u.strip()]
-        if not ubuntus:
-            print("Error: No codenames provided to --ubuntu", file=sys.stderr)
-            return 1
-        for u in ubuntus:
-            if u not in UBUNTU_RELEASES:
-                print(
-                    f"Error: unknown Ubuntu codename '{u}'; valid: {sorted(UBUNTU_RELEASES)}",
-                    file=sys.stderr,
-                )
-                return 1
-
-        roles = list_roles()
+        roles = list_testable_roles()
         if not roles:
             print("No roles with tasks/main.yml found", file=sys.stderr)
             return 1
-        # A role that declares `machine: <X>` in its roles/<n>/meta/test.yml is
-        # opting into a specific test fixture (typically box_deps for roles
-        # that benefit from pre-baked podman+nginx). Honour that override
-        # instead of the CLI --machines value for those roles -- matches
-        # testrole.py's resolution and prevents (box_deps-roles, box)
-        # combinations from running against the wrong fixture.
-        machine_roles = [
-            MachineRole(
-                resolve_default_machine(role) if Path(f"roles/{role}/meta/test.yml").exists() else machine,
-                ubuntu_name,
-                role,
-            )
-            for role in roles
-            for ubuntu_name in ubuntus
-            for machine in machines
-        ]
-        # Dedupe in case the same (machine, ubuntu, role) triple appears twice
-        # — e.g. user passes --machines box,box_deps and a role redirects from
-        # both to box_deps.
-        machine_roles = list({mr: None for mr in machine_roles})
+
+        # Build the meta-driven matrix (same fanout logic as CI), then
+        # filter by --machines / --ubuntu when the user wants a subset.
+        all_cells = build_test_matrix(roles)
+        machine_roles = [MachineRole(c.machine, c.ubuntu, c.role) for c in all_cells]
+
+        if args.machines is not None:
+            machines = [m.strip() for m in args.machines.split(",") if m.strip()]
+            if not machines:
+                print("Error: No machines provided to --machines", file=sys.stderr)
+                return 1
+            for m in machines:
+                if m not in MACHINE_CHOICES:
+                    print(
+                        f"Error: unknown machine profile '{m}'; valid: {list(MACHINE_CHOICES)}",
+                        file=sys.stderr,
+                    )
+                    return 1
+            machine_set = set(machines)
+            machine_roles = [mr for mr in machine_roles if mr.machine in machine_set]
+
+        if args.ubuntu is not None:
+            ubuntus = [u.strip() for u in args.ubuntu.split(",") if u.strip()]
+            if not ubuntus:
+                print("Error: No codenames provided to --ubuntu", file=sys.stderr)
+                return 1
+            for u in ubuntus:
+                if u not in UBUNTU_RELEASES:
+                    print(
+                        f"Error: unknown Ubuntu codename '{u}'; valid: {sorted(UBUNTU_RELEASES)}",
+                        file=sys.stderr,
+                    )
+                    return 1
+            ubuntu_set = set(ubuntus)
+            machine_roles = [mr for mr in machine_roles if mr.ubuntu_name in ubuntu_set]
 
     if args.only_role:
         wanted = {r.strip() for r in args.only_role.split(",") if r.strip()}
