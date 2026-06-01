@@ -9,6 +9,7 @@ testable Python equivalents that can replace the bash+jq inline over time.
 """
 
 import json
+import os
 import re
 import sys
 from typing import NamedTuple
@@ -266,11 +267,77 @@ def _cmd_packer_ubuntu(args: list[str]) -> int:
     return 0
 
 
+def _cmd_emit(args: list[str]) -> int:
+    """Emit all CI outputs: matrix buckets, packer sources/ubuntu, flags.
+
+    Called by detect-roles.sh's emit() wrapper.  Writes key=value lines to
+    $GITHUB_OUTPUT (CI) or stdout (local).
+    """
+    from argparse import ArgumentParser
+
+    p = ArgumentParser()
+    p.add_argument("--matrix", required=True)
+    p.add_argument("--packer-changed", default="false")
+    p.add_argument("--ci-image-changed", default="false")
+    p.add_argument("--inputs-sources", default="")
+    p.add_argument("--inputs-ubuntu", default="")
+    opts = p.parse_args(args)
+
+    specs = json.loads(opts.matrix)
+    matrix_str = json.dumps(specs)
+    buckets = split_matrix_buckets(specs)
+    packer = compute_packer_sources(opts.inputs_sources)
+    ubuntu = compute_packer_ubuntu(opts.inputs_ubuntu)
+
+    pairs = [
+        ("matrix", matrix_str),
+        ("matrix_jammy", json.dumps(buckets.jammy)),
+        ("matrix_noble", json.dumps(buckets.noble)),
+        ("matrix_resolute", json.dumps(buckets.resolute)),
+        ("matrix_minimal", json.dumps(buckets.minimal)),
+        ("packer_changed", opts.packer_changed),
+        ("ci_image_changed", opts.ci_image_changed),
+        ("packer_sources", json.dumps(packer.all)),
+        ("packer_sources_box", json.dumps(packer.box)),
+        ("packer_sources_extra", json.dumps(packer.extra)),
+        ("packer_ubuntu_box", json.dumps(ubuntu.box)),
+        ("packer_ubuntu_extra", json.dumps(ubuntu.extra)),
+    ]
+
+    log_parts = [
+        f"matrix={matrix_str}",
+        f"(jammy={json.dumps(buckets.jammy)}"
+        f" noble={json.dumps(buckets.noble)}"
+        f" resolute={json.dumps(buckets.resolute)}"
+        f" minimal={json.dumps(buckets.minimal)})",
+        f"packer_changed={opts.packer_changed}",
+        f"ci_image_changed={opts.ci_image_changed}",
+        f"packer_sources={json.dumps(packer.all)}"
+        f" (box={json.dumps(packer.box)}"
+        f" extra={json.dumps(packer.extra)})",
+        f"packer_ubuntu=(box={json.dumps(ubuntu.box)}"
+        f" extra={json.dumps(ubuntu.extra)})",
+    ]
+    print(f"[detect-roles] result: {' '.join(log_parts)}", file=sys.stderr)
+
+    github_output = os.environ.get("GITHUB_OUTPUT", "")
+    if github_output:
+        with open(github_output, "a") as f:
+            for k, v in pairs:
+                f.write(f"{k}={v}\n")
+    else:
+        for k, v in pairs:
+            print(f"{k}={v}")
+
+    return 0
+
+
 _COMMANDS = {
     "classify": _cmd_classify,
     "split-buckets": _cmd_split_buckets,
     "packer-sources": _cmd_packer_sources,
     "packer-ubuntu": _cmd_packer_ubuntu,
+    "emit": _cmd_emit,
 }
 
 

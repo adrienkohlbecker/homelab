@@ -198,84 +198,18 @@ CI_IMAGE_INPUTS_RE="^($(join_re "${CI_IMAGE_INPUT_PATTERNS[@]}"))\$"
 # so it matches just the leading segment).
 ROLE_PATH_RE='^roles/[^/]+'
 
-# Packer source matrix, folded in from packer-build.yml's old `prepare` job so
-# detect is the single matrix computer for the whole pipeline. INPUTS_SOURCES
-# is ci.yml's `sources` dispatch input (space-separated, e.g. "box pug"); empty
-# (a push, or an empty dispatch input) builds the full set. Computed once and
-# emitted on every exit path -- the gate that decides *whether* packer runs is
-# packer_changed; this only shapes the matrix once it does.
-PACKER_SOURCES_JSON=$(jq -cn --arg s "${INPUTS_SOURCES:-}" \
-  '($s | split(" ") | map(select(. != ""))) as $l
-   | if ($l | length) == 0 then ["box", "pug", "lab", "hetzner"] else $l end')
-
-# Split the source matrix so ci.yml can build box on its own and gate the role
-# test matrix on it alone: box (which also seeds box_deps) is the only image
-# push-CI test cells consume, so a pug/lab/hetzner build failure -- including
-# the master-only Hetzner snapshot publish -- must not block test.
-PACKER_SOURCES_BOX_JSON=$(jq -cn --argjson all "$PACKER_SOURCES_JSON" '$all | map(select(. == "box"))')
-PACKER_SOURCES_EXTRA_JSON=$(jq -cn --argjson all "$PACKER_SOURCES_JSON" '$all | map(select(. != "box"))')
-
-# Ubuntu release matrix per packer call (crossed with the source matrix in
-# packer-build.yml). box validates across every supported release so a packer
-# change that breaks a release-specific path -- resolute's sudo-rs swap, ZBM on
-# a newer kernel, deb822 apt sources -- surfaces at packer-change time via each
-# release's verify-boot post-processor. pug/lab/hetzner track prod, which is
-# jammy, so they stay single-release (and box_deps, seeded only off jammy box,
-# is the lone image push-CI test cells consume). A dispatch that pins `ubuntu`
-# (INPUTS_UBUNTU, ci.yml's `ubuntu` input) rebuilds just that release for both
-# calls; empty (a push, or a no-arg dispatch) takes the defaults below.
-if [ -n "${INPUTS_UBUNTU:-}" ]; then
-  PACKER_UBUNTU_BOX_JSON=$(jq -cn --arg u "$INPUTS_UBUNTU" '[$u]')
-  PACKER_UBUNTU_EXTRA_JSON=$PACKER_UBUNTU_BOX_JSON
-else
-  PACKER_UBUNTU_BOX_JSON='["jammy","noble","resolute"]'
-  PACKER_UBUNTU_EXTRA_JSON='["jammy"]'
-fi
-
+# Matrix bucket splitting, packer source/ubuntu computation, and CI output
+# emission are handled by mise-tasks/ci/detect.py (unit-tested in Python).
+# This thin wrapper preserves the call-site interface ($1=matrix, $2=packer,
+# $3=ci_image) so the rest of the script is unchanged.
 emit() {
   local matrix=$1 packer_changed=${2:-false} ci_image_changed=${3:-false}
-  # Split the combined matrix into per-packer-dependency groups so ci.yml can
-  # wire each test group to exactly its packer build. The machine field ($s[1])
-  # determines the packer dependency, not the trailing segment:
-  #   box/box_deps → needs packer for that release (jammy/noble/resolute)
-  #   minimal/lab/pug → no packer dep (vanilla cloud image / existing images)
-  # A hypothetical minimal:noble cell lands in matrix_minimal (no packer dep),
-  # not matrix_noble — the machine, not the release, decides the bucket.
-  local matrix_noble matrix_resolute matrix_minimal matrix_jammy
-  matrix_noble=$(jq -c '[.[] | select(split(":") | length == 3 and (.[1] == "box" or .[1] == "box_deps") and .[2] == "noble")]' <<<"$matrix")
-  matrix_resolute=$(jq -c '[.[] | select(split(":") | length == 3 and (.[1] == "box" or .[1] == "box_deps") and .[2] == "resolute")]' <<<"$matrix")
-  matrix_minimal=$(jq -c '[.[] | select(split(":") | .[1] | . != "box" and . != "box_deps")]' <<<"$matrix")
-  matrix_jammy=$(jq -c '[.[] | select(split(":") | (.[1] == "box" or .[1] == "box_deps") and (length < 3 or (.[2] != "noble" and .[2] != "resolute")))]' <<<"$matrix")
-  log "result: matrix=$matrix (jammy=$matrix_jammy noble=$matrix_noble resolute=$matrix_resolute minimal=$matrix_minimal) packer_changed=$packer_changed ci_image_changed=$ci_image_changed packer_sources=$PACKER_SOURCES_JSON (box=$PACKER_SOURCES_BOX_JSON extra=$PACKER_SOURCES_EXTRA_JSON) packer_ubuntu=(box=$PACKER_UBUNTU_BOX_JSON extra=$PACKER_UBUNTU_EXTRA_JSON)"
-  if [ -n "${GITHUB_OUTPUT:-}" ]; then
-    {
-      echo "matrix=$matrix"
-      echo "matrix_jammy=$matrix_jammy"
-      echo "matrix_noble=$matrix_noble"
-      echo "matrix_resolute=$matrix_resolute"
-      echo "matrix_minimal=$matrix_minimal"
-      echo "packer_changed=$packer_changed"
-      echo "ci_image_changed=$ci_image_changed"
-      echo "packer_sources=$PACKER_SOURCES_JSON"
-      echo "packer_sources_box=$PACKER_SOURCES_BOX_JSON"
-      echo "packer_sources_extra=$PACKER_SOURCES_EXTRA_JSON"
-      echo "packer_ubuntu_box=$PACKER_UBUNTU_BOX_JSON"
-      echo "packer_ubuntu_extra=$PACKER_UBUNTU_EXTRA_JSON"
-    } >>"$GITHUB_OUTPUT"
-  else
-    echo "matrix=$matrix"
-    echo "matrix_jammy=$matrix_jammy"
-    echo "matrix_noble=$matrix_noble"
-    echo "matrix_resolute=$matrix_resolute"
-    echo "matrix_minimal=$matrix_minimal"
-    echo "packer_changed=$packer_changed"
-    echo "ci_image_changed=$ci_image_changed"
-    echo "packer_sources=$PACKER_SOURCES_JSON"
-    echo "packer_sources_box=$PACKER_SOURCES_BOX_JSON"
-    echo "packer_sources_extra=$PACKER_SOURCES_EXTRA_JSON"
-    echo "packer_ubuntu_box=$PACKER_UBUNTU_BOX_JSON"
-    echo "packer_ubuntu_extra=$PACKER_UBUNTU_EXTRA_JSON"
-  fi
+  python3 mise-tasks/ci/detect.py emit \
+    --matrix "$matrix" \
+    --packer-changed "$packer_changed" \
+    --ci-image-changed "$ci_image_changed" \
+    --inputs-sources "${INPUTS_SOURCES:-}" \
+    --inputs-ubuntu "${INPUTS_UBUNTU:-}"
 }
 
 # Resolve the role list from --all / INPUTS_ROLES / git diff, then emit.

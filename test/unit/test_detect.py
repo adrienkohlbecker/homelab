@@ -621,6 +621,103 @@ class TestCmdPackerUbuntu:
         assert result["extra"] == ["noble"]
 
 
+class TestCmdEmit:
+    @staticmethod
+    def _parse_kv(text: str) -> dict[str, str]:
+        result = {}
+        for line in text.strip().splitlines():
+            if "=" in line:
+                k, _, v = line.partition("=")
+                result[k] = v
+        return result
+
+    def test_basic_emit(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+        rc = detect._cmd_emit(["--matrix", '["alpha:box","beta:minimal"]'])
+        assert rc == 0
+        out = self._parse_kv(capsys.readouterr().out)
+        assert json.loads(out["matrix_jammy"]) == ["alpha:box"]
+        assert json.loads(out["matrix_minimal"]) == ["beta:minimal"]
+        assert json.loads(out["matrix_noble"]) == []
+        assert json.loads(out["matrix_resolute"]) == []
+        assert out["packer_changed"] == "false"
+        assert out["ci_image_changed"] == "false"
+
+    def test_packer_changed_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+        rc = detect._cmd_emit(["--matrix", "[]", "--packer-changed", "true"])
+        assert rc == 0
+        out = self._parse_kv(capsys.readouterr().out)
+        assert out["packer_changed"] == "true"
+        assert out["ci_image_changed"] == "false"
+
+    def test_ci_image_changed_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+        rc = detect._cmd_emit(["--matrix", "[]", "--ci-image-changed", "true"])
+        assert rc == 0
+        out = self._parse_kv(capsys.readouterr().out)
+        assert out["ci_image_changed"] == "true"
+
+    def test_packer_sources(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+        rc = detect._cmd_emit(["--matrix", "[]", "--inputs-sources", "lab pug"])
+        assert rc == 0
+        out = self._parse_kv(capsys.readouterr().out)
+        assert json.loads(out["packer_sources"]) == ["lab", "pug"]
+        assert json.loads(out["packer_sources_box"]) == []
+        assert json.loads(out["packer_sources_extra"]) == ["lab", "pug"]
+
+    def test_packer_ubuntu_default(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+        rc = detect._cmd_emit(["--matrix", "[]"])
+        assert rc == 0
+        out = self._parse_kv(capsys.readouterr().out)
+        assert json.loads(out["packer_ubuntu_box"]) == ["jammy", "noble", "resolute"]
+        assert json.loads(out["packer_ubuntu_extra"]) == ["jammy"]
+
+    def test_packer_ubuntu_pinned(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+        rc = detect._cmd_emit(["--matrix", "[]", "--inputs-ubuntu", "noble"])
+        assert rc == 0
+        out = self._parse_kv(capsys.readouterr().out)
+        assert json.loads(out["packer_ubuntu_box"]) == ["noble"]
+        assert json.loads(out["packer_ubuntu_extra"]) == ["noble"]
+
+    def test_github_output_file(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture, tmp_path: Path) -> None:
+        gh_out = tmp_path / "output"
+        gh_out.touch()
+        monkeypatch.setenv("GITHUB_OUTPUT", str(gh_out))
+        rc = detect._cmd_emit(["--matrix", '["alpha:box"]'])
+        assert rc == 0
+        assert capsys.readouterr().out == ""
+        content = gh_out.read_text()
+        kv = self._parse_kv(content)
+        assert json.loads(kv["matrix_jammy"]) == ["alpha:box"]
+        assert json.loads(kv["packer_sources"]) == ["box", "pug", "lab", "hetzner"]
+
+    def test_log_to_stderr(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+        detect._cmd_emit(["--matrix", '["alpha:box"]'])
+        err = capsys.readouterr().err
+        assert "[detect-roles] result:" in err
+
+    def test_mixed_buckets(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+        matrix = json.dumps([
+            "alpha:box",
+            "cleanup:minimal",
+            "net:box_deps:noble",
+            "apt:box:resolute",
+        ])
+        rc = detect._cmd_emit(["--matrix", matrix])
+        assert rc == 0
+        out = self._parse_kv(capsys.readouterr().out)
+        assert json.loads(out["matrix_jammy"]) == ["alpha:box"]
+        assert json.loads(out["matrix_noble"]) == ["net:box_deps:noble"]
+        assert json.loads(out["matrix_resolute"]) == ["apt:box:resolute"]
+        assert json.loads(out["matrix_minimal"]) == ["cleanup:minimal"]
+
+
 class TestMainEntrypoint:
     def test_no_args_returns_2(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.argv", ["detect.py"])
@@ -629,3 +726,10 @@ class TestMainEntrypoint:
     def test_unknown_command_returns_2(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.argv", ["detect.py", "bogus"])
         assert detect.main() == 2
+
+    def test_emit_via_main(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+        monkeypatch.setattr("sys.argv", ["detect.py", "emit", "--matrix", "[]"])
+        assert detect.main() == 0
+        out = capsys.readouterr().out
+        assert "matrix=" in out
