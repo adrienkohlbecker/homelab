@@ -47,6 +47,10 @@ StartLimitBurst=3
 After=zfs_mount_mnt_scratch.service
 Requires=zfs_mount_mnt_scratch.service
 {% endif %}
+{% if zfs_has_ci_scratch_mount %}
+After=zfs_mount_mnt_ci_scratch.service
+Requires=zfs_mount_mnt_ci_scratch.service
+{% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
 {% endif %}
