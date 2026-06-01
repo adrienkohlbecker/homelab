@@ -31,18 +31,18 @@
   uri:
     url: http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/json
     status_code: 200
-  register: _verify_socket_proxy_containers
+  register: _socket_proxy_containers
   become: true
 
 - name: _verify | /containers/json body is non-empty (proxy reaches the socket)
   assert:
     that:
-      - _verify_socket_proxy_containers.json | length > 0
+      - _socket_proxy_containers.json | length > 0
   become: true
 
 - name: _verify | Allowed GET /containers/<id>/stats returns 200 (netdata data-plane)
   uri:
-    url: "http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/{{ _verify_socket_proxy_containers.json[0].Id }}/stats?stream=false"
+    url: "http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/{{ _socket_proxy_containers.json[0].Id }}/stats?stream=false"
     status_code: 200
   become: true
 
@@ -84,7 +84,7 @@
 
 - name: _verify | POST /containers/<id>/exec is blocked (EXEC=0)
   uri:
-    url: "http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/{{ _verify_socket_proxy_containers.json[0].Id }}/exec"
+    url: "http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/{{ _socket_proxy_containers.json[0].Id }}/exec"
     method: POST
     body_format: json
     body: {"Cmd": ["true"]}
