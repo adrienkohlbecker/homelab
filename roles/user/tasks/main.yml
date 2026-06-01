@@ -20,7 +20,6 @@
       - fatrace
       - fdupes
       - git
-      - git-delta
       - git-lfs
       - gparted
       - htop
