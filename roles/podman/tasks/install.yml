@@ -31,6 +31,43 @@
 # clean up — drop the dependency so `iptables -L` doesn't silently
 # resurrect empty `ip filter` chains. Drop releases from this list as
 # they age out.
+# Podman's apt postinst lazily initializes the storage bolt DB on first
+# touch, baking in whatever driver the config says at that moment. If
+# /etc/containers/storage.conf doesn't exist yet, the DB records
+# driver="" (auto-detect); our full write after apt then says
+# driver="overlay" and every subsequent podman command dies with
+# "database graph driver does not match". On ZFS hosts the zvol mount
+# wipes the stale DB, but on non-ZFS hosts (minimal) it persists.
+# Pre-seed just enough config for the postinst to record the right
+# driver. The full validated write after apt overwrites this.
+- name: install | Ensure /etc/containers exists for storage pre-seed
+  file:
+    path: /etc/containers
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  tags:
+    - podman
+
+- name: install | Pre-seed storage.conf before apt postinst
+  copy:
+    dest: /etc/containers/storage.conf
+    backup: true
+    content: |
+      [storage]
+      driver = "overlay"
+      runroot = "/run/containers/storage"
+      graphroot = "/var/lib/containers/storage"
+    mode: "0644"
+    owner: root
+    group: root
+    force: false
+  become: true
+  tags:
+    - podman
+
 - name: install | Install podman
   apt:
     pkg: "{{ ['podman', 'aardvark-dns', 'netavark', 'passt', 'man-db', 'python3-tomli']
@@ -66,12 +103,10 @@
 # console) EIO without it. The zvol create/mount tasks below stay gated on
 # zfs_root (the backing); the storage config itself is universal.
 #
-# ORDERING: must be written before any podman command runs. The storage
-# database is lazily initialized on first access; if it's created before
-# this file exists, the DB stores driver="" (auto-detect) while the config
-# says driver="overlay" — podman then refuses to start with "database
-# graph driver does not match". On zfs_root hosts the zvol mount masks
-# this by wiping the stale DB, but on non-ZFS hosts (minimal) it persists.
+# ORDERING: the pre-seed task above writes a minimal storage.conf before
+# apt install so the postinst DB initialization records driver="overlay".
+# This full write adds rootless_storage_path and the fuse-overlayfs shim;
+# it overwrites the pre-seed (force: true, the default) on every converge.
 - name: install | Configure podman storage
   vars:
     # Native overlay learned idmapped-mount support in kernel 5.19.
