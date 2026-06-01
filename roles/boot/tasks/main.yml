@@ -8,19 +8,24 @@
 
 # We boot via rEFInd -> ZFSBootMenu, never grub. linux-generic Recommends a
 # grub-* alternation; hold the whole grub family so a later kernel upgrade can't
-# pull it in to fight the rEFInd boot path. apt-mark expands the glob, so this
-# covers future grub sub-packages without an enumerated list. Gated to non-grub
-# hosts so a grub-booted host is never touched.
-- name: Hold grub packages
+# pull it in to fight the rEFInd boot path. dpkg-query expands the glob; then
+# dpkg_selections sets the hold with proper check-mode and diff support.
+- name: Enumerate grub packages
   when: not grub_bootloader
-  check_mode: false
-  command: apt-mark hold grub*
-  register: boot_grub_hold
-  changed_when: >-
-    boot_grub_hold.stdout_lines
-    | reject('search', 'already')
-    | select('search', 'set on hold')
-    | list | length > 0
+  command: dpkg-query -W -f='${binary:Package}\n' 'grub*'
+  register: boot_grub_packages
+  changed_when: false
+  failed_when: false
+  become: true
+  tags:
+    - boot
+
+- name: Hold grub packages
+  when: not grub_bootloader and boot_grub_packages.stdout_lines | default([]) | length > 0
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: "{{ boot_grub_packages.stdout_lines }}"
   become: true
   tags:
     - boot
