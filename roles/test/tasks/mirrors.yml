@@ -2,6 +2,36 @@
   import_role:
     name: hostname
 
+- name: mirrors | Ensure systemd-resolved drop-in dir exists
+  file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: mirrors | Force DNS-over-TLS so all queries ride TCP
+  copy:
+    dest: /etc/systemd/resolved.conf.d/10-test-dns-over-tls.conf
+    mode: "0644"
+    owner: root
+    group: root
+    content: |
+      [Resolve]
+      DNS={{ bootstrap_dns_resolver }}
+      DNSOverTLS=yes
+      Domains=~.
+  register: _test_resolved_dot
+  become: true
+
+- name: mirrors | Restart systemd-resolved to pick up DoT config
+  systemd:
+    name: systemd-resolved
+    state: restarted
+  when: _test_resolved_dot.changed
+  become: true
+
 - name: mirrors | Configure apt retries and sources
   import_role:
     name: apt
