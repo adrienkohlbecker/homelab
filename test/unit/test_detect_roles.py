@@ -1,20 +1,22 @@
-"""Unit tests for mise-tasks/ci/detect-roles.sh.
+"""End-to-end tests for mise-tasks/ci/detect-roles.sh.
 
-Tests path-classification regexes (via grep against bash EREs), packer
-source/ubuntu matrix computation, and end-to-end mode dispatch.
-Bucket splitting and packer matrix are now handled by detect.py and
-tested in test_detect.py.
+Validates that the thin bash wrapper correctly delegates to detect.py's
+``run`` command. Path classification regexes and data transforms are tested
+directly in test_detect.py; these tests exercise the full pipeline via
+subprocess.
 """
 
 import json
 import os
-import shlex
 import subprocess
 from pathlib import Path
 
-import pytest
-
-DETECT_ROLES_SH = Path(__file__).resolve().parent.parent.parent / "mise-tasks" / "ci" / "detect-roles.sh"
+DETECT_ROLES_SH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "mise-tasks"
+    / "ci"
+    / "detect-roles.sh"
+)
 REPO_ROOT = DETECT_ROLES_SH.parent.parent.parent
 
 
@@ -22,7 +24,10 @@ REPO_ROOT = DETECT_ROLES_SH.parent.parent.parent
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _run_bash(script: str, *, env: dict | None = None, cwd: Path | None = None) -> subprocess.CompletedProcess:
+
+def _run_bash(
+    script: str, *, env: dict | None = None, cwd: Path | None = None
+) -> subprocess.CompletedProcess:
     merged_env = {**os.environ, **(env or {})}
     return subprocess.run(
         ["bash", "-c", script],
@@ -40,139 +45,6 @@ def _parse_emit_output(stdout: str) -> dict[str, str]:
             key, _, val = line.partition("=")
             result[key] = val
     return result
-
-
-# ---------------------------------------------------------------------------
-# Path classification regexes
-# ---------------------------------------------------------------------------
-
-
-class TestPathRegexes:
-    """Verify the ERE patterns from detect-roles.sh match expected paths."""
-
-    @staticmethod
-    def _matches(pattern: str, path: str) -> bool:
-        result = _run_bash(f"echo {shlex.quote(path)} | grep -qE {shlex.quote(pattern)}")
-        return result.returncode == 0
-
-    @pytest.fixture(autouse=True)
-    def _build_regexes(self) -> None:
-        # Reconstruct the regexes from the script source to stay in sync.
-        script_text = DETECT_ROLES_SH.read_text()
-
-        # Extract FULL_UNIVERSE_PATTERNS
-        fu_patterns = []
-        in_fu = False
-        for line in script_text.splitlines():
-            if "FULL_UNIVERSE_PATTERNS=(" in line:
-                in_fu = True
-                continue
-            if in_fu:
-                if line.strip() == ")":
-                    break
-                pat = line.strip().split("#")[0].strip().strip("'\"")
-                if pat:
-                    fu_patterns.append(pat)
-
-        self.full_universe_re = "^(" + "|".join(fu_patterns) + ")$"
-
-        # Extract PACKER_PATH_PATTERNS
-        pp_patterns = []
-        in_pp = False
-        for line in script_text.splitlines():
-            if "PACKER_PATH_PATTERNS=(" in line:
-                in_pp = True
-                continue
-            if in_pp:
-                if line.strip() == ")":
-                    break
-                pat = line.strip().split("#")[0].strip().strip("'\"")
-                if pat:
-                    pp_patterns.append(pat)
-
-        self.packer_paths_re = "^(" + "|".join(pp_patterns) + ")"
-
-        # Extract CI_IMAGE_INPUT_PATTERNS
-        ci_patterns = []
-        in_ci = False
-        for line in script_text.splitlines():
-            if "CI_IMAGE_INPUT_PATTERNS=(" in line:
-                in_ci = True
-                continue
-            if in_ci:
-                if line.strip() == ")":
-                    break
-                pat = line.strip().split("#")[0].strip().strip("'\"")
-                if pat:
-                    ci_patterns.append(pat)
-
-        self.ci_image_re = "^(" + "|".join(ci_patterns) + ")$"
-
-    # -- Full universe --
-
-    def test_full_universe_group_vars(self) -> None:
-        assert self._matches(self.full_universe_re, "group_vars/all/main.yml")
-        assert self._matches(self.full_universe_re, "group_vars/all/service_ports.yaml")
-        assert self._matches(self.full_universe_re, "group_vars/test.yml")
-
-    def test_full_universe_host_vars(self) -> None:
-        assert self._matches(self.full_universe_re, "host_vars/box.yml")
-        assert self._matches(self.full_universe_re, "host_vars/minimal.yml")
-        assert not self._matches(self.full_universe_re, "host_vars/lab.yml")
-        assert not self._matches(self.full_universe_re, "host_vars/pug.yml")
-
-    def test_full_universe_test_harness(self) -> None:
-        assert self._matches(self.full_universe_re, "test/machine.py")
-        assert self._matches(self.full_universe_re, "test/testall.py")
-        assert self._matches(self.full_universe_re, "test/matrix.py")
-        assert not self._matches(self.full_universe_re, "test/unit/test_matrix.py")
-
-    def test_full_universe_test_subdirs(self) -> None:
-        assert self._matches(self.full_universe_re, "test/playbooks/site.yml")
-        assert self._matches(self.full_universe_re, "test/minimal/cloud-init.yml")
-
-    def test_full_universe_config_files(self) -> None:
-        assert self._matches(self.full_universe_re, "ansible.cfg")
-        assert self._matches(self.full_universe_re, "vault-client.sh")
-        assert self._matches(self.full_universe_re, "mise.toml")
-        assert self._matches(self.full_universe_re, "pyproject.toml")
-
-    def test_full_universe_topology(self) -> None:
-        assert self._matches(self.full_universe_re, "data/network_topology.yml")
-        assert self._matches(self.full_universe_re, "data/network_topology.schema.json")
-
-    def test_full_universe_rejects_role_files(self) -> None:
-        assert not self._matches(self.full_universe_re, "roles/nginx/tasks/main.yml")
-        assert not self._matches(self.full_universe_re, "roles/podman/templates/foo.j2")
-
-    # -- Packer paths --
-
-    def test_packer_paths(self) -> None:
-        assert self._matches(self.packer_paths_re, "packer/qemu.pkr.hcl")
-        assert self._matches(self.packer_paths_re, "packer/scripts/chroot.sh")
-        assert self._matches(self.packer_paths_re, "mise-tasks/packer/build")
-
-    def test_packer_paths_rejects(self) -> None:
-        assert not self._matches(self.packer_paths_re, "roles/packer/tasks/main.yml")
-        assert not self._matches(self.packer_paths_re, "test/machine.py")
-
-    # -- CI image inputs --
-
-    def test_ci_image_inputs(self) -> None:
-        assert self._matches(self.ci_image_re, "Dockerfile")
-        assert self._matches(self.ci_image_re, "mise.toml")
-        assert self._matches(self.ci_image_re, "pyproject.toml")
-        assert self._matches(self.ci_image_re, "uv.lock")
-        assert self._matches(self.ci_image_re, "packer/qemu.pkr.hcl")
-
-    def test_ci_image_rejects(self) -> None:
-        assert not self._matches(self.ci_image_re, "packer/scripts/chroot.sh")
-        assert not self._matches(self.ci_image_re, "ansible.cfg")
-
-
-# ---------------------------------------------------------------------------
-# Packer source matrix
-# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
