@@ -29,22 +29,26 @@
       item: /etc/logrotate.d/_verify_logrotate
 
 - name: _verify | Assert the toggle diverted the changed fixture
-  # On box (zfs_root: true) the toggle changes the fixture, so the divert branch
-  # adds a diversion to <path>.dpkg-dist. --list prints the registered diversion.
-  command:
-    argv:
-      - dpkg-divert
-      - --list
-      - /etc/logrotate.d/_verify_logrotate
-  changed_when: false
-  register: logrotate_verify_divert
-  become: true
+  # On box (zfs_root: true) the toggle disables compress (a change), so the
+  # divert branch registers <path>.dpkg-dist. On minimal (zfs_root: false) the
+  # fixture already has compress enabled — no change, no divert.
+  when: zfs_root
+  block:
+    - name: _verify | List diversion for the fixture
+      command:
+        argv:
+          - dpkg-divert
+          - --list
+          - /etc/logrotate.d/_verify_logrotate
+      changed_when: false
+      register: logrotate_verify_divert
+      become: true
 
-- name: _verify | Divert must be registered
-  assert:
-    that:
-      - "'/etc/logrotate.d/_verify_logrotate.dpkg-dist' in logrotate_verify_divert.stdout"
-    fail_msg: compression toggle did not register the dpkg diversion
+    - name: _verify | Divert must be registered
+      assert:
+        that:
+          - "'/etc/logrotate.d/_verify_logrotate.dpkg-dist' in logrotate_verify_divert.stdout"
+        fail_msg: compression toggle did not register the dpkg diversion
 
 - name: _verify | Read back the toggled fixture
   slurp:
@@ -137,8 +141,7 @@
     fail_msg: condition:false did not skip the compression replace
 
 - name: _verify | Remove the test diversion
-  # Drop the diversion the toggle registered, so a --keep box isn't left with a
-  # dangling diversion pointing at a path we're about to delete.
+  when: zfs_root
   community.general.dpkg_divert:
     path: /etc/logrotate.d/_verify_logrotate
     divert: /etc/logrotate.d/_verify_logrotate.dpkg-dist

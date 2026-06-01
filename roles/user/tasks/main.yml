@@ -203,6 +203,10 @@
   args:
     creates: "{{ ansible_user_dir }}/.gnupg/pubring.kbx"
     executable: /bin/bash
+  register: user_gpg_import
+  until: user_gpg_import.rc == 0
+  retries: 3
+  delay: 5
   tags:
     - user
 
