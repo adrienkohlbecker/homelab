@@ -56,6 +56,13 @@
   uri:
     url: http://127.0.0.1:{{ service_ports.socket_proxy }}/info
     status_code: 200
+  become: true
+
+- name: _verify | Versioned GET /v1.41/containers/json returns 200
+  uri:
+    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/v1.41/containers/json
+    status_code: 200
+  become: true
 
 # POST is denied by default (read-only). A blocked write must 403, not reach
 # the socket -- this is the whole point of the proxy.
