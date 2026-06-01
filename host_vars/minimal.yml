@@ -30,3 +30,6 @@ swap_zram:
   size: 2G
 
 has_transcoding_acceleration: false
+
+ssh_public_keys: |
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key
