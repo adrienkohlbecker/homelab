@@ -1,4 +1,5 @@
 # _setup.yml stands up a local headscale (podman + nginx + sqlite dataset) for
 # the tailscale client to register against, so route there to reuse box_deps'
 # pre-baked podman + nginx (skips ~140s/run). Same rationale as roles/headscale.
-machine: box_deps
+machines:
+  box_deps:

@@ -1,0 +1,6 @@
+# crashkernel= delivery splits on grub_bootloader: GRUB hosts rely on the
+# distro kdump-tools.cfg in grub.d; ZBM hosts write a ZFS cmdline property.
+# The minimal cell exercises the GRUB path and its _verify assertions.
+machines:
+  box:
+  minimal:

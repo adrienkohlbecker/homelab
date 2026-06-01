@@ -1,0 +1,6 @@
+# Behaviour differs against a host where the upstream-shipped packages this
+# role removes/replaces are actually present (e.g. snap removal only exercises
+# the real path when snapd was preinstalled on the vanilla cloud image).
+machines:
+  box:
+  minimal:

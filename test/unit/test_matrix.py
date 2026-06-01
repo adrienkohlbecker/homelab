@@ -29,12 +29,6 @@ def _make_role(root: Path, name: str, meta: dict | None = None) -> None:
         (meta_dir / "test.yml").write_text(yaml.dump(meta))
 
 
-def _make_minimal_roles(root: Path, roles: list[str]) -> None:
-    ci_dir = root / ".github"
-    ci_dir.mkdir(parents=True, exist_ok=True)
-    (ci_dir / "ci-minimal-roles.txt").write_text("\n".join(roles) + "\n")
-
-
 # ---------------------------------------------------------------------------
 # list_testable_roles
 # ---------------------------------------------------------------------------
@@ -57,28 +51,7 @@ class TestListTestableRoles:
 
 
 # ---------------------------------------------------------------------------
-# read_minimal_roles
-# ---------------------------------------------------------------------------
-
-
-class TestReadMinimalRoles:
-    def test_reads_from_file(self, roles_tree: Path) -> None:
-        _make_minimal_roles(roles_tree, ["cleanup", "apt_source"])
-        result = matrix.read_minimal_roles()
-        assert result == frozenset({"cleanup", "apt_source"})
-
-    def test_skips_comments_and_blanks(self, roles_tree: Path) -> None:
-        ci_dir = roles_tree / ".github"
-        ci_dir.mkdir(parents=True, exist_ok=True)
-        (ci_dir / "ci-minimal-roles.txt").write_text("# comment\n\ncleanup\n  \n")
-        assert matrix.read_minimal_roles() == frozenset({"cleanup"})
-
-    def test_empty_when_file_missing(self, roles_tree: Path) -> None:
-        assert matrix.read_minimal_roles() == frozenset()
-
-
-# ---------------------------------------------------------------------------
-# default_machine_for / release_ubuntu_for
+# machines_for / default_machine_for / release_ubuntu_for
 # ---------------------------------------------------------------------------
 
 
@@ -88,8 +61,16 @@ class TestRoleMeta:
         assert matrix.default_machine_for("plain") == "box"
 
     def test_default_machine_reads_meta(self, roles_tree: Path) -> None:
-        _make_role(roles_tree, "fancy", {"machine": "box_deps"})
+        _make_role(roles_tree, "fancy", {"machines": {"box_deps": None}})
         assert matrix.default_machine_for("fancy") == "box_deps"
+
+    def test_machines_for_defaults(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "plain")
+        assert matrix.machines_for("plain") == {"box": None}
+
+    def test_machines_for_reads_dict(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "multi", {"machines": {"box": None, "minimal": None}})
+        assert matrix.machines_for("multi") == {"box": None, "minimal": None}
 
     def test_release_ubuntu_empty_when_absent(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "plain")
@@ -108,36 +89,38 @@ class TestRoleMeta:
 class TestBuildRoleCells:
     def test_plain_role_one_cell(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "plain")
-        cells = matrix.build_role_cells("plain", frozenset())
+        cells = matrix.build_role_cells("plain")
         assert cells == [matrix.TestCell("box", "jammy", "plain")]
 
     def test_box_deps_role(self, roles_tree: Path) -> None:
-        _make_role(roles_tree, "svc", {"machine": "box_deps"})
-        cells = matrix.build_role_cells("svc", frozenset())
+        _make_role(roles_tree, "svc", {"machines": {"box_deps": None}})
+        cells = matrix.build_role_cells("svc")
         assert cells == [matrix.TestCell("box_deps", "jammy", "svc")]
 
-    def test_minimal_role_gets_extra_cell(self, roles_tree: Path) -> None:
-        _make_role(roles_tree, "cleanup")
-        cells = matrix.build_role_cells("cleanup", frozenset({"cleanup"}))
+    def test_minimal_machine_gets_extra_cell(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "cleanup", {"machines": {"box": None, "minimal": None}})
+        cells = matrix.build_role_cells("cleanup")
         assert matrix.TestCell("box", "jammy", "cleanup") in cells
         assert matrix.TestCell("minimal", "jammy", "cleanup") in cells
         assert len(cells) == 2
 
-    def test_release_cells_use_default_machine(self, roles_tree: Path) -> None:
-        _make_role(roles_tree, "netdata", {"machine": "box_deps", "ubuntu": ["resolute"]})
-        cells = matrix.build_role_cells("netdata", frozenset())
+    def test_release_cells_use_primary_machine(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "netdata", {"machines": {"box_deps": None}, "ubuntu": ["resolute"]})
+        cells = matrix.build_role_cells("netdata")
         assert matrix.TestCell("box_deps", "jammy", "netdata") in cells
         assert matrix.TestCell("box_deps", "resolute", "netdata") in cells
         assert len(cells) == 2
 
-    def test_multi_release_plus_minimal(self, roles_tree: Path) -> None:
-        _make_role(roles_tree, "podman", {"ubuntu": ["noble", "resolute"]})
-        cells = matrix.build_role_cells("podman", frozenset({"podman"}))
+    def test_multi_machine_plus_release(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "podman", {"machines": {"box": None, "minimal": None}, "ubuntu": ["noble", "resolute"]})
+        cells = matrix.build_role_cells("podman")
         expected = [
             matrix.TestCell("box", "jammy", "podman"),
             matrix.TestCell("minimal", "jammy", "podman"),
             matrix.TestCell("box", "noble", "podman"),
+            matrix.TestCell("minimal", "noble", "podman"),
             matrix.TestCell("box", "resolute", "podman"),
+            matrix.TestCell("minimal", "resolute", "podman"),
         ]
         assert cells == expected
 
@@ -213,16 +196,15 @@ class TestCiSpecs:
 
 class TestDispatchMatrix:
     def test_bare_role_expands(self, roles_tree: Path) -> None:
-        _make_role(roles_tree, "alpha", {"ubuntu": ["noble"]})
-        _make_minimal_roles(roles_tree, ["alpha"])
+        _make_role(roles_tree, "alpha", {"machines": {"box": None, "minimal": None}, "ubuntu": ["noble"]})
         cells = matrix._build_dispatch_matrix("alpha")
         assert matrix.TestCell("box", "jammy", "alpha") in cells
         assert matrix.TestCell("minimal", "jammy", "alpha") in cells
         assert matrix.TestCell("box", "noble", "alpha") in cells
+        assert matrix.TestCell("minimal", "noble", "alpha") in cells
 
     def test_exact_spec_no_escalation(self, roles_tree: Path) -> None:
-        _make_role(roles_tree, "alpha", {"ubuntu": ["noble"]})
-        _make_minimal_roles(roles_tree, ["alpha"])
+        _make_role(roles_tree, "alpha", {"machines": {"box": None, "minimal": None}, "ubuntu": ["noble"]})
         cells = matrix._build_dispatch_matrix("alpha:box")
         assert cells == [matrix.TestCell("box", "jammy", "alpha")]
 
@@ -251,7 +233,7 @@ class TestDispatchMatrix:
 class TestCli:
     def test_json_all(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "alpha")
-        _make_role(roles_tree, "beta", {"machine": "box_deps"})
+        _make_role(roles_tree, "beta", {"machines": {"box_deps": None}})
         result = subprocess.run(
             [sys.executable, "-m", "matrix", "--json", "--all"],
             capture_output=True,

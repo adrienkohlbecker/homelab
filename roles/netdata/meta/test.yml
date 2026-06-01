@@ -9,4 +9,5 @@ ubuntu:
 # to skip the apt-backports + nginx install on every test run. netdata itself
 # isn't pre-baked -- the saving is the shared nginx bringup, same as the
 # keepalived_exporter / fluentbit consumers of the same _setup pattern.
-machine: box_deps
+machines:
+  box_deps:

@@ -1,11 +1,12 @@
 # _setup.yml imports podman/install + test/nginx; both are pre-baked
 # into box_deps (see packer/seed_deps.yml), so route there to skip
 # ~140s of backports + podman + nginx install on every test run.
-machine: box_deps
+machines:
+  box_deps:
 
 # Release-divergent: the tmpfiles.d validate adds `systemd-tmpfiles --dry-run`,
 # which landed in systemd 256 -- only resolute (26.04, systemd 259) has it;
 # jammy (249) and noble (255) render like the default cell. The resolute cell
-# validates that branch (on plain box, since box_deps is jammy-only).
+# validates that branch on box_deps (seed-deps builds per release).
 ubuntu:
   - resolute

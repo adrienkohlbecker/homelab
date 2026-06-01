@@ -1,0 +1,5 @@
+# cloud-init preserve-hostname pin only fires when /etc/cloud/ exists,
+# which it does on the vanilla cloud image (minimal) but not box.
+machines:
+  box:
+  minimal:

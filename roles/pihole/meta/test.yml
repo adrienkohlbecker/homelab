@@ -2,4 +2,5 @@
 # noble backports pre-applied). pihole's _setup.yml imports podman/install
 # + test/nginx, both of which were short-circuiting at ~140s of apt work
 # on every run; with box_deps they idempotent-skip in ~2s.
-machine: box_deps
+machines:
+  box_deps:

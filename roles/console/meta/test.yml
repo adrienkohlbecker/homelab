@@ -1,0 +1,7 @@
+# Two distinct cmdline-delivery paths: grub_bootloader=true writes
+# /etc/default/grub.d/99-console.cfg + update-grub; grub_bootloader=false
+# writes a ZFS dataset property. The minimal cell exercises the GRUB path
+# that box (ZBM-booted) never reaches.
+machines:
+  box:
+  minimal:

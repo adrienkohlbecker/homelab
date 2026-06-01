@@ -1,18 +1,23 @@
-"""Unit tests for mise-tasks/ci/detect.py — CI change-detection logic.
+"""Unit tests for mise-tasks/ci/detect.py — CI change-detection pipeline.
 
-Tests the pure Python equivalents of detect-roles.sh's data transforms:
-path classification regexes, file classification, matrix bucket splitting,
-packer source/ubuntu matrices, and release-cell propagation.
+Tests path classification regexes, file classification, matrix bucket
+splitting, packer source/ubuntu matrices, release-cell propagation,
+git helpers, GitHub API wrappers, green-base resolution, role dependency
+map, and the full ``run`` orchestration command.
 """
 
 import importlib
 import io
 import json
+import subprocess
+import urllib.error
+from collections import defaultdict
 from pathlib import Path
-
 import pytest
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent.parent / "mise-tasks" / "ci" / "detect.py"
+_MODULE_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "mise-tasks" / "ci" / "detect.py"
+)
 
 
 def _load():
@@ -176,10 +181,12 @@ class TestRolePathRe:
 
 class TestClassifyChangedFiles:
     def test_role_detection(self) -> None:
-        result = detect.classify_changed_files([
-            "roles/nginx/tasks/main.yml",
-            "roles/podman/templates/foo.j2",
-        ])
+        result = detect.classify_changed_files(
+            [
+                "roles/nginx/tasks/main.yml",
+                "roles/podman/templates/foo.j2",
+            ]
+        )
         assert result.direct_roles == ["nginx", "podman"]
         assert not result.packer_changed
         assert not result.ci_image_changed
@@ -223,25 +230,31 @@ class TestClassifyChangedFiles:
         assert result.direct_roles == ["nginx"]
 
     def test_deduplicates_roles(self) -> None:
-        result = detect.classify_changed_files([
-            "roles/nginx/tasks/main.yml",
-            "roles/nginx/templates/site.conf.j2",
-        ])
+        result = detect.classify_changed_files(
+            [
+                "roles/nginx/tasks/main.yml",
+                "roles/nginx/templates/site.conf.j2",
+            ]
+        )
         assert result.direct_roles == ["nginx"]
 
     def test_multiple_full_universe_paths(self) -> None:
-        result = detect.classify_changed_files([
-            "mise.toml",
-            "pyproject.toml",
-            "uv.lock",
-        ])
+        result = detect.classify_changed_files(
+            [
+                "mise.toml",
+                "pyproject.toml",
+                "uv.lock",
+            ]
+        )
         assert result.full_universe_paths == ["mise.toml", "pyproject.toml", "uv.lock"]
 
     def test_packer_and_role_simultaneous(self) -> None:
-        result = detect.classify_changed_files([
-            "packer/scripts/chroot.sh",
-            "roles/zfs/tasks/main.yml",
-        ])
+        result = detect.classify_changed_files(
+            [
+                "packer/scripts/chroot.sh",
+                "roles/zfs/tasks/main.yml",
+            ]
+        )
         assert result.packer_changed is True
         assert result.direct_roles == ["zfs"]
 
@@ -260,16 +273,22 @@ class TestSplitMatrixBuckets:
         assert result.minimal == []
 
     def test_noble_cells(self) -> None:
-        result = detect.split_matrix_buckets(["netdata:box_deps:noble", "zfs:box:noble"])
+        result = detect.split_matrix_buckets(
+            ["netdata:box_deps:noble", "zfs:box:noble"]
+        )
         assert result.noble == ["netdata:box_deps:noble", "zfs:box:noble"]
         assert result.jammy == []
 
     def test_resolute_cells(self) -> None:
-        result = detect.split_matrix_buckets(["podman:box:resolute", "netdata:box_deps:resolute"])
+        result = detect.split_matrix_buckets(
+            ["podman:box:resolute", "netdata:box_deps:resolute"]
+        )
         assert result.resolute == ["netdata:box_deps:resolute", "podman:box:resolute"]
 
     def test_minimal_cells(self) -> None:
-        result = detect.split_matrix_buckets(["cleanup:minimal", "somerole:lab", "anotherrole:pug"])
+        result = detect.split_matrix_buckets(
+            ["cleanup:minimal", "somerole:lab", "anotherrole:pug"]
+        )
         assert result.minimal == ["anotherrole:pug", "cleanup:minimal", "somerole:lab"]
         assert result.jammy == []
 
@@ -377,7 +396,7 @@ class TestPropagateReleaseCells:
         result = detect.propagate_release_cells(
             direct_roles=["apt_source"],
             consumers={"apt_source": ["nginx", "podman"]},
-            default_machines={"nginx": "box", "podman": "box_deps"},
+            role_machines={"nginx": ["box"], "podman": ["box_deps"]},
             role_releases={"apt_source": ["noble", "resolute"]},
             universe={"nginx", "podman"},
         )
@@ -392,7 +411,7 @@ class TestPropagateReleaseCells:
         result = detect.propagate_release_cells(
             direct_roles=["nginx"],
             consumers={"nginx": ["homepage"]},
-            default_machines={"homepage": "box"},
+            role_machines={"homepage": ["box"]},
             role_releases={},
             universe={"homepage"},
         )
@@ -402,7 +421,7 @@ class TestPropagateReleaseCells:
         result = detect.propagate_release_cells(
             direct_roles=["nginx"],
             consumers={"nginx": ["homepage"]},
-            default_machines={"homepage": "box"},
+            role_machines={"homepage": ["box"]},
             role_releases={"nginx": []},
             universe={"homepage"},
         )
@@ -412,7 +431,7 @@ class TestPropagateReleaseCells:
         result = detect.propagate_release_cells(
             direct_roles=["apt_source"],
             consumers={},
-            default_machines={},
+            role_machines={},
             role_releases={"apt_source": ["noble"]},
             universe=set(),
         )
@@ -422,7 +441,7 @@ class TestPropagateReleaseCells:
         result = detect.propagate_release_cells(
             direct_roles=["apt_source"],
             consumers={"apt_source": ["helper_only"]},
-            default_machines={"helper_only": "box"},
+            role_machines={"helper_only": ["box"]},
             role_releases={"apt_source": ["noble"]},
             universe=set(),
         )
@@ -432,7 +451,7 @@ class TestPropagateReleaseCells:
         result = detect.propagate_release_cells(
             direct_roles=["apt_source"],
             consumers={"apt_source": ["newrole"]},
-            default_machines={},
+            role_machines={},
             role_releases={"apt_source": ["noble"]},
             universe={"newrole"},
         )
@@ -442,7 +461,7 @@ class TestPropagateReleaseCells:
         result = detect.propagate_release_cells(
             direct_roles=["helper_a", "helper_b"],
             consumers={"helper_a": ["consumer"], "helper_b": ["consumer"]},
-            default_machines={"consumer": "box"},
+            role_machines={"consumer": ["box"]},
             role_releases={"helper_a": ["noble"], "helper_b": ["noble"]},
             universe={"consumer"},
         )
@@ -452,7 +471,7 @@ class TestPropagateReleaseCells:
         result = detect.propagate_release_cells(
             direct_roles=["apt_source", "podman"],
             consumers={"apt_source": ["nginx", "redis"], "podman": ["redis"]},
-            default_machines={"nginx": "box", "redis": "box_deps"},
+            role_machines={"nginx": ["box"], "redis": ["box_deps"]},
             role_releases={"apt_source": ["noble", "resolute"], "podman": ["noble"]},
             universe={"nginx", "redis"},
         )
@@ -463,11 +482,24 @@ class TestPropagateReleaseCells:
             "redis:box_deps:resolute",
         ]
 
+    def test_multi_machine_propagation(self) -> None:
+        result = detect.propagate_release_cells(
+            direct_roles=["apt_source"],
+            consumers={"apt_source": ["cleanup"]},
+            role_machines={"cleanup": ["box", "minimal"]},
+            role_releases={"apt_source": ["noble"]},
+            universe={"cleanup"},
+        )
+        assert result == [
+            "cleanup:box:noble",
+            "cleanup:minimal:noble",
+        ]
+
     def test_empty_inputs(self) -> None:
         result = detect.propagate_release_cells(
             direct_roles=[],
             consumers={},
-            default_machines={},
+            role_machines={},
             role_releases={},
             universe=set(),
         )
@@ -480,96 +512,792 @@ class TestPropagateReleaseCells:
 
 
 class TestRegexParityWithBash:
-    """Verify the Python regexes match the same paths as the bash tests.
+    """Parametrized parity checks for path classification regexes."""
 
-    The existing test_detect_roles.py extracts EREs from detect-roles.sh and
-    tests them via subprocess grep.  If both test suites pass, the two
-    implementations agree.
-    """
-
-    @pytest.mark.parametrize("path", [
-        "group_vars/all/main.yml",
-        "group_vars/all/service_ports.yaml",
-        "group_vars/test.yml",
-        "host_vars/box.yml",
-        "host_vars/minimal.yml",
-        "test/machine.py",
-        "test/testall.py",
-        "test/matrix.py",
-        "test/inventory.ini",
-        "test/playbooks/site.yml",
-        "test/minimal/cloud-init.yml",
-        "ansible.cfg",
-        "vault-client.sh",
-        "mise.toml",
-        "pyproject.toml",
-        "uv.lock",
-        "data/network_topology.yml",
-        "data/network_topology.schema.json",
-    ])
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "group_vars/all/main.yml",
+            "group_vars/all/service_ports.yaml",
+            "group_vars/test.yml",
+            "host_vars/box.yml",
+            "host_vars/minimal.yml",
+            "test/machine.py",
+            "test/testall.py",
+            "test/matrix.py",
+            "test/inventory.ini",
+            "test/playbooks/site.yml",
+            "test/minimal/cloud-init.yml",
+            "ansible.cfg",
+            "vault-client.sh",
+            "mise.toml",
+            "pyproject.toml",
+            "uv.lock",
+            "data/network_topology.yml",
+            "data/network_topology.schema.json",
+        ],
+    )
     def test_full_universe_match(self, path: str) -> None:
         assert detect.FULL_UNIVERSE_RE.match(path), f"should match: {path}"
 
-    @pytest.mark.parametrize("path", [
-        "host_vars/lab.yml",
-        "host_vars/pug.yml",
-        "test/unit/test_matrix.py",
-        "roles/nginx/tasks/main.yml",
-        "roles/podman/templates/foo.j2",
-        "README.md",
-        "Dockerfile",
-    ])
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "host_vars/lab.yml",
+            "host_vars/pug.yml",
+            "test/unit/test_matrix.py",
+            "roles/nginx/tasks/main.yml",
+            "roles/podman/templates/foo.j2",
+            "README.md",
+            "Dockerfile",
+        ],
+    )
     def test_full_universe_reject(self, path: str) -> None:
         assert not detect.FULL_UNIVERSE_RE.match(path), f"should not match: {path}"
 
-    @pytest.mark.parametrize("path", [
-        "packer/qemu.pkr.hcl",
-        "packer/scripts/chroot.sh",
-        "mise-tasks/packer/build",
-    ])
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "packer/qemu.pkr.hcl",
+            "packer/scripts/chroot.sh",
+            "mise-tasks/packer/build",
+        ],
+    )
     def test_packer_match(self, path: str) -> None:
         assert detect.PACKER_PATHS_RE.match(path), f"should match: {path}"
 
-    @pytest.mark.parametrize("path", [
-        "roles/packer/tasks/main.yml",
-        "test/machine.py",
-    ])
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "roles/packer/tasks/main.yml",
+            "test/machine.py",
+        ],
+    )
     def test_packer_reject(self, path: str) -> None:
         assert not detect.PACKER_PATHS_RE.match(path), f"should not match: {path}"
 
-    @pytest.mark.parametrize("path", [
-        "Dockerfile",
-        "mise.toml",
-        "pyproject.toml",
-        "uv.lock",
-        "packer/qemu.pkr.hcl",
-    ])
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "Dockerfile",
+            "mise.toml",
+            "pyproject.toml",
+            "uv.lock",
+            "packer/qemu.pkr.hcl",
+        ],
+    )
     def test_ci_image_match(self, path: str) -> None:
         assert detect.CI_IMAGE_INPUTS_RE.match(path), f"should match: {path}"
 
-    @pytest.mark.parametrize("path", [
-        "packer/scripts/chroot.sh",
-        "ansible.cfg",
-    ])
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "packer/scripts/chroot.sh",
+            "ansible.cfg",
+        ],
+    )
     def test_ci_image_reject(self, path: str) -> None:
         assert not detect.CI_IMAGE_INPUTS_RE.match(path), f"should not match: {path}"
 
 
 # ---------------------------------------------------------------------------
-# CLI subcommands
+# Git helpers
+# ---------------------------------------------------------------------------
+
+
+def _fake_git_result(
+    stdout: str = "", returncode: int = 0
+) -> subprocess.CompletedProcess:
+    return subprocess.CompletedProcess(
+        args=["git"], returncode=returncode, stdout=stdout, stderr=""
+    )
+
+
+class TestGitDiffFiles:
+    def test_parses_filenames(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect, "_git", lambda *a, **kw: _fake_git_result("a.yml\nb.yml\n")
+        )
+        assert detect.git_diff_files("abc", "HEAD") == ["a.yml", "b.yml"]
+
+    def test_empty_diff(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_git", lambda *a, **kw: _fake_git_result(""))
+        assert detect.git_diff_files("abc") == []
+
+    def test_strips_blank_lines(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect, "_git", lambda *a, **kw: _fake_git_result("a.yml\n\nb.yml\n\n")
+        )
+        assert detect.git_diff_files("abc") == ["a.yml", "b.yml"]
+
+
+class TestGitRevParse:
+    def test_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect, "_git", lambda *a, **kw: _fake_git_result("abc123\n")
+        )
+        assert detect.git_rev_parse("HEAD~1") == "abc123"
+
+    def test_failure_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect, "_git", lambda *a, **kw: _fake_git_result("", returncode=128)
+        )
+        assert detect.git_rev_parse("bogus") is None
+
+
+class TestGitRevParseShort:
+    def test_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect, "_git", lambda *a, **kw: _fake_git_result("abc123\n")
+        )
+        assert detect.git_rev_parse_short("HEAD") == "abc123"
+
+    def test_failure_truncates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect, "_git", lambda *a, **kw: _fake_git_result("", returncode=128)
+        )
+        assert detect.git_rev_parse_short("a" * 40) == "a" * 12
+
+
+class TestGitFetchCommit:
+    def test_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_git", lambda *a, **kw: _fake_git_result(""))
+        assert detect.git_fetch_commit("abc") is True
+
+    def test_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect, "_git", lambda *a, **kw: _fake_git_result("", returncode=1)
+        )
+        assert detect.git_fetch_commit("abc") is False
+
+
+# ---------------------------------------------------------------------------
+# GitHub API
+# ---------------------------------------------------------------------------
+
+
+class _FakeResponse:
+    """Minimal context-manager response for mocking urlopen."""
+
+    def __init__(self, data: dict):
+        self._data = json.dumps(data).encode()
+
+    def read(self):
+        return self._data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        pass
+
+
+class TestGhApiGet:
+    def test_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect.urllib.request,
+            "urlopen",
+            lambda req, timeout=None: _FakeResponse({"ok": True}),
+        )
+        assert detect._gh_api_get("http://example.com", "tok") == {"ok": True}
+
+    def test_retry_then_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        attempts = {"n": 0}
+
+        def mock_urlopen(req, timeout=None):
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                raise urllib.error.URLError("transient")
+            return _FakeResponse({"recovered": True})
+
+        monkeypatch.setattr(detect.urllib.request, "urlopen", mock_urlopen)
+        monkeypatch.setattr(detect.time, "sleep", lambda _: None)
+        result = detect._gh_api_get("http://example.com", "tok", retries=4)
+        assert result == {"recovered": True}
+        assert attempts["n"] == 3
+
+    def test_all_retries_fail(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect.urllib.request,
+            "urlopen",
+            lambda req, timeout=None: (_ for _ in ()).throw(
+                urllib.error.URLError("down")
+            ),
+        )
+        monkeypatch.setattr(detect.time, "sleep", lambda _: None)
+        assert detect._gh_api_get("http://x", "tok", retries=2) is None
+
+    def test_http_error_retried(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        attempts = {"n": 0}
+
+        def mock_urlopen(req, timeout=None):
+            attempts["n"] += 1
+            if attempts["n"] == 1:
+                raise urllib.error.HTTPError("http://x", 500, "ISE", {}, None)
+            return _FakeResponse({"ok": True})
+
+        monkeypatch.setattr(detect.urllib.request, "urlopen", mock_urlopen)
+        monkeypatch.setattr(detect.time, "sleep", lambda _: None)
+        assert detect._gh_api_get("http://x", "tok", retries=2) == {"ok": True}
+
+
+class TestIsAncestorOfHead:
+    def test_ahead(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect, "_gh_api_get", lambda url, token, **kw: {"status": "ahead"}
+        )
+        assert detect.is_ancestor_of_head(
+            "abc", "def", repo="r", api_url="http://api", token="t"
+        )
+
+    def test_identical(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect, "_gh_api_get", lambda url, token, **kw: {"status": "identical"}
+        )
+        assert detect.is_ancestor_of_head(
+            "abc", "abc", repo="r", api_url="http://api", token="t"
+        )
+
+    def test_diverged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect, "_gh_api_get", lambda url, token, **kw: {"status": "diverged"}
+        )
+        assert not detect.is_ancestor_of_head(
+            "abc", "def", repo="r", api_url="http://api", token="t"
+        )
+
+    def test_behind(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect, "_gh_api_get", lambda url, token, **kw: {"status": "behind"}
+        )
+        assert not detect.is_ancestor_of_head(
+            "abc", "def", repo="r", api_url="http://api", token="t"
+        )
+
+    def test_api_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_gh_api_get", lambda url, token, **kw: None)
+        assert not detect.is_ancestor_of_head(
+            "abc", "def", repo="r", api_url="http://api", token="t"
+        )
+
+    def test_constructs_correct_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured = {}
+
+        def mock_api(url, token, **kw):
+            captured["url"] = url
+            return {"status": "ahead"}
+
+        monkeypatch.setattr(detect, "_gh_api_get", mock_api)
+        detect.is_ancestor_of_head(
+            "base_sha",
+            "head_sha",
+            repo="owner/repo",
+            api_url="https://api.github.com",
+            token="t",
+        )
+        assert (
+            captured["url"]
+            == "https://api.github.com/repos/owner/repo/compare/base_sha...head_sha"
+        )
+
+
+class TestNightlyActuallyTested:
+    def test_real_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect,
+            "_gh_api_get",
+            lambda url, token, **kw: {
+                "jobs": [
+                    {"name": "gate", "conclusion": "success"},
+                    {"name": "test (foo:box)", "conclusion": "success"},
+                ]
+            },
+        )
+        assert detect.nightly_actually_tested(
+            42, repo="r", api_url="http://api", token="t"
+        )
+
+    def test_gate_only(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect,
+            "_gh_api_get",
+            lambda url, token, **kw: {
+                "jobs": [{"name": "gate", "conclusion": "success"}]
+            },
+        )
+        assert not detect.nightly_actually_tested(
+            42, repo="r", api_url="http://api", token="t"
+        )
+
+    def test_api_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_gh_api_get", lambda url, token, **kw: None)
+        assert not detect.nightly_actually_tested(
+            42, repo="r", api_url="http://api", token="t"
+        )
+
+    def test_empty_jobs(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect, "_gh_api_get", lambda url, token, **kw: {"jobs": []}
+        )
+        assert not detect.nightly_actually_tested(
+            42, repo="r", api_url="http://api", token="t"
+        )
+
+    def test_failed_non_gate_job(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect,
+            "_gh_api_get",
+            lambda url, token, **kw: {
+                "jobs": [
+                    {"name": "gate", "conclusion": "success"},
+                    {"name": "test (foo:box)", "conclusion": "failure"},
+                ]
+            },
+        )
+        assert not detect.nightly_actually_tested(
+            42, repo="r", api_url="http://api", token="t"
+        )
+
+
+class TestNewestGreenAncestor:
+    @staticmethod
+    def _kw(**overrides):
+        defaults = dict(
+            head_sha="HEAD",
+            repo="r",
+            api_url="http://api",
+            token="t",
+            log_fn=lambda m: None,
+        )
+        defaults.update(overrides)
+        return defaults
+
+    def test_finds_on_first_page(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def mock_api(url, token, **kw):
+            if "actions/runs?" in url:
+                return {
+                    "workflow_runs": [
+                        {
+                            "path": ".github/workflows/ci.yml",
+                            "event": "push",
+                            "head_sha": "abc123456789",
+                            "created_at": "2026-01-01",
+                            "id": 1,
+                        }
+                    ]
+                }
+            if "compare/" in url:
+                return {"status": "ahead"}
+            return None
+
+        monkeypatch.setattr(detect, "_gh_api_get", mock_api)
+        assert detect.newest_green_ancestor("master", **self._kw()) == "abc123456789"
+
+    def test_skips_non_ancestor(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def mock_api(url, token, **kw):
+            if "actions/runs?" in url:
+                if "&page=1" in url:
+                    return {
+                        "workflow_runs": [
+                            {
+                                "path": ".github/workflows/ci.yml",
+                                "event": "push",
+                                "head_sha": "old123",
+                                "created_at": "2026-01-01",
+                                "id": 1,
+                            }
+                        ]
+                    }
+                return {"workflow_runs": []}
+            if "compare/" in url:
+                return {"status": "diverged"}
+            return None
+
+        monkeypatch.setattr(detect, "_gh_api_get", mock_api)
+        logs = []
+        assert (
+            detect.newest_green_ancestor("master", **self._kw(log_fn=logs.append))
+            is None
+        )
+        assert any("not an ancestor" in msg for msg in logs)
+
+    def test_skips_gate_only_nightly(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def mock_api(url, token, **kw):
+            if "actions/runs?" in url:
+                if "&page=1" in url:
+                    return {
+                        "workflow_runs": [
+                            {
+                                "path": ".github/workflows/test-nightly.yml",
+                                "event": "schedule",
+                                "head_sha": "nightly123",
+                                "created_at": "2026-01-01",
+                                "id": 42,
+                            }
+                        ]
+                    }
+                return {"workflow_runs": []}
+            if "/jobs?" in url:
+                return {"jobs": [{"name": "gate", "conclusion": "success"}]}
+            return None
+
+        monkeypatch.setattr(detect, "_gh_api_get", mock_api)
+        logs = []
+        assert (
+            detect.newest_green_ancestor("master", **self._kw(log_fn=logs.append))
+            is None
+        )
+        assert any("gate-only" in msg for msg in logs)
+
+    def test_accepts_nightly_that_tested(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def mock_api(url, token, **kw):
+            if "actions/runs?" in url:
+                return {
+                    "workflow_runs": [
+                        {
+                            "path": ".github/workflows/test-nightly.yml",
+                            "event": "schedule",
+                            "head_sha": "nightly_good",
+                            "created_at": "2026-01-01",
+                            "id": 42,
+                        }
+                    ]
+                }
+            if "/jobs?" in url:
+                return {
+                    "jobs": [
+                        {"name": "gate", "conclusion": "success"},
+                        {"name": "test (foo:box)", "conclusion": "success"},
+                    ]
+                }
+            if "compare/" in url:
+                return {"status": "ahead"}
+            return None
+
+        monkeypatch.setattr(detect, "_gh_api_get", mock_api)
+        assert detect.newest_green_ancestor("master", **self._kw()) == "nightly_good"
+
+    def test_pages_through_results(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        page = {"n": 0}
+
+        def mock_api(url, token, **kw):
+            if "actions/runs?" in url:
+                page["n"] += 1
+                if page["n"] == 1:
+                    return {
+                        "workflow_runs": [
+                            {
+                                "path": ".github/workflows/ci.yml",
+                                "event": "push",
+                                "head_sha": "diverged1",
+                                "created_at": "2026-01-02",
+                                "id": 1,
+                            }
+                        ]
+                    }
+                if page["n"] == 2:
+                    return {
+                        "workflow_runs": [
+                            {
+                                "path": ".github/workflows/ci.yml",
+                                "event": "push",
+                                "head_sha": "found_it",
+                                "created_at": "2026-01-01",
+                                "id": 2,
+                            }
+                        ]
+                    }
+                return {"workflow_runs": []}
+            if "compare/" in url:
+                return {"status": "ahead" if "found_it" in url else "diverged"}
+            return None
+
+        monkeypatch.setattr(detect, "_gh_api_get", mock_api)
+        assert detect.newest_green_ancestor("master", **self._kw()) == "found_it"
+
+    def test_api_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_gh_api_get", lambda url, token, **kw: None)
+        logs = []
+        assert (
+            detect.newest_green_ancestor("master", **self._kw(log_fn=logs.append))
+            is None
+        )
+        assert any("failed" in msg for msg in logs)
+
+    def test_empty_runs(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect, "_gh_api_get", lambda url, token, **kw: {"workflow_runs": []}
+        )
+        assert detect.newest_green_ancestor("master", **self._kw()) is None
+
+    def test_skips_dispatch_ci_runs(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def mock_api(url, token, **kw):
+            if "actions/runs?" in url:
+                if "&page=1" in url:
+                    return {
+                        "workflow_runs": [
+                            {
+                                "path": ".github/workflows/ci.yml",
+                                "event": "workflow_dispatch",
+                                "head_sha": "dispatch123",
+                                "created_at": "2026-01-01",
+                                "id": 1,
+                            }
+                        ]
+                    }
+                return {"workflow_runs": []}
+            return None
+
+        monkeypatch.setattr(detect, "_gh_api_get", mock_api)
+        assert detect.newest_green_ancestor("master", **self._kw()) is None
+
+    def test_skips_runs_with_empty_sha(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def mock_api(url, token, **kw):
+            if "actions/runs?" in url:
+                if "&page=1" in url:
+                    return {
+                        "workflow_runs": [
+                            {
+                                "path": ".github/workflows/ci.yml",
+                                "event": "push",
+                                "head_sha": "",
+                                "created_at": "2026-01-01",
+                                "id": 1,
+                            }
+                        ]
+                    }
+                return {"workflow_runs": []}
+            return None
+
+        monkeypatch.setattr(detect, "_gh_api_get", mock_api)
+        assert detect.newest_green_ancestor("master", **self._kw()) is None
+
+
+class TestResolveGreenBase:
+    def test_no_token(self) -> None:
+        logs = []
+        result = detect.resolve_green_base(
+            token="",
+            repo="r",
+            ref_name="master",
+            head_sha="abc",
+            log_fn=logs.append,
+        )
+        assert result is None
+        assert any("no GITHUB_TOKEN" in msg for msg in logs)
+
+    def test_found_on_branch(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect,
+            "newest_green_ancestor",
+            lambda branch, **kw: "abc123" if branch == "feat" else None,
+        )
+        result = detect.resolve_green_base(
+            token="t",
+            repo="r",
+            ref_name="feat",
+            head_sha="head",
+            log_fn=lambda m: None,
+        )
+        assert result == "abc123"
+
+    def test_falls_back_to_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect,
+            "newest_green_ancestor",
+            lambda branch, **kw: None if branch == "feat" else "default_green",
+        )
+        logs = []
+        result = detect.resolve_green_base(
+            token="t",
+            repo="r",
+            ref_name="feat",
+            head_sha="head",
+            default_branch="master",
+            log_fn=logs.append,
+        )
+        assert result == "default_green"
+        assert any("falling back" in msg for msg in logs)
+
+    def test_no_fallback_when_on_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = {"n": 0}
+
+        def mock_ancestor(branch, **kw):
+            calls["n"] += 1
+            return None
+
+        monkeypatch.setattr(detect, "newest_green_ancestor", mock_ancestor)
+        result = detect.resolve_green_base(
+            token="t",
+            repo="r",
+            ref_name="master",
+            head_sha="head",
+            default_branch="master",
+            log_fn=lambda m: None,
+        )
+        assert result is None
+        assert calls["n"] == 1
+
+    def test_missing_repo_returns_none(self) -> None:
+        assert (
+            detect.resolve_green_base(
+                token="t",
+                repo="",
+                ref_name="master",
+                head_sha="abc",
+                log_fn=lambda m: None,
+            )
+            is None
+        )
+
+    def test_missing_ref_returns_none(self) -> None:
+        assert (
+            detect.resolve_green_base(
+                token="t",
+                repo="r",
+                ref_name="",
+                head_sha="abc",
+                log_fn=lambda m: None,
+            )
+            is None
+        )
+
+    def test_missing_sha_returns_none(self) -> None:
+        assert (
+            detect.resolve_green_base(
+                token="t",
+                repo="r",
+                ref_name="master",
+                head_sha="",
+                log_fn=lambda m: None,
+            )
+            is None
+        )
+
+
+# ---------------------------------------------------------------------------
+# Role dependency map
+# ---------------------------------------------------------------------------
+
+
+class TestWalkTasks:
+    def test_finds_import_role(self) -> None:
+        inv = defaultdict(set)
+        detect._walk_tasks([{"import_role": {"name": "nginx"}}], "homepage", inv)
+        assert "homepage" in inv["nginx"]
+
+    def test_finds_include_role(self) -> None:
+        inv = defaultdict(set)
+        detect._walk_tasks([{"include_role": {"name": "podman"}}], "redis", inv)
+        assert "redis" in inv["podman"]
+
+    def test_walks_block(self) -> None:
+        inv = defaultdict(set)
+        detect._walk_tasks(
+            [{"block": [{"import_role": {"name": "systemd_unit"}}]}], "nginx", inv
+        )
+        assert "nginx" in inv["systemd_unit"]
+
+    def test_walks_rescue(self) -> None:
+        inv = defaultdict(set)
+        detect._walk_tasks(
+            [{"rescue": [{"import_role": {"name": "helper"}}]}], "consumer", inv
+        )
+        assert "consumer" in inv["helper"]
+
+    def test_walks_always(self) -> None:
+        inv = defaultdict(set)
+        detect._walk_tasks(
+            [{"always": [{"import_role": {"name": "cleanup"}}]}], "svc", inv
+        )
+        assert "svc" in inv["cleanup"]
+
+    def test_skips_non_dict_tasks(self) -> None:
+        inv = defaultdict(set)
+        detect._walk_tasks(["string_task", 42, None], "role", inv)
+        assert len(inv) == 0
+
+    def test_skips_non_list(self) -> None:
+        inv = defaultdict(set)
+        detect._walk_tasks("not a list", "role", inv)
+        assert len(inv) == 0
+
+    def test_ignores_role_without_name_key(self) -> None:
+        inv = defaultdict(set)
+        detect._walk_tasks([{"import_role": {"tasks_from": "site"}}], "consumer", inv)
+        assert len(inv) == 0
+
+
+class TestBuildRoleDepsMap:
+    def test_builds_map(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        consumer_dir = tmp_path / "roles" / "consumer" / "tasks"
+        consumer_dir.mkdir(parents=True)
+        (consumer_dir / "main.yml").write_text("- import_role:\n    name: helper\n")
+        helper_dir = tmp_path / "roles" / "helper" / "tasks"
+        helper_dir.mkdir(parents=True)
+        (helper_dir / "main.yml").write_text("- debug:\n    msg: hello\n")
+        result = detect.build_role_deps_map()
+        assert result.get("helper") == ["consumer"]
+
+    def test_empty_roles_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "roles").mkdir()
+        assert detect.build_role_deps_map() == {}
+
+    def test_handles_parse_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        bad_dir = tmp_path / "roles" / "broken" / "tasks"
+        bad_dir.mkdir(parents=True)
+        (bad_dir / "main.yml").write_text(": : :\n  - [\n")
+        result = detect.build_role_deps_map()
+        assert result == {}
+
+
+class TestListTestableRoles:
+    def test_finds_roles_with_main(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        for name in ["alpha", "beta"]:
+            (tmp_path / "roles" / name / "tasks").mkdir(parents=True)
+            (tmp_path / "roles" / name / "tasks" / "main.yml").touch()
+        (tmp_path / "roles" / "helper_only" / "tasks").mkdir(parents=True)
+        assert detect.list_testable_roles() == ["alpha", "beta"]
+
+    def test_no_roles_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        assert detect.list_testable_roles() == []
+
+
+# ---------------------------------------------------------------------------
+# CLI subcommands (existing)
 # ---------------------------------------------------------------------------
 
 
 class TestCmdClassify:
-    def test_role_detection(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        monkeypatch.setattr("sys.stdin", io.StringIO("roles/nginx/tasks/main.yml\nroles/podman/templates/foo.j2\n"))
+    def test_role_detection(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        monkeypatch.setattr(
+            "sys.stdin",
+            io.StringIO("roles/nginx/tasks/main.yml\nroles/podman/templates/foo.j2\n"),
+        )
         rc = detect._cmd_classify([])
         assert rc == 0
         result = json.loads(capsys.readouterr().out)
         assert result["direct_roles"] == ["nginx", "podman"]
         assert result["ci_image_changed"] is False
 
-    def test_master_push_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    def test_master_push_flag(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
         monkeypatch.setattr("sys.stdin", io.StringIO("Dockerfile\n"))
         rc = detect._cmd_classify(["--master-push"])
         assert rc == 0
@@ -631,7 +1359,9 @@ class TestCmdEmit:
                 result[k] = v
         return result
 
-    def test_basic_emit(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    def test_basic_emit(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
         rc = detect._cmd_emit(["--matrix", '["alpha:box","beta:minimal"]'])
         assert rc == 0
@@ -643,7 +1373,9 @@ class TestCmdEmit:
         assert out["packer_changed"] == "false"
         assert out["ci_image_changed"] == "false"
 
-    def test_packer_changed_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    def test_packer_changed_flag(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
         rc = detect._cmd_emit(["--matrix", "[]", "--packer-changed", "true"])
         assert rc == 0
@@ -651,14 +1383,18 @@ class TestCmdEmit:
         assert out["packer_changed"] == "true"
         assert out["ci_image_changed"] == "false"
 
-    def test_ci_image_changed_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    def test_ci_image_changed_flag(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
         rc = detect._cmd_emit(["--matrix", "[]", "--ci-image-changed", "true"])
         assert rc == 0
         out = self._parse_kv(capsys.readouterr().out)
         assert out["ci_image_changed"] == "true"
 
-    def test_packer_sources(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    def test_packer_sources(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
         rc = detect._cmd_emit(["--matrix", "[]", "--inputs-sources", "lab pug"])
         assert rc == 0
@@ -667,7 +1403,9 @@ class TestCmdEmit:
         assert json.loads(out["packer_sources_box"]) == []
         assert json.loads(out["packer_sources_extra"]) == ["lab", "pug"]
 
-    def test_packer_ubuntu_default(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    def test_packer_ubuntu_default(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
         rc = detect._cmd_emit(["--matrix", "[]"])
         assert rc == 0
@@ -675,7 +1413,9 @@ class TestCmdEmit:
         assert json.loads(out["packer_ubuntu_box"]) == ["jammy", "noble", "resolute"]
         assert json.loads(out["packer_ubuntu_extra"]) == ["jammy"]
 
-    def test_packer_ubuntu_pinned(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    def test_packer_ubuntu_pinned(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
         rc = detect._cmd_emit(["--matrix", "[]", "--inputs-ubuntu", "noble"])
         assert rc == 0
@@ -683,7 +1423,12 @@ class TestCmdEmit:
         assert json.loads(out["packer_ubuntu_box"]) == ["noble"]
         assert json.loads(out["packer_ubuntu_extra"]) == ["noble"]
 
-    def test_github_output_file(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture, tmp_path: Path) -> None:
+    def test_github_output_file(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+        tmp_path: Path,
+    ) -> None:
         gh_out = tmp_path / "output"
         gh_out.touch()
         monkeypatch.setenv("GITHUB_OUTPUT", str(gh_out))
@@ -695,20 +1440,26 @@ class TestCmdEmit:
         assert json.loads(kv["matrix_jammy"]) == ["alpha:box"]
         assert json.loads(kv["packer_sources"]) == ["box", "pug", "lab", "hetzner"]
 
-    def test_log_to_stderr(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    def test_log_to_stderr(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
         detect._cmd_emit(["--matrix", '["alpha:box"]'])
         err = capsys.readouterr().err
         assert "[detect-roles] result:" in err
 
-    def test_mixed_buckets(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    def test_mixed_buckets(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
-        matrix = json.dumps([
-            "alpha:box",
-            "cleanup:minimal",
-            "net:box_deps:noble",
-            "apt:box:resolute",
-        ])
+        matrix = json.dumps(
+            [
+                "alpha:box",
+                "cleanup:minimal",
+                "net:box_deps:noble",
+                "apt:box:resolute",
+            ]
+        )
         rc = detect._cmd_emit(["--matrix", matrix])
         assert rc == 0
         out = self._parse_kv(capsys.readouterr().out)
@@ -716,6 +1467,430 @@ class TestCmdEmit:
         assert json.loads(out["matrix_noble"]) == ["net:box_deps:noble"]
         assert json.loads(out["matrix_resolute"]) == ["apt:box:resolute"]
         assert json.loads(out["matrix_minimal"]) == ["cleanup:minimal"]
+
+
+# ---------------------------------------------------------------------------
+# _cmd_run (full orchestration)
+# ---------------------------------------------------------------------------
+
+
+def _clean_ci_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Remove all CI-related env vars so tests start clean."""
+    for var in [
+        "GITHUB_OUTPUT",
+        "GITHUB_EVENT_NAME",
+        "GITHUB_SHA",
+        "GITHUB_REF_NAME",
+        "GITHUB_REF",
+        "GITHUB_TOKEN",
+        "GITHUB_REPOSITORY",
+        "GITHUB_API_URL",
+        "CI_BASE_REF",
+        "CI_DEFAULT_BRANCH",
+        "INPUTS_ROLES",
+        "INPUTS_SOURCES",
+        "INPUTS_UBUNTU",
+    ]:
+        monkeypatch.delenv(var, raising=False)
+
+
+def _parse_kv(text: str) -> dict[str, str]:
+    result = {}
+    for line in text.strip().splitlines():
+        if "=" in line:
+            k, _, v = line.partition("=")
+            result[k] = v
+    return result
+
+
+class TestCmdRun:
+    def test_all_mode(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(
+            detect, "_matrix_json", lambda *a: '["alpha:box","beta:minimal"]'
+        )
+        rc = detect._cmd_run(["--all"])
+        assert rc == 0
+        out = capsys.readouterr()
+        assert "alpha:box" in out.out
+        assert "mode: --all" in out.err
+
+    def test_dispatch_roles(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+        monkeypatch.setenv("INPUTS_ROLES", "cleanup")
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(
+            detect, "_matrix_json", lambda *a: '["cleanup:box","cleanup:minimal"]'
+        )
+        rc = detect._cmd_run([])
+        assert rc == 0
+        assert "cleanup:box" in capsys.readouterr().out
+
+    def test_dispatch_all_keyword(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+        monkeypatch.setenv("INPUTS_ROLES", "ALL")
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["big:box"]')
+        rc = detect._cmd_run([])
+        assert rc == 0
+        out = capsys.readouterr()
+        assert "big:box" in out.out
+        assert "roles=ALL" in out.err
+
+    def test_dispatch_passes_args(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+        monkeypatch.setenv("INPUTS_ROLES", "foo,bar:minimal")
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        captured = {}
+        monkeypatch.setattr(
+            detect,
+            "_matrix_json",
+            lambda *a: (captured.update(args=a), '["foo:box"]')[1],
+        )
+        detect._cmd_run([])
+        assert captured["args"] == ("--dispatch", "foo,bar:minimal")
+
+    def test_packer_only_dispatch(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+        monkeypatch.setenv("INPUTS_ROLES", "")
+        monkeypatch.setenv("INPUTS_SOURCES", "lab pug")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        rc = detect._cmd_run([])
+        assert rc == 0
+        kv = _parse_kv(capsys.readouterr().out)
+        assert kv["packer_changed"] == "true"
+        assert json.loads(kv["matrix"]) == []
+        assert sorted(json.loads(kv["packer_sources"])) == ["lab", "pug"]
+
+    def test_local_preview(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc123")
+        monkeypatch.setattr(
+            detect,
+            "git_diff_files",
+            lambda base, head="HEAD": ["roles/zfs/tasks/main.yml"],
+        )
+        monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "def456")
+        monkeypatch.setattr(detect, "list_testable_roles", lambda: ["zfs"])
+        monkeypatch.setattr(detect, "build_role_deps_map", lambda: {})
+        monkeypatch.setattr(detect, "release_ubuntu_for", lambda role: [])
+        monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["zfs:box"]')
+        rc = detect._cmd_run([])
+        assert rc == 0
+        out = capsys.readouterr()
+        assert "zfs:box" in out.out
+        assert "HEAD~1" in out.err
+
+    def test_ci_base_ref_override(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+        monkeypatch.setenv("GITHUB_SHA", "head")
+        monkeypatch.setenv("GITHUB_REF_NAME", "master")
+        monkeypatch.setenv("GITHUB_REF", "refs/heads/master")
+        monkeypatch.setenv("CI_BASE_REF", "HEAD~3")
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "resolved_sha")
+        monkeypatch.setattr(detect, "git_diff_files", lambda base, head="HEAD": [])
+        monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
+        monkeypatch.setattr(detect, "list_testable_roles", lambda: [])
+        monkeypatch.setattr(detect, "build_role_deps_map", lambda: {})
+        monkeypatch.setattr(detect, "_matrix_json", lambda *a: "[]")
+        rc = detect._cmd_run([])
+        assert rc == 0
+        assert "CI_BASE_REF override" in capsys.readouterr().err
+
+    def test_push_with_green_base(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+        monkeypatch.setenv("GITHUB_SHA", "head_sha_123")
+        monkeypatch.setenv("GITHUB_REF_NAME", "master")
+        monkeypatch.setenv("GITHUB_REF", "refs/heads/master")
+        monkeypatch.setenv("GITHUB_TOKEN", "tok")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(detect, "resolve_green_base", lambda **kw: "green_sha_abc")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: ref)
+        monkeypatch.setattr(
+            detect,
+            "git_diff_files",
+            lambda base, head="HEAD": ["roles/nginx/tasks/main.yml"],
+        )
+        monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "abc123")
+        monkeypatch.setattr(detect, "list_testable_roles", lambda: ["nginx", "podman"])
+        monkeypatch.setattr(detect, "build_role_deps_map", lambda: {})
+        monkeypatch.setattr(detect, "release_ubuntu_for", lambda role: [])
+        monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["nginx:box"]')
+        rc = detect._cmd_run([])
+        assert rc == 0
+        assert "nginx:box" in capsys.readouterr().out
+
+    def test_push_no_green_full_universe(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+        monkeypatch.setenv("GITHUB_SHA", "head")
+        monkeypatch.setenv("GITHUB_REF_NAME", "master")
+        monkeypatch.setenv("GITHUB_REF", "refs/heads/master")
+        monkeypatch.setenv("GITHUB_TOKEN", "tok")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(detect, "resolve_green_base", lambda **kw: None)
+        monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["big:box"]')
+        rc = detect._cmd_run([])
+        assert rc == 0
+        kv = _parse_kv(capsys.readouterr().out)
+        assert kv["packer_changed"] == "true"
+
+    def test_push_green_needs_fetch(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+        monkeypatch.setenv("GITHUB_SHA", "head")
+        monkeypatch.setenv("GITHUB_REF_NAME", "master")
+        monkeypatch.setenv("GITHUB_REF", "refs/heads/master")
+        monkeypatch.setenv("GITHUB_TOKEN", "tok")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(detect, "resolve_green_base", lambda **kw: "green_sha")
+        rev_calls = {"n": 0}
+
+        def mock_rev_parse(ref):
+            if ref == "green_sha":
+                rev_calls["n"] += 1
+                return "green_sha" if rev_calls["n"] > 1 else None
+            return ref
+
+        monkeypatch.setattr(detect, "git_rev_parse", mock_rev_parse)
+        monkeypatch.setattr(detect, "git_fetch_commit", lambda sha: True)
+        monkeypatch.setattr(detect, "git_diff_files", lambda base, head="HEAD": [])
+        monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
+        monkeypatch.setattr(detect, "list_testable_roles", lambda: [])
+        monkeypatch.setattr(detect, "build_role_deps_map", lambda: {})
+        monkeypatch.setattr(detect, "_matrix_json", lambda *a: "[]")
+        rc = detect._cmd_run([])
+        assert rc == 0
+        assert "fetching the commit" in capsys.readouterr().err
+
+    def test_full_universe_on_group_vars(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
+        monkeypatch.setattr(
+            detect,
+            "git_diff_files",
+            lambda base, head="HEAD": ["group_vars/all/main.yml"],
+        )
+        monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
+        monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["big:box"]')
+        rc = detect._cmd_run([])
+        assert rc == 0
+        assert "FULL universe" in capsys.readouterr().err
+
+    def test_packer_change_adds_packer_role(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
+        monkeypatch.setattr(
+            detect,
+            "git_diff_files",
+            lambda base, head="HEAD": ["packer/scripts/chroot.sh"],
+        )
+        monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
+        monkeypatch.setattr(detect, "list_testable_roles", lambda: ["packer", "nginx"])
+        monkeypatch.setattr(detect, "build_role_deps_map", lambda: {})
+        monkeypatch.setattr(detect, "release_ubuntu_for", lambda role: [])
+        captured = {}
+        monkeypatch.setattr(
+            detect,
+            "_matrix_json",
+            lambda *a: (captured.update(args=a), '["packer:box"]')[1],
+        )
+        rc = detect._cmd_run([])
+        assert rc == 0
+        assert "packer" in captured["args"]
+        kv = _parse_kv(capsys.readouterr().out)
+        assert kv["packer_changed"] == "true"
+
+    def test_role_deps_expansion(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
+        monkeypatch.setattr(
+            detect,
+            "git_diff_files",
+            lambda base, head="HEAD": ["roles/systemd_unit/tasks/main.yml"],
+        )
+        monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
+        monkeypatch.setattr(
+            detect, "list_testable_roles", lambda: ["systemd_unit", "nginx", "redis"]
+        )
+        monkeypatch.setattr(
+            detect, "build_role_deps_map", lambda: {"systemd_unit": ["nginx", "redis"]}
+        )
+        monkeypatch.setattr(detect, "release_ubuntu_for", lambda role: [])
+        captured = {}
+        monkeypatch.setattr(
+            detect,
+            "_matrix_json",
+            lambda *a: (captured.update(args=a), '["systemd_unit:box"]')[1],
+        )
+        rc = detect._cmd_run([])
+        assert rc == 0
+        args = captured["args"]
+        assert "nginx" in args
+        assert "redis" in args
+        assert "systemd_unit" in args
+
+    def test_release_cell_propagation(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
+        monkeypatch.setattr(
+            detect,
+            "git_diff_files",
+            lambda base, head="HEAD": ["roles/apt_source/tasks/main.yml"],
+        )
+        monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
+        monkeypatch.setattr(
+            detect, "list_testable_roles", lambda: ["apt_source", "nginx"]
+        )
+        monkeypatch.setattr(
+            detect, "build_role_deps_map", lambda: {"apt_source": ["nginx"]}
+        )
+        monkeypatch.setattr(
+            detect,
+            "release_ubuntu_for",
+            lambda role: ["noble"] if role == "apt_source" else [],
+        )
+        monkeypatch.setattr(detect, "default_machine_for", lambda role: "box")
+        captured = {}
+        monkeypatch.setattr(
+            detect,
+            "_matrix_json",
+            lambda *a: (captured.update(args=a), '["apt_source:box"]')[1],
+        )
+        rc = detect._cmd_run([])
+        assert rc == 0
+        args = captured["args"]
+        assert "--extra" in args
+        assert "nginx:box:noble" in args
+
+    def test_ci_image_on_master_push(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+        monkeypatch.setenv("GITHUB_SHA", "head")
+        monkeypatch.setenv("GITHUB_REF_NAME", "master")
+        monkeypatch.setenv("GITHUB_REF", "refs/heads/master")
+        monkeypatch.setenv("CI_BASE_REF", "HEAD~1")
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "resolved")
+        monkeypatch.setattr(
+            detect,
+            "git_diff_files",
+            lambda base, head="HEAD": ["Dockerfile", "roles/nginx/tasks/main.yml"],
+        )
+        monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
+        monkeypatch.setattr(detect, "list_testable_roles", lambda: ["nginx"])
+        monkeypatch.setattr(detect, "build_role_deps_map", lambda: {})
+        monkeypatch.setattr(detect, "release_ubuntu_for", lambda role: [])
+        monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["nginx:box"]')
+        rc = detect._cmd_run([])
+        assert rc == 0
+        kv = _parse_kv(capsys.readouterr().out)
+        assert kv["ci_image_changed"] == "true"
+
+    def test_empty_changeset(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
+        monkeypatch.setattr(detect, "git_diff_files", lambda base, head="HEAD": [])
+        monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
+        monkeypatch.setattr(detect, "list_testable_roles", lambda: ["nginx"])
+        monkeypatch.setattr(detect, "build_role_deps_map", lambda: {})
+        monkeypatch.setattr(detect, "_matrix_json", lambda *a: "[]")
+        rc = detect._cmd_run([])
+        assert rc == 0
+        assert "no role-relevant changes" in capsys.readouterr().err
+
+    def test_role_not_in_universe_skipped(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        _clean_ci_env(monkeypatch)
+        monkeypatch.setenv("INPUTS_SOURCES", "")
+        monkeypatch.setenv("INPUTS_UBUNTU", "")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
+        monkeypatch.setattr(
+            detect,
+            "git_diff_files",
+            lambda base, head="HEAD": ["roles/helper_only/tasks/setup.yml"],
+        )
+        monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
+        monkeypatch.setattr(detect, "list_testable_roles", lambda: ["nginx"])
+        monkeypatch.setattr(
+            detect, "build_role_deps_map", lambda: {"helper_only": ["nginx"]}
+        )
+        monkeypatch.setattr(detect, "release_ubuntu_for", lambda role: [])
+        captured = {}
+        monkeypatch.setattr(
+            detect,
+            "_matrix_json",
+            lambda *a: (captured.update(args=a), '["nginx:box"]')[1],
+        )
+        rc = detect._cmd_run([])
+        assert rc == 0
+        assert "nginx" in captured["args"]
+        assert "helper_only" not in captured["args"]
 
 
 class TestMainEntrypoint:
@@ -727,9 +1902,14 @@ class TestMainEntrypoint:
         monkeypatch.setattr("sys.argv", ["detect.py", "bogus"])
         assert detect.main() == 2
 
-    def test_emit_via_main(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    def test_emit_via_main(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
         monkeypatch.setattr("sys.argv", ["detect.py", "emit", "--matrix", "[]"])
         assert detect.main() == 0
         out = capsys.readouterr().out
         assert "matrix=" in out
+
+    def test_run_in_commands(self) -> None:
+        assert "run" in detect._COMMANDS

@@ -112,7 +112,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         metavar="X",
         help="Comma-separated machine filter; only run cells matching these machines "
-        "(default: all machines from meta/test.yml + ci-minimal-roles.txt)",
+        "(default: all machines from meta/test.yml)",
     )
 
     parser.add_argument(

@@ -3,7 +3,7 @@
 """
 Catch typos and unknown machine names in role test metadata before they
 become a confusing CI failure. Single pass over `roles/*/meta/test.yml`,
-parses each as YAML, asserts `machine:` (if present) is in MACHINE_CHOICES
+parses each as YAML, asserts `machines:` keys are in MACHINE_CHOICES
 and `ubuntu:` (if present) is a list of known UBUNTU_RELEASES codenames
 (excluding jammy, which is the default cell -- listing it is redundant).
 
@@ -36,9 +36,18 @@ def main() -> int:
         if not isinstance(data, dict):
             errors.append(f"{meta}: top-level must be a mapping, got {type(data).__name__}")
             continue
-        machine = data.get("machine")
-        if machine is not None and machine not in MACHINE_CHOICES:
-            errors.append(f"{meta}: machine={machine!r} not in {sorted(MACHINE_CHOICES)}")
+
+        if "machine" in data:
+            errors.append(f"{meta}: uses legacy 'machine:' key -- migrate to 'machines:'")
+
+        machines = data.get("machines")
+        if machines is not None:
+            if not isinstance(machines, dict):
+                errors.append(f"{meta}: machines must be a mapping, got {type(machines).__name__}")
+            else:
+                for name in machines:
+                    if name not in MACHINE_CHOICES:
+                        errors.append(f"{meta}: machines key {name!r} not in {sorted(MACHINE_CHOICES)}")
 
         ubuntu = data.get("ubuntu")
         if ubuntu is not None:
@@ -49,8 +58,6 @@ def main() -> int:
                     if codename not in UBUNTU_RELEASES:
                         errors.append(f"{meta}: ubuntu={codename!r} not in {sorted(UBUNTU_RELEASES)}")
                     elif codename == DEFAULT_UBUNTU:
-                        # The default cell already runs jammy; an extra
-                        # jammy entry just duplicates it.
                         errors.append(
                             f"{meta}: ubuntu lists {DEFAULT_UBUNTU!r}, the default release"
                             " -- omit it (only list extra releases)"
