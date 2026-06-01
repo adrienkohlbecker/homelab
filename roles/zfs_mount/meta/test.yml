@@ -1,0 +1,6 @@
+# zfs_mount_cache_datasets is [] on box — the per-pool mount-generator unit
+# creation and cache-refresh loops are completely skipped. The lab fixture has
+# 3 entries spanning 3 real pools (rpool/dozer/tank), exercising the multi-pool
+# iteration that matches prod.
+machines:
+  lab:

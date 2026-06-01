@@ -24,6 +24,15 @@ macvlan_blocks:
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
     block: "{{ network.sites.home.vlans.management.cidr | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}"
 
+# Override prod pug's swap_partition (by-uuid, points at the physical disk's
+# partition UUID). The packer pug image bakes a single-disk swap partition
+# with GPT label "swap" (provision.sh: sgdisk -c3:swap), so by-partlabel
+# resolves to the same block device the packer mkswap'd. _setup.yml cleans
+# the packer-baked fstab entry to avoid a duplicate.
+swap_partition:
+  device: /dev/disk/by-partlabel/swap
+  opts: discard
+
 has_transcoding_acceleration: false
 
 # Override prod's pug.yml netplan: it matches by physical NIC MAC + r8169

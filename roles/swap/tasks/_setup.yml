@@ -1,0 +1,18 @@
+# The packer image bakes a swap fstab entry by UUID (single-disk layouts get a
+# partition; mirror layouts get a rpool/swap zvol). When swap_partition is
+# defined with a DIFFERENT device path (by-partlabel on pug-qemu), the role's
+# mount task would add a second fstab line for the same block device. Clean the
+# packer entry so the role exercises its fstab-write + swapon path cleanly.
+- name: _setup | Deactivate packer-baked swap
+  when: swap_partition is defined
+  command: swapoff -a
+  changed_when: false
+  become: true
+
+- name: _setup | Remove packer-baked swap fstab entry
+  when: swap_partition is defined
+  lineinfile:
+    path: /etc/fstab
+    regexp: '\sswap\s'
+    state: absent
+  become: true
