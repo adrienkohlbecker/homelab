@@ -4,6 +4,7 @@
 #USAGE arg "[sources]..." help="Source names from qemu.pkr.hcl to build; empty = all"
 #USAGE flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
 #USAGE flag "--upstream" help="Pull apt packages and the cloud image from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
+#USAGE flag "--no-publish" help="Build and verify-boot but skip the install (publish) step. Used by feature-branch CI to validate packer changes without overwriting master's published artifacts."
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
@@ -80,15 +81,25 @@ if [ -t 0 ] && [ -z "${CI:-}" ]; then
   on_error=ask
 fi
 
+publish=true
+if [ "${usage_no_publish:-false}" = "true" ]; then
+  publish=false
+fi
+
 packer build \
   -timestamp-ui \
   -warn-on-undeclared-var \
   "--on-error=${on_error}" \
   -var "ubuntu_name=${usage_ubuntu}" \
   -var "upstream_mirrors=${usage_upstream:-false}" \
+  -var "publish=${publish}" \
   -var "build_directory=${tmp}" \
   -var "output_directory=${base}" \
   "${only_args[@]}" \
   packer
 
-rmdir "${tmp}"
+if [ "${publish}" = "true" ]; then
+  rmdir "${tmp}"
+else
+  rm -rf "${tmp}"
+fi

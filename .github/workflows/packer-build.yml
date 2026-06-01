@@ -21,16 +21,12 @@ on:
         required: false
         default: '["jammy"]'
 
-# Shared with test-nightly.yml (and any concurrent test read) so packer
-# can't rewrite the qcow2 tree mid-test. Packer-build is the ONLY
-# workflow that mounts the qemu volume rw. A reusable workflow keeps its
-# own concurrency group when called, so packer self-serialises across
-# ci.yml runs even though ci.yml itself isn't grouped -- the whole call
-# (every build matrix cell) holds one slot, so the matrix below isn't
-# self-cancelling; the group only serialises distinct packer builds.
-concurrency:
-  group: lab-qemu-artifacts
-  cancel-in-progress: false
+# No workflow-level concurrency group: serialisation is per-cell at
+# the job level (see the concurrency block on `build` below). This
+# lets cells from different callers (packer_box, packer_extra) and
+# different releases (noble, resolute) run in parallel while still
+# preventing two CI runs from building the same (source, ubuntu) pair
+# simultaneously.
 
 defaults:
   run:
@@ -55,20 +51,15 @@ jobs:
     # fail-fast:false keeps one cell's failure from cancelling its siblings
     # (the old single-invocation model tore them all down).
     #
-    # max-parallel:1 serialises the matrix. The runner-pool cap (6 lab-vm
-    # slots) does NOT bound RAM: lab runs prod + the CI containers and leaves
-    # only ~3GB free, but each build VM wants 4GB (packer/qemu.pkr.hcl), so
-    # the extra matrix (lab/pug/hetzner) running 3-up thrashed swap and qemu
-    # died mid-build ("unexpected EOF"). Serial builds keep one 4GB VM in
-    # flight at a time -- slower on packer-changed runs, but no OOM. The box
-    # call now carries one source across N releases (jammy/noble/resolute), so
-    # the cap serialises those release builds too; the test matrix (which only
-    # needs jammy box/box_deps) still runs concurrently alongside. timeout is
-    # per-cell (90 min), so the extra release cells don't eat the box cell's
-    # budget -- only the lab-qemu-artifacts group's wall-clock grows.
+    # No max-parallel: cells run concurrently, capped only by the lab-vm
+    # runner pool (6 slots shared with test-role). Each build VM uses 4GB
+    # (packer/qemu.pkr.hcl); with ARC at 4 GiB and Nexus at 1G the host
+    # has enough headroom for 2-3 concurrent builds without swapping.
+    # ci.yml's needs: graph gates packer_extra behind packer_jammy so the
+    # box images (used by test cells) finish first. timeout is per-cell
+    # (90 min).
     strategy:
       fail-fast: false
-      max-parallel: 1
       # source x ubuntu. box is called with all supported releases so a packer
       # change is build-validated per-release (each cell's verify-boot boots the
       # image); pug/lab/hetzner are called with just jammy (prod's release). The
@@ -78,6 +69,9 @@ jobs:
       matrix:
         source: ${{ fromJSON(inputs.sources_matrix) }}
         ubuntu: ${{ fromJSON(inputs.ubuntu_matrix) }}
+    concurrency:
+      group: lab-qemu-artifacts-${{ matrix.source }}-${{ matrix.ubuntu }}
+      cancel-in-progress: false
     runs-on: [ self-hosted, lab-vm ]
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
@@ -105,6 +99,10 @@ jobs:
         # Pass the matrix source + ubuntu codename through env vars rather
         # than substituting them straight into the shell command -- a
         # misbehaving input could otherwise break out of the args list.
+        #
+        # Feature branches pass --no-publish so verify-boot validates the
+        # packer change without overwriting master's published artifacts.
+        # Only master publishes to the shared /mnt/scratch/qemu tree.
         env:
           PACKER_SOURCE: ${{ matrix.source }}
           PACKER_UBUNTU: ${{ matrix.ubuntu }}
@@ -113,6 +111,9 @@ jobs:
           args=("$PACKER_SOURCE")
           if [ -n "$PACKER_UBUNTU" ]; then
             args+=(--ubuntu "$PACKER_UBUNTU")
+          fi
+          if [ "$GITHUB_REF" != "refs/heads/master" ]; then
+            args+=(--no-publish)
           fi
           mise run packer:build "${args[@]}"
       - name: Publish Hetzner snapshot
@@ -149,7 +150,11 @@ jobs:
         # top of the 15-30 min box build. Seeded for every release so
         # box_deps roles with release cells (github_runner, jellyfin,
         # netdata) test on the right substrate.
-        if: matrix.source == 'box'
+        #
+        # Master-only: seed-deps publishes to /mnt/scratch/qemu, so
+        # feature branches skip it for the same reason they skip the
+        # build publish (--no-publish above).
+        if: matrix.source == 'box' && github.ref == 'refs/heads/master'
         env:
           PACKER_UBUNTU: ${{ matrix.ubuntu }}
           # seed-deps boots box and runs `ansible-playbook --limit box`,
