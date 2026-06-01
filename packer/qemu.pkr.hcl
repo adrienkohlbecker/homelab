@@ -35,6 +35,12 @@ variable "output_directory" {
   description = "Parent directory of final per-source artifact dirs. The install post-processor renames <build_directory>/<source-name> -> <output_directory>/<source-name> after verify + compress pass."
 }
 
+variable "publish" {
+  type        = bool
+  default     = true
+  description = "When false, skip the install post-processor (no publish to output_directory). The build, verify-boot, and compress steps still run. Used by feature-branch CI to validate packer changes without overwriting master's published artifacts."
+}
+
 variable "upstream_mirrors" {
   type        = bool
   default     = false
@@ -468,6 +474,10 @@ build {
       inline_shebang = "/bin/bash"
       inline = [<<-EOT
         set -euxo pipefail
+        if [ "${var.publish}" != "true" ]; then
+          echo "==> Skipping publish (publish=false)"
+          exit 0
+        fi
         python3 ${path.root}/publish.py \
           "${var.output_directory}/.publish-lock" \
           "${var.build_directory}/${source.name}" \
