@@ -1,44 +1,3 @@
-# Podman's storage bolt DB is lazily initialized the first time any
-# podman command (including apt postinst triggers) touches the storage
-# layer, baking in whatever driver the config says at that moment. If
-# /etc/containers/storage.conf doesn't exist yet, the DB records
-# driver="" (auto-detect); our full write after apt then says
-# driver="overlay" and every subsequent podman command dies with
-# "database graph driver does not match". On ZFS hosts the zvol mount
-# wipes the stale DB, but on non-ZFS hosts (minimal) it persists.
-#
-# The backports import below installs podman on jammy (its upgrade task
-# pulls the noble-pinned packages), so the pre-seed must land before it.
-# The full validated write after apt overwrites this with
-# rootless_storage_path and the fuse-overlayfs shim.
-- name: install | Ensure /etc/containers exists for storage pre-seed
-  file:
-    path: /etc/containers
-    state: directory
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
-  tags:
-    - podman
-
-- name: install | Pre-seed storage.conf before any apt install
-  copy:
-    dest: /etc/containers/storage.conf
-    backup: true
-    content: |
-      [storage]
-      driver = "overlay"
-      runroot = "/run/containers/storage"
-      graphroot = "/var/lib/containers/storage"
-    mode: "0644"
-    owner: root
-    group: root
-    force: false
-  become: true
-  tags:
-    - podman
-
 # Route podman + its userspace stack through noble on jammy. The
 # full pin list lives in podman_backport_packages so the pin file's
 # `Package:` line and the upgrade task share a single source of
@@ -84,9 +43,14 @@
     - podman
 
 # Drop-ins under /etc/containers/storage.conf.d/ aren't loaded in rootless
-# mode on podman 4.9, so we have to write the main file directly. The driver
-# is set explicitly to silence the "A driver was picked automatically"
-# warning when containers-common's default storage.conf is absent.
+# mode on podman 4.9, so we have to write the main file directly.
+#
+# driver is left empty (auto-detect) rather than pinned to "overlay".
+# Auto-detect always resolves to overlay on modern kernels and avoids a
+# "database graph driver does not match" fatal when the storage bolt DB
+# was lazily initialized before this file existed (the DB records
+# driver="" and an explicit "overlay" mismatches). The cosmetic "A driver
+# was picked automatically" warning is harmless.
 #
 # runroot and graphroot must be set explicitly even though they match the
 # upstream defaults: containers/storage's TOML loader unconditionally
@@ -106,11 +70,6 @@
 # running a --uidmap image would still hit the chown-by-maps lchown(dev/
 # console) EIO without it. The zvol create/mount tasks below stay gated on
 # zfs_root (the backing); the storage config itself is universal.
-#
-# ORDERING: the pre-seed task above writes a minimal storage.conf before
-# apt install so the postinst DB initialization records driver="overlay".
-# This full write adds rootless_storage_path and the fuse-overlayfs shim;
-# it overwrites the pre-seed (force: true, the default) on every converge.
 - name: install | Configure podman storage
   vars:
     # Native overlay learned idmapped-mount support in kernel 5.19.
@@ -128,7 +87,6 @@
     dest: /etc/containers/storage.conf
     content: |
       [storage]
-      driver = "overlay"
       runroot = "/run/containers/storage"
       graphroot = "/var/lib/containers/storage"
       rootless_storage_path = "/var/lib/containers/rootless/$USER"
