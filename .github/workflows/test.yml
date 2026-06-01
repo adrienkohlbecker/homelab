@@ -1,15 +1,17 @@
 name: test
 # Reusable, call-only. ci.yml runs a single detect pass and passes the
 # resolved role matrix in as an input, so this workflow does no detection
-# of its own. ci.yml also orders it after packer +
-# ci-image (`needs: [packer, ci-image]`), which is why the old
-# wait-for-* sentinel polls are gone. Ad-hoc role runs go through
-# dispatching ci.yml (with roles=...), not this workflow directly --
-# without its own detect it can't compute a matrix from a bare dispatch.
+# of its own. ci.yml calls it once per release/variant group (test_jammy,
+# test_noble, test_resolute, test_minimal), each depending on its own
+# packer build (packer_jammy, packer_noble, packer_resolute; test_minimal
+# has no packer dep). Ad-hoc role runs go through dispatching ci.yml
+# (with roles=...), not this workflow directly -- without its own detect
+# it can't compute a matrix from a bare dispatch.
 #
 # test-nightly.yml is the OTHER caller: it computes a full-universe matrix
 # (its own schedule-gated `gate` job) and calls this workflow with that
-# matrix. The test-role job below is therefore defined once and shared;
+# matrix (a single call, no per-release split -- nightly has no packer
+# dep). The test-role job below is therefore defined once and shared;
 # push vs nightly differ only in the matrix passed in. Concurrent VMs are
 # capped by the lab-vm runner pool, not a per-call knob. Failures (push or
 # nightly) surface via GitHub's own Actions failure email.
@@ -36,13 +38,13 @@ defaults:
 
 jobs:
   # NOTE: the old wait-for-packer-build AND wait-for-ci-image sentinel-poll
-  # jobs lived here. Both are gone -- ci.yml runs packer-build and ci-image
-  # (uses:) before this workflow via `needs: [packer, ci-image]`, so the
-  # qcow2 tree is published and :latest is rebuilt before any test cell
-  # starts. The cross-workflow ordering those filesystem sentinels faked is
-  # now native job dependencies one level up. (test-nightly still reads the
-  # tree concurrently with a packer publish, so packer's publish flock
-  # stays -- see notes/concurrency_rework.md.)
+  # jobs lived here. Both are gone -- ci.yml calls this workflow per
+  # release/variant group (test_jammy/noble/resolute/minimal), each ordered
+  # after its own packer build via `needs`. The cross-workflow ordering
+  # those filesystem sentinels faked is now native job dependencies one
+  # level up. (test-nightly still reads the tree concurrently with a packer
+  # publish, so packer's publish flock stays -- see
+  # notes/concurrency_rework.md.)
 
   test-role:
     # Lands on the lab-vm pool (4 runners) -- the cap on concurrent
@@ -54,10 +56,11 @@ jobs:
     # the previous shape used a static `lab-qemu-artifacts` here, which
     # made every matrix cell compete for one slot and cancel all but
     # one -- see notes/concurrency_rework.md for the symptom.
-    # The matrix and packer/ci-image ordering both come from ci.yml (one
-    # detect pass, needs: [packer, ci-image]), so this job has no needs
-    # and only gates on a non-empty matrix -- short-circuiting the no-op
-    # case (empty matrix: no role-relevant changes) without spinning a runner.
+    # The matrix and packer/ci-image ordering come from ci.yml (one detect
+    # pass; each test_* group needs its own packer build), so this job has
+    # no needs and only gates on a non-empty matrix -- short-circuiting the
+    # no-op case (empty matrix: no role-relevant changes) without spinning
+    # a runner.
     if: |
       inputs.matrix != '[]'
       && inputs.matrix != ''
@@ -138,9 +141,9 @@ jobs:
           set -euo pipefail
           # SPEC is "role:variant" (release defaults to jammy) or
           # "role:variant:ubuntu" for a release cell (detect emits
-          # "<role>:box:<codename>" for release-gated roles). Splitting on ":"
-          # into three fields handles both -- the third is empty for the
-          # two-segment form, so default it to jammy.
+          # "<role>:<machine>:<codename>" for release-gated roles). Splitting
+          # on ":" into three fields handles both -- the third is empty for
+          # the two-segment form, so default it to jammy.
           IFS=: read -r role variant ubuntu <<<"$SPEC"
           ubuntu=${ubuntu:-jammy}
           # Persist for the on-failure artifact step. $GITHUB_ENV is

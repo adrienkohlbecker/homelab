@@ -18,20 +18,35 @@
 #       push (local preview, empty dispatch) uses HEAD~1. CI_BASE_REF wins.
 #
 # Outputs (to $GITHUB_OUTPUT, or stdout when $GITHUB_OUTPUT is unset):
-#   matrix=<JSON array of "role:variant" strings>  -- input to fromJson() in
-#                                              the workflow. A role that gates
-#                                              behaviour on the Ubuntu release
-#                                              also emits "role:box:<codename>"
-#                                              entries (three segments) for each
-#                                              release in its meta/test.yml
-#                                              `ubuntu:` list; the two-segment
-#                                              form defaults the release to jammy.
-#                                              On the change-detection path those
-#                                              release cells also propagate onto
-#                                              the changed role's consumers, so a
+#   matrix=<JSON array of "role:variant" strings>  -- combined matrix (all cells);
+#                                              used by test-nightly.yml. A role
+#                                              that gates behaviour on the Ubuntu
+#                                              release also emits
+#                                              "role:box:<codename>" entries
+#                                              (three segments) for each release
+#                                              in its meta/test.yml `ubuntu:`
+#                                              list; the two-segment form defaults
+#                                              the release to jammy. On the
+#                                              change-detection path those release
+#                                              cells also propagate onto the
+#                                              changed role's consumers, so a
 #                                              change to a release-gated helper
 #                                              validates its dependents on that
 #                                              release too.
+#   matrix_jammy=<JSON array>                  -- cells where machine is box or
+#                                              box_deps and release is jammy
+#                                              (default). Wired to test_jammy ->
+#                                              packer_jammy.
+#   matrix_noble=<JSON array>                  -- cells where machine is box and
+#                                              release is noble. Wired to
+#                                              test_noble -> packer_noble.
+#   matrix_resolute=<JSON array>               -- cells where machine is box and
+#                                              release is resolute. Wired to
+#                                              test_resolute -> packer_resolute.
+#   matrix_minimal=<JSON array>                -- cells where machine is not
+#                                              box/box_deps (minimal, lab, pug).
+#                                              No packer dep. Wired to
+#                                              test_minimal.
 #   packer_changed=true|false               -- whether the change touches
 #                                              packer/ or mise-tasks/packer/
 #                                              (gates ci.yml's packer call,
@@ -239,10 +254,26 @@ fi
 
 emit() {
   local matrix=$1 packer_changed=${2:-false} ci_image_changed=${3:-false}
-  log "result: matrix=$matrix packer_changed=$packer_changed ci_image_changed=$ci_image_changed packer_sources=$PACKER_SOURCES_JSON (box=$PACKER_SOURCES_BOX_JSON extra=$PACKER_SOURCES_EXTRA_JSON) packer_ubuntu=(box=$PACKER_UBUNTU_BOX_JSON extra=$PACKER_UBUNTU_EXTRA_JSON)"
+  # Split the combined matrix into per-packer-dependency groups so ci.yml can
+  # wire each test group to exactly its packer build. The machine field ($s[1])
+  # determines the packer dependency, not the trailing segment:
+  #   box/box_deps → needs packer for that release (jammy/noble/resolute)
+  #   minimal/lab/pug → no packer dep (vanilla cloud image / existing images)
+  # A hypothetical minimal:noble cell lands in matrix_minimal (no packer dep),
+  # not matrix_noble — the machine, not the release, decides the bucket.
+  local matrix_noble matrix_resolute matrix_minimal matrix_jammy
+  matrix_noble=$(jq -c '[.[] | select(split(":") | length == 3 and (.[1] == "box" or .[1] == "box_deps") and .[2] == "noble")]' <<<"$matrix")
+  matrix_resolute=$(jq -c '[.[] | select(split(":") | length == 3 and (.[1] == "box" or .[1] == "box_deps") and .[2] == "resolute")]' <<<"$matrix")
+  matrix_minimal=$(jq -c '[.[] | select(split(":") | .[1] | . != "box" and . != "box_deps")]' <<<"$matrix")
+  matrix_jammy=$(jq -c '[.[] | select(split(":") | (.[1] == "box" or .[1] == "box_deps") and (length < 3 or (.[2] != "noble" and .[2] != "resolute")))]' <<<"$matrix")
+  log "result: matrix=$matrix (jammy=$matrix_jammy noble=$matrix_noble resolute=$matrix_resolute minimal=$matrix_minimal) packer_changed=$packer_changed ci_image_changed=$ci_image_changed packer_sources=$PACKER_SOURCES_JSON (box=$PACKER_SOURCES_BOX_JSON extra=$PACKER_SOURCES_EXTRA_JSON) packer_ubuntu=(box=$PACKER_UBUNTU_BOX_JSON extra=$PACKER_UBUNTU_EXTRA_JSON)"
   if [ -n "${GITHUB_OUTPUT:-}" ]; then
     {
       echo "matrix=$matrix"
+      echo "matrix_jammy=$matrix_jammy"
+      echo "matrix_noble=$matrix_noble"
+      echo "matrix_resolute=$matrix_resolute"
+      echo "matrix_minimal=$matrix_minimal"
       echo "packer_changed=$packer_changed"
       echo "ci_image_changed=$ci_image_changed"
       echo "packer_sources=$PACKER_SOURCES_JSON"
@@ -253,6 +284,10 @@ emit() {
     } >>"$GITHUB_OUTPUT"
   else
     echo "matrix=$matrix"
+    echo "matrix_jammy=$matrix_jammy"
+    echo "matrix_noble=$matrix_noble"
+    echo "matrix_resolute=$matrix_resolute"
+    echo "matrix_minimal=$matrix_minimal"
     echo "packer_changed=$packer_changed"
     echo "ci_image_changed=$ci_image_changed"
     echo "packer_sources=$PACKER_SOURCES_JSON"
@@ -271,19 +306,19 @@ emit() {
 # nightly, but they don't fan out from push CI.
 #
 # A role that declares meta/test.yml `ubuntu:` also gets one
-# "role:box:<codename>" entry per release listed (the releases its behaviour
-# gates for). These three-segment specs always use the box machine -- it's the
-# only image packer builds per-release (box_deps is jammy-only) -- so a
-# box_deps-default role still gets its jammy box_deps cell above plus these box
-# release cells. The workflow defaults the absent third segment to jammy.
+# "role:<machine>:<codename>" entry per release listed (the releases its
+# behaviour gates for). <machine> is the role's default machine (box or
+# box_deps), so a box_deps role's release cell runs on the box_deps image
+# for that release. The workflow defaults the absent third segment to jammy.
 #
-# $2 (optional) is a newline-separated list of extra "role:box:<codename>"
-# specs to fold in. The change-detection path uses it to PROPAGATE a changed
-# release-gated role's cells onto its consumers: editing apt_source's >= 26
-# deb822 path should validate the roles that import apt_source on resolute too,
-# not just apt_source's own standalone cell. Empty for --all / dispatch (no
-# dependency expansion). The combined output is sorted + de-duplicated, since a
-# role can pick up the same release cell from its own meta and via propagation.
+# $2 (optional) is a newline-separated list of extra
+# "role:<machine>:<codename>" specs to fold in. The change-detection path
+# uses it to PROPAGATE a changed release-gated role's cells onto its
+# consumers: editing apt_source's >= 26 deb822 path should validate the
+# roles that import apt_source on resolute too, not just apt_source's own
+# standalone cell. Empty for --all / dispatch (no dependency expansion).
+# The combined output is sorted + de-duplicated, since a role can pick up
+# the same release cell from its own meta and via propagation.
 #
 # Flat strings (not {role, variant} objects) keep workflow parsing
 # simple: an `IFS=: read role variant ubuntu` triple in bash gets all
@@ -295,7 +330,9 @@ build_matrix() {
   local specs=""
   while IFS= read -r role; do
     [ -z "$role" ] && continue
-    specs+=$'\n'"$role:$(default_machine_for "$role")"
+    local machine
+    machine=$(default_machine_for "$role")
+    specs+=$'\n'"$role:$machine"
     if is_minimal_role "$role"; then
       specs+=$'\n'"$role:minimal"
     fi
@@ -303,7 +340,7 @@ build_matrix() {
     # (no `ubuntu:` declared) yields no iterations.
     # shellcheck disable=SC2046
     for codename in $(release_ubuntu_for "$role"); do
-      specs+=$'\n'"$role:box:$codename"
+      specs+=$'\n'"$role:$machine:$codename"
     done
   done <<<"$roles"
   if [ -n "$extra" ]; then
@@ -343,7 +380,8 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}
   # escalation -- user said what they wanted). `role:lab` / `role:pug` are
   # valid as explicit tokens but are not auto-emitted on push fan-out; they
   # exist for on-demand manual runs. Output entries are "role:variant" (or
-  # "role:box:<codename>" for release cells) strings; see build_matrix() for why.
+  # "role:<machine>:<codename>" for release cells) strings; see
+  # build_matrix() for why.
   entries=()
   IFS=',' read -ra tokens <<<"$INPUTS_ROLES"
   for token in "${tokens[@]}"; do
@@ -363,13 +401,14 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}
         echo "error: role '$role' is not in the testable universe (no roles/$role/tasks/main.yml)" >&2
         exit 1
       fi
-      entries+=("\"$role:$(default_machine_for "$role")\"")
+      machine=$(default_machine_for "$role")
+      entries+=("\"$role:$machine\"")
       if is_minimal_role "$role"; then
         entries+=("\"$role:minimal\"")
       fi
       # shellcheck disable=SC2046
       for codename in $(release_ubuntu_for "$role"); do
-        entries+=("\"$role:box:$codename\"")
+        entries+=("\"$role:$machine:$codename\"")
       done
     fi
   done
@@ -619,10 +658,11 @@ fi
 DIRECT=$(echo "$CHANGED" | grep -oE "$ROLE_PATH_RE" | sed 's|^roles/||' | sort -u || true)
 
 ROLES=""
-# Propagated release cells ("<consumer>:box:<codename>"), newline-separated --
-# a changed release-gated role's release set fanned out onto its consumers
-# (build_matrix de-dups + sorts). Stays empty when no changed role declares
-# `ubuntu:`.
+# Propagated release cells ("<consumer>:<machine>:<codename>"),
+# newline-separated -- a changed release-gated role's release set fanned
+# out onto its consumers (build_matrix de-dups + sorts). The consumer's
+# own default machine is used so a box_deps consumer gets a box_deps
+# release cell. Stays empty when no changed role declares `ubuntu:`.
 RELEASE_CELLS=""
 # A packer change rebuilds the qcow2 tree, so test roles/packer against it.
 if [ "$packer_changed" = true ]; then
@@ -656,7 +696,7 @@ for role in $DIRECT; do
     for consumer in $expanded; do
       in_universe "$consumer" || continue
       for codename in $releases; do
-        RELEASE_CELLS="$RELEASE_CELLS"$'\n'"$consumer:box:$codename"
+        RELEASE_CELLS="$RELEASE_CELLS"$'\n'"$consumer:$(default_machine_for "$consumer"):$codename"
       done
     done
   fi

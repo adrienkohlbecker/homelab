@@ -146,12 +146,10 @@ jobs:
         # reflink-copy of box's artifacts, boots them via launch.py
         # --commit, applies packer/seed_deps.yml (podman + nginx +
         # backports), then atomically publishes the result. ~5 min on
-        # top of the 15-30 min box build. Only the jammy box cell seeds it:
-        # box_deps is the substrate push-CI test cells run on, and those run
-        # against jammy box/box_deps -- nothing consumes a noble/resolute
-        # box_deps, so seeding one would be wasted minutes and failure surface.
-        # The other sources leave box's existing artifact untouched.
-        if: matrix.source == 'box' && matrix.ubuntu == 'jammy'
+        # top of the 15-30 min box build. Seeded for every release so
+        # box_deps roles with release cells (github_runner, jellyfin,
+        # netdata) test on the right substrate.
+        if: matrix.source == 'box'
         env:
           PACKER_UBUNTU: ${{ matrix.ubuntu }}
           # seed-deps boots box and runs `ansible-playbook --limit box`,
