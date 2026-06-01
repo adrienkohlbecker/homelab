@@ -763,9 +763,9 @@
           failed silently)
 
     - name: _verify | Reboot to pick up the swapped kernel
-      ansible.builtin.reboot:
-        reboot_timeout: 120
-      become: true
+      ansible.builtin.import_role:
+        name: reboot
+        tasks_from: reboot
 
     - name: _verify | Capture uname -r after reboot
       ansible.builtin.command: uname -r

@@ -1,0 +1,14 @@
+# The reboot role is a helper: its logic lives in tasks/reboot.yml and
+# is invoked with `import_role: { name: reboot, tasks_from: reboot }`
+# plus a `reboot_args` dict. main.yml is intentionally a no-op.
+#
+# It exists only so the role carries a tasks/main.yml and thus lands in
+# the testable universe (test/matrix.py), which lets tasks/_verify.yml
+# exercise the helper. A standalone `reboot:box` converge must NOT
+# reboot the box, so the real path is gated behind tasks_from above and
+# never reached here.
+- name: Reboot helper has no standalone converge action
+  debug:
+    msg: >-
+      The reboot role has no standalone converge action. Invoke it with
+      tasks_from=reboot and a reboot_args dict (see tasks/reboot.yml).

@@ -131,6 +131,11 @@
 
 - name: Reboot check
   hosts: box,lab,pug,fox
+  # serial: 1 reboots the fleet one host at a time. The reboot helper
+  # fires the reboot async (so throttle alone would only serialize the
+  # wait phase, not the reboots themselves); play-level serial keeps a
+  # whole host down-and-back before the next one cycles.
+  serial: 1
   tasks:
     - name: Check if a reboot is required
       stat:
@@ -140,10 +145,25 @@
         - always
 
     - name: Restart machine
-      reboot:
-        reboot_timeout: 120
-      throttle: 1
-      become: true
-      when: reboot_required.stat.exists
+      import_role:
+        name: reboot
+        tasks_from: reboot
+      vars:
+        reboot_args:
+          condition: "{{ reboot_required.stat.exists }}"
+      tags:
+        - always
+
+    # serial: 1 means this runs per host; pause 2 min after a host is
+    # back before the next one goes down, so services resettle before
+    # we take another host out of the fleet. Skip when we didn't reboot,
+    # and skip for a single-host run (e.g. --limit foo) — there's no
+    # next host to settle ahead of, so the pause would just stall.
+    - name: Settle before cycling the next host
+      pause:
+        minutes: 2
+      when:
+        - reboot_required.stat.exists
+        - ansible_play_hosts_all | length > 1
       tags:
         - always

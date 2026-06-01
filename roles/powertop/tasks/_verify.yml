@@ -19,10 +19,12 @@
 # loading an X64 image after a kernel-triggered reset), same carve-out as
 # roles/console; the converge-time start already exercised the unit there.
 - name: _verify | Reboot so assertions test post-reboot reality
-  when: ansible_architecture != 'aarch64'
-  reboot:
-    reboot_timeout: 120
-  become: true
+  import_role:
+    name: reboot
+    tasks_from: reboot
+  vars:
+    reboot_args:
+      condition: "{{ ansible_architecture != 'aarch64' }}"
 
 - name: _verify | Confirm powertop unit is active  # noqa: command-instead-of-module
   command: systemctl is-active powertop

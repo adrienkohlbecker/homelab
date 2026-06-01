@@ -1,0 +1,34 @@
+# Exercise the reboot helper end to end: capture the boot id, reboot
+# through the helper, then assert the host came back with a *different*
+# boot id. That proves the whole path — async reboot fired, the box
+# actually went down and returned, wait_for_connection re-established
+# the (mitogen) connection, and facts were re-gathered — rather than
+# the reboot module's silent spin-to-timeout this role exists to avoid.
+#
+# Not arch-gated: this is a plain reboot with no boot-config change, so
+# it survives on the aarch64 fixture (unlike roles/console + roles/kdump,
+# whose aarch64 carve-out is about rebooting *after* a ZBM/refind cmdline
+# write, not the reboot itself).
+
+- name: _verify | Capture boot id before reboot
+  command: cat /proc/sys/kernel/random/boot_id
+  register: _reboot_verify_boot_id_before
+  changed_when: false
+
+- name: _verify | Reboot through the helper
+  import_role:
+    name: reboot
+    tasks_from: reboot
+
+- name: _verify | Capture boot id after reboot
+  command: cat /proc/sys/kernel/random/boot_id
+  register: _reboot_verify_boot_id_after
+  changed_when: false
+
+- name: _verify | Boot id changed — the host actually rebooted and came back
+  assert:
+    that:
+      - _reboot_verify_boot_id_after.stdout != _reboot_verify_boot_id_before.stdout
+    fail_msg: >-
+      boot id unchanged after the reboot helper ran — the host did not
+      reboot (before/after = {{ _reboot_verify_boot_id_before.stdout }}).
