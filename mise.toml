@@ -61,6 +61,9 @@ ZBM_VERSION = "3.1.0"
 # without that wrapping mise would export the literal string and HA
 # would reject it as a bad bearer.
 HA_API_TOKEN = "op://Lab/pfcoggyhvncfnr6rt6p5zbnuja/password"
+# Suppress the HashiCorp checkpoint phone-home (update check) on every
+# packer build/init and tofu plan/apply — latency + privacy on CI workers.
+CHECKPOINT_DISABLE = "1"
 
 [tools]
 opentofu = "1.11.6"
