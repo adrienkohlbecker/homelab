@@ -131,12 +131,12 @@ jobs:
   # matrix (max-parallel:1); the split preserves that serialisation via the
   # lab-qemu-artifacts concurrency group in packer-build.yml, but now
   # test_jammy can start as soon as packer_jammy finishes -- it no longer
-  # waits for noble/resolute. The chain (jammy → noble → resolute → extra)
-  # ensures jammy runs first (the bulk of test cells consume it). Each call
-  # builds source=box for one release; the `if` gates on that release being
-  # in the packer_ubuntu_box array (which a dispatch `ubuntu=noble` narrows
-  # to just ["noble"]). box_deps is seeded for every release (the step
-  # in packer-build.yml gates on source==box).
+  # waits for noble/resolute. Jammy runs first (the bulk of test cells
+  # consume it); noble and resolute depend on jammy but run concurrently
+  # with each other. Each call builds source=box for one release; the `if`
+  # gates on that release being in the packer_ubuntu_box array (which a
+  # dispatch `ubuntu=noble` narrows to just ["noble"]). box_deps is seeded
+  # for every release (the step in packer-build.yml gates on source==box).
 
   packer_jammy:
     needs: [ detect, ci-image ]
