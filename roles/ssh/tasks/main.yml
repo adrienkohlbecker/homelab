@@ -45,11 +45,24 @@
   tags:
     - ssh
 
-- name: Restart ssh
-  when: ssh_sshd_config.changed or ssh_sshd_config_sftp.changed
-  systemd:
-    name: ssh
-    state: restarted
+- name: Validate sshd config before reload
+  when:
+    - not (ansible_check_mode and ssh_apt.changed)
+    - ssh_sshd_config.changed or ssh_sshd_config_sftp.changed
+  command: sshd -t
+  changed_when: false
   become: true
+  tags:
+    - ssh
+
+- name: Enable and reload sshd
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: ssh
+      condition: "{{ not (ansible_check_mode and ssh_apt.changed) }}"
+      reload: "{{ ssh_sshd_config.changed or ssh_sshd_config_sftp.changed }}"
   tags:
     - ssh
