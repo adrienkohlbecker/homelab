@@ -53,6 +53,9 @@ source "hcloud" "worker" {
   location     = var.location
   server_type  = var.server_type
   ssh_username = "root"
+  ssh_timeout  = "10m"
+
+  temporary_key_pair_type = "ed25519"
 
   firewalls     = var.firewalls
   server_name   = "packer-ci-worker"
@@ -89,6 +92,11 @@ build {
   provisioner "file" {
     source      = "${path.root}/ubuntu_images.json"
     destination = "/tmp/ubuntu_images.json"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/../roles/github_runner/vars/main.yml"
+    destination = "/tmp/github_runner_vars.yml"
   }
 
   provisioner "shell" {
