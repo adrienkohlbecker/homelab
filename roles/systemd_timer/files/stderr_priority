@@ -13,6 +13,8 @@
 # and SIGPIPE drops the in-flight line. Using `exec 2> >(...)` lets
 # us capture the PID via `$!` and `wait "$pid"` explicitly; closing
 # fd 2 first feeds sed EOF so it returns instead of hanging.
+# not -euo pipefail: -e would exit before capturing the child's rc=$?;
+# no pipelines in the wrapper so -o pipefail is irrelevant.
 set -u
 [ "$#" -ge 1 ] || {
   echo "Usage: ${0##*/} CMD [ARGS...]" >&2

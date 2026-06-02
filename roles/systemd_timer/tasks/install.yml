@@ -6,7 +6,10 @@
 #                     the systemd-level ExecStart=, so this string runs
 #                     under bash and PATH lookup applies; prefer
 #                     absolute paths anyway so the unit stays grep-able
-#                     to the binary it invokes.
+#                     to the binary it invokes. Literal % must be
+#                     doubled (%%) and $ written as $$ — systemd
+#                     expands %-specifiers and $-env refs before the
+#                     command reaches the shell (systemd.service(5)).
 #   on_calendar       required; OnCalendar= spec (e.g.
 #                     `*-*-* 00:55:00`, `Sun *-*-* 00:47:00`).
 #   frequency         required iff monitor: true; one of
@@ -16,6 +19,12 @@
 #                     "overdue" timers (last trigger > 2 * period).
 #   description       optional; falls back to name.
 #   randomized_delay_sec  optional; emits RandomizedDelaySec=<n>.
+#   fixed_random_delay    optional bool; emits FixedRandomDelay=yes|no.
+#                     When true, the random delay is derived from a
+#                     hash of the machine ID + timer name, giving a
+#                     stable per-host offset that avoids cross-host
+#                     thundering-herd without jittering the fire time
+#                     between runs. Requires randomized_delay_sec.
 #   timeout_start_sec optional; emits TimeoutStartSec=<v>. Default '1h'
 #                     — every job we ship today completes in seconds
 #                     to minutes; override per-consumer if a future
@@ -75,6 +84,18 @@
 # import_role replaces the whole `systemd_timer_args` value at play-vars
 # scope so a previous caller's name/exec_start/etc. can't bleed into the
 # next caller's call.
+- name: install | Validate required inputs for {{ systemd_timer_args.name | default('<unset>') }}
+  assert:
+    that:
+      - systemd_timer_args.name is defined
+      - systemd_timer_args.name is match('^[a-zA-Z0-9_]+$')
+      - systemd_timer_args.exec_start is defined
+      - systemd_timer_args.on_calendar is defined
+    fail_msg: >-
+      systemd_timer: name (got {{ systemd_timer_args.name | default('<unset>') }})
+      must be defined and contain only [a-zA-Z0-9_]; exec_start and on_calendar
+      must also be defined.
+
 - name: install | Resolve caller defaults for {{ systemd_timer_args.name }}
   set_fact:
     _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
@@ -108,6 +129,18 @@
       systemd_timer {{ systemd_timer_args.name }}: frequency must be one of
       hourly/daily/weekly/monthly when monitor is enabled (got
       {{ systemd_timer_args.frequency | default('<unset>') }}).
+
+- name: install | Validate environment keys for {{ systemd_timer_args.name }}
+  when: systemd_timer_args.environment is defined
+  assert:
+    that:
+      - item is match('^[A-Za-z_][A-Za-z0-9_]*$')
+    fail_msg: >-
+      systemd_timer {{ systemd_timer_args.name }}: environment key '{{ item }}'
+      is not a valid POSIX variable name ([A-Za-z_][A-Za-z0-9_]*).
+  loop: "{{ systemd_timer_args.environment.keys() | list }}"
+  loop_control:
+    label: "{{ item }}"
 
 # Wrapper script used by every timer's ExecStart so stderr lines land
 # in the journal at priority err. Install before the unit so

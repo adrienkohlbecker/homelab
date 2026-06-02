@@ -41,7 +41,7 @@ _systemd_timers_last_trigger_epoch() {
     printf 0
     return
   fi
-  date -d "$raw" +%s 2>/dev/null || printf 0
+  LC_ALL=C date -d "$raw" +%s 2>/dev/null || printf 0
 }
 
 systemd_timers_check() {
@@ -78,7 +78,7 @@ systemd_timers_update() {
       continue
     fi
     safe=$(_systemd_timers_safe "$name")
-    if [ -z "${_systemd_timers_seen[$name]}" ]; then
+    if [ -z "${_systemd_timers_seen[$name]:-}" ]; then
       cat <<EOF
 CHART systemd_timers.${safe} '' "systemd timer freshness: ${name}" "secs" systemd_timers systemd.timer_lag area ${systemd_timers_priority} ${systemd_timers_update_every}
 CLABEL timer "${name}" 1
