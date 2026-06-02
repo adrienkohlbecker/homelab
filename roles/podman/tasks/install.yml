@@ -29,8 +29,6 @@
     content: |
       [storage]
       driver = "overlay"
-      runroot = "/run/containers/storage"
-      graphroot = "/var/lib/containers/storage"
     mode: "0644"
     owner: root
     group: root

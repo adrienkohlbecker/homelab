@@ -20,6 +20,7 @@
     content: |
       [Resolve]
       DNS={{ bootstrap_dns_resolver }}
+      FallbackDNS=
       DNSOverTLS=yes
       Domains=~.
   register: _test_resolved_dot
