@@ -3,8 +3,8 @@
 # overflow coexisting below it, and swappiness tuned. testrole.py /
 # testall.py only (qemu); never site.yml. See notes/swap_strategy.md.
 
-- name: _verify | Read active swap devices with priorities
-  command: swapon --show=NAME,PRIO --noheadings --raw
+- name: _verify | Read active swap devices with priorities and sizes
+  command: swapon --show=NAME,PRIO,SIZE --noheadings --bytes --raw
   changed_when: false
   become: true
   register: _swap_verify_swapon
@@ -36,25 +36,18 @@
       priority 10 so this is primary): {{ _swap_verify_swapon.stdout }}
   become: true
 
-- name: _verify | Read zram0 device size
-  when:
-    - swap_zram is defined
-    - _swap_verify_zram_module.rc == 0
-  slurp:
-    src: /sys/block/zram0/disksize
-  become: true
-  register: _swap_verify_zram_size
-
 # Catches the generator silently falling back to its default size (e.g. a
 # size key the installed version doesn't honor). Expected = min(configured,
 # MemTotal); zram rounds down by a page, so allow a small band.
+# SIZE (field 3, bytes) comes directly from swapon --show --bytes; no slurp needed.
 - name: _verify | Zram device sized per config (capped at RAM)
   when:
     - swap_zram is defined
     - _swap_verify_zram_module.rc == 0
   vars:
+    _zram_line: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | first | default('') }}"
     _expected_mb: "{{ [(swap_zram.size | human_to_bytes) // 1048576, ansible_memtotal_mb] | min }}"
-    _actual_mb: "{{ (_swap_verify_zram_size.content | b64decode | trim | int) // 1048576 }}"
+    _actual_mb: "{{ ((_zram_line.split()[2] | default('0')) | int) // 1048576 }}"
   assert:
     that:
       - _actual_mb | int >= (_expected_mb | float * 0.95) | int
@@ -114,7 +107,7 @@
   assert:
     that:
       - _overflow_lines | length >= 1
-      - _overflow_lines | map('split') | map('last') | map('int') | max < _zram_prio | int
+      - _overflow_lines | map('split') | map(attribute='1') | map('int') | max < _zram_prio | int
     fail_msg: >-
       Overflow swap priority must be below zram ({{ _zram_prio }}), got:
       {{ _swap_verify_swapon.stdout }}
