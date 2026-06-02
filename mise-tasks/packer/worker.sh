@@ -5,27 +5,8 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
-# In CI the resolved token arrives as $HCLOUD_TOKEN_CI (a GitHub Actions secret;
-# see ci.yml). It can't be handed in as plain $HCLOUD_TOKEN because mise.toml's
-# [env] unconditionally re-injects the op:// ref over any inherited value before
-# this script runs. Prefer the CI var when present so the re-exec is skipped.
-if [ -n "${HCLOUD_TOKEN_CI:-}" ]; then
-  HCLOUD_TOKEN="$HCLOUD_TOKEN_CI"
-fi
-
-# HCLOUD_TOKEN normally arrives as the literal op:// ref (file-based mise tasks
-# don't resolve op://, per CLAUDE.md), so re-exec under `op run --` to get the
-# real token. With $HCLOUD_TOKEN_CI set (CI) the token is already resolved, so
-# this is skipped.
-if [[ "${HCLOUD_TOKEN:-}" == op://* ]]; then
-  exec op run -- "$0" "$@"
-fi
-export HCLOUD_TOKEN
-
-[ -n "${HCLOUD_TOKEN:-}" ] || {
-  echo "HCLOUD_TOKEN is unset — sign into 1Password CLI or set it manually." >&2
-  exit 1
-}
+# shellcheck source=_hcloud_token.sh
+source "$(dirname "$0")/_hcloud_token.sh"
 
 # Forward MISE_GITHUB_TOKEN if available (raises the GitHub API rate limit
 # during mise install inside the build).
@@ -47,8 +28,6 @@ packer build \
   "${mise_token_args[@]}" \
   packer/hcloud_worker.pkr.hcl
 
-# Call directly (not via `mise run`) because mise re-reads [env] from
-# mise.toml which clobbers HCLOUD_TOKEN back to the unresolved op:// ref.
-"$(dirname "$0")/hcloud-prune-snapshots.sh" "role=ci-worker,ubuntu=noble"
+mise run packer:hcloud-prune-snapshots -- "role=ci-worker,ubuntu=noble"
 
 echo "==> Done. Label selector: role=ci-worker,ubuntu=noble"
