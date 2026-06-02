@@ -707,6 +707,8 @@ def _cmd_run(args: list[str]) -> int:
     inputs_sources = os.environ.get("INPUTS_SOURCES", "")
 
     if event == "workflow_dispatch" and inputs_roles:
+        if inputs_sources:
+            log(f"WARNING: both roles='{inputs_roles}' and sources='{inputs_sources}' set; sources ignored")
         log(f"mode: workflow_dispatch roles='{inputs_roles}'")
         if inputs_roles == "ALL":
             log("roles=ALL -> full universe")
