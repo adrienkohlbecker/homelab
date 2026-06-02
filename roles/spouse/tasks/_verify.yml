@@ -7,8 +7,11 @@
 - name: _verify | Assert user shell and home
   assert:
     that:
-      - "'/usr/sbin/nologin' in spouse_verify_passwd.stdout"
-      - "'/mnt/data/' ~ spouse_firstname in spouse_verify_passwd.stdout"
+      # passwd fields: name:passwd:uid:gid:gecos:home:shell -- split rather than
+      # substring-match so a wrong home and a wrong shell are distinguishable in
+      # the failure.
+      - spouse_verify_passwd.stdout.split(':')[6] == '/usr/sbin/nologin'
+      - spouse_verify_passwd.stdout.split(':')[5] == '/mnt/data/' ~ spouse_firstname
     fail_msg: >-
       Expected nologin shell and /mnt/data/{{ spouse_firstname }} home,
       got: {{ spouse_verify_passwd.stdout }}
@@ -24,17 +27,24 @@
   register: spouse_verify_home
   become: true
 
-- name: _verify | Assert home directory ownership
+- name: _verify | Assert home directory ownership and mode
   assert:
     that:
       - spouse_verify_home.stat.exists
       - spouse_verify_home.stat.pw_name == spouse_firstname
       - spouse_verify_home.stat.gr_name == spouse_firstname
+      # 0750 is useradd's HOME_MODE default on Ubuntu; the home is the spouse's
+      # private data dir (exported only via [homes] valid users = %S), so assert
+      # it stayed owner+own-group, not world-readable.
+      - spouse_verify_home.stat.mode == '0750'
     fail_msg: >-
-      Home dir /mnt/data/{{ spouse_firstname }} missing or wrong ownership.
+      Home dir /mnt/data/{{ spouse_firstname }} missing, wrong ownership, or
+      mode != 0750 (got {{ spouse_verify_home.stat.mode | default('absent') }}).
 
-- name: _verify | SMB account is registered  # noqa: command-instead-of-module -- pdbedit query
-  command: pdbedit --user={{ spouse_firstname }}
+# Functional probe rather than a bare `pdbedit --user` exit-code check: prove
+# the account can actually authenticate over SMB (its whole reason to exist).
+- name: _verify | SMB account authenticates and can list shares
+  command: smbclient -L localhost -U {{ spouse_firstname }}%{{ spouse_samba_password }}
   changed_when: false
   become: true
 

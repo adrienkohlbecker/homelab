@@ -2,6 +2,9 @@
   apt:
     pkg:
       - samba
+      # smbclient is a separate package from the samba server; _verify uses it
+      # to prove the spouse SMB account actually authenticates.
+      - smbclient
     install_recommends: false
     cache_valid_time: 3600
   become: true
