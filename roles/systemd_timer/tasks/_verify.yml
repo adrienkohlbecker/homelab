@@ -1,23 +1,30 @@
 # Verify covers four contracts:
 #   1. install + manual-trigger + remove for a monitor: false timer
 #   2. stderr_priority wrapper routes stderr to journal priority err
-#   3. monitor: true writes the netdata metadata file with the right period
+#   3. monitor: true writes the netdata metadata file with period_secs
+#      derived from on_calendar via systemd-analyze
 #   4. systemd_timers.chart.sh emits a chart per registered timer, age_secs
-#      tracks real LastTriggerUSec, and overdue fires when the file's mtime
-#      is older than 2 * period without a trigger
+#      tracks the persistent trigger stamp's mtime, and overdue fires when
+#      the stamp is older than 2 * period
 
 - name: _verify | Install systemd_timers netdata collector
   import_tasks: netdata.yml
 
-# Drop a fast-poll override so a fixture chart materializes in seconds
-# rather than the default 60s. Restart netdata so charts.d.plugin picks it
-# up before any of the later assertions run.
+# The collector conf was installed by netdata.yml above. Assert it actually
+# renders the meta dir first -- otherwise a typo in
+# charts_d_systemd_timers.conf would be silently masked by an override that
+# re-declares it, and every test would still pass against a collector
+# pointed at the wrong directory. Then append only the fast-poll
+# update_every so a fixture chart materializes in seconds rather than 60s.
+- name: _verify | Assert collector conf renders the metadata dir
+  command: grep -qxF systemd_timers_meta_dir=/etc/netdata/charts.d/systemd_timers.d /etc/netdata/charts.d/systemd_timers.conf
+  changed_when: false
+  become: true
 - name: _verify | Speed up systemd_timers update_every for tests
-  copy:
-    content: |
-      systemd_timers_meta_dir=/etc/netdata/charts.d/systemd_timers.d
-      systemd_timers_update_every=5
-    dest: /etc/netdata/charts.d/systemd_timers.conf
+  lineinfile:
+    path: /etc/netdata/charts.d/systemd_timers.conf
+    regexp: ^systemd_timers_update_every=
+    line: systemd_timers_update_every=5
     owner: netdata
     group: netdata
     mode: "0644"
