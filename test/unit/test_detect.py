@@ -1216,6 +1216,7 @@ class TestCmdEmit:
         assert json.loads(out["matrix_lab"]) == []
         assert json.loads(out["matrix_pug"]) == []
         assert out["packer_changed"] == "false"
+        assert out["packer_worker_changed"] == "false"
         assert out["ci_image_changed"] == "false"
 
     def test_packer_changed_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
@@ -1224,7 +1225,16 @@ class TestCmdEmit:
         assert rc == 0
         out = _parse_kv(capsys.readouterr().out)
         assert out["packer_changed"] == "true"
+        assert out["packer_worker_changed"] == "false"
         assert out["ci_image_changed"] == "false"
+
+    def test_packer_worker_changed_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+        rc = detect._cmd_emit(["--matrix", "[]", "--packer-worker-changed", "true"])
+        assert rc == 0
+        out = _parse_kv(capsys.readouterr().out)
+        assert out["packer_worker_changed"] == "true"
+        assert out["packer_changed"] == "false"
 
     def test_ci_image_changed_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
