@@ -46,24 +46,22 @@ PACKER_PATH_PATTERNS: list[str] = [
     r"mise-tasks/packer/",
 ]
 
-# Worker-only packer paths — excluded from packer_changed so a
-# provision_worker.sh edit doesn't trigger QEMU image rebuilds.
-PACKER_WORKER_ONLY_PATTERNS: list[str] = [
-    r"packer/hcloud_worker\.pkr\.hcl",
-    r"packer/scripts/provision_worker\.sh",
-    r"mise-tasks/packer/worker\.sh",
+# Maps changed-file patterns to the packer sources they affect.
+# "qemu" = box/lab/pug (they share qemu.pkr.hcl and all its scripts).
+# A file matching multiple entries unions the sources. Any packer/ or
+# mise-tasks/packer/ file not explicitly listed falls through to "qemu"
+# (the safe default — unknown files rebuild the QEMU images).
+PACKER_SOURCE_MAP: list[tuple[str, list[str]]] = [
+    (r"packer/hcloud_worker\.pkr\.hcl", ["worker"]),
+    (r"packer/scripts/provision_worker\.sh", ["worker"]),
+    (r"mise-tasks/packer/worker\.sh", ["worker"]),
+    (r"roles/github_runner/vars/main\.yml", ["worker"]),
+    (r"packer/ubuntu_images\.json", ["qemu", "hetzner", "worker"]),
+    (r"mise-tasks/packer/hetzner\.sh", ["hetzner"]),
+    (r"mise-tasks/packer/_hcloud_token\.sh", ["hetzner", "worker"]),
+    (r"mise-tasks/packer/hcloud-prune-snapshots\.sh", ["hetzner", "worker"]),
 ]
-
-# All inputs to the CI worker snapshot (packer:worker). Includes shared
-# files (ubuntu_images.json, _hcloud_token.sh) that also affect QEMU builds,
-# plus worker-only files and the runner binary pins.
-PACKER_WORKER_INPUT_PATTERNS: list[str] = [
-    r"packer/hcloud_worker\.pkr\.hcl",
-    r"packer/scripts/provision_worker\.sh",
-    r"packer/ubuntu_images\.json",
-    r"mise-tasks/packer/(worker|_hcloud_token|hcloud-prune-snapshots)\.sh",
-    r"roles/github_runner/vars/main\.yml",
-]
+_PACKER_SOURCE_MAP_COMPILED = [(re.compile(r"^" + pat + r"$"), srcs) for pat, srcs in PACKER_SOURCE_MAP]
 
 CI_IMAGE_INPUT_PATTERNS: list[str] = [
     r"Dockerfile",
@@ -76,8 +74,6 @@ CI_IMAGE_INPUT_PATTERNS: list[str] = [
 
 FULL_UNIVERSE_RE = re.compile(r"^(" + "|".join(FULL_UNIVERSE_PATTERNS) + r")$")
 PACKER_PATHS_RE = re.compile(r"^(" + "|".join(PACKER_PATH_PATTERNS) + r")")
-PACKER_WORKER_ONLY_RE = re.compile(r"^(" + "|".join(PACKER_WORKER_ONLY_PATTERNS) + r")$")
-PACKER_WORKER_INPUTS_RE = re.compile(r"^(" + "|".join(PACKER_WORKER_INPUT_PATTERNS) + r")$")
 CI_IMAGE_INPUTS_RE = re.compile(r"^(" + "|".join(CI_IMAGE_INPUT_PATTERNS) + r")$")
 ROLE_PATH_RE = re.compile(r"^roles/([^/]+)/")
 
@@ -90,9 +86,18 @@ ROLE_PATH_RE = re.compile(r"^roles/([^/]+)/")
 class ChangeClassification(NamedTuple):
     direct_roles: list[str]
     full_universe_paths: list[str]
-    packer_changed: bool
-    packer_worker_changed: bool
+    packer_sources_affected: set[str]
     ci_image_changed: bool
+
+
+def _packer_sources_for(path: str) -> set[str]:
+    """Map a changed file to the packer sources it affects."""
+    for pat, srcs in _PACKER_SOURCE_MAP_COMPILED:
+        if pat.match(path):
+            return set(srcs)
+    if PACKER_PATHS_RE.match(path):
+        return {"qemu"}
+    return set()
 
 
 def classify_changed_files(
@@ -103,8 +108,7 @@ def classify_changed_files(
     """Classify changed file paths into CI-relevant categories."""
     roles: set[str] = set()
     full_universe: list[str] = []
-    packer_changed = False
-    packer_worker_changed = False
+    packer_sources: set[str] = set()
     ci_image_changed = False
 
     for path in paths:
@@ -112,10 +116,7 @@ def classify_changed_files(
             continue
         if FULL_UNIVERSE_RE.match(path):
             full_universe.append(path)
-        if PACKER_PATHS_RE.match(path) and not PACKER_WORKER_ONLY_RE.match(path):
-            packer_changed = True
-        if PACKER_WORKER_INPUTS_RE.match(path):
-            packer_worker_changed = True
+        packer_sources |= _packer_sources_for(path)
         if is_master_push and CI_IMAGE_INPUTS_RE.match(path):
             ci_image_changed = True
         m = ROLE_PATH_RE.match(path)
@@ -125,8 +126,7 @@ def classify_changed_files(
     return ChangeClassification(
         direct_roles=sorted(roles),
         full_universe_paths=full_universe,
-        packer_changed=packer_changed,
-        packer_worker_changed=packer_worker_changed,
+        packer_sources_affected=packer_sources,
         ci_image_changed=ci_image_changed,
     )
 
@@ -208,12 +208,28 @@ class PackerSources(NamedTuple):
     hetzner: list[str]
 
 
-def compute_packer_sources(inputs_sources: str = "") -> PackerSources:
-    """Compute packer source matrix from dispatch input.
+def compute_packer_sources(
+    inputs_sources: str = "",
+    *,
+    affected: set[str] | None = None,
+) -> PackerSources:
+    """Compute packer source matrix.
 
-    Empty input returns the full set; otherwise splits on whitespace.
+    Priority: dispatch input > file-based affected set > full set.
+    ``affected`` maps source-map tags (qemu, hetzner) to concrete
+    packer sources: "qemu" expands to box/lab/pug.
     """
-    sources = [s for s in inputs_sources.split() if s] or list(ALL_PACKER_SOURCES)
+    if inputs_sources:
+        sources = [s for s in inputs_sources.split() if s]
+    elif affected is not None:
+        concrete: set[str] = set()
+        if "qemu" in affected:
+            concrete |= {"box", "lab", "pug"}
+        if "hetzner" in affected:
+            concrete.add("hetzner")
+        sources = sorted(concrete & set(ALL_PACKER_SOURCES))
+    else:
+        sources = list(ALL_PACKER_SOURCES)
     return PackerSources(
         all=sources,
         box=[s for s in sources if s == "box"],
@@ -566,7 +582,9 @@ def _cmd_classify(args: list[str]) -> int:
     is_master = "--master-push" in args
     paths = [line.strip() for line in sys.stdin if line.strip()]
     result = classify_changed_files(paths, is_master_push=is_master)
-    print(json.dumps(result._asdict()))
+    d = result._asdict()
+    d["packer_sources_affected"] = sorted(d["packer_sources_affected"])
+    print(json.dumps(d))
     return 0
 
 
@@ -608,12 +626,14 @@ def _cmd_emit(args: list[str]) -> int:
     p.add_argument("--ci-image-changed", default="false")
     p.add_argument("--inputs-sources", default="")
     p.add_argument("--inputs-ubuntu", default="")
+    p.add_argument("--packer-sources-affected", default="")
     opts = p.parse_args(args)
 
     specs = json.loads(opts.matrix)
     matrix_str = json.dumps(specs)
     buckets = split_matrix_buckets(specs)
-    packer = compute_packer_sources(opts.inputs_sources)
+    affected = set(opts.packer_sources_affected.split(",")) if opts.packer_sources_affected else None
+    packer = compute_packer_sources(opts.inputs_sources, affected=affected)
     ubuntu = compute_packer_ubuntu(opts.inputs_ubuntu)
 
     pairs = [
@@ -673,8 +693,17 @@ def _cmd_emit(args: list[str]) -> int:
     return 0
 
 
-def _emit_result(matrix: str, packer_changed: str, ci_image_changed: str, packer_worker_changed: str = "false") -> int:
+def _emit_result(
+    matrix: str,
+    *,
+    packer_affected: set[str] | None = None,
+    ci_image_changed: bool = False,
+) -> int:
     """Emit CI outputs via _cmd_emit with current env for sources/ubuntu."""
+    affected = packer_affected or set()
+    packer_changed = "true" if affected & {"qemu", "hetzner"} else "false"
+    packer_worker_changed = "true" if "worker" in affected else "false"
+    affected_str = ",".join(sorted(affected)) if affected else ""
     return _cmd_emit(
         [
             "--matrix",
@@ -684,7 +713,9 @@ def _emit_result(matrix: str, packer_changed: str, ci_image_changed: str, packer
             "--packer-worker-changed",
             packer_worker_changed,
             "--ci-image-changed",
-            ci_image_changed,
+            "true" if ci_image_changed else "false",
+            "--packer-sources-affected",
+            affected_str,
             "--inputs-sources",
             os.environ.get("INPUTS_SOURCES", ""),
             "--inputs-ubuntu",
@@ -701,7 +732,7 @@ def _cmd_run(args: list[str]) -> int:
 
     if "--all" in args:
         log("mode: --all (full universe)")
-        return _emit_result(_matrix_json("--all"), "false", "false")
+        return _emit_result(_matrix_json("--all"))
 
     event = os.environ.get("GITHUB_EVENT_NAME", "")
     inputs_roles = os.environ.get("INPUTS_ROLES", "")
@@ -711,12 +742,12 @@ def _cmd_run(args: list[str]) -> int:
         log(f"mode: workflow_dispatch roles='{inputs_roles}'")
         if inputs_roles == "ALL":
             log("roles=ALL -> full universe")
-            return _emit_result(_matrix_json("--all"), "false", "false")
-        return _emit_result(_matrix_json("--dispatch", inputs_roles), "false", "false")
+            return _emit_result(_matrix_json("--all"))
+        return _emit_result(_matrix_json("--dispatch", inputs_roles))
 
     if event == "workflow_dispatch" and inputs_sources:
         log(f"mode: workflow_dispatch sources='{inputs_sources}' (packer-only, empty test matrix)")
-        return _emit_result("[]", "true", "false")
+        return _emit_result("[]", packer_affected={"qemu", "hetzner"})
 
     head_sha = os.environ.get("GITHUB_SHA", "")
     ref_name = os.environ.get("GITHUB_REF_NAME", "")
@@ -731,9 +762,9 @@ def _cmd_run(args: list[str]) -> int:
         f"branch={ref_name or '?'}, sha={head_sha[:12] if head_sha else '?'})"
     )
 
-    def full_universe(reason, packer="false", ci_image="false", packer_worker="false"):
+    def full_universe(reason, packer_affected=None, ci_image_changed=False):
         log(f"{reason} -> testing the FULL universe")
-        return _emit_result(_matrix_json("--all"), packer, ci_image, packer_worker)
+        return _emit_result(_matrix_json("--all"), packer_affected=packer_affected, ci_image_changed=ci_image_changed)
 
     ci_base_ref = os.environ.get("CI_BASE_REF", "")
     if ci_base_ref:
@@ -750,12 +781,12 @@ def _cmd_run(args: list[str]) -> int:
             log_fn=log,
         )
         if not green:
-            return full_universe("no green ancestor run found", packer="true")
+            return full_universe("no green ancestor run found", packer_affected={"qemu", "hetzner", "worker"})
         if git_rev_parse(green) is None:
             log(f"  base {green[:12]} outside shallow checkout; fetching the commit")
             git_fetch_commit(green)
         if git_rev_parse(green) is None:
-            return full_universe(f"green run {green[:12]} unreachable", packer="true")
+            return full_universe(f"green run {green[:12]} unreachable", packer_affected={"qemu", "hetzner", "worker"})
         base_ref = green
         log(f"diff base: {green[:12]} (last green ci run)")
     else:
@@ -764,7 +795,7 @@ def _cmd_run(args: list[str]) -> int:
 
     base = git_rev_parse(base_ref)
     if base is None:
-        return full_universe(f"base ref '{base_ref}' does not resolve", packer="true")
+        return full_universe(f"base ref '{base_ref}' does not resolve", packer_affected={"qemu", "hetzner", "worker"})
 
     changed = git_diff_files(base)
     head_short = git_rev_parse_short("HEAD")
@@ -773,14 +804,10 @@ def _cmd_run(args: list[str]) -> int:
     is_master_push = event == "push" and github_ref == "refs/heads/master"
     classification = classify_changed_files(changed, is_master_push=is_master_push)
 
-    packer_str = "true" if classification.packer_changed else "false"
-    packer_worker_str = "true" if classification.packer_worker_changed else "false"
-    ci_image_str = "true" if classification.ci_image_changed else "false"
+    packer_affected = classification.packer_sources_affected or set()
 
-    if classification.packer_changed:
-        log("packer inputs changed -> packer_changed=true")
-    if classification.packer_worker_changed:
-        log("worker image inputs changed -> packer_worker_changed=true")
+    if packer_affected:
+        log(f"packer sources affected: {' '.join(sorted(packer_affected))}")
     if classification.ci_image_changed:
         log("ci-image inputs changed (master push) -> ci_image_changed=true")
 
@@ -789,14 +816,16 @@ def _cmd_run(args: list[str]) -> int:
         for p in classification.full_universe_paths:
             log(f"     {p}")
         return full_universe(
-            "full-universe path changed", packer=packer_str, ci_image=ci_image_str, packer_worker=packer_worker_str
+            "full-universe path changed",
+            packer_affected=packer_affected,
+            ci_image_changed=classification.ci_image_changed,
         )
 
     universe = set(list_testable_roles())
     roles: set[str] = set()
     release_cells: list[str] = []
 
-    if classification.packer_changed:
+    if packer_affected & {"qemu", "hetzner"}:
         roles.add("packer")
 
     deps_map = build_role_deps_map()
@@ -833,7 +862,11 @@ def _cmd_run(args: list[str]) -> int:
     matrix_args.extend(roles_sorted)
     matrix = _matrix_json(*matrix_args)
 
-    return _emit_result(matrix, packer_str, ci_image_str, packer_worker_str)
+    return _emit_result(
+        matrix,
+        packer_affected=packer_affected,
+        ci_image_changed=classification.ci_image_changed,
+    )
 
 
 _COMMANDS = {
