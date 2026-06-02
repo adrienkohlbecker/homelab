@@ -42,11 +42,11 @@
     validate_certs: false
     follow_redirects: none
     status_code: 302
-  register: _verify_nginx_gate
+  register: speedtest_verify_nginx_gate
   retries: 10
   delay: 1
-  until: _verify_nginx_gate.status == 302
+  until: speedtest_verify_nginx_gate.status == 302
   failed_when: >-
-    _verify_nginx_gate.status != 302
-    or 'https://auth.' not in (_verify_nginx_gate.location | default(''))
+    speedtest_verify_nginx_gate.status != 302
+    or 'https://auth.' not in (speedtest_verify_nginx_gate.location | default(''))
   become: true

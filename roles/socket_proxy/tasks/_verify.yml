@@ -87,7 +87,9 @@
     url: "http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/{{ _socket_proxy_containers.json[0].Id }}/exec"
     method: POST
     body_format: json
-    body: {"Cmd": ["true"]}
+    body:
+      Cmd:
+        - "true"
     status_code: 403
   become: true
 
