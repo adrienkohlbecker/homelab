@@ -72,7 +72,7 @@
     dest: /root/.ssh/config
     owner: root
     group: root
-    mode: "0644"
+    mode: "0600"
     backup: true
     validate: ssh -G -F %s localhost
   become: true

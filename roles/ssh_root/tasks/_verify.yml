@@ -35,14 +35,14 @@
   changed_when: false
   failed_when: "'ED25519' not in _ssh_root_keygen.stdout"
 
-- name: _verify | Assert /root/.ssh/config exists with mode 0644 owned by root
+- name: _verify | Assert /root/.ssh/config exists with mode 0600 owned by root
   stat:
     path: /root/.ssh/config
   register: _ssh_root_config_file
   become: true
   failed_when: >-
     not _ssh_root_config_file.stat.exists
-    or _ssh_root_config_file.stat.mode != '0644'
+    or _ssh_root_config_file.stat.mode != '0600'
     or _ssh_root_config_file.stat.pw_name != 'root'
     or _ssh_root_config_file.stat.gr_name != 'root'
 
@@ -57,6 +57,7 @@
     that:
       - "'controlmaster auto' in _ssh_root_config.stdout"
       - "'controlpersist 300' in _ssh_root_config.stdout"
+      - "'forwardagent no' in _ssh_root_config.stdout"
       - "'serveraliveinterval 30' in _ssh_root_config.stdout"
       - "'connecttimeout 10' in _ssh_root_config.stdout"
       - "'identityfile ~/.ssh/id_ed25519' in _ssh_root_config.stdout"
