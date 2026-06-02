@@ -1,0 +1,7 @@
+{{ ansible_user_id }}:100000:65536
+{% for user in subid_users %}
+{{ user }}:{{ 100000 + (loop.index * 65536) }}:65536
+{% endfor %}
+{% for entry in subid_extras %}
+{{ entry.user }}:{{ subid_id_source[entry[subid_id_key]][1] }}:{{ entry.count | default(1) }}
+{% endfor %}

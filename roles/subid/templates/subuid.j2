@@ -1,7 +1,0 @@
-{{ ansible_user_id }}:100000:65536
-{% for user in subid_users %}
-{{ user }}:{{ 100000 + (loop.index * 65536) }}:65536
-{% endfor %}
-{% for entry in (subid_extra_subuid_users | default([])) %}
-{{ entry.user }}:{{ ansible_facts.getent_passwd[entry.source_user][1] }}:{{ entry.count | default(1) }}
-{% endfor %}
