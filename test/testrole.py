@@ -241,6 +241,16 @@ async def run_test(
                             await m.ensure_ssh()
                         print_line("SSH up")
 
+                        # The vanilla cloud image runs cloud-init's config/final
+                        # stages (apt sources, manage_etc_hosts, package installs)
+                        # after sshd comes up, so the mirrors playbook + snapd
+                        # purge below would race them. Settle cloud-init first.
+                        # Only `minimal` carries a live cloud-init datasource; the
+                        # packer images pin NoCloud and would stall the wait.
+                        if m.machine == "minimal":
+                            async with _phase("cloud-init wait"):
+                                await m.ensure_cloud_init()
+
                         # Mirror setup playbook: apt sources, podman registries,
                         # /etc/pip.conf, /etc/uv/uv.toml. Routes everything
                         # through the lab Nexus when nexus_url is set
