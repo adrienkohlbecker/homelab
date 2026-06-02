@@ -122,7 +122,7 @@
 
 - name: _verify | Read vm.swappiness
   when:
-    - swap_zram is defined
+    - swap_zram is defined or swap_zvol is defined or swap_partition is defined
     - _swap_verify_zram_module.rc == 0
   slurp:
     src: /proc/sys/vm/swappiness
@@ -131,7 +131,7 @@
 
 - name: _verify | Swappiness tuned to the configured value
   when:
-    - swap_zram is defined
+    - swap_zram is defined or swap_zvol is defined or swap_partition is defined
     - _swap_verify_zram_module.rc == 0
   assert:
     that:
