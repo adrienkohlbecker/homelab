@@ -15,6 +15,13 @@
     and (_tailscale_status.stdout | from_json).BackendState == 'Running'
   become: true
 
+- name: _verify | Tailscale interface carries a mesh IP
+  command: tailscale ip -4
+  register: _tailscale_ip
+  changed_when: false
+  failed_when: _tailscale_ip.rc != 0 or (_tailscale_ip.stdout | trim | length == 0)
+  become: true
+
 - name: _verify | This node appears in headscale's node list
   command: podman exec headscale headscale nodes list -o json
   register: _tailscale_nodes
@@ -27,22 +34,67 @@
       {{ (_tailscale_nodes.stdout | from_json)
          | selectattr('given_name', 'equalto', ansible_hostname | lower)
          | list | first | default({}) }}
+    _tailscale_desired_routes: >-
+      {{ (tailscale_advertise_routes.split(','))
+         + (tailscale_advertise_exit_node | ternary(['0.0.0.0/0', '::/0'], [])) }}
 
-# Derive the expected set from the same host_vars the role advertises from
-# (subnets + the exit-node defaults), rather than hardcoding box's CIDR -- so the
-# assertion can't silently drift from tailscale_advertise_routes.
-- name: _verify | The node registered and every advertised route was approved
+- name: _verify | The node registered and approved routes match exactly
   assert:
     that:
       - _tailscale_node.id is defined
-      - >-
-        ((tailscale_advertise_routes.split(','))
-         + (tailscale_advertise_exit_node | ternary(['0.0.0.0/0', '::/0'], [])))
-        | difference(_tailscale_node.approved_routes | default([])) | length == 0
+      - (_tailscale_desired_routes | symmetric_difference(_tailscale_node.approved_routes | default([]))) | length == 0
     fail_msg: >-
       headscale node for {{ ansible_hostname | lower }} is missing, or its
-      advertised subnet/exit routes were not all approved.
-      approved={{ _tailscale_node.approved_routes | default([]) }}
+      approved routes don't match the desired set.
+      desired={{ _tailscale_desired_routes | sort }}
+      approved={{ _tailscale_node.approved_routes | default([]) | sort }}
+
+- name: _verify | Read local preferences (accept-routes, accept-dns)
+  command: tailscale debug prefs
+  register: _tailscale_prefs
+  changed_when: false
+  become: true
+
+- name: _verify | Accept-routes and accept-dns match host_vars
+  vars:
+    _prefs: "{{ _tailscale_prefs.stdout | from_json }}"
+  assert:
+    that:
+      - (_prefs.RouteAll | default(false) | bool) == (tailscale_accept_routes | bool)
+      - (_prefs.CorpDNS | default(false) | bool) == (tailscale_accept_dns | bool)
+    fail_msg: >-
+      Local preferences don't match desired: RouteAll={{ _prefs.RouteAll | default(false) }}
+      (want {{ tailscale_accept_routes }}), CorpDNS={{ _prefs.CorpDNS | default(false) }}
+      (want {{ tailscale_accept_dns }})
+
+# Exercise the route-reconciliation path (tailscale set). Temporarily advertise
+# a different subnet, verify the prefs update, then restore the original set.
+- name: _verify | Reconcile test -- switch to a canary route
+  command: >-
+    tailscale set
+    --advertise-routes=10.254.254.0/24
+    --advertise-exit-node={{ tailscale_advertise_exit_node | ternary('true', 'false') }}
+    --timeout=60s
+  changed_when: true
+  become: true
+
+- name: _verify | Reconcile test -- verify canary route took effect
+  command: tailscale debug prefs
+  register: _tailscale_canary_prefs
+  changed_when: false
+  failed_when: "'10.254.254.0/24' not in (_tailscale_canary_prefs.stdout | from_json).AdvertiseRoutes | default([])"
+  become: true
+
+- name: _verify | Reconcile test -- restore original routes
+  command: >-
+    tailscale set
+    --advertise-routes={{ tailscale_advertise_routes }}
+    --advertise-exit-node={{ tailscale_advertise_exit_node | ternary('true', 'false') }}
+    --accept-routes={{ tailscale_accept_routes | ternary('true', 'false') }}
+    --accept-dns={{ tailscale_accept_dns | ternary('true', 'false') }}
+    --timeout=60s
+  changed_when: true
+  become: true
 
 # The forwarding sysctls are what make the approved subnet route / exit node
 # actually pass traffic -- assert the role set them (live value, not just the
