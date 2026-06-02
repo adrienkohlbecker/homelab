@@ -206,6 +206,13 @@ subid_extra_subgid_groups:
   - user: gitea_runner
     group: disk
 
+# Exercise the extra-subuid-users loop in the subid role (getent lookup +
+# template rendering). On prod this path has no consumers yet; here we
+# map root's uid into gitea_runner's userns as a harmless equivalent.
+subid_extra_subuid_users:
+  - user: gitea_runner
+    source_user: root
+
 # Override gitea_runner_labels (group_vars/all.yml defaults to the
 # docker-based runner-images) to a `:host` runner so the _verify
 # smoke can execute a workflow directly on the VM host -- no ~1GB
