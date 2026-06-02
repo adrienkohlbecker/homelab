@@ -51,16 +51,29 @@
   failed_when: _boot_verify_modules.rc != 0
   become: true
 
-# The conf.d check proves the file landed; this proves update-initramfs
-# honoured it. megaraid_sas is a server-class HBA driver present under
-# MODULES=most but absent under MODULES=dep on a VM with no such hardware.
-- name: _verify | Initramfs carries server-class HBA drivers (MODULES=most functional)
-  when: ansible_architecture == 'x86_64'
+# The conf.d check proves the pin landed; this proves it took effect. ahci (SATA)
+# and e1000 (Intel NIC) are the witnesses: both ship in stock kernels but a
+# virtio-only VM loads neither, so a MODULES=dep initramfs omits them while
+# MODULES=most pulls them in (with the rest of the broad driver set). Finding
+# either in the live image proves update-initramfs honoured the pin rather than
+# building the boot-critical minimum dep would. Two drivers (one storage, one
+# net) so a flavour that trims one -- a stripped -kvm cloud kernel might -- still
+# matches the other. grep reads to EOF (no -q) so an early close can't SIGPIPE
+# lsinitramfs under pipefail.
+- name: _verify | Find the host initramfs (cloud images may boot initrd-less)
+  stat:
+    path: /boot/initrd.img-{{ ansible_kernel }}
+  register: _boot_verify_initrd
+  become: true
+
+- name: _verify | MODULES=most pulled non-virtio drivers (ahci/e1000) into the initramfs
+  # Skipped where the host boots without an initramfs at all (the arm64 cloud
+  # fixture has no /boot/initrd.img to inspect); the conf.d pin check stands in.
+  when: _boot_verify_initrd.stat.exists
   shell:
     cmd: >-
       set -euo pipefail;
-      lsinitramfs /boot/initrd.img-{{ ansible_kernel }}
-      | grep -E '/(megaraid_sas|mpt3sas)\.ko' >/dev/null
+      lsinitramfs /boot/initrd.img-{{ ansible_kernel }} | grep -E '/(ahci|e1000)\.ko' >/dev/null
     executable: /bin/bash
   changed_when: false
   become: true
