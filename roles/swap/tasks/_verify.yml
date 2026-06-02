@@ -4,8 +4,9 @@
 # testall.py only (qemu); never site.yml. See notes/swap_strategy.md.
 
 - name: _verify | Read active swap devices with priorities
-  command: swapon --show=NAME,PRIO --noheadings
+  command: swapon --show=NAME,PRIO --noheadings --raw
   changed_when: false
+  become: true
   register: _swap_verify_swapon
 
 # The role gates zram on the kernel module being present (the arm64 cloud kernel
@@ -33,13 +34,15 @@
       zram swap missing or not at the configured priority (expected
       {{ swap_zram.priority | default(100) }}, disk/zvol swap defaults
       negative so this is primary): {{ _swap_verify_swapon.stdout }}
+  become: true
 
 - name: _verify | Read zram0 device size
   when:
     - swap_zram is defined
     - _swap_verify_zram_module.rc == 0
-  command: cat /sys/block/zram0/disksize
-  changed_when: false
+  slurp:
+    src: /sys/block/zram0/disksize
+  become: true
   register: _swap_verify_zram_size
 
 # Catches the generator silently falling back to its default size (e.g. a
@@ -51,7 +54,7 @@
     - _swap_verify_zram_module.rc == 0
   vars:
     _expected_mb: "{{ [(swap_zram.size | human_to_bytes) // 1048576, ansible_memtotal_mb] | min }}"
-    _actual_mb: "{{ (_swap_verify_zram_size.stdout | int) // 1048576 }}"
+    _actual_mb: "{{ (_swap_verify_zram_size.content | b64decode | trim | int) // 1048576 }}"
   assert:
     that:
       - _actual_mb | int >= (_expected_mb | float * 0.95) | int
@@ -60,17 +63,46 @@
       zram0 is {{ _actual_mb }} MB, expected ~{{ _expected_mb }} MB (min of
       configured {{ swap_zram.size }} and MemTotal {{ ansible_memtotal_mb }} MB)
       -- check zram-fraction/max-zram-size in zram-generator.conf.
+  become: true
 
-- name: _verify | Disk/zvol overflow swap coexists below zram
+- name: _verify | Zvol swap device is active
+  when: swap_zvol is defined
+  assert:
+    that:
+      - _swap_verify_swapon.stdout_lines | select('search', 'zd') | list | length >= 1
+    fail_msg: >-
+      zvol swap device not found in swapon output (expected /dev/zd*
+      for {{ swap_zvol.dataset }}): {{ _swap_verify_swapon.stdout }}
+  become: true
+
+- name: _verify | Partition swap device is active
+  when: swap_partition is defined
+  vars:
+    _partition_lines: "{{ _swap_verify_swapon.stdout_lines | reject('search', 'zram') | reject('search', 'zd') | list }}"
+  assert:
+    that:
+      - _partition_lines | length >= 1
+    fail_msg: >-
+      partition swap device not active (expected {{ swap_partition.device }}):
+      {{ _swap_verify_swapon.stdout }}
+  become: true
+
+- name: _verify | Overflow swap priority is below zram
   when:
     - swap_zram is defined
     - _swap_verify_zram_module.rc == 0
     - swap_zvol is defined or swap_partition is defined
+  vars:
+    _overflow_lines: "{{ _swap_verify_swapon.stdout_lines | reject('search', 'zram') | list }}"
+    _zram_prio: "{{ swap_zram.priority | default(100) | int }}"
   assert:
-    that: _swap_verify_swapon.stdout_lines | length >= 2
+    that:
+      - _overflow_lines | length >= 1
+      - _overflow_lines | map('split') | map('last') | map('int') | max < _zram_prio | int
     fail_msg: >-
-      Expected zram + a disk/zvol overflow device, got:
+      Overflow swap priority must be below zram ({{ _zram_prio }}), got:
       {{ _swap_verify_swapon.stdout }}
+  become: true
 
 - name: _verify | Read vm.swappiness
   when:
@@ -78,6 +110,7 @@
     - _swap_verify_zram_module.rc == 0
   slurp:
     src: /proc/sys/vm/swappiness
+  become: true
   register: _swap_verify_swappiness
 
 - name: _verify | Swappiness tuned to the configured value
@@ -90,11 +123,13 @@
     fail_msg: >-
       vm.swappiness is {{ _swap_verify_swappiness.content | b64decode | trim }},
       expected {{ swap_swappiness | default(100) }}.
+  become: true
 
 # tmpfs /tmp applies at next boot, so assert the next-boot state (enabled), not a
-# live mount — matches how the role leaves it without forcing a reboot.
-- name: _verify | Tmpfs /tmp is enabled via tmp.mount  # noqa: command-instead-of-module
+# live mount -- matches how the role leaves it without forcing a reboot.
+- name: _verify | Tmpfs /tmp is enabled via tmp.mount # noqa: command-instead-of-module
   command: systemctl is-enabled tmp.mount
   changed_when: false
+  become: true
   register: _swap_verify_tmp_mount
   failed_when: _swap_verify_tmp_mount.stdout not in ['enabled', 'enabled-runtime', 'static']
