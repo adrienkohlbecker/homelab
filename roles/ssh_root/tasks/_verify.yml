@@ -55,13 +55,16 @@
 - name: _verify | Assert expected directives are active
   assert:
     that:
+      - "'batchmode yes' in _ssh_root_config.stdout"
       - "'controlmaster auto' in _ssh_root_config.stdout"
       - "'controlpersist 300' in _ssh_root_config.stdout"
       - "'forwardagent no' in _ssh_root_config.stdout"
-      - "'serveraliveinterval 30' in _ssh_root_config.stdout"
-      - "'connecttimeout 10' in _ssh_root_config.stdout"
       - "'identityfile ~/.ssh/id_ed25519' in _ssh_root_config.stdout"
       - "'identitiesonly yes' in _ssh_root_config.stdout"
+      - "'preferredauthentications publickey' in _ssh_root_config.stdout"
+      - "'serveralivecountmax 2' in _ssh_root_config.stdout"
+      - "'serveraliveinterval 30' in _ssh_root_config.stdout"
+      - "'connecttimeout 10' in _ssh_root_config.stdout"
     fail_msg: "ssh_config missing expected directives"
 
 - name: _verify | Capture key fingerprint before forced regeneration
