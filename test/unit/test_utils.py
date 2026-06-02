@@ -155,6 +155,42 @@ class TestTerminateSubprocess:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# run_command
+# ---------------------------------------------------------------------------
+
+
+class TestRunCommand:
+    def test_success(self) -> None:
+        async def _run() -> None:
+            result = await utils.run_command(["echo", "hello"], quiet=True)
+            assert result.exitcode == 0
+            assert any("hello" in line for line in result.stdout)
+
+        asyncio.run(_run())
+
+    def test_failure_raises(self) -> None:
+        async def _run() -> None:
+            with pytest.raises(utils.CommandFailedException):
+                await utils.run_command(["false"], quiet=True)
+
+        asyncio.run(_run())
+
+    def test_failure_no_check(self) -> None:
+        async def _run() -> None:
+            result = await utils.run_command(["false"], check=False, quiet=True)
+            assert result.exitcode != 0
+
+        asyncio.run(_run())
+
+    def test_captures_stderr(self) -> None:
+        async def _run() -> None:
+            result = await utils.run_command(["sh", "-c", "echo err >&2"], check=False, quiet=True)
+            assert any("err" in line for line in result.stderr)
+
+        asyncio.run(_run())
+
+
 class TestCommandResult:
     def test_named_fields(self) -> None:
         r = utils.CommandResult(exitcode=0, stdout=["ok"], stderr=[])
