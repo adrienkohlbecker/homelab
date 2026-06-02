@@ -20,8 +20,8 @@ static_curl_version: "8.20.0"
 
 static_curl_release:
   x86_64:
-    url: https://github.com/stunnel/static-curl/releases/download/{{ static_curl_version }}/curl-linux-x86_64-musl-{{ static_curl_version }}.tar.xz
+    url: "{{ mirror_github }}/stunnel/static-curl/releases/download/{{ static_curl_version }}/curl-linux-x86_64-musl-{{ static_curl_version }}.tar.xz"
     sha256: 7a12a4c460967e769fad9ddae2de4fce6679633b5a1891628e657dad8df57f3d
   aarch64:
-    url: https://github.com/stunnel/static-curl/releases/download/{{ static_curl_version }}/curl-linux-aarch64-musl-{{ static_curl_version }}.tar.xz
+    url: "{{ mirror_github }}/stunnel/static-curl/releases/download/{{ static_curl_version }}/curl-linux-aarch64-musl-{{ static_curl_version }}.tar.xz"
     sha256: b5dde6790a33f55dee04e965d5b0fcd9c82493b72e1e5608c09ce1483359fb81
