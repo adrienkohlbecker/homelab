@@ -49,7 +49,7 @@
   changed_when: false
   failed_when: >-
     not paperless_verify_dblink.stat.islnk
-    or not (paperless_verify_dblink.stat.lnk_target | default('')).startswith('/mnt/services/sqlite/paperless/')
+    or paperless_verify_dblink.stat.lnk_target | default('') != '/mnt/services/sqlite/paperless/db.sqlite3'
   become: true
 
 # The HTTP probes prove the web tier is up, but paperless's actual job --

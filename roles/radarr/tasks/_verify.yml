@@ -81,6 +81,7 @@
 - name: _verify | Stat the radarr DB paths
   stat:
     path: "/mnt/services/radarr/{{ item }}"
+    follow: false
   loop:
     - radarr.db
     - logs.db
