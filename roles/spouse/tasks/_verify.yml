@@ -1,25 +1,35 @@
 - name: _verify | POSIX user exists with correct attributes
-  command: getent passwd {{ spouse_firstname }}
-  register: spouse_verify_passwd
-  changed_when: false
-  become: true
+  getent:
+    database: passwd
+    key: "{{ spouse_firstname }}"
 
-- name: _verify | Assert user shell and home
+- name: _verify | Assert user shell, home, and non-system UID
   assert:
     that:
-      # passwd fields: name:passwd:uid:gid:gecos:home:shell -- split rather than
-      # substring-match so a wrong home and a wrong shell are distinguishable in
-      # the failure.
-      - spouse_verify_passwd.stdout.split(':')[6] == '/usr/sbin/nologin'
-      - spouse_verify_passwd.stdout.split(':')[5] == '/mnt/data/' ~ spouse_firstname
+      # getent_passwd[user]: [password, uid, gid, gecos, home, shell] (0-indexed)
+      - ansible_facts.getent_passwd[spouse_firstname][5] == '/usr/sbin/nologin'
+      - ansible_facts.getent_passwd[spouse_firstname][4] == '/mnt/data/' ~ spouse_firstname
+      # system: false in main.yml gives a stable non-system UID for the arq bucket
+      # and subid range -- assert it stayed that way.
+      - ansible_facts.getent_passwd[spouse_firstname][1] | int >= 1000
+      - ansible_facts.getent_passwd[spouse_firstname][2] | int >= 1000
     fail_msg: >-
-      Expected nologin shell and /mnt/data/{{ spouse_firstname }} home,
-      got: {{ spouse_verify_passwd.stdout }}
+      Expected nologin shell, /mnt/data/{{ spouse_firstname }} home, non-system UID/GID;
+      got: {{ ansible_facts.getent_passwd[spouse_firstname] | default([]) }}
 
 - name: _verify | POSIX group exists
-  command: getent group {{ spouse_firstname }}
-  changed_when: false
-  become: true
+  getent:
+    database: group
+    key: "{{ spouse_firstname }}"
+
+- name: _verify | Assert group is non-system
+  assert:
+    that:
+      # getent_group[group]: [password, gid, members] (0-indexed)
+      - ansible_facts.getent_group[spouse_firstname][1] | int >= 1000
+    fail_msg: >-
+      Group {{ spouse_firstname }} missing or has system GID
+      (got {{ ansible_facts.getent_group[spouse_firstname][1] | default('absent') }}).
 
 - name: _verify | Home directory exists and is owned correctly
   stat:
