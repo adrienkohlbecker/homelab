@@ -32,8 +32,8 @@
       - _zram_lines[0].split()[1] | int == swap_zram.priority | default(100) | int
     fail_msg: >-
       zram swap missing or not at the configured priority (expected
-      {{ swap_zram.priority | default(100) }}, disk/zvol swap defaults
-      negative so this is primary): {{ _swap_verify_swapon.stdout }}
+      {{ swap_zram.priority | default(100) }}, disk/zvol swap sits at
+      priority 10 so this is primary): {{ _swap_verify_swapon.stdout }}
   become: true
 
 - name: _verify | Read zram0 device size

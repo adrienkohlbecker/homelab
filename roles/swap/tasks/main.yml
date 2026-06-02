@@ -262,7 +262,7 @@
 #######################################################################
 # Compressed-RAM swap fronting the disk/zvol overflow above. swap-priority
 # 100 (set in the generator config) sits above the disk/zvol swap, which
-# carries the kernel's default negative auto-priority, so routine paging
+# the role places at priority 10, so routine paging
 # compresses into RAM and the disk/zvol is reached only under genuine
 # exhaustion. zram is deadlock-free (no ZFS allocation on the page-out
 # path), which is what keeps the zvol cold on the mirror hosts.
