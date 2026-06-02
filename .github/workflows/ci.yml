@@ -234,9 +234,8 @@ jobs:
   # Rebuilds the pre-baked CI worker snapshot when packer inputs change.
   # Master-only: the snapshot is a project-global resource (label-selected
   # by the runtime provisioner), so a feature-branch publish would silently
-  # become the next worker's boot image. Runs on a gen runner (no qemu
-  # needed — the hcloud builder creates the server remotely). No container
-  # — mise + packer are on the runner host.
+  # become the next worker's boot image. Runs in the CI container (the
+  # hcloud builder creates the server remotely, no host-level KVM needed).
   packer_worker:
     needs: [ detect, ci-image ]
     if: |
