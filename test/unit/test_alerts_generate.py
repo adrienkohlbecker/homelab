@@ -9,6 +9,8 @@ import importlib
 import time
 from pathlib import Path
 
+import pytest
+
 _MODULE_PATH = Path(__file__).resolve().parent.parent.parent / "roles" / "homepage" / "files" / "alerts_generate.py"
 
 
@@ -272,11 +274,12 @@ class TestFormatValue:
         alarm = {"units": "timestamp", "value": "0", "value_string": "0 timestamp"}
         assert ag._format_value(alarm) == "never"
 
-    def test_timestamp_recent(self) -> None:
-        now = time.time()
-        alarm = {"units": "timestamp", "value": str(now - 120)}
+    def test_timestamp_recent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        fixed_now = 1700000000.0
+        monkeypatch.setattr(ag.time, "time", lambda: fixed_now)
+        alarm = {"units": "timestamp", "value": str(fixed_now - 120)}
         result = ag._format_value(alarm)
-        assert "ago" in result
+        assert "2m ago" == result
 
     def test_no_units(self) -> None:
         alarm = {"value_string": "42"}
