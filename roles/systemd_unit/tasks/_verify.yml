@@ -361,6 +361,35 @@
           - _systemd_unit_dropin_stat.stat.exists
           - not _systemd_unit_dropin_stat.stat.islnk
 
+# Absolute-path dropin mode: dest_abs lets callers place daemon-config
+# drop-ins (journald.conf.d/, resolved.conf.d/) at arbitrary absolute
+# paths. The path derivation and fact-name computation differ from the
+# default mode, so exercise them separately.
+- name: _verify | Install drop-in via dest_abs mode
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_dropin.conf
+      for: systemd_unit_verify_copy_ok.service
+      dest_abs: /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/99-abs-test.conf
+
+- name: _verify | Absolute-path drop-in landed at dest_abs path
+  block:
+    - name: _verify | Stat dest_abs drop-in path
+      stat:
+        path: /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/99-abs-test.conf
+      register: _systemd_unit_abs_dropin_stat
+    - name: _verify | Assert dest_abs drop-in exists and carries the expected line
+      assert:
+        that:
+          - _systemd_unit_abs_dropin_stat.stat.exists
+          - not _systemd_unit_abs_dropin_stat.stat.islnk
+    - name: _verify | Assert dest_abs drop-in content
+      command: grep -qF Environment=DROPIN_TEST=1 /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/99-abs-test.conf
+      changed_when: false
+
 - name: _verify | Cleanup drop-in directory
   file:
     path: /etc/systemd/system/systemd_unit_verify_copy_ok.service.d
@@ -462,4 +491,73 @@
   file:
     path: /etc/systemd/system/systemd_unit_remove_mask_test.service
     state: absent
+  become: true
+
+# --- service.yml coverage ---
+# The service entrypoint (enable, start, restart, reload, pre-pull) is
+# the most-called path (~68 services) and has the most conditional logic.
+# Exercise the core lifecycle: install → start → idempotent re-start →
+# restart-on-change → cleanup.
+
+- name: _verify | Install fixture for service-path tests
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+
+- name: _verify | Start the fixture via tasks_from=service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+
+- name: _verify | Unit is active after first start  # noqa: command-instead-of-module
+  command: systemctl is-active systemd_unit_verify_ok.service
+  changed_when: false
+
+- name: _verify | Re-run service (idempotent — already active, no restart)
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+
+- name: _verify | Restart fires when requested
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+      restart: true
+
+- name: _verify | Unit is still active after restart  # noqa: command-instead-of-module
+  command: systemctl is-active systemd_unit_verify_ok.service
+  changed_when: false
+
+- name: _verify | Start=false skips lifecycle
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+      start: false
+
+- name: _verify | Cleanup service-path fixture
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: systemd_unit_verify_ok.service
+
+- name: _verify | Daemon-reload after service-path cleanup
+  systemd:
+    daemon_reload: true
   become: true
