@@ -198,7 +198,7 @@ run = "git ls-files -z '*.sh' | xargs -0 shfmt -i 2 -w"
 [tasks."tf"]
 description = "tofu (forwards subcommand + args)"
 dir = "{{config_root}}/terraform"
-run = 'op run -- env HCLOUD_TOKEN="$HCLOUD_TOKEN_OP" tofu "$@"'
+run = 'HCLOUD_TOKEN="$HCLOUD_TOKEN_OP" op run -- tofu "$@"'
 
 [tasks."ansible"]
 description = "ansible-playbook against site.yml (forwards args)"
