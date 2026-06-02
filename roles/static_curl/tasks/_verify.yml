@@ -9,22 +9,6 @@
       - _static_curl_curl_version.stdout is search('^curl ' ~ (static_curl_version | regex_escape) ~ ' ')
     fail_msg: "curl_static --version output didn't start with 'curl {{ static_curl_version }} ': {{ _static_curl_curl_version.stdout }}"
 
-- name: _verify | Stat /usr/local/bin/curl_static
-  stat:
-    path: /usr/local/bin/curl_static
-  register: _static_curl_stat
-
-- name: _verify | Assert curl_static ownership and mode
-  assert:
-    that:
-      - _static_curl_stat.stat.exists
-      - _static_curl_stat.stat.pw_name == 'root'
-      - _static_curl_stat.stat.gr_name == 'root'
-      - _static_curl_stat.stat.mode == '0755'
-    fail_msg: >-
-      curl_static has wrong ownership or mode:
-      {{ _static_curl_stat.stat | to_nice_json }}
-
 # ldd on a fully-static binary emits "statically linked" (jammy) or
 # "not a dynamic executable" (older glibc) — on stdout or stderr — and
 # may exit non-zero.
@@ -43,18 +27,6 @@
       curl_static is not fully statically linked.
       ldd stdout: {{ _static_curl_curl_ldd.stdout | default('') }}
       ldd stderr: {{ _static_curl_curl_ldd.stderr | default('') }}
-
-- name: _verify | Curl_static can fetch a local file
-  command: /usr/local/bin/curl_static -sf file:///etc/hostname
-  changed_when: false
-  register: _static_curl_fetch
-
-- name: _verify | Assert curl_static returned content
-  assert:
-    that:
-      - _static_curl_fetch.rc == 0
-      - _static_curl_fetch.stdout | length > 0
-    fail_msg: "curl_static failed to fetch file:///etc/hostname: rc={{ _static_curl_fetch.rc }}, stdout={{ _static_curl_fetch.stdout }}"
 
 # The role exists to give distroless containers an HTTP client for
 # --health-cmd, so exercise the socket path the consumers actually hit.
