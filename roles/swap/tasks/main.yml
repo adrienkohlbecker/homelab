@@ -243,7 +243,11 @@
 
 - name: Activate partition swap
   when: swap_partition is defined
-  command: swapon -p 10 {{ swap_partition.device }}
+  vars:
+    _opts: "{{ swap_partition.opts | default('defaults,nofail,discard,pri=10') }}"
+  # Pass --discard at activation when fstab requests it, so the live device
+  # matches the next-boot state instead of acquiring discard only after a reboot.
+  command: swapon -p 10 {{ '--discard' if 'discard' in _opts else '' }} {{ swap_partition.device }}
   register: swap_partition_swapon
   changed_when: swap_partition_swapon.rc == 0
   failed_when:
