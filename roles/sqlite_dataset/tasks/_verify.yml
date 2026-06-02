@@ -1,0 +1,156 @@
+- name: _verify | All sqlite_dataset scenarios
+  block:
+    # -- Scenario 1: directory-only (no links, like plex) ----------------
+    - name: _verify | Scenario 1 — directory-only
+      import_role:
+        name: sqlite_dataset
+        tasks_from: dataset
+      vars:
+        sqlite_dataset_args:
+          name: sqlite_dataset_test
+          owner: root
+          group: root
+          mode: "0700"
+
+    - name: _verify | Scenario 1 — stat the sqlite dir
+      stat:
+        path: /mnt/services/sqlite/sqlite_dataset_test
+      register: _sqlite_dataset_dir
+      become: true
+
+    - name: _verify | Scenario 1 — directory exists with correct attrs
+      assert:
+        that:
+          - _sqlite_dataset_dir.stat.exists
+          - _sqlite_dataset_dir.stat.isdir
+          - _sqlite_dataset_dir.stat.pw_name == 'root'
+          - _sqlite_dataset_dir.stat.gr_name == 'root'
+          - _sqlite_dataset_dir.stat.mode == '0700'
+
+    # -- Scenario 2: pre_create + symlinks -------------------------------
+    - name: _verify | Scenario 2 — pre_create + symlinks
+      import_role:
+        name: sqlite_dataset
+        tasks_from: dataset
+      vars:
+        sqlite_dataset_args:
+          name: sqlite_dataset_test
+          owner: root
+          group: root
+          mode: "0750"
+          pre_create: true
+          links:
+            - /mnt/services/sqlite_dataset_test/test.db
+            - /mnt/services/sqlite_dataset_test/sub/other.db
+
+    - name: _verify | Scenario 2 — stat pre-created src files
+      stat:
+        path: "/mnt/services/sqlite/sqlite_dataset_test/{{ item }}"
+      loop:
+        - test.db
+        - other.db
+      register: _sqlite_dataset_src_files
+      become: true
+
+    - name: _verify | Scenario 2 — src files exist with correct attrs
+      assert:
+        that:
+          - item.stat.exists
+          - not item.stat.islnk
+          - item.stat.pw_name == 'root'
+          - item.stat.gr_name == 'root'
+          - item.stat.mode == '0640'
+      loop: "{{ _sqlite_dataset_src_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: _verify | Scenario 2 — stat symlinks at dest
+      stat:
+        path: "{{ item }}"
+        follow: false
+      loop:
+        - /mnt/services/sqlite_dataset_test/test.db
+        - /mnt/services/sqlite_dataset_test/sub/other.db
+      register: _sqlite_dataset_symlinks
+      become: true
+
+    - name: _verify | Scenario 2 — symlinks resolve onto the sqlite dir
+      assert:
+        that:
+          - item.stat.exists
+          - item.stat.islnk
+          - item.stat.lnk_target == '/mnt/services/sqlite/sqlite_dataset_test/' ~ (item.item | basename)
+      loop: "{{ _sqlite_dataset_symlinks.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # -- Scenario 3: pre_create does not clobber an existing file --------
+    - name: _verify | Scenario 3 — write sentinel content into src file
+      copy:
+        content: "SENTINEL"
+        dest: /mnt/services/sqlite/sqlite_dataset_test/test.db
+        owner: root
+        group: root
+        mode: "0640"
+      become: true
+
+    - name: _verify | Scenario 3 — re-run with pre_create
+      import_role:
+        name: sqlite_dataset
+        tasks_from: dataset
+      vars:
+        sqlite_dataset_args:
+          name: sqlite_dataset_test
+          owner: root
+          group: root
+          pre_create: true
+          links:
+            - /mnt/services/sqlite_dataset_test/test.db
+
+    - name: _verify | Scenario 3 — read src file content
+      slurp:
+        src: /mnt/services/sqlite/sqlite_dataset_test/test.db
+      register: _sqlite_dataset_sentinel
+      become: true
+
+    - name: _verify | Scenario 3 — sentinel content is preserved
+      assert:
+        that:
+          - _sqlite_dataset_sentinel.content | b64decode == 'SENTINEL'
+
+    # -- Scenario 4: custom file_mode ------------------------------------
+    - name: _verify | Scenario 4 — pre_create with file_mode 0600
+      import_role:
+        name: sqlite_dataset
+        tasks_from: dataset
+      vars:
+        sqlite_dataset_args:
+          name: sqlite_dataset_test
+          owner: root
+          group: root
+          pre_create: true
+          file_mode: "0600"
+          links:
+            - /mnt/services/sqlite_dataset_test/private.db
+
+    - name: _verify | Scenario 4 — stat the private file
+      stat:
+        path: /mnt/services/sqlite/sqlite_dataset_test/private.db
+      register: _sqlite_dataset_private
+      become: true
+
+    - name: _verify | Scenario 4 — file mode is 0600
+      assert:
+        that:
+          - _sqlite_dataset_private.stat.exists
+          - _sqlite_dataset_private.stat.mode == '0600'
+
+  always:
+    - name: _verify | Teardown — remove test fixtures
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /mnt/services/sqlite/sqlite_dataset_test
+        - /mnt/services/sqlite_dataset_test
+      become: true
