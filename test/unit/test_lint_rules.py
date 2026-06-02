@@ -5,7 +5,7 @@ lint/ansible_rules/{require_backup,shell_strict_mode}.py without needing
 a full ansible-lint invocation.
 """
 
-import re
+import importlib
 import subprocess
 import sys
 from pathlib import Path
@@ -14,18 +14,20 @@ _LINT_DIR = Path(__file__).resolve().parent.parent.parent / "lint" / "ansible_ru
 
 
 # ---------------------------------------------------------------------------
-# shell_strict_mode regexes (extracted to avoid importing ansiblelint)
+# shell_strict_mode regexes — imported from the real rule module
 # ---------------------------------------------------------------------------
 
 
-def _load_regexes():
-    set_e = re.compile(r"(?<![\w-])set(?![\w-])[^\n;]*-[A-Za-z]*e", re.MULTILINE)
-    set_u = re.compile(r"(?<![\w-])set(?![\w-])[^\n;]*-[A-Za-z]*u", re.MULTILINE)
-    pipefail = re.compile(r"(?<![\w-])set(?![\w-])[^\n]*pipefail", re.MULTILINE)
-    return set_e, set_u, pipefail
+def _load_shell_strict_mode():
+    spec = importlib.util.spec_from_file_location("shell_strict_mode", _LINT_DIR / "shell_strict_mode.py")
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
-SET_E_RE, SET_U_RE, PIPEFAIL_RE = _load_regexes()
+_ssm = _load_shell_strict_mode()
+SET_E_RE, SET_U_RE, PIPEFAIL_RE = _ssm._SET_E_RE, _ssm._SET_U_RE, _ssm._PIPEFAIL_RE
 
 
 class TestShellStrictModeRegex:
@@ -83,47 +85,10 @@ class TestShellStrictModeRegex:
 # ---------------------------------------------------------------------------
 
 
-_FILE_WRITE_MODULES = frozenset(
-    {
-        "copy",
-        "template",
-        "replace",
-        "lineinfile",
-        "blockinfile",
-        "assemble",
-        "ini_file",
-    }
-)
-
-
 class TestRequireBackupModuleSet:
-    def test_copy_is_covered(self) -> None:
-        assert "copy" in _FILE_WRITE_MODULES
-
-    def test_template_is_covered(self) -> None:
-        assert "template" in _FILE_WRITE_MODULES
-
-    def test_replace_is_covered(self) -> None:
-        assert "replace" in _FILE_WRITE_MODULES
-
-    def test_lineinfile_is_covered(self) -> None:
-        assert "lineinfile" in _FILE_WRITE_MODULES
-
-    def test_blockinfile_is_covered(self) -> None:
-        assert "blockinfile" in _FILE_WRITE_MODULES
-
-    def test_ini_file_is_covered(self) -> None:
-        assert "ini_file" in _FILE_WRITE_MODULES
-
-    def test_file_module_excluded(self) -> None:
-        assert "file" not in _FILE_WRITE_MODULES
-
-    def test_command_excluded(self) -> None:
-        assert "command" not in _FILE_WRITE_MODULES
-
-    def test_matches_source(self) -> None:
+    def test_expected_modules_in_source(self) -> None:
         text = (_LINT_DIR / "require_backup.py").read_text()
-        for mod in _FILE_WRITE_MODULES:
+        for mod in ("copy", "template", "replace", "lineinfile", "blockinfile", "assemble", "ini_file"):
             assert f'"{mod}"' in text
 
 
@@ -143,6 +108,7 @@ class TestTestMetaValidation:
             capture_output=True,
             text=True,
             cwd=str(Path(__file__).resolve().parent.parent.parent),
+            timeout=30,
         )
         assert result.returncode == 0, f"test-meta.py failed:\n{result.stderr}"
         assert "Validated" in result.stdout
