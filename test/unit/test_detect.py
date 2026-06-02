@@ -33,124 +33,6 @@ detect = _load()
 # ---------------------------------------------------------------------------
 
 
-class TestFullUniverseRe:
-    def test_group_vars_yml(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("group_vars/all/main.yml")
-
-    def test_group_vars_yaml(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("group_vars/all/service_ports.yaml")
-
-    def test_group_vars_test(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("group_vars/test.yml")
-
-    def test_host_vars_box(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("host_vars/box.yml")
-
-    def test_host_vars_minimal(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("host_vars/minimal.yml")
-
-    def test_host_vars_lab_excluded(self) -> None:
-        assert not detect.FULL_UNIVERSE_RE.match("host_vars/lab.yml")
-
-    def test_host_vars_pug_excluded(self) -> None:
-        assert not detect.FULL_UNIVERSE_RE.match("host_vars/pug.yml")
-
-    def test_test_module(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("test/machine.py")
-
-    def test_test_subdir_excluded(self) -> None:
-        assert not detect.FULL_UNIVERSE_RE.match("test/unit/test_matrix.py")
-
-    def test_test_playbooks(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("test/playbooks/site.yml")
-
-    def test_test_minimal_subdir(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("test/minimal/cloud-init.yml")
-
-    def test_ansible_cfg(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("ansible.cfg")
-
-    def test_vault_client(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("vault-client.sh")
-
-    def test_mise_toml(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("mise.toml")
-
-    def test_pyproject_toml(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("pyproject.toml")
-
-    def test_uv_lock(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("uv.lock")
-
-    def test_topology_yml(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("data/network_topology.yml")
-
-    def test_topology_schema(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("data/network_topology.schema.json")
-
-    def test_role_file_excluded(self) -> None:
-        assert not detect.FULL_UNIVERSE_RE.match("roles/nginx/tasks/main.yml")
-
-    def test_random_file_excluded(self) -> None:
-        assert not detect.FULL_UNIVERSE_RE.match("README.md")
-
-    def test_test_inventory(self) -> None:
-        assert detect.FULL_UNIVERSE_RE.match("test/inventory.ini")
-
-    def test_group_vars_nested_dir_excluded(self) -> None:
-        assert not detect.FULL_UNIVERSE_RE.match("group_vars/all/sub/deep.yml")
-
-
-# ---------------------------------------------------------------------------
-# PACKER_PATHS_RE
-# ---------------------------------------------------------------------------
-
-
-class TestPackerPathsRe:
-    def test_packer_file(self) -> None:
-        assert detect.PACKER_PATHS_RE.match("packer/qemu.pkr.hcl")
-
-    def test_packer_script(self) -> None:
-        assert detect.PACKER_PATHS_RE.match("packer/scripts/chroot.sh")
-
-    def test_mise_packer_task(self) -> None:
-        assert detect.PACKER_PATHS_RE.match("mise-tasks/packer/build")
-
-    def test_role_packer_excluded(self) -> None:
-        assert not detect.PACKER_PATHS_RE.match("roles/packer/tasks/main.yml")
-
-    def test_test_file_excluded(self) -> None:
-        assert not detect.PACKER_PATHS_RE.match("test/machine.py")
-
-
-# ---------------------------------------------------------------------------
-# CI_IMAGE_INPUTS_RE
-# ---------------------------------------------------------------------------
-
-
-class TestCiImageInputsRe:
-    def test_dockerfile(self) -> None:
-        assert detect.CI_IMAGE_INPUTS_RE.match("Dockerfile")
-
-    def test_mise_toml(self) -> None:
-        assert detect.CI_IMAGE_INPUTS_RE.match("mise.toml")
-
-    def test_pyproject_toml(self) -> None:
-        assert detect.CI_IMAGE_INPUTS_RE.match("pyproject.toml")
-
-    def test_uv_lock(self) -> None:
-        assert detect.CI_IMAGE_INPUTS_RE.match("uv.lock")
-
-    def test_packer_hcl(self) -> None:
-        assert detect.CI_IMAGE_INPUTS_RE.match("packer/qemu.pkr.hcl")
-
-    def test_packer_script_excluded(self) -> None:
-        assert not detect.CI_IMAGE_INPUTS_RE.match("packer/scripts/chroot.sh")
-
-    def test_ansible_cfg_excluded(self) -> None:
-        assert not detect.CI_IMAGE_INPUTS_RE.match("ansible.cfg")
-
-
 # ---------------------------------------------------------------------------
 # ROLE_PATH_RE
 # ---------------------------------------------------------------------------
@@ -565,6 +447,7 @@ class TestRegexParityWithBash:
         [
             "host_vars/lab.yml",
             "host_vars/pug.yml",
+            "group_vars/all/sub/deep.yml",
             "test/unit/test_matrix.py",
             "roles/nginx/tasks/main.yml",
             "roles/podman/templates/foo.j2",
