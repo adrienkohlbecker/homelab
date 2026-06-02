@@ -273,6 +273,7 @@ class TestCli:
             text=True,
             cwd=roles_tree,
             env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+            timeout=30,
         )
         assert result.returncode == 0
         specs = json.loads(result.stdout)
@@ -287,6 +288,7 @@ class TestCli:
             text=True,
             cwd=roles_tree,
             env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+            timeout=30,
         )
         assert result.returncode == 0
         specs = json.loads(result.stdout)
@@ -299,6 +301,7 @@ class TestCli:
             text=True,
             cwd=roles_tree,
             env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+            timeout=30,
         )
         assert result.returncode == 0
         assert json.loads(result.stdout) == []
@@ -320,6 +323,7 @@ class TestCli:
             text=True,
             cwd=roles_tree,
             env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+            timeout=30,
         )
         assert result.returncode == 0
         specs = json.loads(result.stdout)
@@ -334,6 +338,7 @@ class TestCli:
             text=True,
             cwd=roles_tree,
             env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+            timeout=30,
         )
         assert result.returncode == 0
         assert "box\tjammy\talpha" in result.stdout
@@ -345,5 +350,6 @@ class TestCli:
             text=True,
             cwd=roles_tree,
             env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+            timeout=30,
         )
         assert result.returncode != 0

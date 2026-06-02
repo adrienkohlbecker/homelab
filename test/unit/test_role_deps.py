@@ -120,6 +120,7 @@ class TestCli:
             capture_output=True,
             text=True,
             cwd=tmp_path,
+            timeout=30,
         )
         assert result.returncode == 0
         consumers = result.stdout.strip().splitlines()
@@ -135,6 +136,7 @@ class TestCli:
             capture_output=True,
             text=True,
             cwd=tmp_path,
+            timeout=30,
         )
         assert result.returncode == 0
         assert result.stdout.strip() == ""
@@ -144,6 +146,7 @@ class TestCli:
             [sys.executable, str(_ROLE_DEPS_PATH)],
             capture_output=True,
             text=True,
+            timeout=30,
         )
         assert result.returncode == 2
 
@@ -161,6 +164,7 @@ class TestCli:
             capture_output=True,
             text=True,
             cwd=tmp_path,
+            timeout=30,
         )
         assert result.returncode == 0
         assert result.stdout.strip() == "homepage"
