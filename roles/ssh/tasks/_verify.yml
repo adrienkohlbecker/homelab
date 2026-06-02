@@ -1,5 +1,5 @@
 # sshd -T (effective-config dump) exercises the whole Include chain:
-# /etc/ssh/sshd_config → sshd_config.d/01-hardening.conf. Reading the
+# /etc/ssh/sshd_config → sshd_config.d/00-hardening.conf. Reading the
 # drop-in alone would pass even if the Include were missing.
 
 # Query both units so the check holds whether sshd runs as the long-lived

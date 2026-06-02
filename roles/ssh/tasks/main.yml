@@ -16,10 +16,18 @@
   tags:
     - ssh
 
+- name: Remove packer bootstrap drop-in
+  file:
+    path: /etc/ssh/sshd_config.d/00-no-password-auth.conf
+    state: absent
+  become: true
+  tags:
+    - ssh
+
 - name: Configure sshd
   copy:
-    src: 01-hardening.conf
-    dest: /etc/ssh/sshd_config.d/01-hardening.conf
+    src: 00-hardening.conf
+    dest: /etc/ssh/sshd_config.d/00-hardening.conf
     owner: root
     group: root
     mode: "0644"
