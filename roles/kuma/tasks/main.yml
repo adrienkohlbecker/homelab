@@ -20,42 +20,30 @@
   tags:
     - kuma
 
-- name: Create sqlite directory
-  when: not (ansible_check_mode and kuma_user.changed)
-  file:
-    dest: /mnt/services/sqlite/kuma
-    state: directory
-    owner: kuma
-    group: kuma
-    mode: "0750"
-  become: true
-  tags:
-    - kuma
-
 # Uptime-Kuma writes kuma.db at /app/data root alongside upload assets;
 # symlink it onto the dedicated 4K-recordsize sqlite dataset so the WAL
 # workload lands there.
 #
-# Hand-rolled rather than the sqlite_dataset helper, and force: true is
-# load-bearing: kuma must create kuma.db ITSELF on first boot -- it runs the
-# schema bootstrap only when the file is ABSENT. Both helper shapes break
-# that: plain state:link refuses to plant a dangling symlink (cold-start
-# errors), and pre_create plants an empty kuma.db that kuma then treats as
-# an already-initialised DB, skips the bootstrap, and dies on `no such
-# table: setting`. So plant the dangling symlink with force: true and let
-# kuma create the real DB through it. (jellyfin uses pre_create because it
-# migrates an empty DB; kuma cannot -- do not migrate this to the helper.)
-- name: Symlink kuma SQLite DB onto sqlite dataset
-  when: not (ansible_check_mode and kuma_user.changed)
-  file:
-    src: /mnt/services/sqlite/kuma/kuma.db
-    dest: /mnt/services/kuma/kuma.db
-    state: link
-    force: true
-    owner: kuma
-    group: kuma
-    follow: false
-  become: true
+# force: true (no pre_create) is load-bearing: kuma must create kuma.db ITSELF
+# on first boot -- it runs the schema bootstrap only when the file is ABSENT.
+# pre_create would plant an empty kuma.db that kuma treats as an
+# already-initialised DB, skips the bootstrap, and dies on `no such table:
+# setting`. So plant the dangling symlink with force: true and let kuma create
+# the real DB through it. (jellyfin uses pre_create instead because it migrates
+# an empty DB cleanly; kuma cannot.)
+- name: Place kuma SQLite DB on the sqlite dataset
+  import_role:
+    name: sqlite_dataset
+    tasks_from: dataset
+  vars:
+    sqlite_dataset_args:
+      name: kuma
+      owner: kuma
+      group: kuma
+      condition: "{{ not (ansible_check_mode and kuma_user.changed) }}"
+      force: true
+      links:
+        - /mnt/services/kuma/kuma.db
   tags:
     - kuma
 

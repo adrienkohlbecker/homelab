@@ -8,33 +8,25 @@
   tags:
     - tautulli
 
-- name: Create sqlite directory
-  when: not (ansible_check_mode and tautulli_user.changed)
-  file:
-    dest: /mnt/services/sqlite/tautulli
-    state: directory
-    owner: tautulli
-    group: tautulli
-    mode: "0755"
-  become: true
-  tags:
-    - tautulli
-
 # Tautulli's --datadir bundles config.ini, logs, backups, and tautulli.db
-# into one directory. Symlink only the live DB so SQLite resolves to the
-# 4K sqlite dataset; backups stay on the 128K dataset (one-shot full DB
-# files compress and snapshot fine at 128K).
-- name: Symlink tautulli SQLite DB onto sqlite dataset
-  when: not (ansible_check_mode and tautulli_user.changed)
-  file:
-    src: /mnt/services/sqlite/tautulli/tautulli.db
-    dest: /mnt/services/tautulli/tautulli.db
-    state: link
-    force: true
-    owner: tautulli
-    group: tautulli
-    follow: false
-  become: true
+# into one directory. The helper symlinks only the live DB so SQLite resolves
+# to the 4K sqlite dataset; backups stay on the 128K dataset (one-shot full DB
+# files compress and snapshot fine at 128K). force: true (no pre_create) plants
+# the dangling link on a cold host -- Tautulli creates the real DB through it.
+- name: Place tautulli SQLite DB on the sqlite dataset
+  import_role:
+    name: sqlite_dataset
+    tasks_from: dataset
+  vars:
+    sqlite_dataset_args:
+      name: tautulli
+      owner: tautulli
+      group: tautulli
+      mode: "0755"
+      condition: "{{ not (ansible_check_mode and tautulli_user.changed) }}"
+      force: true
+      links:
+        - /mnt/services/tautulli/tautulli.db
   tags:
     - tautulli
 
