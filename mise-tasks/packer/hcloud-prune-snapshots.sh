@@ -14,10 +14,11 @@ set -euo pipefail
 API="https://api.hetzner.cloud/v1"
 AUTH=(-H "Authorization: Bearer ${HCLOUD_TOKEN}")
 SELECTOR="$usage_selector"
+SELECTOR_ENC=$(python3 -c 'import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))' "$SELECTOR")
 
 echo "==> Pruning snapshots matching '${SELECTOR}' (keeping newest 2 + running servers)"
-snaps_json=$(curl -fsS "${AUTH[@]}" "${API}/images?type=snapshot&sort=created:desc&per_page=50&label_selector=${SELECTOR}")
-servers_json=$(curl -fsS "${AUTH[@]}" "${API}/servers?per_page=50")
+snaps_json=$(curl -fsS --retry 3 --retry-all-errors "${AUTH[@]}" "${API}/images?type=snapshot&sort=created:desc&per_page=50&label_selector=${SELECTOR_ENC}")
+servers_json=$(curl -fsS --retry 3 --retry-all-errors "${AUTH[@]}" "${API}/servers?per_page=50")
 # shellcheck disable=SC2086  # word-split the space-separated id list on purpose
 stale=$(python3 -c '
 import json, sys
@@ -30,7 +31,8 @@ print(" ".join(str(i["id"]) for i in snaps if i["id"] not in keep))
 count=0
 for old in $stale; do
   echo "    deleting snapshot $old"
-  curl -fsS -X DELETE "${AUTH[@]}" "${API}/images/$old" >/dev/null || true
+  curl -fsS --retry 3 --retry-all-errors -X DELETE "${AUTH[@]}" "${API}/images/$old" >/dev/null ||
+    echo "    WARNING: failed to delete snapshot $old" >&2
   count=$((count + 1))
 done
 if [ "$count" -eq 0 ]; then
