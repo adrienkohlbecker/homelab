@@ -53,15 +53,12 @@ locals {
   arch_raw = trimspace(data.external-raw.host_arch.result)
   arch     = local.arch_raw == "arm64" ? "aarch64" : local.arch_raw
 
-  # Cloud image dated snapshots. Bump when refreshing; older snapshots
-  # eventually fall out of the upstream listing (and out of the Nexus
-  # proxy cache).
-  ubuntu_snapshots = {
-    jammy    = "20260320"
-    noble    = "20260323"
-    resolute = "20260421"
-  }
-  ubuntu_snapshot = local.ubuntu_snapshots[var.ubuntu_name]
+  # Cloud image pins (snapshot date + sha256) live in ubuntu_images.json
+  # — single source of truth shared with packer/scripts/provision_worker.sh.
+  # Bump when refreshing; older snapshots eventually fall out of the
+  # upstream listing (and out of the Nexus proxy cache).
+  ubuntu_images   = jsondecode(file("${path.root}/ubuntu_images.json"))
+  ubuntu_snapshot = local.ubuntu_images[var.ubuntu_name].snapshot
 
   # Arch-keyed configuration table. Centralizes everything that varies
   # between the supported builds. In this stack arch is a 1:1 proxy for

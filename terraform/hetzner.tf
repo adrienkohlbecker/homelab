@@ -59,6 +59,22 @@ resource "hcloud_primary_ip" "fox_v6" {
   auto_delete = false
 }
 
+# SSH-only firewall for ephemeral CI worker instances (packer build +
+# runtime). Default-drop inbound with only 22/tcp open from the home WAN.
+# Packer attaches this during image builds; the runtime provisioning script
+# attaches it when creating ephemeral CCX workers for CI runs.
+resource "hcloud_firewall" "ci_worker" {
+  name = "ci-worker"
+
+  rule {
+    description = "SSH (home WAN only)"
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "22"
+    source_ips  = ["${local.home_wan_ip}/32"]
+  }
+}
+
 # Default-drop inbound (an attached hcloud firewall drops anything not
 # explicitly allowed; outbound stays open with no `out` rules). Only the mesh
 # control plane is reachable from the internet: 443/tcp (Headscale control API

@@ -1,0 +1,17 @@
+{
+  "jammy": {
+    "version": "22.04",
+    "snapshot": "20260320",
+    "sha256_amd64": "ea85b16f81b3f6aa53a1260912d3f991fc33e0e0fc1d73f0b8c9c96247e42fdb"
+  },
+  "noble": {
+    "version": "24.04",
+    "snapshot": "20260323",
+    "sha256_amd64": "6e7016f2c9f4d3c00f48789eb6b9043ba2172ccc1b6b1eaf3ed1e29dd3e52bb3"
+  },
+  "resolute": {
+    "version": "26.04",
+    "snapshot": "20260421",
+    "sha256_amd64": "8ed228c9f08a50122fa72307623d9f88d9209ba26e7e849edd584fa675e34863"
+  }
+}
