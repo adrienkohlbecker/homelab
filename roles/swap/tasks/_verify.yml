@@ -65,26 +65,42 @@
       -- check zram-fraction/max-zram-size in zram-generator.conf.
   become: true
 
+- name: _verify | Resolve zvol device path
+  when: swap_zvol is defined
+  command: readlink -f /dev/zvol/{{ swap_zvol.dataset }}
+  changed_when: false
+  become: true
+  register: _swap_verify_zvol_dev
+
 - name: _verify | Zvol swap device is active
   when: swap_zvol is defined
+  vars:
+    _names: "{{ _swap_verify_swapon.stdout_lines | map('split') | map('first') | list }}"
   assert:
     that:
-      - _swap_verify_swapon.stdout_lines | select('search', 'zd') | list | length >= 1
+      - (_swap_verify_zvol_dev.stdout | trim) in _names
     fail_msg: >-
-      zvol swap device not found in swapon output (expected /dev/zd*
-      for {{ swap_zvol.dataset }}): {{ _swap_verify_swapon.stdout }}
+      zvol swap device {{ _swap_verify_zvol_dev.stdout | trim }} (for
+      {{ swap_zvol.dataset }}) not active: {{ _swap_verify_swapon.stdout }}
   become: true
+
+- name: _verify | Resolve partition device path
+  when: swap_partition is defined
+  command: readlink -f {{ swap_partition.device }}
+  changed_when: false
+  become: true
+  register: _swap_verify_partition_dev
 
 - name: _verify | Partition swap device is active
   when: swap_partition is defined
   vars:
-    _partition_lines: "{{ _swap_verify_swapon.stdout_lines | reject('search', 'zram') | reject('search', 'zd') | list }}"
+    _names: "{{ _swap_verify_swapon.stdout_lines | map('split') | map('first') | list }}"
   assert:
     that:
-      - _partition_lines | length >= 1
+      - (_swap_verify_partition_dev.stdout | trim) in _names
     fail_msg: >-
-      partition swap device not active (expected {{ swap_partition.device }}):
-      {{ _swap_verify_swapon.stdout }}
+      partition swap device {{ _swap_verify_partition_dev.stdout | trim }}
+      (for {{ swap_partition.device }}) not active: {{ _swap_verify_swapon.stdout }}
   become: true
 
 - name: _verify | Overflow swap priority is below zram
