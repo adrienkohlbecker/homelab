@@ -119,16 +119,20 @@
   become: true
   failed_when: "'Anonymized DNS: routing' not in _dnscrypt_proxy_journal_startup.stdout"
 
-# +time=5 (not the original +time=2) because the relay round-trip
-# (dct-fr/dnscry.pt-paris-ipv4 → upstream → back) occasionally spikes
-# past 2s under cold network conditions, dropping a query with dig rc=9
-# and aborting the loop. 5s per query × 20 queries caps total runtime
-# under 100s even in the pathological case.
+# This loop only generates traffic; the real assertion is the journal grep
+# below (both relays traversed). +time=5 (not the original +time=2) because the
+# relay round-trip (dct-fr/dnscry.pt-paris-ipv4 → upstream → back) occasionally
+# spikes past 2s under cold network conditions. `|| true` because that round-trip
+# also crosses the qemu NAT's lossy UDP path, where a single query's packet can
+# drop (dig waits out +time=5, exits rc=9) -- one such drop must not abort the
+# other 19, which still drive both servers. If the relays are genuinely
+# unreachable every query fails and the grep below (not this loop) reports it.
+# 5s per query × 20 caps total runtime under 100s even in the pathological case.
 - name: _verify | Drive 20 queries so the load balancer picks both pinned servers
   shell: |
     set -euo pipefail
     for _ in $(seq 20); do
-      dig @127.0.0.1 -p {{ service_ports.dnscrypt_proxy }} example.com A +short +time=5 +tries=1 > /dev/null
+      dig @127.0.0.1 -p {{ service_ports.dnscrypt_proxy }} example.com A +short +time=5 +tries=1 > /dev/null || true
     done
   args:
     executable: /bin/bash
