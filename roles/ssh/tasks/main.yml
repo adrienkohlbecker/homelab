@@ -29,7 +29,11 @@
   tags:
     - ssh
 
-- name: Setup sftp
+# On OpenSSH <= 9.4 (jammy 8.9), duplicate Subsystem sftp is fatal — sshd
+# refuses to start. The drop-in declares our audited Subsystem, so the stock
+# line must be commented out. Noble (9.6+) tolerates duplicates via
+# first-match-wins, but the comment-out is harmless there.
+- name: Comment out stock sftp Subsystem to avoid duplicate on jammy
   lineinfile:
     path: /etc/ssh/sshd_config
     regexp: '^(#? ?)Subsystem(\s+)sftp(\s+)(.*)$'
