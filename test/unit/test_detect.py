@@ -140,6 +140,34 @@ class TestClassifyChangedFiles:
 
 
 # ---------------------------------------------------------------------------
+# _packer_sources_for
+# ---------------------------------------------------------------------------
+
+
+class TestPackerSourcesFor:
+    @pytest.mark.parametrize(
+        "path, expected",
+        [
+            ("packer/hcloud_worker.pkr.hcl", {"worker"}),
+            ("packer/scripts/provision_worker.sh", {"worker"}),
+            ("mise-tasks/packer/worker.sh", {"worker"}),
+            ("roles/github_runner/vars/main.yml", {"worker"}),
+            ("packer/ubuntu_images.json", {"qemu", "worker"}),
+            ("mise-tasks/packer/hetzner.sh", {"hetzner"}),
+            ("mise-tasks/packer/_hcloud_token.sh", {"hetzner", "worker"}),
+            ("mise-tasks/packer/hcloud-prune-snapshots.sh", {"hetzner", "worker"}),
+            ("packer/qemu.pkr.hcl", {"qemu"}),
+            ("packer/scripts/chroot.sh", {"qemu"}),
+            ("mise-tasks/packer/build", {"qemu"}),
+            ("roles/nginx/tasks/main.yml", set()),
+            ("README.md", set()),
+        ],
+    )
+    def test_mapping(self, path: str, expected: set[str]) -> None:
+        assert detect._packer_sources_for(path) == expected
+
+
+# ---------------------------------------------------------------------------
 # split_matrix_buckets
 # ---------------------------------------------------------------------------
 
