@@ -3,14 +3,23 @@
     package:
       - openssh-server
     cache_valid_time: 3600
+  register: ssh_apt
+  become: true
+  tags:
+    - ssh
+
+- name: Remove legacy drop-in path
+  file:
+    path: /etc/ssh/sshd_config.d/config.conf
+    state: absent
   become: true
   tags:
     - ssh
 
 - name: Configure sshd
   copy:
-    src: sshd_config
-    dest: /etc/ssh/sshd_config.d/config.conf
+    src: 01-hardening.conf
+    dest: /etc/ssh/sshd_config.d/01-hardening.conf
     owner: root
     group: root
     mode: "0644"
