@@ -53,20 +53,9 @@
   tags:
     - sabnzbd
 
-- name: Create sqlite directory
-  when: not (ansible_check_mode and sabnzbd_user.changed)
-  file:
-    dest: /mnt/services/sqlite/sabnzbd
-    state: directory
-    owner: sabnzbd
-    group: media
-    mode: "0750"
-  become: true
-  tags:
-    - sabnzbd
-
 # Sabnzbd creates admin/ on first start, but the symlink below needs the
-# parent dir to exist already. Pre-create with matching ownership.
+# parent dir to exist already. Pre-create with matching ownership (the
+# sqlite_dataset helper leaves the dest's parent to the caller).
 - name: Create admin directory
   when: not (ansible_check_mode and sabnzbd_user.changed)
   file:
@@ -80,33 +69,30 @@
     - sabnzbd
 
 # Sabnzbd writes history1.db inside /config/admin/ alongside cookies.dat,
-# server.cert, queue.sav, etc. Symlink only the SQLite DB so SQLite resolves
-# through to the 4K sqlite dataset before computing WAL/SHM placement.
+# server.cert, queue.sav, etc. The helper symlinks only the SQLite DB so
+# SQLite resolves through to the 4K sqlite dataset before computing WAL/SHM
+# placement.
 #
-# force: true is load-bearing on a cold host: it lets ansible plant the
-# symlink while the target doesn't exist yet, and sabnzbd then creates
-# history1.db *through* the dangling link on first start (SQLite follows it
-# and writes the real DB at the sqlite-dataset target — this is exactly the
-# state prod runs in). Without force, state=link refuses the dangling link
-# and the converge dies before sabnzbd ever runs. Do NOT instead pre-create
-# an empty target file: sabnzbd treats a 0-byte history1.db as needing
-# reinitialization and rewrites it via temp+rename, which replaces the
-# symlink with a real file — breaking both the 4K placement and idempotence.
-# Same hand-rolled force:true shape as roles/kuma (not the sqlite_dataset
-# helper, whose pre_create path suits apps like jellyfin that migrate an
-# empty DB cleanly). Idempotent once planted: an already-correct symlink is
-# left unchanged.
-- name: Symlink sabnzbd history DB onto sqlite dataset
-  when: not (ansible_check_mode and sabnzbd_user.changed)
-  file:
-    src: /mnt/services/sqlite/sabnzbd/history1.db
-    dest: /mnt/services/sabnzbd/admin/history1.db
-    state: link
-    owner: sabnzbd
-    group: media
-    follow: false
-    force: true
-  become: true
+# force: true (no pre_create) plants a dangling link on a cold host: sabnzbd
+# creates history1.db *through* it on first start, writing the real DB at the
+# sqlite-dataset target. Do NOT pre_create an empty target: sabnzbd treats a
+# 0-byte history1.db as needing reinitialization and rewrites it via
+# temp+rename, replacing the symlink with a real file -- breaking both the 4K
+# placement and idempotence. (roles/kuma uses force: true for the same reason.)
+- name: Place sabnzbd history DB on the sqlite dataset
+  import_role:
+    name: sqlite_dataset
+    tasks_from: dataset
+  vars:
+    sqlite_dataset_args:
+      name: sabnzbd
+      owner: sabnzbd
+      group: media
+      mode: "0750"
+      condition: "{{ not (ansible_check_mode and sabnzbd_user.changed) }}"
+      force: true
+      links:
+        - /mnt/services/sabnzbd/admin/history1.db
   tags:
     - sabnzbd
 
