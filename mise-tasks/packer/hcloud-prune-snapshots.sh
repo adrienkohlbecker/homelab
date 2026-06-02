@@ -16,8 +16,8 @@ AUTH=(-H "Authorization: Bearer ${HCLOUD_TOKEN}")
 SELECTOR="$usage_selector"
 
 echo "==> Pruning snapshots matching '${SELECTOR}' (keeping newest 2 + running servers)"
-snaps_json=$(curl -fsS "${AUTH[@]}" "${API}/images?type=snapshot&sort=created:desc&label_selector=${SELECTOR}")
-servers_json=$(curl -fsS "${AUTH[@]}" "${API}/servers")
+snaps_json=$(curl -fsS "${AUTH[@]}" "${API}/images?type=snapshot&sort=created:desc&per_page=50&label_selector=${SELECTOR}")
+servers_json=$(curl -fsS "${AUTH[@]}" "${API}/servers?per_page=50")
 # shellcheck disable=SC2086  # word-split the space-separated id list on purpose
 stale=$(python3 -c '
 import json, sys
