@@ -1,0 +1,26 @@
+- name: _setup | Create /mnt/services/sqlite parent
+  file:
+    path: /mnt/services/sqlite
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _setup | Create test service dir (simulates caller's config dir)
+  file:
+    path: /mnt/services/sqlite_dataset_test
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _setup | Create subdirectory for nested-link scenario
+  file:
+    path: /mnt/services/sqlite_dataset_test/sub
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
