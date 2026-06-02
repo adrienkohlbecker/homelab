@@ -103,3 +103,39 @@
   loop: "{{ subid_extra_subuid_users | default([]) }}"
   loop_control:
     label: "{{ item.user }}:{{ item.source_user }}"
+
+- name: _verify | Subuid ranges confirmed visible through NSS/libsubid (getsubids)
+  command: getsubids {{ item }}
+  register: _subid_getsubids_uid
+  changed_when: false
+  become: true
+  loop: "{{ ([ansible_user_id] + subid_users) | unique }}"
+
+- name: _verify | NSS-visible subuid has a 65536-count entry for each user
+  assert:
+    that:
+      - item.stdout is search(item.item ~ ' [0-9]+ 65536')
+    fail_msg: >-
+      getsubids found no 65536-count subuid range for {{ item.item }}.
+      Output: {{ item.stdout }}.
+  loop: "{{ _subid_getsubids_uid.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: _verify | Subgid ranges confirmed visible through NSS/libsubid (getsubids -g)
+  command: getsubids -g {{ item }}
+  register: _subid_getsubids_gid
+  changed_when: false
+  become: true
+  loop: "{{ ([ansible_user_id] + subid_users) | unique }}"
+
+- name: _verify | NSS-visible subgid has a 65536-count entry for each user
+  assert:
+    that:
+      - item.stdout is search(item.item ~ ' [0-9]+ 65536')
+    fail_msg: >-
+      getsubids -g found no 65536-count subgid range for {{ item.item }}.
+      Output: {{ item.stdout }}.
+  loop: "{{ _subid_getsubids_gid.results }}"
+  loop_control:
+    label: "{{ item.item }}"
