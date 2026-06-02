@@ -5,45 +5,27 @@
 # key: register.yml mints a single-use pre-auth key from the control plane and
 # spends it in the same play.
 
-# Keyring at the modern /usr/share/keyrings path + signed-by in the apt source
-# line. Unlike apt_key (removed on Ubuntu 26 -- see roles/docker_client's
-# version fork), this single path works on jammy/noble/resolute alike, so no
-# major-version branch is needed. Trust anchors on HTTPS to pkgs.tailscale.com,
-# same posture as the docker repo key fetch.
-- name: Install the tailscale apt signing key
-  get_url:
-    url: https://pkgs.tailscale.com/stable/ubuntu/{{ ansible_distribution_release }}.noarmor.gpg
-    dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
-    mode: "0644"
-    owner: root
-    group: root
-  become: true
+- name: Configure tailscale apt repository
+  import_role:
+    name: apt_source
+    tasks_from: configure
+  vars:
+    apt_source_args:
+      name: tailscale
+      key_id: 2596A99EAAB33821893C0A79458CA832957F5868
+      key_url: "https://pkgs.tailscale.com/stable/ubuntu/{{ ansible_distribution_release }}.asc"
+      uris: "{{ mirror_apt_tailscale }}"
+      suites: "{{ ansible_distribution_release }}"
+      components: main
   tags:
     - tailscale
 
-- name: Add the tailscale apt repository
-  apt_repository:
-    repo: >-
-      deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg]
-      https://pkgs.tailscale.com/stable/ubuntu {{ ansible_distribution_release }} main
-    filename: tailscale
-    state: present
-  register: tailscale_repo
-  become: true
-  tags:
-    - tailscale
-
-# Gated like roles/docker_client's install: in --check on a system without the
-# repo yet, apt_repository only *reports* it would add the source (nothing
-# written, no cache refresh), so `apt install tailscale` would fail with "no
-# package matching". Skip the install (and the tailscaled enable that needs the
-# binary) in that case; once the repo is really present both run in check too.
 - name: Install tailscale
   apt:
     pkg: tailscale
     update_cache: true
     cache_valid_time: 3600
-  when: not (ansible_check_mode and tailscale_repo.changed)
+  when: not (ansible_check_mode and apt_source_tailscale_changed)
   become: true
   tags:
     - tailscale
@@ -53,7 +35,7 @@
     name: tailscaled
     enabled: true
     state: started
-  when: not (ansible_check_mode and tailscale_repo.changed)
+  when: not (ansible_check_mode and apt_source_tailscale_changed)
   become: true
   tags:
     - tailscale
@@ -83,5 +65,19 @@
 # import_role: tasks_from: register). Last so the binary + sysctls are in place.
 - name: Register against the headscale control plane
   import_tasks: register.yml
+  tags:
+    - tailscale
+
+# Tailscale perf best practice for subnet routers / exit nodes on Linux 6.2+:
+# enable UDP GRO forwarding offload so WireGuard-encapsulated traffic batches
+# instead of hitting the per-packet path. Not persistent across reboots, so
+# applied on every converge. Skipped on first converge before registration
+# (tailscale0 doesn't exist yet) and in check mode.
+- name: Enable UDP GRO forwarding offload on the tailscale interface
+  command: ethtool -K tailscale0 rx-udp-gro-forwarding on rx-gro-list off
+  when: not ansible_check_mode
+  changed_when: false
+  failed_when: false
+  become: true
   tags:
     - tailscale

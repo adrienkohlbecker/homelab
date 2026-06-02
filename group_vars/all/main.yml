@@ -249,6 +249,7 @@ mirror_apt_nodesource: 'https://{{ nexus_url ~ "/repository/nodesource-node" ~ n
 mirror_apt_netdata: 'https://{{ nexus_url ~ "/repository/netdata" if nexus_url else "repo.netdata.cloud/repos/stable/ubuntu" }}'
 mirror_apt_fluentbit: 'https://{{ nexus_url ~ "/repository/fluentbit" if nexus_url else "packages.fluentbit.io/ubuntu" }}'
 mirror_apt_docker: 'https://{{ nexus_url ~ "/repository/docker-ce" if nexus_url else "download.docker.com/linux/ubuntu" }}'
+mirror_apt_tailscale: 'https://{{ nexus_url ~ "/repository/tailscale" if nexus_url else "pkgs.tailscale.com/stable/ubuntu" }}'
 # 1password apt proxy targets amd64; aarch64 falls back to upstream.
 mirror_apt_1password: 'https://{{ nexus_url ~ "/repository/1password" if (nexus_url and ansible_architecture != "aarch64") else "downloads.1password.com/linux/debian/" ~ ((ansible_architecture == "aarch64") | ternary("arm64", "amd64")) }}'
 
