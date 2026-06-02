@@ -51,10 +51,20 @@
       Home dir /mnt/data/{{ spouse_firstname }} missing, wrong ownership, or
       mode != 0750 (got {{ spouse_verify_home.stat.mode | default('absent') }}).
 
-# Functional probe rather than a bare `pdbedit --user` exit-code check: prove
-# the account can actually authenticate over SMB (its whole reason to exist).
+# Functional probes: prove the account can authenticate and access its [homes]
+# share. PASSWD env keeps the vaulted value out of the process argument list
+# (smbclient reads PASSWD from the environment when no %password is given).
 - name: _verify | SMB account authenticates and can list shares
-  command: smbclient -L localhost -U {{ spouse_firstname }}%{{ spouse_samba_password }}
+  command: smbclient -L localhost -U {{ spouse_firstname }}
+  environment:
+    PASSWD: "{{ spouse_samba_password }}"
+  changed_when: false
+  become: true
+
+- name: _verify | SMB account can access homes share
+  command: smbclient //localhost/{{ spouse_firstname }} -U {{ spouse_firstname }} -c ls
+  environment:
+    PASSWD: "{{ spouse_samba_password }}"
   changed_when: false
   become: true
 
@@ -69,5 +79,7 @@
     that:
       - spouse_verify_sentinel.stat.exists
       - spouse_verify_sentinel.stat.mode == '0600'
+      - spouse_verify_sentinel.stat.pw_name == 'root'
     fail_msg: >-
-      Sentinel /etc/samba/.smbpasswd_{{ spouse_firstname }}_hash missing or wrong perms.
+      Sentinel /etc/samba/.smbpasswd_{{ spouse_firstname }}_hash missing, wrong perms,
+      or not root-owned.
