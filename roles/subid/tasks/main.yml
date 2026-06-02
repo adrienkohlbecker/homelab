@@ -83,8 +83,9 @@
 - name: Warn about podman system migrate
   debug:
     msg: >-
-      /etc/subuid or /etc/subgid changed — rootless podman users may need
-      'podman system migrate' to pick up the new ranges.
+      /etc/subuid or /etc/subgid changed — for each rootless podman user in
+      {{ subid_users }} run `sudo -u <user> podman system migrate` so the new
+      ranges take effect (the per-user pause process must be restarted).
   when: subid_subuid_result.changed or subid_subgid_result.changed
   tags:
     - subid
