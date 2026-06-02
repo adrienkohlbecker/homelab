@@ -63,6 +63,26 @@ def main() -> int:
                             " -- omit it (only list extra releases)"
                         )
 
+        # skip: quarantines a known-failing cell so it can't gate a green
+        # run. A mapping of cell-spec -> reason; the reason is mandatory so
+        # a skip can't rot into a silent permanent exclusion. cell-spec is
+        # `machine` (the jammy cell) or `machine:codename` (a release cell).
+        skip = data.get("skip")
+        if skip is not None:
+            if not isinstance(skip, dict):
+                errors.append(f"{meta}: skip must be a mapping of cell-spec -> reason, got {type(skip).__name__}")
+            else:
+                for spec, reason in skip.items():
+                    parts = str(spec).split(":")
+                    if parts[0] not in MACHINE_CHOICES:
+                        errors.append(f"{meta}: skip {spec!r}: machine {parts[0]!r} not in {sorted(MACHINE_CHOICES)}")
+                    if len(parts) > 1 and parts[1] not in UBUNTU_RELEASES:
+                        errors.append(f"{meta}: skip {spec!r}: ubuntu {parts[1]!r} not in {sorted(UBUNTU_RELEASES)}")
+                    if len(parts) > 2:
+                        errors.append(f"{meta}: skip {spec!r}: too many ':' (want machine or machine:codename)")
+                    if not reason or not str(reason).strip():
+                        errors.append(f"{meta}: skip {spec!r}: needs a non-empty reason")
+
     if errors:
         for e in errors:
             print(e, file=sys.stderr)

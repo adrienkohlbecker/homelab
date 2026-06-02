@@ -155,6 +155,39 @@ class TestBuildTestMatrix:
 
 
 # ---------------------------------------------------------------------------
+# skip:
+# ---------------------------------------------------------------------------
+
+
+class TestSkip:
+    def test_skip_for_parses_machine_and_release(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "svc", {"skip": {"minimal": "why", "box_deps:resolute": "why"}})
+        assert matrix.skip_for("svc") == {("minimal", "jammy"), ("box_deps", "resolute")}
+
+    def test_skip_for_empty_when_absent(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "svc")
+        assert matrix.skip_for("svc") == set()
+
+    def test_build_role_cells_drops_skipped_jammy_cell(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "svc", {"machines": {"box": None, "minimal": None}, "skip": {"minimal": "flaky"}})
+        cells = matrix.build_role_cells("svc")
+        assert cells == [matrix.TestCell("box", "jammy", "svc")]
+
+    def test_build_role_cells_drops_skipped_release_cell_only(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "svc", {"machines": {"box": None}, "ubuntu": ["noble"], "skip": {"box:noble": "flaky"}})
+        cells = matrix.build_role_cells("svc")
+        assert cells == [matrix.TestCell("box", "jammy", "svc")]
+
+    def test_build_test_matrix_drops_skipped_propagated_extra(self, roles_tree: Path) -> None:
+        # A consumer's release cell pushed in via CI fan-out must still drop
+        # if that consumer skips it.
+        _make_role(roles_tree, "svc", {"machines": {"box": None}, "skip": {"box:resolute": "flaky"}})
+        extra = [matrix.TestCell("box", "resolute", "svc")]
+        cells = matrix.build_test_matrix(["svc"], extra_cells=extra)
+        assert cells == [matrix.TestCell("box", "jammy", "svc")]
+
+
+# ---------------------------------------------------------------------------
 # CI spec conversion
 # ---------------------------------------------------------------------------
 
