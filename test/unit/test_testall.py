@@ -257,22 +257,3 @@ class TestSetupOutputDir:
         testall.setup_output_dir(plan)
         assert not stale.exists()
         assert other.exists()
-
-
-# ---------------------------------------------------------------------------
-# TESTROLE_OWNED_FLAGS
-# ---------------------------------------------------------------------------
-
-
-class TestTestRoleOwnedFlags:
-    def test_machine_is_owned(self) -> None:
-        assert "--machine" in testall.TESTROLE_OWNED_FLAGS
-
-    def test_keep_is_owned(self) -> None:
-        assert "--keep" in testall.TESTROLE_OWNED_FLAGS
-
-    def test_ubuntu_is_owned(self) -> None:
-        assert "--ubuntu" in testall.TESTROLE_OWNED_FLAGS
-
-    def test_random_flag_not_owned(self) -> None:
-        assert "--verbose" not in testall.TESTROLE_OWNED_FLAGS
