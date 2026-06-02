@@ -38,6 +38,7 @@
     mode: "0600"
     comment: root@{{ inventory_hostname }}
     regenerate: full_idempotence
+    backend: opensshbin
   become: true
   register: ssh_root_keypair
   tags:
@@ -58,9 +59,10 @@
     msg: >-
       Root SSH keypair regenerated on {{ inventory_hostname }} -- the old public
       key is now stale in bunk authorized_keys, so offsite backups will fail to
-      authenticate. Replace this host entry in host_vars/bunk.yml
-      ssh_public_keys_additional with the new public key below, then re-converge
-      bunk:
+      authenticate. Replace the entry for root@{{ inventory_hostname }} in
+      host_vars/bunk.yml ssh_public_keys_additional with the new public key below,
+      then re-converge bunk. (If the host was recently renamed in inventory, a
+      comment mismatch on the existing key may have triggered this regeneration.)
       {{ ssh_root_keypair.public_key }}
   tags:
     - ssh_root

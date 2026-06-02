@@ -98,6 +98,7 @@
     mode: "0600"
     comment: root@{{ inventory_hostname }}
     regenerate: always
+    backend: opensshbin
   become: true
   register: _ssh_root_regen
 
