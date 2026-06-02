@@ -151,7 +151,6 @@
     systemd_timer_args:
       name: prune_ansible_backups
       description: Prune ansible config backups older than a week
-      frequency: daily
       on_calendar: "*-*-* 03:30:00"
       exec_start: /usr/local/sbin/prune_ansible_backups
   tags:

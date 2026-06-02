@@ -56,6 +56,5 @@
       exec_start: /usr/bin/podman system prune -f --filter until=48h
       on_calendar: daily
       randomized_delay_sec: 3600
-      frequency: daily
       user: "{{ podman_prune_args.user | default('root') }}"
   when: podman_prune_args.condition | default(true)

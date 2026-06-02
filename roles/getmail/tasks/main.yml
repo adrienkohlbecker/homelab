@@ -78,7 +78,6 @@
     systemd_timer_args:
       name: getmail
       description: Fetch mail via getmail
-      frequency: daily
       on_calendar: "*-*-* 00:24:00"
       # --getmaildir co-locates oldmail-* state next to the maildir so a
       # $HOME reset doesn't trigger a re-fetch of years of archive.
