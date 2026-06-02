@@ -24,12 +24,13 @@
 #               snapshot-restore safety -- a real DB already at the src is
 #               never clobbered -- and the dest-clobber safety (state=link
 #               without force) is unaffected.
-#   force       optional bool (default false); when true, state=link plants
-#               the symlink even over a non-existent target (dangling) or an
-#               existing file. This DROPS the no-force dest-clobber safety
-#               below, so it is only for apps that must boot against a
-#               dangling link and would rewrite a pre_create'd empty file
-#               anyway (sabnzbd, kuma). Mutually exclusive with pre_create.
+#   force       optional bool (default false); when true, plants the symlink
+#               over a dangling (not-yet-created) target -- for apps that
+#               create the DB themselves on first boot (kuma, sabnzbd,
+#               tautulli). It only relaxes the dangling-target refusal: a
+#               pre-stat guard below still refuses to replace a *real* file
+#               already at a dest, keeping the snapshot-restore safety the
+#               no-force default gives. Mutually exclusive with pre_create.
 #
 # The dict form prevents inter-call leakage: each import_role pass
 # replaces the whole sqlite_dataset_args value at play-vars scope.
@@ -101,6 +102,47 @@
   loop_control:
     label: "{{ sqlite_dataset_link }}"
     loop_var: sqlite_dataset_link
+
+# force relaxes only the dangling-target refusal, not the real-file one:
+# stat each dest first and fail loud if a regular file (not a symlink) is
+# there, so a snapshot-restored real DB is never silently replaced. Gated on
+# force -- the no-force path gets this refusal from the file module itself.
+- name: Stat force dests for {{ sqlite_dataset_args.name }}
+  when:
+    - sqlite_dataset_args.condition | default(true)
+    - sqlite_dataset_args.force | default(false)
+    - sqlite_dataset_args.links is defined
+  stat:
+    path: "{{ sqlite_dataset_link }}"
+    follow: false
+  become: true
+  register: sqlite_dataset_force_stat
+  loop: "{{ sqlite_dataset_args.links }}"
+  loop_control:
+    label: "{{ sqlite_dataset_link }}"
+    loop_var: sqlite_dataset_link
+
+# selectattr keeps only real stat results. When the stat above was skipped
+# (force false, condition false, or no links) its register still carries
+# per-item skip entries that lack .stat; filter them out so the loop empties
+# and nothing is asserted. A plain `when:` gate wouldn't help -- ansible
+# templates the loop and the `that:`/label args (which dereference .stat)
+# before it evaluates when, so a skip entry in the loop errors regardless.
+- name: Refuse to clobber a real file at a force dest for {{ sqlite_dataset_args.name }}
+  assert:
+    quiet: true
+    that:
+      - not (sqlite_dataset_force_item.stat.exists and not sqlite_dataset_force_item.stat.islnk)
+    fail_msg: >-
+      {{ sqlite_dataset_force_item.sqlite_dataset_link }} exists as a regular
+      file; force would replace it with a symlink and lose the DB. Move it
+      under /mnt/services/sqlite/{{ sqlite_dataset_args.name }}/ first.
+  # stat results key the looped item under the stat task's loop_var
+  # (sqlite_dataset_link), not .item; selectattr drops skipped entries (no .stat).
+  loop: "{{ sqlite_dataset_force_stat.results | default([]) | selectattr('stat', 'defined') | list }}"
+  loop_control:
+    label: "{{ sqlite_dataset_force_item.sqlite_dataset_link }}"
+    loop_var: sqlite_dataset_force_item
 
 - name: Symlink DBs onto sqlite dataset for {{ sqlite_dataset_args.name }}
   when:
