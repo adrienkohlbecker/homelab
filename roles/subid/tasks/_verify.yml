@@ -16,7 +16,7 @@
   register: _subid_stat
   failed_when: >-
     not _subid_stat.stat.exists
-    or _subid_stat.stat.mode != '0644'
+    or _subid_stat.stat.mode != '0640'
     or _subid_stat.stat.pw_name != 'root'
   loop:
     - subuid

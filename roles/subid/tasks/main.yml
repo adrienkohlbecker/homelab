@@ -50,7 +50,7 @@
     dest: /etc/subuid
     owner: root
     group: root
-    mode: '0644'
+    mode: '0640'
     backup: true
     validate: python3 -c 'import sys; lines = [x.strip() for x in open(sys.argv[1]) if x.strip()]; sys.exit(1 if [x for x in lines if len(x.split(":")) != 3 or not x.split(":")[1].isdigit() or not x.split(":")[2].isdigit()] else 0)' "%s"
   vars:
@@ -68,7 +68,7 @@
     dest: /etc/subgid
     owner: root
     group: root
-    mode: '0644'
+    mode: '0640'
     backup: true
     validate: python3 -c 'import sys; lines = [x.strip() for x in open(sys.argv[1]) if x.strip()]; sys.exit(1 if [x for x in lines if len(x.split(":")) != 3 or not x.split(":")[1].isdigit() or not x.split(":")[2].isdigit()] else 0)' "%s"
   vars:
