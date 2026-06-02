@@ -79,18 +79,44 @@ def release_ubuntu_for(role: str) -> list[str]:
     return _read_role_meta(role).get("ubuntu") or []
 
 
+def skip_for(role: str) -> set[tuple[str, str]]:
+    """(machine, ubuntu) cells this role declares as skipped in CI.
+
+    meta/test.yml `skip:` is a mapping of cell-spec -> reason, where a
+    cell-spec is `machine` (the jammy cell) or `machine:codename` (a
+    release cell). Skipped cells are dropped from every generated matrix
+    (CI detect and testall), so they can't gate a green run. They are NOT
+    a substitute for a fix -- `testrole.py <role> --machine <m>` still
+    runs a skipped cell directly (it bypasses this matrix), which is how
+    you iterate on the fix that lets the skip be removed.
+    """
+    skip = _read_role_meta(role).get("skip") or {}
+    specs = skip.keys() if isinstance(skip, dict) else skip
+    out: set[tuple[str, str]] = set()
+    for spec in specs:
+        parts = str(spec).split(":")
+        machine = parts[0]
+        ubuntu = parts[1] if len(parts) > 1 else DEFAULT_UBUNTU
+        out.add((machine, ubuntu))
+    return out
+
+
 def build_role_cells(role: str) -> list[TestCell]:
     """Expand a single role into its test cells.
 
     - One base cell per machine in machines: (machine, jammy, role)
     - Release cell per (machine, ubuntu) cross-product for each ubuntu
       in meta/test.yml: (machine, codename, role).
+
+    Cells listed under skip: are excluded.
     """
     machines = machines_for(role)
-    cells = [TestCell(m, DEFAULT_UBUNTU, role) for m in machines]
+    skip = skip_for(role)
+    cells = [TestCell(m, DEFAULT_UBUNTU, role) for m in machines if (m, DEFAULT_UBUNTU) not in skip]
     for codename in release_ubuntu_for(role):
         for m in machines:
-            cells.append(TestCell(m, codename, role))
+            if (m, codename) not in skip:
+                cells.append(TestCell(m, codename, role))
     return cells
 
 
@@ -107,7 +133,9 @@ def build_test_matrix(
     for role in roles:
         cells.update(build_role_cells(role))
     if extra_cells:
-        cells.update(extra_cells)
+        # Honour skip: for propagated cells too (a consumer's release cell
+        # pushed in via CI's helper-fan-out must still drop if skipped).
+        cells.update(c for c in extra_cells if (c.machine, c.ubuntu) not in skip_for(c.role))
     return sorted(cells)
 
 
