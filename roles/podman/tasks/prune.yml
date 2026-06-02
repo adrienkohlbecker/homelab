@@ -58,8 +58,4 @@
       randomized_delay_sec: 3600
       frequency: daily
       user: "{{ podman_prune_args.user | default('root') }}"
-      # netdata's systemd_timers collector binds the system bus only, so
-      # only the root-scope timer is observable; user-scope prunes
-      # (operator, runners) opt out of monitoring.
-      monitor: "{{ (podman_prune_args.user | default('root')) == 'root' }}"
   when: podman_prune_args.condition | default(true)

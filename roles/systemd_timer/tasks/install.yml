@@ -104,7 +104,14 @@
 - name: install | Resolve caller defaults for {{ systemd_timer_args.name }}
   set_fact:
     _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
-    _systemd_timer_monitor: "{{ systemd_timer_args.monitor | default(true) }}"
+    # The netdata systemd_timers collector reads /var/lib/systemd/timers
+    # stamps (a system path), so it can only observe system-scope timers.
+    # Auto-disable monitoring for user-scope units rather than let the
+    # monitor:true default register a metadata file the collector can never
+    # satisfy -- which would peg the timer permanently `overdue`. User-scope
+    # freshness monitoring is a deferred follow-up; callers don't need to
+    # special-case it.
+    _systemd_timer_monitor: "{{ (systemd_timer_args.monitor | default(true)) and (systemd_timer_args.user | default('root')) == 'root' }}"
 
 # run_as only makes sense for system-scope units; a user-scope unit
 # already runs as the named user, and User= in /etc/systemd/user/ is
