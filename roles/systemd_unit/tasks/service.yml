@@ -35,6 +35,18 @@
 # a system-scope unit with User=github_runner would silently pre-pull
 # into root's store and then bust TimeoutStartSec on a cold rootless
 # pull inside systemctl start.
+- name: service | Validate service args
+  assert:
+    quiet: true
+    that:
+      - systemd_unit_args is defined
+      - systemd_unit_args is mapping
+      - systemd_unit_args.src is defined or systemd_unit_args.dest is defined
+    fail_msg: >-
+      systemd_unit_args needs src or dest (unit name);
+      got src={{ systemd_unit_args.src | default('<unset>') }},
+      dest={{ systemd_unit_args.dest | default('<unset>') }}
+
 # Two set_fact tasks because ansible's templating engine resolves all
 # keys in a single set_fact concurrently — a key can't read a sibling
 # defined in the same task. Primitives (caller-var defaulting) first,
