@@ -15,3 +15,37 @@
     state: directory
     mode: "0755"
   become: true
+
+# The default Ubuntu smb.conf ships with [homes] commented out. Write a
+# minimal test config with [homes] enabled so the smbclient homes-share
+# probe in _verify.yml has something to connect to. The production smb.conf
+# is managed by the samba role; this is a test-fixture stub only.
+- name: _setup | Write minimal test smb.conf with [homes]
+  copy:
+    content: |
+      [global]
+         workgroup = WORKGROUP
+         security = user
+         passdb backend = tdbsam
+         map to guest = never
+         logging = systemd
+
+      [homes]
+         writeable = yes
+         browseable = no
+         valid users = %S
+         create mask = 0700
+         directory mask = 0700
+    dest: /etc/samba/smb.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: testparm -s %s
+  become: true
+
+- name: _setup | Start smbd
+  systemd:
+    name: smbd
+    state: restarted
+  become: true
