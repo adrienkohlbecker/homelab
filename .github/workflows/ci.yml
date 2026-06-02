@@ -69,6 +69,7 @@ jobs:
       matrix_lab: ${{ steps.detect.outputs.matrix_lab }}
       matrix_pug: ${{ steps.detect.outputs.matrix_pug }}
       packer_changed: ${{ steps.detect.outputs.packer_changed }}
+      packer_worker_changed: ${{ steps.detect.outputs.packer_worker_changed }}
       ci_image_changed: ${{ steps.detect.outputs.ci_image_changed }}
       packer_sources: ${{ steps.detect.outputs.packer_sources }}
       packer_sources_box: ${{ steps.detect.outputs.packer_sources_box }}
@@ -231,17 +232,20 @@ jobs:
       ubuntu_matrix: ${{ needs.detect.outputs.packer_ubuntu_hetzner }}
 
   # --- packer: CI worker snapshot (Hetzner Cloud) --------------------------
-  # Rebuilds the pre-baked CI worker snapshot when packer inputs change.
-  # Master-only: the snapshot is a project-global resource (label-selected
-  # by the runtime provisioner), so a feature-branch publish would silently
-  # become the next worker's boot image. Runs in the CI container (the
-  # hcloud builder creates the server remotely, no host-level KVM needed).
+  # Rebuilds the pre-baked CI worker snapshot when worker-specific inputs
+  # change (provision_worker.sh, hcloud_worker.pkr.hcl, ubuntu_images.json,
+  # runner vars, etc.) — NOT on every packer change (that would rebuild
+  # the snapshot on a qemu-only edit). Master-only: the snapshot is a
+  # project-global resource (label-selected by the runtime provisioner), so
+  # a feature-branch publish would silently become the next worker's boot
+  # image. Runs in the CI container (the hcloud builder creates the server
+  # remotely, no host-level KVM needed).
   packer_worker:
     needs: [ detect, ci-image ]
     if: |
       always()
       && needs.detect.result == 'success'
-      && needs.detect.outputs.packer_changed == 'true'
+      && needs.detect.outputs.packer_worker_changed == 'true'
       && github.ref == 'refs/heads/master'
       && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     runs-on: [ self-hosted, lab ]
