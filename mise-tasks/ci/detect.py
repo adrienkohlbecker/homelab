@@ -325,11 +325,11 @@ def propagate_release_cells(
 
 
 def _git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], capture_output=True, text=True, check=check)
+    return subprocess.run(["git", *args], capture_output=True, text=True, check=check, timeout=120)
 
 
 def git_diff_files(base: str, head: str = "HEAD") -> list[str]:
-    result = _git("diff", "--name-only", base, head)
+    result = _git("diff", "--name-only", "--no-renames", base, head)
     return [line for line in result.stdout.strip().splitlines() if line]
 
 
