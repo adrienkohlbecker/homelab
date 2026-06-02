@@ -808,16 +808,15 @@ def _cmd_run(args: list[str]) -> int:
         for consumer in consumers:
             if consumer in universe:
                 roles.add(consumer)
-        releases = release_ubuntu_for(role)
-        if releases and consumers:
-            log(f"  propagating release cells [{' '.join(releases)}] from '{role}' to its consumers")
-            for consumer in consumers:
-                if consumer not in universe:
-                    continue
-                machines = list(machines_for(consumer))
-                for machine in machines:
-                    for codename in releases:
-                        release_cells.append(f"{consumer}:{machine}:{codename}")
+
+    role_releases = {r: release_ubuntu_for(r) for r in classification.direct_roles}
+    all_consumers = {c for r in classification.direct_roles for c in deps_map.get(r, []) if c in universe}
+    role_machines_map = {c: list(machines_for(c)) for c in all_consumers}
+    release_cells = propagate_release_cells(
+        classification.direct_roles, deps_map, role_machines_map, role_releases, universe
+    )
+    if release_cells:
+        log(f"  propagated release cells: {' '.join(release_cells)}")
 
     roles_sorted = sorted(roles)
     if roles_sorted:
