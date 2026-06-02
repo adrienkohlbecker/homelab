@@ -64,27 +64,41 @@
       subgid: {{ _subgid_lines | select('match', '^' ~ item ~ ':') | list }}.
   loop: "{{ subid_users }}"
 
-- name: _verify | Extra subgid entries present
+- name: _verify | Resolve gids for subgid extras
+  getent:
+    database: group
+  when: (subid_extra_subgid_groups | default([])) | length > 0
+  become: true
+
+- name: _verify | Resolve uids for subuid extras
+  getent:
+    database: passwd
+  when: (subid_extra_subuid_users | default([])) | length > 0
+  become: true
+
+- name: _verify | Extra subgid entries map the resolved gid
   vars:
     _subgid_lines: "{{ (_subid_subgid.content | b64decode).splitlines() }}"
+    _gid: "{{ ansible_facts.getent_group[item.group][1] }}"
   assert:
     that:
-      - _subgid_lines | select('match', '^' ~ item.user ~ ':[0-9]+:' ~ (item.count | default(1)) | string ~ '$') | list | length >= 1
+      - _subgid_lines | select('match', '^' ~ item.user ~ ':' ~ _gid ~ ':' ~ (item.count | default(1)) | string ~ '$') | list | length >= 1
     fail_msg: >-
-      Extra subgid entry missing for {{ item.user }} (group {{ item.group }}).
+      Extra subgid entry for {{ item.user }} should map group {{ item.group }} (gid {{ _gid }}).
       Got: {{ _subgid_lines | select('match', '^' ~ item.user ~ ':') | list }}.
   loop: "{{ subid_extra_subgid_groups | default([]) }}"
   loop_control:
     label: "{{ item.user }}:{{ item.group }}"
 
-- name: _verify | Extra subuid entries present
+- name: _verify | Extra subuid entries map the resolved uid
   vars:
     _subuid_lines: "{{ (_subid_subuid.content | b64decode).splitlines() }}"
+    _uid: "{{ ansible_facts.getent_passwd[item.source_user][1] }}"
   assert:
     that:
-      - _subuid_lines | select('match', '^' ~ item.user ~ ':[0-9]+:' ~ (item.count | default(1)) | string ~ '$') | list | length >= 1
+      - _subuid_lines | select('match', '^' ~ item.user ~ ':' ~ _uid ~ ':' ~ (item.count | default(1)) | string ~ '$') | list | length >= 1
     fail_msg: >-
-      Extra subuid entry missing for {{ item.user }} (source_user {{ item.source_user }}).
+      Extra subuid entry for {{ item.user }} should map source_user {{ item.source_user }} (uid {{ _uid }}).
       Got: {{ _subuid_lines | select('match', '^' ~ item.user ~ ':') | list }}.
   loop: "{{ subid_extra_subuid_users | default([]) }}"
   loop_control:
