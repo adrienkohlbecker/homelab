@@ -1,5 +1,9 @@
-# Note: with ubuntu 24.04, may be able to use `validate: systemd-analyze verify %s:foo.service`,
-# although it won't fail for warnings like undefined keys?
+# The validate task below uses `failed_when: rc != 0 or stderr != ''` —
+# intentionally stricter than systemd-analyze's own exit code, so warnings
+# (undefined keys, ordering cycles) also trigger rollback. Ansible's
+# template/copy `validate:` arg would check *before* placing, but it
+# passes the temp path which systemd-analyze can't resolve dependencies
+# against, and on 24.04+ the `:unit` form still doesn't reject warnings.
 #
 # Inputs: caller passes a single dict `systemd_unit_args` with keys
 #   src               file under role files/ (copy) or templates/ (.j2 → template)
@@ -171,7 +175,13 @@
     # newer `--no-man` form is 254+ only.
     - name: Validate unit file
       when: systemd_unit_file.changed
-      command: systemd-analyze verify --man=no {{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}
+      command:
+        argv:
+          - systemd-analyze
+          - verify
+          - --no-pager
+          - --man=no
+          - "{{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}"
       register: systemd_unit_verify
       changed_when: false
       failed_when: systemd_unit_verify.rc != 0 or systemd_unit_verify.stderr != ''
@@ -235,4 +245,8 @@
 
     - name: Record failure
       fail:
-        msg: Unable to install systemd unit
+        msg: >-
+          Unable to install {{ _systemd_unit_path }}:
+          {{ ansible_failed_result.stderr
+             | default(ansible_failed_result.msg
+             | default('unknown error')) }}
