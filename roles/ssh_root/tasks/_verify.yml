@@ -1,16 +1,32 @@
-- name: _verify | Assert /root/.ssh directory exists with mode 0700
+# Functional testing (an actual SSH to bunk) is impossible on the box fixture: it
+# has no WireGuard peer, and known_hosts for the backup peers is gated
+# `when: not qemu_test` in zfs_autobackup. So these checks fall back to artifact
+# state (key type/mode/owner, config mode/owner) plus `ssh -G`, which parses the
+# shipped config and proves the load-bearing directives survive the Host-block
+# merge -- the one genuinely functional assertion here. The closing block forces a
+# regeneration to confirm the warn/fail gate in main.yml would catch a real
+# rotation; safe because the box fixture is disposable.
+- name: _verify | Assert /root/.ssh directory exists with mode 0700 owned by root
   stat:
     path: /root/.ssh
   register: _ssh_root_dir
   become: true
-  failed_when: not _ssh_root_dir.stat.exists or _ssh_root_dir.stat.mode != '0700'
+  failed_when: >-
+    not _ssh_root_dir.stat.exists
+    or _ssh_root_dir.stat.mode != '0700'
+    or _ssh_root_dir.stat.pw_name != 'root'
+    or _ssh_root_dir.stat.gr_name != 'root'
 
-- name: _verify | Assert ed25519 private key exists with mode 0600
+- name: _verify | Assert ed25519 private key exists with mode 0600 owned by root
   stat:
     path: /root/.ssh/id_ed25519
   register: _ssh_root_key
   become: true
-  failed_when: not _ssh_root_key.stat.exists or _ssh_root_key.stat.mode != '0600'
+  failed_when: >-
+    not _ssh_root_key.stat.exists
+    or _ssh_root_key.stat.mode != '0600'
+    or _ssh_root_key.stat.pw_name != 'root'
+    or _ssh_root_key.stat.gr_name != 'root'
 
 - name: _verify | Assert keypair is ed25519
   command: ssh-keygen -l -f /root/.ssh/id_ed25519
@@ -18,6 +34,17 @@
   become: true
   changed_when: false
   failed_when: "'ED25519' not in _ssh_root_keygen.stdout"
+
+- name: _verify | Assert /root/.ssh/config exists with mode 0644 owned by root
+  stat:
+    path: /root/.ssh/config
+  register: _ssh_root_config_file
+  become: true
+  failed_when: >-
+    not _ssh_root_config_file.stat.exists
+    or _ssh_root_config_file.stat.mode != '0644'
+    or _ssh_root_config_file.stat.pw_name != 'root'
+    or _ssh_root_config_file.stat.gr_name != 'root'
 
 - name: _verify | Assert ssh_config parses cleanly
   command: ssh -G -F /root/.ssh/config localhost
@@ -28,7 +55,45 @@
 - name: _verify | Assert expected directives are active
   assert:
     that:
-      - "'controlmaster auto' in _ssh_root_config.stdout | lower"
-      - "'identityfile ~/.ssh/id_ed25519' in _ssh_root_config.stdout | lower"
-      - "'identitiesonly yes' in _ssh_root_config.stdout | lower"
+      - "'controlmaster auto' in _ssh_root_config.stdout"
+      - "'controlpersist 300' in _ssh_root_config.stdout"
+      - "'serveraliveinterval 30' in _ssh_root_config.stdout"
+      - "'connecttimeout 10' in _ssh_root_config.stdout"
+      - "'identityfile ~/.ssh/id_ed25519' in _ssh_root_config.stdout"
+      - "'identitiesonly yes' in _ssh_root_config.stdout"
     fail_msg: "ssh_config missing expected directives"
+
+- name: _verify | Capture key fingerprint before forced regeneration
+  command: ssh-keygen -l -f /root/.ssh/id_ed25519
+  register: _ssh_root_fp_before
+  become: true
+  changed_when: false
+
+- name: _verify | Force keypair regeneration to exercise the regen-detection path
+  community.crypto.openssh_keypair:
+    path: /root/.ssh/id_ed25519
+    type: ed25519
+    owner: root
+    group: root
+    mode: "0600"
+    comment: root@{{ inventory_hostname }}
+    regenerate: always
+  become: true
+  register: _ssh_root_regen
+
+- name: _verify | Assert regeneration surfaces as a change with a new public key
+  assert:
+    that:
+      - _ssh_root_regen.changed
+      - _ssh_root_regen.public_key is defined
+      - _ssh_root_regen.public_key | length > 0
+    fail_msg: >-
+      openssh_keypair regenerate did not surface as a change -- the warn/fail gate
+      in main.yml would miss a real key rotation.
+
+- name: _verify | Assert the regenerated key fingerprint actually differs
+  command: ssh-keygen -l -f /root/.ssh/id_ed25519
+  register: _ssh_root_fp_after
+  become: true
+  changed_when: false
+  failed_when: _ssh_root_fp_after.stdout == _ssh_root_fp_before.stdout
