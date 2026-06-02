@@ -11,7 +11,7 @@
 
 - name: dest | Scan SSH host keys from backup peers
   when: not qemu_test
-  command: ssh-keyscan -t ed25519 -T 5 {{ item }}
+  command: ssh-keyscan -H -t ed25519 -T 5 {{ item }}
   loop: "{{ _zfs_autobackup_ssh_targets }}"
   changed_when: false
   failed_when: false
