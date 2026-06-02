@@ -9,16 +9,16 @@ export DEBIAN_FRONTEND=noninteractive
 
 # Retry helper for transient apt failures.
 apt_update() {
-	local attempt
-	for attempt in 1 2 3 4 5; do
-		if apt-get update -o APT::Update::Error-Mode=any; then
-			return 0
-		fi
-		echo "apt-get update attempt ${attempt} failed; retrying in $((attempt * 5))s" >&2
-		sleep "$((attempt * 5))"
-	done
-	echo "apt-get update failed after 5 attempts" >&2
-	return 1
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if apt-get update -o APT::Update::Error-Mode=any; then
+      return 0
+    fi
+    echo "apt-get update attempt ${attempt} failed; retrying in $((attempt * 5))s" >&2
+    sleep "$((attempt * 5))"
+  done
+  echo "apt-get update failed after 5 attempts" >&2
+  return 1
 }
 
 echo 'Acquire::Retries "3";' >/etc/apt/apt.conf.d/80-retries
@@ -62,22 +62,22 @@ chmod -x /etc/update-motd.d/* 2>/dev/null || true
 # curl, jq, git, unzip: general tooling
 # netcat-openbsd: UDP probes in _verify
 apt-get install -y --no-install-recommends \
-	ca-certificates curl git jq xz-utils unzip gpg apt-transport-https \
-	qemu-system-x86 qemu-utils ovmf \
-	openssh-client coreutils \
-	netcat-openbsd \
-	passt \
-	xorriso cloud-image-utils \
-	python3-yaml python3-tomli \
-	nodejs \
-	build-essential
+  ca-certificates curl git jq xz-utils unzip gpg apt-transport-https \
+  qemu-system-x86 qemu-utils ovmf \
+  openssh-client coreutils \
+  netcat-openbsd \
+  passt \
+  xorriso cloud-image-utils \
+  python3-yaml python3-tomli \
+  nodejs \
+  build-essential
 
 # --- mise (tool version manager) ---
 install -dm 755 /etc/apt/keyrings
 curl -fsSL https://mise.jdx.dev/gpg-key.pub |
-	gpg --dearmor -o /etc/apt/keyrings/mise-archive-keyring.gpg
+  gpg --dearmor -o /etc/apt/keyrings/mise-archive-keyring.gpg
 echo "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.jdx.dev/deb stable main" \
-	>/etc/apt/sources.list.d/mise.list
+  >/etc/apt/sources.list.d/mise.list
 apt-get update
 apt-get install -y --no-install-recommends mise
 
@@ -96,9 +96,9 @@ export UV_LINK_MODE=copy
 cd /tmp
 mise trust
 if [ -n "${MISE_GITHUB_TOKEN:-}" ]; then
-	GITHUB_TOKEN="${MISE_GITHUB_TOKEN}" mise install
+  GITHUB_TOKEN="${MISE_GITHUB_TOKEN}" mise install
 else
-	mise install
+  mise install
 fi
 
 # Warm uv's wheel cache so per-run `uv sync` resolves in seconds.
@@ -108,7 +108,7 @@ rm -rf /tmp/.venv
 # Global mise config so shims resolve from any CWD (same as Dockerfile).
 mkdir -p /etc/mise
 awk '/^\[tools\]/{p=1; print; next} /^\[/{p=0} p' /tmp/mise.toml \
-	>/etc/mise/config.toml
+  >/etc/mise/config.toml
 
 # --- Packer plugins ---
 # Pre-install the qemu + external plugins declared in qemu.pkr.hcl.
@@ -127,7 +127,7 @@ RUNNER_SHA256="048024cd2c848eb6f14d5646d56c13a4def2ae7ee3ad12122bee960c56f3d271"
 mkdir -p /opt/actions-runner
 cd /opt/actions-runner
 curl -fL -o runner.tar.gz \
-	"https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
+  "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
 echo "${RUNNER_SHA256}  runner.tar.gz" | sha256sum -c -
 tar xzf runner.tar.gz
 rm runner.tar.gz
@@ -161,16 +161,16 @@ mkdir -p /mnt/ci_scratch
 PACKER_CACHE=/mnt/scratch/packer
 mkdir -p "$PACKER_CACHE"
 packer_cache_seed() {
-	local codename="$1" snapshot="$2" sha256="$3"
-	local url="https://cloud-images.ubuntu.com/${codename}/${snapshot}/${codename}-server-cloudimg-amd64.img"
-	local key
-	key=$(echo -n "sha256:${sha256}" | sha1sum | awk '{print $1}')
-	local dest="${PACKER_CACHE}/${key}.iso"
-	if [ -f "$dest" ]; then return 0; fi
-	echo "==> Pre-seeding packer cache: ${codename} (${snapshot}) -> ${key}.iso"
-	curl -fL --retry 3 -o "${dest}.tmp" "$url"
-	echo "${sha256}  ${dest}.tmp" | sha256sum -c -
-	mv "${dest}.tmp" "$dest"
+  local codename="$1" snapshot="$2" sha256="$3"
+  local url="https://cloud-images.ubuntu.com/${codename}/${snapshot}/${codename}-server-cloudimg-amd64.img"
+  local key
+  key=$(echo -n "sha256:${sha256}" | sha1sum | awk '{print $1}')
+  local dest="${PACKER_CACHE}/${key}.iso"
+  if [ -f "$dest" ]; then return 0; fi
+  echo "==> Pre-seeding packer cache: ${codename} (${snapshot}) -> ${key}.iso"
+  curl -fL --retry 3 -o "${dest}.tmp" "$url"
+  echo "${sha256}  ${dest}.tmp" | sha256sum -c -
+  mv "${dest}.tmp" "$dest"
 }
 
 # --- Pre-cache minimal cloud images ---
@@ -185,19 +185,19 @@ mkdir -p "$CLOUD_CACHE"
 # packer file provisioner alongside this script).
 IMAGES_JSON=/tmp/ubuntu_images.json
 for codename in $(jq -r 'keys[]' "$IMAGES_JSON"); do
-	version=$(jq -r ".\"${codename}\".version" "$IMAGES_JSON")
-	snapshot=$(jq -r ".\"${codename}\".snapshot" "$IMAGES_JSON")
-	sha256=$(jq -r ".\"${codename}\".sha256_amd64" "$IMAGES_JSON")
+  version=$(jq -r ".\"${codename}\".version" "$IMAGES_JSON")
+  snapshot=$(jq -r ".\"${codename}\".snapshot" "$IMAGES_JSON")
+  sha256=$(jq -r ".\"${codename}\".sha256_amd64" "$IMAGES_JSON")
 
-	packer_cache_seed "$codename" "$snapshot" "$sha256"
+  packer_cache_seed "$codename" "$snapshot" "$sha256"
 
-	img="ubuntu-${version}-minimal-cloudimg-amd64.img"
-	if [ ! -f "${CLOUD_CACHE}/${img}" ]; then
-		echo "==> Pre-caching ${img}"
-		curl -fL --retry 3 -o "${CLOUD_CACHE}/${img}.tmp" \
-			"https://cloud-images.ubuntu.com/minimal/releases/${codename}/release/${img}"
-		mv "${CLOUD_CACHE}/${img}.tmp" "${CLOUD_CACHE}/${img}"
-	fi
+  img="ubuntu-${version}-minimal-cloudimg-amd64.img"
+  if [ ! -f "${CLOUD_CACHE}/${img}" ]; then
+    echo "==> Pre-caching ${img}"
+    curl -fL --retry 3 -o "${CLOUD_CACHE}/${img}.tmp" \
+      "https://cloud-images.ubuntu.com/minimal/releases/${codename}/release/${img}"
+    mv "${CLOUD_CACHE}/${img}.tmp" "${CLOUD_CACHE}/${img}"
+  fi
 done
 
 # --- Trim cloud-init to the minimum ---
@@ -287,7 +287,7 @@ rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
 # Blank machine-id so each instance gets a unique one.
 : >/etc/machine-id
 if [ -e /var/lib/dbus/machine-id ]; then
-	ln -sf /etc/machine-id /var/lib/dbus/machine-id
+  ln -sf /etc/machine-id /var/lib/dbus/machine-id
 fi
 
 # Clean cloud-init state so it re-runs on the next boot. --machine-id

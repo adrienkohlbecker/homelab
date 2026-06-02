@@ -7,8 +7,8 @@ set -euo pipefail
 # Callers (packer:hetzner, packer:worker) resolve the token before
 # invoking this script; it must already be a real token, not an op:// ref.
 [ -n "${HCLOUD_TOKEN:-}" ] || {
-	echo "HCLOUD_TOKEN is unset" >&2
-	exit 1
+  echo "HCLOUD_TOKEN is unset" >&2
+  exit 1
 }
 
 API="https://api.hetzner.cloud/v1"
@@ -29,10 +29,10 @@ print(" ".join(str(i["id"]) for i in snaps if i["id"] not in keep))
 ' "$snaps_json" "$servers_json")
 count=0
 for old in $stale; do
-	echo "    deleting snapshot $old"
-	curl -fsS -X DELETE "${AUTH[@]}" "${API}/images/$old" >/dev/null || true
-	count=$((count + 1))
+  echo "    deleting snapshot $old"
+  curl -fsS -X DELETE "${AUTH[@]}" "${API}/images/$old" >/dev/null || true
+  count=$((count + 1))
 done
 if [ "$count" -eq 0 ]; then
-	echo "    nothing to prune"
+  echo "    nothing to prune"
 fi
