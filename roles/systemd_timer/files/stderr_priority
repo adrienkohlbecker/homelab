@@ -3,8 +3,11 @@
 # journal. systemd's SyslogLevelPrefix= (default true) parses <N>
 # kernel-style prefixes on captured output and applies the priority,
 # so prefixing every stderr line with <3> turns
-# `journalctl -u <unit> -p err` into a clean failure-only view.
-# No second journal stream (unlike systemd-cat), so no duplicates.
+# `journalctl -u <unit> -p err` into a clean failure-only view. The rewrite
+# is in-place on fd 2 (which systemd has already wired to the unit's stderr
+# journal stream), so journald still attributes the lines to the unit and
+# `journalctl -u <unit>` shows them unchanged -- no extra stream, no
+# SyslogIdentifier shuffle.
 #
 # Implementation notes: bare `2> >(sed ...)` + `wait` looks correct
 # but loses lines under Type=oneshot — bash's `wait` (no args)
