@@ -63,6 +63,24 @@
   tags:
     - swap
 
+# Skip the shrink guard only when the zvol genuinely doesn't exist yet
+# (fresh host: rc=1 "dataset does not exist"). Any *other* `zfs get` failure
+# must halt rather than silently bypass the shrink guard and the swapoff-
+# before-reformat-on-grow below -- both gate on rc == 0.
+- name: Assert the zvol size probe did not error unexpectedly
+  when:
+    - swap_zvol is defined and zfs_root
+    - swap_zvol_current.rc != 0
+  assert:
+    that: "'does not exist' in swap_zvol_current.stderr"
+    fail_msg: >-
+      `zfs get volsize {{ swap_zvol.dataset }}` failed unexpectedly
+      (rc={{ swap_zvol_current.rc }}): {{ swap_zvol_current.stderr | trim }}.
+      Refusing to proceed -- cannot verify the current size for the shrink
+      guard or the swapoff-before-reformat-on-grow.
+  tags:
+    - swap
+
 # zfs accepts any volsize change including a shrink. Pages residing in
 # the discarded sector range vanish on the spot, and the next paging
 # access panics the host. Safe shrink path: swapoff, resize, mkswap,
@@ -95,6 +113,20 @@
       secondarycache: none
       com.sun:auto-snapshot: "false"
   register: swap_zvol_created
+  become: true
+  tags:
+    - swap
+
+# community.general.zfs creates/grows the zvol, but udev populates the
+# /dev/zvol/<dataset> symlink asynchronously; wait for it so the swapoff/
+# mkswap/swapon below act on a real path. A node that never appears (broken
+# zvol) surfaces here as a bounded, named failure instead of a cryptic mkswap
+# error.
+- name: Wait for the zvol device node
+  when: swap_zvol is defined and zfs_root
+  wait_for:
+    path: /dev/zvol/{{ swap_zvol.dataset }}
+    timeout: 30
   become: true
   tags:
     - swap
