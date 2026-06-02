@@ -24,25 +24,25 @@
 - name: _verify | Map test vhost FQDNs to loopback for SNI-correct probing
   lineinfile:
     path: /etc/hosts
-    line: "127.0.0.1 {{ item }}"
-    state: present
-  loop:
-    - "{{ nginx_verify_host }}"
-    - "nginxverifyempty.{{ inventory_hostname }}.{{ domain }}"
-    - "nginxverifyauth.{{ inventory_hostname }}.{{ domain }}"
-    - "nginxverifyloc.{{ inventory_hostname }}.{{ domain }}"
-    - "nginxverifyserverconf.{{ inventory_hostname }}.{{ domain }}"
-    - "nginxverifybody.{{ inventory_hostname }}.{{ domain }}"
-    - "nginxverifybuffering.{{ inventory_hostname }}.{{ domain }}"
-    - "nginxverifycsp.{{ inventory_hostname }}.{{ domain }}"
-    - "nginxverifyplain.{{ inventory_hostname }}.{{ domain }}"
+    regexp: '^127\.0\.0\.1\s+nginxverify'
+    line: >-
+      127.0.0.1
+      {{ nginx_verify_host }}
+      nginxverifyempty.{{ inventory_hostname }}.{{ domain }}
+      nginxverifyauth.{{ inventory_hostname }}.{{ domain }}
+      nginxverifyloc.{{ inventory_hostname }}.{{ domain }}
+      nginxverifyserverconf.{{ inventory_hostname }}.{{ domain }}
+      nginxverifybody.{{ inventory_hostname }}.{{ domain }}
+      nginxverifybuffering.{{ inventory_hostname }}.{{ domain }}
+      nginxverifycsp.{{ inventory_hostname }}.{{ domain }}
+      nginxverifyplain.{{ inventory_hostname }}.{{ domain }}
   become: true
 
 - name: _verify | Map the IPv6 test vhost to ::1 so the probe reaches [::]:443
   lineinfile:
     path: /etc/hosts
+    regexp: '^::1\s+nginxverifyipv6\.'
     line: "::1 nginxverifyipv6.{{ inventory_hostname }}.{{ domain }}"
-    state: present
   become: true
 
 # www-data was dropped from ssl-cert (install.yml): nginx's master loads the
