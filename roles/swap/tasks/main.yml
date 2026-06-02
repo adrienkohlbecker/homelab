@@ -118,15 +118,29 @@
     - swap
 
 # community.general.zfs creates/grows the zvol, but udev populates the
-# /dev/zvol/<dataset> symlink asynchronously; wait for it so the swapoff/
-# mkswap/swapon below act on a real path. A node that never appears (broken
-# zvol) surfaces here as a bounded, named failure instead of a cryptic mkswap
-# error.
+# /dev/zvol/<dataset> symlink asynchronously; wait for it so the canonical
+# path can be resolved below. A node that never appears (broken zvol)
+# surfaces here as a bounded, named failure instead of a cryptic mkswap error.
 - name: Wait for the zvol device node
   when: swap_zvol is defined and zfs_root and not (ansible_check_mode and swap_zvol_current.rc != 0)
   wait_for:
     path: /dev/zvol/{{ swap_zvol.dataset }}
     timeout: 30
+  become: true
+  tags:
+    - swap
+
+# Resolve the canonical block device once; all subsequent tasks (swapoff,
+# blkid, mkswap, swapon) use the result so they address the same underlying
+# node regardless of symlink state.  Falls back to the symlink path when the
+# zvol does not yet exist (check mode on a fresh host).
+- name: Resolve canonical zvol device path
+  when: swap_zvol is defined and zfs_root
+  command: readlink -f /dev/zvol/{{ swap_zvol.dataset }}
+  register: _swap_zvol_dev
+  changed_when: false
+  failed_when: false
+  check_mode: false
   become: true
   tags:
     - swap
@@ -139,7 +153,9 @@
     - swap_zvol is defined and zfs_root
     - swap_zvol_created.changed
     - swap_zvol_current.rc == 0
-  command: swapoff /dev/zvol/{{ swap_zvol.dataset }}
+  vars:
+    _zvol_dev: "{{ (_swap_zvol_dev.stdout | default('') | trim) or '/dev/zvol/' + swap_zvol.dataset }}"
+  command: swapoff {{ _zvol_dev }}
   register: swap_zvol_swapoff
   changed_when: swap_zvol_swapoff.rc == 0
   failed_when:
@@ -153,7 +169,9 @@
 # blkid exits 2 with no signature; treat that as "needs mkswap".
 - name: Detect swap signature on zvol
   when: swap_zvol is defined and zfs_root
-  command: blkid -p -s TYPE -o value /dev/zvol/{{ swap_zvol.dataset }}
+  vars:
+    _zvol_dev: "{{ (_swap_zvol_dev.stdout | default('') | trim) or '/dev/zvol/' + swap_zvol.dataset }}"
+  command: blkid -p -s TYPE -o value {{ _zvol_dev }}
   register: swap_zvol_blkid
   changed_when: false
   failed_when: false
@@ -166,20 +184,24 @@
   when:
     - swap_zvol is defined and zfs_root
     - swap_zvol_blkid.stdout | default('') != 'swap' or swap_zvol_created.changed
-  command: mkswap -f /dev/zvol/{{ swap_zvol.dataset }}
+  vars:
+    _zvol_dev: "{{ (_swap_zvol_dev.stdout | default('') | trim) or '/dev/zvol/' + swap_zvol.dataset }}"
+    _zvol_label: "swap-{{ swap_zvol.dataset | replace('/', '-') }}"
+  command: mkswap -f -L {{ _zvol_label }} {{ _zvol_dev }}
   changed_when: true
   become: true
   tags:
     - swap
 
+# LABEL= lets systemd-fstab-generator resolve the device via libblkid
+# without depending on the /dev/zvol/ udev symlink appearing in time.
 # x-systemd.requires=zfs-volumes.target makes the auto-generated .swap
-# unit wait for ZFS to finish importing pools and exposing zvols at
-# boot.
+# unit wait for ZFS to finish importing pools and exposing zvols at boot.
 - name: Add zvol swap to /etc/fstab
   when: swap_zvol is defined and zfs_root
   mount:
     path: none
-    src: /dev/zvol/{{ swap_zvol.dataset }}
+    src: "LABEL=swap-{{ swap_zvol.dataset | replace('/', '-') }}"
     fstype: swap
     opts: "{{ swap_zvol.opts | default('defaults,nofail,pri=10,x-systemd.requires=zfs-volumes.target') }}"
     state: present
@@ -190,7 +212,9 @@
 
 - name: Activate zvol swap
   when: swap_zvol is defined and zfs_root
-  command: swapon -p 10 /dev/zvol/{{ swap_zvol.dataset }}
+  vars:
+    _zvol_dev: "{{ (_swap_zvol_dev.stdout | default('') | trim) or '/dev/zvol/' + swap_zvol.dataset }}"
+  command: swapon -p 10 {{ _zvol_dev }}
   register: swap_zvol_swapon
   changed_when: swap_zvol_swapon.rc == 0
   failed_when:
