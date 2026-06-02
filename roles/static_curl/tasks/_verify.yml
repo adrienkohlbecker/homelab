@@ -9,17 +9,24 @@
       - _static_curl_curl_version.stdout is search('^curl ' ~ (static_curl_version | regex_escape) ~ ' ')
     fail_msg: "curl_static --version output didn't start with 'curl {{ static_curl_version }} ': {{ _static_curl_curl_version.stdout }}"
 
-# The whole reason this role exists is "a curl that runs inside
-# distroless containers with no libc". `ldd` on a fully-static binary
-# emits either "statically linked" (jammy) or "not a dynamic
-# executable" (older glibc); a dynamically-linked binary always lists
-# each library with a `=>` arrow. The negative check on `=>` covers
-# both glibc variants and catches a glibc-named upstream release that
-# would silently pass --version but break the moment any consumer
-# invoked it inside a distroless image. ldd ships in
-# libc-bin (always present on Ubuntu); `file` is not in the base
-# image. failed_when: false because ldd of a static binary on some
-# glibc versions exits non-zero.
+- name: _verify | Stat /usr/local/bin/curl_static
+  stat:
+    path: /usr/local/bin/curl_static
+  register: _static_curl_stat
+
+- name: _verify | Assert curl_static ownership and mode
+  assert:
+    that:
+      - _static_curl_stat.stat.exists
+      - _static_curl_stat.stat.pw_name == 'root'
+      - _static_curl_stat.stat.gr_name == 'root'
+      - _static_curl_stat.stat.mode == '0755'
+    fail_msg: >-
+      curl_static has wrong ownership or mode:
+      {{ _static_curl_stat.stat | to_nice_json }}
+
+# ldd on a fully-static binary emits "statically linked" (jammy) or
+# "not a dynamic executable" (older glibc), and may exit non-zero.
 - name: _verify | Curl_static is fully statically linked
   command: ldd /usr/local/bin/curl_static
   changed_when: false
@@ -30,7 +37,20 @@
   assert:
     that:
       - "'=>' not in _static_curl_curl_ldd.stdout"
+      - _static_curl_curl_ldd.stdout is search('statically linked|not a dynamic executable')
     fail_msg: >-
       curl_static is not fully statically linked.
       ldd stdout: {{ _static_curl_curl_ldd.stdout | default('') }}
       ldd stderr: {{ _static_curl_curl_ldd.stderr | default('') }}
+
+- name: _verify | Curl_static can fetch a local file
+  command: /usr/local/bin/curl_static -sf file:///etc/hostname
+  changed_when: false
+  register: _static_curl_fetch
+
+- name: _verify | Assert curl_static returned content
+  assert:
+    that:
+      - _static_curl_fetch.rc == 0
+      - _static_curl_fetch.stdout | length > 0
+    fail_msg: "curl_static failed to fetch file:///etc/hostname: rc={{ _static_curl_fetch.rc }}, stdout={{ _static_curl_fetch.stdout }}"
