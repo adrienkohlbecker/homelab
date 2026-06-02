@@ -9,6 +9,24 @@
 # groups that aren't supposed to run the timer (e.g. zfs_autobackup
 # dest hosts). Order matters: stop+remove the timer first so scheduling
 # halts before the service it triggered disappears.
+#
+# Validate name before it flows into unit names and the metadata path. Unlike
+# install (which enforces the underscores-not-hyphens house style for new
+# timers), remove must also accept hyphenated legacy names being torn down
+# (e.g. the pre-migration podman-prune.* units), so the charset is wider --
+# but still anchored to a leading alnum/underscore so a stray name can't
+# start with `-` (a systemctl flag) or contain a path separator.
+- name: remove | Validate name for {{ systemd_timer_args.name | default('<unset>') }}
+  assert:
+    that:
+      - systemd_timer_args.name is defined
+      - systemd_timer_args.name is match('^[A-Za-z0-9_][A-Za-z0-9_-]*$')
+    fail_msg: >-
+      systemd_timer remove: name (got
+      {{ systemd_timer_args.name | default('<unset>') }}) must be defined and
+      match ^[A-Za-z0-9_][A-Za-z0-9_-]*$ (alnum/underscore, internal hyphens
+      allowed for legacy units).
+
 - name: remove | Resolve caller defaults for {{ systemd_timer_args.name }}
   set_fact:
     _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
@@ -38,5 +56,20 @@
 - name: remove | Drop systemd_timers metadata for {{ systemd_timer_args.name }}
   file:
     path: /etc/netdata/charts.d/systemd_timers.d/{{ systemd_timer_args.name }}.conf
+    state: absent
+  become: true
+
+# systemd records a persistent trigger timestamp at
+# /var/lib/systemd/timers/stamp-<name>.timer (Persistent=true is set on every
+# timer.j2); its mtime is the last-fire time. Removing the units orphans that
+# stamp, and worse, a later timer reusing the name inherits the stale
+# timestamp so Persistent= fires an unwanted immediate catch-up run on first
+# enable. Drop it. System scope only: user-scope stamps live under the owning
+# user's ~/.local/share/systemd/timers and are left to that user manager (the
+# only user-scope remove caller is the legacy podman-prune teardown).
+- name: remove | Drop persistent trigger stamp for {{ systemd_timer_args.name }}
+  when: _systemd_timer_user == 'root'
+  file:
+    path: /var/lib/systemd/timers/stamp-{{ systemd_timer_args.name }}.timer
     state: absent
   become: true
