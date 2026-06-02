@@ -10,7 +10,8 @@
 #   owner       owner of the dir and the symlinks (lchown for the latter)
 #   group       group of the dir and the symlinks
 #   mode        sqlite dir mode (e.g. "0750"); default "0750"
-#   condition   optional bool; gates both tasks (default true)
+#   condition   optional bool; gates the dir/pre_create/symlink tasks
+#               (default true). The arg validation runs regardless.
 #   links       optional list of dest paths; src derived as
 #               /mnt/services/sqlite/<name>/<basename(dest)>. Parent dir
 #               of each dest is the caller's responsibility.
@@ -23,27 +24,52 @@
 #               snapshot-restore safety -- a real DB already at the src is
 #               never clobbered -- and the dest-clobber safety (state=link
 #               without force) is unaffected.
+#   force       optional bool (default false); when true, state=link plants
+#               the symlink even over a non-existent target (dangling) or an
+#               existing file. This DROPS the no-force dest-clobber safety
+#               below, so it is only for apps that must boot against a
+#               dangling link and would rewrite a pre_create'd empty file
+#               anyway (sabnzbd, kuma). Mutually exclusive with pre_create.
 #
 # The dict form prevents inter-call leakage: each import_role pass
 # replaces the whole sqlite_dataset_args value at play-vars scope.
 
 - name: Validate sqlite_dataset_args
   assert:
+    quiet: true
     that:
       - sqlite_dataset_args.name is defined
+      # is string before is match: a non-string name raises an opaque
+      # templating error instead of this role's fail_msg (same guard as
+      # roles/service_user, roles/podman_secret).
+      - sqlite_dataset_args.name is string
       - sqlite_dataset_args.name is match('^[a-z_][a-z0-9_-]*$')
       - sqlite_dataset_args.owner is defined
       - sqlite_dataset_args.group is defined
+      # pre_create acts only inside the links loop, so it silently no-ops
+      # without links -- reject the incoherent combination loudly.
+      - >-
+        not (sqlite_dataset_args.pre_create | default(false) | bool)
+        or sqlite_dataset_args.links is defined
+      # force re-introduces the dest-clobber on a target pre_create would
+      # have created, so the two contradict -- a caller wants one or the other.
+      - >-
+        not (sqlite_dataset_args.force | default(false) | bool)
+        or not (sqlite_dataset_args.pre_create | default(false) | bool)
       - >-
         sqlite_dataset_args.links is not defined
         or (sqlite_dataset_args.links | map('basename') | select('eq', '') | list | length == 0)
+      # case_sensitive: basenames become files on a case-sensitive fs, so
+      # Foo.db and foo.db are distinct; the default case-insensitive unique
+      # would wrongly reject them as a collision.
       - >-
         sqlite_dataset_args.links is not defined
-        or (sqlite_dataset_args.links | map('basename') | list | unique | length
+        or (sqlite_dataset_args.links | map('basename') | list | unique(case_sensitive=true) | length
             == sqlite_dataset_args.links | length)
     fail_msg: >-
-      sqlite_dataset_args requires name (alnum+underscore), owner, group;
-      links basenames must be non-empty and unique.
+      sqlite_dataset_args requires name (a valid identifier matching
+      [a-z_][a-z0-9_-]*), owner, group; links basenames must be non-empty
+      and unique; pre_create requires links and excludes force.
 
 - name: Pre-create /mnt/services/sqlite/{{ sqlite_dataset_args.name }}
   when: sqlite_dataset_args.condition | default(true)
@@ -87,6 +113,7 @@
     owner: "{{ sqlite_dataset_args.owner }}"
     group: "{{ sqlite_dataset_args.group }}"
     follow: false
+    force: "{{ sqlite_dataset_args.force | default(false) }}"
   become: true
   loop: "{{ sqlite_dataset_args.links }}"
   loop_control:
