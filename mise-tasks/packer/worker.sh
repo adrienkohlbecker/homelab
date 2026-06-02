@@ -5,18 +5,22 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
+# In CI the resolved token arrives as $HCLOUD_TOKEN_CI (a GitHub Actions secret;
+# see ci.yml). It can't be handed in as plain $HCLOUD_TOKEN because mise.toml's
+# [env] unconditionally re-injects the op:// ref over any inherited value before
+# this script runs. Prefer the CI var when present so the re-exec is skipped.
+if [ -n "${HCLOUD_TOKEN_CI:-}" ]; then
+  HCLOUD_TOKEN="$HCLOUD_TOKEN_CI"
+fi
+
 # HCLOUD_TOKEN normally arrives as the literal op:// ref (file-based mise tasks
 # don't resolve op://, per CLAUDE.md), so re-exec under `op run --` to get the
-# real token.
+# real token. With $HCLOUD_TOKEN_CI set (CI) the token is already resolved, so
+# this is skipped.
 if [[ "${HCLOUD_TOKEN:-}" == op://* ]]; then
   exec op run -- "$0" "$@"
 fi
-
-# In CI the resolved token arrives as $HCLOUD_TOKEN_CI (a GitHub Actions secret).
-if [ -n "${HCLOUD_TOKEN_CI:-}" ]; then
-  HCLOUD_TOKEN="$HCLOUD_TOKEN_CI"
-  export HCLOUD_TOKEN
-fi
+export HCLOUD_TOKEN
 
 [ -n "${HCLOUD_TOKEN:-}" ] || {
   echo "HCLOUD_TOKEN is unset — sign into 1Password CLI or set it manually." >&2

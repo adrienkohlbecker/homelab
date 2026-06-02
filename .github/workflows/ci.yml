@@ -230,6 +230,37 @@ jobs:
       sources_matrix: ${{ needs.detect.outputs.packer_sources_hetzner }}
       ubuntu_matrix: ${{ needs.detect.outputs.packer_ubuntu_hetzner }}
 
+  # --- packer: CI worker snapshot (Hetzner Cloud) --------------------------
+  # Rebuilds the pre-baked CI worker snapshot when packer inputs change.
+  # Master-only: the snapshot is a project-global resource (label-selected
+  # by the runtime provisioner), so a feature-branch publish would silently
+  # become the next worker's boot image. Runs on a gen runner (no qemu
+  # needed — the hcloud builder creates the server remotely). No container
+  # — mise + packer are on the runner host.
+  packer_worker:
+    needs: [ detect, ci-image ]
+    if: |
+      always()
+      && needs.detect.result == 'success'
+      && needs.detect.outputs.packer_changed == 'true'
+      && github.ref == 'refs/heads/master'
+      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
+    runs-on: [ self-hosted, lab ]
+    container:
+      image: nexus.lab.fahm.fr/homelab/ci:latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - run: uv sync --locked
+      - name: Build CI worker snapshot
+        env:
+          # Handed as HCLOUD_TOKEN_CI, not HCLOUD_TOKEN: mise.toml's [env]
+          # re-injects the op:// ref over a plain HCLOUD_TOKEN before the
+          # script runs. worker.sh prefers HCLOUD_TOKEN_CI when present.
+          HCLOUD_TOKEN_CI: ${{ secrets.HCLOUD_TOKEN }}
+          MISE_GITHUB_TOKEN: ${{ secrets.MISE_GITHUB_TOKEN }}
+        run: mise run packer:worker
+
   # --- test: per-release/variant groups -------------------------------------
   # Each group depends on exactly its packer build. test_jammy (the bulk of
   # push-CI cells: box + box_deps) starts as soon as packer_jammy finishes,
