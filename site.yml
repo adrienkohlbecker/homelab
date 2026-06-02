@@ -15,6 +15,9 @@
     - hostname
     - apt
     - apt_upgrade
+    # swap's zvol leg calls community.general.zfs but runs here in the host-base
+    # band (above the zfs role) -- safe because every host boots a ZFS-root image
+    # that already ships zfsutils; the zfs role only manages datasets/snapshots.
     - swap
     - netplan
     - wireguard
