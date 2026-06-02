@@ -85,12 +85,18 @@
 # than the direct fluent-bit loopback HTTP input: catches integration
 # regressions in roles/csplogger's proxy_pass that neither role's own
 # _verify would otherwise see (csplogger's _verify stubs fluent-bit, and
-# the loopback POST here would bypass nginx). Host header drives the
-# nginx server-name match, Origin/Content-Type satisfy csplogger's
-# allowlists in conf.d/.
+# the loopback POST here would bypass nginx). Origin/Content-Type satisfy
+# csplogger's allowlists in conf.d/.
+- name: _verify | OTLP-end-to-end | Map csplogger vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.0\.1\s+csplogger\.'
+    line: "127.0.0.1 csplogger.{{ inventory_hostname }}.{{ domain }}"
+  become: true
+
 - name: _verify | OTLP-end-to-end | POST marked CSP report through nginx
   uri:
-    url: "https://localhost/log"
+    url: "https://csplogger.{{ inventory_hostname }}.{{ domain }}/log"
     method: POST
     body_format: json
     body:
@@ -101,7 +107,6 @@
         effective-directive: "script-src-elem"
         original-policy: "default-src 'self'"
     headers:
-      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
       Origin: "https://verify.{{ domain }}"
       Content-Type: application/csp-report
     validate_certs: false
@@ -678,18 +683,23 @@
         LIMIT 1
         FORMAT JSONEachRow
 
-- name: _verify | Podman_healthcheck | assert rewrite shape
-  vars:
-    row: "{{ test_clickhouse_result.stdout | default('{}', true) | from_json }}"
+- name: _verify | Podman_healthcheck | verify ClickHouse row arrived
   assert:
     that:
-      - "test_clickhouse_result.stdout | length > 0"
+      - "test_clickhouse_result.stdout | default('', true) | length > 0"
+    fail_msg: "podman_healthcheck row not found in ClickHouse (stdout={{ test_clickhouse_result.stdout | default('') }})"
+
+- name: _verify | Podman_healthcheck | assert rewrite shape
+  vars:
+    row: "{{ test_clickhouse_result.stdout | from_json }}"
+  assert:
+    that:
       - "row.ServiceName == 'podman_healthcheck'"
       - "row.container_id_full == fluentbit_otlp_healthcheck_cid"
       - "row.container_id_short == fluentbit_otlp_healthcheck_cid[:12]"
       - "row.unit_field == fluentbit_otlp_healthcheck_cid ~ '.service'"
       - "fluentbit_otlp_healthcheck_cid in row.Body"
-    fail_msg: "podman_healthcheck rewrite did not fire (stdout={{ test_clickhouse_result.stdout }}): {{ row }}"
+    fail_msg: "podman_healthcheck rewrite did not fire: {{ row }}"
 
 # No probe for the svc.<empty> -> SYSLOG_IDENTIFIER fallback branch:
 # the path covers records that reach journald with _TRANSPORT=kernel

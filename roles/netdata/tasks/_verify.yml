@@ -301,8 +301,8 @@
 - name: _verify | Map the netdata vhost FQDN to loopback for SNI-correct probing
   lineinfile:
     path: /etc/hosts
+    regexp: '^127\.0\.0\.1\s+netdata\.'
     line: "127.0.0.1 netdata.{{ inventory_hostname }}.{{ domain }}"
-    state: present
   become: true
 
 # --- nginx Authelia gate + URL-token bypass for cross-host polling ---

@@ -5,9 +5,7 @@
 # harness flake contract.
 #
 # Inputs (set by the caller via vars:):
-#   _wait_route_host  required; the vhost's FQDN (used in URL and Host header).
-#   _wait_route_url   optional, default https://<_wait_route_host>/; override
-#                     for the IPv6 probe (https://[::1]/).
+#   _wait_route_host  required; the vhost's FQDN (used in URL for SNI-correct probing).
 #
 # status_code carries the full set of expected transient codes (incl. 413 for
 # the body-size vhost) so the probe never raises before the vhost is up; -1
@@ -16,9 +14,7 @@
 # retries on both 404 (default-server catch-all) and -1 (TLS race).
 - name: "_verify | Wait for a vhost to route: {{ _wait_route_host }}"
   uri:
-    url: "{{ _wait_route_url | default('https://' + _wait_route_host + '/') }}"
-    headers:
-      Host: "{{ _wait_route_host }}"
+    url: "https://{{ _wait_route_host }}/"
     validate_certs: false
     follow_redirects: none
     status_code: [ -1, 200, 204, 301, 302, 400, 404, 413 ]

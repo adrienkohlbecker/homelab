@@ -17,19 +17,33 @@
       { printf 'ARGS: %s\n' "$*"; cat; } >>/tmp/nut-mail.out
   become: true
 
-# Installing nut-server may auto-start its packaged upsd; stop it so our
-# own foreground upsd can bind 127.0.0.1:3493.
-- name: _verify | Stop the packaged nut-server
+# Installing nut-snmp pulls nut-server, which may auto-start the packaged upsd;
+# stop it so our own foreground upsd can bind 127.0.0.1:3493. On nut 2.8
+# (noble/resolute) upsd is socket-activated, so the .socket must be stopped
+# too. The nut-driver-enumerator.path unit watches ups.conf for changes and
+# can re-activate the service, so stop the enumerator chain first.
+# failed_when:false since the .socket and enumerator units are absent on
+# jammy's 2.7.4.
+- name: _verify | Stop all NUT units that could respawn upsd
   systemd:
-    name: nut-server
+    name: "{{ item }}"
     state: stopped
+  loop:
+    - nut-driver-enumerator.path
+    - nut-driver-enumerator.service
+    - nut-server.socket
+    - nut-server.service
   failed_when: false
   become: true
 
 - name: _verify | Start the dummy-ups driver and a fresh upsd
   shell: |
+    set -euo pipefail
     upsdrvctl -u root stop 2>/dev/null || true
     pkill -x upsd 2>/dev/null || true
+    timeout 5 sh -c 'while pgrep -x upsd >/dev/null 2>&1; do sleep 0.2; done' \
+      || { pkill -9 -x upsd 2>/dev/null || true; sleep 0.5; }
+    rm -f /run/nut/upsd.pid 2>/dev/null || true
     upsdrvctl -u root start eaton
     upsd -u root
   args:
