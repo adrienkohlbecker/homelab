@@ -68,14 +68,20 @@ apt-get install -y --no-install-recommends \
   netcat-openbsd \
   passt \
   xorriso cloud-image-utils \
-  python3-yaml python3-tomli \
+  python3-yaml \
   nodejs \
   build-essential
 
 # --- mise (tool version manager) ---
+MISE_GPG_FPR="24853EC9F655CE80B48E6C3A8B81C9D17413A06D"
 install -dm 755 /etc/apt/keyrings
 curl -fsSL https://mise.jdx.dev/gpg-key.pub |
   gpg --dearmor -o /etc/apt/keyrings/mise-archive-keyring.gpg
+gpg --with-colons --import-options show-only --import /etc/apt/keyrings/mise-archive-keyring.gpg 2>/dev/null |
+  grep -q "fpr:::::::::${MISE_GPG_FPR}:" || {
+  echo "mise GPG key fingerprint mismatch — expected ${MISE_GPG_FPR}" >&2
+  exit 1
+}
 echo "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.jdx.dev/deb stable main" \
   >/etc/apt/sources.list.d/mise.list
 apt-get update
@@ -96,7 +102,9 @@ export UV_LINK_MODE=copy
 cd /tmp
 mise trust
 if [ -n "${MISE_GITHUB_TOKEN:-}" ]; then
+  { set +x; } 2>/dev/null
   GITHUB_TOKEN="${MISE_GITHUB_TOKEN}" mise install
+  set -x
 else
   mise install
 fi
@@ -121,13 +129,16 @@ rm -rf /tmp/packer_init
 # --- GitHub Actions runner ---
 # Pre-install the actions/runner binary so the boot-time provisioning
 # only needs to configure + register, not download ~500 MB.
-# Version kept in sync with roles/github_runner/vars/main.yml.
-RUNNER_VERSION="2.334.0"
-RUNNER_SHA256="048024cd2c848eb6f14d5646d56c13a4def2ae7ee3ad12122bee960c56f3d271"
+# Version + sha256 read from the Ansible role's vars (single source of
+# truth, uploaded by the packer file provisioner).
+read -r RUNNER_URL RUNNER_SHA256 < <(python3 -c '
+import yaml, sys
+d = yaml.safe_load(open(sys.argv[1]))["github_runner_archive"]["x86_64"]
+print(d["url"], d["sha256"])
+' /tmp/github_runner_vars.yml)
 mkdir -p /opt/actions-runner
 cd /opt/actions-runner
-curl -fL -o runner.tar.gz \
-  "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
+curl -fL --retry 3 -o runner.tar.gz "$RUNNER_URL"
 echo "${RUNNER_SHA256}  runner.tar.gz" | sha256sum -c -
 tar xzf runner.tar.gz
 rm runner.tar.gz
@@ -138,8 +149,13 @@ cd /
 # Enable KVM nested virtualization (CCX instances expose /dev/kvm).
 # The module may not be loaded during the packer build (cx22 is shared
 # vCPU, no /dev/kvm), but the config will take effect on CCX at boot.
+# Cover both vendors — Hetzner CCX is predominantly AMD EPYC but Intel
+# is possible on shared-vCPU types.
 mkdir -p /etc/modprobe.d
-echo "options kvm_intel nested=1" >/etc/modprobe.d/kvm-nested.conf
+cat >/etc/modprobe.d/kvm-nested.conf <<'KVM'
+options kvm_intel nested=1
+options kvm_amd nested=1
+KVM
 
 # Bump inotify limits for parallel qemu + runner processes.
 cat >/etc/sysctl.d/99-ci-worker.conf <<'SYSCTL'
@@ -225,39 +241,27 @@ cloud_final_modules: []
 CLOUDINIT
 
 # --- Environment for all users ---
-# /etc/environment is read by PAM (login shells) and by the GitHub
-# runner's runsvc.sh. This is the most reliable path to get env vars
-# into runner step processes.
+# /etc/environment is the single source of truth — read by PAM (login
+# shells) and by the GitHub runner's runsvc.sh (the primary entry point
+# for CI step processes). /etc/profile.d re-exports for interactive
+# login shells; non-login shells inherit from the runner or from PAM.
 cat >/etc/environment <<'ENVFILE'
 MISE_DATA_DIR=/opt/mise
 PATH="/opt/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 UV_CACHE_DIR=/opt/uv-cache
 UV_LINK_MODE=copy
 PACKER_PLUGIN_PATH=/opt/packer/plugins
+PACKER_CACHE_DIR=/mnt/scratch/packer
 ENVFILE
 
-# /etc/profile.d for interactive login shells.
+# /etc/profile.d for interactive login shells — source /etc/environment
+# rather than duplicating the values.
 cat >/etc/profile.d/ci-worker.sh <<'PROFILE'
-export MISE_DATA_DIR=/opt/mise
-export PATH="/opt/mise/shims:${PATH}"
-export UV_CACHE_DIR=/opt/uv-cache
-export UV_LINK_MODE=copy
-export PACKER_PLUGIN_PATH=/opt/packer/plugins
+set -a
+# shellcheck disable=SC1091
+. /etc/environment
+set +a
 PROFILE
-
-# Append to /etc/bash.bashrc for non-login interactive shells and
-# runner steps that source it.
-cat >>/etc/bash.bashrc <<'BASHRC'
-
-# CI worker environment
-if [ -z "${MISE_DATA_DIR:-}" ]; then
-  export MISE_DATA_DIR=/opt/mise
-  export PATH="/opt/mise/shims:${PATH}"
-  export UV_CACHE_DIR=/opt/uv-cache
-  export UV_LINK_MODE=copy
-  export PACKER_PLUGIN_PATH=/opt/packer/plugins
-fi
-BASHRC
 
 # --- Cleanup (hcloud image size reduction) ---
 # https://developer.hashicorp.com/packer/integrations/hetznercloud/hcloud/latest/components/builder/hcloud
@@ -270,7 +274,7 @@ BASHRC
 apt-get -y autopurge
 apt-get -y clean
 
-rm -f /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/qemu.pkr.hcl /tmp/ubuntu_images.json
+rm -f /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/qemu.pkr.hcl /tmp/ubuntu_images.json /tmp/github_runner_vars.yml
 
 # Truncate logs accumulated during provisioning. Don't delete the files
 # (some daemons reopen by name, not fd) — just zero them.
@@ -290,9 +294,10 @@ if [ -e /var/lib/dbus/machine-id ]; then
   ln -sf /etc/machine-id /var/lib/dbus/machine-id
 fi
 
-# Clean cloud-init state so it re-runs on the next boot. --machine-id
-# is redundant (blanked above) but explicit. Keep --configs out: our
-# 99-ci-worker.cfg must survive into the snapshot.
+# Clean cloud-init state so it re-runs on the next boot. Keep --configs
+# out: our 99-ci-worker.cfg must survive into the snapshot. machine-id
+# is already blanked above (empty file, not cloud-init's "uninitialized"
+# sentinel).
 cloud-init clean --logs --seed
 
 # TRIM the filesystem so the hypervisor knows which blocks are free.
