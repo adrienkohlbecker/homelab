@@ -1,14 +1,19 @@
-# Look up gids/uids for the per-host extras so the template can render
-# them as "<user>:<resolved-id>:<count>" lines without the host_vars
-# author having to know each id by hand. getent populates
-# ansible_facts.getent_group / getent_passwd as a dict keyed by name.
+- name: Assert required inputs
+  assert:
+    that:
+      - subid_users is defined
+      - subid_users | unique | length == subid_users | length
+      - ansible_user_id not in subid_users
+    fail_msg: >-
+      subid requires subid_users (list) in host_vars.
+      Must not contain duplicates or ansible_user_id ({{ ansible_user_id }}).
+  tags:
+    - subid
+
 - name: Resolve gids for subgid extras
   getent:
     database: group
-    key: "{{ item.group }}"
-  loop: "{{ subid_extra_subgid_groups | default([]) }}"
-  loop_control:
-    label: "{{ item.user }}:{{ item.group }}"
+  when: (subid_extra_subgid_groups | default([])) | length > 0
   become: true
   tags:
     - subid
@@ -16,25 +21,44 @@
 - name: Resolve uids for subuid extras
   getent:
     database: passwd
-    key: "{{ item.source_user }}"
-  loop: "{{ subid_extra_subuid_users | default([]) }}"
-  loop_control:
-    label: "{{ item.user }}:{{ item.source_user }}"
+  when: (subid_extra_subuid_users | default([])) | length > 0
   become: true
   tags:
     - subid
 
-- name: Apply subuid and subgid settings
+- name: Apply subuid settings
   template:
-    src: subid.j2
-    dest: /etc/{{ item }}
+    src: subuid.j2
+    dest: /etc/subuid
     owner: root
     group: root
     mode: '0644'
     backup: true
+    validate: python3 -c 'import sys; [exit(1) for l in open(sys.argv[1]) if l.strip() and len(l.strip().split(":")) != 3 or l.strip() and not l.strip().split(":")[1].isdigit() or l.strip() and not l.strip().split(":")[2].isdigit()]' "%s"
+  register: subid_subuid_result
   become: true
   tags:
     - subid
-  with_items:
-    - subuid
-    - subgid
+
+- name: Apply subgid settings
+  template:
+    src: subgid.j2
+    dest: /etc/subgid
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true
+    validate: python3 -c 'import sys; [exit(1) for l in open(sys.argv[1]) if l.strip() and len(l.strip().split(":")) != 3 or l.strip() and not l.strip().split(":")[1].isdigit() or l.strip() and not l.strip().split(":")[2].isdigit()]' "%s"
+  register: subid_subgid_result
+  become: true
+  tags:
+    - subid
+
+- name: Warn about podman system migrate
+  debug:
+    msg: >-
+      /etc/subuid or /etc/subgid changed — rootless podman users may need
+      'podman system migrate' to pick up the new ranges.
+  when: subid_subuid_result.changed or subid_subgid_result.changed
+  tags:
+    - subid
