@@ -13,7 +13,9 @@ set -euo pipefail
 
 API="https://api.hetzner.cloud/v1"
 AUTH=(-H "Authorization: Bearer ${HCLOUD_TOKEN}")
-SELECTOR="$usage_selector"
+# Accept the selector from mise's #USAGE arg parsing ($usage_selector)
+# or from $1 when called directly (avoids the mise [env] clobber).
+SELECTOR="${usage_selector:-$1}"
 
 echo "==> Pruning snapshots matching '${SELECTOR}' (keeping newest 2 + running servers)"
 snaps_json=$(curl -fsS "${AUTH[@]}" "${API}/images?type=snapshot&sort=created:desc&label_selector=${SELECTOR}")
