@@ -168,8 +168,29 @@
 # compresses into RAM and the disk/zvol is reached only under genuine
 # exhaustion. zram is deadlock-free (no ZFS allocation on the page-out
 # path), which is what keeps the zvol cold on the mirror hosts.
-- name: Install systemd-zram-generator
+#
+# zram ships in the base kernel-modules package on amd64 (every prod host + the
+# x86 CI fixtures), but the trimmed arm64 cloud kernel on the local minimal/box
+# test VMs carries no zram.ko -- the generator then can't create dev-zram0 and
+# the activation below times out waiting for the device. Probe for the module
+# and gate the zram tasks on it: present everywhere it matters, skipped only on
+# the arm64 fixtures that physically lack it. check_mode:false so the probe runs
+# (and registers) during the harness's dry-run pass too.
+- name: Probe for the zram kernel module
   when: swap_zram is defined
+  command: modinfo -k {{ ansible_kernel }} zram
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  register: swap_zram_module
+  become: true
+  tags:
+    - swap
+
+- name: Install systemd-zram-generator
+  when:
+    - swap_zram is defined
+    - swap_zram_module.rc == 0
   apt:
     name: systemd-zram-generator
     state: present
@@ -179,7 +200,9 @@
     - swap
 
 - name: Configure zram swap device
-  when: swap_zram is defined
+  when:
+    - swap_zram is defined
+    - swap_zram_module.rc == 0
   template:
     src: zram-generator.conf.j2
     dest: /etc/systemd/zram-generator.conf
@@ -205,6 +228,7 @@
 - name: Activate zram swap device
   when:
     - swap_zram is defined
+    - swap_zram_module.rc == 0
     - not (ansible_check_mode and (swap_zram_installed.changed or swap_zram_conf.changed))
   systemd:
     name: dev-zram0.swap
@@ -218,7 +242,9 @@
 # cheap, so prefer it over evicting file cache (especially on cloud hosts
 # whose cache re-reads come from slow network-backed disk).
 - name: Tune vm.swappiness for zram
-  when: swap_zram is defined
+  when:
+    - swap_zram is defined
+    - swap_zram_module.rc == 0
   ansible.posix.sysctl:
     name: vm.swappiness
     value: "{{ swap_swappiness | default(100) | string }}"
@@ -271,6 +297,10 @@
     - swap
 
 - name: Enable tmpfs /tmp via tmp.mount
+  # In check mode on a fresh host the staging copy above only *reports* it would
+  # create tmp.mount, so systemd can't find the unit to enable. Skip enabling
+  # when the unit is merely pending -- the staging task already covers the diff.
+  when: not (ansible_check_mode and swap_tmp_mount_staged.changed)
   systemd:
     name: tmp.mount
     enabled: true

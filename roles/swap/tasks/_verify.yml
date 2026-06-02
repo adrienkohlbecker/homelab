@@ -8,8 +8,21 @@
   changed_when: false
   register: _swap_verify_swapon
 
-- name: _verify | Zram swap active at the configured (primary) priority
+# The role gates zram on the kernel module being present (the arm64 cloud kernel
+# on the local fixtures ships none). Re-probe here -- _verify is a separate
+# ansible run, so converge's register isn't in scope -- and skip the zram
+# assertions where the module, and therefore the zram swap device, is absent.
+- name: _verify | Probe for the zram kernel module
   when: swap_zram is defined
+  command: modinfo -k {{ ansible_kernel }} zram
+  changed_when: false
+  failed_when: false
+  register: _swap_verify_zram_module
+
+- name: _verify | Zram swap active at the configured (primary) priority
+  when:
+    - swap_zram is defined
+    - _swap_verify_zram_module.rc == 0
   vars:
     _zram_lines: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | list }}"
   assert:
@@ -22,7 +35,9 @@
       negative so this is primary): {{ _swap_verify_swapon.stdout }}
 
 - name: _verify | Read zram0 device size
-  when: swap_zram is defined
+  when:
+    - swap_zram is defined
+    - _swap_verify_zram_module.rc == 0
   command: cat /sys/block/zram0/disksize
   changed_when: false
   register: _swap_verify_zram_size
@@ -31,7 +46,9 @@
 # size key the installed version doesn't honor). Expected = min(configured,
 # MemTotal); zram rounds down by a page, so allow a small band.
 - name: _verify | Zram device sized per config (capped at RAM)
-  when: swap_zram is defined
+  when:
+    - swap_zram is defined
+    - _swap_verify_zram_module.rc == 0
   vars:
     _expected_mb: "{{ [(swap_zram.size | human_to_bytes) // 1048576, ansible_memtotal_mb] | min }}"
     _actual_mb: "{{ (_swap_verify_zram_size.stdout | int) // 1048576 }}"
@@ -47,6 +64,7 @@
 - name: _verify | Disk/zvol overflow swap coexists below zram
   when:
     - swap_zram is defined
+    - _swap_verify_zram_module.rc == 0
     - swap_zvol is defined or swap_partition is defined
   assert:
     that: _swap_verify_swapon.stdout_lines | length >= 2
@@ -55,13 +73,17 @@
       {{ _swap_verify_swapon.stdout }}
 
 - name: _verify | Read vm.swappiness
-  when: swap_zram is defined
+  when:
+    - swap_zram is defined
+    - _swap_verify_zram_module.rc == 0
   slurp:
     src: /proc/sys/vm/swappiness
   register: _swap_verify_swappiness
 
 - name: _verify | Swappiness tuned to the configured value
-  when: swap_zram is defined
+  when:
+    - swap_zram is defined
+    - _swap_verify_zram_module.rc == 0
   assert:
     that:
       - (_swap_verify_swappiness.content | b64decode | trim | int) == (swap_swappiness | default(100) | int)
