@@ -29,6 +29,7 @@ def _run_bash(script: str, *, env: dict | None = None, cwd: Path | None = None) 
         text=True,
         cwd=cwd or REPO_ROOT,
         env=merged_env,
+        timeout=30,
     )
 
 
