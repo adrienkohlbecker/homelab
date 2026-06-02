@@ -9,10 +9,17 @@ set -euo pipefail
 source "$(dirname "$0")/_hcloud_token.sh"
 
 # Forward MISE_GITHUB_TOKEN if available (raises the GitHub API rate limit
-# during mise install inside the build).
-mise_token_args=()
+# during mise install inside the build). Passed via env (PKR_VAR_*) rather
+# than -var to keep the token out of /proc/*/cmdline.
 if [ -n "${MISE_GITHUB_TOKEN:-}" ]; then
-  mise_token_args=(-var "mise_github_token=${MISE_GITHUB_TOKEN}")
+  export PKR_VAR_mise_github_token="$MISE_GITHUB_TOKEN"
+fi
+
+# --on-error=ask keeps the failed build VM up for SSH debugging, but only
+# with a human at the terminal. CI has no stdin — fall back to cleanup.
+on_error=cleanup
+if [ -t 0 ] && [ -z "${CI:-}" ]; then
+  on_error=ask
 fi
 
 # Init the hcloud plugin (pre-installed for the qemu plugins, but the
@@ -24,14 +31,16 @@ packer init packer/hcloud_worker.pkr.hcl
 IFS=',' read -ra locations <<<"$usage_location"
 built=false
 log=$(mktemp)
+trap 'rm -f "$log"' EXIT
 for loc in "${locations[@]}"; do
   echo "==> Trying ${usage_server_type} in ${loc}..."
   rc=0
   packer build \
     -timestamp-ui \
+    -warn-on-undeclared-var \
+    "--on-error=${on_error}" \
     -var "location=${loc}" \
     -var "server_type=${usage_server_type}" \
-    "${mise_token_args[@]}" \
     packer/hcloud_worker.pkr.hcl 2>&1 | tee "$log" || rc=$?
   if [ "$rc" -eq 0 ]; then
     built=true
@@ -41,10 +50,8 @@ for loc in "${locations[@]}"; do
     echo "==> ${loc} unavailable, trying next..."
     continue
   fi
-  rm -f "$log"
   exit "$rc"
 done
-rm -f "$log"
 
 if ! $built; then
   echo "==> All locations exhausted (${usage_location})" >&2
