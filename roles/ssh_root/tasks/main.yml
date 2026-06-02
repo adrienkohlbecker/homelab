@@ -43,12 +43,24 @@
   tags:
     - ssh_root
 
+# A regenerated key no longer matches the pubkey bunk pins in its forced-command
+# authorized_keys, so offsite backups would fail to authenticate until
+# host_vars/bunk.yml is updated by hand. Halting the converge here is deliberate:
+# it forces that manual step before the host proceeds. Regeneration only happens
+# on real key drift/corruption (regenerate: full_idempotence above), never on a
+# clean re-run. Skipped under --check so a dry-run never aborts.
 - name: Warn on keypair regeneration
-  when: ssh_root_keypair is changed and ssh_root_key_stat.stat.exists
+  when:
+    - not ansible_check_mode
+    - ssh_root_keypair.changed | default(false)
+    - ssh_root_key_stat.stat.exists
   fail:
     msg: >-
-      Root SSH keypair was regenerated on {{ inventory_hostname }}.
-      Update host_vars/bunk.yml ssh_public_keys_additional with the new public key:
+      Root SSH keypair regenerated on {{ inventory_hostname }} -- the old public
+      key is now stale in bunk authorized_keys, so offsite backups will fail to
+      authenticate. Replace this host entry in host_vars/bunk.yml
+      ssh_public_keys_additional with the new public key below, then re-converge
+      bunk:
       {{ ssh_root_keypair.public_key }}
   tags:
     - ssh_root
