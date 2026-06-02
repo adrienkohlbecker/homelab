@@ -234,6 +234,9 @@
     path: none
     src: "{{ swap_partition.device }}"
     fstype: swap
+    # opts replaces the default wholesale (not merged): a host overriding it
+    # must re-include nofail + pri=10, or boot blocks on a missing device and
+    # the overflow priority drifts. Same applies to swap_zvol.opts above.
     opts: "{{ swap_partition.opts | default('defaults,nofail,discard,pri=10') }}"
     state: present
     backup: true

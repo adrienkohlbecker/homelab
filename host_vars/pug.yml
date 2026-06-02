@@ -29,7 +29,6 @@ macvlan_blocks:
 
 swap_partition:
   device: /dev/disk/by-uuid/00b9e215-aaea-459d-a535-40d47007095b
-  opts: discard
 
 # zram is the primary swap; the partition above is the overflow
 # (notes/swap_strategy.md).

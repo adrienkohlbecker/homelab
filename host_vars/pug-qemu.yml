@@ -31,7 +31,6 @@ macvlan_blocks:
 # the packer-baked fstab entry to avoid a duplicate.
 swap_partition:
   device: /dev/disk/by-partlabel/swap
-  opts: discard
 
 has_transcoding_acceleration: false
 
