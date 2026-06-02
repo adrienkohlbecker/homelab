@@ -1,3 +1,13 @@
+# root's outbound SSH identity for the nightly ZFS backups. Two consumers read
+# what this role produces:
+#   - zfs_autobackup onsite: `zfs-autobackup --ssh-config /root/.ssh/config
+#     --ssh-source zfs_autobackup@<peer>` spawns many short ssh calls per run, so
+#     the ControlMaster block in files/ssh_config multiplexes them (load-bearing).
+#   - zfs_autobackup offsite: rsync of bak-tagged snapshots to ak@bunk, which pins
+#     this host's pubkey to a forced `rrsync -wo` command (host_vars/bunk.yml).
+# /root/.ssh/known_hosts for those peers is owned by zfs_autobackup (dest.yml,
+# ssh-keyscan), not this role -- so a regenerated keypair needs a manual bunk.yml
+# update, which the "Warn on keypair regeneration" task below enforces.
 - name: Create ssh directory
   file:
     dest: /root/.ssh
