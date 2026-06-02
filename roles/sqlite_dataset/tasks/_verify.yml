@@ -398,6 +398,62 @@
         loop_var: sqlite_dataset_invalid
         label: "{{ sqlite_dataset_invalid.label }}"
 
+    # -- Scenario 11: force still refuses to clobber a real DB at a dest -
+    # force relaxes only the dangling-target refusal; a real file at the dest
+    # must still be protected (snapshot-restore safety).
+    - name: _verify | Scenario 11 — plant a real DB at a force dest
+      copy:
+        content: "FORCE-REAL"
+        dest: /mnt/services/sqlite_dataset_test/force_real.db
+        owner: root
+        group: root
+        mode: "0640"
+      become: true
+
+    - name: _verify | Scenario 11 — force must still refuse the real-file clobber
+      block:
+        - name: _verify | Scenario 11 — attempt force symlink over the real DB
+          import_role:
+            name: sqlite_dataset
+            tasks_from: dataset
+          vars:
+            sqlite_dataset_args:
+              name: sqlite_dataset_test
+              owner: root
+              group: root
+              force: true
+              links:
+                - /mnt/services/sqlite_dataset_test/force_real.db
+
+        - name: _verify | Scenario 11 — record wrongly clobbered
+          set_fact:
+            _sqlite_dataset_force_refused: false
+      rescue:
+        - name: _verify | Scenario 11 — record refused (expected)
+          set_fact:
+            _sqlite_dataset_force_refused: true
+
+    - name: _verify | Scenario 11 — re-stat the dest
+      stat:
+        path: /mnt/services/sqlite_dataset_test/force_real.db
+        follow: false
+      register: _sqlite_dataset_force_real
+      become: true
+
+    - name: _verify | Scenario 11 — read the surviving dest content
+      slurp:
+        src: /mnt/services/sqlite_dataset_test/force_real.db
+      register: _sqlite_dataset_force_real_content
+      become: true
+
+    - name: _verify | Scenario 11 — force refused and the real DB survived intact
+      assert:
+        that:
+          - _sqlite_dataset_force_refused
+          - _sqlite_dataset_force_real.stat.exists
+          - not _sqlite_dataset_force_real.stat.islnk
+          - _sqlite_dataset_force_real_content.content | b64decode == 'FORCE-REAL'
+
   always:
     - name: _verify | Teardown — remove test fixtures
       file:
