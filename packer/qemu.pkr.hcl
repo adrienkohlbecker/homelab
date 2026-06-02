@@ -57,7 +57,7 @@ locals {
   # — single source of truth shared with packer/scripts/provision_worker.sh.
   # Bump when refreshing; older snapshots eventually fall out of the
   # upstream listing (and out of the Nexus proxy cache).
-  ubuntu_images   = jsondecode(file("${path.root}/ubuntu_images.json"))
+  ubuntu_images   = jsondecode(file("ubuntu_images.json"))
   ubuntu_snapshot = local.ubuntu_images[var.ubuntu_name].snapshot
 
   # Arch-keyed configuration table. Centralizes everything that varies
