@@ -213,8 +213,10 @@
 - name: Activate zvol swap
   when: swap_zvol is defined and zfs_root
   vars:
+    _zvol_opts: "{{ swap_zvol.opts | default('defaults,nofail,pri=10,x-systemd.requires=zfs-volumes.target') }}"
     _zvol_dev: "{{ (_swap_zvol_dev.stdout | default('') | trim) or '/dev/zvol/' + swap_zvol.dataset }}"
-  command: swapon -p 10 {{ _zvol_dev }}
+    _zvol_pri: "{{ _zvol_opts | regex_search('(?:^|,)pri=(\\d+)', '\\1') | first | default('10') }}"
+  command: swapon -p {{ _zvol_pri }} {{ _zvol_dev }}
   register: swap_zvol_swapon
   changed_when: swap_zvol_swapon.rc == 0
   failed_when:
@@ -272,11 +274,12 @@
   when: swap_partition is defined
   vars:
     _opts: "{{ swap_partition.opts | default('defaults,nofail,discard=once,pri=10') }}"
-  # Forward the discard policy from fstab opts to the live activation so the
-  # device state matches next-boot immediately.  discard=once trims the swap
-  # area once at swapon (preferred for SSDs); bare discard also enables
-  # per-page TRIM which adds latency on page reuse.
-  command: swapon -p 10 {{ '--discard=once' if 'discard=once' in _opts else ('--discard' if ',discard,' in (',' + _opts + ',') else '') }} {{ swap_partition.device }}
+    _pri: "{{ _opts | regex_search('(?:^|,)pri=(\\d+)', '\\1') | first | default('10') }}"
+  # Forward the priority and discard policy from fstab opts to the live
+  # activation so the device state matches next-boot immediately.
+  # discard=once trims the swap area once at swapon (preferred for SSDs);
+  # bare discard also enables per-page TRIM which adds latency on page reuse.
+  command: swapon -p {{ _pri }} {{ '--discard=once' if 'discard=once' in _opts else ('--discard' if ',discard,' in (',' + _opts + ',') else '') }} {{ swap_partition.device }}
   register: swap_partition_swapon
   changed_when: swap_partition_swapon.rc == 0
   failed_when:
