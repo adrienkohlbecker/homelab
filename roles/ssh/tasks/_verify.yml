@@ -1,0 +1,58 @@
+# sshd -T (effective-config dump) exercises the whole Include chain:
+# /etc/ssh/sshd_config → sshd_config.d/01-hardening.conf. Reading the
+# drop-in alone would pass even if the Include were missing.
+
+- name: _verify | Sshd is active  # noqa: command-instead-of-module -- is-active query, not a state change
+  command: systemctl is-active ssh
+  changed_when: false
+  become: true
+
+- name: _verify | Read effective sshd config
+  command: sshd -T
+  changed_when: false
+  become: true
+  register: ssh_verify_effective
+
+- name: _verify | Hardening directives are active
+  assert:
+    that:
+      - ssh_verify_effective.stdout is search('(?m)^passwordauthentication no$')
+      - ssh_verify_effective.stdout is search('(?m)^permitrootlogin no$')
+      - ssh_verify_effective.stdout is search('(?m)^authenticationmethods publickey$')
+      - ssh_verify_effective.stdout is search('(?m)^loglevel verbose$')
+      - ssh_verify_effective.stdout is search('(?m)^kbdinteractiveauthentication no$')
+    fail_msg: >-
+      sshd effective config is missing expected hardening directives —
+      01-hardening.conf may not have landed, or /etc/ssh/sshd_config
+      no longer Includes sshd_config.d.
+
+- name: _verify | Subsystem sftp uses internal-sftp
+  assert:
+    that:
+      - ssh_verify_effective.stdout is search('(?m)^subsystem\s+sftp\s+internal-sftp')
+    fail_msg: >-
+      sshd effective config does not show internal-sftp as the sftp
+      subsystem — the drop-in's Subsystem directive may be shadowed.
+
+- name: _verify | Only EtM MACs are enabled
+  vars:
+    _ssh_verify_macs: >-
+      {{ ssh_verify_effective.stdout_lines
+         | select('match', '^macs\s+')
+         | first
+         | regex_replace('^macs\s+', '') }}
+  assert:
+    that:
+      - _ssh_verify_macs is search('-etm@')
+      - _ssh_verify_macs is not search('(?<!\-)etm')
+      - _ssh_verify_macs is not search('umac-128@openssh\.com')
+    fail_msg: >-
+      Non-EtM MACs are still present in the effective config:
+      {{ _ssh_verify_macs }}
+
+- name: _verify | Stock sftp Subsystem is commented out
+  command: grep -c '^Subsystem' /etc/ssh/sshd_config
+  register: ssh_verify_stock_subsystem
+  changed_when: false
+  failed_when: ssh_verify_stock_subsystem.stdout | int > 0
+  become: true
