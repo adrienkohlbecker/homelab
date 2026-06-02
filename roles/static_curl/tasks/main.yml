@@ -1,17 +1,10 @@
-# Install a statically-linked curl binary at /usr/local/bin/curl_static.
-# Designed to be bind-mounted into distroless containers (gcr.io/distroless/*)
-# whose images have no shell / wget / curl, so --health-cmd has nothing to
-# invoke. Podman's exec form (no shell) calls /usr/local/bin/curl_static
-# directly inside the container.
-#
-# The tarball is sha256-pinned at download. Idempotence comes from
-# running the already-installed binary with --version and skipping the
-# install if it reports the expected version — no need to re-hash the
-# whole binary on every play.
+- name: Validate architecture is supported
+  assert:
+    that: ansible_architecture in static_curl_release
+    fail_msg: "static_curl only supports {{ static_curl_release.keys() | join(', ') }}, got {{ ansible_architecture }}"
+  tags:
+    - static_curl
 
-# xz-utils provides the xz binary that GNU tar shells out to for .tar.xz.
-# The static-curl release only ships .tar.xz, so we need it on every host
-# that installs curl_static. Tiny package, no daemon, safe to add.
 - name: Install xz-utils (needed by tar -J to extract .tar.xz)
   apt:
     name: xz-utils
@@ -20,10 +13,6 @@
   tags:
     - static_curl
 
-# `check_mode: false` so the probe runs even under --check; without it
-# the command is skipped and the install gate below errors on an
-# undefined .rc. Reading --version is read-only, so honoring check mode
-# is correct.
 - name: Check installed curl_static version
   command: /usr/local/bin/curl_static --version
   register: _static_curl_existing
@@ -37,60 +26,44 @@
 - name: Install curl_static
   when: >-
     _static_curl_existing.rc != 0
-    or static_curl_version not in (_static_curl_existing.stdout | default(''))
+    or not (_static_curl_existing.stdout | default('')) is search('^curl ' ~ (static_curl_version | regex_escape) ~ ' ')
   become: true
   tags:
     - static_curl
   block:
-    # `check_mode: false` so the tarball actually lands on disk under
-    # --check; the unarchive below opens it eagerly and would otherwise
-    # fail "Source does not exist". The file lives in /tmp and is wiped
-    # by the always: cleanup at the end of the block.
     - name: Download static curl tarball
       get_url:
         url: "{{ static_curl_release[ansible_architecture].url }}"
-        dest: /tmp/curl_static.tar.xz
-        checksum: sha256:{{ static_curl_release[ansible_architecture].sha256 }}
-        mode: "0644"
+        dest: /var/cache/curl_static.tar.xz
+        checksum: "sha256:{{ static_curl_release[ansible_architecture].sha256 }}"
+        mode: "0600"
       check_mode: false
       register: static_curl_download
       retries: 3
       delay: 5
       until: static_curl_download is succeeded
 
-    # `include: [curl]` keeps trurl + SHA256SUMS out of /usr/local/bin;
-    # `--transform` renames the binary so it doesn't collide with the
-    # distro's /usr/bin/curl on PATH lookups inside the container.
-    #
-    # `when: not ansible_check_mode` because gtar-backed unarchive has no
-    # check-mode support ("remote module does not support check mode
-    # when using gtar"). The downstream file-ownership task is gated the
-    # same way so it doesn't fail on a missing file when --check skipped
-    # the extract.
+    # gtar-backed unarchive has no check-mode support
     - name: Extract curl binary to /usr/local/bin/curl_static
       when: not ansible_check_mode
       unarchive:
-        src: /tmp/curl_static.tar.xz
+        src: /var/cache/curl_static.tar.xz
         dest: /usr/local/bin
         remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+        list_files: true
         include:
           - curl
         extra_opts:
           - --transform=s,^curl$,curl_static,
-
-    - name: Fix ownership and mode on /usr/local/bin/curl_static
-      when: not ansible_check_mode
-      file:
-        path: /usr/local/bin/curl_static
-        owner: root
-        group: root
-        mode: "0755"
+      register: _static_curl_extract
+      failed_when: _static_curl_extract.files | default([]) | length == 0
 
   always:
-    # Cleanup pairs with the check_mode: false download above so /tmp
-    # doesn't carry the tarball past a --check run.
     - name: Remove static curl tarball
       file:
-        path: /tmp/curl_static.tar.xz
+        path: /var/cache/curl_static.tar.xz
         state: absent
       check_mode: false
