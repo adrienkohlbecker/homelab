@@ -171,7 +171,7 @@
   when: swap_zvol is defined and zfs_root
   vars:
     _zvol_dev: "{{ (_swap_zvol_dev.stdout | default('') | trim) or '/dev/zvol/' + swap_zvol.dataset }}"
-  command: blkid -p -s TYPE -o value {{ _zvol_dev }}
+  command: blkid -p --usages other -s TYPE -o value {{ _zvol_dev }}
   register: swap_zvol_blkid
   changed_when: false
   failed_when: false
@@ -229,7 +229,7 @@
 #######################################################################
 - name: Verify partition carries a swap signature
   when: swap_partition is defined
-  command: blkid -p -s TYPE -o value {{ swap_partition.device }}
+  command: blkid -p --usages other -s TYPE -o value {{ swap_partition.device }}
   register: swap_partition_blkid
   changed_when: false
   check_mode: false
@@ -261,7 +261,7 @@
     # opts replaces the default wholesale (not merged): a host overriding it
     # must re-include nofail + pri=10, or boot blocks on a missing device and
     # the overflow priority drifts. Same applies to swap_zvol.opts above.
-    opts: "{{ swap_partition.opts | default('defaults,nofail,discard,pri=10') }}"
+    opts: "{{ swap_partition.opts | default('defaults,nofail,discard=once,pri=10') }}"
     state: present
     backup: true
   become: true
@@ -271,10 +271,12 @@
 - name: Activate partition swap
   when: swap_partition is defined
   vars:
-    _opts: "{{ swap_partition.opts | default('defaults,nofail,discard,pri=10') }}"
-  # Pass --discard at activation when fstab requests it, so the live device
-  # matches the next-boot state instead of acquiring discard only after a reboot.
-  command: swapon -p 10 {{ '--discard' if 'discard' in _opts else '' }} {{ swap_partition.device }}
+    _opts: "{{ swap_partition.opts | default('defaults,nofail,discard=once,pri=10') }}"
+  # Forward the discard policy from fstab opts to the live activation so the
+  # device state matches next-boot immediately.  discard=once trims the swap
+  # area once at swapon (preferred for SSDs); bare discard also enables
+  # per-page TRIM which adds latency on page reuse.
+  command: swapon -p 10 {{ '--discard=once' if 'discard=once' in _opts else ('--discard' if ',discard,' in (',' + _opts + ',') else '') }} {{ swap_partition.device }}
   register: swap_partition_swapon
   changed_when: swap_partition_swapon.rc == 0
   failed_when:
