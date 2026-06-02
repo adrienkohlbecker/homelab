@@ -1,3 +1,7 @@
+# root's outbound SSH client config, read by the zfs_autobackup backup scripts:
+# onsite zfs-autobackup (via --ssh-config) and the offsite rsync to ak@bunk.
+# ControlMaster is load-bearing -- zfs-autobackup opens many short ssh connections
+# per run and multiplexes them over one master. See roles/ssh_root/tasks/main.yml.
 Host *
     ControlPath ~/.ssh/.controlmaster-%C
     ControlMaster auto
