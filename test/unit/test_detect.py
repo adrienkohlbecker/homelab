@@ -1176,20 +1176,11 @@ class TestCmdPackerUbuntu:
 
 
 class TestCmdEmit:
-    @staticmethod
-    def _parse_kv(text: str) -> dict[str, str]:
-        result = {}
-        for line in text.strip().splitlines():
-            if "=" in line:
-                k, _, v = line.partition("=")
-                result[k] = v
-        return result
-
     def test_basic_emit(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
         rc = detect._cmd_emit(["--matrix", '["alpha:box","beta:minimal"]'])
         assert rc == 0
-        out = self._parse_kv(capsys.readouterr().out)
+        out = _parse_kv(capsys.readouterr().out)
         assert json.loads(out["matrix_jammy"]) == ["alpha:box"]
         assert json.loads(out["matrix_minimal"]) == ["beta:minimal"]
         assert json.loads(out["matrix_noble"]) == []
@@ -1203,7 +1194,7 @@ class TestCmdEmit:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
         rc = detect._cmd_emit(["--matrix", "[]", "--packer-changed", "true"])
         assert rc == 0
-        out = self._parse_kv(capsys.readouterr().out)
+        out = _parse_kv(capsys.readouterr().out)
         assert out["packer_changed"] == "true"
         assert out["ci_image_changed"] == "false"
 
@@ -1211,14 +1202,14 @@ class TestCmdEmit:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
         rc = detect._cmd_emit(["--matrix", "[]", "--ci-image-changed", "true"])
         assert rc == 0
-        out = self._parse_kv(capsys.readouterr().out)
+        out = _parse_kv(capsys.readouterr().out)
         assert out["ci_image_changed"] == "true"
 
     def test_packer_sources(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
         rc = detect._cmd_emit(["--matrix", "[]", "--inputs-sources", "lab pug"])
         assert rc == 0
-        out = self._parse_kv(capsys.readouterr().out)
+        out = _parse_kv(capsys.readouterr().out)
         assert json.loads(out["packer_sources"]) == ["lab", "pug"]
         assert json.loads(out["packer_sources_box"]) == []
         assert json.loads(out["packer_sources_lab"]) == ["lab"]
@@ -1228,7 +1219,7 @@ class TestCmdEmit:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
         rc = detect._cmd_emit(["--matrix", "[]"])
         assert rc == 0
-        out = self._parse_kv(capsys.readouterr().out)
+        out = _parse_kv(capsys.readouterr().out)
         assert json.loads(out["packer_ubuntu_box"]) == ["jammy", "noble", "resolute"]
         assert json.loads(out["packer_ubuntu_lab"]) == ["jammy", "noble", "resolute"]
         assert json.loads(out["packer_ubuntu_pug"]) == ["jammy", "noble", "resolute"]
@@ -1238,7 +1229,7 @@ class TestCmdEmit:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
         rc = detect._cmd_emit(["--matrix", "[]", "--inputs-ubuntu", "noble"])
         assert rc == 0
-        out = self._parse_kv(capsys.readouterr().out)
+        out = _parse_kv(capsys.readouterr().out)
         assert json.loads(out["packer_ubuntu_box"]) == ["noble"]
         assert json.loads(out["packer_ubuntu_lab"]) == ["noble"]
 
@@ -1255,7 +1246,7 @@ class TestCmdEmit:
         assert rc == 0
         assert capsys.readouterr().out == ""
         content = gh_out.read_text()
-        kv = self._parse_kv(content)
+        kv = _parse_kv(content)
         assert json.loads(kv["matrix_jammy"]) == ["alpha:box"]
         assert json.loads(kv["packer_sources"]) == ["box", "pug", "lab", "hetzner"]
         assert json.loads(kv["packer_sources_lab"]) == ["lab"]
@@ -1280,7 +1271,7 @@ class TestCmdEmit:
         )
         rc = detect._cmd_emit(["--matrix", matrix])
         assert rc == 0
-        out = self._parse_kv(capsys.readouterr().out)
+        out = _parse_kv(capsys.readouterr().out)
         assert json.loads(out["matrix_jammy"]) == ["alpha:box"]
         assert json.loads(out["matrix_noble"]) == ["net:box_deps:noble"]
         assert json.loads(out["matrix_resolute"]) == ["apt:box:resolute"]
