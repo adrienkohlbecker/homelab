@@ -52,6 +52,7 @@ CI_IMAGE_INPUT_PATTERNS: list[str] = [
     r"pyproject\.toml",
     r"uv\.lock",
     r"packer/qemu\.pkr\.hcl",
+    r"packer/hcloud_worker\.pkr\.hcl",
 ]
 
 FULL_UNIVERSE_RE = re.compile(r"^(" + "|".join(FULL_UNIVERSE_PATTERNS) + r")$")
