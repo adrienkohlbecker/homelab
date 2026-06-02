@@ -142,36 +142,37 @@ def find_image(argv, flags_no_value):
     return None
 
 
-def _get_property(unit_path, prop):
+def _get_properties(unit_path, props):
+    """Fetch multiple properties in a single busctl call.
+
+    busctl outputs one JSON object per property, one per line.
+    Returns a dict mapping property name to its parsed JSON object,
+    or an empty dict on failure.
+    """
     result = subprocess.run(
         [
             "busctl",
             "--json=short",
+            "--timeout=5",
             "get-property",
             "org.freedesktop.systemd1",
             f"/org/freedesktop/systemd1/unit/{unit_path}",
             "org.freedesktop.systemd1.Service",
-            prop,
-        ],
+        ]
+        + list(props),
         capture_output=True,
         text=True,
         check=False,
     )
     if result.returncode != 0:
-        return None
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return None
-
-
-def _get_user(unit_path):
-    """Return the unit's User= as a string; "" if unset (systemd default of root)."""
-    obj = _get_property(unit_path, "User")
-    if not obj:
-        return ""
-    data = obj.get("data")
-    return data if isinstance(data, str) else ""
+        return {}
+    out = {}
+    for line, prop in zip(result.stdout.splitlines(), props):
+        try:
+            out[prop] = json.loads(line)
+        except json.JSONDecodeError:
+            pass  # skip unparseable lines
+    return out
 
 
 def extract_images(name):
@@ -182,10 +183,12 @@ def extract_images(name):
     unit_path = bus_label_escape(name)
     flags_no_value = _parse_run_help()
 
+    all_props = _get_properties(unit_path, list(_EXEC_PROPS) + ["User"])
+
     images = set()
     unresolved = []
     for prop in _EXEC_PROPS:
-        obj = _get_property(unit_path, prop)
+        obj = all_props.get(prop)
         if not obj:
             continue
         for entry in obj.get("data") or []:
@@ -199,7 +202,15 @@ def extract_images(name):
                 images.add(image)
             else:
                 unresolved.append(" ".join(str(a) for a in argv))
-    return sorted(images), _get_user(unit_path), unresolved
+
+    user_obj = all_props.get("User")
+    user = ""
+    if user_obj:
+        data = user_obj.get("data")
+        if isinstance(data, str):
+            user = data
+
+    return sorted(images), user, unresolved
 
 
 def main():
