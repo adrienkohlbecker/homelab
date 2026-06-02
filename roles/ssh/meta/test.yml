@@ -1,2 +1,9 @@
+# Release-divergent: the stock-Subsystem comment-out (tasks/main.yml) exists
+# because jammy's OpenSSH 8.9 treats a duplicate Subsystem as fatal, while
+# noble's 9.6 tolerates it (first-match-wins). The noble cell exercises that
+# tolerant path plus the 9.x crypto/auth surface; resolute takes the same 9.x
+# path so it would add no coverage.
 machines:
   box:
+ubuntu:
+  - noble
