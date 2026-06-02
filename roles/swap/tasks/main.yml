@@ -94,14 +94,34 @@
       primarycache: metadata
       secondarycache: none
       com.sun:auto-snapshot: 'false'
+  register: swap_zvol_created
+  become: true
+  tags:
+    - swap
+
+# After a zvol grow the old swap header still encodes the original size;
+# swapon would silently use only the old capacity. Deactivate first so
+# mkswap can re-stamp the full volume.
+- name: Deactivate swap before zvol re-format on grow
+  when:
+    - swap_zvol is defined and zfs_root
+    - swap_zvol_created.changed
+    - swap_zvol_current.rc == 0
+  command: swapoff /dev/zvol/{{ swap_zvol.dataset }}
+  register: swap_zvol_swapoff
+  changed_when: swap_zvol_swapoff.rc == 0
+  failed_when:
+    - swap_zvol_swapoff.rc != 0
+    - "'No such file or directory' not in swap_zvol_swapoff.stderr"
+    - "'Invalid argument' not in swap_zvol_swapoff.stderr"
   become: true
   tags:
     - swap
 
 # blkid exits 2 with no signature; treat that as "needs mkswap".
 - name: Detect swap signature on zvol
-  when: swap_zvol is defined
-  command: blkid -s TYPE -o value /dev/zvol/{{ swap_zvol.dataset }}
+  when: swap_zvol is defined and zfs_root
+  command: blkid -p -s TYPE -o value /dev/zvol/{{ swap_zvol.dataset }}
   register: swap_zvol_blkid
   changed_when: false
   failed_when: false
@@ -112,8 +132,8 @@
 
 - name: Format swap on zvol
   when:
-    - swap_zvol is defined
-    - swap_zvol_blkid.stdout | default('') != 'swap'
+    - swap_zvol is defined and zfs_root
+    - swap_zvol_blkid.stdout | default('') != 'swap' or swap_zvol_created.changed
   command: mkswap -f /dev/zvol/{{ swap_zvol.dataset }}
   changed_when: true
   become: true
@@ -124,20 +144,21 @@
 # unit wait for ZFS to finish importing pools and exposing zvols at
 # boot.
 - name: Add zvol swap to /etc/fstab
-  when: swap_zvol is defined
+  when: swap_zvol is defined and zfs_root
   mount:
     path: none
     src: /dev/zvol/{{ swap_zvol.dataset }}
     fstype: swap
-    opts: "{{ swap_zvol.opts | default('defaults,nofail,x-systemd.requires=zfs-volumes.target') }}"
+    opts: "{{ swap_zvol.opts | default('defaults,nofail,pri=10,x-systemd.requires=zfs-volumes.target') }}"
     state: present
+    backup: true
   become: true
   tags:
     - swap
 
 - name: Activate zvol swap
-  when: swap_zvol is defined
-  command: swapon /dev/zvol/{{ swap_zvol.dataset }}
+  when: swap_zvol is defined and zfs_root
+  command: swapon -p 10 /dev/zvol/{{ swap_zvol.dataset }}
   register: swap_zvol_swapon
   changed_when: swap_zvol_swapon.rc == 0
   failed_when:
@@ -150,21 +171,34 @@
 #######################################################################
 # Raw-partition swap (no formatting; takes the device as-is)
 #######################################################################
+- name: Verify partition carries a swap signature
+  when: swap_partition is defined
+  command: blkid -p -s TYPE -o value {{ swap_partition.device }}
+  register: swap_partition_blkid
+  changed_when: false
+  check_mode: false
+  become: true
+  failed_when:
+    - swap_partition_blkid.stdout | default('') != 'swap'
+  tags:
+    - swap
+
 - name: Add partition swap to /etc/fstab
   when: swap_partition is defined
   mount:
     path: none
     src: '{{ swap_partition.device }}'
     fstype: swap
-    opts: "{{ swap_partition.opts | default('defaults,nofail,discard') }}"
+    opts: "{{ swap_partition.opts | default('defaults,nofail,discard,pri=10') }}"
     state: present
+    backup: true
   become: true
   tags:
     - swap
 
 - name: Activate partition swap
   when: swap_partition is defined
-  command: swapon {{ swap_partition.device }}
+  command: swapon -p 10 {{ swap_partition.device }}
   register: swap_partition_swapon
   changed_when: swap_partition_swapon.rc == 0
   failed_when:
