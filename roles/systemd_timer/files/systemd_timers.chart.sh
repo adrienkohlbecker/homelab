@@ -24,42 +24,48 @@ systemd_timers_update_every=60
 systemd_timers_priority=90100
 
 systemd_timers_meta_dir="${systemd_timers_meta_dir:-/etc/netdata/charts.d/systemd_timers.d}"
+systemd_timers_stamp_dir="${systemd_timers_stamp_dir:-/var/lib/systemd/timers}"
 
 # Netdata chart/dim ids must be alnum + underscore.
 _systemd_timers_safe() {
   printf '%s' "$1" | tr -c '[:alnum:]_' '_'
 }
 
-# LastTriggerUSec prints as a human date ("Thu 2026-05-14 12:00:00 UTC")
-# or "n/a" if the timer has never fired. `--timestamp=us` would give raw
-# microseconds but only landed in systemd 252; jammy ships 249. LC_ALL=C
-# pins the date format so `date -d` can always parse it.
+# Last-fire time = the mtime of systemd's persistent trigger stamp. Every
+# timer sets Persistent=true (timer.j2), so systemd writes
+# /var/lib/systemd/timers/stamp-<name>.timer on each elapse. Reading the
+# stamp beats `systemctl show LastTriggerUSec`: the stamp survives both
+# reboots and unit reloads, whereas LastTriggerUSec blanks to n/a whenever
+# the .timer is re-enabled -- which every converge that rewrites the unit
+# does -- and would then read as "never fired". No stamp => never fired
+# (the caller falls back to install time). Reads only coreutils, so the
+# collector needs no systemctl and can't be tripped by a transient D-Bus
+# hiccup.
 _systemd_timers_last_trigger_epoch() {
-  local raw
-  raw=$(LC_ALL=C systemctl show --value -p LastTriggerUSec "$1.timer" 2>/dev/null)
-  if [ -z "$raw" ] || [ "$raw" = "n/a" ]; then
+  local stamp="${systemd_timers_stamp_dir}/stamp-$1.timer"
+  if [ -f "$stamp" ]; then
+    stat -c %Y "$stamp" 2>/dev/null || printf 0
+  else
     printf 0
-    return
   fi
-  LC_ALL=C date -d "$raw" +%s 2>/dev/null || printf 0
 }
 
 systemd_timers_check() {
-  command -v systemctl >/dev/null 2>&1 || {
-    error "systemd_timers: systemctl missing"
-    return 1
-  }
   # check() always succeeds so charts.d.plugin keeps the module enabled
   # even when no timers are registered yet. update() handles the empty
   # case (glob expands to no .conf files -> empty for-loop -> no output).
-  # The metadata dir itself is owned by ansible (systemd_timer/install.yml).
+  # Reads only coreutils (stat/awk/basename/date), so there is no external
+  # dependency to probe. The metadata dir is owned by ansible
+  # (systemd_timer/install.yml).
   return 0
 }
 
 # Charts are emitted lazily from update() the first time each timer is
 # observed (and re-emitted on plugin restart). Lets timers added after
-# netdata starts surface without a restart. Removed timers fall out of
-# the scan and netdata auto-obsoletes their charts.
+# netdata starts surface without a restart. Removed timers are obsoleted
+# explicitly by update()'s obsoletion sweep so their chart and its bound
+# overdue alert are reaped promptly, rather than lingering until netdata's
+# auto-stale timeout.
 systemd_timers_create() {
   return 0
 }
@@ -68,6 +74,7 @@ declare -A _systemd_timers_seen
 
 systemd_timers_update() {
   local f name period installed last age overdue safe now
+  declare -A present
   now=$(date +%s)
   for f in "${systemd_timers_meta_dir}"/*.conf; do
     [ -f "$f" ] || continue
@@ -77,6 +84,7 @@ systemd_timers_update() {
       error "systemd_timers: $f missing or invalid period_secs"
       continue
     fi
+    present[$name]=1
     safe=$(_systemd_timers_safe "$name")
     if [ -z "${_systemd_timers_seen[$name]:-}" ]; then
       cat <<EOF
@@ -109,6 +117,19 @@ SET age_secs = $age
 SET overdue = $overdue
 END
 EOF
+  done
+  # Obsoletion sweep: a timer we charted before whose metadata file has since
+  # vanished (role `remove`) gets its CHART re-emitted with the `obsolete`
+  # option, so netdata hides and reaps both the chart and its bound overdue
+  # alert promptly instead of waiting for the auto-stale timeout. Iterating
+  # the key snapshot makes the in-loop unset safe.
+  for name in "${!_systemd_timers_seen[@]}"; do
+    [ -n "${present[$name]:-}" ] && continue
+    safe=$(_systemd_timers_safe "$name")
+    cat <<EOF
+CHART systemd_timers.${safe} '' "systemd timer freshness: ${name}" "secs" systemd_timers systemd.timer_lag area ${systemd_timers_priority} ${systemd_timers_update_every} obsolete
+EOF
+    unset '_systemd_timers_seen[$name]'
   done
   return 0
 }

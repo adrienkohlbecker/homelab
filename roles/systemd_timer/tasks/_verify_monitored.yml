@@ -1,76 +1,69 @@
 # Contracts 3+4: monitored timer (monitor: true) writes netdata metadata
-# with the right period, and the systemd_timers charts.d collector emits a
-# chart per timer with age_secs / overdue tracking.
+# with period_secs derived from on_calendar, and the systemd_timers charts.d
+# collector emits a chart per timer with age_secs / overdue tracking read
+# from the persistent trigger stamp (/var/lib/systemd/timers/stamp-*.timer).
 #
-# A separate file imported under an x86_64 gate: the collector
-# rides netdata-plugin-chartsd, which cannot install on aarch64 (its
-# `Depends: netdata (= 1.46.3)` is unsatisfiable against the lagging arm64
-# build — see roles/netdata/tasks/charts_d.yml). Without the collector the
+# A separate file imported under an x86_64 gate: the collector rides
+# netdata-plugin-chartsd, which cannot install on aarch64 (its
+# `Depends: netdata (= <pinned>)` is unsatisfiable against the lagging arm64
+# build -- see roles/netdata/tasks/charts_d.yml). Without the collector the
 # charts never register, so these assertions have nothing to probe. The
 # local arm64 test box is the only aarch64 host; all prod is x86_64.
+#
+# Both fixtures use the same hourly OnCalendar (period_secs=3600 derived),
+# are stopped so systemd can't fire them and rewrite the stamp underneath
+# us, then have their stamp planted directly: recent => mtime now
+# (overdue=0), overdue => mtime 3h ago (age > 2*3600 -> overdue=1). Faking
+# the stamp keeps the test deterministic (no waiting on a real fire or
+# racing QEMU clock skew) while exercising exactly what the collector reads.
 
 # ============================================================
 # Contract 3+4: monitored timer + overdue detection via netdata
 # ============================================================
-# _verify_timer_recent fires immediately (OnCalendar matches every
-# second) so LastTriggerUSec lands within ~2-3 seconds; then we stop
-# the timer to freeze the value. Expected: age_secs small, overdue=0.
-- name: _verify | Install recent monitored fixture (frequency=hourly)
+- name: _verify | Install recent monitored fixture (hourly)
   import_role:
     name: systemd_timer
     tasks_from: install
   vars:
     systemd_timer_args:
       name: _verify_timer_recent
-      description: monitored fixture, fires immediately
-      frequency: hourly
-      on_calendar: "*-*-* *:*:*"
+      description: monitored fixture, recent stamp
+      on_calendar: "*-*-* *:00:00"
       exec_start: /bin/true
 
-# Manually wait for the timer to fire (LastTriggerUSec moves off n/a)
-# rather than `sleep N`, so the test races less with QEMU clock skew.
-- name: _verify | Wait for the recent timer to fire at least once
-  shell: |
-    for i in $(seq 1 30); do
-      last=$(LC_ALL=C systemctl show --value -p LastTriggerUSec _verify_timer_recent.timer 2>/dev/null)
-      if [ -n "$last" ] && [ "$last" != "n/a" ]; then
-        echo "$last"
-        exit 0
-      fi
-      sleep 1
-    done
-    echo "timer never fired after 30s" >&2
-    exit 1
-  changed_when: false
-  become: true
-
-- name: _verify | Stop the timer to freeze LastTriggerUSec
-  systemd:
-    name: _verify_timer_recent.timer
-    state: stopped
-  become: true
-
-# _verify_timer_overdue: OnCalendar in 2099 so it never fires; backdate
-# the metadata file's mtime to 3h ago so the collector treats it as
-# "installed >2*hourly_period ago, never fired" → overdue=1.
-- name: _verify | Install overdue monitored fixture (frequency=hourly)
+- name: _verify | Install overdue monitored fixture (hourly)
   import_role:
     name: systemd_timer
     tasks_from: install
   vars:
     systemd_timer_args:
       name: _verify_timer_overdue
-      description: monitored fixture, never fires
-      frequency: hourly
-      on_calendar: "2099-01-01 00:00:00"
+      description: monitored fixture, stale stamp
+      on_calendar: "*-*-* *:00:00"
       exec_start: /bin/true
 
-- name: _verify | Backdate overdue fixture's metadata mtime to 3h ago
-  command: touch -d "3 hours ago" /etc/netdata/charts.d/systemd_timers.d/_verify_timer_overdue.conf
+# Stop both timers so systemd won't fire them and overwrite the stamps we
+# plant below.
+- name: _verify | Stop fixture timers to freeze their stamps
+  systemd:
+    name: "{{ item }}.timer"
+    state: stopped
+  loop:
+    - _verify_timer_recent
+    - _verify_timer_overdue
+  become: true
+
+- name: _verify | Plant a fresh stamp (now) for the recent fixture
+  command: touch /var/lib/systemd/timers/stamp-_verify_timer_recent.timer
   changed_when: false
   become: true
 
-- name: _verify | Assert metadata files exist with the right period_secs
+- name: _verify | Plant a stale stamp (3h ago) for the overdue fixture
+  command: touch -d "3 hours ago" /var/lib/systemd/timers/stamp-_verify_timer_overdue.timer
+  changed_when: false
+  become: true
+
+- name: _verify | Read both fixtures' metadata files
   command: cat /etc/netdata/charts.d/systemd_timers.d/{{ item }}.conf
   register: _systemd_timer_meta
   changed_when: false
@@ -78,7 +71,7 @@
     - _verify_timer_recent
     - _verify_timer_overdue
   become: true
-- name: _verify | Assert period_secs=3600 (hourly) in both metadata files
+- name: _verify | Assert period_secs=3600 derived from hourly on_calendar
   assert:
     that:
       - "'period_secs=3600' in item.stdout"
@@ -177,18 +170,22 @@
     systemd_timer_args:
       name: _verify_timer_overdue
 
-- name: _verify | Stat metadata files after removal (should NOT exist)
+# Asserts both the metadata cleanup and remove.yml's persistent-stamp drop.
+- name: _verify | Stat metadata + stamp files after removal (should NOT exist)
   stat:
-    path: /etc/netdata/charts.d/systemd_timers.d/{{ item }}.conf
+    path: "{{ item }}"
   loop:
-    - _verify_timer_recent
-    - _verify_timer_overdue
+    - /etc/netdata/charts.d/systemd_timers.d/_verify_timer_recent.conf
+    - /etc/netdata/charts.d/systemd_timers.d/_verify_timer_overdue.conf
+    - /var/lib/systemd/timers/stamp-_verify_timer_recent.timer
+    - /var/lib/systemd/timers/stamp-_verify_timer_overdue.timer
   register: _systemd_timer_meta_after
-- name: _verify | Assert metadata cleaned up
+  become: true
+- name: _verify | Assert metadata + stamps cleaned up
   assert:
     that:
       - not item.stat.exists
-    fail_msg: "metadata for {{ item.item }} still present"
+    fail_msg: "{{ item.item }} still present after remove"
   loop: "{{ _systemd_timer_meta_after.results }}"
   loop_control:
     label: "{{ item.item }}"

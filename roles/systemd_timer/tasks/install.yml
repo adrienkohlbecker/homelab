@@ -11,12 +11,12 @@
 #                     expands %-specifiers and $-env refs before the
 #                     command reaches the shell (systemd.service(5)).
 #   on_calendar       required; OnCalendar= spec (e.g.
-#                     `*-*-* 00:55:00`, `Sun *-*-* 00:47:00`).
-#   frequency         required iff monitor: true; one of
-#                     hourly/daily/weekly/monthly. Drives the
-#                     period_secs metadata read by the netdata
-#                     systemd_timers charts.d collector to detect
-#                     "overdue" timers (last trigger > 2 * period).
+#                     `*-*-* 00:55:00`, `Sun *-*-* 00:47:00`). When monitor
+#                     is on, the overdue period is derived from this at
+#                     install time (the gap between its next two elapses via
+#                     `systemd-analyze calendar`), so it must describe a
+#                     repeating schedule -- a one-shot calendar has no period
+#                     and can't be monitored.
 #   description       optional; falls back to name.
 #   randomized_delay_sec  optional; emits RandomizedDelaySec=<n>.
 #   fixed_random_delay    optional bool; emits FixedRandomDelay=yes|no.
@@ -37,8 +37,10 @@
 #                     run is being terminated (by TimeoutStartSec or
 #                     by manual systemctl stop).
 #   monitor           default true; writes the per-timer metadata file
-#                     the netdata systemd_timers collector consumes
-#                     for the overdue check. Set false for one-off
+#                     the netdata systemd_timers collector consumes for
+#                     the overdue check. Auto-disabled for user-scope
+#                     timers (user != root), which the collector can't
+#                     observe. Set false for one-off / non-repeating
 #                     timers that don't need cadence monitoring (e.g.
 #                     the role's own _verify fixtures).
 #   user              default 'root'; non-root drives the named user's
@@ -57,9 +59,9 @@
 #                     sub-minute fires (e.g. every 30s via OnCalendar=
 #                     *:*:0/30) set this to a tighter value like "1s" or
 #                     the timer drifts past the interval. Pair with
-#                     monitor: false — sub-minute cadences don't map to
-#                     the netdata overdue-detector's hourly/daily/weekly/
-#                     monthly buckets.
+#                     monitor: false — a sub-minute derived period gives a
+#                     grace window (2 * period) too tight to survive normal
+#                     collector lag, so the overdue check would false-alarm.
 #   on_active_sec     optional; emits OnActiveSec=<v> in [Timer]. Fires
 #                     this many seconds after the timer activates, in
 #                     addition to the OnCalendar schedule. "0" → fire
@@ -126,21 +128,6 @@
       systemd_timer {{ systemd_timer_args.name }}: run_as is only valid
       for system-scope units (user: root). user-scope units already
       run as the named user; User= in /etc/systemd/user/ is invalid.
-
-# The frequency word maps to period_secs in the netdata-side metadata
-# file; an unknown value would silently disable the overdue check for
-# the job. Fail loud at install time instead. Only gated when monitor
-# is on; one-off timers (monitor: false) legitimately have no cadence.
-- name: install | Validate frequency for {{ systemd_timer_args.name }}
-  when: _systemd_timer_monitor
-  assert:
-    that:
-      - systemd_timer_args.frequency is defined
-      - systemd_timer_args.frequency in ['hourly', 'daily', 'weekly', 'monthly']
-    fail_msg: >-
-      systemd_timer {{ systemd_timer_args.name }}: frequency must be one of
-      hourly/daily/weekly/monthly when monitor is enabled (got
-      {{ systemd_timer_args.frequency | default('<unset>') }}).
 
 - name: install | Validate environment keys for {{ systemd_timer_args.name }}
   when: systemd_timer_args.environment is defined
@@ -210,60 +197,6 @@
       dest: "{{ systemd_timer_args.name }}.timer"
       user: "{{ _systemd_timer_user }}"
 
-# Drop the per-timer metadata file the netdata systemd_timers collector
-# consumes. Its mtime doubles as "installed_at" -- the collector counts
-# from there until the first trigger so a freshly-installed timer
-# doesn't immediately alarm overdue. period_secs is computed from the
-# validated frequency above.
-#
-# The metadata file below is owned by netdata:netdata so the collector
-# can read it without elevated privileges. On prod the netdata role
-# installs that user before any timer consumer runs; in the test
-# harness a role's standalone run may not have netdata installed yet,
-# and the chown below would fail. Idempotent precondition that's a
-# no-op when the user already exists, removing the need for each
-# consumer's _setup.yml to redundantly create it.
-- name: install | Ensure netdata user exists for metadata file ownership
-  when: _systemd_timer_monitor
-  user:
-    name: netdata
-    system: true
-    create_home: false
-    shell: /usr/sbin/nologin
-  become: true
-
-# Ensure the parent dir exists -- this task can fire before netdata is
-# installed (site.yml runs many timer-consuming roles before the netdata
-# block), so the .d directory may not yet exist. Owned by root because
-# we don't know whether netdata has even been installed yet; netdata
-# itself is fine reading a root:root parent so long as our metadata
-# files inside are netdata:netdata.
-- name: install | Ensure systemd_timers metadata dir exists
-  when: _systemd_timer_monitor
-  file:
-    path: /etc/netdata/charts.d/systemd_timers.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
-- name: install | Write systemd_timers metadata for {{ systemd_timer_args.name }}
-  when:
-    - _systemd_timer_monitor
-    - not ansible_check_mode
-  copy:
-    dest: /etc/netdata/charts.d/systemd_timers.d/{{ systemd_timer_args.name }}.conf
-    content: |
-      # Managed by ansible roles/systemd_timer/tasks/install.yml.
-      # Consumed by /usr/libexec/netdata/charts.d/systemd_timers.chart.sh.
-      period_secs={{ {'hourly': 3600, 'daily': 86400, 'weekly': 604800, 'monthly': 2592000}[systemd_timer_args.frequency] }}
-    owner: netdata
-    group: netdata
-    mode: "0644"
-    backup: true
-  become: true
-
 # Skip enable+start when systemd_unit just (mock-)wrote either unit file
 # in check-mode — the file isn't actually on disk, so `systemctl enable`
 # would fail with "Could not find the requested service". Mirrors the
@@ -282,3 +215,91 @@
         {{ not (ansible_check_mode
                 and (vars[systemd_timer_args.name ~ '_service_result'].changed
                      or vars[systemd_timer_args.name ~ '_timer_result'].changed)) }}
+
+# --- netdata overdue monitoring -------------------------------------------
+# Register the timer with the netdata systemd_timers collector. Done after
+# enable+start so a timer that fails to come up isn't registered for
+# monitoring, and skipped entirely for user-scope timers (monitor was
+# auto-disabled above -- the collector reads system-scope stamps only).
+
+# period_secs for the overdue check is the gap between the timer's next two
+# elapses, computed from on_calendar by systemd's own parser (no hand-kept
+# frequency->seconds table). A non-repeating calendar yields a single elapse
+# (no "Iter. #2") and can't be monitored -- fail loud so the caller sets
+# monitor: false. on_calendar is passed via the environment so its value
+# never lands in the script text (no quoting/escaping hazards). The two-
+# elapse delta is constant for a regular schedule; a DST-straddling day can
+# shift it by an hour, which the 2 * period grace absorbs.
+- name: install | Derive overdue period from on_calendar for {{ systemd_timer_args.name }}
+  when:
+    - _systemd_timer_monitor
+    - not ansible_check_mode
+  shell: |
+    set -euo pipefail
+    out=$(LC_ALL=C systemd-analyze calendar --iterations=2 "$ON_CALENDAR")
+    e1=$(printf '%s\n' "$out" | awk '/Next elapse:/{sub(/^[^:]*: /, ""); print; exit}')
+    e2=$(printf '%s\n' "$out" | awk '/Iter\. #2:/{sub(/^[^:]*: /, ""); print; exit}')
+    if [ -z "$e2" ]; then
+      echo "on_calendar=$ON_CALENDAR does not repeat (no second elapse); set monitor: false for one-shot timers" >&2
+      exit 1
+    fi
+    s1=$(LC_ALL=C date -d "$e1" +%s)
+    s2=$(LC_ALL=C date -d "$e2" +%s)
+    echo $((s2 - s1))
+  args:
+    executable: /bin/bash
+  environment:
+    ON_CALENDAR: "{{ systemd_timer_args.on_calendar }}"
+  register: _systemd_timer_period
+  changed_when: false
+  become: true
+
+# The metadata file is owned by netdata:netdata so the collector reads it
+# unprivileged. On prod the netdata role installs that user before any timer
+# consumer runs; in the test harness a standalone role run may not have
+# netdata yet, and the chown below would fail. Idempotent precondition that
+# no-ops when the user exists, sparing each consumer's _setup.yml from
+# redundantly creating it.
+- name: install | Ensure netdata user exists for metadata file ownership
+  when: _systemd_timer_monitor
+  user:
+    name: netdata
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+  become: true
+
+# Ensure the parent dir exists -- this can fire before netdata is installed
+# (site.yml runs many timer-consuming roles before the netdata block), so the
+# .d directory may not yet exist. Owned by root because netdata may not be
+# installed yet; netdata reads a root:root parent fine so long as the
+# metadata files inside are netdata:netdata.
+- name: install | Ensure systemd_timers metadata dir exists
+  when: _systemd_timer_monitor
+  file:
+    path: /etc/netdata/charts.d/systemd_timers.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+# The file's mtime doubles as "installed_at" -- the collector counts from
+# there until the first trigger so a freshly-installed timer doesn't alarm
+# overdue before its first fire.
+- name: install | Write systemd_timers metadata for {{ systemd_timer_args.name }}
+  when:
+    - _systemd_timer_monitor
+    - not ansible_check_mode
+  copy:
+    dest: /etc/netdata/charts.d/systemd_timers.d/{{ systemd_timer_args.name }}.conf
+    content: |
+      # Managed by ansible roles/systemd_timer/tasks/install.yml.
+      # Consumed by /usr/libexec/netdata/charts.d/systemd_timers.chart.sh.
+      # period_secs is derived from on_calendar via systemd-analyze calendar.
+      period_secs={{ _systemd_timer_period.stdout }}
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+  become: true
