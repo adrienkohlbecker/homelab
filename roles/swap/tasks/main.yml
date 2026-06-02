@@ -35,6 +35,21 @@
 # activation at next boot via the generator.
 
 #######################################################################
+# Input validation
+#######################################################################
+- name: Validate swap input schema
+  assert:
+    that:
+      - swap_zvol is not defined or (swap_zvol.dataset is defined and swap_zvol.size is defined)
+      - swap_partition is not defined or swap_partition.device is defined
+      - swap_zram is not defined or swap_zram.size is defined
+    fail_msg: >-
+      Missing required keys -- swap_zvol needs .dataset + .size,
+      swap_partition needs .device, swap_zram needs .size.
+  tags:
+    - swap
+
+#######################################################################
 # Zvol-backed swap
 #######################################################################
 - name: Read current swap zvol size
