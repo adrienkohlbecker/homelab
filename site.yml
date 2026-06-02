@@ -162,6 +162,7 @@
     - name: Settle before cycling the next host
       pause:
         minutes: 2
+        prompt: "Waiting 2 min for services to resettle before cycling the next host (Ctrl+C then C to skip)"
       when:
         - reboot_required.stat.exists
         - ansible_play_hosts_all | length > 1

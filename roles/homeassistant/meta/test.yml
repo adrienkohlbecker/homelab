@@ -7,7 +7,7 @@ skip:
   box_deps: >-
     nginx site setup loses the mitogen sudo context mid-converge in CI
     (kex_exchange_identification: Connection reset by peer; ContextService
-    refcount 0). Same mitogen-disconnect family as the reboot cells, no
-    reboot involved. Passes solo; the differentiating factor in the live
-    CI matrix is not yet identified. Quarantined so it can't gate a green
-    run; remove once fixed.
+    refcount 0). No reboot involved — a distinct mitogen-disconnect
+    trigger from the reboot cells. Passes solo; the differentiating
+    factor in the live CI matrix is not yet identified. Quarantined so
+    it can't gate a green run.

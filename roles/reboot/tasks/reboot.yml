@@ -54,21 +54,25 @@
 
 - name: Reboot the host and wait for it to return
   when: (reboot_args | default({})).condition | default(true)
+  vars:
+    _ra: "{{ reboot_args | default({}) }}"
+    _reboot_pre_delay: "{{ _ra.pre_delay | default(2) | int }}"
+    _reboot_delay: "{{ _ra.delay | default(15) | int }}"
+    _reboot_timeout: "{{ _ra.timeout | default(120) | int }}"
+    _reboot_throttle: "{{ _ra.throttle | default(1) | int }}"
   block:
     - name: Trigger reboot
       become: true
-      vars:
-        _reboot_pre_delay: "{{ (reboot_args | default({})).pre_delay | default(2) | int }}"
       shell: |
         set -euo pipefail
         sleep {{ _reboot_pre_delay }}
         systemctl reboot
       args:
         executable: /bin/bash
-      async: 1
+      async: 60
       poll: 0
       changed_when: false
-      throttle: "{{ (reboot_args | default({})).throttle | default(1) | int }}"
+      throttle: "{{ _reboot_throttle }}"
 
     - name: Reset the connection so mitogen rebuilds its context tree
       # Drops mitogen's dead ssh stream + stale sudo.root child so the
@@ -80,9 +84,9 @@
 
     - name: Wait for the host to come back after reboot
       wait_for_connection:
-        delay: "{{ (reboot_args | default({})).delay | default(15) | int }}"
-        timeout: "{{ (reboot_args | default({})).timeout | default(120) | int }}"
-      throttle: "{{ (reboot_args | default({})).throttle | default(1) | int }}"
+        delay: "{{ _reboot_delay }}"
+        timeout: "{{ _reboot_timeout }}"
+      throttle: "{{ _reboot_throttle }}"
 
     - name: Re-gather facts so they reflect the post-reboot state
       setup:

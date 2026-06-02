@@ -91,9 +91,8 @@ def skip_for(role: str) -> set[tuple[str, str]]:
     you iterate on the fix that lets the skip be removed.
     """
     skip = _read_role_meta(role).get("skip") or {}
-    specs = skip.keys() if isinstance(skip, dict) else skip
     out: set[tuple[str, str]] = set()
-    for spec in specs:
+    for spec in skip:
         parts = str(spec).split(":")
         machine = parts[0]
         ubuntu = parts[1] if len(parts) > 1 else DEFAULT_UBUNTU
