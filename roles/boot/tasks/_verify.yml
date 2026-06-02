@@ -220,3 +220,30 @@
     that: not _efi_result.changed
     fail_msg: >-
       EFI boot entries need changes: {{ _efi_result.actions | join(', ') }}
+
+# --- /tmp mount ---
+
+# tmpfs /tmp -- enabled by tasks/main.yml, applied at the reboot above. Assert
+# both the next-boot intent (is-enabled, every machine) and, where we actually
+# rebooted, the live end-state (/tmp is really tmpfs) rather than just intent.
+- name: _verify | Tmp.mount is enabled # noqa: command-instead-of-module
+  command: systemctl is-enabled tmp.mount
+  changed_when: false
+  become: true
+  register: _boot_verify_tmp_enabled
+  failed_when: _boot_verify_tmp_enabled.stdout not in ['enabled', 'enabled-runtime', 'static']
+
+- name: _verify | Read /tmp filesystem type
+  when: not grub_bootloader and ansible_architecture != 'aarch64'
+  command: findmnt -no FSTYPE -T /tmp
+  changed_when: false
+  become: true
+  register: _boot_verify_tmp_fstype
+
+- name: _verify | /tmp is mounted as tmpfs
+  when: not grub_bootloader and ansible_architecture != 'aarch64'
+  assert:
+    that: _boot_verify_tmp_fstype.stdout | trim == 'tmpfs'
+    fail_msg: >-
+      /tmp is '{{ _boot_verify_tmp_fstype.stdout | trim }}', expected tmpfs
+      after the tmp.mount enable + reboot.

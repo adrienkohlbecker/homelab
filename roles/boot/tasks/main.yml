@@ -127,3 +127,68 @@
   import_tasks: efi_entries.yml
   tags:
     - boot
+
+# tmpfs /tmp -- the twin of chroot.sh's `systemctl enable tmp.mount` in the
+# baked image, reproduced so an ansible-from-stock-Ubuntu host gets the same
+# RAM-backed /tmp (it pages out to swap under pressure). jammy/noble ship it as
+# a disabled template under /usr/share/systemd/ -- stage it into place first;
+# resolute ships + pre-enables /usr/lib/systemd/system/tmp.mount, so the stage
+# no-ops there. Enabling only takes effect at the next boot (a live /tmp can't
+# be remounted), so touch reboot-required on a change.
+- name: Probe for the systemd tmp.mount template
+  stat:
+    path: /usr/share/systemd/tmp.mount
+  register: boot_tmp_mount_template
+  become: true
+  tags:
+    - boot
+
+- name: Stage tmp.mount from the systemd template
+  when: boot_tmp_mount_template.stat.exists
+  copy:
+    src: /usr/share/systemd/tmp.mount
+    dest: /etc/systemd/system/tmp.mount
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: boot_tmp_mount_staged
+  become: true
+  tags:
+    - boot
+
+- name: Reload systemd for the staged tmp.mount
+  when:
+    - boot_tmp_mount_staged.changed | default(false)
+    - not (ansible_check_mode and boot_tmp_mount_staged.changed | default(false))
+  systemd:
+    daemon_reload: true
+  become: true
+  tags:
+    - boot
+
+- name: Enable tmpfs /tmp via tmp.mount
+  # In check mode on a fresh host the staging copy above only *reports* it would
+  # create tmp.mount, so systemd can't find the unit to enable. Skip enabling
+  # when the unit is merely pending -- the staging task already covers the diff.
+  when: not (ansible_check_mode and boot_tmp_mount_staged.changed | default(false))
+  systemd:
+    name: tmp.mount
+    enabled: true
+  register: boot_tmp_mount
+  become: true
+  tags:
+    - boot
+
+- name: Ask to reboot after enabling tmp.mount
+  when: boot_tmp_mount.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - boot
