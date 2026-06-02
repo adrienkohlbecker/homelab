@@ -1,7 +1,10 @@
-# box exercises zram + zvol (ZFS-backed); minimal exercises zram-only
-# on ext4 (no zvol, no partition); pug exercises zram + raw-partition swap
-# (the only host with swap_partition — fstab + swapon path in main.yml).
+# box exercises zram + a fresh zvol (ZFS-backed); minimal exercises zram-only
+# on ext4 (no zvol, no partition); pug exercises zram + raw-partition swap (the
+# only host with swap_partition — fstab + swapon path in main.yml); lab
+# exercises the zvol grow→swapoff→mkswap→swapon resequence (8G baked image zvol
+# grown to 16G via host_vars) — the role's only data-destructive path.
 machines:
   box:
   minimal:
   pug:
+  lab:
