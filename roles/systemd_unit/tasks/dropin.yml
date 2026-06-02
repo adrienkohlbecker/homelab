@@ -21,6 +21,21 @@
 # derives copy vs template from src's .j2 suffix — no dispatch flag here.
 # The drop-in name is fixed at override.conf in default mode; absolute
 # mode lets the caller pick any basename (used by journald + resolved).
+- name: dropin | Validate dropin args
+  assert:
+    quiet: true
+    that:
+      - systemd_unit_args is defined
+      - systemd_unit_args is mapping
+      - systemd_unit_args.for is defined
+      - systemd_unit_args.for is string
+      - systemd_unit_args.src is defined
+      - systemd_unit_args.src is string
+    fail_msg: >-
+      systemd_unit_args needs for (parent unit) and src (source filename);
+      got for={{ systemd_unit_args.for | default('<unset>') }},
+      src={{ systemd_unit_args.src | default('<unset>') }}
+
 - name: dropin | Resolve user for {{ systemd_unit_args.for }}
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"

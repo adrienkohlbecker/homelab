@@ -28,6 +28,18 @@
 # role strips .j2 for the on-disk dest. systemd_unit_args.dest overrides
 # the dest path (used by drop-ins to land at <unit>.d/override.conf).
 #
+- name: Validate install args
+  assert:
+    quiet: true
+    that:
+      - systemd_unit_args is defined
+      - systemd_unit_args is mapping
+      - systemd_unit_args.src is defined
+      - systemd_unit_args.src is string
+    fail_msg: >-
+      systemd_unit_args needs src (source filename);
+      got {{ systemd_unit_args | default('<unset>') }}
+
 # Two set_fact tasks because ansible's templating engine resolves all
 # keys in a single set_fact concurrently — a key can't read a sibling
 # defined in the same task. Primitives (caller-var defaulting) first,
