@@ -26,8 +26,6 @@ zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set
   - rpool/ROOT/jammy
 zfs_has_bpool: false
 
-rand_order: 4
-
 # fox runs no onsite pull of its own (empty sources) -- it is a leaf source
 # that lab pulls (lab's zfs_autobackup_sources lists fox -> tank/fox). It still
 # snapshots locally and rsyncs its bak-tagged datasets offsite to bunk: fox

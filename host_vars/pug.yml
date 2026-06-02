@@ -62,8 +62,6 @@ netplan:
 
 hdparm_settings: {}
 
-rand_order: 1
-
 zfs_autobackup_sources:
   - host: lab
     dest_dataset: apoc/lab

@@ -6,6 +6,9 @@ OnCalendar={{ systemd_timer_args.on_calendar }}
 Persistent=true
 {% if systemd_timer_args.randomized_delay_sec is defined %}
 RandomizedDelaySec={{ systemd_timer_args.randomized_delay_sec }}
+{% if systemd_timer_args.fixed_random_delay | default(false) %}
+FixedRandomDelay=yes
+{% endif %}
 {% endif %}
 {% if systemd_timer_args.accuracy_sec is defined %}
 AccuracySec={{ systemd_timer_args.accuracy_sec }}

@@ -141,9 +141,6 @@
   tags:
     - zfs_autobackup
 
-# rand_order is per-host (1..3) so each host's autosnapshot starts at
-# a deterministic per-host minute — preserves the original cron entry's
-# "space hosts out so services don't stop at the same time" intent.
 - name: Schedule the zfs_autosnapshot timer
   import_role:
     name: systemd_timer
@@ -153,7 +150,9 @@
       name: zfs_autosnapshot
       description: Daily ZFS autosnapshot
       frequency: daily
-      on_calendar: "*-*-* 02:{{ '%02d' | format(rand_order * 10) }}:00"
+      on_calendar: "*-*-* 02:00:00"
+      randomized_delay_sec: 1800
+      fixed_random_delay: true
       exec_start: /usr/local/bin/zfs_autosnapshot
       # Override the helper's 1h default. Snapshotting hundreds of
       # datasets can legitimately take hours; 23h gives the script

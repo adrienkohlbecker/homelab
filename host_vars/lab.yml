@@ -121,8 +121,6 @@ netplan:
 
 hdparm_settings: {}
 
-rand_order: 2
-
 # Onsite pulls lab runs nightly: pug (LAN) plus fox (the Hetzner VPS, reached
 # over wg0 at external_ips.fox). zfs_autobackup_ssh_public_key below is the
 # reverse direction -- the key pug uses to pull lab.
