@@ -47,16 +47,16 @@ PACKER_PATH_PATTERNS: list[str] = [
 ]
 
 # Maps changed-file patterns to the packer sources they affect.
-# "qemu" = box/lab/pug (they share qemu.pkr.hcl and all its scripts).
-# A file matching multiple entries unions the sources. Any packer/ or
-# mise-tasks/packer/ file not explicitly listed falls through to "qemu"
-# (the safe default — unknown files rebuild the QEMU images).
+# "qemu" = all QEMU-based sources (box/lab/pug/hetzner — they share
+# qemu.pkr.hcl, chroot.sh, provision.sh). "hetzner" = the upload step
+# only. Any packer/ or mise-tasks/packer/ file not explicitly listed
+# falls through to "qemu" (safe default).
 PACKER_SOURCE_MAP: list[tuple[str, list[str]]] = [
     (r"packer/hcloud_worker\.pkr\.hcl", ["worker"]),
     (r"packer/scripts/provision_worker\.sh", ["worker"]),
     (r"mise-tasks/packer/worker\.sh", ["worker"]),
     (r"roles/github_runner/vars/main\.yml", ["worker"]),
-    (r"packer/ubuntu_images\.json", ["qemu", "hetzner", "worker"]),
+    (r"packer/ubuntu_images\.json", ["qemu", "worker"]),
     (r"mise-tasks/packer/hetzner\.sh", ["hetzner"]),
     (r"mise-tasks/packer/_hcloud_token\.sh", ["hetzner", "worker"]),
     (r"mise-tasks/packer/hcloud-prune-snapshots\.sh", ["hetzner", "worker"]),
@@ -217,14 +217,14 @@ def compute_packer_sources(
 
     Priority: dispatch input > file-based affected set > full set.
     ``affected`` maps source-map tags (qemu, hetzner) to concrete
-    packer sources: "qemu" expands to box/lab/pug.
+    packer sources: "qemu" expands to all QEMU-based sources.
     """
     if inputs_sources:
         sources = [s for s in inputs_sources.split() if s]
     elif affected is not None:
         concrete: set[str] = set()
         if "qemu" in affected:
-            concrete |= {"box", "lab", "pug"}
+            concrete |= set(ALL_PACKER_SOURCES)
         if "hetzner" in affected:
             concrete.add("hetzner")
         sources = sorted(concrete & set(ALL_PACKER_SOURCES))
