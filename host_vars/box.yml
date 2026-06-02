@@ -136,8 +136,6 @@ netplan:
 
 hdparm_settings: {}
 
-rand_order: 3
-
 # Self-referential single source: exercises the onsite-pull render path under
 # the harness (external_ips lookup + the loop). The pull never runs -- the
 # qemu fixture has no second host and dest_dataset is empty.

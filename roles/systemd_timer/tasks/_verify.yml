@@ -133,6 +133,59 @@
     state: absent
   become: true
 
+# ----- run_as (privilege drop in system-scope unit) -----
+- name: "_verify | Install run_as fixture (monitor: false)"
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_runas
+      description: run_as self-test
+      on_calendar: "*-*-* 23:59:00"
+      exec_start: /bin/sh -c 'id -u > /tmp/_verify_timer_runas.out'
+      monitor: false
+      run_as: nobody
+
+- name: _verify | Trigger the run_as fixture manually  # noqa: command-instead-of-module
+  command: systemctl start --wait _verify_timer_runas.service
+  changed_when: false
+  become: true
+
+- name: _verify | Read run_as fixture output
+  slurp:
+    src: /tmp/_verify_timer_runas.out
+  register: _systemd_timer_runas_out
+  become: true
+
+- name: _verify | Read systemctl show User for run_as fixture  # noqa: command-instead-of-module
+  command: systemctl show -p User --value _verify_timer_runas.service
+  register: _systemd_timer_runas_user
+  changed_when: false
+  become: true
+
+- name: _verify | Functional assertions for run_as
+  vars:
+    _uid: "{{ (_systemd_timer_runas_out.content | b64decode).strip() }}"
+  assert:
+    that:
+      - _systemd_timer_runas_user.stdout == 'nobody'
+      - _uid == '65534'
+
+- name: _verify | Remove the run_as fixture timer
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_runas
+
+- name: _verify | Cleanup run_as fixture output
+  file:
+    path: /tmp/_verify_timer_runas.out
+    state: absent
+  become: true
+
 # ----- stderr_priority -----
 - name: _verify | Capture pre-run timestamp for journal filter
   command: date +%s
@@ -203,6 +256,8 @@
         ENV_OTHER: "value with spaces, and a comma"
       accuracy_sec: 1s
       on_active_sec: "0"
+      randomized_delay_sec: 600
+      fixed_random_delay: true
       additional_service_directives:
         # ProtectSystem=strict makes the whole filesystem read-only
         # except /dev /proc /sys, so the exec_start above can't write
@@ -226,7 +281,7 @@
 
 - name: _verify | Read systemctl show properties for knobs fixture  # noqa: command-instead-of-module
   command: >-
-    systemctl show -p AccuracyUSec,ProtectSystem,ProtectHome
+    systemctl show -p AccuracyUSec,OnActiveUSec,RandomizedDelayUSec,FixedRandomDelay,ProtectSystem,ProtectHome
     _verify_timer_knobs.timer _verify_timer_knobs.service
   register: _systemd_timer_knobs_show
   changed_when: false
@@ -239,6 +294,9 @@
     that:
       - _stdout == "ENV_KEY=knob_value|ENV_OTHER=value with spaces, and a comma"
       - "'AccuracyUSec=1s' in _systemd_timer_knobs_show.stdout"
+      - "'OnActiveUSec=0' in _systemd_timer_knobs_show.stdout"
+      - "'RandomizedDelayUSec=10min' in _systemd_timer_knobs_show.stdout"
+      - "'FixedRandomDelay=yes' in _systemd_timer_knobs_show.stdout"
       - "'ProtectSystem=strict' in _systemd_timer_knobs_show.stdout"
       - "'ProtectHome=yes' in _systemd_timer_knobs_show.stdout"
     fail_msg: |
