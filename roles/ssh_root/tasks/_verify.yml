@@ -6,45 +6,59 @@
 # merge -- the one genuinely functional assertion here. The closing block forces a
 # regeneration to confirm the warn/fail gate in main.yml would catch a real
 # rotation; safe because the box fixture is disposable.
-- name: _verify | Assert /root/.ssh directory exists with mode 0700 owned by root
+- name: _verify | Stat /root/.ssh directory
   stat:
     path: /root/.ssh
   register: _ssh_root_dir
   become: true
-  failed_when: >-
-    not _ssh_root_dir.stat.exists
-    or _ssh_root_dir.stat.mode != '0700'
-    or _ssh_root_dir.stat.pw_name != 'root'
-    or _ssh_root_dir.stat.gr_name != 'root'
 
-- name: _verify | Assert ed25519 private key exists with mode 0600 owned by root
+- name: _verify | Assert /root/.ssh directory exists with mode 0700 owned by root
+  assert:
+    that:
+      - _ssh_root_dir.stat.exists
+      - (_ssh_root_dir.stat.mode | default('')) == '0700'
+      - (_ssh_root_dir.stat.pw_name | default('')) == 'root'
+      - (_ssh_root_dir.stat.gr_name | default('')) == 'root'
+    fail_msg: >-
+      /root/.ssh: exists={{ _ssh_root_dir.stat.exists }}
+      mode={{ _ssh_root_dir.stat.mode | default('absent') }} (want 0700)
+      owner={{ _ssh_root_dir.stat.pw_name | default('absent') }}:{{ _ssh_root_dir.stat.gr_name | default('absent') }} (want root:root)
+
+- name: _verify | Stat ed25519 private key
   stat:
     path: /root/.ssh/id_ed25519
   register: _ssh_root_key
   become: true
-  failed_when: >-
-    not _ssh_root_key.stat.exists
-    or _ssh_root_key.stat.mode != '0600'
-    or _ssh_root_key.stat.pw_name != 'root'
-    or _ssh_root_key.stat.gr_name != 'root'
 
-- name: _verify | Assert keypair is ed25519
-  command: ssh-keygen -l -f /root/.ssh/id_ed25519
-  register: _ssh_root_keygen
-  become: true
-  changed_when: false
-  failed_when: "'ED25519' not in _ssh_root_keygen.stdout"
+- name: _verify | Assert ed25519 private key exists with mode 0600 owned by root
+  assert:
+    that:
+      - _ssh_root_key.stat.exists
+      - (_ssh_root_key.stat.mode | default('')) == '0600'
+      - (_ssh_root_key.stat.pw_name | default('')) == 'root'
+      - (_ssh_root_key.stat.gr_name | default('')) == 'root'
+    fail_msg: >-
+      /root/.ssh/id_ed25519: exists={{ _ssh_root_key.stat.exists }}
+      mode={{ _ssh_root_key.stat.mode | default('absent') }} (want 0600)
+      owner={{ _ssh_root_key.stat.pw_name | default('absent') }}:{{ _ssh_root_key.stat.gr_name | default('absent') }} (want root:root)
 
-- name: _verify | Assert /root/.ssh/config exists with mode 0600 owned by root
+- name: _verify | Stat /root/.ssh/config
   stat:
     path: /root/.ssh/config
   register: _ssh_root_config_file
   become: true
-  failed_when: >-
-    not _ssh_root_config_file.stat.exists
-    or _ssh_root_config_file.stat.mode != '0600'
-    or _ssh_root_config_file.stat.pw_name != 'root'
-    or _ssh_root_config_file.stat.gr_name != 'root'
+
+- name: _verify | Assert /root/.ssh/config exists with mode 0600 owned by root
+  assert:
+    that:
+      - _ssh_root_config_file.stat.exists
+      - (_ssh_root_config_file.stat.mode | default('')) == '0600'
+      - (_ssh_root_config_file.stat.pw_name | default('')) == 'root'
+      - (_ssh_root_config_file.stat.gr_name | default('')) == 'root'
+    fail_msg: >-
+      /root/.ssh/config: exists={{ _ssh_root_config_file.stat.exists }}
+      mode={{ _ssh_root_config_file.stat.mode | default('absent') }} (want 0600)
+      owner={{ _ssh_root_config_file.stat.pw_name | default('absent') }}:{{ _ssh_root_config_file.stat.gr_name | default('absent') }} (want root:root)
 
 - name: _verify | Assert ssh_config parses cleanly
   command: ssh -G -F /root/.ssh/config localhost
@@ -57,6 +71,7 @@
     that:
       - "'batchmode yes' in _ssh_root_config.stdout"
       - "'controlmaster auto' in _ssh_root_config.stdout"
+      - "'controlpath /root/.ssh/.controlmaster-' in _ssh_root_config.stdout"
       - "'controlpersist 300' in _ssh_root_config.stdout"
       - "'forwardagent no' in _ssh_root_config.stdout"
       - "'identityfile ~/.ssh/id_ed25519' in _ssh_root_config.stdout"
@@ -72,6 +87,7 @@
   register: _ssh_root_fp_before
   become: true
   changed_when: false
+  failed_when: "'ED25519' not in _ssh_root_fp_before.stdout"
 
 - name: _verify | Force keypair regeneration to exercise the regen-detection path
   community.crypto.openssh_keypair:
@@ -101,3 +117,4 @@
   become: true
   changed_when: false
   failed_when: _ssh_root_fp_after.stdout == _ssh_root_fp_before.stdout
+# Terminal task: key has been rotated; do not add SSH connectivity assertions below this point.
