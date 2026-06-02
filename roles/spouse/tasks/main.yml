@@ -1,5 +1,6 @@
 - name: Assert required spouse inputs are provided
   assert:
+    quiet: true
     that:
       # spouse_firstname becomes the POSIX user/group name, the /mnt/data/<name>
       # home, the samba login, the subid_users entry, and the arq-<name> MinIO
@@ -38,6 +39,7 @@
     shell: /usr/sbin/nologin
     password: "!"
     home: /mnt/data/{{ spouse_firstname }}
+    update_password: on_create
   become: true
   register: spouse_user
   tags:
