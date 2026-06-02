@@ -733,6 +733,19 @@ class Machine:
                 raise TimeoutError("SSH daemon did not become ready in time")
             await sleep_tick()
 
+    async def ensure_cloud_init(self) -> None:
+        """Block until cloud-init's config/final stages finish before converge.
+
+        ensure_ssh only waits for the sshd banner, which opens in cloud-init's
+        network stage; its config stage (apt sources, manage_etc_hosts, package
+        installs) is still running. A converge or apt call that starts before
+        that settles races cloud-init's dpkg locks and its /etc/hosts rewrite --
+        the same race packer's provision.sh closes with a cloud-init wait of its
+        own. `cloud-init status --wait` blocks through the final stage; it exits
+        non-zero on a degraded-but-complete run, so don't gate on the result.
+        """
+        await self.ssh_command("sudo", "cloud-init", "status", "--wait", check=False)
+
     async def _ssh_banner_ready(self) -> bool:
         """Probe the SSH port once. Return True iff a non-empty banner arrives."""
 

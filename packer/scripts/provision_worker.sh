@@ -24,6 +24,12 @@ apt_update() {
 echo 'Acquire::Retries "3";' >/etc/apt/apt.conf.d/80-retries
 echo 'Acquire::Retries::Delay "true";' >>/etc/apt/apt.conf.d/80-retries
 
+# Wait for cloud-init's first-boot setup (network, apt sources, any package
+# installs) to finish before we start driving apt -- otherwise apt_update races
+# cloud-init's own dpkg/apt activity and its sources.list write. Tolerate a
+# non-zero exit from a degraded-but-complete run.
+cloud-init status --wait || true
+
 apt_update
 apt-get upgrade -y
 

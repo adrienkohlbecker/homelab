@@ -149,6 +149,17 @@ apt_update() {
 
 # Install helpers
 
+# Block until cloud-init has finished applying user-data before touching apt.
+# preserve_sources_list:false + apt.primary in user-data.pkrtpl rewrite
+# sources.list to the Nexus mirror, but that runs in cloud-init's config stage
+# -- which is still going when packer's SSH provisioner connects (sshd opens in
+# the earlier network stage). Without this wait the apt below races the rewrite
+# and falls back to the base image's upstream archive.ubuntu.com; multi-disk
+# variants (lab/pug) boot slower and lose the race deterministically, failing
+# with "Unable to locate package" once the wipe below drops the primed indices.
+# --wait can exit non-zero on a degraded-but-complete run, which is fine here.
+cloud-init status --wait || true
+
 # The cloud base image ships a primed /var/lib/apt/lists whose cached base
 # jammy InRelease lets apt-get update record a "Hit" and skip re-fetching the
 # base suite -- but its Packages files aren't all present, so apt rejects the
