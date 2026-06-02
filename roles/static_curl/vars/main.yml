@@ -1,21 +1,4 @@
-# Statically-linked curl from https://github.com/stunnel/static-curl, used
-# to bind-mount into distroless containers that have no in-image HTTP
-# client to power their --health-cmd. Installed to /usr/local/bin/curl_static.
-#
-# musl variant (not glibc): the musl build is fully static — no libc
-# dependency at all — so the same binary works inside any container
-# image, including distroless/static, scratch, alpine, and the
-# distroless/cc-debian13. The glibc-named
-# build is only partially static and still needs a matching libc.so.6
-# inside the container, which would lock us to distroless/cc-glibc
-# images. For a localhost healthcheck the musl quirks (subset
-# getaddrinfo, TLS edge cases) don't matter.
-#
-# Idempotence: the install task runs the already-installed binary with
-# --version and skips the reinstall if the output contains
-# static_curl_version. Bumping just the version + URLs + sha256s is
-# enough to roll a new version onto every host on next apply.
-
+# musl variant: fully static, no libc dependency — works in any container image.
 static_curl_version: "8.20.0"
 
 static_curl_release:
