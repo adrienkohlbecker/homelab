@@ -1,0 +1,91 @@
+- name: _verify | Slurp /etc/subuid
+  slurp:
+    src: /etc/subuid
+  register: _subid_subuid
+  become: true
+
+- name: _verify | Slurp /etc/subgid
+  slurp:
+    src: /etc/subgid
+  register: _subid_subgid
+  become: true
+
+- name: _verify | /etc/subuid and /etc/subgid have correct permissions
+  stat:
+    path: /etc/{{ item }}
+  register: _subid_stat
+  failed_when: >-
+    not _subid_stat.stat.exists
+    or _subid_stat.stat.mode != '0644'
+    or _subid_stat.stat.pw_name != 'root'
+  loop:
+    - subuid
+    - subgid
+  become: true
+
+- name: _verify | Every line matches name:start:count format
+  vars:
+    _subuid_lines: "{{ (_subid_subuid.content | b64decode).splitlines() }}"
+    _subgid_lines: "{{ (_subid_subgid.content | b64decode).splitlines() }}"
+    _bad_subuid: "{{ _subuid_lines | reject('match', '^[a-z_][a-z0-9_.-]*:[0-9]+:[0-9]+$') | list }}"
+    _bad_subgid: "{{ _subgid_lines | reject('match', '^[a-z_][a-z0-9_.-]*:[0-9]+:[0-9]+$') | list }}"
+  assert:
+    that:
+      - _bad_subuid | length == 0
+      - _bad_subgid | length == 0
+    fail_msg: >-
+      Malformed lines in subuid/subgid.
+      subuid: {{ _bad_subuid }}, subgid: {{ _bad_subgid }}.
+
+- name: _verify | Operator user has the base 100000:65536 range in both files
+  vars:
+    _subuid_lines: "{{ (_subid_subuid.content | b64decode).splitlines() }}"
+    _subgid_lines: "{{ (_subid_subgid.content | b64decode).splitlines() }}"
+  assert:
+    that:
+      - _subuid_lines | select('match', '^' ~ ansible_user_id ~ ':100000:65536$') | list | length == 1
+      - _subgid_lines | select('match', '^' ~ ansible_user_id ~ ':100000:65536$') | list | length == 1
+    fail_msg: >-
+      {{ ansible_user_id }} missing base 100000:65536 range.
+      subuid: {{ _subuid_lines | select('match', '^' ~ ansible_user_id ~ ':') | list }},
+      subgid: {{ _subgid_lines | select('match', '^' ~ ansible_user_id ~ ':') | list }}.
+
+- name: _verify | Each subid_users entry has a 65536-count range in both files
+  vars:
+    _subuid_lines: "{{ (_subid_subuid.content | b64decode).splitlines() }}"
+    _subgid_lines: "{{ (_subid_subgid.content | b64decode).splitlines() }}"
+  assert:
+    that:
+      - _subuid_lines | select('match', '^' ~ item ~ ':[0-9]+:65536$') | list | length >= 1
+      - _subgid_lines | select('match', '^' ~ item ~ ':[0-9]+:65536$') | list | length >= 1
+    fail_msg: >-
+      {{ item }} missing 65536-count range.
+      subuid: {{ _subuid_lines | select('match', '^' ~ item ~ ':') | list }},
+      subgid: {{ _subgid_lines | select('match', '^' ~ item ~ ':') | list }}.
+  loop: "{{ subid_users }}"
+
+- name: _verify | Extra subgid entries present
+  vars:
+    _subgid_lines: "{{ (_subid_subgid.content | b64decode).splitlines() }}"
+  assert:
+    that:
+      - _subgid_lines | select('match', '^' ~ item.user ~ ':[0-9]+:' ~ (item.count | default(1)) | string ~ '$') | list | length >= 1
+    fail_msg: >-
+      Extra subgid entry missing for {{ item.user }} (group {{ item.group }}).
+      Got: {{ _subgid_lines | select('match', '^' ~ item.user ~ ':') | list }}.
+  loop: "{{ subid_extra_subgid_groups | default([]) }}"
+  loop_control:
+    label: "{{ item.user }}:{{ item.group }}"
+
+- name: _verify | Extra subuid entries present
+  vars:
+    _subuid_lines: "{{ (_subid_subuid.content | b64decode).splitlines() }}"
+  assert:
+    that:
+      - _subuid_lines | select('match', '^' ~ item.user ~ ':[0-9]+:' ~ (item.count | default(1)) | string ~ '$') | list | length >= 1
+    fail_msg: >-
+      Extra subuid entry missing for {{ item.user }} (source_user {{ item.source_user }}).
+      Got: {{ _subuid_lines | select('match', '^' ~ item.user ~ ':') | list }}.
+  loop: "{{ subid_extra_subuid_users | default([]) }}"
+  loop_control:
+    label: "{{ item.user }}:{{ item.source_user }}"
