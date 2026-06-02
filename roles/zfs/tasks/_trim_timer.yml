@@ -29,6 +29,5 @@
     systemd_timer_args:
       name: "zfs_trim_{{ item }}"
       description: "Weekly ZFS trim for {{ item }}"
-      frequency: weekly
       on_calendar: "Thu *-*-* 00:05:00"
       exec_start: "/sbin/zpool trim {{ item }}"

@@ -149,7 +149,6 @@
     systemd_timer_args:
       name: zfs_autosnapshot
       description: Daily ZFS autosnapshot
-      frequency: daily
       on_calendar: "*-*-* 02:00:00"
       randomized_delay_sec: 1800
       fixed_random_delay: true
