@@ -3,11 +3,14 @@
 # ControlMaster is load-bearing -- zfs-autobackup opens many short ssh connections
 # per run and multiplexes them over one master. See roles/ssh_root/tasks/main.yml.
 Host *
+    BatchMode yes
     ControlPath ~/.ssh/.controlmaster-%C
     ControlMaster auto
     ControlPersist 300
-    IdentityFile ~/.ssh/id_ed25519
     ForwardAgent no
+    IdentityFile ~/.ssh/id_ed25519
     IdentitiesOnly yes
+    PreferredAuthentications publickey
+    ServerAliveCountMax 2
     ServerAliveInterval 30
     ConnectTimeout 10
