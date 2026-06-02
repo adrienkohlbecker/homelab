@@ -10,6 +10,14 @@
   tags:
     - ssh_root
 
+- name: Check for existing keypair
+  stat:
+    path: /root/.ssh/id_ed25519
+  become: true
+  register: ssh_root_key_stat
+  tags:
+    - ssh_root
+
 - name: Generate an OpenSSH keypair
   when: not (ansible_check_mode and ssh_root_directory.changed)
   community.crypto.openssh_keypair:
@@ -19,7 +27,19 @@
     group: root
     mode: "0600"
     comment: root@{{ inventory_hostname }}
+    regenerate: full_idempotence
   become: true
+  register: ssh_root_keypair
+  tags:
+    - ssh_root
+
+- name: Warn on keypair regeneration
+  when: ssh_root_keypair is changed and ssh_root_key_stat.stat.exists
+  fail:
+    msg: >-
+      Root SSH keypair was regenerated on {{ inventory_hostname }}.
+      Update host_vars/bunk.yml ssh_public_keys_additional with the new public key:
+      {{ ssh_root_keypair.public_key }}
   tags:
     - ssh_root
 
