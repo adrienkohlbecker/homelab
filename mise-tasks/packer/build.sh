@@ -35,9 +35,8 @@ tmp=$(mktemp -d "${QEMU_DIR}/.build-XXXXXX")
 # without PACKER_LOG, so the shim writes to QEMU_NET_WRAPPER_LOG instead. Point
 # it at a sibling file *outside* any per-source output dir: packer deletes a
 # failed source's output_directory before this EXIT trap runs, which would take
-# a build-dir-derived log with it. Tailing on EXIT whatever the outcome makes a
-# passt-path regression diagnosable straight from the CI job log, no PACKER_LOG
-# rerun needed.
+# a build-dir-derived log with it. On failure the ERR trap dumps the logs to
+# stdout for CI diagnosis; on success they're silently cleaned up.
 netlog=$(mktemp "${QEMU_DIR}/.netlog-XXXXXX")
 export QEMU_NET_WRAPPER_LOG="${netlog}"
 dump_net_logs() {
@@ -49,11 +48,11 @@ dump_net_logs() {
   for f in "${netlog}".passt-*; do
     [ -f "${f}" ] || continue
     echo "=== ${f##*/} (passt sidecar startup banner) ==="
-    cat "${f}"
+    grep -v '^Failed to send .* bytes to syslog$' "${f}" || true
   done
-  rm -f "${netlog}" "${netlog}".passt-*
 }
-trap dump_net_logs EXIT
+trap 'dump_net_logs; rm -f "${netlog}" "${netlog}".passt-*' ERR
+trap 'rm -f "${netlog}" "${netlog}".passt-*' EXIT
 
 # Build -only filter when sources are specified. Packer parallelizes
 # the matched sources internally (one VM per source, non-overlapping
