@@ -209,7 +209,7 @@
   register: swap_partition_blkid
   changed_when: false
   check_mode: false
-  failed_when: false  # evaluated by the assert below so rc==8 gets a real message
+  failed_when: false # evaluated by the assert below so rc==8 gets a real message
   become: true
   tags:
     - swap
@@ -336,12 +336,13 @@
   tags:
     - swap
 
-# Higher than the disk-tuned default of 60: paging into compressed RAM is
-# cheap, so prefer it over evicting file cache (especially on cloud hosts
-# whose cache re-reads come from slow network-backed disk).
-- name: Tune vm.swappiness for zram
+# vm.swappiness default 100 suits the zram-primary hosts (paging into
+# compressed RAM is cheap, unlike the disk-tuned kernel default of 60). Runs
+# for any swap-carrying host so swap_swappiness isn't silently inert on a
+# zvol/partition-only host (such a host should set a lower value explicitly).
+- name: Tune vm.swappiness
   when:
-    - swap_zram is defined
+    - swap_zram is defined or swap_zvol is defined or swap_partition is defined
     - swap_zram_module.rc == 0
   ansible.posix.sysctl:
     name: vm.swappiness
