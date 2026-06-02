@@ -1360,7 +1360,7 @@ class TestCmdRun:
         monkeypatch.setenv("INPUTS_UBUNTU", "")
 
     def test_all_mode(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["alpha:box","beta:minimal"]')
+        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: '["alpha:box","beta:minimal"]')
         rc = detect._cmd_run(["--all"])
         assert rc == 0
         out = capsys.readouterr()
@@ -1370,7 +1370,8 @@ class TestCmdRun:
     def test_dispatch_roles(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
         monkeypatch.setenv("INPUTS_ROLES", "cleanup")
-        monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["cleanup:box","cleanup:minimal"]')
+        monkeypatch.setattr(detect, "_build_dispatch_matrix", lambda inp: [])
+        monkeypatch.setattr(detect, "cells_to_ci_specs", lambda cells: ["cleanup:box", "cleanup:minimal"])
         rc = detect._cmd_run([])
         assert rc == 0
         assert "cleanup:box" in capsys.readouterr().out
@@ -1378,7 +1379,7 @@ class TestCmdRun:
     def test_dispatch_all_keyword(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
         monkeypatch.setenv("INPUTS_ROLES", "ALL")
-        monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["big:box"]')
+        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: '["big:box"]')
         rc = detect._cmd_run([])
         assert rc == 0
         out = capsys.readouterr()
@@ -1391,11 +1392,12 @@ class TestCmdRun:
         captured = {}
         monkeypatch.setattr(
             detect,
-            "_matrix_json",
-            lambda *a: (captured.update(args=a), '["foo:box"]')[1],
+            "_build_dispatch_matrix",
+            lambda inp: (captured.update(input=inp), [])[1],
         )
+        monkeypatch.setattr(detect, "cells_to_ci_specs", lambda cells: ["foo:box"])
         detect._cmd_run([])
-        assert captured["args"] == ("--dispatch", "foo,bar:minimal")
+        assert captured["input"] == "foo,bar:minimal"
 
     def test_packer_only_dispatch(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
@@ -1419,7 +1421,8 @@ class TestCmdRun:
         monkeypatch.setattr(detect, "list_testable_roles", lambda: ["zfs"])
         monkeypatch.setattr(detect, "build_role_deps_map", lambda: {})
         monkeypatch.setattr(detect, "release_ubuntu_for", lambda role: [])
-        monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["zfs:box"]')
+        monkeypatch.setattr(detect, "build_test_matrix", lambda roles, extra=None: [])
+        monkeypatch.setattr(detect, "cells_to_ci_specs", lambda cells: ["zfs:box"])
         rc = detect._cmd_run([])
         assert rc == 0
         out = capsys.readouterr()
@@ -1437,7 +1440,8 @@ class TestCmdRun:
         monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
         monkeypatch.setattr(detect, "list_testable_roles", lambda: [])
         monkeypatch.setattr(detect, "build_role_deps_map", lambda: {})
-        monkeypatch.setattr(detect, "_matrix_json", lambda *a: "[]")
+        monkeypatch.setattr(detect, "build_test_matrix", lambda roles, extra=None: [])
+        monkeypatch.setattr(detect, "cells_to_ci_specs", lambda cells: [])
         rc = detect._cmd_run([])
         assert rc == 0
         assert "CI_BASE_REF override" in capsys.readouterr().err
@@ -1460,7 +1464,8 @@ class TestCmdRun:
         monkeypatch.setattr(detect, "list_testable_roles", lambda: ["nginx", "podman"])
         monkeypatch.setattr(detect, "build_role_deps_map", lambda: {})
         monkeypatch.setattr(detect, "release_ubuntu_for", lambda role: [])
-        monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["nginx:box"]')
+        monkeypatch.setattr(detect, "build_test_matrix", lambda roles, extra=None: [])
+        monkeypatch.setattr(detect, "cells_to_ci_specs", lambda cells: ["nginx:box"])
         rc = detect._cmd_run([])
         assert rc == 0
         assert "nginx:box" in capsys.readouterr().out
@@ -1473,7 +1478,7 @@ class TestCmdRun:
         monkeypatch.setenv("GITHUB_TOKEN", "tok")
         monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
         monkeypatch.setattr(detect, "resolve_green_base", lambda **kw: None)
-        monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["big:box"]')
+        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: '["big:box"]')
         rc = detect._cmd_run([])
         assert rc == 0
         kv = _parse_kv(capsys.readouterr().out)
@@ -1501,7 +1506,8 @@ class TestCmdRun:
         monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
         monkeypatch.setattr(detect, "list_testable_roles", lambda: [])
         monkeypatch.setattr(detect, "build_role_deps_map", lambda: {})
-        monkeypatch.setattr(detect, "_matrix_json", lambda *a: "[]")
+        monkeypatch.setattr(detect, "build_test_matrix", lambda roles, extra=None: [])
+        monkeypatch.setattr(detect, "cells_to_ci_specs", lambda cells: [])
         rc = detect._cmd_run([])
         assert rc == 0
         assert "fetching the commit" in capsys.readouterr().err
@@ -1514,7 +1520,7 @@ class TestCmdRun:
             lambda base, head="HEAD": ["group_vars/all/main.yml"],
         )
         monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
-        monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["big:box"]')
+        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: '["big:box"]')
         rc = detect._cmd_run([])
         assert rc == 0
         assert "FULL universe" in capsys.readouterr().err
@@ -1535,12 +1541,13 @@ class TestCmdRun:
         captured = {}
         monkeypatch.setattr(
             detect,
-            "_matrix_json",
-            lambda *a: (captured.update(args=a), '["packer:box"]')[1],
+            "build_test_matrix",
+            lambda roles, extra=None: (captured.update(roles=list(roles)), [])[1],
         )
+        monkeypatch.setattr(detect, "cells_to_ci_specs", lambda cells: ["packer:box"])
         rc = detect._cmd_run([])
         assert rc == 0
-        assert "packer" in captured["args"]
+        assert "packer" in captured["roles"]
         kv = _parse_kv(capsys.readouterr().out)
         assert kv["packer_changed"] == "true"
 
@@ -1558,15 +1565,15 @@ class TestCmdRun:
         captured = {}
         monkeypatch.setattr(
             detect,
-            "_matrix_json",
-            lambda *a: (captured.update(args=a), '["systemd_unit:box"]')[1],
+            "build_test_matrix",
+            lambda roles, extra=None: (captured.update(roles=list(roles)), [])[1],
         )
+        monkeypatch.setattr(detect, "cells_to_ci_specs", lambda cells: ["systemd_unit:box"])
         rc = detect._cmd_run([])
         assert rc == 0
-        args = captured["args"]
-        assert "nginx" in args
-        assert "redis" in args
-        assert "systemd_unit" in args
+        assert "nginx" in captured["roles"]
+        assert "redis" in captured["roles"]
+        assert "systemd_unit" in captured["roles"]
 
     def test_release_cell_propagation(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
@@ -1583,18 +1590,19 @@ class TestCmdRun:
             "release_ubuntu_for",
             lambda role: ["noble"] if role == "apt_source" else [],
         )
-        monkeypatch.setattr(detect, "default_machine_for", lambda role: "box")
+        monkeypatch.setattr(detect, "machines_for", lambda role: {"box": None})
         captured = {}
         monkeypatch.setattr(
             detect,
-            "_matrix_json",
-            lambda *a: (captured.update(args=a), '["apt_source:box"]')[1],
+            "build_test_matrix",
+            lambda roles, extra=None: (captured.update(roles=list(roles), extra=extra), [])[1],
         )
+        monkeypatch.setattr(detect, "cells_to_ci_specs", lambda cells: ["apt_source:box"])
         rc = detect._cmd_run([])
         assert rc == 0
-        args = captured["args"]
-        assert "--extra" in args
-        assert "nginx:box:noble" in args
+        assert captured["extra"] is not None
+        extra_specs = [f"{c.role}:{c.machine}:{c.ubuntu}" for c in captured["extra"]]
+        assert "nginx:box:noble" in extra_specs
 
     def test_ci_image_on_master_push(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
@@ -1612,7 +1620,8 @@ class TestCmdRun:
         monkeypatch.setattr(detect, "list_testable_roles", lambda: ["nginx"])
         monkeypatch.setattr(detect, "build_role_deps_map", lambda: {})
         monkeypatch.setattr(detect, "release_ubuntu_for", lambda role: [])
-        monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["nginx:box"]')
+        monkeypatch.setattr(detect, "build_test_matrix", lambda roles, extra=None: [])
+        monkeypatch.setattr(detect, "cells_to_ci_specs", lambda cells: ["nginx:box"])
         rc = detect._cmd_run([])
         assert rc == 0
         kv = _parse_kv(capsys.readouterr().out)
@@ -1624,7 +1633,8 @@ class TestCmdRun:
         monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
         monkeypatch.setattr(detect, "list_testable_roles", lambda: ["nginx"])
         monkeypatch.setattr(detect, "build_role_deps_map", lambda: {})
-        monkeypatch.setattr(detect, "_matrix_json", lambda *a: "[]")
+        monkeypatch.setattr(detect, "build_test_matrix", lambda roles, extra=None: [])
+        monkeypatch.setattr(detect, "cells_to_ci_specs", lambda cells: [])
         rc = detect._cmd_run([])
         assert rc == 0
         assert "no role-relevant changes" in capsys.readouterr().err
@@ -1643,13 +1653,14 @@ class TestCmdRun:
         captured = {}
         monkeypatch.setattr(
             detect,
-            "_matrix_json",
-            lambda *a: (captured.update(args=a), '["nginx:box"]')[1],
+            "build_test_matrix",
+            lambda roles, extra=None: (captured.update(roles=list(roles)), [])[1],
         )
+        monkeypatch.setattr(detect, "cells_to_ci_specs", lambda cells: ["nginx:box"])
         rc = detect._cmd_run([])
         assert rc == 0
-        assert "nginx" in captured["args"]
-        assert "helper_only" not in captured["args"]
+        assert "nginx" in captured["roles"]
+        assert "helper_only" not in captured["roles"]
 
 
 class TestMainEntrypoint:

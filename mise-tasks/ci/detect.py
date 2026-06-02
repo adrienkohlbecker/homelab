@@ -17,8 +17,22 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import defaultdict
 from pathlib import Path
 from typing import NamedTuple
+
+import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
+from matrix import (  # noqa: E402
+    _build_dispatch_matrix,
+    build_test_matrix,
+    cells_to_ci_specs,
+    ci_spec_to_cell,
+    list_testable_roles,
+    machines_for,
+    release_ubuntu_for,
+)
 
 # ---------------------------------------------------------------------------
 # Path classification regexes
@@ -510,67 +524,16 @@ def _walk_tasks(tasks, role: str, inv: dict) -> None:
 
 def build_role_deps_map() -> dict[str, list[str]]:
     """Build helper -> [consumers] inverse dependency map."""
-    import yaml as _yaml
-    from collections import defaultdict
-
     inv: dict[str, set[str]] = defaultdict(set)
     for task_file in sorted(Path("roles").glob("*/tasks/*.yml")):
         role = task_file.parts[-3]
         try:
             with task_file.open() as fh:
-                tasks = _yaml.safe_load(fh)
+                tasks = yaml.safe_load(fh)
         except Exception:
             continue
         _walk_tasks(tasks, role, inv)
     return {k: sorted(v) for k, v in inv.items()}
-
-
-def list_testable_roles() -> list[str]:
-    """Roles with tasks/main.yml (the testable universe)."""
-    roles_dir = Path("roles")
-    if not roles_dir.exists():
-        return []
-    return sorted(d.name for d in roles_dir.iterdir() if d.is_dir() and (d / "tasks" / "main.yml").exists())
-
-
-def _read_role_meta(role: str) -> dict:
-    import yaml as _yaml
-
-    meta_path = Path(f"roles/{role}/meta/test.yml")
-    if not meta_path.exists():
-        return {}
-    try:
-        return _yaml.safe_load(meta_path.read_text()) or {}
-    except Exception:
-        return {}
-
-
-def machines_for(role: str) -> dict:
-    return _read_role_meta(role).get("machines") or {"box": None}
-
-
-def default_machine_for(role: str) -> str:
-    return next(iter(machines_for(role)))
-
-
-def release_ubuntu_for(role: str) -> list[str]:
-    return _read_role_meta(role).get("ubuntu") or []
-
-
-# ---------------------------------------------------------------------------
-# Matrix generation (delegates to test/matrix.py)
-# ---------------------------------------------------------------------------
-
-
-def _matrix_json(*args: str) -> str:
-    """Call test/matrix.py --json and return stdout."""
-    result = subprocess.run(
-        ["python3", "test/matrix.py", "--json", *args],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -724,6 +687,11 @@ def _emit_result(
     )
 
 
+def _full_universe_matrix() -> str:
+    """JSON array of all testable role specs."""
+    return json.dumps(cells_to_ci_specs(build_test_matrix(list_testable_roles())))
+
+
 def _cmd_run(args: list[str]) -> int:
     """Full change-detection pipeline — replaces detect-roles.sh."""
 
@@ -732,7 +700,7 @@ def _cmd_run(args: list[str]) -> int:
 
     if "--all" in args:
         log("mode: --all (full universe)")
-        return _emit_result(_matrix_json("--all"))
+        return _emit_result(_full_universe_matrix())
 
     event = os.environ.get("GITHUB_EVENT_NAME", "")
     inputs_roles = os.environ.get("INPUTS_ROLES", "")
@@ -742,8 +710,9 @@ def _cmd_run(args: list[str]) -> int:
         log(f"mode: workflow_dispatch roles='{inputs_roles}'")
         if inputs_roles == "ALL":
             log("roles=ALL -> full universe")
-            return _emit_result(_matrix_json("--all"))
-        return _emit_result(_matrix_json("--dispatch", inputs_roles))
+            return _emit_result(_full_universe_matrix())
+        cells = _build_dispatch_matrix(inputs_roles)
+        return _emit_result(json.dumps(cells_to_ci_specs(cells)))
 
     if event == "workflow_dispatch" and inputs_sources:
         log(f"mode: workflow_dispatch sources='{inputs_sources}' (packer-only, empty test matrix)")
@@ -764,7 +733,7 @@ def _cmd_run(args: list[str]) -> int:
 
     def full_universe(reason, packer_affected=None, ci_image_changed=False):
         log(f"{reason} -> testing the FULL universe")
-        return _emit_result(_matrix_json("--all"), packer_affected=packer_affected, ci_image_changed=ci_image_changed)
+        return _emit_result(_full_universe_matrix(), packer_affected=packer_affected, ci_image_changed=ci_image_changed)
 
     ci_base_ref = os.environ.get("CI_BASE_REF", "")
     if ci_base_ref:
@@ -856,11 +825,8 @@ def _cmd_run(args: list[str]) -> int:
     else:
         log("no role-relevant changes; matrix will be empty")
 
-    matrix_args: list[str] = []
-    if release_cells:
-        matrix_args.extend(["--extra", *release_cells, "--"])
-    matrix_args.extend(roles_sorted)
-    matrix = _matrix_json(*matrix_args)
+    extra = [ci_spec_to_cell(s) for s in release_cells] if release_cells else None
+    matrix = json.dumps(cells_to_ci_specs(build_test_matrix(roles_sorted, extra)))
 
     return _emit_result(
         matrix,
