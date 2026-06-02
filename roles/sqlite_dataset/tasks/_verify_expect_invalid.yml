@@ -1,0 +1,30 @@
+# Included once per invalid-args case (Scenario 10 loop). include_tasks (not
+# import_role) so sqlite_dataset_args re-evaluates per iteration. Asserts the
+# dataset role's validation rejects the args: a successful import_role falls
+# through to _sqlite_dataset_rejected=false; a failed one (the assert firing)
+# lands in rescue and flips it true. The check is kept OUT of the block so a
+# wrongly-accepted case fails the test rather than being swallowed by rescue.
+- name: "_verify | Apply invalid args, expect reject: {{ sqlite_dataset_invalid.label }}"
+  block:
+    - name: "_verify | Import dataset with invalid args: {{ sqlite_dataset_invalid.label }}"
+      import_role:
+        name: sqlite_dataset
+        tasks_from: dataset
+      vars:
+        sqlite_dataset_args: "{{ sqlite_dataset_invalid.args }}"
+
+    - name: "_verify | Record accept for invalid case: {{ sqlite_dataset_invalid.label }}"
+      set_fact:
+        _sqlite_dataset_rejected: false
+  rescue:
+    - name: "_verify | Record reject for invalid case: {{ sqlite_dataset_invalid.label }}"
+      set_fact:
+        _sqlite_dataset_rejected: true
+
+- name: "_verify | Validation must have rejected case: {{ sqlite_dataset_invalid.label }}"
+  assert:
+    that:
+      - _sqlite_dataset_rejected
+    fail_msg: >-
+      sqlite_dataset_args validation should have rejected the
+      "{{ sqlite_dataset_invalid.label }}" case but accepted it.

@@ -52,7 +52,7 @@
       register: _sqlite_dataset_src_files
       become: true
 
-    - name: _verify | Scenario 2 — src files exist with correct attrs
+    - name: _verify | Scenario 2 — src files exist as plain 0640 files
       assert:
         that:
           - item.stat.exists
@@ -74,18 +74,103 @@
       register: _sqlite_dataset_symlinks
       become: true
 
-    - name: _verify | Scenario 2 — symlinks resolve onto the sqlite dir
+    - name: _verify | Scenario 2 — symlinks resolve onto the sqlite dir and are lchown'd
       assert:
         that:
           - item.stat.exists
           - item.stat.islnk
           - item.stat.lnk_target == '/mnt/services/sqlite/sqlite_dataset_test/' ~ (item.item | basename)
+          # the symlink itself carries owner/group (lchown), per the contract
+          - item.stat.pw_name == 'root'
+          - item.stat.gr_name == 'root'
       loop: "{{ _sqlite_dataset_symlinks.results }}"
       loop_control:
         label: "{{ item.item }}"
 
-    # -- Scenario 3: pre_create does not clobber an existing file --------
-    - name: _verify | Scenario 3 — write sentinel content into src file
+    # -- Scenario 3: idempotence — an identical re-apply is a no-op ------
+    # The harness idempotence pass targets the empty main.yml stub, so
+    # dataset.yml's touch/symlink tasks are otherwise never re-run; assert
+    # here that src mtimes survive an identical second apply (catches a
+    # non-idempotent touch or a symlink that re-lchowns every converge).
+    - name: _verify | Scenario 3 — capture src mtimes before re-run
+      stat:
+        path: "/mnt/services/sqlite/sqlite_dataset_test/{{ item }}"
+      loop:
+        - test.db
+        - other.db
+      register: _sqlite_dataset_before
+      become: true
+
+    - name: _verify | Scenario 3 — re-apply identical args
+      import_role:
+        name: sqlite_dataset
+        tasks_from: dataset
+      vars:
+        sqlite_dataset_args:
+          name: sqlite_dataset_test
+          owner: root
+          group: root
+          mode: "0750"
+          pre_create: true
+          links:
+            - /mnt/services/sqlite_dataset_test/test.db
+            - /mnt/services/sqlite_dataset_test/sub/other.db
+
+    - name: _verify | Scenario 3 — re-stat src mtimes after re-run
+      stat:
+        path: "/mnt/services/sqlite/sqlite_dataset_test/{{ item }}"
+      loop:
+        - test.db
+        - other.db
+      register: _sqlite_dataset_after
+      become: true
+
+    - name: _verify | Scenario 3 — mtimes unchanged across the re-apply
+      assert:
+        that:
+          - item.0.stat.mtime == item.1.stat.mtime
+        fail_msg: >-
+          {{ item.0.item }} mtime changed across an identical re-apply --
+          the pre_create touch or symlink is not idempotent.
+      loop: "{{ _sqlite_dataset_before.results | zip(_sqlite_dataset_after.results) | list }}"
+      loop_control:
+        label: "{{ item.0.item }}"
+
+    # -- Scenario 4: functional write-through ----------------------------
+    # Prove the indirection: bytes written to the dest path land at the
+    # sqlite-dataset src (what an app's SQLite engine actually does), and the
+    # symlink survives the write.
+    - name: _verify | Scenario 4 — write through the dest symlink
+      copy:
+        content: "WRITE-THROUGH"
+        dest: /mnt/services/sqlite_dataset_test/test.db
+        owner: root
+        group: root
+        mode: "0640"
+        follow: true
+      become: true
+
+    - name: _verify | Scenario 4 — re-stat the dest (still a symlink)
+      stat:
+        path: /mnt/services/sqlite_dataset_test/test.db
+        follow: false
+      register: _sqlite_dataset_through_link
+      become: true
+
+    - name: _verify | Scenario 4 — read back from the sqlite-dataset src
+      slurp:
+        src: /mnt/services/sqlite/sqlite_dataset_test/test.db
+      register: _sqlite_dataset_through
+      become: true
+
+    - name: _verify | Scenario 4 — bytes resolved onto the dataset, symlink intact
+      assert:
+        that:
+          - _sqlite_dataset_through_link.stat.islnk
+          - _sqlite_dataset_through.content | b64decode == 'WRITE-THROUGH'
+
+    # -- Scenario 5: pre_create does not clobber an existing src ----------
+    - name: _verify | Scenario 5 — write sentinel directly into the src
       copy:
         content: "SENTINEL"
         dest: /mnt/services/sqlite/sqlite_dataset_test/test.db
@@ -94,7 +179,7 @@
         mode: "0640"
       become: true
 
-    - name: _verify | Scenario 3 — re-run with pre_create
+    - name: _verify | Scenario 5 — re-run with pre_create
       import_role:
         name: sqlite_dataset
         tasks_from: dataset
@@ -107,19 +192,19 @@
           links:
             - /mnt/services/sqlite_dataset_test/test.db
 
-    - name: _verify | Scenario 3 — read src file content
+    - name: _verify | Scenario 5 — read src content
       slurp:
         src: /mnt/services/sqlite/sqlite_dataset_test/test.db
       register: _sqlite_dataset_sentinel
       become: true
 
-    - name: _verify | Scenario 3 — sentinel content is preserved
+    - name: _verify | Scenario 5 — sentinel content preserved (touch did not truncate)
       assert:
         that:
           - _sqlite_dataset_sentinel.content | b64decode == 'SENTINEL'
 
-    # -- Scenario 4: custom file_mode ------------------------------------
-    - name: _verify | Scenario 4 — pre_create with file_mode 0600
+    # -- Scenario 6: custom file_mode ------------------------------------
+    - name: _verify | Scenario 6 — pre_create with file_mode 0600
       import_role:
         name: sqlite_dataset
         tasks_from: dataset
@@ -133,17 +218,185 @@
           links:
             - /mnt/services/sqlite_dataset_test/private.db
 
-    - name: _verify | Scenario 4 — stat the private file
+    - name: _verify | Scenario 6 — stat the private src file
       stat:
         path: /mnt/services/sqlite/sqlite_dataset_test/private.db
       register: _sqlite_dataset_private
       become: true
 
-    - name: _verify | Scenario 4 — file mode is 0600
+    - name: _verify | Scenario 6 — file mode is 0600
       assert:
         that:
           - _sqlite_dataset_private.stat.exists
           - _sqlite_dataset_private.stat.mode == '0600'
+
+    # -- Scenario 7: no-force state=link refuses to clobber a real DB -----
+    # The load-bearing safety: a real file already at a dest is never
+    # converted to a symlink (snapshot-restore / downgrade protection). The
+    # src is pre_create'd so the only reason to fail is the real dest, not a
+    # dangling target.
+    - name: _verify | Scenario 7 — plant a real DB at the dest
+      copy:
+        content: "REAL-DB"
+        dest: /mnt/services/sqlite_dataset_test/real.db
+        owner: root
+        group: root
+        mode: "0640"
+      become: true
+
+    - name: _verify | Scenario 7 — applying the helper must refuse the clobber
+      block:
+        - name: _verify | Scenario 7 — attempt symlink over the real DB
+          import_role:
+            name: sqlite_dataset
+            tasks_from: dataset
+          vars:
+            sqlite_dataset_args:
+              name: sqlite_dataset_test
+              owner: root
+              group: root
+              pre_create: true
+              links:
+                - /mnt/services/sqlite_dataset_test/real.db
+
+        - name: _verify | Scenario 7 — record wrongly converted
+          set_fact:
+            _sqlite_dataset_clobber_refused: false
+      rescue:
+        - name: _verify | Scenario 7 — record refused (expected)
+          set_fact:
+            _sqlite_dataset_clobber_refused: true
+
+    - name: _verify | Scenario 7 — re-stat the dest
+      stat:
+        path: /mnt/services/sqlite_dataset_test/real.db
+        follow: false
+      register: _sqlite_dataset_real
+      become: true
+
+    - name: _verify | Scenario 7 — read the surviving dest content
+      slurp:
+        src: /mnt/services/sqlite_dataset_test/real.db
+      register: _sqlite_dataset_real_content
+      become: true
+
+    - name: _verify | Scenario 7 — converge refused and the real DB survived intact
+      assert:
+        that:
+          - _sqlite_dataset_clobber_refused
+          - _sqlite_dataset_real.stat.exists
+          - not _sqlite_dataset_real.stat.islnk
+          - _sqlite_dataset_real_content.content | b64decode == 'REAL-DB'
+
+    # -- Scenario 8: force plants a dangling symlink ---------------------
+    - name: _verify | Scenario 8 — force on a cold (dangling) target
+      import_role:
+        name: sqlite_dataset
+        tasks_from: dataset
+      vars:
+        sqlite_dataset_args:
+          name: sqlite_dataset_test
+          owner: root
+          group: root
+          force: true
+          links:
+            - /mnt/services/sqlite_dataset_test/forced.db
+
+    - name: _verify | Scenario 8 — stat the dest symlink
+      stat:
+        path: /mnt/services/sqlite_dataset_test/forced.db
+        follow: false
+      register: _sqlite_dataset_forced
+      become: true
+
+    - name: _verify | Scenario 8 — stat the (absent) target
+      stat:
+        path: /mnt/services/sqlite/sqlite_dataset_test/forced.db
+      register: _sqlite_dataset_forced_target
+      become: true
+
+    - name: _verify | Scenario 8 — a dangling symlink was planted
+      assert:
+        that:
+          - _sqlite_dataset_forced.stat.exists
+          - _sqlite_dataset_forced.stat.islnk
+          - _sqlite_dataset_forced.stat.lnk_target == '/mnt/services/sqlite/sqlite_dataset_test/forced.db'
+          # target absent -> the link is genuinely dangling, not pre-created
+          - not _sqlite_dataset_forced_target.stat.exists
+
+    # -- Scenario 9: condition false skips every task --------------------
+    - name: _verify | Scenario 9 — condition false (fresh name)
+      import_role:
+        name: sqlite_dataset
+        tasks_from: dataset
+      vars:
+        sqlite_dataset_args:
+          name: sqlite_dataset_skip
+          owner: root
+          group: root
+          condition: false
+          links:
+            - /mnt/services/sqlite_dataset_test/skip.db
+
+    - name: _verify | Scenario 9 — stat the would-be dir and dest
+      stat:
+        path: "{{ item }}"
+        follow: false
+      loop:
+        - /mnt/services/sqlite/sqlite_dataset_skip
+        - /mnt/services/sqlite_dataset_test/skip.db
+      register: _sqlite_dataset_skipped
+      become: true
+
+    - name: _verify | Scenario 9 — nothing was created
+      assert:
+        that:
+          - not item.stat.exists
+      loop: "{{ _sqlite_dataset_skipped.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # -- Scenario 10: validation rejects incoherent args -----------------
+    # include_tasks (not import_role) so sqlite_dataset_args re-evaluates per
+    # iteration; each case must fail the dataset role's assert.
+    - name: _verify | Scenario 10 — invalid args are rejected
+      include_tasks: _verify_expect_invalid.yml
+      loop:
+        - label: duplicate basenames
+          args:
+            name: sqlite_dataset_test
+            owner: root
+            group: root
+            links:
+              - /mnt/services/sqlite_dataset_test/dup.db
+              - /mnt/services/sqlite_dataset_test/sub/dup.db
+        - label: name with a slash
+          args:
+            name: bad/name
+            owner: root
+            group: root
+        - label: missing owner
+          args:
+            name: sqlite_dataset_test
+            group: root
+        - label: pre_create without links
+          args:
+            name: sqlite_dataset_test
+            owner: root
+            group: root
+            pre_create: true
+        - label: force with pre_create
+          args:
+            name: sqlite_dataset_test
+            owner: root
+            group: root
+            pre_create: true
+            force: true
+            links:
+              - /mnt/services/sqlite_dataset_test/both.db
+      loop_control:
+        loop_var: sqlite_dataset_invalid
+        label: "{{ sqlite_dataset_invalid.label }}"
 
   always:
     - name: _verify | Teardown — remove test fixtures
@@ -152,5 +405,6 @@
         state: absent
       loop:
         - /mnt/services/sqlite/sqlite_dataset_test
+        - /mnt/services/sqlite/sqlite_dataset_skip
         - /mnt/services/sqlite_dataset_test
       become: true
