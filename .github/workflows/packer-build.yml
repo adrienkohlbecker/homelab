@@ -130,11 +130,7 @@ jobs:
         if: matrix.source == 'hetzner' && matrix.ubuntu == 'jammy' && github.ref == 'refs/heads/master'
         env:
           PACKER_UBUNTU: ${{ matrix.ubuntu }}
-          # Handed to hetzner.sh as HCLOUD_TOKEN_CI, not HCLOUD_TOKEN: mise.toml's
-          # [env] re-injects the op:// ref over a plain HCLOUD_TOKEN before the
-          # script runs, which would clobber this resolved secret and send the
-          # script down the `op run` re-exec path (op absent in CI -> exit 127).
-          HCLOUD_TOKEN_CI: ${{ secrets.HCLOUD_TOKEN }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
         run: |
           set -euo pipefail
           args=()

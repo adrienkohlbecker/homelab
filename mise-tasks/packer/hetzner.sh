@@ -5,26 +5,8 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
-# In CI the resolved token arrives as $HCLOUD_TOKEN_CI (a GitHub Actions secret;
-# see packer-build.yml). It can't be handed in as plain $HCLOUD_TOKEN because
-# mise.toml's [env] unconditionally re-injects the op:// ref over any inherited
-# value before this script runs -- so the workflow secret would be clobbered and
-# the op:// re-exec below would fire against an `op` binary the ci container
-# doesn't ship (exit 127). Prefer the CI var when present so the re-exec is
-# skipped on the resolved token.
-if [ -n "${HCLOUD_TOKEN_CI:-}" ]; then
-  HCLOUD_TOKEN="$HCLOUD_TOKEN_CI"
-fi
-
-# HCLOUD_TOKEN normally arrives as the literal op:// ref (file-based mise tasks
-# don't resolve op://, per CLAUDE.md), so re-exec under `op run --` to get the
-# real token. With $HCLOUD_TOKEN_CI set (CI) the token is already resolved, so
-# this is skipped. Checking the value rather than a guard env var also breaks
-# the would-be infinite loop -- the re-exec'd process sees the resolved token.
-# mise's usage_* vars are exported, so they ride through op run's inherited env.
-if [[ "${HCLOUD_TOKEN:-}" == op://* ]]; then
-  exec op run -- "$0" "$@"
-fi
+# shellcheck source=_hcloud_token.sh
+source "$(dirname "$0")/_hcloud_token.sh"
 
 UBUNTU="$usage_ubuntu"
 # Default to the artifact `mise run packer:build hetzner` publishes (raw, on
@@ -122,9 +104,7 @@ for _ in $(seq 1 120); do
   sleep 5
 done
 
-# Call directly (not via `mise run`) because mise re-reads [env] from
-# mise.toml which clobbers HCLOUD_TOKEN back to the unresolved op:// ref.
-"$(dirname "$0")/hcloud-prune-snapshots.sh" "os=ubuntu-zfs,ubuntu=$UBUNTU"
+mise run packer:hcloud-prune-snapshots -- "os=ubuntu-zfs,ubuntu=$UBUNTU"
 
 echo "==> DONE. Snapshot $imgid labelled os=ubuntu-zfs,ubuntu=$UBUNTU."
 echo "    Terraform's data.hcloud_image picks the newest matching snapshot automatically;"

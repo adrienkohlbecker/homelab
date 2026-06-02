@@ -73,9 +73,10 @@ resource "github_actions_secret" "mise_github_token" {
   value       = var.mise_github_token
 }
 
-# HCLOUD_TOKEN (consumed by the packer-build workflow's hetzner publish step) is
-# deliberately NOT managed here: integrations/github 6.x has no write-only value
-# attribute, so a terraform-managed secret lands its plaintext in state (the
-# provider docs say so outright). It's a full-project Hetzner token, so we keep
-# it off state entirely via the manual `gh secret set` path -- same treatment as
-# HOMELAB_VAULT_PASSWORD_TEST. Runbook: notes/github-actions-ci.md, phase 3.
+# HCLOUD_TOKEN (consumed by the packer-build and ci workflows for hetzner
+# snapshot builds) is deliberately NOT managed here: integrations/github 6.x has
+# no write-only value attribute, so a terraform-managed secret lands its
+# plaintext in state (the provider docs say so outright). It's a full-project
+# Hetzner token, so we keep it off state entirely via the manual `gh secret set`
+# path -- same treatment as HOMELAB_VAULT_PASSWORD_TEST. Runbook:
+# notes/github-actions-ci.md, phase 3.

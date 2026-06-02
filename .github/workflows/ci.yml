@@ -254,10 +254,7 @@ jobs:
       - run: uv sync --locked
       - name: Build CI worker snapshot
         env:
-          # Handed as HCLOUD_TOKEN_CI, not HCLOUD_TOKEN: mise.toml's [env]
-          # re-injects the op:// ref over a plain HCLOUD_TOKEN before the
-          # script runs. worker.sh prefers HCLOUD_TOKEN_CI when present.
-          HCLOUD_TOKEN_CI: ${{ secrets.HCLOUD_TOKEN }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
           MISE_GITHUB_TOKEN: ${{ secrets.MISE_GITHUB_TOKEN }}
         run: mise run packer:worker
 

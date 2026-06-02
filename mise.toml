@@ -42,11 +42,13 @@ TF_VAR_gandi_pat = "op://Lab/s5a2q2hlq5vudnvhydhcbmb3da/password"
 # resource, see terraform/mailgun.tf). Create the 1P item once
 # (item: "Mailgun API", field "password") then update the item-id below.
 TF_VAR_mailgun_api_key = "op://Lab/j6iayri7rcsq27nym5z7u37jgu/password"
-# Hetzner Cloud API token for the `fox` VPS (terraform/hetzner.tf). The hcloud
-# provider reads HCLOUD_TOKEN from the env -- unlike scaleway it does NOT load
-# the hcloud CLI config -- so it's wired here and resolved by the `tf` task's
-# `op run --` wrapper.
-HCLOUD_TOKEN = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
+# Hetzner Cloud API token (terraform/hetzner.tf, packer worker/hetzner builds).
+# Named _OP so it doesn't collide with the HCLOUD_TOKEN env var that hcloud
+# tooling actually reads -- otherwise every `mise run` clobbers a previously
+# resolved token with the literal op:// ref. Consumers resolve it themselves:
+# - `mise run tf` runs under `op run --` which maps _OP → HCLOUD_TOKEN.
+# - packer scripts source _hcloud_token.sh (CI token or op run re-exec).
+HCLOUD_TOKEN_OP = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
 # Expose [vars] entries as env so file-based mise-tasks/ scripts can read
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
@@ -196,7 +198,7 @@ run = "git ls-files -z '*.sh' | xargs -0 shfmt -i 2 -w"
 [tasks."tf"]
 description = "tofu (forwards subcommand + args)"
 dir = "{{config_root}}/terraform"
-run = 'op run -- tofu "$@"'
+run = 'op run -- env HCLOUD_TOKEN="$HCLOUD_TOKEN_OP" tofu "$@"'
 
 [tasks."ansible"]
 description = "ansible-playbook against site.yml (forwards args)"
