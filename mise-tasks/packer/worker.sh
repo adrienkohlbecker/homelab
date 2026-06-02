@@ -43,28 +43,6 @@ packer build \
 	"${mise_token_args[@]}" \
 	packer/hcloud_worker.pkr.hcl
 
-# --- Prune old snapshots ---
-# Keep the 2 newest ci-worker snapshots (current + one rollback) plus
-# any snapshot a running server was created from. Same policy as the
-# fox/hetzner image pruning in mise-tasks/packer/hetzner.sh.
-API="https://api.hetzner.cloud/v1"
-AUTH=(-H "Authorization: Bearer ${HCLOUD_TOKEN}")
-echo "==> Pruning old ci-worker snapshots (keeping newest 2 + any running server's image)"
-snaps_json=$(curl -fsS "${AUTH[@]}" "${API}/images?type=snapshot&sort=created:desc&label_selector=role=ci-worker,ubuntu=noble")
-servers_json=$(curl -fsS "${AUTH[@]}" "${API}/servers")
-# shellcheck disable=SC2086  # word-split the space-separated id list on purpose
-stale=$(python3 -c '
-import json, sys
-snaps = json.loads(sys.argv[1])["images"]
-servers = json.loads(sys.argv[2])["servers"]
-in_use = {s["image"]["id"] for s in servers if s.get("status") == "running" and s.get("image")}
-keep = {i["id"] for i in snaps[:2]} | in_use
-print(" ".join(str(i["id"]) for i in snaps if i["id"] not in keep))
-' "$snaps_json" "$servers_json")
-for old in $stale; do
-	echo "    deleting old snapshot $old"
-	curl -fsS -X DELETE "${AUTH[@]}" "${API}/images/$old" >/dev/null || true
-done
+mise run packer:hcloud-prune-snapshots "role=ci-worker,ubuntu=noble"
 
-echo "==> Snapshot created. Label selector: role=ci-worker,ubuntu=noble"
-echo "    Use 'hcloud image list --selector role=ci-worker' to find it."
+echo "==> Done. Label selector: role=ci-worker,ubuntu=noble"
