@@ -131,7 +131,9 @@ rm -rf /tmp/packer_init
 # only needs to configure + register, not download ~500 MB.
 # Version + sha256 read from the Ansible role's vars (single source of
 # truth, uploaded by the packer file provisioner).
-read -r RUNNER_URL RUNNER_SHA256 < <(python3 -c '
+# Use the system interpreter (apt's python3-yaml above), not the mise-shim
+# python3 first on PATH -- the mise toolchain python has no PyYAML.
+read -r RUNNER_URL RUNNER_SHA256 < <(/usr/bin/python3 -c '
 import yaml, sys
 d = yaml.safe_load(open(sys.argv[1]))["github_runner_archive"]["x86_64"]
 print(d["url"], d["sha256"])
