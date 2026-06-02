@@ -209,9 +209,22 @@
   register: swap_partition_blkid
   changed_when: false
   check_mode: false
+  failed_when: false  # evaluated by the assert below so rc==8 gets a real message
   become: true
-  failed_when:
-    - swap_partition_blkid.stdout | default('') != 'swap'
+  tags:
+    - swap
+
+- name: Assert the partition carries a clean swap signature
+  when: swap_partition is defined
+  assert:
+    that: swap_partition_blkid.stdout | default('') == 'swap'
+    fail_msg: >-
+      {{ swap_partition.device }} is not a clean swap device (blkid
+      TYPE={{ swap_partition_blkid.stdout | default('<none>') }},
+      rc={{ swap_partition_blkid.rc }}).
+      {{ 'rc=8 means ambivalent/multiple on-disk signatures -- wipefs the device first.'
+         if swap_partition_blkid.rc == 8
+         else 'The role never reformats a partition; it must already carry a swap signature.' }}
   tags:
     - swap
 
