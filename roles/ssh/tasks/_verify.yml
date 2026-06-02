@@ -25,7 +25,7 @@
       - ssh_verify_effective.stdout is search('(?m)^passwordauthentication no$')
       - ssh_verify_effective.stdout is search('(?m)^permitrootlogin no$')
       - ssh_verify_effective.stdout is search('(?m)^authenticationmethods publickey$')
-      - ssh_verify_effective.stdout is search('(?m)^loglevel verbose$')
+      - ssh_verify_effective.stdout is search('(?m)^loglevel VERBOSE$')
       - ssh_verify_effective.stdout is search('(?m)^kbdinteractiveauthentication no$')
       - ssh_verify_effective.stdout is search('(?m)^streamlocalbindunlink yes$')
     fail_msg: >-
