@@ -27,48 +27,68 @@
 # The dict form prevents inter-call leakage: each import_role pass
 # replaces the whole sqlite_dataset_args value at play-vars scope.
 
+- name: Validate sqlite_dataset_args
+  assert:
+    that:
+      - sqlite_dataset_args.name is defined
+      - sqlite_dataset_args.name is match('^[a-z_][a-z0-9_-]*$')
+      - sqlite_dataset_args.owner is defined
+      - sqlite_dataset_args.group is defined
+      - >-
+        sqlite_dataset_args.links is not defined
+        or (sqlite_dataset_args.links | map('basename') | select('eq', '') | list | length == 0)
+      - >-
+        sqlite_dataset_args.links is not defined
+        or (sqlite_dataset_args.links | map('basename') | list | unique | length
+            == sqlite_dataset_args.links | length)
+    fail_msg: >-
+      sqlite_dataset_args requires name (alnum+underscore), owner, group;
+      links basenames must be non-empty and unique.
+
 - name: Pre-create /mnt/services/sqlite/{{ sqlite_dataset_args.name }}
   when: sqlite_dataset_args.condition | default(true)
   file:
-    dest: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}"
+    path: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}"
     state: directory
     owner: "{{ sqlite_dataset_args.owner }}"
     group: "{{ sqlite_dataset_args.group }}"
     mode: "{{ sqlite_dataset_args.mode | default('0750') }}"
   become: true
 
-# force=false: only plants the empty file when the src is absent (cold
-# start). On snapshot-restore the real DB already sits here and is left
-# untouched, so we never zero out live data.
-- name: Pre-create SQLite DB src files for {{ sqlite_dataset_args.name }}  # noqa: require-backup
+# state=touch with preserve timestamps is idempotent: creates the file if
+# absent, leaves an existing DB untouched (no truncation, no mtime bump).
+- name: Pre-create SQLite DB src files for {{ sqlite_dataset_args.name }}
   when:
     - sqlite_dataset_args.condition | default(true)
     - sqlite_dataset_args.pre_create | default(false)
     - sqlite_dataset_args.links is defined
-  copy:
-    content: ""
-    dest: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ item | basename }}"
+  file:
+    path: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ sqlite_dataset_link | basename }}"
+    state: touch
     owner: "{{ sqlite_dataset_args.owner }}"
     group: "{{ sqlite_dataset_args.group }}"
-    mode: "0640"
-    force: false
+    mode: "{{ sqlite_dataset_args.file_mode | default('0640') }}"
+    modification_time: preserve
+    access_time: preserve
   become: true
-  loop: "{{ sqlite_dataset_args.links | default([]) }}"
+  loop: "{{ sqlite_dataset_args.links }}"
   loop_control:
-    label: "{{ item }}"
+    label: "{{ sqlite_dataset_link }}"
+    loop_var: sqlite_dataset_link
 
 - name: Symlink DBs onto sqlite dataset for {{ sqlite_dataset_args.name }}
   when:
     - sqlite_dataset_args.condition | default(true)
     - sqlite_dataset_args.links is defined
   file:
-    src: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ item | basename }}"
-    dest: "{{ item }}"
+    src: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ sqlite_dataset_link | basename }}"
+    dest: "{{ sqlite_dataset_link }}"
     state: link
     owner: "{{ sqlite_dataset_args.owner }}"
     group: "{{ sqlite_dataset_args.group }}"
     follow: false
   become: true
-  loop: "{{ sqlite_dataset_args.links | default([]) }}"
+  loop: "{{ sqlite_dataset_args.links }}"
   loop_control:
-    label: "{{ item }}"
+    label: "{{ sqlite_dataset_link }}"
+    loop_var: sqlite_dataset_link
