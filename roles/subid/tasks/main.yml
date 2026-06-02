@@ -82,10 +82,8 @@
 
 - name: Warn about podman system migrate
   debug:
-    msg: >-
-      /etc/subuid or /etc/subgid changed — for each rootless podman user in
-      {{ subid_users }} run `sudo -u <user> podman system migrate` so the new
-      ranges take effect (the per-user pause process must be restarted).
+    msg: "Run: sudo -u {{ item }} podman system migrate"
+  loop: "{{ ([ansible_user_id] + subid_users) | unique }}"
   when: subid_subuid_result.changed or subid_subgid_result.changed
   tags:
     - subid
