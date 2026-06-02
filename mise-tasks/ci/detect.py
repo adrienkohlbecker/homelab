@@ -421,11 +421,12 @@ def newest_green_ancestor(
     api_url: str,
     token: str,
     log_fn,
+    max_pages: int = 5,
 ) -> str | None:
     """Find the newest green CI/nightly run on branch that is an ancestor of head_sha."""
     log_fn(f"  searching green ci/nightly runs on '{branch}'...")
     page = 1
-    while True:
+    while page <= max_pages:
         params = urllib.parse.urlencode(
             {
                 "branch": branch,
@@ -460,7 +461,7 @@ def newest_green_ancestor(
                 return sha
             log_fn(f"    skip {sha[:12]} ({created}): not an ancestor of HEAD")
         page += 1
-    log_fn(f"  no green ancestor on '{branch}'")
+    log_fn(f"  no green ancestor on '{branch}' (searched {page - 1} page(s))")
     return None
 
 
