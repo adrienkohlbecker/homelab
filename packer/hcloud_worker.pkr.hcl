@@ -33,10 +33,10 @@ variable "server_type" {
   description = "Hetzner server type the build VM is created as. Provisioning does not need KVM so any shared-vCPU type works."
 }
 
-variable "firewall_ids" {
-  type        = list(number)
-  default     = []
-  description = "Hetzner firewall IDs to attach to the build server. The mise task resolves the 'fox' firewall by name."
+variable "firewalls" {
+  type        = list(string)
+  default     = ["ci-worker"]
+  description = "Hetzner firewall names to attach to the build server."
 }
 
 variable "mise_github_token" {
@@ -54,7 +54,7 @@ source "hcloud" "worker" {
   server_type  = var.server_type
   ssh_username = "root"
 
-  firewall_ids  = var.firewall_ids
+  firewalls     = var.firewalls
   server_name   = "packer-ci-worker"
   snapshot_name = "ci-worker-noble-{{timestamp}}"
   snapshot_labels = {

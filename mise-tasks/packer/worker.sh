@@ -30,25 +30,16 @@ if [ -n "${MISE_GITHUB_TOKEN:-}" ]; then
 	mise_token_args=(-var "mise_github_token=${MISE_GITHUB_TOKEN}")
 fi
 
-# Look up the ci-worker firewall ID (terraform/hetzner.tf: SSH from
-# home WAN only, default-drop inbound).
-FIREWALL_ID=$(curl -fsS -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
-	"https://api.hetzner.cloud/v1/firewalls?name=ci-worker" |
-	jq '.firewalls[0].id')
-[ "$FIREWALL_ID" != "null" ] && [ -n "$FIREWALL_ID" ] || {
-	echo "error: could not resolve ci-worker firewall ID — run 'mise run tf apply' first" >&2
-	exit 1
-}
-
 # Init the hcloud plugin (pre-installed for the qemu plugins, but the
 # hcloud plugin is only declared in hcloud_worker.pkr.hcl).
 packer init packer/hcloud_worker.pkr.hcl
 
+# The ci-worker firewall (terraform/hetzner.tf) is referenced by name
+# in hcloud_worker.pkr.hcl's default; no ID lookup needed.
 packer build \
 	-timestamp-ui \
 	-var "location=${usage_location}" \
 	-var "server_type=${usage_server_type}" \
-	-var "firewall_ids=[${FIREWALL_ID}]" \
 	"${mise_token_args[@]}" \
 	packer/hcloud_worker.pkr.hcl
 
