@@ -1,3 +1,21 @@
+- name: Assert required spouse inputs are provided
+  assert:
+    that:
+      # spouse_firstname becomes the POSIX user/group name, the /mnt/data/<name>
+      # home, the samba login, the subid_users entry, and the arq-<name> MinIO
+      # bucket -- so it must be a valid identifier (the regex also rejects an
+      # unset/empty value). Same guard as roles/samba + roles/service_user.
+      # default('') so an undefined var fails into fail_msg rather than raising
+      # a raw "undefined variable" jinja error here.
+      - spouse_firstname | default('') is match('^[a-z_][a-z0-9_-]*$')
+      - spouse_samba_password | default('') | length > 0
+    fail_msg: >-
+      spouse_firstname (a valid identifier matching [a-z_][a-z0-9_-]*) and
+      spouse_samba_password must be set (vaulted). These are required inputs;
+      role vars sit above host_vars and must not default them.
+  tags:
+    - spouse
+
 - name: Add spouse group
   group:
     name: "{{ spouse_firstname }}"
@@ -7,6 +25,11 @@
     - spouse
 
 - name: Add spouse user
+  # Deliberately a non-system user (system: false): the household member needs a
+  # stable login-class uid that owns their arq-<name> backup bucket and rootless
+  # podman subid range, so this can't route through the service_user helper
+  # (which forces system: true). nologin + password "!" disable local and ssh
+  # login; the SMB account registered below is the intended, live access path.
   user:
     name: "{{ spouse_firstname }}"
     group: "{{ spouse_firstname }}"
