@@ -1,0 +1,53 @@
+- name: _verify | POSIX user exists with correct attributes
+  command: getent passwd {{ spouse_firstname }}
+  register: spouse_verify_passwd
+  changed_when: false
+  become: true
+
+- name: _verify | Assert user shell and home
+  assert:
+    that:
+      - "'/usr/sbin/nologin' in spouse_verify_passwd.stdout"
+      - "'/mnt/data/' ~ spouse_firstname in spouse_verify_passwd.stdout"
+    fail_msg: >-
+      Expected nologin shell and /mnt/data/{{ spouse_firstname }} home,
+      got: {{ spouse_verify_passwd.stdout }}
+
+- name: _verify | POSIX group exists
+  command: getent group {{ spouse_firstname }}
+  changed_when: false
+  become: true
+
+- name: _verify | Home directory exists and is owned correctly
+  stat:
+    path: /mnt/data/{{ spouse_firstname }}
+  register: spouse_verify_home
+  become: true
+
+- name: _verify | Assert home directory ownership
+  assert:
+    that:
+      - spouse_verify_home.stat.exists
+      - spouse_verify_home.stat.pw_name == spouse_firstname
+      - spouse_verify_home.stat.gr_name == spouse_firstname
+    fail_msg: >-
+      Home dir /mnt/data/{{ spouse_firstname }} missing or wrong ownership.
+
+- name: _verify | SMB account is registered  # noqa: command-instead-of-module -- pdbedit query
+  command: pdbedit --user={{ spouse_firstname }}
+  changed_when: false
+  become: true
+
+- name: _verify | Smbpasswd sentinel exists
+  stat:
+    path: /etc/samba/.smbpasswd_{{ spouse_firstname }}_hash
+  register: spouse_verify_sentinel
+  become: true
+
+- name: _verify | Assert sentinel file
+  assert:
+    that:
+      - spouse_verify_sentinel.stat.exists
+      - spouse_verify_sentinel.stat.mode == '0600'
+    fail_msg: >-
+      Sentinel /etc/samba/.smbpasswd_{{ spouse_firstname }}_hash missing or wrong perms.

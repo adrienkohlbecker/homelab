@@ -12,7 +12,8 @@
     group: "{{ spouse_firstname }}"
     createhome: true
     system: false
-    shell: /bin/bash
+    shell: /usr/sbin/nologin
+    password: "!"
     home: /mnt/data/{{ spouse_firstname }}
   become: true
   register: spouse_user
@@ -27,5 +28,6 @@
     samba_smbpasswd_args:
       name: "{{ spouse_firstname }}"
       password: "{{ spouse_samba_password }}"
+  when: not (ansible_check_mode and spouse_user.changed)
   tags:
     - spouse

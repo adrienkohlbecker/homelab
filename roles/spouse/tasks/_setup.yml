@@ -6,11 +6,9 @@
     cache_valid_time: 3600
   become: true
 
-- name: _setup | Setup dependencies
-  shell: |
-    set -euo pipefail
-    mkdir /mnt/data
-  args:
-    executable: /bin/bash
-    creates: /mnt/data
+- name: _setup | Create /mnt/data
+  file:
+    path: /mnt/data
+    state: directory
+    mode: "0755"
   become: true
