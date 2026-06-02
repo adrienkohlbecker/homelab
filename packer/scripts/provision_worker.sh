@@ -75,7 +75,7 @@ apt-get install -y --no-install-recommends \
 # --- mise (tool version manager) ---
 MISE_GPG_FPR="24853EC9F655CE80B48E6C3A8B81C9D17413A06D"
 install -dm 755 /etc/apt/keyrings
-curl -fsSL https://mise.jdx.dev/gpg-key.pub |
+curl -fsSL --retry 3 --retry-all-errors https://mise.jdx.dev/gpg-key.pub |
   gpg --dearmor -o /etc/apt/keyrings/mise-archive-keyring.gpg
 gpg --with-colons --import-options show-only --import /etc/apt/keyrings/mise-archive-keyring.gpg 2>/dev/null |
   grep -q "fpr:::::::::${MISE_GPG_FPR}:" || {
@@ -84,7 +84,7 @@ gpg --with-colons --import-options show-only --import /etc/apt/keyrings/mise-arc
 }
 echo "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.jdx.dev/deb stable main" \
   >/etc/apt/sources.list.d/mise.list
-apt-get update
+apt_update
 apt-get install -y --no-install-recommends mise
 
 # mise data + shims on PATH for all users.
@@ -138,7 +138,7 @@ print(d["url"], d["sha256"])
 ' /tmp/github_runner_vars.yml)
 mkdir -p /opt/actions-runner
 cd /opt/actions-runner
-curl -fL --retry 3 -o runner.tar.gz "$RUNNER_URL"
+curl -fL --retry 3 --retry-all-errors -o runner.tar.gz "$RUNNER_URL"
 echo "${RUNNER_SHA256}  runner.tar.gz" | sha256sum -c -
 tar xzf runner.tar.gz
 rm runner.tar.gz
@@ -184,7 +184,7 @@ packer_cache_seed() {
   local dest="${PACKER_CACHE}/${key}.iso"
   if [ -f "$dest" ]; then return 0; fi
   echo "==> Pre-seeding packer cache: ${codename} (${snapshot}) -> ${key}.iso"
-  curl -fL --retry 3 -o "${dest}.tmp" "$url"
+  curl -fL --retry 3 --retry-all-errors -o "${dest}.tmp" "$url"
   echo "${sha256}  ${dest}.tmp" | sha256sum -c -
   mv "${dest}.tmp" "$dest"
 }
@@ -210,7 +210,7 @@ for codename in $(jq -r 'keys[]' "$IMAGES_JSON"); do
   img="ubuntu-${version}-minimal-cloudimg-amd64.img"
   if [ ! -f "${CLOUD_CACHE}/${img}" ]; then
     echo "==> Pre-caching ${img}"
-    curl -fL --retry 3 -o "${CLOUD_CACHE}/${img}.tmp" \
+    curl -fL --retry 3 --retry-all-errors -o "${CLOUD_CACHE}/${img}.tmp" \
       "https://cloud-images.ubuntu.com/minimal/releases/${codename}/release/${img}"
     mv "${CLOUD_CACHE}/${img}.tmp" "${CLOUD_CACHE}/${img}"
   fi
@@ -288,17 +288,11 @@ find /var/log -type f -name '*.gz' -delete
 # giving each instance a unique host key.
 rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
 
-# Blank machine-id so each instance gets a unique one.
-: >/etc/machine-id
-if [ -e /var/lib/dbus/machine-id ]; then
-  ln -sf /etc/machine-id /var/lib/dbus/machine-id
-fi
-
-# Clean cloud-init state so it re-runs on the next boot. Keep --configs
-# out: our 99-ci-worker.cfg must survive into the snapshot. machine-id
-# is already blanked above (empty file, not cloud-init's "uninitialized"
-# sentinel).
-cloud-init clean --logs --seed
+# Clean cloud-init state + blank machine-id so each instance gets a
+# unique one and cloud-init re-runs on next boot. --machine-id writes
+# the "uninitialized" sentinel (cloud-init 22.3+, noble ships 24.1+).
+# Keep --configs out: our 99-ci-worker.cfg must survive into the snapshot.
+cloud-init clean --logs --seed --machine-id
 
 # TRIM the filesystem so the hypervisor knows which blocks are free.
 # This is the single biggest snapshot-size win: a 20 GB disk with 8 GB
