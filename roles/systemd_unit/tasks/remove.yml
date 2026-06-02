@@ -17,19 +17,40 @@
 # to remove a masked unit (symlink to /dev/null) for the same reason
 # install.yml refuses to overwrite one -- the mask encodes operator
 # intent that a quiet `rm` would silently undo.
+- name: remove | Validate remove args
+  assert:
+    quiet: true
+    that:
+      - systemd_unit_args is defined
+      - systemd_unit_args is mapping
+      - systemd_unit_args.dest is defined or systemd_unit_args.src is defined or systemd_unit_args.for is defined or systemd_unit_args.dest_abs is defined
+    fail_msg: >-
+      systemd_unit_args needs at least one of dest, src, for, or dest_abs;
+      got dest={{ systemd_unit_args.dest | default('<unset>') }},
+      src={{ systemd_unit_args.src | default('<unset>') }},
+      for={{ systemd_unit_args.for | default('<unset>') }},
+      dest_abs={{ systemd_unit_args.dest_abs | default('<unset>') }}
+
 - name: remove | Resolve caller defaults for {{ systemd_unit_args.dest | default(systemd_unit_args.src | default('?')) }}
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
+    # For dest_abs mode, the identifier used in the per-unit result fact
+    # is the last two path components — same as install.yml.
     _systemd_unit_name: >-
-      {{ systemd_unit_args.dest
-         | default((systemd_unit_args.for ~ '.d/override.conf') if systemd_unit_args.for is defined
-                   else (systemd_unit_args.src | regex_replace('\.j2$', ''))) }}
+      {{ ((systemd_unit_args.dest_abs | dirname | basename) ~ '/' ~ (systemd_unit_args.dest_abs | basename))
+         if systemd_unit_args.dest_abs is defined
+         else (systemd_unit_args.dest
+               | default((systemd_unit_args.for ~ '.d/override.conf') if systemd_unit_args.for is defined
+                         else (systemd_unit_args.src | regex_replace('\.j2$', '')))) }}
 
 - name: remove | Derive scope for {{ systemd_unit_args.dest | default(systemd_unit_args.src | default('?')) }}
   set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
+    _systemd_unit_remove_path: >-
+      {{ systemd_unit_args.dest_abs
+         | default(('/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user') ~ '/' ~ _systemd_unit_name) }}
 
 # Check-mode tolerance on the linger-marker stat: see install.yml.
 # Name references caller var, not set_fact'd _systemd_unit_user, for the
@@ -49,7 +70,7 @@
 - name: remove | Stat unit path to detect a pre-existing mask
   when: _systemd_unit_condition
   stat:
-    path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
+    path: "{{ _systemd_unit_remove_path }}"
   register: _systemd_unit_mask
   become: true
 
@@ -60,15 +81,13 @@
     - _systemd_unit_mask.stat.lnk_target | default('') == '/dev/null'
   fail:
     msg: >-
-      Refusing to remove {{ _systemd_unit_dir }}/{{ _systemd_unit_name }}:
+      Refusing to remove {{ _systemd_unit_remove_path }}:
       it is masked (symlink to /dev/null). Unmask with
       `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_name }}`
       before re-running, or --limit the play to skip this role.
 
-# failed_when:false because the steady state we want IS "this unit is
-# gone" -- stopping a non-existent unit must be a no-op. The systemd
-# module returns module-level failure on "unit not found", which we
-# explicitly tolerate here.
+# Tolerate "unit not found" (the steady state we want IS "gone"), but
+# surface genuine errors (permissions, D-Bus unreachable).
 - name: remove | Stop and disable {{ systemd_unit_args.dest | default(systemd_unit_args.src | default('?')) }}
   when: _systemd_unit_condition
   systemd:
@@ -78,15 +97,42 @@
     scope: "{{ _systemd_unit_scope }}"
   become: true
   become_user: "{{ _systemd_unit_user }}"
-  failed_when: false
+  register: _systemd_unit_stop
+  failed_when: >-
+    _systemd_unit_stop.failed | default(false) and
+    'could not find' not in (_systemd_unit_stop.msg | default('') | lower)
 
 - name: remove | Delete the unit file
   when: _systemd_unit_condition
   file:
-    path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
+    path: "{{ _systemd_unit_remove_path }}"
     state: absent
   become: true
   register: systemd_unit_file
+
+- name: remove | Check drop-in directory is empty before removal
+  when:
+    - _systemd_unit_condition
+    - systemd_unit_file.changed
+    - systemd_unit_args.for is defined
+  find:
+    paths: "{{ _systemd_unit_dir }}/{{ systemd_unit_args.for }}.d"
+    file_type: any
+  become: true
+  register: _systemd_unit_dropin_dir_contents
+  failed_when: false
+
+- name: remove | Remove empty drop-in directory
+  when:
+    - _systemd_unit_condition
+    - systemd_unit_file.changed
+    - systemd_unit_args.for is defined
+    - (_systemd_unit_dropin_dir_contents.files | default([])) | length == 0
+    - _systemd_unit_dropin_dir_contents is not failed
+  file:
+    path: "{{ _systemd_unit_dir }}/{{ systemd_unit_args.for }}.d"
+    state: absent
+  become: true
 
 - name: remove | Reload daemon
   when:
