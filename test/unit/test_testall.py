@@ -1,12 +1,10 @@
 """Unit tests for test/testall.py — joblog I/O, merge logic, result types."""
 
 import csv
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import testall
 
 
