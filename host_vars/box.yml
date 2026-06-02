@@ -191,7 +191,7 @@ homepage_netdata_hosts:
 smb_shares:
   - name: test_share
     path: /tmp/samba_test
-    valid users: {{ ansible_user_id }}
+    valid users: "{{ ansible_user_id }}"
     time_machine: true
     time_machine_max_size: 1T
 
