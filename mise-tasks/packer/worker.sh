@@ -47,6 +47,8 @@ packer build \
   "${mise_token_args[@]}" \
   packer/hcloud_worker.pkr.hcl
 
-mise run packer:hcloud-prune-snapshots "role=ci-worker,ubuntu=noble"
+# Call directly (not via `mise run`) because mise re-reads [env] from
+# mise.toml which clobbers HCLOUD_TOKEN back to the unresolved op:// ref.
+"$(dirname "$0")/hcloud-prune-snapshots.sh" "role=ci-worker,ubuntu=noble"
 
 echo "==> Done. Label selector: role=ci-worker,ubuntu=noble"

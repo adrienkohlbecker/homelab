@@ -122,7 +122,9 @@ for _ in $(seq 1 120); do
   sleep 5
 done
 
-mise run packer:hcloud-prune-snapshots "os=ubuntu-zfs,ubuntu=$UBUNTU"
+# Call directly (not via `mise run`) because mise re-reads [env] from
+# mise.toml which clobbers HCLOUD_TOKEN back to the unresolved op:// ref.
+"$(dirname "$0")/hcloud-prune-snapshots.sh" "os=ubuntu-zfs,ubuntu=$UBUNTU"
 
 echo "==> DONE. Snapshot $imgid labelled os=ubuntu-zfs,ubuntu=$UBUNTU."
 echo "    Terraform's data.hcloud_image picks the newest matching snapshot automatically;"
