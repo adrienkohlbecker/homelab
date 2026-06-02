@@ -16,8 +16,13 @@
     set -euo pipefail
     umask 077
     sentinel="/etc/samba/.smbpasswd_${SMB_USER}_hash"
-    current_hash=$(printf '%s' "$SMB_PASSWORD" | sha256sum | cut -d' ' -f1)
-    if [ -f "$sentinel" ] && [ "$(cat "$sentinel")" = "$current_hash" ]; then
+    # Include machine-id so the sentinel is host-specific and non-portable
+    # even if the file is exfiltrated.
+    current_hash=$(printf '%s:%s' "$SMB_PASSWORD" "$(cat /etc/machine-id)" | sha256sum | cut -d' ' -f1)
+    # Also verify the SMB account still exists in the passdb -- a passdb wipe
+    # (package reinstall, migration) with a surviving sentinel would otherwise
+    # skip re-creation and silently leave the account absent.
+    if [ -f "$sentinel" ] && [ "$(cat "$sentinel")" = "$current_hash" ] && pdbedit --user="$SMB_USER" > /dev/null 2>&1; then
       exit 0
     fi
     if pdbedit --user="$SMB_USER" > /dev/null 2>&1; then
