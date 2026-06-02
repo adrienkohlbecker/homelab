@@ -21,6 +21,7 @@
       - ssh_verify_effective.stdout is search('(?m)^authenticationmethods publickey$')
       - ssh_verify_effective.stdout is search('(?m)^loglevel verbose$')
       - ssh_verify_effective.stdout is search('(?m)^kbdinteractiveauthentication no$')
+      - ssh_verify_effective.stdout is search('(?m)^streamlocalbindunlink yes$')
     fail_msg: >-
       sshd effective config is missing expected hardening directives —
       01-hardening.conf may not have landed, or /etc/ssh/sshd_config
@@ -43,9 +44,11 @@
          | regex_replace('^macs\s+', '') }}
   assert:
     that:
-      - _ssh_verify_macs is search('-etm@')
-      - _ssh_verify_macs is not search('(?<!\-)etm')
-      - _ssh_verify_macs is not search('umac-128@openssh\.com')
+      # Every enabled MAC must be an EtM variant. Assert the invariant
+      # positively (no token lacks -etm@) rather than blocklisting specific
+      # non-EtM names — a blocklist passes a plain hmac-sha2-256 that simply
+      # lacks the substring being excluded.
+      - _ssh_verify_macs.split(',') | reject('search', '-etm@') | list | length == 0
     fail_msg: >-
       Non-EtM MACs are still present in the effective config:
       {{ _ssh_verify_macs }}
@@ -55,4 +58,27 @@
   register: ssh_verify_stock_subsystem
   changed_when: false
   failed_when: ssh_verify_stock_subsystem.stdout | int > 0
+  become: true
+
+- name: _verify | Legacy drop-in is absent
+  stat:
+    path: /etc/ssh/sshd_config.d/config.conf
+  register: ssh_verify_legacy
+  failed_when: ssh_verify_legacy.stat.exists
+  become: true
+
+# Prove the validate gate is not a silent no-op: a deliberately invalid
+# drop-in must make `sshd -t` fail. /run is tmpfs and the VM is ephemeral.
+- name: _verify | Stage an invalid sshd drop-in
+  copy:
+    dest: /run/ssh_verify_bad.conf
+    content: "ThisIsNotAValidSshdDirective yes\n"
+    mode: "0600"
+  become: true
+
+- name: _verify | Invalid drop-in is rejected by sshd -t
+  command: sshd -t -f /run/ssh_verify_bad.conf
+  register: ssh_verify_badcfg
+  changed_when: false
+  failed_when: ssh_verify_badcfg.rc == 0
   become: true
