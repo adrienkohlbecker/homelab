@@ -68,7 +68,7 @@ class TestClassifyChangedFiles:
             ]
         )
         assert result.direct_roles == ["nginx", "podman"]
-        assert not result.packer_changed
+        assert not result.packer_sources_affected
         assert not result.ci_image_changed
         assert result.full_universe_paths == []
 
@@ -78,7 +78,7 @@ class TestClassifyChangedFiles:
 
     def test_packer_changed(self) -> None:
         result = detect.classify_changed_files(["packer/qemu.pkr.hcl"])
-        assert result.packer_changed is True
+        assert result.packer_sources_affected
 
     def test_ci_image_on_master(self) -> None:
         result = detect.classify_changed_files(["Dockerfile"], is_master_push=True)
@@ -97,13 +97,13 @@ class TestClassifyChangedFiles:
         ]
         result = detect.classify_changed_files(paths, is_master_push=True)
         assert result.direct_roles == ["nginx"]
-        assert result.packer_changed is True
+        assert result.packer_sources_affected
         assert result.ci_image_changed is True
         assert result.full_universe_paths == ["group_vars/all/main.yml"]
 
     def test_empty_paths(self) -> None:
         result = detect.classify_changed_files([])
-        assert result == detect.ChangeClassification([], [], False, False)
+        assert result == detect.ChangeClassification([], [], set(), False)
 
     def test_blank_lines_ignored(self) -> None:
         result = detect.classify_changed_files(["", "roles/nginx/tasks/main.yml", ""])
@@ -135,7 +135,7 @@ class TestClassifyChangedFiles:
                 "roles/zfs/tasks/main.yml",
             ]
         )
-        assert result.packer_changed is True
+        assert result.packer_sources_affected
         assert result.direct_roles == ["zfs"]
 
 
@@ -1353,10 +1353,13 @@ def _parse_kv(text: str) -> dict[str, str]:
 
 
 class TestCmdRun:
-    def test_all_mode(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _clean_ci_env(monkeypatch)
         monkeypatch.setenv("INPUTS_SOURCES", "")
         monkeypatch.setenv("INPUTS_UBUNTU", "")
+
+    def test_all_mode(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["alpha:box","beta:minimal"]')
         rc = detect._cmd_run(["--all"])
         assert rc == 0
@@ -1365,22 +1368,16 @@ class TestCmdRun:
         assert "mode: --all" in out.err
 
     def test_dispatch_roles(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
         monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
         monkeypatch.setenv("INPUTS_ROLES", "cleanup")
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["cleanup:box","cleanup:minimal"]')
         rc = detect._cmd_run([])
         assert rc == 0
         assert "cleanup:box" in capsys.readouterr().out
 
     def test_dispatch_all_keyword(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
         monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
         monkeypatch.setenv("INPUTS_ROLES", "ALL")
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["big:box"]')
         rc = detect._cmd_run([])
         assert rc == 0
@@ -1389,11 +1386,8 @@ class TestCmdRun:
         assert "roles=ALL" in out.err
 
     def test_dispatch_passes_args(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
         monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
         monkeypatch.setenv("INPUTS_ROLES", "foo,bar:minimal")
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         captured = {}
         monkeypatch.setattr(
             detect,
@@ -1404,11 +1398,9 @@ class TestCmdRun:
         assert captured["args"] == ("--dispatch", "foo,bar:minimal")
 
     def test_packer_only_dispatch(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
         monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
         monkeypatch.setenv("INPUTS_ROLES", "")
         monkeypatch.setenv("INPUTS_SOURCES", "lab pug")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         rc = detect._cmd_run([])
         assert rc == 0
         kv = _parse_kv(capsys.readouterr().out)
@@ -1417,9 +1409,6 @@ class TestCmdRun:
         assert sorted(json.loads(kv["packer_sources"])) == ["lab", "pug"]
 
     def test_local_preview(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc123")
         monkeypatch.setattr(
             detect,
@@ -1438,14 +1427,11 @@ class TestCmdRun:
         assert "HEAD~1" in out.err
 
     def test_ci_base_ref_override(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
         monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
         monkeypatch.setenv("GITHUB_SHA", "head")
         monkeypatch.setenv("GITHUB_REF_NAME", "master")
         monkeypatch.setenv("GITHUB_REF", "refs/heads/master")
         monkeypatch.setenv("CI_BASE_REF", "HEAD~3")
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "resolved_sha")
         monkeypatch.setattr(detect, "git_diff_files", lambda base, head="HEAD": [])
         monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
@@ -1457,15 +1443,12 @@ class TestCmdRun:
         assert "CI_BASE_REF override" in capsys.readouterr().err
 
     def test_push_with_green_base(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
         monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
         monkeypatch.setenv("GITHUB_SHA", "head_sha_123")
         monkeypatch.setenv("GITHUB_REF_NAME", "master")
         monkeypatch.setenv("GITHUB_REF", "refs/heads/master")
         monkeypatch.setenv("GITHUB_TOKEN", "tok")
         monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         monkeypatch.setattr(detect, "resolve_green_base", lambda **kw: "green_sha_abc")
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: ref)
         monkeypatch.setattr(
@@ -1483,15 +1466,12 @@ class TestCmdRun:
         assert "nginx:box" in capsys.readouterr().out
 
     def test_push_no_green_full_universe(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
         monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
         monkeypatch.setenv("GITHUB_SHA", "head")
         monkeypatch.setenv("GITHUB_REF_NAME", "master")
         monkeypatch.setenv("GITHUB_REF", "refs/heads/master")
         monkeypatch.setenv("GITHUB_TOKEN", "tok")
         monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         monkeypatch.setattr(detect, "resolve_green_base", lambda **kw: None)
         monkeypatch.setattr(detect, "_matrix_json", lambda *a: '["big:box"]')
         rc = detect._cmd_run([])
@@ -1500,15 +1480,12 @@ class TestCmdRun:
         assert kv["packer_changed"] == "true"
 
     def test_push_green_needs_fetch(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
         monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
         monkeypatch.setenv("GITHUB_SHA", "head")
         monkeypatch.setenv("GITHUB_REF_NAME", "master")
         monkeypatch.setenv("GITHUB_REF", "refs/heads/master")
         monkeypatch.setenv("GITHUB_TOKEN", "tok")
         monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         monkeypatch.setattr(detect, "resolve_green_base", lambda **kw: "green_sha")
         rev_calls = {"n": 0}
 
@@ -1530,9 +1507,6 @@ class TestCmdRun:
         assert "fetching the commit" in capsys.readouterr().err
 
     def test_full_universe_on_group_vars(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
         monkeypatch.setattr(
             detect,
@@ -1548,9 +1522,6 @@ class TestCmdRun:
     def test_packer_change_adds_packer_role(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        _clean_ci_env(monkeypatch)
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
         monkeypatch.setattr(
             detect,
@@ -1574,9 +1545,6 @@ class TestCmdRun:
         assert kv["packer_changed"] == "true"
 
     def test_role_deps_expansion(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
         monkeypatch.setattr(
             detect,
@@ -1601,9 +1569,6 @@ class TestCmdRun:
         assert "systemd_unit" in args
 
     def test_release_cell_propagation(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
         monkeypatch.setattr(
             detect,
@@ -1632,14 +1597,11 @@ class TestCmdRun:
         assert "nginx:box:noble" in args
 
     def test_ci_image_on_master_push(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
         monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
         monkeypatch.setenv("GITHUB_SHA", "head")
         monkeypatch.setenv("GITHUB_REF_NAME", "master")
         monkeypatch.setenv("GITHUB_REF", "refs/heads/master")
         monkeypatch.setenv("CI_BASE_REF", "HEAD~1")
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "resolved")
         monkeypatch.setattr(
             detect,
@@ -1657,9 +1619,6 @@ class TestCmdRun:
         assert kv["ci_image_changed"] == "true"
 
     def test_empty_changeset(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
         monkeypatch.setattr(detect, "git_diff_files", lambda base, head="HEAD": [])
         monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
@@ -1671,9 +1630,6 @@ class TestCmdRun:
         assert "no role-relevant changes" in capsys.readouterr().err
 
     def test_role_not_in_universe_skipped(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        _clean_ci_env(monkeypatch)
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
         monkeypatch.setattr(
             detect,
