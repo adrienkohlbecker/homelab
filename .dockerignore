@@ -13,6 +13,7 @@
 !packer
 packer/*
 !packer/qemu.pkr.hcl
+!packer/hcloud_worker.pkr.hcl
 !runner
 runner/*
 !runner/entrypoint.sh
