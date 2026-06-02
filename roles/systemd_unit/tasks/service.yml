@@ -144,6 +144,10 @@
   containers.podman.podman_image:
     name: "{{ item }}"
   loop: "{{ systemd_unit_podman_images.images | default([]) }}"
+  retries: 3
+  delay: 10
+  register: _systemd_unit_pull
+  until: _systemd_unit_pull is not failed
   become: true
   become_user: "{{ systemd_unit_podman_images.user if (systemd_unit_podman_images.user | default('')) not in ['', 'root'] else 'root' }}"
 
@@ -165,7 +169,11 @@
     - _systemd_unit_start
     - not ansible_check_mode
     - (systemd_unit_args.restart | default(false)) or ((_systemd_unit_enable.status.ActiveState | default('inactive')) != 'active')
-  command: "systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} reset-failed {{ _systemd_unit_name }}"
+  command:
+    argv: >-
+      {{ ['systemctl'] +
+         (['--user'] if _systemd_unit_scope == 'user' else []) +
+         ['reset-failed', _systemd_unit_name] }}
   changed_when: false
   failed_when: false
   become: true
@@ -210,14 +218,15 @@
   become_user: "{{ _systemd_unit_user }}"
 
 # Hitless alternative to restart for daemons that pick up config via SIGHUP
-# (keepalived, nginx, etc.). Mutually exclusive with systemd_unit_args.restart
-# in practice — set one or the other. Skipped on the play that just started
-# the unit (the started state already reflects current config).
+# (keepalived, nginx, etc.). Skipped when restart is also set (restart
+# already applied), and on the play that just started the unit (the started
+# state already reflects current config).
 - name: Reload the service
   when:
     - _systemd_unit_condition
     - _systemd_unit_start
     - systemd_unit_args.reload | default(false)
+    - not (systemd_unit_args.restart | default(false))
     - not systemd_unit_started.changed
   throttle: "{{ systemd_unit_args.throttle | default(0) }}"
   systemd:
