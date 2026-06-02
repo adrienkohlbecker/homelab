@@ -25,13 +25,14 @@
 
 - name: Configure ssh
   when: not (ansible_check_mode and ssh_root_directory.changed)
-  template:
-    src: ssh_config.j2
+  copy:
+    src: ssh_config
     dest: /root/.ssh/config
     owner: root
     group: root
     mode: "0644"
     backup: true
+    validate: ssh -G -F %s localhost
   become: true
   tags:
     - ssh_root
