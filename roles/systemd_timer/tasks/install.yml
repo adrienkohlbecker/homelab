@@ -70,7 +70,12 @@
 #   environment       optional dict {KEY: value}; emits one Environment=
 #                     line per entry in [Service]. Each value lands as a
 #                     separate Environment= directive so embedded
-#                     spaces/commas don't need shell-escaping.
+#                     spaces/commas don't need shell-escaping. NON-SECRET
+#                     config only: values are written into the world-readable
+#                     0644 unit file and exposed by `systemctl show` to any
+#                     local user. For a secret, load it from a file instead
+#                     (LoadCredential= via additional_service_directives +
+#                     $CREDENTIALS_DIRECTORY), never environment.
 #   additional_service_directives
 #                     optional list of literal strings; emitted verbatim
 #                     into [Service]. Escape hatch for hardening
@@ -141,6 +146,21 @@
   loop: "{{ systemd_timer_args.environment.keys() | list }}"
   loop_control:
     label: "{{ item }}"
+
+# FixedRandomDelay= only has meaning paired with RandomizedDelaySec=, and
+# timer.j2 emits it *inside* the randomized_delay_sec block -- so
+# fixed_random_delay alone is silently dropped, reintroducing the cross-host
+# thundering-herd it was meant to prevent. Reject the combination loudly.
+- name: install | Reject fixed_random_delay without randomized_delay_sec for {{ systemd_timer_args.name }}
+  when: systemd_timer_args.fixed_random_delay | default(false)
+  assert:
+    that:
+      - systemd_timer_args.randomized_delay_sec is defined
+    fail_msg: >-
+      systemd_timer {{ systemd_timer_args.name }}: fixed_random_delay requires
+      randomized_delay_sec (FixedRandomDelay= pins an otherwise-random delay to
+      a stable per-host value; with no RandomizedDelaySec= there is nothing to
+      pin).
 
 # Wrapper script used by every timer's ExecStart so stderr lines land
 # in the journal at priority err. Install before the unit so
