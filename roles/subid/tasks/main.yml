@@ -1,3 +1,7 @@
+# /etc/subuid and /etc/subgid are rendered wholesale (not via
+# `usermod --add-subuids`) because the file is the single declarative source of
+# truth and the index-based range arithmetic guarantees non-overlapping per-user
+# ranges; there is no native ansible module for subids (ansible/ansible#82924).
 - name: Assert required inputs
   assert:
     that:
@@ -26,15 +30,33 @@
   tags:
     - subid
 
+- name: Assert subuid/subgid extra sources exist on the host
+  vars:
+    subid_missing_users: "{{ subid_extra_subuid_users | default([]) | map(attribute='source_user') | list | difference(ansible_facts.getent_passwd | default({}) | list) }}"
+    subid_missing_groups: "{{ subid_extra_subgid_groups | default([]) | map(attribute='group') | list | difference(ansible_facts.getent_group | default({}) | list) }}"
+  assert:
+    that:
+      - subid_missing_users | length == 0
+      - subid_missing_groups | length == 0
+    fail_msg: >-
+      subid extra entries reference id sources missing on {{ inventory_hostname }}.
+      Missing passwd users: {{ subid_missing_users }}; missing groups: {{ subid_missing_groups }}.
+  tags:
+    - subid
+
 - name: Apply subuid settings
   template:
-    src: subuid.j2
+    src: subid.j2
     dest: /etc/subuid
     owner: root
     group: root
     mode: '0644'
     backup: true
-    validate: python3 -c 'import sys; [exit(1) for l in open(sys.argv[1]) if l.strip() and len(l.strip().split(":")) != 3 or l.strip() and not l.strip().split(":")[1].isdigit() or l.strip() and not l.strip().split(":")[2].isdigit()]' "%s"
+    validate: python3 -c 'import sys; lines = [x.strip() for x in open(sys.argv[1]) if x.strip()]; sys.exit(1 if [x for x in lines if len(x.split(":")) != 3 or not x.split(":")[1].isdigit() or not x.split(":")[2].isdigit()] else 0)' "%s"
+  vars:
+    subid_extras: "{{ subid_extra_subuid_users | default([]) }}"
+    subid_id_source: "{{ ansible_facts.getent_passwd | default({}) }}"
+    subid_id_key: source_user
   register: subid_subuid_result
   become: true
   tags:
@@ -42,13 +64,17 @@
 
 - name: Apply subgid settings
   template:
-    src: subgid.j2
+    src: subid.j2
     dest: /etc/subgid
     owner: root
     group: root
     mode: '0644'
     backup: true
-    validate: python3 -c 'import sys; [exit(1) for l in open(sys.argv[1]) if l.strip() and len(l.strip().split(":")) != 3 or l.strip() and not l.strip().split(":")[1].isdigit() or l.strip() and not l.strip().split(":")[2].isdigit()]' "%s"
+    validate: python3 -c 'import sys; lines = [x.strip() for x in open(sys.argv[1]) if x.strip()]; sys.exit(1 if [x for x in lines if len(x.split(":")) != 3 or not x.split(":")[1].isdigit() or not x.split(":")[2].isdigit()] else 0)' "%s"
+  vars:
+    subid_extras: "{{ subid_extra_subgid_groups | default([]) }}"
+    subid_id_source: "{{ ansible_facts.getent_group | default({}) }}"
+    subid_id_key: group
   register: subid_subgid_result
   become: true
   tags:
