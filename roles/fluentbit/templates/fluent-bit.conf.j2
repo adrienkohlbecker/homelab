@@ -117,8 +117,7 @@
 
 # File-backed service logs that can't be routed to journald in their
 # own config (or where the volume/UI dependency makes that the wrong
-# call): samba's per-machine `log.%m` only ships above a too-coarse
-# syslog level cap; pihole's FTL.log is parsed by the admin web UI's
+# call): pihole's FTL.log is parsed by the admin web UI's
 # diagnosis view and can't be redirected without breaking it; pihole's
 # lighttpd access + gravity-update logs live inside the container
 # with no exposed override knob, so we tail what the container writes
@@ -143,35 +142,16 @@
 #
 # Migrated to journald in their own role, so the systemd input above
 # already covers them: fail2ban (logtarget=SYSTEMD-JOURNAL in
-# fail2ban.local) and jellyfin (Serilog File sink disabled via
+# fail2ban.local), jellyfin (Serilog File sink disabled via
 # /config/logging.json override; Console sink still streams to
-# container stdout -> journald).
+# container stdout -> journald), and samba (logging = systemd).
 #
-# Read_from_Head=off prevents replay of rotated leftovers (samba's
-# log.smbd.1, log.nmbd.old, etc.) when fluent-bit first sees them.
+# Read_from_Head=off prevents replay of rotated leftovers when
+# fluent-bit first sees them.
 # Rotate_Wait=30 holds the pre-rotation inode open after a detected
 # rotation so the tail buffer flushes -- matches the nginx tails'
 # choice for the same reason. service.name lands at the tag
 # (lowercased) via otlp_shape's else branch.
-
-# samba's `log file = /var/log/samba/log.%m` produces log.smbd,
-# log.nmbd, log.samba-bgqd, and a log.<client> per connecting machine.
-# Single-level glob (no **) so the cores/ subdir is naturally excluded;
-# binary core dumps would otherwise fail tail's UTF-8 path.
-[INPUT]
-    Name              tail
-    Tag               samba
-    Path              /var/log/samba/log.*
-    DB                /var/lib/fluent-bit/samba.db
-    db.locking        on
-    Path_Key          filepath
-    Read_from_Head    off
-    Skip_Long_Lines   on
-    Skip_Empty_Lines  on
-    Rotate_Wait       30
-    Buffer_Max_Size   256k
-    storage.type      filesystem
-    storage.pause_on_chunks_overlimit  on
 
 # pihole's FTL daemon (the actual DNS resolver + API) writes FTL.log
 # directly inside the container at /var/log/pihole/FTL.log, which is

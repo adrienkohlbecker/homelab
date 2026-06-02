@@ -13,8 +13,15 @@ set -euo pipefail
 # Skip when notes/ is not initialized (fresh clone without --recurse).
 [ -d "notes/.git" ] || [ -f "notes/.git" ] || exit 0
 
+# git's pre-commit hook exports GIT_DIR pointing at the parent repo;
+# `git -C notes` inherits it and misreads the parent tree as notes content.
+# Unset both so the submodule resolves its own .git naturally.
+# (The pointer-drift checks below use the parent's index deliberately, so
+# they must run with the original GIT_DIR — only the dirty-worktree check
+# needs isolation.)
+
 # 1. Dirty worktree inside notes/
-if [ -n "$(git -C notes status --porcelain 2>/dev/null)" ]; then
+if [ -n "$(unset GIT_DIR GIT_WORK_TREE; git -C notes status --porcelain 2>/dev/null)" ]; then
   echo >&2 "pre-commit: notes/ submodule has uncommitted changes."
   echo >&2 "  Commit (and push) inside notes/ first, then 'git add notes'."
   exit 1

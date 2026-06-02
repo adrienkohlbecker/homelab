@@ -50,16 +50,7 @@
 
 #### Debugging/Accounting ####
 
-# This tells Samba to use a separate log file for each machine
-# that connects
-   log file = /var/log/samba/log.%m
-
-# Cap the size of the individual log files (in KiB).
-   max log size = 1000
-
-# We want Samba to only log to /var/log/samba/log.{smbd,nmbd}.
-# Append syslog@1 if you want important messages to be sent to syslog too.
-   logging = file systemd@0
+   logging = systemd
 
 # Do something sensible when Samba crashes: mail the admin a backtrace
    panic action = /usr/share/samba/panic-action %d
