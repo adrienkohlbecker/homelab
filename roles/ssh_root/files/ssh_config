@@ -7,6 +7,7 @@ Host *
     ControlMaster auto
     ControlPersist 300
     IdentityFile ~/.ssh/id_ed25519
+    ForwardAgent no
     IdentitiesOnly yes
     ServerAliveInterval 30
     ConnectTimeout 10
