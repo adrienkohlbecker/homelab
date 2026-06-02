@@ -53,12 +53,13 @@
   loop:
     - library.db
     - jellyfin.db
+    - introskipper/introskipper.db
 
 - name: _verify | Assert symlink targets land on sqlite dataset
   assert:
     that:
       - item.stat.islnk
-      - item.stat.lnk_target == '/mnt/services/sqlite/jellyfin/' ~ item.item
+      - item.stat.lnk_target == '/mnt/services/sqlite/jellyfin/' ~ (item.item | basename)
     fail_msg: >-
       /mnt/services/jellyfin/data/{{ item.item }} should be a symlink
       pointing into /mnt/services/sqlite/jellyfin/, but is

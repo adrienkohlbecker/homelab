@@ -61,6 +61,7 @@
 - name: _verify | Stat the lidarr DB paths
   stat:
     path: "/mnt/services/lidarr/{{ item }}"
+    follow: false
   loop:
     - lidarr.db
     - logs.db

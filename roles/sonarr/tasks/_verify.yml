@@ -103,6 +103,7 @@
 - name: _verify | Stat the sonarr DB paths
   stat:
     path: "/mnt/services/sonarr/{{ item }}"
+    follow: false
   loop:
     - sonarr.db
     - logs.db
