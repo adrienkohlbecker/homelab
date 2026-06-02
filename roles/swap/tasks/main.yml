@@ -385,3 +385,20 @@
   become: true
   tags:
     - swap
+
+# vm.page-cluster controls how many contiguous swap pages are read ahead per
+# fault (2^N pages; default 3 = 8 pages). Disk swap benefits from readahead
+# to amortise seek cost; zram has no seek penalty so each speculative page only
+# costs a decompression cycle. Setting to 0 (1 page per fault) removes that
+# waste on zram-primary hosts.
+- name: Tune vm.page-cluster for zram hosts
+  when: swap_zram is defined
+  ansible.posix.sysctl:
+    name: vm.page-cluster
+    value: "0"
+    sysctl_file: /etc/sysctl.d/30-swap.conf
+    state: present
+    reload: true
+  become: true
+  tags:
+    - swap
