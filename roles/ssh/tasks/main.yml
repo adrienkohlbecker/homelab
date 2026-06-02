@@ -24,6 +24,10 @@
     group: root
     mode: "0644"
     backup: true
+    # Parse the staged file before it lands, catching a syntax error in the
+    # drop-in on write. This validates the drop-in in isolation; the merged
+    # Include-chain check is the separate `sshd -t` task below.
+    validate: sshd -t -f %s
   register: ssh_sshd_config
   become: true
   tags:
@@ -36,7 +40,7 @@
 - name: Comment out stock sftp Subsystem to avoid duplicate on jammy
   lineinfile:
     path: /etc/ssh/sshd_config
-    regexp: '^(#? ?)Subsystem(\s+)sftp(\s+)(.*)$'
+    regexp: '^([#\s]*)Subsystem(\s+)sftp(\s+)(.*)$'
     line: '# Subsystem\2sftp\3\4'
     backrefs: true
     backup: true
@@ -45,6 +49,11 @@
   tags:
     - ssh
 
+# `sshd -t` (no -f) re-validates the *merged* live config: the whole Include
+# chain plus the base-file Subsystem edit above. The copy's validate: only
+# sees the drop-in in isolation, so it can't catch the duplicate Subsystem
+# that is fatal on jammy. Keep both — per-file gate on write, merged-config
+# gate before reload.
 - name: Validate sshd config before reload
   when:
     - not (ansible_check_mode and ssh_apt.changed)
