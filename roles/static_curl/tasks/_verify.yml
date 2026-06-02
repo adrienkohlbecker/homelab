@@ -26,7 +26,8 @@
       {{ _static_curl_stat.stat | to_nice_json }}
 
 # ldd on a fully-static binary emits "statically linked" (jammy) or
-# "not a dynamic executable" (older glibc), and may exit non-zero.
+# "not a dynamic executable" (older glibc) — on stdout or stderr — and
+# may exit non-zero.
 - name: _verify | Curl_static is fully statically linked
   command: ldd /usr/local/bin/curl_static
   changed_when: false
@@ -37,7 +38,7 @@
   assert:
     that:
       - "'=>' not in _static_curl_curl_ldd.stdout"
-      - _static_curl_curl_ldd.stdout is search('statically linked|not a dynamic executable')
+      - (_static_curl_curl_ldd.stdout ~ _static_curl_curl_ldd.stderr) is search('statically linked|not a dynamic executable')
     fail_msg: >-
       curl_static is not fully statically linked.
       ldd stdout: {{ _static_curl_curl_ldd.stdout | default('') }}
@@ -54,3 +55,53 @@
       - _static_curl_fetch.rc == 0
       - _static_curl_fetch.stdout | length > 0
     fail_msg: "curl_static failed to fetch file:///etc/hostname: rc={{ _static_curl_fetch.rc }}, stdout={{ _static_curl_fetch.stdout }}"
+
+# The role exists to give distroless containers an HTTP client for
+# --health-cmd, so exercise the socket path the consumers actually hit.
+# Plain HTTP over loopback (no TLS/SNI, no UDP) dodges the qemu SLIRP and
+# openssl-3 SNI flakes that bite TLS/external probes on the fixtures.
+- name: _verify | Create a docroot for the HTTP probe
+  file:
+    path: /tmp/curl_static_probe
+    state: directory
+    mode: "0755"
+
+- name: _verify | Write a known body for the probe server to serve
+  copy:
+    dest: /tmp/curl_static_probe/health
+    content: "curl_static-http-ok\n"
+    mode: "0644"
+
+- name: _verify | Start a throwaway loopback HTTP server
+  shell: |
+    nohup python3 -m http.server 18080 --bind 127.0.0.1 \
+      --directory /tmp/curl_static_probe </dev/null \
+      >/tmp/curl_static_probe/server.log 2>&1 &
+    echo $!
+  register: _static_curl_http_server
+  changed_when: false
+
+- name: _verify | Wait for the probe server to accept connections
+  wait_for:
+    host: 127.0.0.1
+    port: 18080
+    timeout: 10
+
+- name: _verify | Curl_static can fetch over HTTP
+  command: /usr/local/bin/curl_static -sf http://127.0.0.1:18080/health
+  changed_when: false
+  register: _static_curl_http_fetch
+
+- name: _verify | Assert curl_static fetched the served body over HTTP
+  assert:
+    that:
+      - _static_curl_http_fetch.rc == 0
+      - _static_curl_http_fetch.stdout == 'curl_static-http-ok'
+    fail_msg: >-
+      curl_static failed to fetch http://127.0.0.1:18080/health:
+      rc={{ _static_curl_http_fetch.rc }}, stdout={{ _static_curl_http_fetch.stdout }}
+
+- name: _verify | Stop the throwaway HTTP server
+  command: kill {{ _static_curl_http_server.stdout }}
+  changed_when: false
+  failed_when: false
