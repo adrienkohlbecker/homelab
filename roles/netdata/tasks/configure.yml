@@ -35,7 +35,7 @@
     dest: /var/lib/netdata/cloud.d/cloud.conf
     owner: netdata
     group: netdata
-    mode: "0660"
+    mode: "0640"
     backup: true
   register: netdata_cloud_conf
   become: true
@@ -90,7 +90,9 @@
 # install.yml), whose v6-aware module talks to the FTL API -- the pihole role
 # templates the matching go.d/pihole.conf job (url 127.0.0.1:{{ service_ports.pihole }},
 # password-authenticated). Flipping this to `yes` also undoes the `pihole: no`
-# already written into go.d.conf on hosts converged under the old pin.
+# already written into go.d.conf on hosts converged under the old pin. On hosts
+# without the pihole role (fox), go.d autodetects and fails harmlessly (no job
+# config, no status chart, no alarm -- just log noise).
 - name: Enable pihole collector in go.d.conf
   when: not (ansible_check_mode and netdata_godconf_copy.changed)
   lineinfile:
@@ -98,6 +100,7 @@
     regexp: '^[#\s]*pihole:\s+'
     line: '  pihole: yes'
     backup: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
   register: netdata_godconf_pihole
   become: true
   tags:
