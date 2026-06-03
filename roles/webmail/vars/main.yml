@@ -1,2 +1,16 @@
 webmail_dovecot_version: "2.4.4"
 webmail_roundcube_version: "1.6.16"
+
+# Fixed, non-secret IMAP credential, single-sourced here so the dovecot passdb,
+# the dovecot healthcheck, the nginx Basic-auth inject, and the _verify probes
+# can't drift. Guards nothing: the IMAP listener is internal-network-only and
+# Authelia is the real gate (notes/getmail_webmail_design.md), hence unvaulted.
+webmail_imap_user: archive
+webmail_imap_password: archive
+
+# Roundcube's 3DES key for the password stored in the session cookie. Pinned to
+# a fixed value (any 24 chars) so sessions survive a container restart: the
+# webroot is ephemeral, so an unset key regenerates each boot and silently
+# invalidates every session. Non-secret because the cred it encrypts is the
+# non-secret IMAP credential above.
+webmail_roundcube_des_key: webmailArchiveViewer0001
