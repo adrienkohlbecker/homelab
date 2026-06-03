@@ -371,6 +371,7 @@ fluentbit_otlp_local: false
 pihole_keepalived_peers:
   - lab
   - pug
+  - udm
 pihole_keepalived_vrid: 1
 pihole_adlists:
   - https://v.firebog.net/hosts/lists.php?type=tick

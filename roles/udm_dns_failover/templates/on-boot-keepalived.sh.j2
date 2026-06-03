@@ -1,0 +1,43 @@
+#!/bin/bash
+set -euo pipefail
+# Re-bootstrap keepalived + dnscrypt-proxy after a UniFi OS firmware update.
+# Firmware replaces the SquashFS root, wiping /usr/ — the keepalived apt
+# package disappears. dnscrypt-proxy (static binary in /data/) survives.
+# Systemd units in /etc/systemd/system/ (overlay upper dir) usually survive
+# but may not after a major firmware update — re-deploy unconditionally.
+
+DATADIR=/data/keepalived
+
+# -- keepalived ----------------------------------------------------------
+if ! command -v keepalived &>/dev/null; then
+  if ls "$DATADIR"/cache/keepalived_*.deb &>/dev/null; then
+    dpkg -i "$DATADIR"/cache/keepalived_*.deb
+  else
+    apt-get update -qq
+    apt-get install -y -qq keepalived
+    mkdir -p "$DATADIR/cache"
+    cp /var/cache/apt/archives/keepalived_*.deb "$DATADIR/cache/" 2>/dev/null || true
+  fi
+fi
+
+# -- symlinks from persistent storage ------------------------------------
+ln -sfn "$DATADIR/keepalived.conf" /etc/keepalived/keepalived.conf
+mkdir -p /etc/keepalived/conf.d
+ln -sfn "$DATADIR/pihole.conf"     /etc/keepalived/conf.d/pihole.conf
+ln -sfn "$DATADIR/healthcheck.sh"  /usr/local/bin/pihole_healthcheck
+ln -sfn "$DATADIR/dnscrypt-proxy"  /usr/local/bin/dnscrypt-proxy
+
+# -- sysctl ---------------------------------------------------------------
+sysctl -w net.ipv4.ip_nonlocal_bind=1
+
+# -- iptables VRRP accept ------------------------------------------------
+if ! iptables -C INPUT -i {{ udm_dns_failover_interface }} -p 112 -j ACCEPT 2>/dev/null; then
+  iptables -A INPUT -i {{ udm_dns_failover_interface }} -p 112 -j ACCEPT
+fi
+
+# -- systemd units --------------------------------------------------------
+cp "$DATADIR/dnscrypt-proxy-vip.service" /etc/systemd/system/
+systemctl daemon-reload
+
+systemctl enable --now dnscrypt-proxy-vip.service
+systemctl enable --now keepalived.service

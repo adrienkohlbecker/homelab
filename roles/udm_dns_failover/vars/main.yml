@@ -1,0 +1,5 @@
+udm_dns_failover_dnscrypt:
+  version: "2.1.7"
+  aarch64:
+    url: https://github.com/DNSCrypt/dnscrypt-proxy/releases/download/2.1.7/dnscrypt-proxy-linux_arm64-2.1.7.tar.gz
+    sha256: 46d71003727700bfcf69b83aa404c0c8981c1d5f9373f84ecb7f52cb9f69b02e
