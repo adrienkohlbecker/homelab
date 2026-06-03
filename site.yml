@@ -188,7 +188,7 @@
           failed_when: false
 
         - name: Refuse to reboot — no peer is serving DNS
-          when: _reboot_dns_probe.results | selectattr('rc', 'eq', 0) | list | length == 0
+          when: _reboot_dns_probe.results | selectattr('rc', 'eq', 0) | selectattr('stdout') | list | length == 0
           fail:
             msg: >-
               No pihole peer is answering DNS — refusing to reboot to preserve
@@ -213,11 +213,11 @@
         - name: Wait for peer to finish rebooting
           when:
             - _reboot_is_lowest_priority | bool
-            - _reboot_dns_reprobe.results | selectattr('rc', 'eq', 0) | list | length == 0
+            - _reboot_dns_reprobe.results | selectattr('rc', 'eq', 0) | selectattr('stdout') | list | length == 0
           command: dig +short +timeout=3 +tries=2 @{{ item }} pi.hole
           loop: "{{ _reboot_dns_ips }}"
           register: _reboot_dns_wait
-          until: _reboot_dns_wait.rc == 0
+          until: _reboot_dns_wait.rc == 0 and _reboot_dns_wait.stdout | default('') | length > 0
           retries: 30
           delay: 10
           changed_when: false
@@ -226,8 +226,8 @@
         - name: Refuse to reboot — peer did not recover
           when:
             - _reboot_is_lowest_priority | bool
-            - _reboot_dns_reprobe.results | selectattr('rc', 'eq', 0) | list | length == 0
-            - _reboot_dns_wait.results | default([]) | selectattr('rc', 'eq', 0) | list | length == 0
+            - _reboot_dns_reprobe.results | selectattr('rc', 'eq', 0) | selectattr('stdout') | list | length == 0
+            - _reboot_dns_wait.results | default([]) | selectattr('rc', 'eq', 0) | selectattr('stdout') | list | length == 0
           fail:
             msg: >-
               No pihole peer recovered DNS after 5 min — refusing to reboot.
@@ -259,14 +259,14 @@
         - name: Verify peer claimed the VIP
           command: dig +short +timeout=5 +tries=3 @{{ pihole_keepalived_ip }} pi.hole
           register: _reboot_vip_check
-          until: _reboot_vip_check.rc == 0
+          until: _reboot_vip_check.rc == 0 and _reboot_vip_check.stdout | default('') | length > 0
           retries: 6
           delay: 2
           changed_when: false
           failed_when: false
 
         - name: Refuse to reboot — VIP did not migrate
-          when: _reboot_vip_check.rc | default(1) != 0
+          when: (_reboot_vip_check.rc | default(1) != 0) or (_reboot_vip_check.stdout | default('') | length == 0)
           fail:
             msg: >-
               Pihole VIP {{ pihole_keepalived_ip }} is not answering DNS after
