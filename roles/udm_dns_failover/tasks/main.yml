@@ -256,14 +256,17 @@
   tags:
     - udm_dns_failover
 
+# 0640: the rendered unit embeds the healthchecks.io ping URL (a bearer
+# token in the UUID), so it must not be world-readable.
 - name: Deploy heartbeat service to persistent storage
   template:
     src: udm_keepalived_heartbeat.service.j2
     dest: /data/keepalived/udm_keepalived_heartbeat.service
     owner: root
     group: root
-    mode: "0644"
+    mode: "0640"
     backup: true
+  register: udm_dns_failover_heartbeat_service
   become: true
   tags:
     - udm_dns_failover
@@ -276,32 +279,32 @@
     group: root
     mode: "0644"
     backup: true
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Deploy heartbeat service to systemd
-  template:
-    src: udm_keepalived_heartbeat.service.j2
-    dest: /etc/systemd/system/udm_keepalived_heartbeat.service
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: udm_dns_failover_heartbeat_service
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Deploy heartbeat timer to systemd
-  copy:
-    src: udm_keepalived_heartbeat.timer
-    dest: /etc/systemd/system/udm_keepalived_heartbeat.timer
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
   register: udm_dns_failover_heartbeat_timer
+  become: true
+  tags:
+    - udm_dns_failover
+
+# Symlink the active units to the persistent masters, so the converge and
+# the on-boot recovery (which symlinks the same way) leave one on-disk
+# shape -- not a real file here and a symlink after a firmware update.
+- name: Symlink heartbeat service into systemd
+  file:
+    src: /data/keepalived/udm_keepalived_heartbeat.service
+    dest: /etc/systemd/system/udm_keepalived_heartbeat.service
+    state: link
+    force: true
+  register: udm_dns_failover_heartbeat_service_link
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Symlink heartbeat timer into systemd
+  file:
+    src: /data/keepalived/udm_keepalived_heartbeat.timer
+    dest: /etc/systemd/system/udm_keepalived_heartbeat.timer
+    state: link
+    force: true
+  register: udm_dns_failover_heartbeat_timer_link
   become: true
   tags:
     - udm_dns_failover
@@ -310,7 +313,9 @@
   when: >-
     udm_dns_failover_onboot_unit.changed or
     udm_dns_failover_heartbeat_service.changed or
-    udm_dns_failover_heartbeat_timer.changed
+    udm_dns_failover_heartbeat_timer.changed or
+    udm_dns_failover_heartbeat_service_link.changed or
+    udm_dns_failover_heartbeat_timer_link.changed
   systemd:
     daemon_reload: true
   become: true
