@@ -1,96 +1,21 @@
-# Inputs: caller passes a single dict `systemd_timer_args` with keys
-#   name              required; bare name (no extension). The role
-#                     installs <name>.service + <name>.timer.
-#   exec_start        required; the command (and args) handed to the
-#                     stderr_priority wrapper. The wrapper itself is
-#                     the systemd-level ExecStart=, so this string runs
-#                     under bash and PATH lookup applies; prefer
-#                     absolute paths anyway so the unit stays grep-able
-#                     to the binary it invokes. Literal % must be
-#                     doubled (%%) and $ written as $$ — systemd
-#                     expands %-specifiers and $-env refs before the
-#                     command reaches the shell (systemd.service(5)).
-#   on_calendar       required; OnCalendar= spec (e.g.
-#                     `*-*-* 00:55:00`, `Sun *-*-* 00:47:00`). When monitor
-#                     is on, the overdue period is derived from this at
-#                     install time (the gap between its next two elapses via
-#                     `systemd-analyze calendar`), so it must describe a
-#                     repeating schedule -- a one-shot calendar has no period
-#                     and can't be monitored.
-#   description       optional; falls back to name.
-#   randomized_delay_sec  optional; emits RandomizedDelaySec=<n>.
-#   fixed_random_delay    optional bool; emits FixedRandomDelay=yes|no.
-#                     When true, the random delay is derived from a
-#                     hash of the machine ID + timer name, giving a
-#                     stable per-host offset that avoids cross-host
-#                     thundering-herd without jittering the fire time
-#                     between runs. Requires randomized_delay_sec.
-#   timeout_start_sec optional; emits TimeoutStartSec=<v>. Default '1h'
-#                     — every job we ship today completes in seconds
-#                     to minutes; override per-consumer if a future
-#                     job legitimately needs longer. (RuntimeMaxSec=
-#                     is the natural-sounding name but has no effect
-#                     under Type=oneshot; TimeoutStartSec bounds
-#                     ExecStart for oneshot.)
-#   timeout_stop_sec  optional; emits TimeoutStopSec=<v>. Default '30s' —
-#                     grace period between SIGTERM and SIGKILL when a
-#                     run is being terminated (by TimeoutStartSec or
-#                     by manual systemctl stop).
-#   monitor           default true; writes the per-timer metadata file
-#                     the netdata systemd_timers collector consumes for
-#                     the overdue check. Auto-disabled for user-scope
-#                     timers (user != root), which the collector can't
-#                     observe. Set false for one-off / non-repeating
-#                     timers that don't need cadence monitoring (e.g.
-#                     the role's own _verify fixtures).
-#   user              default 'root'; non-root drives the named user's
-#                     user manager (linger must already be on).
-#   run_as            optional; only valid when user is 'root' (default).
-#                     Emits User=<name> + Group=<name>/<run_as_group> in
-#                     the [Service] section so the system-scope unit
-#                     drops privileges to <name> for the ExecStart. Use
-#                     this instead of a user-scope timer when the work
-#                     needs an unprivileged identity but the unit
-#                     should still be visible to system-bus tooling
-#                     (netdata systemdunits, system journal, etc.).
-#   run_as_group      optional; defaults to run_as.
-#   accuracy_sec      optional; emits AccuracySec=<v> in [Timer]. systemd's
-#                     default is 1min, fine for daily/weekly cadences; for
-#                     sub-minute fires (e.g. every 30s via OnCalendar=
-#                     *:*:0/30) set this to a tighter value like "1s" or
-#                     the timer drifts past the interval. Pair with
-#                     monitor: false — a sub-minute derived period gives a
-#                     grace window (2 * period) too tight to survive normal
-#                     collector lag, so the overdue check would false-alarm.
-#   on_active_sec     optional; emits OnActiveSec=<v> in [Timer]. Fires
-#                     this many seconds after the timer activates, in
-#                     addition to the OnCalendar schedule. "0" → fire
-#                     immediately on enable, useful for sub-minute timers
-#                     where waiting for the next OnCalendar tick leaves a
-#                     visible gap (e.g. nginx serving a static file that
-#                     should be populated before the first browser hit).
-#   environment       optional dict {KEY: value}; emits one Environment=
-#                     line per entry in [Service]. Each value lands as a
-#                     separate Environment= directive so embedded
-#                     spaces/commas don't need shell-escaping. NON-SECRET
-#                     config only: values are written into the world-readable
-#                     0644 unit file and exposed by `systemctl show` to any
-#                     local user. For a secret, load it from a file instead
-#                     (LoadCredential= via additional_service_directives +
-#                     $CREDENTIALS_DIRECTORY), never environment.
-#   additional_service_directives
-#                     optional list of literal strings; emitted verbatim
-#                     into [Service]. Escape hatch for hardening
-#                     (PrivateTmp=yes, ProtectSystem=strict,
-#                     ReadWritePaths=<path>, NoNewPrivileges=yes, etc.)
-#                     until a structured hardening API exists. See the
-#                     SOMEDAY entry in CLAUDE.md re: cheap-systemd-
-#                     hardening sweep.
+# Install a paired <name>.service + <name>.timer. Caller passes `systemd_timer_args`;
+# see CLAUDE.md "Helper roles → systemd_timer" for the full key reference.
+#
+# Non-obvious constraints kept here (everything else is in CLAUDE.md):
+#   - fixed_random_delay requires randomized_delay_sec (enforced below).
+#   - run_as is only valid when user == 'root'; rejected early so systemd
+#     doesn't see an invalid User= in a user-scope unit.
+#   - environment values must be non-secret: written into the 0644 unit file.
+#     Use LoadCredential= via additional_service_directives for secrets.
+#   - exec_start: literal % → %%, literal $ → $$ (systemd expands both before
+#     the command runs). TimeoutStartSec= bounds oneshot ExecStart (RuntimeMaxSec=
+#     has no effect under Type=oneshot).
+#   - on_calendar must be a repeating schedule when monitor: true; a one-shot
+#     calendar has no second elapse and can't derive a period.
 #
 # The dict form mirrors systemd_unit / podman_secret / service_user: each
 # import_role replaces the whole `systemd_timer_args` value at play-vars
-# scope so a previous caller's name/exec_start/etc. can't bleed into the
-# next caller's call.
+# scope so a previous caller's args can't bleed into the next call.
 - name: install | Validate required inputs for {{ systemd_timer_args.name | default('<unset>') }}
   assert:
     quiet: true
