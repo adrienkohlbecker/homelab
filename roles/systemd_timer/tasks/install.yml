@@ -221,10 +221,11 @@
                      or vars[systemd_timer_args.name ~ '_timer_result'].changed)) }}
 
 # --- netdata overdue monitoring -------------------------------------------
-# Register the timer with the netdata systemd_timers collector. Done after
-# enable+start so a timer that fails to come up isn't registered for
-# monitoring, and skipped entirely for user-scope timers (monitor was
-# auto-disabled above -- the collector reads system-scope stamps only).
+# Register the timer with the netdata systemd_timers collector. Placed after
+# enable+start: if the enable fails, Ansible aborts the play before reaching
+# the metadata write, so a broken timer is never registered for monitoring.
+# Skipped entirely for user-scope timers (monitor was auto-disabled above --
+# the collector reads system-scope stamps only).
 
 # period_secs for the overdue check is the gap between the timer's next two
 # elapses, computed from on_calendar by systemd's own parser (no hand-kept

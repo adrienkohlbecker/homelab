@@ -1,11 +1,14 @@
-# Verify covers four contracts:
+# Verify covers five contracts:
 #   1. install + manual-trigger + remove for a monitor: false timer
-#   2. stderr_priority wrapper routes stderr to journal priority err
+#   2. stderr_priority wrapper routes stderr to journal priority err,
+#      and propagates the wrapped command's exit code faithfully
 #   3. monitor: true writes the netdata metadata file with period_secs
 #      derived from on_calendar via systemd-analyze
 #   4. systemd_timers.chart.sh emits a chart per registered timer, age_secs
 #      tracks the persistent trigger stamp's mtime, and overdue fires when
 #      the stamp is older than 2 * period
+#   5. extension knobs (environment, accuracy_sec, on_active_sec,
+#      randomized_delay_sec, fixed_random_delay, additional_service_directives)
 
 - name: _verify | Install systemd_timers netdata collector
   import_tasks: netdata.yml
