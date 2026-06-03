@@ -1,4 +1,4 @@
--- Unit tests for parse_unifi.lua. Run via `mise run test:fluentbit-parser`
+-- Unit tests for parse_unifi.lua. Run via `mise run test:fluentbit-lua`
 -- (which locates a system lua); or directly: `lua5.4 parse_unifi_test.lua`.
 -- Exits non-zero on the first failed assertion.
 --

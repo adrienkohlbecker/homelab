@@ -23,7 +23,7 @@
 -- on the record and otlp_shape.lua lifts it into LogAttributes.
 --
 -- Unit tests (real captured payloads): parse_unifi_test.lua, run via
--- `mise run test:fluentbit-parser`.
+-- `mise run test:fluentbit-lua`.
 
 -- syslog severity (PRI % 8) -> OTLP severity_text/number, aligned with
 -- level_from_message.lua's SEV table (crit and worse collapse to fatal).
