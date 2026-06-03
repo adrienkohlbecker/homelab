@@ -2,15 +2,11 @@ Global:
   ManageImages: true
   DracutFlags:
     - "--no-early-microcode"
-# Components mode (kernel + initrd as separate files, loaded by rEFInd):
-# the systemd-boot aarch64 EFI stub used in UKI mode silently fails to
-# invoke the embedded kernel under EDK2 on QEMU virt — `-kernel` boots
-# the same kernel/initrd fine. Letting rEFInd do the kernel handoff
-# directly works on both x86_64 and aarch64.
 Components:
   Versions: false
   Enabled: true
 EFI:
-  Enabled: false
+  Versions: false
+  Enabled: true
 Kernel:
   CommandLine: quiet loglevel=0 nomodeset
