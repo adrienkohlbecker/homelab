@@ -42,3 +42,12 @@ tailscale_authkey_file: /run/tailscale_authkey
 # physically on that subnet" risk in notes/headscale_mesh_redesign.md. Enable per
 # host only after weighing that.
 tailscale_accept_routes: false
+
+# Subnet-router forwarding knobs, surfaced so a Tailscale default-flip can't
+# silently change how lab/pug route LAN traffic (they advertise a subnet they
+# physically sit on -- see the hairpin note above). snat_subnet_routes: SNAT
+# advertised-subnet traffic to the router's own tailnet IP (Tailscale default
+# true); false preserves client source IPs. stateful_filtering: drop inbound to
+# the subnet that the router didn't initiate (Tailscale default false on Linux).
+tailscale_snat_subnet_routes: true
+tailscale_stateful_filtering: false

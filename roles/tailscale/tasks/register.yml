@@ -168,6 +168,8 @@
         {{ tailscale_advertise_exit_node | ternary('--advertise-exit-node', '') }}
         --accept-routes={{ tailscale_accept_routes | ternary('true', 'false') }}
         --accept-dns={{ tailscale_accept_dns | ternary('true', 'false') }}
+        --snat-subnet-routes={{ tailscale_snat_subnet_routes | ternary('true', 'false') }}
+        --stateful-filtering={{ tailscale_stateful_filtering | ternary('true', 'false') }}
         --timeout=60s
         --reset
       register: tailscale_up
@@ -226,6 +228,8 @@
     --advertise-exit-node={{ tailscale_advertise_exit_node | ternary('true', 'false') }}
     --accept-routes={{ tailscale_accept_routes | ternary('true', 'false') }}
     --accept-dns={{ tailscale_accept_dns | ternary('true', 'false') }}
+    --snat-subnet-routes={{ tailscale_snat_subnet_routes | ternary('true', 'false') }}
+    --stateful-filtering={{ tailscale_stateful_filtering | ternary('true', 'false') }}
     --timeout=60s
   when:
     - not ansible_check_mode
