@@ -104,18 +104,6 @@
   tags:
     - transmission
 
-- name: Configure environment
-  copy:
-    src: transmission_healthcheck.sh
-    dest: /usr/local/bin/transmission_healthcheck
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-  register: transmission_health
-  become: true
-  tags:
-    - transmission
 
 - name: Install transmission service
   import_role:
@@ -136,7 +124,7 @@
     systemd_unit_args:
       src: transmission
       condition: "{{ not (ansible_check_mode and (transmission_service_result.changed or transmission_user.changed)) }}"
-      restart: "{{ transmission_service_result.changed or transmission_conf.changed or transmission_env.changed or transmission_health.changed or transmission_user.changed or media_group.changed }}"
+      restart: "{{ transmission_service_result.changed or transmission_conf.changed or transmission_env.changed or transmission_user.changed or media_group.changed }}"
   tags:
     - transmission
 

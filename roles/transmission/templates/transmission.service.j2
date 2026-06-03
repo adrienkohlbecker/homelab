@@ -51,13 +51,12 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/transmission:/config \
     --volume /mnt/media/Torrents:/downloads/complete \
     --volume /mnt/scratch/transmission:/downloads/incomplete \
-    --volume /usr/local/bin/transmission_healthcheck:/usr/local/bin/transmission_healthcheck \
     --network media \
     --publish 127.0.0.1:9091:9091/tcp \
     --publish 0.0.0.0:51413:51413/tcp \
     --publish 0.0.0.0:51413:51413/udp \
-    --health-cmd         '["/usr/local/bin/transmission_healthcheck"]' \
-    --health-startup-cmd '["/usr/local/bin/transmission_healthcheck"]' \
+    --health-cmd         '["transmission-remote","localhost:9091","--session-info"]' \
+    --health-startup-cmd '["transmission-remote","localhost:9091","--session-info"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
