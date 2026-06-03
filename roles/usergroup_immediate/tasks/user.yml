@@ -2,8 +2,10 @@
 #   usergroup_immediate_args:
 #     group   (required, string or list) — group(s) to add ansible_user_id to.
 #             Each group must already exist; the `user` module hard-fails on a
-#             missing group, so the caller gates with
-#             `when: not (ansible_check_mode and <group_task>.changed)`.
+#             missing group, so the caller gates on whatever task guarantees the
+#             group exists — a `group:` task (roles/media: media_group) or the
+#             package that ships it (roles/libvirt: libvirt_apt) — with
+#             `when: not (ansible_check_mode and <prereq>.changed)`.
 #
 # Outputs:
 #   usergroup_immediate_result — the user module result (internal; not a stable API)
@@ -16,19 +18,19 @@
 # it until a genuinely fresh connection; it is reliably effective at the
 # next login/service start.
 
-- name: user | Validate inputs
+- name: Validate inputs
   assert:
+    quiet: true
     that:
       - usergroup_immediate_args is defined
       - usergroup_immediate_args.group is defined
       - usergroup_immediate_args.group is string or usergroup_immediate_args.group is sequence
       - usergroup_immediate_args.group | length > 0
-    quiet: true
     fail_msg: >-
       usergroup_immediate_args.group must be a non-empty string or list,
       got: {{ usergroup_immediate_args.group | default('undefined') }}
 
-- name: user | Add user to group
+- name: Add user to group
   user:
     name: "{{ ansible_user_id }}"
     groups: "{{ usergroup_immediate_args.group }}"
@@ -38,6 +40,6 @@
 
 # meta: reset_connection ignores task-level when:; include_tasks
 # evaluates the condition before dispatching, so it works correctly.
-- name: user | Reset connection to apply user group change
+- name: Reset connection to apply user group change
   include_tasks: reset_connection.yml
   when: usergroup_immediate_result.changed and not ansible_check_mode
