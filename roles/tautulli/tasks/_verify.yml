@@ -90,7 +90,7 @@
       - _tautulli_db_link.stat.lnk_target == "/mnt/services/sqlite/tautulli/tautulli.db"
     fail_msg: "tautulli.db is not a symlink onto the sqlite dataset (stat={{ _tautulli_db_link.stat }})"
 
-- name: _verify | Stat the dataset-side tautulli DB
+- name: _verify | Tautulli wrote a real, non-empty DB onto the dataset
   stat:
     path: /mnt/services/sqlite/tautulli/tautulli.db
   register: _tautulli_db_file
@@ -101,14 +101,6 @@
     - not _tautulli_db_file.stat.islnk
     - (_tautulli_db_file.stat.size | default(0) | int) > 0
   become: true
-
-- name: _verify | Tautulli wrote a real, non-empty DB onto the dataset
-  assert:
-    that:
-      - _tautulli_db_file.stat.exists
-      - not _tautulli_db_file.stat.islnk
-      - (_tautulli_db_file.stat.size | int) > 0
-    fail_msg: "tautulli.db on the dataset is missing or empty (stat={{ _tautulli_db_file.stat }})"
 
 # config_dir_group: media (see main.yml) stops ansible flapping
 # /mnt/services/tautulli's gid against linuxserver's startup chown to
@@ -172,9 +164,12 @@
 
 # The sort_ini path unit watches config.ini for daemon rewrites (Tautulli
 # shuffles INI key order) and re-sorts in place. Assert it is active.
+# The unit name is sort_ini_<escaped>.path where sort_ini derives <escaped> by
+# stripping the leading / and replacing remaining / with - (keeping the .ini
+# dot) -- so hyphens and the dot, not underscores.
 - name: _verify | The sort_ini path watcher is active
   systemd:
-    name: sort_ini_mnt_services_tautulli_config_ini.path
+    name: sort_ini_mnt-services-tautulli-config.ini.path
     state: started
   check_mode: true
   register: _tautulli_sort_ini_path
