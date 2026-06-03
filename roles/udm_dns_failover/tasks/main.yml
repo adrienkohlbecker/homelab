@@ -374,6 +374,18 @@
           were restored from backup. Inspect the validate output above --
           /data/keepalived/pihole.conf or keepalived.conf is malformed.
 
+# keepalived -t passes even when conf.d/*.conf is a dangling symlink (zero
+# vrrp_instances): the daemon would then run, healthy and pointless, never
+# claiming the VIP. Assert the fragment actually resolves and defines the
+# instance before starting.
+- name: Assert the VRRP instance is present in the assembled config
+  when: not ansible_check_mode
+  command: grep -q '^vrrp_instance pihole' /etc/keepalived/conf.d/pihole.conf
+  changed_when: false
+  become: true
+  tags:
+    - udm_dns_failover
+
 - name: Start keepalived
   systemd:
     name: keepalived.service

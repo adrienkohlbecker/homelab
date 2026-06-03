@@ -17,11 +17,11 @@
   failed_when: _udm_dns_failover_keepalived_status.status.ActiveState != 'active'
   become: true
 
-- name: Verify VRRP state is BACKUP (lab or pug should be MASTER)
+- name: Verify VRRP state settled to BACKUP (lab/pug hold the VIP as MASTER)
   shell:
     cmd: |
       set -euo pipefail
-      journalctl -t pihole-keepalived --no-pager -n 5 | grep -qE 'BACKUP|MASTER'
+      journalctl -t pihole-keepalived --no-pager -n 20 | grep -qw BACKUP
     executable: /bin/bash
   changed_when: false
   become: true
