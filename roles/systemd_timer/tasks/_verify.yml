@@ -255,6 +255,48 @@
       - "'STDERR_VERIFY_LINE' in _systemd_timer_stderr_journal_err.stdout"
       - "'STDOUT_VERIFY_LINE' not in _systemd_timer_stderr_journal_err.stdout"
 
+# --- exit-code propagation ---
+# A broken rc=$? / exit "$rc" in stderr_priority would cause a failing timer
+# to report Result=success to systemd, silently suppressing failed-state alerts.
+- name: "_verify | Install exit-code fixture (monitor: false)"
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_exitcode
+      description: stderr_priority exit-code propagation self-test
+      on_calendar: "*-*-* 23:59:00"
+      exec_start: /bin/sh -c 'exit 2'
+      monitor: false
+
+- name: _verify | Trigger the exit-code fixture manually  # noqa: command-instead-of-module
+  command: systemctl start --wait _verify_timer_exitcode.service
+  register: _systemd_timer_exitcode_start
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Read exit-code fixture Result property  # noqa: command-instead-of-module
+  command: systemctl show -p Result --value _verify_timer_exitcode.service
+  register: _systemd_timer_exitcode_result
+  changed_when: false
+  become: true
+
+- name: _verify | Assert exit-code propagated (wrapper must not swallow non-zero rc)
+  assert:
+    that:
+      - _systemd_timer_exitcode_start.rc != 0
+      - _systemd_timer_exitcode_result.stdout == 'exit-code'
+
+- name: _verify | Remove the exit-code fixture timer
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_exitcode
+
 - name: _verify | Remove the stderr fixture timer
   import_role:
     name: systemd_timer
