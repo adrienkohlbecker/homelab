@@ -78,10 +78,9 @@
   changed_when: false
   become: true
 
-# The 'default' fragment carries the base console args; without it the
-# ZBM-kexec'd kernel boots with no console= at all. The earlycon and serial
-# values are arch-specific (uart8250+ttyS0 on x86, pl011+ttyAMA0 on arm64),
-# so the checks below match the arch-agnostic prefix only.
+# The 'default' fragment carries the base console args. On test VMs (qemu) this
+# includes earlycon + serial for harness output capture; on prod (no legacy UART)
+# it's just console=tty0.
 - name: _verify | Read the assembled ZBM commandline
   when: not grub_bootloader
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
@@ -89,18 +88,23 @@
   changed_when: false
   become: true
 
-- name: _verify | Commandline carries the base console args
+- name: _verify | Commandline carries console=tty0
   when: not grub_bootloader
-  vars:
-    _serial: "{{ (ansible_architecture == 'aarch64') | ternary('ttyAMA0', 'ttyS0') }}"
   assert:
     that:
       - "'console=tty0' in _boot_verify_cmdline.stdout"
-      - "'console=' ~ _serial in _boot_verify_cmdline.stdout"
+    fail_msg: >-
+      org.zfsbootmenu:commandline is missing console=tty0 from the 'default'
+      fragment: {{ _boot_verify_cmdline.stdout }}
+
+- name: _verify | Commandline carries earlycon + serial (when configured)
+  when: not grub_bootloader and (boot_serial_console | default('') | trim | length > 0 or (qemu_test | default(false)))
+  assert:
+    that:
       - "'earlycon=' in _boot_verify_cmdline.stdout"
     fail_msg: >-
-      org.zfsbootmenu:commandline is missing the base console args the 'default'
-      fragment should set: {{ _boot_verify_cmdline.stdout }}
+      boot_serial_console is set but org.zfsbootmenu:commandline has no earlycon=
+      arg: {{ _boot_verify_cmdline.stdout }}
 
 # /proc/cmdline exposes the args the running kernel actually booted with.
 # Post-reboot this proves the ZBM property propagated through the boot chain,
@@ -112,15 +116,13 @@
   register: _boot_verify_proc_cmdline
   become: true
 
-- name: _verify | Running kernel booted with the base console args
+- name: _verify | Running kernel booted with console=tty0
   when: not grub_bootloader and ansible_architecture != 'aarch64'
   vars:
     _cmdline: "{{ _boot_verify_proc_cmdline.content | b64decode }}"
   assert:
     that:
       - "'console=tty0' in _cmdline"
-      - "'console=ttyS0' in _cmdline"
-      - "'earlycon=' in _cmdline"
     fail_msg: >-
-      /proc/cmdline does not carry the base console args after reboot — the
+      /proc/cmdline does not carry console=tty0 after reboot — the
       ZBM property may not have propagated: {{ _cmdline }}
