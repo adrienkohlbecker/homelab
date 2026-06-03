@@ -8,6 +8,10 @@
       - tautulli_pms_uuid | default('') | length > 0
       - themoviedb_api_key | default('') | length > 0
       - plex_machine_id | default('') | length > 0
+      - service_ports.tautulli is defined
+      - external_ips.lab is defined
+      - system_timezone | default('') | length > 0
+      - domain | default('') | length > 0
   tags:
     - tautulli
 
@@ -27,6 +31,10 @@
       name: tautulli
       extra_groups: [ media ]
       config_dir_group: media
+      # /config holds config.ini (api_key/pms_token/jwt_secret) and Tautulli's
+      # own backups/ which bundle copies of it; 0700 keeps the dir untraversable
+      # by the media co-tenants config_dir_group would otherwise let in.
+      config_dir_mode: "0700"
   tags:
     - tautulli
 
@@ -120,7 +128,9 @@
     nginx_site_args:
       subdomain: tautulli
       proxy_pass: "http://127.0.0.1:{{ service_ports.tautulli }}/"
-      csp_default_src: "plex.tv *.plex.tv"
+      # Tautulli's Plex sign-in does browser-side XHR to plex.tv; scope it to
+      # connect-src (matching radarr/sonarr) rather than widening default-src.
+      csp_additional: "connect-src plex.tv *.plex.tv {{ nginx_csp_default }}"
       auth: required
   tags:
     - tautulli
