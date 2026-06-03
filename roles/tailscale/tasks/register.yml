@@ -254,6 +254,12 @@
   register: tailscale_nodes
   changed_when: false
   check_mode: false
+  # failed_when:false so an unreachable headscale host during --check mode
+  # doesn't abort the dry-run: the until: short-circuits on ansible_check_mode,
+  # so the task completes immediately and the downstream assert (guarded by
+  # when: not ansible_check_mode) is skipped. Without it a check-pass with fox
+  # down hard-fails even though no state would be mutated.
+  failed_when: false
   retries: 15
   delay: 2
   until: >-
@@ -277,11 +283,11 @@
 - name: register | Resolve this host's headscale node
   set_fact:
     tailscale_node_matches: >-
-      {{ (tailscale_nodes.stdout | from_json)
+      {{ (tailscale_nodes.stdout | default('[]') | from_json)
          | selectattr('user.name', 'equalto', tailscale_headscale_user)
          | selectattr('given_name', 'equalto', ansible_hostname | lower) | list }}
     tailscale_node: >-
-      {{ (tailscale_nodes.stdout | from_json)
+      {{ (tailscale_nodes.stdout | default('[]') | from_json)
          | selectattr('user.name', 'equalto', tailscale_headscale_user)
          | selectattr('given_name', 'equalto', ansible_hostname | lower)
          | list | first | default({}) }}
