@@ -61,7 +61,10 @@
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
     _systemd_unit_start: "{{ systemd_unit_args.start | default(true) }}"
-    _systemd_unit_name: "{{ systemd_unit_args.dest | default(systemd_unit_args.src) }}"
+    # Strip .j2 so a caller can hand `service` the same dict it handed
+    # `install` (src: foo.service.j2); install.yml and remove.yml strip it too.
+    _systemd_unit_name: >-
+      {{ systemd_unit_args.dest | default(systemd_unit_args.src | regex_replace('\.j2$', '')) }}
 
 - name: service | Derive scope and unit type for {{ systemd_unit_args.src }}
   set_fact:
