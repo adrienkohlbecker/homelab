@@ -1,33 +1,10 @@
-- name: Add tautulli group
-  group:
-    name: tautulli
-    system: true
-  become: true
-  tags:
-    - tautulli
-
-- name: Add tautulli user
-  user:
-    name: tautulli
-    group: tautulli
-    createhome: false
-    system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
-  register: tautulli_user
-  tags:
-    - tautulli
-
-- name: Create configuration directory
-  when: not (ansible_check_mode and tautulli_user.changed)
-  file:
-    dest: /mnt/services/tautulli
-    state: directory
-    owner: tautulli
-    group: tautulli
-    mode: "0755"
-  become: true
+- name: Set up tautulli system user and group
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: tautulli
   tags:
     - tautulli
 
@@ -74,7 +51,7 @@
   when: _tautulli_existing is succeeded
   set_fact:
     _tautulli_pms_plexpass: "{{ (_tautulli_existing.content | b64decode | regex_findall('(?m)^pms_plexpass = (\\d+)$')) | default(['0'], true) | first }}"
-    _tautulli_pms_version: "{{ (_tautulli_existing.content | b64decode | regex_findall('(?m)^pms_version = (\\S+)$')) | default([''], true) | first }}"
+    _tautulli_pms_version: "{{ (_tautulli_existing.content | b64decode | regex_findall('(?m)^pms_version = ([\\w.\\-]+)$')) | default([''], true) | first }}"
   tags:
     - tautulli
 
@@ -94,6 +71,7 @@
     group: tautulli
     mode: "0600"
     backup: true
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' "%s"
   register: tautulli_conf
   become: true
   tags:
@@ -129,7 +107,7 @@
   vars:
     nginx_site_args:
       subdomain: tautulli
-      proxy_pass: http://127.0.0.1:8182/
+      proxy_pass: "http://127.0.0.1:{{ service_ports.tautulli }}/"
       csp_default_src: "plex.tv *.plex.tv"
       auth: required
   tags:
