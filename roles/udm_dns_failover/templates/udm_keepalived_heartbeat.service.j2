@@ -3,4 +3,4 @@ Description=Heartbeat ping for UDM keepalived VRRP peer
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c 'systemctl is-active --quiet keepalived.service && exec curl -fsS -m 10 -o /dev/null "{{ udm_dns_failover_heartbeat_url }}"'
+ExecStart=/bin/bash -c 'systemctl is-active --quiet keepalived.service && exec curl -fsS -m 10 --retry 2 --retry-delay 5 --retry-connrefused -o /dev/null "{{ udm_dns_failover_heartbeat_url }}"'
