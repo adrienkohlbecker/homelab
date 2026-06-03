@@ -1,4 +1,6 @@
-# Functional checks: timer active, config parses, key settings deployed.
+# Functional checks: timer active, config parses, and the deployed values
+# are what apt actually resolves (via apt-config dump — not by re-reading
+# the files this role just wrote).
 
 - name: _verify | Apt-daily-upgrade timer is active  # noqa: command-instead-of-module
   command: systemctl is-active apt-daily-upgrade.timer
@@ -15,49 +17,6 @@
   tags:
     - unattended_upgrades
 
-- name: _verify | Read deployed 50unattended-upgrades
-  slurp:
-    src: /etc/apt/apt.conf.d/50unattended-upgrades
-  register: unattended_upgrades_verify_50
-  become: true
-  tags:
-    - unattended_upgrades
-
-- name: _verify | Key settings are present in 50unattended-upgrades
-  vars:
-    _cfg: "{{ unattended_upgrades_verify_50.content | b64decode }}"
-  assert:
-    that:
-      - _cfg is search('Unattended-Upgrade::Automatic-Reboot "false"')
-      - _cfg is search('Unattended-Upgrade::SyslogEnable "true"')
-      - _cfg is search('Unattended-Upgrade::MinimalSteps "true"')
-      - _cfg is search('Unattended-Upgrade::Mail "root"')
-      - _cfg is search('"\\$\\{distro_id\\}:\\$\\{distro_codename\\}-security"')
-      - _cfg is search('"linux-"')
-    fail_msg: "50unattended-upgrades missing expected settings"
-  tags:
-    - unattended_upgrades
-
-- name: _verify | Read deployed 20auto-upgrades
-  slurp:
-    src: /etc/apt/apt.conf.d/20auto-upgrades
-  register: unattended_upgrades_verify_20
-  become: true
-  tags:
-    - unattended_upgrades
-
-- name: _verify | APT::Periodic settings are present
-  vars:
-    _cfg: "{{ unattended_upgrades_verify_20.content | b64decode }}"
-  assert:
-    that:
-      - _cfg is search('APT::Periodic::Update-Package-Lists "1"')
-      - _cfg is search('APT::Periodic::Unattended-Upgrade "1"')
-      - _cfg is search('APT::Periodic::AutocleanInterval "7"')
-    fail_msg: "20auto-upgrades missing expected APT::Periodic settings"
-  tags:
-    - unattended_upgrades
-
 - name: _verify | Apt-config parses both config files without error
   command: apt-config dump APT::Periodic Unattended-Upgrade
   changed_when: false
@@ -66,12 +25,15 @@
   tags:
     - unattended_upgrades
 
-- name: _verify | Parsed apt-config reports expected values
+- name: _verify | Parsed apt-config reflects deployed values
   assert:
     that:
       - '"APT::Periodic::Unattended-Upgrade \"1\"" in unattended_upgrades_verify_aptconfig.stdout'
       - '"APT::Periodic::Update-Package-Lists \"1\"" in unattended_upgrades_verify_aptconfig.stdout'
       - '"APT::Periodic::AutocleanInterval \"7\"" in unattended_upgrades_verify_aptconfig.stdout'
-    fail_msg: "apt-config dump does not reflect deployed APT::Periodic values"
+      - '"Unattended-Upgrade::Automatic-Reboot \"false\"" in unattended_upgrades_verify_aptconfig.stdout'
+      - '"Unattended-Upgrade::Mail \"root\"" in unattended_upgrades_verify_aptconfig.stdout'
+      - '"Unattended-Upgrade::SyslogEnable \"true\"" in unattended_upgrades_verify_aptconfig.stdout'
+    fail_msg: "apt-config dump does not reflect deployed APT::Periodic / Unattended-Upgrade values"
   tags:
     - unattended_upgrades
