@@ -30,8 +30,8 @@ if [ ! -d "$src_dir" ]; then
 fi
 
 # Stage the stable recovery-SSH host private key into the build dir for
-# crypt-ssh to bake in (dropbear.conf points dropbear_ed25519_key here). The
-# plaintext is gitignored and shredded on exit; only the committed .pub rides
+# crypt-ssh to bake in (recovery.conf points dropbear_ed25519_key here). The
+# plaintext is gitignored and removed on exit; only the committed .pub rides
 # in the repo. The op:// reference was resolved by the op-run re-exec above.
 host_key="${MISE_CONFIG_ROOT}/zbm/dropbear/ssh_host_ed25519_key"
 trap 'rm -f "$host_key"' EXIT
