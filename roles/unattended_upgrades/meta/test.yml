@@ -1,0 +1,9 @@
+# The role ships static apt config with no release branching, so the converged
+# files are identical across releases. This cell isn't testing a divergent
+# code path — it validates that the always-on unattended-upgrades pipeline
+# still accepts the shipped config and that `unattended-upgrades --dry-run`
+# resolves the (release-specific) ESM origin pockets against a newer u-u
+# version than jammy's. noble is the next prod LTS; resolute adds no role-code
+# coverage over it, so it's left off to avoid doubling the cell cost.
+ubuntu:
+  - noble
