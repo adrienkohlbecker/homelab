@@ -28,6 +28,7 @@ Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
 TimeoutSec=120
+TimeoutStopSec=150
 RestartSec=5
 Type=notify
 NotifyAccess=all
@@ -42,6 +43,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name transmission \
+    --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="transmission" \
     --env PUID={{ transmission_user.uid }} \
