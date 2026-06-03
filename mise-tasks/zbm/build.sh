@@ -69,9 +69,13 @@ if [ -f "$out_dir/vmlinuz.EFI" ]; then
   mv "$out_dir/vmlinuz.EFI" "$out_dir/zfsbootmenu.EFI"
 fi
 
-# --owner=0/--group=0 bake root:0 into the archive metadata so extracting
-# in a chroot or onto FAT32 doesn't trip "Cannot change ownership"
-# from the container's build-user uids leaking into the archive.
+# --sort=name + --mtime=@0 + --numeric-owner, piped through gzip -n, strip the
+# build-time mtimes and uid/gid names that tar and the gzip header would
+# otherwise embed, so rebuilds of a pinned ZBM_VERSION produce a byte-identical
+# archive (pairs with reproducible=yes, which stabilizes the cpio inside it).
+# --owner=0/--group=0 also bake root:0 into the metadata so extracting in a
+# chroot or onto FAT32 doesn't trip "Cannot change ownership" from the
+# container's build-user uids leaking into the archive.
 tarball="zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
-(cd "$out_dir" && tar --sort=name --owner=0 --group=0 -czf "$tarball" vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI)
+(cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI | gzip -n >"$tarball")
 sha256sum "$out_dir/$tarball"
