@@ -24,14 +24,14 @@
       DNSOverTLS=yes
       Domains=~.
     validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, delimiters=("=",)).read(sys.argv[1])' "%s"
-  register: _test_resolved_dot
+  register: test_resolved_dot
   become: true
 
 - name: mirrors | Restart systemd-resolved to pick up DoT config
   systemd:
     name: systemd-resolved
     state: restarted
-  when: _test_resolved_dot.changed
+  when: test_resolved_dot.changed
   become: true
 
 - name: mirrors | Configure apt retries and sources

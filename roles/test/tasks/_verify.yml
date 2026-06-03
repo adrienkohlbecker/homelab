@@ -17,7 +17,7 @@
   when: ansible_distribution_release == "jammy"
   slurp:
     src: /etc/apt/sources.list
-  register: test_verify_apt_legacy
+  register: test_apt_legacy
 
 - name: _verify | Read apt sources (noble+ deb822)
   when: ansible_distribution_release != "jammy"
@@ -30,7 +30,7 @@
   assert:
     that:
       - >-
-        nexus_url in (test_verify_apt_legacy.content | default('') | b64decode)
+        nexus_url in (test_apt_legacy.content | default('') | b64decode)
         or nexus_url in (test_apt_deb822.content | default('') | b64decode)
     fail_msg: "apt sources don't reference {{ nexus_url }}"
 
@@ -39,8 +39,8 @@
   assert:
     that:
       - >-
-        ('archive.ubuntu.com' in (test_verify_apt_legacy.content | default('') | b64decode))
-        or ('ports.ubuntu.com' in (test_verify_apt_legacy.content | default('') | b64decode))
+        ('archive.ubuntu.com' in (test_apt_legacy.content | default('') | b64decode))
+        or ('ports.ubuntu.com' in (test_apt_legacy.content | default('') | b64decode))
         or ('archive.ubuntu.com' in (test_apt_deb822.content | default('') | b64decode))
         or ('ports.ubuntu.com' in (test_apt_deb822.content | default('') | b64decode))
     fail_msg: "apt sources don't reference upstream archive/ports"
