@@ -5,3 +5,7 @@ Description=systemd_unit_verify_ok
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/bin/true
+ExecReload=/bin/true
+
+[Install]
+WantedBy=multi-user.target
