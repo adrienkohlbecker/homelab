@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
 #MISE description="Build a ZFSBootMenu kernel + initrd tarball via the local builder container"
-# Runs localhost/zbm-builder:<version>-<arch> with zbm/ bind-mounted at
-# /build (config.yaml + dracut.conf.d live there, read-only) and
-# zbm-build/<arch>/ at /output. Components mode: the container emits
-# vmlinuz-bootmenu (or vmlinux-bootmenu on aarch64) + initramfs-bootmenu.img
-# rather than a unified .EFI. We tarball both into a single artifact
-# suitable for upload to Gitea releases. (The systemd-boot UKI stub
-# silently fails to invoke the kernel under EDK2/aarch64 on QEMU virt;
-# letting rEFInd do the handoff via loader/initrd directives works on
-# both arches.)
-set -eu
+# Calls upstream's zbm-builder.sh with zbm/ as the build directory and
+# the cloned source tree mounted read-only at /zbm. Components mode:
+# emits vmlinuz-bootmenu + initramfs-bootmenu.img (no unified .EFI).
+# We tarball both into a single artifact suitable for upload to Gitea.
+set -euo pipefail
 
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
+src_dir="${MISE_CONFIG_ROOT}/zbm-build/src"
 out_dir="${MISE_CONFIG_ROOT}/zbm-build/${arch}"
 mkdir -p "$out_dir"
 rm -f \
@@ -21,11 +17,25 @@ rm -f \
   "$out_dir"/zfsbootmenu-v*-"${arch}".tar.gz.sha256sum \
   "$out_dir"/*.EFI
 
-podman run --rm \
-  -v "${MISE_CONFIG_ROOT}/zbm:/build:ro" \
-  -v "$out_dir:/output" \
-  "localhost/zbm-builder:v${ZBM_VERSION}-${arch}" \
-  -o /output -t "v${ZBM_VERSION}"
+if [ ! -d "$src_dir" ]; then
+  echo "ZBM source not found at $src_dir — run 'mise run zbm:builder-image' first" >&2
+  exit 1
+fi
+
+# zbm-builder.sh:
+#   -b: build directory (zbm/ — contains config.yaml, dracut.conf.d/, hooks/)
+#   -i: builder container image
+#   -l: ZBM source tree (mounted read-only at /zbm)
+#   -H: skip hostid (release build, not host-specific)
+#   -O: extra podman run args (output volume)
+#   --: args forwarded to build-init.sh (-o output dir, -t version tag)
+"$src_dir/zbm-builder.sh" \
+  -b "${MISE_CONFIG_ROOT}/zbm" \
+  -i "localhost/zbm-builder:v${ZBM_VERSION}-${arch}" \
+  -l "$src_dir" \
+  -H \
+  -O -v -O "$out_dir:/output" \
+  -- -o /output -t "v${ZBM_VERSION}"
 
 # Components mode emits vmlin{u,uz}-bootmenu + initramfs-bootmenu.img;
 # tar them together preserving upstream names so chroot.sh can glob.
