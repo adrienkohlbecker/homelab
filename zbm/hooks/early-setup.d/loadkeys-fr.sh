@@ -1,4 +1,5 @@
 #!/bin/bash
-# Load the French keyboard layout so the ZBM recovery shell is usable
-# on AZERTY keyboards without mentally mapping every key.
-loadkeys fr 2>/dev/null || true
+# Sourced (not executed) by ZBM's run_hookdir — the shebang is inert.
+# Do NOT add set -euo pipefail: strict mode would propagate into ZBM's
+# init and kill boot on any transient failure.
+loadkeys fr || echo "loadkeys fr failed (keyboard is QWERTY)" >&2
