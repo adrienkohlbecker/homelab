@@ -51,7 +51,7 @@
     - unattended_upgrades
 
 - name: Validate unattended-upgrades config
-  when: not (ansible_check_mode and unattended_upgrades_apt.changed)
+  when: unattended_upgrades_apt_20.changed or unattended_upgrades_apt_50.changed
   command: unattended-upgrades --dry-run --verbose
   changed_when: false
   timeout: 120
