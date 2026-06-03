@@ -31,6 +31,8 @@ vrrp_instance pihole {
   # existing L2 path instead of acquiring the vmac as egress iface.
   vmac_xmit_base
 
+  check_unicast_src
+
   unicast_src_ip {{ external_ips[inventory_hostname] }}
   unicast_peer {
     {% for name in pihole_keepalived_peers | select("ne", inventory_hostname) | sort %}
@@ -48,6 +50,10 @@ vrrp_instance pihole {
   # preempt (no nopreempt) is kept so the MASTER does eventually reclaim.
   preempt_delay     60
 
+  track_interface {
+    eth0
+  }
+
   virtual_ipaddress {
     {{ pihole_keepalived_ip }}/32
   }
@@ -64,11 +70,8 @@ vrrp_instance pihole {
     pihole_healthcheck
   }
 
-  notify_master "/usr/bin/logger -t pihole-keepalived MASTER"
-  notify_backup "/usr/bin/logger -t pihole-keepalived BACKUP"
-  notify_fault  "/usr/bin/logger -t pihole-keepalived FAULT"
-  # The state-transition hooks above don't fire when keepalived itself is
-  # stopped (SIGTERM during the throttled rolling restart), so notify_stop
-  # leaves a breadcrumb in the journal at exactly that planned VIP handoff.
-  notify_stop   "/usr/bin/logger -t pihole-keepalived STOP"
+  # Unified notify fires for all transitions (MASTER/BACKUP/FAULT) and also
+  # STOP (SIGTERM during the throttled rolling restart), leaving a breadcrumb
+  # in the journal at exactly the planned VIP handoff.
+  notify "/usr/bin/logger -t pihole-keepalived"
 }
