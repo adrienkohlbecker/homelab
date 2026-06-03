@@ -192,10 +192,14 @@
 
 # -- iptables VRRP accept -------------------------------------------------
 # INPUT has policy ACCEPT with jumps to ALIEN/TOR/UBIOS_INPUT_JUMP (no
-# trailing DROP), so appending is safe. The rule is idempotent via -C check.
+# trailing DROP), so appending is safe. One rule per peer source IP (not a
+# blanket proto-112 accept) so only the real VRRP peers can deliver adverts
+# on br0 -- mirrors the peer-scoped accept the prod hosts apply via nftables
+# vrrp_peer_ips. Idempotent via the -C check.
 
-- name: Check VRRP iptables rule
-  command: iptables -w 5 -C INPUT -i {{ udm_dns_failover_interface }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
+- name: Check VRRP iptables rule per peer
+  command: iptables -w 5 -C INPUT -i {{ udm_dns_failover_interface }} -s {{ item }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
+  loop: "{{ pihole_keepalived_peers | select('ne', inventory_hostname) | map('extract', external_ips) | sort }}"
   register: udm_dns_failover_iptables_check
   changed_when: false
   failed_when: false
@@ -203,10 +207,26 @@
   tags:
     - udm_dns_failover
 
-- name: Add VRRP iptables rule
-  when: udm_dns_failover_iptables_check.rc != 0
-  command: iptables -w 5 -A INPUT -i {{ udm_dns_failover_interface }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
+- name: Add VRRP iptables rule per peer
+  when: item.rc != 0
+  command: iptables -w 5 -A INPUT -i {{ udm_dns_failover_interface }} -s {{ item.item }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
+  loop: "{{ udm_dns_failover_iptables_check.results }}"
+  loop_control:
+    label: "{{ item.item }}"
   changed_when: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+# One-time cleanup of the pre-scoping blanket rule (proto 112 from any
+# source). Converge only appends, so the legacy unscoped rule would linger
+# beside the new per-peer rules until a reboot flushes it; -D removes it
+# idempotently (rc != 0 once it is gone).
+- name: Remove legacy unscoped VRRP iptables rule
+  command: iptables -w 5 -D INPUT -i {{ udm_dns_failover_interface }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
+  register: udm_dns_failover_iptables_legacy
+  changed_when: udm_dns_failover_iptables_legacy.rc == 0
+  failed_when: false
   become: true
   tags:
     - udm_dns_failover

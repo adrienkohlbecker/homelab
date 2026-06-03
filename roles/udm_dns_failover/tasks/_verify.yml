@@ -26,8 +26,9 @@
   changed_when: false
   become: true
 
-- name: Verify iptables VRRP rule
-  command: iptables -C INPUT -i {{ udm_dns_failover_interface }} -p 112 -j ACCEPT
+- name: Verify iptables VRRP rule per peer
+  command: iptables -C INPUT -i {{ udm_dns_failover_interface }} -s {{ item }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
+  loop: "{{ pihole_keepalived_peers | select('ne', inventory_hostname) | map('extract', external_ips) | sort }}"
   changed_when: false
   become: true
 
