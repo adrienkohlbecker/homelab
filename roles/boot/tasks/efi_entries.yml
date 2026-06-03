@@ -54,6 +54,13 @@
   become: true
   register: _boot_efi_result
   changed_when: (_boot_efi_result.stdout | from_json).changed
+  # The script exits non-zero on any efibootmgr/mdadm failure, printing a
+  # structured {"failed": true, "msg": ...} to stdout first. Fail on the rc
+  # (short-circuits before from_json, so an empty-stdout crash still fails
+  # cleanly) and surface the diagnostic through the registered stdout.
+  failed_when: >-
+    _boot_efi_result.rc != 0
+    or (_boot_efi_result.stdout | from_json).failed | default(false)
   tags:
     - boot
 
