@@ -149,8 +149,75 @@
   tags:
     - netdata
 
+# Damp the predictive disk-fill flap. out_of_disk_*_time estimates
+# hours-to-full as $avail / $disk_fill_rate, and disk_fill_rate is
+# ($baseline_avail - $current_avail) / hours where baseline is the `min`
+# avail in a 10m window. Upstream samples that baseline at -50m; on a
+# churny filesystem (container prune, minio/scratch write-then-delete)
+# current avail routinely bounces back above the 50-min-ago min, flipping
+# the rate negative -> calc yields inf -> CLEAR, then a fresh write drops
+# it again -> WARNING, cycling several times an hour. Each crossing is a
+# telegram. Two dampers:
+#   (a) deepen the baseline sample to -3h. On a steadily-filling disk the
+#       free space 3h ago sits well above current avail, so a transient
+#       deletion no longer lifts current past the baseline and the rate
+#       stays positive -- far fewer spurious CLEARs. The estimate just
+#       averages the fill over ~3h instead of ~55m, which is if anything
+#       a steadier early-warning signal.
+#   (b) lengthen the predictive alarms' down-delay so a raised alarm rides
+#       through residual blips before it's allowed to clear.
+# Raising is left untouched (warn/crit every 10s, no up-delay), so a
+# genuine fast fill still fires immediately -- the 2026-05-15 lead-time
+# requirement that motivated the un-silence above is preserved.
+- name: Deepen the disk-fill rate baseline window
+  when: not (ansible_check_mode and netdata_disks_staged.changed)
+  replace:
+    path: /etc/netdata/health.d/disks.conf
+    # [ \t] (not \s) so the line-anchored match can't span into the next
+    # line. The `min -10m`/`unaligned of avail` literals fence the edit to
+    # the disk_fill_rate + disk_inode_rate lookups -- the only two stanzas
+    # carrying `at -50m` (verified against upstream v2.10.3).
+    regexp: '^([ \t]*lookup:[ \t]*min -10m )at -50m( unaligned of avail)[ \t]*$'
+    replace: '\1at -3h\2'
+    backup: true
+  register: netdata_disks_rate_window
+  become: true
+  tags:
+    - netdata
+
+- name: Lengthen the out_of_disk_space_time down-delay
+  when: not (ansible_check_mode and netdata_disks_staged.changed)
+  replace:
+    path: /etc/netdata/health.d/disks.conf
+    # Stanza-anchored (same shape as the un-silence above): the bare
+    # `delay: down 15m multiplier 1.2 max 1h` string is shared with the
+    # legitimately-silent 10min_disk_utilization/backlog templates, so a
+    # global replace would clobber theirs.
+    regexp: '(?ms)(^\s*template:\s*out_of_disk_space_time\b(?:(?!^\s*template:).)*?^\s*delay:\s*)down 15m multiplier 1.2 max 1h'
+    replace: '\1down 1h multiplier 1.5 max 6h'
+    backup: true
+  register: netdata_disks_space_delay
+  become: true
+  tags:
+    - netdata
+
+- name: Lengthen the out_of_disk_inodes_time down-delay
+  when: not (ansible_check_mode and netdata_disks_staged.changed)
+  replace:
+    path: /etc/netdata/health.d/disks.conf
+    regexp: '(?ms)(^\s*template:\s*out_of_disk_inodes_time\b(?:(?!^\s*template:).)*?^\s*delay:\s*)down 15m multiplier 1.2 max 1h'
+    replace: '\1down 1h multiplier 1.5 max 6h'
+    backup: true
+  register: netdata_disks_inodes_delay
+  become: true
+  tags:
+    - netdata
+
 - name: Reload netdata health after disks.conf edits
-  when: netdata_disks_staged.changed or netdata_disks_space_unsilenced.changed or netdata_disks_inodes_unsilenced.changed
+  when: >-
+    netdata_disks_staged.changed or netdata_disks_space_unsilenced.changed
+    or netdata_disks_inodes_unsilenced.changed or netdata_disks_rate_window.changed
+    or netdata_disks_space_delay.changed or netdata_disks_inodes_delay.changed
   import_tasks: reload_health.yml
   tags:
     - netdata
@@ -184,11 +251,19 @@
       # un-silence missed -- fail here, not during an actual disk-fill.
       - _disks | regex_findall('(?ms)^\s*template:\s*out_of_disk_space_time\s(?:(?!^\s*template:).)*?^\s*to:\s*sysadmin') | length >= 1
       - _disks | regex_findall('(?ms)^\s*template:\s*out_of_disk_inodes_time\s(?:(?!^\s*template:).)*?^\s*to:\s*sysadmin') | length >= 1
+      # Flap-damping landed: deepened baseline on both rate templates + the
+      # lengthened down-delay on both predictive templates. Same fail-closed
+      # rationale -- an upstream restructure that defeats a replace must fail
+      # here, not silently leave the alarm flapping in production.
+      - _disks | regex_findall('(?m)^\s*lookup:\s*min -10m at -3h unaligned of avail') | length >= 2
+      - _disks | regex_findall('(?ms)^\s*template:\s*out_of_disk_space_time\s(?:(?!^\s*template:).)*?^\s*delay:\s*down 1h multiplier 1.5 max 6h') | length >= 1
+      - _disks | regex_findall('(?ms)^\s*template:\s*out_of_disk_inodes_time\s(?:(?!^\s*template:).)*?^\s*delay:\s*down 1h multiplier 1.5 max 6h') | length >= 1
     fail_msg: >-
       disks.conf out_of_disk_space_time / out_of_disk_inodes_time no longer
-      resolve to a `to: sysadmin` stanza -- upstream likely renamed or
-      restructured them, leaving the predictive disk-fill alarm silenced.
-      Re-check the un-silence regexes in this role.
+      resolve to a `to: sysadmin` stanza with the deepened (-3h) fill-rate
+      baseline and lengthened (down 1h) predictive delay -- upstream likely
+      renamed or restructured them, leaving the predictive disk-fill alarm
+      silenced or flapping. Re-check the un-silence/damping regexes in this role.
   tags:
     - netdata
 
@@ -264,11 +339,17 @@
 # of failed; warn: $this == 1; delay: down 1m), shipped `to: silent`.
 # Un-silencing it closes the O2 gap: netdata_presence.chart.sh catches a job
 # that never instantiated any chart; this catches a job that instantiated but
-# is now failing to collect. The 30s-average lookup + 1m delay keep it
-# non-flappy, and a job that never autodetects emits no status chart, so the
-# idle prometheus jobs on hosts where the target is absent don't alarm.
-# go.d.plugin.conf ships exactly one template, so the stanza anchoring is
-# defensive against a future upstream addition.
+# is now failing to collect. A job that never autodetects emits no status
+# chart, so idle prometheus jobs on hosts where the target is absent don't
+# alarm. go.d.plugin.conf ships exactly one template, so the stanza anchoring
+# is defensive against a future upstream addition.
+#
+# Upstream's `delay: down 1m` (no up-delay) still flapped: collectors like
+# docker/kuma/minio/redis intermittently miss a single scrape cycle (target
+# slow under load) then recover, and a 30s-average-of-failed crossing 1 for
+# one cycle was enough to notify. We add `up 5m` so the failure must persist
+# ~5m before it pages -- a genuinely-broken collector stays down well past
+# that, but a one-off timeout no longer does.
 - name: Stage upstream go.d.plugin.conf into /etc/netdata/health.d
   command: cp /usr/lib/netdata/conf.d/health.d/go.d.plugin.conf /etc/netdata/health.d/go.d.plugin.conf
   args:
@@ -290,8 +371,22 @@
   tags:
     - netdata
 
+- name: Add an up-delay to plugin_data_collection_status
+  when: not (ansible_check_mode and netdata_godplugin_staged.changed)
+  replace:
+    path: /etc/netdata/health.d/go.d.plugin.conf
+    # Stanza-anchored like the un-silence above (defensive though the file
+    # ships one template). Require a sustained failure before paging.
+    regexp: '(?ms)(^\s*template:\s*plugin_data_collection_status\b(?:(?!^\s*template:).)*?^\s*delay:\s*)down 1m'
+    replace: '\1up 5m down 5m'
+    backup: true
+  register: netdata_godplugin_delay
+  become: true
+  tags:
+    - netdata
+
 - name: Reload netdata health after go.d.plugin.conf edits
-  when: netdata_godplugin_staged.changed or netdata_godplugin_unsilenced.changed
+  when: netdata_godplugin_staged.changed or netdata_godplugin_unsilenced.changed or netdata_godplugin_delay.changed
   import_tasks: reload_health.yml
   tags:
     - netdata
@@ -314,9 +409,11 @@
     that:
       # \s (not \b) after the name dodges ansible 2.20 re-escaping \b in `that:`.
       - _godplugin | regex_findall('(?ms)^\s*template:\s*plugin_data_collection_status\s(?:(?!^\s*template:).)*?^\s*to:\s*sysadmin') | length >= 1
+      - _godplugin | regex_findall('(?ms)^\s*template:\s*plugin_data_collection_status\s(?:(?!^\s*template:).)*?^\s*delay:\s*up 5m down 5m') | length >= 1
     fail_msg: >-
       go.d.plugin.conf plugin_data_collection_status no longer resolves to a
-      `to: sysadmin` stanza -- upstream likely renamed/restructured it, leaving
-      the collector-failure alert silenced. Re-check the un-silence regex.
+      `to: sysadmin` stanza with the `up 5m` debounce -- upstream likely
+      renamed/restructured it, leaving the collector-failure alert silenced or
+      flappy. Re-check the un-silence/delay regexes.
   tags:
     - netdata
