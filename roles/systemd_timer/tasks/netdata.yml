@@ -23,6 +23,5 @@
     netdata_args:
       src: systemd_timers_alerts.conf
       dest: systemd_timers.conf
-      mode: "0600"
   tags:
     - systemd_timer
