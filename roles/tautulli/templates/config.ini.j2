@@ -70,7 +70,10 @@ http_host = 0.0.0.0
 http_password = ""
 http_plex_admin = 0
 http_port = 8181
-http_proxy = 0
+{# http_proxy=1: Tautulli sits behind the nginx TLS vhost, so CherryPy must #}
+{# honour the X-Forwarded-* headers nginx sends -- otherwise every client   #}
+{# logs and rate-limits as 127.0.0.1 and self-URLs build as http not https. #}
+http_proxy = 1
 http_rate_limit_attempts = 10
 http_rate_limit_attempts_interval = 300
 http_rate_limit_lockout_time = 300
@@ -149,7 +152,7 @@ pms_ip = {{ external_ips.lab }}
 pms_is_cloud = 0
 pms_is_remote = 0
 pms_language = ""
-pms_logs_folder = /plex/Library/Application Support/Plex Media Server/Logs
+pms_logs_folder = ""
 pms_logs_line_cap = 1000
 pms_name = DockerPlex
 pms_name_override = ""
@@ -171,5 +174,5 @@ pms_url_manual = 0
 pms_url_override = ""
 pms_use_bif = 0
 pms_uuid = {{ tautulli_pms_uuid }}
-pms_version ={{ ' ' ~ _tautulli_pms_version if _tautulli_pms_version else ' ""' }}
+pms_version = {{ _tautulli_pms_version if _tautulli_pms_version else '""' }}
 pms_web_url = https://plex.{{ inventory_hostname }}.{{ domain }}/web/index.html
