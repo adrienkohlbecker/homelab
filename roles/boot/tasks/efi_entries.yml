@@ -64,6 +64,15 @@
   tags:
     - boot
 
+- name: efi_entries | Surface firmware warnings
+  when:
+    - _boot_efi_result is not skipped
+    - (_boot_efi_result.stdout | from_json).warnings | default([]) | length > 0
+  debug:
+    msg: "{{ (_boot_efi_result.stdout | from_json).warnings }}"
+  tags:
+    - boot
+
 - name: efi_entries | Ask to reboot
   when: _boot_efi_result is changed
   file:
