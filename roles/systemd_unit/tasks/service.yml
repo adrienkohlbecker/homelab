@@ -280,3 +280,12 @@
     scope: "{{ _systemd_unit_scope }}"
   become: true
   become_user: "{{ _systemd_unit_user }}"
+
+# Expose the start result under a stable per-unit fact (mirroring install.yml's
+# <name>_result convention) so callers that start multiple units in the same
+# play don't have to manually capture `systemd_unit_started` before the next
+# service call rebinds it. When start: false the Start task is skipped and
+# systemd_unit_started is undefined; default to changed=false in that case.
+- name: service | Record service result for {{ systemd_unit_args.src | default(systemd_unit_args.dest | default('?')) }}
+  set_fact:
+    "{{ _systemd_unit_name | regex_replace('[^A-Za-z0-9_]', '_') }}_started_result": "{{ systemd_unit_started | default({'changed': false}) }}"
