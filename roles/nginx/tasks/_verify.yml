@@ -115,7 +115,8 @@
     name: test
     tasks_from: authelia_stub
   vars:
-    test_authelia_stub_mode: gate
+    test_authelia_stub_args:
+      mode: gate
 
 # Bounded readiness probe (fail-fast, per the harness flake contract): the stub
 # re-install reloaded nginx, so poll its endpoint until the gate 401 lands
@@ -381,7 +382,8 @@
     name: test
     tasks_from: authelia_stub
   vars:
-    test_authelia_stub_mode: authed
+    test_authelia_stub_args:
+      mode: authed
 
 - name: _verify | Wait for the Authelia authed stub to answer 200
   uri:

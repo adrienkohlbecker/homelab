@@ -2,32 +2,53 @@
 # endpoint so roles using nginx_site_args.auth=required can be tested
 # without bringing up the real authelia role. Listens on
 # 127.0.0.1:{{ service_ports.authelia }} (same port the prod authelia
-# role publishes); response code depends on the `test_authelia_stub_mode`
-# var the caller sets:
-#   always_200 (default): every auth-request subrequest returns 200,
-#       so the site template's `auth_request /internal/authelia` always
-#       admits the parent. Use when the _verify only cares that the
-#       wiring is intact and not the gate semantics (homepage today).
-#   gate: returns 401 unauthenticated, so the parent's error_page 401
-#       -> 302 redirect mapping fires for negative-path probes (no
-#       token / wrong token in nginx_site_args.bypass_query_param
-#       tests). The bypass `if` short-circuits BEFORE reaching the
-#       stub, so positive-path tests still see 200 from upstream.
-#       Like real Authelia, gate mode also returns a Location header
-#       pointing at the portal with a ?rd=<original-url> returnUrl, so the
-#       parent's modern redirect (auth_request_set $redirection_url
-#       $upstream_http_location; error_page 401 =302 $redirection_url) has a
-#       target to 302 to that routes back to the requested vhost.
-#   authed: returns 200 plus a `Remote-User` header (value from
-#       test_authelia_stub_user, default nginxverifyuser), like Authelia on a
-#       successful auth. Lets a test exercise the auth-passes paths --
-#       X-Forwarded-User forwarding and per-user upstream_authorization
-#       injection (the $authelia_user-keyed map in upstream_auth_map.conf.j2).
+# role publishes).
+#
+# Inputs: caller passes a single dict `test_authelia_stub_args` (replaced
+# wholesale per import, so a previous caller's mode can't bleed into the
+# next that doesn't override it):
+#   mode  optional, default 'always_200'. One of:
+#     always_200: every auth-request subrequest returns 200, so the site
+#         template's `auth_request /internal/authelia` always admits the
+#         parent. Use when the _verify only cares that the wiring is intact
+#         and not the gate semantics (homepage today).
+#     gate: returns 401 unauthenticated, so the parent's error_page 401
+#         -> 302 redirect mapping fires for negative-path probes (no
+#         token / wrong token in nginx_site_args.bypass_query_param
+#         tests). The bypass `if` short-circuits BEFORE reaching the
+#         stub, so positive-path tests still see 200 from upstream.
+#         Like real Authelia, gate mode also returns a Location header
+#         pointing at the portal with a ?rd=<original-url> returnUrl, so the
+#         parent's modern redirect (auth_request_set $redirection_url
+#         $upstream_http_location; error_page 401 =302 $redirection_url) has a
+#         target to 302 to that routes back to the requested vhost.
+#     authed: returns 200 plus a `Remote-User` header (value from `user`),
+#         like Authelia on a successful auth. Lets a test exercise the
+#         auth-passes paths -- X-Forwarded-User forwarding and per-user
+#         upstream_authorization injection (the $authelia_user-keyed map in
+#         upstream_auth_map.conf.j2).
+#   user  optional, default 'nginxverifyuser'. Remote-User value emitted in
+#         authed mode.
 #
 # Localhost-only. Prod Authelia uses the same port; this fixture is
 # only ever installed by tasks/_setup.yml chains under test/testrole.py,
 # never on prod. The conf.d/ filename is prefixed with `test_` to make
 # the test-only intent visible in operator listings.
+- name: authelia_stub | Assert mode is a known value
+  assert:
+    that:
+      - (test_authelia_stub_args | default({})).mode | default('always_200') in ['always_200', 'gate', 'authed']
+    fail_msg: >-
+      test_authelia_stub_args.mode must be one of always_200/gate/authed; got
+      '{{ (test_authelia_stub_args | default({})).mode | default('always_200') }}'.
+      A typo silently falls through to always_200, so a negative-path auth test
+      would spuriously pass.
+
+- name: authelia_stub | Resolve caller defaults
+  set_fact:
+    _test_authelia_stub_mode: "{{ (test_authelia_stub_args | default({})).mode | default('always_200') }}"
+    _test_authelia_stub_user: "{{ (test_authelia_stub_args | default({})).user | default('nginxverifyuser') }}"
+
 - name: authelia_stub | Install nginx fixture for /api/authz/auth-request
   import_role:
     name: nginx
@@ -41,7 +62,7 @@
           listen 127.0.0.1:{{ service_ports.authelia }};
           server_name _;
           location = /api/authz/auth-request {
-        {% if (test_authelia_stub_mode | default('always_200')) == 'gate' %}
+        {% if _test_authelia_stub_mode == 'gate' %}
             # `always` so add_header applies to the 401 the way real Authelia
             # emits the portal redirect in its Location response header. Like
             # real Authelia, carry the returnUrl as ?rd=<original-url> so the
@@ -52,11 +73,11 @@
             # forward-auth wiring, not just the bare redirect.
             add_header Location "https://auth.{{ inventory_hostname }}.{{ domain }}/?rd=$http_x_original_url" always;
             return 401;
-        {% elif (test_authelia_stub_mode | default('always_200')) == 'authed' %}
+        {% elif _test_authelia_stub_mode == 'authed' %}
             # authed: 200 with a Remote-User header, like Authelia on a
             # successful auth, so the parent's auth_request_set $authelia_user
             # populates (exercises X-Forwarded-User + upstream_authorization).
-            add_header Remote-User "{{ test_authelia_stub_user | default('nginxverifyuser') }}" always;
+            add_header Remote-User "{{ _test_authelia_stub_user }}" always;
             return 200 'test_stub_ok';
         {% else %}
             return 200 'test_stub_ok';
