@@ -1,20 +1,12 @@
 #!/usr/bin/env bash
 #MISE description="Build the zbm-builder container image locally for the host arch"
-# Clones zfsbootmenu at the pinned tag, then builds zbm/Dockerfile
-# (a podman-compatible vendored copy of upstream's
-# releng/docker/Dockerfile) against the upstream releng/docker context
-# so build-init.sh remains COPYable. The image always targets the host
-# arch (no cross-build): run on Mac arm for an aarch64 image, on the
-# Linux x86_64 dev host for an amd64 image. Tagged
-# localhost/zbm-builder:<version>-<arch>. Re-run when ZBM_VERSION
-# changes.
+# Clones zfsbootmenu at the pinned tag, then calls upstream's
+# image-build.sh (buildah-based, no Dockerfile) to produce
+# localhost/zbm-builder:v<version>-<arch>.
 #
-# --security-opt seccomp=unconfined is needed because xbps-install
-# sets file capabilities/xattrs on extracted files (e.g. libelf.so.1)
-# via syscalls that the default rootless seccomp profile blocks,
-# yielding "Operation not permitted" on unpack. The relaxation
-# applies to the build process only; the resulting image runs with
-# the default profile.
+# Re-run when ZBM_VERSION changes. The image always targets the host
+# arch (no cross-build): run on Mac arm for an aarch64 image, on the
+# Linux x86_64 dev host for an amd64 image.
 #
 # XBPS_REPOS points at the Void Linux Frankfurt mirror because the
 # upstream-default Fastly CDN throttles to <100 kB/s from this ISP,
@@ -22,7 +14,7 @@
 # mirror with EU-local capacity. Per Void docs, glibc x86_64 lives at
 # `/current` and aarch64 (still glibc) at `/current/aarch64` — pick the
 # subpath that matches the host arch.
-set -eu
+set -euo pipefail
 
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 case "$arch" in
@@ -38,9 +30,14 @@ src_dir="${MISE_CONFIG_ROOT}/zbm-build/src"
 rm -rf "$src_dir"
 mkdir -p "$(dirname "$src_dir")"
 git clone --depth 1 --branch "v${ZBM_VERSION}" https://github.com/zbm-dev/zfsbootmenu.git "$src_dir"
-podman build \
-  --security-opt seccomp=unconfined \
-  --build-arg "XBPS_REPOS=${xbps_repo}" \
-  --tag "localhost/zbm-builder:v${ZBM_VERSION}-${arch}" \
-  -f "${MISE_CONFIG_ROOT}/zbm/Dockerfile" \
-  "$src_dir/releng/docker"
+
+tag="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
+
+# upstream image-build.sh uses buildah step-by-step (no Dockerfile).
+# -R: custom XBPS repo (Frankfurt mirror)
+# -p: extra package (mdadm for lab's ESP RAID1 recovery)
+cd "$src_dir"
+"$src_dir/releng/docker/image-build.sh" \
+  -R "$xbps_repo" \
+  -p mdadm \
+  "$tag" "v${ZBM_VERSION}"
