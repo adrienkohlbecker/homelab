@@ -136,9 +136,29 @@
     replace: '\g<1>1.40.0.8395-abc123def'
   become: true
 
+# Mimic the daemon rewrite the sort_ini watcher reacts to: re-sort config.ini,
+# which strips blank lines and reorders keys. The re-converge below then has to
+# re-render against the sorted file. If the template emits blank lines (e.g. a
+# dropped trim_blocks header), sort_ini strips them, the re-render re-adds them,
+# tautulli_conf reports changed, and the churn-stability assert below fails --
+# catching a regression that restarts the container on every converge.
+- name: _verify | Re-sort config.ini to mimic a daemon rewrite
+  command: /usr/local/bin/sort_ini /mnt/services/tautulli/config.ini
+  changed_when: false
+  become: true
+
 - name: _verify | Re-run the role to exercise the PMS value readback
   import_role:
     name: tautulli
+
+- name: _verify | Config is churn-stable -- the post-sort re-render made no change
+  assert:
+    that:
+      - not tautulli_conf.changed
+    fail_msg: >-
+      config.ini re-rendered with changes after a sort_ini pass: the template
+      likely emits blank lines (a dropped trim_blocks header) that the watcher
+      strips, restarting the container on every converge.
 
 - name: _verify | Re-read config.ini after the re-converge
   slurp:

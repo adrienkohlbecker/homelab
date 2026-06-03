@@ -30,9 +30,9 @@
     - /mnt/services/sqlite
   become: true
 
-- name: _setup | Stub sort_ini binary
-  file:
-    src: /usr/bin/tail
-    dest: /usr/local/bin/sort_ini
-    state: link
-  become: true
+# Install the real sort_ini binary (not a stub): _verify re-sorts config.ini
+# with it to prove the rendered template round-trips through the watcher
+# without churn. A `tail` stub would strip nothing and hide blank-line drift.
+- name: _setup | Install sort_ini binary
+  import_role:
+    name: sort_ini

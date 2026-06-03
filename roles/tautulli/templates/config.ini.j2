@@ -1,3 +1,8 @@
+#jinja2: trim_blocks: True, lstrip_blocks: True
+{# trim_blocks/lstrip_blocks keep the inline comment blocks below from        #}
+{# emitting blank lines: the sort_ini watcher discards blanks on the daemon's #}
+{# first rewrite, so a stray blank would make every converge re-diff          #}
+{# config.ini and needlessly restart the container.                          #}
 [Advanced]
 cache_sizemb = 32
 check_docker_mount = 1
@@ -28,7 +33,10 @@ cloudinary_api_secret = ""
 cloudinary_cloud_name = ""
 [General]
 allow_guest_access = 0
-anon_redirect = https://www.nullrefer.com/?
+{# Empty so outbound UI link clicks go direct, not through a third-party    #}
+{# referrer-stripper (a metadata leak + availability dependency that buys    #}
+{# nothing for an Authelia-gated single-operator instance).                  #}
+anon_redirect = ""
 anon_redirect_dynamic = 0
 api_enabled = 1
 api_key = {{ tautulli_api_key }}
