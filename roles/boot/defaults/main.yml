@@ -16,24 +16,10 @@ boot_serial_console: ""
 #
 # On aarch64 the direct EFI-stub "Linux" entry is the primary boot path
 # (rEFInd->ZBM kexec panics on aarch64 QEMU), so it is prepended first.
-
-# aarch64 EFI-stub entry (kernel + initrd on the ESP, booted directly by
-# the firmware without rEFInd). Kept in sync with chroot.sh's aarch64 block.
-_boot_efi_stub_entry:
-  - label: Linux
-    loader: "\\EFI\\Linux\\vmlinuz.efi"
-    options: "root=zfs:rpool/ROOT/{{ ansible_distribution_release }} initrd=\\EFI\\Linux\\initrd {{ _boot_assembled_cmdline | default('console=tty0') }}"
-    multi_disk: true
-
-_boot_efi_loader_entries:
-  - label: rEFInd
-    loader: "\\EFI\\refind\\{{ 'refind_aa64.efi' if ansible_architecture == 'aarch64' else 'refind_x64.efi' }}"
-    multi_disk: true
-  - label: ZFSBootMenu
-    loader: "\\EFI\\ZBM\\VMLINUZ.EFI"
-  - label: ZFSBootMenu (Backup)
-    loader: "\\EFI\\ZBM\\VMLINUZ-BACKUP.EFI"
-
+#
+# Building-block vars (_boot_efi_stub_entry, _boot_efi_loader_entries) live
+# in vars/main.yml (not overridable). Override boot_efi_entries to replace
+# the full list.
 boot_efi_entries: "{{ (_boot_efi_stub_entry if ansible_architecture == 'aarch64' else []) + _boot_efi_loader_entries }}"
 
 # EFI firmware boot timeout in seconds. How long the firmware waits at the

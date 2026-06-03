@@ -8,6 +8,16 @@
 #
 # Gated on `not grub_bootloader` by the import in main.yml.
 
+- name: efi_entries | Assert cmdline engine has run (aarch64 needs options)
+  when: ansible_architecture == 'aarch64'
+  assert:
+    that: _boot_assembled_cmdline is defined
+    fail_msg: >-
+      _boot_assembled_cmdline is not set — the cmdline engine (tasks/cmdline.yml)
+      must run before efi_entries.yml on aarch64. Don't --start-at-task past it.
+  tags:
+    - boot
+
 - name: efi_entries | Create /opt/boot
   file:
     path: /opt/boot
@@ -27,6 +37,7 @@
     group: root
     mode: "0755"
     backup: true
+    validate: python3 -m py_compile "%s"
   register: _boot_efi_install
   become: true
   tags:
@@ -34,7 +45,8 @@
 
 - name: efi_entries | Converge NVRAM entries
   when: not (ansible_check_mode and _boot_efi_install is changed)
-  command: python3 /opt/boot/efi_entries.py {{ '--check' if ansible_check_mode else '' }}
+  command:
+    argv: "{{ ['python3', '/opt/boot/efi_entries.py'] + (['--check'] if ansible_check_mode else []) }}"
   environment:
     BOOT_EFI_ENTRIES: "{{ boot_efi_entries | to_json }}"
     BOOT_EFI_TIMEOUT: "{{ boot_efi_timeout | to_json }}"
