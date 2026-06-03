@@ -82,7 +82,10 @@ ExecStart=/usr/bin/podman run \
        nginx location_conf in tasks/main.yml and notes/getmail_webmail_design.md.
        zipdownload (bulk export-as-zip) is an image default that setting PLUGINS
        would otherwise drop — kept for archive export; the archive default is not
-       (it moves mail to an Archive folder, which the read-only Maildir rejects). #}
+       (it moves mail to an Archive folder, which the read-only Maildir rejects).
+       zipdownload would also let a hijacked session export the whole mailbox in
+       one request, but that exfiltration is bounded by the Authelia gate and the
+       tightened CSP (see the nginx location_conf), so the export convenience wins. #}
     --env ROUNDCUBEMAIL_PLUGINS=http_authentication,zipdownload \
     --health-cmd         '["curl","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:80/"]' \
     --health-startup-cmd '["curl","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:80/"]' \
