@@ -21,7 +21,7 @@
   when: not grub_bootloader
   shell:
     executable: /bin/bash
-    cmd: set -euo pipefail; dpkg-query -W -f='${Status}\t${binary:Package}\n' 'grub*' | awk -F'\t' '/^install ok installed/ {print $2}'
+    cmd: set -euo pipefail; dpkg-query -W -f='${db:Status-Status}\t${binary:Package}\n' 'grub*' | awk -F'\t' '/^installed/ {print $2}'
   register: boot_grub_packages
   changed_when: false
   failed_when: false
@@ -114,6 +114,6 @@
       {% endif %}
     boot_cmdline_args:
       name: default
-      contents: "console=tty0{{ (' ' ~ _boot_serial | trim) if (_boot_serial | trim | length > 0) else '' }}"
+      contents: "console=tty0{{ (' ' ~ (_boot_serial | trim)) if ((_boot_serial | trim) | length > 0) else '' }}"
   tags:
     - boot
