@@ -19,6 +19,9 @@ AccuracySec={{ systemd_timer_args.accuracy_sec }}
 {% if systemd_timer_args.on_active_sec is defined %}
 OnActiveSec={{ systemd_timer_args.on_active_sec }}
 {% endif %}
+{% if systemd_timer_args.wake_system | default(false) %}
+WakeSystem=yes
+{% endif %}
 
 [Install]
 WantedBy=timers.target
