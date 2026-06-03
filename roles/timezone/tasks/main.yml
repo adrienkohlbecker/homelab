@@ -12,9 +12,10 @@
   when: not (ansible_check_mode and timezone_apt.changed)
   community.general.timezone:
     name: Etc/UTC
-    # Pin the RTC to UTC too (timedatectl set-local-rtc 0) so hardware and
-    # system clocks share one reference -- explicit rather than relying on
-    # the installer default.
+    # Tell systemd the RTC is in UTC (timedatectl set-local-rtc 0) so the kernel
+    # applies no local-time offset -- explicit rather than relying on the
+    # installer default. On the RTC-less qemu/VPS guests this is just the systemd
+    # flag, with no hardware clock to write.
     hwclock: UTC
   become: true
   tags:
