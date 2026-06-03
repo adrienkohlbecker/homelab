@@ -230,7 +230,6 @@
     --accept-dns={{ tailscale_accept_dns | ternary('true', 'false') }}
     --snat-subnet-routes={{ tailscale_snat_subnet_routes | ternary('true', 'false') }}
     --stateful-filtering={{ tailscale_stateful_filtering | ternary('true', 'false') }}
-    --timeout=60s
   when:
     - not ansible_check_mode
     - tailscale_running
