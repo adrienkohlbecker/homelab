@@ -61,9 +61,17 @@ key_material="$(op read 'op://Lab/hxad25fxm2gfulafg23b6sv33e/private key')"
 # Both modes emit into $out_dir:
 #   Components: vmlin{u,uz}-bootmenu + initramfs-bootmenu.img
 #   EFI:        vmlinuz.EFI (unified kernel image)
+# Rename the unified EFI to zfsbootmenu.EFI before archiving: on the
+# case-insensitive FAT32 ESP, vmlinuz.EFI == VMLINUZ.EFI — the path the
+# zfsbootmenu role deploys the stock single-file recovery UKI to — so unpacking
+# our tarball there would clobber it. A distinct name lets both coexist.
+if [ -f "$out_dir/vmlinuz.EFI" ]; then
+  mv "$out_dir/vmlinuz.EFI" "$out_dir/zfsbootmenu.EFI"
+fi
+
 # --owner=0/--group=0 bake root:0 into the archive metadata so extracting
 # in a chroot or onto FAT32 doesn't trip "Cannot change ownership"
 # from the container's build-user uids leaking into the archive.
 tarball="zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
-(cd "$out_dir" && tar --sort=name --owner=0 --group=0 -czf "$tarball" vmlin*-bootmenu initramfs-bootmenu.img vmlin*.EFI)
+(cd "$out_dir" && tar --sort=name --owner=0 --group=0 -czf "$tarball" vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI)
 sha256sum "$out_dir/$tarball"
