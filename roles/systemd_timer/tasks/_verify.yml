@@ -35,11 +35,9 @@
     name: netdata
     state: restarted
   become: true
-# netdata dropped /run/netdata/netdata.pipe in 1.46.x+ (control moved to
-# HTTP — see roles/netdata/tasks/charts_d.yml), so a wait_for on the pipe
-# hangs until timeout on the pinned x86_64 build. Probe the HTTP API
-# instead, which both the lagging arm64 build (1.39.1) and the x86_64
-# build (1.46.3) serve.
+# netdata dropped /run/netdata/netdata.pipe in 1.46+ (control moved to HTTP
+# — see roles/netdata/tasks/charts_d.yml), so a wait_for on the pipe would
+# hang until timeout. Probe the HTTP API instead.
 - name: _verify | Wait for netdata HTTP API after restart
   uri:
     url: http://127.0.0.1:19999/api/v1/info
@@ -141,6 +139,19 @@
   become: true
 
 # ----- run_as (privilege drop in system-scope unit) -----
+# systemd-analyze verify (run by systemd_unit) warns "Special user nobody
+# configured, this is not safe!" for User=nobody, and systemd_unit treats any
+# verify stderr as a failure. Use a dedicated created user instead -- it also
+# mirrors how real run_as callers work (a service's own system user).
+- name: _verify | Create a dedicated user for the run_as fixture
+  user:
+    name: _verify_runas
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+  register: _systemd_timer_runas_created
+  become: true
+
 - name: "_verify | Install run_as fixture (monitor: false)"
   import_role:
     name: systemd_timer
@@ -152,7 +163,7 @@
       on_calendar: "*-*-* 23:59:00"
       exec_start: /bin/sh -c 'id -u > /tmp/_verify_timer_runas.out'
       monitor: false
-      run_as: nobody
+      run_as: _verify_runas
 
 - name: _verify | Trigger the run_as fixture manually  # noqa: command-instead-of-module
   command: systemctl start --wait _verify_timer_runas.service
@@ -176,8 +187,8 @@
     _uid: "{{ (_systemd_timer_runas_out.content | b64decode).strip() }}"
   assert:
     that:
-      - _systemd_timer_runas_user.stdout == 'nobody'
-      - _uid == '65534'
+      - _systemd_timer_runas_user.stdout == '_verify_runas'
+      - _uid == (_systemd_timer_runas_created.uid | string)
 
 - name: _verify | Remove the run_as fixture timer
   import_role:
@@ -190,6 +201,12 @@
 - name: _verify | Cleanup run_as fixture output
   file:
     path: /tmp/_verify_timer_runas.out
+    state: absent
+  become: true
+
+- name: _verify | Remove the run_as fixture user
+  user:
+    name: _verify_runas
     state: absent
   become: true
 
@@ -286,9 +303,12 @@
   register: _systemd_timer_knobs_out
   become: true
 
+# OnActiveSec= has no scalar property -- monotonic timer settings surface in
+# the TimersMonotonic list as e.g. "TimersMonotonic={ OnActiveUSec=0 ; ... }",
+# so query that (the OnActiveUSec=0 assertion below matches its content).
 - name: _verify | Read systemctl show properties for knobs fixture  # noqa: command-instead-of-module
   command: >-
-    systemctl show -p AccuracyUSec,OnActiveUSec,RandomizedDelayUSec,FixedRandomDelay,ProtectSystem,ProtectHome
+    systemctl show -p AccuracyUSec,TimersMonotonic,RandomizedDelayUSec,FixedRandomDelay,ProtectSystem,ProtectHome
     _verify_timer_knobs.timer _verify_timer_knobs.service
   register: _systemd_timer_knobs_show
   changed_when: false
@@ -325,9 +345,8 @@
     state: absent
   become: true
 
-# Contracts 3+4 exercise the netdata charts.d collector, which is x86_64
-# only (see _verify_monitored.yml). import_tasks propagates this `when:`
-# onto every imported task, so the whole block skips cleanly on aarch64.
-- name: _verify | Monitored-timer + overdue netdata contracts (x86_64 only)
+# Contracts 3+4 exercise the netdata charts.d collector. netdata installs
+# from repo.netdata.cloud's multi-arch 2.x series (see roles/netdata), so
+# netdata-plugin-chartsd resolves on arm64 as well as x86_64 -- no arch gate.
+- name: _verify | Monitored-timer + overdue netdata contracts
   import_tasks: _verify_monitored.yml
-  when: ansible_architecture == 'x86_64'
