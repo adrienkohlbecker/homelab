@@ -145,6 +145,114 @@
       tags:
         - always
 
+    # DNS safety gate: refuse to reboot the last DNS-serving host.
+    # Two concurrent playbooks (--limit lab / --limit pug) can race past
+    # the probe before either actually reboots. Keepalived priority breaks
+    # the tie: the lower-priority host yields 30s, letting the higher-
+    # priority host reboot first; the post-yield re-probe detects the
+    # peer's absence and waits for it to recover before proceeding.
+    - name: DNS safety gate
+      when:
+        - not ansible_check_mode
+        - reboot_required.stat.exists
+        - inventory_hostname in pihole_keepalived_peers
+      vars:
+        _reboot_dns_peers: "{{ pihole_keepalived_peers | reject('eq', inventory_hostname) | list }}"
+        _reboot_dns_ips: "{{ _reboot_dns_peers | map('extract', external_ips) | list }}"
+        _reboot_is_lowest_priority: >-
+          {{ pihole_keepalived_priority <
+             (_reboot_dns_peers | map('extract', hostvars, 'pihole_keepalived_priority') | max) }}
+      tags:
+        - always
+      block:
+        - name: Probe peer pihole before reboot
+          command: dig +short +timeout=3 +tries=2 @{{ item }} pi.hole
+          loop: "{{ _reboot_dns_ips }}"
+          register: _reboot_dns_probe
+          changed_when: false
+          failed_when: false
+
+        - name: Refuse to reboot — no peer is serving DNS
+          when: _reboot_dns_probe.results | selectattr('rc', 'eq', 0) | list | length == 0
+          fail:
+            msg: >-
+              No pihole peer is answering DNS — refusing to reboot to preserve
+              DNS availability. Recover a peer first, or rm /var/run/reboot-required.
+
+        - name: Yield to higher-priority DNS peer (race protection)
+          when: _reboot_is_lowest_priority | bool
+          pause:
+            seconds: 30
+            prompt: >-
+              Lower keepalived priority — yielding 30s in case a higher-priority
+              peer is rebooting concurrently
+
+        - name: Re-probe peer pihole after yield
+          when: _reboot_is_lowest_priority | bool
+          command: dig +short +timeout=3 +tries=2 @{{ item }} pi.hole
+          loop: "{{ _reboot_dns_ips }}"
+          register: _reboot_dns_reprobe
+          changed_when: false
+          failed_when: false
+
+        - name: Wait for peer to finish rebooting
+          when:
+            - _reboot_is_lowest_priority | bool
+            - _reboot_dns_reprobe.results | selectattr('rc', 'eq', 0) | list | length == 0
+          command: dig +short +timeout=3 +tries=2 @{{ _reboot_dns_ips | first }} pi.hole
+          register: _reboot_dns_wait
+          until: _reboot_dns_wait.rc == 0
+          retries: 30
+          delay: 10
+          changed_when: false
+          failed_when: false
+
+        - name: Refuse to reboot — peer did not recover
+          when:
+            - _reboot_is_lowest_priority | bool
+            - _reboot_dns_reprobe.results | selectattr('rc', 'eq', 0) | list | length == 0
+            - _reboot_dns_wait.rc | default(1) != 0
+          fail:
+            msg: >-
+              Pihole peer did not recover DNS after 5 min — refusing to reboot.
+              Investigate the peer manually.
+
+    # Graceful VIP drain: stop keepalived before the reboot so the peer
+    # claims the VIP via the priority-0 VRRP advertisement *before* pihole
+    # shuts down. Without this, systemd stops both concurrently — pihole
+    # can die first, leaving the VIP on a host with no DNS for the ~2s
+    # until the healthcheck FAULT triggers failover.
+    - name: Drain keepalived VIP before reboot
+      when:
+        - not ansible_check_mode
+        - reboot_required.stat.exists
+        - inventory_hostname in pihole_keepalived_peers
+      tags:
+        - always
+      block:
+        - name: Stop keepalived to release the VIP
+          systemd:
+            name: keepalived.service
+            state: stopped
+          become: true
+
+        - name: Verify peer claimed the VIP
+          command: dig +short +timeout=5 +tries=3 @{{ pihole_keepalived_ip }} pi.hole
+          register: _reboot_vip_check
+          until: _reboot_vip_check.rc == 0
+          retries: 6
+          delay: 2
+          changed_when: false
+          failed_when: false
+
+        - name: Warn if VIP did not migrate
+          when: _reboot_vip_check.rc | default(1) != 0
+          debug:
+            msg: >-
+              WARNING: pihole VIP {{ pihole_keepalived_ip }} is not answering DNS
+              after keepalived stop — peer may not have claimed it. Proceeding
+              with reboot anyway (the peer's keepalived will detect our absence).
+
     - name: Restart machine
       import_role:
         name: reboot
