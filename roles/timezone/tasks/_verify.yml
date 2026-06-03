@@ -1,7 +1,8 @@
 # Post-converge checks for the timezone role. Converge success proves the
 # community.general.timezone module exited cleanly; these verify the host is
-# functionally on UTC -- timedatectl (the source systemd and services consult)
-# and `date +%Z` (what libc actually resolves through /etc/localtime).
+# functionally on UTC -- timedatectl (the source systemd and services consult),
+# `date +%Z` (what libc actually resolves through /etc/localtime), and LocalRTC
+# (the RTC-in-UTC pin the module sets via `set-local-rtc 0`, otherwise unchecked).
 
 - name: _verify | Read timedatectl timezone
   command: timedatectl show -p Timezone --value
@@ -13,6 +14,18 @@
   assert:
     that: "timezone_verify_timedatectl.stdout == 'Etc/UTC'"
     fail_msg: "timedatectl reports {{ timezone_verify_timedatectl.stdout }}, not Etc/UTC"
+    quiet: true
+
+- name: _verify | Read RTC interpretation
+  command: timedatectl show -p LocalRTC --value
+  register: timezone_verify_localrtc
+  changed_when: false
+  become: true
+
+- name: _verify | RTC is in UTC (LocalRTC=no)
+  assert:
+    that: "timezone_verify_localrtc.stdout == 'no'"
+    fail_msg: "timedatectl reports LocalRTC={{ timezone_verify_localrtc.stdout }}, RTC not pinned to UTC"
     quiet: true
 
 - name: _verify | Read resolved zone abbreviation
