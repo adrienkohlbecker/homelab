@@ -3,6 +3,10 @@
 // Note that in Ubuntu security updates may pull in new dependencies
 // from non-security sources (e.g. chromium). By allowing the release
 // pocket these get automatically pulled in.
+//
+// Third-party repos (netdata, tailscale, fluent-bit, etc.) are
+// intentionally excluded; their updates are applied during
+// operator-driven converge via apt_upgrade.
 Unattended-Upgrade::Allowed-Origins {
 	"${distro_id}:${distro_codename}";
 	"${distro_id}:${distro_codename}-security";
@@ -20,7 +24,7 @@ Unattended-Upgrade::Allowed-Origins {
 // Python regular expressions, matching packages to exclude from upgrading
 Unattended-Upgrade::Package-Blacklist {
     // The following matches all packages starting with linux-
-//  "linux-";
+    "linux-";
 
     // Use $ to explicitely define the end of a package name. Without
     // the $, "libc6" would match all of them.
@@ -53,7 +57,7 @@ Unattended-Upgrade::DevRelease "auto";
 // they can be interrupted with SIGTERM. This makes the upgrade
 // a bit slower but it has the benefit that shutdown while a upgrade
 // is running is possible (with a small delay)
-//Unattended-Upgrade::MinimalSteps "true";
+Unattended-Upgrade::MinimalSteps "true";
 
 // Install all updates when the machine is shutting down
 // instead of doing it in the background while the machine is running.
