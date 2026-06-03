@@ -324,6 +324,7 @@
   apt:
     name: systemd-zram-generator
     state: present
+    cache_valid_time: 3600
   register: swap_zram_installed
   become: true
   tags:
@@ -340,7 +341,7 @@
     group: root
     mode: "0644"
     backup: true
-    validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' "%s"
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False,delimiters=("=",)).read(sys.argv[1])' "%s"
   register: swap_zram_conf
   become: true
   tags:
