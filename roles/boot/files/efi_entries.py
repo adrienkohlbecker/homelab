@@ -143,11 +143,15 @@ def detect_esp_disks():
 
 def _add_disk(disks, part, index):
     partname = os.path.basename(part)
-    info = json.loads(run(["lsblk", "-J", "-n", "-o", "PKNAME,PARTUUID", part]))
-    blockdevices = info.get("blockdevices", [])
-    if len(blockdevices) != 1:
-        raise RuntimeError(f"lsblk {part}: expected exactly one blockdevice, got {len(blockdevices)}")
-    dev = blockdevices[0]
+    # -d/--nodeps reports only the queried partition, not its mdadm holder — an
+    # ESP mirror member carries the md device as a dependent, which would
+    # otherwise show up as a second blockdevice. Select by name as a belt-and-
+    # braces guard against any extra rows.
+    info = json.loads(run(["lsblk", "-J", "-n", "-d", "-o", "NAME,PKNAME,PARTUUID", part]))
+    matched = [b for b in info.get("blockdevices", []) if b.get("name") == partname]
+    if len(matched) != 1:
+        raise RuntimeError(f"lsblk {part}: could not resolve a unique blockdevice for {partname}")
+    dev = matched[0]
     if not dev.get("pkname"):
         raise RuntimeError(f"lsblk {part}: no parent disk (pkname) — unexpected device stacking")
     if not dev.get("partuuid"):

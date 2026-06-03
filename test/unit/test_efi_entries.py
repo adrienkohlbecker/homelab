@@ -129,7 +129,7 @@ def run_check(
 
 _SINGLE = dict(
     findmnt="/dev/sda1",
-    lsblk_map={"/dev/sda1": {"blockdevices": [{"pkname": "sda", "partuuid": "AAA-0"}]}},
+    lsblk_map={"/dev/sda1": {"blockdevices": [{"name": "sda1", "pkname": "sda", "partuuid": "AAA-0"}]}},
     partn={"/sys/class/block/sda1/partition": "1"},
 )
 
@@ -174,7 +174,17 @@ def _mdadm_export(roles):
     return "\n".join(lines)
 
 
-_LSBLK3 = {f"/dev/nvme{i}n1p1": {"blockdevices": [{"pkname": f"nvme{i}n1", "partuuid": f"UU-{i}"}]} for i in range(3)}
+# Mirror members carry their md holder as a second blockdevice; the name filter
+# in _add_disk must pick the partition, not the holder.
+_LSBLK3 = {
+    f"/dev/nvme{i}n1p1": {
+        "blockdevices": [
+            {"name": f"nvme{i}n1p1", "pkname": f"nvme{i}n1", "partuuid": f"UU-{i}"},
+            {"name": "md127", "pkname": None, "partuuid": None},
+        ]
+    }
+    for i in range(3)
+}
 _PARTN3 = {f"/sys/class/block/nvme{i}n1p1/partition": "1" for i in range(3)}
 
 
