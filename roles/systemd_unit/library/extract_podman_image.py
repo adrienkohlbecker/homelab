@@ -26,7 +26,6 @@ Returns:
 """
 
 import json
-import re
 import subprocess
 
 from ansible.module_utils.basic import AnsibleModule
@@ -64,11 +63,30 @@ user:
 
 _EXEC_PROPS = ("ExecStart", "ExecStartPre", "ExecStartPost")
 
-# Help-line shape: optional `-x,` short, then `--long`, then optional type
-# token (anything non-whitespace -- `string`, `strings`, `int`, `ARCH`,
-# `<number>[<unit>]`, etc.), then a 2+ space gap before the description.
-# A type token's presence means the option takes a value; absence => flag.
-_HELP_LINE = re.compile(r"^\s+(?:-(\w),\s+)?(--[\w-]+)(\s+(\S+))?\s{2,}")
+# Valueless flags for `podman run`: the forward argv-walker needs to know
+# which flags consume no extra token so it can skip correctly to the image
+# positional. Hardcoding the set instead of parsing `podman run --help` at
+# runtime removes a subprocess call + regex parser that could silently drift
+# if podman's cobra help format changes. Add new valueless flags here when
+# podman introduces them; omitting one causes the walker to skip the next
+# token (treating it as a flag value) — the consequence is "image not found"
+# surfaced immediately, not a silent wrong-store pre-pull.
+_FLAGS_NO_VALUE = frozenset({
+    "--detach", "-d",
+    "--init",
+    "--interactive", "-i",
+    "--no-healthcheck",
+    "--oom-kill-disable",
+    "--privileged",
+    "--publish-all", "-P",
+    "--quiet", "-q",
+    "--read-only",
+    "--replace",
+    "--rm",
+    "--rootfs",
+    "--sig-proxy",
+    "--tty", "-t",
+})
 
 
 def bus_label_escape(name):
@@ -76,48 +94,16 @@ def bus_label_escape(name):
     return "".join(c if c.isascii() and c.isalnum() else f"_{ord(c):02x}" for c in name)
 
 
-def _parse_run_help():
-    """Return the set of `podman run` flags that take no value.
-
-    Parsing podman's own help means we don't hardcode a flag list -- if podman
-    adds, removes, or changes options, our parser stays in sync as long as
-    the cobra-generated help format remains consistent. Anything not in this
-    set (including options we failed to parse) is treated as `--opt value`.
-    """
-    flags_no_value = set()
-    try:
-        result = subprocess.run(
-            ["podman", "run", "--help"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError, subprocess.TimeoutExpired):
-        return flags_no_value
-    for line in result.stdout.splitlines():
-        m = _HELP_LINE.match(line)
-        if not m:
-            continue
-        short, long_, has_value = m.group(1), m.group(2), bool(m.group(3))
-        if has_value:
-            continue
-        flags_no_value.add(long_)
-        if short:
-            flags_no_value.add(f"-{short}")
-    return flags_no_value
-
-
 def is_podman_run(argv):
     """True iff argv looks like a `podman run ...` invocation."""
     return len(argv) >= 3 and argv[1] == "run" and isinstance(argv[0], str) and argv[0].rsplit("/", 1)[-1] == "podman"
 
 
-def find_image(argv, flags_no_value):
+def find_image(argv, flags_no_value=_FLAGS_NO_VALUE):
     """Return the image arg from a `podman run ...` argv, or None.
 
-    Walks options using the schema in `flags_no_value` so unit templates that
-    pass a CMD after the image (e.g. redis's trailing
+    Walks options left-to-right using `flags_no_value` (see module constant)
+    so unit templates that pass a CMD after the image (e.g. redis's trailing
     `redis-server --save 60 1 --loglevel warning`) still resolve to the image
     rather than to some trailing CMD arg.
     """
@@ -134,11 +120,11 @@ def find_image(argv, flags_no_value):
         elif arg in flags_no_value:
             i += 1
         else:
-            # Known value-taker, or an option we couldn't classify -- treat
-            # as `--opt value` and skip both. Erring this way means an
-            # unrecognized flag would over-consume one positional, but the
-            # consequence is just "image not found" rather than confusing
-            # some flag value with the image.
+            # Known value-taker, or an unlisted flag -- treat as `--opt value`
+            # and skip both. An unlisted valueless flag would over-consume one
+            # positional, but the consequence is "image not found" surfaced
+            # immediately, not a silent wrong-store pre-pull. Add any new
+            # valueless flag to _FLAGS_NO_VALUE to fix it.
             i += 2
     return None
 
@@ -192,11 +178,10 @@ def _get_properties(unit_path, props):
 
 def extract_images(name):
     """Return (images, user, unresolved). `unresolved` lists podman-run argvs we
-    saw but couldn't extract an image from — typically a parser drift."""
+    saw but couldn't extract an image from — typically a flag-set drift."""
     if not name.endswith(".service"):
         name = name + ".service"
     unit_path = bus_label_escape(name)
-    flags_no_value = _parse_run_help()
 
     all_props = _get_properties(unit_path, list(_EXEC_PROPS) + ["User"])
 
@@ -212,7 +197,7 @@ def extract_images(name):
             argv = entry[1]
             if not isinstance(argv, list) or not is_podman_run(argv):
                 continue
-            image = find_image(argv, flags_no_value)
+            image = find_image(argv, _FLAGS_NO_VALUE)
             if image is not None:
                 images.add(image)
             else:
