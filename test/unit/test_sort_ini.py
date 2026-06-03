@@ -60,3 +60,23 @@ class TestSortIni:
             timeout=30,
         )
         assert "USAGE" in result.stderr
+        assert result.returncode == 1
+
+    def test_nonexistent_file(self, tmp_path: Path) -> None:
+        result = subprocess.run(
+            [sys.executable, str(_SORT_INI_PATH), str(tmp_path / "does_not_exist.ini")],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 0
+        assert "not found" in result.stderr
+
+    def test_strips_blank_lines(self, tmp_path: Path) -> None:
+        ini = tmp_path / "test.ini"
+        ini.write_text("[section]\nz_key = 1\n\na_key = 2\n")
+        subprocess.run([sys.executable, str(_SORT_INI_PATH), str(ini)], check=True, timeout=30)
+        result = ini.read_text()
+        assert "\n\n" not in result
+        assert "a_key = 2" in result
+        assert "z_key = 1" in result
