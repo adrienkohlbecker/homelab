@@ -133,20 +133,8 @@
   tags:
     - libvirt
 
-# `systemd_unit` registers the libvirtd start-result as the play var
-# `systemd_unit_started`, but a later systemd_unit caller (the virsh_backup
-# timer below) overwrites it. Capture it under a role-local name now,
-# while it still reflects libvirtd, so the check-mode gates on the
-# network/pool tasks can't silently rebind to a different unit's result if
-# one is ever inserted between here and there.
-- name: Record libvirtd start result
-  set_fact:
-    _libvirt_started: "{{ systemd_unit_started }}"
-  tags:
-    - libvirt
-
 - name: Check the default network is defined
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or systemd_unit_started.changed or _libvirt_started.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_started_result.changed))
   command: virsh net-info default
   register: libvirt_default_net
   changed_when: false
@@ -167,9 +155,9 @@
   tags:
     - libvirt
 
-# The check-mode gate reads `_libvirt_started` (captured right after the
-# libvirtd enable above) rather than the raw `systemd_unit_started` play var, so
-# it can't rebind to a later systemd_unit caller's result.
+# The check-mode gate uses libvirtd_started_result -- the stable per-unit
+# fact service.yml emits -- which can't rebind if a later systemd_unit call
+# lands between here and the virsh_backup timer below.
 # The whole condition skips the network calls in check mode on a fresh
 # host where libvirtd / python3-libvirt aren't really installed yet.
 # virt_net's core() returns from its `state:` branch before it reaches the
@@ -177,7 +165,7 @@
 # autostart half -- split into two calls (same reason the pool dance below
 # needs three). state: active first, then autostart on a stateless call.
 - name: Start default network
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or systemd_unit_started.changed or _libvirt_started.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_started_result.changed))
   community.libvirt.virt_net:
     name: default
     state: active
@@ -186,7 +174,7 @@
     - libvirt
 
 - name: Autostart default network
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or systemd_unit_started.changed or _libvirt_started.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_started_result.changed))
   community.libvirt.virt_net:
     name: default
     autostart: true
@@ -217,7 +205,7 @@
 # `state: present` defines only when absent, so an existing pool is left
 # untouched. virsh_backup's pool-dumpxml captures the definition.
 - name: Declare the default storage pool
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or systemd_unit_started.changed or _libvirt_started.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_started_result.changed))
   become: true
   tags:
     - libvirt
