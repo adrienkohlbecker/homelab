@@ -1,0 +1,23 @@
+# Shared one-shot ClickHouse fetch command for clickhouse_query.yml (single
+# shot) and clickhouse_query_wait.yml (poll loop). One source so a flag change
+# can't land in one variant and drift from the other -- both were hardened
+# together and must stay in lockstep. A literal string (no register'd-result
+# reference), so it doesn't trip Ansible's conditional trust check the way the
+# split between the two task files exists to avoid.
+#
+# curl flags:
+#   --fail-with-body    surface a non-2xx (a query error, buffered whole by
+#                       wait_end_of_query=1) as a non-zero rc *with* the body.
+#   --connect-timeout 2 fast-fail an unreachable container instead of burning
+#                       the full --max-time on a stalled TCP connect.
+#   --retry/-connrefused absorb a just-started hyperdx whose ClickHouse port is
+#                       not yet accepting (connection refused) without consuming
+#                       a caller-level Ansible retry.
+#   --max-time 5        bound the whole request.
+# wait_end_of_query=1 buffers the full response server-side so an error raised
+# mid-stream arrives as a non-200 (with the exception in the body) rather than a
+# 200 whose body is silently truncated.
+_test_clickhouse_curl_cmd: >-
+  podman exec -i hyperdx curl --fail-with-body -sS
+  --connect-timeout 2 --retry 2 --retry-connrefused --max-time 5
+  --data-binary @- "http://localhost:8123/?wait_end_of_query=1"

@@ -22,7 +22,7 @@
 # with garbage stdout.
 - name: "clickhouse_query | {{ test_args.label | default('query') }}"
   command:
-    cmd: podman exec -i hyperdx curl --fail-with-body -sS --max-time 5 --data-binary @- "http://localhost:8123/?wait_end_of_query=1"
+    cmd: "{{ _test_clickhouse_curl_cmd }}"
     stdin: "{{ test_args.sql }}"
   register: test_clickhouse_result
   changed_when: false

@@ -14,9 +14,13 @@
 #                       the helper has no sensible default for what
 #                       "ready" means in caller-specific data.
 #
-# failed_when allows transient curl failures during the polling loop
-# (the whole point of polling is to wait for downstream state to settle)
-# but fails hard when retries exhaust with a non-zero exit code.
+# No failed_when: the task retries until `until` holds or retries exhaust, and
+# Ansible fails the task on exhaustion. Every caller's `until` is anchored on
+# `test_clickhouse_result.rc == 0`, so a transient curl failure simply keeps the
+# loop polling (the point of the wait) while a row that never appears now fails
+# loudly. A custom failed_when here would *override* that exhaustion failure --
+# an rc==0 poll whose predicate never goes true would report ok, silently
+# passing the exact assertion the wait exists to make.
 #
 # Output:
 #   test_clickhouse_result.stdout: response from the final iteration.
@@ -24,19 +28,22 @@
 # error raised mid-stream arrives as a non-200 status (with the exception
 # in the body) rather than a 200 whose body is silently truncated --
 # without it curl --fail-with-body can't see the error.
+- name: "clickhouse_query_wait | Assert caller supplied an until predicate"
+  assert:
+    that:
+      - (test_args.until | default('')) | length > 0
+    fail_msg: >-
+      clickhouse_query_wait requires test_args.until (a boolean expression over
+      test_clickhouse_result). An empty until is treated as immediately true, so
+      the task would run once and never wait -- silently dropping the poll.
+
 - name: "clickhouse_query_wait | {{ test_args.label | default('query') }}"
   command:
-    cmd: podman exec -i hyperdx curl --fail-with-body -sS --max-time 5 --data-binary @- "http://localhost:8123/?wait_end_of_query=1"
+    cmd: "{{ _test_clickhouse_curl_cmd }}"
     stdin: "{{ test_args.sql }}"
   register: test_clickhouse_result
   changed_when: false
-  # Resolve the retry count once so the failed_when guard and retries: can't
-  # drift apart. .attempts is unset before the first iteration completes, so
-  # default(0) keeps the guard from erroring on a transient early curl failure.
-  vars:
-    _test_ch_retries: "{{ test_args.retries | default(30) }}"
-  failed_when: test_clickhouse_result.rc != 0 and (test_clickhouse_result.attempts | default(0)) >= (_test_ch_retries | int)
-  retries: "{{ _test_ch_retries }}"
+  retries: "{{ test_args.retries | default(30) }}"
   delay: "{{ test_args.delay | default(2) }}"
   until: "{{ test_args.until }}"
   become: true
