@@ -31,7 +31,7 @@ RUN set -eu \
  && for _kern in ${KERNELS}; do kern_headers="${kern_headers} ${_kern}-headers"; done \
  && zbm_deps="$(xbps-query -Rp run_depends zfsbootmenu)" \
  && xbps-install -y ${KERNELS} ${kern_headers} ${zbm_deps} \
-      zstd systemd-boot-efistub curl yq-go bash kbd \
+      zstd systemd-boot-efistub curl yq-go bash kbd mdadm \
       dracut mkinitcpio dracut-network gptfdisk iproute2 iputils parted \
       dosfstools e2fsprogs efibootmgr cryptsetup openssh util-linux kpartx \
  && echo "ignorepkg=dkms" > /etc/xbps.d/10-nodkms.conf \
