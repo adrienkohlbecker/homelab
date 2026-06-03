@@ -1,10 +1,10 @@
 #!/bin/bash
 set -euo pipefail
-# Re-bootstrap keepalived + dnscrypt-proxy after a UniFi OS firmware update.
+# Re-bootstrap keepalived after a UniFi OS firmware update.
 # Firmware replaces the SquashFS root, wiping /usr/ — the keepalived apt
-# package disappears. dnscrypt-proxy (static binary in /data/) survives.
-# Systemd units in /etc/systemd/system/ (overlay upper dir) usually survive
-# but may not after a major firmware update — re-deploy unconditionally.
+# package disappears. Systemd units in /etc/systemd/system/ (overlay upper
+# dir) usually survive but may not after a major firmware update — re-deploy
+# symlinks unconditionally.
 
 DATADIR=/data/keepalived
 
@@ -25,7 +25,6 @@ ln -sfn "$DATADIR/keepalived.conf" /etc/keepalived/keepalived.conf
 mkdir -p /etc/keepalived/conf.d
 ln -sfn "$DATADIR/pihole.conf"     /etc/keepalived/conf.d/pihole.conf
 ln -sfn "$DATADIR/healthcheck.sh"  /usr/local/bin/pihole_healthcheck
-ln -sfn "$DATADIR/dnscrypt-proxy"  /usr/local/bin/dnscrypt-proxy
 
 # -- sysctl ---------------------------------------------------------------
 sysctl -w net.ipv4.ip_nonlocal_bind=1
@@ -35,9 +34,5 @@ if ! iptables -C INPUT -i {{ udm_dns_failover_interface }} -p 112 -j ACCEPT 2>/d
   iptables -A INPUT -i {{ udm_dns_failover_interface }} -p 112 -j ACCEPT
 fi
 
-# -- systemd units --------------------------------------------------------
-cp "$DATADIR/dnscrypt-proxy-vip.service" /etc/systemd/system/
-systemctl daemon-reload
-
-systemctl enable --now dnscrypt-proxy-vip.service
+# -- start ----------------------------------------------------------------
 systemctl enable --now keepalived.service

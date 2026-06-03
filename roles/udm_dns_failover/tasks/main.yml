@@ -1,7 +1,10 @@
-# Provisions keepalived + dnscrypt-proxy on the UDM Pro as a last-resort
-# DNS VIP failover peer. All persistent state lives under /data/keepalived/
-# (survives firmware updates). An on-boot script re-bootstraps the apt-
-# installed keepalived binary after firmware wipes /usr/.
+# Provisions keepalived on the UDM Pro as a last-resort DNS VIP failover peer.
+# When the UDM claims the VIP, its own dnsmasq (which binds every address on
+# br0) automatically serves DNS on it — no separate resolver needed.
+#
+# All persistent state lives under /data/keepalived/ (survives firmware
+# updates). An on-boot script re-bootstraps the apt-installed keepalived
+# binary after firmware wipes /usr/.
 #
 # This role targets the UDM only (hosts: udm in site.yml). The UDM is not
 # a standard Ubuntu host — it runs UniFi OS (Debian bullseye, SquashFS root,
@@ -31,66 +34,11 @@
     state: directory
     owner: root
     group: root
-    mode: "0750"
+    mode: "0755"
   loop:
     - /data/keepalived
     - /data/keepalived/cache
     - /data/on_boot.d
-  become: true
-  tags:
-    - udm_dns_failover
-
-# -- dnscrypt-proxy binary ------------------------------------------------
-
-- name: Download dnscrypt-proxy
-  get_url:
-    url: "{{ udm_dns_failover_dnscrypt.aarch64.url }}"
-    dest: "/data/keepalived/cache/dnscrypt-proxy-{{ udm_dns_failover_dnscrypt.version }}.tar.gz"
-    checksum: "sha256:{{ udm_dns_failover_dnscrypt.aarch64.sha256 }}"
-    mode: "0644"
-  register: udm_dns_failover_download
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Check if dnscrypt-proxy binary exists
-  stat:
-    path: /data/keepalived/dnscrypt-proxy
-  register: udm_dns_failover_binary
-  tags:
-    - udm_dns_failover
-
-- name: Extract dnscrypt-proxy binary
-  when: udm_dns_failover_download.changed or not udm_dns_failover_binary.stat.exists
-  unarchive:
-    src: "/data/keepalived/cache/dnscrypt-proxy-{{ udm_dns_failover_dnscrypt.version }}.tar.gz"
-    dest: /data/keepalived/
-    remote_src: true
-    include:
-      - linux-arm64/dnscrypt-proxy
-    extra_opts:
-      - --strip-components=1
-  register: udm_dns_failover_extract
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Set dnscrypt-proxy binary permissions
-  file:
-    path: /data/keepalived/dnscrypt-proxy
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Symlink dnscrypt-proxy into PATH
-  file:
-    src: /data/keepalived/dnscrypt-proxy
-    dest: /usr/local/bin/dnscrypt-proxy
-    state: link
-    force: true
   become: true
   tags:
     - udm_dns_failover
@@ -166,19 +114,6 @@
     mode: "0755"
     backup: true
     validate: bash -n %s
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Deploy dnscrypt-proxy config
-  template:
-    src: dnscrypt-proxy.toml.j2
-    dest: /data/keepalived/dnscrypt-proxy.toml
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: udm_dns_failover_dnscrypt_conf
   become: true
   tags:
     - udm_dns_failover
@@ -274,19 +209,6 @@
   tags:
     - udm_dns_failover
 
-- name: Deploy dnscrypt-proxy-vip unit
-  template:
-    src: dnscrypt-proxy-vip.service.j2
-    dest: /etc/systemd/system/dnscrypt-proxy-vip.service
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: udm_dns_failover_dnscrypt_unit
-  become: true
-  tags:
-    - udm_dns_failover
-
 - name: Deploy on-boot keepalived script
   template:
     src: on-boot-keepalived.sh.j2
@@ -300,24 +222,8 @@
   tags:
     - udm_dns_failover
 
-# Keep a copy of the unit in /data/ for the on-boot script to re-deploy
-# if a firmware update clears the overlay.
-- name: Cache dnscrypt-proxy-vip unit in /data/
-  template:
-    src: dnscrypt-proxy-vip.service.j2
-    dest: /data/keepalived/dnscrypt-proxy-vip.service
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
-  tags:
-    - udm_dns_failover
-
 - name: Reload systemd
-  when: >-
-    udm_dns_failover_onboot_unit.changed or
-    udm_dns_failover_dnscrypt_unit.changed
+  when: udm_dns_failover_onboot_unit.changed
   systemd:
     daemon_reload: true
   become: true
@@ -329,15 +235,6 @@
 - name: Enable on-boot framework
   systemd:
     name: on-boot.service
-    enabled: true
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Start dnscrypt-proxy-vip
-  systemd:
-    name: dnscrypt-proxy-vip.service
-    state: "{{ (udm_dns_failover_dnscrypt_conf.changed or udm_dns_failover_dnscrypt_unit.changed or (udm_dns_failover_extract | default({})).changed | default(false)) | ternary('restarted', 'started') }}"
     enabled: true
   become: true
   tags:

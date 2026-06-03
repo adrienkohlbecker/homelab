@@ -1,4 +1,4 @@
-- name: Verify dnscrypt-proxy is listening on the VIP
+- name: Verify DNS is available on the VIP
   wait_for:
     host: "{{ pihole_keepalived_ip }}"
     port: 53
@@ -10,13 +10,6 @@
     name: keepalived.service
   register: _udm_dns_failover_keepalived_status
   failed_when: _udm_dns_failover_keepalived_status.status.ActiveState != 'active'
-  become: true
-
-- name: Verify dnscrypt-proxy-vip is running
-  systemd:
-    name: dnscrypt-proxy-vip.service
-  register: _udm_dns_failover_dnscrypt_status
-  failed_when: _udm_dns_failover_dnscrypt_status.status.ActiveState != 'active'
   become: true
 
 - name: Verify VRRP state is BACKUP (lab or pug should be MASTER)
