@@ -4,7 +4,7 @@
 # reached only under genuine exhaustion. See
 # notes/swap_strategy.md.
 [zram0]
-# Size = min(ram, max-zram-size). jammy's 0.3.2 sizes via zram-fraction +
+# Size = min(ram, max-zram-size). jammy's 1.0.0 sizes via zram-fraction +
 # max-zram-size (the zram-size expression is 1.x-only); both keys work on
 # 1.x too. fraction 1.0 means "up to all of RAM", capped at the MB below
 # -- so a small box gets ~RAM, a big box the cap. The cap also stops a
