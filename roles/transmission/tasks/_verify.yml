@@ -1,29 +1,38 @@
-# Transmission's RPC endpoint returns 409 with a X-Transmission-Session-Id
-# header for any request without the CSRF token. The 409 is specific to
-# transmission's RPC handshake, not a generic server error -- it proves the
-# daemon is up, listening, and serving the RPC protocol.
-- name: _verify | Transmission RPC is listening on loopback
+# With rpc-authentication-required on, transmission answers an unauthenticated
+# request with 401 (Basic realm="Transmission") -- auth is checked before the
+# CSRF handshake, so the 401 (not the 409 you'd see auth-off) proves the daemon
+# is up, serving RPC over the host loopback publish, AND enforcing auth.
+- name: _verify | Transmission RPC is listening on loopback and enforcing auth
   uri:
     url: http://127.0.0.1:{{ service_ports.transmission }}/transmission/rpc
     method: POST
     body: '{"method":"session-get"}'
     body_format: json
-    status_code: 409
+    status_code: 401
   register: _transmission_rpc
   retries: 30
   delay: 2
-  until: _transmission_rpc.status == 409
+  until: _transmission_rpc.status == 401
+
+# SNI follows the URL host, not the Host header, so probing https://localhost/
+# with a Host: override trips TLSV1_UNRECOGNIZED_NAME on openssl 3.x
+# (noble/resolute). Map the vhost FQDN to loopback and probe it directly so
+# SNI and Host both carry transmission's server_name.
+- name: _verify | Map the transmission vhost to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 transmission.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
 
 # The vhost is `auth: required`, so the real browser path goes through
 # Authelia. Assert a cookieless GET redirects to the portal -- this is the
 # only probe that fails if `auth: required` is dropped from nginx_site_args.
 # Asserting the returnUrl (rd=) echoes transmission's own URL proves the
-# Host header routed to transmission's server_name, not the default vhost.
+# request routed to transmission's server_name, not the default vhost.
 - name: _verify | Transmission UI gate redirects unauthenticated requests to Authelia
   uri:
-    url: https://localhost/
-    headers:
-      Host: "transmission.{{ inventory_hostname }}.{{ domain }}"
+    url: https://transmission.{{ inventory_hostname }}.{{ domain }}/
     validate_certs: false
     follow_redirects: none
     status_code: 302
@@ -33,21 +42,21 @@
     or 'auth.' not in (_transmission_nginx_gate.location | default(''))
     or ('rd=https://transmission.' ~ inventory_hostname ~ '.' ~ domain) not in (_transmission_nginx_gate.location | default(''))
 
-# The --network media join + transmission.dns.podman FQDN is how the *arr
-# stack reaches transmission's RPC, bypassing nginx. The loopback/nginx
-# probes above don't exercise it -- a dropped `--network media` strands
-# that path while leaving them green. Probe from a throwaway container on
-# the media network: the 409 proves aardvark resolves the FQDN and
-# transmission listens on the podman network path.
-- name: _verify | Transmission is reachable intra-stack at transmission.dns.podman over the media network
+# The --network media join + transmission.dns.podman FQDN is how the *arr stack
+# reaches transmission's RPC, bypassing nginx -- the loopback/nginx probes above
+# don't exercise it, so a dropped `--network media` strands that path while
+# leaving them green. transmission-remote completes the full CSRF handshake +
+# login from a throwaway container on the media network, so this proves three
+# things at once: aardvark resolves the FQDN, transmission listens on the podman
+# network path, and the configured credential authenticates.
+- name: _verify | Transmission RPC accepts the configured credential over the media network
   command: >-
-    podman run --rm --network media --entrypoint /usr/bin/curl
+    podman run --rm --network media --entrypoint /usr/bin/transmission-remote
     docker.io/linuxserver/transmission:4.1.1
-    -s -o /dev/null -w %{http_code} -X POST
-    http://transmission.dns.podman:9091/transmission/rpc
+    transmission.dns.podman:9091 --auth transmission:{{ transmission_rpc_password }} --session-info
   become: true
-  register: _transmission_dns_podman
-  until: _transmission_dns_podman.rc == 0 and _transmission_dns_podman.stdout == "409"
+  register: _transmission_auth_ok
+  until: _transmission_auth_ok.rc == 0
   retries: 15
   delay: 2
   changed_when: false

@@ -12,3 +12,10 @@
   import_role:
     name: media
     tasks_from: network
+
+- name: _setup | Install authelia stub in gate mode for auth=required tests
+  import_role:
+    name: test
+    tasks_from: authelia_stub
+  vars:
+    test_authelia_stub_mode: gate

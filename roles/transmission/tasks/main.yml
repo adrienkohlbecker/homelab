@@ -30,6 +30,7 @@
     - transmission
 
 - name: Create scratch directory
+  when: not (ansible_check_mode and transmission_user.changed)
   file:
     dest: /mnt/scratch/transmission
     state: directory
@@ -41,6 +42,7 @@
     - transmission
 
 - name: Create storage directory
+  when: not (ansible_check_mode and transmission_user.changed)
   file:
     dest: /mnt/media/Torrents
     state: directory
@@ -70,6 +72,7 @@
   failed_when: false
 
 - name: Configure transmission
+  when: not (ansible_check_mode and transmission_user.changed)
   # Render via copy:content + regex_replace because transmission rewrites
   # settings.json on every shutdown without a trailing newline; a plain
   # template: leaves us drifting forever.
@@ -83,7 +86,12 @@
     dest: /mnt/services/transmission/settings.json
     owner: transmission
     group: media
-    mode: "0640"
+    # 0664 owner:transmission group:media -- not a choice: transmission
+    # rewrites settings.json on shutdown/hash-persist under its own umask 002
+    # (load-bearing so downloaded media stays group-accessible to the *arr
+    # stack), landing it 0664 root-of-the-rewrite. Declaring anything tighter
+    # just flaps idempotence; the rpc-password is only a salted hash here.
+    mode: "0664"
     backup: true
     validate: python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "%s"
   register: transmission_conf
@@ -91,19 +99,16 @@
   tags:
     - transmission
 
-- name: Configure environment
-  template:
-    src: env.j2
-    dest: /etc/default/transmission
-    owner: root
-    group: root
-    mode: "0600"
-    backup: true
-  register: transmission_env
-  become: true
+- name: Create transmission rpc-password secret
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: transmission_rpc_password
+      data: "{{ transmission_rpc_password }}"
   tags:
     - transmission
-
 
 - name: Install transmission service
   import_role:
@@ -124,7 +129,7 @@
     systemd_unit_args:
       src: transmission
       condition: "{{ not (ansible_check_mode and (transmission_service_result.changed or transmission_user.changed)) }}"
-      restart: "{{ transmission_service_result.changed or transmission_conf.changed or transmission_env.changed or transmission_user.changed or media_group.changed }}"
+      restart: "{{ transmission_service_result.changed or transmission_conf.changed or transmission_rpc_password_rotated or transmission_user.changed or media_group.changed }}"
   tags:
     - transmission
 
