@@ -130,6 +130,31 @@
       `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_verify }}`
       before re-running, or --limit the play to skip this role.
 
+# The check above guards the parent/verify unit. When dest_abs is set the
+# write target is a different path (e.g. /etc/systemd/journald.conf.d/99-custom.conf),
+# so we need a second mask check for that specific path.
+- name: Stat dest_abs path for pre-existing mask
+  when:
+    - _systemd_unit_condition
+    - systemd_unit_args.dest_abs is defined
+  stat:
+    path: "{{ systemd_unit_args.dest_abs }}"
+  register: _systemd_unit_mask_abs
+  become: true
+
+- name: Refuse to overwrite masked dest_abs path
+  when:
+    - _systemd_unit_condition
+    - systemd_unit_args.dest_abs is defined
+    - _systemd_unit_mask_abs.stat.islnk | default(false)
+    - _systemd_unit_mask_abs.stat.lnk_target | default('') == '/dev/null'
+  fail:
+    msg: >-
+      Refusing to overwrite {{ systemd_unit_args.dest_abs }}:
+      it is masked (symlink to /dev/null). Unmask with
+      `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_verify }}`
+      before re-running, or --limit the play to skip this role.
+
 - name: Install systemd unit
   vars:
     _systemd_unit_path: "{{ systemd_unit_args.dest_abs | default(_systemd_unit_dir ~ '/' ~ _systemd_unit_name) }}"
