@@ -23,6 +23,15 @@
     mode: "0755"
   become: true
 
+- name: _setup | Create /mnt/services/sqlite parent
+  file:
+    path: /mnt/services/sqlite
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 # In prod the getmail role creates and populates this Maildir before the
 # webmail role runs (site.yml ordering). The webmail harness test runs this
 # role standalone, so stand the Maildir up here — operator-owned 0700, matching

@@ -5,8 +5,8 @@
 # (SSL, submission, sieve) would fight this single-user, internal-network,
 # read-only setup. Everything needed is inline. 2.4 requires both version
 # pins below or it refuses to start.
-dovecot_config_version = 2.4.4
-dovecot_storage_version = 2.4.4
+dovecot_config_version = {{ webmail_dovecot_version }}
+dovecot_storage_version = {{ webmail_dovecot_version }}
 
 base_dir = /run/dovecot
 log_path = /dev/stderr
@@ -21,7 +21,7 @@ default_login_user = vmail
 default_internal_group = vmail
 
 # The Maildir is bind-mounted read-only; index + control (which Dovecot must
-# write: UIDs, keywords, message state) are redirected onto the rw /dovecot
+# write: UIDs, keywords, message state) are redirected onto the rw /state
 # volume so the archive bytes are never modified. Without the redirect Dovecot
 # tries to drop dovecot.index* / dovecot-uidlist inside the read-only Maildir
 # and errors on every mailbox open. getmail delivers into new/; on a read-only
@@ -45,6 +45,7 @@ mail_gid = {{ ansible_user_gid }}
 # maps to the single mail_uid above. See notes/getmail_webmail_design.md.
 passdb static {
   password = archive
+  username_filter = archive
 }
 
 # Plaintext auth is fine: the only hop is Roundcube→Dovecot on the internal

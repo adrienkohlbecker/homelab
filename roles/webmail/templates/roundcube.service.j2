@@ -12,7 +12,7 @@ Wants=network-online.target
 # dovecot bouncing — the user just re-logs in.
 After=dovecot.service
 Wants=dovecot.service
-StartLimitInterval=600
+StartLimitIntervalSec=600
 StartLimitBurst=3
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
@@ -47,6 +47,7 @@ ExecStart=/usr/bin/podman run \
     --name roundcube \
     --log-driver journald \
     --log-opt tag="roundcube" \
+    --security-opt=no-new-privileges \
     --network webmail \
     {# The webroot is ephemeral: the image re-extracts its whole tree into
        /var/www/html on every boot (--rm wipes the prior copy), so des_key and
@@ -61,14 +62,14 @@ ExecStart=/usr/bin/podman run \
        symlink dance (unlike kuma/paperless, whose DB sits inside a larger data
        dir). The image's entrypoint creates sqlite.db here on first boot. #}
     --volume /mnt/services/sqlite/roundcube:/var/roundcube/db \
-    {# Sets apache's ServerName (cosmetic — nginx fronts it) to silence the
-       AH00558 "could not determine FQDN" startup line. See tasks/main.yml. #}
-    --volume /mnt/services/webmail/roundcube_apache.conf:/etc/apache2/conf-enabled/zz-servername.conf:ro \
+    {# Disable compose/reply/forward UI and SMTP — read-only archive viewer. #}
+    --volume /mnt/services/webmail/roundcube_disable_send.php:/var/roundcube/config/disable-send.php:ro \
     --publish 127.0.0.1:{{ service_ports.roundcube }}:80/tcp \
     {# Plain IMAP on 143 to the dovecot container; the hop stays on the internal
        podman bridge so TLS would be ceremony. #}
-    --env ROUNDCUBEMAIL_DEFAULT_HOST=dovecot \
+    --env ROUNDCUBEMAIL_DEFAULT_HOST=dovecot.dns.podman \
     --env ROUNDCUBEMAIL_DEFAULT_PORT=143 \
+    --env ROUNDCUBEMAIL_DB_DIR=/var/roundcube/db \
     --env ROUNDCUBEMAIL_DB_TYPE=sqlite \
     --env ROUNDCUBEMAIL_SKIN=elastic \
     {# Skip Roundcube's own login form: the http_authentication plugin logs in
@@ -83,7 +84,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-timeout "5s" \
     --health-start-period "60s" \
     --stop-timeout 30 \
-    docker.io/roundcube/roundcubemail:1.6.16-apache
+    docker.io/roundcube/roundcubemail:{{ webmail_roundcube_version }}-apache
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
