@@ -15,12 +15,13 @@
       - pihole_keepalived_ip is defined
       - pihole_keepalived_vrid is defined
       - pihole_keepalived_priority is defined
-      - (pihole_keepalived_priority | int) > 0
-      - (pihole_keepalived_priority | int) <= 255
+      - (pihole_keepalived_priority | default(0) | int) > 0
+      - (pihole_keepalived_priority | default(0) | int) <= 255
       - pihole_keepalived_peers is defined
-      - (pihole_keepalived_peers | length) > 0
+      - (pihole_keepalived_peers | default([]) | length) > 0
       - inventory_hostname in external_ips
       - udm_dns_failover_heartbeat_url is defined
+      - udm_dns_failover_interface is regex("^[a-zA-Z0-9._-]+$")
     fail_msg: >-
       udm_dns_failover requires pihole_keepalived_{ip,vrid,priority,peers},
       an external_ips entry, and udm_dns_failover_heartbeat_url.
@@ -51,6 +52,7 @@
     pkg:
       - keepalived
     cache_valid_time: 3600
+    policy_rc_d: 101
   register: udm_dns_failover_keepalived_apt
   become: true
   tags:
@@ -65,6 +67,21 @@
   tags:
     - udm_dns_failover
 
+- name: Clear stale .deb files from keepalived cache
+  when: udm_dns_failover_keepalived_debs.files | length > 0
+  shell:
+    cmd: |
+      set -euo pipefail
+      latest="{{ udm_dns_failover_keepalived_debs.files | sort(attribute='mtime') | last | attr('path') | basename }}"
+      for f in /data/keepalived/cache/keepalived_*.deb; do
+        [ -f "$f" ] && [ "$(basename "$f")" != "$latest" ] && rm -f "$f"
+      done
+    executable: /bin/bash
+  changed_when: false
+  become: true
+  tags:
+    - udm_dns_failover
+
 - name: Cache keepalived .deb for firmware-update recovery
   when: udm_dns_failover_keepalived_debs.files | length > 0
   copy:
@@ -73,7 +90,6 @@
     remote_src: true
     mode: "0644"
     backup: true
-  changed_when: false
   become: true
   tags:
     - udm_dns_failover
@@ -179,7 +195,7 @@
 # trailing DROP), so appending is safe. The rule is idempotent via -C check.
 
 - name: Check VRRP iptables rule
-  command: iptables -C INPUT -i {{ udm_dns_failover_interface }} -p 112 -j ACCEPT
+  command: iptables -w 5 -C INPUT -i {{ udm_dns_failover_interface }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
   register: udm_dns_failover_iptables_check
   changed_when: false
   failed_when: false
@@ -189,7 +205,7 @@
 
 - name: Add VRRP iptables rule
   when: udm_dns_failover_iptables_check.rc != 0
-  command: iptables -A INPUT -i {{ udm_dns_failover_interface }} -p 112 -j ACCEPT
+  command: iptables -w 5 -A INPUT -i {{ udm_dns_failover_interface }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
   changed_when: true
   become: true
   tags:
@@ -223,10 +239,34 @@
   tags:
     - udm_dns_failover
 
-- name: Deploy heartbeat service
+- name: Deploy heartbeat service to persistent storage
   template:
     src: udm_keepalived_heartbeat.service.j2
     dest: /data/keepalived/udm_keepalived_heartbeat.service
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Deploy heartbeat timer to persistent storage
+  copy:
+    src: udm_keepalived_heartbeat.timer
+    dest: /data/keepalived/udm_keepalived_heartbeat.timer
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Deploy heartbeat service to systemd
+  template:
+    src: udm_keepalived_heartbeat.service.j2
+    dest: /etc/systemd/system/udm_keepalived_heartbeat.service
     owner: root
     group: root
     mode: "0644"
@@ -236,35 +276,15 @@
   tags:
     - udm_dns_failover
 
-- name: Deploy heartbeat timer
+- name: Deploy heartbeat timer to systemd
   copy:
     src: udm_keepalived_heartbeat.timer
-    dest: /data/keepalived/udm_keepalived_heartbeat.timer
+    dest: /etc/systemd/system/udm_keepalived_heartbeat.timer
     owner: root
     group: root
     mode: "0644"
     backup: true
   register: udm_dns_failover_heartbeat_timer
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Symlink heartbeat service
-  file:
-    src: /data/keepalived/udm_keepalived_heartbeat.service
-    dest: /etc/systemd/system/udm_keepalived_heartbeat.service
-    state: link
-    force: true
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Symlink heartbeat timer
-  file:
-    src: /data/keepalived/udm_keepalived_heartbeat.timer
-    dest: /etc/systemd/system/udm_keepalived_heartbeat.timer
-    state: link
-    force: true
   become: true
   tags:
     - udm_dns_failover
@@ -286,6 +306,14 @@
   systemd:
     name: on-boot.service
     enabled: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Validate keepalived config before start
+  when: not ansible_check_mode
+  command: keepalived -t -f /etc/keepalived/keepalived.conf
+  changed_when: false
   become: true
   tags:
     - udm_dns_failover

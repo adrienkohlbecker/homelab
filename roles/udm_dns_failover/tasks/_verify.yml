@@ -5,6 +5,11 @@
     timeout: 5
   become: true
 
+- name: Verify local dnsmasq healthcheck passes
+  command: /usr/local/bin/pihole_healthcheck
+  changed_when: false
+  become: true
+
 - name: Verify keepalived is running
   systemd:
     name: keepalived.service

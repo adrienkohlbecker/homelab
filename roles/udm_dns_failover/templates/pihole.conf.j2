@@ -4,7 +4,6 @@ vrrp_script pihole_healthcheck {
   timeout   5
   rise      1
   fall      2
-  user      root
   init_fail
 }
 
@@ -16,6 +15,8 @@ vrrp_instance pihole {
   # GARP announces VIP → br0 physical MAC instead of the VRRP standard MAC.
   # Acceptable: the UDM only claims the VIP in a catastrophic dual-failure
   # scenario where the UniFi client-tracker cosmetic flipping is a non-issue.
+
+  check_unicast_src
 
   unicast_src_ip {{ external_ips[inventory_hostname] }}
   unicast_peer {
@@ -30,6 +31,10 @@ vrrp_instance pihole {
 
   preempt_delay     60
 
+  track_interface {
+    {{ udm_dns_failover_interface }}
+  }
+
   virtual_ipaddress {
     {{ pihole_keepalived_ip }}/32
   }
@@ -41,8 +46,5 @@ vrrp_instance pihole {
     pihole_healthcheck
   }
 
-  notify_master "/usr/bin/logger -t pihole-keepalived MASTER"
-  notify_backup "/usr/bin/logger -t pihole-keepalived BACKUP"
-  notify_fault  "/usr/bin/logger -t pihole-keepalived FAULT"
-  notify_stop   "/usr/bin/logger -t pihole-keepalived STOP"
+  notify "/usr/bin/logger -t pihole-keepalived"
 }

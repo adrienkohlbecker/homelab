@@ -6,6 +6,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=true
+TimeoutStartSec=120
 ExecStart=/bin/bash -c 'for f in /data/on_boot.d/*.sh; do [ -x "$f" ] && "$f"; done'
 
 [Install]

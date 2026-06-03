@@ -9,15 +9,20 @@ set -euo pipefail
 DATADIR=/data/keepalived
 
 # -- keepalived ----------------------------------------------------------
+# Wrapped in a subshell so a dpkg/apt failure does not abort the rest of
+# the recovery (sysctl, iptables, service start).
 if ! command -v keepalived &>/dev/null; then
-  if ls "$DATADIR"/cache/keepalived_*.deb &>/dev/null; then
-    dpkg -i "$DATADIR"/cache/keepalived_*.deb
-  else
-    apt-get update -qq
-    apt-get install -y -qq keepalived
-    mkdir -p "$DATADIR/cache"
-    cp /var/cache/apt/archives/keepalived_*.deb "$DATADIR/cache/" 2>/dev/null || true
-  fi
+  (
+    if ls "$DATADIR"/cache/keepalived_*.deb &>/dev/null; then
+      latest="$(ls -v "$DATADIR"/cache/keepalived_*.deb | tail -1)"
+      dpkg -i "$latest" || { apt-get update -qq && apt-get install -y -qq keepalived; }
+    else
+      apt-get update -qq
+      apt-get install -y -qq keepalived
+      mkdir -p "$DATADIR/cache"
+      cp /var/cache/apt/archives/keepalived_*.deb "$DATADIR/cache/" 2>/dev/null || true
+    fi
+  ) || logger -t on-boot-keepalived "WARNING: keepalived install failed, continuing with infra setup"
 fi
 
 # -- symlinks from persistent storage ------------------------------------
@@ -35,10 +40,14 @@ systemctl daemon-reload
 sysctl -w net.ipv4.ip_nonlocal_bind=1
 
 # -- iptables VRRP accept ------------------------------------------------
-if ! iptables -C INPUT -i {{ udm_dns_failover_interface }} -p 112 -j ACCEPT 2>/dev/null; then
-  iptables -A INPUT -i {{ udm_dns_failover_interface }} -p 112 -j ACCEPT
+if ! iptables -w 5 -C INPUT -i {{ udm_dns_failover_interface }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT 2>/dev/null; then
+  iptables -w 5 -A INPUT -i {{ udm_dns_failover_interface }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
 fi
 
-# -- start ----------------------------------------------------------------
-systemctl enable --now keepalived.service
+# -- validate and start ---------------------------------------------------
+if command -v keepalived &>/dev/null && keepalived -t -f /etc/keepalived/keepalived.conf &>/dev/null; then
+  systemctl enable --now keepalived.service
+else
+  logger -t on-boot-keepalived "WARNING: keepalived config validation failed, skipping start"
+fi
 systemctl enable --now udm_keepalived_heartbeat.timer
