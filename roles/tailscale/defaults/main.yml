@@ -8,6 +8,12 @@
 # a role default of "fox" would bake one deployment's control-plane host into
 # the generic role. The role asserts both are set (see tasks/main.yml).
 
+# Subnet(s) this node advertises into the tailnet, comma-separated CIDRs (e.g.
+# "10.123.0.0/21"). Optional: a node may instead be a pure exit node
+# (tailscale_advertise_exit_node: true) carrying no subnet route -- the role
+# asserts at least one of the two is set. Empty = advertise no subnet.
+tailscale_advertise_routes: ""
+
 # Advertise a full-tunnel exit node alongside the subnet route. Off by default;
 # lab/pug turn it on in host_vars (home exit), as does bunk (Bonniers exit).
 tailscale_advertise_exit_node: false

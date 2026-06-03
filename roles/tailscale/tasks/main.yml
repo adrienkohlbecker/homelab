@@ -43,11 +43,14 @@
 # Subnet router + exit node both need the kernel to forward between the tailnet
 # interface and the LAN. lab/pug already get this from the wireguard role, but
 # the role is self-sufficient (the box harness has no wireguard role applied).
+# Gated on actually routing: a pure mesh client (no subnet, no exit node) has no
+# reason to become an IP router.
 - name: Enable IPv4 forwarding for subnet routing / exit node
   ansible.posix.sysctl:
     name: net.ipv4.ip_forward
     value: "1"
     sysctl_file: /etc/sysctl.d/99-tailscale.conf
+  when: (tailscale_advertise_routes | length > 0) or (tailscale_advertise_exit_node | bool)
   become: true
   tags:
     - tailscale
@@ -57,6 +60,7 @@
     name: net.ipv6.conf.all.forwarding
     value: "1"
     sysctl_file: /etc/sysctl.d/99-tailscale.conf
+  when: (tailscale_advertise_routes | length > 0) or (tailscale_advertise_exit_node | bool)
   become: true
   tags:
     - tailscale
