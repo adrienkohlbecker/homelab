@@ -1,0 +1,52 @@
+# Post-converge checks for the timezone role. Converge success proves the
+# community.general.timezone module exited cleanly; these verify the host
+# is actually running Etc/UTC — /etc/timezone content, /etc/localtime
+# symlink target, and timedatectl all agree.
+
+- name: _verify | Read /etc/timezone
+  slurp:
+    src: /etc/timezone
+  register: timezone_verify_file
+  become: true
+  tags:
+    - timezone
+
+- name: _verify | /etc/timezone is Etc/UTC
+  assert:
+    that: "(timezone_verify_file.content | b64decode).strip() == 'Etc/UTC'"
+    fail_msg: "/etc/timezone is {{ (timezone_verify_file.content | b64decode).strip() }}, not Etc/UTC"
+    quiet: true
+  tags:
+    - timezone
+
+- name: _verify | Read /etc/localtime symlink target
+  command: readlink -f /etc/localtime
+  register: timezone_verify_localtime
+  changed_when: false
+  become: true
+  tags:
+    - timezone
+
+- name: _verify | /etc/localtime resolves to Etc/UTC
+  assert:
+    that: "timezone_verify_localtime.stdout is search('/Etc/UTC$')"
+    fail_msg: "/etc/localtime points to {{ timezone_verify_localtime.stdout }}, not Etc/UTC"
+    quiet: true
+  tags:
+    - timezone
+
+- name: _verify | Read timedatectl timezone
+  command: timedatectl show -p Timezone --value
+  register: timezone_verify_timedatectl
+  changed_when: false
+  become: true
+  tags:
+    - timezone
+
+- name: _verify | Timedatectl reports Etc/UTC
+  assert:
+    that: "timezone_verify_timedatectl.stdout == 'Etc/UTC'"
+    fail_msg: "timedatectl reports {{ timezone_verify_timedatectl.stdout }}, not Etc/UTC"
+    quiet: true
+  tags:
+    - timezone
