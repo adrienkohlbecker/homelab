@@ -22,7 +22,7 @@
       name: tautulli
       owner: tautulli
       group: tautulli
-      mode: "0755"
+      mode: "0750"
       condition: "{{ not (ansible_check_mode and tautulli_user.changed) }}"
       force: true
       links:
