@@ -205,31 +205,13 @@
 
 # Reconcile preferences on an ALREADY-registered node. `tailscale up` is gated
 # on not-Running, so editing host_vars later would otherwise never take effect
-# on a live node. `tailscale set` applies in place. Gate on drift between
-# desired state and the node's own local prefs (`tailscale debug prefs` ->
-# AdvertiseRoutes, RouteAll, CorpDNS) so steady-state converges detect nothing
-# and stay idempotent. Only meaningful once Running -- first registration is
-# handled by `tailscale up` above.
-- name: register | Read the node's local preferences
-  command: "{{ tailscale_bin }} debug prefs"
-  register: tailscale_prefs
-  changed_when: false
-  check_mode: false
-  failed_when: false
-  become: true
-  tags:
-    - tailscale
-
-- name: register | Parse local preferences for drift detection
-  set_fact:
-    tailscale_local_prefs: >-
-      {{ tailscale_prefs.stdout | default('{}') | from_json }}
-  when:
-    - tailscale_running
-    - (tailscale_prefs.stdout | default('') | trim).startswith('{')
-  tags:
-    - tailscale
-
+# on a live node. `tailscale set` applies in place on every Running converge --
+# fast (local prefs write, no control-plane round-trip) and self-healing. All
+# six flags are passed so any drift -- including snat-subnet-routes and
+# stateful-filtering that were absent from the old field-by-field drift check
+# -- is corrected regardless of which flag changed. changed_when:false: like
+# ethtool -K in this role, tailscale set can't distinguish "already correct"
+# from "just corrected"; correctness is verified by _verify.yml's prefs asserts.
 - name: register | Reconcile routes / exit node / accept-routes / accept-dns
   command: >-
     {{ tailscale_bin }} set
@@ -239,16 +221,12 @@
     --accept-dns={{ tailscale_accept_dns | ternary('true', 'false') }}
     --snat-subnet-routes={{ tailscale_snat_subnet_routes | ternary('true', 'false') }}
     --stateful-filtering={{ tailscale_stateful_filtering | ternary('true', 'false') }}
+    --timeout=30s
   when:
     - not ansible_check_mode
     - tailscale_running
-    - tailscale_local_prefs is defined
-    - (tailscale_desired_routes | sort)
-      != (tailscale_local_prefs.AdvertiseRoutes | default([]) | sort)
-      or (tailscale_accept_routes | bool) != (tailscale_local_prefs.RouteAll | default(false) | bool)
-      or (tailscale_accept_dns | bool) != (tailscale_local_prefs.CorpDNS | default(false) | bool)
   register: tailscale_set
-  changed_when: true
+  changed_when: false
   become: true
   tags:
     - tailscale
