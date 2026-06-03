@@ -4,10 +4,12 @@
       - tzdata
     cache_valid_time: 3600
   become: true
+  register: timezone_apt
   tags:
     - timezone
 
 - name: Configure timezone
+  when: not (ansible_check_mode and timezone_apt.changed)
   community.general.timezone:
     name: Etc/UTC
   become: true
