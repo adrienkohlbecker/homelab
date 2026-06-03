@@ -97,14 +97,18 @@
       org.zfsbootmenu:commandline is missing console=tty0 from the 'default'
       fragment: {{ _boot_verify_cmdline.stdout }}
 
-- name: _verify | Commandline carries earlycon + serial (when configured)
+- name: _verify | Commandline carries serial args (when configured)
   when: not grub_bootloader and (boot_serial_console | default('') | trim | length > 0 or (qemu_test | default(false)))
+  vars:
+    _expected: >-
+      {% if qemu_test | default(false) %}earlycon={% else %}{{ boot_serial_console }}{% endif %}
   assert:
     that:
-      - "'earlycon=' in _boot_verify_cmdline.stdout"
+      - "_expected | trim in _boot_verify_cmdline.stdout"
     fail_msg: >-
-      boot_serial_console is set but org.zfsbootmenu:commandline has no earlycon=
-      arg: {{ _boot_verify_cmdline.stdout }}
+      Expected serial args not found in org.zfsbootmenu:commandline.
+      Expected: {{ _expected | trim }}
+      Got: {{ _boot_verify_cmdline.stdout }}
 
 # /proc/cmdline exposes the args the running kernel actually booted with.
 # Post-reboot this proves the ZBM property propagated through the boot chain,
@@ -126,3 +130,14 @@
     fail_msg: >-
       /proc/cmdline does not carry console=tty0 after reboot — the
       ZBM property may not have propagated: {{ _cmdline }}
+
+- name: _verify | Running kernel booted with earlycon (when configured)
+  when: not grub_bootloader and ansible_architecture != 'aarch64' and (qemu_test | default(false))
+  vars:
+    _cmdline: "{{ _boot_verify_proc_cmdline.content | b64decode }}"
+  assert:
+    that:
+      - "'earlycon=' in _cmdline"
+    fail_msg: >-
+      /proc/cmdline does not carry earlycon= after reboot — the
+      ZBM serial args may not have propagated: {{ _cmdline }}

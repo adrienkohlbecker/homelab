@@ -257,7 +257,9 @@ fi
 # the login prompt both land on serial; tty0 keeps VGA output for physical
 # consoles; earlycon emits before the real driver registers its console.
 #
-# This is the single source of truth for the console args. x86_64 boots
+# Source of truth for the *test-image* console args. Prod hosts derive theirs
+# from boot_serial_console in host_vars (the boot role's "Set the base console
+# command line" task overwrites this property at converge). x86_64 boots
 # rEFInd -> ZBM, which reads org.zfsbootmenu:commandline natively; aarch64's
 # default boot bypasses ZBM (direct EFI-stub Boot entry, below) and reads the
 # value back with `zfs get` to build its cmdline. The serial hardware differs
