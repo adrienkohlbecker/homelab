@@ -23,6 +23,7 @@
       FallbackDNS=
       DNSOverTLS=yes
       Domains=~.
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, delimiters=("=",)).read(sys.argv[1])' "%s"
   register: _test_resolved_dot
   become: true
 
@@ -39,7 +40,7 @@
 
 - name: mirrors | Ensure /etc/containers/registries.conf.d exists
   when: nexus_url | length > 0
-  ansible.builtin.file:
+  file:
     path: /etc/containers/registries.conf.d
     state: directory
     mode: "0755"
@@ -49,7 +50,7 @@
 
 - name: mirrors | Configure podman registry mirrors
   when: nexus_url | length > 0
-  ansible.builtin.copy:
+  copy:
     dest: /etc/containers/registries.conf.d/homelab-mirrors.conf
     mode: "0644"
     owner: root
@@ -76,7 +77,7 @@
 
 - name: mirrors | Configure pip
   when: nexus_url | length > 0
-  ansible.builtin.copy:
+  copy:
     dest: /etc/pip.conf
     mode: "0644"
     owner: root
@@ -84,11 +85,12 @@
     content: |
       [global]
       index-url = {{ mirror_pypi }}/simple/
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' "%s"
   become: true
 
 - name: mirrors | Ensure /etc/uv exists
   when: nexus_url | length > 0
-  ansible.builtin.file:
+  file:
     path: /etc/uv
     state: directory
     mode: "0755"
@@ -98,7 +100,7 @@
 
 - name: mirrors | Configure uv
   when: nexus_url | length > 0
-  ansible.builtin.copy:
+  copy:
     dest: /etc/uv/uv.toml
     mode: "0644"
     owner: root
