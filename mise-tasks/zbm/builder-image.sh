@@ -39,20 +39,23 @@ esac
 
 src_dir="${MISE_CONFIG_ROOT}/zbm-build/src"
 mkdir -p "$(dirname "$src_dir")"
-if [ -d "$src_dir/.git" ] && \
-   [ "$(git -C "$src_dir" describe --tags --exact-match 2>/dev/null)" = "v${ZBM_VERSION}" ]; then
+if [ -d "$src_dir/.git" ] &&
+  [ "$(git -C "$src_dir" describe --tags --exact-match 2>/dev/null)" = "v${ZBM_VERSION}" ]; then
   echo "ZBM source at $src_dir already at v${ZBM_VERSION}, skipping clone"
 else
+  # Prune any temp left by a previously-crashed clone, then clone into a fresh
+  # PID-suffixed temp and atomically swap it in (a half-clone never becomes src).
+  rm -rf "${src_dir}".tmp.*
   tmp_dir="${src_dir}.tmp.$$"
-  trap 'rm -rf "$tmp_dir"' EXIT
-  rm -rf "$tmp_dir"
+  trap 'rm -rf "$tmp_dir"' EXIT INT TERM
   git clone --depth 1 --branch "v${ZBM_VERSION}" https://github.com/zbm-dev/zfsbootmenu.git "$tmp_dir"
   rm -rf "$src_dir"
   mv "$tmp_dir" "$src_dir"
-  trap - EXIT
+  trap - EXIT INT TERM
 fi
 
 docker buildx build \
+  --pull \
   --progress=plain \
   --build-arg "XBPS_REPOS=${xbps_repo}" \
   --build-arg "PACKAGES=mdadm nvme-cli dracut-crypt-ssh dropbear" \
