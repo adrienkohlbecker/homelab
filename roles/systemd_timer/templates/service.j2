@@ -3,47 +3,22 @@ Description={{ systemd_timer_args.description | default(systemd_timer_args.name)
 
 [Service]
 Type=oneshot
-# Wrap so stderr lines land in the journal at priority err instead
-# of info; lets `journalctl -u <unit> -p err` surface only real
-# failure output. See /usr/local/bin/stderr_priority for the
-# implementation (single sed pipe, no second journal stream).
+# stderr lines land in the journal at priority err; see /usr/local/bin/stderr_priority.
 ExecStart=/usr/local/bin/stderr_priority {{ systemd_timer_args.exec_start }}
 SyslogIdentifier={{ systemd_timer_args.name }}
-# Kill-switch for wedged runs. RuntimeMaxSec= has no effect under
-# Type=oneshot (systemd warns about it); the right knob is
-# TimeoutStartSec=, which under oneshot bounds ExecStart for oneshot.
-# Default is infinity. Every job we ship completes in seconds to
-# minutes; 1h is generous enough that a legitimate run never trips it.
+# RuntimeMaxSec= has no effect under Type=oneshot; TimeoutStartSec= is the right knob.
 TimeoutStartSec={{ systemd_timer_args.timeout_start_sec | default('1h') }}
-# Grace period between SIGTERM and SIGKILL during shutdown. 30s is
-# plenty for our jobs (zfs ops finish in seconds, getmail hangs on
-# network locks but releases quickly, etc.); raise it if a future
-# job needs longer to flush state before being killed.
 TimeoutStopSec={{ systemd_timer_args.timeout_stop_sec | default('30s') }}
 {% if systemd_timer_args.run_as is defined %}
-# System-scope unit running as a non-root user via User=/Group=. Keeps
-# every operation under the system manager (systemctl/journalctl with
-# no --user gymnastics, netdata's systemdunits collector sees it) while
-# still dropping privileges for the actual job.
 User={{ systemd_timer_args.run_as }}
 Group={{ systemd_timer_args.run_as_group | default(systemd_timer_args.run_as) }}
 {% endif %}
 {% if systemd_timer_args.environment is defined %}
-# Caller-supplied env vars, one Environment= line each. Wrap the whole
-# KEY=VALUE in double quotes so values with spaces (and other systemd
-# separator chars) survive unit-file parsing -- systemd's Environment=
-# treats unquoted whitespace as a token separator, so `Environment=K=a b`
-# parses as K=a + invalid token `b`. Escape backslashes and embedded
-# double quotes per systemd.syntax(7). dictsort keeps unit-file diffs
-# stable across applies.
 {% for k, v in (systemd_timer_args.environment | dictsort) %}
 Environment="{{ k }}={{ v | string | replace('\\', '\\\\') | replace('"', '\\"') }}"
 {% endfor %}
 {% endif %}
 {% if systemd_timer_args.additional_service_directives is defined %}
-# Caller-supplied [Service] directives emitted verbatim. Escape hatch
-# for hardening (PrivateTmp=yes, ProtectSystem=strict, ReadWritePaths=,
-# NoNewPrivileges=yes, etc.) until a structured hardening API exists.
 {% for line in systemd_timer_args.additional_service_directives %}
 {{ line }}
 {% endfor %}
