@@ -1,0 +1,71 @@
+# Lay the Debian snakeoil keypair at the letsencrypt paths nginx.conf.j2
+# references, so the nginx role can validate its config and start in tests
+# without a real certbot-issued cert. Test-only scaffolding (prod issues real
+# certs via certbot): both the nginx role's own _setup and the `test` role's
+# nginx fixture call this, so the placement lives in one spot.
+#
+# Inputs (single dict, replaced wholesale per import):
+#   nginx_snakeoil_args.fqdn          host FQDN whose live/<fqdn>/ dir to fill.
+#   nginx_snakeoil_args.harden_perms  optional, default false. When true, mirror
+#       the prod certbot perms (live/ 0750 root:ssl-cert, privkey.pem 0600
+#       root:root). This makes the nginx _verify ssl-cert check functional rather
+#       than a stat tautology: once converge drops www-data from ssl-cert, a
+#       www-data worker can neither traverse live/ nor read the key, so any HTTPS
+#       probe that still succeeds proves the master loaded the cert as root and
+#       shared the context. The test-role fixture doesn't exercise that removal,
+#       so it leaves the default-perms path.
+# The snakeoil keypair only exists once ssl-cert is installed (the caller does
+# that first). In the harness check-mode pass ssl-cert is merely *reported* as
+# would-be-installed, so the source files aren't really on disk -- stat the
+# world-readable public cert and skip the placement when it's absent, mirroring
+# the `creates:` short-circuit the shell version relied on. In a real converge
+# the caller installs ssl-cert before this, so the source is always present.
+- name: Snakeoil | Check the snakeoil keypair is present
+  stat:
+    path: /etc/ssl/certs/ssl-cert-snakeoil.pem
+  register: nginx_snakeoil_src
+
+- name: Snakeoil | Ensure the letsencrypt live dir exists
+  when: nginx_snakeoil_src.stat.exists
+  file:
+    path: /etc/letsencrypt/live/{{ nginx_snakeoil_args.fqdn }}
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Snakeoil | Lay down the snakeoil cert files
+  when: nginx_snakeoil_src.stat.exists
+  copy:
+    src: "{{ item.src }}"
+    dest: /etc/letsencrypt/live/{{ nginx_snakeoil_args.fqdn }}/{{ item.dest }}
+    remote_src: true
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - src: /etc/ssl/private/ssl-cert-snakeoil.key
+      dest: privkey.pem
+      mode: "{{ '0600' if (nginx_snakeoil_args.harden_perms | default(false)) else '0640' }}"
+    - src: /etc/ssl/certs/ssl-cert-snakeoil.pem
+      dest: chain.pem
+      mode: "0644"
+    - src: /etc/ssl/certs/ssl-cert-snakeoil.pem
+      dest: fullchain.pem
+      mode: "0644"
+  loop_control:
+    label: "{{ item.dest }}"
+  become: true
+
+# Mirror the prod certbot perms (roles/certbot sets live/ to 0750 root:ssl-cert
+# and certbot keeps privkey.pem at 0600 root:root) so the _verify ssl-cert check
+# is functional rather than a stat tautology.
+- name: Snakeoil | Harden live/ perms to mirror prod certbot
+  when: nginx_snakeoil_args.harden_perms | default(false)
+  file:
+    path: /etc/letsencrypt/live
+    state: directory
+    group: ssl-cert
+    mode: "0750"
+  become: true

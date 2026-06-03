@@ -6,23 +6,17 @@
     cache_valid_time: 3600
   become: true
 
-# Lay down snakeoil at the letsencrypt paths nginx.conf.j2 references so
-# the prod nginx role can start its service in tests. Mirrors the snakeoil
-# block in roles/nginx/tasks/_setup.yml (which additionally hardens privkey
-# perms to exercise ssl-cert group removal; not needed here).
+# Lay down snakeoil at the letsencrypt paths nginx.conf.j2 references so the
+# prod nginx role can start its service in tests. Shares roles/nginx's snakeoil
+# task; the prod-perms hardening (harden_perms) is only needed for nginx's own
+# _verify ssl-cert-removal check, not here.
 - name: nginx | Lay down snakeoil certs at letsencrypt paths
-  shell: |
-    set -euo pipefail
-    mkdir -p /etc/letsencrypt/live/{{ item }}
-    cp /etc/ssl/private/ssl-cert-snakeoil.key /etc/letsencrypt/live/{{ item }}/privkey.pem
-    cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/letsencrypt/live/{{ item }}/chain.pem
-    cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/letsencrypt/live/{{ item }}/fullchain.pem
-  args:
-    executable: /bin/bash
-    creates: /etc/letsencrypt/live/{{ item }}/fullchain.pem
-  loop:
-    - "{{ inventory_hostname }}.{{ domain }}"
-  become: true
+  import_role:
+    name: nginx
+    tasks_from: _setup_snakeoil
+  vars:
+    nginx_snakeoil_args:
+      fqdn: "{{ inventory_hostname }}.{{ domain }}"
 
 - name: nginx | Install nginx
   import_role:

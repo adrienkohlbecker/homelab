@@ -11,32 +11,15 @@
     cache_valid_time: 3600
   become: true
 
-# Lay snakeoil at the letsencrypt paths nginx.conf.j2 references before
-# the nginx install below validates that config.
+# Lay snakeoil at the letsencrypt paths nginx.conf.j2 references before the
+# nginx install below validates that config. harden_perms mirrors prod certbot
+# perms so the _verify ssl-cert-removal check is functional (see the task file).
 - name: _setup | Generate certificates
-  shell: |
-    set -euo pipefail
-
-    mkdir -p /etc/letsencrypt/live/{{ item }}
-    cp /etc/ssl/private/ssl-cert-snakeoil.key /etc/letsencrypt/live/{{ item }}/privkey.pem
-    cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/letsencrypt/live/{{ item }}/chain.pem
-    cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/letsencrypt/live/{{ item }}/fullchain.pem
-
-    # Mirror the prod certbot perms (roles/certbot sets live/ to 0750
-    # root:ssl-cert and certbot keeps privkey.pem at 0600 root:root). This makes
-    # the _verify ssl-cert check functional rather than a stat tautology: once
-    # converge drops www-data from ssl-cert, the www-data workers can neither
-    # traverse live/ nor read the key, so every HTTPS probe that still succeeds
-    # proves the master loaded the cert as root and shared the context.
-    chgrp ssl-cert /etc/letsencrypt/live
-    chmod 0750 /etc/letsencrypt/live
-    chmod 0600 /etc/letsencrypt/live/{{ item }}/privkey.pem
-  args:
-    executable: /bin/bash
-    creates: /etc/letsencrypt/live/{{ item }}
-  become: true
-  loop:
-    - '{{ inventory_hostname }}.{{ domain }}'
+  import_tasks: _setup_snakeoil.yml
+  vars:
+    nginx_snakeoil_args:
+      fqdn: "{{ inventory_hostname }}.{{ domain }}"
+      harden_perms: true
 
 # Pre-install nginx so the authelia_stub task below (which writes into
 # /etc/nginx/conf.d/ and validates the config) has both the target
