@@ -5,3 +5,38 @@
 # Example for a host with a standard 8250 UART at 0x3f8:
 #   boot_serial_console: "earlycon=uart8250,io,0x3f8 console=ttyS0,115200"
 boot_serial_console: ""
+
+# EFI NVRAM boot entries to manage declaratively. Each entry becomes a
+# Boot#### variable in NVRAM via efibootmgr. Entries with multi_disk: true
+# expand to per-disk variants on mdadm-EFI hosts (one entry per component
+# disk) for single-disk-failure survivability. BootOrder is set to list
+# managed entries first, in this order, then unmanaged firmware entries.
+# Optional 'options' key passes --unicode to efibootmgr for EFI-stub
+# kernel cmdline args.
+#
+# On aarch64 the direct EFI-stub "Linux" entry is the primary boot path
+# (rEFInd->ZBM kexec panics on aarch64 QEMU), so it is prepended first.
+
+# aarch64 EFI-stub entry (kernel + initrd on the ESP, booted directly by
+# the firmware without rEFInd). Kept in sync with chroot.sh's aarch64 block.
+_boot_efi_stub_entry:
+  - label: Linux
+    loader: "\\EFI\\Linux\\vmlinuz.efi"
+    options: "root=zfs:rpool/ROOT/{{ ansible_distribution_release }} initrd=\\EFI\\Linux\\initrd {{ _boot_assembled_cmdline | default('console=tty0') }}"
+    multi_disk: true
+
+_boot_efi_loader_entries:
+  - label: rEFInd
+    loader: "\\EFI\\refind\\{{ 'refind_aa64.efi' if ansible_architecture == 'aarch64' else 'refind_x64.efi' }}"
+    multi_disk: true
+  - label: ZFSBootMenu
+    loader: "\\EFI\\ZBM\\VMLINUZ.EFI"
+  - label: ZFSBootMenu (Backup)
+    loader: "\\EFI\\ZBM\\VMLINUZ-BACKUP.EFI"
+
+boot_efi_entries: "{{ (_boot_efi_stub_entry if ansible_architecture == 'aarch64' else []) + _boot_efi_loader_entries }}"
+
+# EFI firmware boot timeout in seconds. How long the firmware waits at the
+# boot selection screen before auto-selecting the first BootOrder entry.
+# 3s is enough to intervene via keyboard without slowing normal boots.
+boot_efi_timeout: 3

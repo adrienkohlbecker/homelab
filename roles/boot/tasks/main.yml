@@ -45,6 +45,7 @@
   apt:
     package:
       - dosfstools
+      - efibootmgr
       - initramfs-tools
     cache_valid_time: 3600
   become: true
@@ -115,5 +116,14 @@
     boot_cmdline_args:
       name: default
       contents: "console=tty0{{ (' ' ~ (_boot_serial | trim)) if ((_boot_serial | trim) | length > 0) else '' }}"
+  tags:
+    - boot
+
+# NVRAM boot entries — managed after the boot-chain config above is in place.
+# On aarch64 the EFI-stub "Linux" entry is prepended (primary boot path there)
+# so rEFInd->ZBM entries exist but don't take over BootOrder.
+- name: Manage EFI boot entries
+  when: not grub_bootloader
+  import_tasks: efi_entries.yml
   tags:
     - boot
