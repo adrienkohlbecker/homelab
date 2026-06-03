@@ -19,10 +19,11 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 
 def run(cmd):
-    return subprocess.check_output(cmd, text=True).strip()
+    return subprocess.run(cmd, capture_output=True, check=True, text=True).stdout.strip()
 
 
 def parse_efibootmgr():
@@ -32,7 +33,7 @@ def parse_efibootmgr():
     timeout = None
     for line in out.splitlines():
         if line.startswith("BootOrder:"):
-            boot_order = [x.strip() for x in line.split(":", 1)[1].split(",")]
+            boot_order = [x.strip() for x in line.split(":", 1)[1].split(",") if x.strip()]
             continue
         if line.startswith("Timeout:"):
             m_timeout = re.match(r"Timeout:\s*(\d+)\s*seconds?", line)
@@ -45,6 +46,8 @@ def parse_efibootmgr():
         num, active, label, devpath = m.groups()
         fp = re.search(r"File\(([^)]+)\)", devpath or "")
         gp = re.search(r"GPT,([0-9a-f-]+)", devpath or "", re.IGNORECASE)
+        parts = re.split(r"File\([^)]+\)", devpath or "")
+        optional_data = parts[-1].strip() if len(parts) > 1 else ""
         entries.append(
             {
                 "num": num,
@@ -52,6 +55,7 @@ def parse_efibootmgr():
                 "label": label.strip(),
                 "file": fp.group(1) if fp else "",
                 "gpt_uuid": gp.group(1).lower() if gp else "",
+                "options": optional_data,
             }
         )
     return entries, boot_order, timeout
@@ -75,10 +79,10 @@ def detect_esp_disks():
 
 def _add_disk(disks, part):
     partname = os.path.basename(part)
-    pkname = run(["lsblk", "-n", "-o", "PKNAME", part])
-    partnum = open(f"/sys/class/block/{partname}/partition").read().strip()
-    gpt_uuid = run(["blkid", "-s", "PARTUUID", "-o", "value", part]).lower()
-    disks.append({"disk": f"/dev/{pkname}", "part": int(partnum), "gpt_uuid": gpt_uuid})
+    info = json.loads(run(["lsblk", "-J", "-n", "-o", "PKNAME,PARTUUID", part]))
+    dev = info["blockdevices"][0]
+    partnum = Path(f"/sys/class/block/{partname}/partition").read_text().strip()
+    disks.append({"disk": f"/dev/{dev['pkname']}", "part": int(partnum), "gpt_uuid": dev["partuuid"].lower()})
 
 
 def expand_entries(desired, esp_disks):
@@ -91,6 +95,7 @@ def expand_entries(desired, esp_disks):
                     {
                         "label": f"{entry['label']} (disk {idx})",
                         "loader": entry["loader"],
+                        "options": entry.get("options", ""),
                         "disk": disk["disk"],
                         "part": disk["part"],
                         "gpt_uuid": disk["gpt_uuid"],
@@ -102,6 +107,7 @@ def expand_entries(desired, esp_disks):
                 {
                     "label": entry["label"],
                     "loader": entry["loader"],
+                    "options": entry.get("options", ""),
                     "disk": esp_disks[0]["disk"],
                     "part": esp_disks[0]["part"],
                     "gpt_uuid": esp_disks[0]["gpt_uuid"],
@@ -119,6 +125,17 @@ def all_managed_labels(desired, esp_disks):
             for idx in range(len(esp_disks)):
                 labels.add(f"{entry['label']} (disk {idx})".lower())
     return labels
+
+
+def _is_degraded_disk_entry(label, desired, num_active_disks):
+    """A (disk N) entry for a disk beyond the current active set — keep it."""
+    for entry in desired:
+        if not entry.get("multi_disk"):
+            continue
+        m = re.match(rf"^{re.escape(entry['label'])} \(disk (\d+)\)$", label, re.IGNORECASE)
+        if m and int(m.group(1)) >= num_active_disks:
+            return True
+    return False
 
 
 def loader_eq(a, b):
@@ -152,6 +169,8 @@ def main():
             if de["match_disk"] and ce["gpt_uuid"] and de["gpt_uuid"]:
                 if ce["gpt_uuid"] != de["gpt_uuid"]:
                     continue
+            if de["options"] and ce["options"] and de["options"] != ce["options"]:
+                continue
             matched.add(idx)
             break
 
@@ -160,10 +179,15 @@ def main():
     for idx, ce in enumerate(current):
         if idx in matched:
             continue
+        if _is_degraded_disk_entry(ce["label"], desired, len(esp_disks)):
+            continue
         if ce["label"].lower() in managed:
             to_remove.append(ce)
             actions.append(f"remove '{ce['label']}' (Boot{ce['num']})")
             continue
+        # Entries not in managed but sharing a loader path with a desired entry
+        # are treated as stale (e.g. firmware-created "rEFInd Boot Manager"
+        # pointing to the same EFI binary as the managed "rEFInd" entry).
         for de in expanded:
             if loader_eq(ce["file"], de["loader"]):
                 to_remove.append(ce)
@@ -178,16 +202,12 @@ def main():
             to_create.append(de)
             actions.append(f"create '{de['label']}' -> {de['loader']} " f"on {de['disk']} part {de['part']}")
 
-    # --- Apply ---
+    # --- Apply (create first, then remove — a failed create can't orphan the boot chain) ---
     if not check:
-        for ce in to_remove:
-            subprocess.check_call(
-                ["efibootmgr", "-b", ce["num"], "-B"],
-                stdout=subprocess.DEVNULL,
-            )
         for de in to_create:
             cmd = [
                 "efibootmgr",
+                "-q",
                 "-c",
                 "-d",
                 de["disk"],
@@ -200,7 +220,14 @@ def main():
             ]
             if de.get("options"):
                 cmd.extend(["--unicode", de["options"]])
-            subprocess.check_call(cmd, stdout=subprocess.DEVNULL)
+            subprocess.run(cmd, capture_output=True, check=True, text=True)
+        for ce in to_remove:
+            subprocess.run(
+                ["efibootmgr", "-q", "-b", ce["num"], "-B"],
+                capture_output=True,
+                check=True,
+                text=True,
+            )
 
     # --- BootOrder ---
     if not check and (to_remove or to_create):
@@ -221,24 +248,41 @@ def main():
             desired_order.append(ce["num"])
 
     if desired_order != boot_order:
-        actions.append(f"reorder {','.join(boot_order)} -> {','.join(desired_order)}")
+        reorder_msg = f"reorder {','.join(boot_order)} -> {','.join(desired_order)}"
+        if check and (to_create or to_remove):
+            reorder_msg += " (approximate, entries would be created/removed first)"
+        actions.append(reorder_msg)
         if not check:
-            subprocess.check_call(
-                ["efibootmgr", "-o", ",".join(desired_order)],
-                stdout=subprocess.DEVNULL,
+            subprocess.run(
+                ["efibootmgr", "-q", "-o", ",".join(desired_order)],
+                capture_output=True,
+                check=True,
+                text=True,
             )
 
     # --- Timeout ---
     if desired_timeout is not None and current_timeout != desired_timeout:
         actions.append(f"timeout {current_timeout} -> {desired_timeout}")
         if not check:
-            subprocess.check_call(
-                ["efibootmgr", "-t", str(desired_timeout)],
-                stdout=subprocess.DEVNULL,
+            subprocess.run(
+                ["efibootmgr", "-q", "-t", str(desired_timeout)],
+                capture_output=True,
+                check=True,
+                text=True,
             )
 
     json.dump({"changed": bool(actions), "actions": actions}, sys.stdout)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except subprocess.CalledProcessError as e:
+        msg = f"{e.cmd!r} returned {e.returncode}"
+        if e.stderr:
+            msg += f": {e.stderr.strip()}"
+        json.dump({"changed": False, "actions": [], "failed": True, "msg": msg}, sys.stdout)
+        sys.exit(1)
+    except Exception as e:
+        json.dump({"changed": False, "actions": [], "failed": True, "msg": str(e)}, sys.stdout)
+        sys.exit(1)
