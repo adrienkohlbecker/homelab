@@ -1,0 +1,81 @@
+- name: _verify | All usergroup_immediate scenarios
+  block:
+    # Scenario 1: string input (the common case — docker_client, media)
+    - name: _verify | Add user to a single group (string)
+      import_role:
+        name: usergroup_immediate
+        tasks_from: user
+      vars:
+        usergroup_immediate_args:
+          group: usergroup_immediate_test
+
+    - name: _verify | Verify group membership after string input
+      command: id -nG
+      register: _usergroup_immediate_groups_string
+      changed_when: false
+
+    - name: _verify | User belongs to the test group
+      assert:
+        that:
+          - "'usergroup_immediate_test' in _usergroup_immediate_groups_string.stdout.split()"
+
+    # Scenario 2: list input (the libvirt case)
+    - name: _verify | Create a second test group
+      group:
+        name: usergroup_immediate_test2
+        system: true
+      become: true
+
+    - name: _verify | Add user to multiple groups (list)
+      import_role:
+        name: usergroup_immediate
+        tasks_from: user
+      vars:
+        usergroup_immediate_args:
+          group:
+            - usergroup_immediate_test
+            - usergroup_immediate_test2
+
+    - name: _verify | Verify group membership after list input
+      command: id -nG
+      register: _usergroup_immediate_groups_list
+      changed_when: false
+
+    - name: _verify | User belongs to both test groups
+      assert:
+        that:
+          - "'usergroup_immediate_test' in _usergroup_immediate_groups_list.stdout.split()"
+          - "'usergroup_immediate_test2' in _usergroup_immediate_groups_list.stdout.split()"
+
+    # Scenario 3: idempotence — re-adding the same group should not change
+    - name: _verify | Re-add user to the same group (idempotence)
+      import_role:
+        name: usergroup_immediate
+        tasks_from: user
+      vars:
+        usergroup_immediate_args:
+          group: usergroup_immediate_test
+
+    - name: _verify | Second invocation did not report changed
+      assert:
+        that:
+          - not usergroup_immediate_result.changed
+
+  always:
+    - name: _verify | Remove user from test groups
+      command: gpasswd -d {{ ansible_user_id }} {{ item }}
+      become: true
+      loop:
+        - usergroup_immediate_test
+        - usergroup_immediate_test2
+      failed_when: false
+      changed_when: false
+
+    - name: _verify | Tear down test groups
+      group:
+        name: "{{ item }}"
+        state: absent
+      become: true
+      loop:
+        - usergroup_immediate_test
+        - usergroup_immediate_test2
