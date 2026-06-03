@@ -561,3 +561,78 @@
   systemd:
     daemon_reload: true
   become: true
+
+# Pre-pull integration: the service entrypoint's headline feature -- detect
+# the unit's podman image over D-Bus, then pull it into the right store
+# *before* systemctl start -- is otherwise exercised only as an isolated
+# module (extract_podman_image, above), never wired through
+# tasks_from: service. Drive a unit with a real `podman run` ExecStart
+# through `service` with start: false, so only enable + detect + pre-pull
+# run (the container never starts), then prove the image landed in the store
+# by the pre-pull alone. busybox is the Nexus-mirrored probe image the
+# podman role's own _verify uses, so the pull is reliable under qemu.
+- name: _verify | Remove the probe image so the pre-pull is observable
+  command: podman rmi -f docker.io/library/busybox
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Install a unit whose ExecStart runs a real podman image
+  copy:
+    dest: /etc/systemd/system/systemd_unit_verify_podman.service
+    content: |
+      [Unit]
+      Description=systemd_unit_verify_podman
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/podman run --rm docker.io/library/busybox true
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify | Reload so the podman unit lands on the bus
+  systemd:
+    daemon_reload: true
+  become: true
+
+- name: _verify | Pre-pull via tasks_from=service with start=false to isolate the pull
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      dest: systemd_unit_verify_podman.service
+      start: false
+
+- name: _verify | Detect step surfaced the unit's image through the role
+  assert:
+    that:
+      - systemd_unit_podman_images.images == ["docker.io/library/busybox"]
+      - systemd_unit_podman_images.user == ""
+
+- name: _verify | Pre-pull placed the image in the store (container never started)
+  command: podman image exists docker.io/library/busybox
+  changed_when: false
+  become: true
+
+- name: _verify | Cleanup pre-pull integration fixture
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: systemd_unit_verify_podman.service
+
+- name: _verify | Remove the probe image after the integration test
+  command: podman rmi -f docker.io/library/busybox
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Daemon-reload after pre-pull integration cleanup
+  systemd:
+    daemon_reload: true
+  become: true
