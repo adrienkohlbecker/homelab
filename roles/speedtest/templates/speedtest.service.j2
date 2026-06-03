@@ -4,7 +4,7 @@
 Description=speedtest
 After=network-online.target
 Wants=network-online.target
-StartLimitInterval=600
+StartLimitIntervalSec=600
 StartLimitBurst=3
 
 [Service]
@@ -29,6 +29,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="speedtest" \
     --security-opt=no-new-privileges \
+    --user 0:0 \
     --uidmap=0:0:65536 \
     --uidmap=+0:{{ speedtest_user.uid }}:1 \
     --gidmap=0:0:65536 \
