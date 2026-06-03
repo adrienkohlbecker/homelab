@@ -23,8 +23,13 @@ Unattended-Upgrade::Allowed-Origins {
 
 // Python regular expressions, matching packages to exclude from upgrading
 Unattended-Upgrade::Package-Blacklist {
-    // The following matches all packages starting with linux-
-    "linux-";
+    // Keep kernel upgrades operator-controlled so the swap reboots under
+    // supervision (reboots are gated in site.yml, see Automatic-Reboot above).
+    // Scoped to the packages that replace the running kernel and set
+    // /var/run/reboot-required — image, headers, modules (incl. modules-extra)
+    // — so userland kernel bits (linux-libc-dev, linux-firmware) still receive
+    // security updates. Matched with re.match, so anchored at the start.
+    "^linux-(image|headers|modules)";
 
     // Use $ to explicitely define the end of a package name. Without
     // the $, "libc6" would match all of them.
