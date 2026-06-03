@@ -51,7 +51,7 @@
     _conf: "{{ _refind_verify_conf.content | b64decode }}"
   assert:
     that:
-      - "'timeout 1' in _conf"
+      - "'timeout 3' in _conf"
       - '''default_selection "Ubuntu (ZBM)"'' in _conf'
       - "'loader /EFI/ZBM/VMLINUZ.EFI' in _conf"
       - "'include themes/refind-theme-regular/theme.conf' in _conf"
