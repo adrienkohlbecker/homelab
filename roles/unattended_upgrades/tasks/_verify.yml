@@ -34,6 +34,7 @@
       - '"Unattended-Upgrade::Automatic-Reboot \"false\"" in unattended_upgrades_verify_aptconfig.stdout'
       - '"Unattended-Upgrade::Mail \"root\"" in unattended_upgrades_verify_aptconfig.stdout'
       - '"Unattended-Upgrade::SyslogEnable \"true\"" in unattended_upgrades_verify_aptconfig.stdout'
+      - '"\"^linux-(image|headers|modules)\"" in unattended_upgrades_verify_aptconfig.stdout'
     fail_msg: "apt-config dump does not reflect deployed APT::Periodic / Unattended-Upgrade values"
   tags:
     - unattended_upgrades
