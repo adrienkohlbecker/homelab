@@ -263,6 +263,7 @@
       name: virsh_backup
       description: Daily libvirt domain backup
       on_calendar: "*-*-* 00:05:00"
+      persistent: false
       exec_start: /usr/local/bin/virsh_backup
   tags:
     - libvirt

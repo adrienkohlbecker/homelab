@@ -79,6 +79,7 @@
       name: getmail
       description: Fetch mail via getmail
       on_calendar: "*-*-* 00:24:00"
+      persistent: false
       # --getmaildir co-locates oldmail-* state next to the maildir so a
       # $HOME reset doesn't trigger a re-fetch of years of archive.
       # OPERATOR NOTE: when invoking getmail manually from a shell for

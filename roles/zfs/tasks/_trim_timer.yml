@@ -30,4 +30,5 @@
       name: "zfs_trim_{{ item }}"
       description: "Weekly ZFS trim for {{ item }}"
       on_calendar: "Thu *-*-* 00:05:00"
+      persistent: false
       exec_start: "/sbin/zpool trim {{ item }}"

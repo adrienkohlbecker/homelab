@@ -55,6 +55,7 @@
       description: Prune unused podman containers, images and networks
       exec_start: /usr/bin/podman system prune -f --filter until=48h
       on_calendar: daily
+      persistent: false
       randomized_delay_sec: 3600
       user: "{{ podman_prune_args.user | default('root') }}"
   when: podman_prune_args.condition | default(true)

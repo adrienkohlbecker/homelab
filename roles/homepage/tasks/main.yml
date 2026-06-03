@@ -210,6 +210,7 @@
       # required — systemd's 1min default would let fires drift well past
       # the iframe widget's 30s refreshInterval.
       on_calendar: "*:*:0/30"
+      persistent: false
       accuracy_sec: 1s
       # Fire immediately on enable so a fresh install doesn't leave nginx
       # 404'ing /alerts/ until the next OnCalendar tick.
