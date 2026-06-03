@@ -59,8 +59,13 @@
 # manually replacing with plaintext) falls through to the plaintext
 # template var, which transmission then rehashes on next start.
 - name: Read existing transmission rpc-password hash if present
-  command: jq -r '."rpc-password" // ""' /mnt/services/transmission/settings.json
+  command: >-
+    python3 -c 'import json,sys,os;
+    f=sys.argv[1];
+    print(json.load(open(f)).get("rpc-password","") if os.path.exists(f) else "")'
+    /mnt/services/transmission/settings.json
   register: transmission_existing_pw
+  become: true
   changed_when: false
   failed_when: false
 
@@ -80,7 +85,7 @@
     group: media
     mode: "0640"
     backup: true
-    validate: jq . %s
+    validate: python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "%s"
   register: transmission_conf
   become: true
   tags:
