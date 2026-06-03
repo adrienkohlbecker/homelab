@@ -35,7 +35,7 @@
 # The dict form prevents inter-call leakage: each import_role pass
 # replaces the whole sqlite_dataset_args value at play-vars scope.
 
-- name: Validate sqlite_dataset_args
+- name: "Validate inputs for {{ sqlite_dataset_args.name | default('<unset>') }}"
   assert:
     quiet: true
     that:
@@ -72,29 +72,42 @@
       [a-z_][a-z0-9_-]*), owner, group; links basenames must be non-empty
       and unique; pre_create requires links and excludes force.
 
+# Resolve caller defaults once so the values are consistent across all tasks
+# and there is no risk of a default() expression drifting between a when: check
+# and a module param. Also resets sqlite_dataset_force_stat so a previous
+# import_role call's register cannot bleed into this invocation's assert task.
+- name: Resolve defaults for {{ sqlite_dataset_args.name }}
+  set_fact:
+    _sqlite_dataset_condition: "{{ sqlite_dataset_args.condition | default(true) | bool }}"
+    _sqlite_dataset_pre_create: "{{ sqlite_dataset_args.pre_create | default(false) | bool }}"
+    _sqlite_dataset_force: "{{ sqlite_dataset_args.force | default(false) | bool }}"
+    _sqlite_dataset_mode: "{{ sqlite_dataset_args.mode | default('0750') }}"
+    _sqlite_dataset_file_mode: "{{ sqlite_dataset_args.file_mode | default('0640') }}"
+    sqlite_dataset_force_stat: {}
+
 - name: Pre-create /mnt/services/sqlite/{{ sqlite_dataset_args.name }}
-  when: sqlite_dataset_args.condition | default(true)
+  when: _sqlite_dataset_condition
   file:
     path: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}"
     state: directory
     owner: "{{ sqlite_dataset_args.owner }}"
     group: "{{ sqlite_dataset_args.group }}"
-    mode: "{{ sqlite_dataset_args.mode | default('0750') }}"
+    mode: "{{ _sqlite_dataset_mode }}"
   become: true
 
 # state=touch with preserve timestamps is idempotent: creates the file if
 # absent, leaves an existing DB untouched (no truncation, no mtime bump).
 - name: Pre-create SQLite DB src files for {{ sqlite_dataset_args.name }}
   when:
-    - sqlite_dataset_args.condition | default(true)
-    - sqlite_dataset_args.pre_create | default(false)
+    - _sqlite_dataset_condition
+    - _sqlite_dataset_pre_create
     - sqlite_dataset_args.links is defined
   file:
     path: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ sqlite_dataset_link | basename }}"
     state: touch
     owner: "{{ sqlite_dataset_args.owner }}"
     group: "{{ sqlite_dataset_args.group }}"
-    mode: "{{ sqlite_dataset_args.file_mode | default('0640') }}"
+    mode: "{{ _sqlite_dataset_file_mode }}"
     modification_time: preserve
     access_time: preserve
   become: true
@@ -109,8 +122,8 @@
 # force -- the no-force path gets this refusal from the file module itself.
 - name: Stat force dests for {{ sqlite_dataset_args.name }}
   when:
-    - sqlite_dataset_args.condition | default(true)
-    - sqlite_dataset_args.force | default(false)
+    - _sqlite_dataset_condition
+    - _sqlite_dataset_force
     - sqlite_dataset_args.links is defined
   stat:
     path: "{{ sqlite_dataset_link }}"
@@ -146,7 +159,7 @@
 
 - name: Symlink DBs onto sqlite dataset for {{ sqlite_dataset_args.name }}
   when:
-    - sqlite_dataset_args.condition | default(true)
+    - _sqlite_dataset_condition
     - sqlite_dataset_args.links is defined
   file:
     src: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ sqlite_dataset_link | basename }}"
@@ -155,7 +168,7 @@
     owner: "{{ sqlite_dataset_args.owner }}"
     group: "{{ sqlite_dataset_args.group }}"
     follow: false
-    force: "{{ sqlite_dataset_args.force | default(false) }}"
+    force: "{{ _sqlite_dataset_force }}"
   become: true
   loop: "{{ sqlite_dataset_args.links }}"
   loop_control:
