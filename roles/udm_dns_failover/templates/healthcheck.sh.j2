@@ -1,3 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-exec 3<>/dev/tcp/{{ pihole_keepalived_ip }}/53 && exec 3>&-
+# Probe dnsmasq on the UDM's own loopback, not the VIP. dnsmasq only
+# binds the VIP after keepalived assigns it, so probing VIP:53 deadlocks
+# (healthcheck fails → FAULT → VIP never assigned → dnsmasq never binds).
+exec 3<>/dev/tcp/127.0.0.1/53 && exec 3>&-
