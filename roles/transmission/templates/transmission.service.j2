@@ -54,7 +54,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/media/Torrents:/downloads/complete \
     --volume /mnt/scratch/transmission:/downloads/incomplete \
     --network media \
-    --publish 127.0.0.1:9091:9091/tcp \
+    --publish 127.0.0.1:{{ service_ports.transmission }}:9091/tcp \
     --publish 0.0.0.0:51413:51413/tcp \
     --publish 0.0.0.0:51413:51413/udp \
     --health-cmd         '["transmission-remote","localhost:9091","--session-info"]' \
