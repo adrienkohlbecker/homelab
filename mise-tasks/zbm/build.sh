@@ -29,6 +29,8 @@ fi
 #   -H: skip hostid (release build, not host-specific)
 #   -O: extra podman run args (output volume)
 #   --: args forwarded to build-init.sh (-o output dir, -t version tag)
+#
+# zbm-builder.sh auto-detects hooks/ and generates user_hooks.conf.
 "$src_dir/zbm-builder.sh" \
   -b "${MISE_CONFIG_ROOT}/zbm" \
   -i "localhost/zbm-builder:v${ZBM_VERSION}-${arch}" \
