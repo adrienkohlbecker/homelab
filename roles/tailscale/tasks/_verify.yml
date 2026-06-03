@@ -74,7 +74,6 @@
     tailscale set
     --advertise-routes=10.254.254.0/24
     --advertise-exit-node={{ tailscale_advertise_exit_node | ternary('true', 'false') }}
-    --timeout=60s
   changed_when: true
   become: true
 
@@ -92,7 +91,6 @@
     --advertise-exit-node={{ tailscale_advertise_exit_node | ternary('true', 'false') }}
     --accept-routes={{ tailscale_accept_routes | ternary('true', 'false') }}
     --accept-dns={{ tailscale_accept_dns | ternary('true', 'false') }}
-    --timeout=60s
   changed_when: true
   become: true
 
