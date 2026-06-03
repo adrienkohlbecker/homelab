@@ -152,6 +152,7 @@
       vars:
         reboot_args:
           condition: "{{ reboot_required.stat.exists }}"
+          timeout: 240
       tags:
         - always
 
