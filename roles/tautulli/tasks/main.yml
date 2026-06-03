@@ -1,3 +1,23 @@
+- name: Assert required tautulli inputs are provided
+  assert:
+    that:
+      - tautulli_api_key | default('') | length > 0
+      - tautulli_jwt_secret | default('') | length > 0
+      - tautulli_pms_token | default('') | length > 0
+      - tautulli_pms_client_id | default('') | length > 0
+      - tautulli_pms_uuid | default('') | length > 0
+      - themoviedb_api_key | default('') | length > 0
+      - plex_machine_id | default('') | length > 0
+  tags:
+    - tautulli
+
+- name: Add media group
+  import_role:
+    name: media
+    tasks_from: group
+  tags:
+    - tautulli
+
 - name: Set up tautulli system user and group
   import_role:
     name: service_user
@@ -5,6 +25,8 @@
   vars:
     service_user_args:
       name: tautulli
+      extra_groups: [ media ]
+      config_dir_group: media
   tags:
     - tautulli
 
@@ -21,9 +43,9 @@
     sqlite_dataset_args:
       name: tautulli
       owner: tautulli
-      group: tautulli
+      group: media
       mode: "0750"
-      condition: "{{ not (ansible_check_mode and tautulli_user.changed) }}"
+      condition: "{{ not (ansible_check_mode and (tautulli_user.changed or media_group.changed)) }}"
       force: true
       links:
         - /mnt/services/tautulli/tautulli.db
@@ -39,19 +61,16 @@
   tags:
     - tautulli
 
-- name: Preserve runtime PMS values
-  when: _tautulli_existing is succeeded
+- name: Preserve runtime PMS values (default on fresh install)
   set_fact:
-    _tautulli_pms_plexpass: "{{ (_tautulli_existing.content | b64decode | regex_findall('(?m)^pms_plexpass = (\\d+)$')) | default(['0'], true) | first }}"
-    _tautulli_pms_version: "{{ (_tautulli_existing.content | b64decode | regex_findall('(?m)^pms_version = ([\\w.\\-]+)$')) | default([''], true) | first }}"
-  tags:
-    - tautulli
-
-- name: Default runtime PMS values for fresh install
-  when: _tautulli_existing is not succeeded
-  set_fact:
-    _tautulli_pms_plexpass: "0"
-    _tautulli_pms_version: ""
+    _tautulli_pms_plexpass: >-
+      {{ ((_tautulli_existing.content | b64decode | regex_findall('(?m)^pms_plexpass = (\d+)$'))
+          | default(['0'], true) | first)
+         if _tautulli_existing is succeeded else '0' }}
+    _tautulli_pms_version: >-
+      {{ ((_tautulli_existing.content | b64decode | regex_findall('(?m)^pms_version = ([\w.\-]+)$'))
+          | default([''], true) | first)
+         if _tautulli_existing is succeeded else '' }}
   tags:
     - tautulli
 
@@ -60,11 +79,12 @@
     src: config.ini.j2
     dest: /mnt/services/tautulli/config.ini
     owner: tautulli
-    group: tautulli
+    group: media
     mode: "0600"
     backup: true
     validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' "%s"
   register: tautulli_conf
+  when: not (ansible_check_mode and (tautulli_user.changed or media_group.changed))
   become: true
   tags:
     - tautulli
@@ -76,7 +96,7 @@
   vars:
     systemd_unit_args:
       src: tautulli.service.j2
-      condition: "{{ not (ansible_check_mode and tautulli_user.changed) }}"
+      condition: "{{ not (ansible_check_mode and (tautulli_user.changed or media_group.changed)) }}"
   tags:
     - tautulli
 
@@ -87,8 +107,8 @@
   vars:
     systemd_unit_args:
       src: tautulli
-      condition: "{{ not (ansible_check_mode and (tautulli_service_result.changed or tautulli_user.changed)) }}"
-      restart: "{{ tautulli_service_result.changed or tautulli_conf.changed }}"
+      condition: "{{ not (ansible_check_mode and (tautulli_service_result.changed or tautulli_user.changed or media_group.changed)) }}"
+      restart: "{{ tautulli_service_result.changed or tautulli_conf.changed or tautulli_user.changed or media_group.changed }}"
   tags:
     - tautulli
 

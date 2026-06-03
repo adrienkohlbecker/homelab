@@ -21,7 +21,8 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
-TimeoutSec=120
+TimeoutStartSec=120
+TimeoutStopSec=150
 RestartSec=5
 Type=notify
 NotifyAccess=all
@@ -43,7 +44,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/sqlite/tautulli:/mnt/services/sqlite/tautulli \
     --volume "/mnt/services/plex:/plex:ro" \
     --env PUID={{ tautulli_user.uid }} \
-    --env PGID={{ tautulli_user.group }} \
+    --env PGID={{ media_group.gid }} \
     --env TZ={{ system_timezone }} \
     --network media \
     --publish 127.0.0.1:{{ service_ports.tautulli }}:8181/tcp \

@@ -1,0 +1,187 @@
+# /status is the same endpoint used in the container healthcheck. It is
+# unauthenticated (no api_key needed), so it only proves the container is up
+# and answering HTTP. Type=notify + --sdnotify=healthy means the unit is
+# already active==healthy by converge end; the retries are a safety margin.
+- name: _verify | Tautulli answers /status on its loopback port
+  uri:
+    url: http://127.0.0.1:{{ service_ports.tautulli }}/status
+    status_code: 200
+  register: _tautulli_http
+  retries: 30
+  delay: 2
+  until: _tautulli_http.status == 200
+
+# Tautulli's /api/v2 returns HTTP 200 for all calls, with a JSON
+# response.result of "error" when the key is wrong or missing. Proving both
+# sides (rejected without / accepted with) is the only way to confirm the
+# api_key we templated is the one the running container uses.
+- name: _verify | Tautulli /api/v2 rejects requests without the api_key
+  uri:
+    url: http://127.0.0.1:{{ service_ports.tautulli }}/api/v2?cmd=get_tautulli_info
+    return_content: true
+  register: _tautulli_api_unauth
+  failed_when: >-
+    _tautulli_api_unauth.json.response.result | default('') != 'error'
+
+- name: _verify | Tautulli /api/v2 accepts our api_key
+  uri:
+    url: http://127.0.0.1:{{ service_ports.tautulli }}/api/v2?apikey={{ tautulli_api_key }}&cmd=get_tautulli_info
+    return_content: true
+  register: _tautulli_api_auth
+  failed_when: >-
+    _tautulli_api_auth.json.response.result | default('') != 'success'
+
+# The vhost is `auth: required`, so a cookieless request must bounce to
+# Authelia. With the stub in gate mode (see _setup.yml), assert a cookieless
+# GET / lands on nginx's 401 =302 redirect to the portal. This is the only
+# probe that fails if `auth: required` is dropped from nginx_site_args.
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects with TLSV1_UNRECOGNIZED_NAME.
+- name: _verify | Map the tautulli vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 tautulli.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
+- name: _verify | Tautulli UI gate redirects unauthenticated requests to Authelia
+  uri:
+    url: https://tautulli.{{ inventory_hostname }}.{{ domain }}/
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: _tautulli_nginx_gate
+  failed_when: >-
+    _tautulli_nginx_gate.status != 302
+    or 'auth.' not in (_tautulli_nginx_gate.location | default(''))
+    or ('rd=https://tautulli.' ~ inventory_hostname ~ '.' ~ domain) not in (_tautulli_nginx_gate.location | default(''))
+
+# Media-network join probe. Intra-stack peers (seerr) reach tautulli at
+# tautulli.dns.podman:8181 with the api_key, bypassing nginx. A dropped
+# `--network media` strands it while leaving loopback probes green.
+- name: _verify | Tautulli is reachable intra-stack at tautulli.dns.podman over the media network
+  command: >-
+    podman exec tautulli
+    curl -s -o /dev/null -w '%{http_code}'
+    http://tautulli.dns.podman:8181/status
+  become: true
+  register: _tautulli_dns_podman
+  changed_when: false
+  retries: 15
+  delay: 2
+  until: _tautulli_dns_podman.rc == 0 and _tautulli_dns_podman.stdout == "200"
+
+# The sqlite_dataset symlink (force: true) plants a dangling link on a cold
+# host; Tautulli creates the real DB through it on first start. Assert both
+# the symlink and the dataset-side file exist and are non-empty.
+- name: _verify | Stat the tautulli DB symlink
+  stat:
+    path: /mnt/services/tautulli/tautulli.db
+    follow: false
+  register: _tautulli_db_link
+  become: true
+
+- name: _verify | Tautulli DB is a symlink onto the sqlite dataset
+  assert:
+    that:
+      - _tautulli_db_link.stat.islnk
+      - _tautulli_db_link.stat.lnk_target == "/mnt/services/sqlite/tautulli/tautulli.db"
+    fail_msg: "tautulli.db is not a symlink onto the sqlite dataset (stat={{ _tautulli_db_link.stat }})"
+
+- name: _verify | Stat the dataset-side tautulli DB
+  stat:
+    path: /mnt/services/sqlite/tautulli/tautulli.db
+  register: _tautulli_db_file
+  retries: 15
+  delay: 2
+  until:
+    - _tautulli_db_file.stat.exists
+    - not _tautulli_db_file.stat.islnk
+    - (_tautulli_db_file.stat.size | default(0) | int) > 0
+  become: true
+
+- name: _verify | Tautulli wrote a real, non-empty DB onto the dataset
+  assert:
+    that:
+      - _tautulli_db_file.stat.exists
+      - not _tautulli_db_file.stat.islnk
+      - (_tautulli_db_file.stat.size | int) > 0
+    fail_msg: "tautulli.db on the dataset is missing or empty (stat={{ _tautulli_db_file.stat }})"
+
+# config_dir_group: media (see main.yml) stops ansible flapping
+# /mnt/services/tautulli's gid against linuxserver's startup chown to
+# PUID:PGID=tautulli:media.
+- name: _verify | Stat the tautulli config dir
+  stat:
+    path: /mnt/services/tautulli
+  register: _tautulli_config_dir
+  become: true
+
+- name: _verify | Tautulli config dir is group media
+  assert:
+    that:
+      - _tautulli_config_dir.stat.gr_name == "media"
+    fail_msg: "/mnt/services/tautulli is not group media (gr_name={{ _tautulli_config_dir.stat.gr_name }})"
+
+# PMS value preservation (main.yml's slurp+regex readback) is the role's most
+# fragile mechanism. A broken readback silently resets pms_plexpass/pms_version
+# to defaults on the next converge. The idempotence check never catches this
+# because the values start at their defaults. Seed a sentinel, re-run the
+# role, and assert the re-render read it back.
+- name: _verify | Seed a sentinel pms_plexpass into config.ini
+  replace:
+    path: /mnt/services/tautulli/config.ini
+    regexp: '^(pms_plexpass = )\d+$'
+    replace: '\g<1>1'
+  become: true
+
+- name: _verify | Seed a sentinel pms_version into config.ini
+  replace:
+    path: /mnt/services/tautulli/config.ini
+    regexp: '^(pms_version = ).*$'
+    replace: '\g<1>1.40.0.8395-abc123def'
+  become: true
+
+- name: _verify | Re-run the role to exercise the PMS value readback
+  import_role:
+    name: tautulli
+
+- name: _verify | Re-read config.ini after the re-converge
+  slurp:
+    src: /mnt/services/tautulli/config.ini
+  register: _tautulli_verify_ini
+  become: true
+
+- name: _verify | The seeded pms_plexpass survived the re-render
+  vars:
+    _ini: "{{ _tautulli_verify_ini.content | b64decode }}"
+  assert:
+    that:
+      - (_ini | regex_findall('(?m)^pms_plexpass = (\d+)$') | first) == '1'
+    fail_msg: "pms_plexpass preservation regressed: readback reset the seeded value"
+
+- name: _verify | The seeded pms_version survived the re-render
+  vars:
+    _ini: "{{ _tautulli_verify_ini.content | b64decode }}"
+  assert:
+    that:
+      - (_ini | regex_findall('(?m)^pms_version = ([\w.\-]+)$') | first) == '1.40.0.8395-abc123def'
+    fail_msg: "pms_version preservation regressed: readback reset the seeded value"
+
+# The sort_ini path unit watches config.ini for daemon rewrites (Tautulli
+# shuffles INI key order) and re-sorts in place. Assert it is active.
+- name: _verify | The sort_ini path watcher is active
+  systemd:
+    name: sort_ini_mnt_services_tautulli_config_ini.path
+    state: started
+  check_mode: true
+  register: _tautulli_sort_ini_path
+  become: true
+
+- name: _verify | Assert the sort_ini path unit is active
+  assert:
+    that:
+      - _tautulli_sort_ini_path.status.ActiveState == "active"
+    fail_msg: "sort_ini path unit is {{ _tautulli_sort_ini_path.status.ActiveState }}, expected active"
