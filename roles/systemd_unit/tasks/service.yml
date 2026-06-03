@@ -220,6 +220,27 @@
   become: true
   become_user: "{{ _systemd_unit_user }}"
 
+# A unit with no ExecReload= can't be reloaded -- systemd fails the job
+# with "Unit ... does not support reloading". Catch that here with an
+# actionable message instead of the raw systemd error. CanReload comes
+# from the Enable task's systemctl-show status (the same dict the pre-pull
+# gate reads ActiveState from), so it costs no extra task.
+- name: Assert the unit supports reload before reloading
+  when:
+    - _systemd_unit_condition
+    - _systemd_unit_start
+    - systemd_unit_args.reload | default(false)
+    - not (systemd_unit_args.restart | default(false))
+    - not systemd_unit_started.changed
+  assert:
+    quiet: true
+    that:
+      - _systemd_unit_enable.status.CanReload | default('no') == 'yes'
+    fail_msg: >-
+      systemd_unit_args.reload was requested for {{ _systemd_unit_name }},
+      but the unit declares no ExecReload= (CanReload=no). Add an
+      ExecReload= directive to the unit, or drive a restart instead.
+
 # Hitless alternative to restart for daemons that pick up config via SIGHUP
 # (keepalived, nginx, etc.). Skipped when restart is also set (restart
 # already applied), and on the play that just started the unit (the started
