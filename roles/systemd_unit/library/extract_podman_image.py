@@ -166,8 +166,19 @@ def _get_properties(unit_path, props):
     )
     if result.returncode != 0:
         return {}
+    lines = result.stdout.splitlines()
+    # busctl --json=short emits exactly one compact JSON line per requested
+    # property, in request order; the positional zip below relies on that. If
+    # the counts ever diverge (e.g. a future flag change drops --json=short
+    # and a value wraps), fail loud rather than silently misattributing User=
+    # to another property's value and pre-pulling into the wrong podman store.
+    if len(lines) != len(props):
+        raise ValueError(
+            f"busctl returned {len(lines)} line(s) for {len(props)} "
+            f"requested properties; expected one JSON line each (--json=short)."
+        )
     out = {}
-    for line, prop in zip(result.stdout.splitlines(), props):
+    for line, prop in zip(lines, props):
         try:
             out[prop] = json.loads(line)
         except json.JSONDecodeError:

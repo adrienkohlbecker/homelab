@@ -169,6 +169,14 @@
     # man-page check is completeness fluff, not syntax/dependency
     # validation — drop it. `--man=no` works on systemd 249+; the
     # newer `--no-man` form is 254+ only.
+    #
+    # For user-scope installs (user: <non-root>, /etc/systemd/user) the unit
+    # is verified by path against the default (system) manager context --
+    # --user is intentionally not passed. The path-based load still catches
+    # syntax and common dependency errors (github_runner's user units rely on
+    # this), and skipping --user avoids surfacing user-manager-only
+    # resolution differences that the strict `stderr != ''` check would turn
+    # into a spurious rollback.
     - name: Validate unit file
       when: systemd_unit_file.changed
       command:
