@@ -7,8 +7,9 @@
   become: true
 
 # Lay down snakeoil at the letsencrypt paths nginx.conf.j2 references so
-# the prod nginx role can start its service in tests. Mirrors what
-# certbot/_setup.yml does for roles that import certbot.
+# the prod nginx role can start its service in tests. Mirrors the snakeoil
+# block in roles/nginx/tasks/_setup.yml (which additionally hardens privkey
+# perms to exercise ssl-cert group removal; not needed here).
 - name: nginx | Lay down snakeoil certs at letsencrypt paths
   shell: |
     set -euo pipefail
