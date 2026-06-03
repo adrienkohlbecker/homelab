@@ -1,0 +1,53 @@
+# Transmission's RPC endpoint returns 409 with a X-Transmission-Session-Id
+# header for any request without the CSRF token. The 409 is specific to
+# transmission's RPC handshake, not a generic server error -- it proves the
+# daemon is up, listening, and serving the RPC protocol.
+- name: _verify | Transmission RPC is listening on loopback
+  uri:
+    url: http://127.0.0.1:{{ service_ports.transmission }}/transmission/rpc
+    method: POST
+    body: '{"method":"session-get"}'
+    body_format: json
+    status_code: 409
+  register: _transmission_rpc
+  retries: 30
+  delay: 2
+  until: _transmission_rpc.status == 409
+
+# The vhost is `auth: required`, so the real browser path goes through
+# Authelia. Assert a cookieless GET redirects to the portal -- this is the
+# only probe that fails if `auth: required` is dropped from nginx_site_args.
+# Asserting the returnUrl (rd=) echoes transmission's own URL proves the
+# Host header routed to transmission's server_name, not the default vhost.
+- name: _verify | Transmission UI gate redirects unauthenticated requests to Authelia
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "transmission.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: _transmission_nginx_gate
+  failed_when: >-
+    _transmission_nginx_gate.status != 302
+    or 'auth.' not in (_transmission_nginx_gate.location | default(''))
+    or ('rd=https://transmission.' ~ inventory_hostname ~ '.' ~ domain) not in (_transmission_nginx_gate.location | default(''))
+
+# The --network media join + transmission.dns.podman FQDN is how the *arr
+# stack reaches transmission's RPC, bypassing nginx. The loopback/nginx
+# probes above don't exercise it -- a dropped `--network media` strands
+# that path while leaving them green. Probe from a throwaway container on
+# the media network: the 409 proves aardvark resolves the FQDN and
+# transmission listens on the podman network path.
+- name: _verify | Transmission is reachable intra-stack at transmission.dns.podman over the media network
+  command: >-
+    podman run --rm --network media --entrypoint /usr/bin/curl
+    docker.io/linuxserver/transmission:4.1.1
+    -s -o /dev/null -w %{http_code} -X POST
+    http://transmission.dns.podman:9091/transmission/rpc
+  become: true
+  register: _transmission_dns_podman
+  until: _transmission_dns_podman.rc == 0 and _transmission_dns_podman.stdout == "409"
+  retries: 15
+  delay: 2
+  changed_when: false
