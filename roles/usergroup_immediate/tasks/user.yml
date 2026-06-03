@@ -1,11 +1,33 @@
-- name: Add user to group
+# Inputs:
+#   usergroup_immediate_args:
+#     group   (required, string or list) — group(s) to add ansible_user_id to
+#
+# Outputs:
+#   usergroup_immediate_result — the user module result (internal; not a stable API)
+#
+# Side-effect: resets the SSH connection on change so subsequent tasks
+# see the new group membership immediately.
+
+- name: user | Validate inputs
+  assert:
+    that:
+      - usergroup_immediate_args is defined
+      - usergroup_immediate_args.group is defined
+      - usergroup_immediate_args.group is string or usergroup_immediate_args.group is sequence
+      - usergroup_immediate_args.group | length > 0
+    quiet: true
+    fail_msg: >-
+      usergroup_immediate_args.group must be a non-empty string or list,
+      got: {{ usergroup_immediate_args.group | default('undefined') }}
+
+- name: user | Add user to group
   user:
     name: "{{ ansible_user_id }}"
-    groups: "{{ usergroup_immediate_group }}"
+    groups: "{{ usergroup_immediate_args.group }}"
     append: true
   register: usergroup_immediate_result
   become: true
 
-- name: Reset ssh connection
-  when: usergroup_immediate_result.changed
-  include_tasks: reset_connection.yml
+- name: user | Reset connection to apply user group change
+  meta: reset_connection
+  when: usergroup_immediate_result.changed and not ansible_check_mode
