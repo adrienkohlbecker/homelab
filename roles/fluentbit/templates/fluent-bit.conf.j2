@@ -465,6 +465,25 @@
     script            /etc/fluent-bit/flatten_csp.lua
     call              flatten_csp
 
+{% if fluentbit_otlp_local %}
+# Parse raw UniFi syslog into structured fields. The udp input delivers
+# the whole RFC 3164 line as `log`; parse_unifi.lua handles all three
+# wire shapes (gateway daemon syslog, AP/switch device syslog, and CEF
+# events), sets `log` to the human-readable body, stamps severity from
+# the syslog PRI, and leaves the extracted fields on the record for
+# otlp_shape.lua to lift into LogAttributes. A Lua filter rather than a
+# `parser` filter because CEF can't be expressed as a fixed regex: its
+# extension is a variable set of space-separated key=value pairs whose
+# values themselves contain spaces. See the script header for the
+# deliberate choice to keep the ingestion timestamp (the syslog stamp
+# has no year/timezone and would land records in the future).
+[FILTER]
+    Name              lua
+    Match             unifi
+    script            /etc/fluent-bit/parse_unifi.lua
+    call              parse_unifi
+{% endif %}
+
 # Two record-shaping passes that apply to every record:
 # (a) Stamp inventory_hostname as `host` so cross-stream queries in
 #     HyperDX can filter by host without parsing the tag. systemd input
