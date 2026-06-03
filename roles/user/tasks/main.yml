@@ -179,7 +179,7 @@
     - user
 
 - name: Check for the commit-signing GPG key
-  command: gpg --list-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
+  command: gpg --with-colons --list-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
   register: user_gpg_check
   failed_when: false
   changed_when: false
@@ -214,6 +214,7 @@
   apt:
     name: stow
     state: present
+    cache_valid_time: 3600
   become: true
   tags:
     - user
