@@ -147,3 +147,43 @@
       auth: required
   tags:
     - transmission
+
+- name: Create transmission code directory
+  file:
+    dest: /opt/transmission
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - transmission
+
+- name: Install blocklist refresh script
+  copy:
+    src: blocklist_update.sh
+    dest: /opt/transmission/blocklist_update.sh
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  become: true
+  tags:
+    - transmission
+
+# Transmission fetches blocklist-url only on an explicit --blocklist-update,
+# never on a schedule or at startup -- without this the configured blocklist
+# silently rots. Weekly is plenty for a peer blocklist.
+- name: Schedule the weekly blocklist refresh timer
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: transmission_blocklist_update
+      description: Refresh the transmission peer blocklist
+      on_calendar: Sun *-*-* 04:30:00
+      persistent: false
+      exec_start: /opt/transmission/blocklist_update.sh
+  tags:
+    - transmission
