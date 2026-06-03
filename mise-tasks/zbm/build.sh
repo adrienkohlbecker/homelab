@@ -50,8 +50,7 @@ fi
 #   ENTRYPOINT [ "/${ZBM_BUILDER}" ]
 # in exec form, and BuildKit does not expand the ARG in exec-form
 # ENTRYPOINT — the built image's entrypoint is the literal string
-# "/${ZBM_BUILDER}", which crun can't find. (The old vendored Dockerfile
-# hard-coded /build-init.sh, so it never hit this.) Override it here.
+# "/${ZBM_BUILDER}", which crun can't find. Override it here.
 "$src_dir/zbm-builder.sh" \
   -b "${MISE_CONFIG_ROOT}/zbm" \
   -i "localhost/zbm-builder:v${ZBM_VERSION}-${arch}" \

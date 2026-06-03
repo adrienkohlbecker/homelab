@@ -1,7 +1,8 @@
 #!/bin/bash
 # Build-time hook run by build-init.sh inside the builder container (from
 # ${BUILDROOT}/rc.d/*). Writes the dracut network cmdline fragment that
-# recovery.conf bakes into the initramfs via install_optional_items.
+# recovery.conf bakes into the initramfs via install_items (a missing fragment
+# hard-fails the build).
 #
 # Kept in /etc/cmdline.d (dracut reads it at boot) rather than the EFI bundle's
 # embedded kernel cmdline: a duplicate ip= in the bundle makes dracut-network
