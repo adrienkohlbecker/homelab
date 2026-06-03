@@ -19,7 +19,7 @@
 #       $upstream_http_location; error_page 401 =302 $redirection_url) has a
 #       target to 302 to that routes back to the requested vhost.
 #   authed: returns 200 plus a `Remote-User` header (value from
-#       authelia_stub_user, default nginxverifyuser), like Authelia on a
+#       test_authelia_stub_user, default nginxverifyuser), like Authelia on a
 #       successful auth. Lets a test exercise the auth-passes paths --
 #       X-Forwarded-User forwarding and per-user upstream_authorization
 #       injection (the $authelia_user-keyed map in upstream_auth_map.conf.j2).
@@ -56,7 +56,7 @@
             # authed: 200 with a Remote-User header, like Authelia on a
             # successful auth, so the parent's auth_request_set $authelia_user
             # populates (exercises X-Forwarded-User + upstream_authorization).
-            add_header Remote-User "{{ authelia_stub_user | default('nginxverifyuser') }}" always;
+            add_header Remote-User "{{ test_authelia_stub_user | default('nginxverifyuser') }}" always;
             return 200 'test_stub_ok';
         {% else %}
             return 200 'test_stub_ok';

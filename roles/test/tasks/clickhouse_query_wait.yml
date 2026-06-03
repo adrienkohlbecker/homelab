@@ -14,20 +14,19 @@
 #                       the helper has no sensible default for what
 #                       "ready" means in caller-specific data.
 #
-# failed_when is hardcoded to false: a transient curl failure should
-# retry rather than abort, since the whole point of polling is to wait
-# for downstream state to settle. The until: predicate is the only exit
-# condition.
+# failed_when allows transient curl failures during the polling loop
+# (the whole point of polling is to wait for downstream state to settle)
+# but fails hard when retries exhaust with a non-zero exit code.
 #
 # Output:
 #   test_clickhouse_result.stdout: response from the final iteration.
-- name: "Test | Clickhouse_query_wait | {{ test_args.label | default('query') }}"
+- name: "clickhouse_query_wait | {{ test_args.label | default('query') }}"
   command:
-    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
+    cmd: podman exec -i hyperdx curl --fail-with-body -sS --max-time 5 --data-binary @- "http://localhost:8123/"
     stdin: "{{ test_args.sql }}"
   register: test_clickhouse_result
   changed_when: false
-  failed_when: false
+  failed_when: test_clickhouse_result.rc != 0 and test_clickhouse_result.attempts >= (test_args.retries | default(30))
   retries: "{{ test_args.retries | default(30) }}"
   delay: "{{ test_args.delay | default(2) }}"
   until: "{{ test_args.until }}"

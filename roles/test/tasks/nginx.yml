@@ -18,7 +18,7 @@
     cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/letsencrypt/live/{{ item }}/fullchain.pem
   args:
     executable: /bin/bash
-    creates: /etc/letsencrypt/live/{{ item }}
+    creates: /etc/letsencrypt/live/{{ item }}/fullchain.pem
   loop:
     - "{{ inventory_hostname }}.{{ domain }}"
   become: true
