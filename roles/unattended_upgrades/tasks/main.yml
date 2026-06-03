@@ -58,3 +58,35 @@
   become: true
   tags:
     - unattended_upgrades
+
+- name: Check for netdata systemd_timers collector
+  stat:
+    path: /etc/netdata/charts.d/systemd_timers.d
+  register: unattended_upgrades_timers_meta
+  become: true
+  tags:
+    - unattended_upgrades
+
+# Mail "root" only fires on a run that *errors*; a disabled or never-firing
+# timer is silent. Registering apt-daily-upgrade.timer with netdata's
+# systemd_timers collector adds the missing heartbeat: it alerts overdue once
+# age > 2 * period_secs. Gated on the collector dir so it no-ops on hosts
+# without netdata and self-heals on the converge after the netdata band runs.
+- name: Register apt-daily-upgrade.timer for netdata overdue monitoring
+  when: unattended_upgrades_timers_meta.stat.exists
+  copy:
+    dest: /etc/netdata/charts.d/systemd_timers.d/apt-daily-upgrade.conf
+    content: |
+      # Managed by ansible roles/unattended_upgrades/tasks/main.yml.
+      # Consumed by /usr/libexec/netdata/charts.d/systemd_timers.chart.sh.
+      # period_secs is apt-daily-upgrade.timer's daily cadence
+      # (OnCalendar=*-*-* 6:00); RandomizedDelaySec jitter is absorbed by the
+      # collector's 2 * period grace.
+      period_secs=86400
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - unattended_upgrades

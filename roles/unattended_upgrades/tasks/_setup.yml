@@ -1,0 +1,28 @@
+# Emulate netdata's presence so the gated overdue-monitoring registration in
+# main.yml fires under an isolated `testrole.py unattended_upgrades` run (the
+# harness applies only this role, so the real netdata band never converges
+# here). Prod gets the netdata user + collector dir from the netdata role.
+
+- name: _setup | Create netdata group
+  group:
+    name: netdata
+    system: true
+  become: true
+
+- name: _setup | Create netdata user
+  user:
+    name: netdata
+    group: netdata
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+  become: true
+
+- name: _setup | Create netdata systemd_timers collector dir
+  file:
+    path: /etc/netdata/charts.d/systemd_timers.d
+    state: directory
+    owner: netdata
+    group: netdata
+    mode: "0755"
+  become: true
