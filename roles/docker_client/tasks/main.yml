@@ -71,6 +71,7 @@
     name: usergroup_immediate
     tasks_from: user
   vars:
-    usergroup_immediate_group: podman-socket
+    usergroup_immediate_args:
+      group: podman-socket
   tags:
     - docker_client

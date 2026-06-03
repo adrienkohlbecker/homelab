@@ -10,7 +10,8 @@
     tasks_from: user
   when: not (ansible_check_mode and media_group.changed)
   vars:
-    usergroup_immediate_group: media
+    usergroup_immediate_args:
+      group: media
   tags:
     - media
 

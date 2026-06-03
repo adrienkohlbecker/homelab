@@ -92,9 +92,10 @@
     tasks_from: user
   when: not (ansible_check_mode and libvirt_apt.changed)
   vars:
-    usergroup_immediate_group:
-      - libvirt
-      - kvm
+    usergroup_immediate_args:
+      group:
+        - libvirt
+        - kvm
   tags:
     - libvirt
 
