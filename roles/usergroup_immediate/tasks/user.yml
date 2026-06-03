@@ -28,6 +28,8 @@
   register: usergroup_immediate_result
   become: true
 
+# meta: reset_connection ignores task-level when:; include_tasks
+# evaluates the condition before dispatching, so it works correctly.
 - name: user | Reset connection to apply user group change
-  meta: reset_connection
+  include_tasks: reset_connection.yml
   when: usergroup_immediate_result.changed and not ansible_check_mode
