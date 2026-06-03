@@ -1,13 +1,12 @@
-# The hdparm netdata charts.d collector is an x86_64-only integration:
-# netdata-plugin-chartsd can't install on aarch64 (its `Depends:
-# netdata (= 1.46.3)` is unsatisfiable against the lagging arm64 build —
-# see roles/netdata/tasks/charts_d.yml), so the collector never
-# materializes there and these chart/alert assertions have nothing to
-# probe. arm64 is the local test box only; the role's real behavior
-# (hdparm package, /etc/hdparm.conf, CAP_SYS_RAWIO, the udev re-apply) is
-# exercised by the converge on every arch. So gate the whole collector
-# exercise on x86_64 — import_tasks propagates this `when:` onto each
-# imported task.
-- name: _verify | Exercise the hdparm charts.d collector (x86_64 only)
+# Entry point for the role's verification. The collector exercise is large,
+# so it lives in _verify_collector.yml; this file just imports it.
+#
+# It runs on every arch: netdata installs from repo.netdata.cloud's multi-arch
+# 2.x series (see roles/netdata), so netdata-plugin-chartsd resolves on arm64
+# too, and the exercise is hardware-independent -- _verify_collector.yml
+# overlays ghost devices plus an hdparm shim emitting canned power states, so
+# it needs no real disk. The role's converge behavior (hdparm package,
+# /etc/hdparm.conf, CAP_SYS_RAWIO, the udev re-apply) is exercised on every
+# arch regardless.
+- name: _verify | Exercise the hdparm charts.d collector
   import_tasks: _verify_collector.yml
-  when: ansible_architecture == 'x86_64'
