@@ -1,0 +1,3 @@
+# usergroup_immediate is a helper role accessed only via `tasks_from: user`.
+# main.yml exists so testrole.py can target this role; the actual logic
+# lives in user.yml and the verification scenarios in _verify.yml.

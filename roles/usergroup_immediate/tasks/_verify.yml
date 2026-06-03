@@ -9,15 +9,17 @@
         usergroup_immediate_args:
           group: usergroup_immediate_test
 
+    # id -nG checks process supplementary groups, which mitogen's
+    # reset_connection doesn't reliably refresh; getent reads /etc/group.
     - name: _verify | Verify group membership after string input
-      command: id -nG
+      command: getent group usergroup_immediate_test
       register: _usergroup_immediate_groups_string
       changed_when: false
 
     - name: _verify | User belongs to the test group
       assert:
         that:
-          - "'usergroup_immediate_test' in _usergroup_immediate_groups_string.stdout.split()"
+          - ansible_user_id in _usergroup_immediate_groups_string.stdout.split(':')[-1].split(',')
 
     # Scenario 2: list input (the libvirt case)
     - name: _verify | Create a second test group
@@ -37,15 +39,20 @@
             - usergroup_immediate_test2
 
     - name: _verify | Verify group membership after list input
-      command: id -nG
+      command: getent group {{ item }}
       register: _usergroup_immediate_groups_list
       changed_when: false
+      loop:
+        - usergroup_immediate_test
+        - usergroup_immediate_test2
 
     - name: _verify | User belongs to both test groups
       assert:
         that:
-          - "'usergroup_immediate_test' in _usergroup_immediate_groups_list.stdout.split()"
-          - "'usergroup_immediate_test2' in _usergroup_immediate_groups_list.stdout.split()"
+          - ansible_user_id in item.stdout.split(':')[-1].split(',')
+      loop: "{{ _usergroup_immediate_groups_list.results }}"
+      loop_control:
+        label: "{{ item.item }}"
 
     # Scenario 3: idempotence — re-adding the same group should not change
     - name: _verify | Re-add user to the same group (idempotence)
