@@ -44,7 +44,9 @@ if [ -d "$src_dir/.git" ] &&
   echo "ZBM source at $src_dir already at v${ZBM_VERSION}, skipping clone"
 else
   # Prune any temp left by a previously-crashed clone, then clone into a fresh
-  # PID-suffixed temp and atomically swap it in (a half-clone never becomes src).
+  # PID-suffixed temp and move it into place only after the clone fully succeeds,
+  # so a half-finished clone never becomes src (a crash mid-clone leaves only the
+  # temp, pruned on the next run).
   rm -rf "${src_dir}".tmp.*
   tmp_dir="${src_dir}.tmp.$$"
   trap 'rm -rf "$tmp_dir"' EXIT INT TERM
