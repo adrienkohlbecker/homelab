@@ -474,7 +474,7 @@ HOOK
 fi
 
 cat <<EOF >/boot/efi/EFI/refind/refind.conf
-timeout 1
+timeout 3
 default_selection "Ubuntu (ZBM)"
 dont_scan_dirs /EFI/ZBM
 
