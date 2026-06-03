@@ -136,7 +136,9 @@
       command: >-
         podman exec headscale headscale preauthkeys create
         --user {{ (tailscale_users.stdout | from_json | selectattr('name', 'equalto', tailscale_headscale_user) | list | first).id }}
-        --expiration 5m -o json
+        --expiration 5m
+        --name {{ ansible_hostname }}
+        -o json
       delegate_to: "{{ tailscale_headscale_host }}"
       register: tailscale_preauth
       changed_when: false
