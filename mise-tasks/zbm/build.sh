@@ -6,6 +6,13 @@
 # We tarball both into a single artifact suitable for upload to Gitea.
 set -euo pipefail
 
+# Re-exec under `op run --` so ZBM_DROPBEAR_HOST_KEY's op:// reference (mise
+# [env]) resolves to the real recovery-SSH host private key. File-based mise
+# tasks don't get op:// auto-resolution — only toml `run` strings do.
+if [[ "${ZBM_DROPBEAR_HOST_KEY:-}" == op://* && -z "${_ZBM_OP_RESOLVED:-}" ]]; then
+  exec op run -- env _ZBM_OP_RESOLVED=1 "$0" "$@"
+fi
+
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 src_dir="${MISE_CONFIG_ROOT}/zbm-build/src"
 out_dir="${MISE_CONFIG_ROOT}/zbm-build/${arch}"
@@ -21,6 +28,18 @@ if [ ! -d "$src_dir" ]; then
   echo "ZBM source not found at $src_dir — run 'mise run zbm:builder-image' first" >&2
   exit 1
 fi
+
+# Stage the stable recovery-SSH host private key into the build dir for
+# crypt-ssh to bake in (dropbear.conf points dropbear_ed25519_key here). The
+# plaintext is gitignored and shredded on exit; only the committed .pub rides
+# in the repo. The op:// reference was resolved by the op-run re-exec above.
+host_key="${MISE_CONFIG_ROOT}/zbm/dropbear/ssh_host_ed25519_key"
+trap 'rm -f "$host_key"' EXIT
+if [ -z "${ZBM_DROPBEAR_HOST_KEY:-}" ]; then
+  echo "ZBM_DROPBEAR_HOST_KEY is unset (op:// ref in mise.toml [env]) — cannot stage the recovery host key" >&2
+  exit 1
+fi
+(umask 077 && printf '%s\n' "$ZBM_DROPBEAR_HOST_KEY" > "$host_key")
 
 # zbm-builder.sh:
 #   -b: build directory (zbm/ — contains config.yaml, dracut.conf.d/, hooks/)
