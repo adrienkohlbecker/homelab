@@ -28,9 +28,14 @@
 -- syslog severity (PRI % 8) -> OTLP severity_text/number, aligned with
 -- level_from_message.lua's SEV table (crit and worse collapse to fatal).
 local SYSLOG_SEV = {
-    [0] = { "fatal", 21 }, [1] = { "fatal", 21 }, [2] = { "fatal", 21 },
-    [3] = { "error", 17 }, [4] = { "warn", 13 },  [5] = { "info", 9 },
-    [6] = { "info", 9 },   [7] = { "debug", 5 },
+    [0] = { "fatal", 21 },
+    [1] = { "fatal", 21 },
+    [2] = { "fatal", 21 },
+    [3] = { "error", 17 },
+    [4] = { "warn", 13 },
+    [5] = { "info", 9 },
+    [6] = { "info", 9 },
+    [7] = { "debug", 5 },
 }
 
 -- Split a CEF extension blob ("k1=v1 k2=v2 ..." where values may contain
@@ -44,7 +49,9 @@ local function split_cef_ext(ext)
     local i = 1
     while true do
         local s, e, key = ext:find("([%a][%w_%.]*)=", i)
-        if not s then break end
+        if not s then
+            break
+        end
         if s == 1 or ext:sub(s - 1, s - 1) == " " then
             marks[#marks + 1] = { s = s, key = key, vstart = e + 1 }
         end
@@ -60,8 +67,7 @@ end
 
 local function parse_cef(record, cef)
     -- CEF:Version|Vendor|Product|DeviceVersion|SignatureID|Name|Severity|Extension
-    local ver, vendor, product, dver, sig, name, sev, ext =
-        cef:match("^CEF:(.-)|(.-)|(.-)|(.-)|(.-)|(.-)|(.-)|(.*)$")
+    local ver, vendor, product, dver, sig, name, sev, ext = cef:match("^CEF:(.-)|(.-)|(.-)|(.-)|(.-)|(.-)|(.-)|(.*)$")
     if not ver then
         -- Malformed CEF: keep the raw blob as the body.
         record["log"] = cef
@@ -93,7 +99,9 @@ local function parse_device_syslog(record, host, tail)
     -- The UDM repeats the hostname as the first token of the message body;
     -- drop the duplicate so the program tag leads.
     local dedup = tail:match("^" .. host:gsub("(%W)", "%%%1") .. " (.*)$")
-    if dedup then tail = dedup end
+    if dedup then
+        tail = dedup
+    end
 
     -- "<program>: <message>" -- program is "kernel" / "systemd[1]" on the
     -- gateway, or the AP/switch "mac,model-version" tag.
@@ -112,7 +120,7 @@ local function parse_device_syslog(record, host, tail)
     record["log"] = msg
 end
 
-function parse_unifi(tag, ts, group, metadata, record)
+function parse_unifi(_tag, ts, _group, metadata, record)
     local line = record["log"]
     if type(line) ~= "string" then
         return 0, ts, metadata, record

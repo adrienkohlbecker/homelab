@@ -29,7 +29,12 @@ end
 -- Numeric mapping (OTLP SEVERITY_NUMBER_*); rules below pick a
 -- severity text, this table converts to the number.
 local SEV = {
-    fatal = 21, error = 17, warn = 13, info = 9, debug = 5, trace = 1,
+    fatal = 21,
+    error = 17,
+    warn = 13,
+    info = 9,
+    debug = 5,
+    trace = 1,
 }
 
 -- Priority-ordered: first match wins. Higher-severity keywords come
@@ -45,25 +50,27 @@ local SEV = {
 -- "LOG: ... error" record still classifies as error.
 local LEVEL_RULES = {
     { keywords = { "fatal", "panic", "emerg", "crit", "critical" }, text = "fatal" },
-    { keywords = { "err", "error" },                                text = "error" },
-    { keywords = { "warn", "warning" },                             text = "warn"  },
-    { keywords = { "info", "notice" },                              text = "info"  },
-    { pattern  = "[^%w]log:",                                       text = "info"  },
-    { keywords = { "debug" },                                       text = "debug" },
-    { keywords = { "trace" },                                       text = "trace" },
+    { keywords = { "err", "error" }, text = "error" },
+    { keywords = { "warn", "warning" }, text = "warn" },
+    { keywords = { "info", "notice" }, text = "info" },
+    { pattern = "[^%w]log:", text = "info" },
+    { keywords = { "debug" }, text = "debug" },
+    { keywords = { "trace" }, text = "trace" },
 }
 
 local function match_rule(head, rule)
     if rule.keywords then
         for _, kw in ipairs(rule.keywords) do
-            if has(head, kw) then return true end
+            if has(head, kw) then
+                return true
+            end
         end
         return false
     end
     return string.find(head, rule.pattern) ~= nil
 end
 
-function set_priority(tag, ts, group, metadata, record)
+function set_priority(tag, ts, _group, metadata, record)
     metadata.otlp = metadata.otlp or {}
     if metadata.otlp.severity_text ~= nil then
         -- Upstream filter (flatten_csp.lua for CSP records) already

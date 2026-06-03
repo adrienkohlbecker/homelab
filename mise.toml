@@ -72,6 +72,9 @@ python = "3.14"
 uv = "0.9.26"
 shellcheck = "0.11.0"
 shfmt = "3.13.1"
+stylua = "2.5.2"
+# selene (Lua linter) has no short registry name; pin the aqua backend.
+"aqua:Kampfkarren/selene" = "0.31.0"
 tflint = "0.62.0"
 
 [hooks]
@@ -102,6 +105,7 @@ depends = [
   "lint:yaml",
   "lint:shell",
   "lint:shfmt",
+  "lint:lua",
   "lint:test-meta",
   "lint:topology",
 ]
@@ -152,6 +156,13 @@ run = "git ls-files -z '*.sh' | xargs -0 shellcheck"
 description = "Check shell script formatting (shfmt)"
 run = "git ls-files -z '*.sh' | xargs -0 shfmt -i 2 -d"
 
+[tasks."lint:lua"]
+description = "Lint Lua filters (stylua --check + selene)"
+run = [
+  "git ls-files -z '*.lua' | xargs -0 stylua --config-path lint/stylua.toml --check",
+  "git ls-files -z '*.lua' | xargs -0 selene --config lint/selene.toml",
+]
+
 [tasks."lint:topology"]
 description = "Validate data/network_topology.yml against its JSON Schema"
 # check-jsonschema is a project dep (not `uvx`-fetched) so `uv sync`
@@ -172,6 +183,7 @@ depends = [
   "fmt:python",
   "fmt:mise",
   "fmt:shfmt",
+  "fmt:lua",
 ]
 
 [tasks."fmt:ansible"]
@@ -197,6 +209,10 @@ run = "mise fmt"
 [tasks."fmt:shfmt"]
 description = "Format shell scripts (shfmt)"
 run = "git ls-files -z '*.sh' | xargs -0 shfmt -i 2 -w"
+
+[tasks."fmt:lua"]
+description = "Format Lua filters (stylua)"
+run = "git ls-files -z '*.lua' | xargs -0 stylua --config-path lint/stylua.toml"
 
 [tasks."tf"]
 description = "tofu (forwards subcommand + args)"

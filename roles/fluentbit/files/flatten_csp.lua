@@ -30,7 +30,9 @@
 -- LogAttribute bloat) that survive through to ClickHouse otel_logs.
 
 local function pick(t, ...)
-    if type(t) ~= "table" then return nil end
+    if type(t) ~= "table" then
+        return nil
+    end
     for _, k in ipairs({ ... }) do
         local v = t[k]
         local vtype = type(v)
@@ -64,7 +66,9 @@ local MAX_FIELD_BYTES = 1024
 -- MAX_FIELD_BYTES, walking back to drop any trailing incomplete UTF-8
 -- sequence the byte-cut may have split.
 local function scrub(s)
-    if s == nil then return nil end
+    if s == nil then
+        return nil
+    end
     s = tostring(s)
     s = s:gsub("\xE2\x80[\xAA-\xAE]", "")
     s = s:gsub("\xE2\x81[\xA6-\xA9]", "")
@@ -76,10 +80,14 @@ local function scrub(s)
         -- truncated buffer, chop from the leader onward.
         for i = #s, math.max(1, #s - 3), -1 do
             local b = s:byte(i)
-            if b < 0x80 then break end           -- ASCII; prefix complete
-            if b >= 0xC0 then                    -- multi-byte leader
+            if b < 0x80 then
+                break
+            end -- ASCII; prefix complete
+            if b >= 0xC0 then -- multi-byte leader
                 local expected = (b < 0xE0) and 2 or (b < 0xF0) and 3 or 4
-                if #s - i + 1 < expected then s = s:sub(1, i - 1) end
+                if #s - i + 1 < expected then
+                    s = s:sub(1, i - 1)
+                end
                 break
             end
             -- continuation byte; keep walking
@@ -98,13 +106,17 @@ end
 -- channel to anyone with HyperDX access. Scheme+host+path is enough
 -- to debug a CSP violation; the query string almost never is.
 local function strip_url_meta(url)
-    if url == nil or url == "" then return url end
+    if url == nil or url == "" then
+        return url
+    end
     local q = url:find("[?#]")
-    if q then return url:sub(1, q - 1) end
+    if q then
+        return url:sub(1, q - 1)
+    end
     return url
 end
 
-function flatten_csp(tag, ts, group, metadata, record)
+function flatten_csp(_tag, ts, _group, metadata, record)
     -- Every CSP report is a policy violation worth surfacing at warn.
     -- 13 is OTLP SEVERITY_NUMBER_WARN.
     metadata.otlp = metadata.otlp or {}
@@ -138,17 +150,17 @@ function flatten_csp(tag, ts, group, metadata, record)
         n[k:gsub("([a-z])([A-Z])", "%1-%2"):lower()] = v
     end
 
-    local blocked     = scrub(strip_url_meta(pick(n, "blocked-uri", "blocked-url")))
-    local document    = scrub(strip_url_meta(pick(n, "document-uri", "document-url")))
-    local violated    = scrub(pick(n, "violated-directive", "effective-directive"))
-    local effective   = scrub(pick(n, "effective-directive", "violated-directive"))
-    local policy      = scrub(pick(n, "original-policy"))
+    local blocked = scrub(strip_url_meta(pick(n, "blocked-uri", "blocked-url")))
+    local document = scrub(strip_url_meta(pick(n, "document-uri", "document-url")))
+    local violated = scrub(pick(n, "violated-directive", "effective-directive"))
+    local effective = scrub(pick(n, "effective-directive", "violated-directive"))
+    local policy = scrub(pick(n, "original-policy"))
     local disposition = scrub(pick(n, "disposition"))
-    local referrer    = scrub(strip_url_meta(pick(n, "referrer")))
+    local referrer = scrub(strip_url_meta(pick(n, "referrer")))
     local source_file = scrub(strip_url_meta(pick(n, "source-file")))
-    local sample      = scrub(pick(n, "script-sample", "sample"))
-    local line_no     = pick(n, "line-number")
-    local col_no      = pick(n, "column-number")
+    local sample = scrub(pick(n, "script-sample", "sample"))
+    local line_no = pick(n, "line-number")
+    local col_no = pick(n, "column-number")
     local status_code = pick(n, "status-code")
 
     -- Build LogAttributes as a structured key-value map. Goes through
@@ -156,28 +168,28 @@ function flatten_csp(tag, ts, group, metadata, record)
     -- LogRecord.Attributes in ClickHouse otel_logs.
     local attrs = { csp_format = format }
     local function add(key, val)
-        if val ~= nil and val ~= "" then attrs[key] = tostring(val) end
+        if val ~= nil and val ~= "" then
+            attrs[key] = tostring(val)
+        end
     end
-    add("csp_blocked_uri",         blocked)
-    add("csp_document_uri",        document)
-    add("csp_violated_directive",  violated)
+    add("csp_blocked_uri", blocked)
+    add("csp_document_uri", document)
+    add("csp_violated_directive", violated)
     add("csp_effective_directive", effective)
-    add("csp_original_policy",     policy)
-    add("csp_disposition",         disposition)
-    add("csp_referrer",            referrer)
-    add("csp_source_file",         source_file)
-    add("csp_sample",              sample)
-    add("csp_line_number",         line_no)
-    add("csp_column_number",       col_no)
-    add("csp_status_code",         status_code)
+    add("csp_original_policy", policy)
+    add("csp_disposition", disposition)
+    add("csp_referrer", referrer)
+    add("csp_source_file", source_file)
+    add("csp_sample", sample)
+    add("csp_line_number", line_no)
+    add("csp_column_number", col_no)
+    add("csp_status_code", status_code)
     metadata.otlp.attributes = attrs
 
-    return 1, ts, metadata, {
-        log = string.format(
-            "CSP %s blocked %s on %s",
-            effective or "?",
-            blocked or "?",
-            document or "?"
-        ),
-    }
+    return 1,
+        ts,
+        metadata,
+        {
+            log = string.format("CSP %s blocked %s on %s", effective or "?", blocked or "?", document or "?"),
+        }
 end
