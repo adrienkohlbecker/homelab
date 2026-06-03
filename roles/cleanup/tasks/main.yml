@@ -152,6 +152,7 @@
       name: prune_ansible_backups
       description: Prune ansible config backups older than a week
       on_calendar: "*-*-* 03:30:00"
+      persistent: false
       exec_start: /usr/local/sbin/prune_ansible_backups
   tags:
     - cleanup
