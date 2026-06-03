@@ -21,8 +21,14 @@
       dest: sort_ini_{{ sort_ini_escaped_path }}.path
 
 - name: path | Record path unit install result
+  # systemd_unit stores the install result as <unit-name>_result, sanitizing the
+  # unit name to [A-Za-z0-9_] (install.yml). Mirror that sanitization: the dest is
+  # sort_ini_<escaped>.path, and sort_ini_escaped_path keeps hyphens and the .ini
+  # dot, so the raw lookup misses the fact -- defaulting to false and silently
+  # disarming the check-mode start-skip guard below (start then fails on a cold
+  # host where check mode never wrote the unit).
   set_fact:
-    _sort_ini_path_unit_changed: "{{ vars['sort_ini_' ~ sort_ini_escaped_path ~ '_path_result'].changed | default(false) }}"
+    _sort_ini_path_unit_changed: "{{ vars[('sort_ini_' ~ sort_ini_escaped_path ~ '.path') | regex_replace('[^A-Za-z0-9_]', '_') ~ '_result'].changed | default(false) }}"
 
 - name: path | Enable sort_ini.path
   import_role:
