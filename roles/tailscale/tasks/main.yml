@@ -50,6 +50,7 @@
     name: net.ipv4.ip_forward
     value: "1"
     sysctl_file: /etc/sysctl.d/99-tailscale.conf
+    sysctl_set: true
   when: (tailscale_advertise_routes | length > 0) or (tailscale_advertise_exit_node | bool)
   become: true
   tags:
@@ -60,6 +61,7 @@
     name: net.ipv6.conf.all.forwarding
     value: "1"
     sysctl_file: /etc/sysctl.d/99-tailscale.conf
+    sysctl_set: true
   when: (tailscale_advertise_routes | length > 0) or (tailscale_advertise_exit_node | bool)
   become: true
   tags:
