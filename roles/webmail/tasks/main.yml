@@ -18,6 +18,10 @@
   tags:
     - webmail
 
+# disable_dns: false is load-bearing — it wires aardvark-dns under netavark so
+# Roundcube resolves the dovecot container by its dovecot.dns.podman FQDN (see
+# roundcube.service.j2). On the CNI backend the flag no-ops without the dnsname
+# plugin. This role is both producer and consumer of the network.
 - name: Create webmail podman network
   when: not ansible_check_mode
   containers.podman.podman_network:
@@ -56,7 +60,7 @@
     dest: /mnt/services/webmail/dovecot
     state: directory
     owner: "{{ ansible_user_id }}"
-    group: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_gid }}"
     mode: "0700"
   become: true
   tags:
@@ -181,6 +185,6 @@
       # Authelia stays mandatory and we just hand the upstream the cred. The
       # credential is non-secret by design, so it's fine inline / unvaulted.
       location_conf: |
-        proxy_set_header Authorization "Basic YXJjaGl2ZTphcmNoaXZl";
+        proxy_set_header Authorization "Basic {{ (webmail_imap_user ~ ':' ~ webmail_imap_password) | b64encode }}";
   tags:
     - webmail

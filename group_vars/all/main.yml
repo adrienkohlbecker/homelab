@@ -187,7 +187,7 @@ service_ports:
   radarr: 7878
   redis: 6379
   # Roundcube webmail (getmail archive viewer), loopback-published; Dovecot's
-  # IMAP backend stays internal to the getmail_webmail podman network and so
+  # IMAP backend stays internal to the webmail podman network and so
   # isn't registered here.
   roundcube: 8002
   # SABnzbd, loopback-published; nginx fronts it on the sabnzbd subdomain
