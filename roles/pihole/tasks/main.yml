@@ -348,6 +348,31 @@
           previous fragment was restored (or removed if newly added). Inspect
           the reload output above and roles/pihole/templates/keepalived.conf.j2.
 
+- name: Create logind conf.d directory
+  file:
+    dest: /etc/systemd/logind.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - pihole
+
+- name: Extend logind inhibitor delay for the reboot guard
+  copy:
+    content: |
+      [Login]
+      InhibitDelayMaxSec=300
+    dest: /etc/systemd/logind.conf.d/pihole_reboot_guard.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - pihole
+
 - name: Install pihole reboot guard script
   template:
     src: pihole_reboot_guard.j2

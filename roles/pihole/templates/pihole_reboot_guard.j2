@@ -7,7 +7,7 @@ set -euo pipefail
 # --force`.
 #
 # Reactive: watches keepalived journal for state transitions (BACKUP =
-# peer is MASTER = safe, instant unlock; MASTER/FAULT/STOP = probe peer).
+# peer is MASTER = safe, probe to confirm; MASTER/FAULT/STOP = probe peer).
 # Falls back to a periodic DNS probe every 30s when the journal is idle.
 #
 # Probes `pi.hole` (pihole-local, no external dependency) — if FTL answers
@@ -20,9 +20,10 @@ PEER_IPS=(
 )
 
 LOCK_PID=
+JCTL_PID=
 
 take_lock() {
-  if [ -z "$LOCK_PID" ]; then
+  if [ -z "${LOCK_PID:-}" ]; then
     systemd-inhibit \
       --what=shutdown \
       --mode=block \
@@ -30,6 +31,7 @@ take_lock() {
       --why="No healthy pihole peer — this host is the last DNS server" \
       sleep infinity &
     LOCK_PID=$!
+    echo "lock taken — no peer answered DNS" >&2
   fi
 }
 
@@ -38,12 +40,13 @@ release_lock() {
     kill "$LOCK_PID" 2>/dev/null || true
     wait "$LOCK_PID" 2>/dev/null || true
     LOCK_PID=
+    echo "lock released — peer is healthy" >&2
   fi
 }
 
 check_peers() {
   for ip in "${PEER_IPS[@]}"; do
-    if dig +timeout=3 +tries=1 "@${ip}" pi.hole >/dev/null 2>&1; then
+    if dig +timeout=3 +tries=2 "@${ip}" pi.hole >/dev/null 2>&1; then
       return 0
     fi
   done
@@ -58,26 +61,48 @@ update_lock() {
   fi
 }
 
-trap 'release_lock; exit 0' SIGTERM SIGINT
+cleanup() {
+  exec 3<&- 2>/dev/null || true
+  if [ -n "${JCTL_PID:-}" ]; then
+    kill "${JCTL_PID}" 2>/dev/null || true
+    wait "${JCTL_PID}" 2>/dev/null || true
+  fi
+  release_lock
+  exit 0
+}
+trap cleanup SIGTERM SIGINT
 
 update_lock
 
 while true; do
+  # Open a dedicated fd to journalctl so we can track and kill the process
+  # on loop restart (avoids leaking idle journalctl processes when the
+  # journal is quiet and read -t fires the timeout path).
+  exec 3< <(exec journalctl _SYSTEMD_UNIT=keepalived.service \
+    SYSLOG_IDENTIFIER=pihole-keepalived -f -n 0 -o cat 2>/dev/null)
+  JCTL_PID=$!
+
   # Read keepalived state transitions reactively. BACKUP = peer is MASTER
-  # and healthy (instant unlock). MASTER/FAULT/STOP = peer may be down
-  # (probe to confirm). `read -t 30` fires a periodic fallback probe when
-  # the journal is idle. If journalctl exits (journal rotation, unit
-  # absent), the inner loop ends and the outer loop restarts it.
-  while IFS= read -r -t 30 line; do
+  # (probe to confirm before releasing). MASTER/FAULT/STOP = peer may be
+  # down (probe to confirm). `read -t 30` fires a periodic fallback probe
+  # when the journal is idle.
+  while IFS= read -r -t 30 line <&3; do
     case "$line" in
       *BACKUP*)
-        release_lock
+        update_lock
         ;;
       *MASTER*|*FAULT*|*STOP*)
         update_lock
         ;;
     esac
-  done < <(journalctl -t pihole-keepalived -f --since=now -o cat 2>/dev/null || true)
+  done
 
+  exec 3<&-
+  kill "${JCTL_PID}" 2>/dev/null || true
+  wait "${JCTL_PID}" 2>/dev/null || true
+  JCTL_PID=
+
+  echo "journal follower exited — restarting after backoff" >&2
+  sleep 5
   update_lock
 done

@@ -3,12 +3,16 @@ Description=Pihole DNS reboot guard
 Documentation=file:///usr/local/sbin/pihole_reboot_guard
 After=network-online.target keepalived.service
 Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
 
 [Service]
 Type=exec
 ExecStart=/usr/local/sbin/pihole_reboot_guard
 Restart=always
 RestartSec=5
+TimeoutStopSec=30
+SyslogIdentifier=%N
 
 [Install]
 WantedBy=multi-user.target
