@@ -39,11 +39,12 @@ fi
   -O -v -O "$out_dir:/output" \
   -- -o /output -t "v${ZBM_VERSION}"
 
-# Components mode emits vmlin{u,uz}-bootmenu + initramfs-bootmenu.img;
-# tar them together preserving upstream names so chroot.sh can glob.
+# Both modes emit into $out_dir:
+#   Components: vmlin{u,uz}-bootmenu + initramfs-bootmenu.img
+#   EFI:        vmlinuz.EFI (unified kernel image)
 # --owner=0/--group=0 bake root:0 into the archive metadata so extracting
 # in a chroot or onto FAT32 doesn't trip "Cannot change ownership"
 # from the container's build-user uids leaking into the archive.
 tarball="zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
-(cd "$out_dir" && tar --owner=0 --group=0 -czf "$tarball" vmlin*-bootmenu initramfs-bootmenu.img)
+(cd "$out_dir" && tar --owner=0 --group=0 -czf "$tarball" vmlin*-bootmenu initramfs-bootmenu.img vmlinuz.EFI)
 sha256sum "$out_dir/$tarball"
