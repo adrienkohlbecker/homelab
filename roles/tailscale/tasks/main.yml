@@ -73,13 +73,18 @@
     - tailscale
 
 # Tailscale perf best practice for subnet routers / exit nodes on Linux 6.2+:
-# enable UDP GRO forwarding offload so WireGuard-encapsulated traffic batches
-# instead of hitting the per-packet path. Not persistent across reboots, so
-# applied on every converge. Skipped on first converge before registration
-# (tailscale0 doesn't exist yet) and in check mode.
-- name: Enable UDP GRO forwarding offload on the tailscale interface
-  command: ethtool -K tailscale0 rx-udp-gro-forwarding on rx-gro-list off
-  when: not ansible_check_mode
+# enable UDP GRO forwarding offload on the UNDERLAY NIC -- the physical device
+# that actually receives the WireGuard-encapsulated UDP -- so traffic batches
+# instead of hitting the per-packet path. It must target the physical interface,
+# NOT tailscale0 (a tun device that does no hardware offload). Not persistent
+# across reboots, so applied on every converge. failed_when:false: drivers that
+# don't support the offload (e.g. qemu virtio on the box fixture) reject it
+# harmlessly. https://tailscale.com/kb/1320/performance-best-practices
+- name: Enable UDP GRO forwarding offload on the underlay NIC
+  command: ethtool -K {{ ansible_default_ipv4.interface }} rx-udp-gro-forwarding on rx-gro-list off
+  when:
+    - not ansible_check_mode
+    - ansible_default_ipv4.interface is defined
   changed_when: false
   failed_when: false
   become: true
