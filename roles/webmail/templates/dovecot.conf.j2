@@ -42,6 +42,10 @@ mail_control_path = /state/control
 # multi-year All-Mail Maildir avoids a full rescan. Lands on the writable
 # /state volume (alongside the indexes above), never the read-only Maildir.
 mailbox_list_index = yes
+# Trust the cached list index between getmail runs instead of reconciling it
+# against the Maildir on every access: the archive is append-only and static
+# between fetches, so the periodic full syncs are wasted work here.
+mailbox_list_index_very_dirty_syncs = yes
 
 # Map the mail process to the operator who owns the Maildir (0700), so it can
 # read the archive. root setuids to this for the imap worker.

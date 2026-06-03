@@ -57,11 +57,13 @@ ExecStart=/usr/bin/podman run \
        mounting over it shadows the binary (exec: No such file or directory). #}
     --volume /mnt/services/webmail/dovecot:/state \
     --volume /mnt/services/webmail/dovecot.conf:/etc/dovecot/dovecot.conf:ro \
-    {# Startup: doveadm search gates readiness on a real mailbox scan (auth +
-       userdb + Maildir mount + index write), not just auth. Running: auth test
-       is lighter and sufficient once the mailbox was proven reachable. #}
+    {# Startup: doveadm mailbox status opens INBOX to count messages, exercising
+       the full readiness path (auth + userdb + Maildir mount + index write)
+       without materializing a guid list for every message like `search … ALL`.
+       Running: auth test is lighter and sufficient once the mailbox was proven
+       reachable. #}
     --health-cmd         '["doveadm","auth","test","{{ webmail_imap_user }}","{{ webmail_imap_password }}"]' \
-    --health-startup-cmd '["doveadm","search","-u","{{ webmail_imap_user }}","mailbox","INBOX","ALL"]' \
+    --health-startup-cmd '["doveadm","mailbox","status","-u","{{ webmail_imap_user }}","messages","INBOX"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "30s" \
