@@ -279,6 +279,8 @@
   # activation so the device state matches next-boot immediately.
   # discard=once trims the swap area once at swapon (preferred for SSDs);
   # bare discard also enables per-page TRIM which adds latency on page reuse.
+  # NOTE: only pri= and discard are forwarded here; any other custom opts
+  # (e.g. x-systemd.*) reach fstab but take effect only at next boot.
   command: swapon -p {{ _pri }} {{ '--discard=once' if 'discard=once' in _opts else ('--discard' if ',discard,' in (',' + _opts + ',') else '') }} {{ swap_partition.device }}
   register: swap_partition_swapon
   changed_when: swap_partition_swapon.rc == 0
