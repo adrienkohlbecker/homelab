@@ -109,4 +109,8 @@
       [[index]]
       url = "{{ mirror_pypi }}/simple/"
       default = true
+    # Best-effort TOML parse: tomllib is 3.11+, so the find_spec guard no-ops on
+    # jammy's 3.10 (no false-fail) and validates on noble/resolute, catching a
+    # jinja typo in mirror_pypi that would otherwise land as malformed TOML.
+    validate: python3 -c 'import sys,importlib.util; importlib.import_module("tomllib").load(open(sys.argv[1],"rb")) if importlib.util.find_spec("tomllib") else None' "%s"
   become: true
