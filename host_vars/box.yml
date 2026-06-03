@@ -189,7 +189,7 @@ homepage_netdata_hosts:
 # template gates on zfs_has_*_mount (all false on box), so it renders an
 # empty [Unit] section regardless of paths used here.
 smb_shares:
-  - name: test_share
+  - name: smbtest
     path: /tmp/samba_test
     valid users: "{{ ansible_user_id }}"
     time_machine: true

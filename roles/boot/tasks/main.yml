@@ -19,7 +19,9 @@
 # dpkg_selections sets the hold with proper check-mode and diff support.
 - name: Enumerate grub packages
   when: not grub_bootloader
-  command: dpkg-query -W -f='${binary:Package}\n' 'grub*'
+  shell:
+    executable: /bin/bash
+    cmd: set -euo pipefail; dpkg-query -W -f='${Status}\t${binary:Package}\n' 'grub*' | awk -F'\t' '/^install ok installed/ {print $2}'
   register: boot_grub_packages
   changed_when: false
   failed_when: false

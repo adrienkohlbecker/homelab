@@ -29,7 +29,10 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="speedtest" \
     --security-opt=no-new-privileges \
-    --user {{ speedtest_user.uid }}:{{ speedtest_user.group }} \
+    --uidmap=0:0:65536 \
+    --uidmap=+0:{{ speedtest_user.uid }}:1 \
+    --gidmap=0:0:65536 \
+    --gidmap=+0:{{ speedtest_user.group }}:1 \
     --env MODE=standalone \
     --env WEBPORT={{ service_ports.speedtest }} \
     --env DISABLE_IPINFO=true \

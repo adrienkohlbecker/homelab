@@ -59,4 +59,4 @@ class TestSortIni:
             text=True,
             timeout=30,
         )
-        assert "USAGE" in result.stdout
+        assert "USAGE" in result.stderr

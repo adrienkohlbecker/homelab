@@ -90,6 +90,7 @@
   ansible.builtin.stat:
     path: /boot/efi/EFI/BOOT/BOOT{{ 'AA64' if ansible_architecture == 'aarch64' else 'X64' }}.EFI
   register: packer_verify_refind_fallback
+  become: true
 
 - name: _verify | Firmware-fallback rEFInd binary present at /EFI/BOOT/
   ansible.builtin.assert:
@@ -103,6 +104,7 @@
     - /boot/efi/EFI/ZBM/initramfs-bootmenu.img
     - /boot/efi/EFI/ZBM/{{ 'vmlinux-bootmenu' if ansible_architecture == 'aarch64' else 'vmlinuz-bootmenu' }}
   register: packer_verify_zbm
+  become: true
 
 - name: _verify | ZBM artifacts present and non-empty
   ansible.builtin.assert:
