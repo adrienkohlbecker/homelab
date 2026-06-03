@@ -24,7 +24,9 @@ fi
 uncommitted=$(git diff --name-only --diff-filter=ACMR HEAD -- '*.yml' '*.yaml')
 untracked=$(git ls-files --others --exclude-standard -- '*.yml' '*.yaml')
 
-files=$(printf '%s\n%s\n%s\n' "$committed" "$uncommitted" "$untracked" | sort -u | sed '/^$/d')
+files=$(printf '%s\n%s\n%s\n' "$committed" "$uncommitted" "$untracked" \
+  | sort -u | sed '/^$/d' \
+  | while IFS= read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done)
 
 if [ -z "$files" ]; then
   echo "lint:ansible-changed: no changed YAML files."
