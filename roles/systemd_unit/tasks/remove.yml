@@ -116,7 +116,13 @@
     - systemd_unit_file.changed
     - systemd_unit_args.for is defined
   find:
-    paths: "{{ _systemd_unit_dir }}/{{ systemd_unit_args.for }}.d"
+    # dest_abs drop-ins (journald.conf.d/*, resolved.conf.d/*) live under
+    # dest_abs | dirname, not under _systemd_unit_dir/for.d. Mirror
+    # dropin.yml's path derivation so remove is symmetric with install.
+    paths: >-
+      {{ (systemd_unit_args.dest_abs | dirname)
+         if systemd_unit_args.dest_abs is defined
+         else (_systemd_unit_dir ~ '/' ~ systemd_unit_args.for ~ '.d') }}
     file_type: any
   become: true
   register: _systemd_unit_dropin_dir_contents
@@ -130,7 +136,10 @@
     - (_systemd_unit_dropin_dir_contents.files | default([])) | length == 0
     - _systemd_unit_dropin_dir_contents is not failed
   file:
-    path: "{{ _systemd_unit_dir }}/{{ systemd_unit_args.for }}.d"
+    path: >-
+      {{ (systemd_unit_args.dest_abs | dirname)
+         if systemd_unit_args.dest_abs is defined
+         else (_systemd_unit_dir ~ '/' ~ systemd_unit_args.for ~ '.d') }}
     state: absent
   become: true
 
