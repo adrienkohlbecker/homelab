@@ -54,9 +54,8 @@ systemd_timers_check() {
   # check() always succeeds so charts.d.plugin keeps the module enabled
   # even when no timers are registered yet. update() handles the empty
   # case (glob expands to no .conf files -> empty for-loop -> no output).
-  # Reads only coreutils (stat/awk/basename/date), so there is no external
-  # dependency to probe. The metadata dir is owned by ansible
-  # (systemd_timer/install.yml).
+  # Reads only coreutils (stat/awk), so there is no external dependency
+  # to probe. The metadata dir is owned by ansible (systemd_timer/install.yml).
   return 0
 }
 
@@ -70,23 +69,30 @@ systemd_timers_create() {
   return 0
 }
 
+# _systemd_timers_seen maps name → safe-name; populated on first observation.
+# Per-process state (sourced once by charts.d.plugin); safe-name is cached
+# so the _systemd_timers_safe tr subshell runs only once per timer lifetime.
 declare -A _systemd_timers_seen
 
 systemd_timers_update() {
   local f name period installed last age overdue safe now
   declare -A present
-  now=$(date +%s)
+  # $EPOCHSECONDS is a bash 5.0+ built-in; jammy ships bash 5.1, noble 5.2.
+  now=$EPOCHSECONDS
   for f in "${systemd_timers_meta_dir}"/*.conf; do
     [ -f "$f" ] || continue
-    name=$(basename "$f" .conf)
+    # Pure-bash basename equivalent -- no subprocess.
+    name="${f##*/}"; name="${name%.conf}"
     period=$(awk -F= '$1=="period_secs"{print $2+0; exit}' "$f")
     if [ -z "$period" ] || [ "$period" -le 0 ]; then
       error "systemd_timers: $f missing or invalid period_secs"
       continue
     fi
     present[$name]=1
-    safe=$(_systemd_timers_safe "$name")
     if [ -z "${_systemd_timers_seen[$name]:-}" ]; then
+      # Compute and cache safe name on first observation only.
+      safe=$(_systemd_timers_safe "$name")
+      _systemd_timers_seen[$name]="$safe"
       cat <<EOF
 CHART systemd_timers.${safe} '' "systemd timer freshness: ${name}" "secs" systemd_timers systemd.timer_lag area ${systemd_timers_priority} ${systemd_timers_update_every}
 CLABEL timer "${name}" 1
@@ -94,8 +100,8 @@ CLABEL_COMMIT
 DIMENSION age_secs '' absolute 1 1
 DIMENSION overdue '' absolute 1 1
 EOF
-      _systemd_timers_seen[$name]=1
     fi
+    safe="${_systemd_timers_seen[$name]}"
     installed=$(stat -c %Y "$f" 2>/dev/null || echo "$now")
     last=$(_systemd_timers_last_trigger_epoch "$name")
     if [ "$last" -gt 0 ]; then
@@ -125,7 +131,7 @@ EOF
   # the key snapshot makes the in-loop unset safe.
   for name in "${!_systemd_timers_seen[@]}"; do
     [ -n "${present[$name]:-}" ] && continue
-    safe=$(_systemd_timers_safe "$name")
+    safe="${_systemd_timers_seen[$name]}"
     cat <<EOF
 CHART systemd_timers.${safe} '' "systemd timer freshness: ${name}" "secs" systemd_timers systemd.timer_lag area ${systemd_timers_priority} ${systemd_timers_update_every} obsolete
 EOF
