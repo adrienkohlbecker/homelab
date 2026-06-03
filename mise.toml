@@ -54,6 +54,12 @@ HCLOUD_TOKEN_OP = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
 QEMU_DIR = '{{vars.qemu_dir}}'
 ZBM_VERSION = "3.1.0"
+# Stable ed25519 host key for the ZBM recovery Dropbear server, staged into the
+# build by mise-tasks/zbm/build.sh (which re-execs under `op run --` to resolve
+# this op:// reference; mise exports the literal string to file-based tasks
+# otherwise). The public half is committed at zbm/dropbear/ssh_host_ed25519_key.pub
+# for known_hosts pinning.
+ZBM_DROPBEAR_HOST_KEY = "op://Lab/hxad25fxm2gfulafg23b6sv33e/private key"
 # Home Assistant long-lived access token -- consumed by mise-tasks/ha/sync.py
 # to call /api/services/<domain>/reload after pushing the GUI YAML. Minted
 # in HA UI under Profile > Security > Long-Lived Access Tokens. The
