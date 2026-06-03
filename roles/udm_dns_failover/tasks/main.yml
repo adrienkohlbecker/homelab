@@ -20,9 +20,10 @@
       - pihole_keepalived_peers is defined
       - (pihole_keepalived_peers | length) > 0
       - inventory_hostname in external_ips
+      - udm_dns_failover_heartbeat_url is defined
     fail_msg: >-
-      udm_dns_failover requires pihole_keepalived_{ip,vrid,priority,peers}
-      and an external_ips entry for this host.
+      udm_dns_failover requires pihole_keepalived_{ip,vrid,priority,peers},
+      an external_ips entry, and udm_dns_failover_heartbeat_url.
   tags:
     - udm_dns_failover
 
@@ -222,8 +223,57 @@
   tags:
     - udm_dns_failover
 
+- name: Deploy heartbeat service
+  template:
+    src: udm_keepalived_heartbeat.service.j2
+    dest: /data/keepalived/udm_keepalived_heartbeat.service
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: udm_dns_failover_heartbeat_service
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Deploy heartbeat timer
+  copy:
+    src: udm_keepalived_heartbeat.timer
+    dest: /data/keepalived/udm_keepalived_heartbeat.timer
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: udm_dns_failover_heartbeat_timer
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Symlink heartbeat service
+  file:
+    src: /data/keepalived/udm_keepalived_heartbeat.service
+    dest: /etc/systemd/system/udm_keepalived_heartbeat.service
+    state: link
+    force: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Symlink heartbeat timer
+  file:
+    src: /data/keepalived/udm_keepalived_heartbeat.timer
+    dest: /etc/systemd/system/udm_keepalived_heartbeat.timer
+    state: link
+    force: true
+  become: true
+  tags:
+    - udm_dns_failover
+
 - name: Reload systemd
-  when: udm_dns_failover_onboot_unit.changed
+  when: >-
+    udm_dns_failover_onboot_unit.changed or
+    udm_dns_failover_heartbeat_service.changed or
+    udm_dns_failover_heartbeat_timer.changed
   systemd:
     daemon_reload: true
   become: true
@@ -244,6 +294,15 @@
   systemd:
     name: keepalived.service
     state: "{{ (udm_dns_failover_base_conf.changed or udm_dns_failover_vrrp_conf.changed) | ternary('reloaded', 'started') }}"
+    enabled: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Enable heartbeat timer
+  systemd:
+    name: udm_keepalived_heartbeat.timer
+    state: started
     enabled: true
   become: true
   tags:
