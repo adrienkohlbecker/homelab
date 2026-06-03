@@ -1,0 +1,87 @@
+- name: _verify | Read login shell for {{ ansible_user_id }}
+  command: getent passwd {{ ansible_user_id }}
+  changed_when: false
+  register: _user_getent
+
+- name: _verify | Login shell is zsh
+  assert:
+    that:
+      - _user_getent.stdout.endswith('/zsh')
+    fail_msg: >-
+      Expected login shell /bin/zsh,
+      got {{ _user_getent.stdout.split(':')[-1] | default('') }}
+
+- name: _verify | Read supplementary groups
+  command: id -nG {{ ansible_user_id }}
+  changed_when: false
+  register: _user_groups
+
+- name: _verify | Member of adm and kvm groups
+  assert:
+    that:
+      - "'adm' in _user_groups.stdout.split()"
+      - "'kvm' in _user_groups.stdout.split()"
+    fail_msg: >-
+      Expected adm and kvm in supplementary groups,
+      got {{ _user_groups.stdout | default('') }}
+
+- name: _verify | Ghostty terminfo is compiled
+  command: infocmp xterm-ghostty
+  changed_when: false
+
+- name: _verify | Passwordless sudo works
+  command: sudo -n true
+  changed_when: false
+
+- name: _verify | Mise binary runs
+  command: "{{ ansible_user_dir }}/.local/share/mise/bin/mise --version"
+  changed_when: false
+  register: _user_mise_version
+
+- name: _verify | Mise version matches pin
+  assert:
+    that:
+      - user_mise_version in _user_mise_version.stdout
+    fail_msg: >-
+      Expected mise {{ user_mise_version }},
+      got {{ _user_mise_version.stdout | default('') }}
+
+- name: _verify | Dotfiles deployed (zshrc is a symlink)
+  stat:
+    path: "{{ ansible_user_dir }}/.zshrc"
+  register: _user_zshrc
+
+- name: _verify | .zshrc is a symlink from stow
+  assert:
+    that:
+      - _user_zshrc.stat.exists
+      - _user_zshrc.stat.islnk
+    fail_msg: >-
+      Expected ~/.zshrc to be a symlink (stow deploy),
+      got exists={{ _user_zshrc.stat.exists | default(false) }}
+      islnk={{ _user_zshrc.stat.islnk | default(false) }}
+
+- name: _verify | Gitconfig.local has correct email  # noqa: command-instead-of-module
+  command: git config --file {{ ansible_user_dir }}/.gitconfig.local user.email
+  changed_when: false
+  register: _user_git_email
+
+- name: _verify | Gitconfig email matches root_email
+  assert:
+    that:
+      - _user_git_email.stdout == root_email
+    fail_msg: >-
+      Expected git user.email={{ root_email }},
+      got {{ _user_git_email.stdout | default('') }}
+
+- name: _verify | 1Password CLI is installed
+  command: op --version
+  changed_when: false
+  register: _user_op_version
+
+- name: _verify | Op version is non-empty
+  assert:
+    that:
+      - _user_op_version.stdout | length > 0
+    fail_msg: >-
+      op --version produced no output

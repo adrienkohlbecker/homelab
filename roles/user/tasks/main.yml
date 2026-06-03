@@ -1,9 +1,10 @@
-- name: Install gpg
-  apt:
-    pkg: gpg
-    cache_valid_time: 3600
-  become: true
-  register: user_apt_gpg
+- name: Validate required inputs
+  assert:
+    that:
+      - ssh_public_keys is defined and ssh_public_keys | length > 0
+      - root_email is defined and root_email | length > 0
+    fail_msg: >-
+      ssh_public_keys and root_email must be set in host_vars/group_vars.
   tags:
     - user
 
@@ -21,6 +22,7 @@
       - fdupes
       - git
       - git-lfs
+      - gpg
       - gparted
       - htop
       - iotop
@@ -60,6 +62,7 @@
       - zsh
     cache_valid_time: 3600
   become: true
+  register: user_apt_packages
   tags:
     - user
 
@@ -83,24 +86,14 @@
 
 # adm owns most of /var/log (syslog, auth.log, journal via systemd-journal),
 # so membership lets the operator tail logs over SSH without sudo -- the
-# diagnostic reads CLAUDE.md treats as pre-authorized. append is load-bearing:
-# without it `groups:` replaces the supplementary set and would strip sudo.
-- name: Add the operator to the adm group (read /var/log without sudo)
+# diagnostic reads CLAUDE.md treats as pre-authorized. kvm owns /dev/kvm,
+# so membership lets the operator boot qemu VMs (test harness, ad-hoc libvirt)
+# without sudo. append is load-bearing: without it `groups:` replaces the
+# supplementary set and would strip sudo.
+- name: Add the operator to the adm and kvm groups
   user:
     name: "{{ ansible_user_id }}"
-    groups: adm
-    append: true
-  become: true
-  tags:
-    - user
-
-# kvm owns /dev/kvm, so membership lets the operator boot qemu VMs -- the
-# test harness (test/testrole.py) and ad-hoc libvirt VMs -- without sudo.
-# Same append rationale as adm above.
-- name: Add the operator to the kvm group (run qemu/the test harness without sudo)
-  user:
-    name: "{{ ansible_user_id }}"
-    groups: kvm
+    groups: [adm, kvm]
     append: true
   become: true
   tags:
@@ -188,6 +181,16 @@
     owner: "{{ ansible_user_id }}"
     group: "{{ ansible_user_id }}"
     backup: true
+    validate: git config --file %s --list
+  tags:
+    - user
+
+- name: Check for the commit-signing GPG key
+  command: gpg --list-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
+  register: user_gpg_check
+  failed_when: false
+  changed_when: false
+  check_mode: false
   tags:
     - user
 
@@ -196,13 +199,15 @@
 # resolves to an AAAA the host can't route (the qemu test net has no IPv6
 # route) instead of falling back. curl rides 443 and happy-eyeballs to IPv4.
 - name: Import the commit-signing public key
-  when: not (ansible_check_mode and user_apt_gpg.changed)
+  when:
+    - user_gpg_check.rc != 0
+    - not (ansible_check_mode and user_apt_packages.changed)
   shell: |
     set -euo pipefail
-    curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xC248DE6357445D6302F9A62E74BFD03C20CC21AF" | gpg --import
+    curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xC248DE6357445D6302F9A62E74BFD03C20CC21AF" | gpg --batch --import
   args:
-    creates: "{{ ansible_user_dir }}/.gnupg/pubring.kbx"
     executable: /bin/bash
+  changed_when: true
   register: user_gpg_import
   until: user_gpg_import.rc == 0
   retries: 3
@@ -220,55 +225,15 @@
   tags:
     - user
 
-# One-time migration off the legacy bare-repo model. Older hosts have ~/.dotfiles
-# as a *bare* repo (no .git subdir) with real files reset --hard'd into $HOME;
-# stow can't symlink over those. When that layout is detected, delete the
-# bare-repo-deployed files (recoverable from the repo) and the bare repo itself,
-# so the clone + stow below install the symlinked layout cleanly. Fresh hosts
-# (~/.dotfiles absent) and already-migrated hosts (~/.dotfiles/.git present) skip
-# this, so it fires at most once per host and never on the test fixtures.
-- name: Stat dotfiles dir + its .git
-  stat:
-    path: "{{ ansible_user_dir }}/{{ item }}"
-  loop:
-    - .dotfiles
-    - .dotfiles/.git
-  register: user_dotfiles_stat
-  tags:
-    - user
-
-- name: Migrate off the legacy bare dotfiles repo
-  when:
-    - user_dotfiles_stat.results[0].stat.exists
-    - not user_dotfiles_stat.results[1].stat.exists
-  tags:
-    - user
-  block:
-    - name: List files the legacy bare repo deployed into $HOME  # noqa: command-instead-of-module
-      command: git -C {{ ansible_user_dir }} --git-dir={{ ansible_user_dir }}/.dotfiles --work-tree={{ ansible_user_dir }} ls-files
-      register: user_legacy_files
-      changed_when: false
-      check_mode: false
-
-    - name: Remove legacy-deployed real files ($HOME) — stow re-links them below
-      file:
-        path: "{{ ansible_user_dir }}/{{ item }}"
-        state: absent
-      loop: "{{ user_legacy_files.stdout_lines }}"
-      loop_control:
-        label: "{{ item }}"
-
-    - name: Remove the legacy bare repo
-      file:
-        path: "{{ ansible_user_dir }}/.dotfiles"
-        state: absent
-
-- name: Clone dotfiles repo  # noqa: command-instead-of-module
-  command: git clone https://github.com/adrienkohlbecker/dotfiles.git .dotfiles
-  args:
-    chdir: "{{ ansible_user_dir }}"
-    creates: "{{ ansible_user_dir }}/.dotfiles/.git"
+- name: Clone dotfiles repo  # noqa: latest[git]
+  git:
+    repo: "{{ mirror_github }}/adrienkohlbecker/dotfiles.git"
+    dest: "{{ ansible_user_dir }}/.dotfiles"
+    update: false
   register: user_dotfiles_clone
+  until: user_dotfiles_clone is not failed
+  retries: 3
+  delay: 5
   tags:
     - user
 
@@ -281,31 +246,45 @@
   tags:
     - user
 
-- name: Create mise parent directory
-  when: user_mise_version not in user_mise_check.stdout
+- name: Set mise upgrade flag
+  set_fact:
+    user_mise_needs_upgrade: "{{ user_mise_check.stdout is not defined or (user_mise_check.stdout.split()[0] | default('')) != user_mise_version }}"
+  tags:
+    - user
+
+- name: Create mise directories
+  when: user_mise_needs_upgrade
   file:
-    path: "{{ ansible_user_dir }}/.local/share"
+    path: "{{ item }}"
     state: directory
     owner: "{{ ansible_user_id }}"
     group: "{{ ansible_user_id }}"
     mode: "0755"
-  register: user_mise_dir
+  loop:
+    - "{{ ansible_user_dir }}/.local/share"
+    - "{{ ansible_user_dir }}/.local/bin"
+    - "{{ ansible_user_dir }}/.local/share/mise/completions"
+  register: user_mise_dirs
   tags:
     - user
 
 - name: Download mise archive
-  when: user_mise_version not in user_mise_check.stdout
+  when: user_mise_needs_upgrade
   check_mode: false
   get_url:
     url: "{{ user_mise_release[ansible_architecture].url }}"
     checksum: "sha256:{{ user_mise_release[ansible_architecture].sha256 }}"
     dest: /tmp/mise-{{ user_mise_version }}.tar.gz
     mode: "0644"
+  register: user_mise_download
+  until: user_mise_download is not failed
+  retries: 3
+  delay: 5
   tags:
     - user
 
 - name: Install mise binary
-  when: not (ansible_check_mode and user_mise_dir.changed) and user_mise_version not in user_mise_check.stdout
+  when: user_mise_needs_upgrade and not (ansible_check_mode and user_mise_dirs.changed)
   unarchive:
     src: /tmp/mise-{{ user_mise_version }}.tar.gz
     remote_src: true
@@ -315,18 +294,8 @@
   tags:
     - user
 
-- name: Create ~/.local/bin directory
-  file:
-    path: "{{ ansible_user_dir }}/.local/bin"
-    state: directory
-    owner: "{{ ansible_user_id }}"
-    group: "{{ ansible_user_id }}"
-    mode: "0755"
-  tags:
-    - user
-
 - name: Symlink mise binary into ~/.local/bin
-  when: not (ansible_check_mode and user_mise_dir.changed)
+  when: not (ansible_check_mode and user_mise_dirs.changed)
   file:
     src: "{{ ansible_user_dir }}/.local/share/mise/bin/mise"
     dest: "{{ ansible_user_dir }}/.local/bin/mise"
@@ -336,19 +305,8 @@
   tags:
     - user
 
-- name: Create mise completions directory
-  when: user_mise_version not in user_mise_check.stdout
-  file:
-    path: "{{ ansible_user_dir }}/.local/share/mise/completions"
-    state: directory
-    owner: "{{ ansible_user_id }}"
-    group: "{{ ansible_user_id }}"
-    mode: "0755"
-  tags:
-    - user
-
 - name: Generate mise zsh completions
-  when: user_mise_version not in user_mise_check.stdout
+  when: user_mise_needs_upgrade
   shell: |
     set -euo pipefail
     {{ ansible_user_dir }}/.local/share/mise/bin/mise completion zsh > {{ ansible_user_dir }}/.local/share/mise/completions/_mise
@@ -359,7 +317,7 @@
     - user
 
 - name: Delete mise archive
-  when: user_mise_version not in user_mise_check.stdout
+  when: user_mise_needs_upgrade
   file:
     path: /tmp/mise-{{ user_mise_version }}.tar.gz
     state: absent
@@ -384,6 +342,8 @@
     executable: /bin/bash
     chdir: "{{ ansible_user_dir }}/.dotfiles"
     creates: "{{ ansible_user_dir }}/.zshrc"
+  environment:
+    MISE_YES: "1"
   tags:
     - user
 
@@ -413,6 +373,7 @@
   # volume. Reading via lookup keeps the token out of argv.
   environment:
     GITHUB_TOKEN: "{{ lookup('env', 'GITHUB_TOKEN') | default('', true) }}"
+    MISE_YES: "1"
   register: user_mise_tools
   changed_when: "'CHANGED' in user_mise_tools.stdout"
   tags:
@@ -433,7 +394,7 @@
   tags:
     - user
 
-- name: Install packages
+- name: Install 1Password CLI
   when: not (ansible_check_mode and apt_source_1password_changed)
   apt:
     pkg:
