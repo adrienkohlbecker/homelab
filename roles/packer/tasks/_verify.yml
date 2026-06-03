@@ -593,6 +593,7 @@
 
 - name: _verify | X86_64-only assertions
   when: ansible_architecture == "x86_64"
+  become: true
   block:
     - name: _verify | Stat /EFI/Linux on x86_64
       stat:
