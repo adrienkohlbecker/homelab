@@ -78,10 +78,11 @@
 # enable UDP GRO forwarding offload on the UNDERLAY NIC -- the physical device
 # that actually receives the WireGuard-encapsulated UDP -- so traffic batches
 # instead of hitting the per-packet path. It must target the physical interface,
-# NOT tailscale0 (a tun device that does no hardware offload). Not persistent
-# across reboots, so applied on every converge. failed_when:false: drivers that
-# don't support the offload (e.g. qemu virtio on the box fixture) reject it
-# harmlessly. https://tailscale.com/kb/1320/performance-best-practices
+# NOT tailscale0 (a tun device that does no hardware offload). Applied on every
+# converge for immediate effect; the tailscaled-gro.conf drop-in (installed
+# below) persists it across reboots via ExecStartPost=. failed_when:false:
+# drivers that don't support the offload (e.g. qemu virtio on the box fixture)
+# reject it harmlessly. https://tailscale.com/kb/1320/performance-best-practices
 - name: Enable UDP GRO forwarding offload on the underlay NIC
   command: ethtool -K {{ ansible_default_ipv4.interface }} rx-udp-gro-forwarding on rx-gro-list off
   when:
@@ -90,5 +91,19 @@
   changed_when: false
   failed_when: false
   become: true
+  tags:
+    - tailscale
+
+- name: Install tailscaled GRO offload drop-in for reboot persistence
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      src: tailscaled-gro.conf.j2
+      for: tailscaled.service
+  when:
+    - ansible_default_ipv4.interface is defined
+    - (tailscale_advertise_routes | length > 0) or (tailscale_advertise_exit_node | bool)
   tags:
     - tailscale
