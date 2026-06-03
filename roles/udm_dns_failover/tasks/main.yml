@@ -329,11 +329,45 @@
 
 - name: Validate keepalived config before start
   when: not ansible_check_mode
-  command: keepalived -t -f /etc/keepalived/keepalived.conf
-  changed_when: false
-  become: true
   tags:
     - udm_dns_failover
+  block:
+    - name: Run keepalived -t on the assembled config
+      command: keepalived -t -f /etc/keepalived/keepalived.conf
+      changed_when: false
+      become: true
+  rescue:
+    # keepalived -t reads the assembled config in place, so the bad file is
+    # already on persistent /data -- which the on-boot recovery re-applies on
+    # every boot. Restore the previous version from the backup the copy/
+    # template made so a SIGHUP-reload or boot-time start can't pick it up
+    # (mirrors roles/keepalived/tasks/main.yml).
+    - name: Restore previous VRRP fragment after failed validation  # noqa: require-backup
+      when: '"backup_file" in udm_dns_failover_vrrp_conf'
+      copy:
+        remote_src: true
+        src: "{{ udm_dns_failover_vrrp_conf.backup_file }}"
+        dest: /data/keepalived/pihole.conf
+        owner: root
+        group: root
+        mode: "0640"
+      become: true
+    - name: Restore previous base config after failed validation  # noqa: require-backup
+      when: '"backup_file" in udm_dns_failover_base_conf'
+      copy:
+        remote_src: true
+        src: "{{ udm_dns_failover_base_conf.backup_file }}"
+        dest: /data/keepalived/keepalived.conf
+        owner: root
+        group: root
+        mode: "0640"
+      become: true
+    - name: Fail after restoring keepalived config
+      fail:
+        msg: >-
+          keepalived -t failed on the assembled config; the previous configs
+          were restored from backup. Inspect the validate output above --
+          /data/keepalived/pihole.conf or keepalived.conf is malformed.
 
 - name: Start keepalived
   systemd:
