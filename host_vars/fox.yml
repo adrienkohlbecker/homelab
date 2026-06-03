@@ -118,10 +118,7 @@ netdata_contexts:
   systemd_service: systemd.service.cpu.utilization
   uptime:          system.uptime
 netdata_collectors:
-  # No chrony collector: the ntp role sets `cmdport 0` (closes chrony's
-  # loopback UDP control port), and go.d's chrony module is UDP-only -- it
-  # can never register. Clock-sync is covered by timex.conf's un-silenced
-  # system_clock_sync_state alarm, which needs no command port.
+  # No chrony: ntp cmdport=0 blocks go.d UDP-only collector (timex alarm covers clock-sync).
   - go.d:collector:docker:local
   - go.d:collector:fail2ban:fail2ban
   - go.d:collector:logind:logind
