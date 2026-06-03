@@ -116,17 +116,83 @@
   when:
     - nexus_url | length > 0
     - etc_hosts_entries | default({}) | length > 0
-  command: getent hosts '{{ item.key }}'
+  # argv form (no shell, no quoting around the hostname) + an exact match on a
+  # whitespace-split field: a substring `in stdout` would let a configured
+  # 10.0.0.1 pass against a resolved 10.0.0.10.
+  command:
+    argv:
+      - getent
+      - hosts
+      - "{{ item.key }}"
   loop: "{{ etc_hosts_entries | default({}) | dict2items }}"
   register: test_getent
   changed_when: false
-  failed_when: test_getent.rc != 0 or item.value not in test_getent.stdout
+  failed_when: test_getent.rc != 0 or item.value not in test_getent.stdout.split()
+  loop_control:
+    label: "{{ item.key }} -> {{ item.value }}"
 
 - name: _verify | Apt update reaches configured mirror
   apt:
     update_cache: true
     cache_valid_time: 0
   become: true
+
+# Functional mirror probes: the slurp+substring asserts above prove the config
+# files name Nexus, but not that the mirror actually serves -- the registries.conf
+# path layout in particular is subtle (the docker v2 API lives only under
+# /repository/<repo>/v2/, see mirrors.yml). Hit each mirror's API so a
+# parses-but-404s mirror fails here, the way the apt update above does for apt.
+- name: _verify | Podman docker.io mirror serves its v2 API
+  when: nexus_url | length > 0
+  uri:
+    # nexus_url is a bare host (the registries.conf mirror location, where podman
+    # supplies the scheme); add https:// for a direct probe. validate_certs:false
+    # -- this checks the mirror *serves*, not its cert, on a throwaway VM.
+    url: "https://{{ nexus_url }}/repository/docker.io/v2/"
+    validate_certs: false
+    # Nexus answers the v2 root 200 (anonymous) or 401 (auth-gated); a 404 means
+    # the mirror location the registries.conf points at doesn't exist.
+    status_code: [200, 401]
+    timeout: 15
+  register: test_podman_mirror
+
+- name: _verify | PyPI mirror serves a known package index
+  when: nexus_url | length > 0
+  uri:
+    # mirror_pypi already carries https://. Probe a package that always exists
+    # rather than the bare /simple/ root (whose response varies by Nexus config).
+    url: "{{ mirror_pypi }}/simple/pip/"
+    validate_certs: false
+    status_code: [200, 301, 302]
+    timeout: 15
+  register: test_pypi_mirror
+
+# DNS-over-TLS verification: mirrors.yml forces DoT so every query rides TCP
+# (the qemu SLIRP UDP-drop class of flakes). A stat of the drop-in would be a
+# tautology -- assert the *running* resolver state instead, scoped to the Global
+# Protocols line (driven by resolved.conf.d/) the way roles/resolved does.
+- name: _verify | Read resolvectl status
+  command: resolvectl status
+  register: test_resolvectl
+  changed_when: false
+  become: true
+
+- name: _verify | Isolate the Global Protocols line
+  set_fact:
+    test_resolvectl_global_protocols: >-
+      {{ test_resolvectl.stdout_lines
+         | select('search', 'Protocols:') | list | first | default('') }}
+
+- name: _verify | DNS-over-TLS is enforced at the configured resolver
+  assert:
+    that:
+      - "'+DNSOverTLS' in test_resolvectl_global_protocols"
+      - bootstrap_dns_resolver in test_resolvectl.stdout
+    fail_msg: >-
+      systemd-resolved isn't enforcing DNS-over-TLS via {{ bootstrap_dns_resolver }};
+      the 10-test-dns-over-tls.conf drop-in didn't take effect, so queries can fall
+      back to UDP and revive the SLIRP UDP-drop flakes it exists to prevent. Global
+      Protocols line: {{ test_resolvectl_global_protocols }}
 
 # nginx fixture: snakeoil certs + prod roles/nginx tasks_from: install.
 
@@ -170,9 +236,19 @@
     or test_nginx_unit.status.ActiveState != "active"
   become: true
 
-- name: _verify | Nginx TLS listener responds
+# Functional liveness over the loopback stub_status drop (roles/nginx install
+# lands it): a plain-HTTP 127.0.0.1 probe sidesteps the SNI trap an
+# https://localhost/ probe hits on OpenSSL 3.x (noble/resolute reject SNI that
+# matches no server_name), and asserting the body proves nginx is actually
+# serving rather than accepting any of a broad status set. The TLS config itself
+# is covered by the nginx.conf directive grep above + the unit-active check (the
+# install's nginx -t won't start the service unless the cert loads).
+- name: _verify | Nginx stub_status serves on loopback
   uri:
-    url: https://localhost/
-    validate_certs: false
-    status_code: [200, 301, 302, 403, 404]
-  register: test_nginx_http
+    url: http://127.0.0.1/nginx_status
+    return_content: true
+    status_code: 200
+  register: test_nginx_status
+  failed_when: >-
+    test_nginx_status.status != 200
+    or 'Active connections' not in (test_nginx_status.content | default(''))
