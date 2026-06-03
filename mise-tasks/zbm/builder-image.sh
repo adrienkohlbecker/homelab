@@ -43,7 +43,7 @@ git clone --depth 1 --branch "v${ZBM_VERSION}" https://github.com/zbm-dev/zfsboo
 export DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
 docker buildx build \
   --build-arg "XBPS_REPOS=${xbps_repo}" \
-  --build-arg "PACKAGES=mdadm" \
+  --build-arg "PACKAGES=mdadm nvme-cli" \
   --load \
   --tag "localhost/zbm-builder:v${ZBM_VERSION}-${arch}" \
   -f "$src_dir/releng/docker/Dockerfile" \
