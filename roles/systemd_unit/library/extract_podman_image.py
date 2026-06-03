@@ -91,8 +91,9 @@ def _parse_run_help():
             capture_output=True,
             text=True,
             check=False,
+            timeout=10,
         )
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError, subprocess.TimeoutExpired):
         return flags_no_value
     for line in result.stdout.splitlines():
         m = _HELP_LINE.match(line)
@@ -163,6 +164,9 @@ def _get_properties(unit_path, props):
         capture_output=True,
         text=True,
         check=False,
+        # --timeout=5 is inert for get-property (only applies to busctl call);
+        # Python-level timeout is the real guard against a hung D-Bus.
+        timeout=10,
     )
     if result.returncode != 0:
         return {}
