@@ -84,7 +84,6 @@
     - name: register | Ensure the headscale user for this node exists
       command: podman exec headscale headscale users create {{ tailscale_headscale_user }}
       delegate_to: "{{ tailscale_headscale_host }}"
-      register: tailscale_user_create
       changed_when: false
       failed_when: false
 
@@ -111,6 +110,17 @@
           converged and up before {{ inventory_hostname }} can register: this
           path mints its pre-auth key and approves routes by delegating to
           {{ tailscale_headscale_host }}. Converge fox/headscale there first.
+
+    - name: register | Assert the headscale user for this node exists exactly once
+      assert:
+        that:
+          - (tailscale_users.stdout | from_json | selectattr('name', 'equalto', tailscale_headscale_user) | list | length) == 1
+        fail_msg: >-
+          headscale user {{ tailscale_headscale_user }} is not present exactly once
+          on {{ tailscale_headscale_host }}. The `users create` above swallows all
+          errors (benign only for already-exists), so a real failure (permissions,
+          gRPC error) surfaces here instead of as an opaque empty-list crash at the
+          user-id lookup below.
 
     - name: register | Mint a single-use pre-auth key
       command: >-
@@ -258,6 +268,7 @@
   until: >-
     ansible_check_mode
     or ((tailscale_nodes.stdout | default('[]') | from_json)
+        | selectattr('user.name', 'equalto', tailscale_headscale_user)
         | selectattr('given_name', 'equalto', ansible_hostname | lower) | list | length > 0)
   become: true
   tags:
@@ -267,14 +278,20 @@
 # phase, where `tailscale up` is skipped) yields an empty dict instead of an
 # undefined-var error in the tasks below. ansible_hostname | lower: headscale
 # sanitizes given_name to lowercase, so an exact-case match would miss a node on
-# any mixed-case host (e.g. DSM reports bunk's host as "Bunk").
+# any mixed-case host (e.g. DSM reports bunk's host as "Bunk"). Scope to this
+# host's headscale user first: prod hosts share one user (servers), so given_name
+# disambiguates within it, but a same-named node under a DIFFERENT user must not
+# bind -- approve-routes replaces the whole approved set, so a wrong match is
+# destructive.
 - name: register | Resolve this host's headscale node
   set_fact:
     tailscale_node_matches: >-
       {{ (tailscale_nodes.stdout | from_json)
+         | selectattr('user.name', 'equalto', tailscale_headscale_user)
          | selectattr('given_name', 'equalto', ansible_hostname | lower) | list }}
     tailscale_node: >-
       {{ (tailscale_nodes.stdout | from_json)
+         | selectattr('user.name', 'equalto', tailscale_headscale_user)
          | selectattr('given_name', 'equalto', ansible_hostname | lower)
          | list | first | default({}) }}
   tags:
