@@ -94,28 +94,18 @@
   delay: 2
   until: pihole_verify_admin.status in [200, 301, 302]
 
-# The admin subdomain's bare / is an exact-match `location = /` that 302s
-# to /admin/ (nginx_site_args.server_conf) before auth_request runs -- no
-# Authelia involvement. Guards that redirect block.
 - name: _verify | Reboot guard service is active
   systemd:
     name: pihole_reboot_guard.service
   register: _pihole_verify_reboot_guard
+  failed_when: _pihole_verify_reboot_guard.status.ActiveState != 'active'
   become: true
-
-- name: _verify | Reboot guard service is running
-  assert:
-    that:
-      - _pihole_verify_reboot_guard.status.ActiveState == 'active'
-    fail_msg: >-
-      pihole_reboot_guard.service is {{ _pihole_verify_reboot_guard.status.ActiveState }},
-      expected active
 
 - name: _verify | Reboot guard holds the inhibitor lock (peers unreachable on test fixture)
   shell:
     cmd: >-
       set -euo pipefail;
-      systemd-inhibit --list 2>/dev/null | grep -c pihole_reboot_guard || echo 0
+      systemd-inhibit --list --no-legend 2>/dev/null | grep -c pihole_reboot_guard || echo 0
     executable: /bin/bash
   register: _pihole_verify_inhibitor
   changed_when: false
@@ -124,6 +114,9 @@
   until: (_pihole_verify_inhibitor.stdout | trim | int) > 0
   become: true
 
+# The admin subdomain's bare / is an exact-match `location = /` that 302s
+# to /admin/ (nginx_site_args.server_conf) before auth_request runs -- no
+# Authelia involvement. Guards that redirect block.
 - name: _verify | Admin subdomain root redirects to /admin/
   uri:
     url: https://localhost/
