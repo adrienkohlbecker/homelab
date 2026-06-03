@@ -33,6 +33,35 @@
   until: _webmail_rc_loopback.status == 200
   become: true
 
+# The http_authentication plugin auto-logs-in from the Basic header nginx
+# injects. Verify the integration: send the same header, assert we get a
+# logged-in page (the inbox task), not the login form.
+- name: _verify | Roundcube auto-login via http_authentication works
+  when: ansible_architecture == 'x86_64'
+  uri:
+    url: http://localhost:{{ service_ports.roundcube }}/?_task=mail
+    headers:
+      Authorization: "Basic YXJjaGl2ZTphcmNoaXZl"
+    return_content: true
+    status_code: 200
+  register: _webmail_rc_autologin
+  retries: 10
+  delay: 2
+  until: _webmail_rc_autologin.status == 200 and 'id="login-form"' not in _webmail_rc_autologin.content
+  failed_when: >-
+    _webmail_rc_autologin.status != 200
+    or 'id="login-form"' in _webmail_rc_autologin.content
+  become: true
+
+# Map the vhost FQDN to loopback so SNI matches the served vhost on
+# noble/resolute (openssl 3.x rejects SNI=localhost + Host header mismatch).
+- name: _verify | Map roundcube vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 roundcube.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 # auth: required -- a cookieless GET / must land on the Authelia 302 redirect
 # chain (stub is in gate mode). Validates the auth_request wiring and the
 # proxy_pass port together; the loopback probe above already proved Roundcube
@@ -40,9 +69,7 @@
 # valid even where Roundcube (amd64-only) isn't running.
 - name: _verify | Roundcube vhost gate redirects unauthenticated to Authelia
   uri:
-    url: https://localhost/
-    headers:
-      Host: roundcube.{{ inventory_hostname }}.{{ domain }}
+    url: https://roundcube.{{ inventory_hostname }}.{{ domain }}/
     validate_certs: false
     follow_redirects: none
     status_code: 302

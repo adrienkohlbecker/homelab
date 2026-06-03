@@ -62,25 +62,19 @@
   tags:
     - webmail
 
-# Roundcube's sqlite DB on the dedicated sqlite dataset (4K recordsize, matches
-# kuma/paperless). The unit mounts this dir as ROUNDCUBEMAIL_DB_DIR directly
-# (no symlink) and the image creates sqlite.db in it on first boot. Intermediate
-# /mnt/services/sqlite is created here too on the test box; on prod it's the
-# sqlite dataset mountpoint.
-#
-# Owned by uid 33 (the roundcube image's baked-in www-data, which the apache
-# worker writes the DB as). The container runs without a userns, so container
-# uid 33 == host uid 33; the entrypoint chowns the DB dir to 33 on boot, so if
-# we created it root-owned the next converge would flap it back (33 -> 0 -> 33).
-# Numeric to avoid depending on a www-data passwd entry existing on the host.
-- name: Create roundcube sqlite directory
-  file:
-    dest: /mnt/services/sqlite/roundcube
-    state: directory
-    owner: "33"
-    group: "33"
-    mode: "0755"
-  become: true
+# Roundcube's sqlite DB on the dedicated sqlite dataset (4K recordsize). The
+# unit mounts this dir as ROUNDCUBEMAIL_DB_DIR directly (no symlink) and the
+# image creates sqlite.db in it on first boot. Owned by uid 33 (the roundcube
+# image's baked-in www-data); numeric to avoid a host passwd dependency.
+- name: Place roundcube SQLite DB dir on the sqlite dataset
+  import_role:
+    name: sqlite_dataset
+    tasks_from: dataset
+  vars:
+    sqlite_dataset_args:
+      name: roundcube
+      owner: "33"
+      group: "33"
   tags:
     - webmail
 
@@ -124,29 +118,26 @@
   tags:
     - webmail
 
-# Apache ServerName, mounted read-only into the roundcube container's
-# conf-enabled. amd64-gated like the unit below — it's only ever consumed by
-# the Roundcube container, so there's no point staging it on the arm64 box.
-- name: Install roundcube apache config
-  when: ansible_architecture == 'x86_64'
-  copy:
-    src: roundcube_apache.conf
-    dest: /mnt/services/webmail/roundcube_apache.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
-  register: _webmail_roundcube_apache
-  tags:
-    - webmail
-
 # Roundcube ships no arm64 image (only the unpinned latest-fpm-alpine is
 # multi-arch). Every prod host is amd64, so the gate is a no-op there and in
 # CI (amd64 runners); it only skips the Roundcube container on the operator's
 # local arm64 test VM. Dovecot (multi-arch 2.4.4) still runs and is fully
 # exercised on arm64, so the IMAP/archive path is verified everywhere — only
 # the Roundcube UI is amd64-only. See notes/getmail_webmail_design.md.
+- name: Install roundcube disable-send config
+  when: ansible_architecture == 'x86_64'
+  copy:
+    src: roundcube_disable_send.php
+    dest: /mnt/services/webmail/roundcube_disable_send.php
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: _webmail_roundcube_config
+  tags:
+    - webmail
+
 - name: Install roundcube service
   import_role:
     name: systemd_unit
@@ -166,7 +157,7 @@
     systemd_unit_args:
       src: roundcube
       condition: "{{ ansible_architecture == 'x86_64' and not (ansible_check_mode and (roundcube_service_result.changed or _webmail_dir.changed)) }}"
-      restart: "{{ roundcube_service_result.changed or _webmail_roundcube_apache.changed }}"
+      restart: "{{ roundcube_service_result.changed or _webmail_roundcube_config.changed }}"
   tags:
     - webmail
 

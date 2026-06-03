@@ -7,7 +7,7 @@
 Description=dovecot
 After=network-online.target
 Wants=network-online.target
-StartLimitInterval=600
+StartLimitIntervalSec=600
 StartLimitBurst=3
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
@@ -57,12 +57,11 @@ ExecStart=/usr/bin/podman run \
        mounting over it shadows the binary (exec: No such file or directory). #}
     --volume /mnt/services/webmail/dovecot:/state \
     --volume /mnt/services/webmail/dovecot.conf:/etc/dovecot/dovecot.conf:ro \
-    {# doveadm auth test exercises the real passdb→userdb path (returns 0 only
-       when auth succeeds AND the userdb resolves), a functional check rather
-       than a port-open stat. The fixed creds match dovecot.conf's static
-       passdb. #}
+    {# Startup: doveadm search gates readiness on a real mailbox scan (auth +
+       userdb + Maildir mount + index write), not just auth. Running: auth test
+       is lighter and sufficient once the mailbox was proven reachable. #}
     --health-cmd         '["doveadm","auth","test","archive","archive"]' \
-    --health-startup-cmd '["doveadm","auth","test","archive","archive"]' \
+    --health-startup-cmd '["doveadm","search","-u","archive","mailbox","INBOX","ALL"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "30s" \
@@ -71,7 +70,7 @@ ExecStart=/usr/bin/podman run \
        amd64-only and fail on the arm64 test VM. dovecot.conf is written to the
        2.4 grammar (dovecot_config_version pin, mail_driver/mail_path,
        passdb static filter) — bumping major requires re-checking the config. #}
-    docker.io/dovecot/dovecot:2.4.4
+    docker.io/dovecot/dovecot:{{ webmail_dovecot_version }}
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
