@@ -405,6 +405,9 @@
     MISE_YES: "1"
   register: user_mise_tools
   changed_when: "'CHANGED' in user_mise_tools.stdout"
+  until: user_mise_tools is not failed
+  retries: 3
+  delay: 5
   tags:
     - user
 
