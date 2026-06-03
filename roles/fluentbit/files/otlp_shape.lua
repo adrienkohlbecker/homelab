@@ -141,20 +141,26 @@ local function service_from_tag(tag, record)
         -- nginx.error). nginx.service journal records arrive as
         -- svc.nginx.service and hit the svc. branch (yielding "nginx").
         local sub = string.sub(tag, 7)
-        if sub ~= "" then svc = "nginx_" .. sub end
+        if sub ~= "" then
+            svc = "nginx_" .. sub
+        end
     else
         svc = tag
     end
-    if svc == nil or svc == "" then svc = "unknown" end
+    if svc == nil or svc == "" then
+        svc = "unknown"
+    end
     return string.lower(svc)
 end
 
 local EXCLUDE_FROM_ATTRS = {
-    log = true, resource = true,
-    severity_text = true, severity_number = true,
+    log = true,
+    resource = true,
+    severity_text = true,
+    severity_number = true,
 }
 
-function shape_otlp(tag, ts, group, metadata, record)
+function shape_otlp(tag, ts, _group, metadata, record)
     metadata.otlp = metadata.otlp or {}
     metadata.otlp.attributes = metadata.otlp.attributes or {}
 

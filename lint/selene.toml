@@ -1,0 +1,16 @@
+# selene config for the fluent-bit Lua filters (roles/fluentbit/files/*.lua).
+# Invoked via `mise run lint:lua` with `--config lint/selene.toml`.
+#
+# std: lua51 + a small fluent-bit std (lint/fluentbit.yml) that declares the
+# four filter entry-point globals (parse_unifi, set_priority, shape_otlp,
+# flatten_csp). fluent-bit calls these by name from C, so from selene's
+# single-file view they'd otherwise read as "defined but never used", and the
+# unit test that dofile()s the script would read parse_unifi as undefined.
+std = "lua51+fluentbit"
+
+[lints]
+# fluent-bit embeds LuaJIT (reports _VERSION "Lua 5.1" but supports the \xHH
+# hex-escape extension), so flatten_csp.lua's \xE2\x80.. UTF-8 directional-mark
+# scrubbing is valid at runtime. selene's strict lua51 std rejects \x, so this
+# would otherwise false-flag. Verified on lab: "A\xE2\x80\xAAB" measures 5 bytes.
+bad_string_escape = "allow"
