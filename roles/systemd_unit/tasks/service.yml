@@ -100,6 +100,23 @@
   become: true
   become_user: "{{ _systemd_unit_user }}"
 
+# install.yml checks for masking before writing the file; service.yml must
+# check independently because a unit can be masked between install and the
+# next converge. The Enable result's LoadState is populated from `systemctl
+# show` (same source as ConditionResult/ActiveState), so this costs no extra
+# task. A masked unit that somehow survived the install guard would produce a
+# raw systemd "Unit is masked" error on the Start task without this check.
+- name: Refuse to start a masked unit
+  when:
+    - _systemd_unit_condition
+    - _systemd_unit_start
+    - _systemd_unit_enable.status.LoadState | default('') == 'masked'
+  fail:
+    msg: >-
+      Refusing to start {{ _systemd_unit_name }}: it is masked.
+      Unmask with `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_name }}`
+      before re-running, or --limit the play to skip this role.
+
 # The detect + pre-pull pair below only earns its cost when the unit is
 # actually about to (re)start: a cold start needs the image present before
 # `systemctl start`, and a caller-requested restart may swap to a new image
