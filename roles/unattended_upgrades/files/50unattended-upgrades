@@ -93,9 +93,14 @@ Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
 // (equivalent to apt-get autoremove)
 Unattended-Upgrade::Remove-Unused-Dependencies "true";
 
-// Automatically reboot *WITHOUT CONFIRMATION* if
-//  the file /var/run/reboot-required is found after the upgrade
-Unattended-Upgrade::Automatic-Reboot "true";
+// Reboots are operator-driven, not unattended: site.yml's "Reboot check"
+// play reboots the fleet serially behind a keepalived-priority DNS-safety
+// gate (refuses to take down the last DNS-serving host). An unattended
+// reboot here would bypass that gate — rebooting both pihole peers at the
+// same 23:50 window, or rebooting unsupervised into a freshly-rewritten
+// ZBM/grub boot config with no operator present to recover. The
+// /var/run/reboot-required sentinel drains through that gated path instead.
+Unattended-Upgrade::Automatic-Reboot "false";
 
 // Automatically reboot even if there are users currently logged in
 // when Unattended-Upgrade::Automatic-Reboot is set to true
@@ -104,7 +109,7 @@ Unattended-Upgrade::Automatic-Reboot "true";
 // If automatic reboot is enabled and needed, reboot at the specific
 // time instead of immediately
 //  Default: "now"
-Unattended-Upgrade::Automatic-Reboot-Time "23:50";
+//Unattended-Upgrade::Automatic-Reboot-Time "23:50";
 
 // Use apt bandwidth limit feature, this example limits the download
 // speed to 70kb/sec

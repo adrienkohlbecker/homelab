@@ -28,7 +28,7 @@
     _cfg: "{{ unattended_upgrades_verify_50.content | b64decode }}"
   assert:
     that:
-      - _cfg is search('Unattended-Upgrade::Automatic-Reboot "true"')
+      - _cfg is search('Unattended-Upgrade::Automatic-Reboot "false"')
       - _cfg is search('Unattended-Upgrade::SyslogEnable "true"')
       - _cfg is search('Unattended-Upgrade::MinimalSteps "true"')
       - _cfg is search('Unattended-Upgrade::Mail "root"')
