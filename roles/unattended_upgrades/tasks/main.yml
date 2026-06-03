@@ -1,14 +1,18 @@
 - name: Install unattended-upgrades
   apt:
     pkg:
+      # provides /var/run/reboot-required sentinel (consumed by site.yml
+      # reboot check, boot, firewall, pihole reboot guard, etc.)
       - update-notifier-common
       - unattended-upgrades
     cache_valid_time: 3600
+    lock_timeout: 300
   become: true
+  register: unattended_upgrades_apt
   tags:
     - unattended_upgrades
 
-- name: Setup unattended-upgrades (20auto-upgrades)
+- name: Configure unattended-upgrades periodic settings
   copy:
     src: 20auto-upgrades
     dest: /etc/apt/apt.conf.d/20auto-upgrades
@@ -16,12 +20,13 @@
     group: root
     mode: "0644"
     backup: true
+    validate: 'apt-config dump -c %s'
   become: true
   register: unattended_upgrades_apt_20
   tags:
     - unattended_upgrades
 
-- name: Setup unattended-upgrades (50unattended-upgrades)
+- name: Configure unattended-upgrades behavior
   copy:
     src: 50unattended-upgrades
     dest: /etc/apt/apt.conf.d/50unattended-upgrades
@@ -29,15 +34,27 @@
     group: root
     mode: "0644"
     backup: true
+    validate: 'apt-config dump -c %s'
   become: true
   register: unattended_upgrades_apt_50
   tags:
     - unattended_upgrades
 
-- name: Dry-run unattended-upgrades
-  when: unattended_upgrades_apt_20.changed or unattended_upgrades_apt_50.changed
+- name: Ensure apt-daily-upgrade timer is active
+  when: not (ansible_check_mode and unattended_upgrades_apt.changed)
+  systemd:
+    name: apt-daily-upgrade.timer
+    state: started
+    enabled: true
+  become: true
+  tags:
+    - unattended_upgrades
+
+- name: Validate unattended-upgrades config
+  when: not (ansible_check_mode and unattended_upgrades_apt.changed)
   command: unattended-upgrades --dry-run --verbose
   changed_when: false
+  timeout: 120
   become: true
   tags:
     - unattended_upgrades
