@@ -89,6 +89,21 @@ jobs:
     uses: ./.github/workflows/ci-image.yml
     secrets: inherit
 
+  zbm_build:
+    # Validate the custom ZFSBootMenu recovery image still builds whenever zbm/
+    # or mise-tasks/zbm/ changes (detect's zbm_changed). Runs bare on lab (it
+    # needs docker buildx + the runner's rootless podman, not the CI container),
+    # so it waits on ci-image only for ordering on the shared runner -- same
+    # always() && (success || skipped) shape as lint/packer. No secrets: it's a
+    # validate-only build with a throwaway host key and no Gitea upload.
+    needs: [ detect, ci-image ]
+    if: |
+      always()
+      && needs.detect.result == 'success'
+      && needs.detect.outputs.zbm_changed == 'true'
+      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
+    uses: ./.github/workflows/zbm-build.yml
+
   # --- packer: per-release box builds ----------------------------------------
   # Split into one call per Ubuntu release so each test_* group can depend on
   # exactly its image. The old packer_box built all releases in one serialised

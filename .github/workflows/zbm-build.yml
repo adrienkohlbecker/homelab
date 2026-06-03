@@ -1,0 +1,99 @@
+name: zbm-build
+# Validation build of the custom ZFSBootMenu recovery image. ci.yml calls this
+# via `uses:` gated on detect's zbm_changed (any push touching zbm/ or
+# mise-tasks/zbm/); it's also workflow_dispatch-able so the buildx-over-podman
+# path can be exercised on demand.
+#
+# Validate-only: builds the builder container + the kernel/initrd/EFI tarball
+# with a THROWAWAY recovery SSH host key (ZBM_EPHEMERAL_HOST_KEY=1, since CI has
+# no 1Password), and does NOT upload to Gitea. The point is to catch build
+# regressions (a missing recovery tool failing dracut's install_items, a broken
+# tar glob, an upstream Dockerfile bump) on the workstation's behalf — releases
+# stay the manual `mise run zbm:build && zbm:upload`.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+# Workflow only reads the repo and builds locally; no registry push, no secrets.
+permissions:
+  contents: read
+
+# Heavy build (clones ZBM, xbps-installs a Void toolchain, runs buildx); serialize
+# per ref so rapid pushes don't race on podman's image store / the buildx builder.
+# cancel-in-progress=false: a half-built image is worse than a delayed run.
+concurrency:
+  group: lab-zbm-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    # Bare on the lab runner (no `container:`) like ci-image: the build needs
+    # `docker buildx` talking to the runner's rootless podman, which only exists
+    # on the host. The github_runner service exports DOCKER_HOST=<rootless podman
+    # socket> and the docker_client role installs docker-ce-cli + the buildx
+    # plugin fleet-wide, so the CLI and socket are already in place here.
+    runs-on: [ self-hosted, lab ]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Shallow: the scripts read the working tree only. persist-credentials
+          # =false keeps GITHUB_TOKEN out of .git/config on the shared runner.
+          fetch-depth: 1
+          persist-credentials: false
+
+      # builder-image.sh runs `docker buildx build` against the upstream
+      # Dockerfile (BuildKit heredocs podman can't parse natively). buildx needs
+      # a docker-container-driver builder, which spins up moby/buildkit as a
+      # container in the runner's rootless podman (reached via DOCKER_HOST). A
+      # fresh runner has none, so create one idempotently and make it current;
+      # builder-image.sh's bare `docker buildx build` then uses it.
+      - name: Ensure a buildx builder exists
+        run: |
+          set -euo pipefail
+          echo "DOCKER_HOST=${DOCKER_HOST:-<unset>}"
+          if ! docker buildx inspect zbm >/dev/null 2>&1; then
+            docker buildx create --name zbm --driver docker-container --bootstrap
+          fi
+          docker buildx use zbm
+          docker buildx inspect zbm
+
+      # No mise on the bare runner (it lives in the CI container, which has no
+      # podman socket). The two scripts are plain bash needing only MISE_CONFIG_ROOT
+      # + ZBM_VERSION exported and otherwise system tools (git/docker/tar/...),
+      # so invoke them directly. ZBM_VERSION is mise.toml's single source of truth.
+      # ZBM_EPHEMERAL_HOST_KEY=1 bakes a throwaway dropbear host key (no 1Password
+      # in CI); the resulting tarball is a build-check artifact, never uploaded.
+      - name: Build the ZBM image + tarball
+        env:
+          ZBM_EPHEMERAL_HOST_KEY: "1"
+        run: |
+          set -euo pipefail
+          MISE_CONFIG_ROOT="$GITHUB_WORKSPACE"
+          ZBM_VERSION="$(awk -F'"' '/^ZBM_VERSION/{print $2; exit}' mise.toml)"
+          [ -n "$ZBM_VERSION" ] || { echo "could not read ZBM_VERSION from mise.toml" >&2; exit 1; }
+          export MISE_CONFIG_ROOT ZBM_VERSION
+          echo "Building ZFSBootMenu v${ZBM_VERSION} for $(uname -m)"
+          ./mise-tasks/zbm/builder-image.sh
+          ./mise-tasks/zbm/build.sh
+
+      # Turn "it ran" into an assertion: the tarball exists and carries the
+      # Components kernel + initrd and the renamed unified EFI.
+      - name: Verify the tarball contents
+        run: |
+          set -euo pipefail
+          arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
+          ZBM_VERSION="$(awk -F'"' '/^ZBM_VERSION/{print $2; exit}' mise.toml)"
+          tarball="${GITHUB_WORKSPACE}/zbm-build/${arch}/zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
+          test -f "$tarball" || { echo "tarball not produced: $tarball" >&2; exit 1; }
+          members="$(tar tzf "$tarball")"
+          echo "$members"
+          for f in initramfs-bootmenu.img zfsbootmenu.EFI; do
+            grep -qxF "$f" <<<"$members" || { echo "missing $f in tarball" >&2; exit 1; }
+          done
+          grep -qE '^vmlin.*-bootmenu$' <<<"$members" || { echo "missing vmlin*-bootmenu kernel in tarball" >&2; exit 1; }
+          echo "ZBM tarball OK: $tarball"
