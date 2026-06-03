@@ -97,7 +97,7 @@
     dest: /mnt/services/transmission/settings.json
     owner: transmission
     group: media
-    mode: "0664"
+    mode: "0640"
     backup: true
     validate: jq . %s
   register: transmission_conf
@@ -162,12 +162,9 @@
     nginx_site_args:
       subdomain: transmission
       proxy_pass: http://127.0.0.1:9091/
-      # PR 5 tail: Authelia is the sole UI gate. transmission has
-      # rpc-authentication-required = false in settings.json (a
-      # rpc-password hash is present but unused without that flag),
-      # so no double-click. The *arr leg uses
+      # Authelia gates the browser UI. The *arr leg uses
       # transmission.dns.podman:9091 over the media podman network
-      # and bypasses nginx entirely.
+      # with rpc-username/rpc-password, bypassing nginx entirely.
       auth: required
   tags:
     - transmission
