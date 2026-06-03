@@ -21,7 +21,7 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
-TimeoutStartSec=120
+TimeoutSec=120
 # Exceed the container's --stop-timeout (120s) so a slow graceful shutdown --
 # during which Tautulli writes config.ini back -- finishes before systemd's
 # stop deadline SIGKILLs it and skips the writeback.
