@@ -1,0 +1,5 @@
+- name: _setup | Create test group for usergroup_immediate
+  group:
+    name: usergroup_immediate_test
+    system: true
+  become: true
