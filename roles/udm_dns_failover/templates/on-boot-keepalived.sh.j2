@@ -19,7 +19,7 @@ if ! command -v keepalived &>/dev/null; then
     else
       apt-get update -qq
       apt-get install -y -qq keepalived
-      mkdir -p "$DATADIR/cache"
+      mkdir -p -m 700 "$DATADIR/cache"
       cp /var/cache/apt/archives/keepalived_*.deb "$DATADIR/cache/" 2>/dev/null || true
     fi
   ) || logger -t on-boot-keepalived "WARNING: keepalived install failed, continuing with infra setup"

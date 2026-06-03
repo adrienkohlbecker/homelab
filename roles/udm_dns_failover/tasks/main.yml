@@ -39,8 +39,20 @@
     mode: "0755"
   loop:
     - /data/keepalived
-    - /data/keepalived/cache
     - /data/on_boot.d
+  become: true
+  tags:
+    - udm_dns_failover
+
+# Root-only: the on-boot recovery path runs `dpkg -i` from here as root, so
+# a non-root write into this dir would be boot-time root code execution.
+- name: Create keepalived .deb cache
+  file:
+    path: /data/keepalived/cache
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
   become: true
   tags:
     - udm_dns_failover
@@ -63,21 +75,6 @@
     paths: /var/cache/apt/archives
     patterns: 'keepalived_*.deb'
   register: udm_dns_failover_keepalived_debs
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Clear stale .deb files from keepalived cache
-  when: udm_dns_failover_keepalived_debs.files | length > 0
-  shell:
-    cmd: |
-      set -euo pipefail
-      latest="{{ udm_dns_failover_keepalived_debs.files | sort(attribute='mtime') | last | attr('path') | basename }}"
-      for f in /data/keepalived/cache/keepalived_*.deb; do
-        [ -f "$f" ] && [ "$(basename "$f")" != "$latest" ] && rm -f "$f"
-      done
-    executable: /bin/bash
-  changed_when: false
   become: true
   tags:
     - udm_dns_failover
