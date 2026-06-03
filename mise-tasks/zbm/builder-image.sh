@@ -16,6 +16,8 @@
 #
 # Requires: docker-ce-cli + docker-buildx-plugin, podman socket active.
 # On pug: `systemctl --user start podman.socket`
+# If the build fails with connection errors (stale BuildKit builder):
+#   docker buildx rm default && systemctl --user restart podman.socket
 #
 # XBPS_REPOS points at the Void Linux Frankfurt mirror because the
 # upstream-default Fastly CDN throttles to <100 kB/s from this ISP,
@@ -36,12 +38,22 @@ aarch64) xbps_repo=https://repo-de.voidlinux.org/current/aarch64 ;;
 esac
 
 src_dir="${MISE_CONFIG_ROOT}/zbm-build/src"
-rm -rf "$src_dir"
 mkdir -p "$(dirname "$src_dir")"
-git clone --depth 1 --branch "v${ZBM_VERSION}" https://github.com/zbm-dev/zfsbootmenu.git "$src_dir"
+if [ -d "$src_dir/.git" ] && \
+   [ "$(git -C "$src_dir" describe --tags --exact-match 2>/dev/null)" = "v${ZBM_VERSION}" ]; then
+  echo "ZBM source at $src_dir already at v${ZBM_VERSION}, skipping clone"
+else
+  tmp_dir="${src_dir}.tmp.$$"
+  trap 'rm -rf "$tmp_dir"' EXIT
+  rm -rf "$tmp_dir"
+  git clone --depth 1 --branch "v${ZBM_VERSION}" https://github.com/zbm-dev/zfsbootmenu.git "$tmp_dir"
+  rm -rf "$src_dir"
+  mv "$tmp_dir" "$src_dir"
+  trap - EXIT
+fi
 
-export DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
 docker buildx build \
+  --progress=plain \
   --build-arg "XBPS_REPOS=${xbps_repo}" \
   --build-arg "PACKAGES=mdadm nvme-cli dracut-crypt-ssh dropbear" \
   --load \
