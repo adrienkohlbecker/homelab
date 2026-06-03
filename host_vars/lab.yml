@@ -174,7 +174,10 @@ netdata_contexts:
   vmstat:          mem.swapio
   zfs:             zfs.arc_size
 netdata_collectors:
-  - go.d:collector:chrony:local
+  # No chrony collector: the ntp role sets `cmdport 0` (closes chrony's
+  # loopback UDP control port), and go.d's chrony module is UDP-only -- it
+  # can never register. Clock-sync is covered by timex.conf's un-silenced
+  # system_clock_sync_state alarm, which needs no command port.
   - go.d:collector:docker:local
   - go.d:collector:fail2ban:fail2ban
   - go.d:collector:intelgpu:intelgpu
