@@ -367,7 +367,10 @@
   args:
     executable: /bin/bash
     chdir: "{{ ansible_user_dir }}/.dotfiles"
-    creates: "{{ ansible_user_dir }}/.zshrc"
+    # Sentinel on the ~/.config/mise symlink the next task depends on, not
+    # ~/.zshrc -- a stow that half-failed before laying that link down re-runs
+    # instead of staying wedged behind an already-present .zshrc.
+    creates: "{{ ansible_user_dir }}/.config/mise"
   environment:
     MISE_YES: "1"
   tags:
