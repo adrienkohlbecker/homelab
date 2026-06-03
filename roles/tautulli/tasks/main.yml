@@ -69,16 +69,20 @@
   tags:
     - tautulli
 
+# The slurp carries failed_when: false, so on a fresh host (no config.ini) it
+# is still "succeeded" but exposes no .content key. default('') on .content is
+# what handles that case -- the trailing default([...], true) then maps the
+# empty regex match to the fresh-install seed.
 - name: Preserve runtime PMS values (default on fresh install)
   set_fact:
     _tautulli_pms_plexpass: >-
-      {{ ((_tautulli_existing.content | b64decode | regex_findall('(?m)^pms_plexpass = (\d+)$'))
-          | default(['0'], true) | first)
-         if _tautulli_existing is succeeded else '0' }}
+      {{ (_tautulli_existing.content | default('') | b64decode
+          | regex_findall('(?m)^pms_plexpass = (\d+)$'))
+         | default(['0'], true) | first }}
     _tautulli_pms_version: >-
-      {{ ((_tautulli_existing.content | b64decode | regex_findall('(?m)^pms_version = ([\w.\-]+)$'))
-          | default([''], true) | first)
-         if _tautulli_existing is succeeded else '' }}
+      {{ (_tautulli_existing.content | default('') | b64decode
+          | regex_findall('(?m)^pms_version = ([\w.\-]+)$'))
+         | default([''], true) | first }}
   tags:
     - tautulli
 
