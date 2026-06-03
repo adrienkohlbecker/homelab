@@ -28,15 +28,16 @@
   become: true
 
 - name: fake_render_device | Create fake renderD128 char device
-  command: mknod /dev/dri/renderD128 c 226 128
+  command: mknod -m 0660 /dev/dri/renderD128 c 226 128
   args:
     creates: /dev/dri/renderD128
   become: true
 
-- name: fake_render_device | Set device ownership
+# mknod -m set the mode atomically at creation (no default-mode window); mknod
+# can't set the group, so the file module owns that.
+- name: fake_render_device | Set device group
   file:
     path: /dev/dri/renderD128
     owner: root
     group: render
-    mode: "0660"
   become: true
