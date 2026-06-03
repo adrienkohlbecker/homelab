@@ -76,13 +76,11 @@
       Expected DOCKER_HOST=unix:///run/podman/podman.sock,
       got {{ _docker_client_docker_host_env.stdout }}
 
-# id -nG reports the groups nsswitch resolves for the user, i.e.
-# the supplementary set a fresh login shell or service would pick
-# up. That's a stronger check than parsing /etc/group via getent:
-# it exercises the same path that consumers (login shells, the
-# rootful podman socket's permission check) actually use, and it
-# witnesses the post-reset_connection state that usergroup_immediate
-# is named for.
+# id -nG <user> resolves the user's groups through nsswitch
+# (/etc/group), the same view a fresh login shell or service start
+# gets. This proves the membership was written; like getent it is an
+# NSS lookup, not a read of the live connection's process credentials,
+# so it does not by itself witness reset_connection's in-process effect.
 - name: _verify | Read ansible_user_id supplementary groups
   command: id -nG {{ ansible_user_id }}
   changed_when: false

@@ -1,12 +1,20 @@
 # Inputs:
 #   usergroup_immediate_args:
-#     group   (required, string or list) — group(s) to add ansible_user_id to
+#     group   (required, string or list) — group(s) to add ansible_user_id to.
+#             Each group must already exist; the `user` module hard-fails on a
+#             missing group, so the caller gates with
+#             `when: not (ansible_check_mode and <group_task>.changed)`.
 #
 # Outputs:
 #   usergroup_immediate_result — the user module result (internal; not a stable API)
 #
-# Side-effect: resets the SSH connection on change so subsequent tasks
-# see the new group membership immediately.
+# Side-effect: on change, resets the SSH connection so a subsequent task in
+# the play — including in later roles — can pick up the new membership
+# without a re-login. Caveat: /etc/group is authoritative immediately, but
+# mitogen doesn't reliably refresh a live worker's process supplementary
+# set, so a non-`become` task that depends on the new group may not observe
+# it until a genuinely fresh connection; it is reliably effective at the
+# next login/service start.
 
 - name: user | Validate inputs
   assert:
