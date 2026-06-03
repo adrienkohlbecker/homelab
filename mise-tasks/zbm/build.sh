@@ -27,15 +27,23 @@ fi
 #   -i: builder container image
 #   -l: ZBM source tree (mounted read-only at /zbm)
 #   -H: skip hostid (release build, not host-specific)
-#   -O: extra podman run args (output volume)
+#   -O: extra podman run args (output volume + entrypoint override)
 #   --: args forwarded to build-init.sh (-o output dir, -t version tag)
 #
 # zbm-builder.sh auto-detects hooks/ and generates user_hooks.conf.
+#
+# --entrypoint /build-init.sh: the upstream Dockerfile declares
+#   ENTRYPOINT [ "/${ZBM_BUILDER}" ]
+# in exec form, and BuildKit does not expand the ARG in exec-form
+# ENTRYPOINT — the built image's entrypoint is the literal string
+# "/${ZBM_BUILDER}", which crun can't find. (The old vendored Dockerfile
+# hard-coded /build-init.sh, so it never hit this.) Override it here.
 "$src_dir/zbm-builder.sh" \
   -b "${MISE_CONFIG_ROOT}/zbm" \
   -i "localhost/zbm-builder:v${ZBM_VERSION}-${arch}" \
   -l "$src_dir" \
   -H \
+  -O --entrypoint -O /build-init.sh \
   -O -v -O "$out_dir:/output" \
   -- -o /output -t "v${ZBM_VERSION}"
 
