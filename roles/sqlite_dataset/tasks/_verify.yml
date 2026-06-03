@@ -87,6 +87,17 @@
       loop_control:
         label: "{{ item.item }}"
 
+    - name: _verify | Scenario 2 — stat the sqlite dir (mode should have updated from 0700 to 0750)
+      stat:
+        path: /mnt/services/sqlite/sqlite_dataset_test
+      register: _sqlite_dataset_dir_s2
+      become: true
+
+    - name: _verify | Scenario 2 — directory mode was updated from 0700 to 0750
+      assert:
+        that:
+          - _sqlite_dataset_dir_s2.stat.mode == '0750'
+
     # -- Scenario 3: idempotence — an identical re-apply is a no-op ------
     # The harness idempotence pass targets the empty main.yml stub, so
     # dataset.yml's touch/symlink tasks are otherwise never re-run; assert
@@ -324,6 +335,47 @@
           # target absent -> the link is genuinely dangling, not pre-created
           - not _sqlite_dataset_forced_target.stat.exists
 
+    # -- Scenario 8b: force idempotence — re-apply leaves symlink unchanged -
+    # The harness idempotence pass targets main.yml (the stub), so dataset.yml
+    # is never re-exercised by it; assert here that a second identical apply
+    # with force: true is a no-op (symlink still dangling, attrs unchanged).
+    - name: _verify | Scenario 8b — re-apply identical force args
+      import_role:
+        name: sqlite_dataset
+        tasks_from: dataset
+      vars:
+        sqlite_dataset_args:
+          name: sqlite_dataset_test
+          owner: root
+          group: root
+          force: true
+          links:
+            - /mnt/services/sqlite_dataset_test/forced.db
+
+    - name: _verify | Scenario 8b — re-stat the symlink after re-apply
+      stat:
+        path: /mnt/services/sqlite_dataset_test/forced.db
+        follow: false
+      register: _sqlite_dataset_forced_again
+      become: true
+
+    - name: _verify | Scenario 8b — re-stat the (still absent) target after re-apply
+      stat:
+        path: /mnt/services/sqlite/sqlite_dataset_test/forced.db
+      register: _sqlite_dataset_forced_target_again
+      become: true
+
+    - name: _verify | Scenario 8b — symlink still dangling and unchanged after re-apply
+      assert:
+        that:
+          - _sqlite_dataset_forced_again.stat.exists
+          - _sqlite_dataset_forced_again.stat.islnk
+          - _sqlite_dataset_forced_again.stat.lnk_target == '/mnt/services/sqlite/sqlite_dataset_test/forced.db'
+          - _sqlite_dataset_forced_again.stat.pw_name == 'root'
+          - _sqlite_dataset_forced_again.stat.gr_name == 'root'
+          # target still absent -> the re-apply did not pre-create the src
+          - not _sqlite_dataset_forced_target_again.stat.exists
+
     # -- Scenario 9: condition false skips every task --------------------
     - name: _verify | Scenario 9 — condition false (fresh name)
       import_role:
@@ -453,6 +505,54 @@
           - _sqlite_dataset_force_real.stat.exists
           - not _sqlite_dataset_force_real.stat.islnk
           - _sqlite_dataset_force_real_content.content | b64decode == 'FORCE-REAL'
+
+    # -- Scenario 12: caller pre-creates src externally (no pre_create/force) -
+    # The third cold-start mode: the calling role creates the src file itself
+    # (e.g. via sqlite3 or copy: with creates:) before invoking this helper.
+    # state=link without force succeeds because the src already exists, and
+    # the content is preserved. Use this when the app needs a pre-initialized
+    # (not just empty) DB -- canonical caller: roles/paperless/tasks/main.yml.
+    - name: _verify | Scenario 12 — caller pre-creates the src with content
+      copy:
+        content: "PRE-INITIALIZED"
+        dest: /mnt/services/sqlite/sqlite_dataset_test/prebuilt.db
+        owner: root
+        group: root
+        mode: "0640"
+      become: true
+
+    - name: _verify | Scenario 12 — apply helper with no pre_create and no force
+      import_role:
+        name: sqlite_dataset
+        tasks_from: dataset
+      vars:
+        sqlite_dataset_args:
+          name: sqlite_dataset_test
+          owner: root
+          group: root
+          links:
+            - /mnt/services/sqlite_dataset_test/prebuilt.db
+
+    - name: _verify | Scenario 12 — stat the dest symlink
+      stat:
+        path: /mnt/services/sqlite_dataset_test/prebuilt.db
+        follow: false
+      register: _sqlite_dataset_prebuilt_lnk
+      become: true
+
+    - name: _verify | Scenario 12 — read back through the symlink
+      slurp:
+        src: /mnt/services/sqlite/sqlite_dataset_test/prebuilt.db
+      register: _sqlite_dataset_prebuilt_content
+      become: true
+
+    - name: _verify | Scenario 12 — symlink planted and pre-initialized content preserved
+      assert:
+        that:
+          - _sqlite_dataset_prebuilt_lnk.stat.exists
+          - _sqlite_dataset_prebuilt_lnk.stat.islnk
+          - _sqlite_dataset_prebuilt_lnk.stat.lnk_target == '/mnt/services/sqlite/sqlite_dataset_test/prebuilt.db'
+          - _sqlite_dataset_prebuilt_content.content | b64decode == 'PRE-INITIALIZED'
 
   always:
     - name: _verify | Teardown — remove test fixtures
