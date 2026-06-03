@@ -46,6 +46,8 @@ on:
         value: ${{ jobs.detect.outputs.packer_worker_changed }}
       ci_image_changed:
         value: ${{ jobs.detect.outputs.ci_image_changed }}
+      zbm_changed:
+        value: ${{ jobs.detect.outputs.zbm_changed }}
       packer_sources:
         value: ${{ jobs.detect.outputs.packer_sources }}
       packer_sources_box:
@@ -132,6 +134,7 @@ jobs:
       packer_changed: ${{ steps.detect.outputs.packer_changed }}
       packer_worker_changed: ${{ steps.detect.outputs.packer_worker_changed }}
       ci_image_changed: ${{ steps.detect.outputs.ci_image_changed }}
+      zbm_changed: ${{ steps.detect.outputs.zbm_changed }}
       packer_sources: ${{ steps.detect.outputs.packer_sources }}
       packer_sources_box: ${{ steps.detect.outputs.packer_sources_box }}
       packer_sources_lab: ${{ steps.detect.outputs.packer_sources_lab }}
