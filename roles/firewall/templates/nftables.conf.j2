@@ -56,6 +56,9 @@ table inet homelab {
     counter aardvark_accept {}
     counter mdns_accept {}
     counter igmp_accept {}
+{% if fluentbit_otlp_local %}
+    counter udm_syslog_accept {}
+{% endif %}
     counter wireguard_accept {}
     counter mosh_accept {}
     counter forward_nonsyn {}
@@ -202,6 +205,9 @@ table inet homelab {
         ip saddr $PODMAN_DEFAULT meta l4proto { tcp, udp } th dport {{ service_ports.dnscrypt_proxy }} counter name "dnscrypt_accept" accept comment "dnscrypt-proxy (default bridge only, TCP+UDP)"
         ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } udp dport 5333 counter name "aardvark_accept" accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
         iifname $WAN_IFACE ip saddr $HOME_LAN udp dport 5353 counter name "mdns_accept" accept comment "mDNS (home LAN)"
+{% if fluentbit_otlp_local %}
+        iifname $WAN_IFACE ip saddr {{ network.sites.home.vlans.management.cidr }} udp dport {{ service_ports.udm_syslog }} counter name "udm_syslog_accept" accept comment "UniFi SIEM syslog (mgmt VLAN)"
+{% endif %}
 
         # IGMP — link-local multicast group management (TTL=1, never
         # routed in from WAN). lab is a real subscriber: avahi joins
