@@ -84,7 +84,12 @@ Unattended-Upgrade::MailReport "only-on-error";
 
 // Remove unused automatically installed kernel-related packages
 // (kernel images, kernel headers and kernel version locked tools).
-Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+// Kernel package GC is operator-driven on this ZFS-root / ZBM-booted fleet:
+// an unattended autoremove of a kernel the bootloader or initrd still
+// references — no operator present, mail only-on-error — risks an unbootable
+// host. Superseded kernels are pruned during converge, where the boot chain
+// is validated. (Upstream default is "true".)
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "false";
 
 // Do automatic removal of newly unused dependencies after the upgrade
 Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
