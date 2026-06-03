@@ -1,0 +1,9 @@
+[Unit]
+Description=Heartbeat timer for UDM keepalived VRRP peer
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

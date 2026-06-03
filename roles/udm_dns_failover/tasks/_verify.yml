@@ -32,3 +32,10 @@
   changed_when: false
   failed_when: _udm_dns_failover_nonlocal.stdout | trim != '1'
   become: true
+
+- name: Verify heartbeat timer is active
+  systemd:
+    name: udm_keepalived_heartbeat.timer
+  register: _udm_dns_failover_heartbeat_timer
+  failed_when: _udm_dns_failover_heartbeat_timer.status.ActiveState != 'active'
+  become: true
