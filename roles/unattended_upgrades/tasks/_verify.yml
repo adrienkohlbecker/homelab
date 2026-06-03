@@ -38,3 +38,21 @@
     fail_msg: "apt-config dump does not reflect deployed APT::Periodic / Unattended-Upgrade values"
   tags:
     - unattended_upgrades
+
+# _setup planted the collector dir, so the gated registration in main.yml must
+# have fired and written the metadata file with the timer's daily period.
+- name: _verify | Read apt-daily-upgrade netdata metadata
+  slurp:
+    src: /etc/netdata/charts.d/systemd_timers.d/apt-daily-upgrade.conf
+  register: unattended_upgrades_verify_meta
+  become: true
+  tags:
+    - unattended_upgrades
+
+- name: _verify | Apt-daily-upgrade.timer is registered for overdue monitoring
+  assert:
+    that:
+      - (unattended_upgrades_verify_meta.content | b64decode) is search('period_secs=86400')
+    fail_msg: "apt-daily-upgrade.timer not registered with the netdata systemd_timers collector"
+  tags:
+    - unattended_upgrades
