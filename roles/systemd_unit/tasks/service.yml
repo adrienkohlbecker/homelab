@@ -90,7 +90,7 @@
   register: _systemd_unit_linger
   failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
 
-- name: Enable the service
+- name: service | Enable the service
   when: _systemd_unit_condition and not (ansible_check_mode and systemd_unit_file is defined and systemd_unit_file is changed)
   systemd:
     name: "{{ _systemd_unit_name }}"
@@ -106,7 +106,7 @@
 # show` (same source as ConditionResult/ActiveState), so this costs no extra
 # task. A masked unit that somehow survived the install guard would produce a
 # raw systemd "Unit is masked" error on the Start task without this check.
-- name: Refuse to start a masked unit
+- name: service | Refuse to start a masked unit
   when:
     - _systemd_unit_condition
     - _systemd_unit_start
@@ -137,7 +137,7 @@
 # pulling here moves a slow network fetch out of `systemctl start`'s
 # TimeoutStartSec window and into a normal ansible task with no fixed
 # deadline.
-- name: Detect podman images referenced by the unit
+- name: service | Detect podman images referenced by the unit
   when:
     - _systemd_unit_condition
     - not ansible_check_mode
@@ -158,7 +158,7 @@
 # drops into the user via become_user; the user's linger + podman.sock
 # are the caller's responsibility (see github_runner main.yml for the
 # canonical setup).
-- name: Pre-pull podman images referenced by the unit
+- name: service | Pre-pull podman images referenced by the unit
   when:
     - _systemd_unit_condition
     - not ansible_check_mode
@@ -187,7 +187,7 @@
 # reset-failed is pure overhead -- skip it (68 services x a become
 # command every converge). ActiveState != 'active' (failed, inactive,
 # activating) or a requested restart means a start is imminent, so clear.
-- name: Reset failed state to clear any rate-limit
+- name: service | Reset failed state to clear any rate-limit
   when:
     - _systemd_unit_condition
     - _systemd_unit_start
@@ -211,7 +211,7 @@
 # in that case so the second converge is idempotent. The result is also
 # the truth — if systemd never executes ExecStart, the unit's runtime
 # state is identical to before.
-- name: Start the service
+- name: service | Start the service
   when:
     - _systemd_unit_condition
     - _systemd_unit_start
@@ -227,7 +227,7 @@
   become: true
   become_user: "{{ _systemd_unit_user }}"
 
-- name: Restart the service
+- name: service | Restart the service
   when:
     - _systemd_unit_condition
     - _systemd_unit_start
@@ -246,7 +246,7 @@
 # actionable message instead of the raw systemd error. CanReload comes
 # from the Enable task's systemctl-show status (the same dict the pre-pull
 # gate reads ActiveState from), so it costs no extra task.
-- name: Assert the unit supports reload before reloading
+- name: service | Assert the unit supports reload before reloading
   when:
     - _systemd_unit_condition
     - _systemd_unit_start
@@ -266,7 +266,7 @@
 # (keepalived, nginx, etc.). Skipped when restart is also set (restart
 # already applied), and on the play that just started the unit (the started
 # state already reflects current config).
-- name: Reload the service
+- name: service | Reload the service
   when:
     - _systemd_unit_condition
     - _systemd_unit_start
