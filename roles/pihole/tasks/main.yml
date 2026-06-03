@@ -347,3 +347,38 @@
           keepalived rejected the rendered pihole fragment on reload; the
           previous fragment was restored (or removed if newly added). Inspect
           the reload output above and roles/pihole/templates/keepalived.conf.j2.
+
+- name: Install pihole reboot guard script
+  template:
+    src: pihole_reboot_guard.j2
+    dest: /usr/local/sbin/pihole_reboot_guard
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  register: pihole_reboot_guard_script
+  become: true
+  tags:
+    - pihole
+
+- name: Install pihole reboot guard service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: pihole_reboot_guard.service.j2
+  tags:
+    - pihole
+
+- name: Enable pihole reboot guard
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: pihole_reboot_guard
+      restart: "{{ pihole_reboot_guard_service_result.changed or pihole_reboot_guard_script.changed }}"
+  tags:
+    - pihole
