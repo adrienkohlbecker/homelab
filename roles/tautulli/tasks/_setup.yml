@@ -28,7 +28,6 @@
   loop:
     - /mnt/services
     - /mnt/services/sqlite
-    - /mnt/services/plex
   become: true
 
 - name: _setup | Stub sort_ini binary
