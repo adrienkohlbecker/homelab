@@ -22,7 +22,7 @@
 
 - name: path | Record path unit install result
   set_fact:
-    _sort_ini_path_unit_changed: "{{ systemd_unit_file.changed }}"
+    _sort_ini_path_unit_changed: "{{ vars['sort_ini_' ~ sort_ini_escaped_path ~ '_path_result'].changed | default(false) }}"
 
 - name: path | Enable sort_ini.path
   import_role:
