@@ -244,6 +244,9 @@
   tags:
     - user
 
+# The pin is authoritative: any drift from user_mise_version -- including a
+# mise that self-updated past it -- flags a reinstall to restore the pinned
+# version, so the comparison is exact-match, not upgrade-only.
 - name: Set mise upgrade flag
   set_fact:
     user_mise_needs_upgrade: "{{ user_mise_check.stdout is not defined or (user_mise_check.stdout.split()[0] | default('')) != user_mise_version }}"
@@ -259,6 +262,7 @@
     group: "{{ ansible_user_id }}"
     mode: "0755"
   loop:
+    - "{{ ansible_user_dir }}/.cache"
     - "{{ ansible_user_dir }}/.local/share"
     - "{{ ansible_user_dir }}/.local/bin"
     - "{{ ansible_user_dir }}/.local/share/mise/completions"
@@ -266,13 +270,16 @@
   tags:
     - user
 
+# Stage in the operator-owned ~/.cache rather than world-writable /tmp -- a
+# fixed /tmp/mise-<ver>.tar.gz name is a symlink/TOCTOU target on a multi-user
+# host (get_url's checksum catches a tampered payload, but not a hijacked dest).
 - name: Download mise archive
   when: user_mise_needs_upgrade
   check_mode: false
   get_url:
     url: "{{ user_mise_release[ansible_architecture].url }}"
     checksum: "sha256:{{ user_mise_release[ansible_architecture].sha256 }}"
-    dest: /tmp/mise-{{ user_mise_version }}.tar.gz
+    dest: "{{ ansible_user_dir }}/.cache/mise-{{ user_mise_version }}.tar.gz"
     mode: "0644"
   register: user_mise_download
   until: user_mise_download is not failed
@@ -284,11 +291,27 @@
 - name: Install mise binary
   when: user_mise_needs_upgrade and not (ansible_check_mode and user_mise_dirs.changed)
   unarchive:
-    src: /tmp/mise-{{ user_mise_version }}.tar.gz
+    src: "{{ ansible_user_dir }}/.cache/mise-{{ user_mise_version }}.tar.gz"
     remote_src: true
     dest: "{{ ansible_user_dir }}/.local/share"
     owner: "{{ ansible_user_id }}"
     group: "{{ ansible_user_id }}"
+    list_files: true
+  register: user_mise_unarchive
+  tags:
+    - user
+
+# Fail loud if an upstream tarball-layout change drops mise/bin/mise: otherwise
+# the version check below keeps reporting needs_upgrade and re-extracts every
+# converge while the binary stays absent.
+- name: Assert the mise binary extracted
+  when: user_mise_needs_upgrade and not ansible_check_mode
+  assert:
+    that:
+      - "'mise/bin/mise' in (user_mise_unarchive.files | default([]))"
+    fail_msg: >-
+      mise tarball layout changed: expected mise/bin/mise,
+      got {{ user_mise_unarchive.files | default([]) }}
   tags:
     - user
 
@@ -317,7 +340,7 @@
 - name: Delete mise archive
   when: user_mise_needs_upgrade
   file:
-    path: /tmp/mise-{{ user_mise_version }}.tar.gz
+    path: "{{ ansible_user_dir }}/.cache/mise-{{ user_mise_version }}.tar.gz"
     state: absent
   tags:
     - user
