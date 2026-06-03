@@ -6,11 +6,14 @@
 # into a temp dir, and direct-boots the kernel + initrd via test/launch.py
 # in --foreground mode (mon:stdio, QMP socket, 9p share, EDK2 pflash). Quit
 # with Ctrl-A,x or HMP `quit`.
-set -eu
+set -euo pipefail
 
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 # shellcheck disable=SC2012  # filenames here are well-known patterns, no spaces/newlines
-tarball=$(ls -t "${MISE_CONFIG_ROOT}/zbm-build/${arch}"/zfsbootmenu-v*-"${arch}".tar.gz | head -1)
+# ls -t lists newest-first; take the first line without a `| head` pipe, whose
+# early reader would SIGPIPE ls and trip pipefail.
+tarball=$(ls -t "${MISE_CONFIG_ROOT}/zbm-build/${arch}"/zfsbootmenu-v*-"${arch}".tar.gz)
+tarball=${tarball%%$'\n'*}
 tmp=$(mktemp -d -t zbm-test)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 tar -xzf "$tarball" -C "$tmp" --no-same-owner

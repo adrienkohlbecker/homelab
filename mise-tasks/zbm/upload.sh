@@ -8,7 +8,7 @@
 # references the same stable filename, so a rebuild propagates without
 # source edits — bump zbm_version (mise.toml [vars]) only when moving
 # to a new upstream release. Token is read from 1Password at runtime.
-set -eu
+set -euo pipefail
 
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 out_dir="${MISE_CONFIG_ROOT}/zbm-build/${arch}"
