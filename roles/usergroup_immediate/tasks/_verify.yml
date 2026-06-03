@@ -24,6 +24,18 @@
           {{ ansible_user_id }} expected in usergroup_immediate_test;
           members: {{ getent_group['usergroup_immediate_test'][2] | default('') }}
 
+    # The role's reason to exist over a bare `user:` task is the reset_connection
+    # fired on change. We assert the add reported changed (the condition gating
+    # that reset) rather than probing post-reset membership functionally: under
+    # mitogen (strategy = mitogen_linear) the worker's process supplementary set
+    # isn't reliably refreshed, so an `id -nG` probe would be flaky. The getent
+    # check above is the authoritative state; changed→reset is the contract here.
+    - name: _verify | First add to a fresh group reported changed
+      assert:
+        that:
+          - usergroup_immediate_result.changed
+        fail_msg: adding a user to a fresh group should report changed (gates reset_connection)
+
     # Scenario 2: list input (the libvirt case)
     - name: _verify | Create a second test group
       group:
