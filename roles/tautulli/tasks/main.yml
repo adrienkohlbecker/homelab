@@ -61,6 +61,31 @@
   tags:
     - tautulli
 
+- name: Read existing tautulli config for runtime PMS values
+  slurp:
+    src: /mnt/services/tautulli/config.ini
+  register: _tautulli_existing
+  failed_when: false
+  become: true
+  tags:
+    - tautulli
+
+- name: Preserve runtime PMS values
+  when: _tautulli_existing is succeeded
+  set_fact:
+    _tautulli_pms_plexpass: "{{ (_tautulli_existing.content | b64decode | regex_findall('(?m)^pms_plexpass = (\\d+)$')) | default(['0'], true) | first }}"
+    _tautulli_pms_version: "{{ (_tautulli_existing.content | b64decode | regex_findall('(?m)^pms_version = (\\S+)$')) | default([''], true) | first }}"
+  tags:
+    - tautulli
+
+- name: Default runtime PMS values for fresh install
+  when: _tautulli_existing is not succeeded
+  set_fact:
+    _tautulli_pms_plexpass: "0"
+    _tautulli_pms_version: ""
+  tags:
+    - tautulli
+
 - name: Configure tautulli
   template:
     src: config.ini.j2
