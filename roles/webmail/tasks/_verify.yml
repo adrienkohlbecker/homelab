@@ -111,6 +111,26 @@
     or 'auth.' not in (_webmail_rc_gate.location | default(''))
   become: true
 
+# Negative bypass: the vhost injects an Authorization: Basic header for the
+# upstream, but it must do so AFTER auth_request, not in place of it. Send a
+# client-supplied Authorization header and assert it still hits the Authelia
+# 302 -- proves the cred-inject uses plain proxy_set_header, not the
+# upstream_authorization knob that would let any Authorization-bearing request
+# skip the gate. Runs on all arches: the 302 fires before proxy_pass.
+- name: _verify | Client-supplied Authorization header does not bypass the Authelia gate
+  uri:
+    url: https://roundcube.{{ inventory_hostname }}.{{ domain }}/
+    headers:
+      Authorization: "Basic {{ (webmail_imap_user ~ ':' ~ webmail_imap_password) | b64encode }}"
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: _webmail_rc_gate_authz
+  failed_when: >-
+    _webmail_rc_gate_authz.status != 302
+    or 'auth.' not in (_webmail_rc_gate_authz.location | default(''))
+  become: true
+
 # Functional IMAP probe: doveadm search forces Dovecot to scan new/ and serve
 # the planted message over the real passdb->userdb->Maildir path. Non-empty
 # stdout (one `<guid> <uid>` line per match) means the message is reachable --
