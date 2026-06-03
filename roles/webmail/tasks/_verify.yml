@@ -41,7 +41,7 @@
   uri:
     url: http://localhost:{{ service_ports.roundcube }}/?_task=mail
     headers:
-      Authorization: "Basic YXJjaGl2ZTphcmNoaXZl"
+      Authorization: "Basic {{ (webmail_imap_user ~ ':' ~ webmail_imap_password) | b64encode }}"
     return_content: true
     status_code: 200
   register: _webmail_rc_autologin
@@ -51,6 +51,38 @@
   failed_when: >-
     _webmail_rc_autologin.status != 200
     or 'id="login-form"' in _webmail_rc_autologin.content
+  become: true
+
+# The read-only-UI guarantee (no compose/reply/forward) rides on this single
+# bind-mount landing at the exact path the image auto-includes. A wrong target
+# would silently re-enable sending with CI still green, so prove it reached the
+# container. amd64-only (Roundcube isn't started on the arm64 VM).
+- name: _verify | Roundcube disable-send config is mounted in the container
+  when: ansible_architecture == 'x86_64'
+  command:
+    argv:
+      - podman
+      - exec
+      - roundcube
+      - test
+      - -f
+      - /var/roundcube/config/disable-send.php
+  register: _webmail_disable_send
+  changed_when: false
+  become: true
+
+# Roundcube creates sqlite.db in the dataset dir on first boot; if ownership or
+# traversal is wrong the create fails silently and prefs/contacts vanish on the
+# next restart. Retry because creation lags the active-transition.
+- name: _verify | Roundcube created its SQLite DB on the dataset
+  when: ansible_architecture == 'x86_64'
+  stat:
+    path: /mnt/services/sqlite/roundcube/sqlite.db
+  register: _webmail_rc_db
+  retries: 10
+  delay: 2
+  until: _webmail_rc_db.stat.exists
+  failed_when: not _webmail_rc_db.stat.exists
   become: true
 
 # Map the vhost FQDN to loopback so SNI matches the served vhost on
@@ -92,7 +124,7 @@
       - doveadm
       - search
       - -u
-      - archive
+      - "{{ webmail_imap_user }}"
       - mailbox
       - INBOX
       - subject
@@ -102,6 +134,25 @@
   retries: 10
   delay: 2
   until: _webmail_doveadm.rc == 0 and (_webmail_doveadm.stdout | trim | length > 0)
+  become: true
+
+# Negative auth: username_filter restricts the static passdb to the one
+# username, so a different username must be rejected even with the right
+# password. Guards against a regression loosening the filter.
+- name: _verify | Dovecot rejects a non-archive username
+  command:
+    argv:
+      - podman
+      - exec
+      - dovecot
+      - doveadm
+      - auth
+      - test
+      - "{{ webmail_imap_user }}x"
+      - "{{ webmail_imap_password }}"
+  register: _webmail_doveadm_neg
+  changed_when: false
+  failed_when: _webmail_doveadm_neg.rc == 0
   become: true
 
 # Read-only guarantee, three ways. (1) The planted message stays in new/:
