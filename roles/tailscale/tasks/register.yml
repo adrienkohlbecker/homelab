@@ -34,7 +34,7 @@
 # non-zero -- failed_when:false + the default guards turn that into "not
 # running" rather than a task failure.
 - name: register | Check whether tailscale is already registered and running
-  command: "{{ tailscale_bin }} status --json"
+  command: "{{ tailscale_bin }} status --json --peers=false"
   register: tailscale_status
   changed_when: false
   failed_when: false
