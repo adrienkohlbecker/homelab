@@ -3,12 +3,10 @@
 # collector emits a chart per timer with age_secs / overdue tracking read
 # from the persistent trigger stamp (/var/lib/systemd/timers/stamp-*.timer).
 #
-# A separate file imported under an x86_64 gate: the collector rides
-# netdata-plugin-chartsd, which cannot install on aarch64 (its
-# `Depends: netdata (= <pinned>)` is unsatisfiable against the lagging arm64
-# build -- see roles/netdata/tasks/charts_d.yml). Without the collector the
-# charts never register, so these assertions have nothing to probe. The
-# local arm64 test box is the only aarch64 host; all prod is x86_64.
+# Split into its own file (imported from _verify.yml) only to keep that file
+# readable -- the collector rides netdata-plugin-chartsd, which is part of
+# netdata's multi-arch 2.x repo, so this runs on the arm64 box as well as
+# x86_64.
 #
 # Both fixtures use the same hourly OnCalendar (period_secs=3600 derived),
 # are stopped so systemd can't fire them and rewrite the stamp underneath
