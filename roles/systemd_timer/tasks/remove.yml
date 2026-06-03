@@ -18,6 +18,7 @@
 # start with `-` (a systemctl flag) or contain a path separator.
 - name: remove | Validate name for {{ systemd_timer_args.name | default('<unset>') }}
   assert:
+    quiet: true
     that:
       - systemd_timer_args.name is defined
       - systemd_timer_args.name is match('^[A-Za-z0-9_][A-Za-z0-9_-]*$')

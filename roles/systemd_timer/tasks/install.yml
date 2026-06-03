@@ -93,6 +93,7 @@
 # next caller's call.
 - name: install | Validate required inputs for {{ systemd_timer_args.name | default('<unset>') }}
   assert:
+    quiet: true
     that:
       - systemd_timer_args.name is defined
       - systemd_timer_args.name is match('^[a-zA-Z0-9_]+$')
@@ -122,6 +123,7 @@
 - name: install | Reject run_as on user-scope timer for {{ systemd_timer_args.name }}
   when: systemd_timer_args.run_as is defined
   assert:
+    quiet: true
     that:
       - _systemd_timer_user == 'root'
     fail_msg: >-
@@ -132,6 +134,7 @@
 - name: install | Validate environment keys for {{ systemd_timer_args.name }}
   when: systemd_timer_args.environment is defined
   assert:
+    quiet: true
     that:
       - item is match('^[A-Za-z_][A-Za-z0-9_]*$')
     fail_msg: >-
@@ -148,6 +151,7 @@
 - name: install | Reject fixed_random_delay without randomized_delay_sec for {{ systemd_timer_args.name }}
   when: systemd_timer_args.fixed_random_delay | default(false)
   assert:
+    quiet: true
     that:
       - systemd_timer_args.randomized_delay_sec is defined
     fail_msg: >-
