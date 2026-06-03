@@ -70,9 +70,12 @@
   assert:
     that:
       - test_registries.stat.exists
-      - "'docker.io' in (test_registries_content.content | b64decode)"
-      - "'ghcr.io' in (test_registries_content.content | b64decode)"
-      - nexus_url in (test_registries_content.content | b64decode)
+      # Assert the mirror *location* lines, not bare 'docker.io'/'ghcr.io':
+      # those appear as the [[registry]] location regardless of whether the
+      # [[registry.mirror]] block survived, so a substring check on the bare
+      # names passes even with the mirror blocks dropped.
+      - (nexus_url ~ '/repository/docker.io') in (test_registries_content.content | b64decode)
+      - (nexus_url ~ '/repository/ghcr.io') in (test_registries_content.content | b64decode)
     fail_msg: "registries.conf.d/homelab-mirrors.conf missing or doesn't mirror docker.io+ghcr.io to {{ nexus_url }}"
 
 - name: _verify | Stat pip and uv configs
