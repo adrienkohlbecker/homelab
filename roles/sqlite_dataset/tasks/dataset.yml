@@ -31,6 +31,11 @@
 #               pre-stat guard below still refuses to replace a *real* file
 #               already at a dest, keeping the snapshot-restore safety the
 #               no-force default gives. Mutually exclusive with pre_create.
+#   (no pre_create, no force): caller pre-creates the src file directly
+#               (e.g. via sqlite3 or copy:) before invoking this role.
+#               state=link succeeds because the src already exists. Use this
+#               when the app needs a pre-initialized (not just empty) DB.
+#               Canonical caller: roles/paperless/tasks/main.yml.
 #
 # The dict form prevents inter-call leakage: each import_role pass
 # replaces the whole sqlite_dataset_args value at play-vars scope.
