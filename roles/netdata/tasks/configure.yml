@@ -35,7 +35,7 @@
     dest: /var/lib/netdata/cloud.d/cloud.conf
     owner: netdata
     group: netdata
-    mode: "0644"
+    mode: "0660"
     backup: true
   register: netdata_cloud_conf
   become: true
