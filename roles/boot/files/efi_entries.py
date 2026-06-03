@@ -159,7 +159,9 @@ def _add_disk(disks, part, index):
     # The partition number is read from sysfs rather than lsblk's PARTN column:
     # PARTN landed in util-linux 2.38 and the fleet's jammy ships 2.37.2.
     partnum = Path(f"/sys/class/block/{partname}/partition").read_text().strip()
-    disks.append({"index": index, "disk": f"/dev/{dev['pkname']}", "part": int(partnum), "gpt_uuid": dev["partuuid"].lower()})
+    disks.append(
+        {"index": index, "disk": f"/dev/{dev['pkname']}", "part": int(partnum), "gpt_uuid": dev["partuuid"].lower()}
+    )
 
 
 def expand_entries(desired, esp_disks, total_slots):
@@ -379,18 +381,35 @@ def main():
             )
 
     # --- Timeout ---
+    timeout_warning = None
     if desired_timeout is not None and current_timeout != desired_timeout:
-        actions.append(f"timeout {current_timeout} -> {desired_timeout}")
-        if not check:
-            subprocess.run(
-                ["efibootmgr", "-q", "-t", str(desired_timeout)],
-                capture_output=True,
-                check=True,
-                text=True,
-                timeout=CMD_TIMEOUT,
-            )
+        if check:
+            actions.append(f"timeout {current_timeout} -> {desired_timeout}")
+        else:
+            try:
+                subprocess.run(
+                    ["efibootmgr", "-q", "-t", str(desired_timeout)],
+                    capture_output=True,
+                    check=True,
+                    text=True,
+                    timeout=CMD_TIMEOUT,
+                )
+                actions.append(f"timeout {current_timeout} -> {desired_timeout}")
+            except subprocess.CalledProcessError as e:
+                combined = (e.stderr or "") + (e.stdout or "")
+                if "Read-only file system" in combined:
+                    timeout_warning = (
+                        f"firmware locks Timeout variable at runtime "
+                        f"(current {current_timeout}s, desired {desired_timeout}s) "
+                        f"— change it from the BIOS setup screen"
+                    )
+                else:
+                    raise
 
-    json.dump({"changed": bool(actions), "actions": actions}, sys.stdout)
+    result = {"changed": bool(actions), "actions": actions}
+    if timeout_warning:
+        result["warnings"] = [timeout_warning]
+    json.dump(result, sys.stdout)
 
 
 if __name__ == "__main__":
