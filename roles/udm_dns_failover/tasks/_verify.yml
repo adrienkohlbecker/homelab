@@ -1,0 +1,41 @@
+- name: Verify dnscrypt-proxy is listening on the VIP
+  wait_for:
+    host: "{{ pihole_keepalived_ip }}"
+    port: 53
+    timeout: 5
+  become: true
+
+- name: Verify keepalived is running
+  systemd:
+    name: keepalived.service
+  register: _udm_dns_failover_keepalived_status
+  failed_when: _udm_dns_failover_keepalived_status.status.ActiveState != 'active'
+  become: true
+
+- name: Verify dnscrypt-proxy-vip is running
+  systemd:
+    name: dnscrypt-proxy-vip.service
+  register: _udm_dns_failover_dnscrypt_status
+  failed_when: _udm_dns_failover_dnscrypt_status.status.ActiveState != 'active'
+  become: true
+
+- name: Verify VRRP state is BACKUP (lab or pug should be MASTER)
+  shell:
+    cmd: |
+      set -euo pipefail
+      journalctl -t pihole-keepalived --no-pager -n 5 | grep -qE 'BACKUP|MASTER'
+    executable: /bin/bash
+  changed_when: false
+  become: true
+
+- name: Verify iptables VRRP rule
+  command: iptables -C INPUT -i {{ udm_dns_failover_interface }} -p 112 -j ACCEPT
+  changed_when: false
+  become: true
+
+- name: Verify ip_nonlocal_bind is set
+  command: sysctl -n net.ipv4.ip_nonlocal_bind
+  register: _udm_dns_failover_nonlocal
+  changed_when: false
+  failed_when: _udm_dns_failover_nonlocal.stdout | trim != '1'
+  become: true

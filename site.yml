@@ -130,6 +130,11 @@
     - nexus
     - homepage
 
+- name: UDM DNS failover
+  hosts: udm
+  roles:
+    - udm_dns_failover
+
 - name: Reboot check
   hosts: box,lab,pug,fox
   # serial: 1 reboots the fleet one host at a time. The reboot helper

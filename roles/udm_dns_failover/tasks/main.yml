@@ -1,0 +1,353 @@
+# Provisions keepalived + dnscrypt-proxy on the UDM Pro as a last-resort
+# DNS VIP failover peer. All persistent state lives under /data/keepalived/
+# (survives firmware updates). An on-boot script re-bootstraps the apt-
+# installed keepalived binary after firmware wipes /usr/.
+#
+# This role targets the UDM only (hosts: udm in site.yml). The UDM is not
+# a standard Ubuntu host — it runs UniFi OS (Debian bullseye, SquashFS root,
+# overlay /etc/). No handlers, no systemd_unit helper, no podman.
+- name: Validate required variables
+  assert:
+    that:
+      - pihole_keepalived_ip is defined
+      - pihole_keepalived_vrid is defined
+      - pihole_keepalived_priority is defined
+      - (pihole_keepalived_priority | int) > 0
+      - (pihole_keepalived_priority | int) <= 255
+      - pihole_keepalived_peers is defined
+      - (pihole_keepalived_peers | length) > 0
+      - inventory_hostname in external_ips
+    fail_msg: >-
+      udm_dns_failover requires pihole_keepalived_{ip,vrid,priority,peers}
+      and an external_ips entry for this host.
+  tags:
+    - udm_dns_failover
+
+# -- directory structure --------------------------------------------------
+
+- name: Create persistent directory tree
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - /data/keepalived
+    - /data/keepalived/cache
+    - /data/on_boot.d
+  become: true
+  tags:
+    - udm_dns_failover
+
+# -- dnscrypt-proxy binary ------------------------------------------------
+
+- name: Download dnscrypt-proxy
+  get_url:
+    url: "{{ udm_dns_failover_dnscrypt.aarch64.url }}"
+    dest: "/data/keepalived/cache/dnscrypt-proxy-{{ udm_dns_failover_dnscrypt.version }}.tar.gz"
+    checksum: "sha256:{{ udm_dns_failover_dnscrypt.aarch64.sha256 }}"
+    mode: "0644"
+  register: udm_dns_failover_download
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Check if dnscrypt-proxy binary exists
+  stat:
+    path: /data/keepalived/dnscrypt-proxy
+  register: udm_dns_failover_binary
+  tags:
+    - udm_dns_failover
+
+- name: Extract dnscrypt-proxy binary
+  when: udm_dns_failover_download.changed or not udm_dns_failover_binary.stat.exists
+  unarchive:
+    src: "/data/keepalived/cache/dnscrypt-proxy-{{ udm_dns_failover_dnscrypt.version }}.tar.gz"
+    dest: /data/keepalived/
+    remote_src: true
+    include:
+      - linux-arm64/dnscrypt-proxy
+    extra_opts:
+      - --strip-components=1
+  register: udm_dns_failover_extract
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Set dnscrypt-proxy binary permissions
+  file:
+    path: /data/keepalived/dnscrypt-proxy
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Symlink dnscrypt-proxy into PATH
+  file:
+    src: /data/keepalived/dnscrypt-proxy
+    dest: /usr/local/bin/dnscrypt-proxy
+    state: link
+    force: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+# -- keepalived (apt) -----------------------------------------------------
+
+- name: Install keepalived
+  apt:
+    pkg:
+      - keepalived
+    cache_valid_time: 3600
+  register: udm_dns_failover_keepalived_apt
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Find keepalived .deb in apt cache
+  find:
+    paths: /var/cache/apt/archives
+    patterns: 'keepalived_*.deb'
+  register: udm_dns_failover_keepalived_debs
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Cache keepalived .deb for firmware-update recovery
+  when: udm_dns_failover_keepalived_debs.files | length > 0
+  copy:
+    src: "{{ udm_dns_failover_keepalived_debs.files | sort(attribute='mtime') | last | attr('path') }}"
+    dest: /data/keepalived/cache/
+    remote_src: true
+    mode: "0644"
+    backup: true
+  changed_when: false
+  become: true
+  tags:
+    - udm_dns_failover
+
+# -- configuration files --------------------------------------------------
+
+- name: Deploy keepalived base config
+  copy:
+    src: keepalived.conf
+    dest: /data/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: "0640"
+    backup: true
+  register: udm_dns_failover_base_conf
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Deploy VRRP fragment
+  template:
+    src: pihole.conf.j2
+    dest: /data/keepalived/pihole.conf
+    owner: root
+    group: root
+    mode: "0640"
+    backup: true
+  register: udm_dns_failover_vrrp_conf
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Deploy healthcheck script
+  template:
+    src: healthcheck.sh.j2
+    dest: /data/keepalived/healthcheck.sh
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Deploy dnscrypt-proxy config
+  template:
+    src: dnscrypt-proxy.toml.j2
+    dest: /data/keepalived/dnscrypt-proxy.toml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: udm_dns_failover_dnscrypt_conf
+  become: true
+  tags:
+    - udm_dns_failover
+
+# -- symlinks into /etc/ --------------------------------------------------
+
+- name: Symlink keepalived base config
+  file:
+    src: /data/keepalived/keepalived.conf
+    dest: /etc/keepalived/keepalived.conf
+    state: link
+    force: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Create keepalived conf.d directory
+  file:
+    path: /etc/keepalived/conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Symlink VRRP fragment
+  file:
+    src: /data/keepalived/pihole.conf
+    dest: /etc/keepalived/conf.d/pihole.conf
+    state: link
+    force: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Symlink healthcheck script
+  file:
+    src: /data/keepalived/healthcheck.sh
+    dest: /usr/local/bin/pihole_healthcheck
+    state: link
+    force: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+# -- sysctl ----------------------------------------------------------------
+
+- name: Enable ip_nonlocal_bind
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_nonlocal_bind
+    value: '1'
+    sysctl_file: /etc/sysctl.d/30-keepalived.conf
+    sysctl_set: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+# -- iptables VRRP accept -------------------------------------------------
+# INPUT has policy ACCEPT with jumps to ALIEN/TOR/UBIOS_INPUT_JUMP (no
+# trailing DROP), so appending is safe. The rule is idempotent via -C check.
+
+- name: Check VRRP iptables rule
+  command: iptables -C INPUT -i {{ udm_dns_failover_interface }} -p 112 -j ACCEPT
+  register: udm_dns_failover_iptables_check
+  changed_when: false
+  failed_when: false
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Add VRRP iptables rule
+  when: udm_dns_failover_iptables_check.rc != 0
+  command: iptables -A INPUT -i {{ udm_dns_failover_interface }} -p 112 -j ACCEPT
+  changed_when: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+# -- systemd units ---------------------------------------------------------
+
+- name: Deploy on-boot framework unit
+  copy:
+    src: "{{ role_path }}/templates/on-boot.service"
+    dest: /etc/systemd/system/on-boot.service
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: udm_dns_failover_onboot_unit
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Deploy dnscrypt-proxy-vip unit
+  template:
+    src: dnscrypt-proxy-vip.service.j2
+    dest: /etc/systemd/system/dnscrypt-proxy-vip.service
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: udm_dns_failover_dnscrypt_unit
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Deploy on-boot keepalived script
+  template:
+    src: on-boot-keepalived.sh.j2
+    dest: /data/on_boot.d/30-keepalived.sh
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - udm_dns_failover
+
+# Keep a copy of the unit in /data/ for the on-boot script to re-deploy
+# if a firmware update clears the overlay.
+- name: Cache dnscrypt-proxy-vip unit in /data/
+  template:
+    src: dnscrypt-proxy-vip.service.j2
+    dest: /data/keepalived/dnscrypt-proxy-vip.service
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Reload systemd
+  when: >-
+    udm_dns_failover_onboot_unit.changed or
+    udm_dns_failover_dnscrypt_unit.changed
+  systemd:
+    daemon_reload: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+# -- service lifecycle -----------------------------------------------------
+
+- name: Enable on-boot framework
+  systemd:
+    name: on-boot.service
+    enabled: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Start dnscrypt-proxy-vip
+  systemd:
+    name: dnscrypt-proxy-vip.service
+    state: "{{ (udm_dns_failover_dnscrypt_conf.changed or udm_dns_failover_dnscrypt_unit.changed or (udm_dns_failover_extract | default({})).changed | default(false)) | ternary('restarted', 'started') }}"
+    enabled: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Start keepalived
+  systemd:
+    name: keepalived.service
+    state: "{{ (udm_dns_failover_base_conf.changed or udm_dns_failover_vrrp_conf.changed) | ternary('reloaded', 'started') }}"
+    enabled: true
+  become: true
+  tags:
+    - udm_dns_failover
