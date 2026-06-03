@@ -15,10 +15,14 @@
 #   reload            default false; hitless alternative to restart for
 #                     daemons that pick up config via SIGHUP. Mutually
 #                     exclusive with restart in practice.
-#   throttle          default 0 (no limit); forwarded to the restart/reload
-#                     tasks' `throttle:`. A multi-host HA service (pihole on
-#                     the lab+pug pair) sets throttle: 1 so state changes
-#                     serialize across the batch and one node keeps serving.
+#   throttle          default 0 (no limit); forwarded only to the restart
+#                     and reload tasks' `throttle:` -- the pre-pull and
+#                     reset-failed steps are deliberately not throttled, so
+#                     on an HA pair both nodes may pull/clear concurrently;
+#                     only the restart/reload state-change serializes. A
+#                     multi-host HA service (pihole on the lab+pug pair) sets
+#                     throttle: 1 so the restart serializes across the batch
+#                     and one node keeps serving.
 #
 # The dict form prevents inter-call leakage: each import_role pass replaces
 # the whole `systemd_unit_args` value at play-vars scope, so a previous
