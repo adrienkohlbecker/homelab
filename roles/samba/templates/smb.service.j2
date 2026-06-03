@@ -1,27 +1,27 @@
 <?xml version="1.0" standalone='no'?>
 <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
 <service-group>
- <name replace-wildcards="yes">%h</name>
- <service protocol="ipv4">
-   <type>_smb._tcp</type>
-   <port>{{ service_ports.samba }}</port>
- </service>
- {# No _device-info._tcp here: the avahi role owns that record (model=
-    avahi_device_model), so publishing a second one from samba would race
-    it with a conflicting model string. The macOS Finder server icon for an
-    SMB connection comes from fruit:model in smb.conf, delivered in-band
-    over the AAPL extension -- independent of this mDNS advert. #}
+  <name replace-wildcards="yes">%h</name>
+  <service protocol="ipv4">
+     <type>_smb._tcp</type>
+     <port>{{ service_ports.samba }}</port>
+  </service>
+  {# No _device-info._tcp here: the avahi role owns that record (model=
+     avahi_device_model), so publishing a second one from samba would race
+     it with a conflicting model string. The macOS Finder server icon for an
+     SMB connection comes from fruit:model in smb.conf, delivered in-band
+     over the AAPL extension -- independent of this mDNS advert. #}
 {% set tm_shares = smb_shares | default([]) | selectattr('time_machine', 'defined') | selectattr('time_machine') | list %}
 {% if tm_shares | length > 0 %}
- {# Advertise Time Machine targets so macOS auto-discovers them; each share
-    flagged time_machine: true becomes one dkN entry. #}
- <service protocol="ipv4">
-   <type>_adisk._tcp</type>
-   <port>9</port>
-   <txt-record>sys=waMa=0,adVF=0x100</txt-record>
+  {# Advertise Time Machine targets so macOS auto-discovers them; each share
+     flagged time_machine: true becomes one dkN entry. #}
+  <service protocol="ipv4">
+     <type>_adisk._tcp</type>
+     <port>9</port>
+     <txt-record>sys=waMa=0,adVF=0x100</txt-record>
 {% for share in tm_shares %}
-   <txt-record>dk{{ loop.index0 }}=adVN={{ share.name }},adVF=0x82</txt-record>
+     <txt-record>dk{{ loop.index0 }}=adVN={{ share.name }},adVF=0x82</txt-record>
 {% endfor %}
- </service>
+  </service>
 {% endif %}
 </service-group>
