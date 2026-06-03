@@ -73,5 +73,5 @@ fi
 # in a chroot or onto FAT32 doesn't trip "Cannot change ownership"
 # from the container's build-user uids leaking into the archive.
 tarball="zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
-(cd "$out_dir" && tar --owner=0 --group=0 -czf "$tarball" vmlin*-bootmenu initramfs-bootmenu.img vmlinuz.EFI)
+(cd "$out_dir" && tar --sort=name --owner=0 --group=0 -czf "$tarball" vmlin*-bootmenu initramfs-bootmenu.img vmlin*.EFI)
 sha256sum "$out_dir/$tarball"
