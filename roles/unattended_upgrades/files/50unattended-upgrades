@@ -82,6 +82,9 @@ Unattended-Upgrade::MinimalSteps "true";
 // If empty or unset then no email is sent, make sure that you
 // have a working mail setup on your system. A package that provides
 // 'mailx' must be installed. E.g. "user@example.com"
+// Delivery routes via the postfix root alias (roles/postfix → root_email).
+// The postfix role converges after this one, but mail only fires on the
+// later apt-daily timer, so the deferred ordering is harmless.
 Unattended-Upgrade::Mail "root";
 
 // Set this value to one of:
