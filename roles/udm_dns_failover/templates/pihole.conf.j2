@@ -4,6 +4,14 @@ vrrp_script pihole_healthcheck {
   timeout   5
   rise      1
   fall      2
+  # The base conf defaults vrrp_script blocks to script_user nobody; declare
+  # it explicitly per the multi-tenant contract. The loopback DNS healthcheck
+  # needs no privilege (unlike pihole's container-port probe on lab/pug, which
+  # declares user root).
+  user      nobody
+  # Start in FAILED state so keepalived enters FAULT on every restart and only
+  # leaves once the healthcheck passes once -- a deterministic gate on the
+  # UDM's own dnsmasq health rather than a wallclock startup delay.
   init_fail
 }
 
@@ -29,6 +37,10 @@ vrrp_instance pihole {
   priority          {{ pihole_keepalived_priority }}
   advert_int        1
 
+  # Delay a recovered higher-priority peer (lab/pug) from reclaiming the VIP
+  # for 60s so a flapping peer doesn't yank DNS back and forth. Plain preempt
+  # (no nopreempt) is kept so a recovered peer does eventually reclaim and the
+  # UDM falls back to BACKUP.
   preempt_delay     60
 
   track_interface {
@@ -39,6 +51,9 @@ vrrp_instance pihole {
     {{ pihole_keepalived_ip }}/32
   }
 
+  # Periodic gratuitous ARP so any LAN cache holding a stale MAC for the VIP
+  # self-heals within ~1 minute. Without use_vmac (above) these advertise the
+  # VIP at br0's physical MAC.
   garp_master_repeat 3
   garp_master_refresh 60
 
