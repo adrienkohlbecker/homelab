@@ -1,0 +1,7 @@
+# Optional serial console args appended to the ZBM commandline's 'default'
+# fragment. Set per-host when the hardware has a legacy UART — earlycon probing
+# an absent port hangs the boot. Empty = no serial console args (safe default).
+#
+# Example for a host with a standard 8250 UART at 0x3f8:
+#   boot_serial_console: "earlycon=uart8250,io,0x3f8 console=ttyS0,115200"
+boot_serial_console: ""
