@@ -32,7 +32,7 @@
 # role strips .j2 for the on-disk dest. systemd_unit_args.dest overrides
 # the dest path (used by drop-ins to land at <unit>.d/override.conf).
 #
-- name: Validate install args
+- name: install | Validate install args
   assert:
     quiet: true
     that:
@@ -48,7 +48,7 @@
 # keys in a single set_fact concurrently — a key can't read a sibling
 # defined in the same task. Primitives (caller-var defaulting) first,
 # derived facts (scope/dir) second.
-- name: Resolve caller defaults for {{ systemd_unit_args.src }}
+- name: install | Resolve caller defaults for {{ systemd_unit_args.src }}
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
@@ -69,7 +69,7 @@
                    else (systemd_unit_args.dest
                          | default(systemd_unit_args.src | regex_replace('\.j2$', '')))) }}
 
-- name: Derive install scope for {{ systemd_unit_args.src }}
+- name: install | Derive install scope for {{ systemd_unit_args.src }}
   set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
@@ -95,7 +95,7 @@
 # "would have enabled" without actually creating the sentinel, so a
 # false positive here would block check-mode runs on a fresh host.
 # Real-apply still fail-closes.
-- name: Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
+- name: install | Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
   when:
     - _systemd_unit_condition
     - _systemd_unit_scope == 'user'
@@ -111,14 +111,14 @@
 # intent. Check the same path the verify command targets so drop-ins
 # whose parent unit is masked (dest = <unit>.d/override.conf, verify =
 # the bare unit) are also caught.
-- name: Stat unit path to detect a pre-existing mask
+- name: install | Stat unit path to detect a pre-existing mask
   when: _systemd_unit_condition
   stat:
     path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}"
   register: _systemd_unit_mask
   become: true
 
-- name: Refuse to overwrite masked unit
+- name: install | Refuse to overwrite masked unit
   when:
     - _systemd_unit_condition
     - _systemd_unit_mask.stat.islnk | default(false)
@@ -133,7 +133,7 @@
 # The check above guards the parent/verify unit. When dest_abs is set the
 # write target is a different path (e.g. /etc/systemd/journald.conf.d/99-custom.conf),
 # so we need a second mask check for that specific path.
-- name: Stat dest_abs path for pre-existing mask
+- name: install | Stat dest_abs path for pre-existing mask
   when:
     - _systemd_unit_condition
     - systemd_unit_args.dest_abs is defined
@@ -142,7 +142,7 @@
   register: _systemd_unit_mask_abs
   become: true
 
-- name: Refuse to overwrite masked dest_abs path
+- name: install | Refuse to overwrite masked dest_abs path
   when:
     - _systemd_unit_condition
     - systemd_unit_args.dest_abs is defined
@@ -155,7 +155,7 @@
       `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_verify }}`
       before re-running, or --limit the play to skip this role.
 
-- name: Install systemd unit
+- name: install | Install systemd unit
   vars:
     _systemd_unit_path: "{{ systemd_unit_args.dest_abs | default(_systemd_unit_dir ~ '/' ~ _systemd_unit_name) }}"
   block:
@@ -172,7 +172,7 @@
     # vars: block before set_facts run still resolves cleanly. Same
     # reason as the linger-task name above. Task body itself still uses
     # _systemd_unit_src because by execution time the set_fact has run.
-    - name: Write the unit file ({{ _module }})
+    - name: install | Write the unit file ({{ _module }})
       when: _systemd_unit_condition
       vars:
         _module: "{{ 'template' if systemd_unit_args.src.endswith('.j2') else 'copy' }}"
@@ -202,7 +202,7 @@
     # this), and skipping --user avoids surfacing user-manager-only
     # resolution differences that the strict `stderr != ''` check would turn
     # into a spurious rollback.
-    - name: Validate unit file
+    - name: install | Validate unit file
       when: systemd_unit_file.changed
       command:
         argv:
@@ -216,7 +216,7 @@
       failed_when: systemd_unit_verify.rc != 0 or systemd_unit_verify.stderr != ''
       become: true
 
-    - name: Reload daemon
+    - name: install | Reload daemon
       when: systemd_unit_file.changed
       systemd:
         daemon_reload: true
@@ -233,7 +233,7 @@
     # Caller var in the name (same parse-time-vs-runtime reason as the
     # linger and Write tasks above); body still references the
     # set_fact'd _systemd_unit_name because by execution time it's set.
-    - name: Record install result for {{ systemd_unit_args.src }}
+    - name: install | Record install result for {{ systemd_unit_args.src }}
       set_fact:
         "{{ _systemd_unit_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ systemd_unit_file }}"
 
@@ -247,7 +247,7 @@
   # template/copy `validate:` arg would let us check before placing, but
   # it doesn't fail on warnings; see the comment at the top of this file.)
   rescue:
-    - name: Copy backup file to original  # noqa: require-backup
+    - name: install | Copy backup file to original  # noqa: require-backup
       when: '"backup_file" in systemd_unit_file'
       copy:
         remote_src: true
@@ -258,21 +258,21 @@
         mode: "0644"
       become: true
 
-    - name: Delete backup file
+    - name: install | Delete backup file
       when: '"backup_file" in systemd_unit_file'
       file:
         path: "{{ systemd_unit_file.backup_file }}"
         state: absent
       become: true
 
-    - name: Delete newly added file
+    - name: install | Delete newly added file
       when: systemd_unit_file.changed and "backup_file" not in systemd_unit_file
       file:
         path: "{{ _systemd_unit_path }}"
         state: absent
       become: true
 
-    - name: Record failure
+    - name: install | Record failure
       fail:
         msg: >-
           Unable to install {{ _systemd_unit_path }}:
