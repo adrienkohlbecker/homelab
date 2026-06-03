@@ -181,7 +181,9 @@ seerr_vapid_public: changeme
 seerr_client_id: changeme
 seerr_session_secret: 0000000000000000000000000000000000000000000000000000000000000000
 plex_machine_id: changeme
-tautulli_api_key: changeme
+# Tautulli's /api/v2 rejects a key whose length != 32 ("API key not generated
+# correctly"), so the placeholder must be 32 chars for _verify's api probes.
+tautulli_api_key: changemechangemechangemechangeme
 tautulli_jwt_secret: changeme
 tautulli_pms_token: changeme
 tautulli_pms_client_id: changeme
