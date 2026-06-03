@@ -190,7 +190,7 @@ homepage_netdata_hosts:
 # empty [Unit] section regardless of paths used here.
 smb_shares:
   - name: smbtest
-    path: /tmp/samba_test
+    path: /srv/smbtest
     valid users: "{{ ansible_user_id }}"
     time_machine: true
     time_machine_max_size: 1T

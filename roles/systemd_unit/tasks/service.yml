@@ -72,7 +72,7 @@
   failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
 
 - name: Enable the service
-  when: _systemd_unit_condition
+  when: _systemd_unit_condition and not (ansible_check_mode and systemd_unit_file is defined and systemd_unit_file is changed)
   systemd:
     name: "{{ _systemd_unit_name }}"
     enabled: true
