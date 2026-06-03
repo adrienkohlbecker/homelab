@@ -141,3 +141,30 @@
     fail_msg: >-
       /proc/cmdline does not carry earlycon= after reboot — the
       ZBM serial args may not have propagated: {{ _cmdline }}
+
+# --- EFI NVRAM boot entries ---
+
+- name: _verify | Dump EFI boot entries
+  when: not grub_bootloader
+  command: efibootmgr -v
+  changed_when: false
+  become: true
+
+- name: _verify | EFI entries are converged
+  when: not grub_bootloader
+  command: python3 /opt/boot/efi_entries.py --check
+  environment:
+    BOOT_EFI_ENTRIES: "{{ boot_efi_entries | to_json }}"
+    BOOT_EFI_TIMEOUT: "{{ boot_efi_timeout | to_json }}"
+  changed_when: false
+  become: true
+  register: _boot_verify_efi
+
+- name: _verify | No EFI entry drift
+  when: not grub_bootloader
+  vars:
+    _efi_result: "{{ _boot_verify_efi.stdout | from_json }}"
+  assert:
+    that: not _efi_result.changed
+    fail_msg: >-
+      EFI boot entries need changes: {{ _efi_result.actions | join(', ') }}

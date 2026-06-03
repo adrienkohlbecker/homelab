@@ -1,0 +1,58 @@
+# Declare and converge EFI NVRAM boot entries so the firmware boots
+# rEFInd -> ZBM by default, with per-disk entries on mdadm-EFI hosts
+# for single-disk-failure survivability.
+#
+# A Python helper diffs current NVRAM state against boot_efi_entries
+# (from defaults) and applies the minimum changes: create missing
+# entries, remove stale/relabeled managed entries, reorder BootOrder.
+#
+# Gated on `not grub_bootloader` by the import in main.yml.
+
+- name: efi_entries | Create /opt/boot
+  file:
+    path: /opt/boot
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - boot
+
+- name: efi_entries | Install management script
+  copy:
+    src: efi_entries.py
+    dest: /opt/boot/efi_entries.py
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  register: _boot_efi_install
+  become: true
+  tags:
+    - boot
+
+- name: efi_entries | Converge NVRAM entries
+  when: not (ansible_check_mode and _boot_efi_install is changed)
+  command: python3 /opt/boot/efi_entries.py {{ '--check' if ansible_check_mode else '' }}
+  environment:
+    BOOT_EFI_ENTRIES: "{{ boot_efi_entries | to_json }}"
+    BOOT_EFI_TIMEOUT: "{{ boot_efi_timeout | to_json }}"
+  check_mode: false
+  become: true
+  register: _boot_efi_result
+  changed_when: (_boot_efi_result.stdout | from_json).changed
+  tags:
+    - boot
+
+- name: efi_entries | Ask to reboot
+  when: _boot_efi_result is changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - boot
