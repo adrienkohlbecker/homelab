@@ -35,7 +35,7 @@
          | selectattr('given_name', 'equalto', ansible_hostname | lower)
          | list | first | default({}) }}
     _tailscale_desired_routes: >-
-      {{ (tailscale_advertise_routes.split(','))
+      {{ (tailscale_advertise_routes.split(',') | reject('equalto', '') | list)
          + (tailscale_advertise_exit_node | ternary(['0.0.0.0/0', '::/0'], [])) }}
 
 - name: _verify | The node registered and approved routes match exactly
