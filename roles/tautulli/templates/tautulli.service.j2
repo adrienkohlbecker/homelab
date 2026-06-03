@@ -22,7 +22,10 @@ Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
 TimeoutStartSec=120
-TimeoutStopSec=150
+# Exceed the container's --stop-timeout (120s) so a slow graceful shutdown --
+# during which Tautulli writes config.ini back -- finishes before systemd's
+# stop deadline SIGKILLs it and skips the writeback.
+TimeoutStopSec=180
 RestartSec=5
 Type=notify
 NotifyAccess=all
@@ -42,10 +45,14 @@ ExecStart=/usr/bin/podman run \
     --security-opt=no-new-privileges \
     --volume /mnt/services/tautulli:/config \
     --volume /mnt/services/sqlite/tautulli:/mnt/services/sqlite/tautulli \
-    --volume "/mnt/services/plex:/plex:ro" \
     --env PUID={{ tautulli_user.uid }} \
     --env PGID={{ media_group.gid }} \
     --env TZ={{ system_timezone }} \
+    {# UMASK=027: /config backups bundle config.ini (api_key/pms_token/  #}
+    {# jwt_secret); 027 keeps them group-unreadable (image default 022   #}
+    {# is group-readable by mode). Tautulli isn't in the media file      #}
+    {# pipeline, so no cross-service group-write is sacrificed.          #}
+    --env UMASK=027 \
     --network media \
     --publish 127.0.0.1:{{ service_ports.tautulli }}:8181/tcp \
     --health-cmd '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8181/status"]' \
