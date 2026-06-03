@@ -300,6 +300,25 @@
     storage.type      filesystem
     storage.pause_on_chunks_overlimit  on
 
+{% if fluentbit_otlp_local %}
+# UniFi SIEM syslog: the UDM + APs + switches forward device and
+# system logs as RFC 3164 UDP syslog. Bound to this host's management
+# IP so only the local LAN can reach it (firewall scopes to the mgmt
+# VLAN). Uses a `udp` input + custom parser instead of the `syslog`
+# input because UniFi's ident field contains commas and plus signs
+# (e.g. "e063da...,UAP-nanoHD-6.7.41+15623") that the stock
+# syslog-rfc3164 parser's `[a-zA-Z0-9_\/\.\-]*` rejects.
+[INPUT]
+    Name              udp
+    Tag               unifi
+    Listen            {{ ansible_ssh_host }}
+    Port              {{ service_ports.udm_syslog }}
+    Format            none
+    Chunk_Size        32k
+    storage.type      filesystem
+    storage.pause_on_chunks_overlimit  on
+{% endif %}
+
 # keepalived emits "Printing VRRP as json for process(N) on signal" at
 # LOG_INFO every time keepalived_exporter scrapes it (default ~30s ->
 # ~3k records/day/host of pure exporter chatter). Hardcoded in keepalived

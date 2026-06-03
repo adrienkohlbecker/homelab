@@ -207,6 +207,7 @@ service_ports:
   speedtest: 2807
   tautulli: 8182
   transmission_bt: 51413
+  udm_syslog: 5140
   wireguard: 51820
 
 # URL nginx's auth_request subrequest hits for forward-auth on sites
