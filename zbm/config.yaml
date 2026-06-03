@@ -13,4 +13,4 @@ Components:
 EFI:
   Enabled: false
 Kernel:
-  CommandLine: quiet loglevel=0
+  CommandLine: quiet loglevel=0 nomodeset
