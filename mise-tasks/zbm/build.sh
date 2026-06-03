@@ -34,7 +34,7 @@ if ! key_material="$(op read 'op://Lab/hxad25fxm2gfulafg23b6sv33e/private key')"
   echo "op read failed — is the 1Password CLI signed in? Try: op signin" >&2
   exit 1
 fi
-(umask 077 && printf '%s\n' "$key_material" > "$host_key")
+(umask 077 && printf '%s\n' "$key_material" >"$host_key")
 
 # zbm-builder.sh:
 #   -b: build directory (zbm/ — contains config.yaml, dracut.conf.d/, hooks/)
