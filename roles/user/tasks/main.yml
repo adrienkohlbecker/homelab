@@ -76,23 +76,16 @@
   tags:
     - user
 
-- name: Set shell to zsh
-  user:
-    name: "{{ ansible_user_id }}"
-    shell: /bin/zsh
-  become: true
-  tags:
-    - user
-
 # adm owns most of /var/log (syslog, auth.log, journal via systemd-journal),
 # so membership lets the operator tail logs over SSH without sudo -- the
 # diagnostic reads CLAUDE.md treats as pre-authorized. kvm owns /dev/kvm,
 # so membership lets the operator boot qemu VMs (test harness, ad-hoc libvirt)
 # without sudo. append is load-bearing: without it `groups:` replaces the
 # supplementary set and would strip sudo.
-- name: Add the operator to the adm and kvm groups
+- name: Set login shell and supplementary groups
   user:
     name: "{{ ansible_user_id }}"
+    shell: /bin/zsh
     groups: [adm, kvm]
     append: true
   become: true
