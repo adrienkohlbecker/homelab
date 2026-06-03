@@ -88,6 +88,15 @@ class TestClassifyChangedFiles:
         result = detect.classify_changed_files(["Dockerfile"], is_master_push=False)
         assert result.ci_image_changed is False
 
+    def test_zbm_changed(self) -> None:
+        for path in ("zbm/config.yaml", "zbm/dracut.conf.d/recovery.conf", "mise-tasks/zbm/build.sh"):
+            assert detect.classify_changed_files([path]).zbm_changed is True, path
+
+    def test_zbm_unchanged(self) -> None:
+        assert detect.classify_changed_files(["roles/nginx/tasks/main.yml"]).zbm_changed is False
+        # mise.toml carries ZBM_VERSION but isn't a zbm path -> full-universe, not zbm.
+        assert detect.classify_changed_files(["mise.toml"]).zbm_changed is False
+
     def test_mixed_paths(self) -> None:
         paths = [
             "roles/nginx/tasks/main.yml",
@@ -103,7 +112,7 @@ class TestClassifyChangedFiles:
 
     def test_empty_paths(self) -> None:
         result = detect.classify_changed_files([])
-        assert result == detect.ChangeClassification([], [], set(), False, set())
+        assert result == detect.ChangeClassification([], [], set(), False, set(), False)
 
     def test_blank_lines_ignored(self) -> None:
         result = detect.classify_changed_files(["", "roles/nginx/tasks/main.yml", ""])
@@ -174,9 +183,7 @@ class TestClassifyChangedFiles:
         assert not result.full_universe_paths
 
     def test_machine_universe_multiple(self) -> None:
-        result = detect.classify_changed_files(
-            ["host_vars/lab-qemu.yml", "host_vars/pug-qemu.yml"]
-        )
+        result = detect.classify_changed_files(["host_vars/lab-qemu.yml", "host_vars/pug-qemu.yml"])
         assert result.machine_universe == {"lab", "pug"}
 
 
@@ -1321,6 +1328,7 @@ class TestCmdEmit:
         assert out["packer_worker_changed"] == "false"
         assert out["ci_image_changed"] == "false"
         assert out["site_test"] == "false"
+        assert out["zbm_changed"] == "false"
 
     def test_packer_changed_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
@@ -1352,6 +1360,13 @@ class TestCmdEmit:
         assert rc == 0
         out = _parse_kv(capsys.readouterr().out)
         assert out["site_test"] == "true"
+
+    def test_zbm_changed_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+        rc = detect._cmd_emit(["--matrix", "[]", "--zbm-changed", "true"])
+        assert rc == 0
+        out = _parse_kv(capsys.readouterr().out)
+        assert out["zbm_changed"] == "true"
 
     def test_packer_sources(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
