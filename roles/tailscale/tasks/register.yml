@@ -8,10 +8,9 @@
 - name: register | Assert required tailscale inputs are set
   assert:
     that:
-      - tailscale_login_server is defined
-      - tailscale_headscale_host is defined
-      - tailscale_headscale_user is defined
-      - tailscale_advertise_routes is defined
+      - tailscale_login_server | default('') | length > 0
+      - tailscale_headscale_host | default('') | length > 0
+      - tailscale_headscale_user | default('') | length > 0
       - (tailscale_advertise_routes | length > 0) or (tailscale_advertise_exit_node | bool)
     fail_msg: >-
       tailscale registration needs tailscale_login_server, tailscale_headscale_host
