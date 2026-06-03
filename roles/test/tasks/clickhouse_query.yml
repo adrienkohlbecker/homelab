@@ -15,9 +15,14 @@
 # literal in the role file, which Ansible 2.19's trust check requires
 # (default-from-filter conditionals that reference a register'd module
 # result fail with "Encountered untrusted template or expression").
+# wait_end_of_query=1 buffers the full response server-side so a query
+# error raised mid-stream arrives as a non-200 status (with the exception
+# in the body) rather than a 200 whose body is silently truncated --
+# without it curl --fail-with-body can't see the error and the task passes
+# with garbage stdout.
 - name: "clickhouse_query | {{ test_args.label | default('query') }}"
   command:
-    cmd: podman exec -i hyperdx curl --fail-with-body -sS --max-time 5 --data-binary @- "http://localhost:8123/"
+    cmd: podman exec -i hyperdx curl --fail-with-body -sS --max-time 5 --data-binary @- "http://localhost:8123/?wait_end_of_query=1"
     stdin: "{{ test_args.sql }}"
   register: test_clickhouse_result
   changed_when: false

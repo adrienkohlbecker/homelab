@@ -20,14 +20,23 @@
 #
 # Output:
 #   test_clickhouse_result.stdout: response from the final iteration.
+# wait_end_of_query=1 buffers the full response server-side so a query
+# error raised mid-stream arrives as a non-200 status (with the exception
+# in the body) rather than a 200 whose body is silently truncated --
+# without it curl --fail-with-body can't see the error.
 - name: "clickhouse_query_wait | {{ test_args.label | default('query') }}"
   command:
-    cmd: podman exec -i hyperdx curl --fail-with-body -sS --max-time 5 --data-binary @- "http://localhost:8123/"
+    cmd: podman exec -i hyperdx curl --fail-with-body -sS --max-time 5 --data-binary @- "http://localhost:8123/?wait_end_of_query=1"
     stdin: "{{ test_args.sql }}"
   register: test_clickhouse_result
   changed_when: false
-  failed_when: test_clickhouse_result.rc != 0 and test_clickhouse_result.attempts >= (test_args.retries | default(30))
-  retries: "{{ test_args.retries | default(30) }}"
+  # Resolve the retry count once so the failed_when guard and retries: can't
+  # drift apart. .attempts is unset before the first iteration completes, so
+  # default(0) keeps the guard from erroring on a transient early curl failure.
+  vars:
+    _test_ch_retries: "{{ test_args.retries | default(30) }}"
+  failed_when: test_clickhouse_result.rc != 0 and (test_clickhouse_result.attempts | default(0)) >= (_test_ch_retries | int)
+  retries: "{{ _test_ch_retries }}"
   delay: "{{ test_args.delay | default(2) }}"
   until: "{{ test_args.until }}"
   become: true
