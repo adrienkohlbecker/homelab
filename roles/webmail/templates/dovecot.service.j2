@@ -60,8 +60,8 @@ ExecStart=/usr/bin/podman run \
     {# Startup: doveadm search gates readiness on a real mailbox scan (auth +
        userdb + Maildir mount + index write), not just auth. Running: auth test
        is lighter and sufficient once the mailbox was proven reachable. #}
-    --health-cmd         '["doveadm","auth","test","archive","archive"]' \
-    --health-startup-cmd '["doveadm","search","-u","archive","mailbox","INBOX","ALL"]' \
+    --health-cmd         '["doveadm","auth","test","{{ webmail_imap_user }}","{{ webmail_imap_password }}"]' \
+    --health-startup-cmd '["doveadm","search","-u","{{ webmail_imap_user }}","mailbox","INBOX","ALL"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "30s" \
