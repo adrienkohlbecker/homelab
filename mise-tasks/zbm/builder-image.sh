@@ -54,11 +54,15 @@ else
   trap - EXIT INT TERM
 fi
 
+# PACKAGES are extra Void packages layered onto upstream's base image to satisfy
+# recovery.conf's install_items: mdadm + nvme-cli (disk tooling), dracut-crypt-ssh
+# + dropbear (recovery SSH), and dhclient for ip=single-dhcp (the base image ships
+# no DHCP client, so dracut's network module would otherwise have nothing to call).
 docker buildx build \
   --pull \
   --progress=plain \
   --build-arg "XBPS_REPOS=${xbps_repo}" \
-  --build-arg "PACKAGES=mdadm nvme-cli dracut-crypt-ssh dropbear" \
+  --build-arg "PACKAGES=mdadm nvme-cli dracut-crypt-ssh dropbear dhclient" \
   --load \
   --tag "localhost/zbm-builder:v${ZBM_VERSION}-${arch}" \
   -f "$src_dir/releng/docker/Dockerfile" \
