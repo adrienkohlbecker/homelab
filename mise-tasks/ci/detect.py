@@ -103,9 +103,18 @@ CI_IMAGE_INPUT_PATTERNS: list[str] = [
     r"packer/hcloud_worker\.pkr\.hcl",
 ]
 
+# The custom ZFSBootMenu recovery image is built out-of-band — not a role, not a
+# packer source. A change under either of these dirs triggers the zbm-build
+# validation job (rebuilds the builder image + tarball; no upload).
+ZBM_PATH_PATTERNS: list[str] = [
+    r"zbm/",
+    r"mise-tasks/zbm/",
+]
+
 FULL_UNIVERSE_RE = re.compile(r"^(" + "|".join(FULL_UNIVERSE_PATTERNS) + r")$")
 PACKER_PATHS_RE = re.compile(r"^(" + "|".join(PACKER_PATH_PATTERNS) + r")")
 CI_IMAGE_INPUTS_RE = re.compile(r"^(" + "|".join(CI_IMAGE_INPUT_PATTERNS) + r")$")
+ZBM_PATHS_RE = re.compile(r"^(" + "|".join(ZBM_PATH_PATTERNS) + r")")
 ROLE_PATH_RE = re.compile(r"^roles/([^/]+)/")
 
 
@@ -120,6 +129,7 @@ class ChangeClassification(NamedTuple):
     packer_sources_affected: set[str]
     ci_image_changed: bool
     machine_universe: set[str]
+    zbm_changed: bool
 
 
 def _packer_sources_for(path: str) -> set[str]:
@@ -151,6 +161,7 @@ def classify_changed_files(
     packer_sources: set[str] = set()
     ci_image_changed = False
     machine_universe: set[str] = set()
+    zbm_changed = False
 
     for path in paths:
         if not path:
@@ -163,6 +174,8 @@ def classify_changed_files(
         mu = _machine_universe_for(path)
         if mu:
             machine_universe.add(mu)
+        if ZBM_PATHS_RE.match(path):
+            zbm_changed = True
         m = ROLE_PATH_RE.match(path)
         if m:
             roles.add(m.group(1))
@@ -173,6 +186,7 @@ def classify_changed_files(
         packer_sources_affected=packer_sources,
         ci_image_changed=ci_image_changed,
         machine_universe=machine_universe,
+        zbm_changed=zbm_changed,
     )
 
 
@@ -406,7 +420,7 @@ def _gh_api_get(
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read())
-        except (urllib.error.URLError, urllib.error.HTTPError, OSError):
+        except urllib.error.URLError, urllib.error.HTTPError, OSError:
             if attempt < retries:
                 time.sleep(retry_delay)
             else:
@@ -625,6 +639,7 @@ def _cmd_emit(args: list[str]) -> int:
     p.add_argument("--packer-worker-changed", default="false")
     p.add_argument("--ci-image-changed", default="false")
     p.add_argument("--site-test", default="false")
+    p.add_argument("--zbm-changed", default="false")
     p.add_argument("--inputs-sources", default="")
     p.add_argument("--inputs-ubuntu", default="")
     p.add_argument("--packer-sources-affected", default="")
@@ -649,6 +664,7 @@ def _cmd_emit(args: list[str]) -> int:
         ("packer_worker_changed", opts.packer_worker_changed),
         ("ci_image_changed", opts.ci_image_changed),
         ("site_test", opts.site_test),
+        ("zbm_changed", opts.zbm_changed),
         ("packer_sources", json.dumps(packer.all)),
         ("packer_sources_box", json.dumps(packer.box)),
         ("packer_sources_lab", json.dumps(packer.lab)),
@@ -671,6 +687,7 @@ def _cmd_emit(args: list[str]) -> int:
         f"packer_changed={opts.packer_changed}",
         f"packer_worker_changed={opts.packer_worker_changed}",
         f"ci_image_changed={opts.ci_image_changed}",
+        f"zbm_changed={opts.zbm_changed}",
         f"site_test={opts.site_test}",
         f"packer_sources={json.dumps(packer.all)}"
         f" (box={json.dumps(packer.box)}"
@@ -702,6 +719,7 @@ def _emit_result(
     packer_affected: set[str] | None = None,
     ci_image_changed: bool = False,
     site_test: bool = False,
+    zbm_changed: bool = False,
 ) -> int:
     """Emit CI outputs via _cmd_emit with current env for sources/ubuntu."""
     affected = packer_affected or set()
@@ -720,6 +738,8 @@ def _emit_result(
             "true" if ci_image_changed else "false",
             "--site-test",
             "true" if site_test else "false",
+            "--zbm-changed",
+            "true" if zbm_changed else "false",
             "--packer-sources-affected",
             affected_str,
             "--inputs-sources",
@@ -785,10 +805,14 @@ def _cmd_run(args: list[str]) -> int:
         f"branch={ref_name or '?'}, sha={head_sha[:12] if head_sha else '?'})"
     )
 
-    def full_universe(reason, packer_affected=None, ci_image_changed=False):
+    def full_universe(reason, packer_affected=None, ci_image_changed=False, zbm_changed=False):
         log(f"{reason} -> testing the FULL universe")
         return _emit_result(
-            _full_universe_matrix(), packer_affected=packer_affected, ci_image_changed=ci_image_changed, site_test=True
+            _full_universe_matrix(),
+            packer_affected=packer_affected,
+            ci_image_changed=ci_image_changed,
+            site_test=True,
+            zbm_changed=zbm_changed,
         )
 
     ci_base_ref = os.environ.get("CI_BASE_REF", "")
@@ -844,6 +868,7 @@ def _cmd_run(args: list[str]) -> int:
             "full-universe path changed",
             packer_affected=packer_affected,
             ci_image_changed=classification.ci_image_changed,
+            zbm_changed=classification.zbm_changed,
         )
 
     universe = set(list_testable_roles())
@@ -896,6 +921,7 @@ def _cmd_run(args: list[str]) -> int:
         matrix,
         packer_affected=packer_affected,
         ci_image_changed=classification.ci_image_changed,
+        zbm_changed=classification.zbm_changed,
     )
 
 
