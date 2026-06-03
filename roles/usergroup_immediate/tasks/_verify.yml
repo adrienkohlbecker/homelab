@@ -9,17 +9,20 @@
         usergroup_immediate_args:
           group: usergroup_immediate_test
 
-    # id -nG checks process supplementary groups, which mitogen's
-    # reset_connection doesn't reliably refresh; getent reads /etc/group.
-    - name: _verify | Verify group membership after string input
-      command: getent group usergroup_immediate_test
-      register: _usergroup_immediate_groups_string
-      changed_when: false
+    # /etc/group is authoritative immediately; mitogen's reset_connection
+    # doesn't reliably refresh a live worker's process supplementary set,
+    # so verify via the group database rather than `id -nG`.
+    - name: _verify | Read the group database after string input
+      getent:
+        database: group
 
     - name: _verify | User belongs to the test group
       assert:
         that:
-          - ansible_user_id in _usergroup_immediate_groups_string.stdout.split(':')[-1].split(',')
+          - ansible_user_id in getent_group['usergroup_immediate_test'][2].split(',')
+        fail_msg: >-
+          {{ ansible_user_id }} expected in usergroup_immediate_test;
+          members: {{ getent_group['usergroup_immediate_test'][2] | default('') }}
 
     # Scenario 2: list input (the libvirt case)
     - name: _verify | Create a second test group
@@ -38,21 +41,18 @@
             - usergroup_immediate_test
             - usergroup_immediate_test2
 
-    - name: _verify | Verify group membership after list input
-      command: getent group {{ item }}
-      register: _usergroup_immediate_groups_list
-      changed_when: false
-      loop:
-        - usergroup_immediate_test
-        - usergroup_immediate_test2
+    - name: _verify | Read the group database after list input
+      getent:
+        database: group
 
     - name: _verify | User belongs to both test groups
       assert:
         that:
-          - ansible_user_id in item.stdout.split(':')[-1].split(',')
-      loop: "{{ _usergroup_immediate_groups_list.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+          - ansible_user_id in getent_group[item][2].split(',')
+        fail_msg: "{{ ansible_user_id }} expected in group {{ item }}"
+      loop:
+        - usergroup_immediate_test
+        - usergroup_immediate_test2
 
     # Scenario 3: idempotence — re-adding the same group should not change
     - name: _verify | Re-add user to the same group (idempotence)
@@ -67,6 +67,7 @@
       assert:
         that:
           - not usergroup_immediate_result.changed
+        fail_msg: re-adding an existing group reported changed (idempotence violation)
 
   always:
     - name: _verify | Remove user from test groups
