@@ -218,7 +218,12 @@
   tags:
     - user
 
+# Skip in check mode when git was only would-be-installed above: the git
+# module shells out to the binary even to read status, so it hard-fails on a
+# fresh host where the apt task above merely *reported* the install. Lets the
+# operator dry-run the role with --check before a prod apply.
 - name: Clone dotfiles repo  # noqa: latest[git]
+  when: not (ansible_check_mode and user_apt_packages.changed)
   git:
     repo: "{{ mirror_github }}/adrienkohlbecker/dotfiles.git"
     dest: "{{ ansible_user_dir }}/.dotfiles"
@@ -324,8 +329,13 @@
 # after the mise binary install (needs it) and before the tool install below
 # (which needs the ~/.config/mise symlink this lays down, along with every other
 # dotfile symlink). creates: makes it a one-time deploy.
+#
+# Skip in check mode whenever the clone above didn't materialize ~/.dotfiles --
+# skipped (fresh host, git not really installed) or would-change -- since this
+# shell chdirs into it and would hard-fail. A real run, or a check run against
+# an already-cloned host, still deploys/previews.
 - name: Deploy dotfiles into $HOME (mise stow task)
-  when: not (ansible_check_mode and user_dotfiles_clone.changed)
+  when: not (ansible_check_mode and (user_dotfiles_clone is skipped or user_dotfiles_clone.changed))
   shell: |
     set -euo pipefail
     mise="{{ ansible_user_dir }}/.local/share/mise/bin/mise"
