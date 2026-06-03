@@ -30,7 +30,10 @@ fi
 # zbm-builder.sh / container-build subtree. Mirrors upload.sh's inline op read.
 host_key="${MISE_CONFIG_ROOT}/zbm/dropbear/ssh_host_ed25519_key"
 trap 'rm -f "$host_key"' EXIT INT TERM
-key_material="$(op read 'op://Lab/hxad25fxm2gfulafg23b6sv33e/private key')"
+if ! key_material="$(op read 'op://Lab/hxad25fxm2gfulafg23b6sv33e/private key')"; then
+  echo "op read failed — is the 1Password CLI signed in? Try: op signin" >&2
+  exit 1
+fi
 (umask 077 && printf '%s\n' "$key_material" > "$host_key")
 
 # zbm-builder.sh:
