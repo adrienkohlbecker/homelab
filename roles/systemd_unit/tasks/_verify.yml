@@ -540,6 +540,82 @@
   command: systemctl is-active systemd_unit_verify_ok.service
   changed_when: false
 
+# Reload path: verify_ok.service.j2 now carries ExecReload=/bin/true so
+# CanReload=yes. Drive reload: true while the unit is active (started above)
+# so systemd_unit_started.changed is false and the reload task fires.
+- name: _verify | Reload fires when ExecReload is present
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+      reload: true
+
+- name: _verify | Unit is still active after reload  # noqa: command-instead-of-module
+  command: systemctl is-active systemd_unit_verify_ok.service
+  changed_when: false
+
+# Sad path: a unit with no ExecReload= must raise the actionable message.
+# Install a fresh oneshot+RemainAfterExit fixture without ExecReload, start
+# it (so it is active), then call service with reload: true and assert the
+# play fails with the CanReload message.
+- name: _verify | Install a non-reloadable fixture for the CanReload=no test
+  copy:
+    dest: /etc/systemd/system/systemd_unit_verify_noreload.service
+    content: |
+      [Unit]
+      Description=systemd_unit_verify_noreload
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/bin/true
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify | Reload systemd for non-reloadable fixture
+  systemd:
+    daemon_reload: true
+  become: true
+
+- name: _verify | Start the non-reloadable fixture so it is active
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      dest: systemd_unit_verify_noreload.service
+
+- name: _verify | Reload on a non-reloadable unit must fail with CanReload message
+  block:
+    - name: _verify | Attempt reload on non-reloadable unit (should raise)
+      import_role:
+        name: systemd_unit
+        tasks_from: service
+      vars:
+        systemd_unit_args:
+          dest: systemd_unit_verify_noreload.service
+          reload: true
+    - name: _verify | Sentinel fail if reload on non-reloadable unit succeeded
+      fail:
+        msg: reload on a unit with no ExecReload= should have failed but did not
+  rescue:
+    - name: _verify | Assert the failure carried the CanReload message
+      assert:
+        that: "'CanReload' in ansible_failed_result.msg"
+
+- name: _verify | Cleanup non-reloadable fixture
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: systemd_unit_verify_noreload.service
+
 - name: _verify | Start=false skips lifecycle
   import_role:
     name: systemd_unit

@@ -3,4 +3,8 @@ Description=systemd_unit_verify_copy_ok
 
 [Service]
 Type=oneshot
+RemainAfterExit=yes
 ExecStart=/bin/true
+
+[Install]
+WantedBy=multi-user.target
