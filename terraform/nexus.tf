@@ -72,6 +72,7 @@ locals {
     "fluentbit"         = "https://packages.fluentbit.io/ubuntu/"
     "1password"         = "https://downloads.1password.com/linux/debian/amd64/"
     "docker-ce"         = "https://download.docker.com/linux/ubuntu/"
+    "tailscale"         = "https://pkgs.tailscale.com/stable/ubuntu/"
   }
 
   raw_proxies = {
