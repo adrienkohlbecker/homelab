@@ -151,27 +151,58 @@
   become: true
   register: _boot_verify_efi_dump
 
+- name: _verify | List EFI entry labels
+  when: not grub_bootloader
+  command: efibootmgr
+  changed_when: false
+  become: true
+  register: _boot_verify_efi_list
+
+# Match each managed label against the *entry label* anchored to the start of
+# its `Boot####* ` line (not a substring of the whole -v dump, which would also
+# hit device paths and one label nested inside another). The disk-suffix strip
+# lets a base label like `rEFInd` match its per-disk `rEFInd (disk 0)` variants
+# on mdadm hosts. Regexes use char classes ([(], [0-9]) over backslash escapes
+# to stay clear of ansible's conditional escape reprocessing.
 - name: _verify | Expected EFI labels present in NVRAM
   when: not grub_bootloader
   vars:
-    _efi_dump: "{{ _boot_verify_efi_dump.stdout }}"
+    _actual_labels: >-
+      {{ _boot_verify_efi_list.stdout_lines
+         | select('match', '^Boot[0-9A-Fa-f]{4}[ *] ')
+         | map('regex_replace', '^Boot[0-9A-Fa-f]{4}[ *] ', '')
+         | map('regex_replace', ' [(]disk [0-9]+[)]$', '')
+         | list }}
     _expected_labels: "{{ boot_efi_entries | map(attribute='label') | list }}"
   assert:
-    that: item in _efi_dump
+    that: item in _actual_labels
     fail_msg: >-
-      EFI label '{{ item }}' not found in efibootmgr -v output
+      EFI label '{{ item }}' (or its per-disk variants) is not present as a
+      boot entry; NVRAM labels: {{ _actual_labels }}
   loop: "{{ _expected_labels }}"
 
 - name: _verify | Aarch64 EFI-stub entry carries kernel cmdline
   when: not grub_bootloader and ansible_architecture == 'aarch64'
+  vars:
+    # efibootmgr -v renders the UTF-16 --unicode optional data with a '.' after
+    # every character (root -> r.o.o.t.), so match that dotted form rather than
+    # the plain substring, which never appears in the dump.
+    _dotted_root: "{{ ('root=zfs:' | list | join('.')) ~ '.' }}"
   assert:
-    that: "'root=zfs:' in _boot_verify_efi_dump.stdout"
+    that: _dotted_root in _boot_verify_efi_dump.stdout
     fail_msg: >-
       aarch64 Linux EFI-stub entry missing root=zfs: in optional data —
       the entry may have been created without --unicode options
 
+# _verify is a separate ansible invocation, so the converge-time fact
+# _boot_assembled_cmdline (which the aarch64 stub entry's options embed) is not
+# set here and boot_efi_entries would fall back to its console=tty0 default,
+# falsely diverging from the entry converge actually wrote. Re-seed it from the
+# authoritative org.zfsbootmenu:commandline property read above.
 - name: _verify | EFI entries are converged
   when: not grub_bootloader
+  vars:
+    _boot_assembled_cmdline: "{{ _boot_verify_cmdline.stdout }}"
   command:
     argv: "{{ ['python3', '/opt/boot/efi_entries.py', '--check'] }}"
   environment:
