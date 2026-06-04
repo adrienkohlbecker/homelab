@@ -39,18 +39,29 @@
 # aarch64 bypasses ZBM (direct EFI-stub boot), so the single-file recovery
 # loader must never land on the ESP. Positively assert its absence — turns the
 # otherwise-vacuous bypass-arch converge into a real check of the arch gate.
-- name: _verify | Stat ZBM loader on bypass arches
+- name: _verify | Stat ZBM primary loader on bypass arches
   when: ansible_architecture not in zfsbootmenu_release
   stat:
     path: /boot/efi/EFI/ZBM/VMLINUZ.EFI
   become: true
   register: zfsbootmenu_efi_bypass_stat
 
-- name: _verify | Assert ZBM single-file loader is absent on bypass arches
+- name: _verify | Stat ZBM backup loader on bypass arches
+  when: ansible_architecture not in zfsbootmenu_release
+  stat:
+    path: /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
+  become: true
+  register: zfsbootmenu_backup_bypass_stat
+
+- name: _verify | Assert ZBM single-file loaders are absent on bypass arches
   when: ansible_architecture not in zfsbootmenu_release
   assert:
     that:
       - not zfsbootmenu_efi_bypass_stat.stat.exists
+      - not zfsbootmenu_backup_bypass_stat.stat.exists
     fail_msg: >-
-      {{ ansible_architecture }} bypasses ZBM but a single-file loader was found
-      at /boot/efi/EFI/ZBM/VMLINUZ.EFI — the arch gate may be wrong.
+      {{ ansible_architecture }} bypasses ZBM but a ZBM loader was found under
+      /boot/efi/EFI/ZBM/
+      (primary_exists={{ zfsbootmenu_efi_bypass_stat.stat.exists }},
+      backup_exists={{ zfsbootmenu_backup_bypass_stat.stat.exists }})
+      — the arch gate may be wrong.
