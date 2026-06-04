@@ -17,29 +17,35 @@
   ansible.posix.authorized_key:
     user: zfs_autobackup
     key: "{{ zfs_autobackup_ssh_public_key }}"
-    key_options: "no-port-forwarding,no-agent-forwarding,no-pty,no-X11-forwarding,no-user-rc"
+    # restrict denies all current and future SSH features (pty, all
+    # forwarding, user-rc, etc.), so new OpenSSH primitives cannot leak in
+    # via an outdated allowlist.
+    key_options: "restrict"
     exclusive: true
   become: true
   tags:
     - zfs_autobackup
 
+# The zfs allow machinery runs everywhere ZFS exists -- prod plus the
+# box/lab/pug qemu fixtures (so _verify can exercise it). Only the minimal
+# fixture (vanilla ext4 cloud image, no ZFS) is excluded.
 - name: source | Get back up datasets
-  when: not qemu_test
+  when: not qemu_test_minimal
   shell: set -euo pipefail; zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'
   args:
     executable: /bin/bash
   changed_when: false
-  register: zfs_autobackup_datasets
+  register: _zfs_autobackup_datasets
   become: true
   tags:
     - zfs_autobackup
 
 - name: source | Capture current permissions on backed up datasets
-  when: not qemu_test
+  when: not qemu_test_minimal
   command: zfs allow "{{ item }}"
   changed_when: false
   register: _zfs_autobackup_allow_before
-  loop: "{{ zfs_autobackup_datasets.stdout_lines }}"
+  loop: "{{ _zfs_autobackup_datasets.stdout_lines }}"
   loop_control:
     index_var: idx
   become: true
@@ -47,20 +53,20 @@
     - zfs_autobackup
 
 - name: source | Grant ZFS permissions on backed up datasets
-  when: not qemu_test
+  when: not qemu_test_minimal
   command: zfs allow zfs_autobackup send,hold,release "{{ item }}"
   changed_when: false
-  loop: "{{ zfs_autobackup_datasets.stdout_lines }}"
+  loop: "{{ _zfs_autobackup_datasets.stdout_lines }}"
   become: true
   tags:
     - zfs_autobackup
 
 - name: source | Detect permission changes on backed up datasets
-  when: not qemu_test
+  when: not qemu_test_minimal
   command: zfs allow "{{ item }}"
   changed_when: _zfs_autobackup_allow_before.results[idx].stdout != _zfs_autobackup_allow_after.stdout
   register: _zfs_autobackup_allow_after
-  loop: "{{ zfs_autobackup_datasets.stdout_lines }}"
+  loop: "{{ _zfs_autobackup_datasets.stdout_lines }}"
   loop_control:
     index_var: idx
   become: true
