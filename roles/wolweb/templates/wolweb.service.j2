@@ -33,17 +33,23 @@ ExecStart=/usr/bin/podman run \
     --detach \
     --replace \
     --rm \
+    --init \
     --name wolweb \
     --log-driver journald \
     --log-opt tag="wolweb" \
-    --volume /mnt/services/wolweb/config.json:/wolweb/config.json \
-    --volume /mnt/services/wolweb/devices.json:/wolweb/devices.json \
+    --volume /mnt/services/wolweb/config.json:/wolweb/config.json:ro \
+    --volume /mnt/services/wolweb/devices.json:/wolweb/devices.json:ro \
     --user {{ wolweb_user.uid }}:{{ wolweb_user.group }}  \
+    --security-opt=no-new-privileges \
+    --cap-drop=ALL \
     --unsetenv WOLWEBPORT \
     --unsetenv WOLWEBVDIR \
+    --unsetenv WOLWEBHOST \
+    --unsetenv WOLWEBBCASTIP \
+    --unsetenv WOLWEBREADONLY \
     --network host \
-    --health-cmd '["curl","--head","--request","GET","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8089/health"]' \
-    --health-startup-cmd '["curl","--head","--request","GET","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8089/health"]' \
+    --health-cmd '["curl","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:{{ service_ports.wolweb }}/health"]' \
+    --health-startup-cmd '["curl","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:{{ service_ports.wolweb }}/health"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \

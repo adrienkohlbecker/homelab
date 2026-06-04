@@ -210,6 +210,7 @@ service_ports:
   transmission_bt: 51413
   udm_syslog: 5140
   wireguard: 51820
+  wolweb: 8089
 
 # URL nginx's auth_request subrequest hits for forward-auth on sites
 # that opt in via `nginx_site_args.auth`. Cookie domain and portal

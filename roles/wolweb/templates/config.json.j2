@@ -1,6 +1,7 @@
 {
   "host": "127.0.0.1",
-  "port": 8089,
+  "port": {{ service_ports.wolweb }},
   "vdir": "/",
-  "bcastip": "{{ wolweb_broadcast_ip }}:9"
+  "bcastip": "{{ wolweb_broadcast_ip }}:9",
+  "read_only": true
 }

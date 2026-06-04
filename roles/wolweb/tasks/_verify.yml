@@ -1,0 +1,31 @@
+- name: _verify | Wolweb health endpoint answers on loopback port
+  uri:
+    url: http://localhost:{{ service_ports.wolweb }}/health
+    status_code: 200
+  register: _wolweb_health
+  retries: 5
+  delay: 1
+  until: _wolweb_health.status == 200
+  become: true
+
+- name: _verify | Map the wolweb vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 wolweb.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
+- name: _verify | Unauthenticated hit redirects to Authelia
+  uri:
+    url: https://wolweb.{{ inventory_hostname }}.{{ domain }}/
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: _wolweb_auth_gate
+  retries: 10
+  delay: 1
+  until: _wolweb_auth_gate.status == 302
+  failed_when: >-
+    _wolweb_auth_gate.status != 302
+    or 'https://auth.' not in (_wolweb_auth_gate.location | default(''))
+  become: true
