@@ -11,7 +11,10 @@ homeassistant:
 # already has its own `homeassistant: {...}` block (e.g. a renamed cover)
 # shadows the global one and the override never reaches HA discovery.
 
-# Enable the frontend, runs on port 8080 by default
+# Enable the frontend. The listener is published only on 127.0.0.1 (see the
+# --publish in z2m.service.j2) and fronted by nginx with `auth: required`
+# (Authelia), so `auth_token` is intentionally unset -- it would be a
+# redundant cleartext-in-config second gate behind the real one.
 frontend:
   enabled: true
   port: {{ service_ports.z2m }}
@@ -54,7 +57,10 @@ advanced:
   log_output:
     - console
   enable_external_js: false
-  # channel: 11
+  # Pin to the channel the live mesh is already on. Unpinned, a coordinator
+  # re-form could silently land on a different (possibly congested) channel
+  # and force every device to re-pair. Changing this value moves the network.
+  channel: 11
   network_key: '!secret.yaml network_key'
   pan_id: '!secret.yaml pan_id'
   ext_pan_id: '!secret.yaml ext_pan_id'
