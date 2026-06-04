@@ -283,7 +283,6 @@ wireguard_peers:
       local: "{{ external_ips.lab }}:51820"
       remote: "home.{{ domain }}:51821"
     is_server: true
-    site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.lab.public_key }}"
     private_key: "{{ wireguard_keys.lab.private_key }}"
   - name: pug
@@ -292,7 +291,6 @@ wireguard_peers:
       local: "{{ external_ips.pug }}:51820"
       remote: "home.{{ domain }}:51822"
     is_server: true
-    site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.pug.public_key }}"
     private_key: "{{ wireguard_keys.pug.private_key }}"
   - name: box
@@ -301,7 +299,6 @@ wireguard_peers:
       local: "{{ external_ips.box }}:51820"
       remote: home.{{ domain }}:51823
     is_server: true
-    site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.box.public_key }}"
     private_key: "{{ wireguard_keys.box.private_key }}"
   - name: laptop
@@ -320,7 +317,6 @@ wireguard_peers:
       local: "{{ external_ips.bunk }}:51820"
       remote: "{{ synology_endpoint }}:51820"
     is_server: true
-    site_subnet: "{{ site_subnets.bonniers }}"
     # Lab and pug are the always-on consumers of the bunk offsite link
     # (nightly zfs autobackup replication). Having them send a 25s
     # PersistentKeepalive keeps lab/pug's view of bunk's handshake_ago
@@ -340,14 +336,13 @@ wireguard_peers:
     # wg address is the +64.0.0 mirror 10.123.119.2 derived in the topology. No
     # allowed_ips beyond the implicit /32, so other peers route only fox/32 and
     # fox reaches just lab/pug/box/bunk's wg /32s -- enough for netdata's
-    # Authelia forward-auth over wg0, never the home LAN. site_subnet is fox's
-    # own wg /32 (a unique sentinel) so the endpoint-selection never treats fox
-    # as same-site as home/bonniers (always dials the remote FQDN).
+    # Authelia forward-auth over wg0, never the home LAN. fox's `hetzner` site
+    # (network.hosts.fox.site) differs from home/bonniers, so endpoint-selection
+    # never treats fox as same-site and always dials the remote FQDN.
     address: "{{ network.hosts.fox.wireguard }}"
     endpoint:
       remote: "fox.{{ domain }}:51820"
     is_server: true
-    site_subnet: "{{ network.hosts.fox.wireguard }}/32"
     keepalive_from: [ lab, pug ]
     public_key: "{{ wireguard_keys.fox.public_key }}"
     private_key: "{{ wireguard_keys.fox.private_key }}"
