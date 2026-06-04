@@ -12,11 +12,25 @@
   changed_when: false
   become: true
 
-- name: _verify | Check mount fails for a wrong mountpoint
+- name: _verify | Check mount fails on a mountpoint-property mismatch
   command: /usr/local/bin/zfs_check_mount rpool/ROOT/{{ ansible_distribution_release }} /nonexistent
   register: _zfs_mount_verify_negative
   changed_when: false
   failed_when: _zfs_mount_verify_negative.rc == 0
+  become: true
+
+- name: _verify | Check mount fails on a canmount mismatch
+  command: /usr/local/bin/zfs_check_mount rpool/ROOT/{{ ansible_distribution_release }} / on
+  register: _zfs_mount_verify_canmount
+  changed_when: false
+  failed_when: _zfs_mount_verify_canmount.rc == 0
+  become: true
+
+- name: _verify | Check mount fails for a nonexistent dataset
+  command: /usr/local/bin/zfs_check_mount rpool/nonexistent_dataset / noauto
+  register: _zfs_mount_verify_missing
+  changed_when: false
+  failed_when: _zfs_mount_verify_missing.rc == 0
   become: true
 
 - name: _verify | Findmnt confirms root dataset
