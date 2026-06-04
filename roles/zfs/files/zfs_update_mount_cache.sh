@@ -29,14 +29,16 @@ before=$(md5sum "/etc/zfs/zfs-list.cache/$cachefile" | cut -f 1 -d " ")
 zfs set canmount="$canmount" "$filesystem"
 
 # zed's history_event-zfs-list-cacher.sh regenerates this cache file
-# asynchronously in response to the canmount-set above. Poll for the
-# content to settle instead of burning a fixed `sleep 2` once per pool on
-# every converge: in steady state the hook rewrites identical bytes within
-# a few hundred ms, so this exits after ~0.2s. Cache correctness does not
-# depend on the wait -- zed regenerates it regardless; the loop only gives
-# the hook a moment and lets us report an accurate changed status below.
+# asynchronously in response to the canmount-set above. Poll for the content
+# to settle instead of burning a fixed `sleep 2` once per pool on every
+# converge. `prev` seeds to a sentinel no md5 can equal, so the loop exits only
+# after two *consecutive* reads agree -- ~0.4s in steady state. Seeding `prev`
+# to `$before` (as before) treated an unchanged first read as already settled
+# and broke on iteration 1, under-reporting a hook that rewrites the file a
+# little later. Cache correctness does not depend on the wait -- zed regenerates
+# it regardless; the loop only lets us report an accurate changed status below.
 # Cap at 5s (25 * 0.2s) so a pathologically slow hook can't hang the play.
-prev=$before
+prev=initial
 after=$before
 for _ in $(seq 1 25); do
   sleep 0.2
