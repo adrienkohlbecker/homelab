@@ -99,7 +99,14 @@
     # buildkitd auto-detects rootlesskit and runs its OCI worker without the
     # process sandbox -- no explicit flag needed (matches the validated command).
     # RuntimeDirectory makes systemd create %t/buildkit for the socket; the build
-    # cache persists under the runner's home so a version-pinned rebuild reuses it.
+    # cache persists under the runner's home.
+    #
+    # --oci-worker-gc-keepstorage raises GC's cache floor (Reserved,Free,Maximum
+    # in MB) far above the default 2000 (2 GB) -- the ZBM builder image alone is
+    # ~1.3 GB, so the default would evict it plus the xbps download cache between
+    # runs, defeating the upstream `--mount=type=cache` and forcing cold rebuilds.
+    # 20 GB comfortably retains the layers + xbps cache across ZBM version bumps
+    # (the runner's /mnt/scratch has ~1 TB).
     - name: Install rootless buildkit user service
       when: not ansible_check_mode
       copy:
@@ -112,7 +119,7 @@
           [Service]
           Environment=PATH=/usr/local/bin:/usr/bin:/bin
           RuntimeDirectory=buildkit
-          ExecStart=/usr/local/bin/rootlesskit /usr/local/bin/buildkitd --addr unix://%t/buildkit/buildkitd.sock --root %h/.local/share/buildkit
+          ExecStart=/usr/local/bin/rootlesskit /usr/local/bin/buildkitd --addr unix://%t/buildkit/buildkitd.sock --root %h/.local/share/buildkit --oci-worker-gc-keepstorage 20000,20000,20000
           Restart=on-failure
 
           [Install]
