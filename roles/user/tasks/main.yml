@@ -219,6 +219,11 @@
   tags:
     - user
 
+# Clone direct from github.com, not mirror_github: the Nexus github proxy is a
+# raw artifact proxy (serves the release-tarball GETs in vars/main.yml) and
+# can't speak git smart-HTTP, so a clone through it 404s. Matches the direct
+# github.com clones in roles/fan2go.
+#
 # Skip in check mode when git was only would-be-installed above: the git
 # module shells out to the binary even to read status, so it hard-fails on a
 # fresh host where the apt task above merely *reported* the install. Lets the
@@ -226,7 +231,7 @@
 - name: Clone dotfiles repo  # noqa: latest[git]
   when: not (ansible_check_mode and user_apt_packages.changed)
   git:
-    repo: "{{ mirror_github }}/adrienkohlbecker/dotfiles.git"
+    repo: https://github.com/adrienkohlbecker/dotfiles.git
     dest: "{{ ansible_user_dir }}/.dotfiles"
     update: false
   register: user_dotfiles_clone
