@@ -49,6 +49,7 @@
       - rsync
       - screen
       - socat
+      - stow
       - strace
       - stress
       - sysstat
@@ -205,17 +206,6 @@
   until: user_gpg_import.rc == 0
   retries: 3
   delay: 5
-  tags:
-    - user
-
-# GNU stow symlinks the dotfiles into $HOME. The repo is a normal clone
-# at ~/.dotfiles on the fleet.
-- name: Install GNU stow
-  apt:
-    name: stow
-    state: present
-    cache_valid_time: 3600
-  become: true
   tags:
     - user
 
