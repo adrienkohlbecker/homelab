@@ -3,6 +3,23 @@
   tags:
     - zfs
 
+- name: Assert required inputs
+  assert:
+    that:
+      - zfs_root is defined
+      - zfs_root is boolean or zfs_root in [true, false]
+      - zfs_trim_pools is defined
+      - zfs_trim_pools is not string
+      - zfs_trim_pools is iterable
+      - zfs_mount_cache_datasets is defined
+      - zfs_mount_cache_datasets is not string
+      - zfs_mount_cache_datasets is iterable
+    fail_msg: >-
+      zfs_root (bool), zfs_trim_pools (list), and
+      zfs_mount_cache_datasets (list) must be set in host_vars.
+  tags:
+    - zfs
+
 # Catches divergence between the userspace zfsutils and the loaded
 # zfs.ko. Ubuntu ships the kernel module bundled inside
 # linux-modules-*-generic, so its version tracks whichever release the
