@@ -54,7 +54,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 
 **Never set `no_log: true`.** Applies run interactively on the operator's workstation, never captured to a file or CI log — hiding the diff only makes failures harder to debug.
 
-**Every bash script starts `set -euo pipefail`** — proper files *and* inline ansible `shell:` blocks (which must also declare `executable: /bin/bash`). Enforced by the custom **`shell-strict-mode`** rule ([lint/ansible_rules/shell_strict_mode.py](lint/ansible_rules/shell_strict_mode.py)); test scaffolding (`_verify*`/`_setup*`) exempt. Handle expected-failure commands with `|| true` and avoid `… | head` pipelines (SIGPIPE) — collapse into `awk`.
+**Every bash script starts `set -euo pipefail`** — proper files *and* inline ansible `shell:` blocks (which must also declare `executable: /bin/bash`). Enforced by the custom **`shell-strict-mode`** rule ([lint/ansible_rules/shell_strict_mode.py](lint/ansible_rules/shell_strict_mode.py)); test scaffolding (`_verify*`/`_setup*`) exempt. Handle expected-failure commands with `|| true` and avoid `… | head` pipelines (SIGPIPE) — collapse into `awk`. **No apostrophes inside `shell:`/`command:` block scalars** — even in `#` comments within the block; ansible's pre-exec shlex pass treats `'` as an opening quote and fails task loading. YAML-level comments (outside the scalar) are fine.
 
 **Comments describe current state, not history.** No "this used to…", "was removed", "replaces the old…". That context belongs in the commit message. Explaining why the current code *deliberately* avoids an obvious alternative is fine.
 
@@ -130,7 +130,7 @@ Prefer these over re-implementing boilerplate. All take inputs through a single 
 
 ## Podman Service Conventions
 
-Long-form rationale in [notes/podman_conventions.md](notes/podman_conventions.md). For new roles use `/new_podman_role`.
+Long-form rationale in [notes/podman_conventions.md](notes/podman_conventions.md). For new roles use `/new_podman_role`. **Use canonical upstream image names** in service templates (`docker.io/sonatype/nexus3:3.91.1`, not `nexus.lab.fahm.fr/docker.io/…`); mirror redirection belongs in `registries.conf` + the `--upstream-mirrors` test flag.
 
 ### Healthchecks
 
