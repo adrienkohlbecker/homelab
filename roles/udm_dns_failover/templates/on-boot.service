@@ -12,7 +12,12 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=true
 TimeoutStartSec=120
-ExecStart=/bin/bash -c 'for f in /data/on_boot.d/*.sh; do [ -x "$f" ] && "$f"; done'
+# set -e so a recovery script that fails fails the unit (visible in
+# `systemctl status on-boot`); without it the loop swallows the exit code and
+# a broken post-firmware recovery looks like a clean oneshot success. A
+# non-executable / glob-no-match entry is in a tested `&&` position, so it
+# doesn't trip -e.
+ExecStart=/bin/bash -c 'set -euo pipefail; for f in /data/on_boot.d/*.sh; do [ -x "$f" ] && "$f"; done'
 
 [Install]
 WantedBy=multi-user.target

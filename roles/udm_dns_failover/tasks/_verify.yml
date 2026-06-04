@@ -149,3 +149,117 @@
   changed_when: false
   failed_when: pihole_keepalived_ip not in _udm_dns_failover_vip_after.stdout
   become: true
+
+# Rescue probe: a base-conf change that then fails keepalived -t must restore
+# the previous base from its backup AND delete that backup, leaving the live
+# daemon on the previous good config. Perturb the base so the role's copy
+# rewrites it (leaving a backup), with a malformed extra fragment present so
+# keepalived -t fails after the good base is written.
+- name: _verify | Count base-conf backups before the rollback probe
+  find:
+    paths: /data/keepalived
+    patterns: 'keepalived.conf.*'
+  register: _udm_dns_failover_backups_pre
+  become: true
+
+- name: _verify | Perturb the base conf so the next copy leaves a backup
+  lineinfile:
+    path: /data/keepalived/keepalived.conf
+    line: "# _verify rollback perturbation"
+    insertafter: EOF
+  become: true
+
+- name: _verify | Drop a malformed fragment to fail validation after the copy
+  copy:
+    content: |
+      _verify_rollback_bogus_keyword
+    dest: /etc/keepalived/conf.d/_verify_rollback_bad.conf
+    owner: root
+    group: root
+    mode: "0640"
+  become: true
+
+- name: _verify | Re-run the role expecting the base-conf rescue to fire
+  block:
+    - name: _verify | Converge with a perturbed base conf and a bad fragment
+      import_role:
+        name: udm_dns_failover
+    - name: _verify | Role unexpectedly succeeded on the rollback probe
+      fail:
+        msg: keepalived -t did not fail the run as it must with a malformed fragment present.
+  rescue:
+    - name: _verify | Role aborted and the base-conf rescue ran as expected
+      debug:
+        msg: role failed validation as expected -- base conf restored from backup.
+
+- name: _verify | Slurp the base conf after the rollback
+  slurp:
+    src: /data/keepalived/keepalived.conf
+  register: _udm_dns_failover_base_after_rollback
+  become: true
+
+- name: _verify | Count base-conf backups after the rollback probe
+  find:
+    paths: /data/keepalived
+    patterns: 'keepalived.conf.*'
+  register: _udm_dns_failover_backups_post
+  become: true
+
+- name: _verify | Rollback restored the perturbed base and cleaned its backup
+  vars:
+    _base: "{{ _udm_dns_failover_base_after_rollback.content | b64decode }}"
+  assert:
+    that:
+      # Restore arm ran: the perturbation we appended (the backed-up pre-copy
+      # version) is back on disk.
+      - "'# _verify rollback perturbation' in _base"
+      # Delete-backup arm ran: backup count unchanged vs before the probe.
+      - _udm_dns_failover_backups_post.matched == _udm_dns_failover_backups_pre.matched
+
+- name: _verify | Keepalived still active on the good config after the rollback
+  systemd:
+    name: keepalived.service
+  register: _udm_dns_failover_keepalived_rollback
+  failed_when: _udm_dns_failover_keepalived_rollback.status.ActiveState != 'active'
+  become: true
+
+- name: _verify | Remove the rollback probe fragment
+  file:
+    path: /etc/keepalived/conf.d/_verify_rollback_bad.conf
+    state: absent
+  become: true
+
+# VRRP-guard probe: keepalived -t passes on an instance-less fragment, so the
+# on-boot recovery must ALSO confirm the instance is present before starting
+# -- otherwise it brings up a healthy but VIP-less daemon, the exact
+# post-firmware failure mode this guard exists to prevent. Stop keepalived,
+# blank the fragment of its instance, run the recovery script, and assert it
+# did NOT start the daemon. Destructive + last: leaves keepalived stopped (the
+# VM is disposed after _verify).
+- name: _verify | Stop keepalived for the vrrp-guard probe
+  systemd:
+    name: keepalived.service
+    state: stopped
+  become: true
+
+- name: _verify | Replace the fragment with an instance-less stub
+  copy:
+    content: |
+      # no vrrp_instance here -- keepalived -t passes but there is nothing to run
+    dest: /data/keepalived/pihole.conf
+    owner: root
+    group: root
+    mode: "0640"
+  become: true
+
+- name: _verify | Run the recovery script against the instance-less fragment
+  command: /data/on_boot.d/30-keepalived.sh
+  changed_when: false
+  become: true
+
+- name: _verify | The guard skipped the start -- keepalived stays inactive
+  systemd:
+    name: keepalived.service
+  register: _udm_dns_failover_keepalived_guard
+  failed_when: _udm_dns_failover_keepalived_guard.status.ActiveState == 'active'
+  become: true
