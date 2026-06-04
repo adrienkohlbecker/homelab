@@ -6,6 +6,7 @@
   vars:
     zfs_mount_dataset: "rpool/ROOT/{{ ansible_distribution_release }}"
     zfs_mount_mountpoint: /
+    zfs_mount_canmount: noauto
   tags:
     - zfs_mount
 
@@ -19,5 +20,6 @@
   vars:
     zfs_mount_dataset: "bpool/BOOT/{{ ansible_distribution_release }}"
     zfs_mount_mountpoint: /boot
+    zfs_mount_canmount: noauto
   tags:
     - zfs_mount

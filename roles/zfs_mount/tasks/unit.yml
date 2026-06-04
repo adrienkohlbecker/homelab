@@ -3,9 +3,11 @@
     that:
       - zfs_mount_dataset is defined
       - zfs_mount_dataset | length > 0
+      - zfs_mount_dataset is match('^[A-Za-z0-9][A-Za-z0-9_.:/-]*$')
       - zfs_mount_mountpoint is defined
       - zfs_mount_mountpoint is string
       - zfs_mount_mountpoint is match('^/')
+      - (zfs_mount_canmount | default('on')) in ['on', 'noauto']
     quiet: true
   tags:
     - zfs_mount

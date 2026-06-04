@@ -1,11 +1,13 @@
 [Unit]
 Description=ZFS mount status at boot
 After=zfs-mount.service local-fs.target
+RequiresMountsFor={{ zfs_mount_mountpoint }}
+AssertPathIsMountPoint={{ zfs_mount_mountpoint }}
 
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/usr/local/bin/zfs_check_mount "{{ zfs_mount_dataset }}" "{{ zfs_mount_mountpoint }}"
+ExecStart=/usr/local/bin/zfs_check_mount "{{ zfs_mount_dataset }}" "{{ zfs_mount_mountpoint }}" "{{ zfs_mount_canmount | default('on') }}"
 SyslogIdentifier=%N
 
 [Install]
