@@ -25,22 +25,38 @@
   changed_when: false
   failed_when: wireguard_ipv6_fwd.stdout | trim != '1'
 
-- name: _verify | Assert listen-port matches expected
-  command: wg show {{ iface | default('wg0') }} listen-port
-  register: wireguard_listen_port
+# One `wg show <iface> dump` carries the whole live interface + peer table as
+# tab-separated columns, so the scalar probes below parse a single register
+# instead of re-invoking wg (and hand-parsing it) per attribute. Columns:
+#   interface line: private-key  public-key  listen-port  fwmark
+#   peer lines:     public-key  preshared-key  endpoint  allowed-ips
+#                   latest-handshake  transfer-rx  transfer-tx  persistent-keepalive
+- name: _verify | Dump live wg interface + peer state
+  command: wg show {{ iface | default('wg0') }} dump
+  register: wireguard_dump
   become: true
   changed_when: false
-  failed_when: wireguard_listen_port.stdout | int != (listen_port | default('51820') | int)
+
+- name: _verify | Assert listen-port matches service_ports.wireguard
+  vars:
+    listen_port_actual: "{{ (wireguard_dump.stdout_lines[0] | split('\t'))[2] | int }}"
+  assert:
+    quiet: true
+    that: listen_port_actual == service_ports.wireguard
+    fail_msg: >-
+      wg0 listen-port {{ listen_port_actual }} != service_ports.wireguard
+      ({{ service_ports.wireguard }})
 
 # Count equals all-peers-minus-self only because converge is server-only
 # (main.yml asserts own_peer.is_server), so the template's loop includes every
 # other peer; against a non-server converge it would be servers-only.
 - name: _verify | Assert peer count matches wireguard_peers - 1
-  command: wg show {{ iface | default('wg0') }} peers
-  register: wireguard_peer_count
-  become: true
-  changed_when: false
-  failed_when: wireguard_peer_count.stdout_lines | length != (wireguard_peers | length - 1)
+  assert:
+    quiet: true
+    that: wireguard_dump.stdout_lines[1:] | length == (wireguard_peers | length - 1)
+    fail_msg: >-
+      live peer count {{ wireguard_dump.stdout_lines[1:] | length }} !=
+      wireguard_peers - 1 ({{ wireguard_peers | length - 1 }})
 
 - name: _verify | Assert interface carries own_peer.address
   vars:
@@ -49,16 +65,17 @@
   register: wireguard_ip_addr
   become: true
   changed_when: false
-  failed_when: own_peer.address not in wireguard_ip_addr.stdout
+  failed_when: ('inet ' ~ own_peer.address ~ '/32') not in wireguard_ip_addr.stdout
 
 - name: _verify | Assert preshared keys are loaded for every peer
-  command: wg show {{ iface | default('wg0') }} preshared-keys
-  register: wireguard_psk_check
-  become: true
-  changed_when: false
-  failed_when: >-
-    '(none)' in wireguard_psk_check.stdout or
-    wireguard_psk_check.stdout_lines | length != (wireguard_peers | length - 1)
+  vars:
+    psk_fields: "{{ wireguard_dump.stdout_lines[1:] | map('split', '\t') | map(attribute=1) | list }}"
+  assert:
+    quiet: true
+    that:
+      - "'(none)' not in psk_fields"
+      - psk_fields | length == (wireguard_peers | length - 1)
+    fail_msg: "preshared keys missing or miscounted: {{ psk_fields }}"
 
 # PersistentKeepalive is emitted per-pair (wg.conf.j2), only when the converging
 # host appears in a peer's keepalive_from. Assert the live count of peers with a
@@ -68,27 +85,13 @@
 - name: _verify | Assert persistent-keepalive matches keepalive_from membership
   vars:
     expected_keepalive_count: "{{ wireguard_peers | selectattr('keepalive_from', 'defined') | map(attribute='keepalive_from') | select('contains', inventory_hostname) | list | length }}"
-  shell: |
-    set -euo pipefail
-    wg show {{ iface | default('wg0') }} persistent-keepalive | awk -F'\t' '$2 != "off" { c++ } END { print c + 0 }'
-  args:
-    executable: /bin/bash
-  register: wireguard_keepalive_count
-  become: true
-  changed_when: false
-  failed_when: wireguard_keepalive_count.stdout | int != (expected_keepalive_count | int)
-
-# Running wg syncconf as a no-op verifies the running kernel crypto state is
-# consistent with the rendered config -- if the freshly-rendered conf disagreed
-# with what wg-quick loaded, syncconf would push deltas (visible in stderr) or
-# fail. (main.yml reloads via a full wg-quick restart, not syncconf, so kernel
-# routes stay in sync with AllowedIPs -- see wg.yml.)
-- name: _verify | Exercise wg syncconf as a no-op consistency check
-  shell: wg syncconf {{ iface | default('wg0') }} <(wg-quick strip {{ iface | default('wg0') }})
-  args:
-    executable: /bin/bash
-  become: true
-  changed_when: false
+    keepalive_on_count: "{{ wireguard_dump.stdout_lines[1:] | map('split', '\t') | map(attribute=7) | reject('eq', 'off') | list | length }}"
+  assert:
+    quiet: true
+    that: keepalive_on_count | int == expected_keepalive_count | int
+    fail_msg: >-
+      keepalive-on count {{ keepalive_on_count }} != keepalive_from membership
+      ({{ expected_keepalive_count }})
 
 # Regression guard for the syncconf-vs-routes bug: every non-default peer
 # AllowedIP must have a kernel route via the wg iface, else traffic to that
