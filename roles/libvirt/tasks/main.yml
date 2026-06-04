@@ -81,8 +81,9 @@
     name: zfs_mount
     tasks_from: unit
   vars:
-    zfs_mount_dataset: rpool/libvirt
-    zfs_mount_mountpoint: /var/lib/libvirt/images
+    zfs_mount_args:
+      dataset: rpool/libvirt
+      mountpoint: /var/lib/libvirt/images
   tags:
     - libvirt
 

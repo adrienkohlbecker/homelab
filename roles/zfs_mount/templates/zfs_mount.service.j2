@@ -1,13 +1,17 @@
 [Unit]
 Description=ZFS mount status at boot
+# After=zfs-mount.service is load-bearing: this unit only asserts the mount,
+# it never performs it. RequiresMountsFor= synthesizes ordering only for
+# legacy/.mount datasets; ZFS-native mountpoints have no .mount unit, so
+# zfs-mount.service (or initramfs, for the / BE) is the real ordering anchor.
 After=zfs-mount.service local-fs.target
-RequiresMountsFor={{ zfs_mount_mountpoint }}
-AssertPathIsMountPoint={{ zfs_mount_mountpoint }}
+RequiresMountsFor={{ zfs_mount_args.mountpoint }}
+AssertPathIsMountPoint={{ zfs_mount_args.mountpoint }}
 
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/usr/local/bin/zfs_check_mount "{{ zfs_mount_dataset }}" "{{ zfs_mount_mountpoint }}" "{{ zfs_mount_canmount | default('on') }}"
+ExecStart=/usr/local/bin/zfs_check_mount "{{ zfs_mount_args.dataset }}" "{{ zfs_mount_args.mountpoint }}" "{{ zfs_mount_args.canmount | default('on') }}"
 SyslogIdentifier=%N
 
 [Install]

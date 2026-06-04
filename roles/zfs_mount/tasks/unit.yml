@@ -1,13 +1,34 @@
+# Install a per-mountpoint oneshot (zfs_mount_<path>.service) that asserts
+# the dataset is correctly mounted at boot; consumer service units
+# Requires= it so they refuse to start on a failed/missing mount. Caller
+# passes one dict `zfs_mount_args`:
+#   dataset    zfs dataset path (e.g. rpool/services)
+#   mountpoint absolute mountpoint (e.g. /mnt/services)
+#   canmount   optional expected canmount; 'on' (default) for auto-mount
+#              datasets, 'noauto' for boot environments.
+#
+# The dict form mirrors systemd_unit / service_user: each import_role pass
+# replaces the whole `zfs_mount_args` value at play-vars scope so a previous
+# caller's args can't bleed into the next call.
+#
+# Unit-name suffix: mountpoint with '/' -> '_' ('/' itself -> 'root'). This
+# is not systemd-escape and is non-injective when a mountpoint holds a
+# literal '_' (e.g. /mnt/ci_scratch and a hypothetical /mnt/ci/scratch both
+# map to mnt_ci_scratch). The live mountpoint set is collision-free; the
+# assert below rejects only the one concrete footgun (/root aliasing /).
+# ~14 consumer *.service.j2 hard-code the resulting names as Requires=, so
+# changing this derivation is a fleet-wide rename.
 - name: unit | Assert required inputs
   assert:
     that:
-      - zfs_mount_dataset is defined
-      - zfs_mount_dataset | length > 0
-      - zfs_mount_dataset is match('^[A-Za-z0-9][A-Za-z0-9_.:/-]*$')
-      - zfs_mount_mountpoint is defined
-      - zfs_mount_mountpoint is string
-      - zfs_mount_mountpoint is match('^/')
-      - (zfs_mount_canmount | default('on')) in ['on', 'noauto']
+      - zfs_mount_args.dataset is defined
+      - zfs_mount_args.dataset | length > 0
+      - zfs_mount_args.dataset is match('^[A-Za-z0-9][A-Za-z0-9_.:/-]*$')
+      - zfs_mount_args.mountpoint is defined
+      - zfs_mount_args.mountpoint is string
+      - zfs_mount_args.mountpoint is match('^/')
+      - zfs_mount_args.mountpoint != '/root'
+      - (zfs_mount_args.canmount | default('on')) in ['on', 'noauto']
     quiet: true
   tags:
     - zfs_mount
@@ -27,7 +48,7 @@
 
 - name: unit | Derive unit name suffix
   set_fact:
-    _zfs_mount_unit_suffix: "{{ zfs_mount_mountpoint | regex_replace('^/$', '/root') | replace('/', '_') }}"
+    _zfs_mount_unit_suffix: "{{ zfs_mount_args.mountpoint | regex_replace('^/$', '/root') | replace('/', '_') }}"
   tags:
     - zfs_mount
 

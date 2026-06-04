@@ -1,12 +1,18 @@
+# dataset is pinned to ansible_distribution_release at converge time. If the
+# host is later booted into a different boot environment via ZFSBootMenu
+# without re-converging (e.g. a rollback), this unit asserts a SOURCE not
+# mounted at / and fails -- blocking every consumer that Requires= it.
+# Re-converge after a deliberate BE switch to regenerate the unit.
 - name: Add zfs mount service for root pool
   when: zfs_root
   import_role:
     name: zfs_mount
     tasks_from: unit
   vars:
-    zfs_mount_dataset: "rpool/ROOT/{{ ansible_distribution_release }}"
-    zfs_mount_mountpoint: /
-    zfs_mount_canmount: noauto
+    zfs_mount_args:
+      dataset: "rpool/ROOT/{{ ansible_distribution_release }}"
+      mountpoint: /
+      canmount: noauto
   tags:
     - zfs_mount
 
@@ -18,8 +24,9 @@
     name: zfs_mount
     tasks_from: unit
   vars:
-    zfs_mount_dataset: "bpool/BOOT/{{ ansible_distribution_release }}"
-    zfs_mount_mountpoint: /boot
-    zfs_mount_canmount: noauto
+    zfs_mount_args:
+      dataset: "bpool/BOOT/{{ ansible_distribution_release }}"
+      mountpoint: /boot
+      canmount: noauto
   tags:
     - zfs_mount
