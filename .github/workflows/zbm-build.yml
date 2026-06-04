@@ -103,18 +103,27 @@ jobs:
           grep -qE '^vmlin.*-bootmenu$' <<<"$members" || { echo "missing vmlin*-bootmenu kernel in tarball" >&2; exit 1; }
           echo "ZBM tarball OK: $tarball"
 
-      # Make the validate build downloadable for inspection. This repo is PUBLIC,
-      # so the artifact is publicly downloadable -- acceptable here because the
-      # build bakes only the THROWAWAY ephemeral dropbear key (not the real
-      # 1Password one) plus the already-public authorized_keys, so it carries no
-      # secret. It is NOT a release: the real, stable-host-key tarball still ships
-      # via `mise run zbm:upload`. if: always() so a verify failure still yields
-      # the artifact for debugging; warn (not error) if the build produced none.
-      - name: Upload the built tarball
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: zbm-recovery-build
-          path: zbm-build/*/zfsbootmenu-v*.tar.gz
-          retention-days: 14
-          if-no-files-found: warn
+      # Push the validation build to the private on-lab Nexus raw repo (zbm) for
+      # inspection -- kept off the PUBLIC GitHub artifact store. Not a release:
+      # it bakes the throwaway ephemeral host key (the real, stable-key tarball
+      # ships to Gitea via `mise run zbm:upload`). Stable per-(version,arch)
+      # path, overwritten each run (repo write_policy=ALLOW). Skips gracefully
+      # if the NEXUS_ZBM_* secrets aren't provisioned yet (terraform apply
+      # pending) so the build still passes.
+      - name: Upload the built tarball to Nexus
+        env:
+          NEXUS_ZBM_USERNAME: ${{ secrets.NEXUS_ZBM_USERNAME }}
+          NEXUS_ZBM_PASSWORD: ${{ secrets.NEXUS_ZBM_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NEXUS_ZBM_USERNAME:-}" ]; then
+            echo "NEXUS_ZBM_* not set; skipping Nexus upload (run 'mise run tf apply' to provision the zbm repo + creds)"
+            exit 0
+          fi
+          arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
+          ZBM_VERSION="$(awk -F'"' '/^ZBM_VERSION/{print $2; exit}' mise.toml)"
+          tarball="${GITHUB_WORKSPACE}/zbm-build/${arch}/zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
+          dest="https://nexus.lab.fahm.fr/repository/zbm/zfsbootmenu-v${ZBM_VERSION}-${arch}-ci.tar.gz"
+          curl --fail-with-body -sS --user "${NEXUS_ZBM_USERNAME}:${NEXUS_ZBM_PASSWORD}" \
+            --upload-file "$tarball" "$dest"
+          echo "uploaded validation build to ${dest}"
