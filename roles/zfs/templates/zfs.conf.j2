@@ -1,6 +1,9 @@
+{# int-coerce on the value line too, not just the guard: a stray non-numeric
+   token would otherwise land verbatim in the kernel module option line and
+   inject arbitrary zfs module params at initramfs build. #}
 {% if zfs_arc_min | default(0) | int > 0 %}
-options zfs zfs_arc_min={{ zfs_arc_min }}
+options zfs zfs_arc_min={{ zfs_arc_min | int }}
 {% endif %}
 {% if zfs_arc_max | default(0) | int > 0 %}
-options zfs zfs_arc_max={{ zfs_arc_max }}
+options zfs zfs_arc_max={{ zfs_arc_max | int }}
 {% endif %}

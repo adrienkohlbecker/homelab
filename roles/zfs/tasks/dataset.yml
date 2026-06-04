@@ -14,6 +14,12 @@
 # import_role pass replaces the whole `zfs_dataset_args` value, so a
 # previous caller's mode/group/etc. can't bleed into the next caller
 # that doesn't explicitly override.
+#
+# When `zfs_root` is false (non-ZFS host, e.g. the `minimal` fixture) the
+# dataset and its mount unit are skipped, but the mountpoint directory is
+# still created unconditionally: consumer roles bind-mount or write into that
+# path and expect it to exist regardless of the storage backend, so a plain
+# directory is the correct degraded behavior rather than a hard failure.
 
 # Inner task `name:` strings are static -- no `{{ _zfs_dataset_resolved }}`
 # or `{{ zfs_dataset_args.* }}` interpolation. Ansible renders `name:` at
@@ -45,7 +51,7 @@
 
     - name: Create zfs filesystem
       when: zfs_root
-      zfs:
+      community.general.zfs:
         name: '{{ _zfs_dataset_resolved }}'
         state: present
         extra_zfs_properties: "{{ (zfs_dataset_args.extra_properties | default({})) | combine({'mountpoint': zfs_dataset_args.mountpoint}) }}"

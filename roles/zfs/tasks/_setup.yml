@@ -3,7 +3,7 @@
     name: bash
 
 - name: Create zfs filesystem
-  zfs:
+  community.general.zfs:
     name: '{{ item }}'
     state: present
   become: true
