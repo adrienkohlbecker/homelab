@@ -16,3 +16,9 @@
   command: zfs set canmount=on rpool/ROOT/{{ ansible_distribution_release }}
   changed_when: false
   become: true
+
+- name: _setup | Set canmount=on on bpool/BOOT/<release> (mimic ZBM-on-boot)
+  command: zfs set canmount=on bpool/BOOT/{{ ansible_distribution_release }}
+  changed_when: false
+  become: true
+  when: zfs_has_bpool | default(false)

@@ -1,6 +1,6 @@
 [Unit]
 Description=ZFS mount status at boot
-After=local-fs.target
+After=zfs-mount.service local-fs.target
 
 [Service]
 Type=oneshot
