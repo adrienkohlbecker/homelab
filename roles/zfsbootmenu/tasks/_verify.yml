@@ -1,5 +1,7 @@
-# Backup-promotion verification is suspended while ZBM is pinned to v3.0.1
-# and backup promotion is not yet re-implemented — see notes/SOMEDAY.md.
+# Backup-loader promotion (last-known-good rotation on successful boot) stays
+# suspended while ZBM is pinned to v3.0.1 — see notes/SOMEDAY.md. The backup
+# loader is still seeded as a copy of the primary on first install (main.yml),
+# so the refind fallback menuentry resolves; that seeding is verified below.
 
 - name: _verify | Stat ZBM recovery EFI binary
   when: ansible_architecture in zfsbootmenu_release
@@ -9,15 +11,46 @@
   become: true
   register: zfsbootmenu_efi_stat
 
-- name: _verify | Assert ZBM binary exists with correct checksum
+- name: _verify | Stat ZBM backup EFI binary
+  when: ansible_architecture in zfsbootmenu_release
+  stat:
+    path: /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
+    checksum_algorithm: sha256
+  become: true
+  register: zfsbootmenu_backup_stat
+
+- name: _verify | Assert ZBM primary and backup loaders are present and valid
   when: ansible_architecture in zfsbootmenu_release
   assert:
     that:
       - zfsbootmenu_efi_stat.stat.exists
       - zfsbootmenu_efi_stat.stat.size > 0
       - zfsbootmenu_efi_stat.stat.checksum == zfsbootmenu_release[ansible_architecture].sha256
+      - zfsbootmenu_backup_stat.stat.exists
+      - zfsbootmenu_backup_stat.stat.checksum == zfsbootmenu_efi_stat.stat.checksum
     fail_msg: >-
-      ZBM binary missing or checksum mismatch:
-      exists={{ zfsbootmenu_efi_stat.stat.exists | default(false) }},
-      checksum={{ zfsbootmenu_efi_stat.stat.checksum | default('n/a') }},
+      ZBM loader missing or checksum mismatch:
+      primary_exists={{ zfsbootmenu_efi_stat.stat.exists | default(false) }},
+      primary_checksum={{ zfsbootmenu_efi_stat.stat.checksum | default('n/a') }},
+      backup_exists={{ zfsbootmenu_backup_stat.stat.exists | default(false) }},
+      backup_checksum={{ zfsbootmenu_backup_stat.stat.checksum | default('n/a') }},
       expected={{ zfsbootmenu_release[ansible_architecture].sha256 }}
+
+# aarch64 bypasses ZBM (direct EFI-stub boot), so the single-file recovery
+# loader must never land on the ESP. Positively assert its absence — turns the
+# otherwise-vacuous bypass-arch converge into a real check of the arch gate.
+- name: _verify | Stat ZBM loader on bypass arches
+  when: ansible_architecture not in zfsbootmenu_release
+  stat:
+    path: /boot/efi/EFI/ZBM/VMLINUZ.EFI
+  become: true
+  register: zfsbootmenu_efi_bypass_stat
+
+- name: _verify | Assert ZBM single-file loader is absent on bypass arches
+  when: ansible_architecture not in zfsbootmenu_release
+  assert:
+    that:
+      - not zfsbootmenu_efi_bypass_stat.stat.exists
+    fail_msg: >-
+      {{ ansible_architecture }} bypasses ZBM but a single-file loader was found
+      at /boot/efi/EFI/ZBM/VMLINUZ.EFI — the arch gate may be wrong.
