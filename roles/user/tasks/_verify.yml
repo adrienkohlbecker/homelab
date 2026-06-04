@@ -46,19 +46,19 @@
       Expected mise {{ user_mise_version }},
       got {{ _user_mise_version.stdout | default('') }}
 
-- name: _verify | Mise-managed tools are installed
-  command: "{{ ansible_user_dir }}/.local/share/mise/bin/mise ls --installed"
+# `mise ls --installed` lists registry entries even when a tool's binary
+# failed to download; .zshrc eval-loads zoxide and atuin unconditionally, so a
+# listed-but-broken binary breaks every fleet shell. Execute the two
+# load-bearing tools to prove the binaries actually run, not just that mise
+# knows about them.
+- name: _verify | Load-bearing mise tools execute
+  command: "{{ ansible_user_dir }}/.local/share/mise/bin/mise exec -- {{ item }} --version"
   environment:
     HOME: "{{ ansible_user_dir }}"
   changed_when: false
-  register: _user_mise_tools
-
-- name: _verify | At least one mise tool installed
-  assert:
-    that:
-      - _user_mise_tools.stdout | length > 0
-    fail_msg: >-
-      mise ls --installed returned no tools -- mise install did not run
+  loop:
+    - zoxide
+    - atuin
 
 - name: _verify | Dotfiles deployed (zshrc is a symlink)
   stat:
