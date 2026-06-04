@@ -13,8 +13,6 @@ zfs_has_brumath_mount: false
 zfs_has_eckwersheim_mount: false
 zfs_has_minio_mount: false
 
-z2m_start_service: false
-
 # Same block formula as host_vars/pug.yml; only `parent` differs (the
 # QEMU NIC isn't named eth0). See host_vars/lab-qemu.yml for the
 # rationale around qemu's user-net being pinned to the topology
