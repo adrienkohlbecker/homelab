@@ -327,6 +327,11 @@
   tags:
     - github_runner
 
+# Rootless buildkitd for the zbm-build CI job (needs linger + the rootless
+# podman socket above, since `docker buildx --load` imports into it).
+- name: Set up rootless buildkit
+  import_tasks: buildkitd.yml
+
 - name: Install podman prune timer for github_runner
   import_role:
     name: podman
