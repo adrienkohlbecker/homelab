@@ -9,46 +9,39 @@
   tags:
     - zfs_autobackup
 
-- name: dest | Scan SSH host keys from backup peers
+- name: dest | Check which backup peers are already in known_hosts
   when: not qemu_test
-  command: ssh-keyscan -H -t ed25519 -T 5 {{ item }}
+  command: ssh-keygen -F "{{ item }}" -f /root/.ssh/known_hosts
   loop: "{{ _zfs_autobackup_ssh_targets }}"
+  changed_when: false
+  failed_when: false
+  register: _zfs_autobackup_known_check
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: dest | Scan SSH host keys from new backup peers
+  when: not qemu_test and item.rc != 0
+  command: ssh-keyscan -H -t ed25519 -T 5 "{{ item.item }}"
+  loop: "{{ _zfs_autobackup_known_check.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
   changed_when: false
   failed_when: false
   register: _zfs_autobackup_keyscan
   tags:
     - zfs_autobackup
 
-- name: dest | Register SSH host keys for backup peers
-  when: not qemu_test
+- name: dest | Register SSH host keys for new backup peers
+  when: not qemu_test and item.stdout | default('') | length > 0
   known_hosts:
     path: /root/.ssh/known_hosts
-    name: "{{ item.item }}"
+    name: "{{ item.item.item }}"
     key: "{{ item.stdout }}"
-  loop: "{{ _zfs_autobackup_keyscan.results | selectattr('rc', 'eq', 0) | selectattr('stdout', 'ne', '') }}"
+  loop: "{{ _zfs_autobackup_keyscan.results | default([]) }}"
   loop_control:
-    label: "{{ item.item }}"
+    label: "{{ item.item.item | default(item.item) }}"
   become: true
   tags:
     - zfs_autobackup
 
-- name: dest | Copy the sync script
-  file:
-    path: /usr/local/bin/zfs_autosync
-    state: absent
-  become: true
-  tags:
-    - zfs_autobackup
-
-# dest hosts never run the autosync timer; this removal is idempotent
-# (no-op when never installed) and cleans up after older cron-based
-# installs.
-- name: dest | Remove the zfs_autosync timer
-  import_role:
-    name: systemd_timer
-    tasks_from: remove
-  vars:
-    systemd_timer_args:
-      name: zfs_autosync
-  tags:
-    - zfs_autobackup

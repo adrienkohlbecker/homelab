@@ -1,21 +1,23 @@
-- name: Assert backup sources are configured
+- name: Assert backup inputs are configured
   assert:
     that:
       - zfs_autobackup_sources is defined
       - zfs_autobackup_sources is iterable
       - zfs_autobackup_sources is not string
       - zfs_autobackup_sources is not mapping
+      - zfs_autobackup_ssh_public_key is defined
+      - zfs_autobackup_ssh_public_key is string
+      - zfs_autobackup_ssh_public_key | length > 0
     fail_msg: >-
-      zfs_autobackup_sources must be a list of { host, dest_dataset } dicts in
-      host_vars (the onsite pulls this host runs). Use [] for a source-only host.
+      zfs_autobackup_sources must be a list of { host, dest_dataset } dicts and
+      zfs_autobackup_ssh_public_key must be a non-empty string, both in host_vars.
   tags:
     - zfs_autobackup
 
 - name: Install zfs autobackup dependencies
   apt:
     package:
-      - python3-pip
-      - python3-virtualenv
+      - pipx
       - mbuffer
       - rsync
     cache_valid_time: 3600
@@ -24,34 +26,32 @@
   tags:
     - zfs_autobackup
 
-# because https://www.reddit.com/r/learnpython/comments/uj3dhx/why_does_pip_keep_reinstalling_the_same_version/ marks it changed every time
-- name: Check if zfs autobackup installed
-  stat:
-    path: /opt/virtualenv/zfs_autobackup/bin/zfs-autobackup
-  become: true
-  register: zfs_autobackup_installed
-  tags:
-    - zfs_autobackup
-
-- name: Install zfs autobackup
-  when: not zfs_autobackup_installed.stat.exists and not (ansible_check_mode and zfs_autobackup_apt.changed)
-  pip:
-    name: zfs-autobackup
-    virtualenv: /opt/virtualenv/zfs_autobackup
-  become: true
-  register: zfs_autobackup_install
-  tags:
-    - zfs_autobackup
-
-- name: Configure symlink
-  when: not (ansible_check_mode and (zfs_autobackup_apt.changed or zfs_autobackup_install.changed))
+- name: Remove legacy virtualenv installation
   file:
-    src: /opt/virtualenv/zfs_autobackup/bin/zfs-autobackup
-    dest: /usr/local/bin/zfs-autobackup
-    owner: root
-    group: root
-    mode: "0755"
-    state: link
+    path: /opt/virtualenv/zfs_autobackup
+    state: absent
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Check zfs-autobackup version
+  command: /usr/local/bin/zfs-autobackup --version
+  register: _zfs_autobackup_version_check
+  changed_when: false
+  failed_when: false
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Install zfs-autobackup via pipx
+  when: >-
+    not (ansible_check_mode and zfs_autobackup_apt.changed)
+    and zfs_autobackup_version not in (_zfs_autobackup_version_check.stdout | default(''))
+  command: pipx install --force "zfs-autobackup=={{ zfs_autobackup_version }}"
+  changed_when: true
+  environment:
+    PIPX_HOME: /opt/pipx
+    PIPX_BIN_DIR: /usr/local/bin
   become: true
   tags:
     - zfs_autobackup

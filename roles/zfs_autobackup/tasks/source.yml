@@ -1,19 +1,14 @@
-- name: source | Add zfs_autobackup group
-  group:
-    name: zfs_autobackup
-    system: true
-  become: true
-  tags:
-    - zfs_autobackup
-
-- name: source | Add zfs_autobackup user
-  user:
-    name: zfs_autobackup
-    group: zfs_autobackup
-    system: true
-    shell: /bin/bash
-  become: true
-  register: zfs_autobackup_user
+- name: source | Create zfs_autobackup service user
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: zfs_autobackup
+      shell: /bin/bash
+      createhome: true
+      home: /var/lib/zfs_autobackup
+      config_dir: false
   tags:
     - zfs_autobackup
 
@@ -22,6 +17,7 @@
   ansible.posix.authorized_key:
     user: zfs_autobackup
     key: "{{ zfs_autobackup_ssh_public_key }}"
+    key_options: "no-port-forwarding,no-agent-forwarding,no-pty,no-X11-forwarding,no-user-rc"
     exclusive: true
   become: true
   tags:
@@ -38,14 +34,35 @@
   tags:
     - zfs_autobackup
 
-- name: source | Set permissions on backed up datasets
+- name: source | Capture current permissions on backed up datasets
   when: not qemu_test
-  shell: set -euo pipefail; bfr=`zfs allow {{ item }} | md5sum | cut -f 1 -d " "`; zfs allow zfs_autobackup send,hold,release {{ item }}; aftr=`zfs allow {{ item }} | md5sum | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "permissions updated" || exit 1)
-  args:
-    executable: /bin/bash
-  register: zfs_autobackup_allow_cmd
-  changed_when: "'permissions updated' in zfs_autobackup_allow_cmd.stdout"
+  command: zfs allow "{{ item }}"
+  changed_when: false
+  register: _zfs_autobackup_allow_before
   loop: "{{ zfs_autobackup_datasets.stdout_lines }}"
+  loop_control:
+    index_var: idx
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: source | Grant ZFS permissions on backed up datasets
+  when: not qemu_test
+  command: zfs allow zfs_autobackup send,hold,release "{{ item }}"
+  changed_when: false
+  loop: "{{ zfs_autobackup_datasets.stdout_lines }}"
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: source | Detect permission changes on backed up datasets
+  when: not qemu_test
+  command: zfs allow "{{ item }}"
+  changed_when: _zfs_autobackup_allow_before.results[idx].stdout != _zfs_autobackup_allow_after.stdout
+  register: _zfs_autobackup_allow_after
+  loop: "{{ zfs_autobackup_datasets.stdout_lines }}"
+  loop_control:
+    index_var: idx
   become: true
   tags:
     - zfs_autobackup
