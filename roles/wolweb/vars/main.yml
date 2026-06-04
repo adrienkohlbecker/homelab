@@ -1,0 +1,12 @@
+# Wake-on-LAN targets advertised by the wolweb UI. Each entry references a
+# key in `mac_addresses` (a host/group var); the catalog itself is role-owned
+# structure, mirroring homepage_bookmarks. Only NICs reachable on the host's
+# own L2 broadcast domain (the management VLAN) can be woken -- see the
+# header comment in templates/devices.json.j2. The role runs on lab and pug
+# so each can wake the other (a host cannot WoL itself); the list is the
+# union of their wakeable NICs.
+wolweb_devices:
+  - name: Lab
+    mac: "{{ mac_addresses.lab_i210 }}"
+  - name: Pug
+    mac: "{{ mac_addresses.pug }}"
