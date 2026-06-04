@@ -103,6 +103,8 @@ jobs:
       && needs.detect.outputs.zbm_changed == 'true'
       && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     uses: ./.github/workflows/zbm-build.yml
+    # NEXUS_ZBM_USERNAME/PASSWORD for the tarball upload to the on-lab Nexus.
+    secrets: inherit
 
   # --- packer: per-release box builds ----------------------------------------
   # Split into one call per Ubuntu release so each test_* group can depend on
