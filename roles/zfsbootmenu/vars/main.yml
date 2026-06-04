@@ -1,7 +1,10 @@
 ---
 # ZFSBootMenu recovery EFI binary, x86_64 only (aarch64 bypasses ZBM).
-# Pinned to v3.0.1 while investigating a v3.1.0 boot hang — see notes/SOMEDAY.md.
-# Twin: packer/scripts/chroot.sh pins its own ZBM_VERSION (may differ during staged rollouts).
+# Pinned to v3.0.1: the v3.1.0 boot-hang root cause is identified (per-host
+# serial console via boot_serial_console), so the pin is retained only until
+# v3.1.0 is re-tested with the new args — see notes/SOMEDAY.md.
+# Twin: packer/scripts/chroot.sh installs ZBM in Components mode and currently
+# pins v3.1.0 — the version skew is the staged-rollout state, not drift.
 zfsbootmenu_version: "3.0.1"
 zfsbootmenu_kernel: "linux6.1"
 zfsbootmenu_release:
