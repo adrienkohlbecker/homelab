@@ -12,4 +12,12 @@ if [ -z "$POOL_REGEX" ] || [ -z "$SNAPSHOT_PREFIX" ]; then
   exit 1
 fi
 
-zfs list -t snapshot | grep -E "$POOL_REGEX" | grep "$SNAPSHOT_PREFIX" | cut -d' ' -f1 | sort | uniq | xargs -r -t -n1 zfs destroy
+# `-H -o name` emits exactly the snapshot-name column (tab-stripped, no header),
+# so there is no human-table whitespace to mis-split on -- ZFS permits spaces in
+# dataset names, and the old `cut -d' '` + bare `xargs` would word-split such a
+# name into multiple destroy targets. POOL_REGEX is a deliberate extended regex
+# (operator-supplied); SNAPSHOT_PREFIX is matched as a fixed string anchored to
+# the snapshot component (`@prefix`) so it can only select snapshots whose name
+# starts with it, never a substring elsewhere on the line. `-d '\n'` keeps each
+# whole name as one argument.
+zfs list -H -o name -t snapshot | grep -E "$POOL_REGEX" | grep -F -- "@$SNAPSHOT_PREFIX" | sort -u | xargs -r -t -d '\n' -n1 zfs destroy
