@@ -129,7 +129,6 @@ smb_shares: []
 subid_users: []
 
 has_transcoding_acceleration: true
-z2m_start_service: false
 
 # Tailscale subnet router + home exit node -- the HA pair to lab (both advertise
 # the home /21 + a home exit so either answers if the other is down). See
