@@ -2,6 +2,7 @@
 #MISE description="Rebase worktree <name> onto master: rebase its notes branch onto master:notes first, then rebase the code branch, remapping notes-gitlink conflicts to the rebased commits so code and notes history stay consistent"
 #MISE alias="wt:update"
 #USAGE arg "<name>" help="Branch and worktree name"
+#USAGE complete "name" run="git worktree list --porcelain | awk '/^worktree .*\\/.worktrees\\//{n=split($2,a,\"/\"); print a[n]}'"
 # shellcheck disable=SC2154  # usage_name injected by mise from the #USAGE spec
 
 # Brings worktree branch <name> current with master (the symmetric inverse of

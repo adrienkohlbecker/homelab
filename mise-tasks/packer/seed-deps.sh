@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Layer packer/seed_deps.yml on top of the box artifact and publish as box_deps"
 #MISE interactive=true
-#USAGE flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
+#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="jammy"
+#USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 

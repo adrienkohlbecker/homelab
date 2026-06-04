@@ -2,7 +2,9 @@
 #MISE description="Build packer image source(s) and verify they boot"
 #MISE interactive=true
 #USAGE arg "[sources]..." help="Source names from qemu.pkr.hcl to build; empty = all"
-#USAGE flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
+#USAGE complete "sources" run="printf 'box\nlab\npug\nhetzner\n'"
+#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="jammy"
+#USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
 #USAGE flag "--upstream" help="Pull apt packages and the cloud image from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
 #USAGE flag "--no-publish" help="Build and verify-boot but skip the install (publish) step. Used by feature-branch CI to validate packer changes without overwriting master's published artifacts."
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec

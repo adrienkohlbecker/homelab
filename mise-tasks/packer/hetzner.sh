@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Upload a pre-built ZFS-root disk image to a Hetzner Cloud snapshot (mechanic 2). Build the image first with `mise run packer:build hetzner`."
 #USAGE arg "[image]" help="Path to the rpool .raw disk image (default: the packer:build hetzner artifact for --ubuntu)"
-#USAGE flag "--ubuntu <name>" help="Ubuntu codename -- snapshot label + default image path" default="jammy"
+#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu codename -- snapshot label + default image path" default="jammy"
+#USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
