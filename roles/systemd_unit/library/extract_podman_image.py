@@ -71,22 +71,29 @@ _EXEC_PROPS = ("ExecStart", "ExecStartPre", "ExecStartPost")
 # podman introduces them; omitting one causes the walker to skip the next
 # token (treating it as a flag value) — the consequence is "image not found"
 # surfaced immediately, not a silent wrong-store pre-pull.
-_FLAGS_NO_VALUE = frozenset({
-    "--detach", "-d",
-    "--init",
-    "--interactive", "-i",
-    "--no-healthcheck",
-    "--oom-kill-disable",
-    "--privileged",
-    "--publish-all", "-P",
-    "--quiet", "-q",
-    "--read-only",
-    "--replace",
-    "--rm",
-    "--rootfs",
-    "--sig-proxy",
-    "--tty", "-t",
-})
+_FLAGS_NO_VALUE = frozenset(
+    {
+        "--detach",
+        "-d",
+        "--init",
+        "--interactive",
+        "-i",
+        "--no-healthcheck",
+        "--oom-kill-disable",
+        "--privileged",
+        "--publish-all",
+        "-P",
+        "--quiet",
+        "-q",
+        "--read-only",
+        "--replace",
+        "--rm",
+        "--rootfs",
+        "--sig-proxy",
+        "--tty",
+        "-t",
+    }
+)
 
 
 def bus_label_escape(name):

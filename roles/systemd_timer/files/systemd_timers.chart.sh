@@ -82,7 +82,8 @@ systemd_timers_update() {
   for f in "${systemd_timers_meta_dir}"/*.conf; do
     [ -f "$f" ] || continue
     # Pure-bash basename equivalent -- no subprocess.
-    name="${f##*/}"; name="${name%.conf}"
+    name="${f##*/}"
+    name="${name%.conf}"
     period=$(awk -F= '$1=="period_secs"{print $2+0; exit}' "$f")
     if [ -z "$period" ] || [ "$period" -le 0 ]; then
       error "systemd_timers: $f missing or invalid period_secs"
