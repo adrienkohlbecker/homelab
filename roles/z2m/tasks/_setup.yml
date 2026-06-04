@@ -8,11 +8,17 @@
     name: test
     tasks_from: nginx
 
-- name: _setup | Setup dependencies
-  shell: |
-    set -euo pipefail
-    mkdir /mnt/services
-  args:
-    executable: /bin/bash
-    creates: /mnt/services
+- name: _setup | Install authelia stub in gate mode for auth=required tests
+  import_role:
+    name: test
+    tasks_from: authelia_stub
+  vars:
+    test_authelia_stub_args:
+      mode: gate
+
+- name: _setup | Create the services dataset mountpoint
+  file:
+    path: /mnt/services
+    state: directory
+    mode: "0755"
   become: true

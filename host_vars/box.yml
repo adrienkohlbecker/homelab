@@ -238,6 +238,11 @@ gitea_runner_labels:
 # runtime VAAPI probe inside the container falls back to software, but
 # the ansible-side machinery and container's view of /dev get covered.
 has_transcoding_acceleration: true
+# Don't start z2m under qemu: it brings the frontend up only AFTER the serial
+# adapter connects, so with no Zigbee coordinator the container throws in
+# controller.start() and never serves a port -- it cannot reach `healthy`
+# without emulating a Z-Stack coordinator. _verify covers the config/unit/nginx
+# surface instead (see roles/z2m/tasks/_verify.yml).
 z2m_start_service: false
 
 # Stub instance so the github_runner role exercises its per-
