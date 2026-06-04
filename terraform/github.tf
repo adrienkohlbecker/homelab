@@ -44,6 +44,26 @@ resource "github_actions_secret" "nexus_password" {
   }
 }
 
+# Scoped push credential for the zbm raw hosted repo (nexus.tf), consumed by the
+# zbm-build workflow to PUT the validation tarball. Lands in the homelab repo
+# where zbm-build runs; rotation mirrors the docker creds (-replace the
+# random_password).
+resource "github_actions_secret" "nexus_zbm_username" {
+  repository  = "homelab"
+  secret_name = "NEXUS_ZBM_USERNAME"
+  value       = nexus_security_user.zbm_push.userid
+}
+
+resource "github_actions_secret" "nexus_zbm_password" {
+  repository  = "homelab"
+  secret_name = "NEXUS_ZBM_PASSWORD"
+  value       = random_password.nexus_zbm_push.result
+
+  lifecycle {
+    replace_triggered_by = [random_password.nexus_zbm_push]
+  }
+}
+
 # MISE_GITHUB_TOKEN raises mise's anonymous 60/hr GitHub API rate limit
 # during `mise install` in the ci-image workflow. mise just
 # needs an authenticated token; the value here is a dedicated

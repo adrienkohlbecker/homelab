@@ -362,6 +362,65 @@ resource "nexus_security_user" "lab_local_user" {
   ]
 }
 
+# Raw hosted repo for the ZFSBootMenu CI validation build (zbm-build.yml). The
+# job builds the recovery image with a THROWAWAY host key and PUTs the tarball
+# here for inspection -- private (on-lab), unlike a public GitHub artifact, and
+# NOT a release (the real, stable-host-key tarball still ships to Gitea via
+# `mise run zbm:upload`). Rides the snapshotted "hosted" blob store, same
+# blob-store-lock caveat as the docker hosted repos above (changing it is a
+# delete+recreate via -replace). write_policy=ALLOW so each run overwrites the
+# stable per-(version,arch) path instead of accumulating; strict content-type
+# off because the payload is a plain tarball.
+resource "nexus_repository_raw_hosted" "zbm" {
+  name   = "zbm"
+  online = true
+
+  storage {
+    blob_store_name                = nexus_blobstore_file.hosted.name
+    strict_content_type_validation = false
+    write_policy                   = "ALLOW"
+  }
+}
+
+# Least-privileged push identity for the zbm raw repo, mirroring the per-docker
+# -repo privilege/role/user pattern above: one scoped credential so a leak
+# reaches only this repo. Consumed by zbm-build.yml as NEXUS_ZBM_USERNAME /
+# NEXUS_ZBM_PASSWORD (provisioned into the homelab repo in github.tf).
+resource "nexus_privilege_repository_view" "zbm_raw" {
+  name        = "zbm-raw-all"
+  description = "Full view of the zbm raw hosted repo (browse/read/edit/add/delete)"
+  repository  = nexus_repository_raw_hosted.zbm.name
+  format      = "raw"
+  actions     = ["BROWSE", "READ", "EDIT", "ADD", "DELETE"]
+}
+
+resource "nexus_security_role" "zbm_push" {
+  roleid      = "zbm-push"
+  name        = "zbm-push"
+  description = "Push artifacts to the zbm raw hosted repo"
+  privileges  = [nexus_privilege_repository_view.zbm_raw.name]
+  roles       = []
+}
+
+resource "random_password" "nexus_zbm_push" {
+  length  = 32
+  special = false
+}
+
+resource "nexus_security_user" "zbm_push" {
+  userid    = "zbm-push"
+  firstname = "zbm"
+  lastname  = "push"
+  email     = "zbm-push@noreply.invalid"
+  password  = random_password.nexus_zbm_push.result
+  roles     = [nexus_security_role.zbm_push.roleid]
+  status    = "active"
+
+  lifecycle {
+    replace_triggered_by = [random_password.nexus_zbm_push]
+  }
+}
+
 resource "nexus_repository_docker_proxy" "this" {
   for_each = local.docker_proxies
 
