@@ -20,6 +20,19 @@
   tags:
     - zfs
 
+- name: Assert pool/dataset list shapes
+  assert:
+    that:
+      - zfs_trim_pools | select('search', '/') | list | length == 0
+      - zfs_mount_cache_datasets | reject('search', '/') | list | length == 0
+    fail_msg: >-
+      zfs_trim_pools entries must be bare pool names (no '/'): each becomes a
+      zfs_trim_<pool> unit name and a `zpool trim <pool>` argument. Each
+      zfs_mount_cache_datasets entry must be a 'pool/dataset' path -- its pool
+      component (split('/')[0]) names the per-pool mount-cache file.
+  tags:
+    - zfs
+
 # Catches divergence between the userspace zfsutils and the loaded
 # zfs.ko. Ubuntu ships the kernel module bundled inside
 # linux-modules-*-generic, so its version tracks whichever release the
@@ -74,9 +87,16 @@
     - ansible_distribution_release != "jammy" or "install ok installed" in zfs_hwe_status.stdout
   assert:
     that:
-      - (zfs_version_out.stdout_lines[0] | regex_replace('^zfs-', '')) == (zfs_version_out.stdout_lines[1] | regex_replace('^zfs-kmod-', ''))
+      # Length guard first: a kmod that is not loaded yet makes `zfs --version`
+      # emit only the userspace line, so an unguarded [1] would IndexError with
+      # an opaque template error instead of this diagnostic. The second clause
+      # short-circuits (Jinja `or`) when length < 2, so it never indexes [1]
+      # past the end.
+      - zfs_version_out.stdout_lines | length >= 2
+      - (zfs_version_out.stdout_lines | length < 2) or ((zfs_version_out.stdout_lines[0] | regex_replace('^zfs-', '')) == (zfs_version_out.stdout_lines[1] | regex_replace('^zfs-kmod-', '')))
     fail_msg: |-
-      ZFS userspace and kernel-module versions disagree:
+      ZFS version check failed (expected two lines -- zfs-<ver> userspace and
+      zfs-kmod-<ver> module -- that agree):
       {{ zfs_version_out.stdout }}
   tags:
     - zfs
@@ -165,6 +185,10 @@
       description: Daily ZFS health check
       on_calendar: "*-*-* 00:55:00"
       exec_start: /usr/local/bin/zfs_health
+      # Spread the fleet's nightly zpool-status runs over an hour instead of all
+      # firing at 00:55; fixed_random_delay pins each host to a stable offset.
+      randomized_delay_sec: 3600
+      fixed_random_delay: true
   tags:
     - zfs
 
@@ -262,6 +286,10 @@
   tags:
     - zfs
 
+# Dataset properties go through community.general.zfs: it is idempotent and,
+# unlike the zpool module, cannot destroy a pool -- so the get-then-set command
+# dance above is reserved for pool-level properties where that destroy edge is
+# the concern. dataset.yml uses this same module for consumer datasets.
 - name: Set properties on root dataset
   when: zfs_root
   community.general.zfs:
