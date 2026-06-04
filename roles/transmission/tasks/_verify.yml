@@ -60,3 +60,75 @@
   retries: 15
   delay: 2
   changed_when: false
+
+# config_dir_group: media (see main.yml) exists to stop ansible flapping
+# /mnt/services/transmission's gid back to `transmission` against the
+# linuxserver image's startup chown to PUID:PGID=transmission:media. Assert the
+# dir landed group `media` so a regression in that setting surfaces here, not as
+# a silent per-converge flap.
+- name: _verify | Stat the transmission config dir
+  stat:
+    path: /mnt/services/transmission
+  register: _transmission_config_dir
+  become: true
+
+- name: _verify | Transmission config dir is group media
+  assert:
+    that:
+      - _transmission_config_dir.stat.gr_name == "media"
+    fail_msg: "/mnt/services/transmission is not group media (gr_name={{ _transmission_config_dir.stat.gr_name }})"
+
+# settings.json is the role's other fragile contract: transmission (and the
+# linuxserver init) rewrite it on shutdown/start, so settings.json.j2 must match
+# that writeback byte-for-byte or the next converge drifts and restart-churns
+# forever. The idempotence pass can't catch this -- the harness never restarts
+# transmission between converges. Force a clean shutdown+restart, read the
+# rewritten rpc-password hash back (as main.yml does to stay idempotent), then
+# assert our template still matches what was written.
+- name: _verify | Restart transmission to force a settings.json writeback
+  systemd:
+    name: transmission
+    state: restarted
+  become: true
+
+- name: _verify | Transmission RPC is back up after the restart
+  uri:
+    url: http://127.0.0.1:{{ service_ports.transmission }}/transmission/rpc
+    method: POST
+    body: '{"method":"session-get"}'
+    body_format: json
+    status_code: 401
+  register: _transmission_rpc_postrestart
+  retries: 60
+  delay: 2
+  until: _transmission_rpc_postrestart.status == 401
+
+- name: _verify | Read the rewritten rpc-password hash back
+  command: >-
+    python3 -c 'import json,sys;
+    print(json.load(open(sys.argv[1])).get("rpc-password",""))'
+    /mnt/services/transmission/settings.json
+  register: _transmission_postrestart_pw
+  become: true
+  changed_when: false
+
+- name: _verify | Render the settings.json our template would write
+  set_fact:
+    _transmission_conf_expected: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
+  vars:
+    transmission_rpc_password_hash: "{{ _transmission_postrestart_pw.stdout }}"
+
+- name: _verify | Read settings.json back after the writeback
+  slurp:
+    src: /mnt/services/transmission/settings.json
+  register: _transmission_conf_ondisk
+  become: true
+
+- name: _verify | Templated settings.json survives transmission's writeback without drift
+  assert:
+    that:
+      - (_transmission_conf_ondisk.content | b64decode) == _transmission_conf_expected
+    fail_msg: >-
+      transmission rewrote settings.json into a form settings.json.j2 no longer
+      matches -- its key order/types drifted from the writeback, so deploying
+      would restart-churn. Re-capture settings.json.j2 from a running instance.
