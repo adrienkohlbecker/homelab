@@ -5,3 +5,22 @@
     install_recommends: false
     cache_valid_time: 3600
   become: true
+
+# The backup scripts source /usr/local/lib/functions.sh at runtime; in prod
+# the bash base role guarantees it. _verify drives a real backup, so install
+# it here (mirrors roles/zfs/tasks/_setup.yml).
+- name: _setup | Install bash helpers
+  import_role:
+    name: bash
+
+# A locally-tagged leaf dataset so converge's source.yml grants zfs allow on
+# it and _verify can drive a real local backup. rpool exists on every ZFS
+# fixture (box/lab/pug); minimal has no ZFS and is excluded from this role.
+- name: _setup | Create and tag a scratch dataset for backup testing
+  community.general.zfs:
+    name: rpool/zfs_autobackup_test
+    state: present
+    extra_zfs_properties:
+      autobackup:bak: "true"
+      mountpoint: none
+  become: true

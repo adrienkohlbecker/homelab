@@ -104,3 +104,43 @@
     that:
       - zfs_autobackup_verify_logrotate.stat.exists
     fail_msg: "logrotate config missing at /etc/logrotate.d/zfs_autobackup"
+
+# Functional check: converge granted zfs allow on the scratch dataset that
+# _setup tagged; assert the grant landed, then drive a real local backup and
+# confirm a @bak- snapshot appears -- exercising script discovery, the
+# zfs-autobackup invocation, and the snapshot-target quiesce end to end.
+- name: _verify | Read zfs allow on the scratch dataset
+  command: zfs allow rpool/zfs_autobackup_test
+  changed_when: false
+  register: zfs_autobackup_verify_allow
+  become: true
+
+- name: _verify | User zfs_autobackup was granted send,hold,release
+  assert:
+    that:
+      - "'user zfs_autobackup' in zfs_autobackup_verify_allow.stdout"
+      - "'send' in zfs_autobackup_verify_allow.stdout"
+      - "'hold' in zfs_autobackup_verify_allow.stdout"
+      - "'release' in zfs_autobackup_verify_allow.stdout"
+    fail_msg: >-
+      zfs allow did not grant send,hold,release to zfs_autobackup
+      ({{ zfs_autobackup_verify_allow.stdout }})
+
+- name: _verify | Run a local backup against the scratch dataset
+  command: /usr/local/bin/zfs_backup_local
+  changed_when: false
+  become: true
+
+- name: _verify | List snapshots on the scratch dataset
+  command: zfs list -t snapshot -H -o name -r rpool/zfs_autobackup_test
+  changed_when: false
+  register: zfs_autobackup_verify_snaps
+  become: true
+
+- name: _verify | A bak snapshot was created
+  assert:
+    that:
+      - zfs_autobackup_verify_snaps.stdout is search('@bak-')
+    fail_msg: >-
+      zfs_backup_local created no @bak- snapshot on rpool/zfs_autobackup_test
+      ({{ zfs_autobackup_verify_snaps.stdout }})
