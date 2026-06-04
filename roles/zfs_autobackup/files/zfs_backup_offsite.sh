@@ -17,7 +17,19 @@ DESTPATH=${DATASET//\//_}
 
 zfs_check_mount "$DATASET" "$MOUNTPOINT"
 
-LAST_SNAPSHOT=$(zfs list -t snapshot -o name -s creation -r "$DATASET" | grep "@bak-" | tail -1 | cut -d@ -f2)
+# awk collapses the grep|tail|cut pipeline: snapshots arrive sorted by
+# creation (ascending), so the last @bak- line is the newest. A bare
+# grep would exit 1 (tripping pipefail) on a dataset with no @bak-
+# snapshot yet -- awk just yields an empty string.
+LAST_SNAPSHOT=$(zfs list -t snapshot -o name -s creation -r "$DATASET" | awk -F@ '/@bak-/ {s=$2} END {print s}')
+
+# A freshly-tagged or just-thinned dataset has no @bak- snapshot. Skip it
+# cleanly rather than rsyncing the empty path ".zfs/snapshot//" (the whole
+# snapshot root) with --delete, which would mirror every snapshot offsite.
+if [ -z "$LAST_SNAPSHOT" ]; then
+  echo >&2 "No @bak- snapshot for $DATASET, skipping offsite sync"
+  exit 0
+fi
 
 # --compress causes issues with "deflate" because the version on Synology NASes is too old
 f_trace rsync \
@@ -30,6 +42,8 @@ f_trace rsync \
   --delete \
   --delete-excluded \
   --timeout 60 \
+  --partial-dir .rsync-partial \
+  --info progress2 \
   --devices \
   --specials \
   -M--fake-super \
