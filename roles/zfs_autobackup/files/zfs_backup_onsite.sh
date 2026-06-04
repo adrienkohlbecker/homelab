@@ -19,6 +19,9 @@ fi
 # --keep-source 16384 is a high ceiling: with --no-snapshot the source
 # host's own local run owns source thinning, so this pull never prunes the
 # source; --keep-target does the real thinning of the received copies.
+# No --progress flag: zfs-autobackup auto-enables progress when stderr is a
+# tty (operator run) and stays quiet under the timer -- passing --progress
+# would force it on and spam the journal.
 f_trace zfs-autobackup \
   --buffer 256M \
   --no-snapshot \

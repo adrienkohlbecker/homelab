@@ -31,6 +31,14 @@ if [ -z "$LAST_SNAPSHOT" ]; then
   exit 0
 fi
 
+# rsync's running progress is helpful when an operator runs this by hand but is
+# just \r-spam in the journal when the timer runs it, so only request it when
+# stdout is a tty. (zfs-autobackup auto-detects this itself; rsync does not.)
+rsync_progress=()
+if [ -t 1 ]; then
+  rsync_progress=(--info=progress2)
+fi
+
 # zstd on the wire: both ends are now rsync >= 3.2 (the source hosts, and bunk
 # via rrsync's RSYNC override at SynoCli 3.4.1), so plain --compress
 # auto-negotiates zstd. DSM's stock rsync 3.1.2 only spoke deflate and broke
@@ -48,7 +56,7 @@ f_trace rsync \
   --timeout 60 \
   --compress \
   --partial-dir .rsync-partial \
-  --info progress2 \
+  "${rsync_progress[@]}" \
   --devices \
   --specials \
   -M--fake-super \
