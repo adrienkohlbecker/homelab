@@ -61,15 +61,38 @@ fi
 # + dropbear (recovery SSH), and dhclient for ip=single-dhcp (the base ships no
 # DHCP client).
 img="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
+
+# Registry-backed layer cache (CI). When ZBM_BUILDER_CACHE_REF is set (to a
+# nexus.lab.fahm.fr/homelab/zbm-builder:<tag> ref), pull it as a --cache-from
+# source and embed inline cache in the output, so a later build reuses the slow
+# xbps-install layers even after the local buildkitd cache is pruned. It 404s
+# harmlessly on the first build. The workstation leaves it unset -> plain build.
+cache_args=()
+if [ -n "${ZBM_BUILDER_CACHE_REF:-}" ]; then
+  cache_args=(--cache-from "type=registry,ref=${ZBM_BUILDER_CACHE_REF}" --cache-to type=inline)
+fi
 docker buildx build \
   --pull \
   --progress=plain \
   --build-arg "XBPS_REPOS=${xbps_repo}" \
   --build-arg "PACKAGES=mdadm nvme-cli dracut-crypt-ssh dropbear dhclient" \
+  ${cache_args[@]+"${cache_args[@]}"} \
   --load \
   --tag "$img" \
   -f "$src_dir/releng/docker/Dockerfile" \
   "$src_dir/releng/docker"
+
+# Push the freshly built image as the cache source for the next build -- BEFORE
+# the perl re-extract below, because podman commit doesn't preserve BuildKit's
+# inline cache metadata, so the pushed ref must be the unmodified buildx output.
+# The expensive layer (the xbps toolchain install) is what we want cached; the
+# re-extract doesn't touch it, and build.sh always re-extracts perl on its local
+# copy, so the cache image's missing Pod/Usage.pm is immaterial. Needs a prior
+# `podman login` to the registry (the CI workflow does it).
+if [ -n "${ZBM_BUILDER_CACHE_REF:-}" ]; then
+  podman tag "$img" "${ZBM_BUILDER_CACHE_REF}"
+  podman push "${ZBM_BUILDER_CACHE_REF}"
+fi
 
 # Work around a rootless-BuildKit unpack quirk: the build drops perl's
 # /usr/share/perl5/core_perl/Pod/Usage.pm during xbps extraction (perl ships the
