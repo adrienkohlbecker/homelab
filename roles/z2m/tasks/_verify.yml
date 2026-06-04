@@ -58,14 +58,63 @@
     not z2m_verify_devices.stat.exists
     or z2m_verify_devices.stat.pw_name != 'z2m'
 
-- name: _verify | Groups file is valid YAML owned by z2m
-  stat:
-    path: /mnt/services/z2m/groups.yaml
-  register: z2m_verify_groups
+# patch_cover_tilt.py is the role's one piece of real logic and the live
+# frontend probes that would exercise covers are gated off in CI -- so prove
+# the patcher itself here against a throwaway fixture (a cover whose
+# friendly_name matches the role's real pattern). Asserts it injects the
+# tilt-null override on the first pass and is a no-op on the second.
+- name: _verify | Seed a fixture cover device for the tilt patcher
+  copy:
+    dest: /tmp/z2m_patch_fixture.yaml
+    content: |
+      "0x00124b00ffffffff":
+        friendly_name: testroom/shutter
+    mode: "0644"
   become: true
-  failed_when: >-
-    not z2m_verify_groups.stat.exists
-    or z2m_verify_groups.stat.pw_name != 'z2m'
+
+- name: _verify | Run the cover patch on the fixture (first pass mutates)
+  script:
+    cmd: patch_cover_tilt.py '{{ z2m_cover_friendly_name_pattern }}' /tmp/z2m_patch_fixture.yaml
+  register: z2m_verify_patch
+  changed_when: false
+  become: true
+
+- name: _verify | Run the cover patch again (second pass is idempotent)
+  script:
+    cmd: patch_cover_tilt.py '{{ z2m_cover_friendly_name_pattern }}' /tmp/z2m_patch_fixture.yaml
+  register: z2m_verify_patch_again
+  changed_when: false
+  become: true
+
+- name: _verify | Tilt-null override landed in the patched fixture
+  shell: |
+    set -euo pipefail
+    python3 -c '
+    import yaml, sys
+    cov = yaml.safe_load(open(sys.argv[1]))["0x00124b00ffffffff"]["homeassistant"]["cover"]
+    for k in ("tilt_status_topic", "tilt_status_template", "tilt_command_topic"):
+        assert k in cov and cov[k] is None, f"{k} not null: {cov.get(k)!r}"
+    ' /tmp/z2m_patch_fixture.yaml
+  args:
+    executable: /bin/bash
+  changed_when: false
+  become: true
+
+- name: _verify | Patcher reported mutate-then-idempotent
+  assert:
+    that:
+      - "'CHANGED' in z2m_verify_patch.stdout"
+      - "'OK' in z2m_verify_patch_again.stdout"
+    fail_msg: >-
+      patch_cover_tilt.py did not report CHANGED on the first pass then OK on
+      the second (got {{ z2m_verify_patch.stdout | trim }} /
+      {{ z2m_verify_patch_again.stdout | trim }}).
+
+- name: _verify | Remove the tilt-patcher fixture
+  file:
+    path: /tmp/z2m_patch_fixture.yaml
+    state: absent
+  become: true
 
 - name: _verify | Service unit is installed and enabled
   systemd:

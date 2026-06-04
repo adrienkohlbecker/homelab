@@ -43,6 +43,14 @@
     group: z2m
     mode: "0644"
     backup: true
+    # The generated config round-trips through to_nice_yaml + a list re-indent
+    # regex; parse the rendered file so a quoting/indent break fails the
+    # converge instead of surfacing as a failed container start. The multi-
+    # constructor swallows z2m's `!secret.yaml` tags (resolved at runtime).
+    validate: >-
+      python3 -c 'import yaml,sys;
+      yaml.add_multi_constructor("!", lambda l,s,n: None, yaml.SafeLoader);
+      yaml.safe_load(open(sys.argv[1]))' %s
   register: z2m_conf
   become: true
   tags:
@@ -93,20 +101,6 @@
   tags:
     - z2m
 
-- name: Seed z2m groups
-  copy:
-    src: groups.yaml
-    dest: /mnt/services/z2m/groups.yaml
-    owner: z2m
-    group: z2m
-    mode: "0644"
-    force: false
-    backup: true
-  register: z2m_groups
-  become: true
-  tags:
-    - z2m
-
 - name: Configure z2m secrets
   template:
     src: secret.yaml.j2
@@ -132,6 +126,10 @@
   tags:
     - z2m
 
+# z2m_devices.changed only fires on the first converge (the seed copy is
+# force: false; z2m owns devices.yaml at runtime thereafter), so a later
+# operator edit to devices.yaml does NOT bounce the mesh -- runtime content
+# changes flow through z2m_cover_patch / z2m_devices_perms instead.
 - name: Enable z2m service
   import_role:
     name: systemd_unit
@@ -140,7 +138,7 @@
     systemd_unit_args:
       src: z2m
       condition: "{{ not (ansible_check_mode and (z2m_service_result.changed or z2m_user.changed)) }}"
-      restart: "{{ z2m_service_result.changed or z2m_conf.changed or z2m_secret.changed or z2m_devices.changed or z2m_cover_patch.changed or z2m_devices_perms.changed or z2m_groups.changed }}"
+      restart: "{{ z2m_service_result.changed or z2m_conf.changed or z2m_secret.changed or z2m_devices.changed or z2m_cover_patch.changed or z2m_devices_perms.changed }}"
       start: "{{ z2m_start_service }}"
   tags:
     - z2m
