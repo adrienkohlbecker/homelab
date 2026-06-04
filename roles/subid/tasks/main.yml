@@ -44,13 +44,18 @@
   tags:
     - subid
 
+# 0644 (world-readable) is the Ubuntu default. It must stay readable: rootless
+# tools that set up user namespaces themselves rather than via the setuid
+# newuidmap helper (notably rootlesskit, which backs the github_runner buildkitd)
+# read /etc/subuid + /etc/subgid directly and fail on a non-readable file. The
+# ranges aren't secret (they're uid/gid allocations), so world-read is fine.
 - name: Apply subuid settings
   template:
     src: subid.j2
     dest: /etc/subuid
     owner: root
     group: root
-    mode: '0640'
+    mode: '0644'
     backup: true
     validate: python3 -c 'import sys; lines = [x.strip() for x in open(sys.argv[1]) if x.strip()]; sys.exit(1 if [x for x in lines if len(x.split(":")) != 3 or not x.split(":")[1].isdigit() or not x.split(":")[2].isdigit()] else 0)' "%s"
   vars:
@@ -68,7 +73,7 @@
     dest: /etc/subgid
     owner: root
     group: root
-    mode: '0640'
+    mode: '0644'
     backup: true
     validate: python3 -c 'import sys; lines = [x.strip() for x in open(sys.argv[1]) if x.strip()]; sys.exit(1 if [x for x in lines if len(x.split(":")) != 3 or not x.split(":")[1].isdigit() or not x.split(":")[2].isdigit()] else 0)' "%s"
   vars:
