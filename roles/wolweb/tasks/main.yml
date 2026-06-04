@@ -21,6 +21,21 @@
   tags:
     - wolweb
 
+- name: Validate default interface is a plausible LAN NIC
+  assert:
+    quiet: true
+    that:
+      - ansible_facts.default_ipv4.interface is defined
+      - ansible_facts.default_ipv4.interface is not match('^(wg|podman|virbr|docker|br-|veth)')
+    fail_msg: >-
+      ansible_facts.default_ipv4.interface resolved to
+      '{{ ansible_facts.default_ipv4.interface | default("") }}', which looks
+      like a bridge/tunnel rather than the management NIC -- wolweb egresses the
+      magic packet on this interface and broadcasts to its segment, so a wrong
+      interface would render an unwakeable devices.json (mirrors the firewall role)
+  tags:
+    - wolweb
+
 - name: Compute broadcast ip
   set_fact:
     wolweb_broadcast_ip: "{{ (ansible_facts.default_ipv4.address + '/' + ansible_facts.default_ipv4.netmask) | ansible.utils.ipaddr('broadcast') }}"
