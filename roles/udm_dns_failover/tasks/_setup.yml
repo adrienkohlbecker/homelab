@@ -1,0 +1,43 @@
+# _setup is test-only (runs only under test/testrole.py, never against
+# prod). The real target is the UDM, whose always-on dnsmasq answers the
+# loopback healthcheck and whose firmware-persistent /data the role
+# symlinks from. On the box VM we stub just enough for the role to reach
+# its functional state: dig (UniFi OS ships it; box may not) and a dnsmasq
+# on 127.0.0.1:53 so the init_fail healthcheck (dig @127.0.0.1) passes,
+# letting keepalived leave FAULT and claim the VIP. dnsmasq here is a stand
+# in for the UDM's own resolver — this role never configures dnsmasq, it
+# only rides the resolver the appliance already runs.
+# iptables is part of UniFi OS on the real UDM (it firewalls with it), so
+# the role assumes it's present. The box cloud image ships neither iptables
+# nor a resolver, so the fixture provides them — mirroring how prod roles
+# (firewall, the appliance OS) would have on the target.
+- name: _setup | Install iptables, dig, and a stub resolver for the test
+  apt:
+    pkg:
+      - iptables
+      - dnsutils
+      - dnsmasq
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
+# bind-interfaces + listen-address=127.0.0.1 binds only 127.0.0.1:53, so
+# there is no clash with systemd-resolved's stub on 127.0.0.53:53. dnsmasq
+# serves `localhost` from /etc/hosts, which is all the healthcheck needs.
+- name: _setup | Point the stub resolver at the loopback
+  copy:
+    dest: /etc/dnsmasq.d/_test_loopback.conf
+    content: |
+      listen-address=127.0.0.1
+      bind-interfaces
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Start the stub resolver
+  systemd:
+    name: dnsmasq
+    state: restarted
+    enabled: true
+  become: true

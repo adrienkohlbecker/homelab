@@ -153,6 +153,19 @@ zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFyjxLhHELJkv
 
 pihole_keepalived_priority: 5
 
+# udm_dns_failover normally targets the UDM (a UniFi OS appliance, hosts:
+# udm). The box fixture exercises its portable surface. br0 doesn't exist
+# here and keepalived refuses lo/dummy ifaces (no multicast), so track the
+# VM's default NIC instead of the UDM's bridge. external_ips[box] (the prod
+# LAN IP) isn't local on the SLIRP VM, but the role sets ip_nonlocal_bind=1
+# before keepalived starts, so the unicast source still binds; alone on the
+# closed bridge box becomes MASTER and claims the VIP (scenario: the
+# catastrophic dual-peer failover this role exists for). The heartbeat URL
+# points at the discard port — healthchecks.io isn't reachable over SLIRP —
+# and _verify asserts the timer is active, not the ping landing.
+udm_dns_failover_interface: "{{ ansible_default_ipv4.interface }}"
+udm_dns_failover_heartbeat_url: http://127.0.0.1:9/ping/box-test
+
 prometheus_enabled: true
 
 redis_enabled: true
