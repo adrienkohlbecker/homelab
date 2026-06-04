@@ -31,7 +31,11 @@ if [ -z "$LAST_SNAPSHOT" ]; then
   exit 0
 fi
 
-# --compress causes issues with "deflate" because the version on Synology NASes is too old
+# zstd on the wire: both ends are now rsync >= 3.2 (the source hosts, and bunk
+# via rrsync's RSYNC override at SynoCli 3.4.1), so plain --compress
+# auto-negotiates zstd. DSM's stock rsync 3.1.2 only spoke deflate and broke
+# negotiation -- which is why this was bare before. Load-bearing dependency:
+# bunk's rrsync must point at 3.4.1 (roles/zfs_autobackup/files/rrsync).
 f_trace rsync \
   --archive \
   --hard-links \
@@ -42,6 +46,7 @@ f_trace rsync \
   --delete \
   --delete-excluded \
   --timeout 60 \
+  --compress \
   --partial-dir .rsync-partial \
   --info progress2 \
   --devices \
