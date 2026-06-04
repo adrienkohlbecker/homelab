@@ -248,7 +248,7 @@
 - name: Set properties on root dataset
   when: zfs_root
   community.general.zfs:
-    name: rpool/ROOT/jammy
+    name: rpool/ROOT/{{ ansible_distribution_release }}
     state: present
     extra_zfs_properties:
       'autobackup:bak': 'true'
