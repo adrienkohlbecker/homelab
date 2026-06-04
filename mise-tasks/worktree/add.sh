@@ -3,6 +3,7 @@
 #MISE alias="wt:add"
 #USAGE arg "<name>" help="Branch and worktree name"
 #USAGE arg "[base]" default="HEAD" help="Base commit-ish"
+#USAGE complete "base" run="echo HEAD; git branch --format='%(refname:short)'"
 # shellcheck disable=SC2154  # usage_name / usage_base injected by mise from the #USAGE spec
 
 # The populate step (packer/artifacts symlink + .worktreeinclude copies +

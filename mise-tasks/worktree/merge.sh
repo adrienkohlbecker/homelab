@@ -2,6 +2,7 @@
 #MISE description="Merge <name> into master: rebase its notes onto master's notes ref, FF when possible (--no-ff only if origin/main diverged); then worktree:rm <name>"
 #MISE alias="wt:merge"
 #USAGE arg "<name>" help="Branch and worktree name"
+#USAGE complete "name" run="git worktree list --porcelain | awk '/^worktree .*\\/.worktrees\\//{n=split($2,a,\"/\"); print a[n]}'"
 # shellcheck disable=SC2154  # usage_name injected by mise from the #USAGE spec
 
 # Integrates the worktree branch <name> into master, keeping history linear

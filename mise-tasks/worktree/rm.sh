@@ -2,6 +2,7 @@
 #MISE description="Remove a worktree and delete its branch"
 #MISE alias="wt:rm"
 #USAGE arg "<name>" help="Branch and worktree name"
+#USAGE complete "name" run="git worktree list --porcelain | awk '/^worktree .*\\/.worktrees\\//{n=split($2,a,\"/\"); print a[n]}'"
 # shellcheck disable=SC2154  # usage_name injected by mise from the #USAGE spec
 
 # Before deleting the worktree, migrate Claude Code session logs from
