@@ -84,6 +84,20 @@ jobs:
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:rw
     timeout-minutes: 90
     steps:
+      - name: Reap stale .build-* dirs from prior failed builds
+        # packer/build.sh creates a .build-XXXXXX tmpdir per run and
+        # rmdir's it on success. On failure it's left for inspection,
+        # but nothing ever cleans it up — test containers mount qemu
+        # read-only so machine.py's sweep silently fails. This step
+        # has rw access and runs before the build, so it reaps dirs
+        # older than 2 minutes (grace for a sibling cell that just
+        # created one). Safe: same (source, ubuntu) cells are
+        # serialized by the concurrency group, and cross-source cells
+        # each create their own dir.
+        run: |
+          set -euo pipefail
+          find /mnt/scratch/qemu -maxdepth 1 -name '.build-*' -type d -mmin +2 -print0 \
+            | xargs -0 --no-run-if-empty rm -rf --
       - uses: actions/checkout@v6
       - run: uv sync --locked
       - name: Packer init

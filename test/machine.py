@@ -1018,7 +1018,10 @@ def sweep_stale_workdirs(imagedir: Path) -> None:
                 continue
 
         print_line(f"Reaping orphaned workdir {d}")
-        shutil.rmtree(d, ignore_errors=True)
+        try:
+            shutil.rmtree(d)
+        except OSError as exc:
+            print_line(f"  (reap failed: {exc.strerror} — read-only mount?)")
 
 
 def _workdir_is_orphan(workdir: Path) -> bool:
