@@ -82,26 +82,12 @@ docker buildx build \
   -f "$src_dir/releng/docker/Dockerfile" \
   "$src_dir/releng/docker"
 
-# Push the freshly built image as the cache source for the next build -- BEFORE
-# the perl re-extract below, because podman commit doesn't preserve BuildKit's
-# inline cache metadata, so the pushed ref must be the unmodified buildx output.
-# The expensive layer (the xbps toolchain install) is what we want cached; the
-# re-extract doesn't touch it, and build.sh always re-extracts perl on its local
-# copy, so the cache image's missing Pod/Usage.pm is immaterial. Needs a prior
-# `podman login` to the registry (the CI workflow does it).
+# Push the freshly built image as the cache source for the next build. The
+# expensive layer (the xbps toolchain install) is what we want cached, so a
+# later build reuses it via --cache-from even after the local buildkitd cache
+# is pruned. Needs a prior `podman login` to the registry (the CI workflow
+# does it).
 if [ -n "${ZBM_BUILDER_CACHE_REF:-}" ]; then
   podman tag "$img" "${ZBM_BUILDER_CACHE_REF}"
   podman push "${ZBM_BUILDER_CACHE_REF}"
 fi
-
-# Work around a rootless-BuildKit unpack quirk: the build drops perl's
-# /usr/share/perl5/core_perl/Pod/Usage.pm during xbps extraction (perl ships the
-# file, but it's missing from the built image while perl's other modules are
-# fine), so generate-zbm dies with "Can't locate Pod/Usage.pm". perl-Pod-Usage
-# is only a virtual provide of perl, so it can't be pulled as a package -- but
-# re-extracting perl via podman (which unpacks it correctly) restores the file.
-# Commit it back into the image; runs once per image build (rare, per ZBM_VERSION).
-podman rm -f zbm_perlfix >/dev/null 2>&1 || true
-podman run --name zbm_perlfix --entrypoint /usr/bin/xbps-install "$img" -fy perl
-podman commit -q zbm_perlfix "$img" >/dev/null
-podman rm -f zbm_perlfix >/dev/null
