@@ -1,0 +1,108 @@
+- name: _verify | Config directory exists with correct ownership
+  stat:
+    path: /mnt/services/z2m
+  register: z2m_verify_dir
+  become: true
+  failed_when: >-
+    not z2m_verify_dir.stat.exists
+    or not z2m_verify_dir.stat.isdir
+    or z2m_verify_dir.stat.pw_name != 'z2m'
+    or z2m_verify_dir.stat.gr_name != 'z2m'
+
+- name: _verify | configuration.yaml is valid YAML with expected keys
+  shell: |
+    set -euo pipefail
+    python3 -c '
+    import yaml, sys
+    yaml.add_multi_constructor("!", lambda l,s,n: None, Loader=yaml.SafeLoader)
+    d = yaml.safe_load(open(sys.argv[1]))
+    for k in ("homeassistant", "frontend", "mqtt", "serial", "advanced"):
+        assert k in d, f"missing top-level key: {k}"
+    assert d["advanced"].get("enable_external_js") is False, "enable_external_js must be false"
+    ' /mnt/services/z2m/configuration.yaml
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+
+- name: _verify | secret.yaml exists with restrictive permissions
+  stat:
+    path: /mnt/services/z2m/secret.yaml
+  register: z2m_verify_secret
+  become: true
+  failed_when: >-
+    not z2m_verify_secret.stat.exists
+    or z2m_verify_secret.stat.mode != '0600'
+    or z2m_verify_secret.stat.pw_name != 'z2m'
+
+- name: _verify | secret.yaml contains required keys
+  shell: |
+    set -euo pipefail
+    python3 -c '
+    import yaml, sys
+    d = yaml.safe_load(open(sys.argv[1]))
+    for k in ("network_key", "mqtt_user", "mqtt_password", "pan_id", "ext_pan_id"):
+        assert k in d, f"missing secret key: {k}"
+    ' /mnt/services/z2m/secret.yaml
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+
+- name: _verify | devices.yaml is valid YAML owned by z2m
+  stat:
+    path: /mnt/services/z2m/devices.yaml
+  register: z2m_verify_devices
+  become: true
+  failed_when: >-
+    not z2m_verify_devices.stat.exists
+    or z2m_verify_devices.stat.pw_name != 'z2m'
+
+- name: _verify | groups.yaml is valid YAML owned by z2m
+  stat:
+    path: /mnt/services/z2m/groups.yaml
+  register: z2m_verify_groups
+  become: true
+  failed_when: >-
+    not z2m_verify_groups.stat.exists
+    or z2m_verify_groups.stat.pw_name != 'z2m'
+
+- name: _verify | z2m.service unit is installed and enabled
+  systemd:
+    name: z2m
+  register: z2m_verify_unit
+  become: true
+  failed_when: >-
+    z2m_verify_unit.status.UnitFileState != 'enabled'
+
+- name: _verify | nginx vhost is installed
+  stat:
+    path: /etc/nginx/sites-enabled/z2m
+  register: z2m_verify_vhost
+  become: true
+  failed_when: not z2m_verify_vhost.stat.exists
+
+- name: _verify | z2m is active and healthy
+  when: z2m_start_service
+  shell: |
+    set -euo pipefail
+    systemctl is-active z2m
+  args:
+    executable: /bin/bash
+  become: true
+  register: z2m_verify_active
+  retries: 30
+  delay: 2
+  until: z2m_verify_active.rc == 0
+  changed_when: false
+
+- name: _verify | z2m frontend responds on loopback
+  when: z2m_start_service
+  uri:
+    url: http://localhost:{{ service_ports.z2m }}/
+    status_code: 200
+  register: z2m_verify_http
+  retries: 30
+  delay: 2
+  until: z2m_verify_http.status == 200
+  become: true

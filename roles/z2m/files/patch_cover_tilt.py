@@ -67,12 +67,10 @@ def main() -> int:
         delete=False,
     ) as tmp:
         yaml.safe_dump(devices, tmp, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        tmp.flush()
+        os.fchown(tmp.fileno(), st.st_uid, st.st_gid)
+        os.fchmod(tmp.fileno(), st.st_mode & 0o777)
         tmp_path = Path(tmp.name)
-    # Preserve uid/gid as well as mode — NamedTemporaryFile is created as the
-    # script's running uid (root via become), and the rename would otherwise
-    # silently re-own devices.yaml away from the z2m service user.
-    os.chown(tmp_path, st.st_uid, st.st_gid)
-    tmp_path.chmod(st.st_mode & 0o777)
     tmp_path.replace(path)
     print("CHANGED")
     return 0

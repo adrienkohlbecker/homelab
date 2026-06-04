@@ -86,14 +86,12 @@ gitea_runner_labels:
   - "ubuntu-22.04:docker://gitea/runner-images:ubuntu-22.04"
   - "ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04"
 
-
 # Org name the influxdb image's DOCKER_INFLUXDB_INIT_* entrypoint creates
 # on first boot. Consumer roles (`homeassistant`, etc.) also provision
 # tenants in this org via `import_role: name: influxdb, tasks_from: bucket`
 # -- bucket.yml refuses any org that doesn't already exist, and this is
 # the only one this role bootstraps.
 influxdb_root_org: home
-
 
 # Ports each host-level service publishes. Single source of truth for unit
 # templates (--publish for loopback-bound podman services, ListenStream= for
@@ -211,6 +209,7 @@ service_ports:
   udm_syslog: 5140
   wireguard: 51820
   wolweb: 8089
+  z2m: 8081
 
 # URL nginx's auth_request subrequest hits for forward-auth on sites
 # that opt in via `nginx_site_args.auth`. Cookie domain and portal
@@ -326,7 +325,7 @@ wireguard_peers:
     # during nightly sends and the alarm fires all day. Per-pair (not
     # per-peer) so battery-sensitive mobile peers don't get a forced
     # heartbeat they don't need.
-    keepalive_from: [ lab, pug ]
+    keepalive_from: [lab, pug]
     public_key: "{{ wireguard_keys.bunk.public_key }}"
     private_key: "{{ wireguard_keys.bunk.private_key }}"
   - name: fox
@@ -344,7 +343,7 @@ wireguard_peers:
     endpoint:
       remote: "fox.{{ domain }}:51820"
     is_server: true
-    keepalive_from: [ lab, pug ]
+    keepalive_from: [lab, pug]
     public_key: "{{ wireguard_keys.fox.public_key }}"
     private_key: "{{ wireguard_keys.fox.private_key }}"
 
