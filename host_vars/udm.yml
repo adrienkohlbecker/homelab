@@ -1,2 +1,1 @@
 pihole_keepalived_priority: 1
-udm_dns_failover_heartbeat_url: https://healthchecks.lab.fahm.fr/ping/a07c58f1-b0a0-46f2-89fd-26c3cbbf4ad4
