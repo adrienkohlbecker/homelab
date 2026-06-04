@@ -2,12 +2,13 @@
 {# read_only disables the in-UI device editor (POST /data/save) so         #}
 {# devices.json stays Ansible-managed -- the /wake path is unaffected.     #}
 {# bcastip is a no-op for the wake path (only the per-device `ip` in        #}
-{# devices.json is used); it is the default for the disabled add-device     #}
-{# form, kept only so the config parses.                                   #}
+{# devices.json is used); it is the default for the add-device form, which   #}
+{# read_only disables -- so it is pinned to an inert limited-broadcast        #}
+{# sentinel rather than coupled to the host's computed broadcast.            #}
 {
   "host": "127.0.0.1",
   "port": {{ service_ports.wolweb }},
   "vdir": "/",
-  "bcastip": "{{ wolweb_broadcast_ip }}:9",
+  "bcastip": "255.255.255.255:9",
   "read_only": true
 }
