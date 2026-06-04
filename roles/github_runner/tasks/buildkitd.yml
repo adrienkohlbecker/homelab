@@ -1,0 +1,128 @@
+# Rootless BuildKit for the zbm-build CI job. The upstream ZFSBootMenu Dockerfile
+# uses heredoc RUN blocks that jammy's buildah (1.33) can't parse, so the build
+# needs real BuildKit via `docker buildx`. buildx's docker-container driver runs
+# BuildKit nested inside podman, which can't execute in the runner's rootless
+# podman -- so buildkitd runs here as a standalone rootless process (via
+# rootlesskit), and the CI job points buildx at it with the `remote` driver.
+# `--load` then imports into the runner's rootless podman -- the same store
+# build.sh's `podman run` reads -- so no cross-store copy is needed.
+#
+# Binaries install to versioned dirs under /opt and are symlinked onto PATH, so
+# a version bump (vars/main.yml) re-points the symlinks and re-renders the unit.
+
+- name: Set up rootless buildkit
+  become: true
+  tags:
+    - github_runner
+  block:
+    - name: Download buildkit + rootlesskit tarballs
+      get_url:
+        url: "{{ item.url }}"
+        checksum: "sha256:{{ item.sha256 }}"
+        dest: "/opt/{{ item.name }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - name: "buildkit-{{ github_runner_buildkit_version }}.tar.gz"
+          url: "{{ github_runner_buildkit_archive[ansible_architecture].url }}"
+          sha256: "{{ github_runner_buildkit_archive[ansible_architecture].sha256 }}"
+        - name: "rootlesskit-{{ github_runner_rootlesskit_version }}.tar.gz"
+          url: "{{ github_runner_rootlesskit_archive[ansible_architecture].url }}"
+          sha256: "{{ github_runner_rootlesskit_archive[ansible_architecture].sha256 }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Create buildkit + rootlesskit extract dirs
+      file:
+        path: "/opt/{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - "buildkit-{{ github_runner_buildkit_version }}"
+        - "rootlesskit-{{ github_runner_rootlesskit_version }}"
+
+    - name: Extract buildkit (bin/buildkitd, buildctl, buildkit-runc)
+      unarchive:
+        src: "/opt/buildkit-{{ github_runner_buildkit_version }}.tar.gz"
+        remote_src: true
+        dest: "/opt/buildkit-{{ github_runner_buildkit_version }}"
+        creates: "/opt/buildkit-{{ github_runner_buildkit_version }}/bin/buildkitd"
+        owner: root
+        group: root
+
+    - name: Extract rootlesskit
+      unarchive:
+        src: "/opt/rootlesskit-{{ github_runner_rootlesskit_version }}.tar.gz"
+        remote_src: true
+        dest: "/opt/rootlesskit-{{ github_runner_rootlesskit_version }}"
+        creates: "/opt/rootlesskit-{{ github_runner_rootlesskit_version }}/rootlesskit"
+        owner: root
+        group: root
+
+    - name: Symlink buildkit + rootlesskit binaries onto PATH
+      file:
+        src: "{{ item.src }}"
+        dest: "/usr/local/bin/{{ item.dest }}"
+        state: link
+        force: true
+      loop:
+        - dest: buildkitd
+          src: "/opt/buildkit-{{ github_runner_buildkit_version }}/bin/buildkitd"
+        - dest: buildctl
+          src: "/opt/buildkit-{{ github_runner_buildkit_version }}/bin/buildctl"
+        - dest: buildkit-runc
+          src: "/opt/buildkit-{{ github_runner_buildkit_version }}/bin/buildkit-runc"
+        - dest: rootlesskit
+          src: "/opt/rootlesskit-{{ github_runner_rootlesskit_version }}/rootlesskit"
+      loop_control:
+        label: "{{ item.dest }}"
+
+    - name: Create github_runner user systemd unit dir
+      when: not (ansible_check_mode and github_runner_user.changed)
+      file:
+        path: /mnt/scratch/github_runner/.config/systemd/user
+        state: directory
+        owner: github_runner
+        group: github_runner
+        mode: "0755"
+
+    # buildkitd auto-detects rootlesskit and runs its OCI worker without the
+    # process sandbox -- no explicit flag needed (matches the validated command).
+    # RuntimeDirectory makes systemd create %t/buildkit for the socket; the build
+    # cache persists under the runner's home so a version-pinned rebuild reuses it.
+    - name: Install rootless buildkit user service
+      when: not (ansible_check_mode and github_runner_user.changed)
+      copy:
+        dest: /mnt/scratch/github_runner/.config/systemd/user/buildkit.service
+        content: |
+          [Unit]
+          Description=Rootless BuildKit for github_runner CI image builds
+          After=podman.socket
+
+          [Service]
+          Environment=PATH=/usr/local/bin:/usr/bin:/bin
+          RuntimeDirectory=buildkit
+          ExecStart=/usr/local/bin/rootlesskit /usr/local/bin/buildkitd --addr unix://%t/buildkit/buildkitd.sock --root %h/.local/share/buildkit
+          Restart=on-failure
+
+          [Install]
+          WantedBy=default.target
+        owner: github_runner
+        group: github_runner
+        mode: "0644"
+        backup: true
+      register: github_runner_buildkit_unit
+
+    - name: Enable + start rootless buildkit user service
+      when: not (ansible_check_mode and (github_runner_user.changed or github_runner_lingered))
+      systemd:
+        name: buildkit.service
+        enabled: true
+        state: "{{ 'restarted' if github_runner_buildkit_unit.changed | default(false) else 'started' }}"
+        scope: user
+        daemon_reload: true
+      become: true
+      become_user: github_runner
