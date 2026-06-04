@@ -32,9 +32,30 @@
   tags:
     - zfsbootmenu
 
+# Seed the backup loader the refind fallback menuentry (VMLINUZ-BACKUP.EFI)
+# boots. Copy-if-absent (force: false) so a later primary update never clobbers
+# the last known-good backup; boot-success-gated promotion stays a SOMEDAY item.
+# No backup: true — /boot/efi is vfat; backup_local's chown fails on FAT.
+- name: Seed ZBM backup loader  # noqa: require-backup
+  when:
+    - ansible_architecture in zfsbootmenu_release
+    - not (ansible_check_mode and zfsbootmenu_zbm_directory.changed)
+  copy:
+    src: /boot/efi/EFI/ZBM/VMLINUZ.EFI
+    dest: /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
+    remote_src: true
+    force: false
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - zfsbootmenu
+
 - name: Ask to reboot
   when:
     - ansible_architecture in zfsbootmenu_release
+    - zfsbootmenu_efi is defined
     - zfsbootmenu_efi is changed
   file:
     path: /var/run/reboot-required
