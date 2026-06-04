@@ -64,25 +64,48 @@ fi
 # in exec form, and BuildKit does not expand the ARG in exec-form
 # ENTRYPOINT — the built image's entrypoint is the literal string
 # "/${ZBM_BUILDER}", which crun can't find. Override it here.
-"$src_dir/zbm-builder.sh" \
+#
+# DRACUT_NO_XATTR=1: dracut-install copies install_items/hooks via
+# `cp --preserve=...,xattr,...`, which hard-fails ("setting attributes:
+# Operation not supported") whenever the destination can't take an xattr the
+# source carries. On a Mac podman machine both triggers fire: source files on
+# the virtiofs bind mount carry macOS's unremovable com.apple.provenance (an
+# invalid Linux xattr namespace), and the container overlay is mounted with a
+# fixed SELinux context= that rejects security.selinux. xattrs are meaningless
+# in the initramfs (everything runs as root: no SELinux, no file capabilities),
+# so tell dracut-install to skip them. No-op on Linux/CI where neither trigger
+# exists; set unconditionally to keep local and CI builds identical.
+#
+# Invoke via `bash` (not the script's `#!/bin/bash` shebang) because zbm-builder.sh
+# uses bash-4 lowercase expansion (${var,,}). macOS's /bin/bash is 3.2, where that
+# errors with "bad substitution" — harmless today (the failed `case` falls through
+# to its safe default) but fragile. PATH resolves bash to Homebrew 5.x on the Mac
+# and the system bash 5.x on CI, so the script runs as upstream intended.
+bash "$src_dir/zbm-builder.sh" \
   -b "${MISE_CONFIG_ROOT}/zbm" \
   -i "localhost/zbm-builder:v${ZBM_VERSION}-${arch}" \
   -l "$src_dir" \
   -H \
   -O --entrypoint -O /build-init.sh \
+  -O --env -O DRACUT_NO_XATTR=1 \
   -O -v -O "$out_dir:/output" \
   -- -o /output -t "v${ZBM_VERSION}"
 
 # Both modes emit into $out_dir:
 #   Components: vmlin{u,uz}-bootmenu + initramfs-bootmenu.img
-#   EFI:        vmlinuz.EFI (unified kernel image)
+#   EFI:        the unified image, named after the kernel — vmlinuz.EFI on
+#               x86_64, vmlinux.EFI on aarch64 (Void's arm64 kernel is vmlinux).
 # Rename the unified EFI to zfsbootmenu.EFI before archiving: on the
 # case-insensitive FAT32 ESP, vmlinuz.EFI == VMLINUZ.EFI — the path the
 # zfsbootmenu role deploys the stock single-file recovery UKI to — so unpacking
-# our tarball there would clobber it. A distinct name lets both coexist.
-if [ -f "$out_dir/vmlinuz.EFI" ]; then
-  mv "$out_dir/vmlinuz.EFI" "$out_dir/zfsbootmenu.EFI"
+# our tarball there would clobber it. A distinct name lets both coexist. Match
+# either spelling so the archive member is arch-independent; assert exactly one.
+mapfile -t efi_images < <(find "$out_dir" -maxdepth 1 -type f -name 'vmlin*.EFI')
+if [ "${#efi_images[@]}" -ne 1 ]; then
+  echo "expected exactly one vmlin*.EFI in $out_dir, found ${#efi_images[@]}: ${efi_images[*]:-none}" >&2
+  exit 1
 fi
+mv "${efi_images[0]}" "$out_dir/zfsbootmenu.EFI"
 
 # --sort=name + --mtime=@0 + --numeric-owner, piped through gzip -n, strip the
 # build-time mtimes and uid/gid names that tar and the gzip header would
