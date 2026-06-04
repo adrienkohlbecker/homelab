@@ -4,82 +4,96 @@ source /usr/local/lib/functions.sh
 
 f_require_root
 
-# Destination email
 EMAIL_TO="root"
-
-# Email subject prefix
 EMAIL_SUBJECT_PREFIX="[$(hostname -s)] zfs health"
 
-# Scrub expiration time in seconds. So for 40 days we calculate 40 days
-# times 24 hours times 3600 seconds to equal 3456000 seconds.
+# Scrub expiration in seconds (40 days)
 SCRUB_EXPIRE=3456000
 
-# Collect output for parsing / emails
+# Pool capacity warning threshold (percent, without the % sign)
+CAPACITY_WARN=80
+
 TMP_OUTPUT=$(mktemp)
-trap 'rm -rf $TMP_OUTPUT' EXIT
+trap 'rm -f "$TMP_OUTPUT"' EXIT
+
+ERRORS=0
 
 zpool status | tee "$TMP_OUTPUT"
 
-# Health - Check if all zfs volumes are in good condition. We are looking for
-# any keyword signifying a degraded or broken array.
-echo "Checking pool health condition..."
-if zpool status | grep -q -e 'DEGRADED\|FAULTED\|OFFLINE\|UNAVAIL\|REMOVED\|FAIL\|DESTROYED\|corrupt\|cannot\|unrecover'; then
-  echo >&2 "ERROR :: Detected pool health fault"
-  mail -s "$EMAIL_SUBJECT_PREFIX - Health fault" "$EMAIL_TO" <"$TMP_OUTPUT"
-  exit 1
-fi
-
-# Errors - Check the columns for READ, WRITE and CKSUM (checksum) drive errors
-# on all volumes and all drives using "zpool status". If any non-zero errors
-# are reported an email will be sent out. You should then look to replace the
-# faulty drive and run "zpool scrub" on the affected volume after resilvering.
-echo "Checking drive errors..."
-if zpool status | grep ONLINE | grep -v state | awk '{print $3 $4 $5}' | grep -qv 000; then
-  echo >&2 "ERROR :: Detected drive errors"
-  mail -s "$EMAIL_SUBJECT_PREFIX - Drive errors" "$EMAIL_TO" <"$TMP_OUTPUT"
-  exit 1
-fi
-
-# Scrub Expired - Check if all volumes have been scrubbed in at least the last
-# 8 days. The general guide is to scrub volumes on desktop quality drives once
-# a week and volumes on enterprise class drives once a month. You can always
-# use cron to schedule "zpool scrub" in off hours. We scrub our volumes every
-# Sunday morning for example.
-#
-# Scrubbing traverses all the data in the pool once and verifies all blocks can
-# be read. Scrubbing proceeds as fast as the devices allows, though the
-# priority of any I/O remains below that of normal calls. This operation might
-# negatively impact performance, but the file system will remain usable and
-# responsive while scrubbing occurs. To initiate an explicit scrub, use the
-# "zpool scrub" command.
-echo "Checking scrub age..."
-
-CURRENT_DATE=$(date +"%s")
 ZFS_VOLUMES=$(zpool list -H -o name)
 
+# Health — use the authoritative pool-level health property rather than
+# grepping keywords, so any future failure state is automatically caught.
+echo "Checking pool health condition..."
+while IFS=$'\t' read -r pool health; do
+  if [ "$health" != "ONLINE" ]; then
+    echo >&2 "ERROR :: Pool $pool is $health"
+    ERRORS=$((ERRORS + 1))
+  fi
+done < <(zpool list -H -o name,health)
+
+# Sub-vdev check — catches OFFLINE/DEGRADED individual disks that the
+# pool-level health may already reflect, but also REMOVED/corrupt/cannot
+# states that only appear in zpool status output.
+if grep -q -e 'DEGRADED\|FAULTED\|OFFLINE\|UNAVAIL\|REMOVED\|FAIL\|DESTROYED\|corrupt\|cannot\|unrecover' "$TMP_OUTPUT"; then
+  echo >&2 "ERROR :: Detected sub-vdev or device fault in zpool status"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# Drive errors — use -p for exact numeric values (human-formatted output
+# shows 1.5K/2M for large counts, which the old concatenate-and-grep missed).
+echo "Checking drive errors..."
+if zpool status -p | awk '/ONLINE/ && !/state/ { if ($3+0 + $4+0 + $5+0 > 0) { found=1 } } END { exit !found }'; then
+  echo >&2 "ERROR :: Detected drive errors (READ/WRITE/CKSUM)"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# Capacity — ZFS performance degrades above ~80% due to COW fragmentation.
+echo "Checking pool capacity..."
+while IFS=$'\t' read -r pool cap_str; do
+  cap=${cap_str%%%}
+  if [ "$cap" -ge "$CAPACITY_WARN" ]; then
+    echo >&2 "ERROR :: Pool $pool is ${cap}% full (threshold: ${CAPACITY_WARN}%)"
+    ERRORS=$((ERRORS + 1))
+  fi
+done < <(zpool list -H -o name,capacity)
+
+# Scrub age — check each volume independently.
+echo "Checking scrub age..."
+CURRENT_DATE=$(date +"%s")
+
 for volume in $ZFS_VOLUMES; do
-  if zpool status "$volume" | grep -q -e "scrub canceled"; then
+  vol_status=$(zpool status "$volume")
+
+  if echo "$vol_status" | grep -q -e "scrub canceled"; then
     echo >&2 "ERROR :: Last scrub canceled on $volume"
-    mail -s "$EMAIL_SUBJECT_PREFIX - Last scrub canceled on $volume" "$EMAIL_TO" <"$TMP_OUTPUT"
-    exit 1
-  elif zpool status "$volume" | grep -q -e "scrub in progress\|resilver"; then
+    ERRORS=$((ERRORS + 1))
+    continue
+  elif echo "$vol_status" | grep -q -e "scrub in progress\|resilver"; then
     echo "Scrub in progress for $volume, skipping."
-    break
+    continue
   fi
 
-  if (! zpool status "$volume" | grep -q -e "scan: scrub") || (zpool status "$volume" | grep -q "none requested"); then
-    # No scrub happened; get creation date
+  if (! echo "$vol_status" | grep -q -e "scan: scrub") || (echo "$vol_status" | grep -q "none requested"); then
     SCRUB_DATE=$(zfs get creation -Hpo value "$volume")
   else
-    SCRUB_RAW_DATE=$(zpool status "$volume" | grep -e "scrub repaired" -e "scrub paused" | rev | cut -d' ' -f1-5 | rev)
-    SCRUB_DATE=$(date -d "$SCRUB_RAW_DATE" +"%s")
+    SCRUB_RAW_DATE=$(echo "$vol_status" | grep -e "scrub repaired" -e "scrub paused" | rev | cut -d' ' -f1-5 | rev)
+    SCRUB_DATE=$(date -d "$SCRUB_RAW_DATE" +"%s" 2>/dev/null) || {
+      echo >&2 "ERROR :: Cannot parse scrub date for $volume: $SCRUB_RAW_DATE"
+      ERRORS=$((ERRORS + 1))
+      continue
+    }
   fi
 
   if [ $((CURRENT_DATE - SCRUB_DATE)) -ge $SCRUB_EXPIRE ]; then
     echo >&2 "ERROR :: Scrub expired on $volume"
-    mail -s "$EMAIL_SUBJECT_PREFIX - Scrub expired on $volume" "$EMAIL_TO" <"$TMP_OUTPUT"
-    exit 1
+    ERRORS=$((ERRORS + 1))
   fi
 done
+
+if [ "$ERRORS" -gt 0 ]; then
+  mail -s "$EMAIL_SUBJECT_PREFIX - $ERRORS issue(s) detected" "$EMAIL_TO" <"$TMP_OUTPUT"
+  exit 1
+fi
 
 echo "Done"
