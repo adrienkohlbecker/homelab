@@ -82,7 +82,7 @@
 - name: Cache keepalived .deb for firmware-update recovery
   when: udm_dns_failover_keepalived_debs.files | length > 0
   copy:
-    src: "{{ udm_dns_failover_keepalived_debs.files | sort(attribute='mtime') | last | attr('path') }}"
+    src: "{{ (udm_dns_failover_keepalived_debs.files | sort(attribute='mtime') | last).path }}"
     dest: /data/keepalived/cache/
     remote_src: true
     mode: "0644"
@@ -324,7 +324,13 @@
 
 # -- service lifecycle -----------------------------------------------------
 
+# In check mode on a host that hasn't converged yet (fresh UDM, or one a
+# firmware update wiped), the copy above only *reports* it would create the
+# unit -- the file isn't on disk -- so enabling it errors with "Could not
+# find the requested service". Skip the enable in that case; on an
+# already-converged host the copy is unchanged and the enable still runs.
 - name: Enable on-boot framework
+  when: not (ansible_check_mode and udm_dns_failover_onboot_unit.changed)
   systemd:
     name: on-boot.service
     enabled: true
@@ -386,7 +392,12 @@
   tags:
     - udm_dns_failover
 
+# Same check-mode guard as the on-boot enable: when apt would have installed
+# keepalived this run, keepalived.service isn't on disk yet, so a check-mode
+# start can't find the unit. On a converged host apt is unchanged and the
+# start/reload idempotence check still runs under --check.
 - name: Start keepalived
+  when: not (ansible_check_mode and udm_dns_failover_keepalived_apt.changed)
   systemd:
     name: keepalived.service
     state: "{{ (udm_dns_failover_base_conf.changed or udm_dns_failover_vrrp_conf.changed) | ternary('reloaded', 'started') }}"
@@ -395,7 +406,10 @@
   tags:
     - udm_dns_failover
 
+# The timer unit is a symlink to the /data master; in check mode on a fresh
+# host that symlink isn't created yet, so gate the enable on it the same way.
 - name: Enable heartbeat timer
+  when: not (ansible_check_mode and udm_dns_failover_heartbeat_timer_link.changed)
   systemd:
     name: udm_keepalived_heartbeat.timer
     state: started
