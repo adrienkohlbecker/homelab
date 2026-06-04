@@ -1,3 +1,18 @@
+- name: Assert required z2m inputs
+  assert:
+    that:
+      - z2m_network_key is defined
+      - z2m_network_key | length > 0
+      - mosquitto_accounts.z2m.password is defined
+      - external_ips.tubeszb is defined
+      - z2m_start_service is defined
+    fail_msg: >-
+      z2m requires z2m_network_key, mosquitto_accounts.z2m.password,
+      external_ips.tubeszb, and z2m_start_service to be defined in
+      group_vars / host_vars.
+  tags:
+    - z2m
+
 # Join the mosquitto-owned network so z2m can resolve `mosquitto.dns.podman`
 # via aardvark-dns. See paperless/tasks/main.yml for the rationale.
 - name: Create mosquitto podman network
@@ -10,36 +25,13 @@
   tags:
     - z2m
 
-- name: Add z2m group
-  group:
-    name: z2m
-    system: true
-  become: true
-  tags:
-    - z2m
-
-- name: Add z2m user
-  user:
-    name: z2m
-    group: z2m
-    createhome: false
-    system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
-  register: z2m_user
-  tags:
-    - z2m
-
-- name: Create configuration directory
-  when: not (ansible_check_mode and z2m_user.changed)
-  file:
-    dest: /mnt/services/z2m
-    state: directory
-    owner: z2m
-    group: z2m
-    mode: "0755"
-  become: true
+- name: Set up z2m system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: z2m
   tags:
     - z2m
 
@@ -56,22 +48,14 @@
   tags:
     - z2m
 
-- name: Check if devices.yaml exists
-  stat:
-    path: /mnt/services/z2m/devices.yaml
-  register: z2m_devices_check
-  become: true
-  tags:
-    - z2m
-
-- name: Configure z2m devices
-  when: not z2m_devices_check.stat.exists
+- name: Seed z2m devices
   copy:
     src: devices.yaml
     dest: /mnt/services/z2m/devices.yaml
     owner: z2m
     group: z2m
     mode: "0644"
+    force: false
     backup: true
   register: z2m_devices
   become: true
@@ -109,22 +93,14 @@
   tags:
     - z2m
 
-- name: Check if groups.yaml exists
-  stat:
-    path: /mnt/services/z2m/groups.yaml
-  register: z2m_groups_check
-  become: true
-  tags:
-    - z2m
-
-- name: Configure z2m groups
-  when: not z2m_groups_check.stat.exists
+- name: Seed z2m groups
   copy:
     src: groups.yaml
     dest: /mnt/services/z2m/groups.yaml
     owner: z2m
     group: z2m
     mode: "0644"
+    force: false
     backup: true
   register: z2m_groups
   become: true
@@ -139,6 +115,7 @@
     group: z2m
     mode: "0600"
     backup: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' %s
   register: z2m_secret
   become: true
   tags:
@@ -175,7 +152,7 @@
   vars:
     nginx_site_args:
       subdomain: z2m
-      proxy_pass: http://127.0.0.1:8081/
+      proxy_pass: http://127.0.0.1:{{ service_ports.z2m }}/
       auth: required
   tags:
     - z2m

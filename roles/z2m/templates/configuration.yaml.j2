@@ -14,7 +14,7 @@ homeassistant:
 # Enable the frontend, runs on port 8080 by default
 frontend:
   enabled: true
-  port: 8081
+  port: {{ service_ports.z2m }}
   url: https://z2m.{{ inventory_hostname }}.{{ domain }}
 
 # MQTT settings
@@ -51,25 +51,18 @@ advanced:
   # records/day to HyperDX). The broker / bulb states are observable
   # via MQTT itself, so the per-publish stdout is pure noise.
   log_level: warning
+  log_output:
+    - console
+  enable_external_js: false
   # channel: 11
   network_key: '!secret.yaml network_key'
-  pan_id: 40336
-  ext_pan_id:
-    - 92
-    - 37
-    - 125
-    - 47
-    - 127
-    - 57
-    - 250
-    - 171
+  pan_id: '!secret.yaml pan_id'
+  ext_pan_id: '!secret.yaml ext_pan_id'
   last_seen: ISO_8601
 
 devices: devices.yaml
 groups: groups.yaml
 
 blocklist:
-  - '0x00178801091c4186'
-  - '0x00178801091c419d'
   - '0x00178801091c4186'
   - '0x00178801091c419d'
