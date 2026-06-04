@@ -207,7 +207,10 @@
     argv: "{{ ['python3', '/opt/boot/efi_entries.py', '--check'] }}"
   environment:
     BOOT_EFI_ENTRIES: "{{ boot_efi_entries | to_json }}"
-    BOOT_EFI_TIMEOUT: "{{ boot_efi_timeout | to_json }}"
+    # Skip timeout: QEMU OVMF does not persist BootTimeout across reboots,
+    # so the post-reboot check would always drift. Converge + idempotence
+    # already prove the timeout is applied within a session.
+    BOOT_EFI_TIMEOUT: "null"
   changed_when: false
   become: true
   register: _boot_verify_efi

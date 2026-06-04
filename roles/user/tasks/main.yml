@@ -87,7 +87,7 @@
   user:
     name: "{{ ansible_user_id }}"
     shell: /bin/zsh
-    groups: [adm, kvm]
+    groups: [ adm, kvm ]
     append: true
   become: true
   tags:
