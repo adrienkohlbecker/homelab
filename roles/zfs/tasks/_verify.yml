@@ -55,6 +55,22 @@
       - _zfs_verify_zed.status.ActiveState == 'active'
       - _zfs_verify_zed.status.UnitFileState == 'enabled'
 
+- name: _verify | Read zed.rc notification config
+  when: zfs_root
+  command: grep -E '^ZED_EMAIL_ADDR=' /etc/zfs/zed.d/zed.rc
+  register: _zfs_verify_zedrc
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Zed email notifications point at root
+  when: zfs_root
+  assert:
+    that: _zfs_verify_zedrc.stdout == 'ZED_EMAIL_ADDR="root"'
+    fail_msg: >-
+      zed.rc ZED_EMAIL_ADDR is {{ _zfs_verify_zedrc.stdout | default('<unset>') }},
+      expected ZED_EMAIL_ADDR="root".
+
 # --- Core ZFS boot services ---
 
 - name: _verify | Query boot service state
@@ -131,21 +147,21 @@
   assert:
     that: _zfs_verify_cache_dir.stat.exists
 
-- name: _verify | Mount cache files exist for each pool
+- name: _verify | Read mount cache content for each pool
   when: zfs_mount_cache_datasets | length > 0
-  stat:
-    path: /etc/zfs/zfs-list.cache/{{ item.split('/')[0] }}
+  command: cat /etc/zfs/zfs-list.cache/{{ item.split('/')[0] }}
   loop: "{{ zfs_mount_cache_datasets }}"
   register: _zfs_verify_cache_files
+  changed_when: false
   become: true
 
-- name: _verify | Assert mount cache files exist
+- name: _verify | Mount cache lists its configured dataset
   when: zfs_mount_cache_datasets | length > 0
   assert:
-    that: item.stat.exists
+    that: item.item in item.stdout
     fail_msg: >-
-      Mount cache file /etc/zfs/zfs-list.cache/{{ item.item.split('/')[0] }}
-      does not exist.
+      /etc/zfs/zfs-list.cache/{{ item.item.split('/')[0] }} does not list
+      dataset {{ item.item }} -- the zed cacher did not populate it.
   loop: "{{ _zfs_verify_cache_files.results }}"
   loop_control:
     label: "{{ item.item }}"
@@ -167,4 +183,71 @@
 - name: _verify | Health script runs without error
   command: /usr/local/bin/zfs_health
   changed_when: false
+  become: true
+
+# --- dataset.yml round-trip ---
+# Functionally exercise the role's most-consumed export. dataset.yml is imported
+# by ~6 other roles and its load-bearing `^tank/` -> zfs_tank_filesystem rewrite
+# is untested anywhere else. Create a throwaway dataset through it, assert it
+# resolved + mounted at the right path, then tear everything down. The probe
+# name `tank/_verify_probe` is safe on every fixture because zfs_tank_filesystem
+# always points at an existing pool (tank/ -> rpool/ on box, tank/ -> tank/ on lab),
+# so this also covers the rewrite itself on box.
+- name: _verify | Exercise dataset.yml with a throwaway probe
+  when: zfs_root
+  vars:
+    zfs_dataset_args:
+      dataset: tank/_verify_probe
+      mountpoint: /mnt/_verify_probe
+  import_tasks: dataset.yml
+
+# A wrong rewrite would resolve to a non-existent dataset and these gets would
+# fail loudly -- so dataset existence is itself the rewrite assertion.
+- name: _verify | Read probe dataset mountpoint
+  when: zfs_root
+  command: zfs get -H -o value mountpoint {{ zfs_tank_filesystem | default('tank') }}/_verify_probe
+  register: _zfs_verify_probe_mp
+  changed_when: false
+  become: true
+
+- name: _verify | Read probe dataset mounted state
+  when: zfs_root
+  command: zfs get -H -o value mounted {{ zfs_tank_filesystem | default('tank') }}/_verify_probe
+  register: _zfs_verify_probe_mounted
+  changed_when: false
+  become: true
+
+- name: _verify | Probe dataset resolved, mounted at the right path
+  when: zfs_root
+  assert:
+    that:
+      - _zfs_verify_probe_mp.stdout | trim == '/mnt/_verify_probe'
+      - _zfs_verify_probe_mounted.stdout | trim == 'yes'
+    fail_msg: >-
+      dataset.yml probe mountpoint={{ _zfs_verify_probe_mp.stdout | trim }}
+      mounted={{ _zfs_verify_probe_mounted.stdout | trim }}; expected
+      /mnt/_verify_probe + yes.
+
+# Tear down the probe: remove the mount unit dataset.yml created, destroy the
+# dataset, drop the mountpoint dir.
+- name: _verify | Remove probe mount unit
+  when: zfs_root
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: zfs_mount_mnt__verify_probe.service
+
+- name: _verify | Destroy probe dataset
+  when: zfs_root
+  command: zfs destroy -r {{ zfs_tank_filesystem | default('tank') }}/_verify_probe
+  changed_when: true
+  become: true
+
+- name: _verify | Remove probe mountpoint
+  when: zfs_root
+  file:
+    path: /mnt/_verify_probe
+    state: absent
   become: true
