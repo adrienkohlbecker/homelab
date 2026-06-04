@@ -95,3 +95,21 @@ if [ -n "$ZBM_BUILDER_CACHE_REF" ] && [ -n "${ZBM_BUILDER_CACHE_PUSH:-}" ]; then
   podman tag "$img" "${ZBM_BUILDER_CACHE_REF}"
   podman push "${ZBM_BUILDER_CACHE_REF}"
 fi
+
+# Work around a rootless-BuildKit unpack quirk: the build drops perl's
+# /usr/share/perl5/core_perl/Pod/Usage.pm during xbps extraction (perl ships the
+# file, but it lands missing from the built image while perl's other modules are
+# fine), so generate-zbm dies at "use Pod::Usage" with "Can't locate Pod/Usage.pm".
+# perl-Pod-Usage is only a virtual provide of perl, so it can't be pulled as a
+# package -- but re-extracting perl via podman (which unpacks it correctly)
+# restores the file. The quirk is specific to the rootless buildkitd builder the
+# CI zbm_build step uses; a Mac podman-machine buildx build unpacks perl intact,
+# so this re-extract is a once-per-image-build no-op there.
+#
+# Runs AFTER the cache push above, never gated: podman commit strips BuildKit's
+# inline-cache metadata, so the pushed ref must be the unmodified buildx output,
+# and the local image always needs the fix before build.sh runs generate-zbm.
+podman rm -f zbm_perlfix >/dev/null 2>&1 || true
+podman run --name zbm_perlfix --entrypoint /usr/bin/xbps-install "$img" -fy perl
+podman commit -q zbm_perlfix "$img" >/dev/null
+podman rm -f zbm_perlfix >/dev/null
