@@ -1,4 +1,10 @@
 ansible_python_interpreter: /usr/local/bin/python3.9
+# DSM's sftp subsystem is the restricted internal-sftp (-u 000, no arbitrary
+# paths) and its scp is an older OpenSSH the modern control node can't negotiate
+# with, so the default "smart" transfer method logs sftp+scp failures before
+# falling back. Force piped (dd over the ssh session) to skip both and silence
+# the warnings.
+ansible_ssh_transfer_method: piped
 ansible_become_pass: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
           31323465343565656262643331303439656635393061343335356135373164326565653339326238
