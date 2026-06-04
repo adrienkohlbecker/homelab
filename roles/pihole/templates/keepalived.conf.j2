@@ -50,9 +50,11 @@ vrrp_instance pihole {
   # preempt (no nopreempt) is kept so the MASTER does eventually reclaim.
   preempt_delay     60
 
-  track_interface {
-    eth0
-  }
+  # No explicit track_interface: keepalived tracks the instance's own
+  # `interface` for link state, so re-listing eth0 is redundant — keepalived
+  # ignores it ("since own interface") and the warning makes `keepalived -t`
+  # exit non-zero, failing the ExecReload validate gate. With use_vmac the
+  # instance rides a vmac child of eth0; if eth0 drops, the vmac follows.
 
   virtual_ipaddress {
     {{ pihole_keepalived_ip }}/32
