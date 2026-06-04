@@ -56,15 +56,17 @@ else
   trap - EXIT INT TERM
 fi
 
-# PACKAGES are extra Void packages layered onto upstream's base image to satisfy
-# recovery.conf's install_items: mdadm + nvme-cli (disk tooling), dracut-crypt-ssh
-# + dropbear (recovery SSH), and dhclient for ip=single-dhcp (the base image ships
-# no DHCP client, so dracut's network module would otherwise have nothing to call).
+# PACKAGES are extra Void packages layered onto upstream's base image. Most
+# satisfy recovery.conf's install_items: mdadm + nvme-cli (disk tooling),
+# dracut-crypt-ssh + dropbear (recovery SSH), dhclient for ip=single-dhcp (the
+# base ships no DHCP client). perl-Pod-Usage is a generate-zbm *runtime* dep:
+# recent perl dropped Pod::Usage from core and zfsbootmenu's run_depends don't
+# pull it, so the build dies with "Can't locate Pod/Usage.pm" without it.
 docker buildx build \
   --pull \
   --progress=plain \
   --build-arg "XBPS_REPOS=${xbps_repo}" \
-  --build-arg "PACKAGES=mdadm nvme-cli dracut-crypt-ssh dropbear dhclient" \
+  --build-arg "PACKAGES=mdadm nvme-cli dracut-crypt-ssh dropbear dhclient perl-Pod-Usage" \
   --load \
   --tag "localhost/zbm-builder:v${ZBM_VERSION}-${arch}" \
   -f "$src_dir/releng/docker/Dockerfile" \
