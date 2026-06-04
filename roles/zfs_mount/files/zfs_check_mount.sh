@@ -26,7 +26,7 @@ output=$(zfs get -pH -o property,value type,mounted,mountpoint,readonly,canmount
 declare -A prop
 while IFS=$'\t' read -r name value; do
   prop[$name]=$value
-done <<< "$output"
+done <<<"$output"
 
 check_property() {
   local property=$1 expected=$2

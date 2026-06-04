@@ -51,11 +51,11 @@ if [ "$CONFIRM" != "--yes" ]; then
   fi
   read -r -p "Destroy these ${#targets[@]} snapshot(s)? [y/N] " reply
   case "$reply" in
-    y | Y | yes | YES) ;;
-    *)
-      echo "Aborted."
-      exit 0
-      ;;
+  y | Y | yes | YES) ;;
+  *)
+    echo "Aborted."
+    exit 0
+    ;;
   esac
 fi
 
