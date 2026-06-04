@@ -1,3 +1,15 @@
+- name: unit | Assert required inputs
+  assert:
+    that:
+      - zfs_mount_dataset is defined
+      - zfs_mount_dataset | length > 0
+      - zfs_mount_mountpoint is defined
+      - zfs_mount_mountpoint is string
+      - zfs_mount_mountpoint is match('^/')
+    quiet: true
+  tags:
+    - zfs_mount
+
 - name: Add check mount binary
   copy:
     src: zfs_check_mount.sh
@@ -11,6 +23,12 @@
   tags:
     - zfs_mount
 
+- name: unit | Derive unit name suffix
+  set_fact:
+    _zfs_mount_unit_suffix: "{{ zfs_mount_mountpoint | regex_replace('^/$', '/root') | replace('/', '_') }}"
+  tags:
+    - zfs_mount
+
 - name: unit | Install systemd mount service
   import_role:
     name: systemd_unit
@@ -18,15 +36,7 @@
   vars:
     systemd_unit_args:
       src: zfs_mount.service.j2
-      dest: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', '/root') | replace('/', '_') }}.service
-  tags:
-    - zfs_mount
-
-- name: unit | Capture mount unit install result
-  set_fact:
-    _zfs_mount_unit_changed: >-
-      {{ (vars['zfs_mount' ~ (zfs_mount_mountpoint | regex_replace('^/$', '/root') | replace('/', '_')) ~ '_service_result']
-          | default({})).changed | default(false) }}
+      dest: "zfs_mount{{ _zfs_mount_unit_suffix }}.service"
   tags:
     - zfs_mount
 
@@ -36,8 +46,8 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', '/root') | replace('/', '_') }}
-      condition: "{{ not (ansible_check_mode and _zfs_mount_unit_changed) }}"
-      restart: "{{ _zfs_mount_unit_changed }}"
+      src: "zfs_mount{{ _zfs_mount_unit_suffix }}"
+      condition: "{{ not (ansible_check_mode and (vars['zfs_mount' ~ _zfs_mount_unit_suffix ~ '_service_result'] | default({})).changed | default(false)) }}"
+      restart: "{{ (vars['zfs_mount' ~ _zfs_mount_unit_suffix ~ '_service_result'] | default({})).changed | default(false) }}"
   tags:
     - zfs_mount

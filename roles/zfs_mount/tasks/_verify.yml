@@ -1,0 +1,42 @@
+- name: _verify | Script is installed
+  stat:
+    path: /usr/local/bin/zfs_check_mount
+  register: _zfs_mount_verify_script
+  become: true
+
+- name: _verify | Assert script permissions
+  assert:
+    that:
+      - _zfs_mount_verify_script.stat.exists
+      - _zfs_mount_verify_script.stat.mode == '0755'
+    quiet: true
+
+- name: _verify | Root mount unit is active
+  systemd:
+    name: zfs_mount_root.service
+    state: started
+  check_mode: true
+  register: _zfs_mount_verify_unit
+  become: true
+
+- name: _verify | Assert root mount unit is active
+  assert:
+    that: not _zfs_mount_verify_unit.changed
+    fail_msg: "zfs_mount_root.service is not active"
+    quiet: true
+
+- name: _verify | Check mount passes for root dataset
+  command: /usr/local/bin/zfs_check_mount rpool/ROOT/{{ ansible_distribution_release }} /
+  changed_when: false
+  become: true
+
+- name: _verify | Findmnt confirms root dataset
+  command: findmnt --first-only --mountpoint / --noheadings --types zfs --output SOURCE
+  register: _zfs_mount_verify_findmnt
+  changed_when: false
+  become: true
+
+- name: _verify | Assert root mount source is correct
+  assert:
+    that: _zfs_mount_verify_findmnt.stdout | trim == 'rpool/ROOT/' ~ ansible_distribution_release
+    quiet: true
