@@ -1,13 +1,15 @@
 #!/usr/bin/python3
 
-# Vendored verbatim from rsync v3.4.1 (support/rrsync), only the shebang
-# changed to bunk's interpreter (/usr/bin/python3 -> 3.8.x; DSM ships no perl,
-# so the classic Perl rrsync that came with rsync <= 3.2.3 can't run). bunk.yml
-# copies this to ~ak/bin/rrsync and the offsite backup keys in
-# host_vars/bunk.yml force `command="...rrsync -wo /volume1/Backup/<host>"`, so
-# each source host is confined write-only to its own backup dir. Refresh with:
+# Vendored from rsync v3.4.1 (support/rrsync) with two local edits: the shebang
+# points at bunk's interpreter (/usr/bin/python3 -> 3.8.x; DSM ships no perl, so
+# the classic Perl rrsync that came with rsync <= 3.2.3 can't run), and the
+# RSYNC constant points at the SynoCli rsync 3.4.1 rather than DSM's stock
+# /usr/bin/rsync 3.1.2 (which is too old to negotiate zstd). bunk.yml copies
+# this to ~ak/bin/rrsync and the offsite backup keys in host_vars/bunk.yml force
+# `command="...rrsync -wo /volume1/Backup/<host>"`, so each source host is
+# confined write-only to its own backup dir. Refresh with:
 #   curl -fsSL https://raw.githubusercontent.com/RsyncProject/rsync/v3.4.1/support/rrsync
-# then re-point line 1 at /usr/bin/python3.
+# then re-point line 1 at /usr/bin/python3 and RSYNC below at the SynoCli path.
 
 # Restricts rsync to subdirectory declared in .ssh/authorized_keys.  See
 # the rrsync man page for details of how to make use of this script.
@@ -19,7 +21,7 @@
 
 # You may configure these 2 values to your liking.  See also the section of
 # short & long options if you want to disable any options that rsync accepts.
-RSYNC = '/usr/bin/rsync'
+RSYNC = '/var/packages/synocli-net/target/bin/rsync'
 LOGFILE = 'rrsync.log' # NOTE: the file must exist for a line to be appended!
 
 # The following options are mainly the options that a client rsync can send
