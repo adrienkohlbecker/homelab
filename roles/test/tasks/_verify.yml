@@ -152,7 +152,7 @@
     validate_certs: false
     # Nexus answers the v2 root 200 (anonymous) or 401 (auth-gated); a 404 means
     # the mirror location the registries.conf points at doesn't exist.
-    status_code: [200, 401]
+    status_code: [ 200, 401 ]
     timeout: 15
   register: test_podman_mirror
 
@@ -163,7 +163,7 @@
     # rather than the bare /simple/ root (whose response varies by Nexus config).
     url: "{{ mirror_pypi }}/simple/pip/"
     validate_certs: false
-    status_code: [200, 301, 302]
+    status_code: [ 200, 301, 302 ]
     timeout: 15
   register: test_pypi_mirror
 

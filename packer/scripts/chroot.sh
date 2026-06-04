@@ -302,6 +302,7 @@ else
   # explicit no.
   # shellcheck disable=SC2086  # word-splitting on PARTITIONS_EFI is the point
   mdadm --create /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_EFI
+  udevadm settle --timeout=10
   mdadm --detail --brief /dev/md/efi >>/etc/mdadm/mdadm.conf
   EFI_DEVICE=/dev/md/efi
 

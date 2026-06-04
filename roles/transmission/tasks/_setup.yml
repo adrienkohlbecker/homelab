@@ -18,4 +18,5 @@
     name: test
     tasks_from: authelia_stub
   vars:
-    test_authelia_stub_mode: gate
+    test_authelia_stub_args:
+      mode: gate

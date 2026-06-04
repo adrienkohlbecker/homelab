@@ -169,7 +169,7 @@
 # period_secs for the overdue check is the gap between the timer's next two
 # elapses, computed from on_calendar by systemd's own parser (no hand-kept
 # frequency->seconds table). A non-repeating calendar yields a single elapse
-# (no "Iter. #2") and can't be monitored -- fail loud so the caller sets
+# (no "#2" line) and can't be monitored -- fail loud so the caller sets
 # monitor: false. on_calendar is passed via the environment so its value
 # never lands in the script text (no quoting/escaping hazards). The two-
 # elapse delta is constant for a regular schedule; a DST-straddling day can
@@ -183,8 +183,9 @@
     set -euo pipefail
     out=$(LC_ALL=C systemd-analyze calendar --iterations=2 "$ON_CALENDAR")
     e1=$(printf '%s\n' "$out" | awk '/Next elapse:/{sub(/^[^:]*: /, ""); print; exit}')
-    e2=$(printf '%s\n' "$out" | awk '/Iter\. #2:/{sub(/^[^:]*: /, ""); print; exit}')
+    e2=$(printf '%s\n' "$out" | awk '/#2:/{sub(/^[^:]*: /, ""); print; exit}')
     if [ -z "$e2" ]; then
+      printf 'systemd-analyze output:\n%s\n' "$out" >&2
       echo "on_calendar=$ON_CALENDAR does not repeat (no second elapse); set monitor: false for one-shot timers" >&2
       exit 1
     fi
