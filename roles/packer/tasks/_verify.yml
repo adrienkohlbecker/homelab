@@ -613,25 +613,68 @@
 #   x86_64:  firmware -> rEFInd -> ZBM (Components mode) -> kexec
 #   aarch64: firmware -> EFI-stub direct boot via /EFI/Linux/
 #
-# Per-release apt trigger differs (no one-size path works on all):
-#
-# - jammy/noble: install the HWE meta-package. The HWE kernel is newer
-#   than what packer shipped, becomes the highest in /boot/, and the
-#   reboot lands on it.
-#
-# - resolute: 26.04 LTS GA has no HWE concept. Install the second-newest
-#   linux-image-X.Y.Z-generic, then hide the running kernel's /boot
-#   files behind dotfile names so the "highest kernel" selection skips
-#   them (ZBM's glob on x86_64; the postinst.d hook's glob on aarch64).
-#   dpkg's "Aborting removal of the running kernel" prerm guard blocks
-#   the cleaner apt-purge path, so this is the closest substitute
-#   without bypassing dpkg.
+# Install an older linux-image-X.Y.Z-generic, then hide the running
+# kernel's /boot files behind dotfile names so the "highest kernel"
+# selection skips them (ZBM's glob on x86_64; the postinst.d hook's
+# glob on aarch64). dpkg's "Aborting removal of the running kernel"
+# prerm guard blocks the cleaner apt-purge path, so this is the
+# closest substitute without bypassing dpkg.
 #
 # aarch64 also re-runs the postinst.d hook (after the hide) so
 # /EFI/Linux/ restages with the older kernel, and asserts the file
 # hashes flipped. That ESP-staging path is the aarch64-only mechanism
 # for the direct-EFI-stub workaround documented at chroot.sh's top.
+#
+# ABI discovery runs unconditionally; the reboot exercise is gated on
+# finding a swap target (multiple madison versions can map to the same
+# ABI, so "two versions available" != "two distinct kernels").
+
+- name: _verify | Refresh apt cache so madison sees the current archive
+  apt:
+    update_cache: true
+  become: true
+
+# Deduplicate madison versions at the ABI level before picking a swap
+# target. Multiple meta-package versions (e.g. 5.15.0.179.163 and
+# 5.15.0.179.164) can resolve to the same linux-image-5.15.0-179-generic
+# package — picking the "second-newest version" without dedup selects
+# the running kernel, the hide step removes the only bootable kernel,
+# and ZBM has nothing to kexec into.
+- name: _verify | Find a kernel ABI different from the running one
+  shell:
+    cmd: |
+      set -euo pipefail
+      running=$(uname -r | sed 's/-generic$//')
+      abis=$(apt-cache madison linux-image-generic |
+             awk '$1=="linux-image-generic"{print $3}' |
+             sed -E -e 's/\.[0-9]+$//' -e 's/\.([0-9]+)$/-\1/' |
+             sort -uV)
+      count=$(echo "$abis" | grep -c . || true)
+      target=""
+      for abi in $(echo "$abis" | sort -rV); do
+        if [ "$abi" != "$running" ]; then
+          target=$abi
+          break
+        fi
+      done
+      if [ -z "$target" ]; then
+        echo >&2 "all $count ABI(s) in the archive resolve to $running — no swap target"
+      fi
+      echo "$target"
+    executable: /bin/bash
+  register: packer_verify_swap_abi
+  changed_when: false
+
+- name: _verify | Kernel-swap exercise skipped (no alternative ABI in archive)
+  when: packer_verify_swap_abi.stdout | length == 0
+  debug:
+    msg: >-
+      Only one kernel ABI is available in the archive — skipping the
+      kernel-update + reboot exercise. This is expected when the archive
+      has not yet published a second ABI for this release.
+
 - name: _verify | Kernel-update + reboot exercise
+  when: packer_verify_swap_abi.stdout | length > 0
   block:
     - name: _verify | Capture uname -r before kernel transaction
       command: uname -r
@@ -650,96 +693,36 @@
       register: packer_verify_efi_linux_before
       become: true
 
-    # Pre-2026-05 this branch had a separate HWE-meta-install path
-    # for jammy/noble (linux-generic-hwe-22.04 etc.), which fell over
-    # once the packer image started shipping HWE itself -- apt
-    # reported the install as a no-op and the rest of the test had
-    # nothing to verify. Use the older-kernel-install + hide-running
-    # path for every release; works the same way whether the running
-    # kernel is HWE or GA, because apt-cache madison lists both
-    # linux-image-generic branches and picks the second-newest
-    # version as the downgrade target.
-    - name: _verify | Older-kernel install + hide running kernel
-      block:
-        - name: _verify | Refresh apt cache so madison sees the current archive
-          apt:
-            update_cache: true
-          become: true
+    - name: _verify | Install older specific kernel + modules
+      apt:
+        name:
+          - "linux-image-{{ packer_verify_swap_abi.stdout }}-generic"
+          - "linux-modules-{{ packer_verify_swap_abi.stdout }}-generic"
+        state: present
+      become: true
 
-        # apt-cache madison lists every available version of the
-        # metapackage; the running kernel is the newest, so the
-        # second-newest is the downgrade target. Version is
-        # "ABI.REVISION" (e.g. 7.0.0-15.15); sed strips the trailing
-        # .REVISION (and any +N suffix) to leave the ABI fragment that
-        # names the actual linux-image-X.Y.Z-N-generic package.
-        - name: _verify | Find second-newest linux-image-generic ABI in archive
-          shell:
-            cmd: |
-              set -euo pipefail
-              versions=$(apt-cache madison linux-image-generic |
-                         awk '$1=="linux-image-generic"{print $3}' |
-                         sort -uV)
-              count=$(echo "$versions" | grep -c .)
-              if [ "$count" -lt 2 ]; then
-                echo >&2 "archive has only $count linux-image-generic version(s); need 2+ for a downgrade target (test premise broken)"
-                exit 1
-              fi
-              # apt-cache madison emits two version shapes depending
-              # on release:
-              #   noble / resolute: X.Y.Z-N.M (dash before the ABI
-              #     revision, dot before the package revision) --
-              #     `5.15.0-179.163`. ABI is X.Y.Z-N.
-              #   jammy: X.Y.Z.N.M (dots all the way) --
-              #     `5.15.0.179.163`. ABI is also X.Y.Z-N but the
-              #     meta-package version uses dots.
-              # Two-pass sed: first strip the trailing .M (package
-              # revision), then convert any remaining .N to -N so
-              # the result is the canonical X.Y.Z-N ABI that
-              # linux-image-<ABI>-generic uses.
-              ver=$(echo "$versions" | tail -2 | head -1)
-              echo "$ver" | sed -E -e 's/\.[0-9]+$//' -e 's/\.([0-9]+)$/-\1/'
-            executable: /bin/bash
-          register: packer_verify_older_abi
-          changed_when: false
+    # dpkg refuses to purge the running kernel ("Aborting removal of
+    # the running kernel"). Hide the /boot files behind dotfile names
+    # — shell globs don't match leading dots, so:
+    #   x86_64: ZBM's /boot/vmlinuz-* scan skips the hidden running
+    #           kernel and picks the older one as the new highest.
+    #   aarch64: the postinst.d hook's same glob skips them; we
+    #            re-run the hook below to restage /EFI/Linux/.
+    - name: _verify | Hide running kernel files from highest-kernel selection
+      shell:
+        cmd: |
+          set -euo pipefail
+          mv -f /boot/vmlinuz-{{ ansible_kernel }} /boot/.vmlinuz-{{ ansible_kernel }}
+          mv -f /boot/initrd.img-{{ ansible_kernel }} /boot/.initrd.img-{{ ansible_kernel }}
+        executable: /bin/bash
+      changed_when: true
+      become: true
 
-        - name: _verify | Older-kernel ABI was found in the archive
-          assert:
-            that: packer_verify_older_abi.stdout != ""
-            fail_msg: >-
-              Older-kernel ABI extraction returned an empty string —
-              the madison version didn't match the expected
-              ABI.REVISION shape (sed strip failed)
-
-        - name: _verify | Install older specific kernel + modules
-          apt:
-            name:
-              - "linux-image-{{ packer_verify_older_abi.stdout }}-generic"
-              - "linux-modules-{{ packer_verify_older_abi.stdout }}-generic"
-            state: present
-          become: true
-
-        # dpkg refuses to purge the running kernel ("Aborting removal of
-        # the running kernel"). Hide the /boot files behind dotfile names
-        # — shell globs don't match leading dots, so:
-        #   x86_64: ZBM's /boot/vmlinuz-* scan skips the hidden running
-        #           kernel and picks the older one as the new highest.
-        #   aarch64: the postinst.d hook's same glob skips them; we
-        #            re-run the hook below to restage /EFI/Linux/.
-        - name: _verify | Hide running kernel files from highest-kernel selection
-          shell:
-            cmd: |
-              set -euo pipefail
-              mv -f /boot/vmlinuz-{{ ansible_kernel }} /boot/.vmlinuz-{{ ansible_kernel }}
-              mv -f /boot/initrd.img-{{ ansible_kernel }} /boot/.initrd.img-{{ ansible_kernel }}
-            executable: /bin/bash
-          changed_when: true
-          become: true
-
-        - name: _verify | Re-run the hook to stage the older kernel onto /EFI/Linux/ (aarch64)
-          when: ansible_architecture == "aarch64"
-          command: /etc/kernel/postinst.d/zz-stage-efi-stub
-          changed_when: true
-          become: true
+    - name: _verify | Re-run the hook to stage the older kernel onto /EFI/Linux/ (aarch64)
+      when: ansible_architecture == "aarch64"
+      command: /etc/kernel/postinst.d/zz-stage-efi-stub
+      changed_when: true
+      become: true
 
     - name: _verify | Capture /EFI/Linux/{vmlinuz.efi,initrd} hashes after (aarch64)
       when: ansible_architecture == "aarch64"
