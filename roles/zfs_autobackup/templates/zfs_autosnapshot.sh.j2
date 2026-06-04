@@ -8,7 +8,9 @@ f_require_root
 f_rescue f_trace zfs_backup_local
 
 # pull each configured source host's snapshots onto this host
-{% for src in zfs_autobackup_sources %}
+# (an empty dest_dataset is the skip sentinel -- e.g. box's self-reference
+# in the qemu fixture, which has no peer to pull from)
+{% for src in zfs_autobackup_sources if src.dest_dataset %}
 f_rescue f_trace zfs_backup_onsite "{{ external_ips[src.host] }}" "{{ src.dest_dataset }}"
 {% endfor %}
 # sync each dataset to offsite synology

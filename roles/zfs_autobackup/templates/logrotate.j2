@@ -1,3 +1,6 @@
+# Only the offsite rsync tier writes per-dataset logs here; the local and
+# onsite zfs-autobackup tiers log to the systemd journal (no --logfile flag
+# exists in zfs-autobackup), so this dir and rotation cover offsite alone.
 /var/log/zfs_autobackup/*.log {
   weekly
   minsize 100K
@@ -6,5 +9,4 @@
   {{ zfs_root | ternary("# compress # zfs already compresses disk contents", "compress") }}
   delaycompress
   notifempty
-  sharedscripts
 }
