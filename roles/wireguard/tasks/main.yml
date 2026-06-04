@@ -77,6 +77,9 @@
     value: '1'
     sysctl_set: true
     sysctl_file: /etc/sysctl.d/30-wireguard.conf
+    # sysctl_set already pokes the live value per item, so the per-item
+    # `sysctl -p` reload would be redundant.
+    reload: false
   loop:
     - net.ipv4.ip_forward
     - net.ipv6.conf.all.forwarding
