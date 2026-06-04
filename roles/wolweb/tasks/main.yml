@@ -1,19 +1,13 @@
-- name: Validate mac_addresses inputs
+- name: Validate wolweb device inputs
   assert:
     quiet: true
     that:
-      - mac_addresses is defined
-      - mac_addresses.lab_i210 is defined
-      - mac_addresses.lab_i210 is match('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$')
-      - mac_addresses.pug is defined
-      - mac_addresses.pug is match('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$')
-      - mac_addresses.lab_i225p1 is defined
-      - mac_addresses.lab_i225p1 is match('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$')
-      - mac_addresses.lab_i225p2 is defined
-      - mac_addresses.lab_i225p2 is match('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$')
+      - wolweb_devices is defined
+      - wolweb_devices | length > 0
+      - wolweb_devices | rejectattr('mac', 'match', '^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$') | list | length == 0
     fail_msg: >-
-      mac_addresses must be defined with valid MAC addresses for
-      lab_i210, pug, lab_i225p1, lab_i225p2
+      wolweb_devices must be a non-empty list of {name, mac} entries with
+      valid MAC addresses (the mac values come from mac_addresses)
   tags:
     - wolweb
 
@@ -30,6 +24,18 @@
 - name: Compute broadcast ip
   set_fact:
     wolweb_broadcast_ip: "{{ (ansible_facts.default_ipv4.address + '/' + ansible_facts.default_ipv4.netmask) | ansible.utils.ipaddr('broadcast') }}"
+  tags:
+    - wolweb
+
+- name: Validate computed broadcast ip
+  assert:
+    quiet: true
+    that:
+      - wolweb_broadcast_ip is match('^([0-9]{1,3}[.]){3}[0-9]{1,3}$')
+    fail_msg: >-
+      Computed wolweb_broadcast_ip ('{{ wolweb_broadcast_ip }}') is not a
+      valid IPv4 address -- ansible_facts.default_ipv4 may be empty on this
+      host, which would render an unusable WoL destination
   tags:
     - wolweb
 

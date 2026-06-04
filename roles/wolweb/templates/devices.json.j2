@@ -1,28 +1,21 @@
+#jinja2: trim_blocks: True, lstrip_blocks: True
+{# Each device's `ip` is the magic-packet DESTINATION (read into          #}
+{# Device.BroadcastIP) -- the directed broadcast for the host's own        #}
+{# segment, with WoL discard port :9 -- NOT the device's unicast IP. The   #}
+{# global config.json `bcastip` is unused by the wake path; do not "fix"   #}
+{# this to a unicast address. `interface` is the host NIC the packet       #}
+{# egresses; every target is assumed to share the host's default L2        #}
+{# segment (the management VLAN). A target on another VLAN/segment is not  #}
+{# reachable -- which is why the IoT-only i225 NICs are not listed.        #}
 {
   "devices": [
+{% for d in wolweb_devices %}
     {
-      "name": "Lab",
-      "mac": "{{ mac_addresses.lab_i210 }}",
+      "name": "{{ d.name }}",
+      "mac": "{{ d.mac }}",
       "ip": "{{ wolweb_broadcast_ip }}:9",
       "interface": "{{ ansible_facts.default_ipv4.interface }}"
-    },
-    {
-      "name": "Pug",
-      "mac": "{{ mac_addresses.pug }}",
-      "ip": "{{ wolweb_broadcast_ip }}:9",
-      "interface": "{{ ansible_facts.default_ipv4.interface }}"
-    },
-    {
-      "name": "Lab (i225 #1)",
-      "mac": "{{ mac_addresses.lab_i225p1 }}",
-      "ip": "{{ wolweb_broadcast_ip }}:9",
-      "interface": "{{ ansible_facts.default_ipv4.interface }}"
-    },
-    {
-      "name": "Lab (i225 #2)",
-      "mac": "{{ mac_addresses.lab_i225p2 }}",
-      "ip": "{{ wolweb_broadcast_ip }}:9",
-      "interface": "{{ ansible_facts.default_ipv4.interface }}"
-    }
+    }{{ "," if not loop.last else "" }}
+{% endfor %}
   ]
 }

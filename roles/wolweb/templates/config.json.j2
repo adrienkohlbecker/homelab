@@ -1,3 +1,9 @@
+{# host: the app binds loopback; nginx proxies here.                      #}
+{# read_only disables the in-UI device editor (POST /data/save) so         #}
+{# devices.json stays Ansible-managed -- the /wake path is unaffected.     #}
+{# bcastip is a no-op for the wake path (only the per-device `ip` in        #}
+{# devices.json is used); it is the default for the disabled add-device     #}
+{# form, kept only so the config parses.                                   #}
 {
   "host": "127.0.0.1",
   "port": {{ service_ports.wolweb }},
