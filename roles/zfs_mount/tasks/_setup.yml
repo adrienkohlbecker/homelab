@@ -4,21 +4,3 @@
 - name: _setup | Install bash functions.sh
   import_role:
     name: bash
-
-# The packer image creates rpool/ROOT/<release> with canmount=noauto
-# so ZFSBootMenu can flip it to `on` on the chosen BE at boot. Prod
-# hosts (lab, pug) end up with canmount=on locally; the harness's
-# direct-boot path (aarch64 Mac skips ZBM) leaves it at noauto, so
-# zfs_check_mount's assertion `... off on` fails. Mirror prod's
-# state so the assertion holds. Harmless re-run: zfs set is
-# idempotent on a value match.
-- name: _setup | Set canmount=on on rpool/ROOT/<release> (mimic ZBM-on-boot)
-  command: zfs set canmount=on rpool/ROOT/{{ ansible_distribution_release }}
-  changed_when: false
-  become: true
-
-- name: _setup | Set canmount=on on bpool/BOOT/<release> (mimic ZBM-on-boot)
-  command: zfs set canmount=on bpool/BOOT/{{ ansible_distribution_release }}
-  changed_when: false
-  become: true
-  when: zfs_has_bpool | default(false)
