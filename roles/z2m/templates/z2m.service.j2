@@ -31,6 +31,7 @@ ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \
+    --init \
     --sdnotify=healthy \
     --detach \
     --replace \
@@ -42,6 +43,7 @@ ExecStart=/usr/bin/podman run \
     --user {{ z2m_user.uid }}:{{ z2m_user.group }} \
     --network mosquitto \
     --security-opt=no-new-privileges \
+    --tz={{ system_timezone }} \
     --publish 127.0.0.1:{{ service_ports.z2m }}:{{ service_ports.z2m }}/tcp \
     --health-cmd         '["wget","--quiet","--tries=1","--spider","--timeout=5","http://localhost:{{ service_ports.z2m }}/"]' \
     --health-startup-cmd '["wget","--quiet","--tries=1","--spider","--timeout=5","http://localhost:{{ service_ports.z2m }}/"]' \
