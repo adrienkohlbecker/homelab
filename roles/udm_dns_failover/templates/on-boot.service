@@ -1,3 +1,8 @@
+# The /data/on_boot.d/*.sh convention (numeric-prefix ordering, oneshot
+# after network-online) is the community unifios-utilities "on-boot-script"
+# idiom for surviving UniFi firmware updates. This is a deliberate
+# self-contained reimplementation -- don't install the upstream package on
+# top, it would collide on this same unit name and directory.
 [Unit]
 Description=Run /data/on_boot.d scripts
 After=network-online.target

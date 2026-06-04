@@ -9,6 +9,13 @@
 # This role targets the UDM only (hosts: udm in site.yml). The UDM is not
 # a standard Ubuntu host — it runs UniFi OS (Debian bullseye, SquashFS root,
 # overlay /etc/). No handlers, no systemd_unit helper, no podman.
+#
+# The heartbeat timer is hand-rolled rather than via the systemd_timer
+# helper for two reasons specific to this host: its units must live on
+# persistent /data and be symlinked into /etc (to survive a firmware wipe),
+# which the helper doesn't do; and the helper's netdata `monitor:` cadence
+# alerting has nothing to attach to (no netdata on the UDM). The
+# healthchecks.io heartbeat below is this peer's alerting channel instead.
 - name: Validate required variables
   assert:
     that:
@@ -21,6 +28,11 @@
       - (pihole_keepalived_peers | default([]) | length) > 0
       - inventory_hostname in external_ips
       - udm_dns_failover_heartbeat_url is defined
+      # Shell-injection guard, not a validity check: the interface is
+      # interpolated into the iptables `command:` tasks below and the
+      # on-boot script's iptables loop. The charset rules out metacharacters;
+      # a wrong-but-valid interface name still passes (keepalived would fault
+      # on it at runtime).
       - udm_dns_failover_interface is regex("^[a-zA-Z0-9._-]+$")
     fail_msg: >-
       udm_dns_failover requires pihole_keepalived_{ip,vrid,priority,peers},
