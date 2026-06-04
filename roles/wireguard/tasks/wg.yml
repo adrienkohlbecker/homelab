@@ -11,7 +11,7 @@
     # [A-Za-z0-9_=+.-]{1,15}\.conf, so the ansible-staged temp file
     # fails the check. Symlink it under the real interface name in a
     # per-run tempdir and parse through the link.
-    validate: 'sh -c ''d=$(mktemp -d) && ln -s "%s" "$d/{{ iface }}.conf" && wg-quick strip "$d/{{ iface }}.conf" >/dev/null && rm -rf "$d"'''
+    validate: 'sh -c ''d=$(mktemp -d) && trap "rm -rf $d" EXIT && ln -s "%s" "$d/{{ iface }}.conf" && wg-quick strip "$d/{{ iface }}.conf" >/dev/null'''
   register: wireguard_cfg
   become: true
   tags:

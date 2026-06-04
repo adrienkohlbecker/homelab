@@ -4,20 +4,28 @@
 - name: Assert wireguard_peers entry exists for this host
   vars:
     own_peer: "{{ wireguard_peers | default([]) | selectattr('name', 'eq', inventory_hostname) | list }}"
+    server_peers: "{{ wireguard_peers | selectattr('is_server', 'eq', true) | list }}"
   assert:
     that:
       - wireguard_peers is defined
       - wireguard_peers | length > 0
+      - wireguard_psk_seed is defined
+      - wireguard_psk_seed | length > 0
+      - wireguard_peers | map(attribute='address') | unique | list | length == wireguard_peers | length
+      - wireguard_peers | map(attribute='public_key') | unique | list | length == wireguard_peers | length
       - own_peer | length == 1
       - own_peer[0].is_server | bool
       - own_peer[0].address is defined
       - own_peer[0].public_key is defined
       - own_peer[0].private_key is defined
+      - server_peers | rejectattr('site_subnet', 'defined') | list | length == 0
       - wireguard_peers | map(attribute='name') | reject('match', '^[a-z][a-z0-9_]*$') | list | length == 0
     fail_msg: >-
       wireguard_peers must be defined and contain an is_server entry for
       {{ inventory_hostname }} with address, public_key, private_key set;
-      every peer name must match ^[a-z][a-z0-9_]*$.
+      every peer name must match ^[a-z][a-z0-9_]*$; wireguard_psk_seed
+      must be set; addresses and public_keys must be unique; every
+      is_server peer must have site_subnet.
   tags:
     - wireguard
 
@@ -47,6 +55,7 @@
   ansible.posix.sysctl:
     name: net.ipv4.ip_forward
     value: '1'
+    sysctl_set: true
     sysctl_file: /etc/sysctl.d/99-wireguard.conf
   become: true
   tags:
@@ -56,16 +65,14 @@
   ansible.posix.sysctl:
     name: net.ipv6.conf.all.forwarding
     value: '1'
+    sysctl_set: true
     sysctl_file: /etc/sysctl.d/99-wireguard.conf
   become: true
   tags:
     - wireguard
 
-# One-time cleanup: an earlier version of this role wrote the same
-# forwarding sysctls to /etc/sysctl.conf (the module's legacy default).
-# Procps reads /etc/sysctl.d/* after /etc/sysctl.conf so the new file
-# already wins, but leaving the stale entries muddies the audit trail
-# for "where does ip_forward=1 come from". Drop them.
+# One-time cleanup (added 2026-05-21, safe to remove after full converge):
+# an earlier version wrote forwarding sysctls to /etc/sysctl.conf.
 - name: Remove legacy forwarding sysctls from /etc/sysctl.conf
   ansible.posix.sysctl:
     name: "{{ item }}"
@@ -82,7 +89,7 @@
   import_tasks: wg.yml
   vars:
     iface: wg0
-    listen_port: '51820'
+    listen_port: "{{ service_ports.wireguard }}"
     own_peer_name: "{{ inventory_hostname }}"
   tags:
     - wireguard

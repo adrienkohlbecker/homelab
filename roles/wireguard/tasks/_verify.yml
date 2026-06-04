@@ -2,6 +2,29 @@
 # Behavior probes against the live wg interface, not the rendered
 # config. Only invoked by test/testrole.py against a qemu VM; never
 # from site.yml or `mise run ansible --tags wireguard`.
+- name: _verify | Assert wg-quick@wg0 is active
+  systemd:
+    name: wg-quick@wg0.service
+    state: started
+  become: true
+  check_mode: true
+  register: wireguard_service_check
+  failed_when: wireguard_service_check.changed
+
+- name: _verify | Assert IPv4 forwarding is active at runtime
+  command: sysctl -n net.ipv4.ip_forward
+  register: wireguard_ipv4_fwd
+  become: true
+  changed_when: false
+  failed_when: wireguard_ipv4_fwd.stdout | trim != '1'
+
+- name: _verify | Assert IPv6 forwarding is active at runtime
+  command: sysctl -n net.ipv6.conf.all.forwarding
+  register: wireguard_ipv6_fwd
+  become: true
+  changed_when: false
+  failed_when: wireguard_ipv6_fwd.stdout | trim != '1'
+
 - name: _verify | Probe wg show on the live interface
   command: wg show {{ iface | default('wg0') }}
   register: wireguard_wg_show
@@ -15,14 +38,12 @@
   changed_when: false
   failed_when: wireguard_listen_port.stdout | int != (listen_port | default('51820') | int)
 
-- name: _verify | Assert peer count matches wireguard_peers - 1  # noqa: risky-shell-pipe
-  shell: wg show {{ iface | default('wg0') }} peers | wc -l
-  args:
-    executable: /bin/bash
+- name: _verify | Assert peer count matches wireguard_peers - 1
+  command: wg show {{ iface | default('wg0') }} peers
   register: wireguard_peer_count
   become: true
   changed_when: false
-  failed_when: wireguard_peer_count.stdout | int != (wireguard_peers | length - 1)
+  failed_when: wireguard_peer_count.stdout_lines | length != (wireguard_peers | length - 1)
 
 - name: _verify | Assert interface carries own_peer.address
   vars:
@@ -32,6 +53,15 @@
   become: true
   changed_when: false
   failed_when: own_peer.address not in wireguard_ip_addr.stdout
+
+- name: _verify | Assert preshared keys are loaded for every peer
+  command: wg show {{ iface | default('wg0') }} preshared-keys
+  register: wireguard_psk_check
+  become: true
+  changed_when: false
+  failed_when: >-
+    '(none)' in wireguard_psk_check.stdout or
+    wireguard_psk_check.stdout_lines | length != (wireguard_peers | length - 1)
 
 # Running wg syncconf as a no-op verifies the running kernel crypto state is
 # consistent with the rendered config -- if the freshly-rendered conf disagreed

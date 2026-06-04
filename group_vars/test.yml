@@ -30,8 +30,8 @@ mac_addresses:
   lab_i225p1: 4c:4b:b9:1b:60:0c
   lab_i225p2: d2:7d:10:e0:9c:68
 
-# 3-peer test fixture (lab/pug/box only) — intentionally narrower than
-# prod's 9-peer list. Overrides group_vars/all/main.yml's derived list.
+# 4-peer test fixture (lab/pug/box + fox) — fox is cross-site (hetzner)
+# to exercise the AllowedIPs physical-/32 branch in wg.conf.j2.
 wireguard_peers:
   - name: lab
     address: "{{ network.hosts.lab.wireguard }}"
@@ -60,6 +60,12 @@ wireguard_peers:
     site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.box.public_key }}"
     private_key: "{{ wireguard_keys.box.private_key }}"
+  - name: fox
+    address: "{{ network.hosts.fox.wireguard }}"
+    is_server: true
+    site_subnet: "{{ network.hosts.fox.wireguard }}/32"
+    public_key: "{{ wireguard_keys.fox.public_key }}"
+    private_key: "{{ wireguard_keys.fox.private_key }}"
 
 # Master seed for deriving per-pair PSKs (filter_plugins/wireguard_psk.py):
 # PresharedKey = base64(HMAC-SHA256(seed, sorted-pair-name)). One value, no
@@ -111,6 +117,9 @@ wireguard_keys:
     private_key: changeme
   phone:
     public_key: changeme
+    private_key: changeme
+  fox:
+    public_key: WPG8NRx4VlUIoRdCTpRWBkQlwXOdkw7ejfBFlGyNaFI=
     private_key: changeme
   bunk:
     public_key: changeme

@@ -36,7 +36,7 @@ PostDown = {{ own_peer.post_down }}
    bonniers /24, so that stays out. Same-site peers reach each other on the LAN;
    roaming clients (no site, own_host == {}) keep the pure wg-/32 split tunnel. #}
 {% set own_host = network.hosts.get(own_peer_name, {}) %}
-{% for peer in wireguard_peers if (peer.is_server or own_peer.is_server) and (peer.public_key != own_peer.public_key) %}
+{% for peer in wireguard_peers if (peer.is_server or own_peer.is_server) and (peer.name != own_peer_name) %}
 {% set tuple = [own_peer.name, peer.name]|sort %}
 {% set peer_host = network.hosts.get(peer.name, {}) %}
 [Peer]
