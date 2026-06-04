@@ -363,8 +363,11 @@
     # keepalived -t reads the assembled config in place, so the bad file is
     # already on persistent /data -- which the on-boot recovery re-applies on
     # every boot. Restore the previous version from the backup the copy/
-    # template made so a SIGHUP-reload or boot-time start can't pick it up
-    # (mirrors roles/keepalived/tasks/main.yml).
+    # template made (and delete that backup), so a SIGHUP-reload or boot-time
+    # start can't pick it up. On the first-ever write there is no backup, so
+    # drop the freshly-added file instead -- leaving a broken config on /data
+    # would have the on-boot recovery re-apply it forever. Mirrors the
+    # three-arm rescue in roles/keepalived/tasks/main.yml.
     - name: Restore previous VRRP fragment after failed validation  # noqa: require-backup
       when: '"backup_file" in udm_dns_failover_vrrp_conf'
       copy:
@@ -375,6 +378,18 @@
         group: root
         mode: "0640"
       become: true
+    - name: Remove the VRRP fragment backup
+      when: '"backup_file" in udm_dns_failover_vrrp_conf'
+      file:
+        path: "{{ udm_dns_failover_vrrp_conf.backup_file }}"
+        state: absent
+      become: true
+    - name: Remove the freshly-added VRRP fragment
+      when: 'udm_dns_failover_vrrp_conf.changed and "backup_file" not in udm_dns_failover_vrrp_conf'
+      file:
+        path: /data/keepalived/pihole.conf
+        state: absent
+      become: true
     - name: Restore previous base config after failed validation  # noqa: require-backup
       when: '"backup_file" in udm_dns_failover_base_conf'
       copy:
@@ -384,6 +399,18 @@
         owner: root
         group: root
         mode: "0640"
+      become: true
+    - name: Remove the base config backup
+      when: '"backup_file" in udm_dns_failover_base_conf'
+      file:
+        path: "{{ udm_dns_failover_base_conf.backup_file }}"
+        state: absent
+      become: true
+    - name: Remove the freshly-added base config
+      when: 'udm_dns_failover_base_conf.changed and "backup_file" not in udm_dns_failover_base_conf'
+      file:
+        path: /data/keepalived/keepalived.conf
+        state: absent
       become: true
     - name: Fail after restoring keepalived config
       fail:
