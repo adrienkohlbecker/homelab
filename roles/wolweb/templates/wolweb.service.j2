@@ -26,6 +26,16 @@ NotifyAccess=all
 SyslogIdentifier=%N
 
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
+{# --network host: a WoL magic packet is an L2 broadcast that must reach   #}
+{# the target NIC's segment (the management VLAN). A NAT bridge cannot     #}
+{# emit it and a published port would not help; host netns is what lets    #}
+{# wolweb broadcast on the host's own NIC and bind the `interface` named   #}
+{# in devices.json. (A mac_mgmt macvlan is the only non-host alternative   #}
+{# and is materially more complex -- see host_vars mac_mgmt block.)        #}
+{# --cap-drop=ALL is safe: sending a UDP datagram needs no capability.     #}
+{# --unsetenv WOLWEB*: the image bakes WOLWEBPORT/WOLWEBVDIR env defaults  #}
+{# which cleanenv overlays ON TOP of config.json; clearing them keeps the  #}
+{# mounted config.json authoritative (esp. vdir=/ and host=127.0.0.1).     #}
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \
