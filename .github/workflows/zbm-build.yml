@@ -47,32 +47,25 @@ jobs:
           persist-credentials: false
 
       # builder-image.sh runs `docker buildx build` against the upstream
-      # Dockerfile (BuildKit heredocs podman can't parse natively). buildx needs
-      # a docker-container-driver builder, which spins up moby/buildkit as a
-      # container in the runner's rootless podman (reached via DOCKER_HOST).
-      #
-      # The buildkit container must use the -rootless image + no-process-sandbox:
-      # github_runner.service points DOCKER_HOST at the runner's ROOTLESS podman
-      # socket, and the default moby/buildkit image can't set up its process
-      # sandbox in an unprivileged container — the dockerfile frontend exec dies
-      # instantly with "exit code: 1". (A workstation build works because
-      # docker_client points the docker CLI at the ROOTFUL podman socket, where
-      # the default sandbox has the privileges it needs.) Replace any prior
-      # default-sandbox `zbm` builder, then create + reuse `zbm-rootless` (its
-      # xbps build cache persists across runs).
-      - name: Ensure a rootless buildx builder exists
+      # Dockerfile (BuildKit heredocs buildah can't parse natively). BuildKit
+      # can't run as a container nested in the runner's rootless podman, so the
+      # github_runner role runs a standalone rootless buildkitd (rootlesskit) as
+      # a user service; point a buildx `remote` builder at its socket. The build
+      # runs in that buildkitd (executor works, not nested); `--load` still
+      # targets DOCKER_HOST (the runner's rootless podman) -- the same store
+      # build.sh's `podman run` reads. Drop any stale builders from earlier
+      # docker-container attempts so they can't be reused.
+      - name: Use the rootless buildkitd builder
         run: |
           set -euo pipefail
           echo "DOCKER_HOST=${DOCKER_HOST:-<unset>}"
+          sock="unix:///run/user/$(id -u)/buildkit/buildkitd.sock"
           docker buildx rm zbm >/dev/null 2>&1 || true
-          if ! docker buildx inspect zbm-rootless >/dev/null 2>&1; then
-            docker buildx create --name zbm-rootless --driver docker-container \
-              --driver-opt image=moby/buildkit:buildx-stable-1-rootless \
-              --driver-opt env.BUILDKITD_FLAGS=--oci-worker-no-process-sandbox \
-              --bootstrap
-          fi
-          docker buildx use zbm-rootless
-          docker buildx inspect zbm-rootless
+          docker buildx rm zbm-rootless >/dev/null 2>&1 || true
+          docker buildx inspect zbm-remote >/dev/null 2>&1 \
+            || docker buildx create --name zbm-remote --driver remote "$sock"
+          docker buildx use zbm-remote
+          docker buildx inspect zbm-remote
 
       # No mise on the bare runner (it lives in the CI container, which has no
       # podman socket). The two scripts are plain bash needing only MISE_CONFIG_ROOT
