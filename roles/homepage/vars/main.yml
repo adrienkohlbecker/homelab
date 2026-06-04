@@ -41,6 +41,7 @@ homepage_bookmarks:
     - { name: OpenProject,    abbr: OP, sub: openproject,   icon: openproject }
     - { name: Compta,         abbr: CP, sub: compta }
     - { name: Home Assistant, abbr: HA, sub: homeassistant, icon: home-assistant }
+    - { name: Zigbee2MQTT,    abbr: Z2, sub: z2m,           icon: zigbee2mqtt }
     - { name: Filebrowser,    abbr: FB, sub: filebrowser,   icon: filebrowser-quantum }
     - { name: Roundcube,      abbr: RC, sub: roundcube,     icon: roundcube }
     - { name: Speedtest,      abbr: ST, sub: speedtest,     icon: librespeed }
