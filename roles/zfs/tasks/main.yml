@@ -212,6 +212,37 @@
   tags:
     - zfs
 
+# ZED is enabled for its cache-rebuild zedlet regardless, but with
+# ZED_EMAIL_ADDR unset (the package default) it mails nothing. Pointing it at
+# root lights up the stock statechange-notify / data-notify / scrub_finish
+# zedlets, which deliver event-driven fault + checksum + scrub-error mail within
+# seconds — the real-time complement to zfs_health's nightly poll backstop
+# (which still owns the capacity-free signals ZED structurally can't: a scrub
+# that *didn't* happen). ZED_NOTIFY_VERBOSE stays at its 0 default so clean
+# scrub completions don't mail; only faults and errored scrubs do.
+- name: Configure ZED email notifications
+  when: not (ansible_check_mode and zfs_apt.changed)
+  lineinfile:
+    path: /etc/zfs/zed.d/zed.rc
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    backup: true
+    validate: bash -n %s
+  loop:
+    - regexp: '^#?ZED_EMAIL_ADDR='
+      line: 'ZED_EMAIL_ADDR="root"'
+    # Deliberate non-default: a resilver only verifies the replaced device, so
+    # auto-scrub the whole pool afterwards to confirm end-to-end integrity on
+    # the multi-disk pools after a disk swap.
+    - regexp: '^#?ZED_SCRUB_AFTER_RESILVER='
+      line: ZED_SCRUB_AFTER_RESILVER=1
+  loop_control:
+    label: "{{ item.line }}"
+  register: zfs_zedrc
+  become: true
+  tags:
+    - zfs
+
 - name: Enable zed
   when: not (ansible_check_mode and zfs_apt.changed)
   systemd:
@@ -222,13 +253,14 @@
     - zfs
 
 # Restart on a backports upgrade so the running zed picks up the
-# noble binary after a jammy→noble flip; otherwise just ensure it's
-# started (and leave a healthy daemon undisturbed).
+# noble binary after a jammy→noble flip, or when zed.rc changed so the
+# notification config takes effect; otherwise just ensure it's started
+# (and leave a healthy daemon undisturbed).
 - name: Start zed
   when: not (ansible_check_mode and zfs_apt.changed)
   systemd:
     name: zfs-zed
-    state: '{{ "restarted" if (zfs_backports_updated | default(false)) else "started" }}'
+    state: '{{ "restarted" if (zfs_backports_updated | default(false) or zfs_zedrc.changed) else "started" }}'
   become: true
   tags:
     - zfs
