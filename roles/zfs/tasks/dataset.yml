@@ -72,5 +72,6 @@
         name: zfs_mount
         tasks_from: unit
       vars:
-        zfs_mount_dataset: '{{ _zfs_dataset_resolved }}'
-        zfs_mount_mountpoint: '{{ zfs_dataset_args.mountpoint }}'
+        zfs_mount_args:
+          dataset: '{{ _zfs_dataset_resolved }}'
+          mountpoint: '{{ zfs_dataset_args.mountpoint }}'
