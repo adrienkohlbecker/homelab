@@ -62,13 +62,17 @@ fi
 # DHCP client).
 img="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
 
-# Registry-backed layer cache (CI). When ZBM_BUILDER_CACHE_REF is set (to a
-# nexus.lab.fahm.fr/homelab/zbm-builder:<tag> ref), pull it as a --cache-from
-# source and embed inline cache in the output, so a later build reuses the slow
-# xbps-install layers even after the local buildkitd cache is pruned. It 404s
-# harmlessly on the first build. The workstation leaves it unset -> plain build.
+# Registry-backed layer cache in the on-lab Nexus homelab docker repo. The ref
+# defaults to the shared tag here -- the single source of truth for its registry
+# path + version + arch, so CI and the workstation can't drift. Set
+# ZBM_BUILDER_CACHE_REF empty to opt out of caching entirely. --cache-from pulls
+# prior layers so a build reuses the slow xbps-install layers even after the
+# local buildkitd cache is pruned; cache import is best-effort, so a miss or an
+# unauthenticated 401/404 is a non-fatal warning. --cache-to type=inline embeds
+# the cache metadata into the built image (local only, needs no auth).
+: "${ZBM_BUILDER_CACHE_REF:=nexus.lab.fahm.fr/homelab/zbm-builder:v${ZBM_VERSION}-${arch}}"
 cache_args=()
-if [ -n "${ZBM_BUILDER_CACHE_REF:-}" ]; then
+if [ -n "$ZBM_BUILDER_CACHE_REF" ]; then
   cache_args=(--cache-from "type=registry,ref=${ZBM_BUILDER_CACHE_REF}" --cache-to type=inline)
 fi
 docker buildx build \
@@ -82,12 +86,12 @@ docker buildx build \
   -f "$src_dir/releng/docker/Dockerfile" \
   "$src_dir/releng/docker"
 
-# Push the freshly built image as the cache source for the next build. The
-# expensive layer (the xbps toolchain install) is what we want cached, so a
-# later build reuses it via --cache-from even after the local buildkitd cache
-# is pruned. Needs a prior `podman login` to the registry (the CI workflow
-# does it).
-if [ -n "${ZBM_BUILDER_CACHE_REF:-}" ]; then
+# Push the freshly built image as the cache source for the next build (the
+# expensive xbps toolchain layer is what we want cached). Gated on
+# ZBM_BUILDER_CACHE_PUSH because the push needs a prior `podman login` to the
+# registry: CI logs in then sets the flag; the workstation opts in explicitly
+# (ZBM_BUILDER_CACHE_PUSH=1 mise run zbm:builder-image) once logged in.
+if [ -n "$ZBM_BUILDER_CACHE_REF" ] && [ -n "${ZBM_BUILDER_CACHE_PUSH:-}" ]; then
   podman tag "$img" "${ZBM_BUILDER_CACHE_REF}"
   podman push "${ZBM_BUILDER_CACHE_REF}"
 fi
