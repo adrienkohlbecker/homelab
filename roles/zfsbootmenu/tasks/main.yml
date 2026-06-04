@@ -1,4 +1,5 @@
 - name: Create ZBM directory
+  when: ansible_architecture in zfsbootmenu_release
   file:
     dest: /boot/efi/EFI/ZBM/
     state: directory
@@ -10,35 +11,31 @@
   tags:
     - zfsbootmenu
 
-- name: Download zfsbootmenu
-  when: not (ansible_check_mode and zfsbootmenu_zbm_directory.changed)
+# No backup: true — /boot/efi is vfat; backup_local's chown fails on FAT.
+- name: Download zfsbootmenu  # noqa: require-backup
+  when:
+    - ansible_architecture in zfsbootmenu_release
+    - not (ansible_check_mode and zfsbootmenu_zbm_directory.changed)
   get_url:
-    url: "{{ zfsbootmenu_artifact.url }}"
-    checksum: "sha256:{{ zfsbootmenu_artifact.sha256 }}"
+    url: "{{ zfsbootmenu_release[ansible_architecture].url }}"
+    checksum: "sha256:{{ zfsbootmenu_release[ansible_architecture].sha256 }}"
     dest: /boot/efi/EFI/ZBM/VMLINUZ.EFI
     mode: "0755"
     owner: root
     group: root
-    backup: true
     timeout: 120
   become: true
   register: zfsbootmenu_efi
+  retries: 3
+  delay: 5
+  until: zfsbootmenu_efi is succeeded
   tags:
     - zfsbootmenu
 
-# TODO this is a zpool property
-# - name: Set bootfs on rpool
-#   zfs:
-#     name: rpool
-#     state: present
-#     extra_zfs_properties:
-#       'bootfs': 'rpool/ROOT/jammy'
-#   become: true
-#   tags:
-#     - zfsbootmenu
-
 - name: Ask to reboot
-  when: zfsbootmenu_efi.changed
+  when:
+    - ansible_architecture in zfsbootmenu_release
+    - zfsbootmenu_efi is changed
   file:
     path: /var/run/reboot-required
     state: touch
