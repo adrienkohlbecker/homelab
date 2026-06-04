@@ -30,8 +30,10 @@ mac_addresses:
   lab_i225p1: 4c:4b:b9:1b:60:0c
   lab_i225p2: d2:7d:10:e0:9c:68
 
-# 4-peer test fixture (lab/pug/box + fox) — fox is cross-site (hetzner)
-# to exercise the AllowedIPs physical-/32 branch in wg.conf.j2.
+# 5-peer test fixture (lab/pug/box + fox + laptop). fox is cross-site
+# (hetzner) to exercise the AllowedIPs physical-/32 branch; laptop is a
+# roaming peer (is_server:false, no endpoint) to exercise the non-server
+# [Peer] branch — plain /32, no Endpoint, no keepalive — in wg.conf.j2.
 wireguard_peers:
   - name: lab
     address: "{{ network.hosts.lab.wireguard }}"
@@ -62,6 +64,11 @@ wireguard_peers:
     is_server: true
     public_key: "{{ wireguard_keys.fox.public_key }}"
     private_key: "{{ wireguard_keys.fox.private_key }}"
+  - name: laptop
+    address: "{{ network.wireguard.roaming.laptop }}"
+    is_server: false
+    public_key: "{{ wireguard_keys.laptop.public_key }}"
+    private_key: "{{ wireguard_keys.laptop.private_key }}"
 
 # Master seed for deriving per-pair PSKs (filter_plugins/wireguard_psk.py):
 # PresharedKey = base64(HMAC-SHA256(seed, sorted-pair-name)). One value, no
@@ -109,7 +116,7 @@ wireguard_keys:
           62393936656438393436373865643033626166313262383132306433646435393637323166306466
           6231663565306334323561396235323165333463313364643631
   laptop:
-    public_key: changeme
+    public_key: McpkKBvRc7Z5Akc0PZHqnN1mSnjKVXiQ1rpoPbFt3UQ=
     private_key: changeme
   phone:
     public_key: changeme
