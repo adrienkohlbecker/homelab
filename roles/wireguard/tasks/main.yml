@@ -5,27 +5,44 @@
   vars:
     own_peer: "{{ wireguard_peers | default([]) | selectattr('name', 'eq', inventory_hostname) | list }}"
     server_peers: "{{ wireguard_peers | selectattr('is_server', 'eq', true) | list }}"
+    server_hosts: "{{ server_peers | map(attribute='name') | map('extract', network.hosts) | list }}"
   assert:
+    quiet: true
     that:
       - wireguard_peers is defined
       - wireguard_peers | length > 0
       - wireguard_psk_seed is defined
-      - wireguard_psk_seed | length > 0
+      # The seed feeds HMAC-SHA256 for every pair's preshared key; a short
+      # seed makes all derived PSKs brute-forceable at once (single point of
+      # failure), so require ~256 bits of material.
+      - wireguard_psk_seed | length >= 32
       - wireguard_peers | map(attribute='address') | unique | list | length == wireguard_peers | length
       - wireguard_peers | map(attribute='public_key') | unique | list | length == wireguard_peers | length
+      # Names feed the sorted-pair PSK key and the [Peer] iteration; a
+      # duplicate silently collides a PSK pair and skews the _verify count.
+      - wireguard_peers | map(attribute='name') | unique | list | length == wireguard_peers | length
       - own_peer | length == 1
       - own_peer[0].is_server | bool
       - own_peer[0].address is defined
       - own_peer[0].public_key is defined
       - own_peer[0].private_key is defined
-      - server_peers | rejectattr('site_subnet', 'defined') | list | length == 0
+      # Every server peer must resolve to a topology host with site + physical:
+      # the template derives same-site endpoint selection from .site and the
+      # cross-site host route from .physical (wg.conf.j2). A missing entry
+      # silently drops the cross-site route.
+      - server_hosts | selectattr('site', 'undefined') | list | length == 0
+      - server_hosts | selectattr('physical', 'undefined') | list | length == 0
+      # A local endpoint must dial the configured ListenPort; the remote port
+      # may differ (external port-forward), so only .local is checked.
+      - wireguard_peers | selectattr('endpoint', 'defined') | map(attribute='endpoint') | selectattr('local', 'defined') | map(attribute='local') | map('regex_replace', '^.*:', '') | map('int') | reject('eq', service_ports.wireguard) | list | length == 0
       - wireguard_peers | map(attribute='name') | reject('match', '^[a-z][a-z0-9_]*$') | list | length == 0
     fail_msg: >-
       wireguard_peers must be defined and contain an is_server entry for
       {{ inventory_hostname }} with address, public_key, private_key set;
-      every peer name must match ^[a-z][a-z0-9_]*$; wireguard_psk_seed
-      must be set; addresses and public_keys must be unique; every
-      is_server peer must have site_subnet.
+      every peer name must match ^[a-z][a-z0-9_]*$ and be unique; addresses
+      and public_keys must be unique; wireguard_psk_seed must be >= 32 chars;
+      every is_server peer must resolve to a network.hosts entry with site and
+      physical; any endpoint.local must use port {{ service_ports.wireguard }}.
   tags:
     - wireguard
 
@@ -51,36 +68,29 @@
   tags:
     - wireguard
 
-- name: Enable ipv4 forwarding
-  ansible.posix.sysctl:
-    name: net.ipv4.ip_forward
-    value: '1'
-    sysctl_set: true
-    sysctl_file: /etc/sysctl.d/99-wireguard.conf
-  become: true
-  tags:
-    - wireguard
-
-- name: Enable ipv6 forwarding
-  ansible.posix.sysctl:
-    name: net.ipv6.conf.all.forwarding
-    value: '1'
-    sysctl_set: true
-    sysctl_file: /etc/sysctl.d/99-wireguard.conf
-  become: true
-  tags:
-    - wireguard
-
-# One-time cleanup (added 2026-05-21, safe to remove after full converge):
-# an earlier version wrote forwarding sysctls to /etc/sysctl.conf.
-- name: Remove legacy forwarding sysctls from /etc/sysctl.conf
+# IPv4 forwarding carries the cross-site host route (fox -> a home host's
+# physical IP over the backbone); IPv6 forwarding is enabled for parity with
+# the other forwarding consumers on these hosts (tailscale).
+- name: Enable IP forwarding for the wg0 backbone
   ansible.posix.sysctl:
     name: "{{ item }}"
-    state: absent
-    sysctl_file: /etc/sysctl.conf
+    value: '1'
+    sysctl_set: true
+    sysctl_file: /etc/sysctl.d/30-wireguard.conf
   loop:
     - net.ipv4.ip_forward
     - net.ipv6.conf.all.forwarding
+  become: true
+  tags:
+    - wireguard
+
+# 30-wireguard.conf owns the forwarding sysctls (matching the 30-<role>.conf
+# drop-ins of swap/keepalived/redis); drop the superseded 99- file so a single
+# drop-in is the source of truth.
+- name: Remove superseded sysctl drop-in
+  file:
+    path: /etc/sysctl.d/99-wireguard.conf
+    state: absent
   become: true
   tags:
     - wireguard
