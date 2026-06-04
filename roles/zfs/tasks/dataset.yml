@@ -25,6 +25,14 @@
   vars:
     _zfs_dataset_resolved: "{{ zfs_dataset_args.dataset | regex_replace('^tank/', (zfs_tank_filesystem | default('tank')) ~ '/') }}"
   block:
+    - name: Assert required dataset inputs
+      assert:
+        that:
+          - zfs_dataset_args.dataset is defined
+          - zfs_dataset_args.mountpoint is defined
+        fail_msg: >-
+          zfs_dataset_args must include 'dataset' and 'mountpoint' keys.
+
     - name: Reject mountpoint inside extra_properties
       assert:
         that: "'mountpoint' not in (zfs_dataset_args.extra_properties | default({}))"
