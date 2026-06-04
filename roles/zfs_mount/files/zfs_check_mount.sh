@@ -28,7 +28,7 @@ while IFS=$'\t' read -r name value; do
   prop[$name]=$value
 done <<< "$output"
 
-f_check_property() {
+check_property() {
   local property=$1 expected=$2
   local actual=${prop[$property]:-}
   if [ "$actual" != "$expected" ]; then
@@ -37,19 +37,18 @@ f_check_property() {
   fi
 }
 
-f_check_property type filesystem
-f_check_property mounted yes
-f_check_property mountpoint "$MOUNTPOINT"
-f_check_property readonly off
-f_check_property canmount "$EXPECTED_CANMOUNT"
+check_property type filesystem
+check_property mounted yes
+check_property mountpoint "$MOUNTPOINT"
+check_property readonly off
+check_property canmount "$EXPECTED_CANMOUNT"
 
-SOURCE=$(findmnt --first-only --mountpoint "$MOUNTPOINT" --noheadings --types zfs --output SOURCE) || {
-  echo >&2 "Error: no zfs mount found at $MOUNTPOINT"
+# Cross-check the live mount table: a single findmnt that matches only when
+# DATASET is the zfs source AND it is mounted at MOUNTPOINT. The exit code
+# is the whole test -- no separate source string-compare to drift.
+findmnt --source "$DATASET" --mountpoint "$MOUNTPOINT" --noheadings --types zfs >/dev/null || {
+  echo >&2 "Error: zfs dataset $DATASET is not the mount at $MOUNTPOINT"
   exit 1
 }
-if [ "$SOURCE" != "$DATASET" ]; then
-  echo >&2 "Error: zfs mount at $MOUNTPOINT is '$SOURCE', expected '$DATASET'"
-  exit 1
-fi
 
 echo "OK: $DATASET mounted at $MOUNTPOINT (canmount=$EXPECTED_CANMOUNT)"
