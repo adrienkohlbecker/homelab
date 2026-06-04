@@ -1,0 +1,6 @@
+# The RPC host-whitelist is consumed in two hand-synced places: the
+# HOST_WHITELIST env (which the linuxserver image writes into settings.json at
+# container start) and the rpc-host-whitelist key the role renders into
+# settings.json (which must pre-match that post-init value or idempotence
+# flaps). Single-sourcing the literal here keeps the twin from desyncing.
+transmission_host_whitelist: "transmission.{{ inventory_hostname }}.{{ domain }},transmission.dns.podman,localhost"
