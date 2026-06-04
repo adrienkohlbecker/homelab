@@ -13,6 +13,10 @@ Address = {{ own_peer.address }}/32
 {% if not own_peer.is_server %}
 MTU = 1280
 {% endif %}
+{# Table = auto is wg-quick's default; pinned to document that wg-quick owns
+   route installation -- the full-restart-on-change strategy (wg.yml) and the
+   _verify kernel-route guard both depend on it, not on `wg syncconf`. #}
+Table = auto
 ListenPort = {{ listen_port | default('51820') }}
 {# No DNS line: wg0 is a split-tunnel break-glass backbone (peer /32s only),
    so DNS = pihole would point the device at a resolver outside AllowedIPs
