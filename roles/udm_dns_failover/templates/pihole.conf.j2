@@ -43,9 +43,13 @@ vrrp_instance pihole {
   # UDM falls back to BACKUP.
   preempt_delay     60
 
-  track_interface {
-    {{ udm_dns_failover_interface }}
-  }
+  # No explicit track_interface: keepalived already tracks the instance's own
+  # `interface` (above) for link state, so re-listing it is redundant --
+  # keepalived ignores it ("since own interface") and that warning makes
+  # `keepalived -t` exit non-zero, failing the validate gate. (pihole's
+  # fragment lists it because its use_vmac moves the instance onto a vmac
+  # child, leaving the physical a *different* interface worth tracking; this
+  # role omits use_vmac, so there is nothing extra to track.)
 
   virtual_ipaddress {
     {{ pihole_keepalived_ip }}/32
