@@ -1,6 +1,7 @@
-# ZFS role _verify: assert the pool-level properties the role manages are live
-# on the pool, reading them straight from `zpool get`. testrole.py / testall.py
-# only (qemu); never site.yml or --tags zfs against prod.
+# ZFS role _verify: assert the role's converged state is live.
+# testrole.py / testall.py only (qemu); never site.yml or --tags zfs against prod.
+
+# --- Pool properties ---
 
 - name: _verify | Read managed pool properties
   command: zpool get -H -o value {{ item.name }} {{ item.pool }}
@@ -20,3 +21,186 @@
   loop: "{{ _zfs_verify_props.results }}"
   loop_control:
     label: "{{ item.item.pool }} {{ item.item.name }}"
+
+# --- Root dataset autobackup property ---
+
+- name: _verify | Read autobackup:bak on root dataset
+  when: zfs_root
+  command: zfs get -H -o value autobackup:bak rpool/ROOT/{{ ansible_distribution_release }}
+  register: _zfs_verify_autobackup
+  changed_when: false
+  become: true
+
+- name: _verify | Root dataset autobackup:bak is set
+  when: zfs_root
+  assert:
+    that: _zfs_verify_autobackup.stdout | trim == "true"
+    fail_msg: >-
+      autobackup:bak on rpool/ROOT/{{ ansible_distribution_release }} is
+      {{ _zfs_verify_autobackup.stdout | trim }}, expected true.
+
+# --- Zed service ---
+
+- name: _verify | Query zed unit state
+  when: zfs_root
+  systemd:
+    name: zfs-zed
+  register: _zfs_verify_zed
+  become: true
+
+- name: _verify | Zed is active and enabled
+  when: zfs_root
+  assert:
+    that:
+      - _zfs_verify_zed.status.ActiveState == 'active'
+      - _zfs_verify_zed.status.UnitFileState == 'enabled'
+
+# --- Core ZFS boot services ---
+
+- name: _verify | Query boot service state
+  when: zfs_root
+  systemd:
+    name: "{{ item }}"
+  loop:
+    - zfs.target
+    - zfs-import.target
+    - zfs-import-cache
+    - zfs-mount
+  register: _zfs_verify_boot_services
+  become: true
+
+- name: _verify | Boot services are enabled
+  when: zfs_root
+  assert:
+    that: item.status.UnitFileState in ['enabled', 'static', 'enabled-runtime']
+    fail_msg: >-
+      {{ item.item }} UnitFileState is {{ item.status.UnitFileState }},
+      expected enabled/static.
+  loop: "{{ _zfs_verify_boot_services.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+# --- Scripts deployed ---
+
+- name: _verify | Health script is deployed
+  stat:
+    path: /usr/local/bin/zfs_health
+  register: _zfs_verify_health_script
+  become: true
+
+- name: _verify | Assert health script exists and is executable
+  assert:
+    that:
+      - _zfs_verify_health_script.stat.exists
+      - _zfs_verify_health_script.stat.mode == "0755"
+
+- name: _verify | Cull script is deployed
+  stat:
+    path: /usr/local/bin/zfs_cull
+  register: _zfs_verify_cull_script
+  become: true
+
+- name: _verify | Assert cull script exists and is executable
+  assert:
+    that:
+      - _zfs_verify_cull_script.stat.exists
+      - _zfs_verify_cull_script.stat.mode == "0755"
+
+# --- Health timer ---
+
+- name: _verify | Read health timer state  # noqa: command-instead-of-module
+  command: systemctl show -p ActiveState,UnitFileState --value zfs_health.timer
+  register: _zfs_verify_health_timer
+  changed_when: false
+  become: true
+
+- name: _verify | Health timer is active and enabled
+  assert:
+    that:
+      - _zfs_verify_health_timer.stdout_lines[0] == 'active'
+      - _zfs_verify_health_timer.stdout_lines[1] == 'enabled'
+
+# --- ARC modprobe config ---
+
+- name: _verify | ARC config exists
+  stat:
+    path: /etc/modprobe.d/zfs.conf
+  register: _zfs_verify_arc_conf
+  become: true
+
+- name: _verify | Assert ARC config is present
+  assert:
+    that: _zfs_verify_arc_conf.stat.exists
+
+# --- Trim timers (lab only; box has zfs_trim_pools=[]) ---
+
+- name: _verify | Read trim timer state  # noqa: command-instead-of-module
+  when: zfs_trim_pools | length > 0
+  command: systemctl show -p ActiveState,UnitFileState --value zfs_trim_{{ item }}.timer
+  loop: "{{ zfs_trim_pools }}"
+  register: _zfs_verify_trim_timers
+  changed_when: false
+  become: true
+
+- name: _verify | Trim timers are active and enabled
+  when: zfs_trim_pools | length > 0
+  assert:
+    that:
+      - item.stdout_lines[0] == 'active'
+      - item.stdout_lines[1] == 'enabled'
+    fail_msg: >-
+      zfs_trim_{{ item.item }}.timer is not active+enabled:
+      {{ item.stdout_lines }}.
+  loop: "{{ _zfs_verify_trim_timers.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+# --- Mount generator (lab only; box has zfs_mount_cache_datasets=[]) ---
+
+- name: _verify | Mount cache directory exists
+  stat:
+    path: /etc/zfs/zfs-list.cache
+  register: _zfs_verify_cache_dir
+  become: true
+
+- name: _verify | Assert mount cache directory exists
+  assert:
+    that: _zfs_verify_cache_dir.stat.exists
+
+- name: _verify | Mount cache files exist for each pool
+  when: zfs_mount_cache_datasets | length > 0
+  stat:
+    path: /etc/zfs/zfs-list.cache/{{ item.split('/')[0] }}
+  loop: "{{ zfs_mount_cache_datasets }}"
+  register: _zfs_verify_cache_files
+  become: true
+
+- name: _verify | Assert mount cache files exist
+  when: zfs_mount_cache_datasets | length > 0
+  assert:
+    that: item.stat.exists
+    fail_msg: >-
+      Mount cache file /etc/zfs/zfs-list.cache/{{ item.item.split('/')[0] }}
+      does not exist.
+  loop: "{{ _zfs_verify_cache_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: _verify | Zed cacher symlink exists
+  stat:
+    path: /etc/zfs/zed.d/history_event-zfs-list-cacher.sh
+  register: _zfs_verify_cacher_link
+  become: true
+
+- name: _verify | Assert zed cacher symlink
+  assert:
+    that:
+      - _zfs_verify_cacher_link.stat.exists
+      - _zfs_verify_cacher_link.stat.islnk
+
+# --- Dry-run health script ---
+
+- name: _verify | Health script runs without error
+  command: /usr/local/bin/zfs_health
+  changed_when: false
+  become: true
