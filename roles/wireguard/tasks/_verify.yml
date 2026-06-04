@@ -25,12 +25,6 @@
   changed_when: false
   failed_when: wireguard_ipv6_fwd.stdout | trim != '1'
 
-- name: _verify | Probe wg show on the live interface
-  command: wg show {{ iface | default('wg0') }}
-  register: wireguard_wg_show
-  become: true
-  changed_when: false
-
 - name: _verify | Assert listen-port matches expected
   command: wg show {{ iface | default('wg0') }} listen-port
   register: wireguard_listen_port
@@ -38,6 +32,9 @@
   changed_when: false
   failed_when: wireguard_listen_port.stdout | int != (listen_port | default('51820') | int)
 
+# Count equals all-peers-minus-self only because converge is server-only
+# (main.yml asserts own_peer.is_server), so the template's loop includes every
+# other peer; against a non-server converge it would be servers-only.
 - name: _verify | Assert peer count matches wireguard_peers - 1
   command: wg show {{ iface | default('wg0') }} peers
   register: wireguard_peer_count
@@ -62,6 +59,24 @@
   failed_when: >-
     '(none)' in wireguard_psk_check.stdout or
     wireguard_psk_check.stdout_lines | length != (wireguard_peers | length - 1)
+
+# PersistentKeepalive is emitted per-pair (wg.conf.j2), only when the converging
+# host appears in a peer's keepalive_from. Assert the live count of peers with a
+# keepalive interval matches that membership -- guards the per-pair condition
+# from regressing to per-peer (which would force a heartbeat on mobile peers).
+# On box no peer lists box, so the expected count is 0.
+- name: _verify | Assert persistent-keepalive matches keepalive_from membership
+  vars:
+    expected_keepalive_count: "{{ wireguard_peers | selectattr('keepalive_from', 'defined') | map(attribute='keepalive_from') | select('contains', inventory_hostname) | list | length }}"
+  shell: |
+    set -euo pipefail
+    wg show {{ iface | default('wg0') }} persistent-keepalive | awk -F'\t' '$2 != "off" { c++ } END { print c + 0 }'
+  args:
+    executable: /bin/bash
+  register: wireguard_keepalive_count
+  become: true
+  changed_when: false
+  failed_when: wireguard_keepalive_count.stdout | int != (expected_keepalive_count | int)
 
 # Running wg syncconf as a no-op verifies the running kernel crypto state is
 # consistent with the rendered config -- if the freshly-rendered conf disagreed
