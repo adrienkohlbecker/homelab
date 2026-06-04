@@ -121,6 +121,29 @@
   failed_when: _udm_dns_failover_onboot.status.UnitFileState != 'enabled'
   become: true
 
+- name: _verify | Stat the keepalived validate drop-in
+  stat:
+    path: /etc/systemd/system/keepalived.service.d/override.conf
+  register: _udm_dns_failover_dropin_stat
+  become: true
+
+- name: _verify | Slurp the keepalived validate drop-in
+  slurp:
+    src: /etc/systemd/system/keepalived.service.d/override.conf
+  register: _udm_dns_failover_dropin_content
+  become: true
+
+- name: _verify | Drop-in is a /data symlink carrying the validate hooks
+  vars:
+    _dropin: "{{ _udm_dns_failover_dropin_content.content | b64decode }}"
+  assert:
+    that:
+      - _udm_dns_failover_dropin_stat.stat.islnk
+      - _udm_dns_failover_dropin_stat.stat.lnk_target == '/data/keepalived/override.conf'
+      - "'ConditionPathExistsGlob=/etc/keepalived/conf.d/*.conf' in _dropin"
+      - "'ExecStartPre=/usr/sbin/keepalived -t -f /etc/keepalived/keepalived.conf' in _dropin"
+      - "'ExecReload=/usr/sbin/keepalived -t -f /etc/keepalived/keepalived.conf' in _dropin"
+
 # Firmware-recovery probe: the on-boot script is the path that re-bootstraps
 # everything after a SquashFS wipe. We can't wipe /usr under qemu, but the
 # script is idempotent by design, so running it by hand must be a no-op that
@@ -148,6 +171,52 @@
   register: _udm_dns_failover_vip_after
   changed_when: false
   failed_when: pihole_keepalived_ip not in _udm_dns_failover_vip_after.stdout
+  become: true
+
+# Drop-in probe (finding 9): a malformed fragment must not reach the live
+# daemon via an out-of-band `systemctl reload`. The drop-in's ExecReload runs
+# keepalived -t before the HUP, so the reload aborts and the daemon keeps the
+# good config it is running -- the VIP never flaps.
+- name: _verify | Drop a malformed fragment for the reload-validate probe
+  copy:
+    content: |
+      _verify_dropin_bogus_keyword
+    dest: /etc/keepalived/conf.d/_verify_dropin_bad.conf
+    owner: root
+    group: root
+    mode: "0640"
+  become: true
+
+- name: _verify | Out-of-band systemctl reload aborts on the ExecReload validate  # noqa: command-instead-of-module
+  command: systemctl reload keepalived
+  register: _udm_dns_failover_bad_reload
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Reload was rejected by the drop-in validate
+  assert:
+    that:
+      - _udm_dns_failover_bad_reload.rc != 0
+
+- name: _verify | Daemon kept the good config and VIP after the rejected reload
+  systemd:
+    name: keepalived.service
+  register: _udm_dns_failover_keepalived_after_bad_reload
+  failed_when: _udm_dns_failover_keepalived_after_bad_reload.status.ActiveState != 'active'
+  become: true
+
+- name: _verify | VIP still held after the rejected reload
+  command: ip -4 -oneline addr show dev {{ udm_dns_failover_interface }}
+  register: _udm_dns_failover_vip_reload
+  changed_when: false
+  failed_when: pihole_keepalived_ip not in _udm_dns_failover_vip_reload.stdout
+  become: true
+
+- name: _verify | Remove the reload-validate probe fragment
+  file:
+    path: /etc/keepalived/conf.d/_verify_dropin_bad.conf
+    state: absent
   become: true
 
 # Rescue probe: a base-conf change that then fails keepalived -t must restore

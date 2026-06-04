@@ -43,6 +43,10 @@ ln -sfn "$DATADIR/healthcheck.sh"  /usr/local/bin/pihole_healthcheck
 # -- heartbeat timer (firmware-update detection via healthchecks.io) ------
 ln -sfn "$DATADIR/udm_keepalived_heartbeat.service" /etc/systemd/system/udm_keepalived_heartbeat.service
 ln -sfn "$DATADIR/udm_keepalived_heartbeat.timer"   /etc/systemd/system/udm_keepalived_heartbeat.timer
+
+# -- keepalived validate drop-in (ExecStartPre/ExecReload keepalived -t) ---
+mkdir -p /etc/systemd/system/keepalived.service.d
+ln -sfn "$DATADIR/override.conf" /etc/systemd/system/keepalived.service.d/override.conf
 systemctl daemon-reload
 
 # -- sysctl ---------------------------------------------------------------

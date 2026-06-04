@@ -321,13 +321,56 @@
   tags:
     - udm_dns_failover
 
+# keepalived.service.d drop-in: validate the assembled config before the
+# daemon starts (ExecStartPre) or reloads (ExecReload). The converge
+# keepalived -t gate and the on-boot script both validate, but a manual
+# `systemctl restart keepalived` or systemd auto-restart bypasses both -- the
+# drop-in fails those closed. Symlinked from /data like the other units so a
+# firmware wipe doesn't drop it.
+- name: Deploy keepalived validate drop-in to persistent storage
+  copy:
+    src: override_keepalived.conf
+    dest: /data/keepalived/override.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: udm_dns_failover_dropin
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Create keepalived.service.d directory
+  file:
+    path: /etc/systemd/system/keepalived.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Symlink keepalived validate drop-in into systemd
+  file:
+    src: /data/keepalived/override.conf
+    dest: /etc/systemd/system/keepalived.service.d/override.conf
+    state: link
+    force: true
+  register: udm_dns_failover_dropin_link
+  become: true
+  tags:
+    - udm_dns_failover
+
 - name: Reload systemd
   when: >-
     udm_dns_failover_onboot_unit.changed or
     udm_dns_failover_heartbeat_service.changed or
     udm_dns_failover_heartbeat_timer.changed or
     udm_dns_failover_heartbeat_service_link.changed or
-    udm_dns_failover_heartbeat_timer_link.changed
+    udm_dns_failover_heartbeat_timer_link.changed or
+    udm_dns_failover_dropin.changed or
+    udm_dns_failover_dropin_link.changed
   systemd:
     daemon_reload: true
   become: true
