@@ -48,9 +48,10 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="transmission" \
     --env PUID={{ transmission_user.uid }} \
     --env PGID={{ media_group.gid }} \
+    --env UMASK=002 \
     --env TZ={{ system_timezone }} \
     --env USER=transmission \
-    --env HOST_WHITELIST=transmission.{{ inventory_hostname }}.{{ domain }},transmission.dns.podman,localhost \
+    --env HOST_WHITELIST={{ transmission_host_whitelist }} \
     --secret=transmission_rpc_password,type=mount,target=pass \
     --env FILE__PASS=/run/secrets/pass \
     --volume /mnt/services/transmission:/config \
@@ -66,8 +67,8 @@ ExecStart=/usr/bin/podman run \
    409 CSRF response, which precedes auth, and curl without -f exits 0 on any
    HTTP reply (only a refused/closed port is non-zero). 127.0.0.1 is always
    allowed regardless of rpc-host-whitelist. #}
-    --health-cmd         '["curl","-s","-m","4","-o","/dev/null","http://127.0.0.1:9091/transmission/rpc"]' \
-    --health-startup-cmd '["curl","-s","-m","4","-o","/dev/null","http://127.0.0.1:9091/transmission/rpc"]' \
+    --health-cmd         '["curl","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://127.0.0.1:9091/transmission/rpc"]' \
+    --health-startup-cmd '["curl","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://127.0.0.1:9091/transmission/rpc"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \

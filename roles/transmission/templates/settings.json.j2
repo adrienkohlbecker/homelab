@@ -55,7 +55,7 @@
     "rpc-authentication-required": true,
     "rpc-bind-address": "0.0.0.0",
     "rpc-enabled": true,
-    "rpc-host-whitelist": "transmission.{{ inventory_hostname }}.{{ domain }},transmission.dns.podman,localhost",
+    "rpc-host-whitelist": "{{ transmission_host_whitelist }}",
     "rpc-host-whitelist-enabled": true,
     "rpc-password": "{{ transmission_rpc_password_hash }}",
     "rpc-port": 9091,
