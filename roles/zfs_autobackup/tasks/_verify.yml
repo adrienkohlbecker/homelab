@@ -1,0 +1,106 @@
+- name: _verify | Check zfs-autobackup binary exists
+  stat:
+    path: /usr/local/bin/zfs-autobackup
+  register: zfs_autobackup_verify_bin
+
+- name: _verify | Binary is present and executable
+  assert:
+    that:
+      - zfs_autobackup_verify_bin.stat.exists
+      - zfs_autobackup_verify_bin.stat.executable
+    fail_msg: "zfs-autobackup binary missing or not executable"
+
+- name: _verify | Run zfs-autobackup --version
+  command: /usr/local/bin/zfs-autobackup --version
+  changed_when: false
+  failed_when: zfs_autobackup_verify_version.stdout is not defined or zfs_autobackup_verify_version.stdout | length == 0
+  register: zfs_autobackup_verify_version
+
+- name: _verify | Installed version matches pinned version
+  assert:
+    that:
+      - zfs_autobackup_version in zfs_autobackup_verify_version.stdout
+    fail_msg: >-
+      installed={{ zfs_autobackup_verify_version.stdout | trim }},
+      expected={{ zfs_autobackup_version }}
+
+- name: _verify | Stat deployed scripts
+  stat:
+    path: "/usr/local/bin/{{ item }}"
+  loop:
+    - zfs_backup_local
+    - zfs_backup_onsite
+    - zfs_backup_offsite
+    - zfs_autosnapshot
+  register: zfs_autobackup_verify_scripts
+
+- name: _verify | All backup scripts are present and executable
+  assert:
+    that:
+      - item.stat.exists
+      - item.stat.executable
+    fail_msg: "missing or not executable: {{ item.item }}"
+  loop: "{{ zfs_autobackup_verify_scripts.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: _verify | Inspect zfs_autosnapshot.timer
+  systemd:
+    name: zfs_autosnapshot.timer
+  register: zfs_autobackup_verify_timer
+  become: true
+
+- name: _verify | Timer is loaded, enabled, and active
+  assert:
+    that:
+      - zfs_autobackup_verify_timer.status.LoadState == "loaded"
+      - zfs_autobackup_verify_timer.status.UnitFileState == "enabled"
+      - zfs_autobackup_verify_timer.status.ActiveState == "active"
+    fail_msg: >-
+      zfs_autosnapshot.timer not in expected state
+      (LoadState={{ zfs_autobackup_verify_timer.status.LoadState }},
+      UnitFileState={{ zfs_autobackup_verify_timer.status.UnitFileState }},
+      ActiveState={{ zfs_autobackup_verify_timer.status.ActiveState }})
+
+- name: _verify | User zfs_autobackup exists
+  getent:
+    database: passwd
+    key: zfs_autobackup
+
+- name: _verify | User has expected shell
+  assert:
+    that:
+      - getent_passwd.zfs_autobackup is defined
+      - getent_passwd.zfs_autobackup[5] == "/bin/bash"
+    fail_msg: >-
+      zfs_autobackup user missing or wrong shell
+      ({{ getent_passwd.zfs_autobackup | default('not found') }})
+
+- name: _verify | Stat log directory
+  stat:
+    path: /var/log/zfs_autobackup
+  register: zfs_autobackup_verify_logdir
+  become: true
+
+- name: _verify | Log directory exists with correct permissions
+  assert:
+    that:
+      - zfs_autobackup_verify_logdir.stat.exists
+      - zfs_autobackup_verify_logdir.stat.isdir
+      - zfs_autobackup_verify_logdir.stat.mode == "0700"
+      - zfs_autobackup_verify_logdir.stat.pw_name == "root"
+    fail_msg: >-
+      /var/log/zfs_autobackup missing or wrong perms
+      ({{ zfs_autobackup_verify_logdir.stat }})
+
+- name: _verify | Stat logrotate config
+  stat:
+    path: /etc/logrotate.d/zfs_autobackup
+  register: zfs_autobackup_verify_logrotate
+  become: true
+
+- name: _verify | Logrotate config exists
+  assert:
+    that:
+      - zfs_autobackup_verify_logrotate.stat.exists
+    fail_msg: "logrotate config missing at /etc/logrotate.d/zfs_autobackup"
