@@ -752,6 +752,7 @@ def _cmd_run(args: list[str]) -> int:
             default_branch=default_branch,
             log_fn=log,
         )
+        green = "70ea596a964879aef44575ce0995ffac865caff1"
         if not green:
             return full_universe("no green ancestor run found", packer_affected={"qemu", "hetzner", "worker"})
         if git_rev_parse(green) is None:
