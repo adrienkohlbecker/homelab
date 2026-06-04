@@ -3,22 +3,26 @@
     {
       "name": "Lab",
       "mac": "{{ mac_addresses.lab_i210 }}",
-      "ip": "{{ wolweb_broadcast_ip }}:9"
+      "ip": "{{ wolweb_broadcast_ip }}:9",
+      "interface": "{{ ansible_facts.default_ipv4.interface }}"
     },
     {
       "name": "Pug",
       "mac": "{{ mac_addresses.pug }}",
-      "ip": "{{ wolweb_broadcast_ip }}:9"
+      "ip": "{{ wolweb_broadcast_ip }}:9",
+      "interface": "{{ ansible_facts.default_ipv4.interface }}"
     },
     {
       "name": "Lab (i225 #1)",
       "mac": "{{ mac_addresses.lab_i225p1 }}",
-      "ip": "{{ wolweb_broadcast_ip }}:9"
+      "ip": "{{ wolweb_broadcast_ip }}:9",
+      "interface": "{{ ansible_facts.default_ipv4.interface }}"
     },
     {
       "name": "Lab (i225 #2)",
       "mac": "{{ mac_addresses.lab_i225p2 }}",
-      "ip": "{{ wolweb_broadcast_ip }}:9"
+      "ip": "{{ wolweb_broadcast_ip }}:9",
+      "interface": "{{ ansible_facts.default_ipv4.interface }}"
     }
   ]
 }

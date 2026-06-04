@@ -7,3 +7,11 @@
   import_role:
     name: podman
     tasks_from: install
+
+- name: _setup | Install authelia stub for auth=required tests
+  import_role:
+    name: test
+    tasks_from: authelia_stub
+  vars:
+    test_authelia_stub_args:
+      mode: gate
