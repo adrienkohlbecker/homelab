@@ -90,13 +90,13 @@ jobs:
         # but nothing ever cleans it up — test containers mount qemu
         # read-only so machine.py's sweep silently fails. This step
         # has rw access and runs before the build, so it reaps dirs
-        # older than 2 minutes (grace for a sibling cell that just
-        # created one). Safe: same (source, ubuntu) cells are
-        # serialized by the concurrency group, and cross-source cells
-        # each create their own dir.
+        # older than 120 minutes (well past the 90-min job timeout).
+        # Cross-source cells run in parallel and share /mnt/scratch/qemu,
+        # so the grace must exceed the longest possible build to avoid
+        # deleting a sibling cell's active build dir.
         run: |
           set -euo pipefail
-          find /mnt/scratch/qemu -maxdepth 1 -name '.build-*' -type d -mmin +2 -print0 \
+          find /mnt/scratch/qemu -maxdepth 1 -name '.build-*' -type d -mmin +120 -print0 \
             | xargs -0 --no-run-if-empty rm -rf --
       - uses: actions/checkout@v6
       - run: uv sync --locked
