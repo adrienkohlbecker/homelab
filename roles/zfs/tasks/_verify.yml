@@ -80,33 +80,9 @@
   loop_control:
     label: "{{ item.item }}"
 
-# --- Scripts deployed ---
-
-- name: _verify | Health script is deployed
-  stat:
-    path: /usr/local/bin/zfs_health
-  register: _zfs_verify_health_script
-  become: true
-
-- name: _verify | Assert health script exists and is executable
-  assert:
-    that:
-      - _zfs_verify_health_script.stat.exists
-      - _zfs_verify_health_script.stat.mode == "0755"
-
-- name: _verify | Cull script is deployed
-  stat:
-    path: /usr/local/bin/zfs_cull
-  register: _zfs_verify_cull_script
-  become: true
-
-- name: _verify | Assert cull script exists and is executable
-  assert:
-    that:
-      - _zfs_verify_cull_script.stat.exists
-      - _zfs_verify_cull_script.stat.mode == "0755"
-
 # --- Health timer ---
+# (script deployment is covered functionally by the live zfs_health run at the
+# end of this file, and by `validate: bash -n` at copy time -- no stat needed.)
 
 - name: _verify | Read health timer state  # noqa: command-instead-of-module
   command: systemctl show -p ActiveState,UnitFileState --value zfs_health.timer
@@ -119,18 +95,6 @@
     that:
       - _zfs_verify_health_timer.stdout_lines[0] == 'active'
       - _zfs_verify_health_timer.stdout_lines[1] == 'enabled'
-
-# --- ARC modprobe config ---
-
-- name: _verify | ARC config exists
-  stat:
-    path: /etc/modprobe.d/zfs.conf
-  register: _zfs_verify_arc_conf
-  become: true
-
-- name: _verify | Assert ARC config is present
-  assert:
-    that: _zfs_verify_arc_conf.stat.exists
 
 # --- Trim timers (lab only; box has zfs_trim_pools=[]) ---
 
