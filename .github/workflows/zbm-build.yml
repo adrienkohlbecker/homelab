@@ -102,3 +102,19 @@ jobs:
           done
           grep -qE '^vmlin.*-bootmenu$' <<<"$members" || { echo "missing vmlin*-bootmenu kernel in tarball" >&2; exit 1; }
           echo "ZBM tarball OK: $tarball"
+
+      # Make the validate build downloadable for inspection. This repo is PUBLIC,
+      # so the artifact is publicly downloadable -- acceptable here because the
+      # build bakes only the THROWAWAY ephemeral dropbear key (not the real
+      # 1Password one) plus the already-public authorized_keys, so it carries no
+      # secret. It is NOT a release: the real, stable-host-key tarball still ships
+      # via `mise run zbm:upload`. if: always() so a verify failure still yields
+      # the artifact for debugging; warn (not error) if the build produced none.
+      - name: Upload the built tarball
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zbm-recovery-build
+          path: zbm-build/*/zfsbootmenu-v*.tar.gz
+          retention-days: 14
+          if-no-files-found: warn
