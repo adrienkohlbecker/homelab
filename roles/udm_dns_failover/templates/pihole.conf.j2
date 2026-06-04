@@ -15,6 +15,11 @@ vrrp_script pihole_healthcheck {
   init_fail
 }
 
+# The instance name `pihole` (and the pihole-* identifiers throughout) is
+# deliberately shared with the lab/pug peers, not a copy-paste leftover:
+# this is the same VRRP group as roles/pihole, so the vrid/advert_int/VIP
+# here MUST stay equal to roles/pihole/templates/keepalived.conf.j2. Only
+# priority, use_vmac, and interface legitimately differ per peer.
 vrrp_instance pihole {
   state     BACKUP
   interface {{ udm_dns_failover_interface }}
@@ -24,6 +29,11 @@ vrrp_instance pihole {
   # Acceptable: the UDM only claims the VIP in a catastrophic dual-failure
   # scenario where the UniFi client-tracker cosmetic flipping is a non-issue.
 
+  # No `authentication` block: VRRPv2 auth is plaintext (worthless against
+  # anyone who can sniff the segment), so it isn't the control here. The real
+  # takeover protection is the per-peer iptables source-scoping (only the
+  # listed peers may deliver proto-112 adverts) plus check_unicast_src below,
+  # which validates each advert's source against unicast_peer.
   check_unicast_src
 
   unicast_src_ip {{ external_ips[inventory_hostname] }}
