@@ -14,12 +14,6 @@ Address = {{ own_peer.address }}/32
 MTU = 1280
 {% endif %}
 ListenPort = {{ listen_port | default('51820') }}
-{% if 'post_up' in own_peer %}
-PostUp = {{ own_peer.post_up }}
-{% endif %}
-{% if 'post_down' in own_peer %}
-PostDown = {{ own_peer.post_down }}
-{% endif %}
 {# No DNS line: wg0 is a split-tunnel break-glass backbone (peer /32s only),
    so DNS = pihole would point the device at a resolver outside AllowedIPs
    (unreachable over the tunnel) and would hijack the device's system DNS the
@@ -51,9 +45,11 @@ AllowedIPs = {{ peer.address }}/32
    the pair name so they compute the same key. See filter_plugins/wireguard_psk.py. #}
 PresharedKey = {{ tuple | join('-') | wireguard_psk(wireguard_psk_seed) }}
 {% if 'endpoint' in peer %}
-{% if own_peer.is_server and peer.is_server and peer.site_subnet == own_peer.site_subnet %}
+{% if own_peer.is_server and peer.is_server and own_host.site is defined and peer_host.site is defined and peer_host.site == own_host.site and peer.endpoint.local is defined %}
 Endpoint = {{ peer.endpoint.local }}
 {% else %}
+{# Endpoints are IPv4 or FQDN host:port -- this split assumes a single colon,
+   so a bracketed IPv6 literal ([2001:db8::1]:51820) would not parse. #}
 {% set host = peer.endpoint.remote | split(':') | first %}
 {% set port = peer.endpoint.remote | split(':') | last %}
 {% if own_peer.is_server %}

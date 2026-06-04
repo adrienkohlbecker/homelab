@@ -39,7 +39,6 @@ wireguard_peers:
       local: "{{ external_ips.lab }}:51820"
       remote: home.{{ domain }}:51823
     is_server: true
-    site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.lab.public_key }}"
     private_key: "{{ wireguard_keys.lab.private_key }}"
   - name: pug
@@ -48,7 +47,6 @@ wireguard_peers:
       local: "{{ external_ips.pug }}:51820"
       remote: home.{{ domain }}:51823
     is_server: true
-    site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.pug.public_key }}"
     private_key: "{{ wireguard_keys.pug.private_key }}"
   - name: box
@@ -57,13 +55,11 @@ wireguard_peers:
       local: "{{ external_ips.box }}:51820"
       remote: home.{{ domain }}:51823
     is_server: true
-    site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.box.public_key }}"
     private_key: "{{ wireguard_keys.box.private_key }}"
   - name: fox
     address: "{{ network.hosts.fox.wireguard }}"
     is_server: true
-    site_subnet: "{{ network.hosts.fox.wireguard }}/32"
     public_key: "{{ wireguard_keys.fox.public_key }}"
     private_key: "{{ wireguard_keys.fox.private_key }}"
 
