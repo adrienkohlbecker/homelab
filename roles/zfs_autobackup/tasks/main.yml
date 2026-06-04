@@ -22,7 +22,7 @@
       - rsync
     cache_valid_time: 3600
   become: true
-  register: zfs_autobackup_apt
+  register: _zfs_autobackup_apt
   tags:
     - zfs_autobackup
 
@@ -45,7 +45,7 @@
 
 - name: Install zfs-autobackup via pipx
   when: >-
-    not (ansible_check_mode and zfs_autobackup_apt.changed)
+    not (ansible_check_mode and _zfs_autobackup_apt.changed)
     and zfs_autobackup_version not in (_zfs_autobackup_version_check.stdout | default(''))
   command: pipx install --force "zfs-autobackup=={{ zfs_autobackup_version }}"
   changed_when: true
@@ -89,41 +89,19 @@
   tags:
     - zfs_autobackup
 
-- name: Copy the local backup script
+- name: Copy the backup scripts
   copy:
-    src: zfs_backup_local.sh
-    dest: /usr/local/bin/zfs_backup_local
+    src: "{{ item }}.sh"
+    dest: "/usr/local/bin/{{ item }}"
     mode: "0755"
     owner: root
     group: root
     backup: true
     validate: bash -n %s
-  become: true
-  tags:
-    - zfs_autobackup
-
-- name: Copy the onsite backup script
-  copy:
-    src: zfs_backup_onsite.sh
-    dest: /usr/local/bin/zfs_backup_onsite
-    mode: "0755"
-    owner: root
-    group: root
-    backup: true
-    validate: bash -n %s
-  become: true
-  tags:
-    - zfs_autobackup
-
-- name: Copy the offsite backup script
-  copy:
-    src: zfs_backup_offsite.sh
-    dest: /usr/local/bin/zfs_backup_offsite
-    mode: "0755"
-    owner: root
-    group: root
-    backup: true
-    validate: bash -n %s
+  loop:
+    - zfs_backup_local
+    - zfs_backup_onsite
+    - zfs_backup_offsite
   become: true
   tags:
     - zfs_autobackup
@@ -181,6 +159,10 @@
 
 - name: Configure host as a source for backups
   import_tasks: source.yml
+  tags:
+    - zfs_autobackup
 
 - name: Configure host as a destination for backups
   import_tasks: dest.yml
+  tags:
+    - zfs_autobackup
