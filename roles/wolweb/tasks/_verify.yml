@@ -8,6 +8,18 @@
   until: _wolweb_health.status == 200
   become: true
 
+# --network host strips podman's port-publishing boundary, so the only thing
+# keeping the unauthenticated UI off the management VLAN is the loopback bind
+# (config.json host=127.0.0.1 + --unsetenv WOLWEBHOST). Prove the port is NOT
+# reachable on the host's LAN IP so a bind regression to 0.0.0.0 fails here.
+- name: _verify | Wolweb port is closed on the host LAN IP (bound to loopback only)
+  wait_for:
+    host: "{{ ansible_facts.default_ipv4.address }}"
+    port: "{{ service_ports.wolweb }}"
+    state: stopped
+    timeout: 5
+  become: true
+
 - name: _verify | Wolweb serves the templated device list
   uri:
     url: http://localhost:{{ service_ports.wolweb }}/data/get
@@ -34,6 +46,31 @@
     status_code: 404
   become: true
 
+# Complements the 404 case: a known device name must resolve in the loaded
+# list. Upstream returns 200 on a successful send and 500 if the directed
+# broadcast fails to leave the box (SO_BROADCAST / SLIRP on the qemu fixture),
+# so accept either -- both prove name-matching works without depending on a
+# packet landing. A 404 here would mean the name failed to resolve.
+- name: _verify | Wolweb wake route resolves a known device (200, or 500 if the send fails under SLIRP)
+  uri:
+    url: http://localhost:{{ service_ports.wolweb }}/wake/Lab
+    status_code: [200, 500]
+  become: true
+
+# read_only:true leaves the /data/save POST route unregistered upstream, so a
+# hit returns 404. This fails if a future image ignores read_only or the flag
+# is dropped, which would let any authenticated user rewrite the device list.
+- name: _verify | Wolweb in-UI device editor is disabled under read_only (route unregistered)
+  uri:
+    url: http://localhost:{{ service_ports.wolweb }}/data/save
+    method: POST
+    body_format: json
+    body:
+      name: __probe__
+      mac: "00:00:00:00:00:00"
+    status_code: 404
+  become: true
+
 - name: _verify | Map the wolweb vhost FQDN to loopback for SNI-correct probing
   lineinfile:
     path: /etc/hosts
@@ -53,5 +90,6 @@
   until: _wolweb_auth_gate.status == 302
   failed_when: >-
     _wolweb_auth_gate.status != 302
-    or 'https://auth.' not in (_wolweb_auth_gate.location | default(''))
+    or 'auth.' not in (_wolweb_auth_gate.location | default(''))
+    or ('rd=https://wolweb.' ~ inventory_hostname ~ '.' ~ domain) not in (_wolweb_auth_gate.location | default(''))
   become: true
