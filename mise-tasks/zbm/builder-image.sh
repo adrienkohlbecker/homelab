@@ -56,18 +56,29 @@ else
   trap - EXIT INT TERM
 fi
 
-# PACKAGES are extra Void packages layered onto upstream's base image. Most
-# satisfy recovery.conf's install_items: mdadm + nvme-cli (disk tooling),
-# dracut-crypt-ssh + dropbear (recovery SSH), dhclient for ip=single-dhcp (the
-# base ships no DHCP client). perl-Pod-Usage is a generate-zbm *runtime* dep:
-# recent perl dropped Pod::Usage from core and zfsbootmenu's run_depends don't
-# pull it, so the build dies with "Can't locate Pod/Usage.pm" without it.
+# PACKAGES are extra Void packages layered onto upstream's base image to satisfy
+# recovery.conf's install_items: mdadm + nvme-cli (disk tooling), dracut-crypt-ssh
+# + dropbear (recovery SSH), and dhclient for ip=single-dhcp (the base ships no
+# DHCP client).
+img="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
 docker buildx build \
   --pull \
   --progress=plain \
   --build-arg "XBPS_REPOS=${xbps_repo}" \
-  --build-arg "PACKAGES=mdadm nvme-cli dracut-crypt-ssh dropbear dhclient perl-Pod-Usage" \
+  --build-arg "PACKAGES=mdadm nvme-cli dracut-crypt-ssh dropbear dhclient" \
   --load \
-  --tag "localhost/zbm-builder:v${ZBM_VERSION}-${arch}" \
+  --tag "$img" \
   -f "$src_dir/releng/docker/Dockerfile" \
   "$src_dir/releng/docker"
+
+# Work around a rootless-BuildKit unpack quirk: the build drops perl's
+# /usr/share/perl5/core_perl/Pod/Usage.pm during xbps extraction (perl ships the
+# file, but it's missing from the built image while perl's other modules are
+# fine), so generate-zbm dies with "Can't locate Pod/Usage.pm". perl-Pod-Usage
+# is only a virtual provide of perl, so it can't be pulled as a package -- but
+# re-extracting perl via podman (which unpacks it correctly) restores the file.
+# Commit it back into the image; runs once per image build (rare, per ZBM_VERSION).
+podman rm -f zbm_perlfix >/dev/null 2>&1 || true
+podman run --name zbm_perlfix --entrypoint /usr/bin/xbps-install "$img" -fy perl
+podman commit -q zbm_perlfix "$img" >/dev/null
+podman rm -f zbm_perlfix >/dev/null
