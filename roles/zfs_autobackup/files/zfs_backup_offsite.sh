@@ -39,11 +39,18 @@ if [ -t 1 ]; then
   rsync_progress=(--info=progress2)
 fi
 
-# zstd on the wire: both ends are now rsync >= 3.2 (the source hosts, and bunk
-# via rrsync's RSYNC override at SynoCli 3.4.1), so plain --compress
-# auto-negotiates zstd. DSM's stock rsync 3.1.2 only spoke deflate and broke
-# negotiation -- which is why this was bare before. Load-bearing dependency:
-# bunk's rrsync must point at 3.4.1 (roles/zfs_autobackup/files/rrsync).
+# Both ends now speak rsync >= 3.2 (the source hosts, and bunk via rrsync's
+# RSYNC override at SynoCli 3.4.1), unlocking the negotiated fast paths: plain
+# --compress auto-picks zstd, the per-block strong checksum auto-negotiates xxh3
+# (faster and stronger than the MD4 floor 3.1.2 forced), and --partial-dir now
+# resumes a cut-off transfer in-place instead of restarting the file. We do NOT
+# pin --compress-choice/--checksum-choice on purpose: if a DSM update ever resets
+# rrsync to stock 3.1.2, the backup should degrade gracefully rather than
+# hard-fail on an unsupported algorithm. --fuzzy lets a renamed or rotated file
+# (log.1, dump-<date>.sql) delta against a similar basis already in the dest
+# instead of resending it whole -- nearly free, since same-named files match
+# first and never trigger the fuzzy search. Load-bearing dependency: bunk's
+# rrsync must point at 3.4.1 (roles/zfs_autobackup/files/rrsync).
 f_trace rsync \
   --archive \
   --hard-links \
@@ -56,6 +63,7 @@ f_trace rsync \
   --timeout 60 \
   --compress \
   --partial-dir .rsync-partial \
+  --fuzzy \
   "${rsync_progress[@]}" \
   --devices \
   --specials \
