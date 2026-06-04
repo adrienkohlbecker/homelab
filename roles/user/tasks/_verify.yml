@@ -144,10 +144,12 @@
 
 # exclusive: true must leave nothing but the configured keys -- compare the
 # count of real key lines on disk to the configured set so a stray key fails.
+# Match the key-type token allowing leading options (command=, restrict) so
+# option-prefixed backup keys still count.
 - name: _verify | Authorized keys are exactly the configured set
   vars:
-    _configured: "{{ ((ssh_public_keys ~ '\n' ~ (ssh_public_keys_additional | default(''))) | trim).split('\n') | select('match', '^(ssh-|ecdsa-|sk-)') | list }}"
-    _present: "{{ (_user_authkeys.content | b64decode).split('\n') | select('match', '^(ssh-|ecdsa-|sk-)') | list }}"
+    _configured: "{{ ((ssh_public_keys ~ '\n' ~ (ssh_public_keys_additional | default(''))) | trim).split('\n') | reject('match', '^#') | select('search', '(^| )(ssh-|ecdsa-|sk-)') | list }}"
+    _present: "{{ (_user_authkeys.content | b64decode).split('\n') | reject('match', '^#') | select('search', '(^| )(ssh-|ecdsa-|sk-)') | list }}"
   assert:
     that:
       - _present | length == _configured | length
