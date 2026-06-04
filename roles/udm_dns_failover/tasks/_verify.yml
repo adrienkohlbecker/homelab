@@ -1,47 +1,151 @@
-- name: Verify DNS is available on the VIP
-  wait_for:
-    host: "{{ pihole_keepalived_ip }}"
-    port: 53
-    timeout: 5
+# _verify is test-only by contract (runs only under test/testrole.py against
+# the box VM). It exercises the role's load-bearing invariants on the live
+# host:
+#
+#   * Persistent masters under /data carry the right perms, and the active
+#     paths in /etc + /usr/local/bin are symlinks pointing back at them —
+#     the on-disk shape the on-boot recovery re-establishes after a firmware
+#     wipe.
+#   * keepalived assembles + validates, leaves init_fail FAULT once the
+#     loopback healthcheck passes, and (alone on the closed bridge) becomes
+#     MASTER and claims the VIP — the catastrophic-failover path.
+#   * The peer-scoped iptables accept, the ip_nonlocal_bind sysctl, and the
+#     heartbeat timer are all in place.
+#   * The on-boot recovery script (30-keepalived.sh) is idempotent: running
+#     it by hand re-applies symlinks/sysctl/iptables and leaves keepalived
+#     active with the VIP still held — proving the firmware-recovery path
+#     without needing an actual firmware wipe.
+#
+# box is alone (its peers lab/pug aren't on the bridge), so it reaches
+# MASTER — unlike the real UDM, which sits BACKUP behind them. That's the
+# point: the box test drives the VIP-claim mechanism this role exists for.
+
+- name: _verify | Stat the persistent config masters under /data
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /data/keepalived/keepalived.conf
+    - /data/keepalived/pihole.conf
+    - /data/keepalived/healthcheck.sh
+  register: _udm_dns_failover_data_masters
   become: true
 
-- name: Verify local dnsmasq healthcheck passes
+- name: _verify | Masters exist with the expected ownership/mode
+  assert:
+    that:
+      - _udm_dns_failover_data_masters.results | map(attribute='stat.exists') | list == [true, true, true]
+      - _udm_dns_failover_data_masters.results | map(attribute='stat.pw_name') | list == ['root', 'root', 'root']
+      - _udm_dns_failover_data_masters.results[0].stat.mode == '0640'
+      - _udm_dns_failover_data_masters.results[1].stat.mode == '0640'
+      - _udm_dns_failover_data_masters.results[2].stat.mode == '0755'
+
+- name: _verify | Stat the active symlinks
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/keepalived/keepalived.conf
+    - /etc/keepalived/conf.d/pihole.conf
+    - /usr/local/bin/pihole_healthcheck
+  register: _udm_dns_failover_symlinks
+  become: true
+
+- name: _verify | Active paths are symlinks pointing at the /data masters
+  assert:
+    that:
+      - _udm_dns_failover_symlinks.results | map(attribute='stat.islnk') | list == [true, true, true]
+      - _udm_dns_failover_symlinks.results[0].stat.lnk_target == '/data/keepalived/keepalived.conf'
+      - _udm_dns_failover_symlinks.results[1].stat.lnk_target == '/data/keepalived/pihole.conf'
+      - _udm_dns_failover_symlinks.results[2].stat.lnk_target == '/data/keepalived/healthcheck.sh'
+
+- name: _verify | Keepalived is active and enabled
+  systemd:
+    name: keepalived.service
+  register: _udm_dns_failover_keepalived
+  failed_when: >-
+    _udm_dns_failover_keepalived.status.ActiveState != 'active' or
+    _udm_dns_failover_keepalived.status.UnitFileState != 'enabled'
+  become: true
+
+- name: _verify | The loopback healthcheck passes (init_fail gate clears)
   command: /usr/local/bin/pihole_healthcheck
   changed_when: false
   become: true
 
-- name: Verify keepalived is running
-  systemd:
-    name: keepalived.service
-  register: _udm_dns_failover_keepalived_status
-  failed_when: _udm_dns_failover_keepalived_status.status.ActiveState != 'active'
-  become: true
-
-- name: Verify VRRP state settled to BACKUP (lab/pug hold the VIP as MASTER)
-  shell:
-    cmd: |
-      set -euo pipefail
-      journalctl -t pihole-keepalived --no-pager -n 20 | grep -qw BACKUP
-    executable: /bin/bash
+# The VIP-claim is the headline invariant: init_fail -> healthcheck passes
+# -> MASTER -> VIP assigned to the tracked interface. Retry to absorb the
+# election + healthcheck-rise latency after the daemon started in converge.
+- name: _verify | Keepalived has claimed the VIP on the tracked interface
+  command: ip -4 -oneline addr show dev {{ udm_dns_failover_interface }}
+  register: _udm_dns_failover_vip
   changed_when: false
+  until: pihole_keepalived_ip in _udm_dns_failover_vip.stdout
+  retries: 10
+  delay: 2
   become: true
 
-- name: Verify iptables VRRP rule per peer
-  command: iptables -C INPUT -i {{ udm_dns_failover_interface }} -s {{ item }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
-  loop: "{{ pihole_keepalived_peers | select('ne', inventory_hostname) | map('extract', external_ips) | sort }}"
+- name: _verify | The VRRP transition was logged via the notify script
+  command: journalctl -t pihole-keepalived --no-pager -n 20
+  register: _udm_dns_failover_notify_log
   changed_when: false
+  failed_when: "'MASTER' not in _udm_dns_failover_notify_log.stdout"
   become: true
 
-- name: Verify ip_nonlocal_bind is set
+- name: _verify | Sysctl ip_nonlocal_bind is set
   command: sysctl -n net.ipv4.ip_nonlocal_bind
   register: _udm_dns_failover_nonlocal
   changed_when: false
   failed_when: _udm_dns_failover_nonlocal.stdout | trim != '1'
   become: true
 
-- name: Verify heartbeat timer is active
+- name: _verify | The peer-scoped VRRP iptables accept is present
+  command: >-
+    iptables -w 5 -C INPUT -i {{ udm_dns_failover_interface }} -s {{ item }}
+    -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
+  loop: "{{ pihole_keepalived_peers | select('ne', inventory_hostname) | map('extract', external_ips) | sort }}"
+  changed_when: false
+  become: true
+
+- name: _verify | The heartbeat timer is active and enabled
   systemd:
     name: udm_keepalived_heartbeat.timer
   register: _udm_dns_failover_heartbeat_timer
-  failed_when: _udm_dns_failover_heartbeat_timer.status.ActiveState != 'active'
+  failed_when: >-
+    _udm_dns_failover_heartbeat_timer.status.ActiveState != 'active' or
+    _udm_dns_failover_heartbeat_timer.status.UnitFileState != 'enabled'
+  become: true
+
+- name: _verify | The on-boot framework unit is enabled
+  systemd:
+    name: on-boot.service
+  register: _udm_dns_failover_onboot
+  failed_when: _udm_dns_failover_onboot.status.UnitFileState != 'enabled'
+  become: true
+
+# Firmware-recovery probe: the on-boot script is the path that re-bootstraps
+# everything after a SquashFS wipe. We can't wipe /usr under qemu, but the
+# script is idempotent by design, so running it by hand must be a no-op that
+# leaves keepalived active with the VIP still held.
+- name: _verify | Capture keepalived's active-enter timestamp before recovery
+  set_fact:
+    _udm_dns_failover_ts_before: "{{ _udm_dns_failover_keepalived.status.ActiveEnterTimestampMonotonic }}"
+
+- name: _verify | Run the on-boot recovery script by hand
+  command: /data/on_boot.d/30-keepalived.sh
+  changed_when: false
+  become: true
+
+- name: _verify | Keepalived still active, never restarted, VIP still held
+  systemd:
+    name: keepalived.service
+  register: _udm_dns_failover_keepalived_after
+  failed_when: >-
+    _udm_dns_failover_keepalived_after.status.ActiveState != 'active' or
+    _udm_dns_failover_keepalived_after.status.ActiveEnterTimestampMonotonic != _udm_dns_failover_ts_before
+  become: true
+
+- name: _verify | VIP still claimed after the recovery run
+  command: ip -4 -oneline addr show dev {{ udm_dns_failover_interface }}
+  register: _udm_dns_failover_vip_after
+  changed_when: false
+  failed_when: pihole_keepalived_ip not in _udm_dns_failover_vip_after.stdout
   become: true
