@@ -54,7 +54,7 @@
 - name: _verify | Wolweb wake route resolves a known device (200, or 500 if the send fails under SLIRP)
   uri:
     url: http://localhost:{{ service_ports.wolweb }}/wake/Lab
-    status_code: [200, 500]
+    status_code: [ 200, 500 ]
   become: true
 
 # read_only:true leaves the /data/save POST route unregistered upstream, so a

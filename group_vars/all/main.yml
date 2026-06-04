@@ -325,7 +325,7 @@ wireguard_peers:
     # during nightly sends and the alarm fires all day. Per-pair (not
     # per-peer) so battery-sensitive mobile peers don't get a forced
     # heartbeat they don't need.
-    keepalive_from: [lab, pug]
+    keepalive_from: [ lab, pug ]
     public_key: "{{ wireguard_keys.bunk.public_key }}"
     private_key: "{{ wireguard_keys.bunk.private_key }}"
   - name: fox
@@ -343,7 +343,7 @@ wireguard_peers:
     endpoint:
       remote: "fox.{{ domain }}:51820"
     is_server: true
-    keepalive_from: [lab, pug]
+    keepalive_from: [ lab, pug ]
     public_key: "{{ wireguard_keys.fox.public_key }}"
     private_key: "{{ wireguard_keys.fox.private_key }}"
 
