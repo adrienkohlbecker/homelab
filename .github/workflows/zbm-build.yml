@@ -76,13 +76,33 @@ jobs:
       - name: Build the ZBM image + tarball
         env:
           ZBM_EPHEMERAL_HOST_KEY: "1"
+          NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+          # Per-run auth file (not the shared ~/.config auth.json) so a sibling
+          # job on this runner can't read the creds mid-push.
+          REGISTRY_AUTH_FILE: ${{ runner.temp }}/zbm-nexus-auth.json
         run: |
           set -euo pipefail
+          trap 'rm -f "$REGISTRY_AUTH_FILE"' EXIT
           MISE_CONFIG_ROOT="$GITHUB_WORKSPACE"
           ZBM_VERSION="$(awk -F'"' '/^ZBM_VERSION/{print $2; exit}' mise.toml)"
           [ -n "$ZBM_VERSION" ] || { echo "could not read ZBM_VERSION from mise.toml" >&2; exit 1; }
+          arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
           export MISE_CONFIG_ROOT ZBM_VERSION
-          echo "Building ZFSBootMenu v${ZBM_VERSION} for $(uname -m)"
+          echo "Building ZFSBootMenu v${ZBM_VERSION} for ${arch}"
+          # Registry-backed build cache in the on-lab Nexus homelab docker repo:
+          # log in (per-run auth file) and point builder-image.sh at the cache
+          # ref so it pulls prior layers (--cache-from, anonymous) and pushes the
+          # fresh image (needs the login). Skips to a plain build if creds are
+          # absent (e.g. before the secret is provisioned).
+          if [ -n "${NEXUS_USERNAME:-}" ] && [ -n "${NEXUS_PASSWORD:-}" ]; then
+            rm -f "$REGISTRY_AUTH_FILE"
+            printf '%s' "$NEXUS_PASSWORD" | podman login nexus.lab.fahm.fr --username "$NEXUS_USERNAME" --password-stdin
+            unset NEXUS_PASSWORD
+            export ZBM_BUILDER_CACHE_REF="nexus.lab.fahm.fr/homelab/zbm-builder:v${ZBM_VERSION}-${arch}"
+          else
+            echo "NEXUS_USERNAME/PASSWORD not set; building without the registry cache"
+          fi
           ./mise-tasks/zbm/builder-image.sh
           ./mise-tasks/zbm/build.sh
 
