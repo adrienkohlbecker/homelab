@@ -9,6 +9,13 @@
   tags:
     - zfs_autobackup
 
+# This three-step check/scan/register is load-bearing, not gratuitous:
+# ssh-keyscan -H hashes each entry with a random per-entry salt, so a fresh
+# scan never byte-matches an existing entry. The ssh-keygen -F pre-check
+# gates the scan+register on the host being genuinely absent, which is what
+# keeps this idempotent. Collapsing it (scan+register every run) would
+# rewrite known_hosts on every converge. Hashing stays on so a compromised
+# backup host can't enumerate its peers from /root/.ssh/known_hosts.
 - name: dest | Check which backup peers are already in known_hosts
   when: not qemu_test
   command: ssh-keygen -F "{{ item }}" -f /root/.ssh/known_hosts
