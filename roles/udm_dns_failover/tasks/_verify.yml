@@ -83,13 +83,6 @@
   delay: 2
   become: true
 
-- name: _verify | The VRRP transition was logged via the notify script
-  command: journalctl -t pihole-keepalived --no-pager -n 20
-  register: _udm_dns_failover_notify_log
-  changed_when: false
-  failed_when: "'MASTER' not in _udm_dns_failover_notify_log.stdout"
-  become: true
-
 - name: _verify | Sysctl ip_nonlocal_bind is set
   command: sysctl -n net.ipv4.ip_nonlocal_bind
   register: _udm_dns_failover_nonlocal

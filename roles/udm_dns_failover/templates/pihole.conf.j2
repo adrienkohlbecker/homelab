@@ -4,11 +4,10 @@ vrrp_script pihole_healthcheck {
   timeout   5
   rise      1
   fall      2
-  # The base conf defaults vrrp_script blocks to script_user nobody; declare
-  # it explicitly per the multi-tenant contract. The loopback DNS healthcheck
-  # needs no privilege (unlike pihole's container-port probe on lab/pug, which
-  # declares user root).
-  user      nobody
+  # The UDM's keepalived 2.2.7 + enable_script_security rejects `user nobody`
+  # on the /data symlink chain (keepalived -t SIGTERMs with rc -15). root is
+  # fine — the healthcheck is a loopback dig that needs no privilege escalation.
+  user      root
   # Start in FAILED state so keepalived enters FAULT on every restart and only
   # leaves once the healthcheck passes once -- a deterministic gate on the
   # UDM's own dnsmasq health rather than a wallclock startup delay.
@@ -75,5 +74,7 @@ vrrp_instance pihole {
     pihole_healthcheck
   }
 
-  notify "/usr/bin/logger -t pihole-keepalived"
+  # notify omitted: keepalived 2.2.7 + enable_script_security on the UDM
+  # SIGTERMs keepalived -t (rc -15) when any notify script is present.
+  # Transition logging is non-critical for this last-resort peer.
 }
