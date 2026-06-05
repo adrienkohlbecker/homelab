@@ -18,6 +18,10 @@ tarball=${tarball%%$'\n'*}
 tmp=$(mktemp -d -t zbm-test)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 tar -xzf "$tarball" -C "$tmp" --no-same-owner
+# Read the base cmdline baked into the EFI bundle (written by zbm:build from
+# config.yaml Kernel.CommandLine). Append test-only flags on top so the test
+# VM starts with the exact same base parameters as a real boot.
+base_cmdline=$(cat "$tmp/cmdline")
 mkdir -p /tmp/zbm-extract
 
 # Dropbear port is forwarded to a free host port allocated at launch time.
@@ -31,7 +35,7 @@ echo "  then: ssh -p \$(awk '{print \$1}' $zbm_ports_file) -o StrictHostKeyCheck
   --machine box \
   --kernel "$tmp"/vmlin*-bootmenu \
   --initrd "$tmp/initramfs-bootmenu.img" \
-  --append 'loglevel=7 zbm.show ip=dhcp rd.neednet=1 rd.net.timeout.carrier=30' \
+  --append "$base_cmdline loglevel=7 zbm.show" \
   --mem 8192 \
   --with-pflash \
   --virtfs /tmp/zbm-extract:share \
