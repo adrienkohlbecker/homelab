@@ -43,17 +43,33 @@ from matrix import (  # noqa: E402
 FULL_UNIVERSE_PATTERNS: list[str] = [
     r"group_vars/all/[^/]+\.(yml|yaml)",
     r"group_vars/test\.yml",
-    r"host_vars/(box|minimal)\.yml",
     r"test/[^/]+\.py",
     r"test/inventory\.ini",
-    r"test/(playbooks|minimal)/.+",
+    r"test/playbooks/.+",
     r"ansible\.cfg",
     r"vault-client\.sh",
     r"mise\.toml",
     r"pyproject\.toml",
     r"uv\.lock",
     r"data/network_topology\.(yml|schema\.json)",
+    r"\.github/workflows/[^/]+\.yml",
+    r"mise-tasks/ci/.+",
 ]
+
+# Machine-universe triggers: a change to a test-VM host_vars or fixture
+# file can't be attributed to specific roles but only affects the test
+# cells that run on that machine. Maps pattern -> machine name.
+MACHINE_UNIVERSE_PATTERNS: list[tuple[str, str]] = [
+    (r"host_vars/box\.yml", "box"),
+    (r"host_vars/minimal\.yml", "minimal"),
+    (r"host_vars/lab\.yml", "lab"),
+    (r"host_vars/lab-qemu\.yml", "lab"),
+    (r"host_vars/pug\.yml", "pug"),
+    (r"host_vars/pug-qemu\.yml", "pug"),
+    (r"test/minimal/.+", "minimal"),
+]
+_MACHINE_UNIVERSE_COMPILED = [(re.compile(r"^" + pat + r"$"), machine) for pat, machine in MACHINE_UNIVERSE_PATTERNS]
+
 
 PACKER_PATH_PATTERNS: list[str] = [
     r"packer/",
@@ -62,18 +78,19 @@ PACKER_PATH_PATTERNS: list[str] = [
 
 # Maps changed-file patterns to the packer sources they affect.
 # "qemu" = all QEMU-based sources (box/lab/pug/hetzner — they share
-# qemu.pkr.hcl, chroot.sh, provision.sh). "hetzner" = the upload step
-# only. Any packer/ or mise-tasks/packer/ file not explicitly listed
-# falls through to "qemu" (safe default).
+# qemu.pkr.hcl, chroot.sh, provision.sh). "hetzner_upload" = hetzner's
+# upload/prune step only (not the shared build). Any packer/ or
+# mise-tasks/packer/ file not explicitly listed falls through to "qemu"
+# (safe default).
 PACKER_SOURCE_MAP: list[tuple[str, list[str]]] = [
     (r"packer/hcloud_worker\.pkr\.hcl", ["worker"]),
     (r"packer/scripts/provision_worker\.sh", ["worker"]),
     (r"mise-tasks/packer/worker\.sh", ["worker"]),
     (r"roles/github_runner/vars/main\.yml", ["worker"]),
     (r"packer/ubuntu_images\.json", ["qemu", "worker"]),
-    (r"mise-tasks/packer/hetzner\.sh", ["hetzner"]),
-    (r"mise-tasks/packer/_hcloud_token\.sh", ["hetzner", "worker"]),
-    (r"mise-tasks/packer/hcloud-prune-snapshots\.sh", ["hetzner", "worker"]),
+    (r"mise-tasks/packer/hetzner\.sh", ["hetzner_upload"]),
+    (r"mise-tasks/packer/_hcloud_token\.sh", ["hetzner_upload", "worker"]),
+    (r"mise-tasks/packer/hcloud-prune-snapshots\.sh", ["hetzner_upload", "worker"]),
 ]
 _PACKER_SOURCE_MAP_COMPILED = [(re.compile(r"^" + pat + r"$"), srcs) for pat, srcs in PACKER_SOURCE_MAP]
 
@@ -102,6 +119,7 @@ class ChangeClassification(NamedTuple):
     full_universe_paths: list[str]
     packer_sources_affected: set[str]
     ci_image_changed: bool
+    machine_universe: set[str]
 
 
 def _packer_sources_for(path: str) -> set[str]:
@@ -114,6 +132,14 @@ def _packer_sources_for(path: str) -> set[str]:
     return set()
 
 
+def _machine_universe_for(path: str) -> str | None:
+    """Return the machine name if path is a machine-universe trigger."""
+    for pat, machine in _MACHINE_UNIVERSE_COMPILED:
+        if pat.match(path):
+            return machine
+    return None
+
+
 def classify_changed_files(
     paths: list[str],
     *,
@@ -124,6 +150,7 @@ def classify_changed_files(
     full_universe: list[str] = []
     packer_sources: set[str] = set()
     ci_image_changed = False
+    machine_universe: set[str] = set()
 
     for path in paths:
         if not path:
@@ -133,6 +160,9 @@ def classify_changed_files(
         packer_sources |= _packer_sources_for(path)
         if is_master_push and CI_IMAGE_INPUTS_RE.match(path):
             ci_image_changed = True
+        mu = _machine_universe_for(path)
+        if mu:
+            machine_universe.add(mu)
         m = ROLE_PATH_RE.match(path)
         if m:
             roles.add(m.group(1))
@@ -142,6 +172,7 @@ def classify_changed_files(
         full_universe_paths=full_universe,
         packer_sources_affected=packer_sources,
         ci_image_changed=ci_image_changed,
+        machine_universe=machine_universe,
     )
 
 
@@ -230,8 +261,9 @@ def compute_packer_sources(
     """Compute packer source matrix.
 
     Priority: dispatch input > file-based affected set > full set.
-    ``affected`` maps source-map tags (qemu, hetzner) to concrete
-    packer sources: "qemu" expands to all QEMU-based sources.
+    ``affected`` maps source-map tags (qemu, hetzner_upload) to concrete
+    packer sources: "qemu" expands to all QEMU-based sources,
+    "hetzner_upload" adds just the hetzner source.
     """
     if inputs_sources:
         sources = [s for s in inputs_sources.split() if s]
@@ -239,7 +271,7 @@ def compute_packer_sources(
         concrete: set[str] = set()
         if "qemu" in affected:
             concrete |= set(ALL_PACKER_SOURCES)
-        if "hetzner" in affected:
+        if "hetzner_upload" in affected:
             concrete.add("hetzner")
         sources = sorted(concrete & set(ALL_PACKER_SOURCES))
     else:
@@ -551,6 +583,7 @@ def _cmd_classify(args: list[str]) -> int:
     result = classify_changed_files(paths, is_master_push=is_master)
     d = result._asdict()
     d["packer_sources_affected"] = sorted(d["packer_sources_affected"])
+    d["machine_universe"] = sorted(d["machine_universe"])
     print(json.dumps(d))
     return 0
 
@@ -668,7 +701,7 @@ def _emit_result(
 ) -> int:
     """Emit CI outputs via _cmd_emit with current env for sources/ubuntu."""
     affected = packer_affected or set()
-    packer_changed = "true" if affected & {"qemu", "hetzner"} else "false"
+    packer_changed = "true" if affected & {"qemu", "hetzner_upload"} else "false"
     packer_worker_changed = "true" if "worker" in affected else "false"
     affected_str = ",".join(sorted(affected)) if affected else ""
     return _cmd_emit(
@@ -722,13 +755,13 @@ def _cmd_run(args: list[str]) -> int:
 
     if event == "workflow_dispatch" and inputs_sources:
         log(f"mode: workflow_dispatch sources='{inputs_sources}' (packer-only, empty test matrix)")
-        return _emit_result("[]", packer_affected={"qemu", "hetzner"})
+        return _emit_result("[]", packer_affected={"qemu"})
 
     if event == "schedule":
         log("mode: schedule (nightly full build)")
         return _emit_result(
             _full_universe_matrix(),
-            packer_affected={"qemu", "hetzner", "worker"},
+            packer_affected={"qemu", "worker"},
             ci_image_changed=True,
         )
 
@@ -764,12 +797,12 @@ def _cmd_run(args: list[str]) -> int:
             log_fn=log,
         )
         if not green:
-            return full_universe("no green ancestor run found", packer_affected={"qemu", "hetzner", "worker"})
+            return full_universe("no green ancestor run found", packer_affected={"qemu", "worker"})
         if git_rev_parse(green) is None:
             log(f"  base {green[:12]} outside shallow checkout; fetching the commit")
             git_fetch_commit(green)
         if git_rev_parse(green) is None:
-            return full_universe(f"green run {green[:12]} unreachable", packer_affected={"qemu", "hetzner", "worker"})
+            return full_universe(f"green run {green[:12]} unreachable", packer_affected={"qemu", "worker"})
         base_ref = green
         log(f"diff base: {green[:12]} (last green ci run)")
     else:
@@ -778,7 +811,7 @@ def _cmd_run(args: list[str]) -> int:
 
     base = git_rev_parse(base_ref)
     if base is None:
-        return full_universe(f"base ref '{base_ref}' does not resolve", packer_affected={"qemu", "hetzner", "worker"})
+        return full_universe(f"base ref '{base_ref}' does not resolve", packer_affected={"qemu", "worker"})
 
     changed = git_diff_files(base)
     head_short = git_rev_parse_short("HEAD")
@@ -808,8 +841,17 @@ def _cmd_run(args: list[str]) -> int:
     roles: set[str] = set()
     release_cells: list[str] = []
 
-    if packer_affected & {"qemu", "hetzner"}:
+    if packer_affected & {"qemu", "hetzner_upload"}:
         roles.add("packer")
+
+    if classification.machine_universe:
+        for machine in sorted(classification.machine_universe):
+            match_keys = {machine}
+            if machine == "box":
+                match_keys.add("box_deps")
+            machine_roles = [r for r in universe if match_keys & set(machines_for(r))]
+            log(f"machine-universe changed -> all {machine} roles: {' '.join(machine_roles)}")
+            roles.update(machine_roles)
 
     deps_map = build_role_deps_map()
 
