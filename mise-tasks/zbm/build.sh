@@ -14,7 +14,7 @@ zbm_base_version="$ZBM_VERSION"
 if [ -z "${ZBM_BUILD_SUFFIX:-}" ] && [ -z "${CI:-}" ]; then
   ZBM_BUILD_SUFFIX="-local.$(date "+%Y%m%d%H%M%S")"
 fi
-ZBM_VERSION="${zbm_base_version}${ZBM_BUILD_SUFFIX:-}"
+ZBM_VERSION="${zbm_base_version}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX:-}"
 src_dir="${MISE_CONFIG_ROOT}/zbm-build/src"
 out_dir="${MISE_CONFIG_ROOT}/zbm-build/${arch}"
 mkdir -p "$out_dir"
@@ -120,6 +120,6 @@ mv "${efi_images[0]}" "$out_dir/zfsbootmenu.EFI"
 # --owner=0/--group=0 also bake root:0 into the metadata so extracting in a
 # chroot or onto FAT32 doesn't trip "Cannot change ownership" from the
 # container's build-user uids leaking into the archive.
-tarball="zfsbootmenu-v${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}-${arch}.tar.gz"
+tarball="zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
 (cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=ustar -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub | gzip -n >"$tarball")
 (cd "$out_dir" && sha256sum "$tarball" | tee "${tarball}.sha256sum")
