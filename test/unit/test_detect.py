@@ -794,7 +794,32 @@ class TestNewestGreenAncestor:
         assert detect.newest_green_ancestor("master", **self._kw(log_fn=logs.append)) is None
         assert any("not an ancestor" in msg for msg in logs)
 
-    def test_skips_gate_only_nightly(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_skips_gate_only_schedule(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def mock_api(url, token, **kw):
+            if "actions/runs?" in url:
+                if "&page=1" in url:
+                    return {
+                        "workflow_runs": [
+                            {
+                                "path": ".github/workflows/ci.yml",
+                                "event": "schedule",
+                                "head_sha": "sched123",
+                                "created_at": "2026-01-01",
+                                "id": 42,
+                            }
+                        ]
+                    }
+                return {"workflow_runs": []}
+            if "/jobs?" in url:
+                return {"jobs": [{"name": "gate", "conclusion": "success"}]}
+            return None
+
+        monkeypatch.setattr(detect, "_gh_api_get", mock_api)
+        logs = []
+        assert detect.newest_green_ancestor("master", **self._kw(log_fn=logs.append)) is None
+        assert any("skipped its test matrix" in msg for msg in logs)
+
+    def test_skips_gate_only_old_nightly(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def mock_api(url, token, **kw):
             if "actions/runs?" in url:
                 if "&page=1" in url:
@@ -817,9 +842,38 @@ class TestNewestGreenAncestor:
         monkeypatch.setattr(detect, "_gh_api_get", mock_api)
         logs = []
         assert detect.newest_green_ancestor("master", **self._kw(log_fn=logs.append)) is None
-        assert any("gate-only" in msg for msg in logs)
+        assert any("skipped its test matrix" in msg for msg in logs)
 
-    def test_accepts_nightly_that_tested(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_accepts_schedule_that_tested(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def mock_api(url, token, **kw):
+            if "actions/runs?" in url:
+                return {
+                    "workflow_runs": [
+                        {
+                            "path": ".github/workflows/ci.yml",
+                            "event": "schedule",
+                            "head_sha": "sched_good",
+                            "created_at": "2026-01-01",
+                            "id": 42,
+                        }
+                    ]
+                }
+            if "/jobs?" in url:
+                return {
+                    "jobs": [
+                        {"name": "gate", "conclusion": "success"},
+                        {"name": "detect", "conclusion": "success"},
+                        {"name": "test_jammy / test-role (foo:box)", "conclusion": "success"},
+                    ]
+                }
+            if "compare/" in url:
+                return {"status": "ahead"}
+            return None
+
+        monkeypatch.setattr(detect, "_gh_api_get", mock_api)
+        assert detect.newest_green_ancestor("master", **self._kw()) == "sched_good"
+
+    def test_accepts_old_nightly_that_tested(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def mock_api(url, token, **kw):
             if "actions/runs?" in url:
                 return {
@@ -1409,6 +1463,19 @@ class TestCmdRun:
         assert kv["packer_changed"] == "true"
         assert json.loads(kv["matrix"]) == []
         assert sorted(json.loads(kv["packer_sources"])) == ["lab", "pug"]
+
+    def test_schedule_full_build(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "schedule")
+        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: '["alpha:box","beta:minimal"]')
+        rc = detect._cmd_run([])
+        assert rc == 0
+        out = capsys.readouterr()
+        kv = _parse_kv(out.out)
+        assert "alpha:box" in kv["matrix"]
+        assert kv["packer_changed"] == "true"
+        assert kv["packer_worker_changed"] == "true"
+        assert kv["ci_image_changed"] == "true"
+        assert "schedule" in out.err
 
     def test_local_preview(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc123")

@@ -195,11 +195,11 @@ Details in [notes/test_environment_design.md](notes/test_environment_design.md).
 
 GitHub Actions on lab via `github_runner`. Internals: [notes/github_runner_design.md](notes/github_runner_design.md). Workflows in [.github/workflows/](.github/workflows/):
 
-- `lint` — every push; `mise run lint`.
-- `test` — every push; `detect` fans out per-role via `mise run ci:detect-roles`. Cross-cut paths emit an empty matrix + mail instructions.
-- `test-nightly` — `0 2 * * *` + dispatch; full-universe matrix. Skips when no commits in 25h.
-- `packer-build` — call-only; gated on detect's `packer_changed`. Shares `lab-qemu-artifacts` concurrency group. Standalone rebuild: dispatch `ci` with `sources=lab pug`.
-- `ci-image` — dispatch + push to `master` touching Dockerfile inputs; rebuilds the ci container image.
+- `ci` — unified pipeline for push, nightly (`0 2 * * *`), and dispatch. `detect` fans out per-role via `mise run ci:detect-roles`; schedule events force a full build (all roles, all packer sources, ci-image, worker). A `gate` job skips quiet days (no commits in 25h). A green schedule run becomes the diff base for subsequent pushes. Cross-cut paths emit the full universe matrix.
+- `lint` — reusable, called by ci; `mise run lint`.
+- `test` — reusable, called by ci per release/variant bucket.
+- `packer-build` — reusable, called by ci; gated on detect's `packer_changed`. Shares `lab-qemu-artifacts` concurrency group. Standalone rebuild: dispatch `ci` with `sources=lab pug`.
+- `ci-image` — reusable + dispatch; rebuilds the ci container image.
 
 **Variant escalation** — adding `minimal:` to `meta/test.yml` `machines:` dict adds a `(role, minimal)` cell. **Release escalation** — `ubuntu:` list adds cells per machine × release; only list releases where converged result diverges from jammy default. On push, release cells **propagate down role-deps** to consumers. **Runner pools** — VM on `lab-vm`, else `lab`. CI secrets are terraform-managed ([notes/ci_secrets_runbook.md](notes/ci_secrets_runbook.md)).
 
