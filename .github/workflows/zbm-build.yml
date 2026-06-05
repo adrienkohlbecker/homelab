@@ -92,9 +92,13 @@ jobs:
           set -euo pipefail
           # Randomised path so concurrent jobs on the same runner instance can't
           # collide on the auth file (matches the mktemp pattern in ci-image.yml).
-          REGISTRY_AUTH_FILE=$(mktemp -p "${RUNNER_TEMP}" zbm-nexus-auth.XXXXXX.json)
+          REGISTRY_AUTH_FILE=$(mktemp -p "${RUNNER_TEMP:-/tmp}" zbm-nexus-auth.XXXXXX.json)
           export REGISTRY_AUTH_FILE
           trap 'rm -f "$REGISTRY_AUTH_FILE"' EXIT
+          # mktemp creates the file empty; podman login reads it before writing (to
+          # merge with existing auth) and bails on an empty file with "unexpected end
+          # of JSON input". Remove it so podman login creates it fresh.
+          rm -f "$REGISTRY_AUTH_FILE"
           export MISE_CONFIG_ROOT="$GITHUB_WORKSPACE"
           # Explicit cache ref so the workstation default (empty) doesn't
           # accidentally inherit a LAN-only Nexus URL in a future mis-invoke.
