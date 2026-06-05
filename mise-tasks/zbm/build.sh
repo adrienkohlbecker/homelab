@@ -33,6 +33,9 @@ ephemeral_dir="$(mktemp -d)"
 trap 'rm -f "$host_key"; rm -rf "$ephemeral_dir"' EXIT INT TERM
 ssh-keygen -q -t ed25519 -N '' -C zbm-recovery -f "$ephemeral_dir/key"
 (umask 077 && cp "$ephemeral_dir/key" "$host_key")
+cp "$ephemeral_dir/key.pub" "$out_dir/ssh_host_ed25519_key.pub"
+echo "Recovery SSH host key fingerprint:"
+ssh-keygen -lf "$ephemeral_dir/key.pub"
 
 # zbm-builder.sh:
 #   -b: build directory (zbm/ — contains config.yaml, dracut.conf.d/, hooks/)
@@ -100,5 +103,5 @@ mv "${efi_images[0]}" "$out_dir/zfsbootmenu.EFI"
 # chroot or onto FAT32 doesn't trip "Cannot change ownership" from the
 # container's build-user uids leaking into the archive.
 tarball="zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
-(cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI | gzip -n >"$tarball")
+(cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub | gzip -n >"$tarball")
 (cd "$out_dir" && sha256sum "$tarball" | tee "${tarball}.sha256sum")
