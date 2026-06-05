@@ -298,3 +298,20 @@ jobs:
     secrets: inherit
     with:
       matrix: ${{ needs.detect.outputs.matrix_pug }}
+
+  # --- site test: full site.yml converge on box --------------------------------
+  # Catches role-ordering and cross-role interaction bugs that per-role tests
+  # miss. Runs the real site.yml (not the single-role test harness stub)
+  # against a box VM with --limit box. Depends on packer_jammy for the box
+  # image; runs whenever detect doesn't skip (any change could affect ordering).
+
+  site_test:
+    needs: [ detect, packer_jammy, ci-image ]
+    if: |
+      always()
+      && needs.detect.result == 'success'
+      && needs.detect.outputs.site_test == 'true'
+      && (needs.packer_jammy.result == 'success' || needs.packer_jammy.result == 'skipped')
+      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
+    uses: ./.github/workflows/site-test.yml
+    secrets: inherit

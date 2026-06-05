@@ -624,6 +624,7 @@ def _cmd_emit(args: list[str]) -> int:
     p.add_argument("--packer-changed", default="false")
     p.add_argument("--packer-worker-changed", default="false")
     p.add_argument("--ci-image-changed", default="false")
+    p.add_argument("--site-test", default="false")
     p.add_argument("--inputs-sources", default="")
     p.add_argument("--inputs-ubuntu", default="")
     p.add_argument("--packer-sources-affected", default="")
@@ -647,6 +648,7 @@ def _cmd_emit(args: list[str]) -> int:
         ("packer_changed", opts.packer_changed),
         ("packer_worker_changed", opts.packer_worker_changed),
         ("ci_image_changed", opts.ci_image_changed),
+        ("site_test", opts.site_test),
         ("packer_sources", json.dumps(packer.all)),
         ("packer_sources_box", json.dumps(packer.box)),
         ("packer_sources_lab", json.dumps(packer.lab)),
@@ -669,6 +671,7 @@ def _cmd_emit(args: list[str]) -> int:
         f"packer_changed={opts.packer_changed}",
         f"packer_worker_changed={opts.packer_worker_changed}",
         f"ci_image_changed={opts.ci_image_changed}",
+        f"site_test={opts.site_test}",
         f"packer_sources={json.dumps(packer.all)}"
         f" (box={json.dumps(packer.box)}"
         f" lab={json.dumps(packer.lab)}"
@@ -698,6 +701,7 @@ def _emit_result(
     *,
     packer_affected: set[str] | None = None,
     ci_image_changed: bool = False,
+    site_test: bool = False,
 ) -> int:
     """Emit CI outputs via _cmd_emit with current env for sources/ubuntu."""
     affected = packer_affected or set()
@@ -714,6 +718,8 @@ def _emit_result(
             packer_worker_changed,
             "--ci-image-changed",
             "true" if ci_image_changed else "false",
+            "--site-test",
+            "true" if site_test else "false",
             "--packer-sources-affected",
             affected_str,
             "--inputs-sources",
@@ -737,7 +743,7 @@ def _cmd_run(args: list[str]) -> int:
 
     if "--all" in args:
         log("mode: --all (full universe)")
-        return _emit_result(_full_universe_matrix())
+        return _emit_result(_full_universe_matrix(), site_test=True)
 
     event = os.environ.get("GITHUB_EVENT_NAME", "")
     inputs_roles = os.environ.get("INPUTS_ROLES", "")
@@ -749,7 +755,7 @@ def _cmd_run(args: list[str]) -> int:
         log(f"mode: workflow_dispatch roles='{inputs_roles}'")
         if inputs_roles == "ALL":
             log("roles=ALL -> full universe")
-            return _emit_result(_full_universe_matrix())
+            return _emit_result(_full_universe_matrix(), site_test=True)
         cells = _build_dispatch_matrix(inputs_roles)
         return _emit_result(json.dumps(cells_to_ci_specs(cells)))
 
@@ -763,6 +769,7 @@ def _cmd_run(args: list[str]) -> int:
             _full_universe_matrix(),
             packer_affected={"qemu", "worker"},
             ci_image_changed=True,
+            site_test=True,
         )
 
     head_sha = os.environ.get("GITHUB_SHA", "")
@@ -780,7 +787,9 @@ def _cmd_run(args: list[str]) -> int:
 
     def full_universe(reason, packer_affected=None, ci_image_changed=False):
         log(f"{reason} -> testing the FULL universe")
-        return _emit_result(_full_universe_matrix(), packer_affected=packer_affected, ci_image_changed=ci_image_changed)
+        return _emit_result(
+            _full_universe_matrix(), packer_affected=packer_affected, ci_image_changed=ci_image_changed, site_test=True
+        )
 
     ci_base_ref = os.environ.get("CI_BASE_REF", "")
     if ci_base_ref:

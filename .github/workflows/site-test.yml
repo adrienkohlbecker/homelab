@@ -1,0 +1,42 @@
+name: site-test
+# Reusable, call-only. Full site.yml converge on a box VM to catch
+# role-ordering and cross-role interaction bugs that per-role tests miss.
+# ci.yml calls this after packer_jammy so a box image is available.
+on:
+  workflow_call:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  site-converge:
+    runs-on: [ self-hosted, lab-vm ]
+    container:
+      image: nexus.lab.fahm.fr/homelab/ci:latest
+      options: >-
+        --device /dev/kvm
+        --group-add 1
+        --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
+        --volume /mnt/scratch/qemu/cloud-images:/mnt/scratch/qemu/cloud-images:rw
+        --volume /mnt/ci_scratch/${{ github.run_id }}-site:/scratch:rw
+    timeout-minutes: 60
+    env:
+      HOMELAB_VAULT_PASSWORD_TEST: ${{ secrets.HOMELAB_VAULT_PASSWORD_TEST }}
+      ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
+      GITHUB_TOKEN: ${{ secrets.MISE_GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+      - run: uv sync --locked
+      - name: Full site.yml converge on box
+        run: test/site_test.py --timeout 2400 --workdir-parent /scratch
+      - name: Upload harness output on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: site-test-output
+          path: |
+            test/out/box.*._site_test.*
+            /scratch/**
+          retention-days: 30
+          if-no-files-found: warn
