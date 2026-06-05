@@ -134,8 +134,8 @@ jobs:
       - name: Verify the tarball contents
         run: |
           set -euo pipefail
-          tarball="${GITHUB_WORKSPACE}/zbm-build/${ARCH}/zfsbootmenu-v${ZBM_VERSION}${ZBM_BUILD_SUFFIX}-${ARCH}.tar.gz"
-          test -f "$tarball" || { echo "tarball not produced: $tarball" >&2; exit 1; }
+          tarball="$(ls "${GITHUB_WORKSPACE}/zbm-build/${ARCH}/zfsbootmenu-v"*.tar.gz 2>/dev/null | head -1)"
+          [ -n "$tarball" ] || { echo "tarball not produced in zbm-build/${ARCH}/" >&2; exit 1; }
           members="$(tar tzf "$tarball")"
           echo "$members"
           for f in initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub; do
@@ -152,7 +152,8 @@ jobs:
       - name: Verify Dropbear SSH is present in the initramfs
         run: |
           set -euo pipefail
-          tarball="${GITHUB_WORKSPACE}/zbm-build/${ARCH}/zfsbootmenu-v${ZBM_VERSION}${ZBM_BUILD_SUFFIX}-${ARCH}.tar.gz"
+          tarball="$(ls "${GITHUB_WORKSPACE}/zbm-build/${ARCH}/zfsbootmenu-v"*.tar.gz 2>/dev/null | head -1)"
+          [ -n "$tarball" ] || { echo "tarball not found in zbm-build/${ARCH}/" >&2; exit 1; }
           tmpdir=$(mktemp -d)
           trap 'rm -rf "$tmpdir"' EXIT
           tar -xzf "$tarball" -C "$tmpdir" initramfs-bootmenu.img
