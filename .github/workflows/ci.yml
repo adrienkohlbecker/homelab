@@ -94,8 +94,10 @@ jobs:
     # or mise-tasks/zbm/ changes (detect's zbm_changed). Runs bare on lab (it
     # needs docker buildx + the runner's rootless podman, not the CI container),
     # so it waits on ci-image only for ordering on the shared runner -- same
-    # always() && (success || skipped) shape as lint/packer. NEXUS secrets for
-    # the registry cache + tarball upload to Nexus (master-only).
+    # always() && (success || skipped) shape as lint/packer. This is a purely
+    # structural dependency (no code is shared): a ci-image failure will suppress
+    # zbm_build even when the two are unrelated. NEXUS secrets for the registry
+    # cache + tarball upload to Nexus (master-only).
     needs: [ detect, ci-image ]
     if: |
       always()
