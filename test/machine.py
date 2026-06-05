@@ -614,13 +614,12 @@ class Machine:
         Path("group_vars").copy_into(self.workdir.name)
         Path("host_vars").copy_into(self.workdir.name)
         Path("roles").copy_into(self.workdir.name)
-        # Custom jinja filter plugins load from alongside the playbook, so a
-        # role under test that uses one (e.g. wireguard_psk in roles/wireguard)
-        # needs filter_plugins/ staged here too, or templating fails with
-        # "No filter named ...". (cidr_exclude never tripped this because its
-        # only caller was the localhost-only artifacts.yml, never the in-harness
-        # server render.)
-        Path("filter_plugins").copy_into(self.workdir.name)
+        # Role-local filter plugins (e.g. roles/wireguard/filter_plugins/)
+        # are already staged via the roles/ copy above. A top-level
+        # filter_plugins/ directory, if present, is also staged so playbook-
+        # scoped filters resolve.
+        if Path("filter_plugins").exists():
+            Path("filter_plugins").copy_into(self.workdir.name)
         # group_vars/{prod,test}.yml derive `network.*` via
         # `lookup('file', playbook_dir ~ '/data/network_topology.yml')`;
         # the file has to be present alongside the staged playbooks for
