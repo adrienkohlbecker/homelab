@@ -1,31 +1,32 @@
 name: ci
-# Unified pipeline for push, nightly schedule, and manual dispatch. detect
-# decides what runs: pushes diff against the last green ancestor, schedule
-# events force a full build (all roles, all packer sources, ci-image), and
-# dispatches accept explicit roles/sources overrides.
+# Unified pipeline for push, nightly schedule, and manual dispatch.
+# detect.yml decides what runs: pushes diff against the last green
+# ancestor, schedule events force a full build (all roles, all packer
+# sources, ci-image), and dispatches accept explicit roles/sources
+# overrides. This file is the orchestrator — it wires detect's outputs
+# into conditional calls to the reusable build/test workflows.
 #
 # Serialised per branch (concurrency below, cancel-in-progress: false): a
 # push touching a shared/cross-cutting path runs the FULL universe, which is
 # expensive, so we queue rather than fan out N concurrent wide runs. At most
 # one run executes + one queues per ref; an older *pending* run is superseded
 # (it never started, so no wasted work), while an in-flight run is NEVER
-# cancelled. Serialising also keeps the diff base maximally fresh -- when the
+# cancelled. Serialising also keeps the diff base maximally fresh — when the
 # next run's detect fires, the prior run has already finished, so it diffs
 # from that run's commit (tightest matrix). Callees keep their own groups
 # (packer-build `lab-qemu-artifacts`, ci-image `ci-image`, lint `lint-<ref>`).
 #
 # A green schedule run becomes the diff base for subsequent pushes
 # (newest_green_ancestor accepts both push and schedule events from this
-# workflow). The 25h activity gate (gate job below) suppresses quiet days.
+# workflow). The 25h activity gate inside detect.yml suppresses quiet days.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: false
 on:
   push:
   schedule:
-    # 02:00 UTC daily. The `gate` job below skips when no commits landed
-    # in the last 25h (25, not 24, so a same-second cron jitter doesn't
-    # mis-fire a false-negative skip). A manual dispatch bypasses the gate.
+    # 02:00 UTC daily. detect.yml's gate job skips when no commits landed
+    # in the last 25h. A manual dispatch bypasses the gate.
     - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
@@ -47,114 +48,33 @@ defaults:
     shell: bash
 
 jobs:
-  gate:
-    # 25h activity gate for scheduled runs. On push/dispatch this job is
-    # skipped (its `if` evaluates false) and detect runs unconditionally.
-    # On schedule, it checks whether commits landed in the last 25 hours;
-    # if none, it sets skip=true and detect never starts — all downstream
-    # jobs auto-skip because they depend (transitively) on detect's success.
-    if: github.event_name == 'schedule'
-    runs-on: [ self-hosted, lab ]
-    container:
-      image: nexus.lab.fahm.fr/homelab/ci:latest
-    outputs:
-      skip: ${{ steps.check.outputs.skip }}
-    steps:
-      - uses: actions/checkout@v6
-        with: { fetch-depth: 0 }
-      - id: check
-        run: |
-          set -euo pipefail
-          count=$(git log --since='25 hours ago' --oneline | wc -l)
-          if [ "$count" -eq 0 ]; then
-            echo "no commits in the last 25h -- skipping nightly"
-            echo "skip=true" >>"$GITHUB_OUTPUT"
-          else
-            echo "$count commit(s) in the last 25h"
-            echo "skip=false" >>"$GITHUB_OUTPUT"
-          fi
-
   detect:
-    # Single detection pass for the whole pipeline. Emits the role test
-    # matrix (passed down to test) and the packer_changed / ci_image_changed
-    # gates (consumed by the packer / ci-image calls). test.yml no longer
-    # detects -- it takes the matrix as an input.
-    #
-    # Depends on gate so schedule runs with no recent commits (gate skip=true)
-    # never start detect. On push/dispatch, gate is skipped and detect runs
-    # unconditionally (always() + gate.result == 'skipped'). For schedule
-    # events that pass the 25h check, detect emits the full universe with
-    # all component flags forced on.
-    needs: gate
-    if: |
-      always()
-      && (needs.gate.result == 'success' || needs.gate.result == 'skipped')
-      && needs.gate.outputs.skip != 'true'
-    runs-on: [ self-hosted, lab ]
-    # actions:read lets detect-roles query the Actions API for the last
-    # entirely-successful push/schedule run of this workflow on the branch
-    # (its diff base). contents:read is the checkout default -- listed
-    # explicitly because a permissions block replaces the default set, it
-    # doesn't merge.
-    permissions:
-      contents: read
-      actions: read
-    container:
-      image: nexus.lab.fahm.fr/homelab/ci:latest
-    outputs:
-      matrix: ${{ steps.detect.outputs.matrix }}
-      # Per-release/variant split so each test_* job depends on exactly its
-      # packer build. jammy = box/box_deps cells (the bulk); noble/resolute =
-      # release cells; minimal = vanilla cloud-image cells (no packer dep).
-      matrix_jammy: ${{ steps.detect.outputs.matrix_jammy }}
-      matrix_noble: ${{ steps.detect.outputs.matrix_noble }}
-      matrix_resolute: ${{ steps.detect.outputs.matrix_resolute }}
-      matrix_minimal: ${{ steps.detect.outputs.matrix_minimal }}
-      matrix_lab: ${{ steps.detect.outputs.matrix_lab }}
-      matrix_pug: ${{ steps.detect.outputs.matrix_pug }}
-      packer_changed: ${{ steps.detect.outputs.packer_changed }}
-      packer_worker_changed: ${{ steps.detect.outputs.packer_worker_changed }}
-      ci_image_changed: ${{ steps.detect.outputs.ci_image_changed }}
-      packer_sources: ${{ steps.detect.outputs.packer_sources }}
-      packer_sources_box: ${{ steps.detect.outputs.packer_sources_box }}
-      packer_sources_lab: ${{ steps.detect.outputs.packer_sources_lab }}
-      packer_sources_pug: ${{ steps.detect.outputs.packer_sources_pug }}
-      packer_sources_hetzner: ${{ steps.detect.outputs.packer_sources_hetzner }}
-      packer_ubuntu_box: ${{ steps.detect.outputs.packer_ubuntu_box }}
-      packer_ubuntu_lab: ${{ steps.detect.outputs.packer_ubuntu_lab }}
-      packer_ubuntu_pug: ${{ steps.detect.outputs.packer_ubuntu_pug }}
-      packer_ubuntu_hetzner: ${{ steps.detect.outputs.packer_ubuntu_hetzner }}
-    steps:
-      - uses: actions/checkout@v6
-        with: { fetch-depth: 50 }
-      - run: uv sync --locked
-      - id: detect
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          INPUTS_ROLES: ${{ inputs.roles }}
-          # The `sources` dispatch input. On a push it's empty (-> full set);
-          # a dispatch that sets it (and not roles) is a packer-only rebuild.
-          INPUTS_SOURCES: ${{ inputs.sources }}
-          # The `ubuntu` dispatch input. Empty on a push (and by default) ->
-          # box builds every supported release; a dispatch that pins it rebuilds
-          # just that release. detect folds it into packer_ubuntu_box/extra.
-          INPUTS_UBUNTU: ${{ inputs.ubuntu }}
-          # detect-roles queries the Actions API for the last green push/schedule
-          # run as its diff base; GITHUB_TOKEN is not auto-exported to steps.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: mise run ci:detect-roles
+    # Change detection + 25h nightly gate. detect.yml encapsulates both:
+    # its internal gate job skips on non-schedule events; its detect job
+    # emits the role matrix and all packer/ci-image/worker gates. When the
+    # 25h gate suppresses the nightly, detect's outputs are empty and the
+    # `skip` output is 'true' — all downstream jobs auto-skip via their
+    # output checks. See detect.yml for internals.
+    uses: ./.github/workflows/detect.yml
+    secrets: inherit
+    with:
+      event_name: ${{ github.event_name }}
+      roles: ${{ inputs.roles }}
+      sources: ${{ inputs.sources }}
+      ubuntu: ${{ inputs.ubuntu }}
 
   lint:
     # Runs in the ci container, so it waits on ci-image whenever that's being
-    # rebuilt -- a stale :latest would lint against the wrong toolchain.
+    # rebuilt — a stale :latest would lint against the wrong toolchain.
     # always() + (success || skipped) lets it run when ci-image is NOT needed
-    # (skipped) and gates it behind a genuine ci-image failure; needs detect
-    # only so ci-image's skip/success is decided first. Keeps its own
-    # ref-cancel concurrency group (in lint.yml).
+    # (skipped) and gates it behind a genuine ci-image failure. The skip
+    # check prevents lint from running on 25h-gated nightlies (where detect
+    # succeeded but emitted empty outputs).
     needs: [ detect, ci-image ]
     if: |
       always()
       && needs.detect.result == 'success'
+      && needs.detect.outputs.skip != 'true'
       && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     uses: ./.github/workflows/lint.yml
     secrets: inherit
@@ -174,7 +94,7 @@ jobs:
   # exactly its image. The old packer_box built all releases in one serialised
   # matrix (max-parallel:1); the split preserves that serialisation via the
   # lab-qemu-artifacts concurrency group in packer-build.yml, but now
-  # test_jammy can start as soon as packer_jammy finishes -- it no longer
+  # test_jammy can start as soon as packer_jammy finishes — it no longer
   # waits for noble/resolute. Jammy runs first (the bulk of test cells
   # consume it); noble and resolute depend on jammy but run concurrently
   # with each other. Each call builds source=box for one release; the `if`
@@ -276,14 +196,7 @@ jobs:
       ubuntu_matrix: ${{ needs.detect.outputs.packer_ubuntu_hetzner }}
 
   # --- packer: CI worker snapshot (Hetzner Cloud) --------------------------
-  # Rebuilds the pre-baked CI worker snapshot when worker-specific inputs
-  # change (provision_worker.sh, hcloud_worker.pkr.hcl, ubuntu_images.json,
-  # runner vars, etc.) — NOT on every packer change (that would rebuild
-  # the snapshot on a qemu-only edit). Master-only: the snapshot is a
-  # project-global resource (label-selected by the runtime provisioner), so
-  # a feature-branch publish would silently become the next worker's boot
-  # image. Runs in the CI container (the hcloud builder creates the server
-  # remotely, no host-level KVM needed).
+
   packer_worker:
     needs: [ detect, ci-image ]
     if: |
@@ -292,18 +205,8 @@ jobs:
       && needs.detect.outputs.packer_worker_changed == 'true'
       && github.ref == 'refs/heads/master'
       && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
-    runs-on: [ self-hosted, lab ]
-    container:
-      image: nexus.lab.fahm.fr/homelab/ci:latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v6
-      - run: uv sync --locked
-      - name: Build CI worker snapshot
-        env:
-          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
-          MISE_GITHUB_TOKEN: ${{ secrets.MISE_GITHUB_TOKEN }}
-        run: mise run packer:worker
+    uses: ./.github/workflows/packer-worker.yml
+    secrets: inherit
 
   # --- test: per-release/variant groups -------------------------------------
   # Each group depends on exactly its packer build. test_jammy (the bulk of

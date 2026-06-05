@@ -1,0 +1,153 @@
+name: detect
+# Reusable, call-only. Runs the change-detection pipeline and emits the
+# role test matrix, packer/ci-image gates, and source/release arrays.
+# Contains the 25h activity gate for scheduled runs (the gate job is
+# skipped on push/dispatch). ci.yml is the sole caller.
+on:
+  workflow_call:
+    inputs:
+      event_name:
+        description: 'The original github.event_name from the caller (schedule, push, workflow_dispatch).'
+        type: string
+        required: true
+      roles:
+        description: 'Dispatch input: comma-separated role names. Empty = use git diff.'
+        type: string
+        default: ''
+      sources:
+        description: 'Dispatch input: packer sources to rebuild. Empty = all.'
+        type: string
+        default: ''
+      ubuntu:
+        description: 'Dispatch input: Ubuntu codename pin. Empty = default set.'
+        type: string
+        default: ''
+    outputs:
+      skip:
+        description: 'true when the 25h gate suppressed the nightly; empty otherwise.'
+        value: ${{ jobs.gate.outputs.skip }}
+      matrix:
+        value: ${{ jobs.detect.outputs.matrix }}
+      matrix_jammy:
+        value: ${{ jobs.detect.outputs.matrix_jammy }}
+      matrix_noble:
+        value: ${{ jobs.detect.outputs.matrix_noble }}
+      matrix_resolute:
+        value: ${{ jobs.detect.outputs.matrix_resolute }}
+      matrix_minimal:
+        value: ${{ jobs.detect.outputs.matrix_minimal }}
+      matrix_lab:
+        value: ${{ jobs.detect.outputs.matrix_lab }}
+      matrix_pug:
+        value: ${{ jobs.detect.outputs.matrix_pug }}
+      packer_changed:
+        value: ${{ jobs.detect.outputs.packer_changed }}
+      packer_worker_changed:
+        value: ${{ jobs.detect.outputs.packer_worker_changed }}
+      ci_image_changed:
+        value: ${{ jobs.detect.outputs.ci_image_changed }}
+      packer_sources:
+        value: ${{ jobs.detect.outputs.packer_sources }}
+      packer_sources_box:
+        value: ${{ jobs.detect.outputs.packer_sources_box }}
+      packer_sources_lab:
+        value: ${{ jobs.detect.outputs.packer_sources_lab }}
+      packer_sources_pug:
+        value: ${{ jobs.detect.outputs.packer_sources_pug }}
+      packer_sources_hetzner:
+        value: ${{ jobs.detect.outputs.packer_sources_hetzner }}
+      packer_ubuntu_box:
+        value: ${{ jobs.detect.outputs.packer_ubuntu_box }}
+      packer_ubuntu_lab:
+        value: ${{ jobs.detect.outputs.packer_ubuntu_lab }}
+      packer_ubuntu_pug:
+        value: ${{ jobs.detect.outputs.packer_ubuntu_pug }}
+      packer_ubuntu_hetzner:
+        value: ${{ jobs.detect.outputs.packer_ubuntu_hetzner }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  gate:
+    # 25h activity gate for scheduled runs. On push/dispatch the caller
+    # passes event_name != 'schedule', so this job is skipped and detect
+    # runs unconditionally. On schedule, it checks whether commits landed
+    # in the last 25 hours; if none, it sets skip=true and detect never
+    # starts — all downstream jobs in the caller auto-skip because they
+    # depend on detect's outputs being populated.
+    if: inputs.event_name == 'schedule'
+    runs-on: [ self-hosted, lab ]
+    container:
+      image: nexus.lab.fahm.fr/homelab/ci:latest
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 0 }
+      - id: check
+        run: |
+          set -euo pipefail
+          count=$(git log --since='25 hours ago' --oneline | wc -l)
+          if [ "$count" -eq 0 ]; then
+            echo "no commits in the last 25h -- skipping nightly"
+            echo "skip=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "$count commit(s) in the last 25h"
+            echo "skip=false" >>"$GITHUB_OUTPUT"
+          fi
+
+  detect:
+    # Single detection pass. Emits the role test matrix and all packer /
+    # ci-image gates. Depends on gate so schedule runs with no recent
+    # commits never start detection. On push/dispatch, gate is skipped
+    # and detect runs unconditionally (always() + gate.result == 'skipped').
+    needs: gate
+    if: |
+      always()
+      && (needs.gate.result == 'success' || needs.gate.result == 'skipped')
+      && needs.gate.outputs.skip != 'true'
+    runs-on: [ self-hosted, lab ]
+    # actions:read lets detect-roles query the Actions API for the last
+    # entirely-successful push/schedule run of this workflow on the branch
+    # (its diff base). contents:read is the checkout default — listed
+    # explicitly because a permissions block replaces the default set, it
+    # doesn't merge.
+    permissions:
+      contents: read
+      actions: read
+    container:
+      image: nexus.lab.fahm.fr/homelab/ci:latest
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+      matrix_jammy: ${{ steps.detect.outputs.matrix_jammy }}
+      matrix_noble: ${{ steps.detect.outputs.matrix_noble }}
+      matrix_resolute: ${{ steps.detect.outputs.matrix_resolute }}
+      matrix_minimal: ${{ steps.detect.outputs.matrix_minimal }}
+      matrix_lab: ${{ steps.detect.outputs.matrix_lab }}
+      matrix_pug: ${{ steps.detect.outputs.matrix_pug }}
+      packer_changed: ${{ steps.detect.outputs.packer_changed }}
+      packer_worker_changed: ${{ steps.detect.outputs.packer_worker_changed }}
+      ci_image_changed: ${{ steps.detect.outputs.ci_image_changed }}
+      packer_sources: ${{ steps.detect.outputs.packer_sources }}
+      packer_sources_box: ${{ steps.detect.outputs.packer_sources_box }}
+      packer_sources_lab: ${{ steps.detect.outputs.packer_sources_lab }}
+      packer_sources_pug: ${{ steps.detect.outputs.packer_sources_pug }}
+      packer_sources_hetzner: ${{ steps.detect.outputs.packer_sources_hetzner }}
+      packer_ubuntu_box: ${{ steps.detect.outputs.packer_ubuntu_box }}
+      packer_ubuntu_lab: ${{ steps.detect.outputs.packer_ubuntu_lab }}
+      packer_ubuntu_pug: ${{ steps.detect.outputs.packer_ubuntu_pug }}
+      packer_ubuntu_hetzner: ${{ steps.detect.outputs.packer_ubuntu_hetzner }}
+    steps:
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 50 }
+      - run: uv sync --locked
+      - id: detect
+        env:
+          GITHUB_EVENT_NAME: ${{ inputs.event_name }}
+          INPUTS_ROLES: ${{ inputs.roles }}
+          INPUTS_SOURCES: ${{ inputs.sources }}
+          INPUTS_UBUNTU: ${{ inputs.ubuntu }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mise run ci:detect-roles
