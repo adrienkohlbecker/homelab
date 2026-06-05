@@ -200,6 +200,16 @@ def parse_args() -> argparse.Namespace:
         "allocated host:port mapping is printed before qemu starts. "
         "Repeatable.",
     )
+    parser.add_argument(
+        "--write-hostfwds",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="After port allocation (before qemu starts), write one "
+        "'HOST_PORT GUEST_PORT' line per --extra-hostfwd to PATH. "
+        "Useful in --foreground mode where the serial console immediately "
+        "floods the terminal and the printed port line scrolls away.",
+    )
 
     args = parser.parse_args()
     if (args.kernel is None) != (args.initrd is None):
@@ -313,7 +323,7 @@ async def _run_async(m: QemuMachine, *, wait_for_ssh: bool, exit_after_ready: bo
                 await m.wait()
 
 
-def _run_foreground(m: QemuMachine) -> int:
+def _run_foreground(m: QemuMachine, write_hostfwds: Path | None = None) -> int:
     """Sync qemu spawn -- no asyncio for the long-running wait.
 
     asyncio's subprocess machinery installs its own SIGCHLD/fd plumbing in
@@ -333,6 +343,10 @@ def _run_foreground(m: QemuMachine) -> int:
         asyncio.run(m.prepare())
         for guest_port, host_port in m.extra_hostfwd_ports.items():
             print_line(f"Extra hostfwd: 127.0.0.1:{host_port} -> guest:{guest_port}")
+        if write_hostfwds is not None:
+            with write_hostfwds.open("w") as fh:
+                for guest_port, host_port in m.extra_hostfwd_ports.items():
+                    fh.write(f"{host_port} {guest_port}\n")
         cmd = m._boot_command()
         print_cmd_line(cmd)
         proc = subprocess.Popen(cmd)
@@ -377,7 +391,7 @@ def main() -> int:
     )
 
     if args.foreground:
-        return _run_foreground(m)
+        return _run_foreground(m, write_hostfwds=args.write_hostfwds)
 
     rc = 0
     try:
