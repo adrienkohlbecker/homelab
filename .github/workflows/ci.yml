@@ -94,8 +94,8 @@ jobs:
     # or mise-tasks/zbm/ changes (detect's zbm_changed). Runs bare on lab (it
     # needs docker buildx + the runner's rootless podman, not the CI container),
     # so it waits on ci-image only for ordering on the shared runner -- same
-    # always() && (success || skipped) shape as lint/packer. No secrets: it's a
-    # validate-only build with a throwaway host key and no Gitea upload.
+    # always() && (success || skipped) shape as lint/packer. NEXUS secrets for
+    # the registry cache + tarball upload to Nexus (master-only).
     needs: [ detect, ci-image ]
     if: |
       always()
