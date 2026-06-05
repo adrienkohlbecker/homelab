@@ -142,6 +142,8 @@ jobs:
             zbm-build/**/*-bootmenu.img
             zbm-build/**/zfsbootmenu.EFI
             zbm-build/**/ssh_host_ed25519_key.pub
+            zbm-build/**/*.tar.gz
+            zbm-build/**/*.sha256sum
 
       # Push the CI build to the private on-lab Nexus raw repo (zbm). Each run
       # creates a new per-(version,suffix,arch) file (write_policy=ALLOW).
