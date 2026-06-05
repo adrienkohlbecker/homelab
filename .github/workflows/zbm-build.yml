@@ -193,17 +193,29 @@ jobs:
           NEXUS_ZBM_PASSWORD: ${{ secrets.NEXUS_ZBM_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "${NEXUS_ZBM_USERNAME:-}" ]; then
+          if [ -z "${NEXUS_ZBM_USERNAME:-}" ] || [ -z "${NEXUS_ZBM_PASSWORD:-}" ]; then
             echo "NEXUS_ZBM_* not set; skipping Nexus upload (run 'mise run tf apply' to provision the zbm repo + creds)"
             exit 0
           fi
           tarball="${GITHUB_WORKSPACE}/zbm-build/${ARCH}/zfsbootmenu-v${ZBM_VERSION}${ZBM_BUILD_SUFFIX}-${ARCH}.tar.gz"
           sha256sum="${tarball}.sha256sum"
           dest_base="https://nexus.lab.fahm.fr/repository/zbm"
+          # Write credentials to a temp .netrc rather than --user to keep the
+          # password out of /proc/<pid>/cmdline while curl runs on the shared runner.
+          netrc=$(mktemp -p "${RUNNER_TEMP:-/tmp}" zbm-nexus-upload.XXXXXX)
+          chmod 600 "$netrc"
+          trap 'rm -f "$netrc"' EXIT
+          printf 'machine nexus.lab.fahm.fr login %s password %s\n' \
+            "$NEXUS_ZBM_USERNAME" "$NEXUS_ZBM_PASSWORD" >"$netrc"
+          unset NEXUS_ZBM_PASSWORD
           for file in "$tarball" "$sha256sum"; do
             name="$(basename "$file")"
-            curl --fail-with-body -sS --retry 3 --retry-delay 5 \
-              --user "${NEXUS_ZBM_USERNAME}:${NEXUS_ZBM_PASSWORD}" \
+            curl --fail-with-body -sS --retry 3 --retry-delay 5 --retry-connrefused \
+              --netrc-file "$netrc" \
               --upload-file "$file" "${dest_base}/${name}"
             echo "uploaded ${name}"
           done
+
+      - name: Remove buildx builder
+        if: always()
+        run: docker buildx rm "${BUILDX_BUILDER:-zbm-remote}" >/dev/null 2>&1 || true
