@@ -1,0 +1,13 @@
+[Unit]
+Description=Rootless BuildKit for github_runner CI image builds
+After=podman.socket
+
+[Service]
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+RuntimeDirectory=buildkit
+ExecStart=/usr/local/bin/rootlesskit /usr/local/bin/buildkitd --addr unix://%t/buildkit/buildkitd.sock --root %h/.local/share/buildkit --oci-worker-gc-keepstorage 20000,20000,20000
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
