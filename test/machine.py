@@ -1074,10 +1074,10 @@ class QemuMachine(Machine):
     # consumed by _boot_command for the `-display vnc=` argument. Bound on
     # 5900+display so qemu won't try to walk the band itself.
     vnc_display: int
-    # Set by prepare() on aarch64 ZFS variants: (kernel, initrd, root_cmdline).
-    # _boot_command() emits -kernel/-initrd/-append from this and skips UEFI
-    # pflash so the firmware boot chain (rEFInd -> ZBM -> kexec, broken on
-    # EDK2+aarch64) is bypassed entirely. None on x86_64 and on minimal.
+    # Set only when launch.py passes --kernel/--initrd/--append (ad-hoc custom
+    # kernel without rebuilding the image). _boot_command() emits
+    # -kernel/-initrd/-append and the firmware boot chain is bypassed.
+    # None in normal harness operation on all arches and variants.
     _direct_boot: tuple[Path, Path, str] | None
     # Guest NIC backend, resolved once in __init__ (resolve_net_backend):
     # "passt" inside the noble ci-image (robust UDP datapath), "slirp"
