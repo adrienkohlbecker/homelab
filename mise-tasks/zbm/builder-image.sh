@@ -50,7 +50,7 @@ else
   rm -rf "${src_dir}".tmp.*
   tmp_dir="${src_dir}.tmp.$$"
   trap 'rm -rf "$tmp_dir"' EXIT INT TERM
-  git clone --depth 1 --branch "v${ZBM_VERSION}" https://github.com/zbm-dev/zfsbootmenu.git "$tmp_dir"
+  git clone --depth 1 --single-branch --branch "v${ZBM_VERSION}" https://github.com/zbm-dev/zfsbootmenu.git "$tmp_dir"
   rm -rf "$src_dir"
   mv "$tmp_dir" "$src_dir"
   trap - EXIT INT TERM
@@ -109,7 +109,8 @@ fi
 # Runs AFTER the cache push above, never gated: podman commit strips BuildKit's
 # inline-cache metadata, so the pushed ref must be the unmodified buildx output,
 # and the local image always needs the fix before build.sh runs generate-zbm.
-podman rm -f zbm_perlfix >/dev/null 2>&1 || true
-podman run --name zbm_perlfix --entrypoint /usr/bin/xbps-install "$img" -fy perl
-podman commit -q zbm_perlfix "$img" >/dev/null
-podman rm -f zbm_perlfix >/dev/null
+ctr="zbm_perlfix_$$"
+podman rm -f "$ctr" >/dev/null 2>&1 || true
+podman run --name "$ctr" --entrypoint /usr/bin/xbps-install "$img" -fy perl
+podman commit -q "$ctr" "$img" >/dev/null
+podman rm -f "$ctr" >/dev/null
