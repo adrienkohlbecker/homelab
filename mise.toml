@@ -54,9 +54,9 @@ HCLOUD_TOKEN_OP = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
 QEMU_DIR = '{{vars.qemu_dir}}'
 ZBM_VERSION = "3.1.0"
-# Kernel minor version to select inside the builder image (substring match in
-# generate-zbm against /boot/vmlinuz-*). Also embedded in the tarball name.
-# Keep in sync with zbm/config.yaml Kernel.Version.
+# Kernel minor version baked into the builder image (KERNELS=linux<ver> build
+# arg) and embedded in the tarball name. Single kernel in the image means
+# generate-zbm picks it up automatically; no Kernel.Version needed in config.yaml.
 ZBM_KERNEL_VERSION = "6.18"
 # Home Assistant long-lived access token -- consumed by mise-tasks/ha/sync.py
 # to call /api/services/<domain>/reload after pushing the GUI YAML. Minted

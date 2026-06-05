@@ -91,6 +91,7 @@ docker buildx build \
   --pull \
   --progress=plain \
   --build-arg "XBPS_REPOS=${xbps_repo}" \
+  --build-arg "KERNELS=linux${ZBM_KERNEL_VERSION}" \
   --build-arg "PACKAGES=mdadm nvme-cli dracut-crypt-ssh dropbear dhclient" \
   ${cache_args[@]+"${cache_args[@]}"} \
   --load \
