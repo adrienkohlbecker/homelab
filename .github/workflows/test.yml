@@ -8,13 +8,14 @@ name: test
 # (with roles=...), not this workflow directly -- without its own detect
 # it can't compute a matrix from a bare dispatch.
 #
-# test-nightly.yml is the OTHER caller: it computes a full-universe matrix
-# (its own schedule-gated `gate` job) and calls this workflow with that
-# matrix (a single call, no per-release split -- nightly has no packer
-# dep). The test-role job below is therefore defined once and shared;
-# push vs nightly differ only in the matrix passed in. Concurrent VMs are
-# capped by the lab-vm runner pool, not a per-call knob. Failures (push or
-# nightly) surface via GitHub's own Actions failure email.
+# ci.yml is the sole caller — it calls this workflow once per
+# release/variant group (test_jammy, test_noble, test_resolute,
+# test_minimal, test_lab, test_pug). On push, detect diffs against the
+# last green run and passes only changed-role cells. On schedule (nightly),
+# detect forces the full universe matrix with all component flags (ci-image,
+# packer, worker). A green schedule run becomes the diff base for
+# subsequent pushes. Concurrent VMs are capped by the lab-vm runner pool,
+# not a per-call knob. Failures surface via GitHub's Actions failure email.
 on:
   workflow_call:
     inputs:
@@ -42,9 +43,9 @@ jobs:
   # release/variant group (test_jammy/noble/resolute/minimal), each ordered
   # after its own packer build via `needs`. The cross-workflow ordering
   # those filesystem sentinels faked is now native job dependencies one
-  # level up. (test-nightly still reads the tree concurrently with a packer
-  # publish, so packer's publish flock stays -- see
-  # notes/concurrency_rework.md.)
+  # level up. (A schedule-triggered run reads the tree concurrently with a
+  # packer publish from a queued push, so packer's publish flock stays --
+  # see notes/concurrency_rework.md.)
 
   test-role:
     # Lands on the lab-vm pool (6 runners) -- the cap on concurrent

@@ -451,10 +451,13 @@ def newest_green_ancestor(
             rid = run.get("id", 0)
             if not sha:
                 continue
-            if not ((path == CI_WORKFLOW and event == "push") or path == NIGHTLY_WORKFLOW):
+            if not ((path == CI_WORKFLOW and event in ("push", "schedule")) or path == NIGHTLY_WORKFLOW):
                 continue
-            if path == NIGHTLY_WORKFLOW and not nightly_actually_tested(rid, repo=repo, api_url=api_url, token=token):
-                log_fn(f"    skip {sha[:12]} ({created}): nightly skipped its matrix (gate-only)")
+            # Schedule events and old nightly runs need a sanity check:
+            # the 25h gate may have suppressed the test matrix, leaving
+            # only the gate job — don't count that as a green base.
+            if event != "push" and not nightly_actually_tested(rid, repo=repo, api_url=api_url, token=token):
+                log_fn(f"    skip {sha[:12]} ({created}): nightly skipped its test matrix")
                 continue
             if is_ancestor_of_head(sha, head_sha, repo=repo, api_url=api_url, token=token):
                 log_fn(f"  green ancestor: {sha[:12]} ({created}, {Path(path).stem})")
@@ -721,6 +724,14 @@ def _cmd_run(args: list[str]) -> int:
         log(f"mode: workflow_dispatch sources='{inputs_sources}' (packer-only, empty test matrix)")
         return _emit_result("[]", packer_affected={"qemu", "hetzner"})
 
+    if event == "schedule":
+        log("mode: schedule (nightly full build)")
+        return _emit_result(
+            _full_universe_matrix(),
+            packer_affected={"qemu", "hetzner", "worker"},
+            ci_image_changed=True,
+        )
+
     head_sha = os.environ.get("GITHUB_SHA", "")
     ref_name = os.environ.get("GITHUB_REF_NAME", "")
     github_ref = os.environ.get("GITHUB_REF", "")
@@ -752,7 +763,6 @@ def _cmd_run(args: list[str]) -> int:
             default_branch=default_branch,
             log_fn=log,
         )
-        green = "70ea596a964879aef44575ce0995ffac865caff1"
         if not green:
             return full_universe("no green ancestor run found", packer_affected={"qemu", "hetzner", "worker"})
         if git_rev_parse(green) is None:
