@@ -188,8 +188,13 @@ jobs:
             || { echo "authorized_keys not found in initramfs" >&2; exit 1; }
           grep -qE 'zfs\.ko' <<<"$initrd_files" \
             || { echo "zfs.ko not found in initramfs (force_drivers zfs missing?)" >&2; exit 1; }
-          # efivarfs is CONFIG_EFIVARFS=y (built-in) on the Void 6.18 kernel —
-          # add_drivers silently skips built-ins, so no .ko appears in the cpio.
+          # efivarfs is a loadable module on aarch64 Void kernels but built-in
+          # (CONFIG_EFIVARFS=y) on x86_64 — add_drivers silently skips built-ins,
+          # so only assert the .ko presence on aarch64.
+          if [ "${ARCH}" = "aarch64" ]; then
+            grep -q 'efivarfs' <<<"$initrd_files" \
+              || { echo "efivarfs.ko not found in initramfs (add_drivers efivarfs missing?)" >&2; exit 1; }
+          fi
           echo "Initramfs SSH: dropbear + authorized_keys OK; ZFS kernel module OK"
 
       # Push the CI build to the private on-lab Nexus raw repo (zbm). Each run
