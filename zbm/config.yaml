@@ -10,5 +10,5 @@ EFI:
   Enabled: true
   SplashImage: /zbm/media/splash.bmp
 Kernel:
-  Version: "6.18"
+  Version: "6.18"  # keep in sync with ZBM_KERNEL_VERSION in mise.toml
   CommandLine: ro quiet loglevel=0 nomodeset

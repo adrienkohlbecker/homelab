@@ -109,17 +109,6 @@ if [ "${#efi_images[@]}" -ne 1 ]; then
 fi
 mv "${efi_images[0]}" "$out_dir/zfsbootmenu.EFI"
 
-# Extract the kernel version string embedded in the binary. `file` parses the
-# bzImage header on x86_64; `strings` fallback covers aarch64 vmlinux (ELF,
-# no bzImage header) where `file` doesn't emit a version line.
-vmlinuz_path="$(ls "$out_dir"/vmlin*-bootmenu)"
-kernel_ver="$(file "$vmlinuz_path" | sed -n 's/.*version \([^ ,(]*\).*/\1/p')"
-if [ -z "$kernel_ver" ]; then
-  kernel_ver="$(strings -n 15 "$vmlinuz_path" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+-' | head -1)"
-fi
-[ -n "$kernel_ver" ] || { echo "could not determine kernel version from $(basename "$vmlinuz_path")" >&2; exit 1; }
-echo "Kernel version: ${kernel_ver}"
-
 # --sort=name + --mtime=@0 + --numeric-owner, piped through gzip -n, strip the
 # build-time mtimes and uid/gid names that tar and the gzip header would
 # otherwise embed, so rebuilds of a pinned ZBM_VERSION produce a byte-identical
@@ -127,6 +116,6 @@ echo "Kernel version: ${kernel_ver}"
 # --owner=0/--group=0 also bake root:0 into the metadata so extracting in a
 # chroot or onto FAT32 doesn't trip "Cannot change ownership" from the
 # container's build-user uids leaking into the archive.
-tarball="zfsbootmenu-v${ZBM_VERSION}-k${kernel_ver}-${arch}.tar.gz"
+tarball="zfsbootmenu-v${ZBM_VERSION}-k${ZBM_KERNEL_VERSION}-${arch}.tar.gz"
 (cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=ustar -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub | gzip -n >"$tarball")
 (cd "$out_dir" && sha256sum "$tarball" | tee "${tarball}.sha256sum")

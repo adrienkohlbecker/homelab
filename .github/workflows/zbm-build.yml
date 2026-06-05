@@ -46,8 +46,11 @@ jobs:
           set -euo pipefail
           ZBM_VERSION="$(awk -F'"' '/^ZBM_VERSION/{print $2; exit}' mise.toml)"
           [ -n "$ZBM_VERSION" ] || { echo "could not read ZBM_VERSION from mise.toml" >&2; exit 1; }
+          ZBM_KERNEL_VERSION="$(awk -F'"' '/^ZBM_KERNEL_VERSION/{print $2; exit}' mise.toml)"
+          [ -n "$ZBM_KERNEL_VERSION" ] || { echo "could not read ZBM_KERNEL_VERSION from mise.toml" >&2; exit 1; }
           {
             echo "ZBM_VERSION=${ZBM_VERSION}"
+            echo "ZBM_KERNEL_VERSION=${ZBM_KERNEL_VERSION}"
             echo "ZBM_BUILD_SUFFIX=-ci.${{ github.run_id }}.${{ github.run_attempt }}"
             echo "ARCH=$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
           } >> "$GITHUB_ENV"
@@ -134,8 +137,8 @@ jobs:
       - name: Verify the tarball contents
         run: |
           set -euo pipefail
-          tarball="$(ls "${GITHUB_WORKSPACE}/zbm-build/${ARCH}/zfsbootmenu-v"*.tar.gz 2>/dev/null | head -1)"
-          [ -n "$tarball" ] || { echo "tarball not produced in zbm-build/${ARCH}/" >&2; exit 1; }
+          tarball="${GITHUB_WORKSPACE}/zbm-build/${ARCH}/zfsbootmenu-v${ZBM_VERSION}-k${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX}-${ARCH}.tar.gz"
+          test -f "$tarball" || { echo "tarball not produced: $tarball" >&2; exit 1; }
           members="$(tar tzf "$tarball")"
           echo "$members"
           for f in initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub; do
@@ -152,8 +155,7 @@ jobs:
       - name: Verify Dropbear SSH is present in the initramfs
         run: |
           set -euo pipefail
-          tarball="$(ls "${GITHUB_WORKSPACE}/zbm-build/${ARCH}/zfsbootmenu-v"*.tar.gz 2>/dev/null | head -1)"
-          [ -n "$tarball" ] || { echo "tarball not found in zbm-build/${ARCH}/" >&2; exit 1; }
+          tarball="${GITHUB_WORKSPACE}/zbm-build/${ARCH}/zfsbootmenu-v${ZBM_VERSION}-k${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX}-${ARCH}.tar.gz"
           tmpdir=$(mktemp -d)
           trap 'rm -rf "$tmpdir"' EXIT
           tar -xzf "$tarball" -C "$tmpdir" initramfs-bootmenu.img
