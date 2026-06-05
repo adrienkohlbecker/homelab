@@ -3,10 +3,14 @@
 # Calls upstream's zbm-builder.sh with zbm/ as the build directory and
 # the cloned source tree mounted read-only at /zbm. Components mode:
 # emits vmlinuz-bootmenu + initramfs-bootmenu.img (no unified .EFI).
-# We tarball both into a single artifact suitable for upload to Gitea.
+# We tarball both + the unified EFI into a single artifact.
 set -euo pipefail
 
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
+zbm_base_version="$ZBM_VERSION"
+# ZBM_BUILD_SUFFIX (e.g. "-ci.12345") is appended to the version tag embedded
+# in the initramfs and the tarball filename, but NOT the builder image tag.
+ZBM_VERSION="${zbm_base_version}${ZBM_BUILD_SUFFIX:-}"
 src_dir="${MISE_CONFIG_ROOT}/zbm-build/src"
 out_dir="${MISE_CONFIG_ROOT}/zbm-build/${arch}"
 mkdir -p "$out_dir"
@@ -64,7 +68,7 @@ ssh-keygen -q -t ed25519 -N '' -C zbm-recovery -f "$ephemeral_dir/key"
 # and the system bash 5.x on CI, so the script runs as upstream intended.
 bash "$src_dir/zbm-builder.sh" \
   -b "${MISE_CONFIG_ROOT}/zbm" \
-  -i "localhost/zbm-builder:v${ZBM_VERSION}-${arch}" \
+  -i "localhost/zbm-builder:v${zbm_base_version}-${arch}" \
   -l "$src_dir" \
   -H \
   -O --entrypoint -O /build-init.sh \
@@ -97,4 +101,4 @@ mv "${efi_images[0]}" "$out_dir/zfsbootmenu.EFI"
 # container's build-user uids leaking into the archive.
 tarball="zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
 (cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI | gzip -n >"$tarball")
-sha256sum "$out_dir/$tarball"
+(cd "$out_dir" && sha256sum "$tarball" | tee "${tarball}.sha256sum")

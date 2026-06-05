@@ -1,19 +1,15 @@
 name: zbm-build
-# Validation build of the custom ZFSBootMenu recovery image. ci.yml calls this
-# via `uses:` gated on detect's zbm_changed (any push touching zbm/ or
-# mise-tasks/zbm/); it's also workflow_dispatch-able so the buildx-over-podman
-# path can be exercised on demand.
+# Build the custom ZFSBootMenu recovery image. ci.yml calls this via `uses:`
+# gated on detect's zbm_changed (any push touching zbm/ or mise-tasks/zbm/);
+# it's also workflow_dispatch-able.
 #
-# Validate-only: builds the builder container + the kernel/initrd/EFI tarball
-# and does NOT upload to Gitea. The point is to catch build regressions (a
-# missing recovery tool failing dracut's install_items, a broken tar glob, an
-# upstream Dockerfile bump) on the workstation's behalf — releases stay the
-# manual `mise run zbm:build && zbm:upload`.
+# Every build gets a version suffix with the run ID (e.g. v3.1.0-ci.12345)
+# embedded in both the initramfs and the tarball filename. Artifacts always go
+# to GitHub; Nexus upload is master-only.
 on:
   workflow_call:
   workflow_dispatch:
 
-# Workflow only reads the repo and builds locally; no registry push, no secrets.
 permissions:
   contents: read
 
@@ -70,6 +66,8 @@ jobs:
       # podman socket). The two scripts are plain bash needing only MISE_CONFIG_ROOT
       # + ZBM_VERSION exported and otherwise system tools (git/docker/tar/...),
       # so invoke them directly. ZBM_VERSION is mise.toml's single source of truth.
+      # ZBM_BUILD_SUFFIX embeds the run ID in the initramfs version string and
+      # tarball filename so CI artifacts are distinguishable.
       - name: Build the ZBM image + tarball
         env:
           NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
@@ -84,8 +82,9 @@ jobs:
           ZBM_VERSION="$(awk -F'"' '/^ZBM_VERSION/{print $2; exit}' mise.toml)"
           [ -n "$ZBM_VERSION" ] || { echo "could not read ZBM_VERSION from mise.toml" >&2; exit 1; }
           arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
-          export MISE_CONFIG_ROOT ZBM_VERSION
-          echo "Building ZFSBootMenu v${ZBM_VERSION} for ${arch}"
+          ZBM_BUILD_SUFFIX="-ci.${{ github.run_id }}"
+          export MISE_CONFIG_ROOT ZBM_VERSION ZBM_BUILD_SUFFIX
+          echo "Building ZFSBootMenu v${ZBM_VERSION}${ZBM_BUILD_SUFFIX} for ${arch}"
           # Registry-backed build cache in the on-lab Nexus homelab docker repo.
           # builder-image.sh defaults the cache ref (its --cache-from pull is
           # best-effort, so it always runs); we only have to authorize the
@@ -111,7 +110,8 @@ jobs:
           set -euo pipefail
           arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
           ZBM_VERSION="$(awk -F'"' '/^ZBM_VERSION/{print $2; exit}' mise.toml)"
-          tarball="${GITHUB_WORKSPACE}/zbm-build/${arch}/zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
+          ZBM_BUILD_SUFFIX="-ci.${{ github.run_id }}"
+          tarball="${GITHUB_WORKSPACE}/zbm-build/${arch}/zfsbootmenu-v${ZBM_VERSION}${ZBM_BUILD_SUFFIX}-${arch}.tar.gz"
           test -f "$tarball" || { echo "tarball not produced: $tarball" >&2; exit 1; }
           members="$(tar tzf "$tarball")"
           echo "$members"
@@ -121,12 +121,21 @@ jobs:
           grep -qE '^vmlin.*-bootmenu$' <<<"$members" || { echo "missing vmlin*-bootmenu kernel in tarball" >&2; exit 1; }
           echo "ZBM tarball OK: $tarball"
 
-      # Push the CI build to the private on-lab Nexus raw repo (zbm) — kept off
-      # the PUBLIC GitHub artifact store. Stable per-(version,arch) path,
-      # overwritten each run (repo write_policy=ALLOW). Skips gracefully if the
-      # NEXUS_ZBM_* secrets aren't provisioned yet (terraform apply pending) so
-      # the build still passes.
+      - name: Upload artifacts to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: zfsbootmenu-${{ github.run_id }}
+          path: |
+            zbm-build/**/zfsbootmenu-v*.tar.gz
+            zbm-build/**/zfsbootmenu-v*.tar.gz.sha256sum
+
+      # Push the CI build to the private on-lab Nexus raw repo (zbm). Stable
+      # per-(version,arch) path, overwritten each run (repo write_policy=ALLOW).
+      # Only on master — branch builds go to GitHub artifacts only. Skips
+      # gracefully if the NEXUS_ZBM_* secrets aren't provisioned yet (terraform
+      # apply pending) so the build still passes.
       - name: Upload the built tarball to Nexus
+        if: github.ref == 'refs/heads/master'
         env:
           NEXUS_ZBM_USERNAME: ${{ secrets.NEXUS_ZBM_USERNAME }}
           NEXUS_ZBM_PASSWORD: ${{ secrets.NEXUS_ZBM_PASSWORD }}
@@ -138,8 +147,13 @@ jobs:
           fi
           arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
           ZBM_VERSION="$(awk -F'"' '/^ZBM_VERSION/{print $2; exit}' mise.toml)"
-          tarball="${GITHUB_WORKSPACE}/zbm-build/${arch}/zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
-          dest="https://nexus.lab.fahm.fr/repository/zbm/zfsbootmenu-v${ZBM_VERSION}-${arch}-ci.tar.gz"
-          curl --fail-with-body -sS --user "${NEXUS_ZBM_USERNAME}:${NEXUS_ZBM_PASSWORD}" \
-            --upload-file "$tarball" "$dest"
-          echo "uploaded validation build to ${dest}"
+          ZBM_BUILD_SUFFIX="-ci.${{ github.run_id }}"
+          tarball="${GITHUB_WORKSPACE}/zbm-build/${arch}/zfsbootmenu-v${ZBM_VERSION}${ZBM_BUILD_SUFFIX}-${arch}.tar.gz"
+          sha256sum="${tarball}.sha256sum"
+          dest_base="https://nexus.lab.fahm.fr/repository/zbm"
+          for file in "$tarball" "$sha256sum"; do
+            name="$(basename "$file")"
+            curl --fail-with-body -sS --user "${NEXUS_ZBM_USERNAME}:${NEXUS_ZBM_PASSWORD}" \
+              --upload-file "$file" "${dest_base}/${name}"
+            echo "uploaded ${name}"
+          done
