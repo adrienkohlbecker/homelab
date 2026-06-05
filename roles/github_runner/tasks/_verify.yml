@@ -57,6 +57,9 @@
     name: buildkit.service
     scope: user
   register: _github_runner_buildkit_svc
+  until: _github_runner_buildkit_svc.status.ActiveState == "active"
+  retries: 10
+  delay: 2
   failed_when: _github_runner_buildkit_svc.status.ActiveState != "active"
   become: true
   become_user: github_runner
@@ -71,6 +74,9 @@
     debug workers
   register: _github_runner_buildctl
   changed_when: false
+  until: _github_runner_buildctl.rc == 0
+  retries: 10
+  delay: 2
   failed_when: _github_runner_buildctl.rc != 0
   become: true
   become_user: github_runner

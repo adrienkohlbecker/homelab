@@ -122,39 +122,59 @@
   tags:
     - fluentbit
 
-# The systemd input plugin doesn't expose db.journal_mode (only the
-# tail plugin does -- which is why the nginx-{access,error}.db files
-# end up WAL by default but journal.db doesn't). Flip the mode once;
-# the pragma is stored in the db header and persists across opens.
-# Gate the convert on the -wal sidecar: SQLite creates -wal at the
-# first WAL-mode write and keeps it while any writer holds the db
-# open. fluent-bit's systemd input is a continuous writer, so during
-# normal operation -wal exists after first apply and the gate skips
-# thereafter. A clean shutdown removes -wal, so a play run with
-# fluent-bit stopped will re-fire the (idempotent) PRAGMA -- cosmetic
-# noise, not a real re-flip. wait_for absorbs the race where
-# fluent-bit hasn't yet written the db on first apply; in --check the
-# unit isn't actually started so we skip the wait and let the
-# creates-gated convert no-op-report.
-- name: Wait for fluent-bit journal.db
-  wait_for:
+# The systemd input plugin does not expose db.journal_mode. SQLite
+# accepts PRAGMA journal_mode=WAL on a missing DB and creates a valid
+# empty WAL-mode file; fluent-bit's systemd input then creates its
+# cursor schema on first write.
+- name: Stat fluent-bit journal.db
+  stat:
     path: /var/lib/fluent-bit/journal.db
-    timeout: 30
+  register: fluentbit_journal_db
   when: not ansible_check_mode
+  become: true
+  tags:
+    - fluentbit
+
+- name: Read fluent-bit journal.db mode
+  command:
+    argv:
+      - sqlite3
+      - /var/lib/fluent-bit/journal.db
+      - PRAGMA journal_mode;
+  register: fluentbit_journal_db_mode
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - fluentbit_journal_db.stat.exists
+  become: true
+  tags:
+    - fluentbit
+
+- name: Convert fluent-bit journal.db to WAL
+  command:
+    argv:
+      - sqlite3
+      - /var/lib/fluent-bit/journal.db
+      - PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - not fluentbit_journal_db.stat.exists or (fluentbit_journal_db_mode.stdout | trim) != "wal"
   become: true
   tags:
     - fluentbit
 
 # sqlite3 CLI is installed at the top of the role (not pulled in by
 # fluent-bit's apt deps -- only libsqlite3-0 is). PRAGMA busy_timeout
-# precedes journal_mode=WAL as defence against the race between
-# wait_for path: returning (inode exists) and fluent-bit's cursor
-# writer holding the lock; fluent-bit's cursor writes are short, 5s
-# is plenty.
-- name: Convert fluent-bit journal.db to WAL
-  command: sqlite3 /var/lib/fluent-bit/journal.db 'PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;'
-  args:
-    creates: /var/lib/fluent-bit/journal.db-wal
+# precedes journal_mode=WAL as defence against fluent-bit's cursor writer
+# holding the lock; fluent-bit's cursor writes are short, 5s is plenty.
+- name: Set fluent-bit journal.db permissions
+  file:
+    path: /var/lib/fluent-bit/journal.db
+    owner: root
+    group: root
+    mode: "0600"
+  when: not ansible_check_mode
   become: true
   tags:
     - fluentbit
