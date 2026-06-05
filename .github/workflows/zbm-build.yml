@@ -129,7 +129,6 @@ jobs:
             zbm-build/**/*-bootmenu
             zbm-build/**/*-bootmenu.img
             zbm-build/**/zfsbootmenu.EFI
-            zbm-build/**/zfsbootmenu-v*.tar.gz.sha256sum
 
       # Push the CI build to the private on-lab Nexus raw repo (zbm). Stable
       # per-(version,arch) path, overwritten each run (repo write_policy=ALLOW).
