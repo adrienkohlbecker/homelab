@@ -113,6 +113,8 @@ fi
 # and the local image always needs the fix before build.sh runs generate-zbm.
 ctr="zbm_perlfix_$$"
 podman rm -f "$ctr" >/dev/null 2>&1 || true
+trap 'podman rm -f "$ctr" >/dev/null 2>&1 || true' EXIT
 podman run --name "$ctr" --entrypoint /usr/bin/xbps-install "$img" -fy perl
 podman commit -q "$ctr" "$img" >/dev/null
 podman rm -f "$ctr" >/dev/null
+trap - EXIT
