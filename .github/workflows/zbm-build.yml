@@ -148,11 +148,31 @@ jobs:
           grep -qE '^vmlin.*-bootmenu$' <<<"$members" || { echo "missing vmlin*-bootmenu kernel in tarball" >&2; exit 1; }
           echo "ZBM tarball OK: $tarball"
 
+      # Verify that the recovery SSH server is actually baked into the initramfs.
+      # A misconfigured PACKAGES arg (missing dracut-crypt-ssh or dropbear) or a
+      # wrong dropbear_acl path would produce a valid-looking tarball and fail only
+      # during an actual recovery. --no-early-microcode in config.yaml means no
+      # prepended microcode cpio, so the initramfs is a pure zstd-compressed cpio.
+      - name: Verify Dropbear SSH is present in the initramfs
+        run: |
+          set -euo pipefail
+          tarball="${GITHUB_WORKSPACE}/zbm-build/${ARCH}/zfsbootmenu-v${ZBM_VERSION}${ZBM_BUILD_SUFFIX}-${ARCH}.tar.gz"
+          tmpdir=$(mktemp -d)
+          trap 'rm -rf "$tmpdir"' EXIT
+          tar -xzf "$tarball" -C "$tmpdir" initramfs-bootmenu.img
+          initrd_files=$(zstdcat "$tmpdir/initramfs-bootmenu.img" | cpio --quiet -t 2>/dev/null)
+          echo "$initrd_files" | grep -q 'dropbear' \
+            || { echo "dropbear not found in initramfs (crypt-ssh module missing?)" >&2; exit 1; }
+          echo "$initrd_files" | grep -q 'authorized_keys' \
+            || { echo "authorized_keys not found in initramfs" >&2; exit 1; }
+          echo "Initramfs SSH: dropbear + authorized_keys OK"
+
       - name: Upload artifacts to GitHub
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zfsbootmenu-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
+          retention-days: 30
           path: |
             zbm-build/**/*-bootmenu
             zbm-build/**/*-bootmenu.img
