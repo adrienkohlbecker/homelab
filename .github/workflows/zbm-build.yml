@@ -119,14 +119,13 @@ jobs:
           # Registry-backed build cache in the on-lab Nexus homelab docker repo.
           # builder-image.sh uses ZBM_BUILDER_CACHE_REF (--cache-from pull is
           # best-effort, so it always runs); we only have to authorize the
-          # push-back. Log in (per-run auth file) and set ZBM_BUILDER_CACHE_PUSH
-          # so the freshly built image seeds the cache. Without creds (e.g.
-          # before the secret is provisioned) we skip the push but still benefit
-          # from any cached layers.
+          # push-back. Log in (per-run auth file) so the freshly built image
+          # seeds the cache. builder-image.sh gates the --cache-to on $CI.
+          # Without creds (e.g. before the secret is provisioned) we skip the
+          # push but still benefit from any cached layers.
           if [ -n "${NEXUS_USERNAME:-}" ] && [ -n "${NEXUS_PASSWORD:-}" ]; then
             printf '%s' "$NEXUS_PASSWORD" | podman login nexus.lab.fahm.fr --username "$NEXUS_USERNAME" --password-stdin
             unset NEXUS_PASSWORD
-            export ZBM_BUILDER_CACHE_PUSH=1
           else
             echo "NEXUS_USERNAME/PASSWORD not set; building without pushing to the registry cache"
           fi

@@ -80,10 +80,10 @@ img="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
 cache_args=()
 if [ -n "$ZBM_BUILDER_CACHE_REF" ]; then
   cache_args+=(--cache-from "type=registry,ref=${ZBM_BUILDER_CACHE_REF}")
-  if [ -n "${ZBM_BUILDER_CACHE_PUSH:-}" ]; then
+  if [ -n "${CI:-}" ]; then
     # type=registry pushes cache manifests directly during the build; no separate
-    # podman push step needed. Gated on ZBM_BUILDER_CACHE_PUSH because the push
-    # requires a prior `podman login`: CI sets it; workstation opts in explicitly.
+    # podman push step needed. Gated on $CI (set by GitHub Actions) so local
+    # workstation builds don't attempt an unauthenticated push.
     cache_args+=(--cache-to "type=registry,ref=${ZBM_BUILDER_CACHE_REF},mode=max")
   fi
 fi
