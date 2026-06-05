@@ -73,6 +73,7 @@ locals {
     "1password"         = "https://downloads.1password.com/linux/debian/amd64/"
     "docker-ce"         = "https://download.docker.com/linux/ubuntu/"
     "tailscale"         = "https://pkgs.tailscale.com/stable/ubuntu/"
+    "mise"              = "https://mise.en.dev/deb/"
   }
 
   raw_proxies = {

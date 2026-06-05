@@ -231,113 +231,29 @@
   tags:
     - user
 
-- name: Check installed mise version
-  command: "{{ ansible_user_dir }}/.local/share/mise/bin/mise --version"
-  register: user_mise_check
-  failed_when: false
-  changed_when: false
-  check_mode: false
-  tags:
-    - user
-
-# The pin is authoritative: any drift from user_mise_version -- including a
-# mise that self-updated past it -- flags a reinstall to restore the pinned
-# version, so the comparison is exact-match, not upgrade-only.
-- name: Set mise upgrade flag
-  set_fact:
-    user_mise_needs_upgrade: "{{ user_mise_check.stdout is not defined or (user_mise_check.stdout.split()[0] | default('')) != user_mise_version }}"
-  tags:
-    - user
-
-- name: Create mise directories
-  when: user_mise_needs_upgrade
+# zsh completions land in ~/.local/share/mise/completions/_mise (zsh fpath).
+# Create the dir explicitly: mise doesn't auto-create it, and `mise completion
+# zsh >` would fail if the parent is absent.
+- name: Create mise completions directory
   file:
-    path: "{{ item }}"
+    path: "{{ ansible_user_dir }}/.local/share/mise/completions"
     state: directory
     owner: "{{ ansible_user_id }}"
     group: "{{ ansible_user_id }}"
     mode: "0755"
-  loop:
-    - "{{ ansible_user_dir }}/.cache"
-    - "{{ ansible_user_dir }}/.local/share"
-    - "{{ ansible_user_dir }}/.local/bin"
-    - "{{ ansible_user_dir }}/.local/share/mise/completions"
-  register: user_mise_dirs
-  tags:
-    - user
-
-# Stage in the operator-owned ~/.cache rather than world-writable /tmp -- a
-# fixed /tmp/mise-<ver>.tar.gz name is a symlink/TOCTOU target on a multi-user
-# host (get_url's checksum catches a tampered payload, but not a hijacked dest).
-- name: Download mise archive
-  when: user_mise_needs_upgrade
-  check_mode: false
-  get_url:
-    url: "{{ user_mise_release[ansible_architecture].url }}"
-    checksum: "sha256:{{ user_mise_release[ansible_architecture].sha256 }}"
-    dest: "{{ ansible_user_dir }}/.cache/mise-{{ user_mise_version }}.tar.gz"
-    mode: "0644"
-  register: user_mise_download
-  until: user_mise_download is not failed
-  retries: 3
-  delay: 5
-  tags:
-    - user
-
-- name: Install mise binary
-  when: user_mise_needs_upgrade and not (ansible_check_mode and user_mise_dirs.changed)
-  unarchive:
-    src: "{{ ansible_user_dir }}/.cache/mise-{{ user_mise_version }}.tar.gz"
-    remote_src: true
-    dest: "{{ ansible_user_dir }}/.local/share"
-    owner: "{{ ansible_user_id }}"
-    group: "{{ ansible_user_id }}"
-    list_files: true
-  register: user_mise_unarchive
-  tags:
-    - user
-
-# Fail loud if an upstream tarball-layout change drops mise/bin/mise: otherwise
-# the version check below keeps reporting needs_upgrade and re-extracts every
-# converge while the binary stays absent.
-- name: Assert the mise binary extracted
-  when: user_mise_needs_upgrade and not ansible_check_mode
-  assert:
-    that:
-      - "'mise/bin/mise' in (user_mise_unarchive.files | default([]))"
-    fail_msg: >-
-      mise tarball layout changed: expected mise/bin/mise,
-      got {{ user_mise_unarchive.files | default([]) }}
-  tags:
-    - user
-
-- name: Symlink mise binary into ~/.local/bin
-  when: not (ansible_check_mode and user_mise_dirs.changed)
-  file:
-    src: "{{ ansible_user_dir }}/.local/share/mise/bin/mise"
-    dest: "{{ ansible_user_dir }}/.local/bin/mise"
-    state: link
-    owner: "{{ ansible_user_id }}"
-    group: "{{ ansible_user_id }}"
+  become: true
   tags:
     - user
 
 - name: Generate mise zsh completions
-  when: user_mise_needs_upgrade
   shell: |
     set -euo pipefail
-    {{ ansible_user_dir }}/.local/share/mise/bin/mise completion zsh > {{ ansible_user_dir }}/.local/share/mise/completions/_mise
+    /usr/bin/mise completion zsh > {{ ansible_user_dir }}/.local/share/mise/completions/_mise
   args:
     executable: /bin/bash
-  changed_when: true
-  tags:
-    - user
-
-- name: Delete mise archive
-  when: user_mise_needs_upgrade
-  file:
-    path: "{{ ansible_user_dir }}/.cache/mise-{{ user_mise_version }}.tar.gz"
-    state: absent
+    creates: "{{ ansible_user_dir }}/.local/share/mise/completions/_mise"
+  become: true
+  become_user: "{{ ansible_user_id }}"
   tags:
     - user
 
@@ -357,9 +273,8 @@
   when: not (ansible_check_mode and (user_dotfiles_clone is skipped or user_dotfiles_clone.changed))
   shell: |
     set -euo pipefail
-    mise="{{ ansible_user_dir }}/.local/share/mise/bin/mise"
-    "$mise" trust
-    "$mise" run stow
+    /usr/bin/mise trust
+    /usr/bin/mise run stow
   args:
     executable: /bin/bash
     chdir: "{{ ansible_user_dir }}/.dotfiles"
@@ -383,10 +298,9 @@
 - name: Install mise-managed tools
   shell: |
     set -euo pipefail
-    mise="{{ ansible_user_dir }}/.local/share/mise/bin/mise"
-    before="$("$mise" ls --installed 2>/dev/null || true)"
-    "$mise" install
-    after="$("$mise" ls --installed 2>/dev/null || true)"
+    before="$(/usr/bin/mise ls --installed 2>/dev/null || true)"
+    /usr/bin/mise install
+    after="$(/usr/bin/mise ls --installed 2>/dev/null || true)"
     [ "$before" = "$after" ] || echo CHANGED
   args:
     executable: /bin/bash
