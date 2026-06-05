@@ -94,8 +94,8 @@ class TestClassifyChangedFiles:
 
     def test_zbm_unchanged(self) -> None:
         assert detect.classify_changed_files(["roles/nginx/tasks/main.yml"]).zbm_changed is False
-        # mise.toml carries ZBM_VERSION but isn't a zbm path -> full-universe, not zbm.
-        assert detect.classify_changed_files(["mise.toml"]).zbm_changed is False
+        # mise.toml carries ZBM_VERSION — a version bump must trigger the zbm build.
+        assert detect.classify_changed_files(["mise.toml"]).zbm_changed is True
 
     def test_mixed_paths(self) -> None:
         paths = [
