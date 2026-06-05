@@ -40,7 +40,7 @@ jobs:
           # =false keeps GITHUB_TOKEN out of .git/config on the shared runner.
           fetch-depth: 1
           persist-credentials: false
-      - run: uv sync --locked
+      - run: mise exec -- uv sync --locked
 
       - name: Set build variables
         run: |
