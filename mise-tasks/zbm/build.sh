@@ -22,32 +22,13 @@ if [ ! -d "$src_dir" ]; then
   exit 1
 fi
 
-# Stage the recovery-SSH host private key into the build dir for crypt-ssh to
-# bake in (recovery.conf points dropbear_ed25519_key here). The plaintext is
-# gitignored and removed on exit; only the committed .pub rides in the repo.
+# Generate a fresh ed25519 host key for the recovery SSH server. Each build
+# gets its own key — there is no stable host key to pin.
 host_key="${MISE_CONFIG_ROOT}/zbm/dropbear/ssh_host_ed25519_key"
-trap 'rm -f "$host_key"' EXIT INT TERM
-if [ "${ZBM_EPHEMERAL_HOST_KEY:-}" = "1" ]; then
-  # CI validation builds have no 1Password: bake a throwaway host key so the
-  # image still builds and the SSH server still starts. It won't match the
-  # committed .pub, so the tarball is NOT publishable — a build-check only.
-  # ssh-keygen into a tempdir so its .pub sibling can't overwrite the committed
-  # dropbear/ssh_host_ed25519_key.pub.
-  echo "ZBM_EPHEMERAL_HOST_KEY=1: baking a throwaway recovery host key (do not upload this build)" >&2
-  ephemeral_dir="$(mktemp -d)"
-  trap 'rm -f "$host_key"; rm -rf "$ephemeral_dir"' EXIT INT TERM
-  ssh-keygen -q -t ed25519 -N '' -C zbm-recovery-ephemeral -f "$ephemeral_dir/key"
-  (umask 077 && cp "$ephemeral_dir/key" "$host_key")
-else
-  # Resolved from 1Password at the point of use (op read into a local,
-  # never-exported var) so the key never enters the environment of the
-  # zbm-builder.sh / container-build subtree. Mirrors upload.sh's inline op read.
-  if ! key_material="$(op read 'op://Lab/hxad25fxm2gfulafg23b6sv33e/private key')"; then
-    echo "op read failed — is the 1Password CLI signed in? Try: op signin" >&2
-    exit 1
-  fi
-  (umask 077 && printf '%s\n' "$key_material" >"$host_key")
-fi
+ephemeral_dir="$(mktemp -d)"
+trap 'rm -f "$host_key"; rm -rf "$ephemeral_dir"' EXIT INT TERM
+ssh-keygen -q -t ed25519 -N '' -C zbm-recovery -f "$ephemeral_dir/key"
+(umask 077 && cp "$ephemeral_dir/key" "$host_key")
 
 # zbm-builder.sh:
 #   -b: build directory (zbm/ — contains config.yaml, dracut.conf.d/, hooks/)

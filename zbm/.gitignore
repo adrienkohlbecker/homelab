@@ -2,6 +2,5 @@
 dracut.conf.d/user_hooks.conf
 mkinitcpio.conf.d/
 
-# Recovery SSH host private key — staged from 1Password by build.sh at build
-# time, removed on exit. Only the .pub is committed (for known_hosts pinning).
+# Recovery SSH host private key — generated fresh per build, removed on exit.
 dropbear/ssh_host_ed25519_key
