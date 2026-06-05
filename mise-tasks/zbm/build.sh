@@ -123,6 +123,3 @@ mv "${efi_images[0]}" "$out_dir/zfsbootmenu.EFI"
 tarball="zfsbootmenu-v${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}-${arch}.tar.gz"
 (cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=ustar -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub | gzip -n >"$tarball")
 (cd "$out_dir" && sha256sum "$tarball" | tee "${tarball}.sha256sum")
-# Record the tarball basename so upload.sh can find it without reconstructing
-# the name (which would require knowing ZBM_BUILD_SUFFIX from this run).
-echo "$tarball" > "$out_dir/.latest"
