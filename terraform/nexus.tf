@@ -387,11 +387,11 @@ resource "nexus_repository_raw_hosted" "zbm" {
 # reaches only this repo. Consumed by zbm-build.yml as NEXUS_ZBM_USERNAME /
 # NEXUS_ZBM_PASSWORD (provisioned into the homelab repo in github.tf).
 resource "nexus_privilege_repository_view" "zbm_raw" {
-  name        = "zbm-raw-all"
-  description = "Full view of the zbm raw hosted repo (browse/read/edit/add/delete)"
+  name        = "zbm-raw-push"
+  description = "Push artifacts to the zbm raw hosted repo (browse/read/add)"
   repository  = nexus_repository_raw_hosted.zbm.name
   format      = "raw"
-  actions     = ["BROWSE", "READ", "EDIT", "ADD", "DELETE"]
+  actions     = ["BROWSE", "READ", "ADD"]
 }
 
 resource "nexus_security_role" "zbm_push" {
