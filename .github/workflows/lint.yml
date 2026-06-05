@@ -47,6 +47,6 @@ jobs:
       # uv's wheel cache is pre-warmed in the image).
       - run: uv sync --locked
       - run: mise run lint
-      # Hermetic git/passlib unit tests (testpaths=test/unit). pytest is a
-      # locked project dep, so `uv sync` above already installed it.
+      # Hermetic unit tests (testpaths=unit_tests). pytest is a locked
+      # project dep, so `uv sync` above already installed it.
       - run: mise run test
