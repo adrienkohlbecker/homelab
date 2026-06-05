@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Boot the most recent ZBM build against the box variant's packer qcow2"
+#MISE interactive=true
 # Iterate on zbm/config.yaml + zbm/dracut.conf.d/* without re-running packer
 # end-to-end: edit, `mise run zbm:build`, then `mise run zbm:test`. Picks the
 # newest zfsbootmenu-v*-<arch>.tar.gz under zbm-build/<arch>/, extracts it
