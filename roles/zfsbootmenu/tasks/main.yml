@@ -1,5 +1,4 @@
 - name: Create ZBM directory
-  when: ansible_architecture in zfsbootmenu_release
   file:
     dest: /boot/efi/EFI/ZBM/
     state: directory
@@ -14,7 +13,6 @@
 # No backup: true — /boot/efi is vfat; backup_local's chown fails on FAT.
 - name: Download zfsbootmenu  # noqa: require-backup
   when:
-    - ansible_architecture in zfsbootmenu_release
     - not (ansible_check_mode and zfsbootmenu_zbm_directory.changed)
   get_url:
     url: "{{ zfsbootmenu_release[ansible_architecture].url }}"
@@ -38,8 +36,7 @@
 # No backup: true — /boot/efi is vfat; backup_local's chown fails on FAT.
 - name: Seed ZBM backup loader  # noqa: require-backup
   when:
-    - ansible_architecture in zfsbootmenu_release
-    - not (ansible_check_mode and zfsbootmenu_zbm_directory.changed)
+    - not (ansible_check_mode and zfsbootmenu_efi.changed)
   copy:
     src: /boot/efi/EFI/ZBM/VMLINUZ.EFI
     dest: /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
@@ -54,8 +51,6 @@
 
 - name: Ask to reboot
   when:
-    - ansible_architecture in zfsbootmenu_release
-    - zfsbootmenu_efi is defined
     - zfsbootmenu_efi is changed
   file:
     path: /var/run/reboot-required

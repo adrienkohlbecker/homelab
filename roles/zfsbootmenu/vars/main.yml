@@ -11,3 +11,7 @@ zfsbootmenu_release:
   x86_64:
     url: "{{ mirror_github }}/zbm-dev/zfsbootmenu/releases/download/v{{ zfsbootmenu_version }}/zfsbootmenu-recovery-x86_64-v{{ zfsbootmenu_version }}-{{ zfsbootmenu_kernel }}.EFI"
     sha256: 3d4c55147964fdbc2b0042535d9ee117dc51bee82af045040d26ae9dfb9bdf0d
+  # NOTE: The file below is currently non-functional and used only as a fixture to test ansible code
+  aarch64:
+    url: "{{ mirror_gitea_lab }}/api/packages/adrienkohlbecker/generic/zfsbootmenu/{{ zfsbootmenu_version }}/zfsbootmenu-recovery-aarch64-v{{ zfsbootmenu_version }}-{{ zfsbootmenu_kernel }}.EFI"
+    sha256: 8cbe5105ff0d005ff67a4ddcf0d91abed614b07fa281b682e5be5b2bf4929322
