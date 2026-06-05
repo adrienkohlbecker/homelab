@@ -11,4 +11,4 @@
 # without a DHCP server).
 set -euo pipefail
 mkdir -p /etc/cmdline.d
-echo "ip=single-dhcp rd.neednet=1" >/etc/cmdline.d/dracut-network.conf
+echo "ip=single-dhcp rd.neednet=1 rd.net.timeout.carrier=30" >/etc/cmdline.d/dracut-network.conf
