@@ -68,8 +68,14 @@ jobs:
           sock="unix:///run/user/$(id -u)/buildkit/buildkitd.sock"
           docker buildx rm zbm >/dev/null 2>&1 || true
           docker buildx rm zbm-rootless >/dev/null 2>&1 || true
-          docker buildx inspect zbm-remote --bootstrap >/dev/null 2>&1 \
-            || docker buildx create --name zbm-remote --driver remote "$sock"
+          # Unconditional rm + create: if zbm-remote exists but buildkitd is
+          # temporarily down (e.g. right after a runner reboot), inspect
+          # --bootstrap exits non-zero and the || create fails because the name
+          # already exists. rm-then-create is simpler and equally safe -- the
+          # buildx config is just a pointer to the socket; build cache lives in
+          # buildkitd storage and is unaffected.
+          docker buildx rm zbm-remote >/dev/null 2>&1 || true
+          docker buildx create --name zbm-remote --driver remote "$sock"
           docker buildx use zbm-remote
           docker buildx inspect zbm-remote
 
