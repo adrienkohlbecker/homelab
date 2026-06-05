@@ -10,4 +10,4 @@ EFI:
   Enabled: true
   SplashImage: /zbm/media/splash.bmp
 Kernel:
-  CommandLine: ro quiet loglevel=0 nomodeset
+  CommandLine: ro quiet loglevel=0 nomodeset ip=dhcp rd.neednet=1 rd.net.timeout.carrier=30
