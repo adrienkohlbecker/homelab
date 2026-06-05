@@ -1,0 +1,25 @@
+- name: Configure mise apt repository
+  import_role:
+    name: apt_source
+    tasks_from: configure
+  vars:
+    apt_source_args:
+      name: mise
+      key_url: https://mise.en.dev/gpg-key.pub
+      key_id: 24853EC9F655CE80B48E6C3A8B81C9D17413A06D
+      uris: "{{ mirror_apt_mise }}"
+      suites: stable
+      components: main
+  tags:
+    - mise
+
+- name: Install mise
+  when: not (ansible_check_mode and apt_source_mise_changed)
+  apt:
+    pkg:
+      - mise
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - mise

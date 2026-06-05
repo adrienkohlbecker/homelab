@@ -1,0 +1,5 @@
+# mise is installed by the mise role in site.yml; bring it up here so
+# the converge and _verify run against a realistic stack.
+- name: _setup | Install mise
+  import_role:
+    name: mise

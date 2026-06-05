@@ -1,8 +1,0 @@
-user_mise_version: "2026.4.28"
-user_mise_release:
-  x86_64:
-    url: "{{ mirror_github }}/jdx/mise/releases/download/v{{ user_mise_version }}/mise-v{{ user_mise_version }}-linux-x64.tar.gz"
-    sha256: "ea7461398ca944029e9a4bd8ee25c94dc5c33bea78926f4c9fd7409e73b29b39"
-  aarch64:
-    url: "{{ mirror_github }}/jdx/mise/releases/download/v{{ user_mise_version }}/mise-v{{ user_mise_version }}-linux-arm64.tar.gz"
-    sha256: "3d8a3570e520136424e781208249abab456c3705f684efd21a4c65a6af565b42"
