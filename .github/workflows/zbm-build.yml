@@ -126,7 +126,9 @@ jobs:
         with:
           name: zfsbootmenu-${{ github.run_id }}
           path: |
-            zbm-build/**/zfsbootmenu-v*.tar.gz
+            zbm-build/**/*-bootmenu
+            zbm-build/**/*-bootmenu.img
+            zbm-build/**/zfsbootmenu.EFI
             zbm-build/**/zfsbootmenu-v*.tar.gz.sha256sum
 
       # Push the CI build to the private on-lab Nexus raw repo (zbm). Stable
