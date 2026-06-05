@@ -66,6 +66,12 @@ jobs:
           set -euo pipefail
           echo "DOCKER_HOST=${DOCKER_HOST:-<unset>}"
           sock="unix:///run/user/$(id -u)/buildkit/buildkitd.sock"
+          # Scope the builder name to the run ID so concurrent pushes to different
+          # branches don't race on the shared lab runner: the concurrency group only
+          # serializes per-ref, but two refs can run simultaneously. Without a
+          # run-scoped name, A rm-then-creates "zbm-remote" while B does the same
+          # -- A's builder is deleted mid-build. Each job manages its own instance.
+          builder_name="zbm-remote-${{ github.run_id }}"
           docker buildx rm zbm >/dev/null 2>&1 || true
           docker buildx rm zbm-rootless >/dev/null 2>&1 || true
           # Unconditional rm + create: if zbm-remote exists but buildkitd is
@@ -75,9 +81,15 @@ jobs:
           # buildx config is just a pointer to the socket; build cache lives in
           # buildkitd storage and is unaffected.
           docker buildx rm zbm-remote >/dev/null 2>&1 || true
-          docker buildx create --name zbm-remote --driver remote "$sock"
-          docker buildx use zbm-remote
-          docker buildx inspect zbm-remote
+          docker buildx rm "$builder_name" >/dev/null 2>&1 || true
+          docker buildx create --name "$builder_name" --driver remote "$sock"
+          docker buildx use "$builder_name"
+          # --bootstrap dials the remote socket to verify buildkitd is actually
+          # serving before the 30-min build starts; without it, inspect only reads
+          # local config and a down daemon surfaces as a confusing error 30 minutes
+          # into the builder-image step.
+          docker buildx inspect --bootstrap "$builder_name"
+          echo "BUILDX_BUILDER=$builder_name" >> "$GITHUB_ENV"
 
       # No mise on the bare runner (it lives in the CI container, which has no
       # podman socket). The two scripts are plain bash needing only MISE_CONFIG_ROOT
