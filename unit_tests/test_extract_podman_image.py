@@ -7,9 +7,7 @@ without needing systemd D-Bus or a running podman.
 import importlib
 from pathlib import Path
 
-_MODULE_PATH = (
-    Path(__file__).resolve().parent.parent / "roles" / "systemd_unit" / "library" / "extract_podman_image.py"
-)
+_MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "systemd_unit" / "library" / "extract_podman_image.py"
 
 
 def _load():
