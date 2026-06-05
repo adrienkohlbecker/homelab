@@ -88,23 +88,26 @@ jobs:
         env:
           NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
           NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
-          # Per-run auth file (not the shared ~/.config auth.json) so a sibling
-          # job on this runner can't read the creds mid-push.
-          REGISTRY_AUTH_FILE: ${{ runner.temp }}/zbm-nexus-auth.json
         run: |
           set -euo pipefail
+          # Randomised path so concurrent jobs on the same runner instance can't
+          # collide on the auth file (matches the mktemp pattern in ci-image.yml).
+          REGISTRY_AUTH_FILE=$(mktemp -p "${RUNNER_TEMP}" zbm-nexus-auth.XXXXXX.json)
+          export REGISTRY_AUTH_FILE
           trap 'rm -f "$REGISTRY_AUTH_FILE"' EXIT
           export MISE_CONFIG_ROOT="$GITHUB_WORKSPACE"
+          # Explicit cache ref so the workstation default (empty) doesn't
+          # accidentally inherit a LAN-only Nexus URL in a future mis-invoke.
+          export ZBM_BUILDER_CACHE_REF="nexus.lab.fahm.fr/homelab/zbm-builder:v${ZBM_VERSION}-${ARCH}"
           echo "Building ZFSBootMenu v${ZBM_VERSION}${ZBM_BUILD_SUFFIX} for ${ARCH}"
           # Registry-backed build cache in the on-lab Nexus homelab docker repo.
-          # builder-image.sh defaults the cache ref (its --cache-from pull is
+          # builder-image.sh uses ZBM_BUILDER_CACHE_REF (--cache-from pull is
           # best-effort, so it always runs); we only have to authorize the
           # push-back. Log in (per-run auth file) and set ZBM_BUILDER_CACHE_PUSH
           # so the freshly built image seeds the cache. Without creds (e.g.
           # before the secret is provisioned) we skip the push but still benefit
           # from any cached layers.
           if [ -n "${NEXUS_USERNAME:-}" ] && [ -n "${NEXUS_PASSWORD:-}" ]; then
-            rm -f "$REGISTRY_AUTH_FILE"
             printf '%s' "$NEXUS_PASSWORD" | podman login nexus.lab.fahm.fr --username "$NEXUS_USERNAME" --password-stdin
             unset NEXUS_PASSWORD
             export ZBM_BUILDER_CACHE_PUSH=1
