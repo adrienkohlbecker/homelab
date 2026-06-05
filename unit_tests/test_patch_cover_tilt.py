@@ -4,7 +4,7 @@ import importlib
 import re
 from pathlib import Path
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent.parent / "roles" / "z2m" / "files" / "patch_cover_tilt.py"
+_MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "z2m" / "files" / "patch_cover_tilt.py"
 
 
 def _load():

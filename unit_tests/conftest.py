@@ -1,4 +1,4 @@
-"""Shared fixtures for the test/unit suite."""
+"""Shared fixtures for the unit_tests suite."""
 
 from collections.abc import Callable, Iterator
 from pathlib import Path

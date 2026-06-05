@@ -272,7 +272,7 @@ class TestCli:
             capture_output=True,
             text=True,
             cwd=roles_tree,
-            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "test")},
             timeout=30,
         )
         assert result.returncode == 0
@@ -287,7 +287,7 @@ class TestCli:
             capture_output=True,
             text=True,
             cwd=roles_tree,
-            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "test")},
             timeout=30,
         )
         assert result.returncode == 0
@@ -300,7 +300,7 @@ class TestCli:
             capture_output=True,
             text=True,
             cwd=roles_tree,
-            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "test")},
             timeout=30,
         )
         assert result.returncode == 0
@@ -322,7 +322,7 @@ class TestCli:
             capture_output=True,
             text=True,
             cwd=roles_tree,
-            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "test")},
             timeout=30,
         )
         assert result.returncode == 0
@@ -337,7 +337,7 @@ class TestCli:
             capture_output=True,
             text=True,
             cwd=roles_tree,
-            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "test")},
             timeout=30,
         )
         assert result.returncode == 0
@@ -349,7 +349,7 @@ class TestCli:
             capture_output=True,
             text=True,
             cwd=roles_tree,
-            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "test")},
             timeout=30,
         )
         assert result.returncode != 0

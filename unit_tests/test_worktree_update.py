@@ -35,7 +35,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 UPDATE_SH = REPO_ROOT / "mise-tasks" / "worktree" / "update.sh"
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git is required")

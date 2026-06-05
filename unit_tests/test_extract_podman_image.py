@@ -8,7 +8,7 @@ import importlib
 from pathlib import Path
 
 _MODULE_PATH = (
-    Path(__file__).resolve().parent.parent.parent / "roles" / "systemd_unit" / "library" / "extract_podman_image.py"
+    Path(__file__).resolve().parent.parent / "roles" / "systemd_unit" / "library" / "extract_podman_image.py"
 )
 
 

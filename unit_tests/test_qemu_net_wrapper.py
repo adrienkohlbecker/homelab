@@ -9,7 +9,7 @@ them as passt port specs -- is pure string work and gets pinned here.
 import importlib.util
 from pathlib import Path
 
-_WRAPPER = Path(__file__).parents[2] / "packer" / "qemu_net_wrapper.py"
+_WRAPPER = Path(__file__).parents[1] / "packer" / "qemu_net_wrapper.py"
 _spec = importlib.util.spec_from_file_location("qemu_net_wrapper", _WRAPPER)
 assert _spec and _spec.loader
 wrapper = importlib.util.module_from_spec(_spec)

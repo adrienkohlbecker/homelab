@@ -28,5 +28,5 @@ line-length = 120
 exclude = [".claude"]
 
 [tool.pytest.ini_options]
-testpaths = ["test/unit"]
+testpaths = ["unit_tests"]
 pythonpath = ["test"]

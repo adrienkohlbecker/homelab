@@ -7,7 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 
 # role-deps.py lives outside the pythonpath; import it by path.
-_ROLE_DEPS_PATH = Path(__file__).resolve().parent.parent.parent / "mise-tasks" / "ci" / "role-deps.py"
+_ROLE_DEPS_PATH = Path(__file__).resolve().parent.parent / "mise-tasks" / "ci" / "role-deps.py"
 
 
 def _load_role_deps():

@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-_LINT_DIR = Path(__file__).resolve().parent.parent.parent / "lint" / "ansible_rules"
+_LINT_DIR = Path(__file__).resolve().parent.parent / "lint" / "ansible_rules"
 
 
 # ---------------------------------------------------------------------------
@@ -103,11 +103,11 @@ class TestTestMetaValidation:
         result = subprocess.run(
             [
                 sys.executable,
-                str(Path(__file__).resolve().parent.parent.parent / "mise-tasks" / "lint" / "test-meta.py"),
+                str(Path(__file__).resolve().parent.parent / "mise-tasks" / "lint" / "test-meta.py"),
             ],
             capture_output=True,
             text=True,
-            cwd=str(Path(__file__).resolve().parent.parent.parent),
+            cwd=str(Path(__file__).resolve().parent.parent),
             timeout=30,
         )
         assert result.returncode == 0, f"test-meta.py failed:\n{result.stderr}"

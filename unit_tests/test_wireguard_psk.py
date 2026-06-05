@@ -1,10 +1,10 @@
-"""Unit tests for filter_plugins/wireguard_psk.py — PSK derivation."""
+"""Unit tests for roles/wireguard/filter_plugins/wireguard_psk.py — PSK derivation."""
 
 import base64
 import importlib
 from pathlib import Path
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent.parent / "filter_plugins" / "wireguard_psk.py"
+_MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "wireguard" / "filter_plugins" / "wireguard_psk.py"
 
 
 def _load():

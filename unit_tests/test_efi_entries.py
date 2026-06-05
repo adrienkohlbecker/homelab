@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent.parent / "roles" / "boot" / "files" / "efi_entries.py"
+_MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "boot" / "files" / "efi_entries.py"
 
 
 def _load():

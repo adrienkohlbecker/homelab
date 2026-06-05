@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent.parent / "packer" / "publish.py"
+_MODULE_PATH = Path(__file__).resolve().parent.parent / "packer" / "publish.py"
 
 
 def _load():
