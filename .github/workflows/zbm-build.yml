@@ -164,7 +164,9 @@ jobs:
             || { echo "dropbear not found in initramfs (crypt-ssh module missing?)" >&2; exit 1; }
           echo "$initrd_files" | grep -q 'authorized_keys' \
             || { echo "authorized_keys not found in initramfs" >&2; exit 1; }
-          echo "Initramfs SSH: dropbear + authorized_keys OK"
+          echo "$initrd_files" | grep -qE 'zfs\.ko' \
+            || { echo "zfs.ko not found in initramfs (force_drivers zfs missing?)" >&2; exit 1; }
+          echo "Initramfs SSH: dropbear + authorized_keys OK; ZFS kernel module OK"
 
       - name: Upload artifacts to GitHub
         uses: actions/upload-artifact@v7
