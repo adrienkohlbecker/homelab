@@ -189,6 +189,17 @@ def parse_args() -> argparse.Namespace:
         "--image-dir to be explicit so it can't accidentally corrupt a "
         "published artifact directory.",
     )
+    parser.add_argument(
+        "--extra-hostfwd",
+        action="append",
+        type=int,
+        default=[],
+        metavar="GUEST_PORT",
+        dest="extra_hostfwds",
+        help="Forward an additional TCP guest port to a free host port. The "
+        "allocated host:port mapping is printed before qemu starts. "
+        "Repeatable.",
+    )
 
     args = parser.parse_args()
     if (args.kernel is None) != (args.initrd is None):
@@ -320,6 +331,8 @@ def _run_foreground(m: QemuMachine) -> int:
     """
     try:
         asyncio.run(m.prepare())
+        for guest_port, host_port in m.extra_hostfwd_ports.items():
+            print_line(f"Extra hostfwd: 127.0.0.1:{host_port} -> guest:{guest_port}")
         cmd = m._boot_command()
         print_cmd_line(cmd)
         proc = subprocess.Popen(cmd)
@@ -360,6 +373,7 @@ def main() -> int:
         foreground=args.foreground,
         qmp_socket=args.qmp,
         commit_in_place=args.commit,
+        extra_hostfwds=args.extra_hostfwds,
     )
 
     if args.foreground:
