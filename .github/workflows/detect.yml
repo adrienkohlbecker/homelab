@@ -64,6 +64,8 @@ on:
         value: ${{ jobs.detect.outputs.packer_ubuntu_pug }}
       packer_ubuntu_hetzner:
         value: ${{ jobs.detect.outputs.packer_ubuntu_hetzner }}
+      site_test:
+        value: ${{ jobs.detect.outputs.site_test }}
 
 defaults:
   run:
@@ -139,6 +141,7 @@ jobs:
       packer_ubuntu_lab: ${{ steps.detect.outputs.packer_ubuntu_lab }}
       packer_ubuntu_pug: ${{ steps.detect.outputs.packer_ubuntu_pug }}
       packer_ubuntu_hetzner: ${{ steps.detect.outputs.packer_ubuntu_hetzner }}
+      site_test: ${{ steps.detect.outputs.site_test }}
     steps:
       - uses: actions/checkout@v6
         with: { fetch-depth: 50 }

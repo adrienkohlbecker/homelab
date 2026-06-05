@@ -1320,6 +1320,7 @@ class TestCmdEmit:
         assert out["packer_changed"] == "false"
         assert out["packer_worker_changed"] == "false"
         assert out["ci_image_changed"] == "false"
+        assert out["site_test"] == "false"
 
     def test_packer_changed_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
@@ -1344,6 +1345,13 @@ class TestCmdEmit:
         assert rc == 0
         out = _parse_kv(capsys.readouterr().out)
         assert out["ci_image_changed"] == "true"
+
+    def test_site_test_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+        rc = detect._cmd_emit(["--matrix", "[]", "--site-test", "true"])
+        assert rc == 0
+        out = _parse_kv(capsys.readouterr().out)
+        assert out["site_test"] == "true"
 
     def test_packer_sources(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
@@ -1523,6 +1531,7 @@ class TestCmdRun:
         assert kv["packer_changed"] == "true"
         assert kv["packer_worker_changed"] == "true"
         assert kv["ci_image_changed"] == "true"
+        assert kv["site_test"] == "true"
         assert "schedule" in out.err
 
     def test_local_preview(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
@@ -1541,7 +1550,9 @@ class TestCmdRun:
         rc = detect._cmd_run([])
         assert rc == 0
         out = capsys.readouterr()
-        assert "zfs:box" in out.out
+        kv = _parse_kv(out.out)
+        assert "zfs:box" in kv["matrix"]
+        assert kv["site_test"] == "false"
         assert "HEAD~1" in out.err
 
     def test_ci_base_ref_override(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
@@ -1596,8 +1607,8 @@ class TestCmdRun:
         monkeypatch.setattr(detect, "_full_universe_matrix", lambda: '["big:box"]')
         rc = detect._cmd_run([])
         assert rc == 0
-        # kv = _parse_kv(capsys.readouterr().out)
-        # assert kv["packer_changed"] == "true"
+        kv = _parse_kv(capsys.readouterr().out)
+        assert kv["site_test"] == "true"
 
     def test_push_green_needs_fetch(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
@@ -1638,7 +1649,10 @@ class TestCmdRun:
         monkeypatch.setattr(detect, "_full_universe_matrix", lambda: '["big:box"]')
         rc = detect._cmd_run([])
         assert rc == 0
-        assert "FULL universe" in capsys.readouterr().err
+        out = capsys.readouterr()
+        assert "FULL universe" in out.err
+        kv = _parse_kv(out.out)
+        assert kv["site_test"] == "true"
 
     def test_packer_change_adds_packer_role(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
