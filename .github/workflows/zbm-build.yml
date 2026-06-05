@@ -91,11 +91,9 @@ jobs:
           docker buildx inspect --bootstrap "$builder_name"
           echo "BUILDX_BUILDER=$builder_name" >> "$GITHUB_ENV"
 
-      # No mise on the bare runner (it lives in the CI container, which has no
-      # podman socket). The two scripts are plain bash needing only MISE_CONFIG_ROOT
-      # + ZBM_VERSION exported and otherwise system tools (git/docker/tar/...),
-      # so invoke them directly. ZBM_VERSION and ZBM_BUILD_SUFFIX come from the
-      # "Set build variables" step above.
+      # mise is installed on the bare runner (github_runner role). ZBM_VERSION and
+      # ZBM_BUILD_SUFFIX come from the "Set build variables" step above; MISE_CONFIG_ROOT
+      # is set automatically by mise to the repo root (location of mise.toml).
       - name: Build the ZBM image + tarball
         env:
           NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
@@ -111,7 +109,6 @@ jobs:
           # merge with existing auth) and bails on an empty file with "unexpected end
           # of JSON input". Remove it so podman login creates it fresh.
           rm -f "$REGISTRY_AUTH_FILE"
-          export MISE_CONFIG_ROOT="$GITHUB_WORKSPACE"
           # Explicit cache ref so the workstation default (empty) doesn't
           # accidentally inherit a LAN-only Nexus URL in a future mis-invoke.
           export ZBM_BUILDER_CACHE_REF="nexus.lab.fahm.fr/homelab/zbm-builder:v${ZBM_VERSION}-${ARCH}"
@@ -129,8 +126,8 @@ jobs:
           else
             echo "NEXUS_USERNAME/PASSWORD not set; building without pushing to the registry cache"
           fi
-          ./mise-tasks/zbm/builder-image.sh
-          ./mise-tasks/zbm/build.sh
+          mise run zbm:builder-image
+          mise run zbm:build
 
       # Turn "it ran" into an assertion: the tarball exists and carries the
       # Components kernel + initrd and the renamed unified EFI.
@@ -182,38 +179,15 @@ jobs:
 
       # Push the CI build to the private on-lab Nexus raw repo (zbm). Each run
       # creates a new per-(version,suffix,arch) file (write_policy=ALLOW).
-      # Only on master — branch builds go to GitHub artifacts only. Skips
-      # gracefully if the NEXUS_ZBM_* secrets aren't provisioned yet (terraform
-      # apply pending) so the build still passes.
+      # Only on master — branch builds go to GitHub artifacts only. upload.sh
+      # skips gracefully if NEXUS_ZBM_* aren't provisioned yet (terraform apply
+      # pending) so the build still passes.
       - name: Upload the built tarball to Nexus
         if: github.ref == 'refs/heads/master'
         env:
           NEXUS_ZBM_USERNAME: ${{ secrets.NEXUS_ZBM_USERNAME }}
           NEXUS_ZBM_PASSWORD: ${{ secrets.NEXUS_ZBM_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [ -z "${NEXUS_ZBM_USERNAME:-}" ] || [ -z "${NEXUS_ZBM_PASSWORD:-}" ]; then
-            echo "NEXUS_ZBM_* not set; skipping Nexus upload (run 'mise run tf apply' to provision the zbm repo + creds)"
-            exit 0
-          fi
-          tarball="${GITHUB_WORKSPACE}/zbm-build/${ARCH}/zfsbootmenu-v${ZBM_VERSION}${ZBM_BUILD_SUFFIX}-${ARCH}.tar.gz"
-          sha256sum="${tarball}.sha256sum"
-          dest_base="https://nexus.lab.fahm.fr/repository/zbm"
-          # Write credentials to a temp .netrc rather than --user to keep the
-          # password out of /proc/<pid>/cmdline while curl runs on the shared runner.
-          netrc=$(mktemp -p "${RUNNER_TEMP:-/tmp}" zbm-nexus-upload.XXXXXX)
-          chmod 600 "$netrc"
-          trap 'rm -f "$netrc"' EXIT
-          printf 'machine nexus.lab.fahm.fr login %s password %s\n' \
-            "$NEXUS_ZBM_USERNAME" "$NEXUS_ZBM_PASSWORD" >"$netrc"
-          unset NEXUS_ZBM_PASSWORD
-          for file in "$tarball" "$sha256sum"; do
-            name="$(basename "$file")"
-            curl --fail-with-body -sS --retry 3 --retry-delay 5 --retry-connrefused \
-              --netrc-file "$netrc" \
-              --upload-file "$file" "${dest_base}/${name}"
-            echo "uploaded ${name}"
-          done
+        run: mise run zbm:upload
 
       - name: Remove buildx builder
         if: always()
