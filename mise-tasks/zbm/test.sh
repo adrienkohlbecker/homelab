@@ -20,9 +20,13 @@ trap 'rm -rf "$tmp"' EXIT INT TERM
 tar -xzf "$tarball" -C "$tmp" --no-same-owner
 mkdir -p /tmp/zbm-extract
 
-# --extra-hostfwd 222: forward Dropbear's port to a free host port; launch.py
-# prints "Extra hostfwd: 127.0.0.1:HOST_PORT -> guest:222" before qemu starts.
-# SSH into ZBM recovery with: ssh -p HOST_PORT -o StrictHostKeyChecking=no root@127.0.0.1
+# Dropbear port is forwarded to a free host port allocated at launch time.
+# --write-hostfwds writes "HOST_PORT 222" to a known path before qemu starts
+# so it's readable from a second terminal once the serial console takes over.
+zbm_ports_file="/tmp/zbm-dropbear-port"
+echo "Dropbear SSH port → $zbm_ports_file (written before qemu starts)"
+echo "  then: ssh -p \$(awk '{print \$1}' $zbm_ports_file) -o StrictHostKeyChecking=no root@127.0.0.1"
+
 "${MISE_CONFIG_ROOT}/test/launch.py" \
   --machine box \
   --kernel "$tmp"/vmlin*-bootmenu \
@@ -33,5 +37,6 @@ mkdir -p /tmp/zbm-extract
   --virtfs /tmp/zbm-extract:share \
   --qmp /tmp/qmp.sock \
   --extra-hostfwd 222 \
+  --write-hostfwds "$zbm_ports_file" \
   --foreground \
   --no-ssh-wait
