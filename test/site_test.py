@@ -47,6 +47,11 @@ def parse_args() -> argparse.Namespace:
         help="Overall timeout for boot + converge (default: %(default)s)",
     )
     parser.add_argument(
+        "--keep",
+        action="store_true",
+        help="Keep the machine running after the test (for debugging)",
+    )
+    parser.add_argument(
         "--workdir-parent",
         type=Path,
         default=None,
@@ -60,42 +65,69 @@ async def run_site_test(m: QemuMachine, *, timeout: int) -> None:
     task = asyncio.current_task()
     assert task is not None
 
+    # When --keep is set and the deadline fires, absorb the cancel so the
+    # VM stays up for debugging. Re-surface TimeoutError after the wait.
+    timer_absorbed = False
+
     with cancel_on_signal(task):
-        async with asyncio.timeout(timeout):
+        async with asyncio.timeout(timeout) as timeout_cm:
             async with m:
-                await m.ensure_booted()
-                print_line("Booted")
-
-                await m.ensure_ssh()
-                print_line("SSH up")
-
-                result = await m.ssh_command("systemctl", "is-system-running", "--wait", check=False)
-                state = "\n".join(result.stdout).strip()
-                if result.exitcode != 0 or state != "running":
-                    failed = await m.ssh_command("systemctl", "--failed", "--no-legend", check=False)
-                    failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
-                    print_line(f"System state {state!r}; failed units:\n{failed_units}")
-                    raise RuntimeError(f"systemd is-system-running returned {state!r}")
-                print_line(f"System ready: {state}")
-
-                print_line("Running mirrors prelude")
-                await m.ansible_command(f"{m.workdir.name}/_mirrors.yml")
-
-                staged = Path(m.workdir.name) / "site.yml"
-                shutil.copy(Path("site.yml"), staged)
-
-                print_line("Running site.yml converge")
                 try:
-                    await m.ansible_command(str(staged))
-                except CommandFailedException:
-                    print_line("Site converge failed")
-                    with contextlib.suppress(Exception):
-                        await m.collect_failure_artifacts()
-                    raise
+                    try:
+                        await m.ensure_booted()
+                        print_line("Booted")
 
-                print_line("Site converge passed")
-                await m.ssh_command("sudo", "systemctl", "poweroff", check=False)
-                await m.wait()
+                        await m.ensure_ssh()
+                        print_line("SSH up")
+
+                        result = await m.ssh_command("systemctl", "is-system-running", "--wait", check=False)
+                        state = "\n".join(result.stdout).strip()
+                        if result.exitcode != 0 or state != "running":
+                            failed = await m.ssh_command("systemctl", "--failed", "--no-legend", check=False)
+                            failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
+                            print_line(f"System state {state!r}; failed units:\n{failed_units}")
+                            raise RuntimeError(f"systemd is-system-running returned {state!r}")
+                        print_line(f"System ready: {state}")
+
+                        print_line("Running mirrors prelude")
+                        await m.ansible_command(f"{m.workdir.name}/_mirrors.yml")
+
+                        staged = Path(m.workdir.name) / "site.yml"
+                        shutil.copy(Path("site.yml"), staged)
+
+                        print_line("Running site.yml converge")
+                        try:
+                            await m.ansible_command(str(staged))
+                        except CommandFailedException:
+                            print_line("Site converge failed")
+                            with contextlib.suppress(Exception):
+                                await m.collect_failure_artifacts()
+                            raise
+
+                        print_line("Site converge passed")
+                        if not m.keep_vm:
+                            await m.ssh_command("sudo", "systemctl", "poweroff", check=False)
+                            await m.wait()
+
+                    except asyncio.CancelledError:
+                        if m.keep_vm and timeout_cm.expired() and task.cancelling():
+                            task.uncancel()
+                            timer_absorbed = True
+                            print_line(
+                                f"Timed out after {timeout}s; --keep set, dropping to SSH for debug",
+                            )
+                        else:
+                            raise
+
+                finally:
+                    if m.keep_vm and not task.cancelling():
+                        with contextlib.suppress(RuntimeError):
+                            timeout_cm.reschedule(None)
+                        m.print_ssh_instructions()
+                        await m.wait()
+
+    if timer_absorbed:
+        raise TimeoutError(f"site_test timed out after {timeout}s")
 
 
 def main() -> int:
@@ -106,7 +138,7 @@ def main() -> int:
     m = QemuMachine(
         machine="box",
         role="_site_test",
-        keep_vm=False,
+        keep_vm=args.keep,
         ubuntu_name=args.ubuntu,
         machine_timeout=args.timeout,
         workdir_parent=args.workdir_parent,
