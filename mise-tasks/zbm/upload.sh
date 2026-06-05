@@ -35,13 +35,14 @@ fi
 
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 out_dir="${MISE_CONFIG_ROOT}/zbm-build/${arch}"
-# ZBM_BUILD_SUFFIX (e.g. -ci.12345.1) is appended by build.sh in CI; empty locally.
-tarball="zfsbootmenu-v${ZBM_VERSION}${ZBM_BUILD_SUFFIX:-}-${arch}.tar.gz"
+# Discover the tarball by glob — build.sh names it with the actual kernel version
+# (e.g. zfsbootmenu-v3.1.0-k6.18.3_1-x86_64.tar.gz); reconstructing the name
+# here would require re-extracting the kernel version from the binary.
+tarball_path="$(ls "${out_dir}"/zfsbootmenu-v*.tar.gz 2>/dev/null | head -1)"
+[ -n "$tarball_path" ] || { echo "no tarball in ${out_dir} — run 'mise run zbm:build' first" >&2; exit 1; }
+tarball="$(basename "$tarball_path")"
 sha256sum_file="${tarball}.sha256sum"
-
-for f in "$tarball" "$sha256sum_file"; do
-  test -f "${out_dir}/${f}" || { echo "missing ${out_dir}/${f} — run 'mise run zbm:build' first" >&2; exit 1; }
-done
+[ -f "${out_dir}/${sha256sum_file}" ] || { echo "missing ${out_dir}/${sha256sum_file} — run 'mise run zbm:build' first" >&2; exit 1; }
 
 dest_base="https://nexus.lab.fahm.fr/repository/zbm"
 netrc="$(mktemp)"

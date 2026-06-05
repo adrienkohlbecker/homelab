@@ -10,4 +10,5 @@ EFI:
   Enabled: true
   SplashImage: /zbm/media/splash.bmp
 Kernel:
+  Version: "6.18"
   CommandLine: ro quiet loglevel=0 nomodeset
