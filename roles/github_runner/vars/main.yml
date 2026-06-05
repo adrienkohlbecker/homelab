@@ -22,6 +22,8 @@ github_runner_archive:
 # arch in lockstep, re-apply. The buildkit tarball ships buildkitd + buildctl +
 # buildkit-runc under bin/; rootlesskit sets up the unprivileged user namespace
 # buildkitd runs in (it reads /etc/subuid directly -- see roles/subid).
+# perlfix in mise-tasks/zbm/builder-image.sh works around an xbps unpack quirk
+# in rootless buildkitd that drops Pod/Usage.pm; re-test removal when bumping.
 github_runner_buildkit_version: "0.30.0"
 github_runner_buildkit_archive:
   x86_64:
