@@ -109,6 +109,7 @@ CI_IMAGE_INPUT_PATTERNS: list[str] = [
 ZBM_PATH_PATTERNS: list[str] = [
     r"zbm/",
     r"mise-tasks/zbm/",
+    r"mise\.toml",
 ]
 
 FULL_UNIVERSE_RE = re.compile(r"^(" + "|".join(FULL_UNIVERSE_PATTERNS) + r")$")
@@ -790,6 +791,7 @@ def _cmd_run(args: list[str]) -> int:
             packer_affected={"qemu", "worker"},
             ci_image_changed=True,
             site_test=True,
+            zbm_changed=True,
         )
 
     head_sha = os.environ.get("GITHUB_SHA", "")
@@ -830,12 +832,14 @@ def _cmd_run(args: list[str]) -> int:
             log_fn=log,
         )
         if not green:
-            return full_universe("no green ancestor run found", packer_affected={"qemu", "worker"})
+            return full_universe("no green ancestor run found", packer_affected={"qemu", "worker"}, zbm_changed=True)
         if git_rev_parse(green) is None:
             log(f"  base {green[:12]} outside shallow checkout; fetching the commit")
             git_fetch_commit(green)
         if git_rev_parse(green) is None:
-            return full_universe(f"green run {green[:12]} unreachable", packer_affected={"qemu", "worker"})
+            return full_universe(
+                f"green run {green[:12]} unreachable", packer_affected={"qemu", "worker"}, zbm_changed=True
+            )
         base_ref = green
         log(f"diff base: {green[:12]} (last green ci run)")
     else:
@@ -844,7 +848,9 @@ def _cmd_run(args: list[str]) -> int:
 
     base = git_rev_parse(base_ref)
     if base is None:
-        return full_universe(f"base ref '{base_ref}' does not resolve", packer_affected={"qemu", "worker"})
+        return full_universe(
+            f"base ref '{base_ref}' does not resolve", packer_affected={"qemu", "worker"}, zbm_changed=True
+        )
 
     changed = git_diff_files(base)
     head_short = git_rev_parse_short("HEAD")
