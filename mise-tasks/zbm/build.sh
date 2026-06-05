@@ -8,8 +8,12 @@ set -euo pipefail
 
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 zbm_base_version="$ZBM_VERSION"
-# ZBM_BUILD_SUFFIX (e.g. "-ci.12345") is appended to the version tag embedded
-# in the initramfs and the tarball filename, but NOT the builder image tag.
+# ZBM_BUILD_SUFFIX is appended to the version tag embedded in the initramfs and
+# the tarball filename, but NOT the builder image tag. CI sets it explicitly
+# (-ci.<run_id>.<attempt>); local builds get a timestamp suffix automatically.
+if [ -z "${ZBM_BUILD_SUFFIX:-}" ] && [ -z "${CI:-}" ]; then
+  ZBM_BUILD_SUFFIX="-local.$(date "+%Y%m%d%H%M%S")"
+fi
 ZBM_VERSION="${zbm_base_version}${ZBM_BUILD_SUFFIX:-}"
 src_dir="${MISE_CONFIG_ROOT}/zbm-build/src"
 out_dir="${MISE_CONFIG_ROOT}/zbm-build/${arch}"
@@ -116,6 +120,9 @@ mv "${efi_images[0]}" "$out_dir/zfsbootmenu.EFI"
 # --owner=0/--group=0 also bake root:0 into the metadata so extracting in a
 # chroot or onto FAT32 doesn't trip "Cannot change ownership" from the
 # container's build-user uids leaking into the archive.
-tarball="zfsbootmenu-v${ZBM_VERSION}-k${ZBM_KERNEL_VERSION}-${arch}.tar.gz"
+tarball="zfsbootmenu-v${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}-${arch}.tar.gz"
 (cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=ustar -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub | gzip -n >"$tarball")
 (cd "$out_dir" && sha256sum "$tarball" | tee "${tarball}.sha256sum")
+# Record the tarball basename so upload.sh can find it without reconstructing
+# the name (which would require knowing ZBM_BUILD_SUFFIX from this run).
+echo "$tarball" > "$out_dir/.latest"
