@@ -1,6 +1,7 @@
 [Unit]
 Description=Rootless BuildKit for github_runner CI image builds
 After=podman.socket
+BindsTo=podman.socket
 
 [Service]
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
