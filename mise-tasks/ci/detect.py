@@ -421,7 +421,7 @@ def _gh_api_get(
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read())
-        except (urllib.error.URLError, urllib.error.HTTPError, OSError):
+        except urllib.error.URLError, urllib.error.HTTPError, OSError:
             if attempt < retries:
                 time.sleep(retry_delay)
             else:
