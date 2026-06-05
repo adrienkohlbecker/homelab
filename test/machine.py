@@ -1079,6 +1079,10 @@ class QemuMachine(Machine):
     # -kernel/-initrd/-append and the firmware boot chain is bypassed.
     # None in normal harness operation on all arches and variants.
     _direct_boot: tuple[Path, Path, str] | None
+    # Extra guest ports to forward in addition to the standard three (22,
+    # 32400, 51820). Set by extra_hostfwds= in __init__; populated in
+    # prepare() as {guest_port: host_port}.
+    extra_hostfwd_ports: dict[int, int]
     # Guest NIC backend, resolved once in __init__ (resolve_net_backend):
     # "passt" inside the noble ci-image (robust UDP datapath), "slirp"
     # everywhere passt can't run. The passt sidecar (a separate process
@@ -1114,6 +1118,7 @@ class QemuMachine(Machine):
         foreground: bool = False,
         qmp_socket: Path | None = None,
         commit_in_place: bool = False,
+        extra_hostfwds: list[int] | None = None,
     ):
         """QEMU-backed machine wrapper used by integration tests.
 
@@ -1175,6 +1180,8 @@ class QemuMachine(Machine):
             raise ValueError("commit_in_place=True requires image_dir to be set explicitly")
         self._commit_in_place = commit_in_place
         self._qmp_socket = qmp_socket
+        self._extra_guest_ports: list[int] = list(extra_hostfwds or [])
+        self.extra_hostfwd_ports: dict[int, int] = {}
         # Captured once at construction so prepare()/_boot_command() don't
         # have to re-run platform.machine() on every access.
         self.arch: ArchProfile = detect_host_arch()
@@ -1287,6 +1294,10 @@ class QemuMachine(Machine):
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.bind((SSH_HOST, 0))
             self.wan_udp_test_port = s.getsockname()[1]
+        for guest_port in self._extra_guest_ports:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind((SSH_HOST, 0))
+                self.extra_hostfwd_ports[guest_port] = s.getsockname()[1]
 
         # On the passt backend qemu connects to the sidecar over a unix
         # socket. It must NOT live in self.workdir: that's on /mnt/scratch
@@ -1586,11 +1597,16 @@ class QemuMachine(Machine):
         # empty for machines absent from the topology (minimal -> slirp's
         # default 10.0.2.0/24). Keyed on inventory_host (box), not machine
         # (box_deps), because the topology indexes inventory names.
+        extra_fwds = "".join(
+            f",hostfwd=tcp:{SSH_HOST}:{host_port}-:{guest_port}"
+            for guest_port, host_port in self.extra_hostfwd_ports.items()
+        )
         netdev = (
             f"user,id=user.0,"
             f"hostfwd=tcp:{SSH_HOST}:{self.ssh_port}-:22,"
             f"hostfwd=tcp:{SSH_HOST}:{self.wan_tcp_test_port}-:32400,"
             f"hostfwd=udp:{SSH_HOST}:{self.wan_udp_test_port}-:51820"
+            f"{extra_fwds}"
             f"{qemu_user_net_args(self.inventory_host)}"
         )
         return netdev, "virtio-net,netdev=user.0"
@@ -1617,7 +1633,8 @@ class QemuMachine(Machine):
             # binds the whole comma-list -- repeating it (addr/a,addr/b) is an
             # "Invalid port specifier" to passt, so the address appears once.
             "--tcp-ports",
-            f"{SSH_HOST}/{self.ssh_port}:22,{self.wan_tcp_test_port}:32400",
+            f"{SSH_HOST}/{self.ssh_port}:22,{self.wan_tcp_test_port}:32400"
+            + "".join(f",{host_port}:{guest_port}" for guest_port, host_port in self.extra_hostfwd_ports.items()),
             "--udp-ports",
             f"{SSH_HOST}/{self.wan_udp_test_port}:51820",
             *passt_address_args(self.inventory_host),
