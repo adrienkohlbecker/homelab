@@ -133,6 +133,20 @@ jobs:
           mise run zbm:builder-image
           mise run zbm:build
 
+      - name: Upload artifacts to GitHub
+        uses: actions/upload-artifact@v7
+        with:
+          name: zfsbootmenu-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            zbm-build/**/*-bootmenu
+            zbm-build/**/*-bootmenu.img
+            zbm-build/**/zfsbootmenu.EFI
+            zbm-build/**/ssh_host_ed25519_key.pub
+            zbm-build/**/*.tar.gz
+            zbm-build/**/*.sha256sum
+
       # Turn "it ran" into an assertion: the tarball exists and carries the
       # Components kernel + initrd and the renamed unified EFI.
       - name: Verify the tarball contents
@@ -174,23 +188,9 @@ jobs:
             || { echo "authorized_keys not found in initramfs" >&2; exit 1; }
           grep -qE 'zfs\.ko' <<<"$initrd_files" \
             || { echo "zfs.ko not found in initramfs (force_drivers zfs missing?)" >&2; exit 1; }
-          grep -q 'efivarfs' <<<"$initrd_files" \
-            || { echo "efivarfs.ko not found in initramfs (add_drivers efivarfs missing?)" >&2; exit 1; }
-          echo "Initramfs SSH: dropbear + authorized_keys OK; ZFS + efivarfs kernel modules OK"
-
-      - name: Upload artifacts to GitHub
-        uses: actions/upload-artifact@v7
-        with:
-          name: zfsbootmenu-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
-          retention-days: 30
-          path: |
-            zbm-build/**/*-bootmenu
-            zbm-build/**/*-bootmenu.img
-            zbm-build/**/zfsbootmenu.EFI
-            zbm-build/**/ssh_host_ed25519_key.pub
-            zbm-build/**/*.tar.gz
-            zbm-build/**/*.sha256sum
+          # efivarfs is CONFIG_EFIVARFS=y (built-in) on the Void 6.18 kernel —
+          # add_drivers silently skips built-ins, so no .ko appears in the cpio.
+          echo "Initramfs SSH: dropbear + authorized_keys OK; ZFS kernel module OK"
 
       # Push the CI build to the private on-lab Nexus raw repo (zbm). Each run
       # creates a new per-(version,suffix,arch) file (write_policy=ALLOW).
