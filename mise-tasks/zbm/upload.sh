@@ -1,38 +1,38 @@
 #!/usr/bin/env bash
-#MISE description="Upload the built ZFSBootMenu tarball + checksum to Gitea generic packages"
-# Generates a .sha256sum sidecar next to the .tar.gz, then PUTs both to
-# gitea.lab.fahm.fr's generic package repo at
-# adrienkohlbecker/zfsbootmenu/<zbm_version>/<file>.tar.gz. One stable
-# filename per (version, arch); Gitea rejects PUT to an existing path,
-# so we DELETE first (404 on the first upload is fine). chroot.sh
-# references the same stable filename, so a rebuild propagates without
-# source edits — bump zbm_version (mise.toml [vars]) only when moving
-# to a new upstream release. Token is read from 1Password at runtime.
+#MISE description="Upload the built ZFSBootMenu tarball + checksum to the Nexus zbm raw repo"
+# PUTs both the .tar.gz and its .sha256sum sidecar (produced by build.sh)
+# to nexus.lab.fahm.fr/repository/zbm. Nexus raw repos accept new filenames
+# unconditionally (write_policy=ALLOW); no DELETE required.
+# NEXUS_USERNAME/PASSWORD come from mise's [env] (op:// references).
 set -euo pipefail
+
+# Re-exec under op run -- if NEXUS_USERNAME is still an op:// reference
+# (file-based mise tasks don't get the [env] block resolved automatically).
+if [[ "${NEXUS_USERNAME:-}" == op://* ]] && [[ -z "${_ZBM_UPLOAD_OP_RESOLVED:-}" ]]; then
+  export _ZBM_UPLOAD_OP_RESOLVED=1
+  exec op run -- "$0" "$@"
+fi
 
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 out_dir="${MISE_CONFIG_ROOT}/zbm-build/${arch}"
-local_name="zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
-sum_name="${local_name}.sha256sum"
+tarball="zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
+sha256sum="${tarball}.sha256sum"
 
-(cd "$out_dir" && sha256sum "$local_name") >"${out_dir}/${sum_name}"
-
-username="$(op read 'op://Lab/Gitea package upload token/username')"
-token="$(op read 'op://Lab/Gitea package upload token/password')"
-base_url="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/${ZBM_VERSION}"
-
-for name in "${local_name}" "${sum_name}"; do
-  status="$(curl -sS -o /dev/null -w '%{http_code}' --user "${username}:${token}" -X DELETE "${base_url}/${name}")"
-  case "${status}" in
-  204 | 404) ;;
-  *)
-    echo "DELETE ${base_url}/${name} returned ${status}" >&2
-    exit 1
-    ;;
-  esac
+for f in "$tarball" "$sha256sum"; do
+  test -f "${out_dir}/${f}" || { echo "missing ${out_dir}/${f} — run 'mise run zbm:build' first" >&2; exit 1; }
 done
 
-curl --fail-with-body --user "${username}:${token}" --upload-file "${out_dir}/${local_name}" "${base_url}/${local_name}"
-echo "${local_name}: uploaded to ${base_url}/${local_name}"
-curl --fail-with-body --user "${username}:${token}" --upload-file "${out_dir}/${sum_name}" "${base_url}/${sum_name}"
-echo "${sum_name}: uploaded to ${base_url}/${sum_name}"
+dest_base="https://nexus.lab.fahm.fr/repository/zbm"
+netrc="$(mktemp)"
+chmod 600 "$netrc"
+trap 'rm -f "$netrc"' EXIT
+printf 'machine nexus.lab.fahm.fr login %s password %s\n' \
+  "$NEXUS_USERNAME" "$NEXUS_PASSWORD" >"$netrc"
+unset NEXUS_PASSWORD
+
+for name in "$tarball" "$sha256sum"; do
+  curl --fail-with-body -sS --retry 3 --retry-delay 5 --retry-connrefused \
+    --netrc-file "$netrc" \
+    --upload-file "${out_dir}/${name}" "${dest_base}/${name}"
+  echo "uploaded ${name}"
+done
