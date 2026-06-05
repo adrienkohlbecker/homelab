@@ -35,11 +35,9 @@ fi
 
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 out_dir="${MISE_CONFIG_ROOT}/zbm-build/${arch}"
-# build.sh writes the tarball basename to .latest so upload.sh doesn't need to
-# reconstruct the name (which would require knowing ZBM_BUILD_SUFFIX from that run).
-latest="${out_dir}/.latest"
-[ -f "$latest" ] || { echo "no build found in ${out_dir} — run 'mise run zbm:build' first" >&2; exit 1; }
-tarball="$(cat "$latest")"
+tarball="$(ls -t "${out_dir}"/zfsbootmenu-v*.tar.gz 2>/dev/null | head -1)"
+[ -n "$tarball" ] || { echo "no tarball in ${out_dir} — run 'mise run zbm:build' first" >&2; exit 1; }
+tarball="$(basename "$tarball")"
 sha256sum_file="${tarball}.sha256sum"
 
 for f in "$tarball" "$sha256sum_file"; do
