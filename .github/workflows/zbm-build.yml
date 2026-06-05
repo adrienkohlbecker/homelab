@@ -3,7 +3,7 @@ name: zbm-build
 # gated on detect's zbm_changed (any push touching zbm/ or mise-tasks/zbm/);
 # it's also workflow_dispatch-able.
 #
-# Every build gets a version suffix with the run ID (e.g. v3.1.0-ci.12345)
+# Every build gets a version suffix with the run ID (e.g. v3.1.0-ci.12345.1)
 # embedded in both the initramfs and the tarball filename. Artifacts always go
 # to GitHub; Nexus upload is master-only.
 on:
@@ -82,7 +82,7 @@ jobs:
           ZBM_VERSION="$(awk -F'"' '/^ZBM_VERSION/{print $2; exit}' mise.toml)"
           [ -n "$ZBM_VERSION" ] || { echo "could not read ZBM_VERSION from mise.toml" >&2; exit 1; }
           arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
-          ZBM_BUILD_SUFFIX="-ci.${{ github.run_id }}"
+          ZBM_BUILD_SUFFIX="-ci.${{ github.run_id }}.${{ github.run_attempt }}"
           export MISE_CONFIG_ROOT ZBM_VERSION ZBM_BUILD_SUFFIX
           echo "Building ZFSBootMenu v${ZBM_VERSION}${ZBM_BUILD_SUFFIX} for ${arch}"
           # Registry-backed build cache in the on-lab Nexus homelab docker repo.
@@ -110,7 +110,7 @@ jobs:
           set -euo pipefail
           arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
           ZBM_VERSION="$(awk -F'"' '/^ZBM_VERSION/{print $2; exit}' mise.toml)"
-          ZBM_BUILD_SUFFIX="-ci.${{ github.run_id }}"
+          ZBM_BUILD_SUFFIX="-ci.${{ github.run_id }}.${{ github.run_attempt }}"
           tarball="${GITHUB_WORKSPACE}/zbm-build/${arch}/zfsbootmenu-v${ZBM_VERSION}${ZBM_BUILD_SUFFIX}-${arch}.tar.gz"
           test -f "$tarball" || { echo "tarball not produced: $tarball" >&2; exit 1; }
           members="$(tar tzf "$tarball")"
@@ -124,7 +124,7 @@ jobs:
       - name: Upload artifacts to GitHub
         uses: actions/upload-artifact@v4
         with:
-          name: zfsbootmenu-${{ github.run_id }}
+          name: zfsbootmenu-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             zbm-build/**/*-bootmenu
             zbm-build/**/*-bootmenu.img
@@ -149,7 +149,7 @@ jobs:
           fi
           arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
           ZBM_VERSION="$(awk -F'"' '/^ZBM_VERSION/{print $2; exit}' mise.toml)"
-          ZBM_BUILD_SUFFIX="-ci.${{ github.run_id }}"
+          ZBM_BUILD_SUFFIX="-ci.${{ github.run_id }}.${{ github.run_attempt }}"
           tarball="${GITHUB_WORKSPACE}/zbm-build/${arch}/zfsbootmenu-v${ZBM_VERSION}${ZBM_BUILD_SUFFIX}-${arch}.tar.gz"
           sha256sum="${tarball}.sha256sum"
           dest_base="https://nexus.lab.fahm.fr/repository/zbm"
