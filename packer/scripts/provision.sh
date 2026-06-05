@@ -190,7 +190,7 @@ for disk in $DISKS; do
   sgdisk --zap-all "$disk"
 
   sgdisk -a1 -n1:24K:+1000K -t1:EF02 -c1:bios "$disk" # MBR booting (EF02 = BIOS boot partition)
-  sgdisk -n2:1M:+512M -t2:EF00 -c2:efi "$disk"        # EFI (EF00 = EFI system partition)
+  sgdisk -n2:1M:+1G -t2:EF00 -c2:efi "$disk"          # EFI (EF00 = EFI system partition)
 
   # Single-disk swap partition, sized by SWAP_SIZE. Mirror variants swap
   # on the rpool zvol below instead (see notes/swap_strategy.md).
