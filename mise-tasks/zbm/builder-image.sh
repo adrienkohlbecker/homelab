@@ -70,7 +70,9 @@ img="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
 # local buildkitd cache is pruned; cache import is best-effort, so a miss or an
 # unauthenticated 401/404 is a non-fatal warning. --cache-to type=inline embeds
 # the cache metadata into the built image (local only, needs no auth).
-: "${ZBM_BUILDER_CACHE_REF:=nexus.lab.fahm.fr/homelab/zbm-builder:v${ZBM_VERSION}-${arch}}"
+# Default empty so local workstation builds don't attempt an anonymous pull
+# from a LAN-only Nexus. CI sets ZBM_BUILDER_CACHE_REF explicitly (zbm-build.yml).
+: "${ZBM_BUILDER_CACHE_REF:=}"
 cache_args=()
 if [ -n "$ZBM_BUILDER_CACHE_REF" ]; then
   cache_args=(--cache-from "type=registry,ref=${ZBM_BUILDER_CACHE_REF}" --cache-to type=inline)
