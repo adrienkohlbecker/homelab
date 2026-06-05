@@ -64,6 +64,16 @@ jobs:
       # targets DOCKER_HOST (the runner's rootless podman) -- the same store
       # build.sh's `podman run` reads. Drop any stale builders from earlier
       # docker-container attempts so they can't be reused.
+      - name: Set up per-run Docker config dir
+        run: |
+          set -euo pipefail
+          # Isolate all docker/buildx state (builder registration, docker login
+          # credentials) in a per-run temp dir so concurrent jobs on the same
+          # runner don't share ~/.docker/. Must be created before the buildx and
+          # build steps so both write and read the same DOCKER_CONFIG.
+          DOCKER_CONFIG=$(mktemp -d -p "${RUNNER_TEMP:-/tmp}" zbm-docker-config.XXXXXX)
+          echo "DOCKER_CONFIG=$DOCKER_CONFIG" >> "$GITHUB_ENV"
+
       - name: Use the rootless buildkitd builder
         run: |
           set -euo pipefail
@@ -103,14 +113,6 @@ jobs:
           NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
         run: |
           set -euo pipefail
-          # Randomised path so concurrent jobs on the same runner instance can't
-          # collide on the auth dir (matches the mktemp pattern in ci-image.yml).
-          # buildkitd reads DOCKER_CONFIG/config.json for both --cache-from and
-          # --cache-to registry operations; podman run/commit use only local images
-          # (localhost/zbm-builder:...) so no podman-side auth is needed.
-          DOCKER_CONFIG=$(mktemp -d -p "${RUNNER_TEMP:-/tmp}" zbm-docker-config.XXXXXX)
-          export DOCKER_CONFIG
-          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
           # Explicit cache ref so the workstation default (empty) doesn't
           # accidentally inherit a LAN-only Nexus URL in a future mis-invoke.
           export ZBM_BUILDER_CACHE_REF="nexus.lab.fahm.fr/homelab/zbm-builder:v${ZBM_VERSION}-${ARCH}"
@@ -196,4 +198,6 @@ jobs:
 
       - name: Remove buildx builder
         if: always()
-        run: docker buildx rm "${BUILDX_BUILDER:-zbm-remote}" >/dev/null 2>&1 || true
+        run: |
+          docker buildx rm "${BUILDX_BUILDER:-zbm-remote}" >/dev/null 2>&1 || true
+          rm -rf "${DOCKER_CONFIG:-}"
