@@ -120,6 +120,15 @@ mv "${efi_images[0]}" "$out_dir/zfsbootmenu.EFI"
 # --owner=0/--group=0 also bake root:0 into the metadata so extracting in a
 # chroot or onto FAT32 doesn't trip "Cannot change ownership" from the
 # container's build-user uids leaking into the archive.
+
+# Write the EFI bundle's kernel cmdline alongside the components so that
+# zbm:test can use the same base and append test-only flags (loglevel, zbm.show).
+python3 -c "
+import yaml
+doc = yaml.safe_load(open('${MISE_CONFIG_ROOT}/zbm/config.yaml'))
+print(doc['Kernel']['CommandLine'])
+" >"$out_dir/cmdline"
+
 tarball="zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
-(cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=ustar -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub | gzip -n >"$tarball")
+(cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=ustar -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub cmdline | gzip -n >"$tarball")
 (cd "$out_dir" && sha256sum "$tarball" | tee "${tarball}.sha256sum")
