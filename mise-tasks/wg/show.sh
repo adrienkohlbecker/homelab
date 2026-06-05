@@ -7,7 +7,7 @@ set -euo pipefail
 
 # wg0 client configs are not stored on disk -- they are fully reproducible from
 # the vault (private key) + wireguard_psk_seed (PSKs derive via
-# filter_plugins/wireguard_psk.py), so we render one on demand and stream it
+# roles/wireguard/filter_plugins/wireguard_psk.py), so we render one on demand and stream it
 # straight to a terminal QR (iOS scans it) or stdout (macOS pastes it into Add
 # Empty Tunnel). The secret lives only in this pipeline's memory.
 #
