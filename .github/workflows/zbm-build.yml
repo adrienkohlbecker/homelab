@@ -126,7 +126,7 @@ jobs:
           test -f "$tarball" || { echo "tarball not produced: $tarball" >&2; exit 1; }
           members="$(tar tzf "$tarball")"
           echo "$members"
-          for f in initramfs-bootmenu.img zfsbootmenu.EFI; do
+          for f in initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub; do
             grep -qxF "$f" <<<"$members" || { echo "missing $f in tarball" >&2; exit 1; }
           done
           grep -qE '^vmlin.*-bootmenu$' <<<"$members" || { echo "missing vmlin*-bootmenu kernel in tarball" >&2; exit 1; }
