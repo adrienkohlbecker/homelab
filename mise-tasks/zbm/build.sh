@@ -28,14 +28,27 @@ fi
 
 # Generate a fresh ed25519 host key for the recovery SSH server. Each build
 # gets its own key — there is no stable host key to pin.
-host_key="${MISE_CONFIG_ROOT}/zbm/dropbear/ssh_host_ed25519_key"
+# The private key stays inside an ephemeral tmpdir for its entire lifetime and
+# is never written into the repo working tree (MISE_CONFIG_ROOT / GITHUB_WORKSPACE).
+# It reaches the builder container via a shadow bind-mount over /build/dropbear
+# (see below), where recovery.conf's dropbear_ed25519_key=/build/dropbear/... picks
+# it up. The pub key goes into the output dir for the tarball and fingerprint log.
 ephemeral_dir="$(mktemp -d)"
-trap 'rm -f "$host_key"; rm -rf "$ephemeral_dir"' EXIT INT TERM
+trap 'rm -rf "$ephemeral_dir"' EXIT INT TERM
 ssh-keygen -q -t ed25519 -N '' -C zbm-recovery -f "$ephemeral_dir/key"
-(umask 077 && cp "$ephemeral_dir/key" "$host_key")
 cp "$ephemeral_dir/key.pub" "$out_dir/ssh_host_ed25519_key.pub"
 echo "Recovery SSH host key fingerprint:"
 ssh-keygen -E sha256 -lf "$ephemeral_dir/key.pub"
+
+# Shadow-mount for the host key: zbm-builder.sh mounts zbm/ → /build:ro. We
+# inject a second volume that shadows just /build/dropbear so the private key
+# is visible inside the container (at the path recovery.conf declares) without
+# landing anywhere in the repo working tree. authorized_keys lives in the repo
+# and must be copied in so the shadow mount doesn't hide it.
+ephemeral_dropbear="$ephemeral_dir/dropbear"
+mkdir -p "$ephemeral_dropbear"
+(umask 077 && cp "$ephemeral_dir/key" "$ephemeral_dropbear/ssh_host_ed25519_key")
+cp "${MISE_CONFIG_ROOT}/zbm/dropbear/authorized_keys" "$ephemeral_dropbear/"
 
 # zbm-builder.sh:
 #   -b: build directory (zbm/ — contains config.yaml, dracut.conf.d/, hooks/)
@@ -77,6 +90,7 @@ bash "$src_dir/zbm-builder.sh" \
   -O --entrypoint -O /build-init.sh \
   -O --env -O DRACUT_NO_XATTR=1 \
   -O -v -O "$out_dir:/output" \
+  -O -v -O "$ephemeral_dropbear:/build/dropbear:ro" \
   -- -o /output -t "v${ZBM_VERSION}"
 
 # Both modes emit into $out_dir:
