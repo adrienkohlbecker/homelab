@@ -15,7 +15,7 @@ from collections import defaultdict
 from pathlib import Path
 import pytest
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent.parent / "mise-tasks" / "ci" / "detect.py"
+_MODULE_PATH = Path(__file__).resolve().parent.parent / "mise-tasks" / "ci" / "detect.py"
 
 
 def _load():
@@ -103,7 +103,7 @@ class TestClassifyChangedFiles:
 
     def test_empty_paths(self) -> None:
         result = detect.classify_changed_files([])
-        assert result == detect.ChangeClassification([], [], set(), False)
+        assert result == detect.ChangeClassification([], [], set(), False, set())
 
     def test_blank_lines_ignored(self) -> None:
         result = detect.classify_changed_files(["", "roles/nginx/tasks/main.yml", ""])
@@ -138,6 +138,47 @@ class TestClassifyChangedFiles:
         assert result.packer_sources_affected
         assert result.direct_roles == ["zfs"]
 
+    def test_machine_universe_box(self) -> None:
+        result = detect.classify_changed_files(["host_vars/box.yml"])
+        assert result.machine_universe == {"box"}
+        assert not result.full_universe_paths
+
+    def test_machine_universe_minimal(self) -> None:
+        result = detect.classify_changed_files(["host_vars/minimal.yml"])
+        assert result.machine_universe == {"minimal"}
+        assert not result.full_universe_paths
+
+    def test_machine_universe_lab(self) -> None:
+        result = detect.classify_changed_files(["host_vars/lab-qemu.yml"])
+        assert result.machine_universe == {"lab"}
+        assert not result.full_universe_paths
+
+    def test_machine_universe_lab_prod(self) -> None:
+        result = detect.classify_changed_files(["host_vars/lab.yml"])
+        assert result.machine_universe == {"lab"}
+        assert not result.full_universe_paths
+
+    def test_machine_universe_pug(self) -> None:
+        result = detect.classify_changed_files(["host_vars/pug-qemu.yml"])
+        assert result.machine_universe == {"pug"}
+        assert not result.full_universe_paths
+
+    def test_machine_universe_pug_prod(self) -> None:
+        result = detect.classify_changed_files(["host_vars/pug.yml"])
+        assert result.machine_universe == {"pug"}
+        assert not result.full_universe_paths
+
+    def test_machine_universe_minimal_fixture(self) -> None:
+        result = detect.classify_changed_files(["test/minimal/cloud-init.yml"])
+        assert result.machine_universe == {"minimal"}
+        assert not result.full_universe_paths
+
+    def test_machine_universe_multiple(self) -> None:
+        result = detect.classify_changed_files(
+            ["host_vars/lab-qemu.yml", "host_vars/pug-qemu.yml"]
+        )
+        assert result.machine_universe == {"lab", "pug"}
+
 
 # ---------------------------------------------------------------------------
 # _packer_sources_for
@@ -153,9 +194,9 @@ class TestPackerSourcesFor:
             ("mise-tasks/packer/worker.sh", {"worker"}),
             ("roles/github_runner/vars/main.yml", {"worker"}),
             ("packer/ubuntu_images.json", {"qemu", "worker"}),
-            ("mise-tasks/packer/hetzner.sh", {"hetzner"}),
-            ("mise-tasks/packer/_hcloud_token.sh", {"hetzner", "worker"}),
-            ("mise-tasks/packer/hcloud-prune-snapshots.sh", {"hetzner", "worker"}),
+            ("mise-tasks/packer/hetzner.sh", {"hetzner_upload"}),
+            ("mise-tasks/packer/_hcloud_token.sh", {"hetzner_upload", "worker"}),
+            ("mise-tasks/packer/hcloud-prune-snapshots.sh", {"hetzner_upload", "worker"}),
             ("packer/qemu.pkr.hcl", {"qemu"}),
             ("packer/scripts/chroot.sh", {"qemu"}),
             ("mise-tasks/packer/build", {"qemu"}),
@@ -450,14 +491,11 @@ class TestRegexParityWithBash:
             "group_vars/all/main.yml",
             "group_vars/all/service_ports.yaml",
             "group_vars/test.yml",
-            "host_vars/box.yml",
-            "host_vars/minimal.yml",
             "test/machine.py",
             "test/testall.py",
             "test/matrix.py",
             "test/inventory.ini",
             "test/playbooks/site.yml",
-            "test/minimal/cloud-init.yml",
             "ansible.cfg",
             "vault-client.sh",
             "mise.toml",
@@ -465,6 +503,11 @@ class TestRegexParityWithBash:
             "uv.lock",
             "data/network_topology.yml",
             "data/network_topology.schema.json",
+            ".github/workflows/ci.yml",
+            ".github/workflows/detect.yml",
+            "mise-tasks/ci/detect.py",
+            "mise-tasks/ci/detect-roles.sh",
+            ".github/workflows/packer-build.yml",
         ],
     )
     def test_full_universe_match(self, path: str) -> None:
@@ -475,8 +518,13 @@ class TestRegexParityWithBash:
         [
             "host_vars/lab.yml",
             "host_vars/pug.yml",
+            "host_vars/box.yml",
+            "host_vars/minimal.yml",
+            "host_vars/lab-qemu.yml",
+            "test/minimal/cloud-init.yml",
+            "site.yml",
             "group_vars/all/sub/deep.yml",
-            "test/unit/test_matrix.py",
+            "unit_tests/test_matrix.py",
             "roles/nginx/tasks/main.yml",
             "roles/podman/templates/foo.j2",
             "README.md",

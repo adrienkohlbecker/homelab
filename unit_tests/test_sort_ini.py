@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-_SORT_INI_PATH = Path(__file__).resolve().parent.parent.parent / "roles" / "sort_ini" / "files" / "sort_ini.py"
+_SORT_INI_PATH = Path(__file__).resolve().parent.parent / "roles" / "sort_ini" / "files" / "sort_ini.py"
 
 
 class TestSortIni:

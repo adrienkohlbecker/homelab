@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent.parent / "roles" / "homepage" / "files" / "alerts_generate.py"
+_MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "homepage" / "files" / "alerts_generate.py"
 
 
 def _load():

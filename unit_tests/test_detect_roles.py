@@ -11,7 +11,7 @@ import os
 import subprocess
 from pathlib import Path
 
-DETECT_ROLES_SH = Path(__file__).resolve().parent.parent.parent / "mise-tasks" / "ci" / "detect-roles.sh"
+DETECT_ROLES_SH = Path(__file__).resolve().parent.parent / "mise-tasks" / "ci" / "detect-roles.sh"
 REPO_ROOT = DETECT_ROLES_SH.parent.parent.parent
 
 

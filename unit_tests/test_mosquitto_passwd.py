@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from ansible.errors import AnsibleError
 
-_FILTER = Path(__file__).resolve().parents[2] / "roles/mosquitto/filter_plugins/mosquitto_passwd.py"
+_FILTER = Path(__file__).resolve().parents[1] / "roles/mosquitto/filter_plugins/mosquitto_passwd.py"
 _spec = importlib.util.spec_from_file_location("mosquitto_passwd", _FILTER)
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
