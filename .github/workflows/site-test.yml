@@ -17,8 +17,8 @@ jobs:
       options: >-
         --device /dev/kvm
         --group-add 1
-        --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
-        --volume /mnt/scratch/qemu/cloud-images:/mnt/scratch/qemu/cloud-images:rw
+        --volume /mnt/scratch/homelab_ci:/mnt/scratch/homelab_ci:ro
+        --volume /mnt/scratch/homelab_ci/cloud-images:/mnt/scratch/homelab_ci/cloud-images:rw
         --volume /mnt/ci_scratch/${{ github.run_id }}-site:/scratch:rw
     timeout-minutes: 60
     env:

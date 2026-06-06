@@ -63,7 +63,7 @@ def main() -> None:
         # Atomic 3-step publish: park the current tree under .outgoing
         # before swapping in the new one. Each rename is rename(2) on
         # the same filesystem (mise-tasks/packer/build.sh builds src under
-        # ${QEMU_DIR}/.build-XXX and dst is ${QEMU_DIR}/<ubuntu>/<src>),
+        # ${HOMELAB_CI_DIR}/.build-XXX and dst is ${HOMELAB_CI_DIR}/<ubuntu>/<src>),
         # so each step is one syscall under any reader's path lookup.
         # os.replace (not shutil.move) so a future change that puts
         # staging on a different fs fails loud with EXDEV instead of

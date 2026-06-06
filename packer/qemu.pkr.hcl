@@ -27,7 +27,7 @@ variable "ubuntu_name" {
 
 variable "build_directory" {
   type        = string
-  description = "Staging directory packer writes into. Each source writes <build_directory>/<source-name>. mise-tasks/packer/build.sh sets this to a fresh tmpdir under QEMU_DIR so the previous good artifacts under output_directory stay intact while the new ones build."
+  description = "Staging directory packer writes into. Each source writes <build_directory>/<source-name>. mise-tasks/packer/build.sh sets this to a fresh tmpdir under HOMELAB_CI_DIR so the previous good artifacts under output_directory stay intact while the new ones build."
 }
 
 variable "output_directory" {

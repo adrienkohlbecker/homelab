@@ -179,7 +179,7 @@ if _ssh_key_path.exists():
 class QemuMachineSpec(NamedTuple):
     ssh_user: str
     inventory_host: str
-    # Packer image directory under /mnt/scratch/qemu/<ubuntu_name>/. None means the
+    # Packer image directory under /mnt/scratch/homelab_ci/<ubuntu_name>/. None means the
     # variant uses an Ubuntu cloud image instead (minimal).
     packer_image: str | None
     # Number of disks the packer image stages as part of the OS install
@@ -935,8 +935,8 @@ class Machine:
 def imagedir_for_host() -> Path:
     """Return the platform's packer-image cache root.
 
-    /mnt/scratch/qemu on Linux dev hosts; <repo>/packer/artifacts on Mac
-    (matches mise.toml's qemu_dir; /mnt/scratch/qemu doesn't exist on Mac).
+    /mnt/scratch/homelab_ci on Linux dev hosts; <repo>/packer/artifacts on Mac
+    (matches mise.toml's homelab_ci_dir; /mnt/scratch/homelab_ci doesn't exist on Mac).
     Linux raises if the mountpoint is missing -- the dev host workflow
     expects the qemu volume to be mounted before any test runs.
     """
@@ -946,11 +946,11 @@ def imagedir_for_host() -> Path:
         d.mkdir(parents=True, exist_ok=True)
         return d
     if system == "Linux":
-        d = Path("/mnt/scratch/qemu")
+        d = Path("/mnt/scratch/homelab_ci")
         if not d.is_dir():
             raise RuntimeError(
                 f"Imagedir {str(d)!r} does not exist. "
-                f"Mount the qemu image volume (e.g. `sudo mount /mnt/scratch/qemu`)."
+                f"Mount the qemu image volume (e.g. `sudo mount /mnt/scratch/homelab_ci`)."
             )
         return d
     raise RuntimeError(f"Unknown operating system: {system}")

@@ -81,7 +81,7 @@ jobs:
       options: >-
         --device /dev/kvm
         --group-add 1
-        --volume /mnt/scratch/qemu:/mnt/scratch/qemu:rw
+        --volume /mnt/scratch/homelab_ci:/mnt/scratch/homelab_ci:rw
     timeout-minutes: 90
     steps:
       - name: Reap stale .build-* dirs from prior failed builds
@@ -91,12 +91,12 @@ jobs:
         # read-only so machine.py's sweep silently fails. This step
         # has rw access and runs before the build, so it reaps dirs
         # older than 120 minutes (well past the 90-min job timeout).
-        # Cross-source cells run in parallel and share /mnt/scratch/qemu,
+        # Cross-source cells run in parallel and share /mnt/scratch/homelab_ci,
         # so the grace must exceed the longest possible build to avoid
         # deleting a sibling cell's active build dir.
         run: |
           set -euo pipefail
-          find /mnt/scratch/qemu -maxdepth 1 -name '.build-*' -type d -mmin +120 -print0 \
+          find /mnt/scratch/homelab_ci -maxdepth 1 -name '.build-*' -type d -mmin +120 -print0 \
             | xargs -0 --no-run-if-empty rm -rf --
       - uses: actions/checkout@v6
       - run: uv sync --locked
@@ -116,7 +116,7 @@ jobs:
         #
         # Feature branches pass --no-publish so verify-boot validates the
         # packer change without overwriting master's published artifacts.
-        # Only master publishes to the shared /mnt/scratch/qemu tree.
+        # Only master publishes to the shared /mnt/scratch/homelab_ci tree.
         env:
           PACKER_SOURCE: ${{ matrix.source }}
           PACKER_UBUNTU: ${{ matrix.ubuntu }}
@@ -161,7 +161,7 @@ jobs:
         # box_deps roles with release cells (github_runner, jellyfin,
         # netdata) test on the right substrate.
         #
-        # Master-only: seed-deps publishes to /mnt/scratch/qemu, so
+        # Master-only: seed-deps publishes to /mnt/scratch/homelab_ci, so
         # feature branches skip it for the same reason they skip the
         # build publish (--no-publish above).
         if: matrix.source == 'box' && github.ref == 'refs/heads/master'

@@ -1,5 +1,5 @@
 [vars]
-qemu_dir = '{% if os() == "macos" %}{{config_root}}/packer/artifacts{% else %}/mnt/scratch/qemu{% endif %}'
+homelab_ci_dir = '{% if os() == "macos" %}{{config_root}}/packer/artifacts{% else %}/mnt/scratch/homelab_ci{% endif %}'
 
 [env]
 CLOUDFLARE_API_TOKEN = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/password"
@@ -52,7 +52,7 @@ HCLOUD_TOKEN_OP = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
 # Expose [vars] entries as env so file-based mise-tasks/ scripts can read
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
-QEMU_DIR = '{{vars.qemu_dir}}'
+HOMELAB_CI_DIR = '{{vars.homelab_ci_dir}}'
 ZBM_VERSION = "3.1.0"
 # Kernel minor version baked into the builder image (KERNELS=linux<ver> build
 # arg) and embedded in the tarball name. Single kernel in the image means
@@ -94,7 +94,7 @@ run = 'packer init "$@" .'
 
 [tasks."packer:clean"]
 description = "Remove leftover tmpdirs from failed packer builds and test-harness runs"
-run = 'rm -rf "{{vars.qemu_dir}}"/.build-* "{{vars.qemu_dir}}"/tmp*'
+run = 'rm -rf "{{vars.homelab_ci_dir}}"/.build-* "{{vars.homelab_ci_dir}}"/tmp*'
 
 [tasks.lint]
 description = "Run all linters"

@@ -174,7 +174,7 @@ SYSCTL
 # --- Scratch directory ---
 # CI workdirs land here; created at image time so cloud-init doesn't
 # need to. On a CCX33, this is on the root ext4 filesystem (NVMe).
-mkdir -p /mnt/scratch/qemu
+mkdir -p /mnt/scratch/homelab_ci
 mkdir -p /mnt/ci_scratch
 
 # --- Pre-seed packer's ISO cache ---
@@ -182,7 +182,7 @@ mkdir -p /mnt/ci_scratch
 # sha1("sha256:" + image_sha256). Pins come from ubuntu_images.json
 # (shared with qemu.pkr.hcl). Pre-downloading saves ~600-900 MB per
 # release on every ephemeral worker.
-PACKER_CACHE=/mnt/scratch/qemu/packer_cache
+PACKER_CACHE=/mnt/scratch/homelab_ci/packer_cache
 mkdir -p "$PACKER_CACHE"
 packer_cache_seed() {
   local codename="$1" snapshot="$2" sha256="$3"
@@ -202,7 +202,7 @@ packer_cache_seed() {
 # Ubuntu minimal cloud image on first run (~400 MB each). Pre-caching
 # at image-build time saves that download from every ephemeral worker.
 # Path must match test/machine.py _ensure_minimal_cloudimg: <imagedir>/cloud-images/.
-CLOUD_CACHE=/mnt/scratch/qemu/cloud-images
+CLOUD_CACHE=/mnt/scratch/homelab_ci/cloud-images
 mkdir -p "$CLOUD_CACHE"
 
 # Both caches are driven from ubuntu_images.json (uploaded by the
@@ -259,7 +259,7 @@ PATH="/opt/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/b
 UV_CACHE_DIR=/opt/uv-cache
 UV_LINK_MODE=copy
 PACKER_PLUGIN_PATH=/opt/packer/plugins
-PACKER_CACHE_DIR=/mnt/scratch/qemu/packer_cache
+PACKER_CACHE_DIR=/mnt/scratch/homelab_ci/packer_cache
 ENVFILE
 
 # /etc/profile.d for interactive login shells — source /etc/environment

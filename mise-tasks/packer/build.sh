@@ -10,13 +10,13 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 # Group-write so github_runner and ak (both in kvm) can mutually delete
-# each other's files in the shared /mnt/scratch/qemu dir.
+# each other's files in the shared /mnt/scratch/homelab_ci dir.
 umask 002
 
 # Linux: keep packer's ISO cache off the root FS; falls through to
 # packer's default (./packer_cache in cwd) on Mac.
 case "$(uname -s)" in
-Linux) export PACKER_CACHE_DIR=/mnt/scratch/qemu/packer_cache ;;
+Linux) export PACKER_CACHE_DIR=/mnt/scratch/homelab_ci/packer_cache ;;
 Darwin) ;;
 *)
   echo "Unsupported OS: $(uname -s)" >&2
@@ -24,15 +24,15 @@ Darwin) ;;
   ;;
 esac
 
-base="${QEMU_DIR}/${usage_ubuntu}"
+base="${HOMELAB_CI_DIR}/${usage_ubuntu}"
 mkdir -p "${base}"
 
-# Build into a tmpdir at QEMU_DIR root so the previous good artifacts
+# Build into a tmpdir at HOMELAB_CI_DIR root so the previous good artifacts
 # at ${base}/<source> stay intact while the new ones build. packer's
 # install post-processor moves each per-source output into ${base};
 # we just rmdir the (empty) tmpdir afterwards. On failure the tmpdir
 # is left behind for inspection (cleanup via packer:clean).
-tmp=$(mktemp -d "${QEMU_DIR}/.build-XXXXXX")
+tmp=$(mktemp -d "${HOMELAB_CI_DIR}/.build-XXXXXX")
 
 # Surface the qemu_net_wrapper shim's NIC-backend decision log (passt vs slirp,
 # the passt command + advertised DNS, the netdev rewrite) plus passt's own startup
@@ -42,7 +42,7 @@ tmp=$(mktemp -d "${QEMU_DIR}/.build-XXXXXX")
 # failed source's output_directory before this EXIT trap runs, which would take
 # a build-dir-derived log with it. On failure the ERR trap dumps the logs to
 # stdout for CI diagnosis; on success they're silently cleaned up.
-netlog=$(mktemp "${QEMU_DIR}/.netlog-XXXXXX")
+netlog=$(mktemp "${HOMELAB_CI_DIR}/.netlog-XXXXXX")
 export QEMU_NET_WRAPPER_LOG="${netlog}"
 dump_net_logs() {
   local f

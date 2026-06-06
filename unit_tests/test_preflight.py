@@ -2,7 +2,7 @@
 
 Each Machine subclass now validates its required binaries via shutil.which
 at the end of __post_init__. Failures raise RuntimeError with installation
-guidance. QemuMachine on Linux additionally rejects a missing /mnt/scratch/qemu
+guidance. QemuMachine on Linux additionally rejects a missing /mnt/scratch/homelab_ci
 so the caller gets a clearer message than tempfile's FileNotFoundError.
 """
 
@@ -44,10 +44,10 @@ def test_qemu_preflight_raises_when_timeout_missing(
 
 
 def test_qemu_imagedir_missing_on_linux_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """QemuMachine on Linux fails fast when /mnt/scratch/qemu isn't mounted.
+    """QemuMachine on Linux fails fast when /mnt/scratch/homelab_ci isn't mounted.
 
     The Mac branch mkdirs packer/artifacts on the fly; the Linux branch
-    hardcodes /mnt/scratch/qemu and assumes the volume is mounted. Surface a
+    hardcodes /mnt/scratch/homelab_ci and assumes the volume is mounted. Surface a
     clear error before tempfile blows up further down __post_init__.
     """
     monkeypatch.setattr(machine, "OUT_DIR", tmp_path / "out")
