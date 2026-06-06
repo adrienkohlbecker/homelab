@@ -8,7 +8,7 @@ set -euo pipefail
 umask 002
 
 ubuntu="${usage_ubuntu}"
-base="${QEMU_DIR}/${ubuntu}"
+base="${HOMELAB_CI_DIR}/${ubuntu}"
 src="${base}/box"
 dst="${base}/box_deps"
 

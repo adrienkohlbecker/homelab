@@ -32,7 +32,7 @@ build that takes the wrong NIC path is debuggable. packer routes a
 qemu_binary's stderr through Go's logger, which it discards unless PACKER_LOG
 is set -- so the shim ALSO drops a qemu_net_wrapper.log into the per-source
 build dir (the same dir holding packer-ubuntu*, derived from the `-drive
-file=` arg). That file rides the shared /mnt/scratch/qemu volume in CI and is
+file=` arg). That file rides the shared /mnt/scratch/homelab_ci volume in CI and is
 tailed by mise-tasks/packer/build.sh after each build, so the decision trail
 reaches the job log without PACKER_LOG. Override the path (or disable with
 "off"/"0") via QEMU_NET_WRAPPER_LOG.

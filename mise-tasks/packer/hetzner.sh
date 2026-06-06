@@ -13,7 +13,7 @@ UBUNTU="$usage_ubuntu"
 # Default to the artifact `mise run packer:build hetzner` publishes (raw, on
 # lab). The upload streams the image straight onto /dev/sda, so it must be a
 # raw disk image, not a qcow2 -- pass an explicit path if it lives elsewhere.
-IMG="${usage_image:-${QEMU_DIR}/${UBUNTU}/hetzner/packer-ubuntu-1.raw}"
+IMG="${usage_image:-${HOMELAB_CI_DIR}/${UBUNTU}/hetzner/packer-ubuntu-1.raw}"
 [ -f "$IMG" ] || {
   echo "no disk image at $IMG -- build it first: mise run packer:build hetzner" >&2
   exit 1
