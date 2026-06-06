@@ -33,8 +33,9 @@ LOADERS = [
     {"label": "ZFSBootMenu", "loader": "\\EFI\\ZBM\\VMLINUZ.EFI"},
     {"label": "ZFSBootMenu (Backup)", "loader": "\\EFI\\ZBM\\VMLINUZ-BACKUP.EFI"},
 ]
-# aarch64 prepends a direct EFI-stub entry carrying the kernel cmdline.
-AARCH = [
+
+# Entry with options exercises efibootmgr --unicode comparison support.
+ENTRY_WITH_OPTIONS = [
     {
         "label": "Linux",
         "loader": "\\EFI\\Linux\\vmlinuz.efi",
@@ -232,10 +233,10 @@ class TestMultiDisk:
         assert not any(a.startswith("remove") or a.startswith("create") for a in out["actions"]), out["actions"]
 
 
-# --- aarch64 EFI-stub options (finding #10) -------------------------------
+# --- EFI-stub options -----------------------------------------------------
 
 
-class TestAarch64Options:
+class TestEntryOptions:
     def test_idempotent_with_whitespace_variation(self, monkeypatch, capsys):
         # efibootmgr -v may render the cmdline with collapsed/extra spaces; the
         # normalized comparison must still treat it as converged.
@@ -248,7 +249,7 @@ class TestAarch64Options:
                 ("0003", "ZFSBootMenu (Backup)", _hd("AAA-0", "\\EFI\\ZBM\\VMLINUZ-BACKUP.EFI")),
             ],
         )
-        out = run_check(monkeypatch, capsys, AARCH, existing, **_SINGLE)
+        out = run_check(monkeypatch, capsys, ENTRY_WITH_OPTIONS, existing, **_SINGLE)
         assert not out["changed"], out["actions"]
 
     def test_optionless_stub_is_replaced(self, monkeypatch, capsys):
@@ -262,7 +263,7 @@ class TestAarch64Options:
                 ("0003", "ZFSBootMenu (Backup)", _hd("AAA-0", "\\EFI\\ZBM\\VMLINUZ-BACKUP.EFI")),
             ],
         )
-        out = run_check(monkeypatch, capsys, AARCH, existing, **_SINGLE)
+        out = run_check(monkeypatch, capsys, ENTRY_WITH_OPTIONS, existing, **_SINGLE)
         assert any("remove 'Linux'" in a for a in out["actions"]), out["actions"]
         assert any("create 'Linux'" in a for a in out["actions"]), out["actions"]
 
