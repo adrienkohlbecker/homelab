@@ -81,7 +81,7 @@ if [ "$notes_action" = "merge" ]; then
     echo "  Resolve in $repo, 'git commit', then 'mise run worktree:rm $usage_name'." >&2
     exit 1
   fi
-  git commit -q --no-edit
+  git commit -q --no-edit -m "notes: Update pointer"
 else
   # linear path: delegate the rebase to worktree:update -- it rebases the notes
   # branch onto master:notes (a no-op here, already done above) and the code
