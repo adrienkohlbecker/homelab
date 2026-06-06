@@ -456,10 +456,18 @@ if gunzip -t "$vmlinuz" 2>/dev/null; then
 else
   cp -L "$vmlinuz" /boot/efi/EFI/Linux/vmlinuz.efi.new
 fi
-mv -f /boot/efi/EFI/Linux/vmlinuz.efi.new /boot/efi/EFI/Linux/vmlinuz.efi
+if cmp -s /boot/efi/EFI/Linux/vmlinuz.efi.new /boot/efi/EFI/Linux/vmlinuz.efi; then
+  rm /boot/efi/EFI/Linux/vmlinuz.efi.new
+else
+  mv -f /boot/efi/EFI/Linux/vmlinuz.efi.new /boot/efi/EFI/Linux/vmlinuz.efi
+fi
 
 cp -L "$initrd" /boot/efi/EFI/Linux/initrd.new
-mv -f /boot/efi/EFI/Linux/initrd.new /boot/efi/EFI/Linux/initrd
+if cmp -s /boot/efi/EFI/Linux/initrd.new /boot/efi/EFI/Linux/initrd; then
+  rm /boot/efi/EFI/Linux/initrd.new
+else
+  mv -f /boot/efi/EFI/Linux/initrd.new /boot/efi/EFI/Linux/initrd
+fi
 HOOK
   chmod +x /etc/kernel/postinst.d/zz-stage-efi-stub
 
