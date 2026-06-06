@@ -742,7 +742,7 @@ menuentry "Ubuntu (ZBM, Components)" {
 menuentry "Ubuntu (Linux EFI Stub)" {
     loader /EFI/Linux/vmlinuz.efi
     initrd /EFI/Linux/initrd
-    options "{{ refind_zbm_cmdline }} root=zfs:rpool/ROOT/{{ ansible_distribution_release }} {{ refind_pool_cmdline.stdout }}"
+    options "root=zfs:rpool/ROOT/{{ ansible_distribution_release }} {{ refind_pool_cmdline.stdout }}"
     icon /EFI/refind/themes/refind-theme-regular/icons/128-48/os_ubuntu.png
 }
 {% endif %}
