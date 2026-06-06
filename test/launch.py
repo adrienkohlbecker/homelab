@@ -139,6 +139,12 @@ def parse_args() -> argparse.Namespace:
         "captured to a file; implies --no-ssh-wait.",
     )
     parser.add_argument(
+        "--display-window",
+        action="store_true",
+        help="Use qemu's local GUI display backend instead of VNC for keep-VM "
+        "runs. Mainly useful with --foreground when testing boot UIs.",
+    )
+    parser.add_argument(
         "--qmp",
         type=Path,
         default=None,
@@ -385,6 +391,7 @@ def main() -> int:
         efi_vars=args.efi_vars,
         virtfs=args.virtfs,
         foreground=args.foreground,
+        display_window=args.display_window,
         qmp_socket=args.qmp,
         commit_in_place=args.commit,
         extra_hostfwds=args.extra_hostfwds,

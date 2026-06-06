@@ -1070,7 +1070,8 @@ class QemuMachine(Machine):
     """Start disposable QEMU guests for role-level integration tests."""
 
     drives: list[str]
-    # VNC display number (0..99) chosen in prepare() when keep_vm is True;
+    # VNC display number (0..99) chosen in prepare() when keep_vm is True
+    # and local GUI display is not requested;
     # consumed by _boot_command for the `-display vnc=` argument. Bound on
     # 5900+display so qemu won't try to walk the band itself.
     vnc_display: int
@@ -1116,6 +1117,7 @@ class QemuMachine(Machine):
         efi_vars: Path | None = None,
         virtfs: list[tuple[Path, str]] | None = None,
         foreground: bool = False,
+        display_window: bool = False,
         qmp_socket: Path | None = None,
         commit_in_place: bool = False,
         extra_hostfwds: list[int] | None = None,
@@ -1136,9 +1138,10 @@ class QemuMachine(Machine):
         (auto-detected paths or explicit overrides). virtfs is a list of
         (host_path, mount_tag) 9p shares. foreground strips the `timeout`
         wrapper and switches `-serial stdio` -> mon:stdio so HMP is reachable
-        via Ctrl-A,c. qmp_socket binds qemu's QMP server to a unix socket.
-        These last set are launch.py-only knobs; testrole.py / production
-        callers leave them at defaults.
+        via Ctrl-A,c. display_window swaps the keep-VM display backend from
+        VNC to a local qemu GUI window. qmp_socket binds qemu's QMP server to
+        a unix socket. These last set are launch.py-only knobs; testrole.py /
+        production callers leave them at defaults.
         """
         try:
             spec = QEMU_MACHINE_SPECS[machine]
@@ -1167,6 +1170,7 @@ class QemuMachine(Machine):
         self._efi_vars = efi_vars.resolve() if efi_vars is not None else None
         self._virtfs: list[tuple[Path, str]] = list(virtfs or [])
         self._foreground = foreground
+        self._display_window = display_window
         # commit_in_place: skip the qcow2-overlay step for the OS disks and
         # mount the image_dir's packer-ubuntu-N.<format> files as the qemu
         # drives directly. Writes during the run mutate those files in
@@ -1220,9 +1224,12 @@ class QemuMachine(Machine):
 
     def print_ssh_instructions(self) -> None:
         super().print_ssh_instructions()
-        # vnc_display is only set when keep_vm=True; print_ssh_instructions
-        # itself is also keep-only, so we always have a display here.
-        print_line(f"VNC: 127.0.0.1:{5900 + self.vnc_display}")
+        if self._display_window:
+            print_line("Display: QEMU window")
+        else:
+            # vnc_display is only set when keep_vm=True and local GUI display
+            # is disabled; print_ssh_instructions itself is also keep-only.
+            print_line(f"VNC: 127.0.0.1:{5900 + self.vnc_display}")
 
     @staticmethod
     def _pick_vnc_display() -> int:
@@ -1312,7 +1319,7 @@ class QemuMachine(Machine):
             self._passt_socket_dir = tempfile.TemporaryDirectory(prefix="homelab-passt-", ignore_cleanup_errors=True)
             self._passt_socket = Path(self._passt_socket_dir.name) / "passt.sock"
 
-        if self.keep_vm:
+        if self.keep_vm and not self._display_window:
             # Pick a VNC display 0..99 the same way -- qemu's vnc= syntax
             # interprets the number as a display (port = 5900+display), so
             # we walk that band and grab the first free port. Replaces
@@ -1689,15 +1696,20 @@ class QemuMachine(Machine):
         if self.keep_vm:
             # q35 has std VGA + PS/2 keyboard by default but USB is opt-in
             # (machine flag usb=on, applied below); usb-tablet then attaches
-            # to the built-in EHCI/UHCI for absolute-coordinate VNC mouse.
+            # to the built-in EHCI/UHCI for absolute-coordinate mouse.
             # aarch64 virt has no default graphics or input devices, so it
             # needs the full virtio-gpu + xhci + usb-kbd set; both come from
             # ArchProfile.keep_vm_extra_devices.
+            display_backend = "cocoa" if platform.system() == "Darwin" else "gtk"
             display_args = [
                 "-display",
-                # Display number pre-picked in prepare(); qemu binds to
-                # 5900+display so the user can connect at 127.0.0.1:<port>.
-                f"vnc=:{self.vnc_display}",
+                (
+                    display_backend
+                    if self._display_window
+                    # Display number pre-picked in prepare(); qemu binds to
+                    # 5900+display so the user can connect at 127.0.0.1:<port>.
+                    else f"vnc=:{self.vnc_display}"
+                ),
                 *self.arch.keep_vm_extra_devices,
                 "-k",
                 "fr",
