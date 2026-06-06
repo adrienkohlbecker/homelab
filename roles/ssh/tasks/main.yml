@@ -63,6 +63,36 @@
   tags:
     - ssh
 
+# X11 forwarding drop-in: deployed only on hosts with ssh_x11_forwarding: true
+# (today: lab). Uses a Match User block so only the operator user gets it;
+# other accounts are unaffected even when they SSH into the same host.
+- name: Configure sshd — X11 forwarding for {{ operator_user }}
+  template:
+    src: 10-x11-forwarding.conf.j2
+    dest: /etc/ssh/sshd_config.d/10-x11-forwarding.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: sshd -t -f %s
+  when:
+    - ssh_x11_forwarding | default(false)
+    - not (ansible_check_mode and ssh_apt.changed)
+  register: ssh_sshd_config_x11
+  become: true
+  tags:
+    - ssh
+
+- name: Remove sshd X11 forwarding drop-in
+  file:
+    path: /etc/ssh/sshd_config.d/10-x11-forwarding.conf
+    state: absent
+  when: not (ssh_x11_forwarding | default(false))
+  register: ssh_sshd_config_x11_remove
+  become: true
+  tags:
+    - ssh
+
 # On OpenSSH <= 9.4 (jammy 8.9), duplicate Subsystem sftp is fatal — sshd
 # refuses to start. The drop-in declares our audited Subsystem, so the stock
 # line must be commented out. Noble (9.6+) tolerates duplicates via
@@ -87,7 +117,10 @@
 - name: Validate sshd config before reload
   when:
     - not (ansible_check_mode and ssh_apt.changed)
-    - ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_legacy.changed or ssh_sshd_config_noble.changed
+    - >-
+      ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_legacy.changed or ssh_sshd_config_noble.changed
+      or (ssh_sshd_config_x11 is defined and ssh_sshd_config_x11 is changed)
+      or (ssh_sshd_config_x11_remove is defined and ssh_sshd_config_x11_remove is changed)
   command: sshd -t
   changed_when: false
   become: true
@@ -102,6 +135,9 @@
     systemd_unit_args:
       src: ssh
       condition: "{{ not (ansible_check_mode and ssh_apt.changed) }}"
-      reload: "{{ ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_legacy.changed or ssh_sshd_config_noble.changed }}"
+      reload: >-
+        {{ ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_legacy.changed or ssh_sshd_config_noble.changed
+           or (ssh_sshd_config_x11 is defined and ssh_sshd_config_x11 is changed)
+           or (ssh_sshd_config_x11_remove is defined and ssh_sshd_config_x11_remove is changed) }}
   tags:
     - ssh
