@@ -105,10 +105,16 @@ jobs:
           if [ "$GITHUB_REF" = "refs/heads/master" ]; then
             tags+=( --tag "${REGISTRY}/${REPO}:latest" )
           fi
+          nexus_host_gateway=$(podman network inspect podman --format '{{range .Subnets}}{{.Gateway}}{{end}}')
+          [[ -n "$nexus_host_gateway" ]] || {
+            echo >&2 "podman default network has no gateway; cannot map ${REGISTRY} for rootless pasta builds"
+            exit 1
+          }
           podman build \
             --pull=newer \
             --layers \
             --cache-from "${REGISTRY}/${REPO}" \
+            --add-host "${REGISTRY}:${nexus_host_gateway}" \
             --secret id=mise_github_token,env=MISE_GITHUB_TOKEN \
             --iidfile "$iidfile" \
             "${tags[@]}" \
