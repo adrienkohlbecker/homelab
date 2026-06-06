@@ -43,4 +43,5 @@ echo "  then: ssh -p \$(awk '{print \$1}' $zbm_ports_file) -o StrictHostKeyCheck
   --extra-hostfwd 222 \
   --write-hostfwds "$zbm_ports_file" \
   --foreground \
+  --display-window \
   --no-ssh-wait

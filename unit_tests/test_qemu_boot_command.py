@@ -123,6 +123,18 @@ def test_keep_vm_zero_timeout_x86_64_uses_minimal_keep_devices(
     assert "usb-tablet" in devices
 
 
+def test_keep_vm_display_window_uses_local_qemu_backend(
+    qemu_machine_factory: Callable[..., machine.QemuMachine],
+) -> None:
+    m = qemu_machine_factory(host_arch="x86_64", keep_vm=True, display_window=True)
+    _setup(m)
+    cmd = m._boot_command()
+
+    display_idx = cmd.index("-display")
+    assert cmd[display_idx + 1] == "cocoa"
+    assert "vnc=:0" not in cmd
+
+
 def test_keep_vm_aarch64_adds_full_input_stack(
     qemu_machine_factory: Callable[..., machine.QemuMachine],
 ) -> None:
