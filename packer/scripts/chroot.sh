@@ -377,7 +377,8 @@ mv "$tmp"/zfsbootmenu.EFI /boot/efi/EFI/ZBM/VMLINUZ.EFI
 if [ "$ZBM_ARCH" = "aarch64" ]; then
   mv "$tmp"/initramfs-bootmenu.img /boot/efi/EFI/ZBM/
   mv "$tmp"/vmlinu*-bootmenu /boot/efi/EFI/ZBM/
-  ZBM_CMDLINE=$(cat "$tmp/cmdline")
+  mv "$tmp"/cmdline /boot/efi/EFI/ZBM/
+  ZBM_CMDLINE=$(cat /boot/efi/EFI/ZBM//cmdline)
 
   # x86_64 emits vmlinuz-bootmenu (compressed); aarch64 emits vmlinux-bootmenu
   # (uncompressed). Capture the actual filename for the rEFInd menuentry.
@@ -520,7 +521,7 @@ menuentry "Ubuntu (ZBM, Components)" {
 menuentry "Ubuntu (Linux EFI Stub)" {
     loader /EFI/Linux/vmlinuz.efi
     initrd /EFI/Linux/initrd
-    options "$ZBM_CMDLINE root=zfs:rpool/ROOT/${UBUNTU_NAME} ${pool_cmdline}"
+    options "root=zfs:rpool/ROOT/${UBUNTU_NAME} ${pool_cmdline}"
 }
 EOF
 
