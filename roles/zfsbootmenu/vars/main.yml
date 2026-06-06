@@ -1,17 +1,18 @@
 ---
-# ZFSBootMenu recovery EFI binary, x86_64 only (aarch64 bypasses ZBM).
-# Pinned to v3.0.1: the v3.1.0 boot-hang root cause is identified (per-host
-# serial console via boot_serial_console), so the pin is retained only until
-# v3.1.0 is re-tested with the new args — see notes/SOMEDAY.md.
-# Twin: packer/scripts/chroot.sh installs ZBM in Components mode and currently
-# pins v3.1.0 — the version skew is the staged-rollout state, not drift.
-zfsbootmenu_version: "3.0.1"
-zfsbootmenu_kernel: "linux6.1"
+# ZFSBootMenu tarballs are built by mise-tasks/zbm/build.sh and uploaded to the
+# Nexus zbm raw repository. Each tarball contains the unified EFI image,
+# components-mode kernel/initrd, and the cmdline used by rEFInd on aarch64.
+zfsbootmenu_repository_url: "https://{{ nexus_url if (nexus_url | length > 0) else 'nexus.lab.fahm.fr' }}/repository/zbm"
 zfsbootmenu_release:
   x86_64:
-    url: "{{ mirror_github }}/zbm-dev/zfsbootmenu/releases/download/v{{ zfsbootmenu_version }}/zfsbootmenu-recovery-x86_64-v{{ zfsbootmenu_version }}-{{ zfsbootmenu_kernel }}.EFI"
-    sha256: 3d4c55147964fdbc2b0042535d9ee117dc51bee82af045040d26ae9dfb9bdf0d
-  # NOTE: The file below is currently non-functional and used only as a fixture to test ansible code
+    version: v3.1.0-linux6.18-ci.27033469422.1-x86_64
+    url: "{{ zfsbootmenu_repository_url }}/zfsbootmenu-v3.1.0-linux6.18-ci.27033469422.1-x86_64.tar.gz"
+    sha256_url: "{{ zfsbootmenu_repository_url }}/zfsbootmenu-v3.1.0-linux6.18-ci.27033469422.1-x86_64.tar.gz.sha256sum"
   aarch64:
-    url: "{{ mirror_gitea_lab }}/api/packages/adrienkohlbecker/generic/zfsbootmenu/{{ zfsbootmenu_version }}/zfsbootmenu-recovery-aarch64-v{{ zfsbootmenu_version }}-{{ zfsbootmenu_kernel }}.EFI"
-    sha256: 8cbe5105ff0d005ff67a4ddcf0d91abed614b07fa281b682e5be5b2bf4929322
+    version: v3.1.0-linux6.18-local.20260605230757-aarch64
+    url: "{{ zfsbootmenu_repository_url }}/zfsbootmenu-v3.1.0-linux6.18-local.20260605230757-aarch64.tar.gz"
+    sha256_url: "{{ zfsbootmenu_repository_url }}/zfsbootmenu-v3.1.0-linux6.18-local.20260605230757-aarch64.tar.gz.sha256sum"
+
+zfsbootmenu_artifact: "{{ zfsbootmenu_release[ansible_architecture] }}"
+zfsbootmenu_cache_dir: "/var/cache/zfsbootmenu/{{ zfsbootmenu_artifact.version }}"
+zfsbootmenu_tarball_path: "{{ zfsbootmenu_cache_dir }}/{{ zfsbootmenu_artifact.url | basename }}"

@@ -10,23 +10,115 @@
   tags:
     - zfsbootmenu
 
-# No backup: true — /boot/efi is vfat; backup_local's chown fails on FAT.
-- name: Download zfsbootmenu  # noqa: require-backup
-  when:
-    - not (ansible_check_mode and zfsbootmenu_zbm_directory.changed)
-  get_url:
-    url: "{{ zfsbootmenu_release[ansible_architecture].url }}"
-    checksum: "sha256:{{ zfsbootmenu_release[ansible_architecture].sha256 }}"
-    dest: /boot/efi/EFI/ZBM/VMLINUZ.EFI
+- name: Create ZBM artifact cache directory
+  file:
+    dest: "{{ zfsbootmenu_cache_dir }}"
+    state: directory
+    owner: root
+    group: root
     mode: "0755"
+  become: true
+  register: zfsbootmenu_cache_directory
+  tags:
+    - zfsbootmenu
+
+- name: Download zfsbootmenu bundle
+  when:
+    - not (ansible_check_mode and zfsbootmenu_cache_directory.changed)
+  get_url:
+    url: "{{ zfsbootmenu_artifact.url }}"
+    checksum: "sha256:{{ zfsbootmenu_artifact.sha256_url }}"
+    dest: "{{ zfsbootmenu_tarball_path }}"
+    mode: "0644"
     owner: root
     group: root
     timeout: 120
   become: true
-  register: zfsbootmenu_efi
+  register: zfsbootmenu_bundle
   retries: 3
   delay: 5
-  until: zfsbootmenu_efi is succeeded
+  until: zfsbootmenu_bundle is succeeded
+  tags:
+    - zfsbootmenu
+
+- name: Extract zfsbootmenu bundle
+  when:
+    - not (ansible_check_mode and zfsbootmenu_cache_directory.changed)
+  unarchive:
+    src: "{{ zfsbootmenu_tarball_path }}"
+    dest: "{{ zfsbootmenu_cache_dir }}"
+    remote_src: true
+    creates: "{{ zfsbootmenu_cache_dir }}/zfsbootmenu.EFI"
+    owner: root
+    group: root
+  become: true
+  register: zfsbootmenu_extract
+  tags:
+    - zfsbootmenu
+
+# No backup: true — /boot/efi is vfat; backup_local's chown fails on FAT.
+- name: Install ZBM unified EFI image  # noqa: require-backup
+  when:
+    - not (ansible_check_mode and (zfsbootmenu_zbm_directory.changed or zfsbootmenu_extract.changed))
+  copy:
+    src: "{{ zfsbootmenu_cache_dir }}/zfsbootmenu.EFI"
+    dest: /boot/efi/EFI/ZBM/VMLINUZ.EFI
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  register: zfsbootmenu_efi
+  tags:
+    - zfsbootmenu
+
+- name: Find aarch64 ZBM components
+  when:
+    - ansible_architecture == "aarch64"
+    - not (ansible_check_mode and zfsbootmenu_extract.changed)
+  find:
+    paths: "{{ zfsbootmenu_cache_dir }}"
+    patterns:
+      - initramfs-bootmenu.img
+      - vmlinu*-bootmenu
+      - cmdline
+    file_type: file
+  become: true
+  register: zfsbootmenu_aarch64_components
+  tags:
+    - zfsbootmenu
+
+- name: Aarch64 ZBM bundle carries required components
+  when:
+    - ansible_architecture == "aarch64"
+    - not (ansible_check_mode and zfsbootmenu_extract.changed)
+  assert:
+    that:
+      - (zfsbootmenu_aarch64_components.files | map(attribute='path') | map('basename') | sort | list) | length == 3
+      - "'initramfs-bootmenu.img' in (zfsbootmenu_aarch64_components.files | map(attribute='path') | map('basename') | list)"
+      - "'cmdline' in (zfsbootmenu_aarch64_components.files | map(attribute='path') | map('basename') | list)"
+      - (zfsbootmenu_aarch64_components.files | map(attribute='path') | map('basename') | select('match', '^vmlinu.*-bootmenu$') | list) | length == 1
+    fail_msg: "ZBM bundle missing aarch64 components needed by refind.conf"
+  tags:
+    - zfsbootmenu
+
+# No backup: true — /boot/efi is vfat; backup_local's chown fails on FAT.
+- name: Install aarch64 ZBM components  # noqa: require-backup
+  when:
+    - ansible_architecture == "aarch64"
+    - not (ansible_check_mode and (zfsbootmenu_zbm_directory.changed or zfsbootmenu_extract.changed))
+  copy:
+    src: "{{ item.path }}"
+    dest: "/boot/efi/EFI/ZBM/{{ item.path | basename }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ zfsbootmenu_aarch64_components.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  become: true
+  register: zfsbootmenu_aarch64_component_install
   tags:
     - zfsbootmenu
 
@@ -51,7 +143,7 @@
 
 - name: Ask to reboot
   when:
-    - zfsbootmenu_efi is changed
+    - zfsbootmenu_efi is changed or (zfsbootmenu_aarch64_component_install is defined and zfsbootmenu_aarch64_component_install is changed)
   file:
     path: /var/run/reboot-required
     state: touch
