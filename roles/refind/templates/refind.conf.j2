@@ -713,10 +713,10 @@ default_selection "{{ 'Ubuntu (Linux EFI Stub)' if ansible_architecture == 'aarc
 # converge-time theme and backup-loader submenu added.
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/VMLINUZ.EFI
-    options "zbm.skip"
+    options "{{ refind_zbm_cmdline }} zbm.skip"
     icon /EFI/refind/themes/refind-theme-regular/icons/128-48/os_ubuntu.png
     submenuentry "Show ZFSBootMenu" {
-      options "zbm.show"
+      options "{{ refind_zbm_cmdline }} zbm.show"
     }
     # VMLINUZ-BACKUP.EFI is seeded by the zfsbootmenu role as a copy of the
     # primary at install time, so this manual recovery entry resolves on a
@@ -724,7 +724,7 @@ menuentry "Ubuntu (ZBM)" {
     # known-good into the backup slot) stays a SOMEDAY item.
     submenuentry "Show ZFSBootMenu (backup)" {
       loader /EFI/ZBM/VMLINUZ-BACKUP.EFI
-      options "zbm.show"
+      options "{{ refind_zbm_cmdline }} zbm.show"
     }
 }
 

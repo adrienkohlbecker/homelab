@@ -373,12 +373,13 @@ tar -xzf "$tmp/zbm.tar.gz" -C "$tmp" --no-same-owner
 
 mkdir -p /boot/efi/EFI/ZBM
 mv "$tmp"/zfsbootmenu.EFI /boot/efi/EFI/ZBM/VMLINUZ.EFI
+mv "$tmp"/cmdline /boot/efi/EFI/ZBM/
+
+ZBM_CMDLINE=$(cat /boot/efi/EFI/ZBM/cmdline)
 
 if [ "$ZBM_ARCH" = "aarch64" ]; then
   mv "$tmp"/initramfs-bootmenu.img /boot/efi/EFI/ZBM/
   mv "$tmp"/vmlinu*-bootmenu /boot/efi/EFI/ZBM/
-  mv "$tmp"/cmdline /boot/efi/EFI/ZBM/
-  ZBM_CMDLINE=$(cat /boot/efi/EFI/ZBM//cmdline)
 
   # x86_64 emits vmlinuz-bootmenu (compressed); aarch64 emits vmlinux-bootmenu
   # (uncompressed). Capture the actual filename for the rEFInd menuentry.
@@ -497,9 +498,9 @@ dont_scan_dirs $refind_dont_scan_dirs
 # hand.
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/VMLINUZ.EFI
-    options "zbm.skip"
+    options "$ZBM_CMDLINE zbm.skip"
     submenuentry "Show ZFSBootMenu" {
-      options "zbm.show"
+      options "$ZBM_CMDLINE zbm.show"
     }
 }
 EOF
