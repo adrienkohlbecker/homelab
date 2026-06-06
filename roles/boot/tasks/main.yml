@@ -120,8 +120,8 @@
     - boot
 
 # NVRAM boot entries — managed after the boot-chain config above is in place.
-# On aarch64 the EFI-stub "Linux" entry is prepended (primary boot path there)
-# so rEFInd->ZBM entries exist but don't take over BootOrder.
+# Firmware points at boot loaders on the ESP; per-loader config carries the
+# loader-specific kernel command line.
 - name: Manage EFI boot entries
   when: not grub_bootloader
   import_tasks: efi_entries.yml
