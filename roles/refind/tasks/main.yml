@@ -249,8 +249,7 @@
   tags:
     - refind
 
-- name: Read ZBM cmdline for aarch64 refind entries
-  when: ansible_architecture == "aarch64"
+- name: Read ZBM cmdline for refind entries
   slurp:
     src: /boot/efi/EFI/ZBM/cmdline
   register: refind_zbm_cmdline_content
@@ -258,8 +257,7 @@
   tags:
     - refind
 
-- name: Decode ZBM cmdline for aarch64 refind entries
-  when: ansible_architecture == "aarch64"
+- name: Set ZBM cmdline fact for refind entries
   set_fact:
     refind_zbm_cmdline: "{{ refind_zbm_cmdline_content.content | b64decode | trim }}"
   tags:
