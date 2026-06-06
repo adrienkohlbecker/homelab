@@ -1,7 +1,6 @@
-# This role maintains rEFInd's on-ESP config + theme. It runs after the
-# zfsbootmenu role (site.yml order), which downloads /EFI/ZBM/VMLINUZ.EFI — the
-# image the menuentry below boots. The assert makes that ordering dependency
-# fail loud rather than writing a config that points at a missing loader.
+# This role maintains rEFInd's on-ESP binaries, config, theme, and aarch64
+# Linux EFI-stub staging hook. It runs after zfsbootmenu, which installs the
+# ZBM artifacts referenced by the menuentries.
 - name: Install refind
   apt:
     package:
@@ -57,11 +56,8 @@
 # backup: true — /boot/efi is vfat and backup_local's ownership-preserving chown
 # fails on FAT.
 #
-# Runs on both arches: the package ships refind_x64.efi on x86 and refind_aa64.efi
-# on arm64 under the same path. Prod is all-x86 and boots rEFInd → ZBM; the arm64
-# test box boots the EFI-stub path (the excluded arm64 branch) and never loads
-# this binary, but the role still owns it there so the converge is exercised on
-# both arches.
+# Runs on both arches: the package ships refind_x64.efi on x86 and
+# refind_aa64.efi on arm64 under the same path.
 - name: Install the rEFInd binary on the ESP  # noqa: require-backup
   when: not (ansible_check_mode and refind_apt.changed)
   copy:
@@ -92,6 +88,65 @@
   file:
     path: /boot/refind_linux.conf
     state: absent
+  become: true
+  tags:
+    - refind
+
+- name: Install aarch64 Linux EFI-stub staging hook
+  when: ansible_architecture == "aarch64"
+  copy:
+    src: zz-stage-efi-stub
+    dest: /etc/kernel/postinst.d/zz-stage-efi-stub
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  become: true
+  register: refind_efi_stub_hook
+  tags:
+    - refind
+
+- name: Create aarch64 Linux EFI-stub hook directories
+  when: ansible_architecture == "aarch64"
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/kernel/postrm.d
+    - /etc/initramfs/post-update.d
+  become: true
+  tags:
+    - refind
+
+- name: Link aarch64 Linux EFI-stub hook into kernel lifecycle
+  when: ansible_architecture == "aarch64"
+  file:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    state: link
+    force: true
+    owner: root
+    group: root
+  loop:
+    - src: ../postinst.d/zz-stage-efi-stub
+      dest: /etc/kernel/postrm.d/zz-stage-efi-stub
+    - src: /etc/kernel/postinst.d/zz-stage-efi-stub
+      dest: /etc/initramfs/post-update.d/zz-stage-efi-stub
+  loop_control:
+    label: "{{ item.dest }}"
+  become: true
+  tags:
+    - refind
+
+- name: Stage aarch64 Linux EFI-stub kernel and initrd
+  when:
+    - ansible_architecture == "aarch64"
+    - not ansible_check_mode
+  command: /etc/kernel/postinst.d/zz-stage-efi-stub
+  changed_when: refind_efi_stub_hook is changed
   become: true
   tags:
     - refind
@@ -194,11 +249,36 @@
   tags:
     - refind
 
+- name: Read ZBM cmdline for aarch64 refind entries
+  when: ansible_architecture == "aarch64"
+  slurp:
+    src: /boot/efi/EFI/ZBM/cmdline
+  register: refind_zbm_cmdline_content
+  become: true
+  tags:
+    - refind
+
+- name: Decode ZBM cmdline for aarch64 refind entries
+  when: ansible_architecture == "aarch64"
+  set_fact:
+    refind_zbm_cmdline: "{{ refind_zbm_cmdline_content.content | b64decode | trim }}"
+  tags:
+    - refind
+
+- name: Read pool cmdline for aarch64 Linux EFI-stub entry
+  when: ansible_architecture == "aarch64"
+  command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
+  changed_when: false
+  register: refind_pool_cmdline
+  become: true
+  tags:
+    - refind
+
 # No backup: true on these two — /boot/efi is vfat, and backup_local's chown
 # to preserve ownership fails on FAT, so a backup can't be written on the ESP.
 - name: Configure refind  # noqa: require-backup
-  copy:
-    src: refind.conf
+  template:
+    src: refind.conf.j2
     dest: /boot/efi/EFI/refind/refind.conf
     owner: root
     group: root

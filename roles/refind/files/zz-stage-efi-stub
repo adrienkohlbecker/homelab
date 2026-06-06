@@ -1,0 +1,35 @@
+#!/bin/bash
+set -euo pipefail
+
+mountpoint -q /boot/efi || exit 0
+
+shopt -s nullglob
+vmlinuz_files=(/boot/vmlinuz-*)
+initrd_files=(/boot/initrd.img-*)
+shopt -u nullglob
+
+[ ${#vmlinuz_files[@]} -gt 0 ] || exit 0
+[ ${#initrd_files[@]} -gt 0 ] || exit 0
+
+vmlinuz=$(printf '%s\n' "${vmlinuz_files[@]}" | sort -V | tail -1)
+initrd=$(printf '%s\n' "${initrd_files[@]}" | sort -V | tail -1)
+
+mkdir -p /boot/efi/EFI/Linux
+
+if gunzip -t "$vmlinuz" 2>/dev/null; then
+	gunzip -c "$vmlinuz" >/boot/efi/EFI/Linux/vmlinuz.efi.new
+else
+	cp -L "$vmlinuz" /boot/efi/EFI/Linux/vmlinuz.efi.new
+fi
+if cmp -s /boot/efi/EFI/Linux/vmlinuz.efi.new /boot/efi/EFI/Linux/vmlinuz.efi; then
+	rm /boot/efi/EFI/Linux/vmlinuz.efi.new
+else
+	mv -f /boot/efi/EFI/Linux/vmlinuz.efi.new /boot/efi/EFI/Linux/vmlinuz.efi
+fi
+
+cp -L "$initrd" /boot/efi/EFI/Linux/initrd.new
+if cmp -s /boot/efi/EFI/Linux/initrd.new /boot/efi/EFI/Linux/initrd; then
+	rm /boot/efi/EFI/Linux/initrd.new
+else
+	mv -f /boot/efi/EFI/Linux/initrd.new /boot/efi/EFI/Linux/initrd
+fi

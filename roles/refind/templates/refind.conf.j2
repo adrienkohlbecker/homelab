@@ -386,7 +386,7 @@ use_nvram false
 # from the scan on the myvol volume but not on other volumes.
 #
 #dont_scan_dirs ESP:/EFI/boot,EFI/Dell,EFI/memtest86
-dont_scan_dirs /EFI/ZBM
+dont_scan_dirs EFI:/EFI/ZBM{% if ansible_architecture == "aarch64" %},EFI:/EFI/Linux{% endif %}
 
 # Files that should NOT be included as EFI boot loaders (on the
 # first line of the display). If you're using a boot loader that
@@ -511,7 +511,7 @@ dont_scan_dirs /EFI/ZBM
 #default_selection "+,bzImage,vmlinuz"
 #default_selection Maintenance 23:30 2:00
 #default_selection "Maintenance,macOS" 1:00 2:30
-default_selection "Ubuntu (ZBM)"
+default_selection "{{ 'Ubuntu (Linux EFI Stub)' if ansible_architecture == 'aarch64' else 'Ubuntu (ZBM)' }}"
 
 # Enable VMX bit and lock the CPU MSR if unlocked.
 # On some Intel Apple computers, the firmware does not lock the MSR 0x3A.
@@ -709,19 +709,8 @@ default_selection "Ubuntu (ZBM)"
 #     disabled
 # }
 
-# Twin of the image-build refind.conf in packer/scripts/chroot.sh, kept in
-# sync by hand. Only the entry title and default_selection are load-bearing:
-# keep them identical across both files so a host selects the same entry
-# whichever config is live. The rest deliberately differs — do NOT reconcile:
-#   - loader: this converge config boots the single-file ZBM UKI (VMLINUZ.EFI,
-#     no initrd) the zfsbootmenu role downloads; chroot.sh boots Components
-#     mode (vmlinuz-bootmenu + a separate initrd).
-#   - theme: only this file carries the theme (include + icon line) and
-#     use_nvram false; the image build ships no theme.
-#   - menu: this file exposes ZFSBootMenu via submenuentry blocks; chroot.sh
-#     uses a second top-level "Ubuntu (ZBM Menu)" menuentry instead.
-#   - binary: this role hand-copies refind_*.efi (no NVRAM touch); chroot.sh
-#     runs refind-install (registers NVRAM entries at bootstrap).
+# Twin of the image-build refind.conf in packer/scripts/chroot.sh, with the
+# converge-time theme and backup-loader submenu added.
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/VMLINUZ.EFI
     options "zbm.skip"
@@ -738,5 +727,24 @@ menuentry "Ubuntu (ZBM)" {
       options "zbm.show"
     }
 }
+
+{% if ansible_architecture == "aarch64" %}
+menuentry "Ubuntu (ZBM, Components)" {
+    loader /EFI/ZBM/vmlinux-bootmenu
+    initrd /EFI/ZBM/initramfs-bootmenu.img
+    options "{{ refind_zbm_cmdline }} zbm.skip"
+    icon /EFI/refind/themes/refind-theme-regular/icons/128-48/os_ubuntu.png
+    submenuentry "Show ZFSBootMenu" {
+      options "{{ refind_zbm_cmdline }} zbm.show"
+    }
+}
+
+menuentry "Ubuntu (Linux EFI Stub)" {
+    loader /EFI/Linux/vmlinuz.efi
+    initrd /EFI/Linux/initrd
+    options "{{ refind_zbm_cmdline }} root=zfs:rpool/ROOT/{{ ansible_distribution_release }} {{ refind_pool_cmdline.stdout }}"
+    icon /EFI/refind/themes/refind-theme-regular/icons/128-48/os_ubuntu.png
+}
+{% endif %}
 
 include themes/refind-theme-regular/theme.conf

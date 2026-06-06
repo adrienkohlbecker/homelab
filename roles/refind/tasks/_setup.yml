@@ -1,8 +1,5 @@
-# refind boots the single-file /EFI/ZBM/VMLINUZ.EFI that the zfsbootmenu role
-# downloads (site.yml runs zfsbootmenu first). The box image ships only the
-# Components-mode vmlinuz-bootmenu, so bring the loader up here to mirror the
-# prod ordering and satisfy the role's loader assert when refind is tested
-# in isolation.
+# refind boots artifacts installed by the zfsbootmenu role. Import that role so
+# isolated refind tests have the same ESP prerequisites as the site.yml order.
 - name: _setup | Provide the ZFSBootMenu loader refind depends on
   import_role:
     name: zfsbootmenu
