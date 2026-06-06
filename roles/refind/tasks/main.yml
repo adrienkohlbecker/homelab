@@ -272,6 +272,21 @@
   tags:
     - refind
 
+- name: Set console cmdline for refind entries
+  vars:
+    _refind_serial: >-
+      {% if qemu_test | default(false) %}
+      {{ (ansible_architecture == 'aarch64')
+         | ternary('earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200',
+                   'earlycon=uart8250,io,0x3f8 console=ttyS0,115200') }}
+      {% else %}
+      {{ boot_serial_console | default('') }}
+      {% endif %}
+  set_fact:
+    refind_console_cmdline: "console=tty0{{ (' ' ~ (_refind_serial | trim)) if (_refind_serial | trim | length > 0) else '' }}"
+  tags:
+    - refind
+
 # No backup: true on these two — /boot/efi is vfat, and backup_local's chown
 # to preserve ownership fails on FAT, so a backup can't be written on the ESP.
 - name: Configure refind  # noqa: require-backup
