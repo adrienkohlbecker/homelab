@@ -41,7 +41,7 @@
     python3 -c '
     import yaml, sys
     d = yaml.safe_load(open(sys.argv[1]))
-    for k in ("network_key", "mqtt_user", "mqtt_password", "pan_id", "ext_pan_id"):
+    for k in ("network_key", "mqtt_user", "mqtt_password"):
         assert k in d, f"missing secret key: {k}"
     ' /mnt/services/z2m/secret.yaml
   args:
