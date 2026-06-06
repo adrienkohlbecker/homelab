@@ -15,7 +15,7 @@ arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 # early reader would SIGPIPE ls and trip pipefail.
 tarball=$(ls -t "${MISE_CONFIG_ROOT}/zbm-build/${arch}"/zfsbootmenu-v*-"${arch}".tar.gz)
 tarball=${tarball%%$'\n'*}
-tmp=$(mktemp -d -t zbm-test)
+tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 tar -xzf "$tarball" -C "$tmp" --no-same-owner
 # Read the base cmdline baked into the EFI bundle (written by zbm:build from
