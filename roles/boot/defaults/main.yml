@@ -11,16 +11,18 @@ boot_serial_console: ""
 # expand to per-disk variants on mdadm-EFI hosts (one entry per component
 # disk) for single-disk-failure survivability. BootOrder is set to list
 # managed entries first, in this order, then unmanaged firmware entries.
-# Optional 'options' key passes --unicode to efibootmgr for EFI-stub
-# kernel cmdline args.
+# Optional 'options' key passes --unicode to efibootmgr for entries that boot
+# an EFI-stub kernel directly from firmware.
 #
-# On aarch64 the direct EFI-stub "Linux" entry is the primary boot path
-# (rEFInd->ZBM kexec panics on aarch64 QEMU), so it is prepended first.
-#
-# Building-block vars (_boot_efi_stub_entry, _boot_efi_loader_entries) live
-# in vars/main.yml (not overridable). Override boot_efi_entries to replace
-# the full list.
-boot_efi_entries: "{{ (_boot_efi_stub_entry if ansible_architecture == 'aarch64' else []) + _boot_efi_loader_entries }}"
+# Override boot_efi_entries to replace the full managed-entry list.
+boot_efi_entries:
+  - label: rEFInd
+    loader: "\\EFI\\refind\\{{ 'refind_aa64.efi' if ansible_architecture == 'aarch64' else 'refind_x64.efi' }}"
+    multi_disk: true
+  - label: ZFSBootMenu
+    loader: "\\EFI\\ZBM\\VMLINUZ.EFI"
+  - label: ZFSBootMenu (Backup)
+    loader: "\\EFI\\ZBM\\VMLINUZ-BACKUP.EFI"
 
 # EFI firmware boot timeout in seconds. How long the firmware waits at the
 # boot selection screen before auto-selecting the first BootOrder entry.

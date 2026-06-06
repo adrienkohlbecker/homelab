@@ -181,24 +181,9 @@
       boot entry; NVRAM labels: {{ _actual_labels }}
   loop: "{{ _expected_labels }}"
 
-- name: _verify | Aarch64 EFI-stub entry carries kernel cmdline
-  when: not grub_bootloader and ansible_architecture == 'aarch64'
-  vars:
-    # efibootmgr -v renders the UTF-16 --unicode optional data with a '.' after
-    # every character (root -> r.o.o.t.), so match that dotted form rather than
-    # the plain substring, which never appears in the dump.
-    _dotted_root: "{{ ('root=zfs:' | list | join('.')) ~ '.' }}"
-  assert:
-    that: _dotted_root in _boot_verify_efi_dump.stdout
-    fail_msg: >-
-      aarch64 Linux EFI-stub entry missing root=zfs: in optional data —
-      the entry may have been created without --unicode options
-
-# _verify is a separate ansible invocation, so the converge-time fact
-# _boot_assembled_cmdline (which the aarch64 stub entry's options embed) is not
-# set here and boot_efi_entries would fall back to its console=tty0 default,
-# falsely diverging from the entry converge actually wrote. Re-seed it from the
-# authoritative org.zfsbootmenu:commandline property read above.
+# _verify is a separate ansible invocation; re-seed the converge-time command
+# line from the authoritative org.zfsbootmenu:commandline property so any
+# overridden EFI entries that reference it compare against the applied value.
 - name: _verify | EFI entries are converged
   when: not grub_bootloader
   vars:
