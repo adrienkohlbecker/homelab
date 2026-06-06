@@ -24,11 +24,13 @@ x86_64)
   REFIND_NAME=refind_x64.efi
   REFIND_FALLBACK_NAME=BOOTX64.EFI
   ZBM_VERSION=v3.1.0-linux6.18-ci.27033469422.1-x86_64
+  CONSOLE_CMDLINE="console=tty0 earlycon=uart8250,io,0x3f8 console=ttyS0,115200"
   ;;
 aarch64)
   REFIND_NAME=refind_aa64.efi
   REFIND_FALLBACK_NAME=BOOTAA64.EFI
   ZBM_VERSION=v3.1.0-linux6.18-local.20260605230757-aarch64
+  CONSOLE_CMDLINE="console=tty0 earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200"
   ;;
 *)
   echo >&2 "Unsupported arch: $ZBM_ARCH"
@@ -252,18 +254,14 @@ fi
 # the login prompt both land on serial; tty0 keeps VGA output for physical
 # consoles; earlycon emits before the real driver registers its console.
 #
-# Source of truth for the *test-image* console args. Prod hosts derive theirs
-# from boot_serial_console in host_vars (the boot role's "Set the base console
-# command line" task overwrites this property at converge). x86_64 boots
-# rEFInd -> ZBM, which reads org.zfsbootmenu:commandline natively; aarch64's
-# image-build rEFInd entry reads the value back with `zfs get` to build the
-# Linux EFI-stub cmdline. The serial hardware differs per arch (8250 COM1 at
-# io 0x3f8 vs pl011 at mmio 0x9000000), so the value is arch-specific.
-if [ "$ZBM_ARCH" = "aarch64" ]; then
-  zfs set org.zfsbootmenu:commandline="console=tty0 earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200" "rpool/ROOT"
-else
-  zfs set org.zfsbootmenu:commandline="console=tty0 earlycon=uart8250,io,0x3f8 console=ttyS0,115200" "rpool/ROOT"
-fi
+# Source of truth for the *test-image* console args is $CONSOLE_CMDLINE, set
+# in the arch case block above. Prod hosts derive theirs from boot_serial_console
+# in host_vars (the boot role's "Set the base console command line" task
+# overwrites this property at converge). The serial hardware differs per arch
+# (8250 COM1 at io 0x3f8 vs pl011 at mmio 0x9000000), so the value is
+# arch-specific. $CONSOLE_CMDLINE is used both here and in the rEFInd menuentries
+# directly — no readback from ZFS needed.
+zfs set org.zfsbootmenu:commandline="$CONSOLE_CMDLINE" "rpool/ROOT"
 
 # Create efi & swap
 
@@ -494,43 +492,39 @@ timeout 3
 default_selection "$refind_default_selection"
 dont_scan_dirs $refind_dont_scan_dirs
 
-# No "quiet loglevel=0" on the ZBM stage: a stalled boot (e.g. the
-# intermittent first-boot SSH-bringup flake the test harness hits) is only
-# diagnosable if the rEFInd -> ZBM -> kexec handoff narrates itself on the
-# serial console. The real kernel already logs verbosely via the ttyS0
-# console arg in org.zfsbootmenu:commandline; this extends that to the
-# otherwise-silent bootmenu stage. zbm.skip still bypasses the menu so the
-# boot stays non-interactive.
+# $CONSOLE_CMDLINE is passed explicitly to every ZBM stage so the rEFInd ->
+# ZBM -> kexec handoff narrates itself on the serial console. A stalled boot
+# (e.g. the intermittent first-boot SSH-bringup flake the test harness hits)
+# is only diagnosable if that stage is visible. zbm.skip still bypasses the
+# menu so the boot stays non-interactive.
 #
 # Twin of the converge-time roles/refind/templates/refind.conf.j2, kept in sync by
 # hand.
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/VMLINUZ.EFI
-    options "$ZBM_CMDLINE zbm.skip"
+    options "$ZBM_CMDLINE $CONSOLE_CMDLINE zbm.skip"
     submenuentry "Show ZFSBootMenu" {
-      options "$ZBM_CMDLINE zbm.show"
+      options "$ZBM_CMDLINE $CONSOLE_CMDLINE zbm.show"
     }
 }
 EOF
 
 if [ "$ZBM_ARCH" = "aarch64" ]; then
 
-  pool_cmdline="$(zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT)"
-
   cat <<EOF >>/boot/efi/EFI/refind/refind.conf
 menuentry "Ubuntu (ZBM, Components)" {
     loader /EFI/ZBM/${ZBM_KERNEL}
     initrd /EFI/ZBM/initramfs-bootmenu.img
-    options "$ZBM_CMDLINE zbm.skip"
+    options "$ZBM_CMDLINE $CONSOLE_CMDLINE zbm.skip"
     submenuentry "Show ZFSBootMenu" {
-      options "$ZBM_CMDLINE zbm.show"
+      options "$ZBM_CMDLINE $CONSOLE_CMDLINE zbm.show"
     }
 }
 
 menuentry "Ubuntu (Linux EFI Stub)" {
     loader /EFI/Linux/vmlinuz.efi
     initrd /EFI/Linux/initrd
-    options "root=zfs:rpool/ROOT/${UBUNTU_NAME} ${pool_cmdline}"
+    options "root=zfs:rpool/ROOT/${UBUNTU_NAME} $(zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT)"
 }
 EOF
 
