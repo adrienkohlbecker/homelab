@@ -95,27 +95,18 @@
 
 # Base kernel console args — the twin of the `zfs set` in chroot.sh, reproduced
 # so the cmdline engine doesn't silently drop them on every converge. tty0 keeps
-# VGA output. The earlycon + serial args are host-specific: earlycon probing an
-# absent I/O port hangs the boot (lab has UART at 0x60a0 not 0x3f8; pug has
-# none). Hosts with a real UART set boot_serial_console in host_vars; test VMs
-# get the qemu virtual UART automatically.
+# VGA output. The earlycon + serial args come from _console_cmdline (group_vars),
+# which selects the arch-specific QEMU UART on test VMs and boot_serial_console
+# on real hardware (empty on lab/pug which have no UART).
 - name: Set the base console command line
   when: not grub_bootloader
   import_role:
     name: boot
     tasks_from: cmdline
   vars:
-    _boot_serial: >-
-      {% if qemu_test | default(false) %}
-      {{ (ansible_architecture == 'aarch64')
-         | ternary('earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200',
-                   'earlycon=uart8250,io,0x3f8 console=ttyS0,115200') }}
-      {% else %}
-      {{ boot_serial_console }}
-      {% endif %}
     boot_cmdline_args:
       name: default
-      contents: "console=tty0{{ (' ' ~ (_boot_serial | trim)) if ((_boot_serial | trim) | length > 0) else '' }}"
+      contents: "{{ _console_cmdline }}"
   tags:
     - boot
 

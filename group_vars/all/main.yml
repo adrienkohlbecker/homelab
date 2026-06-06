@@ -1,6 +1,20 @@
 qemu_test: false
 qemu_test_minimal: false
 
+# Serial console fragment — arch-specific QEMU UART on test VMs, host_vars
+# boot_serial_console on real hardware (empty on lab/pug which have no UART).
+# Mirrors the boot role's _boot_serial derivation so refind and other roles
+# can consume the same value without re-implementing the logic.
+_console_serial: >-
+  {% if qemu_test | default(false) %}
+  {{ (ansible_architecture == 'aarch64')
+     | ternary('earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200',
+               'earlycon=uart8250,io,0x3f8 console=ttyS0,115200') }}
+  {% else %}
+  {{ boot_serial_console | default('') }}
+  {% endif %}
+_console_cmdline: "console=tty0{{ (' ' ~ (_console_serial | trim)) if (_console_serial | trim | length > 0) else '' }}"
+
 zfs_has_services_mount: true
 zfs_has_scratch_mount: true
 zfs_has_ci_scratch_mount: true
