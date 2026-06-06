@@ -182,7 +182,7 @@ mkdir -p /mnt/ci_scratch
 # sha1("sha256:" + image_sha256). Pins come from ubuntu_images.json
 # (shared with qemu.pkr.hcl). Pre-downloading saves ~600-900 MB per
 # release on every ephemeral worker.
-PACKER_CACHE=/mnt/scratch/packer
+PACKER_CACHE=/mnt/scratch/qemu/packer_cache
 mkdir -p "$PACKER_CACHE"
 packer_cache_seed() {
   local codename="$1" snapshot="$2" sha256="$3"
@@ -259,7 +259,7 @@ PATH="/opt/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/b
 UV_CACHE_DIR=/opt/uv-cache
 UV_LINK_MODE=copy
 PACKER_PLUGIN_PATH=/opt/packer/plugins
-PACKER_CACHE_DIR=/mnt/scratch/packer
+PACKER_CACHE_DIR=/mnt/scratch/qemu/packer_cache
 ENVFILE
 
 # /etc/profile.d for interactive login shells — source /etc/environment

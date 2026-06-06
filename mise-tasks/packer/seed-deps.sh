@@ -5,6 +5,7 @@
 #USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
+umask 002
 
 ubuntu="${usage_ubuntu}"
 base="${QEMU_DIR}/${ubuntu}"

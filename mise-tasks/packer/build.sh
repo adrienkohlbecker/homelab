@@ -9,11 +9,14 @@
 #USAGE flag "--no-publish" help="Build and verify-boot but skip the install (publish) step. Used by feature-branch CI to validate packer changes without overwriting master's published artifacts."
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
+# Group-write so github_runner and ak (both in kvm) can mutually delete
+# each other's files in the shared /mnt/scratch/qemu dir.
+umask 002
 
 # Linux: keep packer's ISO cache off the root FS; falls through to
 # packer's default (./packer_cache in cwd) on Mac.
 case "$(uname -s)" in
-Linux) export PACKER_CACHE_DIR=/mnt/scratch/packer ;;
+Linux) export PACKER_CACHE_DIR=/mnt/scratch/qemu/packer_cache ;;
 Darwin) ;;
 *)
   echo "Unsupported OS: $(uname -s)" >&2
