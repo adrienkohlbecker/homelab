@@ -98,22 +98,37 @@
     that: packer_verify_refind_fallback.stat.exists
     fail_msg: "rEFInd firmware-fallback (BOOTAA64.EFI / BOOTX64.EFI) missing — chroot.sh's fallback copy didn't land"
 
-- name: _verify | Stat ZBM kernel + initrd
+- name: _verify | Stat ZBM unified EFI image
+  stat:
+    path: /boot/efi/EFI/ZBM/VMLINUZ.EFI
+  register: packer_verify_zbm
+  become: true
+
+- name: _verify | ZBM unified EFI image present and non-empty
+  assert:
+    that:
+      - packer_verify_zbm.stat.exists
+      - packer_verify_zbm.stat.size > 0
+    fail_msg: "ZBM unified EFI image missing or empty"
+
+- name: _verify | Stat aarch64 ZBM components
+  when: ansible_architecture == "aarch64"
   stat:
     path: "{{ item }}"
   loop:
     - /boot/efi/EFI/ZBM/initramfs-bootmenu.img
-    - /boot/efi/EFI/ZBM/{{ 'vmlinux-bootmenu' if ansible_architecture == 'aarch64' else 'vmlinuz-bootmenu' }}
-  register: packer_verify_zbm
+    - /boot/efi/EFI/ZBM/vmlinux-bootmenu
+  register: packer_verify_zbm_components
   become: true
 
-- name: _verify | ZBM artifacts present and non-empty
+- name: _verify | Aarch64 ZBM components present and non-empty
+  when: ansible_architecture == "aarch64"
   assert:
     that:
       - item.stat.exists
       - item.stat.size > 0
-    fail_msg: "ZBM artifact missing or empty: {{ item.item }}"
-  loop: "{{ packer_verify_zbm.results }}"
+    fail_msg: "aarch64 ZBM component missing or empty: {{ item.item }}"
+  loop: "{{ packer_verify_zbm_components.results }}"
   loop_control:
     label: "{{ item.item }}"
 
@@ -130,18 +145,32 @@
     packer_verify_refind_conf_text: "{{ packer_verify_refind_conf.content | b64decode }}"
 
 - name: _verify | ZBM menuentries + default_selection + dont_scan_dirs in refind.conf
+  vars:
+    _expected_default_selection: "{{ 'Ubuntu (Linux EFI Stub)' if ansible_architecture == 'aarch64' else 'Ubuntu (ZBM)' }}"
+    _expected_dont_scan_dirs: "{{ 'dont_scan_dirs EFI:/EFI/ZBM,EFI:/EFI/Linux' if ansible_architecture == 'aarch64' else 'dont_scan_dirs EFI:/EFI/ZBM' }}"
   assert:
     that:
       - >-
-        'default_selection "Ubuntu (ZBM)"' in packer_verify_refind_conf_text
+        'default_selection "' ~ _expected_default_selection ~ '"' in packer_verify_refind_conf_text
       - >-
         'menuentry "Ubuntu (ZBM)"' in packer_verify_refind_conf_text
       - >-
-        'menuentry "Ubuntu (ZBM Menu)"' in packer_verify_refind_conf_text
+        ansible_architecture != 'aarch64'
+        or 'menuentry "Ubuntu (Linux EFI Stub)"' in packer_verify_refind_conf_text
+      - >-
+        ansible_architecture != 'aarch64'
+        or 'loader /EFI/Linux/vmlinuz.efi' in packer_verify_refind_conf_text
+      - >-
+        ansible_architecture != 'aarch64'
+        or 'initrd /EFI/Linux/initrd' in packer_verify_refind_conf_text
+      - >-
+        ansible_architecture != 'aarch64'
+        or 'root=zfs:rpool/ROOT/' in packer_verify_refind_conf_text
       - "'/EFI/ZBM' in packer_verify_refind_conf_text"
+      - _expected_dont_scan_dirs in packer_verify_refind_conf_text
     fail_msg: "refind.conf missing expected ZBM menuentries / default_selection / dont_scan_dirs"
 
-# --- NVRAM Boot entries (rEFInd, plus aarch64 EFI-stub) ---
+# --- NVRAM Boot entries (rEFInd) ---
 
 - name: _verify | Read NVRAM Boot entries via efibootmgr
   command: efibootmgr -v
@@ -492,9 +521,9 @@
       ignores non-0440/0400 files silently), or NOPASSWD directive
       malformed.
 
-# --- aarch64: direct EFI-stub boot path + kernel-install hook ---
+# --- aarch64: rEFInd EFI-stub menuentry + kernel-install hook ---
 
-- name: _verify | EFI-stub direct-boot assertions (aarch64)
+- name: _verify | EFI-stub rEFInd-entry assertions (aarch64)
   when: ansible_architecture == "aarch64"
   block:
     - name: _verify | Stat staged EFI-stub kernel + initrd
@@ -516,27 +545,10 @@
       loop_control:
         label: "{{ item.item }}"
 
-    # Path-presence is enough — `efibootmgr -c` registers the loader
-    # path and the --unicode cmdline atomically, so if the path is in
-    # NVRAM the cmdline went with it. We don't grep for the cmdline
-    # because --unicode stores it as UCS-2 (ASCII chars interleaved
-    # with nulls) and efibootmgr -v's printout doesn't show the
-    # cmdline as a contiguous ASCII substring.
-    - name: _verify | Direct EFI-stub Boot entry is registered in NVRAM
-      assert:
-        that:
-          - "'EFI\\\\Linux\\\\vmlinuz.efi' in packer_verify_efibootmgr.stdout"
-        fail_msg: >-
-          No NVRAM Boot#### entry pointing at /EFI/Linux/vmlinuz.efi —
-          chroot.sh's aarch64 efibootmgr -c didn't run or didn't land
-
-    # chroot.sh registers the EFI-stub entry AFTER the rEFInd entries;
-    # `efibootmgr -c` prepends to BootOrder, so the Linux entry should
-    # end up first. If a future chroot.sh change flips ordering, or a
-    # third entry slips in front, default boot silently falls through
-    # to rEFInd -> ZBM -> kexec — the aarch64/EDK2 panic path the
-    # EFI-stub direct boot was added to avoid.
-    - name: _verify | First BootOrder entry resolves to the EFI-stub Linux loader
+    # rEFInd is the firmware Boot#### entry chroot.sh creates on aarch64. The
+    # Linux EFI-stub path is a manual rEFInd stanza whose kernel command line
+    # lives in refind.conf.
+    - name: _verify | First BootOrder entry resolves to rEFInd
       vars:
         _bo_first: >-
           {{ (packer_verify_efibootmgr.stdout_lines
@@ -551,11 +563,11 @@
       assert:
         that:
           - _bo_first | length > 0
-          - "'EFI\\\\Linux\\\\vmlinuz.efi' in _bo_first_line"
+          - "'EFI\\\\refind\\\\' in _bo_first_line"
         fail_msg: >-
           First BootOrder entry (Boot{{ _bo_first }}) is not the
-          /EFI/Linux/vmlinuz.efi loader — default boot would land on
-          rEFInd -> ZBM -> kexec, which panics on aarch64/EDK2.
+          rEFInd loader — default boot would not reach the manual
+          Ubuntu (Linux EFI Stub) entry in refind.conf.
 
     - name: _verify | Stat kernel-install hook (regular file)
       stat:
@@ -610,8 +622,8 @@
 # Trigger an apt-driven kernel transaction and reboot, then prove the
 # firmware boots into a *different* kernel. End-to-end exercise of the
 # live boot chain:
-#   x86_64:  firmware -> rEFInd -> ZBM (Components mode) -> kexec
-#   aarch64: firmware -> EFI-stub direct boot via /EFI/Linux/
+#   x86_64:  firmware -> rEFInd -> ZBM unified EFI image -> kexec
+#   aarch64: firmware -> rEFInd -> Linux EFI-stub via /EFI/Linux/
 #
 # Install an older linux-image-X.Y.Z-generic, then hide the running
 # kernel's /boot files behind dotfile names so the "highest kernel"
@@ -623,7 +635,7 @@
 # aarch64 also re-runs the postinst.d hook (after the hide) so
 # /EFI/Linux/ restages with the older kernel, and asserts the file
 # hashes flipped. That ESP-staging path is the aarch64-only mechanism
-# for the direct-EFI-stub workaround documented at chroot.sh's top.
+# behind the rEFInd Linux EFI-stub menuentry.
 #
 # ABI discovery runs unconditionally; the reboot exercise is gated on
 # finding a swap target (multiple madison versions can map to the same
