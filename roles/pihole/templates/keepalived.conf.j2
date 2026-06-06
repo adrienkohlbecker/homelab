@@ -14,7 +14,7 @@ vrrp_script pihole_healthcheck {
 
 vrrp_instance pihole {
   state     BACKUP
-  interface eth0
+  interface {{ default_interface }}
 
   # Create a dedicated macvlan child `vrrp.{{ pihole_keepalived_vrid }}` on
   # eth0 with the VRRP standard MAC 00:00:5e:00:01:{{ '%02x' % pihole_keepalived_vrid }} and

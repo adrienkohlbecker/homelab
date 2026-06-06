@@ -388,10 +388,10 @@ resource "nexus_repository_raw_hosted" "zbm" {
 # NEXUS_ZBM_PASSWORD (provisioned into the homelab repo in github.tf).
 resource "nexus_privilege_repository_view" "zbm_raw" {
   name        = "zbm-raw-push"
-  description = "Push artifacts to the zbm raw hosted repo (browse/read/add)"
+  description = "Push artifacts to the zbm raw hosted repo (browse/read/add/edit)"
   repository  = nexus_repository_raw_hosted.zbm.name
   format      = "raw"
-  actions     = ["BROWSE", "READ", "ADD"]
+  actions     = ["BROWSE", "READ", "ADD", "EDIT"]
 }
 
 resource "nexus_security_role" "zbm_push" {
