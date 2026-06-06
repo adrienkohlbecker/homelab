@@ -49,11 +49,17 @@
 - name: _verify | Validate refind.conf boot config
   vars:
     _conf: "{{ _refind_verify_conf.content | b64decode }}"
+    _expected_default_selection: "{{ 'Ubuntu (Linux EFI Stub)' if ansible_architecture == 'aarch64' else 'Ubuntu (ZBM)' }}"
+    _expected_dont_scan_dirs: "{{ 'dont_scan_dirs EFI:/EFI/ZBM,EFI:/EFI/Linux' if ansible_architecture == 'aarch64' else 'dont_scan_dirs EFI:/EFI/ZBM' }}"
   assert:
     that:
       - "'timeout 3' in _conf"
-      - '''default_selection "Ubuntu (ZBM)"'' in _conf'
+      - "'default_selection \"' ~ _expected_default_selection ~ '\"' in _conf"
+      - _expected_dont_scan_dirs in _conf
       - "'loader /EFI/ZBM/VMLINUZ.EFI' in _conf"
+      - ansible_architecture != "aarch64" or 'menuentry "Ubuntu (Linux EFI Stub)"' in _conf
+      - ansible_architecture != "aarch64" or 'loader /EFI/Linux/vmlinuz.efi' in _conf
+      - ansible_architecture != "aarch64" or 'initrd /EFI/Linux/initrd' in _conf
       - "'include themes/refind-theme-regular/theme.conf' in _conf"
     fail_msg: "refind.conf missing expected boot directives"
 
@@ -69,6 +75,27 @@
     fail_msg: >-
       refind.conf boots /EFI/ZBM/VMLINUZ.EFI but it is absent from the ESP —
       the zfsbootmenu role must run before refind.
+
+- name: _verify | Stat aarch64 Linux EFI-stub files
+  when: ansible_architecture == "aarch64"
+  stat:
+    path: "/boot/efi/EFI/Linux/{{ item }}"
+  loop:
+    - vmlinuz.efi
+    - initrd
+  register: _refind_verify_linux_stub
+  become: true
+
+- name: _verify | Aarch64 Linux EFI-stub files are present
+  when: ansible_architecture == "aarch64"
+  assert:
+    that:
+      - item.stat.exists
+      - item.stat.size > 0
+    fail_msg: "aarch64 Linux EFI-stub file missing or empty: {{ item.item }}"
+  loop: "{{ _refind_verify_linux_stub.results }}"
+  loop_control:
+    label: "{{ item.item }}"
 
 # Both arches: the role owns the binary on x86 (refind_x64.efi) and arm64
 # (refind_aa64.efi) alike, so assert it on whichever arch the fixture is.
@@ -95,9 +122,9 @@
   register: _refind_verify_default_conf
   become: true
 
-- name: _verify | Distro default config was removed
+- name: _verify | Distro default config is absent
   assert:
     that: not _refind_verify_default_conf.stat.exists
     fail_msg: >-
-      /boot/refind_linux.conf should have been removed by the role —
-      its presence can cause unexpected auto-detected kernel entries.
+      /boot/refind_linux.conf is present; rEFInd may auto-add unwanted Linux
+      entries.
