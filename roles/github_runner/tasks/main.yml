@@ -128,6 +128,24 @@
   tags:
     - github_runner
 
+# Both the CI runner (github_runner) and the operator (ak, in the kvm group)
+# need to write here: CI publishes packer artifacts; ak runs packer:build locally.
+# Both are in the kvm group, so kvm group-write avoids adding ak to the
+# github_runner group (which would grant broader access to runner state).
+# setgid (02775) ensures files created by either user inherit the kvm group;
+# build.sh/seed-deps.sh set umask 002 so new files also get group-write.
+- name: Create /mnt/scratch/qemu packer artifacts dir
+  when: not (ansible_check_mode and github_runner_user.changed)
+  file:
+    path: /mnt/scratch/qemu
+    state: directory
+    owner: github_runner
+    group: kvm
+    mode: "02775"
+  become: true
+  tags:
+    - github_runner
+
 # Canonical actions/runner install on the host. Per-instance dirs at
 # /opt/actions-runner/<inst>/ are hard-link mirrors (cp -al, see
 # _register.yml) -- inode sharing keeps the 500MB tree at 1x across N
