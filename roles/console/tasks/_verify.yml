@@ -16,13 +16,11 @@
 # in exchange every downstream check tests post-reboot reality rather
 # than next-boot intent.
 
-# Aarch64 boxes (packer-built on arm Macs) bypass ZBM entirely:
-# chroot.sh registers a direct EFI-stub Boot#### entry whose
-# kernel cmdline is set once at image-build time. So the ZBM
-# commandline property write the role just made wouldn't affect
-# a post-reboot kernel here, and on top of that EDK2 aarch64 has
-# a known reboot bug on this image (refind UEFI firmware crashes
-# trying to load an X64 image after the kernel triggers reset).
+# Aarch64 boxes (packer-built on arm Macs) bypass ZBM entirely: rEFInd boots a
+# Linux EFI-stub menuentry whose kernel cmdline is staged at image-build time.
+# So the ZBM commandline property write the role just made would not affect a
+# post-reboot kernel here, and on top of that EDK2 aarch64 has a known reboot
+# bug on this image.
 # Skip the reboot + the post-reboot sysfs check on aarch64; the
 # ZBM property / GRUB cfg + config + initrd + service assertions
 # below still prove the role wrote the next-boot config correctly,

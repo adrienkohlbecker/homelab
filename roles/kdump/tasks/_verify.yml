@@ -9,12 +9,11 @@
 #       did the capture kernel kexec-load, did kdump-tools.service
 #       come up clean?
 #
-# Reboot pattern mirrors roles/console/tasks/_verify.yml:18-33 — the
-# aarch64 packer image bypasses ZBM via a baked-at-image-build-time
-# EFI-stub cmdline, so the ZBM crashkernel= write wouldn't reach the
-# running kernel after reboot. Skip the post-reboot block there; the
-# cmdline-source checks still prove the role wrote the next-boot
-# config correctly.
+# Reboot pattern mirrors roles/console/tasks/_verify.yml:18-32 — the aarch64
+# packer image boots a rEFInd Linux EFI-stub menuentry with a staged command
+# line, so the ZBM crashkernel= write would not reach the running kernel after
+# reboot. Skip the post-reboot block there; the cmdline-source checks still
+# prove the role wrote the next-boot config correctly.
 
 - name: _verify | ZBM commandline includes crashkernel
   when: zfs_root and not grub_bootloader
@@ -36,10 +35,10 @@
   failed_when: "'crashkernel=' not in (kdump_verify_grub_cfg.content | b64decode)"
   become: true
 
-# Reboot so the post-reboot checks below test the kernel the cmdline
-# write actually selected. aarch64 bypasses ZBM (EFI-stub cmdline baked
-# at image-build time) so the crashkernel= write wouldn't reach the
-# running kernel — skip the reboot there.
+# Reboot so the post-reboot checks below test the kernel the cmdline write
+# actually selected. aarch64 boots with the staged rEFInd EFI-stub cmdline, so
+# the crashkernel= write would not reach the running kernel; skip the reboot
+# there.
 - name: _verify | Reboot to exercise crashkernel reservation
   import_role:
     name: reboot
