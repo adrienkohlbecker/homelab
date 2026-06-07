@@ -64,7 +64,6 @@
     src: "{{ zfsbootmenu_cache_dir }}/zfsbootmenu.EFI"
     dest: /boot/efi/EFI/ZBM/VMLINUZ.EFI
     remote_src: true
-    force: false # TODO
     owner: root
     group: root
     mode: "0755"

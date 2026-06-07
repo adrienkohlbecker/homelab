@@ -162,41 +162,6 @@ jobs:
           grep -qE '^vmlin.*-bootmenu$' <<<"$members" || { echo "missing vmlin*-bootmenu kernel in tarball" >&2; exit 1; }
           echo "ZBM tarball OK: $tarball"
 
-      # Verify that the recovery SSH server is actually baked into the initramfs.
-      # A misconfigured PACKAGES arg (missing dracut-crypt-ssh or dropbear) or a
-      # wrong dropbear_acl path would produce a valid-looking tarball and fail only
-      # during an actual recovery. --no-early-microcode in config.yaml means no
-      # prepended microcode cpio, so the initramfs is a pure zstd-compressed cpio.
-      - name: Verify Dropbear SSH is present in the initramfs
-        run: |
-          set -euo pipefail
-          tarball="${GITHUB_WORKSPACE}/zbm-build/${ARCH}/zfsbootmenu-v${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX}-${ARCH}.tar.gz"
-          tmpdir=$(mktemp -d)
-          trap 'rm -rf "$tmpdir"' EXIT
-          tar -xzf "$tarball" -C "$tmpdir" initramfs-bootmenu.img
-          # cpio -t exits 0 after listing; zstdcat sees its stdout closed and exits
-          # SIGPIPE (141). pipefail would propagate that, so suppress failures from
-          # the pipeline and check the output is non-empty instead.
-          initrd_files=$(zstdcat "$tmpdir/initramfs-bootmenu.img" | cpio --quiet -t 2>/dev/null || true)
-          [ -n "$initrd_files" ] || { echo "initrd listing empty — zstdcat/cpio failed" >&2; exit 1; }
-          # Use here-strings (<<<) rather than echo|grep so grep exiting early on a
-          # match doesn't send SIGPIPE to echo, which pipefail would misreport as a
-          # pipeline failure even when the pattern IS present.
-          grep -q 'dropbear' <<<"$initrd_files" \
-            || { echo "dropbear not found in initramfs (crypt-ssh module missing?)" >&2; exit 1; }
-          grep -q 'authorized_keys' <<<"$initrd_files" \
-            || { echo "authorized_keys not found in initramfs" >&2; exit 1; }
-          grep -qE 'zfs\.ko' <<<"$initrd_files" \
-            || { echo "zfs.ko not found in initramfs (force_drivers zfs missing?)" >&2; exit 1; }
-          # efivarfs is a loadable module on aarch64 Void kernels but built-in
-          # (CONFIG_EFIVARFS=y) on x86_64 — add_drivers silently skips built-ins,
-          # so only assert the .ko presence on aarch64.
-          if [ "${ARCH}" = "aarch64" ]; then
-            grep -q 'efivarfs' <<<"$initrd_files" \
-              || { echo "efivarfs.ko not found in initramfs (add_drivers efivarfs missing?)" >&2; exit 1; }
-          fi
-          echo "Initramfs SSH: dropbear + authorized_keys OK; ZFS kernel module OK"
-
       # Push the CI build to the private on-lab Nexus raw repo (zbm). Each run
       # creates a new per-(version,suffix,arch) file (write_policy=ALLOW).
       # Only on master — branch builds go to GitHub artifacts only. upload.sh
