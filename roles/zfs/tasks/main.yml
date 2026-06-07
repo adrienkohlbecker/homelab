@@ -229,9 +229,16 @@
 # easier to reason about, and self-owned timing lets zfs_autosnapshot pause an
 # in-progress scrub during the nightly backup window. Second Sunday preserves
 # the distro's monthly cadence; fixed_random_delay spreads the fleet's scrubs
-# over an hour while pinning each host to a stable offset. The script kicks the
-# scrub off and returns (no -w), so the default 1h TimeoutStartSec is ample;
+# over half an hour while pinning each host to a stable offset. The script kicks
+# the scrub off and returns (no -w), so the default 1h TimeoutStartSec is ample;
 # zfs_health + ZED's scrub_finish zedlet are the outcome watchdogs.
+#
+# Fire at 01:00 (+0..30min), ahead of the 02:00 zfs_autosnapshot run on the same
+# clock. That run pauses scrubs *once*, at its start; a scrub that began later
+# would miss the pass and contend with the multi-hour replication. Starting the
+# scrub first guarantees it is already "in progress" when the pause pass sweeps,
+# so it is paused for the window and resumed afterwards. The 30min margin covers
+# the randomized spread without colliding with the early small-job cluster.
 - name: Schedule the zfs_scrub timer
   import_role:
     name: systemd_timer
@@ -240,9 +247,9 @@
     systemd_timer_args:
       name: zfs_scrub
       description: Monthly ZFS scrub
-      on_calendar: "Sun *-*-08..14 04:00:00"
+      on_calendar: "Sun *-*-08..14 01:00:00"
       exec_start: /usr/local/bin/zfs_scrub
-      randomized_delay_sec: 3600
+      randomized_delay_sec: 1800
       fixed_random_delay: true
   tags:
     - zfs
