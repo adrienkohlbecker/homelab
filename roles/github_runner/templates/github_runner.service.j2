@@ -51,9 +51,14 @@ Requires=zfs_mount_mnt_scratch.service
 After=zfs_mount_mnt_ci_scratch.service
 Requires=zfs_mount_mnt_ci_scratch.service
 {% endif %}
-After=zfs_autosnapshot.target
-PartOf=zfs_autosnapshot.target
 {% endif %}
+# Deliberately NOT PartOf=zfs_autosnapshot.target. Every stateful service
+# is quiesced by the nightly snapshot (zfs_backup_local.sh stops the target,
+# snapshots, starts it), but the runner has no consistency need -- all its
+# data is ephemeral CI scratch (/mnt/scratch, rpool/ci_scratch; neither in
+# the autobackup:bak set) with no persistent state under /mnt/services at
+# all. Joining the target only let the 02:00 snapshot kill the 02:00 nightly
+# CI run mid-flight.
 
 [Service]
 Type=simple
@@ -99,6 +104,3 @@ Environment=DOCKER_HOST=unix:///run/user/{{ github_runner_user.uid }}/podman/pod
 
 [Install]
 WantedBy=multi-user.target
-{% if zfs_root %}
-WantedBy=zfs_autosnapshot.target
-{% endif %}

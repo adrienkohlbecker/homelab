@@ -24,9 +24,13 @@ Requires=zfs_mount_mnt_services.service
 After=zfs_mount_mnt_scratch.service
 Requires=zfs_mount_mnt_scratch.service
 {% endif %}
-After=zfs_autosnapshot.target
-PartOf=zfs_autosnapshot.target
 {% endif %}
+# Deliberately NOT PartOf=zfs_autosnapshot.target. The nightly snapshot
+# quiesces every stateful service, but the runner has no consistency need:
+# in-flight job containers live on /mnt/scratch (not backed up) and the only
+# backed-up files (config.yml + .runner under /mnt/services) are static, not
+# written mid-job. Joining the target only let the 02:00 snapshot kill the
+# 02:00 nightly CI run mid-flight.
 
 [Service]
 Restart=always
@@ -78,6 +82,3 @@ ExecStart=/usr/local/bin/gitea-runner daemon --config /mnt/services/gitea_runner
 
 [Install]
 WantedBy=multi-user.target
-{% if zfs_root %}
-WantedBy=zfs_autosnapshot.target
-{% endif %}
