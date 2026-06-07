@@ -175,6 +175,19 @@
   tags:
     - zfs
 
+- name: Copy the scrub script
+  copy:
+    src: zfs_scrub.sh
+    dest: /usr/local/bin/zfs_scrub
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - zfs
+
 - name: Schedule the zfs_health timer
   import_role:
     name: systemd_timer
@@ -209,6 +222,61 @@
   loop: "{{ zfs_trim_pools }}"
   loop_control:
     label: "{{ item }}"
+  tags:
+    - zfs
+
+# Own the scrub schedule rather than leaving it to the distro's
+# /etc/cron.d/zfsutils-linux (second Sunday, 00:24) -- a single scheduler is
+# easier to reason about, and self-owned timing lets zfs_autosnapshot pause an
+# in-progress scrub during the nightly backup window. Second Sunday preserves
+# the distro's monthly cadence; fixed_random_delay spreads the fleet's scrubs
+# over an hour while pinning each host to a stable offset. The script kicks the
+# scrub off and returns (no -w), so the default 1h TimeoutStartSec is ample;
+# zfs_health + ZED's scrub_finish zedlet are the outcome watchdogs.
+- name: Schedule the zfs_scrub timer
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: zfs_scrub
+      description: Monthly ZFS scrub
+      on_calendar: "Sun *-*-08..14 04:00:00"
+      exec_start: /usr/local/bin/zfs_scrub
+      randomized_delay_sec: 3600
+      fixed_random_delay: true
+  tags:
+    - zfs
+
+# Neutralise the distro's own ZFS scrub/trim schedulers so zfs_scrub and the
+# zfs_trim_* timers are the single source of truth. Two delivery mechanisms ship
+# on these hosts, both handled here:
+#   - the legacy /etc/cron.d/zfsutils-linux (the *active* one -- it ran the
+#     monthly scrub), diverted aside via dpkg so a package upgrade can't restore
+#     it; the .disabled suffix also makes cron ignore the file (cron skips
+#     names containing a dot) even before the next upgrade rewrites the conffile.
+#   - the zfs-{scrub,trim}-{monthly,weekly}@.timer templates (currently shipped
+#     disabled, masked here defensively so a future preset change can't enable
+#     them).
+- name: Disable distro ZFS scrub/trim cron
+  community.general.dpkg_divert:
+    path: /etc/cron.d/zfsutils-linux
+    divert: /etc/cron.d/zfsutils-linux.disabled
+    rename: true
+  become: true
+  tags:
+    - zfs
+
+- name: Mask distro ZFS scrub/trim systemd timers
+  systemd:
+    name: "{{ item }}"
+    masked: true
+  loop:
+    - zfs-scrub-monthly@.timer
+    - zfs-scrub-weekly@.timer
+    - zfs-trim-monthly@.timer
+    - zfs-trim-weekly@.timer
+  become: true
   tags:
     - zfs
 

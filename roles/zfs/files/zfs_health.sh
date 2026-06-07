@@ -8,10 +8,10 @@ EMAIL_TO="root"
 EMAIL_SUBJECT_PREFIX="[$(hostname -s)] zfs health"
 
 # Scrub expiration in seconds (40 days). Scrubs themselves are scheduled by the
-# distro, not this role: Ubuntu's zfsutils-linux ships /etc/cron.d/zfsutils-linux,
-# which runs /usr/lib/zfs-linux/scrub on the second Sunday of each month. This
-# threshold is the watchdog -- it alarms if that monthly scrub stops happening
-# (40 days = one monthly cycle plus slack).
+# zfs_scrub timer (monthly, second Sunday), not run here; this role also diverts
+# the distro's /etc/cron.d/zfsutils-linux aside so that timer is the sole
+# scheduler. This threshold is the watchdog -- it alarms if that monthly scrub
+# stops happening (40 days = one monthly cycle plus slack).
 SCRUB_EXPIRE=3456000
 
 # Pool capacity is alarmed by netdata's zfspool collector (per-pool

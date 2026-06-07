@@ -135,6 +135,59 @@
   loop_control:
     label: "{{ item.item }}"
 
+# --- Scrub timer + distro scheduler takeover ---
+
+- name: _verify | Read scrub timer state  # noqa: command-instead-of-module
+  command: systemctl show -p ActiveState,UnitFileState --value zfs_scrub.timer
+  register: _zfs_verify_scrub_timer
+  changed_when: false
+  become: true
+
+- name: _verify | Scrub timer is active and enabled
+  assert:
+    that:
+      - _zfs_verify_scrub_timer.stdout_lines[0] == 'active'
+      - _zfs_verify_scrub_timer.stdout_lines[1] == 'enabled'
+    fail_msg: "zfs_scrub.timer is not active+enabled: {{ _zfs_verify_scrub_timer.stdout_lines }}."
+
+- name: _verify | The scrub script kicks off without error
+  command: /usr/local/bin/zfs_scrub
+  changed_when: false
+  become: true
+
+- name: _verify | Distro zfs cron is diverted aside
+  command: dpkg-divert --list /etc/cron.d/zfsutils-linux
+  register: _zfs_verify_cron_divert
+  changed_when: false
+  become: true
+
+- name: _verify | Assert distro zfs cron diversion is active
+  assert:
+    that: "'/etc/cron.d/zfsutils-linux.disabled' in _zfs_verify_cron_divert.stdout"
+    fail_msg: >-
+      dpkg-divert not active for /etc/cron.d/zfsutils-linux:
+      {{ _zfs_verify_cron_divert.stdout }}
+
+- name: _verify | Read distro scrub/trim timer enablement  # noqa: command-instead-of-module
+  command: systemctl is-enabled {{ item }}
+  loop:
+    - zfs-scrub-monthly@.timer
+    - zfs-scrub-weekly@.timer
+    - zfs-trim-monthly@.timer
+    - zfs-trim-weekly@.timer
+  register: _zfs_verify_distro_timers
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Distro scrub/trim timers are masked
+  assert:
+    that: item.stdout | trim == 'masked'
+    fail_msg: "{{ item.item }} is {{ item.stdout | trim }}, expected masked."
+  loop: "{{ _zfs_verify_distro_timers.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
 # --- Mount generator (lab only; box has zfs_mount_cache_datasets=[]) ---
 
 - name: _verify | Mount cache directory exists
