@@ -712,3 +712,87 @@
   systemd:
     daemon_reload: true
   become: true
+
+# --- Reenable prunes stale [Install] symlinks on a unit-file change ---
+# `systemctl enable` only adds the symlinks named in a unit's *current*
+# [Install]; it never removes ones dropped from the template. So a unit that
+# leaves a target (e.g. a service leaving zfs_autosnapshot.target) keeps a
+# dangling .wants symlink on every already-converged host. service.yml reenables
+# on a unit-file change to prune it. Plant the legacy symlink the way an old
+# `enable` would have (before the unit exists -- a dangling link, exactly the
+# already-converged shape), then a fresh install (reports the file changed) +
+# service. Assert the orphan is gone while the current multi-user.target.wants
+# link survives -- a plain enable would leave the orphan, so this gates the
+# reenable step specifically rather than tautologically checking an absent link.
+- name: _verify | Plant a legacy target.wants dir for the prune test
+  file:
+    path: /etc/systemd/system/systemd_unit_verify_stale.target.wants
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: _verify | Plant the legacy enable symlink (simulates a removed WantedBy=)
+  file:
+    path: /etc/systemd/system/systemd_unit_verify_stale.target.wants/systemd_unit_verify_ok.service
+    src: /etc/systemd/system/systemd_unit_verify_ok.service
+    state: link
+    force: true
+    follow: false
+  become: true
+
+- name: _verify | Install the fixture fresh so the unit file reports changed
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+
+- name: _verify | Enable+start via service so the change-driven reenable fires
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+
+- name: _verify | Stat the legacy and current enable symlinks
+  stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - /etc/systemd/system/systemd_unit_verify_stale.target.wants/systemd_unit_verify_ok.service
+    - /etc/systemd/system/multi-user.target.wants/systemd_unit_verify_ok.service
+  register: _systemd_unit_reenable_links
+  become: true
+
+- name: _verify | Stale [Install] symlink pruned, current enable intact
+  assert:
+    that:
+      - not _systemd_unit_reenable_links.results[0].stat.exists
+      - _systemd_unit_reenable_links.results[1].stat.islnk | default(false)
+    fail_msg: >-
+      reenable should have pruned
+      systemd_unit_verify_stale.target.wants/systemd_unit_verify_ok.service
+      (present={{ _systemd_unit_reenable_links.results[0].stat.exists }}) while
+      keeping multi-user.target.wants/systemd_unit_verify_ok.service
+      (islnk={{ _systemd_unit_reenable_links.results[1].stat.islnk | default(false) }}).
+
+- name: _verify | Cleanup reenable-test unit
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: systemd_unit_verify_ok.service
+
+- name: _verify | Cleanup the legacy target.wants dir
+  file:
+    path: /etc/systemd/system/systemd_unit_verify_stale.target.wants
+    state: absent
+  become: true
+
+- name: _verify | Daemon-reload after reenable-test cleanup
+  systemd:
+    daemon_reload: true
+  become: true

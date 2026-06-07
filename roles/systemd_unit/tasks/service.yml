@@ -100,6 +100,35 @@
   become: true
   become_user: "{{ _systemd_unit_user }}"
 
+# `systemctl enable` (what enabled: true runs) only ADDS the symlinks named in
+# the unit's *current* [Install] section -- it never prunes ones that used to be
+# there. So a template that drops a WantedBy= (e.g. a service leaving
+# zfs_autosnapshot.target) leaves a stale .wants symlink on every already-
+# converged host, and the enable above won't clean it up. `reenable` (atomic
+# disable+enable) recreates exactly the current [Install] set, pruning the
+# orphan. Scoped to the converge where the unit file actually changed -- the only
+# time [Install] can have drifted -- so steady-state runs stay a plain idempotent
+# enable. Gated on UnitFileState == enabled so a static / no-[Install] unit
+# (where reenable errors "no installation config") is skipped. The file change
+# already reported changed, so this corrective step is changed_when: false. No
+# command-instead-of-module noqa: reenable has no systemd-module equivalent (cf.
+# the reset-failed command below).
+- name: service | Reenable to prune stale [Install] symlinks on a unit-file change
+  when:
+    - _systemd_unit_condition
+    - not ansible_check_mode
+    - _systemd_unit_enable is not skipped
+    - _systemd_unit_enable.status.UnitFileState | default('') == 'enabled'
+    - systemd_unit_file is defined and systemd_unit_file is changed
+  command:
+    argv: >-
+      {{ ['systemctl'] +
+         (['--user'] if _systemd_unit_scope == 'user' else []) +
+         ['reenable', _systemd_unit_name] }}
+  changed_when: false
+  become: true
+  become_user: "{{ _systemd_unit_user }}"
+
 # install.yml checks for masking before writing the file; service.yml must
 # check independently because a unit can be masked between install and the
 # next converge. The Enable result's LoadState is populated from `systemctl
