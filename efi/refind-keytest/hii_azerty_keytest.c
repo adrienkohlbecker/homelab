@@ -290,8 +290,11 @@ struct _EFI_HII_DATABASE_PROTOCOL {
   VOID *GetPackageListHandle;
 };
 
-static EFI_SYSTEM_TABLE *gST;
 static EFI_BOOT_SERVICES *gBS;
+
+#ifndef KEYTEST_DRIVER_ONLY
+static EFI_SYSTEM_TABLE *gST;
+#endif
 
 static EFI_GUID gEfiHiiDatabaseProtocolGuid = {
     0xef9fc172, 0xa1b2, 0x4693, {0xb3, 0x27, 0x6d, 0x32, 0xfc, 0x41, 0x60, 0x42}};
@@ -348,7 +351,7 @@ static KEYTEST_PACKAGE_LIST gAzertyPackage = {
             {EfiKeyD9, 'o', 'O', 0, 0, EFI_NULL_MODIFIER, CAPS},
             {EfiKeyD10, 'p', 'P', 0, 0, EFI_NULL_MODIFIER, CAPS},
             {EfiKeyD11, '^', 0x00a8, 0, 0, EFI_NULL_MODIFIER, STD},
-            {EfiKeyD12, '$', 0x00a3, 0x00a4, 0, EFI_NULL_MODIFIER, STD},
+            {EfiKeyD12, '$', 0x00a3, 0x20ac, 0, EFI_NULL_MODIFIER, STD},
             {EfiKeyD13, '*', 0x00b5, 0, 0, EFI_NULL_MODIFIER, STD},
             {EfiKeyC1, 'q', 'Q', 0, 0, EFI_NULL_MODIFIER, CAPS},
             {EfiKeyC2, 's', 'S', 0, 0, EFI_NULL_MODIFIER, CAPS},
@@ -497,7 +500,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
   if (EFI_ERROR(status)) {
     print((CHAR16 *)L"No HII database protocol. HII keymap approach cannot work here.\r\n");
     print((CHAR16 *)L"Press Esc to exit.\r\n");
-    dump_keys_until(0, 0x001b);
+    dump_keys_until(0x0017, 0x001b);
     return status;
   }
 
@@ -507,7 +510,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
   print((CHAR16 *)L"\r\n");
   if (EFI_ERROR(status)) {
     print((CHAR16 *)L"Firmware rejected the keyboard package. Press Esc to exit.\r\n");
-    dump_keys_until(0, 0x001b);
+    dump_keys_until(0x0017, 0x001b);
     return status;
   }
 
@@ -517,7 +520,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
   print((CHAR16 *)L"\r\n\r\n");
   if (EFI_ERROR(status)) {
     print((CHAR16 *)L"Firmware did not accept the layout GUID. Press Esc to exit.\r\n");
-    dump_keys_until(0, 0x001b);
+    dump_keys_until(0x0017, 0x001b);
     return status;
   }
 
@@ -526,7 +529,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
   print((CHAR16 *)L"Z -> 0x007A, W -> 0x0077, and unshifted 2/e-acute -> 0x00E9.\r\n");
   print((CHAR16 *)L"If the values are unchanged from BEFORE, this firmware ignores runtime HII layouts.\r\n");
   print((CHAR16 *)L"Press Esc to exit.\r\n\r\n");
-  dump_keys_until(0, 0x001b);
+  dump_keys_until(0x0017, 0x001b);
   return EFI_SUCCESS;
 }
 #else
@@ -535,7 +538,6 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
   EFI_HII_HANDLE hii_handle = NULL;
   EFI_STATUS status;
 
-  gST = SystemTable;
   gBS = SystemTable->BootServices;
 
   status = gBS->LocateProtocol(&gEfiHiiDatabaseProtocolGuid, NULL, (VOID **)&hii);
