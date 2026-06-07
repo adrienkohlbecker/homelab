@@ -16,8 +16,10 @@ data_datasets:
 #
 # special_small_blocks=32K routes records <=32K to the pool's special
 # (allocation-class) vdev; pairs with the default 128K recordsize.
-# Inert today on tank (no special vdev) and rpool (single-disk), kept
-# set so existing data already lands on the special vdev the day one
+# Live on tank, which has an NVMe special mirror (3x Kingston DC1000B);
+# small blocks + metadata land on NVMe so HDD random I/O stays low and
+# the platters can sleep. Inert on rpool (single-disk, no special vdev)
+# but kept set there too so data already lands correctly the day one
 # attaches. roles/media uses the same 32K threshold paired with a 1MB
 # recordsize, making the threshold proportionally stronger.
 data_extra_properties:
