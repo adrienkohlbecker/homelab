@@ -15,8 +15,6 @@ refind_fallback_binary: "{{ 'BOOTAA64.EFI' if ansible_architecture == 'aarch64' 
 # rEFInd loads architecture-specific driver directories automatically before
 # presenting its menu. This tiny HII driver switches the firmware text input
 # layout to French AZERTY so the kernel-args editor matches the physical
-# keyboard. The artifact is built by refind-azerty-keymap.yml and published to the
-# existing Nexus zbm raw repository.
-refind_azerty_keymap_version: "20260607.1"
+# keyboard.
 refind_azerty_keymap_arch: "{{ 'aa64' if ansible_architecture == 'aarch64' else 'x64' }}"
-refind_azerty_keymap_url: "https://{{ nexus_url if (nexus_url | length > 0) else 'nexus.lab.fahm.fr' }}/repository/zbm/refind-azerty-keymap/{{ refind_azerty_keymap_version }}/{{ ansible_architecture }}/homelab_fr_azerty_{{ refind_azerty_keymap_arch }}.efi"
+refind_azerty_keymap_file: "homelab_fr_azerty_{{ refind_azerty_keymap_arch }}.efi"

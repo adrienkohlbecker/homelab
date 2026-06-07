@@ -40,12 +40,15 @@ build/aarch64/BOOTAA64.EFI
 build/aarch64/homelab_fr_azerty_aa64.efi
 ```
 
-CI publishes the architecture directories, plus their `.sha256sum` files, to
-the Nexus `zbm` raw repository under:
+The no-UI driver binaries are vendored into the Ansible role:
 
 ```text
-refind-azerty-keymap/<VERSION>/
+roles/refind/files/homelab_fr_azerty_x64.efi
+roles/refind/files/homelab_fr_azerty_aa64.efi
 ```
+
+Rebuild after source changes, then copy the matching files from
+`build/x86_64/` and `build/aarch64/` into `roles/refind/files/`.
 
 ## USB layout
 
