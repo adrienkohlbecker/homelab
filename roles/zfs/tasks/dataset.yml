@@ -23,10 +23,11 @@
 
 # Inner task `name:` strings are static -- no `{{ _zfs_dataset_resolved }}`
 # or `{{ zfs_dataset_args.* }}` interpolation. Ansible renders `name:` at
-# parse time, but callers that bind `zfs_dataset_args` via `set_fact` (see
-# roles/data/tasks/_dataset.yml) only populate it at runtime, so a parse-
-# time render would fail with "zfs_dataset_args is undefined". Per-iteration
-# context comes from the caller's loop_control.label.
+# parse time, but callers only populate `zfs_dataset_args` at runtime --
+# whether via `set_fact` (roles/services/tasks/_dataset.yml) or `import_role`
+# inline vars under a dynamic include (roles/data/tasks/_dataset.yml) -- so a
+# parse-time render would fail with "zfs_dataset_args is undefined". Per-
+# iteration context comes from the caller's loop_control.label.
 - name: Create and mount zfs dataset
   vars:
     _zfs_dataset_resolved: "{{ zfs_dataset_args.dataset | regex_replace('^tank/', (zfs_tank_filesystem | default('tank')) ~ '/') }}"
