@@ -83,6 +83,47 @@
       {{ (_tautulli_existing.content | default('') | b64decode
           | regex_findall('(?m)^pms_version = ([\w.\-]+)$'))
          | default([''], true) | first }}
+    # Tautulli auto-discovers this path at runtime and writes it back on every
+    # shutdown -- preserve it rather than resetting to "" each converge.
+    _tautulli_pms_logs_folder: >-
+      {{ (_tautulli_existing.content | default('') | b64decode
+          | regex_findall('(?m)^pms_logs_folder = (.+)$'))
+         | default([''], true) | first }}
+  tags:
+    - tautulli
+
+# Tautulli (and many other apps) write their in-memory state back to the config
+# file on container shutdown. When Ansible does `systemctl restart`, the stop
+# phase triggers that write-back AFTER Ansible already wrote the template,
+# clobbering our values. Fix: probe for drift first; if the config will change,
+# stop the service so the write-back lands on the OLD state, then Ansible
+# overwrites it, then the service starts with our values.
+- name: Probe tautulli config drift to gate the pre-write service stop
+  check_mode: true
+  template:
+    src: config.ini.j2
+    dest: /mnt/services/tautulli/config.ini
+    owner: tautulli
+    group: media
+    mode: "0600"
+  register: _tautulli_conf_probe
+  # noqa: require-backup — probe never writes; backup on the real write task below
+  when: not (ansible_check_mode and (tautulli_user.changed or media_group.changed))
+  become: true
+  tags:
+    - tautulli
+
+- name: Stop tautulli before config write to prevent shutdown-time state overwrite
+  systemd:
+    name: tautulli
+    state: stopped
+    scope: system
+  become: true
+  failed_when: false
+  when:
+    - not ansible_check_mode
+    - _tautulli_conf_probe is not skipped
+    - _tautulli_conf_probe.changed
   tags:
     - tautulli
 

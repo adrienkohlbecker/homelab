@@ -71,16 +71,58 @@
   changed_when: false
   failed_when: false
 
+- name: Resolve transmission rpc-password (preserve salted hash if already hashed)
+  set_fact:
+    _transmission_rpc_password_hash: >-
+      {{ transmission_existing_pw.stdout
+         if (transmission_existing_pw.stdout | default('')).startswith('{')
+         else transmission_rpc_password }}
+  tags:
+    - transmission
+
+# Transmission writes its in-memory state back to settings.json on every
+# shutdown. `systemctl restart` stops the container AFTER Ansible writes the
+# template, so the write-back clobbers our values. Fix: probe for drift; if
+# the config will change, stop first so the write-back lands on the OLD state,
+# then Ansible overwrites it, then the service starts with our values.
+- name: Probe transmission config drift to gate the pre-write service stop
+  check_mode: true
+  when: not (ansible_check_mode and transmission_user.changed)
+  vars:
+    transmission_rpc_password_hash: "{{ _transmission_rpc_password_hash }}"
+  copy:
+    content: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
+    dest: /mnt/services/transmission/settings.json
+    owner: transmission
+    group: media
+    mode: "0664"
+  register: _transmission_conf_probe
+  become: true
+  # noqa: require-backup — probe never writes; backup on the real write task below
+  tags:
+    - transmission
+
+- name: Stop transmission before config write to prevent shutdown-time state overwrite
+  systemd:
+    name: transmission
+    state: stopped
+    scope: system
+  become: true
+  failed_when: false
+  when:
+    - not ansible_check_mode
+    - _transmission_conf_probe is not skipped
+    - _transmission_conf_probe.changed
+  tags:
+    - transmission
+
 - name: Configure transmission
   when: not (ansible_check_mode and transmission_user.changed)
   # Render via copy:content + regex_replace because transmission rewrites
   # settings.json on every shutdown without a trailing newline; a plain
   # template: leaves us drifting forever.
   vars:
-    transmission_rpc_password_hash: >-
-      {{ transmission_existing_pw.stdout
-         if (transmission_existing_pw.stdout | default('')).startswith('{')
-         else transmission_rpc_password }}
+    transmission_rpc_password_hash: "{{ _transmission_rpc_password_hash }}"
   copy:
     content: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
     dest: /mnt/services/transmission/settings.json
