@@ -87,6 +87,16 @@ headscale_oidc_enabled: true
 headscale_oidc_issuer: "https://auth.{{ domain }}"
 headscale_oidc_client_id: headscale
 
+# fox is not a Tailscale client, and its WireGuard peer config only routes the
+# lab/pug/box/bunk wg /32s. Public DNS for lab-hosted names may point at
+# Tailscale addresses for mesh clients, so pin the lab-hosted dependencies fox
+# itself consumes to lab's WireGuard address:
+#   - auth.fahm.fr: Headscale OIDC discovery at startup.
+#   - nexus.lab.fahm.fr: ZFSBootMenu release artifacts.
+etc_hosts_entries:
+  auth.fahm.fr: "{{ network.hosts.lab.wireguard }}"
+  nexus.lab.fahm.fr: "{{ network.hosts.lab.wireguard }}"
+
 # Trimmed from the pug-derived list to what a Hetzner cloud VM actually
 # exposes. Dropped contexts: powercap (no Intel RAPL in a VM), zfs (no ZFS
 # module), vmstat/mem.swapio (no swap configured). Dropped collectors:

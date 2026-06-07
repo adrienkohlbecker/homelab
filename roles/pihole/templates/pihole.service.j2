@@ -82,6 +82,10 @@ ExecStart=/usr/bin/podman run \
     {# (not under .lab.) so it needs its own entry -- public Cloudflare    #}
     {# CNAMEs it to lab.fahm.fr, and LAN clients shortcut to lab's         #}
     {# internal IP to avoid a WAN / wireguard hairpin.                     #}
+    {# When adding a new host here, add matching UniFi Console Local DNS    #}
+    {# records for the UDM fallback resolver too: the host apex and         #}
+    {# wildcard subdomain must return physical IPs, not public Tailscale    #}
+    {# IPs, when the UDM claims the pihole VIP.                             #}
     --env FTLCONF_misc_dnsmasq_lines="address=/pug.fahm.fr/{{ external_ips.pug }};address=/lab.fahm.fr/{{ external_ips.lab }};address=/box.fahm.fr/{{ external_ips.box }};address=/auth.fahm.fr/{{ external_ips.lab }}" \
     {# FTL API password, mounted as a podman secret. The entrypoint reads  #}
     {# it from /run/secrets/webpassword (WEBPASSWORD_FILE = the basename)   #}
@@ -115,7 +119,7 @@ ExecStart=/usr/bin/podman run \
 {# test box. Bypasses pihole's own split-horizon wildcard #}
 {# (`address=/lab.fahm.fr/...`) which would resolve nexus.lab.fahm.fr to #}
 {# the fake test external_ips.lab. Production leaves the map unset → #}
-{# loop emits no flags. #}
+{# loop emits no flags on pihole hosts. #}
 {% for host, ip in (etc_hosts_entries | default({})).items() %}
     --add-host={{ host }}:{{ ip }} \
 {% endfor %}
