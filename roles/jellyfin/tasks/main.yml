@@ -364,6 +364,154 @@
   tags:
     - jellyfin
 
+# Test-only: a fresh box Jellyfin has no admin user, so the API-driven pin below
+# would have no token. Bootstrap a throwaway admin via the startup-wizard API
+# and mint a token, so the scheduled-task pin (and its _verify) exercise the
+# real Jellyfin API on box_deps instead of being skipped. Never runs against
+# prod, which authenticates with the vaulted jellyfin_api_token.
+- name: Bootstrap a throwaway Jellyfin admin to mint an API token (test only)
+  when: qemu_test
+  tags:
+    - jellyfin
+  block:
+    - name: Wait for Jellyfin before bootstrapping the admin
+      uri:
+        url: http://localhost:{{ service_ports.jellyfin }}/System/Info/Public
+        status_code: 200
+        return_content: true
+      register: jellyfin_public_info
+      retries: 30
+      delay: 2
+      until: jellyfin_public_info.status | default(0) == 200
+      changed_when: false
+
+    # Wizard endpoints only work before completion -- gate on the live flag so
+    # the idempotence re-run (wizard already done) skips them cleanly.
+    - name: Run the startup wizard to create the first admin
+      when: not (jellyfin_public_info.json.StartupWizardCompleted | default(false))
+      block:
+        - name: Set the startup-wizard locale
+          uri:
+            url: http://localhost:{{ service_ports.jellyfin }}/Startup/Configuration
+            method: POST
+            body_format: json
+            body:
+              UICulture: en-US
+              MetadataCountryCode: US
+              PreferredMetadataLanguage: en
+            status_code: [ 200, 204 ]
+          changed_when: true
+
+        # GET /Startup/User creates and returns the default admin; the POST below
+        # only *updates* the first user (Users.First()) and 500s with "Sequence
+        # contains no elements" if none exists yet. So this GET is load-bearing,
+        # not a probe.
+        - name: Seed the default admin via the startup wizard
+          uri:
+            url: http://localhost:{{ service_ports.jellyfin }}/Startup/User
+            status_code: 200
+          changed_when: true
+
+        - name: Set the startup-wizard admin name and password
+          uri:
+            url: http://localhost:{{ service_ports.jellyfin }}/Startup/User
+            method: POST
+            body_format: json
+            body:
+              Name: "{{ jellyfin_test_admin_user }}"
+              Password: "{{ jellyfin_test_admin_password }}"
+            status_code: [ 200, 204 ]
+          changed_when: true
+
+        - name: Complete the startup wizard
+          uri:
+            url: http://localhost:{{ service_ports.jellyfin }}/Startup/Complete
+            method: POST
+            status_code: [ 200, 204 ]
+          changed_when: true
+
+    - name: Authenticate as the throwaway admin to mint a token
+      uri:
+        url: http://localhost:{{ service_ports.jellyfin }}/Users/AuthenticateByName
+        method: POST
+        headers:
+          Authorization: 'MediaBrowser Client="ansible-harness", Device="box", DeviceId="ansible-harness-box", Version="1.0"'
+        body_format: json
+        body:
+          Username: "{{ jellyfin_test_admin_user }}"
+          Pw: "{{ jellyfin_test_admin_password }}"
+        status_code: 200
+        return_content: true
+      register: jellyfin_test_auth
+      retries: 10
+      delay: 2
+      until: jellyfin_test_auth.status | default(0) == 200
+      changed_when: false
+
+- name: Resolve the effective Jellyfin API token (vaulted on prod, minted on the fixture)
+  set_fact:
+    jellyfin_effective_api_token: "{{ (jellyfin_test_auth.json.AccessToken | default('')) if qemu_test else jellyfin_api_token }}"
+  tags:
+    - jellyfin
+
+# Pin the library-scan schedule via the API. Jellyfin's default is a 12h
+# IntervalTrigger that can fire during the 02:00 UTC backup; replace it with a
+# nightly DailyTrigger that finishes before it. The task is resolved by Key
+# (stable across instances) rather than a hard-coded GUID. Runs wherever a token
+# is available -- vaulted on prod, minted above on the fixture.
+# See notes/scheduled_jobs_audit.md.
+- name: Fetch Jellyfin scheduled tasks
+  when: jellyfin_effective_api_token | length > 0
+  uri:
+    url: http://localhost:{{ service_ports.jellyfin }}/ScheduledTasks?isHidden=false
+    headers:
+      Authorization: 'MediaBrowser Token="{{ jellyfin_effective_api_token }}"'
+    return_content: true
+    status_code: 200
+  register: jellyfin_tasks
+  retries: 30
+  delay: 2
+  until: jellyfin_tasks.status | default(0) == 200
+  changed_when: false
+  tags:
+    - jellyfin
+
+- name: Resolve the library-scan task and its desired trigger
+  when: jellyfin_effective_api_token | length > 0
+  set_fact:
+    jellyfin_scan_task: "{{ (jellyfin_tasks.json | default([]) | selectattr('Key', 'equalto', 'RefreshLibrary') | list | first) | default({}) }}"
+    jellyfin_scan_desired_triggers:
+      - Type: DailyTrigger
+        TimeOfDayTicks: "{{ jellyfin_library_scan_time_ticks }}"
+  tags:
+    - jellyfin
+
+# Idempotent: only POST when the live triggers are not already exactly our
+# single nightly DailyTrigger -- so an out-of-band UI change is reverted while
+# steady state is a no-op. A Key that resolves nothing leaves the task empty and
+# skips the POST rather than erroring (length==1 short-circuits the [0] lookup).
+- name: Pin the Jellyfin library-scan trigger
+  when:
+    - jellyfin_effective_api_token | length > 0
+    - jellyfin_scan_task.Id is defined
+    - not (
+        (jellyfin_scan_task.Triggers | default([]) | length == 1)
+        and (jellyfin_scan_task.Triggers[0].Type | default('')) == 'DailyTrigger'
+        and (jellyfin_scan_task.Triggers[0].TimeOfDayTicks | default(-1) | int) == (jellyfin_library_scan_time_ticks | int)
+      )
+  uri:
+    url: http://localhost:{{ service_ports.jellyfin }}/ScheduledTasks/{{ jellyfin_scan_task.Id }}/Triggers
+    method: POST
+    headers:
+      Authorization: 'MediaBrowser Token="{{ jellyfin_effective_api_token }}"'
+    body_format: json
+    body: "{{ jellyfin_scan_desired_triggers }}"
+    status_code: [ 200, 204 ]
+  register: jellyfin_scan_post
+  changed_when: true
+  tags:
+    - jellyfin
+
 - name: Configure nginx
   import_role:
     name: nginx

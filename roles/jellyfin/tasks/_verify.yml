@@ -201,3 +201,46 @@
     fail_msg: >-
       branding.xml is missing the SSO login-button form for
       jellyfin.{{ inventory_hostname }}.{{ domain }}.
+
+# Confirm the API-driven library-scan pin actually landed -- the converge POST
+# only does anything against a live Jellyfin (--check / non-token hosts skip it),
+# so this is the real coverage. Re-auth with the throwaway admin the converge
+# bootstrapped, then assert the trigger.
+- name: _verify | Mint a token for the throwaway admin
+  uri:
+    url: http://localhost:{{ service_ports.jellyfin }}/Users/AuthenticateByName
+    method: POST
+    headers:
+      Authorization: 'MediaBrowser Client="ansible-verify", Device="box", DeviceId="ansible-verify-box", Version="1.0"'
+    body_format: json
+    body:
+      Username: "{{ jellyfin_test_admin_user }}"
+      Pw: "{{ jellyfin_test_admin_password }}"
+    status_code: 200
+    return_content: true
+  register: _jellyfin_verify_auth
+  retries: 10
+  delay: 2
+  until: _jellyfin_verify_auth.status == 200
+
+- name: _verify | Fetch scheduled tasks
+  uri:
+    url: http://localhost:{{ service_ports.jellyfin }}/ScheduledTasks?isHidden=false
+    headers:
+      Authorization: 'MediaBrowser Token="{{ _jellyfin_verify_auth.json.AccessToken }}"'
+    return_content: true
+    status_code: 200
+  register: _jellyfin_verify_tasks
+
+- name: _verify | Library-scan task is pinned to the nightly DailyTrigger
+  vars:
+    _scan: "{{ _jellyfin_verify_tasks.json | selectattr('Key', 'equalto', 'RefreshLibrary') | list | first | default({}) }}"
+  assert:
+    that:
+      - _scan.Triggers | default([]) | length == 1
+      - _scan.Triggers[0].Type == 'DailyTrigger'
+      - (_scan.Triggers[0].TimeOfDayTicks | int) == (jellyfin_library_scan_time_ticks | int)
+    fail_msg: >-
+      Expected the RefreshLibrary task to carry a single DailyTrigger at
+      {{ jellyfin_library_scan_time_ticks }} ticks; got
+      {{ _scan.Triggers | default([]) }}.
