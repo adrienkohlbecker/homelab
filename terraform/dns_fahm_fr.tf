@@ -86,7 +86,7 @@ locals {
   # interface. Non-tailnet internet traffic to *.fahm.fr always gets an
   # unroutable CGNAT address — the intended fail-closed posture. box has no
   # stable Tailscale IP (test fixture, infrequently enrolled) so it keeps its
-  # physical address. (History: wg mirror IPs → physical IPs → Tailscale IPs.)
+  # physical address.
   fahm_fr_host_records = {
     a_box  = { type = "A", name = "box.fahm.fr", content = local.network.hosts.box.physical }
     a_bunk = { type = "A", name = "bunk.fahm.fr", content = local.network.hosts.bunk.tailscale }
