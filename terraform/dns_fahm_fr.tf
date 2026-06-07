@@ -78,22 +78,20 @@ variable "fahm_fr_records" {
 }
 
 locals {
-  # Host A records — derived from data/network_topology.yml. Each name
-  # resolves to the host's *physical* IP, which sits inside a route the mesh
-  # subnet routers advertise (home hosts in 10.123.0.0/21 via lab/pug; bunk in
-  # 10.123.57.0/24 via bunk). So a tailnet client reaches the host over the mesh
-  # even with MagicDNS / "Use Tailscale DNS settings" toggled OFF (the OS
-  # resolver returns these public records), as long as "Use Tailscale subnets"
-  # stays on — the two toggles are independent. Non-tunnel traffic to *.fahm.fr
-  # never resolves on the internet at large (10.x.x.x is unroutable), the
-  # intended fail-closed behaviour. (These pointed at the wireguard mirror IPs
-  # while wg roaming was the access path; that range isn't a mesh-advertised
-  # route, so the cutover to Tailscale repoints them to physical.)
+  # Host A records — derived from data/network_topology.yml. lab/pug/bunk resolve
+  # to their Tailscale CGNAT IPs (100.64.0.x) so that tailnet clients can reach
+  # them peer-to-peer without needing "Use Tailscale subnets" / --accept-routes.
+  # Pihole's split-horizon `address=/lab.fahm.fr/10.123.0.2` (and siblings)
+  # overrides these for LAN clients, which connect directly over the physical
+  # interface. Non-tailnet internet traffic to *.fahm.fr always gets an
+  # unroutable CGNAT address — the intended fail-closed posture. box has no
+  # stable Tailscale IP (test fixture, infrequently enrolled) so it keeps its
+  # physical address. (History: wg mirror IPs → physical IPs → Tailscale IPs.)
   fahm_fr_host_records = {
     a_box  = { type = "A", name = "box.fahm.fr", content = local.network.hosts.box.physical }
-    a_bunk = { type = "A", name = "bunk.fahm.fr", content = local.network.hosts.bunk.physical }
-    a_lab  = { type = "A", name = "lab.fahm.fr", content = local.network.hosts.lab.physical }
-    a_pug  = { type = "A", name = "pug.fahm.fr", content = local.network.hosts.pug.physical }
+    a_bunk = { type = "A", name = "bunk.fahm.fr", content = local.network.hosts.bunk.tailscale }
+    a_lab  = { type = "A", name = "lab.fahm.fr", content = local.network.hosts.lab.tailscale }
+    a_pug  = { type = "A", name = "pug.fahm.fr", content = local.network.hosts.pug.tailscale }
   }
 
   # fox is the off-home Hetzner Cloud VPS (Headscale control plane + DERP relay).

@@ -313,13 +313,11 @@ github_runner_instances:
 certbot_extra_sans:
   - auth.{{ domain }}
 
-# Tailscale subnet router + home exit node (mesh client registering against the
-# fox headscale control plane -- see notes/headscale_mesh_redesign.md §C).
-# Advertises the whole home /21 so roaming clients reach LAN-only devices, and
-# offers a home exit (pug advertises the same -> HA, no port-picking). The
-# control-plane pointers + pre-auth key are shared prod config in
-# group_vars/prod.yml; only the advertised routes are per-host here.
-tailscale_advertise_routes: "10.123.0.0/21"
+# Tailscale home exit node (mesh client registering against the fox headscale
+# control plane -- see notes/headscale_mesh_redesign.md §C). HA pair with pug.
+# Subnet routes removed: *.fahm.fr DNS now points to Tailscale IPs (100.64.x.x)
+# so roaming clients reach services peer-to-peer without --accept-routes.
+# Non-Tailscale LAN devices are reachable via this exit node when needed.
 tailscale_advertise_exit_node: true
 
 nginx_static_proxies:
