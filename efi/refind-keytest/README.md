@@ -76,7 +76,7 @@ The current mapping targets the common French PC AZERTY layout:
 top row:     ² & é " ' ( - è _ ç à ) =
 shift row:   ² 1 2 3 4 5 6 7 8 9 0 ° +
 AltGr row:     ~ # { [ | ` \ ^ @ ] }
-upper row:   a z e r t y u i o p ^ $
+upper row:   a z e r t y u i o p ^ $ *
 home row:    q s d f g h j k l m ù *
 bottom row:  < w x c v b n , ; : !
 ```

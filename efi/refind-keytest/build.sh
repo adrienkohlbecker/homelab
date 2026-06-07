@@ -61,7 +61,7 @@ $lld_link \
 
 # shellcheck disable=SC2086  # LLD_LINK may intentionally contain "ld.lld -flavor link".
 $lld_link \
-  /subsystem:efi_application \
+  /subsystem:efi_boot_service_driver \
   /entry:efi_main \
   /nodefaultlib \
   /out:build/homelab_fr_azerty_x64.efi \
