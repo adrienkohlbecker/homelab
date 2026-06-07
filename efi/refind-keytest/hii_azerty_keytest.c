@@ -55,6 +55,7 @@ struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
   VOID *ClearScreen;
   VOID *SetCursorPosition;
   VOID *EnableCursor;
+  VOID *Mode;
 };
 
 struct _EFI_BOOT_SERVICES {
@@ -262,7 +263,6 @@ typedef struct {
   UINT16 LayoutCount;
   EFI_HII_KEYBOARD_LAYOUT_HEADER Layout;
   EFI_KEY_DESCRIPTOR Descriptors[89];
-  CHAR16 Description[25];
 } PACKED KEYBOARD_PACKAGE;
 
 typedef struct {
@@ -302,9 +302,8 @@ static EFI_GUID gHomelabFrAzertyLayoutGuid = {
 #define HII_HEADER(Length, Type) ((UINT32)(Length) | ((UINT32)(Type) << 24))
 #define STD EFI_AFFECTED_BY_STANDARD_SHIFT
 #define CAPS (EFI_AFFECTED_BY_STANDARD_SHIFT | EFI_AFFECTED_BY_CAPS_LOCK)
-#define DESC_STRING_BYTES (sizeof(((KEYBOARD_PACKAGE *)0)->Description))
 #define DESC_COUNT (sizeof(((KEYBOARD_PACKAGE *)0)->Descriptors) / sizeof(EFI_KEY_DESCRIPTOR))
-#define LAYOUT_DESC_OFFSET (sizeof(EFI_HII_KEYBOARD_LAYOUT_HEADER) + sizeof(((KEYBOARD_PACKAGE *)0)->Descriptors))
+#define LAYOUT_DESC_OFFSET 0
 #define LAYOUT_LENGTH (sizeof(KEYBOARD_PACKAGE) - sizeof(UINT32) - sizeof(UINT16))
 
 static KEYTEST_PACKAGE_LIST gAzertyPackage = {
@@ -415,8 +414,6 @@ static KEYTEST_PACKAGE_LIST gAzertyPackage = {
             {EfiKeyA0, 0, 0, 0, 0, EFI_NULL_MODIFIER, 0},
             {EfiKeyA3, 0, 0, 0, 0, EFI_NULL_MODIFIER, 0},
         },
-        {'H', 'o', 'm', 'e', 'l', 'a', 'b', ' ', 'F', 'R', ' ', 'A',
-         'Z', 'E', 'R', 'T', 'Y', ' ', 'k', 'e', 'y', 't', 'e', 's', 't'},
     },
     HII_HEADER(4, EFI_HII_PACKAGE_END),
 };
