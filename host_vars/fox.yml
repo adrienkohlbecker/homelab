@@ -6,10 +6,10 @@
 # Hetzner private net, the `hetzner` topology site, at 10.123.55.2) -- so it
 # runs a curated minimal role set (the dedicated `fox` play in site.yml),
 # excluded from the all:!bunk base plays. It DOES join the wg0 backbone (scoped:
-# its wireguard_peers entry has no extra allowed_ips, so it reaches only
-# lab/pug's wg /32s, not the home LAN), which is what lets netdata's
-# Authelia-gated vhost reach lab. Provisioned by terraform/hetzner.tf; reached
-# at fox.fahm.fr (public A -> reserved primary IP).
+# peer host /32s only: each server peer's wg /32 plus the physical /32 for
+# cross-site peers), which lets fox reach lab/pug services at their LAN IPs
+# without routing whole home subnets. Provisioned by terraform/hetzner.tf;
+# reached at fox.fahm.fr (public A -> reserved primary IP).
 
 zfs_root: true
 zfs_arc_min: 0
@@ -87,15 +87,15 @@ headscale_oidc_enabled: true
 headscale_oidc_issuer: "https://auth.{{ domain }}"
 headscale_oidc_client_id: headscale
 
-# fox is not a Tailscale client, and its WireGuard peer config only routes the
-# lab/pug/box/bunk wg /32s. Public DNS for lab-hosted names may point at
+# fox is not a Tailscale client. Public DNS for lab-hosted names may point at
 # Tailscale addresses for mesh clients, so pin the lab-hosted dependencies fox
-# itself consumes to lab's WireGuard address:
+# itself consumes to lab's physical IP, which wg0 routes as a cross-site host
+# /32:
 #   - auth.fahm.fr: Headscale OIDC discovery at startup.
 #   - nexus.lab.fahm.fr: ZFSBootMenu release artifacts.
 etc_hosts_entries:
-  auth.fahm.fr: "{{ network.hosts.lab.wireguard }}"
-  nexus.lab.fahm.fr: "{{ network.hosts.lab.wireguard }}"
+  auth.fahm.fr: "{{ network.hosts.lab.physical }}"
+  nexus.lab.fahm.fr: "{{ network.hosts.lab.physical }}"
 
 # Trimmed from the pug-derived list to what a Hetzner cloud VM actually
 # exposes. Dropped contexts: powercap (no Intel RAPL in a VM), zfs (no ZFS
