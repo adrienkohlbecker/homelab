@@ -121,11 +121,11 @@ sites:
 # per-VLAN /28 block derivation (see schema block above) and must
 # satisfy `primary = host_subnet | ipmath(2 + slot)`.
 hosts:
-  lab:  { site: home,     slot: 0, physical: 10.123.0.2,  wireguard: 10.123.64.2 }
-  pug:  { site: home,     slot: 1, physical: 10.123.0.3,  wireguard: 10.123.64.3 }
+  lab:  { site: home,     slot: 0, physical: 10.123.0.2,  wireguard: 10.123.64.2,  tailscale: 100.64.0.2 }
+  pug:  { site: home,     slot: 1, physical: 10.123.0.3,  wireguard: 10.123.64.3,  tailscale: 100.64.0.3 }
   pom:  { site: home,     slot: 2, physical: 10.123.0.4,  wireguard: 10.123.64.4, status: planned }
   box:  { site: home,     slot: 3, physical: 10.123.0.5,  wireguard: 10.123.64.5 }
-  bunk: { site: bonniers,          physical: 10.123.57.3, wireguard: 10.123.121.3 }
+  bunk: { site: bonniers,          physical: 10.123.57.3, wireguard: 10.123.121.3, tailscale: 100.64.0.5 }
   fox:  { site: hetzner,           physical: 10.123.55.2, wireguard: 10.123.119.2 }
 
 # Wireguard overlay. Server peer addresses are `hosts.<n>.wireguard`;
