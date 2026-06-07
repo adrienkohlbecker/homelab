@@ -10,7 +10,8 @@ nexus_url: nexus.lab.fahm.fr
 #   2. roles/pihole/templates/pihole.service.j2 plumbs them as podman
 #      --add-host flags, bypassing pihole's own split-horizon wildcard
 #      (which resolves *.lab.fahm.fr to the fake test external_ips.lab).
-# Production leaves this unset — both consumers default to no overrides.
+# Production host vars usually leave this unset — both consumers default to no
+# overrides.
 # Values reference `prod_network` (not `network`) because these hostnames
 # MUST point at the live LAN, not the gsub'd test subnet.
 etc_hosts_entries:

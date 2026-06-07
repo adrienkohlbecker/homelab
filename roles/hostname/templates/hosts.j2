@@ -13,11 +13,12 @@
 ::1 localhost ip6-localhost ip6-loopback
 {% if etc_hosts_entries | default({}) %}
 
-# Static name → IP overrides from group_vars `etc_hosts_entries`. Empty in
-# production (regular DNS handles lab-internal names); set in
-# group_vars/test.yml so test boxes resolve lab-internal hostnames to
-# LAN IPs reachable from inside qemu user-mode networking. The same map
-# drives roles/pihole's container --add-host flags.
+# Static name → IP overrides from group_vars or host_vars `etc_hosts_entries`.
+# Empty in most production host vars because regular DNS handles lab-internal
+# names. Set per host only when that host needs a private route public DNS
+# cannot express, and set in group_vars/test.yml so test boxes resolve
+# lab-internal hostnames to LAN IPs reachable from inside qemu user-mode
+# networking. The same map drives roles/pihole's container --add-host flags.
 {% for host, ip in etc_hosts_entries.items() %}
 {{ ip }} {{ host }}
 {% endfor %}
