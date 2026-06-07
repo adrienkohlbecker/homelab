@@ -100,6 +100,23 @@
   become: true
   become_user: "{{ _systemd_unit_user }}"
 
+# A raw `systemctl --user` (unlike the ansible systemd module, which sets it
+# itself for scope: user) needs XDG_RUNTIME_DIR pointed at the named user's
+# /run/user/<uid> to reach their manager -- without it reenable's reload half
+# errors out. Look the uid up so the reenable below can address the user bus.
+# Same derivation as roles/podman_secret/tasks/secret.yml does for rootless
+# podman. System scope drives the system manager and needs none of this.
+- name: service | Resolve uid for the user-scope reenable bus environment
+  when:
+    - _systemd_unit_condition
+    - not ansible_check_mode
+    - _systemd_unit_scope == 'user'
+    - systemd_unit_file is defined and systemd_unit_file is changed
+  getent:
+    database: passwd
+    key: "{{ _systemd_unit_user }}"
+  become: true
+
 # `systemctl enable` (what enabled: true runs) only ADDS the symlinks named in
 # the unit's *current* [Install] section -- it never prunes ones that used to be
 # there. So a template that drops a WantedBy= (e.g. a service leaving
@@ -126,6 +143,8 @@
          (['--user'] if _systemd_unit_scope == 'user' else []) +
          ['reenable', _systemd_unit_name] }}
   changed_when: false
+  environment:
+    XDG_RUNTIME_DIR: "{{ ('/run/user/' ~ getent_passwd[_systemd_unit_user][1]) if _systemd_unit_scope == 'user' else omit }}"
   become: true
   become_user: "{{ _systemd_unit_user }}"
 
