@@ -1,4 +1,4 @@
-name: refind-keytest
+name: refind-azerty-keymap
 
 on:
   workflow_call:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: refind-keytest-${{ github.ref }}
+  group: refind-azerty-keymap-${{ github.ref }}
   cancel-in-progress: true
 
 defaults:
@@ -38,46 +38,46 @@ jobs:
         id: version
         run: |
           set -euo pipefail
-          version="$(cat efi/refind-keytest/VERSION)"
-          [ -n "$version" ] || { echo "empty efi/refind-keytest/VERSION" >&2; exit 1; }
+          version="$(cat efi/refind-azerty-keymap/VERSION)"
+          [ -n "$version" ] || { echo "empty efi/refind-azerty-keymap/VERSION" >&2; exit 1; }
           echo "version=$version" >>"$GITHUB_OUTPUT"
 
       - name: Build AMD64 and AArch64 EFI artifacts
-        run: efi/refind-keytest/build.sh all
+        run: efi/refind-azerty-keymap/build.sh all
 
       - name: Verify artifact machine types
         run: |
           set -euo pipefail
-          file efi/refind-keytest/build/x86_64/BOOTX64.EFI \
+          file efi/refind-azerty-keymap/build/x86_64/BOOTX64.EFI \
             | grep -F 'EFI application' \
             | grep -F 'x86-64'
-          file efi/refind-keytest/build/x86_64/homelab_fr_azerty_x64.efi \
+          file efi/refind-azerty-keymap/build/x86_64/homelab_fr_azerty_x64.efi \
             | grep -F 'EFI boot service driver' \
             | grep -F 'x86-64'
-          file efi/refind-keytest/build/aarch64/BOOTAA64.EFI \
+          file efi/refind-azerty-keymap/build/aarch64/BOOTAA64.EFI \
             | grep -F 'EFI application' \
             | grep -F 'Aarch64'
-          file efi/refind-keytest/build/aarch64/homelab_fr_azerty_aa64.efi \
+          file efi/refind-azerty-keymap/build/aarch64/homelab_fr_azerty_aa64.efi \
             | grep -F 'EFI boot service driver' \
             | grep -F 'Aarch64'
 
       - name: Upload artifacts to GitHub
         uses: actions/upload-artifact@v7
         with:
-          name: refind-keytest-${{ steps.version.outputs.version }}-${{ github.run_id }}.${{ github.run_attempt }}
+          name: refind-azerty-keymap-${{ steps.version.outputs.version }}-${{ github.run_id }}.${{ github.run_attempt }}
           if-no-files-found: error
           retention-days: 30
           path: |
-            efi/refind-keytest/build/x86_64/*.EFI
-            efi/refind-keytest/build/x86_64/*.efi
-            efi/refind-keytest/build/x86_64/*.sha256sum
-            efi/refind-keytest/build/aarch64/*.EFI
-            efi/refind-keytest/build/aarch64/*.efi
-            efi/refind-keytest/build/aarch64/*.sha256sum
+            efi/refind-azerty-keymap/build/x86_64/*.EFI
+            efi/refind-azerty-keymap/build/x86_64/*.efi
+            efi/refind-azerty-keymap/build/x86_64/*.sha256sum
+            efi/refind-azerty-keymap/build/aarch64/*.EFI
+            efi/refind-azerty-keymap/build/aarch64/*.efi
+            efi/refind-azerty-keymap/build/aarch64/*.sha256sum
 
       - name: Upload artifacts to Nexus
         env:
           NEXUS_ZBM_USERNAME: ${{ secrets.NEXUS_ZBM_USERNAME }}
           NEXUS_ZBM_PASSWORD: ${{ secrets.NEXUS_ZBM_PASSWORD }}
-          REFIND_KEYTEST_UPLOAD_PREFIX: refind-keytest/${{ steps.version.outputs.version }}
-        run: mise run refind-keytest:upload
+          REFIND_AZERTY_KEYMAP_UPLOAD_PREFIX: refind-azerty-keymap/${{ steps.version.outputs.version }}
+        run: mise run refind-azerty-keymap:upload

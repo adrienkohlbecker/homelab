@@ -87,8 +87,8 @@ build_arch() {
     -Wall \
     -Wextra \
     -Werror \
-    -c hii_azerty_keytest.c \
-    -o "${out_dir}/hii_azerty_keytest.obj"
+    -c hii_azerty_keymap.c \
+    -o "${out_dir}/hii_azerty_keymap.obj"
 
   "$clang" \
     --target="$target" \
@@ -101,7 +101,7 @@ build_arch() {
     -Wall \
     -Wextra \
     -Werror \
-    -c hii_azerty_keytest.c \
+    -c hii_azerty_keymap.c \
     -o "${out_dir}/homelab_fr_azerty.obj"
 
   # shellcheck disable=SC2086  # LLD_LINK may intentionally contain "ld.lld -flavor link".
@@ -111,7 +111,7 @@ build_arch() {
     /timestamp:0 \
     /nodefaultlib \
     "/out:${out_dir}/${boot_name}" \
-    "${out_dir}/hii_azerty_keytest.obj"
+    "${out_dir}/hii_azerty_keymap.obj"
 
   # shellcheck disable=SC2086  # LLD_LINK may intentionally contain "ld.lld -flavor link".
   $lld_link \
