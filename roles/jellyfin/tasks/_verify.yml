@@ -232,15 +232,17 @@
     status_code: 200
   register: _jellyfin_verify_tasks
 
-- name: _verify | Library-scan task is pinned to the nightly DailyTrigger
+- name: _verify | Each heavy task is pinned to its nightly DailyTrigger
   vars:
-    _scan: "{{ _jellyfin_verify_tasks.json | selectattr('Key', 'equalto', 'RefreshLibrary') | list | first | default({}) }}"
+    _task: "{{ _jellyfin_verify_tasks.json | selectattr('Key', 'equalto', item.key) | list | first | default({}) }}"
   assert:
     that:
-      - _scan.Triggers | default([]) | length == 1
-      - _scan.Triggers[0].Type == 'DailyTrigger'
-      - (_scan.Triggers[0].TimeOfDayTicks | int) == (jellyfin_library_scan_time_ticks | int)
+      - _task.Triggers | default([]) | length == 1
+      - _task.Triggers[0].Type == 'DailyTrigger'
+      - (_task.Triggers[0].TimeOfDayTicks | int) == (item.value | int)
     fail_msg: >-
-      Expected the RefreshLibrary task to carry a single DailyTrigger at
-      {{ jellyfin_library_scan_time_ticks }} ticks; got
-      {{ _scan.Triggers | default([]) }}.
+      Expected the {{ item.key }} task to carry a single DailyTrigger at
+      {{ item.value }} ticks; got {{ _task.Triggers | default([]) }}.
+  loop: "{{ jellyfin_scheduled_task_times | dict2items }}"
+  loop_control:
+    label: "{{ item.key }} -> {{ item.value }}"

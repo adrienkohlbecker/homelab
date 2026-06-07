@@ -1,9 +1,22 @@
-# Scheduled library scan, enforced via the API (Jellyfin schedules in the
-# container TZ=Europe/Paris, so this is local time). The image default is a 12h
-# IntervalTrigger that can fire mid-backup; pin it to a nightly DailyTrigger
-# that completes before the 02:00 UTC zfs_autosnapshot in both DST seasons.
-# TimeOfDayTicks = hour*3600*10^7 (.NET 100 ns ticks); 23:00 local = 8.28e11.
-jellyfin_library_scan_time_ticks: 828000000000
+# Heavy, disk-bound scheduled tasks pinned via the API to nightly DailyTriggers
+# in the late-evening window, so they finish before the 02:00 UTC
+# zfs_autosnapshot in both DST seasons and the backup send runs free of media-
+# read contention (the snapshot is atomic, so this is about I/O contention, not
+# consistency). Jellyfin schedules in the container TZ=Europe/Paris, so these are
+# local times; TimeOfDayTicks = seconds-past-midnight * 10^7 (.NET 100 ns ticks).
+#
+# The stock defaults run the deep extractors at 02:00-03:00 local -- and
+# RefreshTrickplayImages (03:00 local) lands at 02:00 UTC in winter, straight
+# into the backup. Stagger them 20 min apart with the scan first so each extractor
+# processes whatever the scan just found, the same night. Keys are stable core
+# task identifiers, so the pin survives Jellyfin upgrades. The map is enforced
+# (out-of-band UI edits are reverted on the next converge); a key Jellyfin no
+# longer exposes is silently skipped. Times: 23:00 / 23:20 / 23:40 / 23:50 local.
+jellyfin_scheduled_task_times:
+  RefreshLibrary: 828000000000           # Scan Media Library      23:00
+  RefreshChapterImages: 840000000000     # Extract Chapter Images  23:20
+  RefreshTrickplayImages: 852000000000   # Generate Trickplay      23:40
+  TaskExtractMediaSegments: 858000000000  # Detect Media Segments  23:50
 
 # Throwaway admin the harness creates on the box fixture (qemu_test only) via
 # the startup-wizard API, so the API-driven scheduled-task pin and its _verify
