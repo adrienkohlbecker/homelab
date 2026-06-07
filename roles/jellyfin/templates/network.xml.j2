@@ -23,7 +23,9 @@
   <!-- Trust X-Forwarded-For from nginx (loopback). Jellyfin uses the forwarded
        IP for LAN vs remote classification; without this the real client IP is
        ignored and every connection looks local. -->
-  <KnownProxies>127.0.0.1</KnownProxies>
+  <KnownProxies>
+    <string>127.0.0.1</string>
+  </KnownProxies>
   <IgnoreVirtualInterfaces>true</IgnoreVirtualInterfaces>
   <VirtualInterfaceNames>
     <string>veth</string>
