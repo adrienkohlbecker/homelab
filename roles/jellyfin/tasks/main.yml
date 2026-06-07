@@ -199,10 +199,25 @@
 # plugin HTTP API after the service is up (see below).
 #
 # Render via copy:content + regex_replace (not template:) because Jellyfin
-# rewrites branding.xml via .NET's XmlSerializer, which emits no trailing
+# rewrites these XML files via .NET's XmlSerializer, which emits no trailing
 # newline; a plain template: adds one, so every run after Jellyfin has
 # touched the file would re-diff and trigger a needless restart. Same
 # pattern as roles/sonarr (config.xml).
+- name: Configure Jellyfin network settings
+  when: not (ansible_check_mode and jellyfin_user.changed)
+  copy:
+    content: "{{ lookup('template', 'network.xml.j2') | regex_replace('\\n+$', '') }}"
+    dest: /mnt/services/jellyfin/config/network.xml
+    owner: jellyfin
+    group: media
+    mode: "0600"
+    backup: true
+    validate: python3 -c 'import xml.dom.minidom,sys; xml.dom.minidom.parse(sys.argv[1])' "%s"
+  register: jellyfin_network
+  become: true
+  tags:
+    - jellyfin
+
 - name: Configure Jellyfin branding (SSO login button)
   when: not (ansible_check_mode and jellyfin_user.changed)
   copy:
@@ -269,7 +284,8 @@
            or media_group.changed
            or jellyfin_logging_json.changed | default(false)
            or jellyfin_sso_extract.changed | default(false)
-           or jellyfin_branding.changed | default(false) }}
+           or jellyfin_branding.changed | default(false)
+           or jellyfin_network.changed | default(false) }}
   tags:
     - jellyfin
 
