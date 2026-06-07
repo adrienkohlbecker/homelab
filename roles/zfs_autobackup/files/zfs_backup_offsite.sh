@@ -51,10 +51,16 @@ fi
 # instead of resending it whole -- nearly free, since same-named files match
 # first and never trigger the fuzzy search. Load-bearing dependency: bunk's
 # rrsync must point at 3.4.1 (roles/zfs_autobackup/files/rrsync).
+# No --acls: bunk's SynoCli rsync (3.4.1, the build rrsync forces) is compiled
+# "no ACLs" (`rsync --version` Capabilities), so requesting them makes the server
+# bail with "ACLs are not supported on this server" / exit 1 -- which silently
+# failed every offsite push. The datasets carry acltype=posix, so this drops
+# supplementary POSIX ACLs from the DR copy; the base mode bits + ownership still
+# round-trip via --xattrs + -M--fake-super (the SynoCli build *does* have xattrs).
+# Stock DSM rsync has ACLs but is 3.1.2 -- too old to negotiate the protocol.
 f_trace rsync \
   --archive \
   --hard-links \
-  --acls \
   --xattrs \
   --human-readable \
   --sparse \
