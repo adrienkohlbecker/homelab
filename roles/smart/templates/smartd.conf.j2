@@ -157,7 +157,7 @@
 # -d nvme,0xffffffff : use broadcast namespace id instead of namespace pointed to by symlink
 
 # TODO: once all hosts are on noble (smartmontools >= 7.4), simplify DEFAULT to -a
-DEFAULT -H -f -t -l error -l selftest -C 197+ -U 198+ -n standby,q -m root -M exec /usr/share/smartmontools/smartd-runner -M test -M diminishing -o on -S on -s (L/../01/./04:024|S/../.././02) -I 194 -I 190 -I 231 -I 9
+DEFAULT -H -f -t -l error -l selftest -C 197+ -U 198+ -n standby,q -m root -M exec /usr/share/smartmontools/smartd-runner -M diminishing -o on -S on -s (L/../01/./04:024|S/../.././02) -I 194 -I 190 -I 231 -I 9
 
 {% set qualifying_devs = ansible_devices.values() | map(attribute='links') | map(attribute='ids') | select | map('sort') | map('first') | select('match', '^(nvme|ata)-') | sort %}
 {% for dev in qualifying_devs %}
