@@ -1,12 +1,14 @@
 # rEFInd AZERTY HII keytest
 
-This directory builds two x86_64 EFI artifacts for the rEFInd AZERTY keymap
-design:
+This directory builds EFI artifacts for the rEFInd AZERTY keymap design:
 
 - `BOOTX64.EFI`: interactive USB probe. It prints key values before and after
   `SetKeyboardLayout()`.
 - `homelab_fr_azerty_x64.efi`: no-UI layout installer for rEFInd to load from
   `EFI/refind/drivers_x64/`.
+- `BOOTAA64.EFI`: aarch64 interactive USB probe.
+- `homelab_fr_azerty_aa64.efi`: aarch64 no-UI layout installer for
+  `EFI/refind/drivers_aa64/`.
 
 Neither artifact modifies firmware variables. The HII layout remains a runtime
 pre-boot setting.
@@ -17,15 +19,25 @@ pre-boot setting.
 ./build.sh
 ```
 
-The script expects Homebrew LLVM at `/opt/homebrew/opt/llvm/bin` and either
-`lld-link` or `ld.lld`. If Homebrew `lld` is installed, the script finds it at
-`/opt/homebrew/opt/lld/bin`.
+That preserves the original x86_64 outputs. Build both supported
+architectures with:
+
+```bash
+./build.sh all
+```
+
+The script expects `clang` plus either `lld-link` or `ld.lld`. It searches
+`PATH` first, then the Homebrew LLVM/lld locations.
 
 Outputs:
 
 ```text
 build/BOOTX64.EFI
 build/homelab_fr_azerty_x64.efi
+build/x86_64/BOOTX64.EFI
+build/x86_64/homelab_fr_azerty_x64.efi
+build/aarch64/BOOTAA64.EFI
+build/aarch64/homelab_fr_azerty_aa64.efi
 ```
 
 ## USB layout
@@ -64,11 +76,12 @@ Install the no-UI artifact here:
 
 ```text
 EFI/refind/drivers_x64/homelab_fr_azerty_x64.efi
+EFI/refind/drivers_aa64/homelab_fr_azerty_aa64.efi
 ```
 
-rEFInd loads `drivers_x64/*.efi` before presenting its menu, so the artifact
-registers the HII keyboard layout and makes it current before the kernel args
-editor runs.
+rEFInd loads the architecture-specific `drivers_*/*.efi` directory before
+presenting its menu, so the artifact registers the HII keyboard layout and
+makes it current before the kernel args editor runs.
 
 The current mapping targets the common French PC AZERTY layout:
 

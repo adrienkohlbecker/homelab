@@ -1,0 +1,79 @@
+name: refind-keytest
+
+on:
+  push:
+    paths:
+      - .github/workflows/refind-keytest.yml
+      - efi/refind-keytest/**
+      - mise-tasks/refind-keytest/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refind-keytest-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: [ self-hosted, lab ]
+    timeout-minutes: 20
+    container:
+      image: nexus.lab.fahm.fr/homelab/ci:latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install EFI cross-build toolchain
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends clang lld file
+          rm -rf /var/lib/apt/lists/*
+
+      - name: Build AMD64 and AArch64 EFI artifacts
+        run: efi/refind-keytest/build.sh all
+
+      - name: Verify artifact machine types
+        run: |
+          set -euo pipefail
+          file efi/refind-keytest/build/x86_64/BOOTX64.EFI \
+            | grep -F 'EFI application' \
+            | grep -F 'x86-64'
+          file efi/refind-keytest/build/x86_64/homelab_fr_azerty_x64.efi \
+            | grep -F 'EFI boot service driver' \
+            | grep -F 'x86-64'
+          file efi/refind-keytest/build/aarch64/BOOTAA64.EFI \
+            | grep -F 'EFI application' \
+            | grep -F 'Aarch64'
+          file efi/refind-keytest/build/aarch64/homelab_fr_azerty_aa64.efi \
+            | grep -F 'EFI boot service driver' \
+            | grep -F 'Aarch64'
+
+      - name: Upload artifacts to GitHub
+        uses: actions/upload-artifact@v7
+        with:
+          name: refind-keytest-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            efi/refind-keytest/build/x86_64/*.EFI
+            efi/refind-keytest/build/x86_64/*.efi
+            efi/refind-keytest/build/x86_64/*.sha256sum
+            efi/refind-keytest/build/aarch64/*.EFI
+            efi/refind-keytest/build/aarch64/*.efi
+            efi/refind-keytest/build/aarch64/*.sha256sum
+
+      - name: Upload artifacts to Nexus
+        env:
+          NEXUS_ZBM_USERNAME: ${{ secrets.NEXUS_ZBM_USERNAME }}
+          NEXUS_ZBM_PASSWORD: ${{ secrets.NEXUS_ZBM_PASSWORD }}
+          REFIND_KEYTEST_UPLOAD_PREFIX: refind-keytest/${{ github.sha }}/${{ github.run_id }}.${{ github.run_attempt }}
+        run: mise run refind-keytest:upload
