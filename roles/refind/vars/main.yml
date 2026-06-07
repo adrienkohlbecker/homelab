@@ -11,3 +11,19 @@ refind_theme_artifact:
 # on arm64 (the test box).
 refind_efi_binary: "{{ 'refind_aa64.efi' if ansible_architecture == 'aarch64' else 'refind_x64.efi' }}"
 refind_fallback_binary: "{{ 'BOOTAA64.EFI' if ansible_architecture == 'aarch64' else 'BOOTX64.EFI' }}"
+
+# rEFInd loads architecture-specific driver directories automatically before
+# presenting its menu. This tiny HII driver switches the firmware text input
+# layout to French AZERTY so the kernel-args editor matches the physical
+# keyboard. The artifact is built by refind-keytest.yml and published to the
+# existing Nexus zbm raw repository.
+refind_azerty_keymap_version: "20260607.1"
+refind_azerty_keymap_repository_url: "https://{{ nexus_url if (nexus_url | length > 0) else 'nexus.lab.fahm.fr' }}/repository/zbm/refind-keytest"
+refind_azerty_keymap_arch: "{{ 'aa64' if ansible_architecture == 'aarch64' else 'x64' }}"
+refind_azerty_keymap_driver_dir: "drivers_{{ refind_azerty_keymap_arch }}"
+refind_azerty_keymap_driver_file: "homelab_fr_azerty_{{ refind_azerty_keymap_arch }}.efi"
+refind_azerty_keymap_artifact:
+  url: "{{ refind_azerty_keymap_repository_url }}/{{ refind_azerty_keymap_version }}/{{ ansible_architecture }}/{{ refind_azerty_keymap_driver_file }}"
+  sha256_url: "{{ refind_azerty_keymap_repository_url }}/{{ refind_azerty_keymap_version }}/{{ ansible_architecture }}/{{ refind_azerty_keymap_driver_file }}.sha256sum"
+refind_azerty_keymap_cache_dir: "/var/cache/refind-azerty-keymap/{{ refind_azerty_keymap_version }}/{{ ansible_architecture }}"
+refind_azerty_keymap_cache_path: "{{ refind_azerty_keymap_cache_dir }}/{{ refind_azerty_keymap_driver_file }}"

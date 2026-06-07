@@ -40,6 +40,13 @@ build/aarch64/BOOTAA64.EFI
 build/aarch64/homelab_fr_azerty_aa64.efi
 ```
 
+CI publishes the architecture directories, plus their `.sha256sum` files, to
+the Nexus `zbm` raw repository under:
+
+```text
+refind-keytest/<VERSION>/
+```
+
 ## USB layout
 
 Copy the generated file to a FAT-formatted USB stick:

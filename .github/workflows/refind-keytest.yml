@@ -1,11 +1,7 @@
 name: refind-keytest
 
 on:
-  push:
-    paths:
-      - .github/workflows/refind-keytest.yml
-      - efi/refind-keytest/**
-      - mise-tasks/refind-keytest/**
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -38,6 +34,14 @@ jobs:
           apt-get install -y --no-install-recommends clang lld file
           rm -rf /var/lib/apt/lists/*
 
+      - name: Set artifact version
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(cat efi/refind-keytest/VERSION)"
+          [ -n "$version" ] || { echo "empty efi/refind-keytest/VERSION" >&2; exit 1; }
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
       - name: Build AMD64 and AArch64 EFI artifacts
         run: efi/refind-keytest/build.sh all
 
@@ -60,7 +64,7 @@ jobs:
       - name: Upload artifacts to GitHub
         uses: actions/upload-artifact@v7
         with:
-          name: refind-keytest-${{ github.run_id }}-${{ github.run_attempt }}
+          name: refind-keytest-${{ steps.version.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
           retention-days: 30
           path: |
@@ -75,5 +79,5 @@ jobs:
         env:
           NEXUS_ZBM_USERNAME: ${{ secrets.NEXUS_ZBM_USERNAME }}
           NEXUS_ZBM_PASSWORD: ${{ secrets.NEXUS_ZBM_PASSWORD }}
-          REFIND_KEYTEST_UPLOAD_PREFIX: refind-keytest/${{ github.sha }}/${{ github.run_id }}.${{ github.run_attempt }}
+          REFIND_KEYTEST_UPLOAD_PREFIX: refind-keytest/${{ steps.version.outputs.version }}
         run: mise run refind-keytest:upload
