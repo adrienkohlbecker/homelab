@@ -17,6 +17,7 @@ test/out_*.log
 /.ansible-mitogen-strategy
 /packer/artifacts
 /zbm-build
+.DS_Store
 
 # Per Anthropic's Claude Code guidance: track everything in .claude/ that
 # is shared team-level config (settings.json, commands, agents, hooks,
