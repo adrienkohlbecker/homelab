@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Upload rEFInd keytest EFI artifacts to the Nexus zbm raw repo"
+#MISE description="Upload rEFInd AZERTY keymap EFI artifacts to the Nexus zbm raw repo"
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
@@ -10,8 +10,8 @@ repo_root="${MISE_CONFIG_ROOT:-$(git -C "${script_dir}/../.." rev-parse --show-t
 if [[ -z "${NEXUS_ZBM_USERNAME:-}" ]] &&
   [[ -z "${CI:-}" ]] &&
   [[ "${NEXUS_USERNAME:-}" == op://* ]] &&
-  [[ -z "${_REFIND_KEYTEST_UPLOAD_OP_RESOLVED:-}" ]]; then
-  export _REFIND_KEYTEST_UPLOAD_OP_RESOLVED=1
+  [[ -z "${_REFIND_AZERTY_KEYMAP_UPLOAD_OP_RESOLVED:-}" ]]; then
+  export _REFIND_AZERTY_KEYMAP_UPLOAD_OP_RESOLVED=1
   exec op run -- "$0" "$@"
 fi
 
@@ -24,12 +24,12 @@ if [[ -z "${nexus_user:-}" ]] || [[ -z "${nexus_pass:-}" ]] ||
   exit 0
 fi
 
-artifact_root="${REFIND_KEYTEST_BUILD_DIR:-${repo_root}/efi/refind-keytest/build}"
-version="${REFIND_KEYTEST_VERSION:-}"
-if [[ -z "$version" && -f "${repo_root}/efi/refind-keytest/VERSION" ]]; then
-  version="$(<"${repo_root}/efi/refind-keytest/VERSION")"
+artifact_root="${REFIND_AZERTY_KEYMAP_BUILD_DIR:-${repo_root}/efi/refind-azerty-keymap/build}"
+version="${REFIND_AZERTY_KEYMAP_VERSION:-}"
+if [[ -z "$version" && -f "${repo_root}/efi/refind-azerty-keymap/VERSION" ]]; then
+  version="$(<"${repo_root}/efi/refind-azerty-keymap/VERSION")"
 fi
-prefix="${REFIND_KEYTEST_UPLOAD_PREFIX:-refind-keytest/${version:-manual}}"
+prefix="${REFIND_AZERTY_KEYMAP_UPLOAD_PREFIX:-refind-azerty-keymap/${version:-manual}}"
 dest_base="https://nexus.lab.fahm.fr/repository/zbm/${prefix}"
 
 if [[ ! -d "$artifact_root" ]]; then

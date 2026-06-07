@@ -1,4 +1,4 @@
-# rEFInd AZERTY HII keytest
+# rEFInd AZERTY HII Keymap
 
 This directory builds EFI artifacts for the rEFInd AZERTY keymap design:
 
@@ -44,7 +44,7 @@ CI publishes the architecture directories, plus their `.sha256sum` files, to
 the Nexus `zbm` raw repository under:
 
 ```text
-refind-keytest/<VERSION>/
+refind-azerty-keymap/<VERSION>/
 ```
 
 ## USB layout
