@@ -118,7 +118,7 @@
 
 - name: _verify | Stat the rEFInd AZERTY keymap driver on the ESP
   stat:
-    path: "/boot/efi/EFI/refind/{{ refind_azerty_keymap_driver_dir }}/{{ refind_azerty_keymap_driver_file }}"
+    path: "/boot/efi/EFI/refind/drivers_{{ refind_azerty_keymap_arch }}/{{ refind_azerty_keymap_url | basename }}"
   register: _refind_verify_azerty_keymap_driver
   become: true
 
@@ -129,7 +129,7 @@
       - _refind_verify_azerty_keymap_driver.stat.size > 0
     fail_msg: >-
       rEFInd AZERTY keymap driver missing or empty on the ESP:
-      EFI/refind/{{ refind_azerty_keymap_driver_dir }}/{{ refind_azerty_keymap_driver_file }}
+      EFI/refind/drivers_{{ refind_azerty_keymap_arch }}/{{ refind_azerty_keymap_url | basename }}
 
 - name: _verify | Stat distro default config
   stat:

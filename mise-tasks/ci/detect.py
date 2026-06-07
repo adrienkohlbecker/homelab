@@ -116,7 +116,6 @@ REFIND_KEYTEST_PATH_PATTERNS: list[str] = [
     r"efi/refind-keytest/",
     r"mise-tasks/refind-keytest/",
     r"\.github/workflows/refind-keytest\.yml",
-    r"roles/refind/",
 ]
 
 FULL_UNIVERSE_RE = re.compile(r"^(" + "|".join(FULL_UNIVERSE_PATTERNS) + r")$")

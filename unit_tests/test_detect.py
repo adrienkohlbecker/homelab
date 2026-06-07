@@ -102,12 +102,12 @@ class TestClassifyChangedFiles:
             "efi/refind-keytest/hii_azerty_keytest.c",
             "mise-tasks/refind-keytest/upload.sh",
             ".github/workflows/refind-keytest.yml",
-            "roles/refind/tasks/main.yml",
         ):
             assert detect.classify_changed_files([path]).refind_keytest_changed is True, path
 
     def test_refind_keytest_unchanged(self) -> None:
         assert detect.classify_changed_files(["roles/nginx/tasks/main.yml"]).refind_keytest_changed is False
+        assert detect.classify_changed_files(["roles/refind/tasks/main.yml"]).refind_keytest_changed is False
 
     def test_mixed_paths(self) -> None:
         paths = [
