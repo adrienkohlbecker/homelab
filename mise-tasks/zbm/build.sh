@@ -1,22 +1,19 @@
 #!/usr/bin/env bash
-#MISE description="Build a ZFSBootMenu kernel + initrd tarball via the local builder container"
-# Calls upstream's zbm-builder.sh with zbm/ as the build directory and
-# the cloned source tree mounted read-only at /zbm. Components mode:
-# emits vmlinuz-bootmenu + initramfs-bootmenu.img (no unified .EFI).
-# We tarball both + the unified EFI into a single artifact.
+#MISE description="Build a ZFSBootMenu recovery tarball through upstream make-binary.sh"
 set -euo pipefail
 
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
+upstream_arch="$(uname -m | sed -e s/amd64/x86_64/)"
 zbm_base_version="$ZBM_VERSION"
-# ZBM_BUILD_SUFFIX is appended to the version tag embedded in the initramfs and
-# the tarball filename, but NOT the builder image tag. CI sets it explicitly
-# (-ci.<run_id>.<attempt>); local builds get a timestamp suffix automatically.
 if [ -z "${ZBM_BUILD_SUFFIX:-}" ] && [ -z "${CI:-}" ]; then
   ZBM_BUILD_SUFFIX="-local.$(date "+%Y%m%d%H%M%S")"
 fi
-ZBM_VERSION="${zbm_base_version}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX:-}"
-src_dir="${MISE_CONFIG_ROOT}/zbm-build/src"
-out_dir="${MISE_CONFIG_ROOT}/zbm-build/${arch}"
+zbm_artifact_version="${zbm_base_version}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX:-}"
+repo_root="${MISE_CONFIG_ROOT}"
+src_dir="${repo_root}/zbm-build/src"
+out_dir="${repo_root}/zbm-build/${arch}"
+builder_tag="localhost/zbm-builder:v${zbm_base_version}-${arch}"
+
 mkdir -p "$out_dir"
 rm -f \
   "$out_dir"/*-bootmenu \
@@ -25,110 +22,286 @@ rm -f \
   "$out_dir"/zfsbootmenu-v*-"${arch}".tar.gz.sha256sum \
   "$out_dir"/*.EFI
 
-if [ ! -d "$src_dir" ]; then
+if [ ! -d "$src_dir/.git" ]; then
   echo "ZBM source not found at $src_dir — run 'mise run zbm:builder-image' first" >&2
   exit 1
 fi
 
-# Generate a fresh ed25519 host key for the recovery SSH server. Each build
-# gets its own key — there is no stable host key to pin.
-# The private key stays inside an ephemeral tmpdir for its entire lifetime and
-# is never written into the repo working tree (MISE_CONFIG_ROOT / GITHUB_WORKSPACE).
-# It reaches the builder container via a shadow bind-mount over /build/dropbear
-# (see below), where recovery.conf's dropbear_ed25519_key=/build/dropbear/... picks
-# it up. The pub key goes into the output dir for the tarball and fingerprint log.
-ephemeral_dir="$(mktemp -d)"
-trap 'rm -rf "$ephemeral_dir"' EXIT INT TERM
-ssh-keygen -q -t ed25519 -N '' -C zbm-recovery -f "$ephemeral_dir/key"
-cp "$ephemeral_dir/key.pub" "$out_dir/ssh_host_ed25519_key.pub"
-echo "Recovery SSH host key fingerprint:"
-ssh-keygen -E sha256 -lf "$ephemeral_dir/key.pub"
-
-# Shadow-mount for the host key: zbm-builder.sh mounts zbm/ → /build:ro. We
-# inject a second volume that shadows just /build/dropbear so the private key
-# is visible inside the container (at the path recovery.conf declares) without
-# landing anywhere in the repo working tree. authorized_keys lives in the repo
-# and must be copied in so the shadow mount doesn't hide it.
-ephemeral_dropbear="$ephemeral_dir/dropbear"
-mkdir -p "$ephemeral_dropbear"
-(umask 077 && cp "$ephemeral_dir/key" "$ephemeral_dropbear/ssh_host_ed25519_key")
-cp "${MISE_CONFIG_ROOT}/zbm/dropbear/authorized_keys" "$ephemeral_dropbear/"
-
-# zbm-builder.sh:
-#   -b: build directory (zbm/ — contains config.yaml, dracut.conf.d/, hooks/)
-#   -i: builder container image
-#   -l: ZBM source tree (mounted read-only at /zbm)
-#   -H: skip hostid (release build, not host-specific)
-#   -O: extra podman run args (output volume + entrypoint override)
-#   --: args forwarded to build-init.sh (-o output dir, -t version tag)
-#
-# zbm-builder.sh auto-detects hooks/ and generates user_hooks.conf.
-#
-# --entrypoint /build-init.sh: the upstream Dockerfile declares
-#   ENTRYPOINT [ "/${ZBM_BUILDER}" ]
-# in exec form, and BuildKit does not expand the ARG in exec-form
-# ENTRYPOINT — the built image's entrypoint is the literal string
-# "/${ZBM_BUILDER}", which crun can't find. Override it here.
-#
-# DRACUT_NO_XATTR=1: dracut-install copies install_items/hooks via
-# `cp --preserve=...,xattr,...`, which hard-fails ("setting attributes:
-# Operation not supported") whenever the destination can't take an xattr the
-# source carries. On a Mac podman machine both triggers fire: source files on
-# the virtiofs bind mount carry macOS's unremovable com.apple.provenance (an
-# invalid Linux xattr namespace), and the container overlay is mounted with a
-# fixed SELinux context= that rejects security.selinux. xattrs are meaningless
-# in the initramfs (everything runs as root: no SELinux, no file capabilities),
-# so tell dracut-install to skip them. No-op on Linux/CI where neither trigger
-# exists; set unconditionally to keep local and CI builds identical.
-#
-# Invoke via `bash` (not the script's `#!/bin/bash` shebang) because zbm-builder.sh
-# uses bash-4 lowercase expansion (${var,,}). macOS's /bin/bash is 3.2, where that
-# errors with "bad substitution" — harmless today (the failed `case` falls through
-# to its safe default) but fragile. PATH resolves bash to Homebrew 5.x on the Mac
-# and the system bash 5.x on CI, so the script runs as upstream intended.
-bash "$src_dir/zbm-builder.sh" \
-  -b "${MISE_CONFIG_ROOT}/zbm" \
-  -i "localhost/zbm-builder:v${zbm_base_version}-${arch}" \
-  -l "$src_dir" \
-  -H \
-  -O --entrypoint -O /build-init.sh \
-  -O --env -O DRACUT_NO_XATTR=1 \
-  -O -v -O "$out_dir:/output" \
-  -O -v -O "$ephemeral_dropbear:/build/dropbear:ro" \
-  -- -o /output -t "v${ZBM_VERSION}"
-
-# Both modes emit into $out_dir:
-#   Components: vmlin{u,uz}-bootmenu + initramfs-bootmenu.img
-#   EFI:        the unified image, named after the kernel — vmlinuz.EFI on
-#               x86_64, vmlinux.EFI on aarch64 (Void's arm64 kernel is vmlinux).
-# Rename the unified EFI to zfsbootmenu.EFI before archiving: on the
-# case-insensitive FAT32 ESP, vmlinuz.EFI == VMLINUZ.EFI — the path the
-# zfsbootmenu role deploys the stock single-file recovery UKI to — so unpacking
-# our tarball there would clobber it. A distinct name lets both coexist. Match
-# either spelling so the archive member is arch-independent; assert exactly one.
-mapfile -t efi_images < <(find "$out_dir" -maxdepth 1 -type f -name 'vmlin*.EFI')
-if [ "${#efi_images[@]}" -ne 1 ]; then
-  echo "expected exactly one vmlin*.EFI in $out_dir, found ${#efi_images[@]}: ${efi_images[*]:-none}" >&2
+builder_entrypoint="$(podman image inspect "$builder_tag" --format '{{json .Config.Entrypoint}}' 2>/dev/null || true)"
+if [ "$builder_entrypoint" != '["/build-init.sh"]' ]; then
+  echo "ZBM builder image ${builder_tag} has entrypoint ${builder_entrypoint:-<missing>}, expected [\"/build-init.sh\"]" >&2
+  echo "run 'mise run zbm:builder-image' to rebuild the upstream-compatible local builder image" >&2
   exit 1
 fi
-mv "${efi_images[0]}" "$out_dir/zfsbootmenu.EFI"
+if ! podman run --rm --entrypoint /usr/bin/bash "$builder_tag" -lc 'command -v dropbear >/dev/null && test -f /usr/lib/dracut/modules.d/60crypt-ssh/module-setup.sh'; then
+  echo "ZBM builder image ${builder_tag} is missing dropbear or the crypt-ssh dracut module" >&2
+  echo "run 'mise run zbm:builder-image' to rebuild the recovery-capable local builder image" >&2
+  exit 1
+fi
 
-# --sort=name + --mtime=@0 + --numeric-owner, piped through gzip -n, strip the
-# build-time mtimes and uid/gid names that tar and the gzip header would
-# otherwise embed, so rebuilds of a pinned ZBM_VERSION produce a byte-identical
-# archive (pairs with reproducible=yes, which stabilizes the cpio inside it).
-# --owner=0/--group=0 also bake root:0 into the metadata so extracting in a
-# chroot or onto FAT32 doesn't trip "Cannot change ownership" from the
-# container's build-user uids leaking into the archive.
+workdir="$(mktemp -d "${repo_root}/zbm-build/make-binary.${arch}.XXXXXX")"
+cleanup() {
+  rm -rf "$workdir"
+}
+trap cleanup EXIT INT TERM
 
-# Write the EFI bundle's kernel cmdline alongside the components so that
-# zbm:test can use the same base and append test-only flags (loglevel, zbm.show).
+wrapper_dir="${workdir}/bin"
+mkdir -p "$wrapper_dir"
+if command -v grealpath >/dev/null 2>&1; then
+  ln -s "$(command -v grealpath)" "${wrapper_dir}/realpath"
+else
+  cat > "${wrapper_dir}/realpath" <<'WRAPPER'
+#!/usr/bin/env bash
+set -euo pipefail
+
+paths=()
+for arg in "$@"; do
+  case "$arg" in
+    -e)
+      ;;
+    -q)
+      ;;
+    --)
+      shift
+      paths+=( "$@" )
+      break
+      ;;
+    -*)
+      echo "realpath wrapper: unsupported option ${arg}" >&2
+      exit 1
+      ;;
+    *)
+      paths+=( "$arg" )
+      ;;
+  esac
+done
+
+for path in "${paths[@]}"; do
+  [ -e "$path" ] || exit 1
+  python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$path"
+done
+WRAPPER
+  chmod +x "${wrapper_dir}/realpath"
+fi
+real_podman="$(command -v podman)"
+{
+  printf '#!/usr/bin/env bash\n'
+  printf 'set -euo pipefail\n'
+  printf 'real_podman=%q\n' "$real_podman"
+  cat <<'WRAPPER'
+args=()
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-v" ] && [ "$#" -ge 2 ]; then
+    volume="$2"
+    case "$volume" in
+      .:*) volume="${PWD}${volume#.}" ;;
+    esac
+    args+=( "-v" "$volume" )
+    shift 2
+    continue
+  fi
+  args+=( "$1" )
+  shift
+done
+exec "$real_podman" "${args[@]}"
+WRAPPER
+} > "${wrapper_dir}/podman"
+chmod +x "${wrapper_dir}/podman"
+export PATH="${wrapper_dir}:${PATH}"
+
+work_src="${workdir}/src"
+git clone --no-hardlinks "$src_dir" "$work_src" >/dev/null
+git -c advice.detachedHead=false -C "$work_src" checkout -q "v${zbm_base_version}"
+git -C "$work_src" reset --hard "v${zbm_base_version}" >/dev/null
+git -C "$work_src" clean -fdx >/dev/null
+
+python3 - "${work_src}/dracut/module-setup.sh" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as f:
+    contents = f.read()
+
+needle = "  # Install core ZFSBootMenu functionality\n"
+replacement = """  # The builder rootfs includes runit-void power commands. Dracut's
+  # base/shutdown modules install those before 90zfsbootmenu; remove them from
+  # the initramfs staging tree so ZBM's pool-exporting wrappers win.
+  rm -f \\
+    \"${initdir}/usr/bin/firmware-setup\" \\
+    \"${initdir}/usr/bin/poweroff\" \\
+    \"${initdir}/usr/bin/reboot\" \\
+    \"${initdir}/usr/bin/shutdown\"
+
+  # Install core ZFSBootMenu functionality
+"""
+if needle not in contents:
+    raise SystemExit(f"{path}: expected ZFSBootMenu core install marker not found")
+
+with open(path, "w", encoding="utf-8") as f:
+    f.write(contents.replace(needle, replacement, 1))
+PY
+
+python3 - "${work_src}/releng/make-binary.sh" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as f:
+    contents = f.read()
+
+old_case = """case "${arch}" in
+  x86_64) BUILD_EFI="true" ;;
+  *) BUILD_EFI="false" ;;
+esac
+"""
+new_case = 'BUILD_EFI="true"\n'
+
+old_copy = """      if ! cp "${outdir}/vmlinuz.EFI" "${assets}/${efifile}"; then
+        error "failed to copy UEFI bundle"
+      fi
+
+      # Remove it so it won't be included in component tarballs
+      rm -f "${outdir}/vmlinuz.EFI"
+"""
+new_copy = """      efi_images=()
+      while IFS= read -r efi_image; do
+        efi_images+=( "${efi_image}" )
+      done < <(find "${outdir}" -maxdepth 1 -type f -name 'vmlin*.EFI' | sort)
+      if [ "${#efi_images[@]}" -ne 1 ]; then
+        error "expected exactly one UEFI bundle in ${outdir}, found ${#efi_images[@]}"
+      fi
+      if ! cp "${efi_images[0]}" "${assets}/${efifile}"; then
+        error "failed to copy UEFI bundle"
+      fi
+
+      # Remove it so it won't be included in component tarballs
+      rm -f "${efi_images[0]}"
+"""
+
+for needle, replacement in ((old_case, new_case), (old_copy, new_copy)):
+    if needle not in contents:
+        raise SystemExit(f"{path}: expected make-binary.sh snippet not found")
+    contents = contents.replace(needle, replacement, 1)
+
+with open(path, "w", encoding="utf-8") as f:
+    f.write(contents)
+PY
+
+homelab_root="${work_src}/homelab"
+mkdir -p "${homelab_root}/dropbear"
+cp -a "${repo_root}/zbm/hooks" "${homelab_root}/"
+
+ssh-keygen -q -t ed25519 -N '' -C zbm-recovery -f "${homelab_root}/dropbear/ssh_host_ed25519_key"
+cp "${homelab_root}/dropbear/ssh_host_ed25519_key.pub" "$out_dir/ssh_host_ed25519_key.pub"
+cp "${repo_root}/zbm/dropbear/authorized_keys" "${homelab_root}/dropbear/"
+echo "Recovery SSH host key fingerprint:"
+ssh-keygen -E sha256 -lf "$out_dir/ssh_host_ed25519_key.pub"
+
+python3 - "${repo_root}/zbm/config.yaml" "${work_src}/etc/zfsbootmenu/recovery.yaml" <<'PY'
+import sys
+import yaml
+
+overlay_path, upstream_path = sys.argv[1:]
+with open(overlay_path, encoding="utf-8") as f:
+    overlay = yaml.safe_load(f)
+with open(upstream_path, encoding="utf-8") as f:
+    upstream = yaml.safe_load(f)
+
+upstream["Kernel"]["CommandLine"] = overlay["Kernel"]["CommandLine"]
+
+with open(upstream_path, "w", encoding="utf-8") as f:
+    yaml.safe_dump(upstream, f, sort_keys=False)
+PY
+cp "${repo_root}/zbm/dracut.conf.d/recovery.conf" "${work_src}/etc/zfsbootmenu/recovery.conf.d/zz-homelab-recovery.conf"
+cp "${repo_root}/zbm/dracut.conf.d/user_hooks.conf" "${work_src}/etc/zfsbootmenu/recovery.conf.d/zz-homelab-user-hooks.conf"
+
+(
+  cd "$work_src"
+  ./releng/make-binary.sh "$zbm_base_version" "$builder_tag"
+)
+
+asset_base="zfsbootmenu-recovery-${upstream_arch}-v${zbm_base_version}-linux${ZBM_KERNEL_VERSION}"
+component_dir_name="zfsbootmenu-recovery-${upstream_arch}-v${zbm_base_version}"
+asset_dir="${work_src}/releng/assets/${zbm_base_version}"
+upstream_tar="${asset_dir}/${asset_base}.tar.gz"
+upstream_efi="${asset_dir}/${asset_base}.EFI"
+extract_dir="${workdir}/extract"
+
+if [ ! -s "$upstream_tar" ]; then
+  echo "upstream make-binary.sh did not produce expected tarball: $upstream_tar" >&2
+  exit 1
+fi
+if [ ! -s "$upstream_efi" ]; then
+  echo "upstream make-binary.sh did not produce expected EFI image: $upstream_efi" >&2
+  echo "upstream make-binary.sh only enables EFI output on x86_64; run this task on the lab-class architecture" >&2
+  exit 1
+fi
+
+mkdir -p "$extract_dir"
+tar -xzf "$upstream_tar" -C "$extract_dir"
+component_dir="${extract_dir}/${component_dir_name}"
+if [ ! -d "$component_dir" ]; then
+  echo "upstream tarball missing expected component directory: $component_dir_name" >&2
+  exit 1
+fi
+
+mapfile -t kernel_images < <(find "$component_dir" -maxdepth 1 -type f -name 'vmlin*-bootmenu')
+if [ "${#kernel_images[@]}" -ne 1 ]; then
+  echo "expected exactly one vmlin*-bootmenu in $component_dir, found ${#kernel_images[@]}" >&2
+  exit 1
+fi
+
+cp "${kernel_images[0]}" "$out_dir/"
+cp "${component_dir}/initramfs-bootmenu.img" "$out_dir/initramfs-bootmenu.img"
+cp "$upstream_efi" "$out_dir/zfsbootmenu.EFI"
+
 python3 -c "
 import yaml
-doc = yaml.safe_load(open('${MISE_CONFIG_ROOT}/zbm/config.yaml'))
+doc = yaml.safe_load(open('${work_src}/etc/zfsbootmenu/recovery.yaml'))
 print(doc['Kernel']['CommandLine'])
 " >"$out_dir/cmdline"
 
-tarball="zfsbootmenu-v${ZBM_VERSION}-${arch}.tar.gz"
+initramfs_listing="$(
+  podman run --rm \
+    --entrypoint /usr/bin/lsinitrd \
+    -v "$out_dir:/output:ro" \
+    "$builder_tag" \
+    /output/initramfs-bootmenu.img
+)"
+
+for required in dropbear authorized_keys; do
+  if ! grep -qF "$required" <<<"$initramfs_listing"; then
+    echo "Included dracut modules:" >&2
+    awk '/^dracut modules:$/ { show=1; next } show && NF == 1 { print "  " $1; next } show && NF != 1 { exit }' <<<"$initramfs_listing" >&2
+    echo "ZBM initramfs is missing required recovery SSH item: ${required}" >&2
+    exit 1
+  fi
+done
+
+for required in \
+  "usr/bin/reboot" \
+  "usr/bin/poweroff -> reboot" \
+  "usr/bin/shutdown -> reboot" \
+  "usr/bin/firmware-setup -> reboot"; do
+  if ! grep -qF "$required" <<<"$initramfs_listing"; then
+    echo "Power command paths in ZBM initramfs:" >&2
+    awk 'NF >= 9 && $9 ~ /(^|\/)(reboot|poweroff|shutdown|firmware-setup)$/ { print "  " $9, $10, $11 }' <<<"$initramfs_listing" >&2
+    echo "ZBM initramfs is missing required ZFSBootMenu recovery command: /${required%% *}" >&2
+    exit 1
+  fi
+done
+
+for required in zfs spl; do
+  if ! grep -Eq "/${required}[.]ko([.]|$)" <<<"$initramfs_listing"; then
+    echo "ZBM initramfs is missing required ZFS kernel module: ${required}.ko" >&2
+    exit 1
+  fi
+done
+
+if [ "$arch" = "aarch64" ] && ! grep -Eq "/efivarfs[.]ko([.]|$)" <<<"$initramfs_listing"; then
+  echo "ZBM initramfs is missing required EFI variable filesystem module: efivarfs.ko" >&2
+  exit 1
+fi
+
+tarball="zfsbootmenu-v${zbm_artifact_version}-${arch}.tar.gz"
 (cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=ustar -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub cmdline | gzip -n >"$tarball")
 (cd "$out_dir" && sha256sum "$tarball" | tee "${tarball}.sha256sum")

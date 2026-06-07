@@ -55,6 +55,8 @@ else
   mv "$tmp_dir" "$src_dir"
   trap - EXIT INT TERM
 fi
+git -C "$src_dir" reset --hard "v${ZBM_VERSION}" >/dev/null
+git -C "$src_dir" clean -fdx >/dev/null
 
 # PACKAGES are extra Void packages layered onto upstream's base image to satisfy
 # recovery.conf's install_items: mdadm + nvme-cli (disk tooling), dracut-crypt-ssh
@@ -116,6 +118,16 @@ ctr="zbm_perlfix_$$"
 podman rm -f "$ctr" >/dev/null 2>&1 || true
 trap 'podman rm -f "$ctr" >/dev/null 2>&1 || true' EXIT
 podman run --name "$ctr" --entrypoint /usr/bin/xbps-install "$img" -fy perl
-podman commit -q "$ctr" "$img" >/dev/null
+podman commit -q \
+  --change 'ENTRYPOINT ["/build-init.sh"]' \
+  --change 'ENV DRACUT_NO_XATTR=1' \
+  "$ctr" "$img" >/dev/null
 podman rm -f "$ctr" >/dev/null
 trap - EXIT
+
+podman run --rm --entrypoint /usr/bin/bash "$img" -lc '
+  set -euo pipefail
+  command -v dropbear >/dev/null
+  test -f /usr/lib/dracut/modules.d/60crypt-ssh/module-setup.sh
+  test -f /usr/share/perl5/core_perl/Pod/Usage.pm
+'

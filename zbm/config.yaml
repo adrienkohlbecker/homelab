@@ -8,6 +8,6 @@ Components:
 EFI:
   Versions: false
   Enabled: true
-  SplashImage: /zbm/media/splash.bmp
 Kernel:
-  CommandLine: ro loglevel=0 nomodeset ip=dhcp rd.neednet=1 rd.net.timeout.carrier=30
+  CommandLine: >-
+    ro loglevel=0 nomodeset ip=dhcp rd.neednet=1 rd.net.timeout.carrier=30
