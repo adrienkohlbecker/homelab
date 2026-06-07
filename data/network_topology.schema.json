@@ -84,8 +84,8 @@
 
     "tailscale_ip": {
       "type": "string",
-      "pattern": "^100\\.64\\.[0-9]{1,3}\\.[0-9]{1,3}$",
-      "description": "Tailscale CGNAT address (100.64.0.0/10). Assigned by the Headscale control plane; not derived from slot or site."
+      "pattern": "^100\\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\\.[0-9]{1,3}\\.[0-9]{1,3}$",
+      "description": "Tailscale CGNAT address in 100.64.0.0/10 (second octet 64-127, matching the Headscale config's v4 prefix). Assigned by the Headscale control plane; not derived from slot or site."
     },
 
     "host": {
