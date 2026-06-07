@@ -147,7 +147,7 @@ mkdir -p "$wrapper_dir"
 if command -v grealpath >/dev/null 2>&1; then
   ln -s "$(command -v grealpath)" "${wrapper_dir}/realpath"
 else
-  cat > "${wrapper_dir}/realpath" <<'WRAPPER'
+  cat >"${wrapper_dir}/realpath" <<'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -202,7 +202,7 @@ while [ "$#" -gt 0 ]; do
 done
 exec "$real_podman" "${args[@]}"
 WRAPPER
-} > "${wrapper_dir}/podman"
+} >"${wrapper_dir}/podman"
 chmod +x "${wrapper_dir}/podman"
 export PATH="${wrapper_dir}:${PATH}"
 official_dir="${workdir}/official"
@@ -241,8 +241,8 @@ curl -fsSL "${asset_url_base}/sha256.txt" -o "${official_dir}/sha256.txt"
       next
     }
     $NF == tar || $NF == "./" tar || $NF == efi || $NF == "./" efi { print }
-  ' sha256.txt > sha256.selected
-  selected_count="$(wc -l < sha256.selected | tr -d '[:space:]')"
+  ' sha256.txt >sha256.selected
+  selected_count="$(wc -l <sha256.selected | tr -d '[:space:]')"
   if [ "$selected_count" -ne 2 ]; then
     echo "expected 2 checksum entries for ${official_asset_base}, found ${selected_count}" >&2
     sed -n '1,40p' sha256.txt >&2
@@ -293,7 +293,7 @@ lsinitrd_to() {
     --entrypoint /usr/bin/lsinitrd \
     -v "${mount_root}:/work:ro" \
     "$builder_tag" \
-    "$mount_image" > "$output"
+    "$mount_image" >"$output"
 }
 
 lsinitrd_to "$local_initramfs" "${report_dir}/local.lsinitrd"
@@ -311,22 +311,22 @@ extract_paths() {
 }
 
 extract_modules() {
-  extract_paths "$1" \
-    | awk '/[.]ko([.]|$)/ { print }' \
-    | sed -E 's#usr/lib/modules/[^/]+/#usr/lib/modules/<kver>/#' \
-    | sort -u
+  extract_paths "$1" |
+    awk '/[.]ko([.]|$)/ { print }' |
+    sed -E 's#usr/lib/modules/[^/]+/#usr/lib/modules/<kver>/#' |
+    sort -u
 }
 
 extract_binaries() {
-  extract_paths "$1" \
-    | awk '/^((usr\/)?s?bin|libexec)\// { print }' \
-    | sort -u
+  extract_paths "$1" |
+    awk '/^((usr\/)?s?bin|libexec)\// { print }' |
+    sort -u
 }
 
-extract_modules "${report_dir}/local.lsinitrd" > "${report_dir}/local.modules"
-extract_modules "${report_dir}/official.lsinitrd" > "${report_dir}/official.modules"
-extract_binaries "${report_dir}/local.lsinitrd" > "${report_dir}/local.binaries"
-extract_binaries "${report_dir}/official.lsinitrd" > "${report_dir}/official.binaries"
+extract_modules "${report_dir}/local.lsinitrd" >"${report_dir}/local.modules"
+extract_modules "${report_dir}/official.lsinitrd" >"${report_dir}/official.modules"
+extract_binaries "${report_dir}/local.lsinitrd" >"${report_dir}/local.binaries"
+extract_binaries "${report_dir}/official.lsinitrd" >"${report_dir}/official.binaries"
 
 local_upstream_missing_module_count=0
 if [ "$cross_arch_compare" -eq 1 ]; then
@@ -355,11 +355,11 @@ if [ "$cross_arch_compare" -eq 1 ]; then
   tar -xzf "$local_upstream_tar" -C "$local_upstream_extract"
   local_upstream_initramfs="$(find_one "$local_upstream_extract" 'initramfs*.img')"
   lsinitrd_to "$local_upstream_initramfs" "${report_dir}/local-upstream.lsinitrd"
-  extract_modules "${report_dir}/local-upstream.lsinitrd" > "${report_dir}/local-upstream.modules"
-  extract_binaries "${report_dir}/local-upstream.lsinitrd" > "${report_dir}/local-upstream.binaries"
-  comm -23 "${report_dir}/local-upstream.modules" "${report_dir}/local.modules" > "${report_dir}/missing.local-upstream.modules"
-  comm -23 "${report_dir}/local-upstream.binaries" "${report_dir}/local.binaries" > "${report_dir}/missing.local-upstream.binaries"
-  local_upstream_missing_module_count="$(wc -l < "${report_dir}/missing.local-upstream.modules" | tr -d '[:space:]')"
+  extract_modules "${report_dir}/local-upstream.lsinitrd" >"${report_dir}/local-upstream.modules"
+  extract_binaries "${report_dir}/local-upstream.lsinitrd" >"${report_dir}/local-upstream.binaries"
+  comm -23 "${report_dir}/local-upstream.modules" "${report_dir}/local.modules" >"${report_dir}/missing.local-upstream.modules"
+  comm -23 "${report_dir}/local-upstream.binaries" "${report_dir}/local.binaries" >"${report_dir}/missing.local-upstream.binaries"
+  local_upstream_missing_module_count="$(wc -l <"${report_dir}/missing.local-upstream.modules" | tr -d '[:space:]')"
 fi
 
 assert_core() {
@@ -390,12 +390,12 @@ assert_core "${report_dir}/official.lsinitrd" "official"
 
 module_diff=0
 binary_diff=0
-diff -u "${report_dir}/official.modules" "${report_dir}/local.modules" > "${report_dir}/modules.diff" || module_diff=$?
-diff -u "${report_dir}/official.binaries" "${report_dir}/local.binaries" > "${report_dir}/binaries.diff" || binary_diff=$?
-comm -23 "${report_dir}/official.modules" "${report_dir}/local.modules" > "${report_dir}/missing.modules"
-comm -23 "${report_dir}/official.binaries" "${report_dir}/local.binaries" > "${report_dir}/missing.binaries"
-comm -13 "${report_dir}/official.modules" "${report_dir}/local.modules" > "${report_dir}/added.modules"
-comm -13 "${report_dir}/official.binaries" "${report_dir}/local.binaries" > "${report_dir}/added.binaries"
+diff -u "${report_dir}/official.modules" "${report_dir}/local.modules" >"${report_dir}/modules.diff" || module_diff=$?
+diff -u "${report_dir}/official.binaries" "${report_dir}/local.binaries" >"${report_dir}/binaries.diff" || binary_diff=$?
+comm -23 "${report_dir}/official.modules" "${report_dir}/local.modules" >"${report_dir}/missing.modules"
+comm -23 "${report_dir}/official.binaries" "${report_dir}/local.binaries" >"${report_dir}/missing.binaries"
+comm -13 "${report_dir}/official.modules" "${report_dir}/local.modules" >"${report_dir}/added.modules"
+comm -13 "${report_dir}/official.binaries" "${report_dir}/local.binaries" >"${report_dir}/added.binaries"
 
 print_diff_excerpt() {
   local label="$1"
@@ -406,10 +406,10 @@ print_diff_excerpt() {
   sed -n '1,220p' "$path"
 }
 
-missing_module_count="$(wc -l < "${report_dir}/missing.modules" | tr -d '[:space:]')"
-missing_binary_count="$(wc -l < "${report_dir}/missing.binaries" | tr -d '[:space:]')"
-added_module_count="$(wc -l < "${report_dir}/added.modules" | tr -d '[:space:]')"
-added_binary_count="$(wc -l < "${report_dir}/added.binaries" | tr -d '[:space:]')"
+missing_module_count="$(wc -l <"${report_dir}/missing.modules" | tr -d '[:space:]')"
+missing_binary_count="$(wc -l <"${report_dir}/missing.binaries" | tr -d '[:space:]')"
+added_module_count="$(wc -l <"${report_dir}/added.modules" | tr -d '[:space:]')"
+added_binary_count="$(wc -l <"${report_dir}/added.binaries" | tr -d '[:space:]')"
 cross_arch_compare=0
 if [ "$local_arch" != "$official_arch" ]; then
   cross_arch_compare=1
