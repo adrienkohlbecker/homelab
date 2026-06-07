@@ -1,3 +1,17 @@
+# Scheduled library scan, enforced via the API (Jellyfin schedules in the
+# container TZ=Europe/Paris, so this is local time). The image default is a 12h
+# IntervalTrigger that can fire mid-backup; pin it to a nightly DailyTrigger
+# that completes before the 02:00 UTC zfs_autosnapshot in both DST seasons.
+# TimeOfDayTicks = hour*3600*10^7 (.NET 100 ns ticks); 23:00 local = 8.28e11.
+jellyfin_library_scan_time_ticks: 828000000000
+
+# Throwaway admin the harness creates on the box fixture (qemu_test only) via
+# the startup-wizard API, so the API-driven scheduled-task pin and its _verify
+# run against a real token. Not a secret -- the box is isolated and torn down;
+# prod never creates this user and authenticates with the vaulted token instead.
+jellyfin_test_admin_user: harness
+jellyfin_test_admin_password: harness-fixture-only
+
 # SSO/OIDC plugin (9p4/jellyfin-plugin-sso). Provides the in-app OIDC
 # login flow against Authelia (see notes/jellyfin_sso_rollout.md). The
 # plugin is managed .NET (arch-independent) so there is a single
