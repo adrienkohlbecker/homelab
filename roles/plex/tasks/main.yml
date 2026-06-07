@@ -69,11 +69,14 @@
 # Plex reads its transcode scratch path from Preferences.xml
 # (TranscoderTempDirectory); left unset it transcodes under /config on the
 # snapshotted services dataset rather than the dedicated /transcode tmpfs the
-# unit mounts. pms-docker exposes no env for it and Plex rewrites
-# Preferences.xml at runtime, so seed the file before first boot only: Plex
-# reads it, fills in the rest, and preserves the attribute on every later
-# rewrite. Gated on the file's absence (plus force: false) so an already-
-# initialised server is never touched and Plex's own writes are never raced.
+# unit mounts. The same seed also pins the Butler maintenance window
+# (ButlerStartHour/EndHour) so deep tasks finish before the 02:00 UTC backup
+# rather than at Plex's 02:00-05:00 default (see defaults/main.yml). pms-docker
+# exposes no env for either, and Plex rewrites Preferences.xml at runtime, so
+# seed the file before first boot only: Plex reads it, fills in the rest, and
+# preserves the attributes on every later rewrite. Gated on the file's absence
+# (plus force: false) so an already-initialised server is never touched and
+# Plex's own writes are never raced.
 - name: Check whether Plex has initialised its Preferences yet
   stat:
     path: /mnt/services/plex/Library/Application Support/Plex Media Server/Preferences.xml
@@ -104,7 +107,7 @@
   copy:
     content: |
       <?xml version="1.0" encoding="utf-8"?>
-      <Preferences TranscoderTempDirectory="/transcode" />
+      <Preferences TranscoderTempDirectory="/transcode" ButlerStartHour="{{ plex_butler_start_hour }}" ButlerEndHour="{{ plex_butler_end_hour }}" />
     dest: /mnt/services/plex/Library/Application Support/Plex Media Server/Preferences.xml
     owner: plex
     group: media

@@ -86,6 +86,22 @@
   changed_when: false
   become: true
 
+# The seeded Butler window must survive Plex's first-boot rewrite the same way
+# TranscoderTempDirectory does -- proves the maintenance tasks run 22:00-00:00
+# local (before the 02:00 UTC backup), not at Plex's 02:00-05:00 default.
+- name: _verify | Plex Butler window seeded into Preferences.xml
+  command:
+    argv:
+      - podman
+      - exec
+      - plex
+      - grep
+      - -q
+      - ButlerStartHour="{{ plex_butler_start_hour }}"
+      - /config/Library/Application Support/Plex Media Server/Preferences.xml
+  changed_when: false
+  become: true
+
 # Content mounts: the library plus any host-specific read-only source trees
 # (plex_extra_library_binds) must surface inside the container, and the
 # read-only binds must actually reject writes — a dropped :ro would let Plex
