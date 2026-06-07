@@ -305,27 +305,36 @@
    }
   }
  },
+{#
+  Schedule policy: fixed-time batch jobs (full scans, refreshes, cache cleanup)
+  are pinned to <= 00:30 local so they finish well before the 02:00 UTC
+  zfs_autosnapshot backup -- even at the winter (CET, +1h) offset, where 00:30
+  local = 23:30 UTC. This keeps the nightly backup from interrupting them and
+  lets the snapshot capture their completed output. Times are local
+  (--env TZ=Europe/Paris). Continuous poll loops (*/N) are exempt -- they retry
+  and the quiesce stops/resumes them cleanly. See notes/scheduled_jobs_audit.md.
+#}
  "jobs": {
   "plex-recently-added-scan": {
    "schedule": "0 */5 * * * *"
   },
   "plex-full-scan": {
-   "schedule": "0 0 3 * * *"
+   "schedule": "0 0 0 * * *"
   },
   "plex-watchlist-sync": {
    "schedule": "0 */3 * * * *"
   },
   "plex-refresh-token": {
-   "schedule": "0 0 5 * * *"
+   "schedule": "0 30 23 * * *"
   },
   "radarr-scan": {
-   "schedule": "0 0 4 * * *"
+   "schedule": "0 10 0 * * *"
   },
   "sonarr-scan": {
-   "schedule": "0 30 4 * * *"
+   "schedule": "0 20 0 * * *"
   },
   "availability-sync": {
-   "schedule": "0 0 5 * * *"
+   "schedule": "0 30 0 * * *"
   },
   "download-sync": {
    "schedule": "0 * * * * *"
@@ -337,10 +346,10 @@
    "schedule": "0 */5 * * * *"
   },
   "jellyfin-full-scan": {
-   "schedule": "0 0 3 * * *"
+   "schedule": "0 5 0 * * *"
   },
   "image-cache-cleanup": {
-   "schedule": "0 0 5 * * *"
+   "schedule": "0 45 23 * * *"
   },
   "process-blocklisted-tags": {
    "schedule": "0 30 1 */7 * *"

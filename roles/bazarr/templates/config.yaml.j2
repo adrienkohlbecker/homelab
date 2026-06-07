@@ -30,7 +30,9 @@ backup:
   day: 6
   folder: /config/backup
   frequency: Weekly
-  hour: 3
+  # 00:00 local so the weekly backup finishes before the 02:00 UTC
+  # zfs_autosnapshot, winter offset included. See notes/scheduled_jobs_audit.md.
+  hour: 0
   retention: 31
 betaseries:
   token: ''
@@ -210,7 +212,8 @@ radarr:
   excluded_tags: []
   full_update: Daily
   full_update_day: 6
-  full_update_hour: 2
+  # 00:00 local: completes before the 02:00 UTC backup (winter offset included).
+  full_update_hour: 0
   http_timeout: 60
   ip: radarr.dns.podman
   movies_sync: 60
@@ -241,7 +244,8 @@ sonarr:
   excluded_tags: []
   full_update: Daily
   full_update_day: 6
-  full_update_hour: 2
+  # 00:00 local: completes before the 02:00 UTC backup (winter offset included).
+  full_update_hour: 0
   http_timeout: 60
   ip: sonarr.dns.podman
   only_monitored: false
