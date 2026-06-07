@@ -11,9 +11,10 @@ StartLimitBurst=3
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
 {% endif %}
-After=zfs_autosnapshot.target
-PartOf=zfs_autosnapshot.target
 {% endif %}
+# Deliberately NOT PartOf=zfs_autosnapshot.target. The nightly snapshot
+# quiesces stateful services, but homepage has no writable state -- its only
+# mount is /mnt/services/homepage:/app/config:ro. Quiescing buys nothing.
 
 [Service]
 Environment=PODMAN_SYSTEMD_UNIT=%n
@@ -69,6 +70,3 @@ ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
 [Install]
 WantedBy=multi-user.target
-{% if zfs_root %}
-WantedBy=zfs_autosnapshot.target
-{% endif %}
