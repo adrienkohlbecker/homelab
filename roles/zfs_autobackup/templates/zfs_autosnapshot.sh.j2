@@ -32,16 +32,35 @@ done
 # create local snapshots
 f_rescue f_trace zfs_backup_local
 
+# Gate offsite replication on the local snapshot succeeding. The offsite leg
+# rsyncs from this host's just-taken @bak- snapshots and picks the newest @bak-
+# per dataset independently (zfs_backup_offsite.sh). zfs_backup_local wraps each
+# dataset in f_rescue internally, so a partial failure leaves some datasets at
+# tonight's @bak- and others still at last night's -- replicating that now would
+# push a cross-dataset generation skew offsite, overwriting the previous,
+# consistent copy with a mixed one. So if the local step failed at all, skip
+# offsite and let the next run retry from a clean snapshot. (f_failed is already
+# bumped, so the run still exits 1 below for monitoring.)
+zfs_backup_local_ok=$((f_failed == 0))
+
 # pull each configured source host's snapshots onto this host
 # (an empty dest_dataset is the skip sentinel -- e.g. box's self-reference
 # in the qemu fixture, which has no peer to pull from)
+#
+# Unaffected by the gate above: each onsite leg pulls a *peer* host's own
+# snapshots (--no-snapshot --ssh-source), not the ones taken locally this run,
+# so a local-snapshot failure here doesn't make these copies inconsistent.
 {% for src in zfs_autobackup_sources if src.dest_dataset %}
 f_rescue f_trace zfs_backup_onsite "{{ external_ips[src.host] }}" "{{ src.dest_dataset }}"
 {% endfor %}
 # sync each dataset to offsite synology
-for dataset in $(zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'); do
-  f_rescue f_trace zfs_backup_offsite "{{ external_ips.bunk }}" "$dataset"
-done
+if ((zfs_backup_local_ok)); then
+  for dataset in $(zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'); do
+    f_rescue f_trace zfs_backup_offsite "{{ external_ips.bunk }}" "$dataset"
+  done
+else
+  echo >&2 "Error: local snapshot step failed; skipping offsite replication to avoid pushing a cross-dataset generation skew over last night's consistent copy"
+fi
 
 # fail if any of the above failed
 if [ $f_failed -ne 0 ]; then
