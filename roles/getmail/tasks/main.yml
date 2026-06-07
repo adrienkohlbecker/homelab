@@ -78,7 +78,10 @@
     systemd_timer_args:
       name: getmail
       description: Fetch mail via getmail
-      on_calendar: "*-*-* 00:24:00"
+      # 00:40 sits in a clear gap: past the 00:00 cluster (podman-auto-update,
+      # logrotate) and 00:05 virsh_backup, with room for the ~2min fetch before
+      # zfs_health's 00:55 base.
+      on_calendar: "*-*-* 00:40:00"
       persistent: false
       # --getmaildir co-locates oldmail-* state next to the maildir so a
       # $HOME reset doesn't trigger a re-fetch of years of archive.
