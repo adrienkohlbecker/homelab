@@ -182,7 +182,9 @@
     systemd_timer_args:
       name: transmission_blocklist_update
       description: Refresh the transmission peer blocklist
-      on_calendar: Sun *-*-* 04:30:00
+      # 00:08 Sunday, in the compact early small-job cluster -- before
+      # zfs_autosnapshot at 02:00.
+      on_calendar: Sun *-*-* 00:08:00
       persistent: false
       exec_start: /opt/transmission/blocklist_update.sh
   tags:

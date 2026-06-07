@@ -151,7 +151,9 @@
     systemd_timer_args:
       name: prune_ansible_backups
       description: Prune ansible config backups older than a week
-      on_calendar: "*-*-* 03:30:00"
+      # 00:07, in the compact early small-job cluster (~25s run) -- finished well
+      # before zfs_autosnapshot at 02:00.
+      on_calendar: "*-*-* 00:07:00"
       persistent: false
       exec_start: /usr/local/sbin/prune_ansible_backups
   tags:
