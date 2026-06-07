@@ -3,7 +3,8 @@
 # task-level vars) because import_role expands inner task names at parse time
 # before item is bound, and a task-level vars: dict referencing {{ item }} on
 # include_role triggers a parse-time templating warning. Set the consumed role's
-# input fact (zfs_dataset_args) directly. Mirrors roles/data/tasks/_dataset.yml.
+# input fact (zfs_dataset_args) directly. (roles/data/tasks/_dataset.yml binds
+# the same fact via import_role inline vars instead -- see its note for why.)
 - name: _dataset | Build zfs_dataset_args
   set_fact:
     zfs_dataset_args:  # noqa: var-naming[no-role-prefix]
