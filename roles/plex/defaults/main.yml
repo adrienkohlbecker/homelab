@@ -6,3 +6,14 @@
 # zfs_has_data_mount (they sit under /mnt/data), so a host without that mount
 # never gets podman-auto-created root-owned phantom dirs.
 plex_extra_library_binds: []
+
+# Plex Butler (scheduled maintenance) window, local hours -- Plex schedules in
+# the container's TZ (Europe/Paris). Pinned to 22:00-00:00 so the deep tasks
+# (analyze/trickplay/optimize, which read full media bodies off tank) finish
+# before the 02:00 UTC zfs_autosnapshot backup in both DST seasons, instead of
+# Plex's 02:00-05:00 default that straddles it. Seeded into Preferences.xml
+# before first boot; Plex preserves the attributes on every later rewrite. An
+# already-initialised server (prod, or a snapshot restore) keeps whatever it
+# has -- the seed only covers a from-scratch rebuild. End hour 0 = midnight.
+plex_butler_start_hour: 22
+plex_butler_end_hour: 0
