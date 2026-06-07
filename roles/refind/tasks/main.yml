@@ -41,7 +41,7 @@
     mode: "0755"
   loop:
     - /boot/efi/EFI/refind
-    - /boot/efi/EFI/refind/{{ refind_azerty_keymap_driver_dir }}
+    - /boot/efi/EFI/refind/drivers_{{ refind_azerty_keymap_arch }}
     - /boot/efi/EFI/BOOT
   become: true
   register: refind_esp_dirs
@@ -88,7 +88,7 @@
 
 - name: Create rEFInd AZERTY keymap artifact cache directory
   file:
-    dest: "{{ refind_azerty_keymap_cache_dir }}"
+    dest: "/var/cache/refind-azerty-keymap/{{ refind_azerty_keymap_version }}/{{ ansible_architecture }}"
     state: directory
     owner: root
     group: root
@@ -101,9 +101,9 @@
 - name: Download rEFInd AZERTY keymap driver
   when: not (ansible_check_mode and refind_azerty_keymap_cache.changed)
   get_url:
-    url: "{{ refind_azerty_keymap_artifact.url }}"
-    checksum: "sha256:{{ refind_azerty_keymap_artifact.sha256_url }}"
-    dest: "{{ refind_azerty_keymap_cache_path }}"
+    url: "{{ refind_azerty_keymap_url }}"
+    checksum: "sha256:{{ refind_azerty_keymap_url }}.sha256sum"
+    dest: "/var/cache/refind-azerty-keymap/{{ refind_azerty_keymap_version }}/{{ ansible_architecture }}/{{ refind_azerty_keymap_url | basename }}"
     owner: root
     group: root
     mode: "0644"
@@ -130,8 +130,8 @@
       )
     )
   copy:
-    src: "{{ refind_azerty_keymap_cache_path }}"
-    dest: "/boot/efi/EFI/refind/{{ refind_azerty_keymap_driver_dir }}/{{ refind_azerty_keymap_driver_file }}"
+    src: "/var/cache/refind-azerty-keymap/{{ refind_azerty_keymap_version }}/{{ ansible_architecture }}/{{ refind_azerty_keymap_url | basename }}"
+    dest: "/boot/efi/EFI/refind/drivers_{{ refind_azerty_keymap_arch }}/{{ refind_azerty_keymap_url | basename }}"
     remote_src: true
     owner: root
     group: root
