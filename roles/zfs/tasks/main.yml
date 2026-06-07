@@ -196,12 +196,11 @@
     systemd_timer_args:
       name: zfs_health
       description: Daily ZFS health check
-      on_calendar: "*-*-* 00:55:00"
+      # 00:06, early in the compact small-job cluster. zpool status is a
+      # local-only read with no fleet-shared resource, so no randomized spread is
+      # needed -- pinning it keeps the schedule deterministic.
+      on_calendar: "*-*-* 00:06:00"
       exec_start: /usr/local/bin/zfs_health
-      # Spread the fleet's nightly zpool-status runs over an hour instead of all
-      # firing at 00:55; fixed_random_delay pins each host to a stable offset.
-      randomized_delay_sec: 3600
-      fixed_random_delay: true
   tags:
     - zfs
 
