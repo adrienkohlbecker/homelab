@@ -97,18 +97,6 @@ class TestClassifyChangedFiles:
         # mise.toml carries ZBM_VERSION — a version bump must trigger the zbm build.
         assert detect.classify_changed_files(["mise.toml"]).zbm_changed is True
 
-    def test_refind_azerty_keymap_changed(self) -> None:
-        for path in (
-            "efi/refind-azerty-keymap/hii_azerty_keymap.c",
-            "mise-tasks/refind-azerty-keymap/upload.sh",
-            ".github/workflows/refind-azerty-keymap.yml",
-        ):
-            assert detect.classify_changed_files([path]).refind_azerty_keymap_changed is True, path
-
-    def test_refind_azerty_keymap_unchanged(self) -> None:
-        assert detect.classify_changed_files(["roles/nginx/tasks/main.yml"]).refind_azerty_keymap_changed is False
-        assert detect.classify_changed_files(["roles/refind/tasks/main.yml"]).refind_azerty_keymap_changed is False
-
     def test_mixed_paths(self) -> None:
         paths = [
             "roles/nginx/tasks/main.yml",
@@ -124,7 +112,7 @@ class TestClassifyChangedFiles:
 
     def test_empty_paths(self) -> None:
         result = detect.classify_changed_files([])
-        assert result == detect.ChangeClassification([], [], set(), False, set(), False, False)
+        assert result == detect.ChangeClassification([], [], set(), False, set(), False)
 
     def test_blank_lines_ignored(self) -> None:
         result = detect.classify_changed_files(["", "roles/nginx/tasks/main.yml", ""])

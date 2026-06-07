@@ -112,17 +112,10 @@ ZBM_PATH_PATTERNS: list[str] = [
     r"mise\.toml",
 ]
 
-REFIND_AZERTY_KEYMAP_PATH_PATTERNS: list[str] = [
-    r"efi/refind-azerty-keymap/",
-    r"mise-tasks/refind-azerty-keymap/",
-    r"\.github/workflows/refind-azerty-keymap\.yml",
-]
-
 FULL_UNIVERSE_RE = re.compile(r"^(" + "|".join(FULL_UNIVERSE_PATTERNS) + r")$")
 PACKER_PATHS_RE = re.compile(r"^(" + "|".join(PACKER_PATH_PATTERNS) + r")")
 CI_IMAGE_INPUTS_RE = re.compile(r"^(" + "|".join(CI_IMAGE_INPUT_PATTERNS) + r")$")
 ZBM_PATHS_RE = re.compile(r"^(" + "|".join(ZBM_PATH_PATTERNS) + r")")
-REFIND_AZERTY_KEYMAP_PATHS_RE = re.compile(r"^(" + "|".join(REFIND_AZERTY_KEYMAP_PATH_PATTERNS) + r")")
 ROLE_PATH_RE = re.compile(r"^roles/([^/]+)/")
 
 
@@ -138,7 +131,6 @@ class ChangeClassification(NamedTuple):
     ci_image_changed: bool
     machine_universe: set[str]
     zbm_changed: bool
-    refind_azerty_keymap_changed: bool
 
 
 def _packer_sources_for(path: str) -> set[str]:
@@ -171,7 +163,6 @@ def classify_changed_files(
     ci_image_changed = False
     machine_universe: set[str] = set()
     zbm_changed = False
-    refind_azerty_keymap_changed = False
 
     for path in paths:
         if not path:
@@ -186,8 +177,6 @@ def classify_changed_files(
             machine_universe.add(mu)
         if ZBM_PATHS_RE.match(path):
             zbm_changed = True
-        if REFIND_AZERTY_KEYMAP_PATHS_RE.match(path):
-            refind_azerty_keymap_changed = True
         m = ROLE_PATH_RE.match(path)
         if m:
             roles.add(m.group(1))
@@ -199,7 +188,6 @@ def classify_changed_files(
         ci_image_changed=ci_image_changed,
         machine_universe=machine_universe,
         zbm_changed=zbm_changed,
-        refind_azerty_keymap_changed=refind_azerty_keymap_changed,
     )
 
 
