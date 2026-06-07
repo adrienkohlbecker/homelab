@@ -129,6 +129,17 @@
   tags:
     - jellyfin
 
+# Plugin policy: only SSO-Auth is source-controlled here, because it is
+# auth-critical -- a from-scratch rebuild must come up with working OIDC login.
+# The other two plugins in use are operator-installed via the Jellyfin UI and
+# left to Jellyfin's own auto-update: Intro Skipper (intro/credit + media-segment
+# detection) and Open Subtitles. They are convenience features, not load-bearing,
+# so pinning their binaries (download + sha256 + per-Jellyfin-bump ABI ceiling)
+# isn't worth the maintenance. The role still owns their managed state -- Intro
+# Skipper's introskipper.db rides the 4K sqlite dataset (below) and its
+# TaskExtractMediaSegments schedule is pinned via the API (above). After a bare
+# rebuild, install both from the UI; their state and schedules then reconcile.
+#
 # Gate the download on the same version-stamped sentinel the Extract task
 # below keys off. The zip stages under /tmp, which is wiped on reboot and
 # aged out by systemd-tmpfiles -- so a bare get_url re-fetches every
@@ -470,12 +481,14 @@
   tags:
     - jellyfin
 
-# Pin the library-scan schedule via the API. Jellyfin's default is a 12h
-# IntervalTrigger that can fire during the 02:00 UTC backup; replace it with a
-# nightly DailyTrigger that finishes before it. The task is resolved by Key
-# (stable across instances) rather than a hard-coded GUID. Runs wherever a token
-# is available -- vaulted on prod, minted above on the fixture.
-# See notes/scheduled_jobs_audit.md.
+# Pin the heavy media-reading schedules via the API. Jellyfin ships these as
+# IntervalTriggers / late-night DailyTriggers that can fire during the 02:00 UTC
+# backup (trickplay generation at 03:00 local = 02:00 UTC in winter is the worst
+# case); replace each with a single nightly DailyTrigger in the late-evening
+# window. Tasks are resolved by stable Key (not a per-instance GUID). Runs
+# wherever a token is available -- vaulted on prod, minted above on the fixture.
+# See notes/scheduled_jobs_audit.md and jellyfin_scheduled_task_times in
+# vars/main.yml for the per-task times.
 - name: Fetch Jellyfin scheduled tasks
   when: jellyfin_effective_api_token | length > 0
   uri:
@@ -492,37 +505,35 @@
   tags:
     - jellyfin
 
-- name: Resolve the library-scan task and its desired trigger
-  when: jellyfin_effective_api_token | length > 0
-  set_fact:
-    jellyfin_scan_task: "{{ (jellyfin_tasks.json | default([]) | selectattr('Key', 'equalto', 'RefreshLibrary') | list | first) | default({}) }}"
-    jellyfin_scan_desired_triggers:
-      - Type: DailyTrigger
-        TimeOfDayTicks: "{{ jellyfin_library_scan_time_ticks }}"
-  tags:
-    - jellyfin
-
-# Idempotent: only POST when the live triggers are not already exactly our
-# single nightly DailyTrigger -- so an out-of-band UI change is reverted while
-# steady state is a no-op. A Key that resolves nothing leaves the task empty and
-# skips the POST rather than erroring (length==1 short-circuits the [0] lookup).
-- name: Pin the Jellyfin library-scan trigger
+# Idempotent per task: only POST when the live triggers are not already exactly
+# our single nightly DailyTrigger -- so an out-of-band UI change is reverted
+# while steady state is a no-op. _task is computed per iteration; a Key Jellyfin
+# no longer exposes resolves to length 0 and is skipped (the length==1 guard
+# short-circuits the [0] lookups before they can error).
+- name: Pin the heavy Jellyfin scheduled-task triggers
   when:
     - jellyfin_effective_api_token | length > 0
-    - jellyfin_scan_task.Id is defined
+    - _task | length == 1
     - not (
-        (jellyfin_scan_task.Triggers | default([]) | length == 1)
-        and (jellyfin_scan_task.Triggers[0].Type | default('')) == 'DailyTrigger'
-        and (jellyfin_scan_task.Triggers[0].TimeOfDayTicks | default(-1) | int) == (jellyfin_library_scan_time_ticks | int)
+        (_task[0].Triggers | default([]) | length == 1)
+        and (_task[0].Triggers[0].Type | default('')) == 'DailyTrigger'
+        and (_task[0].Triggers[0].TimeOfDayTicks | default(-1) | int) == (item.value | int)
       )
+  vars:
+    _task: "{{ jellyfin_tasks.json | default([]) | selectattr('Key', 'equalto', item.key) | list }}"
   uri:
-    url: http://localhost:{{ service_ports.jellyfin }}/ScheduledTasks/{{ jellyfin_scan_task.Id }}/Triggers
+    url: http://localhost:{{ service_ports.jellyfin }}/ScheduledTasks/{{ _task[0].Id }}/Triggers
     method: POST
     headers:
       Authorization: 'MediaBrowser Token="{{ jellyfin_effective_api_token }}"'
     body_format: json
-    body: "{{ jellyfin_scan_desired_triggers }}"
+    body:
+      - Type: DailyTrigger
+        TimeOfDayTicks: "{{ item.value }}"
     status_code: [ 200, 204 ]
+  loop: "{{ jellyfin_scheduled_task_times | dict2items }}"
+  loop_control:
+    label: "{{ item.key }} -> {{ item.value }}"
   register: jellyfin_scan_post
   changed_when: true
   tags:
