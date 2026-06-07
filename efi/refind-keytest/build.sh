@@ -108,6 +108,7 @@ build_arch() {
   $lld_link \
     /subsystem:efi_application \
     /entry:efi_main \
+    /timestamp:0 \
     /nodefaultlib \
     "/out:${out_dir}/${boot_name}" \
     "${out_dir}/hii_azerty_keytest.obj"
@@ -116,6 +117,7 @@ build_arch() {
   $lld_link \
     /subsystem:efi_boot_service_driver \
     /entry:efi_main \
+    /timestamp:0 \
     /nodefaultlib \
     "/out:${out_dir}/${driver_name}" \
     "${out_dir}/homelab_fr_azerty.obj"

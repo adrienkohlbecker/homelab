@@ -25,7 +25,11 @@ if [[ -z "${nexus_user:-}" ]] || [[ -z "${nexus_pass:-}" ]] ||
 fi
 
 artifact_root="${REFIND_KEYTEST_BUILD_DIR:-${repo_root}/efi/refind-keytest/build}"
-prefix="${REFIND_KEYTEST_UPLOAD_PREFIX:-refind-keytest/${GITHUB_SHA:-manual}/${GITHUB_RUN_ID:-local}.${GITHUB_RUN_ATTEMPT:-1}}"
+version="${REFIND_KEYTEST_VERSION:-}"
+if [[ -z "$version" && -f "${repo_root}/efi/refind-keytest/VERSION" ]]; then
+  version="$(<"${repo_root}/efi/refind-keytest/VERSION")"
+fi
+prefix="${REFIND_KEYTEST_UPLOAD_PREFIX:-refind-keytest/${version:-manual}}"
 dest_base="https://nexus.lab.fahm.fr/repository/zbm/${prefix}"
 
 if [[ ! -d "$artifact_root" ]]; then
