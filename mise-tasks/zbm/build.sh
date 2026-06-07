@@ -50,7 +50,7 @@ mkdir -p "$wrapper_dir"
 if command -v grealpath >/dev/null 2>&1; then
   ln -s "$(command -v grealpath)" "${wrapper_dir}/realpath"
 else
-  cat > "${wrapper_dir}/realpath" <<'WRAPPER'
+  cat >"${wrapper_dir}/realpath" <<'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -105,7 +105,7 @@ while [ "$#" -gt 0 ]; do
 done
 exec "$real_podman" "${args[@]}"
 WRAPPER
-} > "${wrapper_dir}/podman"
+} >"${wrapper_dir}/podman"
 chmod +x "${wrapper_dir}/podman"
 export PATH="${wrapper_dir}:${PATH}"
 
