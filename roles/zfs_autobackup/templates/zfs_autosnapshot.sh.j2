@@ -4,6 +4,31 @@ source /usr/local/lib/functions.sh
 
 f_require_root
 
+# Pause any in-progress scrub for the duration of the backup. A monthly scrub
+# (see roles/zfs zfs_scrub) on a multi-TB pool runs for many hours and overlaps
+# this nightly run; its random-read load would otherwise contend with the
+# snapshot sends. `zpool scrub -p` pauses; re-issuing `zpool scrub` on a paused
+# pool resumes it from where it left off. Only pools we actually paused are
+# resumed (a pool paused for another reason is left alone), and the resume runs
+# from an EXIT trap so it fires even when a backup step fails and the script
+# exits 1 below. functions.sh installs only an ERR trap, so EXIT is free.
+declare -a paused_scrubs=()
+f_resume_scrubs() {
+  local pool
+  for pool in "${paused_scrubs[@]}"; do
+    zpool scrub "$pool" || echo >&2 "Warning: failed to resume scrub on $pool"
+  done
+}
+trap f_resume_scrubs EXIT
+for pool in $(zpool list -H -o name); do
+  if zpool status "$pool" | grep -q "scrub in progress"; then
+    if zpool scrub -p "$pool"; then
+      paused_scrubs+=("$pool")
+      echo "Paused in-progress scrub on $pool for the backup window"
+    fi
+  fi
+done
+
 # create local snapshots
 f_rescue f_trace zfs_backup_local
 
