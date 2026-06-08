@@ -52,7 +52,7 @@ Roles map 1:1 to a service or a system concern; the order in `site.yml` reflects
 - **Monitoring & infra**: `eaton_ipp`, `netdata`, `fluentbit`, `wolweb`, `keepalived`, `custom_exporter`, `nut_server`, `dnscrypt_proxy`, `pihole`, `docker_client`, `socket_proxy`
 - **VPN / mesh**: `headscale`, `tailscale`, `udm_dns_failover`
 - **Lab-only services**: `libvirt`, `minio`, `influxdb`, `scratch`, `data`, `media`, `jellyfin`, `sonarr` / `radarr` / `bazarr` / `lidarr` / `plex` / `tautulli` / `seerr`, `sort_ini`, `sabnzbd`, `transmission`, `profilarr`, `gitea` (+ `gitea_runner`, `github_runner`), `getmail`, `mutt`, `speedtest`, `filebrowser`, `mosquitto`, `z2m`, `homeassistant`, `kuma`, `spouse`, `hyperdx`, `nexus`
-- **Helpers** (imported by other roles, not used directly): `service_user`, `podman_secret`, `systemd_unit`, `systemd_timer`, `usergroup_immediate`, `sqlite_dataset`, `static_curl`, `linger`, `test`
+- **Helpers** (imported by other roles, not used directly): `service_user`, `podman_secret`, `systemd_unit`, `systemd_timer`, `usergroup_immediate`, `sqlite_dataset`, `linger`, `test`
 
 Helper-role contracts and per-role conventions (artifact URL+sha colocation, test hooks `_setup.yml` / `_verify.yml`, `qemu_test` gating, the check-mode-user idiom, the `service_ports:` registry) are documented in **CLAUDE.md**.
 

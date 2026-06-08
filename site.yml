@@ -74,7 +74,6 @@
     - macvlan
     - avahi
     - samba
-    - static_curl
     - kdump
     - eaton_ipp
     - wolweb

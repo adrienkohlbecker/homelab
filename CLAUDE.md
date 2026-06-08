@@ -155,7 +155,8 @@ Every `*.service.j2` declares `--health-cmd` (and `--health-startup-cmd`). Prefe
 1. Service-native CLI — `mosquitto_sub -t ...`, `dig +short @127.0.0.1`.
 2. `curl`/`wget` already in the image — grep the Dockerfile first.
 3. Python `urllib.request` (python images). **Must use JSON-array form** to survive systemd→podman handoff: `--health-cmd '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:PORT/"]'`.
-4. `static_curl` — distroless images, last resort.
+
+No distroless image is in service today; if one arrives needing a healthcheck, bind-mount a statically-linked curl into the unit (JSON-array `--health-cmd` — the image has no `/bin/sh` for the string form).
 
 ### Secrets
 

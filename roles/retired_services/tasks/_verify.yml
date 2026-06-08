@@ -93,3 +93,12 @@
     - /etc/apt/preferences.d/nodesource
   register: retired_services_nodesource_files
   failed_when: retired_services_nodesource_files.stat.exists
+
+- name: _verify | Static curl binary and cached tarball are absent
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/local/bin/curl_static
+    - /var/cache/curl_static-8.20.0.{{ ansible_architecture }}.tar.xz
+  register: retired_services_static_curl_files
+  failed_when: retired_services_static_curl_files.stat.exists

@@ -181,3 +181,16 @@
     - /etc/apt/sources.list.d/nodesource.list
     - /etc/apt/preferences.d/nodesource
   become: true
+
+# Stand in for the retired static_curl role's installed binary + download cache.
+- name: _setup | Plant the static curl binary and a cached tarball
+  copy:
+    dest: "{{ item }}"
+    content: "stub\n"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - /usr/local/bin/curl_static
+    - /var/cache/curl_static-8.20.0.{{ ansible_architecture }}.tar.xz
+  become: true
