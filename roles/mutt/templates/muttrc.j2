@@ -15,10 +15,11 @@ set spoolfile = /mnt/services/mutt/archive
 set record    = ""
 set postponed = ""
 
-# Header/body cache so reopening the multi-year archive doesn't re-parse every
-# message. On the services dataset (operator-owned), never in $HOME.
+# Header cache so reopening the multi-year archive doesn't re-parse every
+# message. On the services dataset (operator-owned), never in $HOME. (No
+# message_cachedir: the body cache only serves IMAP/POP — for a local Maildir
+# the bodies are already on disk, so it would never populate.)
 set header_cache     = /mnt/services/mutt/headers
-set message_cachedir = /mnt/services/mutt/bodies
 
 # Belt-and-suspenders with the wrapper's -R: never move read mail out of the
 # spool, never flag messages "old", no delete/trash.
@@ -39,6 +40,11 @@ set pager_context     = 3
 set pager_stop        = yes
 set tilde
 set mail_check_stats
+
+# Archived mail predates consistent charset labelling; a message lacking a
+# charset= parameter would otherwise decode as US-ASCII and mojibake (accented
+# names, latin1 bodies). Fall back through the common legacy encodings.
+set assumed_charset = "utf-8:windows-1252:iso-8859-1"
 
 # Render HTML mail inline (archived Gmail is heavily HTML) via w3m through the
 # mailcap installed alongside this config.
