@@ -60,6 +60,29 @@
   tags:
     - netdata
 
+# keepalived lost-master alarm, fed by the keepalived_vrrp collector above.
+# Deployed ONLY on the highest-priority VRRP peer: a backup normally has
+# holds_vip=0, so the alarm there would be a permanent false positive. The
+# priority-max compare mirrors site.yml's reboot DNS-safety gate; the leading
+# peer-membership check short-circuits the hostvars extract on non-peers (the
+# box test fixture), so it stays a no-op there.
+- name: Configure netdata keepalived lost-master alert
+  import_role:
+    name: netdata
+    tasks_from: health
+  vars:
+    netdata_args:
+      src: keepalived_vrrp_alerts.conf
+      dest: keepalived_vrrp.conf
+      condition: >-
+        {{ (inventory_hostname in (pihole_keepalived_peers | default([])))
+           and ((pihole_keepalived_priority | default(0) | int)
+                == (pihole_keepalived_peers
+                    | map('extract', hostvars, 'pihole_keepalived_priority')
+                    | map('int') | max)) }}
+  tags:
+    - netdata
+
 - name: Configure netdata SMART + NVMe wear alerts
   import_role:
     name: netdata
