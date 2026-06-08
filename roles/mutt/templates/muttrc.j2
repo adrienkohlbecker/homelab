@@ -21,6 +21,16 @@ set postponed = ""
 # the bodies are already on disk, so it would never populate.)
 set header_cache     = /mnt/services/mutt/headers
 
+# Full-text search over the archive through notmuch. Notmuch indexes the source
+# Maildir but writes only its database under /mnt/services/mutt/notmuch; maildir
+# flag synchronization is disabled in /opt/mutt/notmuch-config, which the
+# mail-archive wrapper exports as NOTMUCH_CONFIG for neomutt's notmuch backend.
+set nm_default_url = notmuch:///mnt/services/mutt/notmuch
+set nm_query_type  = messages
+virtual-mailboxes "All Mail Search" "notmuch://?query=tag:archive"
+bind index,pager X change-vfolder
+bind index,pager \eX vfolder-from-query-readonly
+
 # Belt-and-suspenders with the wrapper's -R: never move read mail out of the
 # spool, never flag messages "old", no delete/trash.
 set read_only     = yes
@@ -50,5 +60,5 @@ set assumed_charset = "utf-8:windows-1252:iso-8859-1"
 # Render HTML mail inline (archived Gmail is heavily HTML) via w3m through the
 # mailcap installed alongside this config.
 set mailcap_path = /opt/mutt/mailcap
-auto-view text/html
-alternative-order text/plain text/enriched text/html
+auto_view text/html
+alternative_order text/plain text/enriched text/html

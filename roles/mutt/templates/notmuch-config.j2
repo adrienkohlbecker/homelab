@@ -1,0 +1,26 @@
+# {{ ansible_managed }}
+# Full-text index for the getmail Gmail archive. The Maildir remains the source
+# of truth; notmuch stores only its index and tags under /mnt/services/mutt.
+
+[database]
+path=/mnt/services/mutt/notmuch
+mail_root=/mnt/services/getmail
+hook_dir=/mnt/services/mutt/notmuch/hooks
+backup_dir=/mnt/services/mutt/notmuch/backups
+
+[user]
+name={{ ansible_user_id }}
+primary_email={{ root_email }}
+
+[new]
+tags=archive
+ignore=getmailrc;messages.log;/^oldmail-.*/
+
+[search]
+exclude_tags=
+
+[maildir]
+synchronize_flags=false
+
+[index]
+decrypt=false

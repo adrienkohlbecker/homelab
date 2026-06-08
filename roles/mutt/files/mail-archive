@@ -3,6 +3,7 @@ set -euo pipefail
 
 # Read-only browser for the getmail Gmail "All Mail" archive Maildir.
 # -R opens neomutt read-only so browsing never mutates the irreplaceable
-# archive; -n skips host-level defaults; -F points at the curated,
-# ansible-managed config.
+# archive; NOTMUCH_CONFIG points neomutt's notmuch backend at the managed index;
+# -n skips host-level defaults; -F points at the curated config.
+export NOTMUCH_CONFIG=/opt/mutt/notmuch-config
 exec neomutt -n -R -F /opt/mutt/muttrc "$@"
