@@ -100,9 +100,9 @@
   tags:
     - mutt
 
-# No validate: neomutt has no offline config linter that works without a
-# terminal and a mailbox, and faking one would violate the "real parser or
-# none" rule. A bad config surfaces when the operator launches mail-archive.
+# In check mode on a fresh host, apt reports that neomutt would be installed
+# but does not put the binary on disk, so config validation runs only during
+# real converges.
 - name: Configure neomutt
   template:
     src: muttrc.j2
@@ -111,6 +111,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: "{{ 'neomutt -n -F %s -Q folder' if not ansible_check_mode else omit }}"
   become: true
   tags:
     - mutt
@@ -135,6 +136,7 @@
     group: root
     mode: "0755"
     backup: true
+    validate: bash -n %s
   become: true
   tags:
     - mutt

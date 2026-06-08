@@ -12,11 +12,13 @@ Description=Read-only bind mount of the getmail archive for mutt
 # Order after — and pull in — whatever provides the source path (the ZFS
 # services dataset on prod), so the bind never races its backing mount.
 RequiresMountsFor=/mnt/services/getmail
+AssertPathIsDirectory=/mnt/services/getmail/new
 
 [Mount]
 What=/mnt/services/getmail
 Where=/mnt/services/mutt/archive
 Type=none
+DirectoryMode=0700
 # bind,ro: libmount applies the read-only flag via an automatic follow-up
 # remount, so the bind is genuinely ro (not just ro-on-the-source).
 # nodev,nosuid,noexec: the tree is attacker-authored mail content, so deny

@@ -23,10 +23,11 @@ set header_cache     = /mnt/services/mutt/headers
 
 # Belt-and-suspenders with the wrapper's -R: never move read mail out of the
 # spool, never flag messages "old", no delete/trash.
+set read_only     = yes
 set move          = no
 set mark_old      = no
 set maildir_trash = no
-unset confirmappend
+unset confirm_append
 
 # Browsing ergonomics for one big flat archive.
 set sort         = reverse-date-received
@@ -49,5 +50,5 @@ set assumed_charset = "utf-8:windows-1252:iso-8859-1"
 # Render HTML mail inline (archived Gmail is heavily HTML) via w3m through the
 # mailcap installed alongside this config.
 set mailcap_path = /opt/mutt/mailcap
-auto_view text/html
-alternative_order text/plain text/enriched text/html
+auto-view text/html
+alternative-order text/plain text/enriched text/html
