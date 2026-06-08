@@ -1,13 +1,12 @@
 {
+  "$schema": "https://lnav.org/schemas/format-v1.schema.json",
   "syslog_body_scan": {
     "title": "Syslog body-scan",
-    "description": "Catch-all for plain-text syslog lines with no structured level field. Infers severity from the first 120 chars of the message body using word-boundary keyword matching -- equivalent to roles/fluentbit/files/level_from_message.lua.",
+    "description": "Catch-all for plain-text syslog lines with no structured level field. Infers severity from message-body keywords using the same vocabulary as roles/fluentbit/files/level_from_message.lua.",
+    "file-pattern": "(.*/)?(syslog|messages|unifi/.*)(\\.[0-9]+)?$",
     "regex": {
       "rfc3164": {
         "pattern": "^(?<timestamp>[A-Z][a-z]{2} +\\d{1,2} \\d{2}:\\d{2}:\\d{2}) (?<host>\\S+) (?<ident>[^\\[:]+)(?:\\[\\d+\\])?:\\s+(?<body>.*)$"
-      },
-      "plain": {
-        "pattern": "^(?<timestamp>[A-Z][a-z]{2} +\\d{1,2} \\d{2}:\\d{2}:\\d{2}) (?<host>\\S+) (?<body>.*)$"
       }
     },
     "value": {
@@ -18,6 +17,8 @@
     "timestamp-field": "timestamp",
     "timestamp-format": "%b %e %H:%M:%S",
     "body-field": "body",
+    "level-field": "body",
+    "multiline": false,
     "level": {
       "fatal":   "(?i)(?<![\\w])(fatal|panic|emerg|crit(?:ical)?)(?![\\w])",
       "error":   "(?i)(?<![\\w])(err(?:or)?)(?![\\w])",

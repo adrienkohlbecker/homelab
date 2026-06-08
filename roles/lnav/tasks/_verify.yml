@@ -1,5 +1,5 @@
 - name: Lnav is installed at expected version
-  command: lnav -V
+  command: /usr/local/bin/lnav -V
   register: lnav_installed_version
   changed_when: false
   tags:
@@ -14,7 +14,7 @@
 
 - name: Lnav formats directory exists
   stat:
-    path: "~{{ operator_user }}/.lnav/formats/installed"
+    path: /etc/lnav/formats/homelab
   register: lnav_formats_dir
   become: true
   tags:
@@ -23,18 +23,17 @@
 - name: Assert lnav formats directory
   assert:
     that: lnav_formats_dir.stat.isdir
-    fail_msg: "~{{ operator_user }}/.lnav/formats/installed is missing"
+    fail_msg: "/etc/lnav/formats/homelab is missing"
   tags:
     - lnav
 
 - name: Lnav format files are present
   stat:
-    path: "~{{ operator_user }}/.lnav/formats/installed/{{ item }}"
+    path: "/etc/lnav/formats/homelab/{{ item }}"
   register: lnav_format_stat
   become: true
   loop:
     - pihole_ftl.json
-    - audit.json
     - syslog_body_scan.json
   tags:
     - lnav
@@ -63,10 +62,102 @@
   tags:
     - lnav
 
-- name: Lnav parses formats without errors
+- name: Create lnav format verification directory
+  file:
+    path: /tmp/lnav_verify
+    state: directory
+    mode: "0755"
+  tags:
+    - lnav
+
+- name: Write representative lnav sample logs
+  copy:
+    dest: "{{ item.path }}"
+    content: "{{ item.content }}"
+    mode: "0644"
+  loop:
+    - path: /tmp/lnav_verify/FTL.log
+      content: |
+        [2026-06-08 08:00:00.000] INFO:  FTL started
+        [2026-06-08 08:00:01.123] WARNING:  Rate-limiting 10.0.0.5
+        [2026-06-08 08:00:02.456] ERROR:  Could not read config file
+    - path: /tmp/lnav_verify/syslog
+      content: |
+        Jun  8 08:00:00 lab pihole-FTL: WARNING: rate-limiting client 10.0.0.5
+        Jun  8 08:00:01 lab sshd[1234]: error: kex_exchange_identification: Connection closed by remote host
+        Jun  8 08:00:02 lab kernel: info: loaded module xfs
+  tags:
+    - lnav
+
+- name: Lnav format definitions are registered
   become: true
-  become_user: "{{ operator_user }}"
-  command: lnav -V
+  become_user: "{{ ansible_user_id }}"
+  command:
+    argv:
+      - /usr/local/bin/lnav
+      - -m
+      - format
+      - "{{ item }}"
+      - get
   changed_when: false
+  loop:
+    - pihole_ftl
+    - syslog_body_scan
+  tags:
+    - lnav
+
+- name: Lnav format samples match their target formats
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  command:
+    argv:
+      - /usr/local/bin/lnav
+      - -m
+      - format
+      - "{{ item.name }}"
+      - test
+      - "{{ item.path }}"
+  changed_when: false
+  loop:
+    - name: pihole_ftl
+      path: /tmp/lnav_verify/FTL.log
+    - name: syslog_body_scan
+      path: /tmp/lnav_verify/syslog
+  tags:
+    - lnav
+
+- name: Lnav config check accepts representative samples
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  command:
+    argv:
+      - /usr/local/bin/lnav
+      - -n
+      - -N
+      - -C
+      - "{{ item }}"
+  changed_when: false
+  loop:
+    - /tmp/lnav_verify/FTL.log
+    - /tmp/lnav_verify/syslog
+  tags:
+    - lnav
+
+- name: Lnav-journal wrapper accepts explicit since override
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  command:
+    argv:
+      - timeout
+      - 20s
+      - /usr/local/bin/lnav-journal
+      - -V
+      - -S
+      - 1 hour ago
+  register: lnav_journal_version
+  changed_when: false
+  failed_when: >-
+    lnav_journal_version.rc != 0 or
+    lnav_version not in lnav_journal_version.stdout
   tags:
     - lnav

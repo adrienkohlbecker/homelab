@@ -1,8 +1,10 @@
 {
+  "$schema": "https://lnav.org/schemas/format-v1.schema.json",
   "pihole_ftl": {
     "title": "Pi-hole FTL",
     "description": "Pi-hole FTL daemon log (/var/log/pihole/FTL.log)",
     "url": "https://docs.pi-hole.net/ftldns/log/",
+    "file-pattern": "(.*/)?FTL\\.log(\\.[0-9]+)?$",
     "regex": {
       "std": {
         "pattern": "^\\[(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d+)\\] (?<level>[A-Z]+): +(?<body>.*)$"
@@ -23,6 +25,7 @@
     "timestamp-field": "timestamp",
     "timestamp-format": "%Y-%m-%d %H:%M:%S.%L",
     "body-field": "body",
+    "multiline": false,
     "sample": [
       {
         "line": "[2026-06-08 08:00:00.000] INFO:  FTL started",

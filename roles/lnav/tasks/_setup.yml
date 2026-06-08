@@ -1,8 +1,0 @@
-- name: Create operator user for test fixture
-  user:
-    name: "{{ operator_user }}"
-    system: false
-    create_home: true
-  become: true
-  tags:
-    - lnav
