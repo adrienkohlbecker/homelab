@@ -10,7 +10,7 @@
 # a write physically cannot reach the Maildir. Prove the mount is actually
 # mounted read-only...
 - name: _verify | Archive is exposed through a read-only bind mount
-  command: findmnt --noheadings --output OPTIONS /mnt/services/mutt/archive
+  command: findmnt --mountpoint /mnt/services/mutt/archive --noheadings --output OPTIONS
   register: _mutt_mount_opts
   changed_when: false
   failed_when: >-
