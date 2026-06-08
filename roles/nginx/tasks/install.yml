@@ -130,8 +130,8 @@
 
 # stub_status drop is what netdata's web_log collector (and any other
 # in-cluster nginx-stats consumer) reads. Validate-and-rollback shape
-# protects every site on the host from a typo here — same conf.d/
-# blast-radius concern as csplogger.
+# protects every site on the host from a typo here — a single bad
+# conf.d/ file takes down every nginx vhost on the host.
 - name: install | Enable stub_status
   import_tasks: conf_d.yml
   vars:

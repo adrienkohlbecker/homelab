@@ -42,7 +42,7 @@ server {
   add_header Referrer-Policy           "same-origin" always;
 {% endif %}
 {% if not (nginx_site_args.csp_passthrough | default(false)) %}
-  add_header Content-Security-Policy   "{% if nginx_site_args.csp_additional is defined %}{{ nginx_site_args.csp_additional }}; {% endif %}default-src {% if nginx_site_args.csp_default_src is defined %}{{ nginx_site_args.csp_default_src }} {% endif %}{{ nginx_csp_default }}; frame-ancestors {% if nginx_site_args.csp_frame_ancestors is defined %}{{ nginx_site_args.csp_frame_ancestors }}{% else %}'self'{% endif %}; report-uri https://csplogger.{{ inventory_hostname }}.{{ domain }}/log; report-to csp-endpoint;" always;
+  add_header Content-Security-Policy   "{% if nginx_site_args.csp_additional is defined %}{{ nginx_site_args.csp_additional }}; {% endif %}default-src {% if nginx_site_args.csp_default_src is defined %}{{ nginx_site_args.csp_default_src }} {% endif %}{{ nginx_csp_default }}; frame-ancestors {% if nginx_site_args.csp_frame_ancestors is defined %}{{ nginx_site_args.csp_frame_ancestors }}{% else %}'self'{% endif %};" always;
 {% endif %}
 {# interest-cohort (FLoC) was abandoned in 2022 and no browser still parses it;
    browsing-topics opts out of its live Topics-API successor instead. #}
@@ -50,7 +50,6 @@ server {
 {# max-age 63072000 (2y) per the TLSRef v6.0 / Mozilla Intermediate profile,
    matching the cipher block in nginx.conf.j2; no preload (deliberate). #}
   add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
-  add_header Reporting-Endpoints       'csp-endpoint="https://csplogger.{{ inventory_hostname }}.{{ domain }}/log"' always;
 {% endset %}
 {{ security_headers }}
 
@@ -94,7 +93,7 @@ server {
 {% endif %}
 {% if nginx_site_args.bypass_query_param is defined %}
     # URL-param bypass for clients that can't send Authorization headers
-    # (compta's Mac app, homepage_alerts cross-host poller). Compare the
+    # (the netdata/homepage cross-host poller). Compare the
     # extracted token (from the parent's $request_uri via the $req_auth_token
     # map in nginx.conf.j2) against the vaulted value; on match return 204
     # (a 2xx -> auth_request lets the parent through) without consulting
@@ -181,7 +180,7 @@ server {
     # second "?" in the URI). $req_auth_token's [?&] extractor matches a
     # ?-prefixed token and fires the 204 bypass, but the &-anchored strip below
     # does not catch it. Both shapes are abnormal for the API clients that use
-    # bypass (compta, the netdata poller), which only ever send one "?auth_token=".
+    # bypass (the netdata/homepage poller), which only ever send one "?auth_token=".
     if ($request_uri ~ "auth_token=.*[?&]auth_token=") {
       return 400;
     }
@@ -189,7 +188,7 @@ server {
       return 400;
     }
     # Strip the bypass token from $args before proxy_pass so the
-    # upstream app never sees it (token must not land in compta's own
+    # upstream app never sees it (token must not land in the upstream's own
     # logs or echo back in error messages). nginx's proxy_pass forwards
     # $is_args$args when the upstream URL has no own query string, so
     # rewriting $args here removes the param from the forwarded URL.

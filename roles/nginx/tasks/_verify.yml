@@ -8,7 +8,7 @@
 # /etc/hosts, then probe https://<fqdn>/ (validate_certs:false) so TLS SNI
 # matches the vhost on every OpenSSL version (noble/resolute 3.x reject
 # SNI=localhost with TLSV1_UNRECOGNIZED_NAME). The upstream stub via
-# systemd-run is the roles/csplogger pattern. The VM is fresh
+# systemd-run (transient unit, no install-time side-effects). The VM is fresh
 # per harness run and _verify runs after the idempotence check, so standing up
 # fixtures here is safe (no when: qemu_test gate needed).
 
@@ -233,8 +233,8 @@
       Raw bypass token leaked into /var/log/nginx/access.log; expected only
       auth_token=REDACTED.
 
-# auth_token as the ONLY query param is the common case (compta's app, the
-# netdata poller) and the edge where stripping must clear $args entirely.
+# auth_token as the ONLY query param is the common case (the netdata/homepage
+# poller) and the edge where stripping must clear $args entirely.
 - name: _verify | Bypass with auth_token as the sole query param reaches the upstream (200)
   uri:
     url: "https://{{ nginx_verify_host }}/?auth_token={{ nginx_verify_token }}"

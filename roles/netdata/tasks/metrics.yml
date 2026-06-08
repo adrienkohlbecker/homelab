@@ -3,7 +3,10 @@
 # (and any alerts) through netdata's config/health/charts_d helpers. Split out
 # of main.yml for navigability; runs in main.yml's order. netdata_presence is
 # netdata's own collector rather than a sibling role.
+# fail2ban now runs only on fox (and the test box); skip its collector on the
+# internal hosts that dropped it.
 - name: Install fail2ban metrics
+  when: inventory_hostname not in ['lab', 'pug']
   import_role:
     name: fail2ban
     tasks_from: netdata

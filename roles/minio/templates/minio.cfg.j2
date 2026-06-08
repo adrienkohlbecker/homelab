@@ -41,12 +41,6 @@ MINIO_ROOT_PASSWORD={{ minio_root_password }}
 MINIO_SERVER_URL=https://minio-api.{{ inventory_hostname }}.{{ domain }}
 MINIO_BROWSER_REDIRECT_URL=https://minio.{{ inventory_hostname }}.{{ domain }}
 
-# don't require auth on metrics endpoint
-MINIO_PROMETHEUS_AUTH_TYPE=public
-
-# Display metrics in the console
-MINIO_PROMETHEUS_URL=http://localhost:{{ service_ports.prometheus }}
-
 # OIDC provider (Authelia). MINIO_ROOT_USER above stays the
 # emergency break-glass login; day-to-day console access is via
 # OIDC. MinIO doesn't probe the discovery URL at startup -- it

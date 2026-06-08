@@ -159,12 +159,12 @@ do
     check("nginx.access.gate-scoped", t, "error")
 end
 
--- 17. Upstream filter already pinned metadata.otlp.severity_text (flatten_csp
---     for CSP records): leave it untouched, return 0 (no modification).
+-- 17. Upstream filter already pinned metadata.otlp.severity_text: leave it
+--     untouched, return 0 (no modification).
 do
     local record = { log = "this body says ERROR but severity is already warn" }
     local metadata = { otlp = { severity_text = "warn", severity_number = 13 } }
-    local code = set_priority("csp.lab", 0, nil, metadata, record)
+    local code = set_priority("svc.some.service", 0, nil, metadata, record)
     check("prepinned.code", code, 0)
     check("prepinned.kept", metadata.otlp.severity_text, "warn")
 end

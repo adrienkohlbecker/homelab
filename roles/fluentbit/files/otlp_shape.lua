@@ -13,7 +13,7 @@
 -- the revert of just the Resource path).
 --
 -- LogAttributes and SeverityText/Number ARE plumbed through the
--- metadata stream, in flatten_csp.lua and level_from_message.lua:
+-- metadata stream, in level_from_message.lua:
 -- $otlp['attributes'] and $otlp['severity_*'] are wired record
 -- accessors in the OTLP output, unlike resource.
 --
@@ -23,9 +23,7 @@
 -- left in the record body is dropped on the floor. For journald records
 -- this is how SYSTEMD_UNIT / SYSLOG_IDENTIFIER / PID / COMM / PRIORITY
 -- etc. reach HyperDX. The upstream "host" field (set by the global
--- Set-host modify filter) gets lifted by the same loop. For CSP records,
--- flatten_csp.lua replaces the record wholesale and pre-populates
--- metadata.otlp.attributes with csp_*; the loop here only adds "host".
+-- Set-host modify filter) gets lifted by the same loop.
 -- Excluded keys (routed elsewhere or already lifted):
 --   log              -> LogRecord.Body
 --   resource         -> ResourceLogs.resource (set just below)
@@ -38,7 +36,6 @@
 -- service.name derivation:
 --   record.UNIT =  -> "podman_healthcheck"  (overrides; see below)
 --   <64hex>.service
---   csp.<host>     -> "csplogger"    (matches what flatten_csp emits)
 --   svc.*          -> SYSLOG_IDENTIFIER (paren-stripped), else
 --                     _SYSTEMD_UNIT (from tag, .service-stripped),
 --                     else "unknown". Sourced from the journal record;
@@ -113,9 +110,7 @@
 
 local function service_from_tag(tag, record)
     local svc
-    if string.sub(tag, 1, 4) == "csp." then
-        svc = "csplogger"
-    elseif string.sub(tag, 1, 4) == "svc." then
+    if string.sub(tag, 1, 4) == "svc." then
         if string.sub(tag, 1, 18) == "svc.libpod-conmon-" then
             -- Unnamed podman container. SYSLOG_IDENTIFIER is podman's
             -- auto-generated nickname (epic_allen, etc.), unbounded.
