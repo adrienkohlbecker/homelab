@@ -46,18 +46,19 @@
       Archive viewer verification body.
   become: true
 
-# Functional probe: open the archive Maildir through the curated read-only
-# config and quit. neomutt parses every header to build the index (and writes
-# the header cache, asserted below), so a clean exit proves the operator can
-# actually browse the archive. Runs under a pty (script) because neomutt needs
-# a terminal; TERM is set so it can initialise curses headlessly. Runs as the
-# connection user (the operator who owns the 0700 Maildir), so no become.
-- name: _verify | Neomutt opens the archive read-only and exits cleanly
+# Functional probe: open the archive through the real operator entry point —
+# the mail-archive wrapper (which adds -R + the curated config) — and quit.
+# neomutt parses every header to build the index (and writes the header cache,
+# asserted below), so a clean exit proves the operator can actually browse the
+# archive via the installed launcher. Runs under a pty (script) because neomutt
+# needs a terminal; TERM is set so it can initialise curses headlessly. Runs as
+# the connection user (the operator who owns the 0700 Maildir), so no become.
+- name: _verify | The mail-archive wrapper opens the archive read-only and exits cleanly
   command:
     argv:
       - script
       - -qec
-      - neomutt -R -F /opt/mutt/muttrc -e "push <quit>"
+      - mail-archive -e "push <quit>"
       - /dev/null
   environment:
     TERM: xterm
