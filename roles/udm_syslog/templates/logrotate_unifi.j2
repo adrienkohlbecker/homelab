@@ -1,11 +1,14 @@
 # {{ ansible_managed }}
 /var/log/unifi/unifi.log {
     daily
+    size {{ udm_syslog_logrotate_size }}
     rotate 14
     {{ zfs_root | ternary("# compress # zfs already compresses disk contents", "compress") }}
     delaycompress
     missingok
     notifempty
+    create 0640 syslog adm
+    su syslog adm
     postrotate
         /usr/lib/rsyslog/rsyslog-rotate
     endscript

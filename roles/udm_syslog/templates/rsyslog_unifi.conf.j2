@@ -5,9 +5,28 @@
 
 # module(load=) is idempotent -- safe if another drop-in already loaded imudp.
 module(load="imudp")
-input(type="imudp" port="{{ service_ports.udm_syslog }}" ruleset="unifi_syslog")
+input(
+  type="imudp"
+  address="{{ udm_syslog_listen_address }}"
+  port="{{ service_ports.udm_syslog | int }}"
+  ruleset="unifi_syslog"
+{% if udm_syslog_rate_limit_interval | int > 0 %}
+  rateLimit.interval="{{ udm_syslog_rate_limit_interval | int }}"
+  rateLimit.burst="{{ udm_syslog_rate_limit_burst | int }}"
+{% endif %}
+)
 
 ruleset(name="unifi_syslog") {
-  action(type="omfile" file="/var/log/unifi/unifi.log")
+{% set udm_syslog_effective_allowed_sources = udm_syslog_allowed_sources + ([ansible_default_ipv4.address] if qemu_test | default(false) else []) %}
+  if not ({% for source in udm_syslog_effective_allowed_sources %}$fromhost-ip == "{{ source }}"{% if not loop.last %} or {% endif %}{% endfor %}) then {
+    stop
+  }
+  action(
+    type="omfile"
+    file="/var/log/unifi/unifi.log"
+    fileOwner="syslog"
+    fileGroup="adm"
+    fileCreateMode="0640"
+  )
   stop
 }
