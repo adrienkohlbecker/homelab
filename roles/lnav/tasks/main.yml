@@ -1,3 +1,10 @@
+- name: Validate architecture is supported
+  assert:
+    that: ansible_architecture in lnav_artifacts
+    fail_msg: "lnav only supports {{ lnav_artifacts.keys() | join(', ') }}, got {{ ansible_architecture }}"
+  tags:
+    - lnav
+
 - name: Install unzip (required to extract lnav release)
   apt:
     pkg: unzip
@@ -20,6 +27,14 @@
   tags:
     - lnav
 
+- name: Check installed lnav version
+  command: /usr/local/bin/lnav -V
+  register: lnav_installed_version
+  failed_when: false
+  changed_when: false
+  tags:
+    - lnav
+
 # unarchive extra_opts inserts args before the zipfile path, making unzip
 # treat the file filter as the archive name. Use command: with explicit argv
 # to control argument order. Skipped in check mode (zip not yet present).
@@ -34,7 +49,12 @@
       - -d
       - /usr/local/bin
   become: true
-  when: lnav_zip_download is changed and not ansible_check_mode
+  when: >-
+    not ansible_check_mode and (
+      lnav_zip_download is changed or
+      lnav_installed_version.rc != 0 or
+      lnav_version not in (lnav_installed_version.stdout | default(''))
+    )
   changed_when: true
   tags:
     - lnav
@@ -46,16 +66,16 @@
     group: root
     mode: "0755"
   become: true
-  when: lnav_zip_download is changed and not ansible_check_mode
+  when: not ansible_check_mode
   tags:
     - lnav
 
 - name: Create lnav formats directory
   file:
-    path: "~{{ operator_user }}/.lnav/formats/installed"
+    path: /etc/lnav/formats/homelab
     state: directory
-    owner: "{{ operator_user }}"
-    group: "{{ operator_user }}"
+    owner: root
+    group: root
     mode: "0755"
   become: true
   tags:
@@ -64,14 +84,14 @@
 - name: Deploy lnav format files
   copy:
     src: "formats/{{ item }}"
-    dest: "~{{ operator_user }}/.lnav/formats/installed/{{ item }}"
-    owner: "{{ operator_user }}"
-    group: "{{ operator_user }}"
+    dest: "/etc/lnav/formats/homelab/{{ item }}"
+    owner: root
+    group: root
     mode: "0644"
     backup: true
+    validate: python3 -m json.tool %s
   loop:
     - pihole_ftl.json
-    - audit.json
     - syslog_body_scan.json
   become: true
   tags:
@@ -85,6 +105,7 @@
     group: root
     mode: "0755"
     backup: true
+    validate: bash -n %s
   become: true
   tags:
     - lnav
