@@ -150,7 +150,7 @@ Long-form rationale in [notes/podman_conventions.md](notes/podman_conventions.md
 
 Every `*.service.j2` declares `--health-cmd` (and `--health-startup-cmd`). Preference order:
 
-1. Service-native CLI — `redis-cli ping`, `dig +short @127.0.0.1`.
+1. Service-native CLI — `mosquitto_sub -t ...`, `dig +short @127.0.0.1`.
 2. `curl`/`wget` already in the image — grep the Dockerfile first.
 3. Python `urllib.request` (python images). **Must use JSON-array form** to survive systemd→podman handoff: `--health-cmd '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:PORT/"]'`.
 4. `static_curl` — distroless images, last resort.
@@ -175,7 +175,7 @@ Default for new timers/services is **system-scope**. Reach for user-scope (linge
 
 ### Inter-container DNS
 
-Containers reach co-located podman services via **`<name>.dns.podman`** (aardvark-dns), never a host port or hard-coded IP. Both producer and consumer create the `containers.podman.podman_network` independently (idempotent). Requires the **netavark** backend with `disable_dns: false`. Canonical: [roles/redis/](roles/redis) (producer) + [roles/z2m/](roles/z2m) (consumer). Target network name or gateway IP, never an `ethN` index.
+Containers reach co-located podman services via **`<name>.dns.podman`** (aardvark-dns), never a host port or hard-coded IP. Both producer and consumer create the `containers.podman.podman_network` independently (idempotent). Requires the **netavark** backend with `disable_dns: false`. Canonical: [roles/mosquitto/](roles/mosquitto) (producer) + [roles/z2m/](roles/z2m) (consumer). Target network name or gateway IP, never an `ethN` index.
 
 ## Testing Guidelines
 

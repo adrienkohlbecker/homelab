@@ -197,7 +197,7 @@ table inet homelab {
         # allocated from netavark's default_subnet_pools[0], hence the
         # podman_bridge_pool prefix here. Without this second subnet,
         # the saddr scope rejects every cross-bridge container-name
-        # lookup (paperless → redis, z2m → mosquitto) at INPUT before
+        # lookup (z2m → mosquitto) at INPUT before
         # aardvark even sees them. Accept TCP alongside UDP on 5053 so
         # clients can fall back to TCP when a response would be
         # UDP-truncated (pihole does this opportunistically); UDP-only

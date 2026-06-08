@@ -88,7 +88,7 @@
     - wireguard
 
 # 30-wireguard.conf owns the forwarding sysctls (matching the 30-<role>.conf
-# drop-ins of swap/keepalived/redis); drop the superseded 99- file so a single
+# drop-ins of swap/keepalived); drop the superseded 99- file so a single
 # drop-in is the source of truth.
 - name: Remove superseded sysctl drop-in
   file:

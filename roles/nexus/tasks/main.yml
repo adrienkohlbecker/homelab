@@ -148,7 +148,7 @@
       # while Nexus expects /repository/<repo>/v2/<image>/manifests/...
       # The matching mirror config is in roles/test/tasks/mirrors.yml.
       #
-      # Hosted-docker push (compta, homelab/ci) uses Nexus's native
+      # Hosted-docker push (homelab/ci) uses Nexus's native
       # path-based routing instead and lands at /v2/<repo>/<image>/...
       # straight through nginx's default location -- Nexus handles the
       # routing internally based on the first path segment after /v2/.

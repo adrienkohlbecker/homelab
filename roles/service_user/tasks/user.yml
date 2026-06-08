@@ -30,9 +30,8 @@
 #                     service state (configs, DBs, secrets), so it is
 #                     owner+group only by default. Loosen to "0755" when a
 #                     co-tenant needs world traversal, or tighten to "0700"
-#                     to drop group read (redis/plex do -- dump.rdb /
-#                     Preferences.xml carry secrets config_dir_group
-#                     shouldn't see).
+#                     to drop group read (plex does -- Preferences.xml
+#                     carries secrets config_dir_group shouldn't see).
 #
 # The dict form prevents inter-call leakage at play-vars scope: each
 # import_role pass replaces the whole `service_user_args` value, so a
