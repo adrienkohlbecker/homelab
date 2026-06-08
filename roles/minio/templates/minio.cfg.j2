@@ -41,6 +41,11 @@ MINIO_ROOT_PASSWORD={{ minio_root_password }}
 MINIO_SERVER_URL=https://minio-api.{{ inventory_hostname }}.{{ domain }}
 MINIO_BROWSER_REDIRECT_URL=https://minio.{{ inventory_hostname }}.{{ domain }}
 
+# Leave the /minio/v2/metrics/ endpoint unauthenticated so netdata's go.d
+# prometheus collector can scrape it on loopback; nginx denies the public
+# path (see the location_conf in roles/minio/tasks/main.yml).
+MINIO_PROMETHEUS_AUTH_TYPE=public
+
 # OIDC provider (Authelia). MINIO_ROOT_USER above stays the
 # emergency break-glass login; day-to-day console access is via
 # OIDC. MinIO doesn't probe the discovery URL at startup -- it
