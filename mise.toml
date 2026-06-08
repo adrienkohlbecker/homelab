@@ -201,6 +201,7 @@ depends = [
   "fmt:shfmt",
   "fmt:lua",
   "fmt:markdown",
+  "fmt:notes",
 ]
 
 [tasks."fmt:ansible"]
@@ -232,8 +233,13 @@ description = "Format Lua filters (stylua)"
 run = "git ls-files -z '*.lua' | xargs -0 stylua --config-path lint/stylua.toml"
 
 [tasks."fmt:markdown"]
-description = "Fix Markdown formatting (CLAUDE.md + notes/)"
-run = "markdownlint-cli2 --fix 'CLAUDE.md' 'notes/**/*.md'"
+description = "Fix Markdown formatting (CLAUDE.md + README.md)"
+run = "markdownlint-cli2 --fix 'CLAUDE.md' 'README.md'"
+
+[tasks."fmt:notes"]
+description = "Fix Markdown formatting in notes/ submodule"
+dir = "{{config_root}}/notes"
+run = "mise run fmt"
 
 [tasks."tf"]
 description = "tofu (forwards subcommand + args)"
