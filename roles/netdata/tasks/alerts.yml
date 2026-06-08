@@ -61,11 +61,8 @@
     - netdata
 
 # keepalived lost-master alarm, fed by the keepalived_vrrp collector above.
-# Deployed ONLY on the highest-priority VRRP peer: a backup normally has
-# holds_vip=0, so the alarm there would be a permanent false positive. The
-# priority-max compare mirrors site.yml's reboot DNS-safety gate; the leading
-# peer-membership check short-circuits the hostvars extract on non-peers (the
-# box test fixture), so it stays a no-op there.
+# Deployed only on the designated primary peer: a backup normally has
+# holds_vip=0, so the alarm there would be a permanent false positive.
 - name: Configure netdata keepalived lost-master alert
   import_role:
     name: netdata
@@ -74,12 +71,23 @@
     netdata_args:
       src: keepalived_vrrp_alerts.conf
       dest: keepalived_vrrp.conf
-      condition: >-
-        {{ (inventory_hostname in (pihole_keepalived_peers | default([])))
-           and ((pihole_keepalived_priority | default(0) | int)
-                == (pihole_keepalived_peers
-                    | map('extract', hostvars, 'pihole_keepalived_priority')
-                    | map('int') | max)) }}
+      condition: "{{ netdata_keepalived_lost_master_alert | default(false) }}"
+  tags:
+    - netdata
+
+- name: Remove stale netdata keepalived lost-master alert
+  when: not (netdata_keepalived_lost_master_alert | default(false))
+  file:
+    path: /etc/netdata/health.d/keepalived_vrrp.conf
+    state: absent
+  register: netdata_keepalived_lost_master_alert_absent
+  become: true
+  tags:
+    - netdata
+
+- name: Reload netdata health after stale keepalived alert removal
+  when: netdata_keepalived_lost_master_alert_absent.changed
+  import_tasks: reload_health.yml
   tags:
     - netdata
 

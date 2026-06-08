@@ -26,7 +26,7 @@
 # ("netdata*") consumer, so the shared apt_source _verify runs here to cover
 # that path: the signing key is scoped (not globally trusted) and the 2.* pin
 # wins at priority 999 from the mirror. No tombstone/negative-key args -- those
-# paths are exercised by nodejs's _verify.
+# paths are exercised by the standalone apt_source:box cell.
 - name: _verify | Netdata apt_source contract (flat repo, scoped key, glob pin)
   import_role:
     name: apt_source
@@ -39,6 +39,116 @@
         package: "netdata*"
         version: "2.*"
         priority: 999
+
+- name: _verify | Add loopback VIP fixture for keepalived_vrrp collector
+  command: ip addr replace 198.51.100.10/32 dev lo
+  changed_when: false
+  become: true
+
+- name: _verify | Install keepalived_vrrp collector fixture
+  import_role:
+    name: netdata
+    tasks_from: charts_d
+  vars:
+    netdata_keepalived_vrrp_ip: 198.51.100.10
+    netdata_keepalived_vrrp_update_every: 5
+    netdata_args:
+      name: keepalived_vrrp
+      script: keepalived_vrrp.chart.sh
+      conf: charts_d_keepalived_vrrp.conf.j2
+
+- name: _verify | Install keepalived_vrrp lost-master alert fixture
+  import_role:
+    name: netdata
+    tasks_from: health
+  vars:
+    netdata_args:
+      src: keepalived_vrrp_alerts.conf
+      dest: keepalived_vrrp.conf
+
+- name: _verify | Wait for keepalived_vrrp chart to register
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/charts
+    return_content: true
+  register: _netdata_keepalived_vrrp_charts
+  retries: 30
+  delay: 2
+  until: >-
+    _netdata_keepalived_vrrp_charts.status == 200
+    and 'keepalived_vrrp.state' in (_netdata_keepalived_vrrp_charts.content | from_json).charts.keys()
+
+- name: _verify | Keepalived_vrrp fixture reports holds_vip=1
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=keepalived_vrrp.state&points=1&after=-90&format=json
+    return_content: true
+  register: _netdata_keepalived_vrrp_data
+  retries: 30
+  delay: 2
+  until: >-
+    _netdata_keepalived_vrrp_data.status == 200
+    and 'holds_vip' in (_netdata_keepalived_vrrp_data.json.labels | default([]))
+    and (_netdata_keepalived_vrrp_data.json.data | default([])) | length > 0
+    and _netdata_keepalived_vrrp_data.json.data[0][_netdata_keepalived_vrrp_data.json.labels.index('holds_vip')] | int == 1
+
+- name: _verify | Keepalived_vrrp chart carries VIP label + shared context
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=keepalived_vrrp.state
+    return_content: true
+  register: _netdata_keepalived_vrrp_chart
+- name: _verify | Assert keepalived_vrrp labels + context
+  assert:
+    that:
+      - _netdata_keepalived_vrrp_chart.json.context == "keepalived_vrrp.state"
+      - _netdata_keepalived_vrrp_chart.json.chart_labels.vip | default('') == "198.51.100.10"
+    fail_msg: >-
+      chart {{ _netdata_keepalived_vrrp_chart.json.id }} context={{ _netdata_keepalived_vrrp_chart.json.context }}
+      labels={{ _netdata_keepalived_vrrp_chart.json.chart_labels | default({}) }}
+
+- name: _verify | Keepalived lost-master alert registered against the fixture
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
+    return_content: true
+  register: _netdata_keepalived_vrrp_alarms
+  retries: 30
+  delay: 2
+  until: >-
+    _netdata_keepalived_vrrp_alarms.status == 200
+    and (_netdata_keepalived_vrrp_alarms.content | from_json).alarms.keys() | list
+        | select('search', 'keepalived_vrrp.state.keepalived_lost_master') | list | length > 0
+
+- name: _verify | Remove keepalived_vrrp alert fixture
+  file:
+    path: /etc/netdata/health.d/keepalived_vrrp.conf
+    state: absent
+  register: _netdata_keepalived_vrrp_alert_cleanup
+  become: true
+
+- name: _verify | Reload health after keepalived_vrrp alert fixture cleanup
+  when: _netdata_keepalived_vrrp_alert_cleanup.changed
+  import_tasks: reload_health.yml
+
+- name: _verify | Remove keepalived_vrrp collector fixture files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/libexec/netdata/charts.d/keepalived_vrrp.chart.sh
+    - /etc/netdata/charts.d/keepalived_vrrp.conf
+  register: _netdata_keepalived_vrrp_collector_cleanup
+  become: true
+
+- name: _verify | Remove loopback VIP fixture
+  command: ip addr del 198.51.100.10/32 dev lo
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Restart netdata after keepalived_vrrp collector fixture cleanup
+  when: _netdata_keepalived_vrrp_collector_cleanup.changed
+  systemd:
+    name: netdata
+    state: restarted
+  become: true
 
 # Shorten update_every so the test doesn't have to wait a full minute
 # for the first emission. The collector defaults to 60s; 5s lets the
