@@ -133,17 +133,18 @@
   block:
     - name: _verify | Converge a probe source with a wrong key_id
       block:
-        - name: _verify | Import apt_source with a bogus key_id (expected to fail)
-          import_role:
-            name: apt_source
-            tasks_from: configure
-          vars:
+        - name: _verify | Set args for bogus key_id probe
+          set_fact:
             apt_source_args:
               name: apt_source_badkey_probe
               key_id: "0000000000000000000000000000000000000000"
               key_url: "{{ apt_source_tombstone_args.key_url }}"
               uris: "{{ apt_source_tombstone_args.uris }}"
               suites: "{{ apt_source_tombstone_args.suites }}"
+        - name: _verify | Import apt_source with a bogus key_id (expected to fail)
+          import_role:
+            name: apt_source
+            tasks_from: configure
         - name: _verify | Record that the bogus key_id was accepted
           set_fact:
             _apt_source_badkey_accepted: true
@@ -173,12 +174,13 @@
 - name: _verify | Tombstone path ({{ apt_source_tombstone_args.name | default('disabled') }})
   when: apt_source_tombstone_args is defined
   block:
+    - name: _verify | Set args for tombstone path
+      set_fact:
+        apt_source_args: "{{ apt_source_tombstone_args }}"
     - name: _verify | Remove the source via state absent
       import_role:
         name: apt_source
         tasks_from: configure
-      vars:
-        apt_source_args: "{{ apt_source_tombstone_args }}"
 
     # The tombstone import only refreshes apt when it actually removed the
     # source; a re-run with the source already gone skips that refresh, so
