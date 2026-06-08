@@ -628,7 +628,7 @@ def _cmd_packer_ubuntu(args: list[str]) -> int:
 
 
 def _cmd_emit(args: list[str]) -> int:
-    """Emit all CI outputs: matrix buckets, packer sources/ubuntu, flags.
+    """Emit CI outputs: matrix buckets and the site-test flag.
 
     Writes key=value lines to $GITHUB_OUTPUT (CI) or stdout (local).
     """
@@ -636,22 +636,12 @@ def _cmd_emit(args: list[str]) -> int:
 
     p = ArgumentParser()
     p.add_argument("--matrix", required=True)
-    p.add_argument("--packer-changed", default="false")
-    p.add_argument("--packer-worker-changed", default="false")
-    p.add_argument("--ci-image-changed", default="false")
     p.add_argument("--site-test", default="false")
-    p.add_argument("--zbm-changed", default="false")
-    p.add_argument("--inputs-sources", default="")
-    p.add_argument("--inputs-ubuntu", default="")
-    p.add_argument("--packer-sources-affected", default="")
     opts = p.parse_args(args)
 
     specs = json.loads(opts.matrix)
     matrix_str = json.dumps(specs)
     buckets = split_matrix_buckets(specs)
-    affected = set(opts.packer_sources_affected.split(",")) if opts.packer_sources_affected else None
-    packer = compute_packer_sources(opts.inputs_sources, affected=affected)
-    ubuntu = compute_packer_ubuntu(opts.inputs_ubuntu)
 
     pairs = [
         ("matrix", matrix_str),
@@ -661,20 +651,7 @@ def _cmd_emit(args: list[str]) -> int:
         ("matrix_minimal", json.dumps(buckets.minimal)),
         ("matrix_lab", json.dumps(buckets.lab)),
         ("matrix_pug", json.dumps(buckets.pug)),
-        ("packer_changed", opts.packer_changed),
-        ("packer_worker_changed", opts.packer_worker_changed),
-        ("ci_image_changed", opts.ci_image_changed),
         ("site_test", opts.site_test),
-        ("zbm_changed", opts.zbm_changed),
-        ("packer_sources", json.dumps(packer.all)),
-        ("packer_sources_box", json.dumps(packer.box)),
-        ("packer_sources_lab", json.dumps(packer.lab)),
-        ("packer_sources_pug", json.dumps(packer.pug)),
-        ("packer_sources_hetzner", json.dumps(packer.hetzner)),
-        ("packer_ubuntu_box", json.dumps(ubuntu.box)),
-        ("packer_ubuntu_lab", json.dumps(ubuntu.lab)),
-        ("packer_ubuntu_pug", json.dumps(ubuntu.pug)),
-        ("packer_ubuntu_hetzner", json.dumps(ubuntu.hetzner)),
     ]
 
     log_parts = [
@@ -685,20 +662,7 @@ def _cmd_emit(args: list[str]) -> int:
         f" minimal={json.dumps(buckets.minimal)}"
         f" lab={json.dumps(buckets.lab)}"
         f" pug={json.dumps(buckets.pug)})",
-        f"packer_changed={opts.packer_changed}",
-        f"packer_worker_changed={opts.packer_worker_changed}",
-        f"ci_image_changed={opts.ci_image_changed}",
-        f"zbm_changed={opts.zbm_changed}",
         f"site_test={opts.site_test}",
-        f"packer_sources={json.dumps(packer.all)}"
-        f" (box={json.dumps(packer.box)}"
-        f" lab={json.dumps(packer.lab)}"
-        f" pug={json.dumps(packer.pug)}"
-        f" hetzner={json.dumps(packer.hetzner)})",
-        f"packer_ubuntu=(box={json.dumps(ubuntu.box)}"
-        f" lab={json.dumps(ubuntu.lab)}"
-        f" pug={json.dumps(ubuntu.pug)}"
-        f" hetzner={json.dumps(ubuntu.hetzner)})",
     ]
     print(f"[detect-roles] result: {' '.join(log_parts)}", file=sys.stderr)
 
@@ -717,36 +681,15 @@ def _cmd_emit(args: list[str]) -> int:
 def _emit_result(
     matrix: str,
     *,
-    packer_affected: set[str] | None = None,
-    ci_image_changed: bool = False,
     site_test: bool = False,
-    zbm_changed: bool = False,
 ) -> int:
-    """Emit CI outputs via _cmd_emit with current env for sources/ubuntu."""
-    affected = packer_affected or set()
-    packer_changed = "true" if affected & {"qemu", "hetzner_upload"} else "false"
-    packer_worker_changed = "true" if "worker" in affected else "false"
-    affected_str = ",".join(sorted(affected)) if affected else ""
+    """Emit CI outputs via _cmd_emit."""
     return _cmd_emit(
         [
             "--matrix",
             matrix,
-            "--packer-changed",
-            packer_changed,
-            "--packer-worker-changed",
-            packer_worker_changed,
-            "--ci-image-changed",
-            "true" if ci_image_changed else "false",
             "--site-test",
             "true" if site_test else "false",
-            "--zbm-changed",
-            "true" if zbm_changed else "false",
-            "--packer-sources-affected",
-            affected_str,
-            "--inputs-sources",
-            os.environ.get("INPUTS_SOURCES", ""),
-            "--inputs-ubuntu",
-            os.environ.get("INPUTS_UBUNTU", ""),
         ]
     )
 
@@ -768,11 +711,8 @@ def _cmd_run(args: list[str]) -> int:
 
     event = os.environ.get("GITHUB_EVENT_NAME", "")
     inputs_roles = os.environ.get("INPUTS_ROLES", "")
-    inputs_sources = os.environ.get("INPUTS_SOURCES", "")
 
     if event == "workflow_dispatch" and inputs_roles:
-        if inputs_sources:
-            log(f"WARNING: both roles='{inputs_roles}' and sources='{inputs_sources}' set; sources ignored")
         log(f"mode: workflow_dispatch roles='{inputs_roles}'")
         if inputs_roles == "ALL":
             log("roles=ALL -> full universe")
@@ -780,19 +720,9 @@ def _cmd_run(args: list[str]) -> int:
         cells = _build_dispatch_matrix(inputs_roles)
         return _emit_result(json.dumps(cells_to_ci_specs(cells)))
 
-    if event == "workflow_dispatch" and inputs_sources:
-        log(f"mode: workflow_dispatch sources='{inputs_sources}' (packer-only, empty test matrix)")
-        return _emit_result("[]", packer_affected={"qemu"})
-
     if event == "schedule":
         log("mode: schedule (nightly full build)")
-        return _emit_result(
-            _full_universe_matrix(),
-            packer_affected={"qemu", "worker"},
-            ci_image_changed=True,
-            site_test=True,
-            zbm_changed=True,
-        )
+        return _emit_result(_full_universe_matrix(), site_test=True)
 
     head_sha = os.environ.get("GITHUB_SHA", "")
     ref_name = os.environ.get("GITHUB_REF_NAME", "")
@@ -807,15 +737,9 @@ def _cmd_run(args: list[str]) -> int:
         f"branch={ref_name or '?'}, sha={head_sha[:12] if head_sha else '?'})"
     )
 
-    def full_universe(reason, packer_affected=None, ci_image_changed=False, zbm_changed=False):
+    def full_universe(reason):
         log(f"{reason} -> testing the FULL universe")
-        return _emit_result(
-            _full_universe_matrix(),
-            packer_affected=packer_affected,
-            ci_image_changed=ci_image_changed,
-            site_test=True,
-            zbm_changed=zbm_changed,
-        )
+        return _emit_result(_full_universe_matrix(), site_test=True)
 
     ci_base_ref = os.environ.get("CI_BASE_REF", "")
     if ci_base_ref:
@@ -832,14 +756,12 @@ def _cmd_run(args: list[str]) -> int:
             log_fn=log,
         )
         if not green:
-            return full_universe("no green ancestor run found", packer_affected={"qemu", "worker"}, zbm_changed=True)
+            return full_universe("no green ancestor run found")
         if git_rev_parse(green) is None:
             log(f"  base {green[:12]} outside shallow checkout; fetching the commit")
             git_fetch_commit(green)
         if git_rev_parse(green) is None:
-            return full_universe(
-                f"green run {green[:12]} unreachable", packer_affected={"qemu", "worker"}, zbm_changed=True
-            )
+            return full_universe(f"green run {green[:12]} unreachable")
         base_ref = green
         log(f"diff base: {green[:12]} (last green ci run)")
     else:
@@ -848,9 +770,7 @@ def _cmd_run(args: list[str]) -> int:
 
     base = git_rev_parse(base_ref)
     if base is None:
-        return full_universe(
-            f"base ref '{base_ref}' does not resolve", packer_affected={"qemu", "worker"}, zbm_changed=True
-        )
+        return full_universe(f"base ref '{base_ref}' does not resolve")
 
     changed = git_diff_files(base)
     head_short = git_rev_parse_short("HEAD")
@@ -863,19 +783,11 @@ def _cmd_run(args: list[str]) -> int:
 
     if packer_affected:
         log(f"packer sources affected: {' '.join(sorted(packer_affected))}")
-    if classification.ci_image_changed:
-        log("ci-image inputs changed (master push) -> ci_image_changed=true")
-
     if classification.full_universe_paths:
         log("full-universe paths changed:")
         for p in classification.full_universe_paths:
             log(f"     {p}")
-        return full_universe(
-            "full-universe path changed",
-            packer_affected=packer_affected,
-            ci_image_changed=classification.ci_image_changed,
-            zbm_changed=classification.zbm_changed,
-        )
+        return full_universe("full-universe path changed")
 
     universe = set(list_testable_roles())
     roles: set[str] = set()
@@ -923,12 +835,7 @@ def _cmd_run(args: list[str]) -> int:
     extra = [ci_spec_to_cell(s) for s in release_cells] if release_cells else None
     matrix = json.dumps(cells_to_ci_specs(build_test_matrix(roles_sorted, extra)))
 
-    return _emit_result(
-        matrix,
-        packer_affected=packer_affected,
-        ci_image_changed=classification.ci_image_changed,
-        zbm_changed=classification.zbm_changed,
-    )
+    return _emit_result(matrix)
 
 
 _COMMANDS = {

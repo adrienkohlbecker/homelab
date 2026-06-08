@@ -1,0 +1,9 @@
+name: hetzner-worker
+# Manual rebuild of the pre-baked Hetzner Cloud CI worker snapshot.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.github/workflows/packer-worker.yml
+    secrets: inherit

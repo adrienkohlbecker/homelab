@@ -55,8 +55,6 @@ class TestModesEndToEnd:
             f"bash {DETECT_ROLES_SH} --all 2>/dev/null",
             env={
                 **os.environ,
-                "INPUTS_SOURCES": "",
-                "INPUTS_UBUNTU": "",
             },
         )
         assert result.returncode == 0
@@ -71,8 +69,6 @@ class TestModesEndToEnd:
                 **os.environ,
                 "GITHUB_EVENT_NAME": "workflow_dispatch",
                 "INPUTS_ROLES": "cleanup",
-                "INPUTS_SOURCES": "",
-                "INPUTS_UBUNTU": "",
             },
         )
         assert result.returncode == 0
@@ -88,8 +84,6 @@ class TestModesEndToEnd:
                 **os.environ,
                 "GITHUB_EVENT_NAME": "workflow_dispatch",
                 "INPUTS_ROLES": "cleanup:box",
-                "INPUTS_SOURCES": "",
-                "INPUTS_UBUNTU": "",
             },
         )
         assert result.returncode == 0
@@ -104,29 +98,9 @@ class TestModesEndToEnd:
                 **os.environ,
                 "GITHUB_EVENT_NAME": "workflow_dispatch",
                 "INPUTS_ROLES": "ALL",
-                "INPUTS_SOURCES": "",
-                "INPUTS_UBUNTU": "",
             },
         )
         assert result.returncode == 0
         out = _parse_emit_output(result.stdout)
         matrix = json.loads(out["matrix"])
         assert len(matrix) > 50
-
-    def test_packer_only_dispatch(self) -> None:
-        result = _run_bash(
-            f"bash {DETECT_ROLES_SH} 2>/dev/null",
-            env={
-                **os.environ,
-                "GITHUB_EVENT_NAME": "workflow_dispatch",
-                "INPUTS_ROLES": "",
-                "INPUTS_SOURCES": "lab pug",
-                "INPUTS_UBUNTU": "",
-            },
-        )
-        assert result.returncode == 0
-        out = _parse_emit_output(result.stdout)
-        assert json.loads(out["matrix"]) == []
-        assert out["packer_changed"] == "true"
-        sources = json.loads(out["packer_sources"])
-        assert sorted(sources) == ["lab", "pug"]
