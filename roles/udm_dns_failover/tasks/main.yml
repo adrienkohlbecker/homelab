@@ -28,6 +28,11 @@
       - (pihole_keepalived_peers | default([]) | length) > 0
       - inventory_hostname in external_ips
       - udm_dns_failover_heartbeat_url is defined
+      # The heartbeat template appends ?status=up / ?status=down, so the
+      # stored value must be the bare Kuma push endpoint with no query of
+      # its own -- a full copied push URL (…?status=up&msg=…) would render
+      # …?status=up&msg=…?status=down and Kuma would read the first status.
+      - udm_dns_failover_heartbeat_url is not search('[?]')
       # Shell-injection guard, not a validity check: the interface is
       # interpolated into the iptables `command:` tasks below and the
       # on-boot script's iptables loop. The charset rules out metacharacters;
