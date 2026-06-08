@@ -1,11 +1,6 @@
 name: packer-worker
-# Reusable, call-only. Rebuilds the pre-baked CI worker snapshot on
-# Hetzner Cloud. ci.yml calls this via `uses:` gated on detect's
-# packer_worker_changed (which itself fires only when worker-specific
-# inputs change — provision_worker.sh, hcloud_worker.pkr.hcl,
-# ubuntu_images.json, runner vars, etc.). The snapshot is a
-# project-global resource (label-selected by the runtime provisioner),
-# so only master pushes should publish; ci.yml enforces the ref gate.
+# Reusable implementation for the manual hetzner-worker workflow. Rebuilds the
+# pre-baked CI worker snapshot on Hetzner Cloud.
 on:
   workflow_call:
 
@@ -15,6 +10,7 @@ defaults:
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/master'
     runs-on: [ self-hosted, lab ]
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest

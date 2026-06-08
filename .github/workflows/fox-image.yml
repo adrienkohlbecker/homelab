@@ -1,0 +1,14 @@
+name: fox-image
+# Manual rebuild of fox's Hetzner Cloud boot image. The reusable packer build
+# publishes the snapshot only from master; branch dispatches still validate the
+# image build with --no-publish.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.github/workflows/packer-build.yml
+    secrets: inherit
+    with:
+      sources_matrix: '["hetzner"]'
+      ubuntu_matrix: '["jammy"]'

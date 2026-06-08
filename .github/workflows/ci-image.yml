@@ -1,13 +1,7 @@
 name: ci-image
-# Reusable + directly dispatchable. ci.yml calls this via `uses:` gated on
-# detect's ci_image_changed (which itself enforces push + ref=master +
-# build-input-diff), so the old `push: branches/paths` gate now lives in
-# detect-roles. ci.yml orders `test` after this job (needs: ci-image), so
-# test-role resolves the freshly-pushed :latest -- replacing the old
-# ci-image-<sha> sentinel poll. workflow_dispatch still builds from any
-# ref (the :latest tag gate below handles the tag policy).
+# Manual rebuild of the CI container image. Branch dispatches produce a
+# sha-tagged image; dispatching from master also refreshes :latest.
 on:
-  workflow_call:
   workflow_dispatch:
 
 # Workflow only reads the repo; Nexus push uses out-of-band creds. Drop
@@ -21,11 +15,8 @@ permissions:
 # push). cancel-in-progress=false because a half-pushed manifest is
 # strictly worse than a delayed run.
 #
-# Ordering vs. test: ci.yml runs this job before test (needs: ci-image,
-# gated on detect's ci_image_changed), so a push that touches both a
-# build-input and a role rebuilds + republishes :latest before any
-# test-role cell resolves its container: block -- no cross-workflow
-# sentinel needed (that's what the old wait-for-ci-image poll did).
+# Tests intentionally use the currently published :latest. Refresh this image
+# manually before or after CI when the toolchain itself changes.
 concurrency:
   group: ci-image-${{ github.ref }}
   cancel-in-progress: false
@@ -187,7 +178,5 @@ jobs:
           fi
           podman rmi "${REGISTRY}/${REPO}:${GITHUB_SHA}" 2>/dev/null || true
 
-      # The old "Mark ci-image complete for waiters" step (touch
-      # _sentinels/ci-image-<sha>) is gone -- ci.yml orders `test` after
-      # this job via `needs: ci-image`, so test-role resolves the new
-      # :latest without polling a sentinel.
+      # No sentinel step: this workflow is manual and CI consumes the currently
+      # published :latest.

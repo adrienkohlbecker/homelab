@@ -1324,35 +1324,7 @@ class TestCmdEmit:
         assert json.loads(out["matrix_resolute"]) == []
         assert json.loads(out["matrix_lab"]) == []
         assert json.loads(out["matrix_pug"]) == []
-        assert out["packer_changed"] == "false"
-        assert out["packer_worker_changed"] == "false"
-        assert out["ci_image_changed"] == "false"
         assert out["site_test"] == "false"
-        assert out["zbm_changed"] == "false"
-
-    def test_packer_changed_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
-        rc = detect._cmd_emit(["--matrix", "[]", "--packer-changed", "true"])
-        assert rc == 0
-        out = _parse_kv(capsys.readouterr().out)
-        assert out["packer_changed"] == "true"
-        assert out["packer_worker_changed"] == "false"
-        assert out["ci_image_changed"] == "false"
-
-    def test_packer_worker_changed_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
-        rc = detect._cmd_emit(["--matrix", "[]", "--packer-worker-changed", "true"])
-        assert rc == 0
-        out = _parse_kv(capsys.readouterr().out)
-        assert out["packer_worker_changed"] == "true"
-        assert out["packer_changed"] == "false"
-
-    def test_ci_image_changed_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
-        rc = detect._cmd_emit(["--matrix", "[]", "--ci-image-changed", "true"])
-        assert rc == 0
-        out = _parse_kv(capsys.readouterr().out)
-        assert out["ci_image_changed"] == "true"
 
     def test_site_test_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
@@ -1360,41 +1332,6 @@ class TestCmdEmit:
         assert rc == 0
         out = _parse_kv(capsys.readouterr().out)
         assert out["site_test"] == "true"
-
-    def test_zbm_changed_flag(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
-        rc = detect._cmd_emit(["--matrix", "[]", "--zbm-changed", "true"])
-        assert rc == 0
-        out = _parse_kv(capsys.readouterr().out)
-        assert out["zbm_changed"] == "true"
-
-    def test_packer_sources(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
-        rc = detect._cmd_emit(["--matrix", "[]", "--inputs-sources", "lab pug"])
-        assert rc == 0
-        out = _parse_kv(capsys.readouterr().out)
-        assert json.loads(out["packer_sources"]) == ["lab", "pug"]
-        assert json.loads(out["packer_sources_box"]) == []
-        assert json.loads(out["packer_sources_lab"]) == ["lab"]
-        assert json.loads(out["packer_sources_pug"]) == ["pug"]
-
-    def test_packer_ubuntu_default(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
-        rc = detect._cmd_emit(["--matrix", "[]"])
-        assert rc == 0
-        out = _parse_kv(capsys.readouterr().out)
-        assert json.loads(out["packer_ubuntu_box"]) == ["jammy", "noble", "resolute"]
-        assert json.loads(out["packer_ubuntu_lab"]) == ["jammy", "noble", "resolute"]
-        assert json.loads(out["packer_ubuntu_pug"]) == ["jammy", "noble", "resolute"]
-        assert json.loads(out["packer_ubuntu_hetzner"]) == ["jammy"]
-
-    def test_packer_ubuntu_pinned(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
-        rc = detect._cmd_emit(["--matrix", "[]", "--inputs-ubuntu", "noble"])
-        assert rc == 0
-        out = _parse_kv(capsys.readouterr().out)
-        assert json.loads(out["packer_ubuntu_box"]) == ["noble"]
-        assert json.loads(out["packer_ubuntu_lab"]) == ["noble"]
 
     def test_github_output_file(
         self,
@@ -1411,8 +1348,6 @@ class TestCmdEmit:
         content = gh_out.read_text()
         kv = _parse_kv(content)
         assert json.loads(kv["matrix_jammy"]) == ["alpha:box"]
-        assert json.loads(kv["packer_sources"]) == ["box", "pug", "lab", "hetzner"]
-        assert json.loads(kv["packer_sources_lab"]) == ["lab"]
 
     def test_log_to_stderr(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
@@ -1462,8 +1397,6 @@ def _clean_ci_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "CI_BASE_REF",
         "CI_DEFAULT_BRANCH",
         "INPUTS_ROLES",
-        "INPUTS_SOURCES",
-        "INPUTS_UBUNTU",
     ]:
         monkeypatch.delenv(var, raising=False)
 
@@ -1481,8 +1414,6 @@ class TestCmdRun:
     @pytest.fixture(autouse=True)
     def _clean_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _clean_ci_env(monkeypatch)
-        monkeypatch.setenv("INPUTS_SOURCES", "")
-        monkeypatch.setenv("INPUTS_UBUNTU", "")
 
     def test_all_mode(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.setattr(detect, "_full_universe_matrix", lambda: '["alpha:box","beta:minimal"]')
@@ -1524,17 +1455,6 @@ class TestCmdRun:
         detect._cmd_run([])
         assert captured["input"] == "foo,bar:minimal"
 
-    def test_packer_only_dispatch(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
-        monkeypatch.setenv("INPUTS_ROLES", "")
-        monkeypatch.setenv("INPUTS_SOURCES", "lab pug")
-        rc = detect._cmd_run([])
-        assert rc == 0
-        kv = _parse_kv(capsys.readouterr().out)
-        assert kv["packer_changed"] == "true"
-        assert json.loads(kv["matrix"]) == []
-        assert sorted(json.loads(kv["packer_sources"])) == ["lab", "pug"]
-
     def test_schedule_full_build(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.setenv("GITHUB_EVENT_NAME", "schedule")
         monkeypatch.setattr(detect, "_full_universe_matrix", lambda: '["alpha:box","beta:minimal"]')
@@ -1543,9 +1463,6 @@ class TestCmdRun:
         out = capsys.readouterr()
         kv = _parse_kv(out.out)
         assert "alpha:box" in kv["matrix"]
-        assert kv["packer_changed"] == "true"
-        assert kv["packer_worker_changed"] == "true"
-        assert kv["ci_image_changed"] == "true"
         assert kv["site_test"] == "true"
         assert "schedule" in out.err
 
@@ -1692,8 +1609,7 @@ class TestCmdRun:
         rc = detect._cmd_run([])
         assert rc == 0
         assert "packer" in captured["roles"]
-        kv = _parse_kv(capsys.readouterr().out)
-        assert kv["packer_changed"] == "true"
+        assert "packer sources affected: qemu" in capsys.readouterr().err
 
     def test_role_deps_expansion(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
@@ -1747,29 +1663,6 @@ class TestCmdRun:
         assert captured["extra"] is not None
         extra_specs = [f"{c.role}:{c.machine}:{c.ubuntu}" for c in captured["extra"]]
         assert "nginx:box:noble" in extra_specs
-
-    def test_ci_image_on_master_push(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
-        monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
-        monkeypatch.setenv("GITHUB_SHA", "head")
-        monkeypatch.setenv("GITHUB_REF_NAME", "master")
-        monkeypatch.setenv("GITHUB_REF", "refs/heads/master")
-        monkeypatch.setenv("CI_BASE_REF", "HEAD~1")
-        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "resolved")
-        monkeypatch.setattr(
-            detect,
-            "git_diff_files",
-            lambda base, head="HEAD": ["Dockerfile", "roles/nginx/tasks/main.yml"],
-        )
-        monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: "short")
-        monkeypatch.setattr(detect, "list_testable_roles", lambda: ["nginx"])
-        monkeypatch.setattr(detect, "build_role_deps_map", lambda: {})
-        monkeypatch.setattr(detect, "release_ubuntu_for", lambda role: [])
-        monkeypatch.setattr(detect, "build_test_matrix", lambda roles, extra=None: [])
-        monkeypatch.setattr(detect, "cells_to_ci_specs", lambda cells: ["nginx:box"])
-        rc = detect._cmd_run([])
-        assert rc == 0
-        kv = _parse_kv(capsys.readouterr().out)
-        assert kv["ci_image_changed"] == "true"
 
     def test_empty_changeset(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")

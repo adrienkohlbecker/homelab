@@ -1,7 +1,7 @@
 name: site-test
 # Reusable, call-only. Full site.yml converge on a box VM to catch
 # role-ordering and cross-role interaction bugs that per-role tests miss.
-# ci.yml calls this after packer_jammy so a box image is available.
+# ci.yml calls this against the currently published box image.
 on:
   workflow_call:
 

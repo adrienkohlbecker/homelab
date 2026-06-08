@@ -1,13 +1,10 @@
 name: zbm-build
-# Build the custom ZFSBootMenu recovery image. ci.yml calls this via `uses:`
-# gated on detect's zbm_changed (any push touching zbm/ or mise-tasks/zbm/);
-# it's also workflow_dispatch-able.
+# Manual build of the custom ZFSBootMenu recovery image.
 #
 # Every build gets a version suffix with the run ID (e.g. v3.1.0-ci.12345.1)
 # embedded in both the initramfs and the tarball filename. Artifacts always go
 # to GitHub; Nexus upload is master-only.
 on:
-  workflow_call:
   workflow_dispatch:
 
 permissions:

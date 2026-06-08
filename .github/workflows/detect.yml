@@ -1,6 +1,6 @@
 name: detect
 # Reusable, call-only. Runs the change-detection pipeline and emits the
-# role test matrix, packer/ci-image gates, and source/release arrays.
+# role test matrix.
 # Contains the 25h activity gate for scheduled runs (the gate job is
 # skipped on push/dispatch). ci.yml is the sole caller.
 on:
@@ -12,14 +12,6 @@ on:
         required: true
       roles:
         description: 'Dispatch input: comma-separated role names. Empty = use git diff.'
-        type: string
-        default: ''
-      sources:
-        description: 'Dispatch input: packer sources to rebuild. Empty = all.'
-        type: string
-        default: ''
-      ubuntu:
-        description: 'Dispatch input: Ubuntu codename pin. Empty = default set.'
         type: string
         default: ''
     outputs:
@@ -40,32 +32,6 @@ on:
         value: ${{ jobs.detect.outputs.matrix_lab }}
       matrix_pug:
         value: ${{ jobs.detect.outputs.matrix_pug }}
-      packer_changed:
-        value: ${{ jobs.detect.outputs.packer_changed }}
-      packer_worker_changed:
-        value: ${{ jobs.detect.outputs.packer_worker_changed }}
-      ci_image_changed:
-        value: ${{ jobs.detect.outputs.ci_image_changed }}
-      zbm_changed:
-        value: ${{ jobs.detect.outputs.zbm_changed }}
-      packer_sources:
-        value: ${{ jobs.detect.outputs.packer_sources }}
-      packer_sources_box:
-        value: ${{ jobs.detect.outputs.packer_sources_box }}
-      packer_sources_lab:
-        value: ${{ jobs.detect.outputs.packer_sources_lab }}
-      packer_sources_pug:
-        value: ${{ jobs.detect.outputs.packer_sources_pug }}
-      packer_sources_hetzner:
-        value: ${{ jobs.detect.outputs.packer_sources_hetzner }}
-      packer_ubuntu_box:
-        value: ${{ jobs.detect.outputs.packer_ubuntu_box }}
-      packer_ubuntu_lab:
-        value: ${{ jobs.detect.outputs.packer_ubuntu_lab }}
-      packer_ubuntu_pug:
-        value: ${{ jobs.detect.outputs.packer_ubuntu_pug }}
-      packer_ubuntu_hetzner:
-        value: ${{ jobs.detect.outputs.packer_ubuntu_hetzner }}
       site_test:
         value: ${{ jobs.detect.outputs.site_test }}
 
@@ -103,10 +69,10 @@ jobs:
           fi
 
   detect:
-    # Single detection pass. Emits the role test matrix and all packer /
-    # ci-image gates. Depends on gate so schedule runs with no recent
-    # commits never start detection. On push/dispatch, gate is skipped
-    # and detect runs unconditionally (always() + gate.result == 'skipped').
+    # Single detection pass. Emits the role test matrix. Depends on gate so
+    # schedule runs with no recent commits never start detection. On
+    # push/dispatch, gate is skipped and detect runs unconditionally
+    # (always() + gate.result == 'skipped').
     needs: gate
     if: |
       always()
@@ -131,19 +97,6 @@ jobs:
       matrix_minimal: ${{ steps.detect.outputs.matrix_minimal }}
       matrix_lab: ${{ steps.detect.outputs.matrix_lab }}
       matrix_pug: ${{ steps.detect.outputs.matrix_pug }}
-      packer_changed: ${{ steps.detect.outputs.packer_changed }}
-      packer_worker_changed: ${{ steps.detect.outputs.packer_worker_changed }}
-      ci_image_changed: ${{ steps.detect.outputs.ci_image_changed }}
-      zbm_changed: ${{ steps.detect.outputs.zbm_changed }}
-      packer_sources: ${{ steps.detect.outputs.packer_sources }}
-      packer_sources_box: ${{ steps.detect.outputs.packer_sources_box }}
-      packer_sources_lab: ${{ steps.detect.outputs.packer_sources_lab }}
-      packer_sources_pug: ${{ steps.detect.outputs.packer_sources_pug }}
-      packer_sources_hetzner: ${{ steps.detect.outputs.packer_sources_hetzner }}
-      packer_ubuntu_box: ${{ steps.detect.outputs.packer_ubuntu_box }}
-      packer_ubuntu_lab: ${{ steps.detect.outputs.packer_ubuntu_lab }}
-      packer_ubuntu_pug: ${{ steps.detect.outputs.packer_ubuntu_pug }}
-      packer_ubuntu_hetzner: ${{ steps.detect.outputs.packer_ubuntu_hetzner }}
       site_test: ${{ steps.detect.outputs.site_test }}
     steps:
       - uses: actions/checkout@v6
@@ -153,7 +106,5 @@ jobs:
         env:
           GITHUB_EVENT_NAME: ${{ inputs.event_name }}
           INPUTS_ROLES: ${{ inputs.roles }}
-          INPUTS_SOURCES: ${{ inputs.sources }}
-          INPUTS_UBUNTU: ${{ inputs.ubuntu }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: mise run ci:detect-roles

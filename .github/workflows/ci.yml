@@ -1,20 +1,18 @@
 name: ci
-# Unified pipeline for push, nightly schedule, and manual dispatch.
-# detect.yml decides what runs: pushes diff against the last green
-# ancestor, schedule events force a full build (all roles, all packer
-# sources, ci-image), and dispatches accept explicit roles/sources
-# overrides. This file is the orchestrator — it wires detect's outputs
-# into conditional calls to the reusable build/test workflows.
+# Unified pipeline for push, nightly schedule, and manual test dispatch.
+# detect.yml decides which role tests run: pushes diff against the last green
+# ancestor, schedule events force the full test matrix, and dispatch accepts
+# explicit roles. Heavy artifact builders live in dedicated manual workflows.
 #
 # Serialised per branch (concurrency below, cancel-in-progress: false): a
-# push touching a shared/cross-cutting path runs the FULL universe, which is
-# expensive, so we queue rather than fan out N concurrent wide runs. At most
+# push touching a shared/cross-cutting path runs the FULL test universe, which
+# is expensive, so we queue rather than fan out N concurrent wide runs. At most
 # one run executes + one queues per ref; an older *pending* run is superseded
 # (it never started, so no wasted work), while an in-flight run is NEVER
 # cancelled. Serialising also keeps the diff base maximally fresh — when the
 # next run's detect fires, the prior run has already finished, so it diffs
 # from that run's commit (tightest matrix). Callees keep their own groups
-# (packer-build `lab-qemu-artifacts`, ci-image `ci-image`, lint `lint-<ref>`).
+# (lint `lint-<ref>`).
 #
 # A green schedule run becomes the diff base for subsequent pushes
 # (newest_green_ancestor accepts both push and schedule events from this
@@ -34,14 +32,6 @@ on:
         description: 'Comma-separated role names (or role:variant). `ALL` = every role. Empty = use git diff.'
         required: false
         default: ''
-      sources:
-        description: 'packer sources to rebuild (e.g. "box pug"). Empty = all (only runs when packer changed).'
-        required: false
-        default: ''
-      ubuntu:
-        description: 'Ubuntu codename to pin the packer build to. Empty = box builds every supported release (jammy/noble/resolute), pug/lab/hetzner build jammy.'
-        required: false
-        default: ''
 
 defaults:
   run:
@@ -51,268 +41,90 @@ jobs:
   detect:
     # Change detection + 25h nightly gate. detect.yml encapsulates both:
     # its internal gate job skips on non-schedule events; its detect job
-    # emits the role matrix and all packer/ci-image/worker gates. When the
-    # 25h gate suppresses the nightly, detect's outputs are empty and the
-    # `skip` output is 'true' — all downstream jobs auto-skip via their
-    # output checks. See detect.yml for internals.
+    # emits the role matrix. When the 25h gate suppresses the nightly,
+    # detect's outputs are empty and the `skip` output is 'true' — all
+    # downstream jobs auto-skip via their output checks.
     uses: ./.github/workflows/detect.yml
     secrets: inherit
     with:
       event_name: ${{ github.event_name }}
       roles: ${{ inputs.roles }}
-      sources: ${{ inputs.sources }}
-      ubuntu: ${{ inputs.ubuntu }}
 
   lint:
-    # Runs in the ci container, so it waits on ci-image whenever that's being
-    # rebuilt — a stale :latest would lint against the wrong toolchain.
-    # always() + (success || skipped) lets it run when ci-image is NOT needed
-    # (skipped) and gates it behind a genuine ci-image failure. The skip
-    # check prevents lint from running on 25h-gated nightlies (where detect
-    # succeeded but emitted empty outputs).
-    needs: [ detect, ci-image ]
+    # Runs in the published ci container. Rebuilding that image is a manual
+    # workflow now, so CI intentionally uses the currently published :latest.
+    needs: detect
     if: |
-      always()
-      && needs.detect.result == 'success'
+      needs.detect.result == 'success'
       && needs.detect.outputs.skip != 'true'
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     uses: ./.github/workflows/lint.yml
     secrets: inherit
 
-  ci-image:
-    # Rebuild + republish the ci :latest image only when a build input
-    # changed on master (detect's ci_image_changed enforces that triple
-    # gate). Ordered before lint / packer / test so they all resolve the
-    # new :latest.
-    needs: detect
-    if: needs.detect.outputs.ci_image_changed == 'true'
-    uses: ./.github/workflows/ci-image.yml
-    secrets: inherit
-
-  zbm_build:
-    # Validate the custom ZFSBootMenu recovery image still builds whenever zbm/
-    # or mise-tasks/zbm/ changes (detect's zbm_changed). Runs bare on lab (it
-    # needs docker buildx + the runner's rootless podman, not the CI container),
-    # so it waits on ci-image only for ordering on the shared runner -- same
-    # always() && (success || skipped) shape as lint/packer. This is a purely
-    # structural dependency (no code is shared): a ci-image failure will suppress
-    # zbm_build even when the two are unrelated. NEXUS secrets for the registry
-    # cache + tarball upload to Nexus (master-only).
-    needs: [ detect, ci-image ]
-    if: |
-      always()
-      && needs.detect.result == 'success'
-      && needs.detect.outputs.zbm_changed == 'true'
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
-    uses: ./.github/workflows/zbm-build.yml
-    # NEXUS_ZBM_USERNAME/PASSWORD for the tarball upload to the on-lab Nexus.
-    secrets: inherit
-
-  # --- packer: per-release box builds ----------------------------------------
-  # Split into one call per Ubuntu release so each test_* group can depend on
-  # exactly its image. The old packer_box built all releases in one serialised
-  # matrix (max-parallel:1); the split preserves that serialisation via the
-  # lab-qemu-artifacts concurrency group in packer-build.yml, but now
-  # test_jammy can start as soon as packer_jammy finishes — it no longer
-  # waits for noble/resolute. Jammy runs first (the bulk of test cells
-  # consume it); noble and resolute depend on jammy but run concurrently
-  # with each other. Each call builds source=box for one release; the `if`
-  # gates on that release being in the packer_ubuntu_box array (which a
-  # dispatch `ubuntu=noble` narrows to just ["noble"]). box_deps is seeded
-  # for every release (the step in packer-build.yml gates on source==box).
-
-  packer_jammy:
-    needs: [ detect, ci-image ]
-    if: |
-      always()
-      && needs.detect.result == 'success'
-      && needs.detect.outputs.packer_changed == 'true'
-      && needs.detect.outputs.packer_sources_box != '[]'
-      && contains(fromJSON(needs.detect.outputs.packer_ubuntu_box), 'jammy')
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
-    uses: ./.github/workflows/packer-build.yml
-    secrets: inherit
-    with:
-      sources_matrix: ${{ needs.detect.outputs.packer_sources_box }}
-      ubuntu_matrix: '["jammy"]'
-
-  packer_noble:
-    needs: [ detect, ci-image, packer_jammy ]
-    if: |
-      always()
-      && needs.detect.result == 'success'
-      && needs.detect.outputs.packer_changed == 'true'
-      && needs.detect.outputs.packer_sources_box != '[]'
-      && contains(fromJSON(needs.detect.outputs.packer_ubuntu_box), 'noble')
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
-    uses: ./.github/workflows/packer-build.yml
-    secrets: inherit
-    with:
-      sources_matrix: ${{ needs.detect.outputs.packer_sources_box }}
-      ubuntu_matrix: '["noble"]'
-
-  packer_resolute:
-    needs: [ detect, ci-image, packer_jammy ]
-    if: |
-      always()
-      && needs.detect.result == 'success'
-      && needs.detect.outputs.packer_changed == 'true'
-      && needs.detect.outputs.packer_sources_box != '[]'
-      && contains(fromJSON(needs.detect.outputs.packer_ubuntu_box), 'resolute')
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
-    uses: ./.github/workflows/packer-build.yml
-    secrets: inherit
-    with:
-      sources_matrix: ${{ needs.detect.outputs.packer_sources_box }}
-      ubuntu_matrix: '["resolute"]'
-
-  # --- packer: per-source non-box builds --------------------------------------
-  # Split into lab / pug / hetzner so each test_* group depends on exactly
-  # its image build. lab and pug build for all Ubuntu releases (like box);
-  # hetzner stays jammy-only (fox runs jammy in prod). All wait for box
-  # release builds so test_jammy can start as soon as packer_jammy finishes.
-
-  packer_lab:
-    needs: [ detect, ci-image, packer_jammy, packer_noble, packer_resolute ]
-    if: |
-      always()
-      && needs.detect.result == 'success'
-      && needs.detect.outputs.packer_changed == 'true'
-      && needs.detect.outputs.packer_sources_lab != '[]'
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
-    uses: ./.github/workflows/packer-build.yml
-    secrets: inherit
-    with:
-      sources_matrix: ${{ needs.detect.outputs.packer_sources_lab }}
-      ubuntu_matrix: ${{ needs.detect.outputs.packer_ubuntu_lab }}
-
-  packer_pug:
-    needs: [ detect, ci-image, packer_jammy, packer_noble, packer_resolute ]
-    if: |
-      always()
-      && needs.detect.result == 'success'
-      && needs.detect.outputs.packer_changed == 'true'
-      && needs.detect.outputs.packer_sources_pug != '[]'
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
-    uses: ./.github/workflows/packer-build.yml
-    secrets: inherit
-    with:
-      sources_matrix: ${{ needs.detect.outputs.packer_sources_pug }}
-      ubuntu_matrix: ${{ needs.detect.outputs.packer_ubuntu_pug }}
-
-  packer_hetzner:
-    needs: [ detect, ci-image, packer_jammy, packer_noble, packer_resolute ]
-    if: |
-      always()
-      && needs.detect.result == 'success'
-      && needs.detect.outputs.packer_changed == 'true'
-      && needs.detect.outputs.packer_sources_hetzner != '[]'
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
-    uses: ./.github/workflows/packer-build.yml
-    secrets: inherit
-    with:
-      sources_matrix: ${{ needs.detect.outputs.packer_sources_hetzner }}
-      ubuntu_matrix: ${{ needs.detect.outputs.packer_ubuntu_hetzner }}
-
-  # --- packer: CI worker snapshot (Hetzner Cloud) --------------------------
-
-  packer_worker:
-    needs: [ detect, ci-image ]
-    if: |
-      always()
-      && needs.detect.result == 'success'
-      && needs.detect.outputs.packer_worker_changed == 'true'
-      && github.ref == 'refs/heads/master'
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
-    uses: ./.github/workflows/packer-worker.yml
-    secrets: inherit
-
   # --- test: per-release/variant groups -------------------------------------
-  # Each group depends on exactly its packer build. test_jammy (the bulk of
-  # push-CI cells: box + box_deps) starts as soon as packer_jammy finishes,
-  # without waiting for the noble/resolute/extra builds. test_minimal has no
-  # packer dep at all (vanilla cloud image). always() + (success || skipped)
-  # lets each group run when packer wasn't needed (skipped) and blocks it
-  # behind a genuine packer failure.
+  # CI no longer builds QEMU images inline. Test cells consume the images already
+  # published under /mnt/scratch/homelab_ci by the manual packer workflows.
 
   test_jammy:
-    needs: [ detect, packer_jammy, ci-image ]
+    needs: detect
     if: |
-      always()
-      && needs.detect.result == 'success'
+      needs.detect.result == 'success'
       && needs.detect.outputs.matrix_jammy != '[]'
       && needs.detect.outputs.matrix_jammy != ''
-      && (needs.packer_jammy.result == 'success' || needs.packer_jammy.result == 'skipped')
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     uses: ./.github/workflows/test.yml
     secrets: inherit
     with:
       matrix: ${{ needs.detect.outputs.matrix_jammy }}
 
   test_noble:
-    needs: [ detect, packer_noble, ci-image ]
+    needs: detect
     if: |
-      always()
-      && needs.detect.result == 'success'
+      needs.detect.result == 'success'
       && needs.detect.outputs.matrix_noble != '[]'
       && needs.detect.outputs.matrix_noble != ''
-      && (needs.packer_noble.result == 'success' || needs.packer_noble.result == 'skipped')
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     uses: ./.github/workflows/test.yml
     secrets: inherit
     with:
       matrix: ${{ needs.detect.outputs.matrix_noble }}
 
   test_resolute:
-    needs: [ detect, packer_resolute, ci-image ]
+    needs: detect
     if: |
-      always()
-      && needs.detect.result == 'success'
+      needs.detect.result == 'success'
       && needs.detect.outputs.matrix_resolute != '[]'
       && needs.detect.outputs.matrix_resolute != ''
-      && (needs.packer_resolute.result == 'success' || needs.packer_resolute.result == 'skipped')
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     uses: ./.github/workflows/test.yml
     secrets: inherit
     with:
       matrix: ${{ needs.detect.outputs.matrix_resolute }}
 
   test_minimal:
-    needs: [ detect, ci-image ]
+    needs: detect
     if: |
-      always()
-      && needs.detect.result == 'success'
+      needs.detect.result == 'success'
       && needs.detect.outputs.matrix_minimal != '[]'
       && needs.detect.outputs.matrix_minimal != ''
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     uses: ./.github/workflows/test.yml
     secrets: inherit
     with:
       matrix: ${{ needs.detect.outputs.matrix_minimal }}
 
   test_lab:
-    needs: [ detect, packer_lab, ci-image ]
+    needs: detect
     if: |
-      always()
-      && needs.detect.result == 'success'
+      needs.detect.result == 'success'
       && needs.detect.outputs.matrix_lab != '[]'
       && needs.detect.outputs.matrix_lab != ''
-      && (needs.packer_lab.result == 'success' || needs.packer_lab.result == 'skipped')
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     uses: ./.github/workflows/test.yml
     secrets: inherit
     with:
       matrix: ${{ needs.detect.outputs.matrix_lab }}
 
   test_pug:
-    needs: [ detect, packer_pug, ci-image ]
+    needs: detect
     if: |
-      always()
-      && needs.detect.result == 'success'
+      needs.detect.result == 'success'
       && needs.detect.outputs.matrix_pug != '[]'
       && needs.detect.outputs.matrix_pug != ''
-      && (needs.packer_pug.result == 'success' || needs.packer_pug.result == 'skipped')
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     uses: ./.github/workflows/test.yml
     secrets: inherit
     with:
@@ -321,16 +133,12 @@ jobs:
   # --- site test: full site.yml converge on box --------------------------------
   # Catches role-ordering and cross-role interaction bugs that per-role tests
   # miss. Runs the real site.yml (not the single-role test harness stub)
-  # against a box VM with --limit box. Depends on packer_jammy for the box
-  # image; runs whenever detect doesn't skip (any change could affect ordering).
+  # against the currently published box image with --limit box.
 
   site_test:
-    needs: [ detect, packer_jammy, ci-image ]
+    needs: detect
     if: |
-      always()
-      && needs.detect.result == 'success'
+      needs.detect.result == 'success'
       && needs.detect.outputs.site_test == 'true'
-      && (needs.packer_jammy.result == 'success' || needs.packer_jammy.result == 'skipped')
-      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     uses: ./.github/workflows/site-test.yml
     secrets: inherit

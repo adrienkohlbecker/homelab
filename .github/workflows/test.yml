@@ -2,20 +2,20 @@ name: test
 # Reusable, call-only. ci.yml runs a single detect pass and passes the
 # resolved role matrix in as an input, so this workflow does no detection
 # of its own. ci.yml calls it once per release/variant group (test_jammy,
-# test_noble, test_resolute, test_minimal), each depending on its own
-# packer build (packer_jammy, packer_noble, packer_resolute; test_minimal
-# has no packer dep). Ad-hoc role runs go through dispatching ci.yml
-# (with roles=...), not this workflow directly -- without its own detect
-# it can't compute a matrix from a bare dispatch.
+# test_noble, test_resolute, test_minimal, test_lab, test_pug). Ad-hoc
+# role runs go through dispatching ci.yml (with roles=...), not this
+# workflow directly -- without its own detect it can't compute a matrix
+# from a bare dispatch.
 #
 # ci.yml is the sole caller — it calls this workflow once per
 # release/variant group (test_jammy, test_noble, test_resolute,
 # test_minimal, test_lab, test_pug). On push, detect diffs against the
 # last green run and passes only changed-role cells. On schedule (nightly),
-# detect forces the full universe matrix with all component flags (ci-image,
-# packer, worker). A green schedule run becomes the diff base for
-# subsequent pushes. Concurrent VMs are capped by the lab-vm runner pool,
-# not a per-call knob. Failures surface via GitHub's Actions failure email.
+# detect forces the full universe matrix. Test cells consume the currently
+# published ci image and QEMU artifacts; those rebuilds are manual workflows.
+# A green schedule run becomes the diff base for subsequent pushes. Concurrent
+# VMs are capped by the lab-vm runner pool, not a per-call knob. Failures
+# surface via GitHub's Actions failure email.
 on:
   workflow_call:
     inputs:
@@ -38,15 +38,6 @@ defaults:
     shell: bash
 
 jobs:
-  # NOTE: the old wait-for-packer-build AND wait-for-ci-image sentinel-poll
-  # jobs lived here. Both are gone -- ci.yml calls this workflow per
-  # release/variant group (test_jammy/noble/resolute/minimal), each ordered
-  # after its own packer build via `needs`. The cross-workflow ordering
-  # those filesystem sentinels faked is now native job dependencies one
-  # level up. (A schedule-triggered run reads the tree concurrently with a
-  # packer publish from a queued push, so packer's publish flock stays --
-  # see notes/concurrency_rework.md.)
-
   test-role:
     # Lands on the lab-vm pool (6 runners) -- the cap on concurrent
     # qemu VMs is exactly the pool size. Packer-build and test-role
@@ -57,11 +48,9 @@ jobs:
     # the previous shape used a static `lab-qemu-artifacts` here, which
     # made every matrix cell compete for one slot and cancel all but
     # one -- see notes/concurrency_rework.md for the symptom.
-    # The matrix and packer/ci-image ordering come from ci.yml (one detect
-    # pass; each test_* group needs its own packer build), so this job has
-    # no needs and only gates on a non-empty matrix -- short-circuiting the
-    # no-op case (empty matrix: no role-relevant changes) without spinning
-    # a runner.
+    # The matrix comes from ci.yml's single detect pass, so this job has no
+    # needs and only gates on a non-empty matrix -- short-circuiting the no-op
+    # case (empty matrix: no role-relevant changes) without spinning a runner.
     if: |
       inputs.matrix != '[]'
       && inputs.matrix != ''

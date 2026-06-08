@@ -1,18 +1,13 @@
 name: packer-build
-# Reusable, call-only. ci.yml calls this via `uses:` (gated on detect's
-# packer_changed), passing the source matrix detect computed in `sources_matrix`
-# -- the build matrix below reads that directly, which is why this workflow no
-# longer has its own matrix-compute `prepare` job (folded into detect). No
-# `push:` trigger (ci.yml owns the push path) and no `workflow_dispatch`: a
-# standalone rebuild of just `lab`/`pug` now goes through dispatching ci.yml
-# with `sources=lab pug`, which detect turns into a packer-only run (empty test
-# matrix). Without its own detect this workflow can't compute a matrix from a
-# bare dispatch anyway.
+# Reusable implementation for manual packer image workflows. Callers pass the
+# source and Ubuntu matrices explicitly; this file owns the actual build cells.
+# No direct workflow_dispatch: use packer-images for test fixtures or fox-image
+# for the Hetzner Cloud boot image.
 on:
   workflow_call:
     inputs:
       sources_matrix:
-        description: 'JSON array of packer sources to build, from ci.yml''s detect (e.g. ["box","pug"]).'
+        description: 'JSON array of packer sources to build (e.g. ["box","pug"]).'
         type: string
         required: true
       ubuntu_matrix:
@@ -23,7 +18,7 @@ on:
 
 # No workflow-level concurrency group: serialisation is per-cell at
 # the job level (see the concurrency block on `build` below). This
-# lets cells from different callers (packer_box, packer_extra) and
+# lets cells from different callers and
 # different releases (noble, resolute) run in parallel while still
 # preventing two CI runs from building the same (source, ubuntu) pair
 # simultaneously.
@@ -34,8 +29,8 @@ defaults:
 
 jobs:
   build:
-    # One job per (source, ubuntu) cell, from the two JSON matrices detect
-    # computed (folded in from the old `prepare` job). Packer spawns one qemu VM
+    # One job per (source, ubuntu) cell, from the two JSON matrices passed by
+    # the manual caller. Packer spawns one qemu VM
     # per cell -- lands on the lab-vm pool. See notes/concurrency_rework.md for
     # the pool model: lab-vm = 6 runners that take VM workloads (packer-build +
     # test-role); lab = 4 runners that take everything else.
@@ -55,17 +50,12 @@ jobs:
     # runner pool (6 slots shared with test-role). Each build VM uses 4GB
     # (packer/qemu.pkr.hcl); with ARC at 4 GiB and Nexus at 1G the host
     # has enough headroom for 2-3 concurrent builds without swapping.
-    # ci.yml's needs: graph gates packer_extra behind packer_jammy so the
-    # box images (used by test cells) finish first. timeout is per-cell
-    # (90 min).
+    # timeout is per-cell (90 min).
     strategy:
       fail-fast: false
-      # source x ubuntu. box is called with all supported releases so a packer
-      # change is build-validated per-release (each cell's verify-boot boots the
-      # image); pug/lab/hetzner are called with just jammy (prod's release). The
-      # cross is shaped entirely by the two input arrays detect computed -- box's
-      # call carries one source and N releases, extra's carries M sources and one
-      # release, so neither produces a cell the other shouldn't build.
+      # source x ubuntu. box/lab/pug can build all supported releases; hetzner
+      # stays jammy-only because fox runs jammy in prod. The cross is shaped
+      # entirely by the two input arrays from the caller.
       matrix:
         source: ${{ fromJSON(inputs.sources_matrix) }}
         ubuntu: ${{ fromJSON(inputs.ubuntu_matrix) }}
@@ -183,8 +173,5 @@ jobs:
             args+=(--ubuntu "$PACKER_UBUNTU")
           fi
           mise run packer:seed-deps "${args[@]}"
-      # The old "Mark build complete for waiters" step (touch
-      # _sentinels/complete-<sha>) is gone -- ci.yml orders this workflow
-      # before test via `needs: packer`, so there's no cross-workflow
-      # poll left to satisfy. (ci-image keeps its own ci-image-<sha>
-      # sentinel; that path is unchanged.)
+      # No sentinel step: packer images are rebuilt manually and CI consumes the
+      # currently published artifacts.
