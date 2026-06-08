@@ -115,6 +115,17 @@ Sync: edit inside `notes/` → commit+push to `homelab_notes` → record in pare
 
 **In worktrees**, `worktree:populate`/`worktree:merge` ([mise-tasks/worktree/](mise-tasks/worktree/)) automate notes init and linear merging. Same-file conflicts halt for manual resolution.
 
+**Every note must open with YAML frontmatter** containing at least `status` and `created_at`:
+
+```yaml
+---
+status: current # optional inline note after #
+created_at: 2026-05-20
+---
+```
+
+Valid statuses: `runbook` (active operator procedures) · `current` (deployed state) · `planned` (near-term active work) · `deferred` (valid but not imminent) · `rejected` (decided against; kept for context) · `completed` (migration/investigation done; outcome in code/git) · `reference` (static lookup material). Archived notes live in `notes/archive/` and follow the same convention.
+
 ### Helper roles
 
 Prefer these over re-implementing boilerplate. All take inputs through a single `*_args` dict (so each call replaces it wholesale and inter-call vars-leak can't happen).
