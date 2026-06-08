@@ -243,11 +243,11 @@
 
 # --- probe_podman_pool group (non-default-bridge-source positives) ---
 # Cross-bridge regression: aardvark-dns binds the gateway IP of every
-# dns-enabled named bridge (mosquitto, redis, …), all carved out of
+# dns-enabled named bridge (mosquitto, …), all carved out of
 # netavark's 10.89.0.0/16 default_subnet_pools[0] base. A previous
 # saddr-scoped rule covered only podman_default_network and the
 # catch-all UDP reject killed every cross-bridge container-name lookup
-# (paperless → redis, z2m → mosquitto) before aardvark saw it. HA's
+# (z2m → mosquitto) before aardvark saw it. HA's
 # NUT integration is the other consumer from this subnet, matching
 # the separate `ip saddr $PODMAN_POOL tcp dport 3493 accept` rule.
 - name: _verify_input | Bind probe_podman_pool on extns veth (non-default-bridge-source probes)

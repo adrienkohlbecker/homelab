@@ -88,7 +88,7 @@
 
 # Live-unload dropped modules best-effort. `modprobe -r` (state: absent)
 # refuses to remove an in-use module rather than forcing it (never rmmod -f),
-# so this can't wedge a driver fancontrol/fan2go or an open hwmon reader is
+# so this can't wedge a driver fan2go or an open hwmon reader is
 # holding -- those stay loaded and get the reboot flag below. This is also
 # why the role hand-rolls module management instead of community.general
 # modprobe's `persistent:`: that writes per-module files and only *comments
