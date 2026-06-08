@@ -1,5 +1,0 @@
-# _setup.yml imports test/nginx and test/authelia_stub; nginx is
-# pre-baked into box_deps (see packer/seed_deps.yml), so route there
-# to skip the apt+nginx install on every test run.
-machines:
-  box_deps:
