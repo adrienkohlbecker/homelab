@@ -197,10 +197,6 @@ service_ports:
   prometheus: 9090
   radarr: 7878
   redis: 6379
-  # Roundcube webmail (getmail archive viewer), loopback-published; Dovecot's
-  # IMAP backend stays internal to the webmail podman network and so
-  # isn't registered here.
-  roundcube: 8002
   # SABnzbd, loopback-published; nginx fronts it on the sabnzbd subdomain
   # behind authelia. Only the host-side --publish maps to this; the
   # container's internal listener stays on 8080 (sabnzbd.ini port), as does

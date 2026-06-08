@@ -276,8 +276,9 @@
 #
 #   fchmodat2 (kernel 6.6): GNU tar 1.35+ routes directory chmods through
 #     it; the profile's SCMP_ACT_ERRNO blocks it (EPERM), breaking any
-#     image whose entrypoint extracts+chmods (roundcube 403 was the first
-#     casualty). Full writeup: notes/podman_seccomp_fchmodat2.md.
+#     image whose entrypoint extracts+chmods (an apache/php image self-
+#     extracting its webroot 403s the lot). Full writeup:
+#     notes/podman_seccomp_fchmodat2.md.
 #
 #   io_uring_setup/enter/register (kernel 5.1): QEMU aio=io_uring inside
 #     CI job containers needs the syscall family unblocked; without it the
