@@ -66,32 +66,26 @@ do
     check("svc.unit_fallback", svc, "cron")
 end
 
--- 6. CSP ingest tag -> csplogger (matches what flatten_csp emits).
-do
-    local svc = shape("csp.lab", { log = "CSP script-src blocked x on y" })
-    check("csp.service", svc, "csplogger")
-end
-
--- 7/8. nginx tail tags -> nginx_access / nginx_error.
+-- 6/7. nginx tail tags -> nginx_access / nginx_error.
 do
     check("nginx.access", (shape("nginx.access", {})), "nginx_access")
     check("nginx.error", (shape("nginx.error", {})), "nginx_error")
 end
 
--- 9. Bare "nginx." with empty subtag -> unknown (not the nameless "nginx_").
+-- 8. Bare "nginx." with empty subtag -> unknown (not the nameless "nginx_").
 do
     local svc = shape("nginx.", {})
     check("nginx.bare", svc, "unknown")
 end
 
--- 10. Any other tag is taken verbatim, lowercased (tail inputs like
---     host_packages, audit, pihole_ftl).
+-- 9. Any other tag is taken verbatim, lowercased (tail inputs like
+--    host_packages, audit, pihole_ftl).
 do
     check("other.verbatim", (shape("host_packages", {})), "host_packages")
     check("other.lowercased", (shape("Audit", {})), "audit")
 end
 
--- 11. Podman healthcheck override: PID 1 emits a lifecycle line whose journal
+-- 10. Podman healthcheck override: PID 1 emits a lifecycle line whose journal
 --     UNIT attribution is a 64-hex <container-id>.service. service.name is
 --     forced to podman_healthcheck and CONTAINER_ID{,_FULL} are stamped (and
 --     thus lifted into LogAttributes) for the HyperDX pivot. Real container id.
@@ -105,13 +99,13 @@ do
     check("healthcheck.cid_short_lifted", attrs.CONTAINER_ID, string.sub(cid, 1, 12))
 end
 
--- 12. A non-hex / wrong-length UNIT must NOT trigger the healthcheck override.
+-- 11. A non-hex / wrong-length UNIT must NOT trigger the healthcheck override.
 do
     local svc = shape("svc.cron.service", { UNIT = "cron.service" })
     check("healthcheck.no_override", svc, "cron")
 end
 
--- 13. Attribute lifting + exclusions: every record key except the four routed
+-- 12. Attribute lifting + exclusions: every record key except the four routed
 --     elsewhere (log, resource, severity_text, severity_number) lands in
 --     LogAttributes. service.name lives in resource attrs, not LogAttributes.
 do
@@ -136,7 +130,7 @@ do
     check("lift.host_name_in_resource", ra["host.name"], "lab")
 end
 
--- 14. host.name is omitted from resource attrs when there's no `host` field
+-- 13. host.name is omitted from resource attrs when there's no `host` field
 --     (empty string also counts as absent).
 do
     local _, ra = shape("svc.x.service", { SYSLOG_IDENTIFIER = "x", host = "" })

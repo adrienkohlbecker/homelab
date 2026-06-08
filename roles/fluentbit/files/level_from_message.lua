@@ -19,8 +19,7 @@
 --
 -- Reads from record["log"]. An upstream modify filter renames journald's
 -- MESSAGE to log, so this is the only field that needs inspecting.
--- Skips records where an upstream filter (flatten_csp.lua) already pinned
--- a severity.
+-- Skips records where an upstream filter already pinned a severity.
 
 local function has(head, token)
     return string.find(head, "[^%w]" .. token .. "[^%w]") ~= nil
@@ -73,8 +72,7 @@ end
 function set_priority(tag, ts, _group, metadata, record)
     metadata.otlp = metadata.otlp or {}
     if metadata.otlp.severity_text ~= nil then
-        -- Upstream filter (flatten_csp.lua for CSP records) already
-        -- pinned the severity; leave it alone.
+        -- An upstream filter already pinned the severity; leave it alone.
         return 0, ts, metadata, record
     end
 
@@ -82,9 +80,8 @@ function set_priority(tag, ts, _group, metadata, record)
     -- record["severity_text"] = "info" so this filter doesn't scan URL
     -- noise for level keywords. Tag-gated to nginx.access: today's
     -- only writer of record["severity_text"] is that modify filter
-    -- (CSP records are replaced wholesale by flatten_csp before this
-    -- filter runs; systemd journal fields arrive uppercased, so
-    -- SEVERITY_TEXT != severity_text). The gate is defence-in-depth:
+    -- (systemd journal fields arrive uppercased, so SEVERITY_TEXT !=
+    -- severity_text). The gate is defence-in-depth:
     -- a future tag-nginx.* input that parses attacker-influenced JSON
     -- (e.g. structured-log nginx tail) would become a forgery channel
     -- without it.

@@ -21,7 +21,6 @@ homepage_bookmarks:
     - { name: Gitea,         abbr: GT, sub: gitea,        icon: gitea }
     - { name: Nexus,         abbr: NX, sub: nexus,        icon: sonatype-nexus-repository }
     - { name: MinIO,         abbr: MN, sub: minio,        icon: minio }
-    - { name: Prometheus,    abbr: PR, sub: prometheus,   icon: prometheus }
     - { name: HyperDX,       abbr: HX, sub: hyperdx,      icon: hyperdx }
     - { name: InfluxDB,      abbr: IF, sub: influxdb,     icon: influxdb }
     - { name: Uptime Kuma,   abbr: UK, sub: kuma,         icon: uptime-kuma }
@@ -36,9 +35,6 @@ homepage_bookmarks:
     - { name: Headscale,     abbr: HS, sub: headscale,     icon: headscale, host: fox }
     - { name: WolWeb,        abbr: WW, sub: wolweb }
   Personal:
-    - { name: Paperless,      abbr: PL, sub: paperless,     icon: paperless-ngx }
-    - { name: OpenProject,    abbr: OP, sub: openproject,   icon: openproject }
-    - { name: Compta,         abbr: CP, sub: compta }
     - { name: Home Assistant, abbr: HA, sub: homeassistant, icon: home-assistant }
     - { name: Zigbee2MQTT,    abbr: Z2, sub: z2m,           icon: zigbee2mqtt }
     - { name: Filebrowser,    abbr: FB, sub: filebrowser,   icon: filebrowser-quantum }

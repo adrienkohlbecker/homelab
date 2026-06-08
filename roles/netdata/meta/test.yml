@@ -8,6 +8,6 @@ ubuntu:
 # log), so route to box_deps where nginx is pre-baked (packer/seed_deps.yml)
 # to skip the apt-backports + nginx install on every test run. netdata itself
 # isn't pre-baked -- the saving is the shared nginx bringup, same as the
-# keepalived_exporter / fluentbit consumers of the same _setup pattern.
+# the fluentbit consumer of the same _setup pattern.
 machines:
   box_deps:

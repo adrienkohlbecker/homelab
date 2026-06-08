@@ -142,26 +142,6 @@
   tags:
     - netdata
 
-# redis requires a password, so the stock auto-detected `local` job (which
-# scrapes 127.0.0.1:6379 unauthenticated) gets NOAUTH and the
-# go.d:collector:redis:local presence alert goes stale. Gate on redis_enabled
-# so the credential lands only on hosts that actually run redis (box, lab),
-# not every netdata host.
-- name: Configure redis metrics
-  import_role:
-    name: netdata
-    tasks_from: config
-  vars:
-    netdata_args:
-      src: redis.conf.j2
-      dest: go.d/redis.conf
-      mode: "0600"
-      condition: "{{ redis_enabled | default(false) }}"
-      validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-      restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
-  tags:
-    - netdata
-
 - name: Copy health_alarm_notify template
   command: cp /usr/lib/netdata/conf.d/health_alarm_notify.conf /etc/netdata/health_alarm_notify.conf
   args:

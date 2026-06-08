@@ -8,12 +8,6 @@ jobs:
     url: http://127.0.0.1:{{ service_ports.fluentbit }}/api/v1/metrics/prometheus
     autodetection_retry: 60
 
-{% if prometheus_enabled|default(false) %}
-
-  - name: prometheus
-    url: http://127.0.0.1:{{ service_ports.prometheus }}/metrics
-    autodetection_retry: 60
-{% endif %}
 {% if minio_enabled|default(false) %}
 
   - name: minio
@@ -27,16 +21,6 @@ jobs:
   # presence alert catches a scrape job that goes missing there.
   - name: gitea_runner
     url: http://127.0.0.1:{{ service_ports.gitea_runner_metrics }}/metrics
-    autodetection_retry: 60
-
-  # The exporter applies to all:!bunk (site.yml); try on every host and
-  # let autodetection_retry idle on hosts where the unit isn't up.
-  # Listed in {lab,pug}.yml's netdata_collectors so the presence alert
-  # catches a scrape job that goes missing. The `_local` suffix matches
-  # the chart context the keepalived_alerts.conf alert binds to
-  # (prometheus.keepalived_exporter_local.keepalived_vrrp_become_master).
-  - name: keepalived_exporter_local
-    url: http://127.0.0.1:{{ service_ports.keepalived_exporter }}/metrics
     autodetection_retry: 60
 
   # kuma runs only on lab (site.yml); try on every host and let

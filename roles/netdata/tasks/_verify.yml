@@ -162,7 +162,6 @@
     check "go.d:collector:nvme:nvme" "exact nvme"
     check "go.d:collector:fail2ban:fail2ban" "exact fail2ban"
     check "go.d:collector:systemdunits:service-units" "instanced systemdunits_service-units"
-    check "go.d:collector:prometheus:keepalived_exporter_local" "instanced prometheus_keepalived_exporter_local"
     check "not-go.d:foo:bar:baz" ""
     exit $fail
   args:
@@ -315,8 +314,7 @@
 #   3. Wrong token -> 302 (gate not accidentally permissive)
 #   4. Nginx access log shows `auth_token=REDACTED`, not the literal
 #      token (http-scope $request_safe map working).
-# The upstream-strip (`set $args ...`) is functionally exercised by
-# compta's _verify via journalctl; it's a property of the shared
+# The upstream-strip (`set $args ...`) is a property of the shared
 # nginx helper, not service-specific, so we don't duplicate it here.
 - name: _verify | Netdata reachable through nginx with auth_token bypass
   uri:

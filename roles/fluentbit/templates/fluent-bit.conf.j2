@@ -59,26 +59,6 @@
     storage.type      filesystem
     storage.pause_on_chunks_overlimit  on
 
-# Browser-emitted CSP violation reports. nginx on csplogger.<host>.<domain>
-# proxies POST /log here; the public endpoint stays public-by-design (CSP
-# reports are fire-and-forget cross-origin POSTs that can't carry auth)
-# while the OO / HyperDX ingest tokens stay server-side. Returns 204 to
-# keep browser report queues happy.
-[INPUT]
-    Name              http
-    Tag               csp.{{ inventory_hostname }}
-    Listen            127.0.0.1
-    Port              {{ service_ports.csp_ingest }}
-    Successful_response_code  204
-    # csplogger's nginx caps client_max_body_size at 32k, so anything
-    # larger never reaches us. Matching here is defence-in-depth: if the
-    # nginx cap is ever raised, the http input still rejects bodies
-    # past this size (returns 413). The two tail inputs below still
-    # use 256k because they read whole logrotated files at startup.
-    Buffer_Max_Size   32k
-    storage.type      filesystem
-    storage.pause_on_chunks_overlimit  on
-
 # nginx access/error logs don't go through journald by default.
 # Rotate_Wait holds the pre-rotation inode open for 30s after a
 # detected rotation. Ubuntu's /etc/logrotate.d/nginx uses rename+USR1
@@ -320,12 +300,12 @@
 {% endif %}
 
 # keepalived emits "Printing VRRP as json for process(N) on signal" at
-# LOG_INFO every time keepalived_exporter scrapes it (default ~30s ->
-# ~3k records/day/host of pure exporter chatter). Hardcoded in keepalived
-# with no upstream toggle; drop here so it doesn't reach HyperDX. The
-# line still lands in journald and /var/log/syslog -- `journalctl -u
-# keepalived` is the source of truth if you ever need to confirm the
-# exporter is alive.
+# LOG_INFO every time netdata's prometheus collector scrapes it (default
+# ~30s -> ~3k records/day/host of pure scrape chatter). Hardcoded in
+# keepalived with no upstream toggle; drop here so it doesn't reach
+# HyperDX. The line still lands in journald and /var/log/syslog --
+# `journalctl -u keepalived` is the source of truth if you ever need to
+# confirm the collector is alive.
 [FILTER]
     Name              grep
     Match             svc.*
@@ -450,21 +430,6 @@
     emitter_name      multiline_emitter
     emitter_storage.type  filesystem
 
-# CSP reports arrive as raw JSON. flatten_csp.lua normalises the two
-# wire formats (legacy report-uri + modern Reporting API) into a uniform
-# csp_* attribute set so HyperDX queries can filter on
-# LogAttributes['csp_blocked_uri'] etc. directly, instead of running
-# JSONExtract over a nested csp-report blob. It also synthesises a
-# scannable `log` body (CSP <directive> blocked <uri> on <document>) and
-# stamps SYSLOG_IDENTIFIER=csplogger on every record -- including
-# unparseable POSTs -- so the UI filter pattern documented at the bottom
-# of this file (LogAttributes.SYSLOG_IDENTIFIER) reaches them too.
-[FILTER]
-    Name              lua
-    Match             csp.*
-    script            /etc/fluent-bit/flatten_csp.lua
-    call              flatten_csp
-
 {% if fluentbit_otlp_local %}
 # Parse raw UniFi syslog into structured fields. The udp input delivers
 # the whole RFC 3164 line as `log`; parse_unifi.lua handles all three
@@ -488,10 +453,10 @@
 # (a) Stamp inventory_hostname as `host` so cross-stream queries in
 #     HyperDX can filter by host without parsing the tag. systemd input
 #     also sets HOSTNAME from the journal, but tails don't -- this
-#     normalises both. Set (not Add): the CSP HTTP input lets an
-#     attacker put `{"host":"lab", ...}` at the top of the POST body,
-#     which would otherwise land as a record key; Add's insert-if-
-#     absent semantics would refuse to overwrite, Set always wins.
+#     normalises both. Set (not Add): defence-in-depth so an attacker
+#     can't spoof `{"host":"lab", ...}` via any ingest path; Add's
+#     insert-if-absent semantics would refuse to overwrite, Set always
+#     wins.
 # (b) Rename journald's MESSAGE -> `log` so HyperDX's OTLP output
 #     reads it as LogRecord.Body (the opentelemetry output expects
 #     `log` by convention). Rename not Copy: HyperDX is the only

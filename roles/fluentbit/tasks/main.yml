@@ -69,7 +69,6 @@
     backup: true
   loop:
     - level_from_message.lua
-    - flatten_csp.lua
     - otlp_shape.lua
     - parse_unifi.lua
   become: true

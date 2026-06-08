@@ -35,7 +35,10 @@
   tags:
     - netdata
 
+# The alert targets the fail2ban chart, which only exists where the collector
+# runs; skip on hosts that dropped fail2ban.
 - name: Configure netdata fail2ban ban-count alert
+  when: inventory_hostname not in ['lab', 'pug']
   import_role:
     name: netdata
     tasks_from: health
@@ -76,17 +79,6 @@
     netdata_args:
       src: fluentbit_alerts.conf
       dest: fluentbit.conf
-  tags:
-    - netdata
-
-- name: Configure netdata keepalived VRRP master-loss alert
-  import_role:
-    name: netdata
-    tasks_from: health
-  vars:
-    netdata_args:
-      src: keepalived_alerts.conf
-      dest: keepalived.conf
   tags:
     - netdata
 
@@ -345,7 +337,7 @@
 # is defensive against a future upstream addition.
 #
 # Upstream's `delay: down 1m` (no up-delay) still flapped: collectors like
-# docker/kuma/minio/redis intermittently miss a single scrape cycle (target
+# docker/kuma/minio intermittently miss a single scrape cycle (target
 # slow under load) then recover, and a 30s-average-of-failed crossing 1 for
 # one cycle was enough to notify. We add `up 5m` so the failure must persist
 # ~5m before it pages -- a genuinely-broken collector stays down well past
