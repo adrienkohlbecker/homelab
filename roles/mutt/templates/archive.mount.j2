@@ -1,0 +1,25 @@
+# {{ ansible_managed }}
+# Read-only bind mount of the getmail Gmail archive Maildir. neomutt browses the
+# archive through this mountpoint (set as `folder` in /opt/mutt/muttrc), so even
+# a forgotten -R or a fat-fingered write physically cannot mutate the
+# irreplaceable archive: the bind is mounted ro. getmail keeps writing the real
+# Maildir at the source path. See notes/archive/getmail_webmail_design.md.
+#
+# The unit filename must match the Where= path
+# (mnt-services-mutt-archive.mount); systemd derives it.
+[Unit]
+Description=Read-only bind mount of the getmail archive for mutt
+# Order after — and pull in — whatever provides the source path (the ZFS
+# services dataset on prod), so the bind never races its backing mount.
+RequiresMountsFor=/mnt/services/getmail
+
+[Mount]
+What=/mnt/services/getmail
+Where=/mnt/services/mutt/archive
+Type=none
+# bind,ro: libmount applies the read-only flag via an automatic follow-up
+# remount, so the bind is genuinely ro (not just ro-on-the-source).
+Options=bind,ro
+
+[Install]
+WantedBy=multi-user.target

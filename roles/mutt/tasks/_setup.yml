@@ -1,0 +1,41 @@
+# In prod the getmail role creates and owns this Maildir before mutt runs
+# (site.yml ordering). The standalone harness test runs mutt alone, so stand the
+# Maildir up here — operator-owned 0700, matching getmail — so neomutt has an
+# archive to open and _verify can plant a message into new/.
+- name: _setup | Ensure /mnt/services exists
+  file:
+    path: /mnt/services
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: _setup | Create the getmail Maildir (getmail role does this in prod)
+  file:
+    path: "/mnt/services/getmail/{{ item }}"
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    mode: "0700"
+  loop:
+    - ""
+    - cur
+    - new
+    - tmp
+  become: true
+
+# Mimic a converged-off-webmail host so _verify can confirm the role's teardown
+# removes the former webmail state directories. (The unit/nginx/podman-network
+# half of the teardown is presence-gated and exercised on prod; on the plain box
+# fixture those prerequisites are absent, so only the directory removal runs.)
+- name: _setup | Stand up former webmail state directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /mnt/services/webmail
+    - /mnt/services/sqlite
+    - /mnt/services/sqlite/roundcube
+  become: true

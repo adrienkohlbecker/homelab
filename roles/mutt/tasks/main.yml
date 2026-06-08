@@ -1,0 +1,202 @@
+# Host-local neomutt viewer for the getmail Gmail "All Mail" archive. The
+# getmail role fetches and owns the Maildir at /mnt/services/getmail (0700);
+# this role installs neomutt + a curated read-only config so the operator can
+# browse it from a shell on the host. Replaces the former webmail role (Dovecot
+# + Roundcube + nginx + Authelia). Design: notes/archive/getmail_webmail_design.md.
+
+# === Retire the former webmail stack ===========================================
+# Transitional teardown: remove webmail's running state on each host before the
+# neomutt viewer takes over. Presence-gated so it's a clean no-op on a host that
+# never ran webmail (fresh test fixtures) and idempotent on a converged host.
+# Remove this block once lab is converged off webmail.
+- name: Remove the roundcube service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: roundcube.service
+  tags:
+    - mutt
+
+- name: Remove the dovecot service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: dovecot.service
+  tags:
+    - mutt
+
+- name: Detect nginx for webmail vhost teardown
+  stat:
+    path: /usr/sbin/nginx
+  register: _mutt_nginx
+  tags:
+    - mutt
+
+# state: absent tombstone — removes the roundcube vhost + its sites-enabled
+# symlink and reloads nginx. Gated on nginx being installed so it no-ops on a
+# host that never ran the webmail stack.
+- name: Remove the roundcube nginx vhost
+  when: _mutt_nginx.stat.exists
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: roundcube
+      state: absent
+  tags:
+    - mutt
+
+- name: Detect podman for webmail network teardown
+  stat:
+    path: /usr/bin/podman
+  register: _mutt_podman
+  tags:
+    - mutt
+
+- name: Remove the webmail podman network
+  when: _mutt_podman.stat.exists
+  containers.podman.podman_network:
+    name: webmail
+    state: absent
+  become: true
+  tags:
+    - mutt
+
+- name: Remove webmail state directories
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /mnt/services/webmail
+    - /mnt/services/sqlite/roundcube
+  become: true
+  tags:
+    - mutt
+
+# === neomutt archive viewer ====================================================
+- name: Install neomutt and w3m
+  apt:
+    package:
+      - neomutt
+      - w3m
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - mutt
+
+- name: Create /opt/mutt config directory
+  file:
+    path: /opt/mutt
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - mutt
+
+# No validate: neomutt has no offline config linter that works without a
+# terminal and a mailbox, and faking one would violate the "real parser or
+# none" rule. A bad config surfaces when the operator launches mail-archive.
+- name: Configure neomutt
+  template:
+    src: muttrc.j2
+    dest: /opt/mutt/muttrc
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - mutt
+
+- name: Install the HTML mailcap
+  copy:
+    src: mailcap
+    dest: /opt/mutt/mailcap
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - mutt
+
+- name: Install the mail-archive launcher
+  copy:
+    src: mail-archive
+    dest: /usr/local/bin/mail-archive
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  become: true
+  tags:
+    - mutt
+
+# neomutt's header/body cache lives here (operator-owned, on the services
+# dataset) so reopening the multi-year archive doesn't re-parse every message
+# and nothing lands in the operator's dotfiles-managed $HOME.
+- name: Create neomutt cache directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    mode: "0700"
+  loop:
+    - /mnt/services/mutt
+    - /mnt/services/mutt/headers
+    - /mnt/services/mutt/bodies
+  become: true
+  tags:
+    - mutt
+
+# Hard read-only guard: neomutt browses the archive through a ro bind mount of
+# the getmail Maildir (set as `folder` in muttrc), so a write physically cannot
+# reach the archive even if -R is bypassed. getmail keeps writing the source
+# path directly. The mountpoint must exist before the unit can mount over it.
+- name: Create the read-only archive mountpoint
+  file:
+    path: /mnt/services/mutt/archive
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    mode: "0700"
+  become: true
+  tags:
+    - mutt
+
+# Install via the systemd_unit helper: it validates the rendered unit with
+# systemd-analyze verify in place (rolling back on a bad unit) and reloads the
+# daemon. .mount is not a .service, so the helper's podman pre-pull steps no-op.
+- name: Install the read-only archive bind mount
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: archive.mount.j2
+      dest: mnt-services-mutt-archive.mount
+  tags:
+    - mutt
+
+- name: Enable and start the read-only archive bind mount
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: mnt-services-mutt-archive.mount
+      # Remount when the unit's Options/What/Where change: a plain `started`
+      # won't re-apply them to an already-mounted bind.
+      restart: "{{ mnt_services_mutt_archive_mount_result.changed }}"
+  tags:
+    - mutt
+  tags:
+    - mutt

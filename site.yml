@@ -115,7 +115,7 @@
     - github_runner
     - transmission
     - getmail
-    - webmail
+    - mutt
     - compta
     - speedtest
     - filebrowser

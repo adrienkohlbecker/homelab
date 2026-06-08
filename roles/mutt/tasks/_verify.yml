@@ -1,0 +1,105 @@
+- name: _verify | Neomutt binary runs
+  command: neomutt -v
+  changed_when: false
+
+- name: _verify | W3m runs
+  command: w3m -version
+  changed_when: false
+
+# Hard read-only guard: neomutt browses the archive through a ro bind mount, so
+# a write physically cannot reach the Maildir. Prove the mount is actually
+# mounted read-only...
+- name: _verify | Archive is exposed through a read-only bind mount
+  command: findmnt --noheadings --output OPTIONS /mnt/services/mutt/archive
+  register: _mutt_mount_opts
+  changed_when: false
+  failed_when: >-
+    _mutt_mount_opts.rc != 0
+    or 'ro' not in (_mutt_mount_opts.stdout | trim).split(',')
+  become: true
+
+# ...and that a write through it is denied even for root (a forgotten -R or a
+# fat-finger can't mutate the archive).
+- name: _verify | Write through the read-only mount is denied
+  command: touch /mnt/services/mutt/archive/_mutt_ro_probe
+  register: _mutt_ro_write
+  changed_when: false
+  failed_when: _mutt_ro_write.rc == 0
+  become: true
+
+# Plant a known message into the archive Maildir's new/ (operator-owned), the
+# same way the getmail fetcher delivers. The read-only viewer must serve it
+# without migrating it out of new/ (asserted below).
+- name: _verify | Plant a test message in the archive Maildir
+  copy:
+    dest: /mnt/services/getmail/new/1700000000.muttverify.box
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    mode: "0600"
+    content: |
+      From: Test Sender <sender@example.com>
+      To: {{ root_email }}
+      Subject: Mutt Verify
+      Date: Tue, 14 Nov 2023 22:13:20 +0000
+      Message-ID: <muttverify@example.com>
+
+      Archive viewer verification body.
+  become: true
+
+# Functional probe: open the archive Maildir through the curated read-only
+# config and quit. neomutt parses every header to build the index (and writes
+# the header cache, asserted below), so a clean exit proves the operator can
+# actually browse the archive. Runs under a pty (script) because neomutt needs
+# a terminal; TERM is set so it can initialise curses headlessly. Runs as the
+# connection user (the operator who owns the 0700 Maildir), so no become.
+- name: _verify | Neomutt opens the archive read-only and exits cleanly
+  command:
+    argv:
+      - script
+      - -qec
+      - neomutt -R -F /opt/mutt/muttrc -e "push <quit>"
+      - /dev/null
+  environment:
+    TERM: xterm
+  changed_when: false
+
+# neomutt populates its header cache while reading the Maildir, even read-only.
+# A cache file appearing proves it actually parsed the archive (not just
+# started and bailed).
+- name: _verify | Neomutt populated its header cache from the archive
+  find:
+    paths: /mnt/services/mutt/headers
+    file_type: file
+  register: _mutt_hcache
+  failed_when: _mutt_hcache.matched == 0
+  become: true
+
+# Read-only guarantee: -R must not migrate the planted message out of new/ or
+# rewrite it with Maildir flags. The archive is irreplaceable; prove browsing
+# never mutated it.
+- name: _verify | Planted message stays in new/ (archive never mutated)
+  stat:
+    path: /mnt/services/getmail/new/1700000000.muttverify.box
+  register: _mutt_newfile
+  failed_when: not _mutt_newfile.stat.exists
+  become: true
+
+- name: _verify | No Maildir cur/ migration happened
+  find:
+    paths: /mnt/services/getmail/cur
+    file_type: file
+  register: _mutt_cur
+  failed_when: _mutt_cur.matched > 0
+  become: true
+
+# The teardown removed the former webmail state directories (stood up in
+# _setup to mimic a converged host).
+- name: _verify | Former webmail state directories are gone
+  stat:
+    path: "{{ item }}"
+  register: _mutt_webmail_state
+  failed_when: _mutt_webmail_state.stat.exists
+  loop:
+    - /mnt/services/webmail
+    - /mnt/services/sqlite/roundcube
+  become: true
