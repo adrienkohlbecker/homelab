@@ -23,7 +23,7 @@ provider "github" {
 # a password rotation (`tofu apply -replace='random_password.
 # nexus_push["<name>"]'`) updates the user, the matching github secret,
 # and any subsequent CI run in one apply. Assumes the GitHub repo name
-# matches the nexus hosted-repo name (true today for homelab + compta).
+# matches the nexus hosted-repo name (true today for homelab).
 resource "github_actions_secret" "nexus_username" {
   for_each = nexus_security_user.push
 
