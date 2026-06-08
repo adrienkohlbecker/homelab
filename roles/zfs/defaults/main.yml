@@ -1,7 +1,7 @@
 ---
 # Pool-level properties to assert on existing pools, as a flat list of
-# {pool, name, value}. Optional + host-overridable (default below sits under
-# host_vars), so a zfs_root host names only its own pools; left empty it no-ops.
+# {pool, name, value}. Optional + host-overridable; a zfs_root host names only
+# its own pools, and an empty list no-ops.
 # Only non-default values are worth listing (autotrim=on on the SSD-backed
 # pools); pools left at the autotrim=off default stay unmanaged per the no-churn
 # convention. Reflect the live host, not the bootstrap scripts: lab's tank was

@@ -26,8 +26,6 @@ data_extra_properties:
   'autobackup:bak': 'true'
   special_small_blocks: '32768'
 
-# Resolves the host's tank pool name. Stays in sync with the
-# `default('tank')` in roles/zfs/tasks/dataset.yml's _zfs_dataset_resolved
-# vars block -- both must agree or _verify checks a pool that main.yml
-# didn't create.
-data_pool: "{{ zfs_tank_filesystem | default('tank') }}"
+# Resolves the host's tank pool name. Mirrors roles/zfs/tasks/dataset.yml's
+# `^tank/` rewrite so producers and verifiers agree on the actual pool.
+data_pool: "{{ zfs_tank_filesystem }}"

@@ -1,0 +1,3 @@
+# Hosts with no shares still run the role so stale smbd state and overrides are
+# removed. Positive share declarations stay in host_vars.
+samba_shares: []

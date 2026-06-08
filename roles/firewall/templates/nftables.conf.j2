@@ -103,7 +103,7 @@ table inet homelab {
         elements = {
             $WAN_IFACE . $HOME_LAN comment "home LAN via WAN iface",
             "wg0" . $WG_SUBNET comment "wireguard peer via wg0",
-{% if (macvlan_blocks | default([])) | selectattr('name', 'equalto', 'mac_mgmt') | list %}
+{% if macvlan_blocks | selectattr('name', 'equalto', 'mac_mgmt') | list %}
             "mac_mgmt" . $HOME_LAN comment "home LAN via macvlan child",
 {% endif %}
         }
@@ -128,7 +128,7 @@ table inet homelab {
         elements = {
             $WAN_IFACE comment "WAN-facing iface (LAN saddrs arrive via UDM)",
             "wg0" comment "wireguard tunnel",
-{% if inventory_hostname in (pihole_keepalived_peers | default([])) %}
+{% if inventory_hostname in pihole_keepalived_peers %}
             "vrrp.{{ pihole_keepalived_vrid }}" comment "keepalived vmac (pihole VIP carrier; same L2 as $WAN_IFACE)",
 {% endif %}
         }
@@ -293,7 +293,7 @@ table inet homelab {
         # VRRP packet and demote keepalived's MASTER role, stealing
         # the pihole VIP. Rule is suppressed on hosts that aren't
         # keepalived peers (e.g. bunk).
-{% set vrrp_peer_ips = pihole_keepalived_peers | default([]) | reject('eq', inventory_hostname) | map('extract', external_ips) | list %}
+{% set vrrp_peer_ips = pihole_keepalived_peers | reject('eq', inventory_hostname) | map('extract', external_ips) | list %}
 {% if vrrp_peer_ips %}
         iifname $WAN_IFACE ip saddr { {{ vrrp_peer_ips | join(', ') }} } ip protocol vrrp counter name "vrrp_accept" accept comment "keepalived (VRRP, named peers only)"
 {% endif %}

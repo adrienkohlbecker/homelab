@@ -6,7 +6,7 @@ qemu_test_minimal: false
 # Mirrors the boot role's _boot_serial derivation so refind and other roles
 # can consume the same value without re-implementing the logic.
 _console_serial: >-
-  {% if qemu_test | default(false) %}
+  {% if qemu_test %}
   {{ (ansible_architecture == 'aarch64')
      | ternary('earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200',
                'earlycon=uart8250,io,0x3f8 console=ttyS0,115200') }}
@@ -23,6 +23,24 @@ zfs_has_data_mount: true
 zfs_has_brumath_mount: true
 zfs_has_eckwersheim_mount: true
 zfs_has_minio_mount: true
+zfs_has_bpool: false
+zfs_root: true
+grub_bootloader: false
+zfs_dozer_filesystem: rpool
+zfs_tank_filesystem: rpool
+zfs_trim_pools:
+  - rpool
+zfs_pool_properties:
+  - { pool: rpool, name: autotrim, value: "on" }
+zfs_mount_cache_datasets:
+  - rpool/ROOT/jammy
+
+macvlan_blocks: []
+etc_hosts_entries: {}
+fail2ban_enabled: false
+has_transcoding_acceleration: false
+minio_enabled: false
+ssh_public_keys_additional: ""
 
 # Auto-discovered /dev/disk/by-id stems for every rotational drive on
 # the host. Consumed by roles/hdparm (charts.d collector) and

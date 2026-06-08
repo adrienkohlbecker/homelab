@@ -1,5 +1,3 @@
-zfs_root: true
-grub_bootloader: false
 fluentbit_otlp_local: true  # hyperdx receiver runs here
 
 ssh_x11_forwarding: true
@@ -25,7 +23,6 @@ zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set
   - rpool/ROOT/jammy
   - dozer/minio
   - tank/data
-zfs_has_bpool: false
 zfs_dozer_filesystem: dozer
 zfs_tank_filesystem: tank
 
@@ -119,8 +116,6 @@ netplan:
       id: 4
       link: nic0
       addresses: [ "10.123.4.2/24" ]
-
-hdparm_settings: {}
 
 # Onsite pulls lab runs nightly: pug (LAN) plus fox (the Hetzner VPS, reached
 # over wg0 at external_ips.fox). zfs_autobackup_ssh_public_key below is the
@@ -229,7 +224,7 @@ homepage_netdata_hosts:
   - pug
   - fox
 
-smb_shares:
+samba_shares:
   # media is deliberately readable+writable by every authenticated SMB user
   # (ak + spouse): a household media library, group-owned via the media group.
   # The absent `valid users` is intentional -- don't add one without revisiting

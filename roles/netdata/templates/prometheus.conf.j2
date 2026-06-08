@@ -8,7 +8,7 @@ jobs:
     url: http://127.0.0.1:{{ service_ports.fluentbit }}/api/v1/metrics/prometheus
     autodetection_retry: 60
 
-{% if minio_enabled|default(false) %}
+{% if minio_enabled %}
 
   - name: minio
     url: http://127.0.0.1:{{ service_ports.minio_api }}/minio/v2/metrics/cluster

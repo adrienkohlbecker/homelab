@@ -1,12 +1,10 @@
 - name: Assert required inputs are set
   assert:
     that:
-      - zfs_dozer_filesystem | default('') | length > 0
+      - zfs_dozer_filesystem | length > 0
     fail_msg: >-
-      scratch requires zfs_dozer_filesystem in host_vars/group_vars. A
-      mistyped or unset value renders to an empty string and would create a
-      dataset literally named /scratch at the pool root -- check for
-      non-empty, not just defined.
+      scratch requires non-empty zfs_dozer_filesystem. A mistyped empty value
+      would create a dataset literally named /scratch at the pool root.
   tags:
     - scratch
 

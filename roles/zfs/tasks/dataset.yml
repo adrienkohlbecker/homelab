@@ -29,7 +29,7 @@
 # comes from the caller's loop_control.label.
 - name: Create and mount zfs dataset
   vars:
-    _zfs_dataset_resolved: "{{ zfs_dataset_args.dataset | regex_replace('^tank/', (zfs_tank_filesystem | default('tank')) ~ '/') }}"
+    _zfs_dataset_resolved: "{{ zfs_dataset_args.dataset | regex_replace('^tank/', zfs_tank_filesystem ~ '/') }}"
   block:
     - name: Assert required dataset inputs
       assert:

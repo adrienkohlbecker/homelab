@@ -5,19 +5,18 @@
 - name: Assert required inputs
   assert:
     that:
-      - subid_users is defined
       - subid_users | unique | length == subid_users | length
       - ansible_user_id not in subid_users
     fail_msg: >-
-      subid requires subid_users (list) in host_vars.
-      Must not contain duplicates or ansible_user_id ({{ ansible_user_id }}).
+      subid_users must not contain duplicates or ansible_user_id
+      ({{ ansible_user_id }}).
   tags:
     - subid
 
 - name: Resolve gids for subgid extras
   getent:
     database: group
-  when: (subid_extra_subgid_groups | default([])) | length > 0
+  when: subid_extra_subgid_groups | length > 0
   become: true
   tags:
     - subid
@@ -25,15 +24,15 @@
 - name: Resolve uids for subuid extras
   getent:
     database: passwd
-  when: (subid_extra_subuid_users | default([])) | length > 0
+  when: subid_extra_subuid_users | length > 0
   become: true
   tags:
     - subid
 
 - name: Assert subuid/subgid extra sources exist on the host
   vars:
-    subid_missing_users: "{{ subid_extra_subuid_users | default([]) | map(attribute='source_user') | list | difference(ansible_facts.getent_passwd | default({}) | list) }}"
-    subid_missing_groups: "{{ subid_extra_subgid_groups | default([]) | map(attribute='group') | list | difference(ansible_facts.getent_group | default({}) | list) }}"
+    subid_missing_users: "{{ subid_extra_subuid_users | map(attribute='source_user') | list | difference(ansible_facts.getent_passwd | default({}) | list) }}"
+    subid_missing_groups: "{{ subid_extra_subgid_groups | map(attribute='group') | list | difference(ansible_facts.getent_group | default({}) | list) }}"
   assert:
     that:
       - subid_missing_users | length == 0
@@ -59,7 +58,7 @@
     backup: true
     validate: python3 -c 'import sys; lines = [x.strip() for x in open(sys.argv[1]) if x.strip()]; sys.exit(1 if [x for x in lines if len(x.split(":")) != 3 or not x.split(":")[1].isdigit() or not x.split(":")[2].isdigit()] else 0)' "%s"
   vars:
-    subid_extras: "{{ subid_extra_subuid_users | default([]) }}"
+    subid_extras: "{{ subid_extra_subuid_users }}"
     subid_id_source: "{{ ansible_facts.getent_passwd | default({}) }}"
     subid_id_key: source_user
   register: subid_subuid_result
@@ -77,7 +76,7 @@
     backup: true
     validate: python3 -c 'import sys; lines = [x.strip() for x in open(sys.argv[1]) if x.strip()]; sys.exit(1 if [x for x in lines if len(x.split(":")) != 3 or not x.split(":")[1].isdigit() or not x.split(":")[2].isdigit()] else 0)' "%s"
   vars:
-    subid_extras: "{{ subid_extra_subgid_groups | default([]) }}"
+    subid_extras: "{{ subid_extra_subgid_groups }}"
     subid_id_source: "{{ ansible_facts.getent_group | default({}) }}"
     subid_id_key: group
   register: subid_subgid_result

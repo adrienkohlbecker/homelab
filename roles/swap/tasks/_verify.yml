@@ -128,8 +128,8 @@
     - _swap_verify_zram_module.rc == 0
   assert:
     that:
-      - (_swap_verify_swappiness.content | b64decode | trim | int) == (swap_swappiness | default(100) | int)
+      - (_swap_verify_swappiness.content | b64decode | trim | int) == (swap_swappiness | int)
     fail_msg: >-
       vm.swappiness is {{ _swap_verify_swappiness.content | b64decode | trim }},
-      expected {{ swap_swappiness | default(100) }}.
+      expected {{ swap_swappiness }}.
   become: true

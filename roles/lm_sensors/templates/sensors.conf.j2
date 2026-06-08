@@ -5,13 +5,13 @@
 # cryptic; set `lm_sensors_relabel` in host_vars to give specific sensors a
 # friendly label (chip identifiers and feature names differ per host -- run
 # `sensors` to list them). It's an optional companion to `lm_sensors_modules`;
-# empty/unset means no relabeling. Shape:
+# empty means no relabeling. Shape:
 #   lm_sensors_relabel:
 #     - chip: coretemp-isa-*      # chip pattern (glob)
 #       sensors:
 #         - name: temp1           # feature name as `sensors` reports it
 #           label: CPU Package
-{% set relabel = lm_sensors_relabel | default([]) %}
+{% set relabel = lm_sensors_relabel %}
 jobs:
   - name: sensors
     autodetection_retry: 60

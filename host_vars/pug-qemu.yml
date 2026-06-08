@@ -30,8 +30,6 @@ macvlan_blocks:
 swap_partition:
   device: /dev/disk/by-partlabel/swap
 
-has_transcoding_acceleration: false
-
 # Override prod's pug.yml netplan: it matches by physical NIC MAC + r8169
 # driver, but the QEMU VM ships a single virtio-net with a different MAC,
 # so `netplan apply` finds no matching interface and brings the only link

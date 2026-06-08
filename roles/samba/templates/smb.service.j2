@@ -11,7 +11,7 @@
      it with a conflicting model string. The macOS Finder server icon for an
      SMB connection comes from fruit:model in smb.conf, delivered in-band
      over the AAPL extension -- independent of this mDNS advert. #}
-{% set tm_shares = smb_shares | default([]) | selectattr('time_machine', 'defined') | selectattr('time_machine') | list %}
+{% set tm_shares = samba_shares | selectattr('time_machine', 'defined') | selectattr('time_machine') | list %}
 {% if tm_shares | length > 0 %}
   {# Advertise Time Machine targets so macOS auto-discovers them; each share
      flagged time_machine: true becomes one dkN entry. #}

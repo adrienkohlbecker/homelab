@@ -1,17 +1,5 @@
-zfs_root: true
-grub_bootloader: false
-
 zfs_arc_min: 1073741824
 zfs_arc_max: 4294967296
-zfs_trim_pools:
-  - rpool
-# rpool is created autotrim=on by provision.sh; apoc stays at the autotrim=off
-# default (pools.sh) and is left unmanaged.
-zfs_pool_properties:
-  - { pool: rpool, name: autotrim, value: "on" }
-zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
-  - rpool/ROOT/jammy
-zfs_has_bpool: false
 
 # Derived from `sudo sensors-detect` on the host; re-run after hardware changes.
 lm_sensors_modules:
@@ -57,8 +45,6 @@ netplan:
       # timer-armed rollback in roles/netplan is the backstop for what
       # it can't cover.
       critical: true
-
-hdparm_settings: {}
 
 zfs_autobackup_sources:
   - host: lab
@@ -123,11 +109,6 @@ netdata_diskspace_blocklist:
   - /mnt/old_bionic
   - /mnt/old_services
   - /mnt/services
-
-smb_shares: []
-subid_users: []
-
-has_transcoding_acceleration: true
 
 # Tailscale home exit node (HA pair with lab -- see notes/headscale_mesh_redesign.md §C).
 # Subnet routes removed: *.fahm.fr DNS now points to Tailscale IPs (100.64.x.x) so

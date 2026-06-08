@@ -11,21 +11,14 @@
 # without routing whole home subnets. Provisioned by terraform/hetzner.tf;
 # reached at fox.fahm.fr (public A -> reserved primary IP).
 
-zfs_root: true
 zfs_arc_min: 0
 zfs_arc_max: 536870912
-zfs_trim_pools:
-  - rpool
 # rpool carries autoexpand=on (chroot.sh sets it so the 20G image grows into
 # cpx22's larger disk on first boot) + autotrim=on; both are set live, the zfs
 # role asserts them.
 zfs_pool_properties:
   - { pool: rpool, name: autotrim, value: "on" }
   - { pool: rpool, name: autoexpand, value: "on" }
-zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
-  - rpool/ROOT/jammy
-zfs_has_bpool: false
-
 # fox runs no onsite pull of its own (empty sources) -- it is a leaf source
 # that lab pulls (lab's zfs_autobackup_sources lists fox -> tank/fox). It still
 # snapshots locally and rsyncs its bak-tagged datasets offsite to bunk: fox
@@ -45,9 +38,6 @@ zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PW
 swap_zram:
   size: 4G
 swap_swappiness: 150
-
-# ZBM + rEFInd, not grub. Same as every prod host.
-grub_bootloader: false
 
 # Hetzner VPS has a standard 8250 UART at 0x3f8 (Hetzner serial console).
 boot_serial_console: "earlycon=uart8250,io,0x3f8 console=ttyS0,115200"

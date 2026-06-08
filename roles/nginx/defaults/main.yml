@@ -9,3 +9,7 @@
 # ladder and would mask the per-host override. defaults sit at the bottom, so
 # host_vars/<host>.yml wins as intended.
 nginx_ipv6: false
+
+# Device admin UI proxies enabled on this host. The nginx role runs on every
+# managed host, but only lab/pug expose these LAN appliances today.
+nginx_static_proxies: []

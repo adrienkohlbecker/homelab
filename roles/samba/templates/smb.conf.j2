@@ -291,11 +291,11 @@ browseable = no
 valid users = %S
 create mask = 0700
 directory mask = 0700
-{% for share in smb_shares %}
+{% for share in samba_shares %}
 
 [{{ share.name }}]
 path = {{ share.path }}
-{# smb_shares entry schema:
+{# samba_shares entry schema:
      name             -> [section] header (rendered above)
      path             -> path = (rendered above)
      time_machine          -> emits `fruit:time machine = yes` (rendered below)

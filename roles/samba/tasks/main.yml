@@ -4,33 +4,29 @@
       # default('') so a wholly-undefined var fails into fail_msg rather than
       # raising a raw "undefined variable" jinja error here.
       - samba_password | default('') | length > 0
-      - smb_shares is defined
-      # default([]) so an undefined smb_shares fails on the line above rather
-      # than raising a raw undefined error in these rejectattr filters.
-      - (smb_shares | default([])) | rejectattr('name', 'defined') | list | length == 0
-      - (smb_shares | default([])) | rejectattr('path', 'defined') | list | length == 0
+      - samba_shares | rejectattr('name', 'defined') | list | length == 0
+      - samba_shares | rejectattr('path', 'defined') | list | length == 0
     fail_msg: >-
-      samba_password must be set (vaulted) and every smb_shares entry needs a
-      name + path. These are required inputs; role vars sit above host_vars and
-      must not default them.
+      samba_password must be set (vaulted) and every samba_shares entry needs a
+      name + path.
   tags:
     - samba
 
-- name: Assert smb_shares names are well-formed identifiers
+- name: Assert samba_shares names are well-formed identifiers
   assert:
     that:
       - >-
-        (smb_shares | default([])) | map(attribute='name')
+        samba_shares | map(attribute='name')
         | reject('match', '^[a-zA-Z0-9][a-zA-Z0-9_ -]*$') | list | length == 0
     fail_msg: >-
-      An smb_shares entry has a name containing characters that are not
+      A samba_shares entry has a name containing characters that are not
       alphanumeric, spaces, hyphens, or underscores (or starts with a
       non-alphanumeric character). Share names render as INI section headers
       in smb.conf; invalid characters could break parsing.
   tags:
     - samba
 
-- name: Assert smb_shares directive keys are well-formed
+- name: Assert samba_shares directive keys are well-formed
   assert:
     that:
       # smb.conf parameter names use spaces, never underscores ("valid users",
@@ -39,11 +35,11 @@
       # smbd silently ignores, leaving the share on the global default (any
       # authenticated user). Structural keys handled by the template are exempt.
       - >-
-        (smb_shares | default([])) | map('dict2items') | flatten
+        samba_shares | map('dict2items') | flatten
         | rejectattr('key', 'in', ['name', 'path', 'opts', 'time_machine', 'time_machine_max_size'])
         | selectattr('key', 'search', '_') | list | length == 0
     fail_msg: >-
-      An smb_shares entry has a directive key containing '_' (e.g. valid_users
+      A samba_shares entry has a directive key containing '_' (e.g. valid_users
       instead of `valid users`). smb.conf parameters use spaces; the typo would
       render a directive smbd ignores, silently leaving the share open to every
       authenticated user.
@@ -100,7 +96,7 @@
       src: smbd_zfs_mounts_override.conf.j2
       for: smbd.service
       dest_abs: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
-      condition: "{{ smb_shares | length > 0 }}"
+      condition: "{{ samba_shares | length > 0 }}"
   tags:
     - samba
 
@@ -111,7 +107,7 @@
 - name: Re-enable smbd to pick up new WantedBy targets  # noqa: command-instead-of-module
   when:
     - not (ansible_check_mode and samba_apt.changed)
-    - smb_shares | length > 0
+    - samba_shares | length > 0
     - smbd_service_d_zfs_mounts_conf_result.changed
   command: systemctl reenable smbd
   changed_when: true
@@ -122,7 +118,7 @@
 # A host that drops all its shares must shed the override too, or smbd keeps a
 # boot dependency on zfs_mount units that may no longer exist.
 - name: Remove smbd zfs-mount override when no shares
-  when: smb_shares | length == 0
+  when: samba_shares | length == 0
   file:
     dest: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
     state: absent
@@ -133,7 +129,7 @@
 
 - name: Reload systemd after smbd override removal
   when:
-    - smb_shares | length == 0
+    - samba_shares | length == 0
     - samba_smbd_override_removed.changed
   systemd:
     daemon_reload: true

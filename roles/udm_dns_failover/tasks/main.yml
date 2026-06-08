@@ -25,7 +25,7 @@
       - (pihole_keepalived_priority | default(0) | int) > 0
       - (pihole_keepalived_priority | default(0) | int) <= 255
       - pihole_keepalived_peers is defined
-      - (pihole_keepalived_peers | default([]) | length) > 0
+      - pihole_keepalived_peers | length > 0
       - inventory_hostname in external_ips
       - udm_dns_failover_heartbeat_url is defined
       # The heartbeat template appends ?status=up / ?status=down, so the

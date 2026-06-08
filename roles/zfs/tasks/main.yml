@@ -16,7 +16,7 @@
       - zfs_mount_cache_datasets is iterable
     fail_msg: >-
       zfs_root (bool), zfs_trim_pools (list), and
-      zfs_mount_cache_datasets (list) must be set in host_vars.
+      zfs_mount_cache_datasets (list) must be set in host/group vars.
   tags:
     - zfs
 
