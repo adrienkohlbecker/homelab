@@ -70,7 +70,8 @@ RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
 # needs to compile. gpg + apt-transport-https are for the mise apt repo.
 # nodejs because every actions/checkout / actions/upload-artifact / etc.
 # is a JS action and crun aborts with "executable file 'node' not found"
-# without it.
+# without it. npm comes from mise's node = "24" install, which
+# markdownlint-cli2 depends on.
 #
 # curl + netcat-openbsd back the WAN-side delegate_to: localhost probes
 # in roles/iptables/tasks/_verify.yml — TCP via curl, UDP via `nc -u`.
