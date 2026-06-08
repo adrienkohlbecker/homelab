@@ -10,6 +10,7 @@
     # are mutually independent, so the order within this band is immaterial.
     - hwe_kernel
     - bash
+    - lnav
     - mise
     - user
     - cleanup

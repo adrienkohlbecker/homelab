@@ -1,0 +1,41 @@
+{
+  "pihole_ftl": {
+    "title": "Pi-hole FTL",
+    "description": "Pi-hole FTL daemon log (/var/log/pihole/FTL.log)",
+    "url": "https://docs.pi-hole.net/ftldns/log/",
+    "regex": {
+      "std": {
+        "pattern": "^\\[(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d+)\\] (?<level>[A-Z]+): +(?<body>.*)$"
+      }
+    },
+    "value": {
+      "level": { "kind": "string" },
+      "body":  { "kind": "string" }
+    },
+    "level-field": "level",
+    "level": {
+      "fatal":   "^(FATAL)$",
+      "error":   "^(ERROR)$",
+      "warning": "^(WARNING|WARN)$",
+      "info":    "^(INFO|NOTICE|LOG)$",
+      "debug":   "^(DEBUG)$"
+    },
+    "timestamp-field": "timestamp",
+    "timestamp-format": "%Y-%m-%d %H:%M:%S.%L",
+    "body-field": "body",
+    "sample": [
+      {
+        "line": "[2026-06-08 08:00:00.000] INFO:  FTL started",
+        "level": "info"
+      },
+      {
+        "line": "[2026-06-08 08:00:01.123] WARNING:  Rate-limiting 10.0.0.5",
+        "level": "warning"
+      },
+      {
+        "line": "[2026-06-08 08:00:02.456] ERROR:  Could not read config file",
+        "level": "error"
+      }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+lnav_version: "0.14.0"
+
+lnav_artifacts:
+  x86_64:
+    url: "https://github.com/tstack/lnav/releases/download/v0.14.0/lnav-0.14.0-linux-musl-x86_64.zip"
+    sha256: "9d146d1da2af005a77920afff5da96d2ae0771ee25450b0954b27de95e7f0f57"
+  aarch64:
+    url: "https://github.com/tstack/lnav/releases/download/v0.14.0/lnav-0.14.0-linux-musl-arm64.zip"
+    sha256: "027e9f540567cd0e9ba00335ab9be0275a414b14608e10d49dc2d6a2633aa546"
