@@ -114,7 +114,7 @@ depends = [
   "lint:test-meta",
   "lint:topology",
   "lint:markdown",
-  "lint:notes-meta",
+  "lint:notes",
 ]
 
 [tasks."lint:ansible"]
@@ -178,12 +178,13 @@ description = "Validate data/network_topology.yml against its JSON Schema"
 run = "check-jsonschema --schemafile data/network_topology.schema.json data/network_topology.yml"
 
 [tasks."lint:markdown"]
-description = "Lint Markdown files (CLAUDE.md + notes/)"
-run = "markdownlint-cli2 'CLAUDE.md' 'notes/**/*.md'"
+description = "Lint Markdown files (CLAUDE.md + README.md)"
+run = "markdownlint-cli2 'CLAUDE.md' 'README.md'"
 
-[tasks."lint:notes-meta"]
-description = "Check notes/ frontmatter has required status and created_at fields"
-run = "uv run python '{{config_root}}/lint/check_notes_frontmatter.py' '{{config_root}}/notes/'"
+[tasks."lint:notes"]
+description = "Lint notes/ submodule (delegates to mise run lint inside notes/)"
+dir = "{{config_root}}/notes"
+run = "mise run lint"
 
 [tasks.test]
 description = "Run Python unit tests (pytest)"
