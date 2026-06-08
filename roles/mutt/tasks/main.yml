@@ -79,10 +79,11 @@
     - mutt
 
 # === neomutt archive viewer ====================================================
-- name: Install neomutt and w3m
+- name: Install neomutt, notmuch, and w3m
   apt:
     package:
       - neomutt
+      - notmuch
       - w3m
     cache_valid_time: 3600
   become: true
@@ -100,18 +101,21 @@
   tags:
     - mutt
 
-# In check mode on a fresh host, apt reports that neomutt would be installed
-# but does not put the binary on disk, so config validation runs only during
-# real converges.
-- name: Configure neomutt
-  template:
-    src: muttrc.j2
-    dest: /opt/mutt/muttrc
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: "{{ 'neomutt -n -F %s -Q folder' if not ansible_check_mode else omit }}"
+# neomutt's header cache and notmuch's index live here (operator-owned, on the
+# services dataset) so reopening/searching the multi-year archive doesn't
+# re-parse every message, and nothing lands in the operator's
+# dotfiles-managed $HOME.
+- name: Create neomutt and notmuch state directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    mode: "0700"
+  loop:
+    - /mnt/services/mutt
+    - /mnt/services/mutt/headers
+    - /mnt/services/mutt/notmuch
   become: true
   tags:
     - mutt
@@ -128,6 +132,19 @@
   tags:
     - mutt
 
+- name: Configure notmuch archive index
+  template:
+    src: notmuch-config.j2
+    dest: /opt/mutt/notmuch-config
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: "{{ '/usr/bin/notmuch --config %s config list' if not ansible_check_mode else omit }}"
+  become: true
+  tags:
+    - mutt
+
 - name: Install the mail-archive launcher
   copy:
     src: mail-archive
@@ -137,23 +154,6 @@
     mode: "0755"
     backup: true
     validate: bash -n %s
-  become: true
-  tags:
-    - mutt
-
-# neomutt's header cache lives here (operator-owned, on the services dataset)
-# so reopening the multi-year archive doesn't re-parse every message, and
-# nothing lands in the operator's dotfiles-managed $HOME.
-- name: Create neomutt cache directories
-  file:
-    path: "{{ item }}"
-    state: directory
-    owner: "{{ ansible_user_id }}"
-    group: "{{ ansible_user_id }}"
-    mode: "0700"
-  loop:
-    - /mnt/services/mutt
-    - /mnt/services/mutt/headers
   become: true
   tags:
     - mutt
@@ -178,6 +178,50 @@
       /mnt/services/getmail is not a Maildir — the getmail role must converge
       before mutt (it creates and owns the archive this viewer binds read-only).
     quiet: true
+  tags:
+    - mutt
+
+- name: Prime the notmuch archive index
+  command: /usr/bin/notmuch --config /opt/mutt/notmuch-config new
+  args:
+    creates: /mnt/services/mutt/notmuch/xapian
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  when: not ansible_check_mode
+  tags:
+    - mutt
+
+# In check mode on a fresh host, apt reports that neomutt would be installed
+# but does not put the binary on disk, so config validation runs only during
+# real converges. The notmuch config and initial database are in place by now,
+# so virtual-mailboxes can be parsed against a real index.
+- name: Configure neomutt
+  template:
+    src: muttrc.j2
+    dest: /opt/mutt/muttrc
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: "{{ 'neomutt -n -F %s -Q folder' if not ansible_check_mode else omit }}"
+  become: true
+  tags:
+    - mutt
+
+- name: Schedule notmuch archive indexing
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: mutt_notmuch
+      description: Index the getmail archive with notmuch
+      # Runs after the 00:10 getmail timer's normal fetch window.
+      on_calendar: "*-*-* 00:30:00"
+      persistent: false
+      exec_start: /usr/bin/notmuch --config /opt/mutt/notmuch-config new
+      run_as: "{{ ansible_user_id }}"
+      timeout_start_sec: 30m
   tags:
     - mutt
 

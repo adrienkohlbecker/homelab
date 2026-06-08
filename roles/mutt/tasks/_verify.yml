@@ -51,6 +51,22 @@
       <a href="http://muttverify.invalid/">a link</a></p></body></html>
   become: true
 
+- name: _verify | Notmuch indexes the planted archive message
+  command: /usr/bin/notmuch --config /opt/mutt/notmuch-config new
+  changed_when: false
+
+- name: _verify | Notmuch finds the planted archive message
+  command:
+    argv:
+      - /usr/bin/notmuch
+      - --config
+      - /opt/mutt/notmuch-config
+      - count
+      - subject:"Mutt Verify"
+  register: _mutt_notmuch_count
+  changed_when: false
+  failed_when: (_mutt_notmuch_count.stdout | trim) != '1'
+
 # Functional probe: open the archive through the real operator entry point —
 # the mail-archive wrapper (which adds -R + the curated config), display the
 # planted message, and quit. This drives the full read path: index build +
