@@ -27,10 +27,12 @@
   failed_when: _mutt_ro_write.rc == 0
   become: true
 
-# Plant a known message into the archive Maildir's new/ (operator-owned), the
-# same way the getmail fetcher delivers. The read-only viewer must serve it
-# without migrating it out of new/ (asserted below).
-- name: _verify | Plant a test message in the archive Maildir
+# Plant a known HTML message into the archive Maildir's new/ (operator-owned),
+# the same way the getmail fetcher delivers. The viewer must render it inline
+# through w3m (auto_view) and serve it without migrating it out of new/ (both
+# asserted below). HTML-only — no text/plain alternative — so auto_view must
+# fire rather than alternative_order preferring a plain part.
+- name: _verify | Plant a test HTML message in the archive Maildir
   copy:
     dest: /mnt/services/getmail/new/1700000000.muttverify.box
     owner: "{{ ansible_user_id }}"
@@ -42,27 +44,53 @@
       Subject: Mutt Verify
       Date: Tue, 14 Nov 2023 22:13:20 +0000
       Message-ID: <muttverify@example.com>
+      MIME-Version: 1.0
+      Content-Type: text/html; charset=us-ascii
 
-      Archive viewer verification body.
+      <html><body><p>MUTTVERIFYHTML
+      <a href="http://muttverify.invalid/">a link</a></p></body></html>
   become: true
 
 # Functional probe: open the archive through the real operator entry point —
-# the mail-archive wrapper (which adds -R + the curated config) — and quit.
-# neomutt parses every header to build the index (and writes the header cache,
-# asserted below), so a clean exit proves the operator can actually browse the
-# archive via the installed launcher. Runs under a pty (script) because neomutt
-# needs a terminal; TERM is set so it can initialise curses headlessly. Runs as
-# the connection user (the operator who owns the 0700 Maildir), so no become.
-- name: _verify | The mail-archive wrapper opens the archive read-only and exits cleanly
+# the mail-archive wrapper (which adds -R + the curated config), display the
+# planted message, and quit. This drives the full read path: index build +
+# header cache (asserted below) + auto_view piping the HTML body through w3m,
+# captured in the pty typescript for the render checks below.
+#
+# The open is pushed (<display-message>) but the two quit keys (qq: pager back
+# to index, then quit neomutt) arrive via stdin, NOT the push buffer. neomutt
+# only paints the pager once its push buffer drains and it blocks polling for
+# input; quitting from within the push buffer skips that paint, so the rendered
+# body would never reach the typescript. The stdin keys land after the paint.
+#
+# Runs under a pty (script) because neomutt needs a terminal; TERM is set so it
+# can initialise curses headlessly. Runs as the connection user (the operator
+# who owns the 0700 Maildir), so no become.
+- name: _verify | The mail-archive wrapper opens and displays a message read-only
   command:
     argv:
       - script
       - -qec
-      - mail-archive -e "push <quit>"
-      - /dev/null
+      - mail-archive -e "push <display-message>"
+      - /tmp/mutt_verify_typescript
+    stdin: qq
   environment:
     TERM: xterm
   changed_when: false
+
+# The pushed <display-message> rendered the HTML part inline: the body marker
+# must appear in the captured output, and the raw href= attribute must not —
+# proving w3m parsed the HTML rather than neomutt showing it raw. grep -a so the
+# binary pty escape codes in the typescript don't trip up the text match.
+- name: _verify | W3m rendered the HTML body inline (marker present)
+  command: grep -qa MUTTVERIFYHTML /tmp/mutt_verify_typescript
+  changed_when: false
+
+- name: _verify | The HTML was parsed by w3m, not shown raw (no href= attribute)
+  command: grep -qa href= /tmp/mutt_verify_typescript
+  register: _mutt_raw_html
+  changed_when: false
+  failed_when: _mutt_raw_html.rc != 1
 
 # neomutt populates its header cache while reading the Maildir, even read-only.
 # A cache file appearing proves it actually parsed the archive (not just
