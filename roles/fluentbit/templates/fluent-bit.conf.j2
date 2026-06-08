@@ -280,7 +280,7 @@
     storage.type      filesystem
     storage.pause_on_chunks_overlimit  on
 
-{% if fluentbit_otlp_local %}
+{% if fluentbit_udm_input %}
 # UniFi SIEM syslog: the UDM + APs + switches forward device and
 # system logs as RFC 3164 UDP syslog. Bound to this host's management
 # IP so only the local LAN can reach it (firewall scopes to the mgmt
@@ -430,7 +430,7 @@
     emitter_name      multiline_emitter
     emitter_storage.type  filesystem
 
-{% if fluentbit_otlp_local %}
+{% if fluentbit_udm_input %}
 # Parse raw UniFi syslog into structured fields. The udp input delivers
 # the whole RFC 3164 line as `log`; parse_unifi.lua handles all three
 # wire shapes (gateway daemon syslog, AP/switch device syslog, and CEF
