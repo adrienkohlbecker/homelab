@@ -9,7 +9,13 @@ if [ -z "${ZBM_BUILD_SUFFIX:-}" ] && [ -z "${CI:-}" ]; then
   ZBM_BUILD_SUFFIX="-local.$(date "+%Y%m%d%H%M%S")"
 fi
 zbm_artifact_version="${zbm_base_version}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX:-}"
-repo_root="${MISE_CONFIG_ROOT}"
+repo_root="${MISE_CONFIG_ROOT:-}"
+if [ -z "$repo_root" ]; then
+  repo_root="$(git rev-parse --show-toplevel)"
+elif [ "${repo_root#/}" = "$repo_root" ] && [ ! -d "${repo_root}/zbm" ]; then
+  repo_root="$(git rev-parse --show-toplevel)"
+fi
+repo_root="$(cd "$repo_root" && pwd -P)"
 src_dir="${repo_root}/zbm-build/src"
 out_dir="${repo_root}/zbm-build/${arch}"
 builder_tag="localhost/zbm-builder:v${zbm_base_version}-${arch}"

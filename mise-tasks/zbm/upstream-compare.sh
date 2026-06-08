@@ -40,8 +40,10 @@ done
 repo_root="${MISE_CONFIG_ROOT:-}"
 if [ -z "$repo_root" ]; then
   repo_root="$(git rev-parse --show-toplevel)"
+elif [ "${repo_root#/}" = "$repo_root" ] && [ ! -d "${repo_root}/zbm" ]; then
+  repo_root="$(git rev-parse --show-toplevel)"
 fi
-repo_root="$(realpath "$repo_root")"
+repo_root="$(cd "$repo_root" && pwd -P)"
 
 local_out_dir="${ZBM_LOCAL_OUT_DIR:-${repo_root}/zbm-build/${local_arch}}"
 src_dir="${repo_root}/zbm-build/src"

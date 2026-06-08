@@ -37,7 +37,15 @@ aarch64) xbps_repo=https://repo-de.voidlinux.org/current/aarch64 ;;
   ;;
 esac
 
-src_dir="${MISE_CONFIG_ROOT}/zbm-build/src"
+repo_root="${MISE_CONFIG_ROOT:-}"
+if [ -z "$repo_root" ]; then
+  repo_root="$(git rev-parse --show-toplevel)"
+elif [ "${repo_root#/}" = "$repo_root" ] && [ ! -d "${repo_root}/zbm" ]; then
+  repo_root="$(git rev-parse --show-toplevel)"
+fi
+repo_root="$(cd "$repo_root" && pwd -P)"
+
+src_dir="${repo_root}/zbm-build/src"
 mkdir -p "$(dirname "$src_dir")"
 if [ -d "$src_dir/.git" ] &&
   [ "$(git -C "$src_dir" describe --tags --exact-match 2>/dev/null)" = "v${ZBM_VERSION}" ]; then
