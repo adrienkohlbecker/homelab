@@ -1,5 +1,5 @@
-# Mailgun powers transactional / notification email for the homelab: five
-# service SMTP credentials (postfix/sabnzbd/gitea/healthchecks/overseerr@
+# Mailgun powers transactional / notification email for the homelab: four
+# service SMTP credentials (postfix/sabnzbd/gitea/overseerr@
 # noreply.fahm.fr) relay through smtp.eu.mailgun.org. The DNS surface (MX,
 # DKIM, SPF, DMARC, click tracking CNAME) is in dns.tf; this file owns the
 # Mailgun-side domain configuration that those DNS records point at.

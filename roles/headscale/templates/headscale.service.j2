@@ -7,7 +7,7 @@ Wants=network-online.target
 # Baseline start-limit, present regardless of OIDC: Restart=always + RestartSec=5
 # can trip systemd's default 5-starts-in-10s burst during a slow dependency
 # warmup and land the unit in `failed` rather than retrying. Matches the sibling
-# podman units (e.g. roles/healthchecks). OIDC widens the burst to 15 -- fox is a
+# podman units (e.g. roles/kuma). OIDC widens the burst to 15 -- fox is a
 # wg *listener*, so the tunnel to lab only carries traffic once lab/pug send their
 # next keepalive (~25s after a fox reboot), and headscale must keep retrying
 # boot-time OIDC discovery through that wg0 warmup rather than exhausting the

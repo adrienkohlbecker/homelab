@@ -58,7 +58,7 @@ ExecStart=/usr/bin/podman run \
     {# USERMAP_UID/GID (CLAUDE.md "User namespacing" tier 2): paperless-ngx's
        s6 init usermods its baked-in paperless user to these ids and drops to
        it. Tier 2 fits a droppable image -- the fake-root --uidmap pattern is
-       reserved for images that insist on id 0 (healthchecks, hyperdx). #}
+       reserved for images that insist on id 0 (hyperdx). #}
     --env USERMAP_UID={{ paperless_user.uid }} \
     --env USERMAP_GID={{ paperless_user.group }} \
     --env PAPERLESS_REDIS="redis://:{{ redis_password }}@redis.dns.podman:6379/1" \

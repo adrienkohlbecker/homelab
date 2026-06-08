@@ -51,7 +51,7 @@ Roles map 1:1 to a service or a system concern; the order in `site.yml` reflects
 - **Container / web stack**: `podman`, `samba`, `certbot`, `nginx`, `authelia`, `homepage`, `services`
 - **Monitoring & infra**: `eaton_ipp`, `netdata`, `fluentbit`, `wolweb`, `csplogger`, `keepalived` (+ `keepalived_exporter`), `custom_exporter`, `nut_server` / `nut_monitor`, `dnscrypt_proxy`, `pihole`, `docker_client`, `socket_proxy`, `prometheus`
 - **VPN / mesh**: `headscale`, `tailscale`, `udm_dns_failover`
-- **Lab-only services**: `libvirt`, `minio`, `influxdb`, `scratch`, `data`, `media`, `jellyfin`, `sonarr` / `radarr` / `bazarr` / `lidarr` / `plex` / `tautulli` / `seerr`, `sort_ini`, `sabnzbd`, `transmission`, `profilarr`, `gitea` (+ `gitea_runner`, `github_runner`, `nodejs`), `getmail`, `webmail`, `compta`, `speedtest`, `filebrowser`, `mosquitto`, `z2m`, `homeassistant`, `kuma`, `healthchecks`, `spouse`, `redis`, `paperless`, `openproject`, `hyperdx`, `nexus`
+- **Lab-only services**: `libvirt`, `minio`, `influxdb`, `scratch`, `data`, `media`, `jellyfin`, `sonarr` / `radarr` / `bazarr` / `lidarr` / `plex` / `tautulli` / `seerr`, `sort_ini`, `sabnzbd`, `transmission`, `profilarr`, `gitea` (+ `gitea_runner`, `github_runner`, `nodejs`), `getmail`, `webmail`, `compta`, `speedtest`, `filebrowser`, `mosquitto`, `z2m`, `homeassistant`, `kuma`, `spouse`, `redis`, `paperless`, `openproject`, `hyperdx`, `nexus`
 - **Helpers** (imported by other roles, not used directly): `service_user`, `podman_secret`, `systemd_unit`, `systemd_timer`, `usergroup_immediate`, `sqlite_dataset`, `static_curl`, `linger`, `test`
 
 Helper-role contracts and per-role conventions (artifact URL+sha colocation, test hooks `_setup.yml` / `_verify.yml`, `qemu_test` gating, the check-mode-user idiom, the `service_ports:` registry) are documented in **CLAUDE.md**.
@@ -79,7 +79,7 @@ mise run packer:build box           # one source (push CI's target)
 mise run packer:build --ubuntu noble
 
 # Test a single role end-to-end in QEMU
-test/testrole.py healthchecks                # defaults to --machine box
+test/testrole.py kuma                        # defaults to --machine box
 test/testrole.py zfs --machine lab --keep    # on-demand prod-shape regression
 test/testall.py --jobs 5            # full role × machine matrix
 

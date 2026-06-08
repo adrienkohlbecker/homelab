@@ -53,7 +53,7 @@ ExecStart=/usr/bin/podman run \
        init usermods its baked-in abc user to these ids and drops to it.
        Tier 2 is the right fit for a droppable image -- the fake-root
        --uidmap pattern is reserved for images that insist on id 0
-       (healthchecks, hyperdx). #}
+       (hyperdx). #}
     --env PUID={{ bazarr_user.uid }} \
     --env PGID={{ media_group.gid }} \
     --env UMASK=002 \
