@@ -80,6 +80,7 @@ stylua = "2.5.2"
 # selene (Lua linter) has no short registry name; pin the aqua backend.
 "aqua:Kampfkarren/selene" = "0.31.0"
 tflint = "0.62.0"
+node = "24"
 markdownlint-cli2 = "0.22.1"
 taplo = "0.10.0"
 
