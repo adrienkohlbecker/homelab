@@ -84,11 +84,10 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 **Style:**
 
 - Centralize downloadable artifact metadata in `roles/<role>/vars/main.yml`: full URL **adjacent to its sha256**, keyed by `ansible_architecture` (`x86_64`/`aarch64`).
-- Bare module names for `ansible.builtin.*`; FQCN only for other collections. Don't mix styles within a file.
 - Every config-writing `copy:`/`template:` carries a best-effort `validate:` that parses the rendered file. Omit rather than invent a fake one. Safe as `validate:` args but **don't** lift into `command:`/`shell:` — embedded quotes break task loading.
 - **Preserve upstream comments in vendored config files.** Deliberate exception to "comments describe current state": the upstream reference *is* current state for a config file.
 - **Don't pin a config value just because it equals the upstream default.** Pin only when load-bearing: documents a dependency, is a deliberate non-default, or is a tuning knob worth surfacing.
-- Every file-writing task sets **`backup: true`**. Enforced by **`require-backup`** rule ([lint/ansible_rules/require_backup.py](lint/ansible_rules/require_backup.py)); test scaffolding and `_`-roles exempt. Exceptions carry `# noqa: require-backup`.
+- Every file-writing task sets **`backup: true`** — enforced by the `require-backup` rule ([lint/ansible_rules/require_backup.py](lint/ansible_rules/require_backup.py)); test scaffolding and `_`-roles exempt. Exceptions carry `# noqa: require-backup`.
 - `/mnt/services/<svc>/` is service *state* (configs, DBs, secrets — rides ZFS snapshots). Service *code* from the repo belongs at `/opt/<svc>/`. Canonical: [roles/homepage/tasks/main.yml](roles/homepage/tasks/main.yml).
 
 ### Service ports
@@ -105,7 +104,7 @@ New user-facing services get a bookmark in [roles/homepage/templates/bookmarks.y
 
 ### Home Assistant GUI YAML sync
 
-HA config lives in a private submodule at [roles/homeassistant/files/ha_gui_config/](roles/homeassistant/files/ha_gui_config). Drive with `mise run ha:sync [pull|push|sync]` ([mise-tasks/ha/sync.py](mise-tasks/ha/sync.py)). Preview with `… push --dry-run`. Auth via `HA_API_TOKEN` (1P-backed `[env]` in [mise.toml](mise.toml)). Don't bypass the sync (no `scp`, no live-VM editing). **Don't bump the parent's submodule pointer**: [.gitmodules](.gitmodules) sets `ignore = all`, the pinned commit is not load-bearing.
+Drive with `mise run ha:sync [pull|push|sync]` ([mise-tasks/ha/sync.py](mise-tasks/ha/sync.py)). Don't bypass the sync (no `scp`, no live-VM editing). **Don't bump the parent's submodule pointer**: [.gitmodules](.gitmodules) sets `ignore = all`, the pinned commit is not load-bearing.
 
 ### `notes/` submodule
 
@@ -128,16 +127,18 @@ Valid statuses: `runbook` (active operator procedures) · `current` (deployed st
 
 ### Helper roles
 
-Prefer these over re-implementing boilerplate. All take inputs through a single `*_args` dict (so each call replaces it wholesale and inter-call vars-leak can't happen).
+Prefer these over re-implementing boilerplate. All take inputs through a single `*_args` dict (so each call replaces it wholesale and inter-call vars-leak can't happen). Full API: [notes/helper-roles-reference.md](notes/helper-roles-reference.md).
 
-- **`service_user`** — `tasks_from: user`, `service_user_args: { name: <svc> }` → system group + nologin user + `/mnt/services/<svc>` config dir; exposes `<svc>_user.uid`/`.group`. Optional: `extra_groups`, `createhome`, `home`, `shell`, `config_dir: false`.
-- **`usergroup_immediate`** — `tasks_from: user`, `usergroup_immediate_args: { group }` → appends `ansible_user_id` to supplementary group(s) and `meta: reset_connection`s on change. Each group must already exist — gate `when: not (ansible_check_mode and <group_task>.changed)`.
-- **`podman_secret`** — `tasks_from: secret`, `podman_secret_args: { name, data }` → creates/rotates a podman secret (byte-compares, recreates on drift; needs podman ≥ 4.7). Optional `user`. Exposes `<name>_rotated` / `<name>_existed_before` for restart triggers.
-- **`systemd_unit`** — `tasks_from: {install,dropin,service,remove}`, `systemd_unit_args` dict (keys: `src`, `dest`, `dest_abs`, `user`, `condition`, `start`, `restart`, `reload`, `throttle`, `verify`, `for`). `install` dispatches copy/template by `src` extension; `dropin` writes override.conf (pass `for:` or `dest_abs:`); `service` pre-pulls images + starts/restarts/reloads; `remove` stops+disables+deletes. Drive restarts via `restart: "{{ <unit>_result.changed or <other>_rotated }}"`. After `service`, `<unit-name>_started_result` carries the result. Always prefer over hand-written `template:`+`systemd:`.
-- **`systemd_timer`** — `tasks_from: {install,remove}`, `systemd_timer_args: { name, exec_start, on_calendar }` → paired `.service`+`.timer` (system scope). Optional: `description`, `randomized_delay_sec`, `fixed_random_delay`, `accuracy_sec`, `on_active_sec`, `timeout_*_sec`, `persistent` (default true), `wake_system` (default false), `monitor` (netdata cadence-overdue), `condition`, `user` (needs linger), `run_as` (preferred over user-scope; canonical [roles/getmail/tasks/main.yml](roles/getmail/tasks/main.yml)), `environment`, `additional_service_directives`.
-- **`nginx_site`** — `import_role: name: nginx, tasks_from: site`, `nginx_site_args: { subdomain, proxy_pass, … }` → vhost with TLS/HSTS/CSP and optional Authelia. Full key list: [roles/nginx/tasks/site.yml](roles/nginx/tasks/site.yml). Never hand-roll an nginx vhost.
-- **`sqlite_dataset`** — `tasks_from: dataset`, `sqlite_dataset_args: { name, owner, group }` → creates `/mnt/services/sqlite/<name>/` and symlinks DBs onto the 4K-recordsize ZFS dataset. Two cold-start modes: `pre_create` (plant empty files for apps that migrate — jellyfin, \*arr) vs `force` (dangling symlink for apps that create their own DB — kuma/sabnzbd/tautulli; mutually exclusive). Both refuse to convert a real file into a symlink. Optional: `mode`, `file_mode`, `condition`, `links`.
-- **`macvlan`** — list-driven per-host macvlan ifaces + optional podman networks via `macvlan_blocks:` in host_vars (schema at top of [roles/macvlan/tasks/main.yml](roles/macvlan/tasks/main.yml)). IP layout: lower /29 = host+libvirt, upper /29 = podman containers.
+| Helper | Entry point | Exposes / creates |
+|--------|-------------|-------------------|
+| `service_user` | `tasks_from: user` | `<svc>_user.uid`/`.group`; `/mnt/services/<svc>` dir |
+| `usergroup_immediate` | `tasks_from: user` | appends to group + `reset_connection` |
+| `podman_secret` | `tasks_from: secret` | `<name>_rotated` / `<name>_existed_before` |
+| `systemd_unit` | `tasks_from: {install,dropin,service,remove}` | `<unit>_started_result`; drives restarts inline |
+| `systemd_timer` | `tasks_from: {install,remove}` | paired `.service`+`.timer` (system scope) |
+| `nginx_site` | `import_role: name: nginx, tasks_from: site` | vhost with TLS/HSTS/CSP + optional Authelia |
+| `sqlite_dataset` | `tasks_from: dataset` | `/mnt/services/sqlite/<name>/` + symlinked DBs |
+| `macvlan` | driven by `macvlan_blocks:` in host_vars | ifaces + optional podman networks |
 
 ## Podman Service Conventions
 
@@ -190,31 +191,13 @@ SSH to `lab`/`pug`/`bunk` for diagnostics (pre-authorized). **Needs explicit ack
 
 ### Test environment design
 
-Details in [notes/test_environment_design.md](notes/test_environment_design.md). **Packer images exist only for qemu test fixtures** — prod hosts are configured by ansible from stock Ubuntu. The `boot` role owns the converge-time boot chain; `packer/scripts/chroot.sh` is the test-fixture analogue. When both write boot state (refind.conf, ZBM image, cmdline), they are hand-synced twins — change both.
-
-| Variant     | Disks                                                       | Use case                                             |
-|-------------|-------------------------------------------------------------|------------------------------------------------------|
-| `minimal`   | Vanilla cloud image, ext4                                   | Stranger-baseline; opt-in via `machines:` in test.yml|
-| `box`       | Single-disk rpool                                           | Default push-CI fixture                              |
-| `box_deps`  | `box` + pre-baked podman + nginx                            | Opt-in for podman-service roles; saves ~140s/test    |
-| `pug`       | 1 rpool + 2 apoc                                            | Matches pug prod; on-demand + nightly                |
-| `lab`       | mdadm-EFI + 3-disk mirror rpool + dozer/tank/mouse          | Matches lab prod; on-demand + nightly                |
-
-`box_deps` derivation: `mise run packer:seed-deps --ubuntu <codename>` (rebuild after every `packer:build box`). Built per release (jammy/noble/resolute). Opt in via `machines: {box_deps:}` in `roles/<role>/meta/test.yml`.
+Details in [notes/test_environment_design.md](notes/test_environment_design.md). **Packer images exist only for qemu test fixtures** — prod hosts are configured by ansible from stock Ubuntu. Variants: `minimal` (cloud ext4), `box` (single-disk rpool, default CI fixture), `box_deps` (box + pre-baked podman/nginx, opt-in via `machines: {box_deps:}` in `meta/test.yml`, saves ~140s/test), `pug`/`lab` (on-demand/nightly). `box_deps` rebuild: `mise run packer:seed-deps --ubuntu <codename>` after every `packer:build box`.
 
 ## Continuous Integration
 
-GitHub Actions on lab via `github_runner`. Internals: [notes/github_runner_design.md](notes/github_runner_design.md). Workflows in [.github/workflows/](.github/workflows/):
+GitHub Actions on lab via `github_runner`. Internals: [notes/github_runner_design.md](notes/github_runner_design.md). Workflows: `ci` (push/nightly/dispatch; `detect` fans out per-role matrix), `lint`, `test`, `packer-build`, `ci-image`.
 
-- `ci` — unified pipeline for push, nightly (`0 2 * * *`), and dispatch. `detect` fans out per-role via `mise run ci:detect-roles`; schedule events force a full build (all roles, all packer sources, ci-image, worker). A `gate` job skips quiet days (no commits in 25h). A green schedule run becomes the diff base for subsequent pushes. Cross-cut paths emit the full universe matrix.
-- `lint` — reusable, called by ci; `mise run lint`.
-- `test` — reusable, called by ci per release/variant bucket.
-- `packer-build` — reusable, called by ci; gated on detect's `packer_changed`. Shares `lab-qemu-artifacts` concurrency group. Standalone rebuild: dispatch `ci` with `sources=lab pug`.
-- `ci-image` — reusable + dispatch; rebuilds the ci container image.
-
-**Variant escalation** — adding `minimal:` to `meta/test.yml` `machines:` dict adds a `(role, minimal)` cell. **Release escalation** — `ubuntu:` list adds cells per machine × release; only list releases where converged result diverges from jammy default. On push, release cells **propagate down role-deps** to consumers. **Runner pools** — VM on `lab-vm`, else `lab`. CI secrets are terraform-managed ([notes/ci_secrets_runbook.md](notes/ci_secrets_runbook.md)).
-
-**Local-debug:** `roles=foo,bar:lab,baz:minimal` via Actions dispatch (`roles=ALL` = everything); `CI_BASE_REF=HEAD~5 mise run ci:detect-roles` previews matrix; `GITHUB_EVENT_NAME=workflow_dispatch INPUTS_ROLES=foo,bar mise run ci:detect-roles` previews dispatch; `mise run ci:role-deps <helper>` lists consumers.
+**Escalation:** `minimal:` in `meta/test.yml` `machines:` adds a cell; `ubuntu:` list adds per-release cells (propagate down role-deps on push). **Local-debug:** `CI_BASE_REF=HEAD~5 mise run ci:detect-roles` previews matrix; `mise run ci:role-deps <helper>` lists consumers. CI secrets: [notes/ci_secrets_runbook.md](notes/ci_secrets_runbook.md).
 
 ## Commit & Pull Request Guidelines
 
