@@ -80,6 +80,7 @@ stylua = "2.5.2"
 # selene (Lua linter) has no short registry name; pin the aqua backend.
 "aqua:Kampfkarren/selene" = "0.31.0"
 tflint = "0.62.0"
+markdownlint-cli2 = "0.22.1"
 
 [hooks]
 enter = "test -x \"$(git rev-parse --git-path hooks/pre-commit)\" || mise generate git-pre-commit --write 2>/dev/null"
@@ -112,6 +113,8 @@ depends = [
   "lint:lua",
   "lint:test-meta",
   "lint:topology",
+  "lint:markdown",
+  "lint:notes-meta",
 ]
 
 [tasks."lint:ansible"]
@@ -174,6 +177,14 @@ description = "Validate data/network_topology.yml against its JSON Schema"
 # download it from the index on every CI run.
 run = "check-jsonschema --schemafile data/network_topology.schema.json data/network_topology.yml"
 
+[tasks."lint:markdown"]
+description = "Lint Markdown files (CLAUDE.md + notes/)"
+run = "markdownlint-cli2 'CLAUDE.md' 'notes/**/*.md'"
+
+[tasks."lint:notes-meta"]
+description = "Check notes/ frontmatter has required status and created_at fields"
+run = "uv run python '{{config_root}}/lint/check_notes_frontmatter.py' '{{config_root}}/notes/'"
+
 [tasks.test]
 description = "Run Python unit tests (pytest)"
 run = "uv run pytest"
@@ -188,6 +199,7 @@ depends = [
   "fmt:mise",
   "fmt:shfmt",
   "fmt:lua",
+  "fmt:markdown",
 ]
 
 [tasks."fmt:ansible"]
@@ -217,6 +229,10 @@ run = "git ls-files -z '*.sh' | xargs -0 shfmt -i 2 -w"
 [tasks."fmt:lua"]
 description = "Format Lua filters (stylua)"
 run = "git ls-files -z '*.lua' | xargs -0 stylua --config-path lint/stylua.toml"
+
+[tasks."fmt:markdown"]
+description = "Fix Markdown formatting (CLAUDE.md + notes/)"
+run = "markdownlint-cli2 --fix 'CLAUDE.md' 'notes/**/*.md'"
 
 [tasks."tf"]
 description = "tofu (forwards subcommand + args)"

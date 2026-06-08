@@ -1,0 +1,25 @@
+default: true
+# Long prose lines are expected in design notes and runbooks.
+MD013: false
+# Inline HTML is occasionally used for special formatting.
+MD033: false
+# Notes open with YAML frontmatter, not a heading.
+MD041: false
+# Table pipe alignment style — cosmetic, not enforced.
+MD060: false
+# Unordered list marker style — allow - and * freely.
+MD004: false
+# Ordered list prefix style — allow 1./2./3. or 1./1./1. freely.
+MD029: false
+# Code block language tag — optional for prose/design notes.
+MD040: false
+# Bold text used as an informal heading — allowed in notes.
+MD036: false
+# Bare URLs — allowed in notes prose.
+MD034: false
+# Single H1 per document — false-positives when YAML frontmatter status
+# comments contain # (e.g. "status: planned # reason").
+MD025: false
+# Code block style consistency — false-positives on indented fenced blocks
+# inside list items (valid GFM).
+MD046: false
