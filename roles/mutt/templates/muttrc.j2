@@ -1,0 +1,47 @@
+# {{ ansible_managed }}
+# Read-only viewer for the getmail Gmail "All Mail" archive: a single flat
+# Maildir at /mnt/services/getmail (operator-owned 0700). Launch via the
+# `mail-archive` wrapper, which adds -R so browsing never mutates the
+# irreplaceable archive. See notes/archive/getmail_webmail_design.md.
+
+set mbox_type = Maildir
+# Browse through the read-only bind mount, not the source Maildir: the bind is
+# mounted ro (mnt-services-mutt-archive.mount), so even a forgotten -R or a
+# fat-fingered write physically cannot reach the archive. getmail still writes
+# the real /mnt/services/getmail directly.
+set folder    = /mnt/services/mutt/archive
+set spoolfile = /mnt/services/mutt/archive
+# Read-only viewer: no sent/draft folders to write to.
+set record    = ""
+set postponed = ""
+
+# Header/body cache so reopening the multi-year archive doesn't re-parse every
+# message. On the services dataset (operator-owned), never in $HOME.
+set header_cache     = /mnt/services/mutt/headers
+set message_cachedir = /mnt/services/mutt/bodies
+
+# Belt-and-suspenders with the wrapper's -R: never move read mail out of the
+# spool, never flag messages "old", no delete/trash.
+set move          = no
+set mark_old      = no
+set maildir_trash = no
+unset confirmappend
+
+# Browsing ergonomics for one big flat archive.
+set sort         = reverse-date-received
+set date_format  = "%Y-%m-%d %H:%M"
+# %D renders the received date via $date_format in local time. (The strftime
+# brace specifier is avoided here because its literal braces collide with
+# Jinja's statement delimiter when this file is templated.)
+set index_format = "%4C %Z %D %-25.25F %s"
+set pager_index_lines = 12
+set pager_context     = 3
+set pager_stop        = yes
+set tilde
+set mail_check_stats
+
+# Render HTML mail inline (archived Gmail is heavily HTML) via w3m through the
+# mailcap installed alongside this config.
+set mailcap_path = /opt/mutt/mailcap
+auto_view text/html
+alternative_order text/plain text/enriched text/html

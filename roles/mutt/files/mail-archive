@@ -1,0 +1,7 @@
+#!/bin/bash
+set -euo pipefail
+
+# Read-only browser for the getmail Gmail "All Mail" archive Maildir.
+# -R opens neomutt read-only so browsing never mutates the irreplaceable
+# archive; -F points at the curated, ansible-managed config.
+exec neomutt -R -F /opt/mutt/muttrc "$@"
