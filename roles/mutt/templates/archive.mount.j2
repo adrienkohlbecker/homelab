@@ -19,7 +19,10 @@ Where=/mnt/services/mutt/archive
 Type=none
 # bind,ro: libmount applies the read-only flag via an automatic follow-up
 # remount, so the bind is genuinely ro (not just ro-on-the-source).
-Options=bind,ro
+# nodev,nosuid,noexec: the tree is attacker-authored mail content, so deny
+# device nodes, setuid bits, and execution from it. noatime avoids needless
+# atime writes back through the bind.
+Options=bind,ro,nodev,nosuid,noexec,noatime
 
 [Install]
 WantedBy=multi-user.target
