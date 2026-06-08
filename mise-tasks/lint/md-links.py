@@ -49,9 +49,7 @@ def check_file(path):
 
 
 def main():
-    root = Path(
-        subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
-    )
+    root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
     files_output = subprocess.check_output(["git", "ls-files"], cwd=root, text=True)
     files = []
     for rel in files_output.splitlines():
