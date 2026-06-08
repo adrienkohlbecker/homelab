@@ -8,6 +8,7 @@ This is a home environment, not a corporate production site. Tie-breakers when t
 - **Security is pragmatic.** Reasonable hygiene (vault, firewall, file permissions) is in scope; defense against nation-state actors is not. New security machinery needs a concrete threat behind it.
 - **Wife-acceptance-factor is real.** Household-depended services (home-assistant, z2m, media, dns) have higher cost-of-failure than operator-only infra. Visible breakage outweighs elegance.
 - **Elegance applies at every scale.** Simple problems deserve simple solutions. Complex problems can warrant complex solutions — a layered role system, a multi-stage pipeline — but the design must stay coherent and followable. The failure mode is not complexity itself; it is complexity that grew without a clear shape or obscures rather than expresses what it does.
+- **Functional tests over stat checks.** Always try to exercise code and configuration against a real running system. Stat-only checks (file exists, service enabled, configuration set) drift toward tautology — they prove the role ran, not that the service works. Fall back to them only when functional testing is genuinely impossible.
 
 ## Hard Rules — DO NOT
 
@@ -29,8 +30,8 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 | `host_vars/`     | host-specific overrides                                                                  |
 | `terraform/`     | DNS (Cloudflare), registrar (Gandi), Cloudflare Access, Mailgun, GitHub-repo, Nexus, GCP|
 | `packer/`        | QEMU image builds                                                                       |
-| `test/`          | harness, inventories, logs                                                              |
-| `wireguard/`     | VPN peers (vaulted keys)                                                                 |
+| `test/`          | ansible test harness, inventories, logs                                                 |
+| `unit_tests/`    | unit tests for non-ansible code                                                         |
 | `notes/`         | long-form design notes — landing zone for content that doesn't belong inline            |
 
 ## Build, Test, and Development Commands
@@ -38,7 +39,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 - Bootstrap: install [mise](https://mise.jdx.dev), `mise trust`, then `mise install`. `python.uv_venv_auto` auto-sources `.venv`; `uv sync` populates Python deps. 1Password CLI must be signed in for the `op://` env vars in `mise.toml` to resolve.
 - **op:// env refs only resolve under `op run --`.** Toml tasks wrap explicitly; file-based tasks under `mise-tasks/` do **not** — mise exports the literal `op://…` string. Fix: re-exec under `op run --` behind a guard env var (preamble at top of [mise-tasks/ha/sync.py](mise-tasks/ha/sync.py)).
 - Configure everything: `mise run ansible --limit prod` (wrapper handles vault-id, ssh args, env; set `--tags` to narrow scope). One service/host: `mise run ansible --limit lab --tags wireguard`.
-- DNS/terraform: `mise run tf {init,plan,apply}` — `cd`s into `terraform/` and forwards to `tofu` (use `--` for flags mise intercepts). State in MinIO (`s3://terraform/homelab.tfstate`), AES-GCM-encrypted. Rotation: [notes/terraform-state-encryption-rotation.md](notes/terraform-state-encryption-rotation.md).
+- DNS/terraform: `mise run tf {init,plan,apply}` — `cd`s into `terraform/` and forwards to `tofu` (use `--` for flags mise intercepts). State in MinIO (`s3://terraform/homelab.tfstate`), AES-GCM-encrypted. Rotation: [notes/runbooks/terraform-state-encryption-rotation.md](notes/runbooks/terraform-state-encryption-rotation.md).
 - Refresh integration image: `mise run packer:build [box|pug|lab]` (parallel; `--ubuntu noble` for another release). See [notes/test_environment_design.md](notes/test_environment_design.md).
 - Lint: `mise run lint` (ansible-lint, tofu/packer fmt+validate, tflint, black/ruff, yamllint, shellcheck+shfmt, stylua+selene, taplo, markdownlint — all parallel); `mise run fmt` applies fixes (`fmt:ansible` = `ansible-lint --fix` — prefer over hand-editing). Inner-loop: prefer `mise run lint:ansible-changed` (~4s; override base via `LINT_BASE=<ref>`) over full `lint:ansible` (~40s). Run full `mise run lint` before pushing.
 - Resume mid-converge: after a `testrole.py --keep` failure, `mise run ansible --limit <host> --start-at-task '<failing task name>'`. `--step` walks task-by-task when bisecting.
@@ -77,7 +78,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 - Gate test-only branches on `qemu_test` (set in `host_vars/{box,minimal}.yml` and `host_vars/{lab,pug}-qemu.yml` overlays). `minimal` also sets `qemu_test_minimal: true`.
 - Per-role test hooks live alongside the role's tasks:
   - `tasks/_setup.yml` — pre-role fixture bringup. **Never runs against prod.**
-  - `tasks/_verify.yml` — post-converge assertions. **Only invoked by the harness against a qemu VM** — never against prod. That contract lets scaffolding sit alongside real tasks without a `when: qemu_test` gate. Stat-only checks drift toward tautology — fall back only when functional testing is impossible. Rebooting inside `_verify` is fine for next-boot state (canonical [roles/console/tasks/_verify.yml](roles/console/tasks/_verify.yml)).
+  - `tasks/_verify.yml` — post-converge assertions. **Only invoked by the harness against a qemu VM** — never against prod. That contract lets scaffolding sit alongside real tasks without a `when: qemu_test` gate. Rebooting inside `_verify` is fine for next-boot state (canonical [roles/console/tasks/_verify.yml](roles/console/tasks/_verify.yml)).
 - Tasks depending on a freshly-created user/group/dir must be gated `when: not (ansible_check_mode and <svc>_user.changed)` — in check mode the prerequisite only *reports* creation.
 - Prefer `import_role`/`import_tasks` over `include_*`. Fall back to `include_*` only for genuinely dynamic name/vars, then wrap the loop body in a per-iteration `include_tasks` for fresh scope.
 - For state-mutating tasks that should run once, gate with `args: creates: <sentinel>` not `changed_when: false`.
@@ -113,7 +114,7 @@ Drive with `mise run ha:sync [pull|push|sync]` ([mise-tasks/ha/sync.py](mise-tas
 
 Sync: edit inside `notes/` → commit+push to `homelab_notes` → record in parent with `git add notes && git commit`. **Unlike `ha_gui_config`, the `notes` pointer IS load-bearing** — divergence surfaces in parent `git status`; commit pointer bumps deliberately.
 
-**In worktrees**, `worktree:populate`/`worktree:merge` ([mise-tasks/worktree/](mise-tasks/worktree/)) automate notes init and linear merging. Same-file conflicts halt for manual resolution.
+**In worktrees**, `worktree:add`/`worktree:merge` ([mise-tasks/worktree/](mise-tasks/worktree/)) automate notes init and linear merging. Same-file conflicts halt for manual resolution.
 
 **Every note must open with YAML frontmatter** containing at least `status` and `created_at`:
 
@@ -198,7 +199,7 @@ Details in [notes/test_environment_design.md](notes/test_environment_design.md).
 
 GitHub Actions on lab via `github_runner`. Internals: [notes/github_runner_design.md](notes/github_runner_design.md). Workflows: `ci` (push/nightly/dispatch; `detect` fans out per-role matrix), `lint`, `test`, `packer-build`, `ci-image`.
 
-**Escalation:** `minimal:` in `meta/test.yml` `machines:` adds a cell; `ubuntu:` list adds per-release cells (propagate down role-deps on push). **Local-debug:** `CI_BASE_REF=HEAD~5 mise run ci:detect-roles` previews matrix; `mise run ci:role-deps <helper>` lists consumers. CI secrets: [notes/ci_secrets_runbook.md](notes/ci_secrets_runbook.md).
+**Escalation:** `minimal:` in `meta/test.yml` `machines:` adds a cell; `ubuntu:` list adds per-release cells (propagate down role-deps on push). **Local-debug:** `CI_BASE_REF=HEAD~5 mise run ci:detect-roles` previews matrix; `mise run ci:role-deps <helper>` lists consumers. CI secrets: [notes/runbooks/ci_secrets.md](notes/runbooks/ci_secrets.md).
 
 ## Commit & Pull Request Guidelines
 
@@ -217,7 +218,7 @@ Two passwords, two scopes ([ansible.cfg](ansible.cfg): `vault_identity_list = pr
 - `prod` — encrypts `group_vars/prod.yml` + prod host_vars. Local workstations only; never in CI.
 - `test` — encrypts `group_vars/test.yml` + test host_vars. Available to CI as `HOMELAB_VAULT_PASSWORD_TEST` — never put a prod-blast-radius credential there.
 
-[vault-client.sh](vault-client.sh): lookup per id: env `HOMELAB_VAULT_PASSWORD_<UPPER_ID>` (CI), then macOS keychain `homelab-vault-<id>`, then Linux `~/.config/homelab/vault-pass-<id>` (0400). Bootstrap: [notes/vault_setup.md](notes/vault_setup.md). New values: `encrypt_string --encrypt-vault-id prod` (or `test`).
+[vault-client.sh](vault-client.sh): lookup per id: env `HOMELAB_VAULT_PASSWORD_<UPPER_ID>` (CI), then macOS keychain `homelab-vault-<id>`, then Linux `~/.config/homelab/vault-pass-<id>` (0400). Bootstrap: [notes/runbooks/vault_setup.md](notes/runbooks/vault_setup.md). New values: `encrypt_string --encrypt-vault-id prod` (or `test`).
 
 ## Someday
 

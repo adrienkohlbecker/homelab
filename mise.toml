@@ -115,6 +115,7 @@ depends = [
   "lint:test-meta",
   "lint:topology",
   "lint:markdown",
+  "lint:md-links",
   "lint:notes",
   "lint:toml",
 ]
@@ -182,6 +183,10 @@ run = "check-jsonschema --schemafile data/network_topology.schema.json data/netw
 [tasks."lint:markdown"]
 description = "Lint Markdown files (CLAUDE.md + README.md)"
 run = "markdownlint-cli2 'CLAUDE.md' 'README.md'"
+
+[tasks."lint:md-links"]
+description = "Verify local markdown links point to existing files"
+run = "python3 lint/check_md_links.py"
 
 [tasks."lint:notes"]
 description = "Lint notes/ submodule (delegates to mise run lint inside notes/)"
