@@ -1,3 +1,6 @@
 # Render HTML mail inline as text (archived Gmail is heavily HTML). w3m is
-# installed alongside neomutt by the mutt role.
-text/html; w3m -dump -T text/html -o display_link_number=1 %s; copiousoutput; nametemplate=%s.html
+# installed alongside neomutt by the mutt role. Hardening for attacker-authored
+# archived HTML: display_image/auto_image=FALSE so rendering never fetches
+# remote resources (tracking pixels), timeout bounds a pathological document,
+# display_charset pins output to UTF-8, and %s is quoted against odd temp names.
+text/html; timeout 10 w3m -dump -T text/html -o display_link_number=1 -o display_image=FALSE -o auto_image=FALSE -o display_charset=UTF-8 '%s'; copiousoutput; nametemplate=%s.html
