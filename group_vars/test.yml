@@ -158,7 +158,6 @@ influxdb_authelia_user: testuser
 pihole_password: changeme
 filebrowser_basic_auth_user: changeme
 filebrowser_basic_auth_password: changeme
-compta_api_token: changeme_compta_api_token_16chars_min
 netdata_alerts_token: changeme_netdata_alerts_token_16chars_min
 # Override prod's firebog tick meta-list (fans out to ~50 external adlists
 # that bypass the nexus cache) with a single small list served through the
@@ -215,8 +214,6 @@ gmail_app_password: changeme
 postgres_password: changeme
 gitea_runner_registration_token: changeme
 spouse_samba_password: changeme
-redis_password: 732b15eba0d087aee392ca791335eb609d09838605327b44
-paperless_secret_key: changeme
 z2m_network_key: changeme
 jellyfin_api_token: changeme
 mosquitto_accounts:
@@ -233,10 +230,6 @@ bazarr_api_key: changeme
 bazarr_flask_secret_key: changeme
 bazarr_opensubtitles_com_username: changeme
 bazarr_opensubtitles_com_password: changeme
-openproject_secret_key: changeme
-openproject_admin_password: changeme
-openproject_smtp_user: changeme
-openproject_smtp_password: changeme
 nexus_encryption_key: changeme
 nexus_encryption_salt: changeme
 nexus_encryption_iv: changeme
@@ -398,15 +391,6 @@ authelia_oidc_clients:
     authorization_policy: one_factor
     redirect_uris:
       - 'https://minio.{{ inventory_hostname }}.{{ domain }}/oauth_callback'
-  - client_id: paperless
-    client_name: Paperless
-    # Same "changeme" pbkdf2 hash as the minio test client. Sharing
-    # the plaintext across test clients is fine -- the box VM is
-    # ephemeral and _verify never completes a real handshake.
-    client_secret: '$pbkdf2-sha512$310000$JURoTanVWouRkvJ.Tyml1A$B4DZyqy25cNbFfwFiPMyAdWcuxiELOBAlH0NfQSxB9jgDTQXiyBIMsFY2Z5I3XO5ItLH1pP5C5ujKja71Bqoww'
-    authorization_policy: one_factor
-    redirect_uris:
-      - 'https://paperless.{{ inventory_hostname }}.{{ domain }}/accounts/oidc/authelia/login/callback/'
   - client_id: gitea
     client_name: Gitea
     # Same "changeme" pbkdf2 hash. Gitea's CLI provisioning is gated
@@ -451,7 +435,6 @@ authelia_oidc_clients:
 # Plaintext OIDC client secrets handed to consumer roles.
 # Pairs with the pbkdf2 hash above; rotate both halves together.
 minio_oidc_client_secret: changeme
-paperless_oidc_client_secret: changeme
 gitea_oidc_client_secret: changeme
 
 # Test-fixture user. Hash is for the password "authelia" -- the

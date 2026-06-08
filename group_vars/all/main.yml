@@ -120,8 +120,6 @@ service_ports:
   # only the host-side --publish maps to this port.
   authelia: 9092
   bazarr: 6767
-  compta: 4567
-  csp_ingest: 9880
   dnscrypt_proxy: 5053
   eaton_ipp: 4680
   # fan2go's upstream default is 9001 but that collides with the
@@ -159,7 +157,6 @@ service_ports:
   hyperdx_otlp_http: 4318
   influxdb: 8086
   jellyfin: 8096
-  keepalived_exporter: 9650
   kuma: 3001
   lidarr: 8686
   # MinIO S3 API + console, both loopback-only (nginx fronts them on the
@@ -177,10 +174,6 @@ service_ports:
   # container.
   nexus: 8082
   nut: 3493
-  openproject: 8070
-  # Paperless-ngx, loopback-published; nginx fronts it on the paperless
-  # subdomain. Container listens on 8000 internally.
-  paperless: 8001
   # pihole admin UI (lighttpd in the container), loopback-only -- nginx
   # fronts it on the pihole subdomain behind authelia. The container's
   # internal listener is :80; only the host-side --publish maps to this.
@@ -192,11 +185,7 @@ service_ports:
   # nginx fronts it on the profilarr subdomain behind authelia. The container
   # listens on 6868 internally.
   profilarr: 6868
-  # Prometheus, loopback-only (nginx fronts it on the prometheus subdomain);
-  # 9090 is the server default. Also minio's MINIO_PROMETHEUS_URL target.
-  prometheus: 9090
   radarr: 7878
-  redis: 6379
   # SABnzbd, loopback-published; nginx fronts it on the sabnzbd subdomain
   # behind authelia. Only the host-side --publish maps to this; the
   # container's internal listener stays on 8080 (sabnzbd.ini port), as does
@@ -359,7 +348,7 @@ wireguard_peers:
 
 podman_default_network: 10.88.0.0/16
 # First range of netavark's default_subnet_pools — every named bridge
-# (mosquitto, redis, …) is auto-allocated a /24 from here. Consumed by
+# (mosquitto, …) is auto-allocated a /24 from here. Consumed by
 # the firewall INPUT accept for aardvark-dns:5333 and homeassistant's
 # trusted_proxies (the published-port DNAT lands on a mosquitto-bridge
 # IP and SNAT rewrites the source to that bridge's gateway).
