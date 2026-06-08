@@ -33,8 +33,8 @@ resource "nexus_blobstore_file" "hosted" {
   path = "hosted"
 
   # Alert-only, like default's. Sized for the handful of CI-built images
-  # (runner image + compta) across their live tags; bump if hosted usage
-  # grows. Lives on the services dataset, which has its own ZFS quota.
+  # (runner image) across their live tags; bump if hosted usage grows.
+  # Lives on the services dataset, which has its own ZFS quota.
   soft_quota {
     type  = "spaceUsedQuota"
     limit = 20 * 1024 * 1024 * 1024 # 20 GiB
@@ -204,9 +204,6 @@ resource "nexus_repository_raw_proxy" "this" {
 #   - homelab: the ci-image workflow pushes
 #     nexus.lab.fahm.fr/homelab/ci:<sha> + :latest after
 #     rebuilding the runner image.
-#   - compta: the adrienkohlbecker/compta repo's build workflow
-#     pushes nexus.lab.fahm.fr/compta/compta:<sha> +
-#     :latest; the compta ansible role pulls from there.
 # force_basic_auth=false (below) keeps the DockerToken realm active so
 # anonymous bearer-token pulls work (unauthenticated `podman pull` from
 # CI / lab hosts). Pushes still require basic auth because the only role
@@ -222,15 +219,12 @@ resource "nexus_repository_raw_proxy" "this" {
 # not the scratch-backed "default". OSS Nexus locks a repo's blob store after
 # creation (the online "Change Repository Blob Store" task is Pro-only), so
 # migrating an existing repo is a delete+recreate that starts it empty:
-#   tofu apply \
-#     -replace='nexus_repository_docker_hosted.this["homelab"]' \
-#     -replace='nexus_repository_docker_hosted.this["compta"]'
-# then re-push: dispatch the ci-image workflow (rebuilds homelab/ci) and the
-# adrienkohlbecker/compta build (re-push the version the compta role pins).
+#   tofu apply -replace='nexus_repository_docker_hosted.this["homelab"]'
+# then re-push: dispatch the ci-image workflow (rebuilds homelab/ci).
 # Orphaned blobs left in "default" are reclaimed by the blob store compact
 # task. A plain `tofu apply` cannot repoint a live repo -- it needs -replace.
 resource "nexus_repository_docker_hosted" "this" {
-  for_each = toset(["homelab", "compta"])
+  for_each = toset(["homelab"])
 
   name   = each.key
   online = true
