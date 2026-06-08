@@ -24,6 +24,9 @@
     mode: "0644"
   become: true
   register: lnav_zip_download
+  retries: 3
+  delay: 5
+  until: lnav_zip_download is succeeded
   tags:
     - lnav
 

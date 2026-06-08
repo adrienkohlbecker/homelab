@@ -2,54 +2,93 @@
 set -euo pipefail
 
 # Defaults to the last 48 hours to avoid cold-loading the entire journal
-# history. Override with -S / -U (v0.14+):
+# history. Override the start with -S / --since; -U / --until narrows the
+# end while keeping the default start unless -S is also supplied:
 #   lnav-journal -S "yesterday"
 #   lnav-journal -S "2026-06-01" -U "2026-06-02"
 #   lnav-journal -S "4 hours ago"
 
-has_time_bound=false
-for arg in "$@"; do
-  case "$arg" in
-    -S | --since | --since=* | -U | --until | --until=*)
-      has_time_bound=true
-      break
-      ;;
-  esac
+case "${1:-}" in
+-V | --version | -h | --help)
+	exec /usr/local/bin/lnav "$@"
+	;;
+esac
+
+since="2 days ago"
+until=""
+lnav_args=()
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	-S | --since)
+		if [[ $# -lt 2 ]]; then
+			echo "lnav-journal: $1 requires a value" >&2
+			exit 2
+		fi
+		since="$2"
+		shift 2
+		;;
+	--since=*)
+		since="${1#--since=}"
+		shift
+		;;
+	-U | --until)
+		if [[ $# -lt 2 ]]; then
+			echo "lnav-journal: $1 requires a value" >&2
+			exit 2
+		fi
+		until="$2"
+		shift 2
+		;;
+	--until=*)
+		until="${1#--until=}"
+		shift
+		;;
+	*)
+		lnav_args+=("$1")
+		shift
+		;;
+	esac
 done
 
-since_args=()
-if [[ "$has_time_bound" == false ]]; then
-  since_args=(-S "2 days ago")
+journalctl_args=(--no-pager --quiet -o json --since "$since")
+if [[ -n "$until" ]]; then
+	journalctl_args+=(--until "$until")
 fi
 
 log_paths=()
-for path in /var/log/journal /var/log/unifi; do
-  if [[ -d "$path" && -r "$path" ]]; then
-    log_paths+=("$path/")
-  fi
-done
+if [[ -d /var/log/unifi && -r /var/log/unifi ]]; then
+	log_paths+=("/var/log/unifi/")
+fi
 
-if [[ ${#log_paths[@]} -eq 0 ]]; then
-  echo "lnav-journal: no readable journal/log directories found" >&2
-  exit 1
+if [[ -f /var/log/pihole/FTL.log && -r /var/log/pihole/FTL.log ]]; then
+	log_paths+=("/var/log/pihole/FTL.log")
 fi
 
 # Noise patterns ported from roles/fluentbit -- keeps the same firehose out of
 # the viewer that Fluent Bit drops before shipping to HyperDX.
-exec /usr/local/bin/lnav \
-  -r \
-  "${since_args[@]}" \
-  -c ':filter-out ^ansible-[A-Za-z0-9._]+ Invoked with' \
-  -c ':filter-out ^pam_unix\(cron:session\)' \
-  -c ':filter-out ^(podman0: port|veth[0-9]+( |@|: ))' \
-  -c ':filter-out ^Printing VRRP as json for process' \
-  -c ':filter-out ^IPv4: martian source 10\.123\.1\.224' \
-  -c ':filter-out ^ll header: 00000000:' \
-  -c ':filter-out name="/etc/gnutls/config"' \
-  -c ':filter-out Failed to get interface "(veth|podman)|Unknown index .* seen, reloading interface list' \
-  -c ':filter-out SYSTEMD_UNIT=speedtest\.service.*"HEAD / HTTP/1\.1" 200 [0-9]+ "-" "curl/' \
-  -c ':filter-out SYSTEMD_UNIT=profilarr\.service.*(Task Repository Sync \(ID: 1\) status changed to:|Updating remote status for branch:|Processing 0 incoming changes)' \
-  -c ':filter-out "homepage-alerts/1"' \
-  -c ':filter-out ^type=SERVICE_(START|STOP) msg=audit\([0-9.]+:[0-9]+\): .* unit=[a-f0-9]{64}' \
-  "$@" \
-  "${log_paths[@]}"
+set +e
+journalctl "${journalctl_args[@]}" | /usr/local/bin/lnav \
+	-r \
+	-c ':filter-out ^ansible-[A-Za-z0-9._]+ Invoked with' \
+	-c ':filter-out ^pam_unix\(cron:session\)' \
+	-c ':filter-out ^(podman0: port|veth[0-9]+( |@|: ))' \
+	-c ':filter-out ^Printing VRRP as json for process' \
+	-c ':filter-out ^IPv4: martian source 10\.123\.1\.224' \
+	-c ':filter-out ^ll header: 00000000:' \
+	-c ':filter-out name="/etc/gnutls/config"' \
+	-c ':filter-out Failed to get interface "(veth|podman)|Unknown index .* seen, reloading interface list' \
+	-c ':filter-out SYSTEMD_UNIT=speedtest\.service.*"HEAD / HTTP/1\.1" 200 [0-9]+ "-" "curl/' \
+	-c ':filter-out SYSTEMD_UNIT=profilarr\.service.*(Task Repository Sync \(ID: 1\) status changed to:|Updating remote status for branch:|Processing 0 incoming changes)' \
+	-c ':filter-out "homepage-alerts/1"' \
+	-c ':filter-out ^type=SERVICE_(START|STOP) msg=audit\([0-9.]+:[0-9]+\): .* unit=[a-f0-9]{64}' \
+	"${lnav_args[@]}" \
+	- \
+	"${log_paths[@]}"
+status=("${PIPESTATUS[@]}")
+set -e
+
+if [[ "${status[0]}" -ne 0 && "${status[0]}" -ne 141 ]]; then
+	exit "${status[0]}"
+fi
+exit "${status[1]}"

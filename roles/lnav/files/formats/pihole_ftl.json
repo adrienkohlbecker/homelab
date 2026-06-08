@@ -24,6 +24,7 @@
     },
     "timestamp-field": "timestamp",
     "timestamp-format": "%Y-%m-%d %H:%M:%S.%L",
+    "ordered-by-time": true,
     "body-field": "body",
     "multiline": false,
     "sample": [

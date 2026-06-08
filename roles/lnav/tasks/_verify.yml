@@ -12,56 +12,6 @@
   tags:
     - lnav
 
-- name: Lnav formats directory exists
-  stat:
-    path: /etc/lnav/formats/homelab
-  register: lnav_formats_dir
-  become: true
-  tags:
-    - lnav
-
-- name: Assert lnav formats directory
-  assert:
-    that: lnav_formats_dir.stat.isdir
-    fail_msg: "/etc/lnav/formats/homelab is missing"
-  tags:
-    - lnav
-
-- name: Lnav format files are present
-  stat:
-    path: "/etc/lnav/formats/homelab/{{ item }}"
-  register: lnav_format_stat
-  become: true
-  loop:
-    - pihole_ftl.json
-    - syslog_body_scan.json
-  tags:
-    - lnav
-
-- name: Assert format files
-  assert:
-    that: item.stat.exists
-    fail_msg: "lnav format file missing: {{ item.item }}"
-  loop: "{{ lnav_format_stat.results }}"
-  tags:
-    - lnav
-
-- name: Lnav-journal wrapper is present and executable
-  stat:
-    path: /usr/local/bin/lnav-journal
-  register: lnav_journal_stat
-  tags:
-    - lnav
-
-- name: Assert lnav-journal wrapper
-  assert:
-    that:
-      - lnav_journal_stat.stat.exists
-      - lnav_journal_stat.stat.xusr
-    fail_msg: "/usr/local/bin/lnav-journal is missing or not executable"
-  tags:
-    - lnav
-
 - name: Create lnav format verification directory
   file:
     path: /tmp/lnav_verify
@@ -143,21 +93,36 @@
   tags:
     - lnav
 
-- name: Lnav-journal wrapper accepts explicit since override
+- name: Lnav-journal wrapper exposes lnav version without log discovery
   become: true
   become_user: "{{ ansible_user_id }}"
   command:
     argv:
-      - timeout
-      - 20s
       - /usr/local/bin/lnav-journal
       - -V
-      - -S
-      - 1 hour ago
   register: lnav_journal_version
   changed_when: false
   failed_when: >-
     lnav_journal_version.rc != 0 or
     lnav_version not in lnav_journal_version.stdout
+  tags:
+    - lnav
+
+- name: Lnav-journal wrapper accepts bounded normal load
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  command:
+    argv:
+      - timeout
+      - -k
+      - 5s
+      - 20s
+      - /usr/local/bin/lnav-journal
+      - -n
+      - -N
+      - -C
+      - -S
+      - 1 hour ago
+  changed_when: false
   tags:
     - lnav
