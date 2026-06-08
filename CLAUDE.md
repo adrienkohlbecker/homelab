@@ -82,6 +82,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 - Tasks depending on a freshly-created user/group/dir must be gated `when: not (ansible_check_mode and <svc>_user.changed)` — in check mode the prerequisite only *reports* creation.
 - Prefer `import_role`/`import_tasks` over `include_*`. Fall back to `include_*` only for genuinely dynamic name/vars, then wrap the loop body in a per-iteration `include_tasks` for fresh scope.
 - For state-mutating tasks that should run once, gate with `args: creates: <sentinel>` not `changed_when: false`.
+- **Never branch a task `when:` on `inventory_hostname`** (no `inventory_hostname in ['lab','pug']`). Introduce a host_var instead — a `<svc>_enabled` flag set in the relevant `host_vars/` and read as `<svc>_enabled | default(false)` — so behaviour follows declared intent, not a hardcoded host list a new host silently misses. Play-level `hosts:` patterns in `site.yml` are the legitimate exception (that *is* ansible's host-targeting mechanism).
 
 **Style:**
 

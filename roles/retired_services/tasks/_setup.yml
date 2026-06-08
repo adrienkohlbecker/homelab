@@ -125,8 +125,8 @@
     - /etc/netdata/health.d/keepalived.conf
   become: true
 
-- name: _setup | Plant stale netdata fail2ban files (internal hosts only)
-  when: inventory_hostname in ['lab', 'pug']
+- name: _setup | Plant stale netdata fail2ban files (where fail2ban no longer runs)
+  when: not (fail2ban_enabled | default(false))
   copy:
     dest: "{{ item }}"
     content: "# stale\n"

@@ -85,6 +85,10 @@ headscale_derp_ipv6: "2a01:4f8:1c19:c5d9::"
 # gate on it, so fox then converges without the secret present.
 headscale_oidc_enabled: true
 headscale_oidc_issuer: "https://auth.{{ domain }}"
+
+# fox is the only internet-facing host, so it runs fail2ban (the home hosts
+# have zero inbound). Drives netdata's fail2ban collector + alert here.
+fail2ban_enabled: true
 headscale_oidc_client_id: headscale
 
 # fox is not a Tailscale client. Public DNS for lab-hosted names may point at
