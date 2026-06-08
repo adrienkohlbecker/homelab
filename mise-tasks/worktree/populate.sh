@@ -54,6 +54,10 @@ if command -v mise >/dev/null; then
   mise trust "$wt/mise.toml"
 fi
 
+if command -v uv >/dev/null && [ -f "$wt/pyproject.toml" ]; then
+  uv sync --project "$wt" --quiet
+fi
+
 # notes submodule: populate it and put it on a branch matching the parent
 # worktree's branch, so notes edits here commit onto <branch> (which wt:merge
 # later integrates into notes/main). A detached worktree (agent isolation, where
