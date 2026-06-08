@@ -14,9 +14,20 @@ from pathlib import Path
 SKIP_PREFIXES = ("http://", "https://", "ftp://", "mailto:")
 INLINE_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 REF_RE = re.compile(r"^\[[^\]]+\]:\s+(\S+)", re.MULTILINE)
+# Fenced code blocks (``` or ~~~, with optional info string).
+FENCE_RE = re.compile(r"^(`{3,}|~{3,})[^\n]*\n.*?\n\1", re.MULTILINE | re.DOTALL)
+# Inline code spans.
+INLINE_CODE_RE = re.compile(r"`+.+?`+", re.DOTALL)
+
+
+def _strip_code(text):
+    text = FENCE_RE.sub("", text)
+    text = INLINE_CODE_RE.sub("", text)
+    return text
 
 
 def iter_links(text):
+    text = _strip_code(text)
     for m in INLINE_RE.finditer(text):
         yield m.group(1)
     for m in REF_RE.finditer(text):
