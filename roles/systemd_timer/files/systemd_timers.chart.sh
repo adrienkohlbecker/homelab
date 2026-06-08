@@ -31,16 +31,16 @@ _systemd_timers_safe() {
   printf '%s' "$1" | tr -c '[:alnum:]_' '_'
 }
 
-# Last-fire time = the mtime of systemd's persistent trigger stamp. Every
-# timer sets Persistent=true (timer.j2), so systemd writes
-# /var/lib/systemd/timers/stamp-<name>.timer on each elapse. Reading the
-# stamp beats `systemctl show LastTriggerUSec`: the stamp survives both
-# reboots and unit reloads, whereas LastTriggerUSec blanks to n/a whenever
-# the .timer is re-enabled -- which every converge that rewrites the unit
-# does -- and would then read as "never fired". No stamp => never fired
-# (the caller falls back to install time). Reads only coreutils, so the
-# collector needs no systemctl and can't be tripped by a transient D-Bus
-# hiccup.
+# Last-fire time = the mtime of the stamp file at
+# /var/lib/systemd/timers/stamp-<name>.timer. System-scope monitored timers
+# touch this file in ExecStartPost (service.j2) after each successful run,
+# regardless of whether Persistent= is set. Reading the stamp beats
+# `systemctl show LastTriggerUSec`: the stamp survives both reboots and unit
+# reloads, whereas LastTriggerUSec blanks to n/a whenever the .timer is
+# re-enabled -- which every converge that rewrites the unit does -- and would
+# then read as "never fired". No stamp => never fired (the caller falls back
+# to install time). Reads only coreutils, so the collector needs no systemctl
+# and can't be tripped by a transient D-Bus hiccup.
 _systemd_timers_last_trigger_epoch() {
   local stamp="${systemd_timers_stamp_dir}/stamp-$1.timer"
   if [ -f "$stamp" ]; then
