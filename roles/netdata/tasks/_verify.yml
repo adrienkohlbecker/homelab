@@ -25,8 +25,11 @@
 # netdata is the only flat-repo (trailing-slash suite, no components) + glob-pin
 # ("netdata*") consumer, so the shared apt_source _verify runs here to cover
 # that path: the signing key is scoped (not globally trusted) and the 2.* pin
-# wins at priority 999 from the mirror. No tombstone/negative-key args -- those
-# paths are exercised by the standalone apt_source:box cell.
+# wins at priority 999 from the mirror. No tombstone/negative-key args: netdata
+# never removes its source, and since the nodejs consumer was retired the
+# apt_source state:absent / negative-fingerprint paths have no live exerciser
+# (the helper capability stays; re-add tombstone args from a consumer that
+# actually removes a source if that coverage is wanted again).
 - name: _verify | Netdata apt_source contract (flat repo, scoped key, glob pin)
   import_role:
     name: apt_source

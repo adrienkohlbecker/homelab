@@ -109,7 +109,6 @@
     - plex
     - tautulli
     - gitea
-    - nodejs
     - gitea_runner
     - github_runner
     - transmission
