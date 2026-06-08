@@ -81,6 +81,7 @@ stylua = "2.5.2"
 "aqua:Kampfkarren/selene" = "0.31.0"
 tflint = "0.62.0"
 markdownlint-cli2 = "0.22.1"
+taplo = "0.10.0"
 
 [hooks]
 enter = "test -x \"$(git rev-parse --git-path hooks/pre-commit)\" || mise generate git-pre-commit --write 2>/dev/null"
@@ -115,6 +116,7 @@ depends = [
   "lint:topology",
   "lint:markdown",
   "lint:notes",
+  "lint:toml",
 ]
 
 [tasks."lint:ansible"]
@@ -186,6 +188,10 @@ description = "Lint notes/ submodule (delegates to mise run lint inside notes/)"
 dir = "{{config_root}}/notes"
 run = "mise run lint"
 
+[tasks."lint:toml"]
+description = "Check TOML formatting (taplo)"
+run = "git ls-files -z '*.toml' | xargs -0 taplo fmt --check"
+
 [tasks.test]
 description = "Run Python unit tests (pytest)"
 run = "uv run pytest"
@@ -202,6 +208,7 @@ depends = [
   "fmt:lua",
   "fmt:markdown",
   "fmt:notes",
+  "fmt:toml",
 ]
 
 [tasks."fmt:ansible"]
@@ -240,6 +247,10 @@ run = "markdownlint-cli2 --fix 'CLAUDE.md' 'README.md'"
 description = "Fix Markdown formatting in notes/ submodule"
 dir = "{{config_root}}/notes"
 run = "mise run fmt"
+
+[tasks."fmt:toml"]
+description = "Format TOML files (taplo)"
+run = "git ls-files -z '*.toml' | xargs -0 taplo fmt"
 
 [tasks."tf"]
 description = "tofu (forwards subcommand + args)"
