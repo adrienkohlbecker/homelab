@@ -79,6 +79,7 @@ netdata_contexts:
   idlejitter:      system.idlejitter
   interrupts:      system.interrupts
   ipc:             system.ipc_semaphores
+  keepalived_vrrp: keepalived_vrrp.state
   loadavg:         system.load
   meminfo:         system.ram
   netdev:          system.net
