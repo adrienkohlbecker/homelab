@@ -21,9 +21,9 @@ Before scaffolding any file:
    - Tier 2: linuxserver `FILE__<VARNAME>` prefix (for linuxserver images only).
    - Tier 3: `type=env,target=VAR` (last resort).
 7. **Healthcheck strategy** (per *Podman Service Conventions → Healthchecks*):
-   - Tier 1: `curl` / `wget` in the image — grep the image's Dockerfile first.
-   - Tier 2: python `urllib.request` (JSON-array argv form — see notes for the gotcha).
-   - Tier 3: service-native CLI (`mosquitto_sub`, `dig +short @127.0.0.1`, etc.).
+   - Tier 1: service-native CLI (`mosquitto_sub`, `dig +short @127.0.0.1`, etc.).
+   - Tier 2: `curl` / `wget` in the image — grep the image's Dockerfile first.
+   - Tier 3: python `urllib.request` (JSON-array argv form — see notes for the gotcha).
    - Tier 4: `static_curl` role + bind-mount `/usr/local/bin/curl_static`.
 
 ## Files to scaffold
