@@ -66,12 +66,47 @@
 #    package + role removed long ago, /etc/logrotate.d/traefik gone
 #    too, but the rotated access.log files (~115 MB across lab+pug)
 #    kept sitting on disk.
+#  - /var/log/unifi/    -- udm_syslog role (rsyslog UDP ingest from
+#    UDM/APs) was dropped in favour of doing nothing (neither path,
+#    rsyslog→file nor fluentbit UDP, was actually delivering logs to
+#    HyperDX). Created by the role on lab only.
 - name: Remove retired-service log directories
   file:
     path: "{{ item }}"
     state: absent
   loop:
     - /var/log/traefik
+    - /var/log/unifi
   become: true
+  tags:
+    - logrotate
+
+#  /etc/logrotate.d/unifi was deployed by the udm_syslog role; remove
+#  it so logrotate stops trying to rotate a non-existent log file.
+- name: Remove retired udm_syslog logrotate config
+  file:
+    path: /etc/logrotate.d/unifi
+    state: absent
+  become: true
+  tags:
+    - logrotate
+
+#  /etc/rsyslog.d/60-unifi.conf bound UDP 5140 for the udm_syslog role.
+#  Removing it and reloading rsyslog frees the port without a full restart.
+- name: Remove retired udm_syslog rsyslog drop-in
+  file:
+    path: /etc/rsyslog.d/60-unifi.conf
+    state: absent
+  become: true
+  register: logrotate_rsyslog_unifi_dropin
+  tags:
+    - logrotate
+
+- name: Reload rsyslog after drop-in removal
+  systemd:
+    name: rsyslog.service
+    state: reloaded
+  become: true
+  when: logrotate_rsyslog_unifi_dropin.changed
   tags:
     - logrotate
