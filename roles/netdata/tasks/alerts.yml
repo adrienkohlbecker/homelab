@@ -36,9 +36,9 @@
     - netdata
 
 # The alert targets the fail2ban chart, which only exists where the collector
-# runs; skip on hosts that dropped fail2ban.
+# runs; gate on the same fail2ban_enabled flag.
 - name: Configure netdata fail2ban ban-count alert
-  when: inventory_hostname not in ['lab', 'pug']
+  when: fail2ban_enabled | default(false)
   import_role:
     name: netdata
     tasks_from: health

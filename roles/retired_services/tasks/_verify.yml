@@ -35,9 +35,9 @@
   failed_when: retired_services_files.stat.exists
 
 # fox + box keep fail2ban, so its netdata files are removed (and thus asserted
-# absent) only on the internal hosts where the teardown drops them.
-- name: _verify | Netdata fail2ban files are absent (internal hosts only)
-  when: inventory_hostname in ['lab', 'pug']
+# absent) only where fail2ban_enabled is unset and the teardown drops them.
+- name: _verify | Netdata fail2ban files are absent (where fail2ban no longer runs)
+  when: not (fail2ban_enabled | default(false))
   stat:
     path: "{{ item }}"
   loop:
