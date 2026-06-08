@@ -62,6 +62,7 @@
     group: root
     mode: "0755"
     backup: true
+    validate: bash -n %s
   register: _netdata_charts_d_chart_sh
   become: true
 
@@ -98,6 +99,7 @@
     group: netdata
     mode: "0644"
     backup: true
+    validate: bash -n %s
   register: _netdata_charts_d_conf_result
   become: true
 

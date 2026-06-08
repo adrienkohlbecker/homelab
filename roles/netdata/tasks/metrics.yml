@@ -79,10 +79,9 @@
   tags:
     - netdata
 
-# keepalived VRRP master-state collector -- the replacement for the retired
-# keepalived_exporter. Reads the state directly off the host (is the DNS VIP
-# bound to a local interface). Gated to the VRRP peers (pihole_keepalived_peers)
-# so it stays off non-DNS hosts; the plugin's own _check is a second guard.
+# keepalived VRRP master-state collector. Reads directly off the host: is the
+# DNS VIP bound to a local interface? Gated by host var so non-DNS hosts stay
+# clean; the plugin's own _check is a second guard.
 - name: Install keepalived VRRP metrics
   import_role:
     name: netdata
@@ -92,7 +91,29 @@
       name: keepalived_vrrp
       script: keepalived_vrrp.chart.sh
       conf: charts_d_keepalived_vrrp.conf.j2
-      condition: "{{ inventory_hostname in (pihole_keepalived_peers | default([])) }}"
+      condition: "{{ netdata_keepalived_vrrp_enabled | default(false) }}"
       restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
+  tags:
+    - netdata
+
+- name: Remove stale keepalived VRRP collector files
+  when: not (netdata_keepalived_vrrp_enabled | default(false))
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/libexec/netdata/charts.d/keepalived_vrrp.chart.sh
+    - /etc/netdata/charts.d/keepalived_vrrp.conf
+  register: netdata_keepalived_vrrp_absent
+  become: true
+  tags:
+    - netdata
+
+- name: Restart netdata after stale keepalived VRRP collector removal
+  when: netdata_keepalived_vrrp_absent.changed
+  systemd:
+    name: netdata
+    state: restarted
+  become: true
   tags:
     - netdata

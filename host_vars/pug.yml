@@ -68,6 +68,7 @@ zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PW
 fan2go_enabled: true
 
 pihole_keepalived_priority: 10
+netdata_keepalived_vrrp_enabled: true
 
 netdata_contexts:
   conntrack:       netfilter.conntrack_sockets
