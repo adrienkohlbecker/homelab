@@ -60,8 +60,16 @@ fi
 # new==base) has no parent branch -> notes stays detached at the recorded SHA.
 # Non-fatal: an offline create still yields a usable code worktree, and a
 # missing notes branch just means wt:merge skips the notes step.
+#
+# Clone from the local notes checkout rather than origin so that unpushed
+# commits (notes/main ahead of origin/main) are reachable.  After init,
+# restore the real remote URL so future fetches/pushes work.
 if git -C "$wt" config -f "$wt/.gitmodules" --get submodule.notes.path >/dev/null 2>&1; then
-  if git -C "$wt" submodule update --init notes >/dev/null 2>&1; then
+  notes_origin=$(git -C "$repo/notes" remote get-url origin 2>/dev/null || true)
+  if git -C "$wt" -c "submodule.notes.url=$repo/notes" -c "protocol.file.allow=always" submodule update --init notes >/dev/null 2>&1; then
+    if [ -n "$notes_origin" ]; then
+      git -C "$wt/notes" remote set-url origin "$notes_origin" 2>/dev/null || true
+    fi
     branch=$(git -C "$wt" symbolic-ref --short -q HEAD || true)
     if [ -n "$branch" ] && [ "$branch" != master ] &&
       ! git -C "$wt/notes" rev-parse --verify -q "$branch" >/dev/null; then
