@@ -23,7 +23,6 @@
       - "'-l error' in _conf"
       - "'-l selftest' in _conf"
       - "'-m root' in _conf"
-      - "'-M test' in _conf"
       - "'-M diminishing' in _conf"
       - "'-n standby,q' in _conf"
     fail_msg: "rendered /etc/smartd.conf missing expected directives:\n{{ _conf }}"

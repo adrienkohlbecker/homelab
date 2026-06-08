@@ -1,21 +1,19 @@
-# Per-dataset wrapper for the include_tasks loop in main.yml. Uses include_tasks
-# + include_role + set_fact (rather than the cheaper import_role + loop +
-# task-level vars) because import_role expands inner task names at parse time
-# before item is bound, and a task-level vars: dict referencing {{ item }} on
-# include_role triggers a parse-time templating warning. Set the consumed role's
-# input fact (zfs_dataset_args) directly. (roles/data/tasks/_dataset.yml binds
-# the same fact via import_role inline vars instead -- see its note for why.)
-- name: _dataset | Build zfs_dataset_args
-  set_fact:
-    zfs_dataset_args:  # noqa: var-naming[no-role-prefix]
+# Per-dataset wrapper for the include_tasks loop in main.yml. Uses
+# import_role + inline vars (not set_fact + include_role) to prevent
+# zfs_dataset_args from persisting at host-fact scope and leaking into
+# later roles' import_role vars: calls. Works here because _dataset.yml is
+# included dynamically (include_tasks), so {{ item }} is bound by the time
+# this import executes at runtime. See roles/data/tasks/_dataset.yml for the
+# same pattern with the full rationale documented.
+- name: _dataset | Configure dataset for {{ item.dataset }}
+  import_role:
+    name: zfs
+    tasks_from: dataset
+  vars:
+    zfs_dataset_args:
       dataset: "{{ item.dataset }}"
       mountpoint: "{{ item.mountpoint }}"
       owner: root
       group: root
       mode: '0755'
       extra_properties: "{{ item.extra_properties | default({}) }}"
-
-- name: _dataset | Configure dataset
-  include_role:
-    name: zfs
-    tasks_from: dataset
