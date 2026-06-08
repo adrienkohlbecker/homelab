@@ -85,7 +85,7 @@ RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
 # passt) or macOS transparently keeps the slirp path. See
 # notes/ci_qemu_net_passt_migration.md.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git jq xz-utils unzip gpg apt-transport-https \
+      ca-certificates curl git jq xz-utils unzip gpg gpg-agent apt-transport-https \
       qemu-system-x86 qemu-utils ovmf \
       openssh-client coreutils \
       netcat-openbsd \
