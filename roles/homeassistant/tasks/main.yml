@@ -399,7 +399,7 @@
 # sqlite3 CLI for the journal_mode probe + WAL conversion below.
 # Each container ships its own libsqlite but the host-side PRAGMA
 # tasks shell out to /usr/bin/sqlite3 which isn't preinstalled on
-# Ubuntu cloud images. Prod gets it via healthchecks/fluentbit
+# Ubuntu cloud images. Prod gets it via fluentbit
 # transitively; testrole.py runs only this role, so the dep is
 # local.
 - name: Install sqlite3 CLI

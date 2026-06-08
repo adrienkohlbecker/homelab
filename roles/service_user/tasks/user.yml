@@ -120,7 +120,7 @@
 # names must match [A-Za-z_][A-Za-z0-9_]* -- any non-identifier char
 # (notably a hyphen, which POSIX permits in user/group names and which
 # some upstream daemons hardcode) would otherwise produce "Invalid
-# variable name" at set_fact time. The typical case (name='healthchecks')
+# variable name" at set_fact time. The typical case (name='paperless')
 # is unchanged; hyphenated names (name='foo-bar') resolve to
 # foo_bar_user. Same pattern as roles/systemd_unit/tasks/install.yml's
 # per-unit fact.

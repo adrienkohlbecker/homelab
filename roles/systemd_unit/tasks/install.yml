@@ -228,7 +228,7 @@
     # the ambiguous shared `systemd_unit` register (which is also the role
     # name and would be clobbered by a second template/copy call in the
     # same play). New callers should reference <basename>_<type>_result —
-    # e.g. healthchecks.service → healthchecks_service_result, and
+    # e.g. kuma.service → kuma_service_result, and
     # podman.socket / podman.service yield distinct facts.
     # Caller var in the name (same parse-time-vs-runtime reason as the
     # linger and Write tasks above); body still references the

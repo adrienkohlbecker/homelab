@@ -94,7 +94,7 @@
 # rebuilds a fresh options struct from XDG_RUNTIME_DIR and
 # rootless_storage_path.
 # Lives in install.yml (not main.yml) so consumers that import only
-# `tasks_from: install` (homeassistant/healthchecks/nexus _setup.yml)
+# `tasks_from: install` (homeassistant/nexus _setup.yml)
 # also get the storage config.
 #
 # Runs on every podman host, not just zfs_root: graphroot is

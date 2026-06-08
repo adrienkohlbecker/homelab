@@ -167,7 +167,7 @@ Three paths, preferred order:
 
 1. **`--user {{ <svc>_user.uid }}:{{ <svc>_user.group }}`** (default). No namespace mapping. Use whenever the app doesn't insist on `id -u == 0`.
 2. **linuxserver `PUID`/`PGID`** — s6-overlay aligns the baked-in `abc` user.
-3. **Fake-root uidmap** — last resort: `--user 0:0` + `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1`. Canonical [roles/healthchecks/](roles/healthchecks/). When the entrypoint drops to a baked-in non-root uid, allocate a dedicated host user and add a `+N:<uid>:1` override (canonical [roles/hyperdx/](roles/hyperdx/)).
+3. **Fake-root uidmap** — last resort: `--user 0:0` + `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1`. Canonical [roles/authelia/](roles/authelia/). When the entrypoint drops to a baked-in non-root uid, allocate a dedicated host user and add a `+N:<uid>:1` override (canonical [roles/hyperdx/](roles/hyperdx/)).
 
 ### Prefer system-scope systemd units
 

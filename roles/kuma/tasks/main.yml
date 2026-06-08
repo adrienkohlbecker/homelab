@@ -11,8 +11,7 @@
 - name: Install sqlite3 CLI
   # The disableAuth seed below drives the sqlite3 CLI against kuma's live DB
   # on prod (and the _verify probes use it too). libsqlite3-0 is pulled in
-  # transitively by kuma; the CLI binary isn't -- install it like
-  # healthchecks does.
+  # transitively by kuma; the CLI binary isn't -- install it explicitly.
   apt:
     pkg: sqlite3
     cache_valid_time: 3600
@@ -139,7 +138,7 @@
       # /api/push/<token> is kuma's push-monitor heartbeat endpoint;
       # the token in the URL is the secret. Off-host monitored systems
       # hit it without an Authelia session, so the sibling location
-      # bypasses auth_request -- mirrors healthchecks' /ping/ carve-out.
+      # bypasses auth_request -- an off-host heartbeat carries no session.
       server_conf: |
         # Token-shaped match only: the token in the URL is the secret, and
         # anchoring to /api/push/<token> stops a future kuma route under

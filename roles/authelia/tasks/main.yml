@@ -8,7 +8,7 @@
   tags:
     - authelia
 
-# Separate SQLite path mirrors healthchecks: /mnt/services/sqlite/<svc>
+# Separate SQLite path: /mnt/services/sqlite/<svc>
 # is its own ZFS dataset on prod (recordsize/cache tuned for SQLite)
 # while /mnt/services/<svc> holds the YAML config. The harness's
 # zfs_has_services_mount flag still gates the consumer side; on the
