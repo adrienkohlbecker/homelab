@@ -148,7 +148,6 @@ service_ports:
   # (terraform/hetzner.tf) also opens 3478 but can't read this var, so it keeps
   # its own copy -- the two must stay in sync.
   headscale_stun: 3478
-  healthchecks: 8000
   homeassistant: 8123
   # Sonos S2 event-subscription callback + HomeKit pairing. Published on
   # 0.0.0.0 so iOS/Sonos controllers on the home LAN can reach them; see

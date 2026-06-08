@@ -213,11 +213,6 @@ transmission_rpc_password: changeme
 samba_password: changeme
 gmail_app_password: changeme
 postgres_password: changeme
-healthchecks_password: changeme
-healthchecks_secret_key: changeme-changeme-changeme-changeme-changeme-chang
-healthchecks_smtp_user: changeme
-healthchecks_smtp_from: changeme
-healthchecks_smtp_password: changeme
 gitea_runner_registration_token: changeme
 spouse_samba_password: changeme
 redis_password: 732b15eba0d087aee392ca791335eb609d09838605327b44
@@ -249,7 +244,7 @@ nexus_encryption_iv: changeme
 # uses the 4G/4G/2g defaults baked into the template.
 nexus_jvm_params: -Xms512M -Xmx1G -XX:MaxDirectMemorySize=512m
 spouse_firstname: changeme
-udm_dns_failover_heartbeat_url: http://127.0.0.1:9/ping/box-test
+udm_dns_failover_heartbeat_url: http://127.0.0.1:9/api/push/box-test
 
 minio_users:
   - access_key: test

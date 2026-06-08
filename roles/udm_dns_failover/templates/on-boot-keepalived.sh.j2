@@ -40,7 +40,7 @@ mkdir -p /etc/keepalived/conf.d
 ln -sfn "$DATADIR/pihole.conf"     /etc/keepalived/conf.d/pihole.conf
 ln -sfn "$DATADIR/healthcheck.sh"  /usr/local/bin/pihole_healthcheck
 
-# -- heartbeat timer (firmware-update detection via healthchecks.io) ------
+# -- heartbeat timer (firmware-update detection via Kuma push) ------------
 ln -sfn "$DATADIR/udm_keepalived_heartbeat.service" /etc/systemd/system/udm_keepalived_heartbeat.service
 ln -sfn "$DATADIR/udm_keepalived_heartbeat.timer"   /etc/systemd/system/udm_keepalived_heartbeat.timer
 

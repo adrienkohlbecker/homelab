@@ -3,13 +3,13 @@ Description=Heartbeat ping for UDM keepalived VRRP peer
 
 [Service]
 Type=oneshot
-# Ping the success URL only when keepalived is up AND the loopback
-# healthcheck passes (the UDM can actually serve DNS); otherwise ping
-# <url>/fail. This catches both a dead keepalived (firmware-wiped /usr) and a
+# Push status=up only when keepalived is up AND the loopback healthcheck
+# passes (the UDM can actually serve DNS); otherwise push status=down.
+# This catches both a dead keepalived (firmware-wiped /usr) and a
 # keepalived wedged in FAULT (its dnsmasq down) -- `systemctl is-active`
 # alone reports the FAULT case as healthy, yet such a peer can't take the
 # VIP. Either way an immediate distinct alert beats waiting out the
-# healthchecks.io grace window like an offline UDM.
+# Kuma push grace window like an offline UDM.
 # --retry-all-errors so a resolver-not-up-yet blip just after boot retries
 # like a 5xx would; --retry-max-time bounds the 2 retries inside -m 10/attempt.
-ExecStart=/bin/bash -c 'if systemctl is-active --quiet keepalived.service && /usr/local/bin/pihole_healthcheck; then url="{{ udm_dns_failover_heartbeat_url }}"; else url="{{ udm_dns_failover_heartbeat_url }}/fail"; fi; exec curl -fsS -m 10 --retry 2 --retry-delay 5 --retry-connrefused --retry-all-errors --retry-max-time 30 -o /dev/null "$url"'
+ExecStart=/bin/bash -c 'if systemctl is-active --quiet keepalived.service && /usr/local/bin/pihole_healthcheck; then url="{{ udm_dns_failover_heartbeat_url }}?status=up"; else url="{{ udm_dns_failover_heartbeat_url }}?status=down"; fi; exec curl -fsS -m 10 --retry 2 --retry-delay 5 --retry-connrefused --retry-all-errors --retry-max-time 30 -o /dev/null "$url"'

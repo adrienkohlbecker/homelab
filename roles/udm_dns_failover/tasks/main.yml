@@ -15,7 +15,7 @@
 # persistent /data and be symlinked into /etc (to survive a firmware wipe),
 # which the helper doesn't do; and the helper's netdata `monitor:` cadence
 # alerting has nothing to attach to (no netdata on the UDM). The
-# healthchecks.io heartbeat below is this peer's alerting channel instead.
+# Kuma push heartbeat below is this peer's alerting channel instead.
 - name: Validate required variables
   assert:
     that:
@@ -268,8 +268,8 @@
   tags:
     - udm_dns_failover
 
-# 0640: the rendered unit embeds the healthchecks.io ping URL (a bearer
-# token in the UUID), so it must not be world-readable.
+# 0640: the rendered unit embeds the Kuma push URL (a bearer
+# token), so it must not be world-readable.
 - name: Deploy heartbeat service to persistent storage
   template:
     src: udm_keepalived_heartbeat.service.j2
