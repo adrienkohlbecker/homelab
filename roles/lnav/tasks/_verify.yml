@@ -1,0 +1,72 @@
+- name: Lnav is installed at expected version
+  command: lnav -V
+  register: lnav_installed_version
+  changed_when: false
+  tags:
+    - lnav
+
+- name: Assert lnav version
+  assert:
+    that: lnav_version in lnav_installed_version.stdout
+    fail_msg: "lnav version mismatch: expected {{ lnav_version }}, got {{ lnav_installed_version.stdout }}"
+  tags:
+    - lnav
+
+- name: Lnav formats directory exists
+  stat:
+    path: "~{{ operator_user }}/.lnav/formats/installed"
+  register: lnav_formats_dir
+  become: true
+  tags:
+    - lnav
+
+- name: Assert lnav formats directory
+  assert:
+    that: lnav_formats_dir.stat.isdir
+    fail_msg: "~{{ operator_user }}/.lnav/formats/installed is missing"
+  tags:
+    - lnav
+
+- name: Lnav format files are present
+  stat:
+    path: "~{{ operator_user }}/.lnav/formats/installed/{{ item }}"
+  register: lnav_format_stat
+  become: true
+  loop:
+    - pihole_ftl.json
+    - audit.json
+    - syslog_body_scan.json
+  tags:
+    - lnav
+
+- name: Assert format files
+  assert:
+    that: item.stat.exists
+    fail_msg: "lnav format file missing: {{ item.item }}"
+  loop: "{{ lnav_format_stat.results }}"
+  tags:
+    - lnav
+
+- name: Lnav-journal wrapper is present and executable
+  stat:
+    path: /usr/local/bin/lnav-journal
+  register: lnav_journal_stat
+  tags:
+    - lnav
+
+- name: Assert lnav-journal wrapper
+  assert:
+    that:
+      - lnav_journal_stat.stat.exists
+      - lnav_journal_stat.stat.xusr
+    fail_msg: "/usr/local/bin/lnav-journal is missing or not executable"
+  tags:
+    - lnav
+
+- name: Lnav parses formats without errors
+  become: true
+  become_user: "{{ operator_user }}"
+  command: lnav -V
+  changed_when: false
+  tags:
+    - lnav

@@ -1,0 +1,90 @@
+- name: Install unzip (required to extract lnav release)
+  apt:
+    pkg: unzip
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - lnav
+
+- name: Download lnav release zip
+  get_url:
+    url: "{{ lnav_artifacts[ansible_architecture].url }}"
+    dest: "/var/cache/lnav-{{ lnav_version }}-{{ ansible_architecture }}.zip"
+    checksum: "sha256:{{ lnav_artifacts[ansible_architecture].sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: lnav_zip_download
+  tags:
+    - lnav
+
+# unarchive extra_opts inserts args before the zipfile path, making unzip
+# treat the file filter as the archive name. Use command: with explicit argv
+# to control argument order. Skipped in check mode (zip not yet present).
+- name: Extract lnav binary
+  command:
+    argv:
+      - unzip
+      - -o
+      - -j
+      - "/var/cache/lnav-{{ lnav_version }}-{{ ansible_architecture }}.zip"
+      - "lnav-{{ lnav_version }}/lnav"
+      - -d
+      - /usr/local/bin
+  become: true
+  when: lnav_zip_download is changed and not ansible_check_mode
+  changed_when: true
+  tags:
+    - lnav
+
+- name: Set lnav binary permissions
+  file:
+    path: /usr/local/bin/lnav
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: lnav_zip_download is changed and not ansible_check_mode
+  tags:
+    - lnav
+
+- name: Create lnav formats directory
+  file:
+    path: "~{{ operator_user }}/.lnav/formats/installed"
+    state: directory
+    owner: "{{ operator_user }}"
+    group: "{{ operator_user }}"
+    mode: "0755"
+  become: true
+  tags:
+    - lnav
+
+- name: Deploy lnav format files
+  copy:
+    src: "formats/{{ item }}"
+    dest: "~{{ operator_user }}/.lnav/formats/installed/{{ item }}"
+    owner: "{{ operator_user }}"
+    group: "{{ operator_user }}"
+    mode: "0644"
+    backup: true
+  loop:
+    - pihole_ftl.json
+    - audit.json
+    - syslog_body_scan.json
+  become: true
+  tags:
+    - lnav
+
+- name: Deploy lnav-journal wrapper
+  copy:
+    src: lnav-journal
+    dest: /usr/local/bin/lnav-journal
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  become: true
+  tags:
+    - lnav

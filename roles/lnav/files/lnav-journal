@@ -1,0 +1,27 @@
+#!/bin/bash
+set -euo pipefail
+
+# Defaults to the last 48 hours to avoid cold-loading the entire journal
+# history. Override with -S / -U (v0.14+):
+#   lnav-journal -S "yesterday"
+#   lnav-journal -S "2026-06-01" -U "2026-06-02"
+#   lnav-journal -S "4 hours ago"
+
+# Noise patterns ported from roles/fluentbit -- keeps the same firehose out of
+# the viewer that Fluent Bit drops before shipping to HyperDX.
+exec lnav \
+  -S "2 days ago" \
+  -c ':filter-out ansible-[^ ]+ Invoked with' \
+  -c ':filter-out pam_unix\(cron:session\)' \
+  -c ':filter-out podman0: port |veth[^:]+: port ' \
+  -c ':filter-out Printing VRRP as json for process' \
+  -c ':filter-out IPv4: martian source 10\.123\.1\.224' \
+  -c ':filter-out type=AppArmor.*etc/gnutls/config' \
+  -c ':filter-out networkd-dispatcher.*Failed to get interface\|Unknown index' \
+  -c ':filter-out which is not our child' \
+  -c ':filter-out SYSTEMD_UNIT=speedtest\.service.*HEAD / HTTP' \
+  -c ':filter-out SYSTEMD_UNIT=profilarr\.service.*(Task Repository Sync|Updating remote status|Processing 0 incoming changes)' \
+  -c ':filter-out homepage-alerts/1' \
+  -c ':filter-out type=SERVICE_(START|STOP).*unit=[a-f0-9]{64}' \
+  /var/log/journal/ \
+  "$@"

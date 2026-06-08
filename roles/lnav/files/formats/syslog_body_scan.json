@@ -1,0 +1,44 @@
+{
+  "syslog_body_scan": {
+    "title": "Syslog body-scan",
+    "description": "Catch-all for plain-text syslog lines with no structured level field. Infers severity from the first 120 chars of the message body using word-boundary keyword matching -- equivalent to roles/fluentbit/files/level_from_message.lua.",
+    "regex": {
+      "rfc3164": {
+        "pattern": "^(?<timestamp>[A-Z][a-z]{2} +\\d{1,2} \\d{2}:\\d{2}:\\d{2}) (?<host>\\S+) (?<ident>[^\\[:]+)(?:\\[\\d+\\])?:\\s+(?<body>.*)$"
+      },
+      "plain": {
+        "pattern": "^(?<timestamp>[A-Z][a-z]{2} +\\d{1,2} \\d{2}:\\d{2}:\\d{2}) (?<host>\\S+) (?<body>.*)$"
+      }
+    },
+    "value": {
+      "host":  { "kind": "string", "identifier": true },
+      "ident": { "kind": "string", "identifier": true },
+      "body":  { "kind": "string" }
+    },
+    "timestamp-field": "timestamp",
+    "timestamp-format": "%b %e %H:%M:%S",
+    "body-field": "body",
+    "level": {
+      "fatal":   "(?i)(?<![\\w])(fatal|panic|emerg|crit(?:ical)?)(?![\\w])",
+      "error":   "(?i)(?<![\\w])(err(?:or)?)(?![\\w])",
+      "warning": "(?i)(?<![\\w])(warn(?:ing)?)(?![\\w])",
+      "info":    "(?i)(?<![\\w])(info|notice|log:)(?![\\w])",
+      "debug":   "(?i)(?<![\\w])debug(?![\\w])",
+      "trace":   "(?i)(?<![\\w])trace(?![\\w])"
+    },
+    "sample": [
+      {
+        "line": "Jun  8 08:00:00 lab pihole-FTL: WARNING: rate-limiting client 10.0.0.5",
+        "level": "warning"
+      },
+      {
+        "line": "Jun  8 08:00:01 lab sshd[1234]: error: kex_exchange_identification: Connection closed by remote host",
+        "level": "error"
+      },
+      {
+        "line": "Jun  8 08:00:02 lab kernel: info: loaded module xfs",
+        "level": "info"
+      }
+    ]
+  }
+}

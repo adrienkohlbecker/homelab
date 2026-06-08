@@ -1,0 +1,34 @@
+{
+  "linux_audit": {
+    "title": "Linux Audit",
+    "description": "Linux audit daemon log (/var/log/audit/audit.log)",
+    "url": "https://linux.die.net/man/8/auditd",
+    "regex": {
+      "std": {
+        "pattern": "^type=(?<type>[A-Z_]+) msg=audit\\((?<timestamp>[0-9]+)\\.[0-9]+:[0-9]+\\): (?<body>.*)$"
+      }
+    },
+    "value": {
+      "type": { "kind": "string", "identifier": true },
+      "body": { "kind": "string" }
+    },
+    "timestamp-field": "timestamp",
+    "timestamp-format": "%s",
+    "body-field": "body",
+    "level": {
+      "error": "res=failed|result=fail",
+      "warning": "type=AVC|type=SELINUX_ERR|type=NETFILTER_CFG",
+      "info":    ".*"
+    },
+    "sample": [
+      {
+        "line": "type=SYSCALL msg=audit(1717833600.123:1234): arch=c000003e syscall=openat success=yes exit=5 a0=ffffff9c a1=7f1234 a2=0 a3=0 items=1 ppid=1000 pid=2000 auid=1000 uid=0 gid=0 euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=(none) ses=1 comm=\"ansible\" exe=\"/usr/bin/python3\" subj=unconfined key=(null)",
+        "level": "info"
+      },
+      {
+        "line": "type=AVC msg=audit(1717833601.456:1235): apparmor=\"DENIED\" operation=\"open\" profile=\"/usr/lib/snapd/snap-confine\" name=\"/dev/pts/0\" pid=3000 comm=\"snap-confine\" requested_mask=\"rw\" denied_mask=\"rw\" fsuid=0 ouid=0",
+        "level": "warning"
+      }
+    ]
+  }
+}
