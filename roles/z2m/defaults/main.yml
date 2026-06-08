@@ -4,3 +4,8 @@
 # `<room>/<position>_shutter`; bare `shutter$` covers both. Tighten or
 # widen here if a non-shutter cover (venetian/tilt-capable) ever joins.
 z2m_cover_friendly_name_pattern: shutter$
+
+# Non-qemu hosts with a real coordinator should start z2m. qemu_test fixtures
+# install and verify the config/nginx surface but do not start the service
+# because z2m waits for a Zigbee coordinator before serving the frontend.
+z2m_start_service: true

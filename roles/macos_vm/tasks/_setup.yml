@@ -6,10 +6,9 @@
 # /dev/disk/by-id/ata-* symlink against a loopback file so the role's
 # block-device passthrough validation has something to find.
 #
-# qemu-system-x86 is installed on every arch so libvirt can validate
-# the x86_64 domain XML even on aarch64 hosts (cross-arch TCG). Box-qemu
-# sets `macos_vm_domain_type: qemu` to stay clear of KVM since /dev/kvm
-# either is wrong-arch or absent in the test VM.
+# qemu-system-x86 is installed on every arch so libvirt can validate the x86_64
+# domain XML even on aarch64 hosts with TCG. main.yml selects qemu under the
+# qemu_test fixture so the role stays clear of /dev/kvm.
 
 - name: _setup | Install libvirt + python bindings
   apt:

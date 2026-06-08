@@ -1,1 +1,1 @@
-udm_dns_failover_interface: br0
+udm_dns_failover_interface: "{{ ansible_default_ipv4.interface if (qemu_test | bool) else 'br0' }}"

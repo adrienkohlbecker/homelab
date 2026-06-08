@@ -159,12 +159,12 @@
     or 'auth.' not in (z2m_verify_gate.location | default(''))
     or ('rd=https://z2m.' ~ inventory_hostname ~ '.' ~ domain) not in (z2m_verify_gate.location | default(''))
 
-# These two only run on a host with a real Zigbee coordinator (z2m_start_service
-# true): z2m serves the frontend only after the serial adapter connects, so it
-# can't reach `healthy` under qemu. They stay gated and skip in CI -- the
-# config/unit/nginx/auth checks above are the coverage there.
+# These two only run on a host with a real Zigbee coordinator: z2m serves the
+# frontend only after the serial adapter connects, so it can't reach `healthy`
+# under qemu. They stay gated and skip in CI; the config/unit/nginx/auth checks
+# above are the coverage there.
 - name: _verify | Z2M is active and healthy
-  when: z2m_start_service
+  when: (z2m_start_service | bool) and not (qemu_test | bool)
   shell: |
     set -euo pipefail
     systemctl is-active z2m
@@ -178,7 +178,7 @@
   changed_when: false
 
 - name: _verify | Z2M frontend responds on loopback
-  when: z2m_start_service
+  when: (z2m_start_service | bool) and not (qemu_test | bool)
   uri:
     url: http://localhost:{{ service_ports.z2m }}/
     status_code: 200

@@ -13,3 +13,8 @@
 # role-internal vars -- same exemption netdata's metrics installs use.
 lm_sensors_modules: []
 lm_sensors_relabel: []
+
+lm_sensors_qemu_test_modules: "{{ ['dummy'] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
+lm_sensors_qemu_test_relabel: >-
+  {{ [{'chip': 'lm-sensors-test-0', 'sensors': [{'name': 'temp1', 'label': 'Verify Probe'}]}]
+     if (_role_under_test | default('')) == 'lm_sensors' else [] }}

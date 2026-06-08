@@ -11,7 +11,7 @@
 #       sensors:
 #         - name: temp1           # feature name as `sensors` reports it
 #           label: CPU Package
-{% set relabel = lm_sensors_relabel %}
+{% set relabel = lm_sensors_effective_relabel | default(lm_sensors_relabel) %}
 jobs:
   - name: sensors
     autodetection_retry: 60

@@ -1,3 +1,13 @@
+- name: Apply qemu test fixture values
+  when: qemu_test | bool
+  set_fact:
+    macos_vm_disk_id: "{{ macos_vm_qemu_test_disk_id }}"
+    macos_vm_macvtap_parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
+    macos_vm_install_mode: false
+    macos_vm_domain_type: qemu
+  tags:
+    - macos_vm
+
 - name: Validate inputs
   assert:
     that:
