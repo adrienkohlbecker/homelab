@@ -2,18 +2,15 @@
 # inventory host (see hosts.ini -- it lives in [test], never in [prod])
 # so this file IS the fixture; there's no prod-box to keep in sync
 # with. Single-disk rpool only (no apoc/dozer/tank/mouse) -- producer
-# roles still run but their datasets land flat under rpool/ via the
-# pool-var remap below. Lab-prod's multi-pool shape is exercised by
-# --machine lab/pug nightly. Everything qemu-only lives here directly
-# (box is in [test], so ansible loads this file with no -e overlay).
+# roles still run but their datasets land flat under the global rpool
+# defaults. Lab-prod's multi-pool shape is exercised by --machine lab/pug
+# nightly. Everything qemu-only lives here directly (box is in [test], so
+# ansible loads this file with no -e overlay).
 qemu_test: true
 
-zfs_root: true
 # Volatile: VM is ephemeral and persistent journals would write to rpool
 # during throwaway test runs for no benefit.
 journald_storage: volatile
-# ZBM + rEFInd, not grub. Same as every prod host.
-grub_bootloader: false
 
 fluentbit_otlp_local: true  # hyperdx receiver runs here
 
@@ -25,21 +22,12 @@ ssh_public_keys: |
 # podman. 256/512 MiB is enough for ZFS to not thrash on a test workload.
 zfs_arc_min: 268435456
 zfs_arc_max: 536870912
+# Box does not exercise trim timers or mount-cache generation; lab/pug cover
+# those on the prod-shaped machine fixtures.
 zfs_trim_pools: []
-# rpool is created autotrim=on by provision.sh (SSD-backed single disk); the
-# zfs role asserts it. apoc/tank/mouse don't exist on the single-disk box.
-zfs_pool_properties:
-  - { pool: rpool, name: autotrim, value: "on" }
 zfs_mount_cache_datasets: [] # must list one dataset per pool. canmount must be set to "on" on this dataset
-zfs_has_bpool: false
-# Box ships single-disk rpool only (no apoc/dozer/tank/mouse). Repoint
-# the producer-role pool vars at rpool so dozer/tank-keyed dataset paths
-# (roles/scratch, roles/minio, roles/media, roles/data, plus the
-# `^tank/` rewrite in roles/zfs/tasks/dataset.yml) all land flat under
-# rpool/<name>. Producer-role coverage against the real prod pool shape
-# moves to lab/pug nightly.
-zfs_dozer_filesystem: rpool
-zfs_tank_filesystem: rpool
+# Box ships single-disk rpool only (no apoc/dozer/tank/mouse), so it inherits
+# the global rpool defaults for dozer/tank-keyed producer-role paths.
 
 swap_zvol:
   dataset: rpool/swap
@@ -130,8 +118,6 @@ netplan:
       # so the rollback path is still exercised.
       critical: true
 
-hdparm_settings: {}
-
 # Self-referential single source: exercises the onsite-pull render path under
 # the harness (external_ips lookup + the loop). The pull never runs -- the
 # qemu fixture has no second host and dest_dataset is empty.
@@ -188,7 +174,7 @@ homepage_netdata_hosts:
 # need to exist for smbd to start (it just can't serve files). The override
 # template gates on zfs_has_*_mount (all false on box), so it renders an
 # empty [Unit] section regardless of paths used here.
-smb_shares:
+samba_shares:
   - name: smbtest
     path: /srv/smbtest
     valid users: "{{ ansible_user_id }}"

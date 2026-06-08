@@ -302,11 +302,11 @@
     - /etc/default/prometheus
   become: true
 
-# ---- fail2ban (dropped where fail2ban_enabled is unset; KEPT on fox + box) ----
+# ---- fail2ban (dropped where fail2ban_enabled is false; KEPT on fox + box) ----
 # fail2ban now runs only on hosts with fail2ban_enabled (fox + the test box),
 # so tear it down everywhere that flag is absent/false.
 - name: Purge fail2ban where it no longer runs
-  when: not (fail2ban_enabled | default(false))
+  when: not fail2ban_enabled
   apt:
     name: fail2ban
     state: absent
@@ -315,7 +315,7 @@
   become: true
 
 - name: Remove fail2ban local overrides where it no longer runs
-  when: not (fail2ban_enabled | default(false))
+  when: not fail2ban_enabled
   file:
     path: "{{ item }}"
     state: absent
@@ -328,7 +328,7 @@
 
 # ---- netdata: drop the now-orphaned collector configs AND health alerts ----
 # The netdata role stopped *deploying* these (redis + keepalived everywhere;
-# fail2ban where fail2ban_enabled is unset) but does not remove the go.d/
+# fail2ban where fail2ban_enabled is false) but does not remove the go.d/
 # collector configs and health.d/ alert files it already wrote. The redis
 # collector + keepalived alert drops are host-agnostic (no-op where they never
 # landed); the fail2ban pair is gated on fail2ban_enabled so fox + the test box
@@ -344,7 +344,7 @@
   register: retired_services_netdata_common
 
 - name: Remove orphaned netdata fail2ban collector and alert where it no longer runs
-  when: not (fail2ban_enabled | default(false))
+  when: not fail2ban_enabled
   file:
     path: "{{ item }}"
     state: absent

@@ -24,7 +24,5 @@ media_library_dirs:
   - /mnt/media/Other
   - /mnt/media/TV
 
-# Resolves the host's tank pool name; mirrors roles/data's data_pool. Stays
-# in sync with the default('tank') in roles/zfs/tasks/dataset.yml -- both
-# must agree or _verify checks a pool main.yml didn't create.
-media_pool: "{{ zfs_tank_filesystem | default('tank') }}"
+# Resolves the host's tank pool name; mirrors roles/data's data_pool.
+media_pool: "{{ zfs_tank_filesystem }}"

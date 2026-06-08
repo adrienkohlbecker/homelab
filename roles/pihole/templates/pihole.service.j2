@@ -118,9 +118,9 @@ ExecStart=/usr/bin/podman run \
 {# `etc_hosts_entries` map roles/hostname renders into /etc/hosts on the #}
 {# test box. Bypasses pihole's own split-horizon wildcard #}
 {# (`address=/lab.fahm.fr/...`) which would resolve nexus.lab.fahm.fr to #}
-{# the fake test external_ips.lab. Production leaves the map unset → #}
+{# the fake test external_ips.lab. Production leaves the map empty, so the #}
 {# loop emits no flags on pihole hosts. #}
-{% for host, ip in (etc_hosts_entries | default({})).items() %}
+{% for host, ip in etc_hosts_entries.items() %}
     --add-host={{ host }}:{{ ip }} \
 {% endfor %}
 {# Bind only on the host's LAN IP and (in prod) the keepalived VIP -- #}

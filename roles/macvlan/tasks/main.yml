@@ -38,8 +38,8 @@
 #               must carry the VLAN's address, the VLAN must route via .1,
 #               and `block` must sit within the parent network (asserted).
 #
-# Hosts that don't trunk any macvlan-bearing VLANs leave
-# macvlan_blocks undefined or empty; the role no-ops cleanly.
+# Hosts that don't trunk any macvlan-bearing VLANs leave macvlan_blocks empty;
+# the role no-ops cleanly.
 
 - name: Install iproute2
   apt:
@@ -52,7 +52,7 @@
 
 - name: Set up macvlan blocks
   include_tasks: install.yml
-  loop: "{{ macvlan_blocks | default([]) }}"
+  loop: "{{ macvlan_blocks }}"
   loop_control:
     loop_var: macvlan_args
     label: "{{ macvlan_args.name }}"

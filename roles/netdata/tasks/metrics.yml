@@ -6,7 +6,7 @@
 # fail2ban runs only where fail2ban_enabled is set (fox + the test box); skip
 # its collector on hosts that don't run it.
 - name: Install fail2ban metrics
-  when: fail2ban_enabled | default(false)
+  when: fail2ban_enabled
   import_role:
     name: fail2ban
     tasks_from: netdata
@@ -91,13 +91,13 @@
       name: keepalived_vrrp
       script: keepalived_vrrp.chart.sh
       conf: charts_d_keepalived_vrrp.conf.j2
-      condition: "{{ netdata_keepalived_vrrp_enabled | default(false) }}"
+      condition: "{{ netdata_keepalived_vrrp_enabled }}"
       restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
   tags:
     - netdata
 
 - name: Remove stale keepalived VRRP collector files
-  when: not (netdata_keepalived_vrrp_enabled | default(false))
+  when: not netdata_keepalived_vrrp_enabled
   file:
     path: "{{ item }}"
     state: absent

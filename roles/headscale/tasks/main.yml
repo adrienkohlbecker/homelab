@@ -16,7 +16,7 @@
       notes/headscale_mesh_redesign.md §E). A mistyped vault key that renders to
       an empty string passes `is defined` but boots an OIDC-broken control plane
       that still reaches `active`, so check for non-empty, not just defined.
-  when: headscale_oidc_enabled | default(false)
+  when: headscale_oidc_enabled
   tags:
     - headscale
 
@@ -106,7 +106,7 @@
     - headscale
 
 - name: Create headscale OIDC client secret
-  when: headscale_oidc_enabled | default(false)
+  when: headscale_oidc_enabled
   import_role:
     name: podman_secret
     tasks_from: secret

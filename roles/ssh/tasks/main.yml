@@ -76,7 +76,7 @@
     backup: true
     validate: sshd -t -f %s
   when:
-    - ssh_x11_forwarding | default(false)
+    - ssh_x11_forwarding
     - not (ansible_check_mode and ssh_apt.changed)
   register: ssh_sshd_config_x11
   become: true
@@ -87,7 +87,7 @@
   file:
     path: /etc/ssh/sshd_config.d/10-x11-forwarding.conf
     state: absent
-  when: not (ssh_x11_forwarding | default(false))
+  when: not ssh_x11_forwarding
   register: ssh_sshd_config_x11_remove
   become: true
   tags:

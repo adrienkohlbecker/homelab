@@ -38,7 +38,7 @@
 # The alert targets the fail2ban chart, which only exists where the collector
 # runs; gate on the same fail2ban_enabled flag.
 - name: Configure netdata fail2ban ban-count alert
-  when: fail2ban_enabled | default(false)
+  when: fail2ban_enabled
   import_role:
     name: netdata
     tasks_from: health
@@ -71,12 +71,12 @@
     netdata_args:
       src: keepalived_vrrp_alerts.conf
       dest: keepalived_vrrp.conf
-      condition: "{{ netdata_keepalived_lost_master_alert | default(false) }}"
+      condition: "{{ netdata_keepalived_lost_master_alert }}"
   tags:
     - netdata
 
 - name: Remove stale netdata keepalived lost-master alert
-  when: not (netdata_keepalived_lost_master_alert | default(false))
+  when: not netdata_keepalived_lost_master_alert
   file:
     path: /etc/netdata/health.d/keepalived_vrrp.conf
     state: absent

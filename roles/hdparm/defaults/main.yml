@@ -1,0 +1,3 @@
+# Per-disk hdparm tuning. Empty by default; set host-specific entries only when
+# a disk actually needs non-default power/performance settings.
+hdparm_settings: {}

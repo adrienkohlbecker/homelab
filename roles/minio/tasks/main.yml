@@ -6,13 +6,13 @@
       - minio_oidc_client_secret | default('') | length > 0
       - minio_users is defined
       - minio_buckets is defined
-      - zfs_dozer_filesystem | default('') | length > 0
+      - zfs_dozer_filesystem | length > 0
     fail_msg: >-
       minio requires minio_root_user, minio_root_password,
-      minio_oidc_client_secret, minio_users, minio_buckets and
-      zfs_dozer_filesystem in host_vars/group_vars. A mistyped vault key
-      renders to an empty string that boots an auth-broken MinIO which still
-      reaches `active`, so check for non-empty, not just defined.
+      minio_oidc_client_secret, minio_users, minio_buckets and non-empty
+      zfs_dozer_filesystem. A mistyped vault key renders to an empty string
+      that boots an auth-broken MinIO which still reaches `active`, so check
+      for non-empty, not just defined.
   tags:
     - minio
 

@@ -144,7 +144,7 @@ dns:
   extra_records: []
 {% endif %}
 
-{% if headscale_oidc_enabled | default(false) %}
+{% if headscale_oidc_enabled %}
 # User-device enrollment via Authelia OIDC. Headless hosts (lab/pug/bunk) use
 # pre-auth keys instead and never hit this. Disabled under the test harness
 # (headscale validates the issuer at boot via OIDC discovery, which the box VM

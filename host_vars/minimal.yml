@@ -7,12 +7,14 @@ qemu_test: true
 qemu_test_minimal: true
 
 zfs_root: false
+zfs_trim_pools: []
+zfs_pool_properties: []
+zfs_mount_cache_datasets: []
 # Volatile: VM is ephemeral; persistent journals on the ext4 root would
 # stick around across throwaway test runs for no benefit.
 journald_storage: volatile
-# No macvlan_blocks: minimal doesn't trunk any VLANs and doesn't need
-# an L2-on-LAN presence for containers. The macvlan role no-ops on
-# missing macvlan_blocks.
+# Inherits empty macvlan_blocks: minimal doesn't trunk any VLANs and doesn't
+# need an L2-on-LAN presence for containers.
 grub_bootloader: true
 netplan:
   ethernets:
@@ -28,8 +30,6 @@ netplan:
 # from the generator's default so _verify proves the config drove the size.
 swap_zram:
   size: 2G
-
-has_transcoding_acceleration: false
 
 ssh_public_keys: |
   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key

@@ -190,7 +190,7 @@ http {
     # Default servers for missing Host header, or header not matching configured site
     server {
         listen              80 default_server;
-{% if nginx_ipv6 | default(false) %}
+{% if nginx_ipv6 %}
         listen              [::]:80 default_server;
 {% endif %}
         server_name         _;
@@ -198,7 +198,7 @@ http {
     }
     server {
         listen              443 default_server ssl{{ _http2_listen }};
-{% if nginx_ipv6 | default(false) %}
+{% if nginx_ipv6 %}
         listen              [::]:443 default_server ssl{{ _http2_listen }};
 {% endif %}
 {% if ansible_distribution_release not in ['jammy'] %}

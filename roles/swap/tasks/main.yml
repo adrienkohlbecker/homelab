@@ -381,7 +381,7 @@
     - swap_zram_module.rc == 0
   ansible.posix.sysctl:
     name: vm.swappiness
-    value: "{{ swap_swappiness | default(100) | string }}"
+    value: "{{ swap_swappiness | string }}"
     sysctl_file: /etc/sysctl.d/30-swap.conf
     state: present
     reload: true

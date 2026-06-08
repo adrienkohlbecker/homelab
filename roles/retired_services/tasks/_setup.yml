@@ -126,7 +126,7 @@
   become: true
 
 - name: _setup | Plant stale netdata fail2ban files (where fail2ban no longer runs)
-  when: not (fail2ban_enabled | default(false))
+  when: not fail2ban_enabled
   copy:
     dest: "{{ item }}"
     content: "# stale\n"

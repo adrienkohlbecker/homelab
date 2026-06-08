@@ -1,0 +1,2 @@
+netdata_keepalived_vrrp_enabled: false
+netdata_keepalived_lost_master_alert: false

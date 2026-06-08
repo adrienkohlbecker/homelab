@@ -7,7 +7,7 @@
 
 - name: _verify | Assert each iface exists and is UP
   command: ip -br link show {{ item.name }}
-  loop: "{{ macvlan_blocks | default([]) }}"
+  loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.name }}"
   register: macvlan_verify_link
@@ -17,7 +17,7 @@
 
 - name: _verify | Assert each iface carries its host_ip/32
   command: ip -4 -o addr show dev {{ item.name }}
-  loop: "{{ macvlan_blocks | default([]) }}"
+  loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.name }}"
   register: macvlan_verify_addr
@@ -29,7 +29,7 @@
 
 - name: _verify | Assert each iface carries its seeded MAC
   command: cat /sys/class/net/{{ item.name }}/address
-  loop: "{{ macvlan_blocks | default([]) }}"
+  loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.name }}"
   register: macvlan_verify_mac
@@ -40,7 +40,7 @@
 
 - name: _verify | Assert the block route points at each iface
   command: ip route show {{ item.block }} dev {{ item.name }}
-  loop: "{{ macvlan_blocks | default([]) }}"
+  loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.name }}"
   register: macvlan_verify_route
@@ -52,7 +52,7 @@
   command: >-
     sysctl -n net.ipv4.conf.{{ item.name }}.arp_ignore
     net.ipv4.conf.{{ item.name }}.arp_announce
-  loop: "{{ macvlan_blocks | default([]) }}"
+  loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.name }}"
   register: macvlan_verify_arp
@@ -66,7 +66,7 @@
   command: >-
     sysctl -n net.ipv4.conf.{{ item.parent }}.arp_ignore
     net.ipv4.conf.{{ item.parent }}.arp_announce
-  loop: "{{ macvlan_blocks | default([]) }}"
+  loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.parent }}"
   register: macvlan_verify_parent_arp
@@ -78,7 +78,7 @@
 # attaches and gets an address from the pool).
 - name: _verify | Assert the podman macvlan network exists on the right parent
   command: podman network inspect {{ item.name }}
-  loop: "{{ macvlan_blocks | default([]) }}"
+  loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.name }}"
   when: item.podman_network | default(false)
@@ -94,7 +94,7 @@
 # behind (guards against the create task losing its `when` gate).
 - name: _verify | Assert no podman network for blocks without podman_network
   command: podman network inspect {{ item.name }}
-  loop: "{{ macvlan_blocks | default([]) }}"
+  loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.name }}"
   when: not (item.podman_network | default(false))
@@ -109,7 +109,7 @@
 # qemu VM.
 - name: _verify | Remove each iface to simulate a manual/driver deletion
   command: ip link delete {{ item.name }}
-  loop: "{{ macvlan_blocks | default([]) }}"
+  loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.name }}"
   become: true
@@ -118,7 +118,7 @@
 - name: _verify | Assert BindsTo drove the unit inactive
   systemd:
     name: "{{ item.name }}.service"
-  loop: "{{ macvlan_blocks | default([]) }}"
+  loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.name }}"
   become: true
@@ -133,14 +133,14 @@
   systemd:
     name: "{{ item.name }}.service"
     state: restarted
-  loop: "{{ macvlan_blocks | default([]) }}"
+  loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.name }}"
   become: true
 
 - name: _verify | Assert the iface is back UP after the heal
   command: ip -br link show {{ item.name }}
-  loop: "{{ macvlan_blocks | default([]) }}"
+  loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.name }}"
   become: true

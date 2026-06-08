@@ -11,7 +11,7 @@
 # and a missing `sensors` key crashes the render before any parse runs.
 - name: Assert lm_sensors_relabel is well-formed before rendering the collector config
   vars:
-    _relabel: "{{ lm_sensors_relabel | default([]) }}"
+    _relabel: "{{ lm_sensors_relabel }}"
     _sensors: "{{ _relabel | map(attribute='sensors', default=[]) | flatten }}"
   assert:
     that:

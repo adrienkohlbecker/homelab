@@ -1,6 +1,6 @@
 {# Order smbd after the zfs_mount_mnt_<name> coordinator unit of every
    /mnt/<name> a share lives on, so smbd never exports an empty mountpoint at
-   boot before its dataset is mounted. Derived from smb_shares (not hard-coded)
+   boot before its dataset is mounted. Derived from samba_shares (not hard-coded)
    so a new share on a known mount auto-wires its dependency; gated on the
    per-site zfs_has_<name>_mount flag so test fixtures (all flags false) emit
    nothing.
@@ -11,25 +11,25 @@
    into the wrong place. The cost (one failed mount blocks all shares incl.
    [homes]) is accepted for that data-safety guarantee.
 
-   Scope note: this ordering is derived ONLY from smb_shares paths -- the
+   Scope note: this ordering is derived ONLY from samba_shares paths -- the
    always-exported [homes] share is NOT covered. A home directory living under
    /mnt/<x> (the spouse home is /mnt/data/<name>) only inherits the guarantee
-   if that /mnt/<x> is also an smb_shares entry. Today this is satisfied: spouse
+   if that /mnt/<x> is also a samba_shares entry. Today this is satisfied: spouse
    runs on box,lab only, and lab's `data` share already pins /mnt/data; pug has
    no spouse and no shares. If a future host homes a user on an /mnt/<x> not in
-   smb_shares, add that mount as a share (or extend this derivation). #}
+   samba_shares, add that mount as a share (or extend this derivation). #}
 {% set mount_flags = {
-     'services': zfs_has_services_mount | default(false),
-     'scratch': zfs_has_scratch_mount | default(false),
-     'media': zfs_has_media_mount | default(false),
-     'data': zfs_has_data_mount | default(false),
-     'brumath': zfs_has_brumath_mount | default(false),
-     'eckwersheim': zfs_has_eckwersheim_mount | default(false),
-     'minio': zfs_has_minio_mount | default(false),
+     'services': zfs_has_services_mount,
+     'scratch': zfs_has_scratch_mount,
+     'media': zfs_has_media_mount,
+     'data': zfs_has_data_mount,
+     'brumath': zfs_has_brumath_mount,
+     'eckwersheim': zfs_has_eckwersheim_mount,
+     'minio': zfs_has_minio_mount,
    } %}
 {% set seen = [] %}
 [Unit]
-{% for share in smb_shares | default([]) %}
+{% for share in samba_shares %}
 {% set top = share.path | regex_replace('^/mnt/', '') | regex_replace('/.*$', '') %}
 {% if top in mount_flags and mount_flags[top] and top not in seen %}
 {% set _ = seen.append(top) %}

@@ -11,7 +11,7 @@
       - (pihole_keepalived_priority | default(0) | int) > 0
       - (pihole_keepalived_priority | default(0) | int) <= 255
       - pihole_keepalived_peers is defined
-      - (pihole_keepalived_peers | default([]) | length) > 0
+      - pihole_keepalived_peers | length > 0
       - inventory_hostname in external_ips
       - pihole_adlists is defined
       - pihole_whitelists is defined

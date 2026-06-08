@@ -67,13 +67,13 @@
 - name: _verify | Resolve gids for subgid extras
   getent:
     database: group
-  when: (subid_extra_subgid_groups | default([])) | length > 0
+  when: subid_extra_subgid_groups | length > 0
   become: true
 
 - name: _verify | Resolve uids for subuid extras
   getent:
     database: passwd
-  when: (subid_extra_subuid_users | default([])) | length > 0
+  when: subid_extra_subuid_users | length > 0
   become: true
 
 - name: _verify | Extra subgid entries map the resolved gid
@@ -86,7 +86,7 @@
     fail_msg: >-
       Extra subgid entry for {{ item.user }} should map group {{ item.group }} (gid {{ _gid }}).
       Got: {{ _subgid_lines | select('match', '^' ~ item.user ~ ':') | list }}.
-  loop: "{{ subid_extra_subgid_groups | default([]) }}"
+  loop: "{{ subid_extra_subgid_groups }}"
   loop_control:
     label: "{{ item.user }}:{{ item.group }}"
 
@@ -100,7 +100,7 @@
     fail_msg: >-
       Extra subuid entry for {{ item.user }} should map source_user {{ item.source_user }} (uid {{ _uid }}).
       Got: {{ _subuid_lines | select('match', '^' ~ item.user ~ ':') | list }}.
-  loop: "{{ subid_extra_subuid_users | default([]) }}"
+  loop: "{{ subid_extra_subuid_users }}"
   loop_control:
     label: "{{ item.user }}:{{ item.source_user }}"
 

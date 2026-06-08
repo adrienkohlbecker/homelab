@@ -98,10 +98,10 @@
       fragment: {{ _boot_verify_cmdline.stdout }}
 
 - name: _verify | Commandline carries serial args (when configured)
-  when: not grub_bootloader and (boot_serial_console | default('') | trim | length > 0 or (qemu_test | default(false)))
+  when: not grub_bootloader and (boot_serial_console | default('') | trim | length > 0 or qemu_test)
   vars:
     _expected: >-
-      {% if qemu_test | default(false) %}earlycon={% else %}{{ boot_serial_console }}{% endif %}
+      {% if qemu_test %}earlycon={% else %}{{ boot_serial_console }}{% endif %}
   assert:
     that:
       - "_expected | trim in _boot_verify_cmdline.stdout"
@@ -132,7 +132,7 @@
       ZBM property may not have propagated: {{ _cmdline }}
 
 - name: _verify | Running kernel booted with earlycon (when configured)
-  when: not grub_bootloader and ansible_architecture != 'aarch64' and (qemu_test | default(false))
+  when: not grub_bootloader and ansible_architecture != 'aarch64' and qemu_test
   vars:
     _cmdline: "{{ _boot_verify_proc_cmdline.content | b64decode }}"
   assert:

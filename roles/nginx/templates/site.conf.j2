@@ -4,7 +4,7 @@
 {% set _http2_listen = ' http2' if ansible_distribution_release in ['jammy', 'noble'] else '' %}
 server {
   listen              443 ssl{{ _http2_listen }};
-{% if nginx_ipv6 | default(false) %}
+{% if nginx_ipv6 %}
   listen              [::]:443 ssl{{ _http2_listen }};
 {% endif %}
 {% if _nginx_site_enable_http %}
@@ -14,7 +14,7 @@ server {
   # that need plaintext -- asserted incompatible with auth/bypass, whose
   # secrets would otherwise travel unencrypted.
   listen              80;
-{% if nginx_ipv6 | default(false) %}
+{% if nginx_ipv6 %}
   listen              [::]:80;
 {% endif %}
 {% endif %}
@@ -285,7 +285,7 @@ server {
 
 server {
     listen      80;
-{% if nginx_ipv6 | default(false) %}
+{% if nginx_ipv6 %}
     listen      [::]:80;
 {% endif %}
     server_name {{ nginx_site_args.subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_site_args.subdomain }}.{{ domain}};

@@ -258,14 +258,14 @@
 # fail loudly -- so dataset existence is itself the rewrite assertion.
 - name: _verify | Read probe dataset mountpoint
   when: zfs_root
-  command: zfs get -H -o value mountpoint {{ zfs_tank_filesystem | default('tank') }}/_verify_probe
+  command: zfs get -H -o value mountpoint {{ zfs_tank_filesystem }}/_verify_probe
   register: _zfs_verify_probe_mp
   changed_when: false
   become: true
 
 - name: _verify | Read probe dataset mounted state
   when: zfs_root
-  command: zfs get -H -o value mounted {{ zfs_tank_filesystem | default('tank') }}/_verify_probe
+  command: zfs get -H -o value mounted {{ zfs_tank_filesystem }}/_verify_probe
   register: _zfs_verify_probe_mounted
   changed_when: false
   become: true
@@ -294,7 +294,7 @@
 
 - name: _verify | Destroy probe dataset
   when: zfs_root
-  command: zfs destroy -r {{ zfs_tank_filesystem | default('tank') }}/_verify_probe
+  command: zfs destroy -r {{ zfs_tank_filesystem }}/_verify_probe
   changed_when: true
   become: true
 

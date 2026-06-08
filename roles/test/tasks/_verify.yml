@@ -115,7 +115,7 @@
 - name: _verify | Resolve etc_hosts_entries to configured IPs
   when:
     - nexus_url | length > 0
-    - etc_hosts_entries | default({}) | length > 0
+    - etc_hosts_entries | length > 0
   # argv form (no shell, no quoting around the hostname) + an exact match on a
   # whitespace-split field: a substring `in stdout` would let a configured
   # 10.0.0.1 pass against a resolved 10.0.0.10.
@@ -124,7 +124,7 @@
       - getent
       - hosts
       - "{{ item.key }}"
-  loop: "{{ etc_hosts_entries | default({}) | dict2items }}"
+  loop: "{{ etc_hosts_entries | dict2items }}"
   register: test_getent
   changed_when: false
   failed_when: test_getent.rc != 0 or item.value not in test_getent.stdout.split()

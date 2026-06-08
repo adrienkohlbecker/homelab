@@ -7,7 +7,7 @@
 # provision.sh / chroot.sh, so none of the invariants below apply.
 
 - name: _verify | Skip on minimal (no packer-built image to assert against)
-  when: qemu_test_minimal | default(false)
+  when: qemu_test_minimal
   meta: end_play
 
 # --- chroot.sh apt-sources reset (universal) ---
