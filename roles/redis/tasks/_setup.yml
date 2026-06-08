@@ -1,4 +1,0 @@
-- name: _setup | Install podman
-  import_role:
-    name: podman
-    tasks_from: install

@@ -1,9 +1,0 @@
-# csplogger's runtime deps are just nginx -- everything past /log is gated
-# inside fluent-bit (a separate role with its own _verify). The verify path
-# stubs fluent-bit out via csplogger_upstream.py so this role's test stays
-# focused on the nginx config it actually installs; the stub is brought up
-# inside _verify, not here.
-- name: _setup | Install nginx
-  import_role:
-    name: test
-    tasks_from: nginx
