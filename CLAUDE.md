@@ -7,6 +7,7 @@ This is a home environment, not a corporate production site. Tie-breakers when t
 - **Maintainability beats ambition.** The operator is also the on-call — an elegant rewrite they can't debug at 11pm is a regression. Default to simple-and-boring.
 - **Security is pragmatic.** Reasonable hygiene (vault, firewall, file permissions) is in scope; defense against nation-state actors is not. New security machinery needs a concrete threat behind it.
 - **Wife-acceptance-factor is real.** Household-depended services (home-assistant, z2m, media, dns) have higher cost-of-failure than operator-only infra. Visible breakage outweighs elegance.
+- **Elegance applies at every scale.** Simple problems deserve simple solutions. Complex problems can warrant complex solutions — a layered role system, a multi-stage pipeline — but the design must stay coherent and followable. The failure mode is not complexity itself; it is complexity that grew without a clear shape or obscures rather than expresses what it does.
 
 ## Hard Rules — DO NOT
 
