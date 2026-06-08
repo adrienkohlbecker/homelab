@@ -159,3 +159,46 @@
         }
   tags:
     - kuma
+
+# Tombstone: retire the self-hosted healthchecks service this host ran
+# before kuma took over availability monitoring. Removes the systemd unit,
+# its nginx vhost (closing the old unauthenticated /ping/ bypass), and the
+# three root-owned podman secrets. Leaves /mnt/services/healthchecks and its
+# sqlite dataset in place -- they ride ZFS snapshots and discarding data is
+# not this change's intent. Idempotent: a no-op on any host that never ran
+# healthchecks. Drop this block once lab has converged past the retirement.
+- name: Remove the retired healthchecks systemd unit
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: healthchecks.service
+  tags:
+    - kuma
+
+- name: Remove the retired healthchecks nginx site
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: healthchecks
+      state: absent
+  tags:
+    - kuma
+
+- name: Remove the retired healthchecks podman secrets
+  include_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: "{{ item }}"
+      state: absent
+  loop:
+    - healthchecks_password
+    - healthchecks_smtp_password
+    - healthchecks_secret_key
+  tags:
+    - kuma
