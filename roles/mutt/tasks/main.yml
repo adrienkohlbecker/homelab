@@ -156,6 +156,29 @@
   tags:
     - mutt
 
+# The bind mount's source must already exist: getmail creates and owns this
+# Maildir ahead of mutt in site.yml (and _setup stands it up for the harness).
+# Assert it directly so a standalone `--tags mutt` run on an unconverged host
+# fails with a clear precondition error rather than a confusing mount failure.
+- name: Stat the getmail archive Maildir
+  stat:
+    path: /mnt/services/getmail/new
+  register: _mutt_getmail_maildir
+  tags:
+    - mutt
+
+- name: Assert the getmail archive Maildir exists
+  assert:
+    that:
+      - _mutt_getmail_maildir.stat.exists
+      - _mutt_getmail_maildir.stat.isdir
+    fail_msg: >-
+      /mnt/services/getmail is not a Maildir — the getmail role must converge
+      before mutt (it creates and owns the archive this viewer binds read-only).
+    quiet: true
+  tags:
+    - mutt
+
 # Hard read-only guard: neomutt browses the archive through a ro bind mount of
 # the getmail Maildir (set as `folder` in muttrc), so a write physically cannot
 # reach the archive even if -R is bypassed. getmail keeps writing the source
