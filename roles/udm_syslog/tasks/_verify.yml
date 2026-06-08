@@ -1,0 +1,63 @@
+- name: Rsyslog unifi drop-in is present
+  stat:
+    path: /etc/rsyslog.d/60-unifi.conf
+  register: udm_syslog_rsyslog_stat
+  tags:
+    - udm_syslog
+
+- name: Assert rsyslog unifi drop-in
+  assert:
+    that: udm_syslog_rsyslog_stat.stat.exists
+    fail_msg: /etc/rsyslog.d/60-unifi.conf is missing
+  tags:
+    - udm_syslog
+
+- name: /var/log/unifi directory exists
+  stat:
+    path: /var/log/unifi
+  register: udm_syslog_logdir_stat
+  become: true
+  tags:
+    - udm_syslog
+
+- name: Assert /var/log/unifi directory
+  assert:
+    that: udm_syslog_logdir_stat.stat.isdir
+    fail_msg: /var/log/unifi is missing
+  tags:
+    - udm_syslog
+
+- name: Logrotate unifi config is present
+  stat:
+    path: /etc/logrotate.d/unifi
+  register: udm_syslog_logrotate_stat
+  tags:
+    - udm_syslog
+
+- name: Assert logrotate unifi config
+  assert:
+    that: udm_syslog_logrotate_stat.stat.exists
+    fail_msg: /etc/logrotate.d/unifi is missing
+  tags:
+    - udm_syslog
+
+# Functional check: send a UDP syslog packet and confirm rsyslog routes it
+# to /var/log/unifi/unifi.log.
+- name: Send test UDP syslog packet to unifi listener
+  command:
+    argv:
+      - python3
+      - -c
+      - "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.sendto(b'<13>udm_syslog_verify_token',('127.0.0.1',{{ service_ports.udm_syslog }})); s.close()"
+  changed_when: false
+  tags:
+    - udm_syslog
+
+- name: Verify test packet landed in unifi.log
+  wait_for:
+    path: /var/log/unifi/unifi.log
+    search_regex: udm_syslog_verify_token
+    timeout: 5
+  become: true
+  tags:
+    - udm_syslog

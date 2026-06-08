@@ -1,0 +1,52 @@
+- name: Install rsyslog
+  apt:
+    pkg: rsyslog
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - udm_syslog
+
+- name: Create /var/log/unifi directory
+  file:
+    path: /var/log/unifi
+    state: directory
+    owner: syslog
+    group: adm
+    mode: "0750"
+  become: true
+  tags:
+    - udm_syslog
+
+- name: Deploy rsyslog unifi drop-in
+  template:
+    src: rsyslog_unifi.conf.j2
+    dest: /etc/rsyslog.d/60-unifi.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: udm_syslog_rsyslog_conf
+  tags:
+    - udm_syslog
+
+- name: Restart rsyslog
+  service:
+    name: rsyslog
+    state: restarted
+  become: true
+  when: udm_syslog_rsyslog_conf is changed
+  tags:
+    - udm_syslog
+
+- name: Deploy logrotate config for unifi syslog
+  import_role:
+    name: logrotate
+    tasks_from: template
+  vars:
+    logrotate_args:
+      src: logrotate_unifi.j2
+      dest: /etc/logrotate.d/unifi
+  tags:
+    - udm_syslog

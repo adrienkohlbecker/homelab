@@ -1,0 +1,13 @@
+# {{ ansible_managed }}
+# Receives syslog UDP from the UDM and writes to /var/log/unifi/unifi.log.
+# Uses a dedicated ruleset so this port's traffic doesn't mix with the
+# default ruleset or trigger other drop-ins.
+
+# module(load=) is idempotent -- safe if another drop-in already loaded imudp.
+module(load="imudp")
+input(type="imudp" port="{{ service_ports.udm_syslog }}" ruleset="unifi_syslog")
+
+ruleset(name="unifi_syslog") {
+  action(type="omfile" file="/var/log/unifi/unifi.log")
+  stop
+}
