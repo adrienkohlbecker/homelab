@@ -1,6 +1,5 @@
 zfs_root: true
 grub_bootloader: false
-nut_monitor_enabled: false
 fluentbit_otlp_local: true  # hyperdx receiver runs here
 
 ssh_x11_forwarding: true
@@ -137,10 +136,6 @@ fan2go_enabled: true
 
 pihole_keepalived_priority: 100
 
-prometheus_enabled: true
-
-redis_enabled: true
-
 minio_enabled: true
 minio_buckets:
   - arq-adrien
@@ -176,7 +171,6 @@ netdata_contexts:
 netdata_collectors:
   # No chrony: ntp cmdport=0 blocks go.d UDP-only collector (timex alarm covers clock-sync).
   - go.d:collector:docker:local
-  - go.d:collector:fail2ban:fail2ban
   - go.d:collector:intelgpu:intelgpu
   - go.d:collector:logind:logind
   - go.d:collector:nginx:local
@@ -184,11 +178,8 @@ netdata_collectors:
   - go.d:collector:pihole:local
   - go.d:collector:prometheus:fluentbit
   - go.d:collector:prometheus:gitea_runner
-  - go.d:collector:prometheus:keepalived_exporter_local
   - go.d:collector:prometheus:kuma
   - go.d:collector:prometheus:minio
-  - go.d:collector:prometheus:prometheus
-  - go.d:collector:redis:local
   - go.d:collector:sensors:sensors
   - go.d:collector:smartctl:smartctl
   - go.d:collector:systemdunits:service-units
@@ -302,8 +293,6 @@ github_runner_instances:
   - { repo: homelab, suffix: gen2, owner: adrienkohlbecker, labels: "self-hosted,lab" }
   - { repo: homelab, suffix: gen3, owner: adrienkohlbecker, labels: "self-hosted,lab" }
   - { repo: homelab, suffix: gen4, owner: adrienkohlbecker, labels: "self-hosted,lab" }
-  - { repo: compta,  suffix: gen1, owner: adrienkohlbecker, labels: "self-hosted,lab" }
-  - { repo: compta,  suffix: gen2, owner: adrienkohlbecker, labels: "self-hosted,lab" }
 
 # auth.{{ domain }} is an apex-zone CNAME → lab.{{ domain }} (public DNS), with a
 # pihole override resolving the LAN clients to lab's internal IP. The

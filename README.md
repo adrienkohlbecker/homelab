@@ -46,12 +46,12 @@ Roles map 1:1 to a service or a system concern; the order in `site.yml` reflects
 
 - **Bootstrap & OS**: `apt`, `apt_source`, `apt_upgrade`, `bash`, `user`, `cleanup`, `hostname`, `locale`, `console`, `timezone`, `subid`, `hwe_kernel`, `cron`, `logrotate`, `journald`, `unattended_upgrades`
 - **Networking**: `netplan`, `wireguard`, `resolved`, `firewall`, `fail2ban`, `ssh` / `ssh_root`, `macvlan`, `avahi`, `postfix`, `ntp`
-- **Hardware**: `fan2go`, `fancontrol`, `hdparm`, `hd_idle`, `smart`, `lm_sensors`, `powertop`
+- **Hardware**: `fan2go`, `hdparm`, `hd_idle`, `smart`, `lm_sensors`, `powertop`
 - **Storage / boot**: `zfs`, `zfs_autobackup`, `zfs_mount`, `swap`, `boot`, `zfsbootmenu`, `refind`, `kdump`
 - **Container / web stack**: `podman`, `samba`, `certbot`, `nginx`, `authelia`, `homepage`, `services`
-- **Monitoring & infra**: `eaton_ipp`, `netdata`, `fluentbit`, `wolweb`, `csplogger`, `keepalived` (+ `keepalived_exporter`), `custom_exporter`, `nut_server` / `nut_monitor`, `dnscrypt_proxy`, `pihole`, `docker_client`, `socket_proxy`, `prometheus`
+- **Monitoring & infra**: `eaton_ipp`, `netdata`, `fluentbit`, `wolweb`, `keepalived`, `custom_exporter`, `nut_server`, `dnscrypt_proxy`, `pihole`, `docker_client`, `socket_proxy`
 - **VPN / mesh**: `headscale`, `tailscale`, `udm_dns_failover`
-- **Lab-only services**: `libvirt`, `minio`, `influxdb`, `scratch`, `data`, `media`, `jellyfin`, `sonarr` / `radarr` / `bazarr` / `lidarr` / `plex` / `tautulli` / `seerr`, `sort_ini`, `sabnzbd`, `transmission`, `profilarr`, `gitea` (+ `gitea_runner`, `github_runner`, `nodejs`), `getmail`, `mutt`, `compta`, `speedtest`, `filebrowser`, `mosquitto`, `z2m`, `homeassistant`, `kuma`, `spouse`, `redis`, `paperless`, `openproject`, `hyperdx`, `nexus`
+- **Lab-only services**: `libvirt`, `minio`, `influxdb`, `scratch`, `data`, `media`, `jellyfin`, `sonarr` / `radarr` / `bazarr` / `lidarr` / `plex` / `tautulli` / `seerr`, `sort_ini`, `sabnzbd`, `transmission`, `profilarr`, `gitea` (+ `gitea_runner`, `github_runner`, `nodejs`), `getmail`, `mutt`, `speedtest`, `filebrowser`, `mosquitto`, `z2m`, `homeassistant`, `kuma`, `spouse`, `hyperdx`, `nexus`
 - **Helpers** (imported by other roles, not used directly): `service_user`, `podman_secret`, `systemd_unit`, `systemd_timer`, `usergroup_immediate`, `sqlite_dataset`, `static_curl`, `linger`, `test`
 
 Helper-role contracts and per-role conventions (artifact URL+sha colocation, test hooks `_setup.yml` / `_verify.yml`, `qemu_test` gating, the check-mode-user idiom, the `service_ports:` registry) are documented in **CLAUDE.md**.

@@ -28,7 +28,6 @@
     - unattended_upgrades
     - logrotate
     - journald
-    - fail2ban
     - ssh
     - ssh_root
     - ntp
@@ -46,17 +45,21 @@
     - certbot
     - nginx
     # Observability.
-    - csplogger
     - socket_proxy
     - netdata
     - fluentbit
+    # Tear down decommissioned service state (drop once prod has re-converged).
+    - retired_services
 
 # Services -- host-scoped, built on the platform above. A role belongs here
 # (not in Base machine install) when only a subset of hosts run it.
 - name: External VPS (fox)
+  # fail2ban only earns its keep on the public-facing host fox (zero inbound
+  # at home); box keeps it as the test fixture.
   hosts: box,fox
   roles:
     - headscale
+    - fail2ban
 
 - name: Lab and Pug
   hosts: box,lab,pug
@@ -66,7 +69,6 @@
     - hd_idle
     - smart
     - lm_sensors
-    - fancontrol
     - fan2go
     - powertop
     - macvlan
@@ -77,9 +79,7 @@
     - eaton_ipp
     - wolweb
     - keepalived
-    - keepalived_exporter
     - nut_server
-    - nut_monitor
     - resolved
     - dnscrypt_proxy
     - pihole
@@ -96,7 +96,6 @@
     - scratch
     - data
     - media
-    - prometheus
     - minio
     - influxdb
     - jellyfin
@@ -116,7 +115,6 @@
     - transmission
     - getmail
     - mutt
-    - compta
     - speedtest
     - filebrowser
     - mosquitto
@@ -126,10 +124,7 @@
     - authelia
     - hyperdx
     - spouse
-    - redis
-    - paperless
     - profilarr
-    - openproject
     - nexus
     - homepage
 
