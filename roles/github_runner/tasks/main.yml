@@ -242,6 +242,51 @@
   tags:
     - github_runner
 
+# The user@<uid>.service.d/override.conf dropin was installed when the
+# github_runner@.service unit ran in user scope (commit 5f15355f8). That
+# dropin added PartOf=zfs_autosnapshot.target so snapshot-quiesce stops
+# propagated into buildkit.service. The unit moved back to system scope
+# in c80891967 and the dropin template was removed from the role, but
+# the on-disk file was never cleaned up. Without this task, the nightly
+# autosnapshot stops user@<uid>.service (PartOf cascade), which
+# cascades via Requires=user@<uid> into all github_runner@*.service
+# instances; they stay down because explicit stops don't trigger
+# Restart=always and the target's post-snapshot start doesn't include
+# user@<uid>.
+- name: Remove obsolete user manager dropin (uid {{ github_runner_user.uid }})
+  when: not (ansible_check_mode and github_runner_user.changed)
+  file:
+    path: /etc/systemd/system/user@{{ github_runner_user.uid }}.service.d/override.conf
+    state: absent
+  become: true
+  register: github_runner_user_dropin_removed
+  tags:
+    - github_runner
+
+# Daemon-reload before the linger task starts user@<uid>.service so
+# systemd operates on the cleaned-up unit definition. Without this,
+# systemd's in-memory copy still has PartOf= until the next reload
+# (which happens later in the systemd_unit install task).
+- name: Reload systemd after removing obsolete dropin
+  when: github_runner_user_dropin_removed.changed
+  systemd:
+    daemon_reload: true
+  become: true
+  tags:
+    - github_runner
+
+# Remove the dangling zfs_autosnapshot.target.wants/github_runner.service
+# symlink left over from the pre-containerisation era. The target it
+# pointed to (/etc/systemd/system/github_runner.service, non-instanced)
+# no longer exists; the symlink is a no-op for starts but adds noise.
+- name: Remove dangling zfs_autosnapshot.target.wants/github_runner.service
+  file:
+    path: /etc/systemd/system/zfs_autosnapshot.target.wants/github_runner.service
+    state: absent
+  become: true
+  tags:
+    - github_runner
+
 # Linger so rootless podman has a user systemd manager up at all times:
 # crun makes sd-bus calls when creating containers, which fail with
 # "Permission denied" without one. The helper enables linger and waits
