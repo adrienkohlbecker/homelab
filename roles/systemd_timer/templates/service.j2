@@ -18,6 +18,15 @@ Group={{ systemd_timer_args.run_as_group | default(systemd_timer_args.run_as) }}
 Environment="{{ k }}={{ v | string | replace('\\', '\\\\') | replace('"', '\\"') }}"
 {% endfor %}
 {% endif %}
+{% if (systemd_timer_args.user | default('root')) == 'root' %}
+{# Update the netdata overdue-monitoring stamp after each successful run.
+   Persistent=false (our default) suppresses catch-up fires on fresh installs
+   but also means systemd never maintains this stamp itself; service.j2 fills
+   the gap. The '+' prefix runs touch with full privileges even when run_as:
+   drops ExecStart to a non-root user. No-ops on first ever run (touch creates
+   the file); from then on the stamp mtime matches the last successful fire. #}
+ExecStartPost=+/usr/bin/touch /var/lib/systemd/timers/stamp-{{ systemd_timer_args.name }}.timer
+{% endif %}
 {% if systemd_timer_args.additional_service_directives is defined %}
 {% for line in systemd_timer_args.additional_service_directives %}
 {{ line }}
