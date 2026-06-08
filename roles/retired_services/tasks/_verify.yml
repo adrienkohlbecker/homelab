@@ -1,0 +1,26 @@
+# Confirms the teardown reaches the intended end state: the decommissioned
+# units are gone (not merely stopped) and the service state directories are
+# absent. On the box_deps fixture nothing was present to begin with, so this
+# asserts the role leaves the host clean rather than half-creating anything.
+- name: _verify | Decommissioned unit files are absent
+  stat:
+    path: "/etc/systemd/system/{{ item }}"
+  loop:
+    - openproject.service
+    - paperless.service
+    - redis.service
+    - compta.service
+    - keepalived_exporter.service
+  register: retired_services_units
+  failed_when: retired_services_units.stat.exists
+
+- name: _verify | Decommissioned state directories are absent
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /mnt/services/openproject
+    - /mnt/services/paperless
+    - /mnt/services/redis
+    - /mnt/services/prometheus
+  register: retired_services_dirs
+  failed_when: retired_services_dirs.stat.exists

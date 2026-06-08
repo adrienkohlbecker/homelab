@@ -1,0 +1,364 @@
+# Decommission tombstones. Each block tears down what a now-deleted service
+# role left on already-converged hosts: systemd units, nginx vhosts, podman
+# secrets/networks, on-disk state, apt packages. Every task is idempotent and
+# no-ops on a host that never ran the service, so this single role can run on
+# the whole base-host group (box,lab,pug,fox) regardless of which host had what.
+#
+# Placed last in the "Base machine install" play so podman + nginx (and netdata)
+# are already up when these removals reference them. Drop this whole role once
+# every prod host has converged past this commit -- it carries no steady-state
+# behaviour, only one-time cleanup.
+#
+# DESTRUCTIVE: the /mnt/services/* removals below delete service data (the
+# openproject Postgres DB, paperless documents, the prometheus TSDB, redis
+# dump.rdb). Recovery rides the daily ZFS snapshots. The service system users
+# are deliberately LEFT in place (uid reuse risk outweighs the tidiness), as
+# with the vscode_ha tombstone in roles/homeassistant.
+#
+# In the base play this role runs after podman + nginx are installed, so those
+# tools are present on every real host. Probe for them anyway and gate the
+# podman/nginx removals on presence: a teardown should degrade to a no-op rather
+# than hard-fail when run somewhere they're absent (e.g. an isolated role test
+# on a bare fixture). apt/systemd/file removals need no such guard.
+- name: Probe for podman and nginx
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/bin/podman
+    - /usr/sbin/nginx
+  register: retired_services_tools
+  become: true
+
+- name: Resolve tool presence
+  set_fact:
+    retired_services_have_podman: "{{ retired_services_tools.results[0].stat.exists }}"
+    retired_services_have_nginx: "{{ retired_services_tools.results[1].stat.exists }}"
+
+# ---- openproject (was lab) ----
+- name: Retire openproject service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: openproject.service
+
+- name: Retire openproject nginx site
+  when: retired_services_have_nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: openproject
+      state: absent
+
+- name: Remove openproject podman secrets
+  when: retired_services_have_podman
+  containers.podman.podman_secret:
+    name: "{{ item }}"
+    state: absent
+  loop:
+    - openproject_secret_key
+    - openproject_admin_password
+    - openproject_smtp_password
+  become: true
+
+- name: Remove openproject state directory
+  file:
+    path: /mnt/services/openproject
+    state: absent
+  become: true
+
+# ---- paperless (was lab) ----
+# Remove paperless before redis: paperless joins the `redis` podman network,
+# which can only be torn down once no container references it.
+- name: Retire paperless service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: paperless.service
+
+- name: Retire paperless nginx site
+  when: retired_services_have_nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: paperless
+      state: absent
+
+- name: Remove paperless podman secrets
+  when: retired_services_have_podman
+  containers.podman.podman_secret:
+    name: "{{ item }}"
+    state: absent
+  loop:
+    - paperless_secret_key
+    - paperless_socialaccount_providers
+  become: true
+
+- name: Remove paperless state directories
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /mnt/services/paperless
+    - /mnt/services/sqlite/paperless
+  become: true
+
+# ---- redis (was box, lab) ----
+- name: Retire redis service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: redis.service
+
+- name: Remove redis podman secret
+  when: retired_services_have_podman
+  containers.podman.podman_secret:
+    name: redis_password
+    state: absent
+  become: true
+
+# Both redis (producer) and paperless (consumer) created this network; both
+# units are gone by now, so the bridge has no remaining references.
+- name: Remove redis podman network
+  when: retired_services_have_podman
+  containers.podman.podman_network:
+    name: redis
+    state: absent
+  become: true
+
+- name: Remove redis state directory and sysctl drop-in
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /mnt/services/redis
+    - /etc/sysctl.d/30-redis.conf
+  become: true
+
+# ---- compta (was lab) ----
+# Stateless image: no /mnt/services dir, no secrets.
+- name: Retire compta service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: compta.service
+
+- name: Retire compta nginx site
+  when: retired_services_have_nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: compta
+      state: absent
+
+# ---- csplogger (was box,lab,pug,fox) ----
+# No unit/secret/dir -- just the nginx vhost plus the http-scope rate-limit
+# conf.d drop the role installed.
+- name: Retire csplogger nginx site
+  when: retired_services_have_nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: csplogger
+      state: absent
+
+- name: Retire csplogger rate-limit conf.d drop
+  when: retired_services_have_nginx
+  import_role:
+    name: nginx
+    tasks_from: conf_d
+  vars:
+    nginx_conf_d_args:
+      name: csp_ratelimit.conf
+      state: absent
+
+# ---- fancontrol (was box,lab,pug; fan2go owns fan control now) ----
+- name: Retire fancontrol service and restart drop-in
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      for: fancontrol.service
+
+- name: Purge fancontrol package
+  apt:
+    name: fancontrol
+    state: absent
+    purge: true
+    autoremove: true
+  become: true
+
+- name: Remove fancontrol on-disk state
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/fancontrol
+    - /etc/fancontrol.template
+    - /usr/local/sbin/fancontrol_remap
+  become: true
+
+# ---- keepalived_exporter (was box,lab,pug) ----
+- name: Retire keepalived_exporter service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: keepalived_exporter.service
+
+- name: Retire keepalived_exporter nginx site
+  when: retired_services_have_nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: keepalived-exporter
+      state: absent
+
+- name: Remove keepalived_exporter binary
+  file:
+    path: /usr/local/bin/keepalived_exporter
+    state: absent
+  become: true
+
+# ---- nut_monitor (was box,lab,pug; nut_server is KEPT) ----
+# nut-monitor.service ships in the nut-client package, which nut_server still
+# needs for `upsc` -- so disable+stop the unit rather than purging the package
+# or deleting the package-owned unit file. Only the upsmon config + notify
+# script were nut_monitor's own; nut_server owns the rest of /etc/nut.
+- name: Disable and stop nut_monitor (upsmon) service
+  systemd:
+    name: nut-monitor.service
+    enabled: false
+    state: stopped
+  become: true
+  register: retired_services_nut_monitor_stop
+  failed_when: >-
+    retired_services_nut_monitor_stop.failed | default(false)
+    and 'could not find' not in (retired_services_nut_monitor_stop.msg | default('') | lower)
+
+- name: Remove nut_monitor config and notify script
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/nut/upsmon.conf
+    - /etc/nut/upssched.conf
+    - /usr/local/bin/nut-notify
+  become: true
+
+# ---- prometheus (was box,lab) ----
+- name: Retire prometheus service override drop-in
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      for: prometheus.service
+
+- name: Purge prometheus package
+  apt:
+    name: prometheus
+    state: absent
+    purge: true
+    autoremove: true
+  become: true
+
+- name: Retire prometheus nginx site
+  when: retired_services_have_nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: prometheus
+      state: absent
+
+- name: Remove prometheus state and leftover config
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /mnt/services/prometheus
+    - /etc/prometheus
+    - /etc/default/prometheus
+  become: true
+
+# ---- fail2ban (dropped from lab,pug only; KEPT on fox + the test box) ----
+- name: Purge fail2ban on internal hosts
+  when: inventory_hostname in ['lab', 'pug']
+  apt:
+    name: fail2ban
+    state: absent
+    purge: true
+    autoremove: true
+  become: true
+
+- name: Remove fail2ban local overrides on internal hosts
+  when: inventory_hostname in ['lab', 'pug']
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/fail2ban/jail.local
+    - /etc/fail2ban/fail2ban.local
+    - /etc/fail2ban/jail.d/sshd.local
+    - /etc/fail2ban/action.d/sendmail-whois-lines.local
+  become: true
+
+# ---- netdata: drop the now-orphaned go.d collector configs ----
+# The netdata role stopped *deploying* these (redis everywhere; fail2ban on
+# lab/pug), but does not remove the files it already wrote. The redis.conf drop
+# is host-agnostic (no-op where redis never ran); the fail2ban.conf drop is
+# gated to lab/pug so fox + the test box keep their live collector.
+- name: Remove orphaned netdata redis collector config
+  file:
+    path: /etc/netdata/go.d/redis.conf
+    state: absent
+  become: true
+  register: retired_services_netdata_redis
+
+- name: Remove orphaned netdata fail2ban collector config (internal hosts)
+  when: inventory_hostname in ['lab', 'pug']
+  file:
+    path: /etc/netdata/go.d/fail2ban.conf
+    state: absent
+  become: true
+  register: retired_services_netdata_fail2ban
+
+- name: Probe for netdata
+  stat:
+    path: /usr/sbin/netdata
+  register: retired_services_netdata_bin
+  become: true
+
+# go.d.plugin only re-reads job configs on a reload/restart, so removing the
+# files above leaves the dead jobs running until netdata is poked. Restart only
+# when something was actually removed and netdata is installed (it isn't on the
+# box_deps test fixture).
+- name: Restart netdata to drop the removed collectors
+  when:
+    - retired_services_netdata_bin.stat.exists
+    - (retired_services_netdata_redis.changed) or (retired_services_netdata_fail2ban.changed | default(false))
+  systemd:
+    name: netdata.service
+    state: restarted
+  become: true

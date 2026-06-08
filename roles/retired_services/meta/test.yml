@@ -1,0 +1,6 @@
+# The teardown references nginx (site/conf_d removal) and podman (secret/network
+# removal), so route to box_deps where both are pre-baked (packer/seed_deps.yml)
+# rather than installed on every run. On a fresh fixture every retired service is
+# already absent, so the role exercises the idempotent no-op path end to end.
+machines:
+  box_deps:
