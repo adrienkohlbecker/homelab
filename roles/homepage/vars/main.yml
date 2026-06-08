@@ -22,7 +22,6 @@ homepage_bookmarks:
     - { name: Nexus,         abbr: NX, sub: nexus,        icon: sonatype-nexus-repository }
     - { name: MinIO,         abbr: MN, sub: minio,        icon: minio }
     - { name: Prometheus,    abbr: PR, sub: prometheus,   icon: prometheus }
-    - { name: Healthchecks,  abbr: HC, sub: healthchecks, icon: healthchecks }
     - { name: HyperDX,       abbr: HX, sub: hyperdx,      icon: hyperdx }
     - { name: InfluxDB,      abbr: IF, sub: influxdb,     icon: influxdb }
     - { name: Uptime Kuma,   abbr: UK, sub: kuma,         icon: uptime-kuma }
