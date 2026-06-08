@@ -264,7 +264,7 @@
   delay: 2
   until: >-
     ansible_check_mode
-    or ((tailscale_nodes.stdout | default('[]') | from_json)
+    or ((tailscale_nodes.stdout | default('[]', true) | from_json)
         | selectattr('user.name', 'equalto', tailscale_headscale_user)
         | selectattr('given_name', 'equalto', ansible_hostname | lower) | list | length > 0)
   become: true
@@ -283,11 +283,11 @@
 - name: register | Resolve this host's headscale node
   set_fact:
     tailscale_node_matches: >-
-      {{ (tailscale_nodes.stdout | default('[]') | from_json)
+      {{ (tailscale_nodes.stdout | default('[]', true) | from_json)
          | selectattr('user.name', 'equalto', tailscale_headscale_user)
          | selectattr('given_name', 'equalto', ansible_hostname | lower) | list }}
     tailscale_node: >-
-      {{ (tailscale_nodes.stdout | default('[]') | from_json)
+      {{ (tailscale_nodes.stdout | default('[]', true) | from_json)
          | selectattr('user.name', 'equalto', tailscale_headscale_user)
          | selectattr('given_name', 'equalto', ansible_hostname | lower)
          | list | first | default({}) }}
