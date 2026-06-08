@@ -3,7 +3,7 @@
   "syslog_body_scan": {
     "title": "Syslog body-scan",
     "description": "Catch-all for plain-text syslog lines with no structured level field. Infers severity from message-body keywords using the same vocabulary as roles/fluentbit/files/level_from_message.lua.",
-    "file-pattern": "(.*/)?(syslog|messages|unifi/.*)(\\.[0-9]+)?$",
+    "file-pattern": "(.*/)?(syslog|messages)(\\.[0-9]+)?$",
     "regex": {
       "rfc3164": {
         "pattern": "^(?<timestamp>[A-Z][a-z]{2} +\\d{1,2} \\d{2}:\\d{2}:\\d{2}) (?<host>\\S+) (?<ident>[^\\[:]+)(?:\\[\\d+\\])?:\\s+(?<body>.*)$"

@@ -9,13 +9,6 @@ name: fluentbit
 globals:
   # Signature: (tag, timestamp, group, metadata, record). All `any` -- selene
   # only needs to know the names exist and are callable.
-  parse_unifi:
-    args:
-      - type: any
-      - type: any
-      - type: any
-      - type: any
-      - type: any
   set_priority:
     args:
       - type: any

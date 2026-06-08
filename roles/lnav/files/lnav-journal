@@ -57,10 +57,6 @@ if [[ -n "$until" ]]; then
 fi
 
 log_paths=()
-if [[ -d /var/log/unifi && -r /var/log/unifi ]]; then
-	log_paths+=("/var/log/unifi/")
-fi
-
 if [[ -f /var/log/pihole/FTL.log && -r /var/log/pihole/FTL.log ]]; then
 	log_paths+=("/var/log/pihole/FTL.log")
 fi
