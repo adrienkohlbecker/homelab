@@ -58,39 +58,28 @@ if command -v uv >/dev/null && [ -f "$wt/pyproject.toml" ]; then
   uv sync --project "$wt" --quiet
 fi
 
-# notes submodule: register as a linked worktree of the main notes checkout so
-# `git -C notes worktree list` enumerates all active worktrees.  Put it on a
-# branch matching the parent worktree's branch so notes edits commit onto
-# <branch> (wt:merge integrates back into notes/main).  Non-fatal: offline or
-# missing main notes checkout yields a usable code worktree; a missing notes
-# branch just means wt:merge skips the notes step.
-# Idempotent: skip if already registered, or if the path exists via an old-style
-# submodule clone (different gitdir path — migrate by removing and re-running).
-if git -C "$wt" config -f "$wt/.gitmodules" --get submodule.notes.path >/dev/null 2>&1 &&
-   { [ -d "$repo/notes" ] && git -C "$repo/notes" rev-parse --git-dir >/dev/null 2>&1; }; then
-  if git -C "$repo/notes" worktree list --porcelain 2>/dev/null | grep -qxF "worktree $wt/notes"; then
-    : # already registered as a worktree — nothing to do
-  elif [ -e "$wt/notes/.git" ]; then
-    : # path exists via old-style submodule clone — leave it alone
-  else
-    branch=$(git -C "$wt" symbolic-ref --short -q HEAD || true)
-    gitlink=$(git -C "$wt" rev-parse "HEAD:notes" 2>/dev/null || true)
-    if [ -n "$branch" ] && [ "$branch" != master ]; then
-      if git -C "$repo/notes" rev-parse --verify -q "refs/heads/$branch" >/dev/null 2>&1; then
-        # Branch exists — --force allows reusing a branch already checked out in
-        # another worktree (e.g. two sessions working the same task branch)
-        git -C "$repo/notes" worktree add --force "$wt/notes" "$branch" >/dev/null ||
-          echo "worktree:populate: notes worktree add failed" >&2
-      else
-        # Branch doesn't exist — create it at the gitlink commit so notes starts
-        # at the same recorded submodule pointer as the parent worktree
-        git -C "$repo/notes" worktree add -b "$branch" "$wt/notes" ${gitlink:+"$gitlink"} >/dev/null ||
-          echo "worktree:populate: notes worktree add failed" >&2
-      fi
-    else
-      # master / detached parent: detach notes at the gitlink commit
-      git -C "$repo/notes" worktree add --detach "$wt/notes" ${gitlink:+"$gitlink"} >/dev/null ||
-        echo "worktree:populate: notes worktree add failed" >&2
+# notes submodule: populate it and put it on a branch matching the parent
+# worktree's branch, so notes edits here commit onto <branch> (which wt:merge
+# later integrates into notes/main). A detached worktree (agent isolation, where
+# new==base) has no parent branch -> notes stays detached at the recorded SHA.
+# Non-fatal: an offline create still yields a usable code worktree, and a
+# missing notes branch just means wt:merge skips the notes step.
+#
+# Clone from the local notes checkout rather than origin so that unpushed
+# commits (notes/main ahead of origin/main) are reachable.  After init,
+# restore the real remote URL so future fetches/pushes work.
+if git -C "$wt" config -f "$wt/.gitmodules" --get submodule.notes.path >/dev/null 2>&1; then
+  notes_origin=$(git -C "$repo/notes" remote get-url origin 2>/dev/null || true)
+  if git -C "$wt" -c "submodule.notes.url=$repo/notes" -c "protocol.file.allow=always" submodule update --init notes >/dev/null 2>&1; then
+    if [ -n "$notes_origin" ]; then
+      git -C "$wt/notes" remote set-url origin "$notes_origin" 2>/dev/null || true
     fi
+    branch=$(git -C "$wt" symbolic-ref --short -q HEAD || true)
+    if [ -n "$branch" ] && [ "$branch" != master ] &&
+      ! git -C "$wt/notes" rev-parse --verify -q "$branch" >/dev/null; then
+      git -C "$wt/notes" switch -c "$branch" >/dev/null
+    fi
+  else
+    echo "worktree:populate: notes submodule init skipped (offline?)" >&2
   fi
 fi
