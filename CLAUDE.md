@@ -9,6 +9,7 @@ This is a home environment, not a corporate production site. Tie-breakers when t
 - **Wife-acceptance-factor is real.** Household-depended services (home-assistant, z2m, media, dns) have higher cost-of-failure than operator-only infra. Visible breakage outweighs elegance.
 - **Elegance applies at every scale.** Simple problems deserve simple solutions. Complex problems can warrant complex solutions — a layered role system, a multi-stage pipeline — but the design must stay coherent and followable. The failure mode is not complexity itself; it is complexity that grew without a clear shape or obscures rather than expresses what it does.
 - **Functional tests over stat checks.** Always try to exercise code and configuration against a real running system. Stat-only checks (file exists, service enabled, configuration set) drift toward tautology — they prove the role ran, not that the service works. Fall back to them only when functional testing is genuinely impossible.
+- **Not everything must be codified.** Codify the *platform* — the service, its reverse proxy, its secrets, its backups. But state that lives in a service's own UI/DB — Uptime-Kuma monitors, Healthchecks checks — is an accepted exception: configure it in the app and let it ride the ZFS snapshots, with the intent captured in a runbook. Don't contort Ansible (fragile sqlite seeds, unofficial APIs) to own monitor definitions. UI-managed monitoring is not a disqualifier when choosing a mechanism.
 
 ## Hard Rules — DO NOT
 
