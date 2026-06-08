@@ -1,0 +1,3 @@
+# Set true on hosts that receive UDM syslog UDP on service_ports.udm_syslog.
+# Superseded by the udm_syslog role (rsyslog → /var/log/unifi/); defaults false.
+fluentbit_udm_input: false
