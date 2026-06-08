@@ -243,9 +243,6 @@ mirror_apt_ubuntu_archive: 'http://{{ nexus_url ~ "/repository/ubuntu-archive" i
 mirror_apt_ubuntu_security: 'http://{{ nexus_url ~ "/repository/ubuntu-security" if nexus_url else "security.ubuntu.com/ubuntu" }}'
 mirror_apt_ubuntu_ports: 'http://{{ nexus_url ~ "/repository/ubuntu-ports" if nexus_url else "ports.ubuntu.com/ubuntu-ports" }}'
 mirror_apt_azlux: 'https://{{ nexus_url ~ "/repository/azlux-debian" if nexus_url else "packages.azlux.fr/debian" }}'
-# Node.js major version -- single source for the apt mirror, pin and _verify.
-nodejs_major: 22
-mirror_apt_nodesource: 'https://{{ nexus_url ~ "/repository/nodesource-node" ~ nodejs_major if nexus_url else "deb.nodesource.com/node_" ~ nodejs_major ~ ".x" }}'
 mirror_apt_netdata: 'https://{{ nexus_url ~ "/repository/netdata" if nexus_url else "repo.netdata.cloud/repos/stable/ubuntu" }}'
 mirror_apt_fluentbit: 'https://{{ nexus_url ~ "/repository/fluentbit" if nexus_url else "packages.fluentbit.io/ubuntu" }}'
 mirror_apt_docker: 'https://{{ nexus_url ~ "/repository/docker-ce" if nexus_url else "download.docker.com/linux/ubuntu" }}'

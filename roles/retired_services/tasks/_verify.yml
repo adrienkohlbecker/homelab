@@ -83,3 +83,13 @@
       teardown left a podman secret/network behind.
       secrets={{ retired_services_podman_ls.results[0].stdout_lines }}
       networks={{ retired_services_podman_ls.results[1].stdout_lines }}
+
+- name: _verify | NodeSource apt source, keyring, and pin are absent
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/share/keyrings/nodesource.gpg
+    - /etc/apt/sources.list.d/nodesource.list
+    - /etc/apt/preferences.d/nodesource
+  register: retired_services_nodesource_files
+  failed_when: retired_services_nodesource_files.stat.exists

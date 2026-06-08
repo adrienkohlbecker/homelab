@@ -372,3 +372,35 @@
     name: netdata.service
     state: restarted
   become: true
+
+# ---- nodejs (was box,lab) ----
+# Host-level node had no consumer: CI runs in containers whose image ships its
+# own node, the actions/runner bundles node for JS actions, and nothing else on
+# the host called node/npm. Gate the purge on the NodeSource keyring (the role's
+# fingerprint) so a node installed by some other means elsewhere is left alone;
+# the source/keyring/pin removals are role-specific filenames, safe anywhere.
+- name: Probe for the retired NodeSource apt source
+  stat:
+    path: /usr/share/keyrings/nodesource.gpg
+  register: retired_services_nodesource
+  become: true
+
+- name: Purge host-level nodejs where the NodeSource source was present
+  when: retired_services_nodesource.stat.exists
+  apt:
+    name: nodejs
+    state: absent
+    purge: true
+    autoremove: true
+  become: true
+
+- name: Remove the NodeSource apt source, keyring, and pin
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/share/keyrings/nodesource.gpg
+    - /etc/apt/sources.list.d/nodesource.list
+    - /etc/apt/sources.list.d/nodesource.sources
+    - /etc/apt/preferences.d/nodesource
+  become: true

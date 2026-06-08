@@ -165,3 +165,19 @@
     nginx_site_args:
       subdomain: openproject
       proxy_pass: http://127.0.0.1:9/
+
+# Stand in for the retired nodejs role's NodeSource apt source + keyring + pin
+# (the nodejs package itself isn't installed: the teardown's purge no-ops on a
+# fixture without it, and the keyring fingerprint still drives the gate).
+- name: _setup | Plant NodeSource apt source, keyring, and pin
+  copy:
+    dest: "{{ item }}"
+    content: "# stale\n"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - /usr/share/keyrings/nodesource.gpg
+    - /etc/apt/sources.list.d/nodesource.list
+    - /etc/apt/preferences.d/nodesource
+  become: true
