@@ -9,8 +9,8 @@ macos_vm_vcpus: 4
 macos_vm_cpu_pinset: ""  # comma-separated list, e.g. "0,2,4,6". Empty = no pinning.
 macos_vm_memory_mib: 12288  # 12 GiB
 
-# Domain type: kvm for production (real x86 host); qemu for cross-arch
-# test (TCG software emulation). Selected via host_vars in test variants.
+# Domain type: kvm for production on a real x86 host. The role switches this
+# to qemu under qemu_test so libvirt can validate the x86_64 domain with TCG.
 macos_vm_domain_type: kvm
 
 # SMBIOS profile. iMacPro1,1 supports Sequoia and is the OSX-KVM default.
@@ -45,3 +45,8 @@ macos_vm_autostart: false
 # and per-VM working files (one subdir per VM).
 macos_vm_artifacts_dir: /var/lib/libvirt/images/macos-vm/_artifacts
 macos_vm_workdir: "/var/lib/libvirt/images/macos-vm/{{ macos_vm_name }}"
+
+# qemu_test fixture values. _setup.yml fabricates the matching by-id symlink
+# over a loopback disk; install mode stays off so tests avoid the large recovery
+# image download.
+macos_vm_qemu_test_disk_id: ata-MACOS_VM_TEST_DISK

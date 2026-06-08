@@ -5,11 +5,15 @@
       - z2m_network_key | length > 0
       - mosquitto_accounts.z2m.password is defined
       - external_ips.tubeszb is defined
-      - z2m_start_service is defined
     fail_msg: >-
       z2m requires z2m_network_key, mosquitto_accounts.z2m.password,
-      external_ips.tubeszb, and z2m_start_service to be defined in
-      group_vars / host_vars.
+      and external_ips.tubeszb.
+  tags:
+    - z2m
+
+- name: Compute whether z2m can start on this host
+  set_fact:
+    z2m_should_start: "{{ (z2m_start_service | bool) and not (qemu_test | bool) }}"
   tags:
     - z2m
 
@@ -139,7 +143,7 @@
       src: z2m
       condition: "{{ not (ansible_check_mode and (z2m_service_result.changed or z2m_user.changed)) }}"
       restart: "{{ z2m_service_result.changed or z2m_conf.changed or z2m_secret.changed or z2m_devices.changed or z2m_cover_patch.changed or z2m_devices_perms.changed }}"
-      start: "{{ z2m_start_service }}"
+      start: "{{ z2m_should_start }}"
   tags:
     - z2m
 

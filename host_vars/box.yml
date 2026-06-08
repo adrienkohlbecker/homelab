@@ -4,8 +4,8 @@
 # with. Single-disk rpool only (no apoc/dozer/tank/mouse) -- producer
 # roles still run but their datasets land flat under the global rpool
 # defaults. Lab-prod's multi-pool shape is exercised by --machine lab/pug
-# nightly. Everything qemu-only lives here directly (box is in [test], so
-# ansible loads this file with no -e overlay).
+# nightly. Machine-shape qemu values live here directly; role-specific qemu
+# behavior belongs in the roles behind qemu_test gates.
 qemu_test: true
 
 # Volatile: VM is ephemeral and persistent journals would write to rpool
@@ -54,17 +54,6 @@ zfs_has_brumath_mount: false
 zfs_has_eckwersheim_mount: false
 zfs_has_minio_mount: false
 
-# A sensorless qemu box can't bind the prod drivers (drivetemp/coretemp/
-# nct6775 -- no matching hardware), so under the lm_sensors test we load a
-# single module that loads cleanly anywhere, purely to exercise the
-# modules-load + live-modprobe path (_verify asserts it landed and loaded).
-# Keyed on _role_under_test so every other role tested on box keeps [].
-lm_sensors_modules: "{{ ['dummy'] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
-# Test relabel entry exercised by lm_sensors/_verify.yml (finding 11's
-# go.d template path); only set under the lm_sensors test, like the modules
-# above. main.yml ignores lm_sensors_relabel -- it's consumed only by netdata.yml.
-lm_sensors_relabel: "{{ [{'chip': 'lm-sensors-test-0', 'sensors': [{'name': 'temp1', 'label': 'Verify Probe'}]}] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
-
 # Two blocks on the same en* parent: exercises the multi-block iteration
 # in main.yml's loop, distinct MAC seeds across sibling blocks, and two
 # podman macvlan networks coexisting on one parent NIC. Prod-shape uses
@@ -88,17 +77,6 @@ macvlan_blocks:
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
     block: "{{ network.sites.home.vlans.iot.cidr | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}"
     podman_network: true
-
-# macos_vm test fixture: matches the symlink _setup.yml fabricates over
-# a loopback file. install_mode=false skips the 700 MB BaseSystem.dmg
-# download so the test stays under a couple of minutes.
-macos_vm_disk_id: ata-MACOS_VM_TEST_DISK
-macos_vm_macvtap_parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-macos_vm_install_mode: false
-macos_vm_autostart: false
-# TCG (software) emulation lets libvirt define + validate the x86_64
-# domain XML on aarch64 hosts where /dev/kvm doesn't fit (or doesn't exist).
-macos_vm_domain_type: qemu
 
 # Override prod-style MAC-matching netplan: the QEMU VM ships a single
 # virtio-net with a fresh MAC, so match by name like everything in
@@ -127,18 +105,6 @@ zfs_autobackup_sources:
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFyjxLhHELJkvSWbVs696fArHKeBM6k6EvmqDckAic5Z root@box
 
 pihole_keepalived_priority: 5
-
-# udm_dns_failover normally targets the UDM (a UniFi OS appliance, hosts:
-# udm). The box fixture exercises its portable surface. br0 doesn't exist
-# here and keepalived refuses lo/dummy ifaces (no multicast), so track the
-# VM's default NIC instead of the UDM's bridge. external_ips[box] (the prod
-# LAN IP) isn't local on the SLIRP VM, but the role sets ip_nonlocal_bind=1
-# before keepalived starts, so the unicast source still binds; alone on the
-# closed bridge box becomes MASTER and claims the VIP (scenario: the
-# catastrophic dual-peer failover this role exists for). The heartbeat URL
-# comes from group_vars/test.yml (a discard endpoint — the Kuma host isn't
-# reachable over SLIRP); _verify asserts the timer is active, not the ping.
-udm_dns_failover_interface: "{{ ansible_default_ipv4.interface }}"
 
 # box runs fail2ban (it's in the box,fox play as the test fixture for fox);
 # this flag tells netdata to deploy the fail2ban collector + alert here, and
@@ -214,13 +180,6 @@ gitea_runner_labels:
 # runtime VAAPI probe inside the container falls back to software, but
 # the ansible-side machinery and container's view of /dev get covered.
 has_transcoding_acceleration: true
-# Don't start z2m under qemu: it brings the frontend up only AFTER the serial
-# adapter connects, so with no Zigbee coordinator the container throws in
-# controller.start() and never serves a port -- it cannot reach `healthy`
-# without emulating a Z-Stack coordinator. _verify covers the config/unit/nginx
-# surface instead (see roles/z2m/tasks/_verify.yml).
-z2m_start_service: false
-
 # Stub instance so the github_runner role exercises its per-
 # instance code path under qemu_test (host-level PAT secret creation,
 # per-instance env file write + workdir create, templated unit loads

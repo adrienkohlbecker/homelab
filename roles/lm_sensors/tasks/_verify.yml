@@ -1,5 +1,5 @@
 # The harness runs main.yml (apt + modules-load + live modprobe) on its own
-# with box's test lm_sensors_modules; this file asserts that took effect, then
+# with the qemu_test module fixture; this file asserts that took effect, then
 # exercises the netdata collector arm (normally invoked from
 # roles/netdata/tasks/main.yml).
 #
@@ -10,7 +10,16 @@
 # the copy helper seeds from. Live charting therefore can't be verified here
 # (it's observed on prod); instead we verify modules load for real, and that
 # netdata.yml renders + deploys a valid go.d config including the relabel
-# template path (host_vars/box.yml feeds a test lm_sensors_relabel).
+# template path.
+
+- name: _verify | Select expected qemu sensor fixture values
+  set_fact:
+    lm_sensors_effective_modules: >-
+      {{ lm_sensors_qemu_test_modules
+         if (qemu_test | bool) else lm_sensors_modules }}
+    lm_sensors_effective_relabel: >-
+      {{ lm_sensors_qemu_test_relabel
+         if (qemu_test | bool) else lm_sensors_relabel }}
 
 - name: _verify | Read the modules-load.d file
   slurp:
@@ -21,14 +30,14 @@
 - name: _verify | Assert it lists exactly lm_sensors_modules
   assert:
     that:
-      - (_lm_sensors_modload.content | b64decode).split() == lm_sensors_modules
+      - (_lm_sensors_modload.content | b64decode).split() == lm_sensors_effective_modules
     fail_msg: >-
       /etc/modules-load.d/lm_sensors.conf = {{ _lm_sensors_modload.content | b64decode | trim }};
-      expected {{ lm_sensors_modules }}
+      expected {{ lm_sensors_effective_modules }}
 
 - name: _verify | Assert each module is loaded in the running kernel
   command: grep -qw {{ item | replace('-', '_') }} /proc/modules
-  loop: "{{ lm_sensors_modules }}"
+  loop: "{{ lm_sensors_effective_modules }}"
   changed_when: false
   become: true
 
@@ -95,7 +104,8 @@
 
 - name: _verify | Switch to an empty module list
   set_fact:
-    lm_sensors_modules: []
+    lm_sensors_qemu_test_modules: []
+    lm_sensors_qemu_test_relabel: []
 
 - name: _verify | Re-run the role's module-management tasks
   import_tasks: main.yml

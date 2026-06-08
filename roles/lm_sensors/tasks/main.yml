@@ -1,11 +1,22 @@
+- name: Select sensor module and relabel inputs for this host
+  set_fact:
+    lm_sensors_effective_modules: >-
+      {{ lm_sensors_qemu_test_modules
+         if (qemu_test | bool) else lm_sensors_modules }}
+    lm_sensors_effective_relabel: >-
+      {{ lm_sensors_qemu_test_relabel
+         if (qemu_test | bool) else lm_sensors_relabel }}
+  tags:
+    - lm_sensors
+
 - name: Assert lm_sensors_modules is a list of valid module names
   assert:
     that:
-      - lm_sensors_modules is not string
-      - lm_sensors_modules | reject('match', '^[a-z0-9_-]+\Z') | list | length == 0
+      - lm_sensors_effective_modules is not string
+      - lm_sensors_effective_modules | reject('match', '^[a-z0-9_-]+\Z') | list | length == 0
     fail_msg: >-
       lm_sensors_modules must be a list of kernel module names (lowercase letters,
-      digits, underscore, hyphen). Got: {{ lm_sensors_modules }}
+      digits, underscore, hyphen). Got: {{ lm_sensors_effective_modules }}
   tags:
     - lm_sensors
 
@@ -45,7 +56,7 @@
     lm_sensors_dropped: >-
       {{ ((lm_sensors_modload_old.content | default('') | b64decode).split()
           if lm_sensors_modload_stat.stat.exists else [])
-         | difference(lm_sensors_modules) }}
+         | difference(lm_sensors_effective_modules) }}
   tags:
     - lm_sensors
 
@@ -55,20 +66,20 @@
 # driver is loaded -- so this also brings sensors (and their netdata charts)
 # up immediately instead of waiting for the next boot.
 - name: Load sensor modules now
-  when: lm_sensors_modules | length > 0
+  when: lm_sensors_effective_modules | length > 0
   modprobe:
     name: "{{ item }}"
     state: present
-  loop: "{{ lm_sensors_modules }}"
+  loop: "{{ lm_sensors_effective_modules }}"
   become: true
   tags:
     - lm_sensors
 
 - name: Persist the sensor module list for boot
-  when: lm_sensors_modules | length > 0
+  when: lm_sensors_effective_modules | length > 0
   copy:
     dest: /etc/modules-load.d/lm_sensors.conf
-    content: "{{ lm_sensors_modules | join('\n') }}\n"
+    content: "{{ lm_sensors_effective_modules | join('\n') }}\n"
     mode: "0644"
     owner: root
     group: root
@@ -78,7 +89,7 @@
     - lm_sensors
 
 - name: Remove the persisted module list when empty
-  when: lm_sensors_modules | length == 0
+  when: lm_sensors_effective_modules | length == 0
   file:
     path: /etc/modules-load.d/lm_sensors.conf
     state: absent

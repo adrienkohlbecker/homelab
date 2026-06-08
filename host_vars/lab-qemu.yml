@@ -13,8 +13,6 @@ zfs_has_brumath_mount: false
 zfs_has_eckwersheim_mount: false
 zfs_has_minio_mount: false
 
-z2m_start_service: false
-
 # Same block formula as host_vars/lab.yml; only `parent` differs (the
 # QEMU NIC isn't named eth0 and isn't VLAN-trunked, so all macvlan
 # children sit on the single en* user-net iface). The harness pins
@@ -26,17 +24,6 @@ macvlan_blocks:
   - name: mac_mgmt
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
     block: "{{ network.sites.home.vlans.management.cidr | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}"
-
-# macos_vm test fixture: matches the symlink _setup.yml fabricates over
-# a loopback file. install_mode=false skips the 700 MB BaseSystem.dmg
-# download so the test stays under a couple of minutes.
-macos_vm_disk_id: ata-MACOS_VM_TEST_DISK
-macos_vm_macvtap_parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-macos_vm_install_mode: false
-macos_vm_autostart: false
-# TCG (software) emulation lets libvirt define + validate the x86_64
-# domain XML on aarch64 hosts where /dev/kvm doesn't fit (or doesn't exist).
-macos_vm_domain_type: qemu
 
 has_transcoding_acceleration: false
 
