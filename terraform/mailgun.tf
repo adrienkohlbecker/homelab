@@ -10,7 +10,7 @@
 #
 # Surfaces intentionally NOT under tofu:
 #
-# - mailgun_domain_credential (the 5 SMTP creds). Passwords live in
+# - mailgun_domain_credential (the 4 SMTP creds). Passwords live in
 #   group_vars/prod.yml as ansible-vault entries and are consumed
 #   directly by service roles. Bringing them under tofu would require
 #   a terraform-output -> ansible-vault sync mechanism (vault is
