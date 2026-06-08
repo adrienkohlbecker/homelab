@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+/var/log/unifi/unifi.log {
+    daily
+    rotate 14
+    {{ zfs_root | ternary("# compress # zfs already compresses disk contents", "compress") }}
+    delaycompress
+    missingok
+    notifempty
+    postrotate
+        /usr/lib/rsyslog/rsyslog-rotate
+    endscript
+}
