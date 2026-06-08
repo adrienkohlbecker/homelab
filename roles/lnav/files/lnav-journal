@@ -24,4 +24,5 @@ exec lnav \
   -c ':filter-out homepage-alerts/1' \
   -c ':filter-out type=SERVICE_(START|STOP).*unit=[a-f0-9]{64}' \
   /var/log/journal/ \
+  /var/log/unifi/ \
   "$@"
