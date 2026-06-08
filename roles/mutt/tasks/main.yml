@@ -198,5 +198,3 @@
       restart: "{{ mnt_services_mutt_archive_mount_result.changed }}"
   tags:
     - mutt
-  tags:
-    - mutt
