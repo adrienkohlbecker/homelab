@@ -324,23 +324,31 @@
     - /etc/fail2ban/action.d/sendmail-whois-lines.local
   become: true
 
-# ---- netdata: drop the now-orphaned go.d collector configs ----
-# The netdata role stopped *deploying* these (redis everywhere; fail2ban on
-# lab/pug), but does not remove the files it already wrote. The redis.conf drop
-# is host-agnostic (no-op where redis never ran); the fail2ban.conf drop is
-# gated to lab/pug so fox + the test box keep their live collector.
-- name: Remove orphaned netdata redis collector config
+# ---- netdata: drop the now-orphaned collector configs AND health alerts ----
+# The netdata role stopped *deploying* these (redis + keepalived everywhere;
+# fail2ban on lab/pug) but does not remove the go.d/ collector configs and
+# health.d/ alert files it already wrote. The redis collector + keepalived
+# alert drops are host-agnostic (no-op where they never landed); the fail2ban
+# pair is gated to lab/pug so fox + the test box keep their live fail2ban
+# collector and alert.
+- name: Remove orphaned netdata configs for removed collectors (all hosts)
   file:
-    path: /etc/netdata/go.d/redis.conf
+    path: "{{ item }}"
     state: absent
+  loop:
+    - /etc/netdata/go.d/redis.conf
+    - /etc/netdata/health.d/keepalived.conf
   become: true
-  register: retired_services_netdata_redis
+  register: retired_services_netdata_common
 
-- name: Remove orphaned netdata fail2ban collector config (internal hosts)
+- name: Remove orphaned netdata fail2ban collector and alert (internal hosts)
   when: inventory_hostname in ['lab', 'pug']
   file:
-    path: /etc/netdata/go.d/fail2ban.conf
+    path: "{{ item }}"
     state: absent
+  loop:
+    - /etc/netdata/go.d/fail2ban.conf
+    - /etc/netdata/health.d/fail2ban.conf
   become: true
   register: retired_services_netdata_fail2ban
 
@@ -350,14 +358,14 @@
   register: retired_services_netdata_bin
   become: true
 
-# go.d.plugin only re-reads job configs on a reload/restart, so removing the
-# files above leaves the dead jobs running until netdata is poked. Restart only
-# when something was actually removed and netdata is installed (it isn't on the
-# box_deps test fixture).
-- name: Restart netdata to drop the removed collectors
+# go.d.plugin re-reads job configs and health re-reads alert files only on a
+# reload/restart, so removing the files above leaves the dead jobs/alarms
+# loaded until netdata is poked. Restart only when something was actually
+# removed and netdata is installed (it isn't on the box_deps test fixture).
+- name: Restart netdata to drop the removed collectors and alerts
   when:
     - retired_services_netdata_bin.stat.exists
-    - (retired_services_netdata_redis.changed) or (retired_services_netdata_fail2ban.changed | default(false))
+    - retired_services_netdata_common.changed or (retired_services_netdata_fail2ban.changed | default(false))
   systemd:
     name: netdata.service
     state: restarted

@@ -1,0 +1,167 @@
+# Plant representative artifacts of the decommissioned services so the
+# converge exercises the real removal path (not just the fresh-host no-op):
+# systemd units, /mnt/services state, the redis sysctl drop-in, stale netdata
+# go.d/health.d files, podman secrets + network, and one nginx vhost. _verify
+# asserts every one is gone after converge. box_deps has podman + nginx but no
+# netdata, so the netdata files are planted as plain files (the converge removes
+# them; its netdata restart is presence-gated and skips here).
+#
+# podman/nginx planting is presence-guarded so this runs on both the default
+# `box` fixture (no podman/nginx -> exercises the unit/dir/file removals) and
+# box_deps (full coverage incl. podman secrets/network + the nginx vhost).
+- name: _setup | Probe for podman and nginx
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/bin/podman
+    - /usr/sbin/nginx
+  register: retired_services_setup_tools
+  become: true
+
+- name: _setup | Resolve tool presence
+  set_fact:
+    retired_services_setup_podman: "{{ retired_services_setup_tools.results[0].stat.exists }}"
+    retired_services_setup_nginx: "{{ retired_services_setup_tools.results[1].stat.exists }}"
+
+- name: _setup | Plant stub systemd units for the retired services
+  copy:
+    dest: "/etc/systemd/system/{{ item }}.service"
+    content: |
+      [Unit]
+      Description=retired_services test stub ({{ item }})
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/true
+      RemainAfterExit=yes
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - openproject
+    - paperless
+    - redis
+    - compta
+    - keepalived_exporter
+  become: true
+
+- name: _setup | Enable the stub units (so teardown's disable is exercised)
+  systemd:
+    name: "{{ item }}.service"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop:
+    - openproject
+    - paperless
+    - redis
+    - compta
+    - keepalived_exporter
+  become: true
+
+- name: _setup | Plant /mnt/services state dirs
+  file:
+    path: "/mnt/services/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - openproject
+    - paperless
+    - redis
+    - prometheus
+  become: true
+
+- name: _setup | Drop content into the state dirs (proves recursive removal)
+  copy:
+    dest: "/mnt/services/{{ item }}/marker"
+    content: "stale state\n"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - openproject
+    - paperless
+    - redis
+    - prometheus
+  become: true
+
+- name: _setup | Plant the redis sysctl drop-in
+  copy:
+    dest: /etc/sysctl.d/30-redis.conf
+    content: "vm.overcommit_memory = 1\n"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Ensure netdata config dirs exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/netdata/go.d
+    - /etc/netdata/health.d
+  become: true
+
+# redis collector + keepalived alert are removed on every host; the fail2ban
+# pair is removed only on lab/pug (fox + box keep fail2ban), so plant those two
+# only where the teardown will remove them — else _verify would (correctly)
+# still find them on box.
+- name: _setup | Plant stale netdata files removed on all hosts
+  copy:
+    dest: "{{ item }}"
+    content: "# stale\n"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - /etc/netdata/go.d/redis.conf
+    - /etc/netdata/health.d/keepalived.conf
+  become: true
+
+- name: _setup | Plant stale netdata fail2ban files (internal hosts only)
+  when: inventory_hostname in ['lab', 'pug']
+  copy:
+    dest: "{{ item }}"
+    content: "# stale\n"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - /etc/netdata/go.d/fail2ban.conf
+    - /etc/netdata/health.d/fail2ban.conf
+  become: true
+
+- name: _setup | Plant podman secrets
+  when: retired_services_setup_podman
+  containers.podman.podman_secret:
+    name: "{{ item }}"
+    data: "stub"
+    state: present
+  loop:
+    - redis_password
+    - openproject_secret_key
+  become: true
+
+- name: _setup | Plant the redis podman network
+  when: retired_services_setup_podman
+  containers.podman.podman_network:
+    name: redis
+    state: present
+  become: true
+
+- name: _setup | Plant an nginx vhost for a retired service
+  when: retired_services_setup_nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: openproject
+      proxy_pass: http://127.0.0.1:9/

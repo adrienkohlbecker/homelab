@@ -1,7 +1,6 @@
-# Confirms the teardown reaches the intended end state: the decommissioned
-# units are gone (not merely stopped) and the service state directories are
-# absent. On the box_deps fixture nothing was present to begin with, so this
-# asserts the role leaves the host clean rather than half-creating anything.
+# _setup planted a representative artifact for each removal mechanism; assert
+# the converge removed every one. This exercises the destructive path the role
+# exists for, not just fresh-host absence.
 - name: _verify | Decommissioned unit files are absent
   stat:
     path: "/etc/systemd/system/{{ item }}"
@@ -24,3 +23,63 @@
     - /mnt/services/prometheus
   register: retired_services_dirs
   failed_when: retired_services_dirs.stat.exists
+
+- name: _verify | Redis sysctl drop-in and host-agnostic netdata files are absent
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/sysctl.d/30-redis.conf
+    - /etc/netdata/go.d/redis.conf
+    - /etc/netdata/health.d/keepalived.conf
+  register: retired_services_files
+  failed_when: retired_services_files.stat.exists
+
+# fox + box keep fail2ban, so its netdata files are removed (and thus asserted
+# absent) only on the internal hosts where the teardown drops them.
+- name: _verify | Netdata fail2ban files are absent (internal hosts only)
+  when: inventory_hostname in ['lab', 'pug']
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/netdata/go.d/fail2ban.conf
+    - /etc/netdata/health.d/fail2ban.conf
+  register: retired_services_fail2ban_files
+  failed_when: retired_services_fail2ban_files.stat.exists
+
+- name: _verify | Retired nginx vhost is gone (sites-available + sites-enabled)
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/nginx/sites-available/openproject
+    - /etc/nginx/sites-enabled/openproject
+  register: retired_services_vhost
+  failed_when: retired_services_vhost.stat.exists
+
+# podman checks only on fixtures that have podman (box_deps); on the default
+# box fixture _setup skipped the podman planting, so there's nothing to assert.
+- name: _verify | Probe for podman
+  stat:
+    path: /usr/bin/podman
+  register: retired_services_verify_podman
+
+- name: _verify | Capture remaining podman secrets and networks
+  when: retired_services_verify_podman.stat.exists
+  command: "podman {{ item }} ls --format {{ '{{.Name}}' }}"
+  loop:
+    - secret
+    - network
+  register: retired_services_podman_ls
+  changed_when: false
+  become: true
+
+- name: _verify | Retired podman secrets and network are gone
+  when: retired_services_verify_podman.stat.exists
+  assert:
+    that:
+      - "'redis_password' not in retired_services_podman_ls.results[0].stdout_lines"
+      - "'openproject_secret_key' not in retired_services_podman_ls.results[0].stdout_lines"
+      - "'redis' not in retired_services_podman_ls.results[1].stdout_lines"
+    fail_msg: >-
+      teardown left a podman secret/network behind.
+      secrets={{ retired_services_podman_ls.results[0].stdout_lines }}
+      networks={{ retired_services_podman_ls.results[1].stdout_lines }}
