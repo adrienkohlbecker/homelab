@@ -222,7 +222,6 @@ service_ports:
   tautulli: 8182
   transmission: 9091
   transmission_bt: 51413
-  udm_syslog: 5140
   wireguard: 51820
   wolweb: 8089
   z2m: 8081

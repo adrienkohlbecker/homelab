@@ -49,7 +49,6 @@
     - socket_proxy
     - netdata
     - fluentbit
-    - udm_syslog
     # Tear down decommissioned service state (drop once prod has re-converged).
     - retired_services
 

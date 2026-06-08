@@ -280,24 +280,6 @@
     storage.type      filesystem
     storage.pause_on_chunks_overlimit  on
 
-{% if fluentbit_udm_input %}
-# UniFi SIEM syslog: the UDM + APs + switches forward device and
-# system logs as RFC 3164 UDP syslog. Bound to this host's management
-# IP so only the local LAN can reach it (firewall scopes to the mgmt
-# VLAN). Uses a `udp` input + custom parser instead of the `syslog`
-# input because UniFi's ident field contains commas and plus signs
-# (e.g. "e063da...,UAP-nanoHD-6.7.41+15623") that the stock
-# syslog-rfc3164 parser's `[a-zA-Z0-9_\/\.\-]*` rejects.
-[INPUT]
-    Name              udp
-    Tag               unifi
-    Listen            {{ ansible_ssh_host }}
-    Port              {{ service_ports.udm_syslog }}
-    Format            none
-    Chunk_Size        32k
-    storage.type      filesystem
-    storage.pause_on_chunks_overlimit  on
-{% endif %}
 
 # keepalived emits "Printing VRRP as json for process(N) on signal" at
 # LOG_INFO every time netdata's prometheus collector scrapes it (default
@@ -429,25 +411,6 @@
     flush_ms          1000
     emitter_name      multiline_emitter
     emitter_storage.type  filesystem
-
-{% if fluentbit_udm_input %}
-# Parse raw UniFi syslog into structured fields. The udp input delivers
-# the whole RFC 3164 line as `log`; parse_unifi.lua handles all three
-# wire shapes (gateway daemon syslog, AP/switch device syslog, and CEF
-# events), sets `log` to the human-readable body, stamps severity from
-# the syslog PRI, and leaves the extracted fields on the record for
-# otlp_shape.lua to lift into LogAttributes. A Lua filter rather than a
-# `parser` filter because CEF can't be expressed as a fixed regex: its
-# extension is a variable set of space-separated key=value pairs whose
-# values themselves contain spaces. See the script header for the
-# deliberate choice to keep the ingestion timestamp (the syslog stamp
-# has no year/timezone and would land records in the future).
-[FILTER]
-    Name              lua
-    Match             unifi
-    script            /etc/fluent-bit/parse_unifi.lua
-    call              parse_unifi
-{% endif %}
 
 # Two record-shaping passes that apply to every record:
 # (a) Stamp inventory_hostname as `host` so cross-stream queries in
