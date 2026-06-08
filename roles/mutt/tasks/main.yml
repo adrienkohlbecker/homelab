@@ -139,9 +139,9 @@
   tags:
     - mutt
 
-# neomutt's header/body cache lives here (operator-owned, on the services
-# dataset) so reopening the multi-year archive doesn't re-parse every message
-# and nothing lands in the operator's dotfiles-managed $HOME.
+# neomutt's header cache lives here (operator-owned, on the services dataset)
+# so reopening the multi-year archive doesn't re-parse every message, and
+# nothing lands in the operator's dotfiles-managed $HOME.
 - name: Create neomutt cache directories
   file:
     path: "{{ item }}"
@@ -152,7 +152,6 @@
   loop:
     - /mnt/services/mutt
     - /mnt/services/mutt/headers
-    - /mnt/services/mutt/bodies
   become: true
   tags:
     - mutt
