@@ -38,12 +38,5 @@ if [ -n "$(git -C "$wt" status --porcelain)" ]; then
   echo "worktree:rm: $wt has uncommitted changes; commit/stash or remove it manually" >&2
   exit 1
 fi
-# If notes was registered as a worktree of the main notes checkout, remove it
-# first so the notes gitdir stays consistent.  The subsequent --force on the
-# parent removal then only needs to override the submodule-path guard for any
-# old-style submodule clone that wasn't migrated.
-if git -C "$repo/notes" worktree list --porcelain 2>/dev/null | grep -qxF "worktree $wt/notes"; then
-  git -C "$repo/notes" worktree remove "$wt/notes"
-fi
 git -C "$repo" worktree remove --force "$wt"
 git -C "$repo" branch -D "$usage_name" 2>/dev/null || true
