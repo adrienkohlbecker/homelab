@@ -43,7 +43,7 @@
       # Prove podman is actually *serving* the augmented profile as its
       # default — not just that the file on disk allows fchmodat2 (asserted
       # below). A containers.conf regression dropping the seccomp_profile line
-      # would silently revert to the stock profile and revive the roundcube 403.
+      # would silently revert to the stock profile and revive the fchmodat2 EPERM.
       - _info.host.security.seccompProfilePath == '/etc/containers/seccomp-fchmodat2.json'
     fail_msg: >-
       podman info disagrees with the role's containers.conf/storage.conf:
