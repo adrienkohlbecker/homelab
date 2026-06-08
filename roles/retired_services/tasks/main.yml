@@ -404,3 +404,21 @@
     - /etc/apt/sources.list.d/nodesource.sources
     - /etc/apt/preferences.d/nodesource
   become: true
+
+# ---- static_curl (was box,lab,pug) ----
+# The role installed a statically-linked curl at /usr/local/bin/curl_static for
+# distroless-image healthchecks, but no service ever bind-mounted it. Remove the
+# binary and the versioned download cache it left under /var/cache.
+- name: Find cached static-curl tarballs
+  find:
+    paths: /var/cache
+    patterns: "curl_static-*.tar.xz"
+  register: retired_services_static_curl_cache
+  become: true
+
+- name: Remove the static curl binary and cached tarballs
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ ['/usr/local/bin/curl_static'] + (retired_services_static_curl_cache.files | map(attribute='path') | list) }}"
+  become: true
