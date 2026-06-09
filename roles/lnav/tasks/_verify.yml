@@ -33,7 +33,7 @@
         Jun  8 08:00:02 lab kernel: info: loaded module xfs
     - path: /tmp/lnav_verify/lnav.jsonl
       content: |
-        {"time":"2026-06-08T12:34:56.789Z","host":"lab","service":"homeassistant","unit":"homeassistant.service","identifier":"homeassistant","level":"warn","level_number":13,"message":"connection failed","stream":"journald","fields":{"CONTAINER_NAME":"homeassistant","SYSTEMD_UNIT":"homeassistant.service","SYSLOG_IDENTIFIER":"homeassistant"}}
+        {"time":"2026-06-08T12:34:56.789Z","host":"lab","service":"homeassistant","unit":"homeassistant.service","identifier":"homeassistant","level":"warn","message":"connection failed","stream":"journald","fields":{"CONTAINER_NAME":"homeassistant","SYSTEMD_UNIT":"homeassistant.service","SYSLOG_IDENTIFIER":"homeassistant"}}
   tags:
     - lnav
 
@@ -89,6 +89,39 @@
   loop:
     - /tmp/lnav_verify/lnav.jsonl
     - /tmp/lnav_verify/syslog
+  tags:
+    - lnav
+
+# Headless render: the fluentbit_lnav format must show each record on a single
+# line -- the human message followed by the fields object as trailing JSON --
+# rather than expanding unit/fields/identifier/stream onto separate lines.
+- name: Lnav headless-renders the fluentbit_lnav sample
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  command:
+    argv:
+      - /usr/local/bin/lnav
+      - -n
+      - /tmp/lnav_verify/lnav.jsonl
+  register: lnav_render
+  changed_when: false
+  tags:
+    - lnav
+
+- name: Lnav renders message and fields JSON on one line
+  vars:
+    body_lines: "{{ lnav_render.stdout_lines | reject('match', '^\\s*$') | list }}"
+  assert:
+    that:
+      # The whole record renders as exactly one line: no unit/identifier/stream
+      # or any undeclared scalar expanding onto its own row.
+      - body_lines | length == 1
+      - "'connection failed' in body_lines[0]"
+      - "'CONTAINER_NAME' in body_lines[0]"
+    fail_msg: |
+      lnav did not render the record on a single line with trailing fields JSON.
+      stdout:
+      {{ lnav_render.stdout }}
   tags:
     - lnav
 
@@ -166,7 +199,7 @@
   copy:
     dest: /var/log/fluent-bit/lnav.jsonl
     content: |
-      {"time":"2026-06-08T12:34:56.789Z","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"info","level_number":9,"message":"lnav wrapper verification","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
+      {"time":"2026-06-08T12:34:56.789Z","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"info","message":"lnav wrapper verification","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
     mode: "0644"
   become: true
   tags:
