@@ -1,44 +1,7 @@
 #!/usr/bin/env bash
-#MISE description="Pre-commit hook: guard notes submodule consistency"
+#MISE description="Pre-commit hook"
 #MISE hide=true
 set -euo pipefail
 
-# Guard the notes submodule against two common mistakes:
-#   1. Committing while notes/ has uncommitted changes (dirty worktree).
-#   2. Committing when the notes pointer has drifted but is not staged,
-#      so the parent silently records a stale gitlink.
-#
-# Wired via: mise generate git-pre-commit --write
-
-# Skip when notes/ is not initialized (fresh clone without --recurse).
-[ -d "notes/.git" ] || [ -f "notes/.git" ] || exit 0
-
-# git's pre-commit hook exports GIT_DIR pointing at the parent repo;
-# `git -C notes` inherits it and misreads the parent tree as notes content.
-# Unset both so the submodule resolves its own .git naturally.
-# (The pointer-drift checks below use the parent's index deliberately, so
-# they must run with the original GIT_DIR — only the dirty-worktree check
-# needs isolation.)
-
-# 1. Dirty worktree inside notes/
-if [ -n "$(unset GIT_DIR GIT_WORK_TREE; git -C notes status --porcelain 2>/dev/null)" ]; then
-  echo >&2 "pre-commit: notes/ submodule has uncommitted changes."
-  echo >&2 "  Commit (and push) inside notes/ first, then 'git add notes'."
-  exit 1
-fi
-
-# 2. Pointer changed but not staged.
-#    git diff (worktree vs index) on a submodule entry shows output when
-#    the checked-out SHA differs from what the index records AND the index
-#    entry has not been updated via 'git add notes'.
-if git diff --quiet -- notes 2>/dev/null; then
-  exit 0
-fi
-# There is a diff — the pointer moved. Check whether it is staged.
-if ! git diff --cached --quiet -- notes 2>/dev/null; then
-  # Staged — fine, the commit will record the new pointer.
-  exit 0
-fi
-echo >&2 "pre-commit: notes/ submodule pointer has changed but is not staged."
-echo >&2 "  Run 'git add notes' to include the pointer update in this commit."
-exit 1
+# notes/ is a gitignored private clone with its own lint and commit flow.
+exit 0
