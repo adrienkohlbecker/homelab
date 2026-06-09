@@ -13,10 +13,10 @@ local function check(label, got, want)
     end
 end
 
-local function shape(tag, record, severity_text, severity_number)
+local function shape(tag, record, level)
     record = record or {}
-    local metadata = { otlp = { severity_text = severity_text, severity_number = severity_number } }
-    local _, _, _, shaped = shape_lnav(tag, 0, nil, metadata, record)
+    record["_level"] = level
+    local _, _, shaped = shape_lnav(tag, 0, record)
     return shaped
 end
 
@@ -27,13 +27,12 @@ do
         SYSTEMD_UNIT = "homeassistant.service",
         SYSLOG_IDENTIFIER = "homeassistant",
         CONTAINER_NAME = "homeassistant",
-    }, "warn", 13)
+    }, "warn")
     check("journald.host", rec.host, "lab")
     check("journald.service", rec.service, "homeassistant")
     check("journald.unit", rec.unit, "homeassistant.service")
     check("journald.identifier", rec.identifier, "homeassistant")
     check("journald.level", rec.level, "warn")
-    check("journald.level_number", rec.level_number, 13)
     check("journald.message", rec.message, "WARNING connection failed")
     check("journald.stream", rec.stream, "journald")
     check("journald.fields.systemd_unit", rec.fields.SYSTEMD_UNIT, "homeassistant.service")
@@ -42,28 +41,28 @@ do
 end
 
 do
-    local rec = shape("svc.keepalived.service", { SYSLOG_IDENTIFIER = "Keepalived_vrrp", host = "lab" }, "info", 9)
+    local rec = shape("svc.keepalived.service", { SYSLOG_IDENTIFIER = "Keepalived_vrrp", host = "lab" }, "info")
     check("svc.identifier_lowercase", rec.service, "keepalived_vrrp")
 end
 
 do
-    local rec = shape("svc.", { SYSLOG_IDENTIFIER = "kernel" }, "info", 9)
+    local rec = shape("svc.", { SYSLOG_IDENTIFIER = "kernel" }, "info")
     check("svc.kernel", rec.service, "kernel")
 end
 
 do
     local rec =
-        shape("svc.session-3.scope", { SYSLOG_IDENTIFIER = "python3(mitogen:ak@lab:12345)", log = "ok" }, "info", 9)
+        shape("svc.session-3.scope", { SYSLOG_IDENTIFIER = "python3(mitogen:ak@lab:12345)", log = "ok" }, "info")
     check("mitogen.service", rec.service, "mitogen")
 end
 
 do
-    local rec = shape("svc.libpod-conmon-abc123.scope", { SYSLOG_IDENTIFIER = "epic_allen", log = "ok" }, "info", 9)
+    local rec = shape("svc.libpod-conmon-abc123.scope", { SYSLOG_IDENTIFIER = "epic_allen", log = "ok" }, "info")
     check("podman_unnamed.service", rec.service, "podman_unnamed")
 end
 
 do
-    local rec = shape("svc.cron.service", {}, "info", 9)
+    local rec = shape("svc.cron.service", {}, "info")
     check("svc.unit_fallback", rec.service, "cron")
 end
 
@@ -71,8 +70,7 @@ do
     local rec = shape(
         "nginx.access",
         { host = "lab", log = "GET / HTTP/1.1", filepath = "/var/log/nginx/access.log" },
-        "info",
-        9
+        "info"
     )
     check("nginx.service", rec.service, "nginx_access")
     check("nginx.stream", rec.stream, "nginx")
@@ -90,9 +88,8 @@ do
         path = "/ok",
         status = 200,
         http_host = "g.example",
-    }, "info", 9)
+    }, "info")
     check("nginx.access.level", rec.level, "info")
-    check("nginx.access.level_number", rec.level_number, 9)
     check("nginx.access.fields.method", rec.fields.method, "GET")
     check("nginx.access.fields.path", rec.fields.path, "/ok")
     check("nginx.access.fields.status", rec.fields.status, 200)
@@ -102,14 +99,12 @@ end
 do
     -- A 5xx status promotes the record to error level even though the upstream
     -- modify filter pinned it to info; a 4xx must NOT (stays info).
-    local rec5xx = shape("nginx.access", { host = "lab", log = "x", status = 503 }, "info", 9)
+    local rec5xx = shape("nginx.access", { host = "lab", log = "x", status = 503 }, "info")
     check("nginx.access.5xx.level", rec5xx.level, "error")
-    check("nginx.access.5xx.level_number", rec5xx.level_number, 17)
     check("nginx.access.5xx.fields.status", rec5xx.fields.status, 503)
 
-    local rec4xx = shape("nginx.access", { host = "lab", log = "x", status = 404 }, "info", 9)
+    local rec4xx = shape("nginx.access", { host = "lab", log = "x", status = 404 }, "info")
     check("nginx.access.4xx.level", rec4xx.level, "info")
-    check("nginx.access.4xx.level_number", rec4xx.level_number, 9)
 end
 
 do
@@ -126,9 +121,8 @@ do
         thread = 99,
         ftl_level = "INFO",
         body = "handled an error condition cleanly MARKER",
-    }, "error", 17)
+    }, "error")
     check("ftl.info.level", rec.level, "info")
-    check("ftl.info.level_number", rec.level_number, 9)
     check("ftl.info.message_is_body", rec.message, "handled an error condition cleanly MARKER")
     check("ftl.info.service", rec.service, "pihole_ftl")
     check("ftl.info.fields.ftl_level", rec.fields.ftl_level, "INFO")
@@ -139,41 +133,38 @@ do
 end
 
 do
-    local recw = shape("pihole_ftl", { host = "lab", log = "x", ftl_level = "WARNING", body = "high load" }, "info", 9)
+    local recw = shape("pihole_ftl", { host = "lab", log = "x", ftl_level = "WARNING", body = "high load" }, "info")
     check("ftl.warn.level", recw.level, "warn")
-    check("ftl.warn.level_number", recw.level_number, 13)
 
-    local rece = shape("pihole_ftl", { host = "lab", log = "x", ftl_level = "ERROR", body = "database is locked" }, "info", 9)
+    local rece = shape("pihole_ftl", { host = "lab", log = "x", ftl_level = "ERROR", body = "database is locked" }, "info")
     check("ftl.error.level", rece.level, "error")
-    check("ftl.error.level_number", rece.level_number, 17)
 
-    local recd = shape("pihole_ftl", { host = "lab", log = "x", ftl_level = "DEBUG_GC", body = "gc run" }, "info", 9)
+    local recd = shape("pihole_ftl", { host = "lab", log = "x", ftl_level = "DEBUG_GC", body = "gc run" }, "info")
     check("ftl.debug.level", recd.level, "debug")
-    check("ftl.debug.level_number", recd.level_number, 5)
 end
 
 do
     -- A non-matching FTL line (parser left it alone: no ftl_level/body) keeps
     -- its raw log line as the message and the upstream-inferred level.
-    local rec = shape("pihole_ftl", { host = "lab", log = "raw banner line" }, "info", 9)
+    local rec = shape("pihole_ftl", { host = "lab", log = "raw banner line" }, "info")
     check("ftl.nomatch.message", rec.message, "raw banner line")
     check("ftl.nomatch.level", rec.level, "info")
 end
 
 do
-    local rec = shape("nginx.error", {}, "info", 9)
+    local rec = shape("nginx.error", {}, "info")
     check("nginx.error", rec.service, "nginx_error")
 end
 
 do
-    local rec = shape("nginx.", {}, "info", 9)
+    local rec = shape("nginx.", {}, "info")
     check("nginx.bare", rec.service, "unknown")
 end
 
 do
     local cid = "75ca2e2b110c2a3e6af421033e99bc1dbc8f58d3eacf929cb2b395377d63e4bc"
     local rec =
-        shape("svc.init.scope", { SYSLOG_IDENTIFIER = "systemd", UNIT = cid .. ".service", log = cid }, "info", 9)
+        shape("svc.init.scope", { SYSLOG_IDENTIFIER = "systemd", UNIT = cid .. ".service", log = cid }, "info")
     check("healthcheck.service", rec.service, "podman_healthcheck")
     check("healthcheck.cid_full", rec.fields.CONTAINER_ID_FULL, cid)
     check("healthcheck.cid_short", rec.fields.CONTAINER_ID, string.sub(cid, 1, 12))
@@ -181,9 +172,8 @@ do
 end
 
 do
-    local rec = shape("host_packages", { host = "lab", log = "updated\npackage", severity_text = "debug" }, nil, nil)
+    local rec = shape("host_packages", { host = "lab", log = "updated\npackage", severity_text = "debug" }, nil)
     check("fallback.level", rec.level, "info")
-    check("fallback.level_number", rec.level_number, 9)
     check("scrub.message", rec.message, "updated package")
     check("fields.no_severity_text", rec.fields.severity_text, nil)
 end

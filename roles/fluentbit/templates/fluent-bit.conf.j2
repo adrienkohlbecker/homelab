@@ -448,19 +448,18 @@
 # which could otherwise become false warning/error matches. Stamp info
 # up-front and skip the 120-char keyword scan in level_from_message.lua
 # for high-volume access logs. The lua filter sees record["severity_text"]
-# and carries it into the metadata stream for lnav_shape.
+# and carries it into the _level field for lnav_shape.
 [FILTER]
     Name              modify
     Match             nginx.access
     Condition         Key_does_not_exist severity_text
     Set               severity_text info
-    Set               severity_number 9
 
 # podman's journald log driver labels every stderr line as PRIORITY=3
 # (err) regardless of content, so postgres / celery / linuxserver INFO
 # chatter swamps `journalctl -p warning`. Parse the message text for
-# a level keyword and write severity_text/severity_number into the metadata
-# stream that lnav_shape promotes into the JSONL record body.
+# a level keyword and write the text level into the record's _level field,
+# which lnav_shape promotes into the JSONL record body.
 [FILTER]
     Name              lua
     Match             *

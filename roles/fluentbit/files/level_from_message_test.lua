@@ -21,37 +21,32 @@ local function check(label, got, want)
 end
 
 -- Run a log line through the filter (default tag svc.test.service, no extra
--- record fields) and return (severity_text, severity_number, return_code).
+-- record fields) and return (level_text, return_code).
 local function sev(line, tag, record)
     record = record or {}
     record.log = line
-    local metadata = {}
-    local code = set_priority(tag or "svc.test.service", 0, nil, metadata, record)
-    local otlp = metadata.otlp or {}
-    return otlp.severity_text, otlp.severity_number, code
+    local code = set_priority(tag or "svc.test.service", 0, record)
+    return record["_level"], code
 end
 
 -- 1. podman/docker structured `level=info` (container stdout via journald).
 do
-    local t, n =
+    local t =
         sev('time="2026-06-03T17:40:42Z" level=info msg="Created exec session 8ac8367408b2 in container 768913f"')
     check("docker.info.text", t, "info")
-    check("docker.info.num", n, 9)
 end
 
 -- 2. `level=warning` -- matches the "warning" keyword, maps to warn.
 do
-    local t, n = sev('time="2026-06-03T17:40:47Z" level=warning msg="StopSignal SIGTERM failed to stop container 9f96"')
+    local t = sev('time="2026-06-03T17:40:47Z" level=warning msg="StopSignal SIGTERM failed to stop container 9f96"')
     check("docker.warn.text", t, "warn")
-    check("docker.warn.num", n, 13)
 end
 
 -- 3. netdata go.d `level=error`.
 do
-    local t, n =
+    local t =
         sev("level=error msg=\"start watching '/etc/netdata/scripts.d': no such file or directory\" plugin=scripts.d")
     check("netdata.error.text", t, "error")
-    check("netdata.error.num", n, 17)
 end
 
 -- 4. nexus log4j: bare WARN token after the timestamp.
@@ -86,9 +81,8 @@ end
 
 -- 8. profilarr/apscheduler `- DEBUG -` form.
 do
-    local t, n = sev("2026-06-03 19:41:48 - apscheduler.scheduler - DEBUG - Looking for jobs to run")
+    local t = sev("2026-06-03 19:41:48 - apscheduler.scheduler - DEBUG - Looking for jobs to run")
     check("profilarr.debug.text", t, "debug")
-    check("profilarr.debug.num", n, 5)
 end
 
 -- 9. nginx `[warn]` form (the leading 2026/.. timestamp doesn't interfere).
@@ -101,9 +95,8 @@ end
 
 -- 10. dnscrypt-proxy `[NOTICE]` -- deliberately maps to info, NOT warn.
 do
-    local t, n = sev("[2026-06-03 05:09:34] [NOTICE] Anonymizing queries for [dct-fr] via [anon-cs-fr]")
+    local t = sev("[2026-06-03 05:09:34] [NOTICE] Anonymizing queries for [dct-fr] via [anon-cs-fr]")
     check("dnscrypt.notice.text", t, "info")
-    check("dnscrypt.notice.num", n, 9)
 end
 
 -- 11. Postgres `LOG:` chatter -- the trailing-colon rule maps to info.
@@ -115,18 +108,16 @@ end
 -- 12. A temperature "critical" -- the fatal rule's `critical` keyword;
 --     crit-and-worse collapse to fatal/21.
 do
-    local t, n = sev(
+    local t = sev(
         "temperature sensor 'temperature_nct6798-isa-0290_temp3_AUXTIN0' transitioned from state 'alarm' to 'critical' [device 'nct6798']"
     )
     check("temp.critical.text", t, "fatal")
-    check("temp.critical.num", n, 21)
 end
 
 -- 13. No level keyword anywhere -> default info for a predictable lnav level.
 do
-    local t, n = sev("netmap: suggested exit node:  ()")
+    local t = sev("netmap: suggested exit node:  ()")
     check("nokw.default.text", t, "info")
-    check("nokw.default.num", n, 9)
 end
 
 -- 14. The scan is body-text only, independent of journald PRIORITY: this
@@ -142,13 +133,12 @@ end
 --     record.severity_text=info so this filter trusts it and does NOT scan
 --     the URL (which here contains "error") for keywords.
 do
-    local t, n = sev(
+    local t = sev(
         '10.89.0.4 - - [03/Jun/2026:17:41:02 +0000] "GET /admin/error-report?fatal=1 HTTP/1.1" 200 12',
         "nginx.access",
-        { severity_text = "info", severity_number = 9 }
+        { severity_text = "info" }
     )
     check("nginx.access.trusted.text", t, "info")
-    check("nginx.access.trusted.num", n, 9)
 end
 
 -- 16. The nginx.access trust gate is tag-scoped: the same severity_text on a
@@ -158,23 +148,24 @@ do
     check("nginx.access.gate-scoped", t, "error")
 end
 
--- 17. Upstream filter already pinned metadata.otlp.severity_text: leave it
---     untouched, return 0 (no modification).
+-- 17. Upstream filter already pinned _level: leave it untouched, return 0
+--     (no modification).
 do
-    local record = { log = "this body says ERROR but severity is already warn" }
-    local metadata = { otlp = { severity_text = "warn", severity_number = 13 } }
-    local code = set_priority("svc.some.service", 0, nil, metadata, record)
+    local record = {
+        log = "this body says ERROR but severity is already warn",
+        _level = "warn",
+    }
+    local code = set_priority("svc.some.service", 0, record)
     check("prepinned.code", code, 0)
-    check("prepinned.kept", metadata.otlp.severity_text, "warn")
+    check("prepinned.kept", record["_level"], "warn")
 end
 
--- 18. Non-string body (already-structured record): return 0, no severity set.
+-- 18. Non-string body (already-structured record): return 0, no level set.
 do
     local record = { log = 42 }
-    local metadata = {}
-    local code = set_priority("svc.x.service", 0, nil, metadata, record)
+    local code = set_priority("svc.x.service", 0, record)
     check("nonstring.code", code, 0)
-    check("nonstring.nosev", (metadata.otlp or {}).severity_text, nil)
+    check("nonstring.nolevel", record["_level"], nil)
 end
 
 if failures == 0 then

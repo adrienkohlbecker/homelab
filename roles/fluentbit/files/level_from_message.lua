@@ -1,10 +1,17 @@
 -- podman's --log-driver journald hardcodes PRIORITY by stream: stdout=6
 -- (info), stderr=3 (err). Everything from postgres / celery / linuxserver
 -- entrypoints arrives at err because the apps write INFO to stderr, which
--- loses useful severity filtering. Parse the message text for a level
--- keyword and write metadata.otlp.severity_{text,number}; the final lnav
--- shaper promotes those values into the JSONL record body. The local journal
--- is untouched.
+-- loses useful severity filtering. Parse the message text for a level keyword
+-- and write the inferred text level into the temp record field _level; the
+-- final lnav shaper reads it, promotes it into the JSONL record body (level),
+-- and drops the temp field. The local journal is untouched.
+--
+-- This and lnav_shape use the classic 3-argument lua-filter signature
+-- (tag, timestamp, record). Fluent Bit auto-selects the metadata-aware
+-- 5-argument prototype when the function declares group/metadata parameters,
+-- and then serializes the returned event metadata into the output as an
+-- `__internal__` object -- so the level is threaded through a record field
+-- rather than the metadata channel to keep that object out of the JSONL.
 --
 -- Scope is deliberately narrow: scan the first 120 chars only, because
 -- the level keyword in every format we care about appears right after
@@ -24,17 +31,6 @@
 local function has(head, token)
     return string.find(head, "[^%w]" .. token .. "[^%w]") ~= nil
 end
-
--- Numeric mapping follows OTLP severity numbers; rules below pick a
--- severity text, this table converts to the number.
-local SEV = {
-    fatal = 21,
-    error = 17,
-    warn = 13,
-    info = 9,
-    debug = 5,
-    trace = 1,
-}
 
 -- Priority-ordered: first match wins. Higher-severity keywords come
 -- first so a warning in the body of a fatal record doesn't downgrade.
@@ -68,11 +64,10 @@ local function match_rule(head, rule)
     return string.find(head, rule.pattern) ~= nil
 end
 
-function set_priority(tag, ts, _group, metadata, record)
-    metadata.otlp = metadata.otlp or {}
-    if metadata.otlp.severity_text ~= nil then
-        -- An upstream filter already pinned the severity; leave it alone.
-        return 0, ts, metadata, record
+function set_priority(tag, ts, record)
+    if record["_level"] ~= nil then
+        -- An upstream filter already pinned the level; leave it alone.
+        return 0, ts, record
     end
 
     -- An upstream modify filter scoped to nginx.access pre-stamps
@@ -85,16 +80,13 @@ function set_priority(tag, ts, _group, metadata, record)
     -- (e.g. structured-log nginx tail) would become a forgery channel
     -- without it.
     if tag == "nginx.access" and record["severity_text"] ~= nil then
-        metadata.otlp.severity_text = record["severity_text"]
-        if record["severity_number"] ~= nil then
-            metadata.otlp.severity_number = tonumber(record["severity_number"]) or 0
-        end
-        return 1, ts, metadata, record
+        record["_level"] = record["severity_text"]
+        return 1, ts, record
     end
 
     local msg = record["log"]
     if type(msg) ~= "string" then
-        return 0, ts, metadata, record
+        return 0, ts, record
     end
 
     local head = " " .. string.lower(string.sub(msg, 1, 120)) .. " "
@@ -108,12 +100,11 @@ function set_priority(tag, ts, _group, metadata, record)
     end
 
     if sev_text == nil then
-        -- No level keyword found. Stamp severity=info so the final
+        -- No level keyword found. Stamp level=info so the final
         -- JSONL record still has a predictable lnav level.
         sev_text = "info"
     end
 
-    metadata.otlp.severity_text = sev_text
-    metadata.otlp.severity_number = SEV[sev_text]
-    return 1, ts, metadata, record
+    record["_level"] = sev_text
+    return 1, ts, record
 end
