@@ -80,7 +80,7 @@
 # vanishes at logout. /var/lib/systemd/linger/<user> is the marker
 # `loginctl enable-linger` creates; a stat is enough and avoids a busctl
 # dependency. Callers wire linger up at user-creation time (roles/user,
-# roles/gitea_runner) — this check is the guardrail for the next consumer
+# roles/github_runner) — this check is the guardrail for the next consumer
 # that forgets.
 # Task name references the caller var (systemd_unit_args.user, set
 # at import time via import_role.vars:) rather than the set_fact'd

@@ -11,6 +11,7 @@
     - compta.service
     - keepalived_exporter.service
     - hyperdx.service
+    - gitea_runner.service
   register: retired_services_units
   failed_when: retired_services_units.stat.exists
 
@@ -23,6 +24,8 @@
     - /mnt/services/redis
     - /mnt/services/prometheus
     - /mnt/services/hyperdx
+    - /mnt/services/gitea_runner
+    - /mnt/scratch/gitea_runner
   register: retired_services_dirs
   failed_when: retired_services_dirs.stat.exists
 
@@ -114,3 +117,27 @@
     - /var/cache/curl_static-8.20.0.{{ ansible_architecture }}.tar.xz
   register: retired_services_static_curl_files
   failed_when: retired_services_static_curl_files.stat.exists
+
+# gitea_runner rootless teardown: the binary, the linger marker (manager turned
+# off), and the user-scope podman_prune units (files under /etc/systemd/user) are
+# all gone. _setup planted every one, so this exercises the destructive path, not
+# fresh-host absence.
+- name: _verify | Retired gitea_runner binary, linger marker, and user-scope units are absent
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/local/bin/gitea-runner
+    - /var/lib/systemd/linger/gitea_runner
+    - /etc/systemd/user/podman_prune.timer
+    - /etc/systemd/user/podman_prune.service
+  register: retired_services_gitea_runner_files
+  failed_when: retired_services_gitea_runner_files.stat.exists
+
+# The system user is deliberately left in place (uid/subid-range reuse risk),
+# matching the role's policy and lab.yml's retained subid slot.
+- name: _verify | Retained gitea_runner system user is still present
+  getent:
+    database: passwd
+    key: gitea_runner
+  register: retired_services_gitea_runner_user
+  failed_when: retired_services_gitea_runner_user is failed

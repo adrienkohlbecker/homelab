@@ -45,6 +45,7 @@
     - compta
     - keepalived_exporter
     - hyperdx
+    - gitea_runner
   become: true
 
 - name: _setup | Enable the stub units (so teardown's disable is exercised)
@@ -60,6 +61,7 @@
     - compta
     - keepalived_exporter
     - hyperdx
+    - gitea_runner
   become: true
 
 - name: _setup | Plant /mnt/services state dirs
@@ -75,6 +77,7 @@
     - redis
     - prometheus
     - hyperdx
+    - gitea_runner
   become: true
 
 - name: _setup | Drop content into the state dirs (proves recursive removal)
@@ -90,6 +93,7 @@
     - redis
     - prometheus
     - hyperdx
+    - gitea_runner
   become: true
 
 - name: _setup | Plant the redis sysctl drop-in
@@ -218,4 +222,51 @@
   loop:
     - /usr/local/bin/curl_static
     - /var/cache/curl_static-8.20.0.{{ ansible_architecture }}.tar.xz
+  become: true
+
+# gitea_runner's rootless tombstone: the stub unit + state dir are planted above
+# (in the unit/dir loops). Here we stand up the user-scope half — a lingering
+# gitea_runner user manager with a podman_prune.timer — so the converge exercises
+# the linger-gated teardown (timer removal + disable-linger) for real rather than
+# skipping it as it would on a host where the runner never ran. Built with the
+# same helpers the deleted role used, so the fixture matches the real artifacts.
+- name: _setup | Create the gitea_runner system user
+  user:
+    name: gitea_runner
+    system: true
+    home: /mnt/scratch/gitea_runner
+    create_home: true
+    shell: /usr/sbin/nologin
+  become: true
+  register: retired_services_setup_gitea_runner_user
+
+- name: _setup | Enable linger and start the gitea_runner user manager
+  import_role:
+    name: linger
+    tasks_from: linger
+  vars:
+    linger_args:
+      name: gitea_runner
+      uid: "{{ retired_services_setup_gitea_runner_user.uid }}"
+
+- name: _setup | Plant the rootless podman_prune timer in the user manager
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: podman_prune
+      description: retired_services test stub (gitea_runner podman prune)
+      exec_start: /bin/true
+      on_calendar: "*-*-* 00:20:00"
+      persistent: false
+      user: gitea_runner
+
+- name: _setup | Plant the gitea-runner binary
+  copy:
+    dest: /usr/local/bin/gitea-runner
+    content: "stub\n"
+    owner: root
+    group: root
+    mode: "0755"
   become: true

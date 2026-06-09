@@ -211,7 +211,6 @@ transmission_rpc_password: changeme
 samba_password: changeme
 gmail_app_password: changeme
 postgres_password: changeme
-gitea_runner_registration_token: changeme
 spouse_samba_password: changeme
 z2m_network_key: changeme
 jellyfin_api_token: changeme

@@ -109,7 +109,6 @@
     - plex
     - tautulli
     - gitea
-    - gitea_runner
     - github_runner
     - transmission
     - getmail

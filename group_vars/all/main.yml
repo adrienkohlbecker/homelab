@@ -106,18 +106,6 @@ bootstrap_dns_resolver: 1.1.1.1
 # test/CI machines so /run/log/journal/ is the only journal location.
 journald_storage: persistent
 
-# Labels written into roles/gitea_runner's config.yml. The daemon's
-# Declare RPC pushes them to gitea on each start, and SaveRegistration
-# writes them back to .runner -- so editing this list and restarting
-# the service updates the gitea-side runner row without re-registration.
-# See internal/app/cmd/daemon.go in gitea/runner v1.0.3. Override
-# per-host via gitea_runner_labels in host_vars if a workflow needs
-# something more specific.
-gitea_runner_labels:
-  - "ubuntu-latest:docker://gitea/runner-images:ubuntu-latest"
-  - "ubuntu-22.04:docker://gitea/runner-images:ubuntu-22.04"
-  - "ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04"
-
 # Org name the influxdb image's DOCKER_INFLUXDB_INIT_* entrypoint creates
 # on first boot. Consumer roles (`homeassistant`, etc.) also provision
 # tenants in this org via `import_role: name: influxdb, tasks_from: bucket`
@@ -146,13 +134,6 @@ service_ports:
   fan2go_api: 9919
   fluentbit: 2020
   gitea: 3000
-  # gitea-runner's built-in cache server. Pinned (not random) so jobs
-  # mid-flight at restart can still resolve ACTIONS_CACHE_URL after the
-  # daemon comes back. See roles/gitea_runner/templates/config.yml.j2.
-  gitea_runner_cache: 8088
-  # gitea-runner Prometheus endpoint (loopback-only). 9101 matches
-  # upstream's documented default.
-  gitea_runner_metrics: 9101
   # headscale control-plane HTTP (loopback-published on the fox VPS, nginx
   # fronts it on 443).
   headscale: 8080

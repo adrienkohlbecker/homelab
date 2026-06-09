@@ -15,14 +15,6 @@ jobs:
     autodetection_retry: 60
 {% endif %}
 
-  # Tries on every host; the role only applies on hosts in site.yml's
-  # gitea_runner mapping (currently lab), elsewhere autodetection_retry
-  # quietly idles. Listed in lab.yml's netdata_collectors so the
-  # presence alert catches a scrape job that goes missing there.
-  - name: gitea_runner
-    url: http://127.0.0.1:{{ service_ports.gitea_runner_metrics }}/metrics
-    autodetection_retry: 60
-
   # kuma runs only on lab (site.yml); try on every host and let
   # autodetection_retry idle elsewhere. Listed in lab.yml's
   # netdata_collectors so the presence alert doubles as a kuma liveness
