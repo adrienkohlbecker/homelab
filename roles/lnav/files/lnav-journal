@@ -1,12 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 
-# Defaults to the last 48 hours to avoid cold-loading the entire journal
-# history. Override the start with -S / --since; -U / --until narrows the
-# end while keeping the default start unless -S is also supplied:
+# Defaults to the last 1 hour. When piped via stdin lnav must buffer everything
+# before displaying; writing to a temp file lets it open and display immediately
+# while journalctl is still writing. Override with -S / --since; -U / --until
+# narrows the end while keeping the default start unless -S is also supplied.
+# Use -n / --lines to fetch the last N lines regardless of time (replaces the
+# --since filter, useful for sparse units via -u):
 #   lnav-journal -S "yesterday"
 #   lnav-journal -S "2026-06-01" -U "2026-06-02"
 #   lnav-journal -S "4 hours ago"
+#   lnav-journal -u nginx.service -n 200
 
 case "${1:-}" in
 -V | --version | -h | --help)
@@ -14,8 +18,11 @@ case "${1:-}" in
 	;;
 esac
 
-since="2 days ago"
+since="1 hour ago"
+since_explicit=false
 until=""
+lines=""
+units=()
 lnav_args=()
 
 while [[ $# -gt 0 ]]; do
@@ -26,10 +33,24 @@ while [[ $# -gt 0 ]]; do
 			exit 2
 		fi
 		since="$2"
+		since_explicit=true
 		shift 2
 		;;
 	--since=*)
 		since="${1#--since=}"
+		since_explicit=true
+		shift
+		;;
+	-n | --lines)
+		if [[ $# -lt 2 ]]; then
+			echo "lnav-journal: $1 requires a value" >&2
+			exit 2
+		fi
+		lines="$2"
+		shift 2
+		;;
+	--lines=*)
+		lines="${1#--lines=}"
 		shift
 		;;
 	-U | --until)
@@ -44,6 +65,18 @@ while [[ $# -gt 0 ]]; do
 		until="${1#--until=}"
 		shift
 		;;
+	-u | --unit)
+		if [[ $# -lt 2 ]]; then
+			echo "lnav-journal: $1 requires a value" >&2
+			exit 2
+		fi
+		units+=("$2")
+		shift 2
+		;;
+	--unit=*)
+		units+=("${1#--unit=}")
+		shift
+		;;
 	*)
 		lnav_args+=("$1")
 		shift
@@ -51,21 +84,83 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-journalctl_args=(--no-pager --quiet -o json --since "$since")
+journalctl_args=(--no-pager --quiet -o json)
+if [[ -n "$lines" ]]; then
+	journalctl_args+=(-n "$lines")
+elif [[ "$since_explicit" == false && ${#units[@]} -gt 0 ]]; then
+	# -u with no explicit time: default to last N lines so sparse units always
+	# return results regardless of the 1-hour default window.
+	journalctl_args+=(-n 10000)
+else
+	journalctl_args+=(--since "$since")
+fi
 if [[ -n "$until" ]]; then
 	journalctl_args+=(--until "$until")
+else
+	# No upper bound: follow the journal so new entries stream into lnav.
+	journalctl_args+=(--follow)
 fi
+for unit in "${units[@]}"; do
+	journalctl_args+=(-u "$unit")
+done
 
 log_paths=()
 if [[ -f /var/log/pihole/FTL.log && -r /var/log/pihole/FTL.log ]]; then
 	log_paths+=("/var/log/pihole/FTL.log")
 fi
 
+# Write journal to a temp file in the background so lnav opens and displays
+# the first entries immediately, then tails new entries as they arrive.
+tmpfile=$(mktemp /tmp/lnav-journal-XXXXXX.json)
+
+# When filtering by unit, generate a line-format override without _SYSTEMD_UNIT.
+# :hide-fields leaves a ':' placeholder in the line; a format file is the only
+# way to truly remove the column.
+lnav_format_args=()
+if [[ ${#units[@]} -gt 0 ]]; then
+	tmpfmt=$(mktemp -d /tmp/lnav-fmt-XXXXXX)
+	mkdir -p "$tmpfmt/formats"
+	cat >"$tmpfmt/formats/journald_no_unit.json" <<'ENDFMT'
+{
+  "$schema": "https://lnav.org/schemas/format-v1.schema.json",
+  "journald_json_log": {
+    "line-format": [
+      { "field": "__REALTIME_TIMESTAMP", "timestamp-format": "%Y-%m-%d %H:%M:%S" },
+      " ",
+      { "field": "SYSLOG_IDENTIFIER", "max-width": 15 },
+      "[",
+      { "field": "_PID" },
+      "] ",
+      { "field": "__level__", "text-transform": "uppercase" },
+      " ",
+      { "field": "MESSAGE" }
+    ]
+  }
+}
+ENDFMT
+	lnav_format_args=(-I "$tmpfmt")
+	trap 'rm -rf "$tmpfmt" "$tmpfile"' EXIT
+else
+	trap 'rm -f "$tmpfile"' EXIT
+fi
+
+journalctl "${journalctl_args[@]}" >"$tmpfile" &
+jctl_pid=$!
+
+# Wait for the first bytes before opening lnav. With --follow journalctl never
+# exits, so cap the wait at 2 s; lnav will open on an empty file and show
+# entries as they stream in.
+_wait=0
+until [[ -s "$tmpfile" ]] || ! kill -0 "$jctl_pid" 2>/dev/null || (( _wait >= 40 )); do
+	sleep 0.05
+	(( _wait++ )) || true
+done
+
 # Noise patterns ported from roles/fluentbit -- keeps the same firehose out of
 # the viewer that Fluent Bit drops before shipping to HyperDX.
 set +e
-journalctl "${journalctl_args[@]}" | /usr/local/bin/lnav \
-	-r \
+/usr/local/bin/lnav \
+	"${lnav_format_args[@]}" \
 	-c ':filter-out ^ansible-[A-Za-z0-9._]+ Invoked with' \
 	-c ':filter-out ^pam_unix\(cron:session\)' \
 	-c ':filter-out ^(podman0: port|veth[0-9]+( |@|: ))' \
@@ -79,12 +174,11 @@ journalctl "${journalctl_args[@]}" | /usr/local/bin/lnav \
 	-c ':filter-out "homepage-alerts/1"' \
 	-c ':filter-out ^type=SERVICE_(START|STOP) msg=audit\([0-9.]+:[0-9]+\): .* unit=[a-f0-9]{64}' \
 	"${lnav_args[@]}" \
-	- \
+	"$tmpfile" \
 	"${log_paths[@]}"
-status=("${PIPESTATUS[@]}")
+lnav_exit=$?
 set -e
 
-if [[ "${status[0]}" -ne 0 && "${status[0]}" -ne 141 ]]; then
-	exit "${status[0]}"
-fi
-exit "${status[1]}"
+kill "$jctl_pid" 2>/dev/null || true
+wait "$jctl_pid" 2>/dev/null || true
+exit "$lnav_exit"
