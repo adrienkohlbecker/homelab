@@ -41,8 +41,6 @@ SSH_AUTHORIZED_KEYS_BACKUP = true
 LFS_START_SERVER = true
 LFS_JWT_SECRET = {{ gitea_lfs_jwt_secret }}
 # Disables external avatar/CDN fetches and the periodic update check.
-# Does NOT block Gitea Actions workflows' `uses:` from cloning external
-# action repos -- that's a per-workflow choice.
 OFFLINE_MODE = true
 # DISABLE_REGISTRATION = true (below) means /explore is the only anon
 # landing page that ever shows public-repo lists; redirecting straight
@@ -132,9 +130,16 @@ DISABLE_GIT_HOOKS = true
 [oauth2]
 JWT_SECRET = {{ gitea_jwt_secret }}
 
+# No registered runner in the fleet (the gitea_runner role was retired).
+# Disabled so a pushed .gitea/workflows/ job is rejected at the UI instead of
+# queueing pending forever against a non-existent executor. Re-enable this
+# alongside a new runner.
 [actions]
-ENABLED = true
+ENABLED = false
 
+# Left on as a fail-safe janitor: [actions] is disabled so nothing new is
+# produced, but this still ages out any residual action logs left in the DB
+# from when the runner was active (and keeps cleaning if Actions is re-enabled).
 [cron.cleanup_actions]
 ENABLED = true
 OLDER_THAN = 8760h
