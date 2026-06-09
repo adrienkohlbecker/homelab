@@ -9,6 +9,11 @@
     Log_Level         warn
     Daemon            off
     Parsers_File      parsers.conf
+    # Absolute path (not relative like the stock parsers.conf above): the
+    # role validates this config with `fluent-bit --dry-run` against a temp
+    # copy, so a relative Parsers_File would resolve against the temp dir and
+    # fail to load. The role deploys parsers_nginx.conf before this validate.
+    Parsers_File      /etc/fluent-bit/parsers_nginx.conf
     # HTTP_Server exposes /api/v1/metrics/prometheus on the loopback for
     # netdata's prometheus collector. The output_dropped_records_total
     # counter increases when fluent-bit exhausts retries against an
@@ -366,6 +371,22 @@
     Name              grep
     Match             nginx.access
     Exclude           log "homepage-alerts/1"
+
+# Parse the nginx access line into structured HTTP fields (see
+# parsers_nginx.conf). Runs after the homepage-alerts drop so we never parse
+# lines we are about to discard. Preserve_Key keeps the raw line under `log`
+# so lnav_shape still uses the full request as the message body; the parsed
+# keys land flat on the record and lnav_shape sweeps them into the JSONL
+# `fields` object. Reserve_Data keeps filepath and the other tail metadata.
+# A non-matching line (malformed beyond the graceful idiom) is left untouched
+# and flows through as a plain message.
+[FILTER]
+    Name              parser
+    Match             nginx.access
+    Key_Name          log
+    Parser            nginx_access_custom
+    Reserve_Data      On
+    Preserve_Key      On
 
 # Join python / go / java / ruby tracebacks into a single record per
 # stack so lnav doesn't scatter the frames across 10+ rows. Records

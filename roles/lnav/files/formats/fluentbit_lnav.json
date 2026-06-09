@@ -38,12 +38,31 @@
       "message": { "kind": "string" },
       "/fields/CONTAINER_NAME": { "kind": "string", "hidden": true },
       "/fields/SYSTEMD_UNIT": { "kind": "string", "hidden": true },
-      "/fields/SYSLOG_IDENTIFIER": { "kind": "string", "hidden": true }
+      "/fields/SYSLOG_IDENTIFIER": { "kind": "string", "hidden": true },
+      "/fields/method": { "kind": "string", "identifier": true },
+      "/fields/path": { "kind": "string" },
+      "/fields/status": { "kind": "integer" },
+      "/fields/http_host": { "kind": "string", "identifier": true },
+      "/fields/server_name": { "kind": "string", "identifier": true, "hidden": true },
+      "/fields/remote_addr": { "kind": "string", "identifier": true },
+      "/fields/request_time": { "kind": "float" },
+      "/fields/upstream_response_time": { "kind": "string", "hidden": true },
+      "/fields/body_bytes_sent": { "kind": "integer", "hidden": true },
+      "/fields/request_length": { "kind": "integer", "hidden": true },
+      "/fields/user_agent": { "kind": "string" },
+      "/fields/referer": { "kind": "string", "hidden": true },
+      "/fields/protocol": { "kind": "string", "hidden": true },
+      "/fields/ssl_protocol": { "kind": "string", "hidden": true },
+      "/fields/ssl_cipher": { "kind": "string", "hidden": true }
     },
     "sample": [
       {
         "line": "{\"time\":\"2026-06-08T12:34:56.789Z\",\"host\":\"lab\",\"service\":\"homeassistant\",\"unit\":\"homeassistant.service\",\"identifier\":\"homeassistant\",\"level\":\"warn\",\"level_number\":13,\"message\":\"connection failed\",\"stream\":\"journald\",\"fields\":{\"CONTAINER_NAME\":\"homeassistant\",\"SYSTEMD_UNIT\":\"homeassistant.service\",\"SYSLOG_IDENTIFIER\":\"homeassistant\"}}",
         "level": "warning"
+      },
+      {
+        "line": "{\"time\":\"2026-06-08T12:34:56.000Z\",\"host\":\"lab\",\"service\":\"nginx_access\",\"unit\":null,\"identifier\":null,\"level\":\"info\",\"level_number\":9,\"message\":\"192.0.2.10 - - [08/Jun/2026:12:34:56 +0200] grafana.lab.example \\\"GET /api/health HTTP/2.0\\\" grafana.lab.example 200 12 345 0.012 0.011 \\\"-\\\" \\\"curl/8.5.0\\\" TLSv1.3 TLS_AES_128_GCM_SHA256\",\"stream\":\"nginx\",\"fields\":{\"remote_addr\":\"192.0.2.10\",\"http_host\":\"grafana.lab.example\",\"method\":\"GET\",\"path\":\"/api/health\",\"protocol\":\"HTTP/2.0\",\"server_name\":\"grafana.lab.example\",\"status\":200,\"body_bytes_sent\":12,\"request_length\":345,\"request_time\":0.012,\"upstream_response_time\":\"0.011\",\"user_agent\":\"curl/8.5.0\",\"referer\":\"-\",\"ssl_protocol\":\"TLSv1.3\",\"ssl_cipher\":\"TLS_AES_128_GCM_SHA256\",\"filepath\":\"/var/log/nginx/access.log\"}}",
+        "level": "info"
       }
     ]
   }

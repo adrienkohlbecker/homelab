@@ -83,6 +83,23 @@
   tags:
     - fluentbit
 
+# Deployed before the main config below: fluent-bit.conf references this with
+# an absolute Parsers_File path that must already exist when the config's
+# `--dry-run` validate runs. Carries the nginx_access_custom parser.
+- name: Install fluent-bit custom parsers
+  copy:
+    src: parsers_nginx.conf
+    dest: /etc/fluent-bit/parsers_nginx.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: fluentbit_parsers
+  when: not (ansible_check_mode and fluentbit_apt.changed)
+  tags:
+    - fluentbit
+
 - name: Create Fluent Bit lnav log directory
   file:
     path: /var/log/fluent-bit
@@ -158,7 +175,7 @@
       src: fluent-bit
       condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or apt_source_fluentbit_changed)) }}"
       restart: "{{ fluentbit_apt.changed or fluent_bit_service_d_override_conf_result.changed }}"
-      reload: "{{ (fluentbit_conf.changed or fluentbit_lua.changed) and not (fluentbit_apt.changed or fluent_bit_service_d_override_conf_result.changed) }}"
+      reload: "{{ (fluentbit_conf.changed or fluentbit_lua.changed or fluentbit_parsers.changed) and not (fluentbit_apt.changed or fluent_bit_service_d_override_conf_result.changed) }}"
   tags:
     - fluentbit
 
