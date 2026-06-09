@@ -204,6 +204,25 @@
   tags:
     - tailscale
 
+- name: register | Read current local tailscale preferences
+  command: "{{ tailscale_bin }} debug prefs"
+  when: tailscale_running
+  register: tailscale_prefs
+  changed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - tailscale
+
+- name: register | Determine whether advertised routes need headscale approval
+  set_fact:
+    tailscale_approve_routes_needed: >-
+      {{ (not tailscale_running)
+         or ((tailscale_desired_routes | sort)
+             != (((tailscale_prefs.stdout | default('{}', true) | from_json).AdvertiseRoutes | default([])) | sort)) }}
+  tags:
+    - tailscale
+
 # Reconcile preferences on an ALREADY-registered node. `tailscale up` is gated
 # on not-Running, so editing host_vars later would otherwise never take effect
 # on a live node. `tailscale set` applies in place on every Running converge --
@@ -234,37 +253,31 @@
 # Route approval is a second opt-in on the control server, keyed by the node's
 # headscale ID (assigned at registration). Look the node up by its given name
 # (= this host's short hostname) on the headscale host.
-# NB: `tailscale set` above may have changed the advertised routes; the client
-# propagates the new set to headscale asynchronously. `approve-routes` is a
-# policy operation (replaces the approved set) that does not require the
-# advertisement to be processed first, so no re-fetch/wait is needed here.
-# check_mode: false so the read-only node listing runs in the `--check` phase
-# too (read-only `nodes list` is safe). Delegated to the headscale host because
-# node IDs only exist on the control server.
+# NB: this is gated on initial registration or local advertised-route drift so
+# steady-state converges do not depend on the headscale host being reachable.
+# If `tailscale set` above changed the advertised routes, the client propagates
+# the new set to headscale asynchronously. `approve-routes` is a policy
+# operation (replaces the approved set) that does not require the advertisement
+# to be processed first, so no re-fetch/wait is needed here. Delegated to the
+# headscale host because node IDs only exist on the control server.
 # retries/until: a just-registered node can take a moment to surface in
 # `nodes list` -- `tailscale up` returns once the client authenticates, but over
 # a real prod link (lab/pug -> fox over wg, then a separate delegated query back
 # to fox) the control-plane record can lag the client by a beat, so a single
 # query races and the assert below fires spuriously. Poll until the node shows
-# up. ansible_check_mode short-circuits the wait: in --check there's no
-# registration, so the node legitimately never appears and we must not block.
+# up.
 - name: register | List headscale nodes (on the control server)
   command: podman exec headscale headscale nodes list -o json
   delegate_to: "{{ tailscale_headscale_host }}"
   register: tailscale_nodes
   changed_when: false
-  check_mode: false
-  # failed_when:false so an unreachable headscale host during --check mode
-  # doesn't abort the dry-run: the until: short-circuits on ansible_check_mode,
-  # so the task completes immediately and the downstream assert (guarded by
-  # when: not ansible_check_mode) is skipped. Without it a check-pass with fox
-  # down hard-fails even though no state would be mutated.
-  failed_when: false
+  when:
+    - not ansible_check_mode
+    - tailscale_approve_routes_needed
   retries: 15
   delay: 2
   until: >-
-    ansible_check_mode
-    or ((tailscale_nodes.stdout | default('[]', true) | from_json)
+    ((tailscale_nodes.stdout | default('[]', true) | from_json)
         | selectattr('user.name', 'equalto', tailscale_headscale_user)
         | selectattr('given_name', 'equalto', ansible_hostname | lower) | list | length > 0)
   become: true
@@ -291,6 +304,9 @@
          | selectattr('user.name', 'equalto', tailscale_headscale_user)
          | selectattr('given_name', 'equalto', ansible_hostname | lower)
          | list | first | default({}) }}
+  when:
+    - not ansible_check_mode
+    - tailscale_approve_routes_needed
   tags:
     - tailscale
 
@@ -306,13 +322,15 @@
       (check tailscaled logs + login-server reachability), or the node joined a
       DIFFERENT control plane (`tailscale down` + re-run). >1 = stale node from
       a prior registration; remove the duplicate via `headscale nodes delete`.
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - tailscale_approve_routes_needed
   tags:
     - tailscale
 
 # approve-routes replaces the whole approved set, so only run it when the
-# current set drifts from desired -- keeps the converge idempotent. Skipped in
-# --check (no node to approve, and approve-routes is a mutation).
+# current set drifts from desired. Skipped in --check (no node to approve, and
+# approve-routes is a mutation).
 - name: register | Approve advertised routes + exit node on headscale
   command: >-
     podman exec headscale headscale nodes approve-routes
@@ -321,6 +339,7 @@
   delegate_to: "{{ tailscale_headscale_host }}"
   when:
     - not ansible_check_mode
+    - tailscale_approve_routes_needed
     - (tailscale_desired_routes | sort) != ((tailscale_node.approved_routes | default([])) | sort)
   changed_when: true
   become: true
