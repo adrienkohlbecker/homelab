@@ -185,7 +185,6 @@ netdata_collectors:
   - go.d:collector:nvme:nvme
   - go.d:collector:pihole:local
   - go.d:collector:prometheus:fluentbit
-  - go.d:collector:prometheus:gitea_runner
   - go.d:collector:prometheus:kuma
   - go.d:collector:prometheus:minio
   - go.d:collector:sensors:sensors
@@ -259,6 +258,12 @@ samba_shares:
 # allocated by index, so inserting in the middle shifts every later
 # user's ranges and invalidates their existing rootless podman storage.
 # Append new entries at the end; don't sort.
+#
+# gitea_runner is decommissioned (the role is gone; retired_services tears
+# down its units/state), but its slot is RETAINED here: the user is left in
+# place (per retired_services' uid-reuse policy) and removing the first entry
+# would shift spouse + github_runner down a range, invalidating github_runner's
+# live rootless podman storage. Keep the placeholder, don't reclaim the slot.
 subid_users:
   - gitea_runner
   - "{{ spouse_firstname }}"

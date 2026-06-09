@@ -115,7 +115,7 @@ jobs:
       # Per-run REGISTRY_AUTH_FILE under $RUNNER_TEMP keeps credentials
       # out of the user-shared ~/.config/containers/auth.json -- on a
       # self-hosted runner where sibling workflows execute as the same
-      # user concurrently (gitea_runner, other CI cells), that path
+      # user concurrently (github_runner, other CI cells), that path
       # would be readable to them during the push window. The mktemp +
       # trap rm pattern also survives SIGKILL (runner cancellation,
       # OOM-kill), unlike `podman logout` which only fires on a clean

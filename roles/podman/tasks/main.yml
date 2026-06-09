@@ -141,8 +141,8 @@
   tags:
     - podman
 
-# No `condition:` here (unlike the gitea_runner/github_runner callers that
-# gate on a freshly-created user): the operator is the ansible connection
+# No `condition:` here (unlike the github_runner caller that gates on a
+# freshly-created user): the operator is the ansible connection
 # user -- always pre-existing -- and linger was enabled for it one task
 # above, so its user manager is guaranteed live when the timer ticks.
 - name: Install user-scope podman prune timer for the operator user

@@ -174,7 +174,7 @@ Three paths, preferred order:
 
 ### Prefer system-scope systemd units
 
-Default for new timers/services is **system-scope**. Reach for user-scope (linger) only when fundamentally required — today just rootless podman ([roles/gitea_runner/](roles/gitea_runner/), [roles/github_runner/](roles/github_runner/)). When hardening, `systemd-analyze security <unit>` lists cheap wins.
+Default for new timers/services is **system-scope**. Reach for user-scope (linger) only when fundamentally required — today just rootless podman ([roles/github_runner/](roles/github_runner/)). When hardening, `systemd-analyze security <unit>` lists cheap wins.
 
 ### Inter-container DNS
 

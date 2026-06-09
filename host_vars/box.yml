@@ -146,30 +146,22 @@ samba_shares:
     time_machine_max_size: 1T
 
 subid_users:
-  - gitea_runner
+  - github_runner
 
 # Exercise the extra-subgid-groups loop in the subid role (getent lookup +
 # template rendering). On prod lab this maps the kvm gid into
-# github_runner's userns; here we map the disk group into gitea_runner's
+# github_runner's userns; here we map the disk group into github_runner's
 # userns as a harmless equivalent. Without this, the loop body never fires.
 subid_extra_subgid_groups:
-  - user: gitea_runner
+  - user: github_runner
     group: disk
 
 # Exercise the extra-subuid-users loop in the subid role (getent lookup +
 # template rendering). On prod this path has no consumers yet; here we
-# map root's uid into gitea_runner's userns as a harmless equivalent.
+# map root's uid into github_runner's userns as a harmless equivalent.
 subid_extra_subuid_users:
-  - user: gitea_runner
+  - user: github_runner
     source_user: root
-
-# Override gitea_runner_labels (group_vars/all.yml defaults to the
-# docker-based runner-images) to a `:host` runner so the _verify
-# smoke can execute a workflow directly on the VM host -- no ~1GB
-# image pull on first run. The DooD path is still covered by the
-# daemon's own require_docker + /healthz checks.
-gitea_runner_labels:
-  - "test-host:host"
 
 # Flipped to true so jellyfin + plex tests exercise the HW-transcoding
 # code path (device passthrough, --group-add wiring, getent lookup) via

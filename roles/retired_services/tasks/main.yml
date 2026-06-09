@@ -457,3 +457,76 @@
     state: absent
   loop: "{{ ['/usr/local/bin/curl_static'] + (retired_services_static_curl_cache.files | map(attribute='path') | list) }}"
   become: true
+
+# ---- gitea_runner (was lab; the fleet's only rootless gitea CI runner) ----
+# Unlike the other tombstones, gitea_runner ran rootless under a *lingering* user
+# manager: the daemon itself was a system-scope unit (User=gitea_runner), but its
+# podman.socket and podman_prune.timer lived in that user's manager. So teardown
+# has two scopes. The system unit + on-disk artifacts come down everywhere
+# (idempotent no-op where the runner never ran). The user-scope prune timer and
+# the linger that keeps the manager alive are torn down only where the linger
+# marker proves the manager was set up: on pug/fox it never ran, and systemd_timer
+# remove asserts a live linger marker for user-scope units, so it must be skipped
+# there. The gitea_runner system user is LEFT in place (uid/subid-range reuse
+# risk, as with the other tombstones and lab.yml's retained subid slot); only its
+# linger, units, binary, and on-disk state go.
+- name: Stat gitea_runner linger marker
+  stat:
+    path: /var/lib/systemd/linger/gitea_runner
+  register: retired_services_gitea_runner_linger
+  become: true
+
+# System-scope daemon first, so it stops before its rootless podman.socket does.
+- name: Retire gitea_runner service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: gitea_runner.service
+
+# User-scope prune timer (files under /etc/systemd/user, not in the home, so the
+# home removal below won't reach them). Acts on the live user manager — gated on
+# the linger marker so it no-ops where gitea_runner never ran.
+- name: Retire gitea_runner rootless podman prune timer
+  when: retired_services_gitea_runner_linger.stat.exists
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: podman_prune
+      user: gitea_runner
+
+# Turn off linger once the user-scope unit is gone, stopping the now-idle user
+# manager. removes: makes it idempotent; gated on the marker so it no-ops where
+# gitea_runner never lingered. The podman.socket's per-user enable symlink lives
+# in the home and goes with the scratch removal below.
+- name: Turn off linger for gitea_runner
+  when: retired_services_gitea_runner_linger.stat.exists
+  command:
+    argv:
+      - loginctl
+      - --no-ask-password
+      - disable-linger
+      - gitea_runner
+    removes: /var/lib/systemd/linger/gitea_runner
+  become: true
+
+- name: Remove gitea_runner binary
+  file:
+    path: /usr/local/bin/gitea-runner
+    state: absent
+  become: true
+
+# DESTRUCTIVE: /mnt/services/gitea_runner holds config.yml + the .runner
+# credential (rides ZFS snapshots); /mnt/scratch/gitea_runner is the rootless
+# podman storage + job cache/workdir (scratch, never backed up).
+- name: Remove gitea_runner state and scratch directories
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /mnt/services/gitea_runner
+    - /mnt/scratch/gitea_runner
+  become: true
