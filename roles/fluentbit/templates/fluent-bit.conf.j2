@@ -1,10 +1,8 @@
 # {{ ansible_managed }}
 #
-# Ships journald + nginx logs to HyperDX over OTLP HTTP. On hosts that
-# colocate HyperDX (lab) we hit its OTLP receiver on loopback; everything
-# else ships TLS through the hyperdx.lab.{{ domain }} nginx subdomain.
-# Auth: a static ingestion token templated in below; rotate by bumping
-# hyperdx_ingestion_api_key in the vault and re-running the play.
+# Normalizes host logs into one JSON Lines stream for lnav. systemd captures
+# stdout to /var/log/fluent-bit/lnav.jsonl; stderr stays in journald so Fluent
+# Bit diagnostics never pollute the JSONL store.
 
 [SERVICE]
     Flush             5
@@ -97,25 +95,22 @@
 
 # File-backed service logs that can't be routed to journald in their
 # own config (or where the volume/UI dependency makes that the wrong
-# call): pihole's FTL.log is parsed by the admin web UI's
-# diagnosis view and can't be redirected without breaking it; pihole's
-# lighttpd access + gravity-update logs live inside the container
-# with no exposed override knob, so we tail what the container writes
-# to the bind-mounted host dir; clickhouse-server inside hyperdx is
-# tailed from the host so a wedged hyperdx doesn't take its own
-# self-observability down; the host package-management subsystem
-# (apt / dpkg / unattended-upgrades / alternatives / ubuntu-pro-client)
-# has no journald routing knob at all; auditd's audit.log is the sole
-# audit-record channel after roles/journald disabled the parallel
-# kernel-netlink subscription (closes the prior 80/20 dual-write).
+# call): pihole's FTL.log is parsed by the admin web UI's diagnosis view and
+# can't be redirected without breaking it; pihole's lighttpd access +
+# gravity-update logs live inside the container with no exposed override knob,
+# so we tail what the container writes to the bind-mounted host dir; the host
+# package-management subsystem (apt / dpkg / unattended-upgrades / alternatives
+# / ubuntu-pro-client) has no journald routing knob at all; auditd's audit.log
+# is the sole audit-record channel after roles/journald disabled the parallel
+# kernel-netlink subscription.
 #
 # Companion log paths we *don't* tail but keep on disk for local
-# troubleshooting (operator ssh + grep, never shipped to HyperDX):
+# troubleshooting (operator ssh + grep, not part of the lnav aggregate):
 #  - /var/log/libvirt/qemu/<vm>.log  -- per-VM qemu stdio / serial
 #    console; guest-specific noise, debugged per-VM not globally.
 #  - /var/log/zfs_autobackup/*.log   -- rsync --log-file with per-file
 #    change records; useful for "why didn't file X land on bunk" but
-#    too verbose / too NAS-specific for the central log stream.
+#    too verbose / too NAS-specific for the operator triage stream.
 #  - /var/log/pihole/pihole.log      -- raw per-query DNS log
 #    (~16 MB/day on lab); privacy-sensitive and FTL.log already
 #    summarises the operational signal.
@@ -130,8 +125,8 @@
 # fluent-bit first sees them.
 # Rotate_Wait=30 holds the pre-rotation inode open after a detected
 # rotation so the tail buffer flushes -- matches the nginx tails'
-# choice for the same reason. service.name lands at the tag
-# (lowercased) via otlp_shape's else branch.
+# choice for the same reason. service lands at the tag (lowercased) via
+# lnav_shape's fallback branch.
 
 # pihole's FTL daemon (the actual DNS resolver + API) writes FTL.log
 # directly inside the container at /var/log/pihole/FTL.log, which is
@@ -181,8 +176,7 @@
 # trace (sources fetched, entries added/skipped, errors); useful to
 # spot the day a blocklist starts 404'ing and the gravity dataset
 # silently shrinks. Cron writes ANSI escape codes (cursor moves,
-# bracket characters) into the file -- fluent-bit ships them as-is,
-# HyperDX renders them readable enough.
+# bracket characters) into the file; fluent-bit ships them as-is.
 [INPUT]
     Name              tail
     Tag               pihole_gravity
@@ -198,40 +192,9 @@
     storage.type      filesystem
     storage.pause_on_chunks_overlimit  on
 
-# clickhouse-server inside the hyperdx container, bind-mounted to
-# /mnt/services/hyperdx/clickhouse_logs/. Tailed from the host so a
-# wedged hyperdx doesn't take its own self-observability down with
-# it (the standard channel for clickhouse errors is hyperdx ingesting
-# its own telemetry -- which requires the clickhouse-server it's
-# trying to report on to be alive).
-#
-# Path narrowed to clickhouse-server.err.log -- the panic / fatal
-# stream. clickhouse-server.log carries per-query INFO chatter; with
-# fluent-bit shipping every line to HyperDX and HyperDX writing to
-# clickhouse, that path creates a tight write-amplification feedback
-# loop (every shipped line generates new lines). The .err file
-# logs only at warning+; the on-disk .log keeps the verbose trace
-# for `ssh + less` when the operator needs it.
-[INPUT]
-    Name              tail
-    Tag               clickhouse_server
-    Path              /mnt/services/hyperdx/clickhouse_logs/clickhouse-server.err.log
-    DB                /var/lib/fluent-bit/clickhouse_server.db
-    db.locking        on
-    Path_Key          filepath
-    Read_from_Head    off
-    Skip_Long_Lines   on
-    Skip_Empty_Lines  on
-    Rotate_Wait       30
-    Buffer_Max_Size   256k
-    storage.type      filesystem
-    storage.pause_on_chunks_overlimit  on
-
 # auditd's authoritative file. The systemd-journald-audit.socket is
 # disabled by roles/journald (Audit=no in journald.conf), so this
-# tail is the sole channel for audit records reaching HyperDX --
-# closes the ~20% file-only gap (USER_CMD / CRED_REFR / USER_START
-# from sudo, etc.) the old dual-write left visible.
+# tail is the sole channel for audit records reaching the lnav aggregate.
 [INPUT]
     Name              tail
     Tag               audit
@@ -254,8 +217,8 @@
 # but the verbose per-package / per-transaction trace lives only in
 # these files). One tail with multiple paths keeps them all in a
 # single `host_packages` bucket; Path_Key filepath stamps the source
-# file on each record so HyperDX can filter by which file the line
-# came from. *.log shape excludes the .log.1 / .log.gz rotated history
+# file on each record so lnav can filter by which file the line came from.
+# *.log shape excludes the .log.1 / .log.gz rotated history
 # (Read_from_Head=off would skip replay anyway).
 #
 # certbot's /var/log/letsencrypt/letsencrypt.log is *not* in this
@@ -285,7 +248,7 @@
 # LOG_INFO every time netdata's prometheus collector scrapes it (default
 # ~30s -> ~3k records/day/host of pure scrape chatter). Hardcoded in
 # keepalived with no upstream toggle; drop here so it doesn't reach
-# HyperDX. The line still lands in journald and /var/log/syslog --
+# the lnav aggregate. The line still lands in journald and /var/log/syslog --
 # `journalctl -u keepalived` is the source of truth if you ever need to
 # confirm the collector is alive.
 [FILTER]
@@ -294,7 +257,7 @@
     Exclude           MESSAGE ^Printing VRRP as json for process
 
 # Drop journal noise from journald-input streams. Each pattern was
-# identified from a 24h HyperDX sweep on pug; the count comments are
+# identified from a 24h log sweep on pug; the count comments are
 # the daily volume that motivated the exclude. journalctl on the host
 # is still the source of truth for any of these.
 #
@@ -303,7 +266,7 @@
 #    parameter dict; appears under mitogen-shaped SYSLOG_IDENTIFIER for
 #    mitogen-strategy applies, also under sudo/sshd when sudo wraps the
 #    module. Match on the body shape ("ansible-<module> Invoked with")
-#    rather than identifier so the otlp_shape.lua mitogen-collapse
+#    rather than identifier so the lnav_shape.lua mitogen-collapse
 #    _verify (which uses a body that doesn't start with "ansible-")
 #    keeps passing. `journalctl _COMM=python3` still has them.
 #  - cron's per-invocation PAM open/close (~350/day): sysstat (sa1)
@@ -390,7 +353,7 @@
     Exclude           log "homepage-alerts/1"
 
 # Join python / go / java / ruby tracebacks into a single record per
-# stack so HyperDX doesn't scatter the frames across 10+ rows. Records
+# stack so lnav doesn't scatter the frames across 10+ rows. Records
 # arrive pre-partitioned by systemd unit (the input's Tag svc.* wildcard
 # expands _SYSTEMD_UNIT per record), so the multiline buffer can't
 # cross-contaminate between concurrent log streams. flush_ms is the
@@ -414,18 +377,15 @@
 
 # Two record-shaping passes that apply to every record:
 # (a) Stamp inventory_hostname as `host` so cross-stream queries in
-#     HyperDX can filter by host without parsing the tag. systemd input
+#     lnav can filter by host without parsing the tag. systemd input
 #     also sets HOSTNAME from the journal, but tails don't -- this
 #     normalises both. Set (not Add): defence-in-depth so an attacker
 #     can't spoof `{"host":"lab", ...}` via any ingest path; Add's
 #     insert-if-absent semantics would refuse to overwrite, Set always
 #     wins.
-# (b) Rename journald's MESSAGE -> `log` so HyperDX's OTLP output
-#     reads it as LogRecord.Body (the opentelemetry output expects
-#     `log` by convention). Rename not Copy: HyperDX is the only
-#     consumer, no need to keep MESSAGE around. The Rename is a no-op
-#     on tail records (no MESSAGE key) so nginx tails' existing `log`
-#     field is untouched.
+# (b) Rename journald's MESSAGE -> `log` so the later Lua filters have
+#     one message key for both journald and tail inputs. Rename not Copy:
+#     lnav_shape preserves the original metadata under `fields`.
 [FILTER]
     Name              modify
     Match             *
@@ -435,13 +395,10 @@
 # nginx access logs never carry semantically-meaningful level keywords
 # -- every token in the body is an HTTP transaction field. The only
 # "alert"/"warning"/"error" substrings are random URL path segments,
-# which HyperDX's collector transform processor's body-regex would
-# happily upgrade to FATAL/WARN/ERROR (it uses \b not non-word borders
-# on both sides). Stamp info up-front to keep that body-regex
-# inference from firing on URL noise, and to skip the 120-char
-# keyword scan in level_from_message.lua for high-volume access logs.
-# The lua filter sees record["severity_text"] and lifts it into the
-# OTLP metadata stream (which is what the OTLP output reads).
+# which could otherwise become false warning/error matches. Stamp info
+# up-front and skip the 120-char keyword scan in level_from_message.lua
+# for high-volume access logs. The lua filter sees record["severity_text"]
+# and carries it into the metadata stream for lnav_shape.
 [FILTER]
     Name              modify
     Match             nginx.access
@@ -452,85 +409,27 @@
 # podman's journald log driver labels every stderr line as PRIORITY=3
 # (err) regardless of content, so postgres / celery / linuxserver INFO
 # chatter swamps `journalctl -p warning`. Parse the message text for
-# a level keyword and write severity_text/severity_number into the
-# OTLP metadata stream that HyperDX reads. See the script for the
-# matching rules and the default-info fallback that prevents
-# HyperDX's body-regex inference from firing on records with no real
-# level marker.
+# a level keyword and write severity_text/severity_number into the metadata
+# stream that lnav_shape promotes into the JSONL record body.
 [FILTER]
     Name              lua
     Match             *
     script            /etc/fluent-bit/level_from_message.lua
     call              set_priority
 
-# Restructure the now-finalised flat record into the OTLP-native shape
-# the opentelemetry output below expects (record["otlp"]["attributes"]
-# -> LogAttributes, record["resource"]["attributes"] -> Resource
-# including service.name for the ClickHouse ServiceName column). Runs
+# Restructure the now-finalised flat record into the lnav JSONL shape. Runs
 # last so it captures every flat key the upstream filters set. See
-# files/otlp_shape.lua for the per-tag service.name derivation.
+# files/lnav_shape.lua for the per-tag service derivation.
 [FILTER]
     Name              lua
     Match             *
-    script            /etc/fluent-bit/otlp_shape.lua
-    call              shape_otlp
+    script            /etc/fluent-bit/lnav_shape.lua
+    call              shape_lnav
 
-# Co-located on lab → hit the OTel receiver on loopback. Off-host (pug
-# etc.) → TLS through hyperdx.lab.{{ domain }} (nginx subdomain proxies
-# /v1/logs to loopback 4318 on lab; see roles/hyperdx).
-#
-# The bundled OTel collector enforces a per-team auth token on the OTLP
-# receiver (opampController in the api wires bearertokenauth/hyperdx
-# when at least one team exists in MongoDB, and the hyperdx role
-# bootstraps that team with team.apiKey = hyperdx_ingestion_api_key).
-# The extension is configured with `scheme: ''`, so the header value
-# is the raw token -- NOT "Bearer <token>". Sending the Bearer prefix
-# gets a 401 "provided authorization does not match expected scheme".
-#
-# Record shape: split between two streams because fluent-bit's OTLP
-# output wires record accessors asymmetrically.
-#
-# (a) LogRecord fields with $otlp[...] accessors (severity_text,
-#     severity_number, attributes, trace/span IDs, timestamps) come
-#     from the event-metadata stream. The three lua filters (5-arg
-#     callback) write metadata.otlp.{severity_text, severity_number,
-#     attributes}; logs_metadata_key=otlp selects the namespace.
-#
-# (b) ResourceLogs.resource has NO $otlp['resource'] accessor. The
-#     output reads Resource via the hardcoded $resource['attributes']
-#     RA applied to each record's BODY in "standalone context" mode
-#     (logs.c's standalone branch jumps to the same set_resource_
-#     attributes call the group-start branch uses). otlp_shape.lua
-#     writes record["resource"]={attributes=...} to the body, and
-#     logs_resource_metadata_key=resource pins it. (commit f59a9e99
-#     tried to route Resource through metadata.otlp.resource alongside
-#     the others and emitted records with empty ServiceName for two
-#     days; this is the revert of just that part.)
-#
-# record["log"] still feeds LogRecord.Body by convention.
 [OUTPUT]
-    Name              opentelemetry
+    Name              stdout
     Match             *
-{% if fluentbit_otlp_local %}
-    Host              127.0.0.1
-    Port              {{ service_ports.hyperdx_otlp_http }}
-{% else %}
-    Host              hyperdx.lab.{{ domain }}
-    Port              443
-    tls               on
-    tls.verify        on
-    tls.verify_hostname  on
-{% endif %}
-    compress          zstd
-    workers           1
-    logs_uri          /v1/logs
-    header            Authorization {{ hyperdx_ingestion_api_key }}
-    log_response_payload  false
-    logs_metadata_key  otlp
-    logs_resource_metadata_key  resource
-    # Retry_Limit false = no per-chunk retry cap. The backlog is bounded
-    # by storage.total_limit_size below (50M on disk), not by retry
-    # count: a HyperDX outage longer than ~2min would otherwise discard
-    # chunks despite the disk reservation being there to absorb them.
-    Retry_Limit       false
-    storage.total_limit_size  50M
+    Format            json_lines
+    json_date_key     time
+    json_date_format  iso8601
+    Workers           1

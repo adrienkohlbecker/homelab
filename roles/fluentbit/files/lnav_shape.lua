@@ -1,0 +1,112 @@
+-- Shape the final Fluent Bit record for the local lnav JSONL store.
+--
+-- The preceding filters normalize MESSAGE into record.log, stamp the
+-- inventory host, and infer severity into metadata.otlp.severity_*.
+-- stdout/json_lines serializes only the record body, so this final pass
+-- promotes the useful fields back into the body and tucks the original
+-- source metadata under fields.
+
+local function scrub(value)
+    if type(value) ~= "string" then
+        return value
+    end
+    return value:gsub("[%c]", " ")
+end
+
+local function service_from_tag(tag, record)
+    local svc
+    if string.sub(tag, 1, 4) == "svc." then
+        if string.sub(tag, 1, 18) == "svc.libpod-conmon-" then
+            svc = "podman_unnamed"
+        else
+            local sysid = record["SYSLOG_IDENTIFIER"]
+            if type(sysid) == "string" and sysid ~= "" then
+                if sysid:find("(mitogen:", 1, true) then
+                    svc = "mitogen"
+                else
+                    svc = sysid
+                end
+            end
+            if svc == nil or svc == "" then
+                svc = string.sub(tag, 5):gsub("%.service$", "")
+            end
+        end
+    elseif string.sub(tag, 1, 6) == "nginx." then
+        local sub = string.sub(tag, 7)
+        if sub ~= "" then
+            svc = "nginx_" .. sub
+        end
+    else
+        svc = tag
+    end
+    if svc == nil or svc == "" then
+        svc = "unknown"
+    end
+    return string.lower(svc)
+end
+
+local function stream_from_tag(tag)
+    if string.sub(tag, 1, 4) == "svc." then
+        return "journald"
+    elseif string.sub(tag, 1, 6) == "nginx." then
+        return "nginx"
+    end
+    return tag
+end
+
+local function unit_from_tag(tag)
+    if string.sub(tag, 1, 4) == "svc." then
+        local unit = string.sub(tag, 5)
+        if unit ~= "" then
+            return unit
+        end
+    end
+    return nil
+end
+
+local EXCLUDE_FROM_FIELDS = {
+    host = true,
+    log = true,
+    severity_text = true,
+    severity_number = true,
+}
+
+function shape_lnav(tag, ts, _group, metadata, record)
+    metadata.otlp = metadata.otlp or {}
+
+    local unit = record["SYSTEMD_UNIT"] or record["UNIT"] or unit_from_tag(tag)
+    local identifier = record["SYSLOG_IDENTIFIER"]
+    local service = service_from_tag(tag, record)
+    local level = metadata.otlp.severity_text or "info"
+
+    local healthcheck_unit = record["UNIT"]
+    if type(healthcheck_unit) == "string" then
+        local cid = healthcheck_unit:match("^([0-9a-f]+)%.service$")
+        if cid and #cid == 64 then
+            service = "podman_healthcheck"
+            record["CONTAINER_ID_FULL"] = cid
+            record["CONTAINER_ID"] = string.sub(cid, 1, 12)
+        end
+    end
+
+    local fields = {}
+    for k, v in pairs(record) do
+        if not EXCLUDE_FROM_FIELDS[k] then
+            fields[k] = scrub(v)
+        end
+    end
+
+    local shaped = {
+        host = scrub(record["host"]),
+        service = scrub(service),
+        unit = scrub(unit),
+        identifier = scrub(identifier),
+        level = scrub(level),
+        level_number = tonumber(metadata.otlp.severity_number or 9) or 9,
+        message = scrub(record["log"] or ""),
+        stream = scrub(stream_from_tag(tag)),
+        fields = fields,
+    }
+
+    return 1, ts, metadata, shaped
+end

@@ -29,12 +29,24 @@
   loop_control:
     label: "{{ item.stat.path }}"
 
-# fluent-bit's HTTP_Server endpoint returns 200 once the engine has
-# initialised inputs/outputs; /api/v1/uptime is always available when
-# HTTP_Server is on (unlike /api/v1/health, which requires an explicit
-# Health_Check On directive we don't ship). Either confirms the main
-# loop is running, which is the function check the CLAUDE.md _verify
-# rule wants.
+- name: _verify | JSONL store perms | stat
+  stat:
+    path: /var/log/fluent-bit/lnav.jsonl
+  register: _fluentbit_lnav_store
+  become: true
+
+- name: _verify | JSONL store perms | assert 0640 root:adm
+  assert:
+    that:
+      - _fluentbit_lnav_store.stat.exists
+      - _fluentbit_lnav_store.stat.mode == '0640'
+      - _fluentbit_lnav_store.stat.pw_name == 'root'
+      - _fluentbit_lnav_store.stat.gr_name == 'adm'
+    fail_msg: >-
+      lnav JSONL store has wrong perms:
+      mode={{ _fluentbit_lnav_store.stat.mode | default('<missing>') }}
+      owner={{ _fluentbit_lnav_store.stat.pw_name | default('<missing>') }}:{{ _fluentbit_lnav_store.stat.gr_name | default('<missing>') }}
+
 - name: _verify | HTTP_Server uptime
   uri:
     url: "http://127.0.0.1:{{ service_ports.fluentbit }}/api/v1/uptime"
@@ -45,499 +57,217 @@
   until: _fluentbit_uptime.status == 200
   become: true
 
-- name: _verify | Journald path | build per-run marker
+- name: _verify | Build per-run markers
   set_fact:
-    fluentbit_otlp_journald_marker: "verify_journald_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    fluentbit_lnav_journald_marker: "verify_journald_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    fluentbit_lnav_nginx_marker: "verify_nginx_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    fluentbit_lnav_warn_marker: "verify_warn_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    fluentbit_lnav_multiline_marker: "verify_trace_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    fluentbit_lnav_mitogen_marker: "verify_mitogen_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    fluentbit_lnav_healthcheck_marker: "verify_healthcheck_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
-# systemd-run sets _SYSTEMD_UNIT on the resulting journal record, so
-# fluent-bit's systemd input expands Tag=svc.fluentbit_verify_journald
-# .service and otlp_shape strips .service to produce a predictable
-# service.name. The "ERROR <marker>" body fires level_from_message's
-# error-keyword arm (severity 17).
 - name: _verify | Journald path | emit marked log via transient unit
   command: >-
     systemd-run --unit=fluentbit_verify_journald --no-block --quiet
     /usr/bin/logger -t fluentbit_verify_journald
-    "ERROR {{ fluentbit_otlp_journald_marker }}"
+    "ERROR {{ fluentbit_lnav_journald_marker }}"
   changed_when: false
   become: true
-
-# Filter on ServiceName so ansible's own task-output journal record
-# (SYSLOG_IDENTIFIER=ansible-ansible.legacy.command, scoped to the ssh
-# session unit) carrying the marker in its logged command line doesn't
-# satisfy the count.
-- name: _verify | Journald path | wait for ClickHouse row matching marker
-  import_role:
-    name: test
-    tasks_from: clickhouse_query_wait
-  vars:
-    test_args:
-      label: "journald path | wait for row"
-      sql: >-
-        SELECT count() FROM default.otel_logs
-        WHERE Body LIKE '%{{ fluentbit_otlp_journald_marker }}%'
-          AND ServiceName = 'fluentbit_verify_journald'
-      retries: 60
-      delay: 2
-      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
-
-- name: _verify | Journald path | fetch row as JSON
-  import_role:
-    name: test
-    tasks_from: clickhouse_query
-  vars:
-    test_args:
-      label: "journald path | fetch row"
-      sql: >-
-        SELECT
-          Body,
-          SeverityText,
-          toUInt32(SeverityNumber) AS SeverityNumber,
-          ServiceName,
-          LogAttributes['SYSTEMD_UNIT']      AS systemd_unit,
-          LogAttributes['SYSLOG_IDENTIFIER'] AS syslog_identifier,
-          LogAttributes['host']              AS log_host
-        FROM default.otel_logs
-        WHERE Body LIKE '%{{ fluentbit_otlp_journald_marker }}%'
-          AND ServiceName = 'fluentbit_verify_journald'
-        ORDER BY Timestamp DESC
-        LIMIT 1
-        FORMAT JSONEachRow
-
-# LogAttributes asserts guard otlp_shape.lua's "lift everything left in
-# record into metadata.otlp.attributes" loop. An earlier version only
-# lifted "host" and silently dropped every journald metadata field; the
-# bug stuck around precisely because nothing here checked.
-- name: _verify | Journald path | assert lua filter output
-  vars:
-    row: "{{ test_clickhouse_result.stdout | from_json }}"
-  assert:
-    that:
-      - "row.SeverityText == 'error'"
-      - "row.SeverityNumber | int == 17"
-      - "row.ServiceName == 'fluentbit_verify_journald'"
-      - "fluentbit_otlp_journald_marker in row.Body"
-      - "row.systemd_unit == 'fluentbit_verify_journald.service'"
-      - "row.syslog_identifier == 'fluentbit_verify_journald'"
-      - "row.log_host == inventory_hostname"
-    fail_msg: "journald record landed with wrong shape: {{ row }}"
-
-# Nginx access tail: exercises the conf.j2 modify pre-stamp
-# (severity_text=info on nginx.access), level_from_message's
-# tag-gated lift of that field into metadata, AND otlp_shape's nginx.*
-# branch. Appended via tee -a so fluent-bit's tail input sees a fresh
-# line on the existing inode without rotation confusion.
-- name: _verify | Nginx tail | build per-run marker
-  set_fact:
-    fluentbit_otlp_nginx_marker: "verify_nginx_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
 - name: _verify | Nginx tail | append marked line to access.log
   command: tee -a /var/log/nginx/access.log
   args:
-    stdin: "{{ fluentbit_otlp_nginx_marker }}\n"
+    stdin: "{{ fluentbit_lnav_nginx_marker }}\n"
   changed_when: false
   become: true
-
-- name: _verify | Nginx tail | wait for ClickHouse row matching marker
-  import_role:
-    name: test
-    tasks_from: clickhouse_query_wait
-  vars:
-    test_args:
-      label: "nginx tail | wait for row"
-      sql: >-
-        SELECT count() FROM default.otel_logs
-        WHERE Body LIKE '%{{ fluentbit_otlp_nginx_marker }}%'
-          AND ServiceName = 'nginx_access'
-      retries: 60
-      delay: 2
-      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
-
-- name: _verify | Nginx tail | fetch row as JSON
-  import_role:
-    name: test
-    tasks_from: clickhouse_query
-  vars:
-    test_args:
-      label: "nginx tail | fetch row"
-      sql: >-
-        SELECT
-          Body,
-          SeverityText,
-          toUInt32(SeverityNumber) AS SeverityNumber,
-          ServiceName
-        FROM default.otel_logs
-        WHERE Body LIKE '%{{ fluentbit_otlp_nginx_marker }}%'
-          AND ServiceName = 'nginx_access'
-        ORDER BY Timestamp DESC
-        LIMIT 1
-        FORMAT JSONEachRow
-
-- name: _verify | Nginx tail | assert lua filter output
-  vars:
-    row: "{{ test_clickhouse_result.stdout | from_json }}"
-  assert:
-    that:
-      - "row.SeverityText == 'info'"
-      - "row.SeverityNumber | int == 9"
-      - "row.ServiceName == 'nginx_access'"
-      - "fluentbit_otlp_nginx_marker in row.Body"
-    fail_msg: "nginx access record landed with wrong shape: {{ row }}"
-
-# Exercises level_from_message's table dispatch on a non-error
-# keyword (WARN), distinct from the existing ERROR probe above:
-# catches mis-ordering of the priority table and SEV-mapping drift
-# after the SMP2 if/elseif -> table rewrite.
-- name: _verify | Journald warn | build per-run marker
-  set_fact:
-    fluentbit_otlp_warn_marker: "verify_warn_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
 - name: _verify | Journald warn | emit marked log via transient unit
   command: >-
     systemd-run --unit=fluentbit_verify_warn --no-block --quiet
     /usr/bin/logger -t fluentbit_verify_warn
-    "WARNING {{ fluentbit_otlp_warn_marker }}"
+    "WARNING {{ fluentbit_lnav_warn_marker }}"
   changed_when: false
   become: true
 
-- name: _verify | Journald warn | wait for ClickHouse row matching marker
-  import_role:
-    name: test
-    tasks_from: clickhouse_query_wait
-  vars:
-    test_args:
-      label: "journald warn | wait"
-      sql: >-
-        SELECT count() FROM default.otel_logs
-        WHERE Body LIKE '%{{ fluentbit_otlp_warn_marker }}%'
-          AND ServiceName = 'fluentbit_verify_warn'
-      retries: 60
-      delay: 2
-      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
-
-- name: _verify | Journald warn | fetch row
-  import_role:
-    name: test
-    tasks_from: clickhouse_query
-  vars:
-    test_args:
-      label: "journald warn | fetch"
-      sql: >-
-        SELECT
-          Body,
-          SeverityText,
-          toUInt32(SeverityNumber) AS SeverityNumber
-        FROM default.otel_logs
-        WHERE Body LIKE '%{{ fluentbit_otlp_warn_marker }}%'
-          AND ServiceName = 'fluentbit_verify_warn'
-        ORDER BY Timestamp DESC
-        LIMIT 1
-        FORMAT JSONEachRow
-
-- name: _verify | Journald warn | assert severity classification
-  vars:
-    row: "{{ test_clickhouse_result.stdout | from_json }}"
-  assert:
-    that:
-      - "row.SeverityText == 'warn'"
-      - "row.SeverityNumber | int == 13"
-      - "fluentbit_otlp_warn_marker in row.Body"
-    fail_msg: "WARN keyword classified wrong: {{ row }}"
-
-# Multiline traceback join: emit a python ValueError so the multiline
-# parser (python,go,java,ruby) joins the 3-line stack into a single
-# record. Filtering Body LIKE '%Traceback%' excludes the known
-# fluent-bit-python-parser dup-record that re-emits the trailing
-# exception line on its own (see fluent-bit.conf.j2's multiline
-# filter block for the quirk's documented context).
-- name: _verify | Multiline | build per-run marker
-  set_fact:
-    fluentbit_otlp_multiline_marker: "verify_trace_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
-
-# --property=SyslogIdentifier= pins SYSLOG_IDENTIFIER on the
-# resulting unit's journal output. Without it the python3 process'
-# comm leaks through as the identifier ("python3"), and otlp_shape's
-# SYSLOG_IDENTIFIER-first rule lands the record under
-# ServiceName=python3 instead of the unit name. Real services we own
-# should set SyslogIdentifier= in their unit file (or pass through a
-# `logger -t` wrapper) for the same reason; this probe doubles as a
-# canonical example.
 - name: _verify | Multiline | emit python traceback via transient unit
   command: >-
     systemd-run --unit=fluentbit_verify_multiline --no-block --quiet
     --property=SyslogIdentifier=fluentbit_verify_multiline
-    /usr/bin/python3 -c "raise ValueError('trace_{{ fluentbit_otlp_multiline_marker }}')"
+    /usr/bin/python3 -c "raise ValueError('trace_{{ fluentbit_lnav_multiline_marker }}')"
   changed_when: false
   become: true
-
-- name: _verify | Multiline | wait for joined traceback row
-  import_role:
-    name: test
-    tasks_from: clickhouse_query_wait
-  vars:
-    test_args:
-      label: "multiline | wait"
-      sql: >-
-        SELECT count() FROM default.otel_logs
-        WHERE Body LIKE '%Traceback%'
-          AND Body LIKE '%{{ fluentbit_otlp_multiline_marker }}%'
-          AND ServiceName = 'fluentbit_verify_multiline'
-      retries: 60
-      delay: 2
-      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
-
-- name: _verify | Multiline | fetch row
-  import_role:
-    name: test
-    tasks_from: clickhouse_query
-  vars:
-    test_args:
-      label: "multiline | fetch"
-      sql: >-
-        SELECT Body, ServiceName
-        FROM default.otel_logs
-        WHERE Body LIKE '%Traceback%'
-          AND Body LIKE '%{{ fluentbit_otlp_multiline_marker }}%'
-          AND ServiceName = 'fluentbit_verify_multiline'
-        ORDER BY Timestamp DESC
-        LIMIT 1
-        FORMAT JSONEachRow
-
-- name: _verify | Multiline | assert traceback joined
-  vars:
-    row: "{{ test_clickhouse_result.stdout | from_json }}"
-  assert:
-    that:
-      - "'Traceback' in row.Body"
-      - "'ValueError' in row.Body"
-      - "fluentbit_otlp_multiline_marker in row.Body"
-      - "row.ServiceName == 'fluentbit_verify_multiline'"
-    fail_msg: "Multiline traceback not joined: {{ row }}"
-
-# Mitogen collapse: ansible accelerator's workers self-name to
-# "python3(mitogen:user@host:PID)" via prctl(PR_SET_NAME); otlp_shape
-# detects the "(mitogen:" substring and lands all variants under
-# ServiceName=mitogen instead of minting a fresh facet per worker
-# PID. Probe by pinning the identifier through SyslogIdentifier= on a
-# transient unit driving /bin/echo. Why /bin/echo and not logger:
-# SyslogIdentifier= only applies to stdout/stderr captured by
-# journald; logger writes via /dev/log and journald assigns its
-# SYSLOG_IDENTIFIER from the syslog message (defaulting to the
-# process name / "root"), bypassing the unit's directive. prctl from
-# a real python is no good either -- the kernel comm has a 15-byte
-# cap and "python3(mitogen" gets truncated before the ":" that the
-# detection key matches against.
-- name: _verify | Mitogen | build per-run marker
-  set_fact:
-    fluentbit_otlp_mitogen_marker: "verify_mitogen_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
 - name: _verify | Mitogen | emit marked log via transient unit with mitogen-shaped identifier
   command: >-
     systemd-run --unit=fluentbit_verify_mitogen --no-block --quiet
     --property=SyslogIdentifier=python3(mitogen:fake@host:9999)
-    /bin/echo fluentbit_verify_mitogen marker {{ fluentbit_otlp_mitogen_marker }}
+    /bin/echo fluentbit_verify_mitogen marker {{ fluentbit_lnav_mitogen_marker }}
   changed_when: false
   become: true
 
-- name: _verify | Mitogen | wait for ClickHouse row matching marker
-  import_role:
-    name: test
-    tasks_from: clickhouse_query_wait
-  vars:
-    test_args:
-      label: "mitogen | wait for row"
-      sql: >-
-        SELECT count() FROM default.otel_logs
-        WHERE Body LIKE '%{{ fluentbit_otlp_mitogen_marker }}%'
-          AND ServiceName = 'mitogen'
-      retries: 60
-      delay: 2
-      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
-
-- name: _verify | Mitogen | fetch row
-  import_role:
-    name: test
-    tasks_from: clickhouse_query
-  vars:
-    test_args:
-      label: "mitogen | fetch"
-      sql: >-
-        SELECT Body, ServiceName
-        FROM default.otel_logs
-        WHERE Body LIKE '%{{ fluentbit_otlp_mitogen_marker }}%'
-          AND ServiceName = 'mitogen'
-        ORDER BY Timestamp DESC
-        LIMIT 1
-        FORMAT JSONEachRow
-
-- name: _verify | Mitogen | assert collapse fired
-  vars:
-    row: "{{ test_clickhouse_result.stdout | from_json }}"
-  assert:
-    that:
-      - "row.ServiceName == 'mitogen'"
-      - "fluentbit_otlp_mitogen_marker in row.Body"
-    fail_msg: "mitogen-shaped identifier did not collapse to ServiceName=mitogen: {{ row }}"
-
-# podman_unnamed fallback: when a container runs without --name, podman
-# assigns "<adjective>_<scientist>" auto-names that become SYSLOG_IDENTIFIER
-# fresh per run. Both _SYSTEMD_UNIT (libpod-conmon-<hash>.scope) and
-# SYSLOG_IDENTIFIER are unbounded, so otlp_shape recognises the
-# "libpod-conmon-" tag prefix and labels the records "podman_unnamed"
-# as a class. Probe drives an actual `podman run --rm` (deliberately
-# no --name) so the conmon-scope path lights up end to end.
-- name: _verify | Podman_unnamed | build per-run marker
-  set_fact:
-    fluentbit_otlp_podman_marker: "verify_podman_unnamed_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
-
-# Image is already pulled by _setup's hyperdx import (busybox isn't
-# part of that, so pull explicitly here). One-shot, creates: gate not
-# applicable -- podman pull is idempotent on its own.
-- name: _verify | Podman_unnamed | ensure busybox image present
-  command: podman pull docker.io/library/busybox
-  changed_when: false
-  become: true
-
-- name: _verify | Podman_unnamed | run marked busybox container (no --name on purpose)
-  command: >-
-    podman run --rm --log-driver journald
-    docker.io/library/busybox
-    echo fluentbit_verify_podman_unnamed marker {{ fluentbit_otlp_podman_marker }}
-  changed_when: false
-  become: true
-
-- name: _verify | Podman_unnamed | wait for ClickHouse row matching marker
-  import_role:
-    name: test
-    tasks_from: clickhouse_query_wait
-  vars:
-    test_args:
-      label: "podman_unnamed | wait for row"
-      sql: >-
-        SELECT count() FROM default.otel_logs
-        WHERE Body LIKE '%{{ fluentbit_otlp_podman_marker }}%'
-          AND ServiceName = 'podman_unnamed'
-      retries: 60
-      delay: 2
-      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
-
-- name: _verify | Podman_unnamed | fetch row
-  import_role:
-    name: test
-    tasks_from: clickhouse_query
-  vars:
-    test_args:
-      label: "podman_unnamed | fetch"
-      sql: >-
-        SELECT Body, ServiceName
-        FROM default.otel_logs
-        WHERE Body LIKE '%{{ fluentbit_otlp_podman_marker }}%'
-          AND ServiceName = 'podman_unnamed'
-        ORDER BY Timestamp DESC
-        LIMIT 1
-        FORMAT JSONEachRow
-
-- name: _verify | Podman_unnamed | assert libpod-conmon fallback fired
-  vars:
-    row: "{{ test_clickhouse_result.stdout | from_json }}"
-  assert:
-    that:
-      - "row.ServiceName == 'podman_unnamed'"
-      - "fluentbit_otlp_podman_marker in row.Body"
-    fail_msg: "unnamed-container record did not hit libpod-conmon fallback: {{ row }}"
-
-# podman_healthcheck override: podman runs each scheduled healthcheck
-# as `systemd-run --unit=<container-id>` where the unit name is the
-# full 64-char container ID + ".service". PID 1 emits "Started",
-# "Deactivated successfully" and on failure "Failed with result
-# 'exit-code'" — tagged with UNIT=<64hex>.service in the journal but
-# _SYSTEMD_UNIT=init.scope (PID 1's cgroup) and SYSLOG_IDENTIFIER=systemd.
-# otlp_shape.lua keys on the UNIT field and rewrites to
-# ServiceName=podman_healthcheck + stamps CONTAINER_ID_FULL/SHORT so
-# HyperDX can pivot to the container's own application logs (which
-# podman's journald log driver tags with the same CONTAINER_ID_FULL).
-# Spoof a real healthcheck by minting a fake 64-hex unit name and
-# letting a transient unit exit non-zero; PID 1 emits the same shape.
-- name: _verify | Podman_healthcheck | build per-run marker
-  set_fact:
-    fluentbit_otlp_healthcheck_marker: "verify_healthcheck_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
-
-# SHA-256 of the marker is a unique 64-char lowercase hex string —
-# the exact shape podman uses for container IDs.
 - name: _verify | Podman_healthcheck | derive fake 64-hex container id
   set_fact:
-    fluentbit_otlp_healthcheck_cid: "{{ fluentbit_otlp_healthcheck_marker | hash('sha256') }}"
+    fluentbit_lnav_healthcheck_cid: "{{ fluentbit_lnav_healthcheck_marker | hash('sha256') }}"
 
-# Default systemd-run is async-start: returns 0 after the unit launches,
-# the unit then exits 1 and PID 1 logs "Failed with result 'exit-code'."
 - name: _verify | Podman_healthcheck | run failing transient unit named like a container id
   command: >-
-    systemd-run --unit={{ fluentbit_otlp_healthcheck_cid }}.service
+    systemd-run --unit={{ fluentbit_lnav_healthcheck_cid }}.service
     --quiet
     /bin/sh -c "exit 1"
   changed_when: false
   become: true
 
-- name: _verify | Podman_healthcheck | wait for ClickHouse row matching cid
-  import_role:
-    name: test
-    tasks_from: clickhouse_query_wait
-  vars:
-    test_args:
-      label: "podman_healthcheck | wait for row"
-      sql: >-
-        SELECT count() FROM default.otel_logs
-        WHERE LogAttributes['CONTAINER_ID_FULL'] = '{{ fluentbit_otlp_healthcheck_cid }}'
-          AND ServiceName = 'podman_healthcheck'
-      retries: 60
-      delay: 2
-      until: "test_clickhouse_result.rc == 0 and (test_clickhouse_result.stdout | trim | int) > 0"
+- name: _verify | JSONL | wait for shaped records
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
 
-- name: _verify | Podman_healthcheck | fetch row
-  import_role:
-    name: test
-    tasks_from: clickhouse_query
-  vars:
-    test_args:
-      label: "podman_healthcheck | fetch"
-      sql: >-
-        SELECT
-          Body,
-          ServiceName,
-          LogAttributes['CONTAINER_ID_FULL'] AS container_id_full,
-          LogAttributes['CONTAINER_ID']      AS container_id_short,
-          LogAttributes['UNIT']              AS unit_field
-        FROM default.otel_logs
-        WHERE LogAttributes['CONTAINER_ID_FULL'] = '{{ fluentbit_otlp_healthcheck_cid }}'
-          AND ServiceName = 'podman_healthcheck'
-        ORDER BY Timestamp DESC
-        LIMIT 1
-        FORMAT JSONEachRow
+        path, marker, service = sys.argv[1:4]
+        extra = sys.argv[4] if len(sys.argv) > 4 else ""
 
-- name: _verify | Podman_healthcheck | verify ClickHouse row arrived
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                if marker not in line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                message = record.get("message", "")
+                if record.get("service") == service and marker in message and (not extra or extra in message):
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+      - "{{ item.marker }}"
+      - "{{ item.service }}"
+      - "{{ item.extra | default('') }}"
+  register: _fluentbit_lnav_records
+  changed_when: false
+  retries: 60
+  delay: 2
+  until: _fluentbit_lnav_records.rc == 0
+  loop:
+    - name: journald
+      marker: "{{ fluentbit_lnav_journald_marker }}"
+      service: fluentbit_verify_journald
+    - name: nginx
+      marker: "{{ fluentbit_lnav_nginx_marker }}"
+      service: nginx_access
+    - name: warn
+      marker: "{{ fluentbit_lnav_warn_marker }}"
+      service: fluentbit_verify_warn
+    - name: multiline
+      marker: "{{ fluentbit_lnav_multiline_marker }}"
+      service: fluentbit_verify_multiline
+      extra: Traceback
+    - name: mitogen
+      marker: "{{ fluentbit_lnav_mitogen_marker }}"
+      service: mitogen
+    - name: podman_healthcheck
+      marker: "{{ fluentbit_lnav_healthcheck_cid }}"
+      service: podman_healthcheck
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+
+- name: _verify | JSONL | collect shaped records
+  set_fact:
+    _fluentbit_lnav_by_name: >-
+      {{ _fluentbit_lnav_by_name | default({}) |
+         combine({item.item.name: (item.stdout | from_json)}) }}
+  loop: "{{ _fluentbit_lnav_records.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: _verify | Journald path | assert JSONL shape
+  vars:
+    row: "{{ _fluentbit_lnav_by_name.journald }}"
   assert:
     that:
-      - "test_clickhouse_result.stdout | default('', true) | length > 0"
-    fail_msg: "podman_healthcheck row not found in ClickHouse (stdout={{ test_clickhouse_result.stdout | default('') }})"
+      - "row.level == 'error'"
+      - "row.level_number | int == 17"
+      - "row.service == 'fluentbit_verify_journald'"
+      - "fluentbit_lnav_journald_marker in row.message"
+      - "row.unit == 'fluentbit_verify_journald.service'"
+      - "row.identifier == 'fluentbit_verify_journald'"
+      - "row.host == inventory_hostname"
+      - "row.stream == 'journald'"
+      - "row.fields.SYSTEMD_UNIT == 'fluentbit_verify_journald.service'"
+      - "row.fields.SYSLOG_IDENTIFIER == 'fluentbit_verify_journald'"
+    fail_msg: "journald record landed with wrong shape: {{ row }}"
+
+- name: _verify | Nginx tail | assert JSONL shape
+  vars:
+    row: "{{ _fluentbit_lnav_by_name.nginx }}"
+  assert:
+    that:
+      - "row.level == 'info'"
+      - "row.level_number | int == 9"
+      - "row.service == 'nginx_access'"
+      - "fluentbit_lnav_nginx_marker in row.message"
+      - "row.stream == 'nginx'"
+    fail_msg: "nginx access record landed with wrong shape: {{ row }}"
+
+- name: _verify | Journald warn | assert severity classification
+  vars:
+    row: "{{ _fluentbit_lnav_by_name.warn }}"
+  assert:
+    that:
+      - "row.level == 'warn'"
+      - "row.level_number | int == 13"
+      - "fluentbit_lnav_warn_marker in row.message"
+    fail_msg: "WARN keyword classified wrong: {{ row }}"
+
+- name: _verify | Multiline | assert traceback joined
+  vars:
+    row: "{{ _fluentbit_lnav_by_name.multiline }}"
+  assert:
+    that:
+      - "'Traceback' in row.message"
+      - "'ValueError' in row.message"
+      - "fluentbit_lnav_multiline_marker in row.message"
+      - "row.service == 'fluentbit_verify_multiline'"
+    fail_msg: "Multiline traceback not joined: {{ row }}"
+
+- name: _verify | Mitogen | assert collapse fired
+  vars:
+    row: "{{ _fluentbit_lnav_by_name.mitogen }}"
+  assert:
+    that:
+      - "row.service == 'mitogen'"
+      - "fluentbit_lnav_mitogen_marker in row.message"
+    fail_msg: "mitogen-shaped identifier did not collapse to service=mitogen: {{ row }}"
 
 - name: _verify | Podman_healthcheck | assert rewrite shape
   vars:
-    row: "{{ test_clickhouse_result.stdout | from_json }}"
+    row: "{{ _fluentbit_lnav_by_name.podman_healthcheck }}"
   assert:
     that:
-      - "row.ServiceName == 'podman_healthcheck'"
-      - "row.container_id_full == fluentbit_otlp_healthcheck_cid"
-      - "row.container_id_short == fluentbit_otlp_healthcheck_cid[:12]"
-      - "row.unit_field == fluentbit_otlp_healthcheck_cid ~ '.service'"
-      - "fluentbit_otlp_healthcheck_cid in row.Body"
+      - "row.service == 'podman_healthcheck'"
+      - "row.fields.CONTAINER_ID_FULL == fluentbit_lnav_healthcheck_cid"
+      - "row.fields.CONTAINER_ID == fluentbit_lnav_healthcheck_cid[:12]"
+      - "row.fields.UNIT == fluentbit_lnav_healthcheck_cid ~ '.service'"
+      - "fluentbit_lnav_healthcheck_cid in row.message"
     fail_msg: "podman_healthcheck rewrite did not fire: {{ row }}"
 
-# No probe for the svc.<empty> -> SYSLOG_IDENTIFIER fallback branch:
-# the path covers records that reach journald with _TRANSPORT=kernel
-# and no _SYSTEMD_UNIT (nftables LOG target, MCE, oom-killer, audit),
-# but those can't be synthesised from userspace. /dev/kmsg writes go
-# through the kernel ring buffer but journald still attributes them
-# to the writing process's cgroup (-> _SYSTEMD_UNIT=session-X.scope),
-# so they hit the normal svc.<unit> branch instead. Real kernel
-# printk records bypass that attribution because the kernel isn't in
-# any cgroup. See otlp_shape.lua for the fallback implementation.
+- name: _verify | Fluent Bit journal has no Lua warnings
+  command:
+    argv:
+      - journalctl
+      - -u
+      - fluent-bit
+      - --since
+      - -5 minutes
+      - --no-pager
+      - --grep
+      - "lua.*(error|warn|warning)"
+  register: _fluentbit_lua_journal
+  changed_when: false
+  failed_when: _fluentbit_lua_journal.rc == 0
+  become: true

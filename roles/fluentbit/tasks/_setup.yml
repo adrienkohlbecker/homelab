@@ -3,18 +3,6 @@
     name: test
     tasks_from: nginx
 
-# fluentbit's _verify exercises the journald/nginx-through-OTLP paths
-# end-to-end: emit marked records, let them flow through the lua filters,
-# and confirm the OTLP output landed them in ClickHouse with the right
-# column shape. That needs a real OTLP receiver + ClickHouse stack on the
-# box, which hyperdx provides. hyperdx pulls in podman + service_user etc.
-# via its own _setup, which we run explicitly here because the harness only
-# invokes the current role's _setup, not transitive ones.
-- name: _setup | Install hyperdx dependencies
+- name: _setup | Install logrotate
   import_role:
-    name: hyperdx
-    tasks_from: _setup
-
-- name: _setup | Install hyperdx
-  import_role:
-    name: hyperdx
+    name: logrotate
