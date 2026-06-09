@@ -20,6 +20,9 @@
     lm_sensors_effective_relabel: >-
       {{ lm_sensors_qemu_test_relabel
          if (qemu_test | bool) else lm_sensors_relabel }}
+    lm_sensors_effective_ignore: >-
+      {{ lm_sensors_qemu_test_ignore
+         if (qemu_test | bool) else lm_sensors_ignore }}
 
 - name: _verify | Read the modules-load.d file
   slurp:
@@ -40,6 +43,21 @@
   loop: "{{ lm_sensors_effective_modules }}"
   changed_when: false
   become: true
+
+- name: _verify | Read the deployed libsensors ignore file
+  slurp:
+    path: /etc/sensors.d/zz_netdata_ignore.conf
+  register: _lm_sensors_ignore
+  become: true
+
+- name: _verify | Assert the ignore file lists the fixture chip and feature
+  vars:
+    _content: "{{ _lm_sensors_ignore.content | b64decode }}"
+  assert:
+    that:
+      - "'lm-sensors-test-0' in _content"
+      - "'ignore temp2' in _content"
+    fail_msg: "deployed /etc/sensors.d/zz_netdata_ignore.conf:\n{{ _lm_sensors_ignore.content | b64decode }}"
 
 # install.yml uses policy_rc_d=101 so apt won't auto-start netdata; prod
 # starts it in netdata's main.yml after configuration. The test path skips
@@ -106,6 +124,7 @@
   set_fact:
     lm_sensors_qemu_test_modules: []
     lm_sensors_qemu_test_relabel: []
+    lm_sensors_qemu_test_ignore: []
 
 - name: _verify | Re-run the role's module-management tasks
   import_tasks: main.yml
@@ -114,6 +133,12 @@
   stat:
     path: /etc/modules-load.d/lm_sensors.conf
   register: _lm_sensors_modload_after
+  become: true
+
+- name: _verify | Stat the libsensors ignore file after removal
+  stat:
+    path: /etc/sensors.d/zz_netdata_ignore.conf
+  register: _lm_sensors_ignore_after
   become: true
 
 - name: _verify | Check whether the dropped module is still loaded
@@ -129,13 +154,15 @@
   register: _lm_sensors_reboot_after
   become: true
 
-- name: _verify | Assert removal dropped the file and live-unloaded the module
+- name: _verify | Assert removal dropped the files and live-unloaded the module
   assert:
     that:
       - not _lm_sensors_modload_after.stat.exists
+      - not _lm_sensors_ignore_after.stat.exists
       - _lm_sensors_dummy_loaded.rc != 0
       - not _lm_sensors_reboot_after.stat.exists
     fail_msg: >-
       empty-list removal arm: modules-load.d exists={{ _lm_sensors_modload_after.stat.exists }},
+      sensors.d ignore exists={{ _lm_sensors_ignore_after.stat.exists }},
       dummy still loaded={{ _lm_sensors_dummy_loaded.rc == 0 }},
       reboot-required exists={{ _lm_sensors_reboot_after.stat.exists }}

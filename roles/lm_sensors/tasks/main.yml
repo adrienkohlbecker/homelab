@@ -6,6 +6,26 @@
     lm_sensors_effective_relabel: >-
       {{ lm_sensors_qemu_test_relabel
          if (qemu_test | bool) else lm_sensors_relabel }}
+    lm_sensors_effective_ignore: >-
+      {{ lm_sensors_qemu_test_ignore
+         if (qemu_test | bool) else lm_sensors_ignore }}
+  tags:
+    - lm_sensors
+
+- name: Assert lm_sensors_ignore is well-formed
+  vars:
+    _ignore: "{{ lm_sensors_effective_ignore }}"
+    _features: "{{ _ignore | map(attribute='features', default=[]) | flatten }}"
+  assert:
+    that:
+      - _ignore is sequence and _ignore is not string
+      - _ignore | selectattr('chip', 'undefined') | list | length == 0
+      - _ignore | selectattr('features', 'undefined') | list | length == 0
+      - _features | reject('match', '^[a-z0-9_]+\Z') | list | length == 0
+    fail_msg: >-
+      lm_sensors_ignore entries each need a `chip` and a `features` list of
+      hwmon feature names (lowercase letters, digits, underscore -- e.g. temp3).
+      Got: {{ _ignore }}
   tags:
     - lm_sensors
 
@@ -139,6 +159,59 @@
     owner: root
     group: root
     mode: "0644"
+  become: true
+  tags:
+    - lm_sensors
+
+# Phantom/unconnected hwmon inputs to hide from libsensors (see the template
+# header for why). Host-global config under /etc/sensors.d/; the netdata
+# restart below makes the change take effect live rather than at next reboot.
+- name: Write the libsensors ignore list
+  when: lm_sensors_effective_ignore | length > 0
+  template:
+    src: sensors_ignore.conf.j2
+    dest: /etc/sensors.d/zz_netdata_ignore.conf
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+  register: lm_sensors_ignore_file
+  become: true
+  tags:
+    - lm_sensors
+
+- name: Remove the libsensors ignore list when empty
+  when: lm_sensors_effective_ignore | length == 0
+  file:
+    path: /etc/sensors.d/zz_netdata_ignore.conf
+    state: absent
+  register: lm_sensors_ignore_removed
+  become: true
+  tags:
+    - lm_sensors
+
+# debugfs.plugin reads libsensors once at startup, so a live change needs a
+# netdata restart to be picked up. Only when netdata is already running -- in
+# the role's standalone test converge netdata is installed but not yet started
+# (the _verify starts it fresh, which reads the file on its own); on prod
+# netdata is up from its own (earlier) play, so the restart fires.
+- name: Check whether netdata is running  # noqa: command-instead-of-module
+  command: systemctl is-active --quiet netdata
+  register: lm_sensors_netdata_active
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - lm_sensors
+
+- name: Restart netdata to re-read the sensor ignore list
+  when:
+    - (lm_sensors_ignore_file.changed | default(false)) or (lm_sensors_ignore_removed.changed | default(false))
+    - lm_sensors_netdata_active.rc == 0
+  systemd:
+    name: netdata
+    state: restarted
   become: true
   tags:
     - lm_sensors

@@ -8,13 +8,22 @@
 #                 per host with `sudo sensors-detect`).
 # lm_sensors_relabel: optional go.d relabel map; consumed only by netdata.yml.
 #                 See roles/lm_sensors/templates/sensors.conf.j2 for the shape.
-# noqa var-naming[no-role-prefix]: lm_sensors_modules/lm_sensors_relabel are the
-# established un-prefixed cross-host interface (set in host_vars), not
+# lm_sensors_ignore: optional libsensors `ignore` list for phantom/unconnected
+#                 hwmon inputs -- writes /etc/sensors.d/, hiding them from every
+#                 libsensors reader (incl. netdata's chatty debugfs.plugin).
+#                 Shape: list of {chip: <glob>, features: [<feature>, ...]};
+#                 feature names per `sensors -u <chip>` (e.g. temp3).
+# noqa var-naming[no-role-prefix]: lm_sensors_modules/lm_sensors_relabel/lm_sensors_ignore
+# are the established un-prefixed cross-host interface (set in host_vars), not
 # role-internal vars -- same exemption netdata's metrics installs use.
 lm_sensors_modules: []
 lm_sensors_relabel: []
+lm_sensors_ignore: []
 
 lm_sensors_qemu_test_modules: "{{ ['dummy'] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
 lm_sensors_qemu_test_relabel: >-
   {{ [{'chip': 'lm-sensors-test-0', 'sensors': [{'name': 'temp1', 'label': 'Verify Probe'}]}]
+     if (_role_under_test | default('')) == 'lm_sensors' else [] }}
+lm_sensors_qemu_test_ignore: >-
+  {{ [{'chip': 'lm-sensors-test-0', 'features': ['temp2']}]
      if (_role_under_test | default('')) == 'lm_sensors' else [] }}
