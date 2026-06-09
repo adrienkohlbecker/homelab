@@ -1,5 +1,5 @@
 # Invoked from roles/netdata/tasks/main.yml after netdata is installed --
-# don't call this before the netdata role has run. lm_sensors_netdata_restart is set
+# don't call this before the netdata role has run. lm_sensors_netdata_condition is set
 # by that caller; default it so a standalone import (or _verify) still works.
 
 # The shared netdata `template` helper carries no validate: -- it also writes
@@ -34,6 +34,6 @@
     netdata_args:
       src: sensors.conf.j2
       dest: go.d/sensors.conf
-      restart: "{{ lm_sensors_netdata_restart | default(true) }}"
+      condition: "{{ lm_sensors_netdata_condition | default(true) }}"
   tags:
     - lm_sensors

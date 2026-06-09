@@ -7,6 +7,6 @@
       src: smartctl.conf
       dest: go.d/smartctl.conf
       validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-      restart: "{{ smart_netdata_restart | default(true) }}"
+      condition: "{{ smart_netdata_condition | default(true) }}"
   tags:
     - smart
