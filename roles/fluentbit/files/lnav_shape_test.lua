@@ -42,6 +42,16 @@ do
 end
 
 do
+    local rec = shape("svc.keepalived.service", { SYSLOG_IDENTIFIER = "Keepalived_vrrp", host = "lab" }, "info", 9)
+    check("svc.identifier_lowercase", rec.service, "keepalived_vrrp")
+end
+
+do
+    local rec = shape("svc.", { SYSLOG_IDENTIFIER = "kernel" }, "info", 9)
+    check("svc.kernel", rec.service, "kernel")
+end
+
+do
     local rec =
         shape("svc.session-3.scope", { SYSLOG_IDENTIFIER = "python3(mitogen:ak@lab:12345)", log = "ok" }, "info", 9)
     check("mitogen.service", rec.service, "mitogen")
@@ -50,6 +60,11 @@ end
 do
     local rec = shape("svc.libpod-conmon-abc123.scope", { SYSLOG_IDENTIFIER = "epic_allen", log = "ok" }, "info", 9)
     check("podman_unnamed.service", rec.service, "podman_unnamed")
+end
+
+do
+    local rec = shape("svc.cron.service", {}, "info", 9)
+    check("svc.unit_fallback", rec.service, "cron")
 end
 
 do
@@ -65,12 +80,23 @@ do
 end
 
 do
+    local rec = shape("nginx.error", {}, "info", 9)
+    check("nginx.error", rec.service, "nginx_error")
+end
+
+do
+    local rec = shape("nginx.", {}, "info", 9)
+    check("nginx.bare", rec.service, "unknown")
+end
+
+do
     local cid = "75ca2e2b110c2a3e6af421033e99bc1dbc8f58d3eacf929cb2b395377d63e4bc"
     local rec =
         shape("svc.init.scope", { SYSLOG_IDENTIFIER = "systemd", UNIT = cid .. ".service", log = cid }, "info", 9)
     check("healthcheck.service", rec.service, "podman_healthcheck")
     check("healthcheck.cid_full", rec.fields.CONTAINER_ID_FULL, cid)
     check("healthcheck.cid_short", rec.fields.CONTAINER_ID, string.sub(cid, 1, 12))
+    check("healthcheck.unit", rec.fields.UNIT, cid .. ".service")
 end
 
 do

@@ -3,6 +3,8 @@ set -euo pipefail
 
 # Prefer the Fluent Bit JSONL store when it exists. Unit and line-count queries
 # still use journalctl directly, because lnav file mode has no -u equivalent.
+# Bare -n is passed through to lnav as non-interactive mode; -n <count> selects
+# the journalctl line-count fallback.
 
 case "${1:-}" in
 -V | --version | -h | --help)

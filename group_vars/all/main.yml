@@ -368,11 +368,6 @@ podman_default_network: 10.88.0.0/16
 # IP and SNAT rewrites the source to that bridge's gateway).
 podman_bridge_pool: 10.89.0.0/16
 
-# True on hosts that co-locate the HyperDX OTLP receiver. fluentbit
-# ships to 127.0.0.1 instead of TLS-through-nginx; the ingest token
-# still authenticates (loopback HTTP).
-fluentbit_otlp_local: false
-
 # The VRRP HA pair. box is a qemu test fixture, not a peer: keeping it
 # here made lab/pug continuously unicast adverts at the test VM's IP and
 # (if box ever ran this role on the LAN at vrid 1) let it join the prod
