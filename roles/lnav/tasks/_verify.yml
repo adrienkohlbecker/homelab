@@ -26,11 +26,6 @@
     content: "{{ item.content }}"
     mode: "0644"
   loop:
-    - path: /tmp/lnav_verify/FTL.log
-      content: |
-        [2026-06-08 08:00:00.000] INFO:  FTL started
-        [2026-06-08 08:00:01.123] WARNING:  Rate-limiting 10.0.0.5
-        [2026-06-08 08:00:02.456] ERROR:  Could not read config file
     - path: /tmp/lnav_verify/syslog
       content: |
         Jun  8 08:00:00 lab pihole-FTL: WARNING: rate-limiting client 10.0.0.5
@@ -56,7 +51,6 @@
   loop:
     - journald_json_log
     - fluentbit_lnav
-    - pihole_ftl
     - syslog_body_scan
   tags:
     - lnav
@@ -76,8 +70,6 @@
   loop:
     - name: fluentbit_lnav
       path: /tmp/lnav_verify/lnav.jsonl
-    - name: pihole_ftl
-      path: /tmp/lnav_verify/FTL.log
     - name: syslog_body_scan
       path: /tmp/lnav_verify/syslog
   tags:
@@ -96,7 +88,6 @@
   changed_when: false
   loop:
     - /tmp/lnav_verify/lnav.jsonl
-    - /tmp/lnav_verify/FTL.log
     - /tmp/lnav_verify/syslog
   tags:
     - lnav

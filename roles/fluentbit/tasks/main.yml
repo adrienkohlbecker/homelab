@@ -83,17 +83,21 @@
   tags:
     - fluentbit
 
-# Deployed before the main config below: fluent-bit.conf references this with
-# an absolute Parsers_File path that must already exist when the config's
-# `--dry-run` validate runs. Carries the nginx_access_custom parser.
+# Deployed before the main config below: fluent-bit.conf references these with
+# absolute Parsers_File paths that must already exist when the config's
+# `--dry-run` validate runs. One file per service whose tailed log gets a
+# custom parser (nginx access, pihole FTL).
 - name: Install fluent-bit custom parsers
   copy:
-    src: parsers_nginx.conf
-    dest: /etc/fluent-bit/parsers_nginx.conf
+    src: "{{ item }}"
+    dest: /etc/fluent-bit/{{ item }}
     owner: root
     group: root
     mode: "0644"
     backup: true
+  loop:
+    - parsers_nginx.conf
+    - parsers_pihole.conf
   become: true
   register: fluentbit_parsers
   when: not (ansible_check_mode and fluentbit_apt.changed)
