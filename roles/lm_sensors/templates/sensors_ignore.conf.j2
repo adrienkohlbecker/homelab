@@ -1,0 +1,14 @@
+# {{ ansible_managed }}
+# libsensors `ignore` directives for phantom / unconnected hwmon inputs.
+# Removing a feature here drops it from libsensors feature enumeration, so
+# every reader stops seeing it -- including netdata's debugfs.plugin, which
+# otherwise logs a state transition each time a railed pin flaps across its
+# kernel-provided crit threshold (tens of thousands of journal lines/day on a
+# host with unconnected AUXTIN pins). Feature names are as `sensors -u <chip>`
+# reports them; chip names accept libsensors globs.
+{% for entry in lm_sensors_effective_ignore %}
+chip "{{ entry.chip }}"
+{% for feature in entry.features %}
+    ignore {{ feature }}
+{% endfor %}
+{% endfor %}

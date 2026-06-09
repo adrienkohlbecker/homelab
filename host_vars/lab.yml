@@ -39,6 +39,18 @@ lm_sensors_modules:
   - coretemp
   - nct6775
 
+# nct6798 AUXTIN0/2/4 (temp3/5/7) are unconnected board pins: they rail at
+# -128/+127 C and oscillate across their crit threshold, so netdata's
+# debugfs.plugin logs a state transition for each flap (~tens of thousands of
+# journal lines/day). temp4/temp6 (AUXTIN1/3) read plausible values and stay
+# quiet, so they are left charted. Feature names per `sensors -u nct6798-isa-0290`.
+lm_sensors_ignore:
+  - chip: nct6798-isa-0290
+    features:
+      - temp3
+      - temp5
+      - temp7
+
 # `block` derives from data/network_topology.yml: each entry is the
 # host's slot-indexed /28 within the VLAN's CIDR (see the schema doc
 # in the topology file — `per-host /28 block = vlan_cidr | ipsubnet(28,
