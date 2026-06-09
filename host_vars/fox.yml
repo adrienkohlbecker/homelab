@@ -28,6 +28,9 @@ zfs_pool_properties:
 zfs_autobackup_sources: []
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
 
+# Hetzner is resetting this to 0
+boot_efi_timeout: 0
+
 # zram-only swap on this 4G VM: compression roughly doubles usable memory
 # and gives an OOM backstop the stock image lacks. No disk overflow yet --
 # the deadlock-free 8200 partition lands with the ZFS-root cutover (it needs
