@@ -24,8 +24,3 @@
     - /mnt/scratch
     - /mnt/media
   become: true
-
-- name: _setup | Fake HW transcoding fixture (no GPU in QEMU)
-  import_role:
-    name: test
-    tasks_from: fake_render_device
