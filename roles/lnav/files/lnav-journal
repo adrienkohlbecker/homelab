@@ -98,8 +98,12 @@ for log_path in "${fluentbit_candidates[@]}"; do
 	fi
 done
 
+# :goto 100% lands on the newest record at startup (lnav otherwise opens at the
+# top, i.e. the oldest line in the store); being at the bottom, lnav then
+# auto-follows records appended live by Fluent Bit. Placed before the
+# passthrough args so an explicit user position still wins.
 if [[ ${#fluentbit_logs[@]} -gt 0 && ${#units[@]} -eq 0 && -z "$lines" ]]; then
-	exec /usr/local/bin/lnav "${lnav_args[@]}" "${fluentbit_logs[@]}"
+	exec /usr/local/bin/lnav -c ':goto 100%' "${lnav_args[@]}" "${fluentbit_logs[@]}"
 fi
 
 journalctl_args=(--no-pager --quiet -o json)
@@ -161,6 +165,7 @@ done
 set +e
 /usr/local/bin/lnav \
 	"${lnav_format_args[@]}" \
+	-c ':goto 100%' \
 	-c ':filter-out ^ansible-[A-Za-z0-9._]+ Invoked with' \
 	-c ':filter-out ^pam_unix\(cron:session\)' \
 	-c ':filter-out ^(podman0: port|veth[0-9]+( |@|: ))' \
