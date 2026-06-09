@@ -1,0 +1,50 @@
+{
+  "$schema": "https://lnav.org/schemas/format-v1.schema.json",
+  "fluentbit_lnav": {
+    "title": "Fluent Bit lnav JSON",
+    "description": "Final Fluent-Bit-shaped records as JSON Lines (/var/log/fluent-bit/lnav.jsonl)",
+    "file-pattern": "(.*/)?lnav\\.jsonl(\\.[0-9]+)?(\\.gz)?$",
+    "json": true,
+    "timestamp-field": "time",
+    "level-field": "level",
+    "level": {
+      "fatal": "^fatal$",
+      "error": "^error$",
+      "warning": "^(warn|warning)$",
+      "info": "^info$",
+      "debug": "^debug$",
+      "trace": "^trace$"
+    },
+    "body-field": "message",
+    "line-format": [
+      { "field": "__timestamp__" },
+      " ",
+      { "field": "__level__", "min-width": 7, "align": "left" },
+      " ",
+      { "field": "host" },
+      " ",
+      { "field": "service" },
+      ": ",
+      { "field": "message" }
+    ],
+    "value": {
+      "host": { "kind": "string", "identifier": true },
+      "service": { "kind": "string", "identifier": true },
+      "unit": { "kind": "string", "identifier": true },
+      "identifier": { "kind": "string", "identifier": true },
+      "stream": { "kind": "string", "identifier": true },
+      "level": { "kind": "string" },
+      "level_number": { "kind": "integer", "hidden": true },
+      "message": { "kind": "string" },
+      "/fields/CONTAINER_NAME": { "kind": "string", "hidden": true },
+      "/fields/SYSTEMD_UNIT": { "kind": "string", "hidden": true },
+      "/fields/SYSLOG_IDENTIFIER": { "kind": "string", "hidden": true }
+    },
+    "sample": [
+      {
+        "line": "{\"time\":\"2026-06-08T12:34:56.789Z\",\"host\":\"lab\",\"service\":\"homeassistant\",\"unit\":\"homeassistant.service\",\"identifier\":\"homeassistant\",\"level\":\"warn\",\"level_number\":13,\"message\":\"connection failed\",\"stream\":\"journald\",\"fields\":{\"CONTAINER_NAME\":\"homeassistant\",\"SYSTEMD_UNIT\":\"homeassistant.service\",\"SYSLOG_IDENTIFIER\":\"homeassistant\"}}",
+        "level": "warning"
+      }
+    ]
+  }
+}

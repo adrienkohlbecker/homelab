@@ -95,6 +95,7 @@
     validate: python3 -m json.tool %s
   loop:
     - journald_json_log.json
+    - fluentbit_lnav.json
     - pihole_ftl.json
     - syslog_body_scan.json
   become: true
