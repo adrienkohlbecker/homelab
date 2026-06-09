@@ -1,10 +1,10 @@
 -- podman's --log-driver journald hardcodes PRIORITY by stream: stdout=6
 -- (info), stderr=3 (err). Everything from postgres / celery / linuxserver
 -- entrypoints arrives at err because the apps write INFO to stderr, which
--- breaks HyperDX severity filtering. Parse the message text for a level
--- keyword and write metadata.otlp.severity_{text,number}, which fluent-bit's
--- opentelemetry output ships as LogRecord.Severity{Text,Number}. The local
--- journal is untouched.
+-- loses useful severity filtering. Parse the message text for a level
+-- keyword and write metadata.otlp.severity_{text,number}; the final lnav
+-- shaper promotes those values into the JSONL record body. The local journal
+-- is untouched.
 --
 -- Scope is deliberately narrow: scan the first 120 chars only, because
 -- the level keyword in every format we care about appears right after
@@ -25,7 +25,7 @@ local function has(head, token)
     return string.find(head, "[^%w]" .. token .. "[^%w]") ~= nil
 end
 
--- Numeric mapping (OTLP SEVERITY_NUMBER_*); rules below pick a
+-- Numeric mapping follows OTLP severity numbers; rules below pick a
 -- severity text, this table converts to the number.
 local SEV = {
     fatal = 21,
@@ -41,8 +41,7 @@ local SEV = {
 -- "notice" maps to info, not warn: dnscrypt-proxy emits routine latency
 -- probe + server-selection output at [NOTICE] (~hundreds of lines/day),
 -- which is operationally info -- not a warning. This deviates from
--- HyperDX's body-regex (which maps notice -> warn); the lua filter
--- stamps severity before the body-regex runs, so the stamp wins.
+-- the older body-regex mapping, which treated notice as warn.
 -- Postgres emits "LOG: ..." for informational chatter -- the pattern
 -- requires a trailing colon so the English word "log" anywhere in a
 -- real error doesn't downgrade it, and LOG: ranks after info so a
@@ -109,11 +108,8 @@ function set_priority(tag, ts, _group, metadata, record)
     end
 
     if sev_text == nil then
-        -- No level keyword found. Stamp severity=info so HyperDX's
-        -- transform processor doesn't fall back to its body-regex
-        -- inference and mis-classify e.g. nginx access logs that
-        -- happen to contain "alert" / "error" / "warn" as URL path
-        -- segments.
+        -- No level keyword found. Stamp severity=info so the final
+        -- JSONL record still has a predictable lnav level.
         sev_text = "info"
     end
 

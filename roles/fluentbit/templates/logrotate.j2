@@ -1,0 +1,19 @@
+/var/log/fluent-bit/lnav.jsonl {
+    daily
+    rotate 14
+    size 200M
+{% if zfs_root %}
+    # compress
+{% else %}
+    compress
+    delaycompress
+{% endif %}
+    missingok
+    notifempty
+    create 0640 root adm
+    sharedscripts
+    postrotate
+        systemctl try-restart fluent-bit.service >/dev/null 2>&1 || true
+    endscript
+    su root adm
+}

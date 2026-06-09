@@ -11,3 +11,5 @@
 # probed from _verify is the practical alternative.
 [Service]
 ExecReload=/bin/kill -s HUP $MAINPID
+StandardOutput=append:/var/log/fluent-bit/lnav.jsonl
+StandardError=journal

@@ -122,8 +122,7 @@ do
     check("temp.critical.num", n, 21)
 end
 
--- 13. No level keyword anywhere -> default info (so HyperDX's body-regex
---     fallback never fires).
+-- 13. No level keyword anywhere -> default info for a predictable lnav level.
 do
     local t, n = sev("netmap: suggested exit node:  ()")
     check("nokw.default.text", t, "info")
