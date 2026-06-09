@@ -110,13 +110,13 @@ New user-facing services get a bookmark in [roles/homepage/templates/bookmarks.y
 
 Drive with `mise run ha:sync [pull|push|sync]` ([mise-tasks/ha/sync.py](mise-tasks/ha/sync.py)). Don't bypass the sync (no `scp`, no live-VM editing). **Don't bump the parent's submodule pointer**: [.gitmodules](.gitmodules) sets `ignore = all`, the pinned commit is not load-bearing.
 
-### `notes/` submodule
+### `notes/` private clone
 
-`notes/` is a **git submodule** → private repo [adrienkohlbecker/homelab_notes](https://github.com/adrienkohlbecker/homelab_notes). **Not** a subtree — **never run `git subtree add/pull/push/merge`** against it. The parent stores only a gitlink; content never lands in the public repo.
+`notes/` is an independent **private clone** of [adrienkohlbecker/homelab_notes](https://github.com/adrienkohlbecker/homelab_notes), living at `<repo>/notes` and **gitignored** — not a submodule, not tracked, not pinned per code commit. The public repo carries no notes footprint beyond the `.gitignore` entry; notes content must never land in it (no committing notes files, no `git subtree`).
 
-Sync: edit inside `notes/` → commit+push to `homelab_notes` → record in parent with `git add notes && git commit`. **Unlike `ha_gui_config`, the `notes` pointer IS load-bearing** — divergence surfaces in parent `git status`; commit pointer bumps deliberately.
+Notes keep their own linear history, soft-correlated to code: a `prepare-commit-msg` hook in the clone stamps each notes commit with a `Code: homelab@<sha>` trailer (the main checkout's HEAD at write time), self-installed via the notes repo's `[hooks] enter`. Sync is just `git commit` + `git push` inside `notes/` when ready — there is no parent pointer to bump.
 
-**In worktrees**, `worktree:add`/`worktree:merge` ([mise-tasks/worktree/](mise-tasks/worktree/)) automate notes init and linear merging. Same-file conflicts halt for manual resolution.
+**In worktrees**, each `notes/` is a symlink to the main checkout's one clone (created by `worktree:add` / the `WorktreeCreate` hook via [mise-tasks/worktree/populate.sh](mise-tasks/worktree/populate.sh)), so notes written from any worktree land on the single notes history — no per-worktree clone, branch, or merge. `worktree:merge`/`worktree:update` therefore just rebase the code branch, with no submodule gitlink to reconcile.
 
 **Every note must open with YAML frontmatter** containing at least `status` and `created_at`:
 

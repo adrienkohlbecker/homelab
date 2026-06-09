@@ -11,6 +11,3 @@
 	# the pointer deliberately, `git add --force` the submodule path —
 	# plain `git add` / `status` won't surface it under `all`.
 	ignore = all
-[submodule "notes"]
-	path = notes
-	url = git@github.com:adrienkohlbecker/homelab_notes.git

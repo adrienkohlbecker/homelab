@@ -35,7 +35,7 @@ def iter_links(text):
         yield m.group(1)
 
 
-def check_file(path):
+def check_file(path, notes_dir=None):
     errors = []
     text = path.read_text(encoding="utf-8", errors="replace")
     for raw in iter_links(text):
@@ -43,13 +43,27 @@ def check_file(path):
         url_path = url.split("#")[0].strip()
         if not url_path or any(url_path.startswith(p) for p in SKIP_PREFIXES):
             continue
-        if not (path.parent / url_path).resolve().exists():
+        target = (path.parent / url_path).resolve()
+        # notes/ is a private repo cloned in-place + gitignored: absent in CI and
+        # any checkout that didn't populate it. Treat links into it as an external
+        # boundary -- verify only when the clone is present, so the public repo's
+        # link check never depends on the private one.
+        if notes_dir is not None:
+            try:
+                target.relative_to(notes_dir)
+                continue
+            except ValueError:
+                pass
+        if not target.exists():
             errors.append(url_path)
     return errors
 
 
 def main():
     root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
+    # When the notes/ clone is absent (CI etc.), links into it are skipped rather
+    # than flagged -- see check_file. None means "present, verify normally".
+    notes_dir = None if (root / "notes").exists() else (root / "notes").resolve()
     files_output = subprocess.check_output(["git", "ls-files"], cwd=root, text=True)
     files = []
     for rel in files_output.splitlines():
@@ -61,7 +75,7 @@ def main():
 
     total = 0
     for f in sorted(files):
-        for link in check_file(f):
+        for link in check_file(f, notes_dir):
             print(f"{f.relative_to(root)}: broken link: {link}", file=sys.stderr)
             total += 1
 

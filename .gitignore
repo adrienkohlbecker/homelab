@@ -1,4 +1,8 @@
 /.worktrees
+# notes/ is a private repo cloned in-place (git@github.com:adrienkohlbecker/homelab_notes),
+# not a submodule: an independent clone the main checkout owns and every worktree
+# symlinks to. Untracked here so the public repo carries no notes footprint.
+/notes
 __pycache__
 .vscode
 test/out.tsv
