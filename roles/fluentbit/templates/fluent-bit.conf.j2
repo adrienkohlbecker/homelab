@@ -274,12 +274,14 @@
 #    CMD line still flows.
 #  - kernel: ephemeral podman bridge churn (~140/day): podman healthchecks
 #    spawn transient containers that add/remove veth pairs.
-#  - kernel: keepalived gratuitous-ARP martians for the pihole VIP
-#    (10.123.1.224, ~120/day). Macvlan bridge mode delivers the broadcast
-#    to both eth0 and mac_mgmt; mac_mgmt's /28 doesn't cover .224, so the per-iface
-#    rp_filter check logs it. Loosening rp_filter site-wide is the bigger
-#    hammer (CLAUDE.md "Someday"); meanwhile silence the specific pattern.
-#    The "ll header: 00000000:" hex dump is the kernel's follow-up line.
+#  - kernel: rp_filter martians on the keepalived VRRP interface (dev vrrp*,
+#    ~108k/day on pug, the host's single largest journal source). VRRP traffic
+#    plus broadcast / gratuitous-ARP arrives on the macvlan-backed vrrp iface
+#    whose subnet doesn't cover the source, so the per-iface rp_filter check
+#    logs every packet. Scoped to `on dev vrrp` so a martian on a real data
+#    iface (an actual signal) still surfaces. Loosening rp_filter site-wide is
+#    the root fix (CLAUDE.md "Someday"). The "ll header: 00000000:" hex dump is
+#    the kernel's follow-up line.
 #  - audit/apparmor: ubuntu_pro_esm_cache's apt method probing
 #    /etc/gnutls/config (which doesn't exist) -- known harmless DENY,
 #    apt method handles ENOENT gracefully.
@@ -296,12 +298,25 @@
     Exclude           MESSAGE ^pam_unix\(cron:session\)
     Exclude           MESSAGE ^podman0: port
     Exclude           MESSAGE ^veth[0-9]+( |@|: )
-    Exclude           MESSAGE ^IPv4: martian source 10\.123\.1\.224
+    Exclude           MESSAGE ^IPv4: martian source .* on dev vrrp
     Exclude           MESSAGE ^ll header: 00000000:
     Exclude           MESSAGE name="/etc/gnutls/config"
     Exclude           MESSAGE Failed to get interface "(veth|podman)
     Exclude           MESSAGE Unknown index .* seen, reloading interface list
     Exclude           MESSAGE which is not our child
+
+# podman emits a `container health_status` event to the journal every time a
+# container's healthcheck runs (~30s) and embeds the container's entire image
+# label set in each one (avg ~900 B). On a host running ~30 containers that is
+# ~60 MB/day of steady "health_status=healthy" events with no signal -- the
+# healthy/unhealthy state already shows on the container's systemd unit and in
+# netdata. Drop the steady healthy events; transitions (health_status=starting
+# / unhealthy) still flow so a flapping container stays visible. journalctl on
+# the host still has the full events.
+[FILTER]
+    Name              grep
+    Match             svc.*
+    Exclude           MESSAGE container health_status .*health_status=healthy
 
 # audit-tail noise filter. SERVICE_START / SERVICE_STOP for podman
 # healthcheck transient .service units (sha256 unit names cycling
