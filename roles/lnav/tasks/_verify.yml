@@ -36,6 +36,9 @@
         Jun  8 08:00:00 lab pihole-FTL: WARNING: rate-limiting client 10.0.0.5
         Jun  8 08:00:01 lab sshd[1234]: error: kex_exchange_identification: Connection closed by remote host
         Jun  8 08:00:02 lab kernel: info: loaded module xfs
+    - path: /tmp/lnav_verify/lnav.jsonl
+      content: |
+        {"time":"2026-06-08T12:34:56.789Z","host":"lab","service":"homeassistant","unit":"homeassistant.service","identifier":"homeassistant","level":"warn","level_number":13,"message":"connection failed","stream":"journald","fields":{"CONTAINER_NAME":"homeassistant","SYSTEMD_UNIT":"homeassistant.service","SYSLOG_IDENTIFIER":"homeassistant"}}
   tags:
     - lnav
 
@@ -51,6 +54,8 @@
       - get
   changed_when: false
   loop:
+    - journald_json_log
+    - fluentbit_lnav
     - pihole_ftl
     - syslog_body_scan
   tags:
@@ -69,6 +74,8 @@
       - "{{ item.path }}"
   changed_when: false
   loop:
+    - name: fluentbit_lnav
+      path: /tmp/lnav_verify/lnav.jsonl
     - name: pihole_ftl
       path: /tmp/lnav_verify/FTL.log
     - name: syslog_body_scan
@@ -88,8 +95,89 @@
       - "{{ item }}"
   changed_when: false
   loop:
+    - /tmp/lnav_verify/lnav.jsonl
     - /tmp/lnav_verify/FTL.log
     - /tmp/lnav_verify/syslog
+  tags:
+    - lnav
+
+- name: Lnav fluentbit_lnav SQL table exposes shaped fields
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  command:
+    argv:
+      - timeout
+      - -k
+      - 5s
+      - 20s
+      - /usr/local/bin/lnav
+      - -n
+      - -N
+      - -c
+      - ";SELECT level, host, service, log_body AS message FROM fluentbit_lnav LIMIT 1"
+      - -c
+      - ":write-jsonlines-to /tmp/lnav_verify/fluentbit_sql.jsonl"
+      - -c
+      - ":quit"
+      - /tmp/lnav_verify/lnav.jsonl
+  register: lnav_fluentbit_sql_export
+  changed_when: false
+  failed_when: >-
+    lnav_fluentbit_sql_export.rc != 0
+    or lnav_fluentbit_sql_export.stderr | length > 0
+  tags:
+    - lnav
+
+- name: Lnav fluentbit_lnav SQL output contains shaped fields
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            rows = [json.loads(line) for line in handle if line.strip()]
+
+        if not rows:
+            raise SystemExit("no SQL rows exported")
+
+        row = rows[0]
+        expected = {
+            "level": "warn",
+            "host": "lab",
+            "service": "homeassistant",
+            "message": "connection failed",
+        }
+        mismatches = {
+            key: {"expected": value, "actual": row.get(key)}
+            for key, value in expected.items()
+            if row.get(key) != value
+        }
+        if mismatches:
+            raise SystemExit(json.dumps({"row": row, "mismatches": mismatches}, sort_keys=True))
+      - /tmp/lnav_verify/fluentbit_sql.jsonl
+  changed_when: false
+  tags:
+    - lnav
+
+- name: Create lnav-journal verification store directory
+  file:
+    path: /var/log/fluent-bit
+    state: directory
+    mode: "0755"
+  become: true
+  tags:
+    - lnav
+
+- name: Write lnav-journal verification store
+  copy:
+    dest: /var/log/fluent-bit/lnav.jsonl
+    content: |
+      {"time":"2026-06-08T12:34:56.789Z","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"info","level_number":9,"message":"lnav wrapper verification","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
+    mode: "0644"
+  become: true
   tags:
     - lnav
 

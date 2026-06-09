@@ -1,16 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-# Defaults to the last 1 hour. When piped via stdin lnav must buffer everything
-# before displaying; writing to a temp file lets it open and display immediately
-# while journalctl is still writing. Override with -S / --since; -U / --until
-# narrows the end while keeping the default start unless -S is also supplied.
-# Use -n / --lines to fetch the last N lines regardless of time (replaces the
-# --since filter, useful for sparse units via -u):
-#   lnav-journal -S "yesterday"
-#   lnav-journal -S "2026-06-01" -U "2026-06-02"
-#   lnav-journal -S "4 hours ago"
-#   lnav-journal -u nginx.service -n 200
+# Prefer the Fluent Bit JSONL store when it exists. Unit and line-count queries
+# still use journalctl directly, because lnav file mode has no -u equivalent.
 
 case "${1:-}" in
 -V | --version | -h | --help)
@@ -34,20 +26,23 @@ while [[ $# -gt 0 ]]; do
 		fi
 		since="$2"
 		since_explicit=true
+		lnav_args+=("$1" "$2")
 		shift 2
 		;;
 	--since=*)
 		since="${1#--since=}"
 		since_explicit=true
+		lnav_args+=("$1")
 		shift
 		;;
 	-n | --lines)
-		if [[ $# -lt 2 ]]; then
-			echo "lnav-journal: $1 requires a value" >&2
-			exit 2
+		if [[ $# -ge 2 && "$2" != -* ]]; then
+			lines="$2"
+			shift 2
+		else
+			lnav_args+=("$1")
+			shift
 		fi
-		lines="$2"
-		shift 2
 		;;
 	--lines=*)
 		lines="${1#--lines=}"
@@ -59,10 +54,12 @@ while [[ $# -gt 0 ]]; do
 			exit 2
 		fi
 		until="$2"
+		lnav_args+=("$1" "$2")
 		shift 2
 		;;
 	--until=*)
 		until="${1#--until=}"
+		lnav_args+=("$1")
 		shift
 		;;
 	-u | --unit)
@@ -84,12 +81,29 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
+shopt -s nullglob
+fluentbit_candidates=(
+	/var/log/fluent-bit/lnav.jsonl
+	/var/log/fluent-bit/lnav.jsonl.[0-9]
+	/var/log/fluent-bit/lnav.jsonl.[0-9].gz
+	/var/log/fluent-bit/lnav.jsonl.[0-9][0-9]
+	/var/log/fluent-bit/lnav.jsonl.[0-9][0-9].gz
+)
+fluentbit_logs=()
+for log_path in "${fluentbit_candidates[@]}"; do
+	if [[ -f "$log_path" && -r "$log_path" ]]; then
+		fluentbit_logs+=("$log_path")
+	fi
+done
+
+if [[ ${#fluentbit_logs[@]} -gt 0 && ${#units[@]} -eq 0 && -z "$lines" ]]; then
+	exec /usr/local/bin/lnav "${lnav_args[@]}" "${fluentbit_logs[@]}"
+fi
+
 journalctl_args=(--no-pager --quiet -o json)
 if [[ -n "$lines" ]]; then
 	journalctl_args+=(-n "$lines")
 elif [[ "$since_explicit" == false && ${#units[@]} -gt 0 ]]; then
-	# -u with no explicit time: default to last N lines so sparse units always
-	# return results regardless of the 1-hour default window.
 	journalctl_args+=(-n 10000)
 else
 	journalctl_args+=(--since "$since")
@@ -97,7 +111,6 @@ fi
 if [[ -n "$until" ]]; then
 	journalctl_args+=(--until "$until")
 else
-	# No upper bound: follow the journal so new entries stream into lnav.
 	journalctl_args+=(--follow)
 fi
 for unit in "${units[@]}"; do
@@ -109,13 +122,8 @@ if [[ -f /var/log/pihole/FTL.log && -r /var/log/pihole/FTL.log ]]; then
 	log_paths+=("/var/log/pihole/FTL.log")
 fi
 
-# Write journal to a temp file in the background so lnav opens and displays
-# the first entries immediately, then tails new entries as they arrive.
 tmpfile=$(mktemp /tmp/lnav-journal-XXXXXX.json)
 
-# When filtering by unit, generate a line-format override without _SYSTEMD_UNIT.
-# :hide-fields leaves a ':' placeholder in the line; a format file is the only
-# way to truly remove the column.
 lnav_format_args=()
 if [[ ${#units[@]} -gt 0 ]]; then
 	tmpfmt=$(mktemp -d /tmp/lnav-fmt-XXXXXX)
@@ -147,17 +155,12 @@ fi
 journalctl "${journalctl_args[@]}" >"$tmpfile" &
 jctl_pid=$!
 
-# Wait for the first bytes before opening lnav. With --follow journalctl never
-# exits, so cap the wait at 2 s; lnav will open on an empty file and show
-# entries as they stream in.
 _wait=0
 until [[ -s "$tmpfile" ]] || ! kill -0 "$jctl_pid" 2>/dev/null || (( _wait >= 40 )); do
 	sleep 0.05
 	(( _wait++ )) || true
 done
 
-# Noise patterns ported from roles/fluentbit -- keeps the same firehose out of
-# the viewer that Fluent Bit drops before shipping to HyperDX.
 set +e
 /usr/local/bin/lnav \
 	"${lnav_format_args[@]}" \
