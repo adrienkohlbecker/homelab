@@ -15,7 +15,14 @@ fi
 MOUNTPOINT=$(zfs get mountpoint -H -o value "$DATASET")
 DESTPATH=${DATASET//\//_}
 
-zfs_check_mount "$DATASET" "$MOUNTPOINT"
+# Boot environments (rpool/ROOT/* and bpool/BOOT/*) keep canmount=noauto so
+# sibling BEs never race to mount at boot; all other datasets are canmount=on.
+if [[ "$DATASET" == rpool/ROOT/* ]] || [[ "$DATASET" == bpool/BOOT/* ]]; then
+  expected_canmount=noauto
+else
+  expected_canmount=on
+fi
+zfs_check_mount "$DATASET" "$MOUNTPOINT" "$expected_canmount"
 
 # awk collapses the grep|tail|cut pipeline: snapshots arrive sorted by
 # creation (ascending), so the last @bak- line is the newest. A bare
