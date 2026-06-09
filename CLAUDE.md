@@ -108,7 +108,7 @@ New user-facing services get a bookmark in [roles/homepage/templates/bookmarks.y
 
 ### Home Assistant GUI YAML sync
 
-Drive with `mise run ha:sync [pull|push|sync]` ([mise-tasks/ha/sync.py](mise-tasks/ha/sync.py)). Don't bypass the sync (no `scp`, no live-VM editing). **Don't bump the parent's submodule pointer**: [.gitmodules](.gitmodules) sets `ignore = all`, the pinned commit is not load-bearing.
+Drive with `mise run ha:sync [pull|push|sync]` ([mise-tasks/ha/sync.py](mise-tasks/ha/sync.py)). Don't bypass the sync (no `scp`, no live-VM editing). The files live in `roles/homeassistant/files/ha_gui_config` — an **in-place gitignored clone** of the private `homelab_ha_config` repo (not a submodule); `ha:sync` owns it (commits + pushes there, deploys to the HA host). The HA role only creates dirs + include-target stubs.
 
 ### `notes/` private clone
 
