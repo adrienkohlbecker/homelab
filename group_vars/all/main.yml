@@ -36,7 +36,11 @@ zfs_mount_cache_datasets:
   - rpool/ROOT/jammy
 
 macvlan_blocks: []
-etc_hosts_entries: {}
+etc_hosts_entries:
+  # auth.fahm.fr is a pihole custom DNS entry (→ lab's LAN IP). When pihole
+  # is under load, Go-runtime DNS lookups (gitea OIDC, headscale) time out
+  # waiting for a UDP response. Pinning it here bypasses pihole entirely.
+  auth.fahm.fr: "{{ network.hosts.lab.physical }}"
 fail2ban_enabled: false
 has_transcoding_acceleration: false
 minio_enabled: false
