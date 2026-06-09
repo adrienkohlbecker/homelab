@@ -113,6 +113,54 @@ do
 end
 
 do
+    -- pihole FTL: ftl_level is authoritative. The keyword scan upstream would
+    -- have set "error" on this INFO line (its body contains "error"), but the
+    -- mapping must force it back to info. Body is promoted to the message; the
+    -- timestamp/level prefix (still in `log`) must not survive as the message.
+    local rec = shape("pihole_ftl", {
+        host = "lab",
+        log = '2026-06-09 04:20:02.163 CEST [52/T99] INFO: handled an error condition cleanly MARKER',
+        ftl_time = "2026-06-09 04:20:02.163",
+        ftl_tz = "CEST",
+        pid = 52,
+        thread = 99,
+        ftl_level = "INFO",
+        body = "handled an error condition cleanly MARKER",
+    }, "error", 17)
+    check("ftl.info.level", rec.level, "info")
+    check("ftl.info.level_number", rec.level_number, 9)
+    check("ftl.info.message_is_body", rec.message, "handled an error condition cleanly MARKER")
+    check("ftl.info.service", rec.service, "pihole_ftl")
+    check("ftl.info.fields.ftl_level", rec.fields.ftl_level, "INFO")
+    check("ftl.info.fields.pid", rec.fields.pid, 52)
+    check("ftl.info.fields.thread", rec.fields.thread, 99)
+    check("ftl.info.fields.tz", rec.fields.ftl_tz, "CEST")
+    check("ftl.info.fields.no_body_dup", rec.fields.body, nil)
+end
+
+do
+    local recw = shape("pihole_ftl", { host = "lab", log = "x", ftl_level = "WARNING", body = "high load" }, "info", 9)
+    check("ftl.warn.level", recw.level, "warn")
+    check("ftl.warn.level_number", recw.level_number, 13)
+
+    local rece = shape("pihole_ftl", { host = "lab", log = "x", ftl_level = "ERROR", body = "database is locked" }, "info", 9)
+    check("ftl.error.level", rece.level, "error")
+    check("ftl.error.level_number", rece.level_number, 17)
+
+    local recd = shape("pihole_ftl", { host = "lab", log = "x", ftl_level = "DEBUG_GC", body = "gc run" }, "info", 9)
+    check("ftl.debug.level", recd.level, "debug")
+    check("ftl.debug.level_number", recd.level_number, 5)
+end
+
+do
+    -- A non-matching FTL line (parser left it alone: no ftl_level/body) keeps
+    -- its raw log line as the message and the upstream-inferred level.
+    local rec = shape("pihole_ftl", { host = "lab", log = "raw banner line" }, "info", 9)
+    check("ftl.nomatch.message", rec.message, "raw banner line")
+    check("ftl.nomatch.level", rec.level, "info")
+end
+
+do
     local rec = shape("nginx.error", {}, "info", 9)
     check("nginx.error", rec.service, "nginx_error")
 end

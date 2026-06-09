@@ -119,11 +119,6 @@ for unit in "${units[@]}"; do
 	journalctl_args+=(-u "$unit")
 done
 
-log_paths=()
-if [[ -f /var/log/pihole/FTL.log && -r /var/log/pihole/FTL.log ]]; then
-	log_paths+=("/var/log/pihole/FTL.log")
-fi
-
 tmpfile=$(mktemp /tmp/lnav-journal-XXXXXX.json)
 
 lnav_format_args=()
@@ -179,8 +174,7 @@ set +e
 	-c ':filter-out "homepage-alerts/1"' \
 	-c ':filter-out ^type=SERVICE_(START|STOP) msg=audit\([0-9.]+:[0-9]+\): .* unit=[a-f0-9]{64}' \
 	"${lnav_args[@]}" \
-	"$tmpfile" \
-	"${log_paths[@]}"
+	"$tmpfile"
 lnav_exit=$?
 set -e
 

@@ -71,6 +71,22 @@ local EXCLUDE_FROM_FIELDS = {
     severity_number = true,
 }
 
+-- pihole-FTL's own level tokens -> {lnav level, OTLP severity number}. NOTICE
+-- maps to info (matching level_from_message's treatment); DEBUG_<category>
+-- variants are handled by prefix below. Anything unrecognised falls back to
+-- info so an FTL record always has a predictable level.
+local FTL_LEVEL = {
+    FATAL = { "fatal", 21 },
+    CRIT = { "fatal", 21 },
+    ERR = { "error", 17 },
+    ERROR = { "error", 17 },
+    WARNING = { "warn", 13 },
+    WARN = { "warn", 13 },
+    INFO = { "info", 9 },
+    NOTICE = { "info", 9 },
+    DEBUG = { "debug", 5 },
+}
+
 function shape_lnav(tag, ts, _group, metadata, record)
     metadata.otlp = metadata.otlp or {}
 
@@ -100,6 +116,32 @@ function shape_lnav(tag, ts, _group, metadata, record)
     if tag == "nginx.access" and type(status) == "number" and status >= 500 then
         level = "error"
         metadata.otlp.severity_number = 17
+    end
+
+    -- pihole-FTL carries its own authoritative level in the prefix (extracted
+    -- as ftl_level by the parser). Map it directly instead of trusting the
+    -- generic keyword scan, which would misread a body like "... SQL error ..."
+    -- on an INFO line. Promote the parsed body to the message (via log, which
+    -- the shaper already reads) so the redundant timestamp/level/pid prefix is
+    -- not repeated under lnav's line-format; a non-matching line has no body
+    -- and keeps its raw log line as the message.
+    if tag == "pihole_ftl" then
+        local ftl_level = record["ftl_level"]
+        if type(ftl_level) == "string" then
+            local mapped = FTL_LEVEL[ftl_level]
+            if not mapped and string.sub(ftl_level, 1, 5) == "DEBUG" then
+                mapped = FTL_LEVEL.DEBUG
+            end
+            if mapped then
+                level = mapped[1]
+                metadata.otlp.severity_number = mapped[2]
+            end
+        end
+        local body = record["body"]
+        if type(body) == "string" then
+            record["log"] = body
+            record["body"] = nil
+        end
     end
 
     local fields = {}

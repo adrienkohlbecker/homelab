@@ -6,3 +6,22 @@
 - name: _setup | Install logrotate
   import_role:
     name: logrotate
+
+# The pihole_ftl tail input watches a fixed path; pihole is not installed on
+# the test fixture, so create the file before fluent-bit starts (Read_from_Head
+# off only tails lines appended after the input opens it -- _verify appends a
+# real FTL line and asserts the pihole_ftl parser extracts its fields).
+- name: _setup | Create pihole FTL.log path (for the tail input to resolve)
+  file:
+    path: /var/log/pihole
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: _setup | Touch pihole FTL.log
+  copy:
+    content: ""
+    dest: /var/log/pihole/FTL.log
+    mode: "0644"
+    force: false
+  become: true

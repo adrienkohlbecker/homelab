@@ -9,11 +9,12 @@
     Log_Level         warn
     Daemon            off
     Parsers_File      parsers.conf
-    # Absolute path (not relative like the stock parsers.conf above): the
+    # Absolute paths (not relative like the stock parsers.conf above): the
     # role validates this config with `fluent-bit --dry-run` against a temp
     # copy, so a relative Parsers_File would resolve against the temp dir and
-    # fail to load. The role deploys parsers_nginx.conf before this validate.
+    # fail to load. The role deploys these parser files before this validate.
     Parsers_File      /etc/fluent-bit/parsers_nginx.conf
+    Parsers_File      /etc/fluent-bit/parsers_pihole.conf
     # HTTP_Server exposes /api/v1/metrics/prometheus on the loopback for
     # netdata's prometheus collector. The output_dropped_records_total
     # counter increases when fluent-bit exhausts retries against an
@@ -385,6 +386,19 @@
     Match             nginx.access
     Key_Name          log
     Parser            nginx_access_custom
+    Reserve_Data      On
+    Preserve_Key      On
+
+# Parse pihole-FTL lines into level / body / pid / thread (see
+# parsers_pihole.conf). Preserve_Key keeps the raw line under `log` as the
+# fallback message for any line that does not match the FTL prefix; for lines
+# that do, lnav_shape maps ftl_level to the record level and promotes `body`
+# to the message so the timestamp/level/pid prefix is not repeated.
+[FILTER]
+    Name              parser
+    Match             pihole_ftl
+    Key_Name          log
+    Parser            pihole_ftl
     Reserve_Data      On
     Preserve_Key      On
 

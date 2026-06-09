@@ -63,6 +63,7 @@
     fluentbit_lnav_nginx_marker: "verify_nginx_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_nginx_access_marker: "verify_nginxaccess_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_nginx_5xx_marker: "verify_nginx5xx_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    fluentbit_lnav_ftl_marker: "verify_ftl_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_warn_marker: "verify_warn_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_multiline_marker: "verify_trace_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_mitogen_marker: "verify_mitogen_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
@@ -99,6 +100,16 @@
   command: tee -a /var/log/nginx/access.log
   args:
     stdin: "203.0.113.7 - - [08/Jun/2026:12:00:01 +0200] grafana.lab.example \"GET /{{ fluentbit_lnav_nginx_5xx_marker }} HTTP/2.0\" grafana.lab.example 503 0 567 0.500 0.498 \"-\" \"Mozilla/5.0 verifyUA\" TLSv1.3 TLS_AES_128_GCM_SHA256\n"
+  changed_when: false
+  become: true
+
+# An FTL INFO line whose BODY contains the word "error": the generic keyword
+# scan would misclassify it as error, so this proves the parser-extracted
+# ftl_level wins and the body becomes the message (prefix stripped).
+- name: _verify | Pihole FTL parse | append a real FTL.log line
+  command: tee -a /var/log/pihole/FTL.log
+  args:
+    stdin: "2026-06-09 04:20:02.163 CEST [52/T99] INFO: verify ftl {{ fluentbit_lnav_ftl_marker }} reported an error condition handled\n"
   changed_when: false
   become: true
 
@@ -186,6 +197,9 @@
     - name: nginx_5xx
       marker: "{{ fluentbit_lnav_nginx_5xx_marker }}"
       service: nginx_access
+    - name: pihole_ftl
+      marker: "{{ fluentbit_lnav_ftl_marker }}"
+      service: pihole_ftl
     - name: warn
       marker: "{{ fluentbit_lnav_warn_marker }}"
       service: fluentbit_verify_warn
@@ -279,6 +293,30 @@
       - "row.level == 'error'"
       - "row.level_number | int == 17"
     fail_msg: "nginx 5xx access record not promoted to error level: {{ row }}"
+
+- name: _verify | Pihole FTL parse | assert authoritative level and structured fields
+  vars:
+    row: "{{ _fluentbit_lnav_by_name.pihole_ftl }}"
+  assert:
+    that:
+      - "row.service == 'pihole_ftl'"
+      - "row.stream == 'pihole_ftl'"
+      # ftl_level (INFO) wins over the body keyword "error" -> stays info.
+      - "row.level == 'info'"
+      - "row.level_number | int == 9"
+      # body promoted to message; the timestamp/level/pid prefix is stripped.
+      - "fluentbit_lnav_ftl_marker in row.message"
+      - "row.message.startswith('verify ftl')"
+      - "'2026-06-09' not in row.message"
+      - "'INFO:' not in row.message"
+      # parsed fields with the right types.
+      - "row.fields.ftl_level == 'INFO'"
+      - "row.fields.ftl_tz == 'CEST'"
+      - "row.fields.pid == 52"
+      - "row.fields.pid is integer"
+      - "row.fields.thread == 99"
+      - "row.host == inventory_hostname"
+    fail_msg: "pihole FTL line did not parse / classify correctly: {{ row }}"
 
 - name: _verify | Journald warn | assert severity classification
   vars:
