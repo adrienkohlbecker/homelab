@@ -232,7 +232,6 @@
   assert:
     that:
       - "row.level == 'error'"
-      - "row.level_number | int == 17"
       - "row.service == 'fluentbit_verify_journald'"
       - "fluentbit_lnav_journald_marker in row.message"
       - "row.unit == 'fluentbit_verify_journald.service'"
@@ -241,6 +240,10 @@
       - "row.stream == 'journald'"
       - "row.fields.SYSTEMD_UNIT == 'fluentbit_verify_journald.service'"
       - "row.fields.SYSLOG_IDENTIFIER == 'fluentbit_verify_journald'"
+      # The lua filters must use the classic 3-arg signature so Fluent Bit does
+      # not serialize event metadata into the JSONL as an __internal__ object.
+      - "'__internal__' not in row"
+      - "'level_number' not in row"
     fail_msg: "journald record landed with wrong shape: {{ row }}"
 
 - name: _verify | Nginx tail | assert JSONL shape
@@ -249,7 +252,6 @@
   assert:
     that:
       - "row.level == 'info'"
-      - "row.level_number | int == 9"
       - "row.service == 'nginx_access'"
       - "fluentbit_lnav_nginx_marker in row.message"
       - "row.stream == 'nginx'"
@@ -291,7 +293,6 @@
       - "fluentbit_lnav_nginx_5xx_marker in row.message"
       - "row.fields.status == 503"
       - "row.level == 'error'"
-      - "row.level_number | int == 17"
     fail_msg: "nginx 5xx access record not promoted to error level: {{ row }}"
 
 - name: _verify | Pihole FTL parse | assert authoritative level and structured fields
@@ -303,7 +304,6 @@
       - "row.stream == 'pihole_ftl'"
       # ftl_level (INFO) wins over the body keyword "error" -> stays info.
       - "row.level == 'info'"
-      - "row.level_number | int == 9"
       # body promoted to message; the timestamp/level/pid prefix is stripped.
       - "fluentbit_lnav_ftl_marker in row.message"
       - "row.message.startswith('verify ftl')"
@@ -324,7 +324,6 @@
   assert:
     that:
       - "row.level == 'warn'"
-      - "row.level_number | int == 13"
       - "fluentbit_lnav_warn_marker in row.message"
     fail_msg: "WARN keyword classified wrong: {{ row }}"
 

@@ -1,10 +1,12 @@
 -- Shape the final Fluent Bit record for the local lnav JSONL store.
 --
--- The preceding filters normalize MESSAGE into record.log, stamp the
--- inventory host, and infer severity into metadata.otlp.severity_*.
--- stdout/json_lines serializes only the record body, so this final pass
--- promotes the useful fields back into the body and tucks the original
--- source metadata under fields.
+-- The preceding filters normalize MESSAGE into record.log, stamp the inventory
+-- host, and infer the text level into the temp field record._level. This final
+-- pass promotes the useful fields into the JSONL body (level, message, ...) and
+-- tucks the original source metadata under fields.
+--
+-- Uses the classic 3-argument lua-filter signature (tag, timestamp, record).
+-- See level_from_message.lua for why the metadata-aware prototype is avoided.
 
 local function scrub(value)
     if type(value) ~= "string" then
@@ -68,32 +70,30 @@ local EXCLUDE_FROM_FIELDS = {
     host = true,
     log = true,
     severity_text = true,
-    severity_number = true,
+    _level = true,
 }
 
--- pihole-FTL's own level tokens -> {lnav level, OTLP severity number}. NOTICE
--- maps to info (matching level_from_message's treatment); DEBUG_<category>
--- variants are handled by prefix below. Anything unrecognised falls back to
--- info so an FTL record always has a predictable level.
+-- pihole-FTL's own level tokens -> lnav level. NOTICE maps to info (matching
+-- level_from_message's treatment); DEBUG_<category> variants are handled by
+-- prefix below. Anything unrecognised falls back to info so an FTL record
+-- always has a predictable level.
 local FTL_LEVEL = {
-    FATAL = { "fatal", 21 },
-    CRIT = { "fatal", 21 },
-    ERR = { "error", 17 },
-    ERROR = { "error", 17 },
-    WARNING = { "warn", 13 },
-    WARN = { "warn", 13 },
-    INFO = { "info", 9 },
-    NOTICE = { "info", 9 },
-    DEBUG = { "debug", 5 },
+    FATAL = "fatal",
+    CRIT = "fatal",
+    ERR = "error",
+    ERROR = "error",
+    WARNING = "warn",
+    WARN = "warn",
+    INFO = "info",
+    NOTICE = "info",
+    DEBUG = "debug",
 }
 
-function shape_lnav(tag, ts, _group, metadata, record)
-    metadata.otlp = metadata.otlp or {}
-
+function shape_lnav(tag, ts, record)
     local unit = record["SYSTEMD_UNIT"] or record["UNIT"] or unit_from_tag(tag)
     local identifier = record["SYSLOG_IDENTIFIER"]
     local service = service_from_tag(tag, record)
-    local level = metadata.otlp.severity_text or "info"
+    local level = record["_level"] or "info"
 
     local healthcheck_unit = record["UNIT"]
     if type(healthcheck_unit) == "string" then
@@ -115,7 +115,6 @@ function shape_lnav(tag, ts, _group, metadata, record)
     local status = record["status"]
     if tag == "nginx.access" and type(status) == "number" and status >= 500 then
         level = "error"
-        metadata.otlp.severity_number = 17
     end
 
     -- pihole-FTL carries its own authoritative level in the prefix (extracted
@@ -133,8 +132,7 @@ function shape_lnav(tag, ts, _group, metadata, record)
                 mapped = FTL_LEVEL.DEBUG
             end
             if mapped then
-                level = mapped[1]
-                metadata.otlp.severity_number = mapped[2]
+                level = mapped
             end
         end
         local body = record["body"]
@@ -157,11 +155,10 @@ function shape_lnav(tag, ts, _group, metadata, record)
         unit = scrub(unit),
         identifier = scrub(identifier),
         level = scrub(level),
-        level_number = tonumber(metadata.otlp.severity_number or 9) or 9,
         message = scrub(record["log"] or ""),
         stream = scrub(stream_from_tag(tag)),
         fields = fields,
     }
 
-    return 1, ts, metadata, shaped
+    return 1, ts, shaped
 end
