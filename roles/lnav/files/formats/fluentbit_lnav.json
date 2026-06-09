@@ -25,16 +25,19 @@
       " ",
       { "field": "service" },
       ": ",
-      { "field": "message" }
+      { "field": "message" },
+      "  ",
+      { "field": "fields" }
     ],
     "value": {
       "host": { "kind": "string", "identifier": true },
       "service": { "kind": "string", "identifier": true },
-      "unit": { "kind": "string", "identifier": true },
-      "identifier": { "kind": "string", "identifier": true },
-      "stream": { "kind": "string", "identifier": true },
+      "unit": { "kind": "string", "identifier": true, "hidden": true },
+      "identifier": { "kind": "string", "identifier": true, "hidden": true },
+      "stream": { "kind": "string", "identifier": true, "hidden": true },
       "level": { "kind": "string" },
       "message": { "kind": "string" },
+      "fields": { "kind": "json" },
       "/fields/CONTAINER_NAME": { "kind": "string", "hidden": true },
       "/fields/SYSTEMD_UNIT": { "kind": "string", "hidden": true },
       "/fields/SYSLOG_IDENTIFIER": { "kind": "string", "hidden": true },
