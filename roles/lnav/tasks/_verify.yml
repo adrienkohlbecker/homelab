@@ -247,3 +247,26 @@
   changed_when: false
   tags:
     - lnav
+
+# Batch (-n) run with no -C, so lnav actually executes the wrapper's startup
+# `-c ':goto 100%'` instead of exiting at config-check. Proves the goto command
+# is accepted (an invalid one would fail the run) and the Fluent Bit store still
+# renders its records.
+- name: Lnav-journal opens the Fluent Bit store with goto-end startup command
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  command:
+    argv:
+      - timeout
+      - -k
+      - 5s
+      - 20s
+      - /usr/local/bin/lnav-journal
+      - -n
+  register: lnav_journal_goto
+  changed_when: false
+  failed_when: >-
+    lnav_journal_goto.rc != 0 or
+    'lnav wrapper verification' not in lnav_journal_goto.stdout
+  tags:
+    - lnav
