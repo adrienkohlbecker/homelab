@@ -21,7 +21,6 @@ homepage_bookmarks:
     - { name: Gitea,         abbr: GT, sub: gitea,        icon: gitea }
     - { name: Nexus,         abbr: NX, sub: nexus,        icon: sonatype-nexus-repository }
     - { name: MinIO,         abbr: MN, sub: minio,        icon: minio }
-    - { name: HyperDX,       abbr: HX, sub: hyperdx,      icon: hyperdx }
     - { name: InfluxDB,      abbr: IF, sub: influxdb,     icon: influxdb }
     - { name: Uptime Kuma,   abbr: UK, sub: kuma,         icon: uptime-kuma }
     - { name: Pi-hole,       abbr: PH, sub: pihole,       icon: pi-hole, path: /admin/ }

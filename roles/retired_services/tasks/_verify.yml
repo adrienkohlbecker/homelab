@@ -10,6 +10,7 @@
     - redis.service
     - compta.service
     - keepalived_exporter.service
+    - hyperdx.service
   register: retired_services_units
   failed_when: retired_services_units.stat.exists
 
@@ -21,6 +22,7 @@
     - /mnt/services/paperless
     - /mnt/services/redis
     - /mnt/services/prometheus
+    - /mnt/services/hyperdx
   register: retired_services_dirs
   failed_when: retired_services_dirs.stat.exists
 
@@ -52,8 +54,18 @@
   loop:
     - /etc/nginx/sites-available/openproject
     - /etc/nginx/sites-enabled/openproject
+    - /etc/nginx/sites-available/hyperdx
+    - /etc/nginx/sites-enabled/hyperdx
   register: retired_services_vhost
   failed_when: retired_services_vhost.stat.exists
+
+- name: _verify | Retired nginx conf.d drops are gone
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/nginx/conf.d/hyperdx_otlp.conf
+  register: retired_services_conf_d
+  failed_when: retired_services_conf_d.stat.exists
 
 # podman checks only on fixtures that have podman (box_deps); on the default
 # box fixture _setup skipped the podman planting, so there's nothing to assert.

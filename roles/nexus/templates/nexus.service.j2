@@ -29,7 +29,7 @@ Restart=always
 Delegate=yes
 TimeoutStartSec=240
 # TimeoutStopSec exceeds --stop-timeout 120 below so a slow graceful container
-# stop doesn't eat into the start budget (hyperdx split-timeout pattern).
+# stop doesn't eat into the start budget.
 TimeoutStopSec=150
 RestartSec=5
 Type=notify
