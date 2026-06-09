@@ -1,5 +1,3 @@
-fluentbit_otlp_local: true  # hyperdx receiver runs here
-
 ssh_x11_forwarding: true
 
 ssh_public_keys_additional: |

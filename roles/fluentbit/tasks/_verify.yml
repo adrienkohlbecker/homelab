@@ -39,9 +39,9 @@
   assert:
     that:
       - _fluentbit_lnav_store.stat.exists
-      - _fluentbit_lnav_store.stat.mode == '0640'
-      - _fluentbit_lnav_store.stat.pw_name == 'root'
-      - _fluentbit_lnav_store.stat.gr_name == 'adm'
+      - (_fluentbit_lnav_store.stat.mode | default('')) == '0640'
+      - (_fluentbit_lnav_store.stat.pw_name | default('')) == 'root'
+      - (_fluentbit_lnav_store.stat.gr_name | default('')) == 'adm'
     fail_msg: >-
       lnav JSONL store has wrong perms:
       mode={{ _fluentbit_lnav_store.stat.mode | default('<missing>') }}
@@ -269,5 +269,5 @@
       - "lua.*(error|warn|warning)"
   register: _fluentbit_lua_journal
   changed_when: false
-  failed_when: _fluentbit_lua_journal.rc == 0
+  failed_when: _fluentbit_lua_journal.rc != 1
   become: true

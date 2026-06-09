@@ -12,8 +12,6 @@ qemu_test: true
 # during throwaway test runs for no benefit.
 journald_storage: volatile
 
-fluentbit_otlp_local: true  # hyperdx receiver runs here
-
 ssh_public_keys: |
   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key
 
