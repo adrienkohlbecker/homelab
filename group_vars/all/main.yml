@@ -171,8 +171,6 @@ service_ports:
   homeassistant_sonos: 1400
   homeassistant_homekit: 3722
   homepage: 3003
-  hyperdx: 5085
-  hyperdx_otlp_http: 4318
   influxdb: 8086
   jellyfin: 8096
   kuma: 3001

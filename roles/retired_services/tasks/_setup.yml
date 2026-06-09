@@ -44,6 +44,7 @@
     - redis
     - compta
     - keepalived_exporter
+    - hyperdx
   become: true
 
 - name: _setup | Enable the stub units (so teardown's disable is exercised)
@@ -58,6 +59,7 @@
     - redis
     - compta
     - keepalived_exporter
+    - hyperdx
   become: true
 
 - name: _setup | Plant /mnt/services state dirs
@@ -72,6 +74,7 @@
     - paperless
     - redis
     - prometheus
+    - hyperdx
   become: true
 
 - name: _setup | Drop content into the state dirs (proves recursive removal)
@@ -86,6 +89,7 @@
     - paperless
     - redis
     - prometheus
+    - hyperdx
   become: true
 
 - name: _setup | Plant the redis sysctl drop-in
@@ -165,6 +169,27 @@
     nginx_site_args:
       subdomain: openproject
       proxy_pass: http://127.0.0.1:9/
+
+- name: _setup | Plant the hyperdx nginx vhost
+  when: retired_services_setup_nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: hyperdx
+      proxy_pass: http://127.0.0.1:9/
+
+- name: _setup | Plant the hyperdx OTLP rate-limit conf.d drop
+  when: retired_services_setup_nginx
+  import_role:
+    name: nginx
+    tasks_from: conf_d
+  vars:
+    nginx_conf_d_args:
+      name: hyperdx_otlp.conf
+      content: |
+        limit_req_zone $binary_remote_addr zone=hyperdx_otlp:10m rate=10r/s;
 
 # Stand in for the retired nodejs role's NodeSource apt source + keyring + pin
 # (the nodejs package itself isn't installed: the teardown's purge no-ops on a

@@ -187,6 +187,41 @@
       name: csp_ratelimit.conf
       state: absent
 
+# ---- hyperdx (was box,lab) ----
+- name: Retire hyperdx service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: hyperdx.service
+
+- name: Retire hyperdx nginx site
+  when: retired_services_have_nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: hyperdx
+      state: absent
+
+- name: Retire hyperdx OTLP rate-limit conf.d drop
+  when: retired_services_have_nginx
+  import_role:
+    name: nginx
+    tasks_from: conf_d
+  vars:
+    nginx_conf_d_args:
+      name: hyperdx_otlp.conf
+      state: absent
+
+- name: Remove hyperdx state directory
+  file:
+    path: /mnt/services/hyperdx
+    state: absent
+  become: true
+
 # ---- fancontrol (was box,lab,pug; fan2go owns fan control now) ----
 - name: Retire fancontrol service and restart drop-in
   import_role:

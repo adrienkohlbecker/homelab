@@ -87,18 +87,15 @@ headscale_oidc_client_id: headscale
 # /32:
 #   - auth.fahm.fr: Headscale OIDC discovery at startup.
 #   - nexus.lab.fahm.fr: ZFSBootMenu release artifacts.
-#   - hyperdx.lab.fahm.fr: fluentbit OTLP log shipping (TLS verify_hostname on).
 etc_hosts_entries:
   auth.fahm.fr: "{{ network.hosts.lab.physical }}"
   nexus.lab.fahm.fr: "{{ network.hosts.lab.physical }}"
-  hyperdx.lab.fahm.fr: "{{ network.hosts.lab.physical }}"
 
 # Trimmed from the pug-derived list to what a Hetzner cloud VM actually
 # exposes. Dropped contexts: powercap (no Intel RAPL in a VM), zfs (no ZFS
 # module), vmstat/mem.swapio (no swap configured). Dropped collectors:
 # intelgpu/nvme/sensors/smartctl/upsd/zfspool (no such hardware) and the
-# keepalived prometheus job (no keepalived here; fluentbit's job IS kept --
-# fox runs the shipper to feed hyperdx, same as lab/pug). These would fire
+# keepalived prometheus job (no keepalived here). These would fire
 # netdata_presence on any netdata version -- they're real absences, not the
 # 1.46-vs-2.x context rename that the extfrag entry hit.
 netdata_contexts:

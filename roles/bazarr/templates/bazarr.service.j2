@@ -52,8 +52,7 @@ ExecStart=/usr/bin/podman run \
     {# PUID/PGID (CLAUDE.md "User namespacing" tier 2): the linuxserver s6
        init usermods its baked-in abc user to these ids and drops to it.
        Tier 2 is the right fit for a droppable image -- the fake-root
-       --uidmap pattern is reserved for images that insist on id 0
-       (hyperdx). #}
+       --uidmap pattern is reserved for images that insist on id 0. #}
     --env PUID={{ bazarr_user.uid }} \
     --env PGID={{ media_group.gid }} \
     --env UMASK=002 \
