@@ -26,9 +26,7 @@
       " ",
       { "field": "service" },
       ": ",
-      { "field": "message" },
-      "  ",
-      { "field": "fields" }
+      { "field": "message" }
     ],
     "value": {
       "host": { "kind": "string", "identifier": true },
@@ -38,7 +36,7 @@
       "stream": { "kind": "string", "identifier": true, "hidden": true },
       "level": { "kind": "string" },
       "message": { "kind": "string" },
-      "fields": { "kind": "json" },
+      "fields": { "kind": "json", "hidden": true },
       "/fields/CONTAINER_NAME": { "kind": "string", "hidden": true },
       "/fields/SYSTEMD_UNIT": { "kind": "string", "hidden": true },
       "/fields/SYSLOG_IDENTIFIER": { "kind": "string", "hidden": true },
