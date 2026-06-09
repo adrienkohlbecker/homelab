@@ -442,6 +442,19 @@
     Set               host {{ inventory_hostname }}
     Rename            MESSAGE log
 
+# Strip ANSI escape sequences (colour/SGR codes, cursor moves) from the
+# message. seerr (jellyseerr) wraps its level token in colour codes and
+# pihole's gravity cron writes cursor moves; both ship the raw bytes to
+# journald. Besides the visual noise, the colour bytes hug the level word
+# (\x1b[34mdebug\x1b[39m) and break level_from_message's word-boundary keyword
+# scan -- a colourised debug/warn would misclassify as info -- so this runs
+# before that filter.
+[FILTER]
+    Name              lua
+    Match             *
+    script            /etc/fluent-bit/strip_ansi.lua
+    call              strip_ansi
+
 # nginx access logs never carry semantically-meaningful level keywords
 # -- every token in the body is an HTTP transaction field. The only
 # "alert"/"warning"/"error" substrings are random URL path segments,

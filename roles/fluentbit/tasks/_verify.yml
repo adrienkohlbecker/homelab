@@ -64,6 +64,7 @@
     fluentbit_lnav_nginx_access_marker: "verify_nginxaccess_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_nginx_5xx_marker: "verify_nginx5xx_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_ftl_marker: "verify_ftl_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    fluentbit_lnav_ansi_marker: "verify_ansi_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_warn_marker: "verify_warn_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_multiline_marker: "verify_trace_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_mitogen_marker: "verify_mitogen_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
@@ -110,6 +111,17 @@
   command: tee -a /var/log/pihole/FTL.log
   args:
     stdin: "2026-06-09 04:20:02.163 CEST [52/T99] INFO: verify ftl {{ fluentbit_lnav_ftl_marker }} reported an error condition handled\n"
+  changed_when: false
+  become: true
+
+# A seerr-style colorized line: the level token is wrapped in SGR colour codes,
+# which strip_ansi must remove. printf interprets the \033 escapes into real ESC
+# bytes; systemd-run captures stdout to the journal preserving them.
+- name: _verify | ANSI | emit a colorized debug line via transient unit
+  command: >-
+    systemd-run --unit=fluentbit_verify_ansi --no-block --quiet
+    --property=SyslogIdentifier=fluentbit_verify_ansi
+    /usr/bin/printf "[\033[34mdebug\033[39m] ansi {{ fluentbit_lnav_ansi_marker }} colorized line\n"
   changed_when: false
   become: true
 
@@ -200,6 +212,9 @@
     - name: pihole_ftl
       marker: "{{ fluentbit_lnav_ftl_marker }}"
       service: pihole_ftl
+    - name: ansi
+      marker: "{{ fluentbit_lnav_ansi_marker }}"
+      service: fluentbit_verify_ansi
     - name: warn
       marker: "{{ fluentbit_lnav_warn_marker }}"
       service: fluentbit_verify_warn
@@ -320,6 +335,22 @@
       - "row.fields.thread == 99"
       - "row.host == inventory_hostname"
     fail_msg: "pihole FTL line did not parse / classify correctly: {{ row }}"
+
+- name: _verify | ANSI | assert colors stripped and level reclassified
+  vars:
+    row: "{{ _fluentbit_lnav_by_name.ansi }}"
+  assert:
+    that:
+      - "row.service == 'fluentbit_verify_ansi'"
+      - "fluentbit_lnav_ansi_marker in row.message"
+      # The SGR colour codes are gone from the message...
+      - "'[34m' not in row.message"
+      - "'[39m' not in row.message"
+      - "row.message == '[debug] ansi ' ~ fluentbit_lnav_ansi_marker ~ ' colorized line'"
+      # ...and the de-coloured level token now classifies correctly (it would
+      # have fallen through to info while the colour bytes hugged the word).
+      - "row.level == 'debug'"
+    fail_msg: "seerr-style ANSI not stripped / level not reclassified: {{ row }}"
 
 - name: _verify | Journald warn | assert severity classification
   vars:

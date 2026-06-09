@@ -67,6 +67,7 @@
     mode: "0644"
     backup: true
   loop:
+    - strip_ansi.lua
     - level_from_message.lua
     - lnav_shape.lua
   become: true
