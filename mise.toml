@@ -186,9 +186,11 @@ description = "Lint Markdown files (CLAUDE.md + README.md)"
 run = "markdownlint-cli2 'CLAUDE.md' 'README.md'"
 
 [tasks."lint:notes"]
-description = "Lint notes/ submodule (delegates to mise run lint inside notes/)"
-dir = "{{config_root}}/notes"
-run = "mise run lint"
+description = "Lint the notes/ clone if present (delegates to its own mise lint; skipped when absent, e.g. CI)"
+# notes/ is a private repo cloned in-place + gitignored, absent in CI and any
+# checkout that didn't populate it. Guard on the clone existing so the public
+# repo's lint never depends on the private one -- notes self-lints via its own mise.
+run = "if [ -d notes/.git ]; then cd notes && mise run lint; else echo 'lint:notes: notes/ clone absent, skipping'; fi"
 
 [tasks."lint:toml"]
 description = "Check TOML formatting (taplo)"
@@ -246,9 +248,8 @@ description = "Fix Markdown formatting (CLAUDE.md + README.md)"
 run = "markdownlint-cli2 --fix 'CLAUDE.md' 'README.md'"
 
 [tasks."fmt:notes"]
-description = "Fix Markdown formatting in notes/ submodule"
-dir = "{{config_root}}/notes"
-run = "mise run fmt"
+description = "Fix Markdown formatting in the notes/ clone if present (skipped when absent)"
+run = "if [ -d notes/.git ]; then cd notes && mise run fmt; else echo 'fmt:notes: notes/ clone absent, skipping'; fi"
 
 [tasks."fmt:toml"]
 description = "Format TOML files (taplo)"

@@ -30,10 +30,11 @@ if [ -d "$src_proj" ]; then
   fi
   rmdir "$src_proj" 2>/dev/null || true
 fi
-# git refuses to remove a worktree containing a submodule (notes) even when
-# clean, so --force is required to clear that structural guard. Guard with an
-# explicit dirty-check first so --force only bypasses the submodule guard and
-# never silently discards uncommitted work (code or notes).
+# Worktrees carry gitignored generated state -- the notes/, packer/artifacts,
+# terraform/.terraform and .remember symlinks populate.sh creates -- which
+# `git worktree remove` treats as blocking content, so --force is required to
+# clear it. Guard with an explicit dirty-check first (status --porcelain ignores
+# gitignored paths) so --force never silently discards uncommitted tracked work.
 if [ -n "$(git -C "$wt" status --porcelain)" ]; then
   echo "worktree:rm: $wt has uncommitted changes; commit/stash or remove it manually" >&2
   exit 1
