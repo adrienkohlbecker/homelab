@@ -67,6 +67,9 @@ do
 end
 
 do
+    -- A line that did NOT match nginx_access_custom (no status field): the
+    -- shaper flags it parse_error and raises it to warn so the drifting parser
+    -- is visible. The raw line stays the message.
     local rec = shape(
         "nginx.access",
         { host = "lab", log = "GET / HTTP/1.1", filepath = "/var/log/nginx/access.log" },
@@ -75,6 +78,8 @@ do
     check("nginx.service", rec.service, "nginx_access")
     check("nginx.stream", rec.stream, "nginx")
     check("nginx.filepath", rec.fields.filepath, "/var/log/nginx/access.log")
+    check("nginx.unparsed.parse_error", rec.parse_error, "nginx_access_custom")
+    check("nginx.unparsed.level", rec.level, "warn")
 end
 
 do
@@ -94,6 +99,8 @@ do
     check("nginx.access.fields.path", rec.fields.path, "/ok")
     check("nginx.access.fields.status", rec.fields.status, 200)
     check("nginx.access.fields.http_host", rec.fields.http_host, "g.example")
+    -- A successful parse carries no parse_error flag.
+    check("nginx.access.no_parse_error", rec.parse_error, nil)
 end
 
 do
@@ -130,6 +137,7 @@ do
     check("ftl.info.fields.thread", rec.fields.thread, 99)
     check("ftl.info.fields.tz", rec.fields.ftl_tz, "CEST")
     check("ftl.info.fields.no_body_dup", rec.fields.body, nil)
+    check("ftl.info.no_parse_error", rec.parse_error, nil)
 end
 
 do
@@ -145,10 +153,12 @@ end
 
 do
     -- A non-matching FTL line (parser left it alone: no ftl_level/body) keeps
-    -- its raw log line as the message and the upstream-inferred level.
+    -- its raw log line as the message, but is flagged parse_error and raised to
+    -- warn so the unparsed line is visible instead of blending into info.
     local rec = shape("pihole_ftl", { host = "lab", log = "raw banner line" }, "info")
     check("ftl.nomatch.message", rec.message, "raw banner line")
-    check("ftl.nomatch.level", rec.level, "info")
+    check("ftl.nomatch.parse_error", rec.parse_error, "pihole_ftl")
+    check("ftl.nomatch.level", rec.level, "warn")
 end
 
 do

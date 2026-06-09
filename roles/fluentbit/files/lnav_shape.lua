@@ -89,6 +89,17 @@ local FTL_LEVEL = {
     DEBUG = "debug",
 }
 
+-- Tags whose tail input has a dedicated parser. Each parser sets a signature
+-- field only on a successful match, so its presence is the discriminant for
+-- "this line parsed". A record that reaches the shaper on one of these tags
+-- WITHOUT the field slipped past the regex unparsed -- surfaced below as
+-- parse_error so a drifting parser is visible instead of the raw line quietly
+-- masquerading as a plain message. parser names the file/stanza to fix.
+local PARSE_DISCRIMINANT = {
+    ["nginx.access"] = { field = "status", parser = "nginx_access_custom" },
+    ["pihole_ftl"] = { field = "ftl_level", parser = "pihole_ftl" },
+}
+
 function shape_lnav(tag, ts, record)
     local unit = record["SYSTEMD_UNIT"] or record["UNIT"] or unit_from_tag(tag)
     local identifier = record["SYSLOG_IDENTIFIER"]
@@ -142,6 +153,19 @@ function shape_lnav(tag, ts, record)
         end
     end
 
+    -- Parse-failure detection: a record on a parsed tag (PARSE_DISCRIMINANT)
+    -- that is missing its parser's signature field never matched the regex.
+    -- Flag it with parse_error (the parser to fix; queryable as
+    -- `... WHERE parse_error IS NOT NULL`) and raise it to warn so a silently
+    -- drifting parser is loud in the stream rather than blending into info. The
+    -- raw line stays the message (Preserve_Key kept it under log).
+    local parse_error
+    local discriminant = PARSE_DISCRIMINANT[tag]
+    if discriminant ~= nil and record[discriminant.field] == nil then
+        parse_error = discriminant.parser
+        level = "warn"
+    end
+
     local fields = {}
     for k, v in pairs(record) do
         if not EXCLUDE_FROM_FIELDS[k] then
@@ -159,6 +183,12 @@ function shape_lnav(tag, ts, record)
         stream = scrub(stream_from_tag(tag)),
         fields = fields,
     }
+
+    -- Only present on parse failures so a clean record stays one line in lnav
+    -- (the format auto-expands the key onto its own row only when it exists).
+    if parse_error ~= nil then
+        shaped.parse_error = parse_error
+    end
 
     return 1, ts, shaped
 end

@@ -36,6 +36,7 @@
       "stream": { "kind": "string", "identifier": true, "hidden": true },
       "level": { "kind": "string" },
       "message": { "kind": "string" },
+      "parse_error": { "kind": "string", "identifier": true },
       "fields": { "kind": "json", "hidden": true },
       "/fields/CONTAINER_NAME": { "kind": "string", "hidden": true },
       "/fields/SYSTEMD_UNIT": { "kind": "string", "hidden": true },
@@ -73,6 +74,10 @@
       },
       {
         "line": "{\"time\":\"2026-06-09T02:21:27.174Z\",\"host\":\"lab\",\"service\":\"pihole_ftl\",\"unit\":null,\"identifier\":null,\"level\":\"warn\",\"message\":\"Long-term load (15min avg) larger than number of processors: 22.1 > 20\",\"stream\":\"pihole_ftl\",\"fields\":{\"ftl_level\":\"WARNING\",\"ftl_time\":\"2026-06-09 04:21:27.174\",\"ftl_tz\":\"CEST\",\"pid\":52,\"thread\":99}}",
+        "level": "warning"
+      },
+      {
+        "line": "{\"time\":\"2026-06-09T02:21:28.000Z\",\"host\":\"lab\",\"service\":\"pihole_ftl\",\"unit\":null,\"identifier\":null,\"level\":\"warn\",\"message\":\"a line the FTL regex did not match\",\"stream\":\"pihole_ftl\",\"parse_error\":\"pihole_ftl\",\"fields\":{\"filepath\":\"/var/log/pihole/FTL.log\"}}",
         "level": "warning"
       }
     ]
