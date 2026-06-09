@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# [MISE] description="Sync HA GUI YAML files (automations/scripts/scenes) between the ha_gui_config submodule and lab. Default mode: pull then push."
+# [MISE] description="Sync HA GUI YAML files (automations/scripts/scenes) between the ha_gui_config clone and lab. Default mode: pull then push."
 # [USAGE] arg "<mode>" help="pull | push | sync (default)" default="sync"
 # [USAGE] flag "--dry-run" help="preview a push (diff + syntax validation) without writing to the host, moving the synced tag, or reloading HA"
 """
@@ -8,21 +8,22 @@ automations.yaml, scripts.yaml, scenes.yaml, sensors.yaml, templates.yaml,
 input_numbers.yaml, timers.yaml, custom_templates/macros.jinja,
 blueprints/automation/*.yaml.
 
-The submodule at roles/homeassistant/files/ha_gui_config/ is the source of
+The in-place clone at roles/homeassistant/files/ha_gui_config/ (a gitignored
+clone of the private homelab_ha_config repo, not a submodule) is the source of
 truth; the ha:sync push path is what deploys these files to the host (the
 role only creates dirs + include-target stubs). A movable tag
 `last_synced_to_host` records the commit whose tree matches the live host
 state; sync direction is detected by comparing host file shas against blobs
 at that tag.
 
-- pull: scp host -> submodule, commit if changed, advance tag.
+- pull: scp host -> clone, commit if changed, advance tag.
         Refuses on a dirty working tree (would clobber local edits).
 - push: auto-commit any working-tree edits first, then refuse if host
         has diverged from the tag (host edited since last pull). For
         every changed file, parse-validate it (YAML via PyYAML with HA
         tag stubs; .jinja via jinja2.Environment().parse) and abort
         with the full failure list on any error -- so a broken file
-        never lands on lab. Then scp submodule -> host, advance tag,
+        never lands on lab. Then scp clone -> host, advance tag,
         and run the appropriate reload(s). Per-file SYNC_SPEC maps
         each file to a reload service (`automation.reload`,
         `template.reload`, ...); files marked `None` need a
@@ -68,13 +69,13 @@ if os.environ.get("HA_API_TOKEN", "").startswith("op://") and not os.environ.get
         sys.exit(subprocess.run([_op, "run", "--", sys.executable, __file__, *sys.argv[1:]], env=_env).returncode)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SUBMODULE = REPO_ROOT / "roles/homeassistant/files/ha_gui_config"
+CLONE = REPO_ROOT / "roles/homeassistant/files/ha_gui_config"
 HOST = "lab"
 HOST_DIR = "/mnt/services/homeassistant"
 HA_URL = "https://homeassistant.lab.fahm.fr"
 SYNCED_TAG = "last_synced_to_host"
 
-# Each entry: (submodule_glob, mode, reload_service-or-None).
+# Each entry: (clone_glob, mode, reload_service-or-None).
 # `None` reload means the file needs a homeassistant.restart -- there is
 # no per-platform reload (e.g. sensors of platform=statistics). Multiple
 # changed files aggregate: if any needs restart, restart covers the
@@ -100,12 +101,12 @@ SYNC_SPEC = [
 
 
 def enumerate_files() -> list[tuple[str, str, str | None]]:
-    """Walk the submodule, return [(relpath, mode, reload_service), ...] for files matching a SYNC_SPEC."""
+    """Walk the clone, return [(relpath, mode, reload_service), ...] for files matching a SYNC_SPEC."""
     out: list[tuple[str, str, str | None]] = []
     for glob, mode, reload in SYNC_SPEC:
-        for p in sorted(SUBMODULE.glob(glob)):
+        for p in sorted(CLONE.glob(glob)):
             if p.is_file():
-                out.append((p.relative_to(SUBMODULE).as_posix(), mode, reload))
+                out.append((p.relative_to(CLONE).as_posix(), mode, reload))
     return out
 
 
@@ -127,7 +128,7 @@ def validate_syntax(relpaths: list[str]) -> None:
     failures: list[str] = []
     jinja_env = Environment()
     for rel in relpaths:
-        path = SUBMODULE / rel
+        path = CLONE / rel
         try:
             if rel.endswith((".yaml", ".yml")):
                 with path.open() as f:
@@ -140,7 +141,7 @@ def validate_syntax(relpaths: list[str]) -> None:
         except OSError as e:
             failures.append(f"  {rel}: cannot read: {e}")
     if failures:
-        sys.exit("refusing: syntax errors in submodule files:\n" + "\n".join(failures))
+        sys.exit("refusing: syntax errors in ha_gui_config files:\n" + "\n".join(failures))
 
 
 def sh(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
@@ -164,7 +165,7 @@ def blob_sha_at(ref: str, filename: str) -> str | None:
     """sha256 of file's blob at git ref; None if the file doesn't exist at that ref."""
     r = subprocess.run(
         ["git", "show", f"{ref}:{filename}"],
-        cwd=SUBMODULE,
+        cwd=CLONE,
         capture_output=True,
         check=False,
     )
@@ -174,56 +175,57 @@ def blob_sha_at(ref: str, filename: str) -> str | None:
 
 
 def worktree_sha(filename: str) -> str | None:
-    """sha256 of the file as it sits in the submodule working tree; None if absent.
+    """sha256 of the file as it sits in the clone working tree; None if absent.
 
     Used by `push --dry-run`, which doesn't auto-commit, so the comparison point
     is the working tree (uncommitted edits included) rather than the HEAD blob.
     """
     try:
-        return hashlib.sha256((SUBMODULE / filename).read_bytes()).hexdigest()
+        return hashlib.sha256((CLONE / filename).read_bytes()).hexdigest()
     except OSError:
         return None
 
 
-def assert_submodule_initialized() -> None:
-    if not (SUBMODULE / ".git").exists():
+def assert_clone_present() -> None:
+    if not (CLONE / ".git").exists():
         sys.exit(
-            f"submodule not initialized at {SUBMODULE}; run `git submodule update --init {SUBMODULE.relative_to(REPO_ROOT)}`"
+            f"ha_gui_config clone not present at {CLONE}. It is an in-place gitignored clone "
+            f"(not a submodule); re-clone homelab_ha_config there, and run ha:sync from the main checkout."
         )
 
 
 def assert_clean_working_tree() -> None:
-    r = sh(["git", "status", "--porcelain"], cwd=SUBMODULE)
+    r = sh(["git", "status", "--porcelain"], cwd=CLONE)
     if r.stdout.strip():
-        sys.exit(f"refusing: submodule working tree has uncommitted changes:\n{r.stdout}\ncommit or stash first.")
+        sys.exit(f"refusing: clone working tree has uncommitted changes:\n{r.stdout}\ncommit or stash first.")
 
 
 def commit_local_edits(subject_prefix: str) -> bool:
     """Stage + commit any working-tree changes, push to origin. Returns True if anything was committed."""
-    if not sh(["git", "status", "--porcelain"], cwd=SUBMODULE).stdout.strip():
+    if not sh(["git", "status", "--porcelain"], cwd=CLONE).stdout.strip():
         return False
     ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    sh(["git", "add", "-A"], cwd=SUBMODULE)
-    sh(["git", "commit", "-m", f"{subject_prefix}: local edits ({ts})"], cwd=SUBMODULE)
-    sh(["git", "push", "origin", "main"], cwd=SUBMODULE)
+    sh(["git", "add", "-A"], cwd=CLONE)
+    sh(["git", "commit", "-m", f"{subject_prefix}: local edits ({ts})"], cwd=CLONE)
+    sh(["git", "push", "origin", "main"], cwd=CLONE)
     return True
 
 
 def has_tag(name: str) -> bool:
-    r = sh(["git", "tag", "-l", name], cwd=SUBMODULE, check=False)
+    r = sh(["git", "tag", "-l", name], cwd=CLONE, check=False)
     return name in r.stdout.split()
 
 
 def advance_synced_tag() -> None:
     """Move SYNCED_TAG to HEAD (locally + on origin)."""
-    sh(["git", "tag", "-f", SYNCED_TAG], cwd=SUBMODULE)
-    sh(["git", "push", "origin", "--force", f"refs/tags/{SYNCED_TAG}"], cwd=SUBMODULE)
+    sh(["git", "tag", "-f", SYNCED_TAG], cwd=CLONE)
+    sh(["git", "push", "origin", "--force", f"refs/tags/{SYNCED_TAG}"], cwd=CLONE)
 
 
 def fetch_from_host() -> None:
-    """sudo-cat each host file into the submodule working tree."""
+    """sudo-cat each host file into the clone working tree."""
     for rel, _, _ in enumerate_files():
-        target = SUBMODULE / rel
+        target = CLONE / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("wb") as out:
             subprocess.run(["ssh", HOST, f"sudo cat {HOST_DIR}/{rel}"], stdout=out, check=True)
@@ -235,7 +237,7 @@ def upload_to_host(entries: list[tuple[str, str]]) -> None:
     for rel, mode in entries:
         safe = rel.replace("/", "_")
         tmp_remote = f"/tmp/.ha_sync_{pid}_{safe}"
-        sh(["scp", "-q", str(SUBMODULE / rel), f"{HOST}:{tmp_remote}"])
+        sh(["scp", "-q", str(CLONE / rel), f"{HOST}:{tmp_remote}"])
         # Make sure the parent dir exists on the host before installing.
         host_parent = f"{HOST_DIR}/{rel.rsplit('/', 1)[0]}" if "/" in rel else HOST_DIR
         sh(
@@ -295,7 +297,7 @@ def show_push_diff(changed: list[tuple[str, str, str | None]]) -> None:
             _print_diff_header(f"push: {rel} ({'new on host' if not host_bytes else 'modified on host'})")
             # --no-index exits 1 when files differ; ignore.
             subprocess.run(
-                ["git", "diff", "--color=always", "--no-index", "--", host_tmp, str(SUBMODULE / rel)],
+                ["git", "diff", "--color=always", "--no-index", "--", host_tmp, str(CLONE / rel)],
                 check=False,
             )
         finally:
@@ -305,7 +307,7 @@ def show_push_diff(changed: list[tuple[str, str, str | None]]) -> None:
 def show_pull_diff() -> None:
     """Print colored diff (HEAD -> working tree) -- what the pull is about to commit."""
     _print_diff_header("pull: host-side changes about to be committed")
-    subprocess.run(["git", "diff", "--color=always", "HEAD"], cwd=SUBMODULE, check=False)
+    subprocess.run(["git", "diff", "--color=always", "HEAD"], cwd=CLONE, check=False)
 
 
 def trigger_post_push(reload_services: list[str | None]) -> None:
@@ -325,16 +327,16 @@ def trigger_post_push(reload_services: list[str | None]) -> None:
 
 
 def do_pull() -> None:
-    assert_submodule_initialized()
+    assert_clone_present()
     assert_clean_working_tree()
-    sh(["git", "fetch", "--tags", "--force"], cwd=SUBMODULE)
-    sh(["git", "pull", "--ff-only", "--quiet"], cwd=SUBMODULE)
+    sh(["git", "fetch", "--tags", "--force"], cwd=CLONE)
+    sh(["git", "pull", "--ff-only", "--quiet"], cwd=CLONE)
     fetch_from_host()
-    if not sh(["git", "status", "--porcelain"], cwd=SUBMODULE).stdout.strip():
+    if not sh(["git", "status", "--porcelain"], cwd=CLONE).stdout.strip():
         if (
             not has_tag(SYNCED_TAG)
-            or sh(["git", "rev-parse", SYNCED_TAG], cwd=SUBMODULE).stdout.strip()
-            != sh(["git", "rev-parse", "HEAD"], cwd=SUBMODULE).stdout.strip()
+            or sh(["git", "rev-parse", SYNCED_TAG], cwd=CLONE).stdout.strip()
+            != sh(["git", "rev-parse", "HEAD"], cwd=CLONE).stdout.strip()
         ):
             advance_synced_tag()
             print("pull: no host changes; advanced tag to HEAD")
@@ -343,29 +345,29 @@ def do_pull() -> None:
         return
     show_pull_diff()
     ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    sh(["git", "add", "-A"], cwd=SUBMODULE)
-    sh(["git", "commit", "-m", f"pull: capture GUI edits from lab ({ts})"], cwd=SUBMODULE)
-    sh(["git", "push", "origin", "main"], cwd=SUBMODULE)
+    sh(["git", "add", "-A"], cwd=CLONE)
+    sh(["git", "commit", "-m", f"pull: capture GUI edits from lab ({ts})"], cwd=CLONE)
+    sh(["git", "push", "origin", "main"], cwd=CLONE)
     advance_synced_tag()
     print(
-        f"pull: committed GUI edits + pushed (tag now at {sh(['git', 'rev-parse', '--short', 'HEAD'], cwd=SUBMODULE).stdout.strip()})"
+        f"pull: committed GUI edits + pushed (tag now at {sh(['git', 'rev-parse', '--short', 'HEAD'], cwd=CLONE).stdout.strip()})"
     )
 
 
 def do_push(dry_run: bool = False) -> None:
-    assert_submodule_initialized()
+    assert_clone_present()
     if not dry_run:
-        sh(["git", "fetch", "--tags", "--force"], cwd=SUBMODULE)
-        sh(["git", "pull", "--ff-only", "--quiet"], cwd=SUBMODULE)
+        sh(["git", "fetch", "--tags", "--force"], cwd=CLONE)
+        sh(["git", "pull", "--ff-only", "--quiet"], cwd=CLONE)
         # Auto-commit any working-tree edits so `ha:sync push` works straight
-        # from a direct file edit in the submodule without a manual git commit.
+        # from a direct file edit in the clone without a manual git commit.
         if commit_local_edits("push"):
             print("push: committed local edits")
     if not has_tag(SYNCED_TAG):
         sys.exit(f"refusing: no {SYNCED_TAG} tag. Run `mise run ha:pull` once to establish the baseline.")
     # Per-file state model:
     #   tag_blob  -- sha at last_synced_to_host, or None if file is new to sync
-    #   head_blob -- sha at submodule HEAD (always exists; file is in HEAD by definition)
+    #   head_blob -- sha at clone HEAD (always exists; file is in HEAD by definition)
     #   host_blob -- sha on lab, or None if file isn't deployed yet
     # diverged   = host has stale-but-present content edited away from tag
     #              (would clobber on push without a pull first)

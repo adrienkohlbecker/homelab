@@ -3,6 +3,11 @@
 # not a submodule: an independent clone the main checkout owns and every worktree
 # symlinks to. Untracked here so the public repo carries no notes footprint.
 /notes
+# roles/homeassistant/files/ha_gui_config is likewise a private repo cloned in-place
+# (git@github.com:adrienkohlbecker/homelab_ha_config), not a submodule — mise run ha:sync
+# owns it (commits/pushes/deploys to the HA host). Untracked so the public repo carries no
+# HA GUI config. The pin was never load-bearing; ha:sync works from the clone + origin.
+/roles/homeassistant/files/ha_gui_config
 __pycache__
 .vscode
 test/out.tsv

@@ -197,7 +197,7 @@
     - homeassistant
 
 # sensors.yaml / templates.yaml / custom_templates/macros.jinja and the
-# blueprint sources live in the ha_gui_config submodule, deployed by
+# blueprint sources live in the ha_gui_config clone, deployed by
 # `mise run ha:sync push` (see CLAUDE.md > Home Assistant GUI YAML sync).
 # This task only touches the include-targets HA reads at startup; their
 # absence would log "file not found" before the operator runs the first sync.
@@ -460,7 +460,7 @@
 
 # vscode_ha (an openvscode-server editor over /mnt/services/homeassistant)
 # was retired: HA's user-authored config now lives in the homelab_ha_config
-# submodule and syncs via `mise run ha:sync`, which forbids editing on the
+# clone and syncs via `mise run ha:sync`, which forbids editing on the
 # live VM, and the editor couldn't be Authelia-gated inside HA's iframe panel
 # anyway (the unauthenticated 302 to the portal can't be framed). The
 # tombstones below tear down what the role left on already-converged hosts;
