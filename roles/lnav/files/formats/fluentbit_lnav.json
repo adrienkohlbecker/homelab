@@ -6,6 +6,7 @@
     "file-pattern": "(.*/)?lnav\\.jsonl(\\.[0-9]+)?(\\.gz)?$",
     "json": true,
     "timestamp-field": "time",
+    "ordered-by-time": true,
     "level-field": "level",
     "level": {
       "fatal": "^fatal$",
@@ -49,6 +50,7 @@
       "/fields/remote_addr": { "kind": "string", "identifier": true },
       "/fields/request_time": { "kind": "float" },
       "/fields/upstream_response_time": { "kind": "string", "hidden": true },
+      "/fields/time_local": { "kind": "string", "hidden": true },
       "/fields/body_bytes_sent": { "kind": "integer", "hidden": true },
       "/fields/request_length": { "kind": "integer", "hidden": true },
       "/fields/user_agent": { "kind": "string" },

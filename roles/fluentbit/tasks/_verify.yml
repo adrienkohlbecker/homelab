@@ -280,6 +280,9 @@
       - "(row.fields.request_time | float) <= 0.05"
       - "row.fields.user_agent == 'Mozilla/5.0 verifyUA'"
       - "row.fields.ssl_protocol == 'TLSv1.3'"
+      # No Time_Key: the parsed request time is kept as a field, not adopted as
+      # the record timestamp (which stays Fluent Bit ingest time).
+      - "row.fields.time_local == '08/Jun/2026:12:00:00 +0200'"
       # http_host must NOT clobber the inventory host stamped by the modify filter.
       - "row.host == inventory_hostname"
     fail_msg: "nginx access line did not parse into structured fields: {{ row }}"
