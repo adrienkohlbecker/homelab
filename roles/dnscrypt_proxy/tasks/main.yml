@@ -9,6 +9,20 @@
   tags:
     - dnscrypt_proxy
 
+# The package helper tries to register the loopback socket with systemd-resolved
+# via resolvconf, which fails on loopback-only links. This role owns the
+# dnscrypt-proxy listener directly, so keep that helper out of the unit state.
+- name: Disable dnscrypt-proxy resolvconf integration
+  when: not (ansible_check_mode and dnscrypt_proxy_apt.changed)
+  systemd:
+    name: dnscrypt-proxy-resolvconf.service
+    enabled: false
+    masked: true
+    state: stopped
+  become: true
+  tags:
+    - dnscrypt_proxy
+
 - name: Install dnscrypt-proxy socket override
   import_role:
     name: systemd_unit
