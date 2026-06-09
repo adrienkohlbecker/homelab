@@ -45,7 +45,6 @@
 - name: charts_d | Install netdata-plugin-chartsd
   when:
     - _netdata_charts_d_condition
-    - not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed))
   apt:
     pkg:
       - netdata-plugin-chartsd
@@ -107,7 +106,6 @@
   when:
     - _netdata_charts_d_condition
     - _netdata_charts_d_restart
-    - not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed or _netdata_charts_d_apt.changed))
     - _netdata_charts_d_apt.changed or _netdata_charts_d_chart_sh.changed or _netdata_charts_d_conf_result.changed
   systemd:
     name: netdata

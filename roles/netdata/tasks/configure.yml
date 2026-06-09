@@ -71,7 +71,7 @@
       dest: go.d/prometheus.conf
       mode: "0600"
       validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-      restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
+      condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
   tags:
     - netdata
 
@@ -115,7 +115,7 @@
       src: docker.conf.j2
       dest: go.d/docker.conf
       validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-      restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
+      condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
   tags:
     - netdata
 
@@ -136,9 +136,8 @@
     netdata_args:
       src: intelgpu.conf
       dest: go.d/intelgpu.conf
-      condition: '{{ ansible_architecture == "x86_64" }}'
+      condition: '{{ ansible_architecture == "x86_64" and not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}'
       validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-      restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
   tags:
     - netdata
 
