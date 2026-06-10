@@ -97,3 +97,58 @@ unit_tests:
     - mise install
     - uv sync --locked
     - mise run test
+
+# Rebuild of the CI container image (the repo Dockerfile), pushed to this
+# project's registry as $CI_REGISTRY_IMAGE/ci:<sha> (+ :latest from master).
+# Manual-only, mirroring the GitHub ci-image workflow's policy: jobs pin the
+# currently published :latest, refreshed deliberately when the toolchain
+# changes — not rebuilt under every pipeline. Builds docker-in-docker on a
+# hosted runner, so apt resolves upstream (USE_NEXUS_MIRRORS=0) — the nexus
+# mirror redirect is only reachable from the lab network.
+#
+# Optional CI/CD variable: MISE_GITHUB_TOKEN (a no-scope PAT) raises mise's
+# GitHub API rate limit during the in-image `mise install`; without it the
+# build still works, mounted only as a BuildKit secret either way.
+ci_image:
+  rules:
+    - when: manual
+      # A skipped manual job must not hold the pipeline in "blocked".
+      allow_failure: true
+  image: docker:28.3.3
+  services:
+    - docker:28.3.3-dind
+  tags:
+    - saas-linux-medium-amd64
+  # Serialize builds across pipelines (the GH workflow's concurrency group):
+  # two concurrent runs would race on the floating :latest push. Don't let
+  # auto-cancel kill a build mid-push either — a half-pushed manifest is
+  # strictly worse than a delayed run.
+  resource_group: ci_image
+  interruptible: false
+  timeout: 45m
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    # Warm the layer cache from the published image; BUILDKIT_INLINE_CACHE
+    # embeds cache metadata in the pushed image so the next rebuild can do
+    # the same. First-ever build has nothing to pull — that's fine.
+    - docker pull "$CI_REGISTRY_IMAGE/ci:latest" || true
+    - |
+      secret_args=""
+      if [ -n "${MISE_GITHUB_TOKEN:-}" ]; then
+        secret_args="--secret id=mise_github_token,env=MISE_GITHUB_TOKEN"
+      fi
+      docker build $secret_args \
+        --build-arg USE_NEXUS_MIRRORS=0 \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        --cache-from "$CI_REGISTRY_IMAGE/ci:latest" \
+        --tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA" .
+    - docker push "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA"
+    # :latest moves only from master, so a branch dispatch can't retarget
+    # what other pipelines pin.
+    - |
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        docker tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE/ci:latest"
+        docker push "$CI_REGISTRY_IMAGE/ci:latest"
+      fi
