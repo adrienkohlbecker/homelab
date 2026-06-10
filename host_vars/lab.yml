@@ -1,5 +1,9 @@
 ssh_x11_forwarding: true
 boot_initramfs_debug: true
+zfsbootmenu_artifact_override:
+  version: v3.0.1-linux6.1-upstream-x86_64
+  url: "{{ zfsbootmenu_repository_url }}/zfsbootmenu-v3.0.1-linux6.1-upstream-x86_64.tar.gz"
+  sha256_url: "{{ zfsbootmenu_repository_url }}/zfsbootmenu-v3.0.1-linux6.1-upstream-x86_64.tar.gz.sha256sum"
 
 ssh_public_keys_additional: |
   command="rrsync /mnt/data/MacbookPro/",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-x11-forwarding ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGoV1GKxsIUqLzdCBrFsNDNJomw8NF3d8EwcJACkm1Qk rsync_to_lab

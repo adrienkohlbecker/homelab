@@ -67,7 +67,6 @@
     owner: root
     group: root
     mode: "0755"
-    force: false # TODO
   become: true
   register: zfsbootmenu_efi
   tags:
