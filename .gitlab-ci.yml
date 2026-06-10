@@ -215,7 +215,11 @@ qemu_images:
     - mise run packer:init
     - |
       set -euo pipefail
-      mise run packer:build "$SOURCE" --ubuntu "$UBUNTU"
+      # --upstream: fleet workers can't reach the lab Nexus proxy, so pull
+      # apt + the cloud image (and its checksum file) straight from Ubuntu.
+      # The worker snapshot pre-seeds the packer ISO cache, so the cloud
+      # image itself is usually already on disk.
+      mise run packer:build "$SOURCE" --ubuntu "$UBUNTU" --upstream
       if [ "$SOURCE" = "box" ]; then
         mise run packer:seed-deps --ubuntu "$UBUNTU"
       fi
