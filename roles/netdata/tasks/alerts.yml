@@ -113,6 +113,17 @@
   tags:
     - netdata
 
+- name: Configure netdata reboot-required alert
+  import_role:
+    name: netdata
+    tasks_from: health
+  vars:
+    netdata_args:
+      src: reboot_alerts.conf
+      dest: reboot.conf
+  tags:
+    - netdata
+
 # Un-silence the two predictive disk-fill alarms shipped in upstream
 # /usr/lib/netdata/conf.d/health.d/disks.conf. Upstream sets
 # `to: silent` on out_of_disk_space_time and out_of_disk_inodes_time
