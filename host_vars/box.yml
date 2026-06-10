@@ -181,10 +181,11 @@ github_runner_instances:
 
 # roles/gitlab_runner CI fixture. Enabled so the role exercises its full
 # host-side path under the harness (binary downloads, config.toml render +
-# TOML validate, unit install + systemd-analyze verify). The tokens are
-# throwaway placeholders -- the role's qemu_test gate skips `systemctl start`,
-# so the manager never actually contacts gitlab.com or Hetzner with them, and
-# _verify only checks the static artifacts. No blast radius.
+# TOML validate, unit install + _verify's start/metrics/stop smoke). The smoke
+# DOES start the manager, which retries registration against gitlab.com with
+# these tokens -- the safety property is that they are non-functional
+# placeholders (registration just fails async), NOT that nothing ever runs.
+# No blast radius as long as they stay obviously fake.
 gitlab_runner_enabled: true
 gitlab_runner_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
 gitlab_runner_hcloud_token: test-hcloud-placeholder-do-not-use
