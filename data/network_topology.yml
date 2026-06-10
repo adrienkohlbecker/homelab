@@ -60,6 +60,11 @@ partitions:
 
 sites:
   home:
+    # Route-precedence contract with the Tailscale mesh: Trusted VLAN DHCP
+    # pushes this /21 as option 121, while lab/pug advertise the less-specific
+    # physical partition (10.123.0.0/18) to Headscale. Trusted clients then
+    # prefer the local UDM gateway for pihole's VIP; roaming clients use
+    # Tailscale.
     cidr: 10.123.0.0/21
     gateway: 10.123.0.1
     vlans:

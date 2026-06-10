@@ -37,11 +37,18 @@ tailscale_authkey_file: /run/tailscale_authkey
 # (Linux defaults to NOT accepting). Off by default. Enabling it on a node lets
 # it reach remote sites over the mesh (e.g. home hosts reaching bunk's Bonniers
 # /24), but it is all-or-nothing: a node that also sits physically on a subnet
-# another node advertises (lab/pug both advertise 10.123.0.0/21) may then install
+# another node advertises (lab/pug both advertise 10.123.0.0/18) may then install
 # a tailnet route to its own LAN and hairpin -- see the "subnet-route while
 # physically on that subnet" risk in notes/headscale_mesh_redesign.md. Enable per
 # host only after weighing that.
 tailscale_accept_routes: false
+
+# Control-plane repair switch for stale Headscale route approvals. Normal
+# steady-state converges avoid depending on Headscale once the local Tailscale
+# prefs already match host_vars; set this true for a one-shot reconciliation when
+# the local advertised routes are correct but Headscale's approved route set is
+# suspected stale.
+tailscale_reconcile_headscale_routes: false
 
 # Subnet-router forwarding knobs, surfaced so a Tailscale default-flip can't
 # silently change how lab/pug route LAN traffic (they advertise a subnet they
