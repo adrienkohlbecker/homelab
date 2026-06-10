@@ -193,15 +193,24 @@
   tags:
     - swap
 
-# LABEL= lets systemd-fstab-generator resolve the device via libblkid
-# without depending on the /dev/zvol/ udev symlink appearing in time.
-# x-systemd.requires=zfs-volumes.target makes the auto-generated .swap
-# unit wait for ZFS to finish importing pools and exposing zvols at boot.
+- name: Remove stale zvol swap label fstab entry
+  when: swap_zvol is defined and zfs_root
+  lineinfile:
+    path: /etc/fstab
+    regexp: '^LABEL=swap-{{ swap_zvol.dataset | replace("/", "-") }}[ \t]+none[ \t]+swap[ \t]+'
+    state: absent
+    backup: true
+  become: true
+  tags:
+    - swap
+
+# x-systemd.requires=zfs-volumes.target makes the auto-generated .swap unit
+# wait for ZFS to finish importing pools and exposing zvols at boot.
 - name: Add zvol swap to /etc/fstab
   when: swap_zvol is defined and zfs_root
   mount:
     path: none
-    src: "LABEL=swap-{{ swap_zvol.dataset | replace('/', '-') }}"
+    src: "/dev/zvol/{{ swap_zvol.dataset }}"
     fstype: swap
     opts: "{{ swap_zvol.opts | default('defaults,nofail,pri=10,x-systemd.requires=zfs-volumes.target') }}"
     state: present
