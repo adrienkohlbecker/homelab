@@ -18,17 +18,19 @@
       gitlab-runner --version did not report {{ gitlab_runner_version }}:
       {{ gitlab_runner_verify_version.stdout }}
 
-- name: Verify | stat the fleeting plugin binary
-  stat:
-    path: /usr/local/bin/fleeting-plugin-hetzner
+- name: Verify | fleeting-plugin-hetzner runs and reports its version
+  command: /usr/local/bin/fleeting-plugin-hetzner --version
   register: gitlab_runner_verify_plugin
+  changed_when: false
 
-- name: Verify | fleeting-plugin-hetzner is present and executable
+- name: Verify | fleeting-plugin-hetzner is the pinned version
   assert:
     that:
-      - gitlab_runner_verify_plugin.stat.exists
-      - gitlab_runner_verify_plugin.stat.executable
-    fail_msg: fleeting-plugin-hetzner is missing or not executable
+      - gitlab_runner_fleeting_hetzner_version in gitlab_runner_verify_plugin.stdout
+    fail_msg: >-
+      fleeting-plugin-hetzner --version did not report
+      {{ gitlab_runner_fleeting_hetzner_version }}:
+      {{ gitlab_runner_verify_plugin.stdout }}
 
 - name: Verify | read back the rendered config.toml
   slurp:
@@ -51,4 +53,35 @@
   register: gitlab_runner_verify_unit
   changed_when: false
   failed_when: gitlab_runner_verify_unit.rc != 0 or gitlab_runner_verify_unit.stderr != ''
+  become: true
+
+# Functional unit-start smoke: the role enable-onlys under qemu_test, so start
+# the manager by hand and wait for active. gitlab-runner run stays up on a
+# placeholder token (registration fails async, the loop keeps retrying), so
+# Type=simple reaches active -- proving User=/Group=/WorkingDirectory=/HOME=/
+# ExecStart all resolve, which systemd-analyze verify (a static parse) cannot.
+- name: Verify | start the manager to drive the unit's ExecStart
+  systemd:
+    name: gitlab_runner.service
+    state: started
+    daemon_reload: true
+  become: true
+
+- name: Verify | wait for gitlab_runner.service to reach active
+  systemd:
+    name: gitlab_runner.service
+  register: gitlab_runner_verify_smoke
+  until: gitlab_runner_verify_smoke.status.ActiveState == "active"
+  retries: 10
+  delay: 2
+  failed_when: gitlab_runner_verify_smoke.status.ActiveState != "active"
+  become: true
+
+# SIGQUIT with zero in-flight jobs drains instantly, so stop won't hang on the
+# unit's TimeoutStopSec=infinity. Leaves the manager stopped (qemu has no
+# upstream to register against anyway).
+- name: Verify | stop the manager after smoke
+  systemd:
+    name: gitlab_runner.service
+    state: stopped
   become: true
