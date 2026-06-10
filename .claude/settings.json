@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worktree_create.sh"
+            "command": "$CLAUDE_PROJECT_DIR/.agents/hooks/worktree_create.sh"
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worktree_remove.sh"
+            "command": "$CLAUDE_PROJECT_DIR/.agents/hooks/worktree_remove.sh"
           }
         ]
       }
@@ -25,17 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session_start_context.sh"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session_end_warn.sh"
+            "command": "$CLAUDE_PROJECT_DIR/.agents/hooks/session_start_context.sh"
           }
         ]
       }
@@ -46,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/lint_before_git_push.sh"
+            "command": "$CLAUDE_PROJECT_DIR/.agents/hooks/lint_before_git_push.sh"
           }
         ]
       }
@@ -57,11 +47,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/lint_ansible_on_edit.sh"
+            "command": "$CLAUDE_PROJECT_DIR/.agents/hooks/lint_ansible_on_edit.sh"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/tf_validate_on_edit.sh"
+            "command": "$CLAUDE_PROJECT_DIR/.agents/hooks/tf_validate_on_edit.sh"
           }
         ]
       }
