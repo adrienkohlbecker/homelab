@@ -120,6 +120,18 @@
   tags:
     - nut_server
 
+- name: Order nut-driver after network-online
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      for: '{{ "nut-driver.service" if ansible_distribution_release in ["jammy"] else "nut-driver@eaton.service" }}'
+      src: override_nut_driver.conf
+      condition: "{{ not (ansible_check_mode and nut_server_apt.changed) }}"
+  tags:
+    - nut_server
+
 - name: Enable nut-driver service
   import_role:
     name: systemd_unit
