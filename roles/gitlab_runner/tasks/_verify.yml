@@ -1,86 +1,76 @@
 # Functional host-side checks. The live runner can't register in the harness
 # (no gitlab.com token, no Hetzner project), so the role enable-onlys under
 # qemu_test and this exercises everything that genuinely runs on the host: the
-# pinned binaries execute on this arch, the rendered config is valid TOML with
-# the expected executor/plugin wiring, and the unit installs + passes
-# systemd-analyze verify. Live scale-from-zero is proven by the gate-1
+# pinned binaries execute on this arch, and the unit starts, stays up, and
+# serves its metrics listener. Live scale-from-zero is proven by the gate-1
 # benchmark on a real instance, not CI.
-- name: Verify | gitlab-runner binary runs and reports its version
+- name: _verify | Pinned gitlab-runner binary runs on this arch
   command: /usr/local/bin/gitlab-runner --version
-  register: gitlab_runner_verify_version
+  register: _gitlab_runner_version
   changed_when: false
+  failed_when: gitlab_runner_version not in _gitlab_runner_version.stdout
 
-- name: Verify | gitlab-runner is the pinned version
-  assert:
-    that:
-      - gitlab_runner_version in gitlab_runner_verify_version.stdout
-    fail_msg: >-
-      gitlab-runner --version did not report {{ gitlab_runner_version }}:
-      {{ gitlab_runner_verify_version.stdout }}
-
-- name: Verify | fleeting-plugin-hetzner runs and reports its version
+- name: _verify | Pinned fleeting-plugin-hetzner binary runs on this arch
   command: /usr/local/bin/fleeting-plugin-hetzner --version
-  register: gitlab_runner_verify_plugin
+  register: _gitlab_runner_plugin_version
   changed_when: false
-
-- name: Verify | fleeting-plugin-hetzner is the pinned version
-  assert:
-    that:
-      - gitlab_runner_fleeting_hetzner_version in gitlab_runner_verify_plugin.stdout
-    fail_msg: >-
-      fleeting-plugin-hetzner --version did not report
-      {{ gitlab_runner_fleeting_hetzner_version }}:
-      {{ gitlab_runner_verify_plugin.stdout }}
-
-- name: Verify | read back the rendered config.toml
-  slurp:
-    src: /mnt/services/gitlab_runner/config.toml
-  register: gitlab_runner_verify_config
-  become: true
-
-- name: Verify | config.toml carries the instance-executor + fleeting wiring
-  vars:
-    _cfg: "{{ gitlab_runner_verify_config.content | b64decode }}"
-  assert:
-    that:
-      - '''executor = "instance"'' in _cfg'
-      - '''plugin = "fleeting-plugin-hetzner"'' in _cfg'
-      - "'[runners.autoscaler.plugin_config]' in _cfg"
-    fail_msg: config.toml is missing the instance-executor / fleeting wiring
-
-- name: Verify | gitlab_runner.service passes systemd-analyze verify
-  command: systemd-analyze verify --no-pager --man=no /etc/systemd/system/gitlab_runner.service
-  register: gitlab_runner_verify_unit
-  changed_when: false
-  failed_when: gitlab_runner_verify_unit.rc != 0 or gitlab_runner_verify_unit.stderr != ''
-  become: true
+  failed_when: >-
+    gitlab_runner_fleeting_hetzner_version
+    not in _gitlab_runner_plugin_version.stdout
 
 # Functional unit-start smoke: the role enable-onlys under qemu_test, so start
-# the manager by hand and wait for active. gitlab-runner run stays up on a
-# placeholder token (registration fails async, the loop keeps retrying), so
-# Type=simple reaches active -- proving User=/Group=/WorkingDirectory=/HOME=/
-# ExecStart all resolve, which systemd-analyze verify (a static parse) cannot.
-- name: Verify | start the manager to drive the unit's ExecStart
+# the manager by hand. gitlab-runner run stays up on a placeholder token
+# (registration fails async, the loop keeps retrying), so Type=simple reaches
+# active -- proving User=/Group=/WorkingDirectory=/HOME=/ExecStart all
+# resolve, which a static parse cannot.
+- name: _verify | Start the manager to drive the unit's ExecStart
   systemd:
     name: gitlab_runner.service
     state: started
     daemon_reload: true
   become: true
 
-- name: Verify | wait for gitlab_runner.service to reach active
+- name: _verify | Wait for gitlab_runner.service to reach active
   systemd:
     name: gitlab_runner.service
-  register: gitlab_runner_verify_smoke
-  until: gitlab_runner_verify_smoke.status.ActiveState == "active"
+  register: _gitlab_runner_smoke
+  until: _gitlab_runner_smoke.status.ActiveState == "active"
   retries: 10
   delay: 2
-  failed_when: gitlab_runner_verify_smoke.status.ActiveState != "active"
+  failed_when: _gitlab_runner_smoke.status.ActiveState != "active"
+  become: true
+
+# Metrics probe -- the loopback listener is the role's only listener and the
+# input to fox's netdata presence alert (go.d prometheus collector), so a
+# broken listen_address must fail here, not silently on prod. Same URL netdata
+# scrapes.
+- name: _verify | Manager serves prometheus metrics on its loopback port
+  uri:
+    url: http://127.0.0.1:{{ service_ports.gitlab_runner }}/metrics
+    status_code: 200
+    return_content: true
+  register: _gitlab_runner_metrics
+  failed_when: "'gitlab_runner_' not in (_gitlab_runner_metrics.content | default(''))"
+  retries: 5
+  delay: 1
+  until: _gitlab_runner_metrics.status | default(0) == 200
+
+# Type=simple is `active` the instant ExecStart forks, so the wait above can
+# catch the brief active window of a crash-looping manager; re-read after the
+# metrics probe (several seconds of runtime) and assert it never restarted.
+- name: _verify | Manager stayed up since the smoke start
+  systemd:
+    name: gitlab_runner.service
+  register: _gitlab_runner_settled
+  failed_when: >-
+    _gitlab_runner_settled.status.ActiveState != "active"
+    or _gitlab_runner_settled.status.NRestarts != "0"
   become: true
 
 # SIGQUIT with zero in-flight jobs drains instantly, so stop won't hang on the
-# unit's TimeoutStopSec=infinity. Leaves the manager stopped (qemu has no
-# upstream to register against anyway).
-- name: Verify | stop the manager after smoke
+# unit's stop timeout. Leaves the manager stopped (qemu has no upstream to
+# register against anyway).
+- name: _verify | Stop the manager after smoke
   systemd:
     name: gitlab_runner.service
     state: stopped

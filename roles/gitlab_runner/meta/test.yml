@@ -2,7 +2,14 @@
 # for box_deps' pre-baked container stack. The instance executor + fleeting
 # autoscaler can't reach gitlab.com / Hetzner in the harness, so the role
 # enable-onlys under qemu_test and _verify exercises the host-side artifacts
-# (binaries run, config.toml valid, unit verifies). Live scale-from-zero is the
-# gate-1 benchmark on a real instance, outside CI.
+# (binaries run, config.toml valid, unit smoke-starts). Live scale-from-zero is
+# the gate-1 benchmark on a real instance, outside CI.
 machines:
   box:
+
+# Release-divergent: the config.toml validate imports tomllib on >= 24.04 and
+# the tomli backport below it (jammy ships python 3.10, no tomllib); the
+# default cell is jammy, so a noble cell exercises the tomllib branch -- the
+# one a noble-based prod host would take.
+ubuntu:
+  - noble
