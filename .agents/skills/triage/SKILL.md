@@ -1,4 +1,5 @@
 ---
+name: triage
 description: Triage a homelab service — resolve host(s), gather state, summarize
 argument-hint: <service-name>
 model: sonnet
@@ -19,7 +20,7 @@ If `roles/$ARGUMENTS/` doesn't exist, stop and report no-such-role plus the 3 ne
 **Unit(s).** Gather candidates from all three sources — they don't fully overlap:
 
 - `roles/$ARGUMENTS/{templates,files}/*.{service,timer,socket}{,.j2}` (strip `.j2` for the on-disk name).
-- `grep -rh systemd_unit_args.src roles/$ARGUMENTS/tasks/` — canonical when the role uses the helper (CLAUDE.md § Helper Roles).
+- `grep -rh systemd_unit_args.src roles/$ARGUMENTS/tasks/` — canonical when the role uses the helper (AGENTS.md § Helper Roles).
 - Bare `systemd:`/`service:` task names — covers package-provided units like `nut-server.service` (no template, hyphen not underscore).
 
 For instanced units (`foo@.service`), enumerate live instances per host: `ssh <h> "systemctl list-units 'foo@*' --no-legend --plain"`, triage each.

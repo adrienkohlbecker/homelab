@@ -34,6 +34,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 | `test/`          | ansible test harness, inventories, logs                                                 |
 | `unit_tests/`    | unit tests for non-ansible code                                                         |
 | `notes/`         | long-form design notes — landing zone for content that doesn't belong inline            |
+| `.agents/`       | agent-neutral skills + hook scripts shared by Claude Code and Codex (see *Workflows*)   |
 
 ## Build, Test, and Development Commands
 
@@ -50,6 +51,9 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 - `/triage <service>` — investigate a service end-to-end (resolve host(s), gather state, summarize).
 - `/split_worktree_commits` — split a multi-finding worktree into per-finding commits.
 - `/new_podman_role` — scaffold a new podman service role per *Podman Service Conventions*.
+- `/cross_review [target]` — have the *other* agent (Claude ↔ Codex) review changes, via `mise run {claude,codex}:review`.
+
+Skills and hook scripts are agent-neutral and live once under `.agents/` (`skills/`, `hooks/`). Codex discovers `.agents/skills/` natively; Claude Code reads it through the `.claude/skills` symlink. Hooks are wired per-agent — `.claude/settings.json` (via `$CLAUDE_PROJECT_DIR`) and `.codex/hooks.json` (via `git rev-parse --show-toplevel`; codex trust-hashes each entry, so re-trust with `/hooks` after editing). New skills go in `.agents/skills/<name>/SKILL.md` and reference `AGENTS.md` (a symlink to CLAUDE.md), not CLAUDE.md, so wording stays agent-neutral.
 
 ## Coding Style & Naming Conventions
 

@@ -5,7 +5,7 @@ description: Scaffold a new podman-based service role following the homelab repo
 
 # New podman service role
 
-Walk the user through scaffolding a new role under `roles/<svc>/` that follows every convention documented in `CLAUDE.md → Repo Conventions` and `CLAUDE.md → Podman Service Conventions`. Each step references the section that authoritatively documents the rule.
+Walk the user through scaffolding a new role under `roles/<svc>/` that follows every convention documented in `AGENTS.md → Repo Conventions` and `AGENTS.md → Podman Service Conventions`. Each step references the section that authoritatively documents the rule.
 
 ## Inputs to collect from the user
 
