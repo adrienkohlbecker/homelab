@@ -60,6 +60,7 @@
       name: hdparm
       script: hdparm.chart.sh
       conf: charts_d_hdparm.conf.j2
+      condition: "{{ hdparm_netdata_condition | default(true) }}"
   tags:
     - hdparm
 
