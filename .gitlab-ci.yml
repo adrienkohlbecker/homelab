@@ -8,9 +8,10 @@
 #     the ci_image job below.
 #   - the fox fleet (roles/gitlab_runner: `instance` executor +
 #     fleeting-plugin-hetzner, scale-to-zero Hetzner workers with the
-#     toolchain baked into the snapshot) is reserved for the heavy jobs to
-#     come: the qemu role matrix, packer builds, site test. Its runner is
-#     tag-only — those jobs will carry `tags: [fox-fleeting-hetzner]`.
+#     toolchain baked into the snapshot) takes the heavy jobs. Its runner is
+#     tag-only — fleet jobs carry `tags: [fox-fleeting-hetzner]`. First
+#     aboard: qemu_images below; still to come: the qemu role matrix, site
+#     test.
 #
 # Migration in progress: the heavy jobs still run on GitHub Actions
 # (.github/workflows/).
@@ -162,3 +163,59 @@ worker_image:
     - test -n "${HCLOUD_TOKEN:-}" || { echo "HCLOUD_TOKEN CI/CD variable is not set" >&2; exit 1; }
     - uv sync --locked
     - mise run packer:worker
+
+# Rebuild of the qemu test fixture images (the packer-images workflow's
+# cells, rebuilt for the fleet): one parallel job per (source, release)
+# cell, like the GH matrix. One job = one ~4 GiB build VM, so the runner's
+# capacity_per_instance slot accounting stays honest (a multi-source packer
+# invocation would fork 3 VMs from a single slot), and one cell's failure
+# can't tear down its siblings. box cells boot a second, sequential VM for
+# the box_deps seed. Runs ON a fleet worker — native /dev/kvm, the packer
+# plugin tree and ISO/cloud-image caches pre-baked by provision_worker.sh —
+# landing artifacts at /mnt/scratch/homelab_ci (HOMELAB_CI_DIR).
+#
+# The artifacts currently live and die with the ephemeral worker: where they
+# persist (worker re-snapshot, registry, R2 — the candidates in
+# notes/ci_ephemeral_hetzner_workers.md "Artifact storage") is deliberately
+# not decided yet. Until then this job validates the full build + seed path
+# on fleet hardware. The hetzner source (fox's boot image) is excluded, as
+# in the GH packer-images workflow: it publishes a main-project snapshot and
+# will get its own job.
+qemu_images:
+  rules:
+    - when: manual
+      # A skipped manual job must not hold the pipeline in "blocked".
+      allow_failure: true
+  tags:
+    - fox-fleeting-hetzner
+  parallel:
+    matrix:
+      - SOURCE: [ box, lab, pug ]
+        UBUNTU: [ jammy, noble, resolute ]
+  # One build per cell across pipelines (the GH per-cell concurrency
+  # group), and never auto-cancelled: a killed run leaves half-built trees
+  # and orphaned build VMs on a possibly-shared worker.
+  resource_group: qemu_images-$SOURCE-$UBUNTU
+  interruptible: false
+  # GH gave each cell 90 min on lab hardware; ccx33 should come in well
+  # under.
+  timeout: 90m
+  variables:
+    # seed-deps boots box and runs ansible against it, loading test-vaulted
+    # host_vars — restrict to the test identity so the absent prod password
+    # isn't attempted (HOMELAB_VAULT_PASSWORD_TEST is a project variable).
+    ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
+    ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
+  script:
+    # Same drift self-heal as .hosted, against the worker's /opt/mise tree.
+    - mise install
+    - uv sync --locked
+    # No-op while the snapshot's pre-baked plugin tree is current; covers a
+    # commit bumping required_plugins ahead of the next worker_image bake.
+    - mise run packer:init
+    - |
+      set -euo pipefail
+      mise run packer:build "$SOURCE" --ubuntu "$UBUNTU"
+      if [ "$SOURCE" = "box" ]; then
+        mise run packer:seed-deps --ubuntu "$UBUNTU"
+      fi
