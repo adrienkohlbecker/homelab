@@ -25,16 +25,6 @@
           }
         ]
       }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)\"/.agents/hooks/session_start_context.sh"
-          }
-        ]
-      }
     ]
   }
 }
