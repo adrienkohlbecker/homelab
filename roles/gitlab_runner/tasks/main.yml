@@ -7,6 +7,13 @@
 # No nginx vhost and no homepage bookmark on purpose: this service exposes no
 # operator-facing HTTP surface. The runner UI is gitlab.com itself; the only
 # local listener is the loopback Prometheus metrics endpoint (for netdata).
+#
+# Accepted risk: the fleeting SSH connector does no host-key verification
+# (ssh.InsecureIgnoreHostKey upstream) and workers are reached over their
+# public addresses, so an on-path attacker between this host and Hetzner could
+# impersonate a fresh worker and harvest the job payload + CI tokens. On-path
+# positioning is outside the homelab threat model; revisit (private network +
+# use_external_addr=false) if that changes.
 - name: GitLab Runner manager
   when: gitlab_runner_enabled | default(false)
   tags:
@@ -30,20 +37,22 @@
           then vault both into host_vars/{{ inventory_hostname }}.yml.
 
     # box legitimately runs the stock ubuntu-24.04 default under qemu (no fleet
-    # ever boots), so this only bites a real host: the instance executor runs
-    # jobs as a shell ON the VM, and the stock base carries no gitlab-runner.
+    # ever boots), so this only bites a real host. Why a baked snapshot is
+    # required: see gitlab_runner_image in defaults/main.yml. Numeric-id match,
+    # not just != the stock default: any named base image ("ubuntu-22.04")
+    # would equally ship a fleet with no toolchain aboard.
     - name: Assert a real worker image is pinned on non-test hosts
-      when: not (qemu_test | default(false))
+      when: not qemu_test
       assert:
         that:
-          - gitlab_runner_image | default('') | length > 0
-          - gitlab_runner_image != "ubuntu-24.04"
+          - gitlab_runner_image | default('') | string is match('^[0-9]+$')
         fail_msg: >-
-          gitlab_runner_image is still the stock "ubuntu-24.04" base for
-          {{ inventory_hostname }}. The instance executor runs each job as a
-          shell ON the fleet VM, so the image must be the numeric snapshot id of
-          a role=ci-worker snapshot built by `mise run packer:worker`. Pin it in
-          host_vars and re-pin after each worker rebuild.
+          gitlab_runner_image ({{ gitlab_runner_image | default('unset') }}) is
+          not a numeric snapshot id for {{ inventory_hostname }}. The instance
+          executor runs each job as a shell ON the fleet VM, so the image must
+          be the numeric snapshot id of a role=ci-worker snapshot built by
+          `mise run packer:worker`. Pin it in host_vars and re-pin after each
+          worker rebuild.
 
     - name: Set up gitlab_runner system user, group, and config dir
       import_role:
@@ -96,7 +105,10 @@
 
     # 0600 + owned by the runner: holds both the glrt- runner token and the
     # hcloud API token. validate parses the rendered TOML (gitlab-runner falls
-    # back to defaults on a parse error, so catch typos here).
+    # back to defaults on a parse error, so catch typos here). A bare TOML
+    # parse is the best validate available: `gitlab-runner verify` is a live
+    # server check (dials gitlab.com with the configured token), not an
+    # offline lint -- upstream ships none.
     - name: Render gitlab-runner config.toml
       when: not (ansible_check_mode and gitlab_runner_user.changed)
       template:
@@ -108,7 +120,6 @@
         backup: true
         validate: python3 -c 'import {{ "tomllib" if ansible_distribution_version is version("24.04", ">=") else "tomli" }} as t, sys; t.load(open(sys.argv[1], "rb"))' %s
       become: true
-      register: gitlab_runner_config
 
     - name: Install gitlab_runner.service
       import_role:
@@ -123,7 +134,11 @@
     # project token to init the fleeting plugin -- neither exists in the qemu
     # harness, so enable-only under qemu_test and let _verify exercise the
     # host-side artifacts. Prod (fox) starts the manager for real. restart
-    # propagates a config or binary change.
+    # propagates a unit or binary change only -- NOT a config change:
+    # gitlab-runner hot-reloads config.toml every 3s, and the one rendered
+    # setting that genuinely needs a restart (listen_address) comes from the
+    # stable service_ports map, so restarting on config would risk a 30-min
+    # drain for changes the runner picks up live.
     - name: Enable and start gitlab_runner.service
       import_role:
         name: systemd_unit
@@ -131,10 +146,9 @@
       vars:
         systemd_unit_args:
           src: gitlab_runner.service.j2
-          start: "{{ not (qemu_test | default(false)) }}"
+          start: "{{ not qemu_test }}"
           restart: >-
             {{ gitlab_runner_service_result.changed
-               or gitlab_runner_config.changed
                or gitlab_runner_binary.changed
                or gitlab_runner_fleeting_binary.changed }}
-          condition: "{{ not (ansible_check_mode and gitlab_runner_user.changed) }}"
+          condition: "{{ not (ansible_check_mode and (gitlab_runner_service_result.changed or gitlab_runner_user.changed)) }}"
