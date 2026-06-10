@@ -37,7 +37,8 @@ For service `<svc>`, create:
     vars:
       service_user_args:
         name: <svc>
-    tags: <svc>
+    tags:
+      - <svc>
 
   - import_role:
       name: podman_secret
@@ -46,16 +47,29 @@ For service `<svc>`, create:
       podman_secret_args:
         name: <svc>_<purpose>
         data: "{{ vault_<svc>_<purpose> }}"
-    tags: <svc>
+    tags:
+      - <svc>
+
+  - import_role:
+      name: systemd_unit
+      tasks_from: install
+    vars:
+      systemd_unit_args:
+        src: <svc>.service.j2
+        condition: "{{ not (ansible_check_mode and <svc>_user.changed) }}"
+    tags:
+      - <svc>
 
   - import_role:
       name: systemd_unit
       tasks_from: service
     vars:
       systemd_unit_args:
-        src: <svc>.service.j2
+        src: <svc>
+        condition: "{{ not (ansible_check_mode and (<svc>_service_result.changed or <svc>_user.changed)) }}"
         restart: "{{ <svc>_service_result.changed or <svc>_<purpose>_rotated }}"
-    tags: <svc>
+    tags:
+      - <svc>
   ```
   Add `when: not (ansible_check_mode and <svc>_user.changed)` gate on tasks that depend on the freshly-created user/dir (per *Role Conventions*).
 - `roles/<svc>/templates/<svc>.service.j2` — the systemd unit. Required pieces:

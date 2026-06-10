@@ -196,7 +196,7 @@ The harness lives in `test/` (Python, asyncio).
 
 ### Debugging prod hosts directly
 
-SSH to `lab`/`pug`/`bunk` for diagnostics (pre-authorized). **Needs explicit ack:** anything mutating (`systemctl restart`, `apt`, config edits, `/mnt/services/*/secrets/`), anything exfiltrating secrets (`journalctl -u` for credential-logging services, `podman secret inspect`, vault files). **Bridge to ack:** run `mise run ansible --limit <host> --tags <role> --check` first so the operator sees the diff.
+SSH to `lab`/`pug`/`bunk` for diagnostics, including service logs, is pre-authorized. **Needs explicit ack:** anything mutating (`systemctl restart`, `apt`, config edits, `/mnt/services/*/secrets/`) or anything exfiltrating secret material (`podman secret inspect`, vault files, secret files/env). **Bridge to ack:** run `mise run ansible --limit <host> --tags <role> --check` first so the operator sees the diff.
 
 ### Test environment design
 
