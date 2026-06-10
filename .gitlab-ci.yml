@@ -1,0 +1,94 @@
+# GitLab CI pipeline (Path B of notes/ci_ephemeral_hetzner_workers.md).
+#
+# Two runner pools:
+#   - gitlab.com hosted runners take the cheap stateless jobs (lint, unit
+#     tests): no qemu, no boxes, and a public project's compute cost factor
+#     makes the minutes effectively free. They can't reach the home network,
+#     so instead of the nexus-hosted ci image each job installs the pinned
+#     toolchain itself — `mise install` from the checkout's mise.toml, made
+#     cheap by the .ci-cache/ CI cache below. That self-heals on every tool
+#     bump, where a registry-published image would drift stale between
+#     rebuilds.
+#   - the fox fleet (roles/gitlab_runner: `instance` executor +
+#     fleeting-plugin-hetzner, scale-to-zero Hetzner workers with the
+#     toolchain baked into the snapshot) is reserved for the heavy jobs to
+#     come: the qemu role matrix, packer builds, site test. Its runner is
+#     tag-only — those jobs will carry `tags: [fox-fleeting-hetzner]`.
+#
+# Migration in progress: the heavy jobs still run on GitHub Actions
+# (.github/workflows/).
+#
+# Required project CI/CD variable: HOMELAB_VAULT_PASSWORD_TEST — the `test`
+# vault identity's password (masked, same value as the GitHub repo secret).
+# The prod identity's password is never available to CI by design (CLAUDE.md:
+# Vault ids).
+
+default:
+  # Only the latest commit's status matters for these jobs — pairs with the
+  # project's auto-cancel-redundant-pipelines setting so a rapid follow-up
+  # push cancels the in-flight run instead of queueing behind it.
+  interruptible: true
+
+# Shared scaffolding for hosted-runner jobs. Everything cacheable lives under
+# .ci-cache/ (GitLab CI caches only paths inside the project dir): the mise
+# tool tree and uv's wheel cache, keyed on the two files that pin them — a
+# tool or dependency bump rebuilds the cache, anything else restores it and
+# `mise install` becomes a no-op. mise auto-trusts the checkout's mise.toml
+# under CI=true; the op:// refs in its [env] resolve to literal strings
+# without `op run`, which nothing here reads.
+.hosted:
+  image: ubuntu:24.04
+  variables:
+    MISE_DATA_DIR: $CI_PROJECT_DIR/.ci-cache/mise
+    UV_CACHE_DIR: $CI_PROJECT_DIR/.ci-cache/uv
+    # .venv lands on a different filesystem than the cache on some runners;
+    # copy is the deliberate path instead of hardlink-then-fallback-warning.
+    UV_LINK_MODE: copy
+  cache:
+    key:
+      files:
+        - mise.toml
+        - uv.lock
+    paths:
+      - .ci-cache/
+  before_script:
+    # build-essential covers any locked dependency without a prebuilt wheel
+    # for the pinned python; xz for mise's tool tarballs.
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends ca-certificates curl git xz-utils build-essential
+    - curl -fsSL https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh
+    - export PATH="$MISE_DATA_DIR/shims:$PATH"
+
+lint:
+  extends: .hosted
+  # The default (small) hosted runner is 2 vCPU; lint fans its linters out in
+  # parallel, so the 4-vCPU medium tier roughly halves the wall-clock.
+  tags:
+    - saas-linux-medium-amd64
+  # ~6 min warm; a cold cache adds the full `mise install`. Bound well under
+  # the project-level 1h default so a wedged run fails fast.
+  timeout: 30m
+  variables:
+    # ansible-lint runs `ansible-playbook --syntax-check`, which loads
+    # vault-encrypted group_vars/host_vars. Restrict ansible to the `test`
+    # identity so the prod identity — undecryptable here — isn't attempted;
+    # without this, syntax-check of prod playbooks errors out.
+    ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
+  script:
+    - mise install
+    - uv sync --locked
+    - mise run lint
+
+# Hermetic pytest suite (testpaths=unit_tests). Needs only python + uv from
+# the toolchain, so it installs just those two and pulls the cache without
+# writing it back — otherwise its subset would race lint's full tool tree
+# for the same cache key and whichever uploads last would win.
+unit_tests:
+  extends: .hosted
+  timeout: 15m
+  cache:
+    policy: pull
+  script:
+    - mise install python uv
+    - uv sync --locked
+    - mise run test

@@ -27,3 +27,4 @@ test/out_*.log
 # means a new feature directory auto-tracks without a gitignore PR.
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.ci-cache
