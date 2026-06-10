@@ -154,14 +154,10 @@ oidc:
   client_id: "{{ headscale_oidc_client_id }}"
   client_secret_path: "/run/secrets/oidc_client_secret"
   scope: ["openid", "profile", "email"]
-  # Fail closed at boot: refuse to start until OIDC discovery against the issuer
-  # succeeds. With the unit's After=wg-quick@wg0 + wide StartLimit window, this
-  # guarantees that whenever headscale is `active` the family Apple-device login
-  # flow actually works -- and _verify leans on exactly that (active == discovery
-  # succeeded). Flip to false only to keep serving pre-auth (lab/pug) clients
-  # through an Authelia outage, at the cost of OIDC possibly staying broken
-  # until a restart.
-  only_start_if_oidc_is_available: true
+  # Keep the control plane available when Authelia is down. Existing nodes and
+  # pre-auth-key registration must not depend on the lab-hosted OIDC issuer; only
+  # interactive user-device enrollment is degraded until discovery succeeds.
+  only_start_if_oidc_is_available: false
   # PKCE hardens the public auth-code flow against authorization-code
   # interception (headscale's default method is S256). Enabling it is the
   # deliberate non-default here; Authelia accepts a PKCE challenge from clients
