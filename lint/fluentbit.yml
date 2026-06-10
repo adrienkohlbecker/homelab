@@ -7,12 +7,10 @@
 base: lua51
 name: fluentbit
 globals:
-  # Signature: (tag, timestamp, group, metadata, record). All `any` -- selene
+  # Classic 3-arg signature: (tag, timestamp, record). All `any` -- selene
   # only needs to know the names exist and are callable.
   set_priority:
     args:
-      - type: any
-      - type: any
       - type: any
       - type: any
       - type: any
@@ -21,12 +19,8 @@ globals:
       - type: any
       - type: any
       - type: any
-      - type: any
-      - type: any
-  flatten_csp:
+  strip_ansi:
     args:
-      - type: any
-      - type: any
       - type: any
       - type: any
       - type: any

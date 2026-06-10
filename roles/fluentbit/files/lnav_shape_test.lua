@@ -70,11 +70,8 @@ do
     -- A line that did NOT match nginx_access_custom (no status field): the
     -- shaper flags it parse_error and raises it to warn so the drifting parser
     -- is visible. The raw line stays the message.
-    local rec = shape(
-        "nginx.access",
-        { host = "lab", log = "GET / HTTP/1.1", filepath = "/var/log/nginx/access.log" },
-        "info"
-    )
+    local rec =
+        shape("nginx.access", { host = "lab", log = "GET / HTTP/1.1", filepath = "/var/log/nginx/access.log" }, "info")
     check("nginx.service", rec.service, "nginx_access")
     check("nginx.stream", rec.stream, "nginx")
     check("nginx.filepath", rec.fields.filepath, "/var/log/nginx/access.log")
@@ -121,7 +118,7 @@ do
     -- timestamp/level prefix (still in `log`) must not survive as the message.
     local rec = shape("pihole_ftl", {
         host = "lab",
-        log = '2026-06-09 04:20:02.163 CEST [52/T99] INFO: handled an error condition cleanly MARKER',
+        log = "2026-06-09 04:20:02.163 CEST [52/T99] INFO: handled an error condition cleanly MARKER",
         ftl_time = "2026-06-09 04:20:02.163",
         ftl_tz = "CEST",
         pid = 52,
@@ -144,7 +141,8 @@ do
     local recw = shape("pihole_ftl", { host = "lab", log = "x", ftl_level = "WARNING", body = "high load" }, "info")
     check("ftl.warn.level", recw.level, "warn")
 
-    local rece = shape("pihole_ftl", { host = "lab", log = "x", ftl_level = "ERROR", body = "database is locked" }, "info")
+    local rece =
+        shape("pihole_ftl", { host = "lab", log = "x", ftl_level = "ERROR", body = "database is locked" }, "info")
     check("ftl.error.level", rece.level, "error")
 
     local recd = shape("pihole_ftl", { host = "lab", log = "x", ftl_level = "DEBUG_GC", body = "gc run" }, "info")
@@ -173,8 +171,7 @@ end
 
 do
     local cid = "75ca2e2b110c2a3e6af421033e99bc1dbc8f58d3eacf929cb2b395377d63e4bc"
-    local rec =
-        shape("svc.init.scope", { SYSLOG_IDENTIFIER = "systemd", UNIT = cid .. ".service", log = cid }, "info")
+    local rec = shape("svc.init.scope", { SYSLOG_IDENTIFIER = "systemd", UNIT = cid .. ".service", log = cid }, "info")
     check("healthcheck.service", rec.service, "podman_healthcheck")
     check("healthcheck.cid_full", rec.fields.CONTAINER_ID_FULL, cid)
     check("healthcheck.cid_short", rec.fields.CONTAINER_ID, string.sub(cid, 1, 12))

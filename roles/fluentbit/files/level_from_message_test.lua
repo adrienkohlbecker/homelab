@@ -31,8 +31,7 @@ end
 
 -- 1. podman/docker structured `level=info` (container stdout via journald).
 do
-    local t =
-        sev('time="2026-06-03T17:40:42Z" level=info msg="Created exec session 8ac8367408b2 in container 768913f"')
+    local t = sev('time="2026-06-03T17:40:42Z" level=info msg="Created exec session 8ac8367408b2 in container 768913f"')
     check("docker.info.text", t, "info")
 end
 
