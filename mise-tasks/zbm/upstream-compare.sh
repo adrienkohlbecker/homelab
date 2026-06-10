@@ -2,8 +2,8 @@
 #MISE description="Diff the locally built ZFSBootMenu artifact against the official upstream release"
 set -euo pipefail
 
-version="${ZBM_VERSION:-3.1.0}"
-kernel="${ZBM_KERNEL_VERSION:-6.18}"
+version="${ZBM_VERSION:-3.0.1}"
+kernel="${ZBM_KERNEL_VERSION:-6.1}"
 style="${ZBM_UPSTREAM_STYLE:-recovery}"
 default_local_arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 local_arch="${ZBM_LOCAL_ARCH:-$default_local_arch}"
