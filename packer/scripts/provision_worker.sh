@@ -62,7 +62,7 @@ chmod -x /etc/update-motd.d/* 2>/dev/null || true
 # openssh-client: harness talks to guests via SSH
 # xorriso + cloud-image-utils: minimal variant's seed ISO
 # passt: guest NIC backend (replaces libslirp, avoids UDP drops)
-# nodejs: GitHub Actions JS actions (checkout, upload-artifact, etc.)
+# nodejs: runtime for node-based tooling (markdownlint-cli2 in lint)
 # python3-yaml: mise-tasks/ci scripts
 # build-essential: any wheel that needs compilation
 # curl, jq, git, unzip: general tooling
@@ -132,26 +132,22 @@ cp /tmp/qemu.pkr.hcl /tmp/packer_init/
 packer init /tmp/packer_init
 rm -rf /tmp/packer_init
 
-# --- GitHub Actions runner ---
-# Pre-install the actions/runner binary so the boot-time provisioning
-# only needs to configure + register, not download ~500 MB.
-# Version + sha256 read from the Ansible role's vars (single source of
-# truth, uploaded by the packer file provisioner).
-# Use the system interpreter (apt's python3-yaml above), not the mise-shim
-# python3 first on PATH -- the mise toolchain python has no PyYAML.
-read -r RUNNER_URL RUNNER_SHA256 < <(/usr/bin/python3 -c '
+# --- GitLab Runner ---
+# The instance executor runs each CI job as a shell ON this VM, so the
+# gitlab-runner binary must be present for the fleeting manager to drive the
+# build over SSH. No boot-time registration: the manager owns the lifecycle.
+# Version + sha256 read from the Ansible role's vars (single source of truth,
+# uploaded by the packer file provisioner). Use the system interpreter (apt's
+# python3-yaml above), not the mise-shim python3 first on PATH -- the mise
+# toolchain python has no PyYAML.
+read -r GLR_URL GLR_SHA256 < <(/usr/bin/python3 -c '
 import yaml, sys
-d = yaml.safe_load(open(sys.argv[1]))["github_runner_archive"]["x86_64"]
+d = yaml.safe_load(open(sys.argv[1]))["gitlab_runner_archive"]["x86_64"]
 print(d["url"], d["sha256"])
-' /tmp/github_runner_vars.yml)
-mkdir -p /opt/actions-runner
-cd /opt/actions-runner
-curl -fL --retry 3 --retry-all-errors -o runner.tar.gz "$RUNNER_URL"
-echo "${RUNNER_SHA256}  runner.tar.gz" | sha256sum -c -
-tar xzf runner.tar.gz
-rm runner.tar.gz
-./bin/installdependencies.sh
-cd /
+' /tmp/gitlab_runner_vars.yml)
+curl -fL --retry 3 --retry-all-errors -o /usr/local/bin/gitlab-runner "$GLR_URL"
+echo "${GLR_SHA256}  /usr/local/bin/gitlab-runner" | sha256sum -c -
+chmod +x /usr/local/bin/gitlab-runner
 
 # --- System tuning for nested virt ---
 # Enable KVM nested virtualization (CCX instances expose /dev/kvm).
@@ -225,9 +221,10 @@ for codename in $(jq -r 'keys[]' "$IMAGES_JSON"); do
 done
 
 # --- Trim cloud-init to the minimum ---
-# The worker only needs cloud-init to create the runner user + inject
-# the SSH key on first boot. Disable modules that phone home, probe
-# metadata services we don't have, or run package operations.
+# The worker only needs cloud-init to apply the fleeting-injected SSH key
+# (Hetzner datasource) for root + set the hostname on first boot. Disable
+# modules that phone home, probe metadata services we don't have, or run
+# package operations.
 mkdir -p /etc/cloud/cloud.cfg.d
 cat >/etc/cloud/cloud.cfg.d/99-ci-worker.cfg <<'CLOUDINIT'
 datasource_list: [ Hetzner, ConfigDrive, NoCloud, None ]
@@ -249,10 +246,10 @@ cloud_final_modules: []
 CLOUDINIT
 
 # --- Environment for all users ---
-# /etc/environment is the single source of truth — read by PAM (login
-# shells) and by the GitHub runner's runsvc.sh (the primary entry point
-# for CI step processes). /etc/profile.d re-exports for interactive
-# login shells; non-login shells inherit from the runner or from PAM.
+# /etc/environment is the single source of truth — read by PAM (pam_env) so
+# the gitlab-runner job shell (the SSH session the fleeting manager opens)
+# inherits the mise shim PATH. /etc/profile.d re-exports for interactive
+# login shells; non-login shells inherit via PAM.
 cat >/etc/environment <<'ENVFILE'
 MISE_DATA_DIR=/opt/mise
 PATH="/opt/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -282,7 +279,7 @@ PROFILE
 apt-get -y autopurge
 apt-get -y clean
 
-rm -f /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/qemu.pkr.hcl /tmp/ubuntu_images.json /tmp/github_runner_vars.yml
+rm -f /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/qemu.pkr.hcl /tmp/ubuntu_images.json /tmp/gitlab_runner_vars.yml
 
 # Truncate logs accumulated during provisioning. Don't delete the files
 # (some daemons reopen by name, not fd) — just zero them.
