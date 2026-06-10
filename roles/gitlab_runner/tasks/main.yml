@@ -29,6 +29,22 @@
           project-scoped Hetzner Cloud API token for the dedicated CI project,
           then vault both into host_vars/{{ inventory_hostname }}.yml.
 
+    # box legitimately runs the stock ubuntu-24.04 default under qemu (no fleet
+    # ever boots), so this only bites a real host: the instance executor runs
+    # jobs as a shell ON the VM, and the stock base carries no gitlab-runner.
+    - name: Assert a real worker image is pinned on non-test hosts
+      when: not (qemu_test | default(false))
+      assert:
+        that:
+          - gitlab_runner_image | default('') | length > 0
+          - gitlab_runner_image != "ubuntu-24.04"
+        fail_msg: >-
+          gitlab_runner_image is still the stock "ubuntu-24.04" base for
+          {{ inventory_hostname }}. The instance executor runs each job as a
+          shell ON the fleet VM, so the image must be the numeric snapshot id of
+          a role=ci-worker snapshot built by `mise run packer:worker`. Pin it in
+          host_vars and re-pin after each worker rebuild.
+
     - name: Set up gitlab_runner system user, group, and config dir
       import_role:
         name: service_user
@@ -37,8 +53,10 @@
         service_user_args:
           name: gitlab_runner
 
-    # python3-tomli for the config.toml validate below (stdlib tomllib only
-    # landed in 3.11; fox is jammy/3.10). apt-idempotent where already present.
+    # python3-tomli backs the config.toml validate below where stdlib tomllib is
+    # absent (it landed in 3.11; jammy/22.04 ships 3.10). Gate on the Ubuntu
+    # release < noble so noble/resolute and beyond skip the backport (they have
+    # tomllib). apt-idempotent where already present.
     - name: Install host dependencies for gitlab_runner
       apt:
         pkg:
@@ -46,6 +64,7 @@
         install_recommends: false
         cache_valid_time: 3600
       become: true
+      when: ansible_distribution_version is version('24.04', '<')
 
     # checksum: drives re-download on a version bump (sha mismatch forces fetch)
     # and surfaces tampering on the plain-https URL.
@@ -87,7 +106,7 @@
         group: gitlab_runner
         mode: "0600"
         backup: true
-        validate: python3 -c 'import tomli, sys; tomli.load(open(sys.argv[1], "rb"))' %s
+        validate: python3 -c 'import {{ "tomllib" if ansible_distribution_version is version("24.04", ">=") else "tomli" }} as t, sys; t.load(open(sys.argv[1], "rb"))' %s
       become: true
       register: gitlab_runner_config
 
