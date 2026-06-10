@@ -5,6 +5,15 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
+# Worker snapshots must land in the dedicated homelab-ci project -- the
+# fleeting plugin's project-scoped token can only boot images that live
+# there, and the ci-worker firewall this build attaches is defined in that
+# project (terraform/hetzner_ci.tf). Route the resolver at the CI token; a
+# preset HCLOUD_TOKEN (CI secret / manual export) still wins inside
+# _hcloud_token.sh.
+if [ -z "${HCLOUD_TOKEN:-}" ] && [ -n "${HCLOUD_TOKEN_CI_OP:-}" ]; then
+  export HCLOUD_TOKEN_OP="$HCLOUD_TOKEN_CI_OP"
+fi
 # shellcheck source=_hcloud_token.sh
 source "$(dirname "$0")/_hcloud_token.sh"
 
