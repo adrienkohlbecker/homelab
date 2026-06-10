@@ -12,6 +12,7 @@
       name: systemd_timers
       script: systemd_timers.chart.sh
       conf: charts_d_systemd_timers.conf
+      condition: "{{ systemd_timer_netdata_condition | default(true) }}"
   tags:
     - systemd_timer
 

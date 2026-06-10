@@ -24,6 +24,7 @@
       name: netdata_presence
       script: netdata_presence.chart.sh
       conf: charts_d_netdata_presence.conf.j2
+      condition: "{{ netdata_presence_condition | default(true) }}"
 
 - name: presence | Configure netdata_presence alerts
   import_role:

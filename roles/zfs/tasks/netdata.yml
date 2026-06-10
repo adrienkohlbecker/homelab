@@ -12,5 +12,6 @@
       name: zfs_scan
       script: zfs_scan.chart.sh
       conf: zfs_scan.conf
+      condition: "{{ zfs_netdata_condition | default(true) }}"
   tags:
     - zfs

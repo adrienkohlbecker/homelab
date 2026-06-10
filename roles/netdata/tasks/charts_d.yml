@@ -42,6 +42,12 @@
 # collector's hard dependency is declared at its point of use (and the role
 # survives a future change to the base Depends). Idempotent apt:
 # cache_valid_time=3600 keeps repeated calls cheap.
+#
+# The caller's condition carries the check-mode-fresh-install guard (callers
+# wire `not (ansible_check_mode and (netdata_apt.changed or
+# netdata_apt_repo.changed))` into netdata_args.condition where those facts are
+# in scope): under --check the netdata repo isn't really added, so this package
+# isn't in cache and an install would error "no package matching".
 - name: charts_d | Install netdata-plugin-chartsd
   when:
     - _netdata_charts_d_condition

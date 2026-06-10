@@ -37,6 +37,8 @@
   import_role:
     name: zfs
     tasks_from: netdata
+  vars:
+    zfs_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
   tags:
     - netdata
 
@@ -44,6 +46,8 @@
   import_role:
     name: systemd_timer
     tasks_from: netdata
+  vars:
+    systemd_timer_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
   tags:
     - netdata
 
@@ -51,6 +55,8 @@
   import_role:
     name: netdata
     tasks_from: presence
+  vars:
+    netdata_presence_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
   tags:
     - netdata
 
