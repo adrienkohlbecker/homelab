@@ -354,6 +354,26 @@
       silently dropped (foo.does_not_exist isn't in the chart registry).
       Got liveness keys: {{ _keys | select('search', 'liveness_') | list }}
 
+- name: _verify | Reboot-required alarm uses sustained file-presence lookup
+  vars:
+    _alarm: >-
+      {{
+        ((_netdata_alarms.content | from_json).alarms
+         ["system.post_update_reboot_status.system_post_update_reboot_status"])
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - _alarm.lookup_method | default('') == "min"
+      - _alarm.lookup_after | default(0) == -1800
+      - _alarm.lookup_before | default(0) == 0
+      - _alarm.lookup_dimensions | default('') == "required"
+    fail_msg: >-
+      Expected system_post_update_reboot_status to route to sysadmin only after
+      required stayed high for 30m. Got:
+      {{ _alarm }}
+
 # Closes the loop the on-disk un-silence assert (main.yml) can't: prove the
 # reload-health actually propagated the un-silence into a LIVE alarm. The
 # out_of_disk_space_time template (un-silenced from upstream's `to: silent`)
