@@ -138,6 +138,12 @@ service_ports:
   fan2go_api: 9919
   fluentbit: 2020
   gitea: 3000
+  # GitLab Runner manager's Prometheus metrics + pprof, loopback-bound
+  # (config.toml listen_address 127.0.0.1); unauthenticated, so never the public
+  # surface. Scraped by netdata's go.d prometheus collector (the gitlab_runner
+  # job in roles/netdata/templates/prometheus.conf.j2, gated on
+  # gitlab_runner_enabled).
+  gitlab_runner: 9252
   # headscale control-plane HTTP (loopback-published on the fox VPS, nginx
   # fronts it on 443).
   headscale: 8080

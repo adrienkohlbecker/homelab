@@ -1,0 +1,8 @@
+# Host-native (no podman/nginx), so the plain box fixture is enough -- no need
+# for box_deps' pre-baked container stack. The instance executor + fleeting
+# autoscaler can't reach gitlab.com / Hetzner in the harness, so the role
+# enable-onlys under qemu_test and _verify exercises the host-side artifacts
+# (binaries run, config.toml valid, unit verifies). Live scale-from-zero is the
+# gate-1 benchmark on a real instance, outside CI.
+machines:
+  box:

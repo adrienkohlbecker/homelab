@@ -1,0 +1,55 @@
+#jinja2: lstrip_blocks: True
+# gitlab_runner.service ###############################################
+# GitLab Runner manager, host-native: a single static Go binary at
+# /usr/local/bin/gitlab-runner running as the gitlab_runner system user.
+# instance executor + fleeting autoscaler -- this process runs no job
+# payloads, it only talks to gitlab.com and provisions/SSHes into
+# ephemeral Hetzner Cloud servers via fleeting-plugin-hetzner. Mirrors
+# the host-native shape of roles/github_runner (no containerisation).
+[Unit]
+Description=GitLab Runner manager (fleeting autoscaler -> Hetzner Cloud)
+After=network-online.target
+Wants=network-online.target
+# Restart=always + RestartSec=10 can trip systemd's default 5-in-10s burst
+# during a slow network warmup and land the unit in `failed`; widen the window.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+{% if zfs_root %}
+{% if zfs_has_services_mount %}
+# config.toml + the runner's working dir live under /mnt/services; order after
+# the dataset mount so they exist before start.
+After=zfs_mount_mnt_services.service
+Requires=zfs_mount_mnt_services.service
+{% endif %}
+{% endif %}
+# Deliberately NOT PartOf=zfs_autosnapshot.target: the manager has no persistent
+# consistency need (config.toml is ansible-rendered; jobs run on remote VMs),
+# and joining the target would let the nightly 02:00 snapshot stop the runner
+# mid-CI -- same call as roles/github_runner.
+
+[Service]
+Type=simple
+User=gitlab_runner
+Group=gitlab_runner
+WorkingDirectory=/mnt/services/gitlab_runner
+# nologin service user has no real home; point HOME at the working dir so the
+# fleeting connector's ssh known_hosts and any runner cache land on a writable,
+# owned path rather than failing against an unset/unwritable HOME.
+Environment=HOME=/mnt/services/gitlab_runner
+ExecStart=/usr/local/bin/gitlab-runner run \
+    --config /mnt/services/gitlab_runner/config.toml \
+    --working-directory /mnt/services/gitlab_runner
+Restart=always
+RestartSec=10
+# gitlab-runner drains gracefully on SIGQUIT: it stops claiming new jobs and
+# waits for in-flight fleet jobs to finish, bounded by config.toml's
+# shutdown_timeout (~30 min), then exits. TimeoutStopSec=infinity defers that
+# bound entirely to shutdown_timeout so systemd never SIGKILLs mid-drain (the
+# pattern GitLab's own service docs use) -- without it, a TimeoutStopSec shorter
+# than shutdown_timeout would truncate the drain. Restart=always + the next
+# converge recover a genuinely wedged manager.
+KillSignal=SIGQUIT
+TimeoutStopSec=infinity
+
+[Install]
+WantedBy=multi-user.target
