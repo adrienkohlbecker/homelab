@@ -60,18 +60,32 @@ resource "hcloud_primary_ip" "fox_v6" {
 }
 
 # SSH-only firewall for ephemeral CI worker instances (packer build +
-# runtime). Default-drop inbound with only 22/tcp open from the home WAN.
-# Packer attaches this during image builds; the runtime provisioning script
-# attaches it when creating ephemeral CCX workers for CI runs.
+# runtime). Default-drop inbound with only 22/tcp open to the fleet's two
+# operators: the home WAN (packer image builds, manual debugging) and fox
+# (the gitlab_runner fleeting manager SSHes into workers over their public
+# IPs). Packer attaches this during image builds; the label selector below
+# additionally auto-applies it to every instance the fleeting plugin creates
+# (stamped role=ci by roles/gitlab_runner's config.toml) -- the plugin itself
+# has no firewall support, so without the selector each worker's root sshd
+# would sit world-open for its whole warm window. The activation checklist
+# (notes/ci_ephemeral_hetzner_workers.md) moves this firewall into the
+# dedicated CI project together with the scoped token.
 resource "hcloud_firewall" "ci_worker" {
   name = "ci-worker"
 
   rule {
-    description = "SSH (home WAN only)"
+    description = "SSH (home WAN + fox)"
     direction   = "in"
     protocol    = "tcp"
     port        = "22"
-    source_ips  = ["${local.home_wan_ip}/32"]
+    source_ips = [
+      "${local.home_wan_ip}/32",
+      "${hcloud_primary_ip.fox.ip_address}/32",
+    ]
+  }
+
+  apply_to {
+    label_selector = "role=ci"
   }
 }
 
