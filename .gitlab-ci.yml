@@ -3,12 +3,9 @@
 # Two runner pools:
 #   - gitlab.com hosted runners take the cheap stateless jobs (lint, unit
 #     tests): no qemu, no boxes, and a public project's compute cost factor
-#     makes the minutes effectively free. They can't reach the home network,
-#     so instead of the nexus-hosted ci image each job installs the pinned
-#     toolchain itself — `mise install` from the checkout's mise.toml, made
-#     cheap by the .ci-cache/ CI cache below. That self-heals on every tool
-#     bump, where a registry-published image would drift stale between
-#     rebuilds.
+#     makes the minutes effectively free. They can't reach the home network
+#     (so no nexus); they run in the project-registry ci image published by
+#     the ci_image job below.
 #   - the fox fleet (roles/gitlab_runner: `instance` executor +
 #     fleeting-plugin-hetzner, scale-to-zero Hetzner workers with the
 #     toolchain baked into the snapshot) is reserved for the heavy jobs to
@@ -29,35 +26,18 @@ default:
   # push cancels the in-flight run instead of queueing behind it.
   interruptible: true
 
-# Shared scaffolding for hosted-runner jobs. Everything cacheable lives under
-# .ci-cache/ (GitLab CI caches only paths inside the project dir): the mise
-# tool tree and uv's wheel cache, keyed on the two files that pin them — a
-# tool or dependency bump rebuilds the cache, anything else restores it and
-# `mise install` becomes a no-op. mise auto-trusts the checkout's mise.toml
-# under CI=true; the op:// refs in its [env] resolve to literal strings
-# without `op run`, which nothing here reads.
+# Shared scaffolding for hosted-runner jobs: the ci image from this project's
+# registry (Dockerfile; rebuilt manually via the ci_image job below). The
+# image bakes the mise tool tree at /opt/mise and a warm uv wheel cache at
+# /opt/uv-cache, so jobs only rebuild .venv against the checkout's lockfile.
+# `mise install` stays in each script as the drift self-heal: a no-op while
+# the image is current, and when mise.toml has moved past the published image
+# it installs just the delta (slower job, loud in the log — the cue to rerun
+# ci_image). mise auto-trusts the checkout's mise.toml under CI=true; the
+# op:// refs in its [env] resolve to literal strings without `op run`, which
+# nothing here reads.
 .hosted:
-  image: ubuntu:24.04
-  variables:
-    MISE_DATA_DIR: $CI_PROJECT_DIR/.ci-cache/mise
-    UV_CACHE_DIR: $CI_PROJECT_DIR/.ci-cache/uv
-    # .venv lands on a different filesystem than the cache on some runners;
-    # copy is the deliberate path instead of hardlink-then-fallback-warning.
-    UV_LINK_MODE: copy
-  cache:
-    key:
-      files:
-        - mise.toml
-        - uv.lock
-    paths:
-      - .ci-cache/
-  before_script:
-    # build-essential covers any locked dependency without a prebuilt wheel
-    # for the pinned python; xz for mise's tool tarballs.
-    - apt-get update -qq
-    - apt-get install -y -qq --no-install-recommends ca-certificates curl git xz-utils build-essential
-    - curl -fsSL https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh
-    - export PATH="$MISE_DATA_DIR/shims:$PATH"
+  image: $CI_REGISTRY_IMAGE/ci:latest
 
 lint:
   extends: .hosted
@@ -65,8 +45,8 @@ lint:
   # parallel, so the 4-vCPU medium tier roughly halves the wall-clock.
   tags:
     - saas-linux-medium-amd64
-  # ~6 min warm; a cold cache adds the full `mise install`. Bound well under
-  # the project-level 1h default so a wedged run fails fast.
+  # ~5 min on a current image; a stale one adds the delta `mise install`.
+  # Bound well under the project-level 1h default so a wedged run fails fast.
   timeout: 30m
   variables:
     # ansible-lint runs `ansible-playbook --syntax-check`, which loads
@@ -85,14 +65,11 @@ lint:
 
 # Hermetic pytest suite (testpaths=unit_tests). Installs the full tool tree
 # even though it only needs python + uv: `mise run` auto-installs whatever is
-# missing anyway, so a partial install just moves the rest to task time (with
-# noisy resolution warnings). The cache is pull-only — lint owns the upload,
-# so the two jobs never race the same cache key.
+# missing anyway, so a partial install would just move the rest to task time
+# (with noisy resolution warnings).
 unit_tests:
   extends: .hosted
   timeout: 15m
-  cache:
-    policy: pull
   script:
     - mise install
     - uv sync --locked
