@@ -161,6 +161,18 @@
   tags:
     - boot
 
+- name: Set target kernel debug command line
+  import_role:
+    name: boot
+    tasks_from: cmdline
+  vars:
+    boot_cmdline_args:
+      name: target_debug
+      contents: "{{ boot_target_debug_cmdline }}"
+      grub_scope: default
+  tags:
+    - boot
+
 # NVRAM boot entries — managed after the boot-chain config above is in place.
 # Firmware points at boot loaders on the ESP; per-loader config carries the
 # loader-specific kernel command line.
