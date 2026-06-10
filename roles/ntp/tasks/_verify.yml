@@ -17,6 +17,21 @@
   changed_when: false
   become: true
 
+- name: _verify | Read the running chronyd command line
+  command: pgrep -a chronyd
+  changed_when: false
+  register: ntp_verify_chronyd_process
+  become: true
+
+- name: _verify | Chronyd runs IPv4-only for NTS-KE
+  assert:
+    that:
+      - ntp_verify_chronyd_process.stdout is search('(^| )chronyd .* -4( |$)')
+    fail_msg: >-
+      chronyd is not running with -4, so broken IPv6 NTS-KE can delay
+      authenticated sync (processes: {{ ntp_verify_chronyd_process.stdout_lines }})
+    success_msg: chronyd is running with -4 for IPv4-only NTS-KE
+
 - name: _verify | Read the running chrony.conf
   slurp:
     src: /etc/chrony/chrony.conf
