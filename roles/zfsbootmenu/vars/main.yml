@@ -13,6 +13,6 @@ zfsbootmenu_release:
     url: "{{ zfsbootmenu_repository_url }}/zfsbootmenu-v3.1.0-linux6.18-local.20260605230757-aarch64.tar.gz"
     sha256_url: "{{ zfsbootmenu_repository_url }}/zfsbootmenu-v3.1.0-linux6.18-local.20260605230757-aarch64.tar.gz.sha256sum"
 
-zfsbootmenu_artifact: "{{ zfsbootmenu_release[ansible_architecture] }}"
+zfsbootmenu_artifact: "{{ zfsbootmenu_artifact_override | default(zfsbootmenu_release[ansible_architecture]) }}"
 zfsbootmenu_cache_dir: "/var/cache/zfsbootmenu/{{ zfsbootmenu_artifact.version }}"
 zfsbootmenu_tarball_path: "{{ zfsbootmenu_cache_dir }}/{{ zfsbootmenu_artifact.url | basename }}"
