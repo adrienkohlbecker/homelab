@@ -7,9 +7,9 @@
 machines:
   box:
 
-# Release-divergent: the config.toml validate imports tomllib on >= 24.04 and
-# the tomli backport below it (jammy ships python 3.10, no tomllib); the
-# default cell is jammy, so a noble cell exercises the tomllib branch -- the
-# one a noble-based prod host would take.
+# Release-divergent: the config.toml validate and update_worker_image.py both
+# import tomllib on >= 24.04 and the tomli backport below it (jammy ships
+# python 3.10, no tomllib); the default cell is jammy, so a noble cell
+# exercises the tomllib branch -- the one a noble-based prod host would take.
 ubuntu:
   - noble

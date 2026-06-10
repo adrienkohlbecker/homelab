@@ -36,23 +36,43 @@
           project-scoped Hetzner Cloud API token for the dedicated CI project,
           then vault both into host_vars/{{ inventory_hostname }}.yml.
 
-    # box legitimately runs the stock ubuntu-24.04 default under qemu (no fleet
-    # ever boots), so this only bites a real host. Why a baked snapshot is
-    # required: see gitlab_runner_image in defaults/main.yml. Numeric-id match,
-    # not just != the stock default: any named base image ("ubuntu-22.04")
-    # would equally ship a fleet with no toolchain aboard.
-    - name: Assert a real worker image is pinned on non-test hosts
+    # The fleeting plugin resolves `image` by name or id only and Hetzner
+    # snapshots have no name, so the rendered value must be a numeric snapshot
+    # id -- which would go stale on every worker rebake if pinned by hand.
+    # Resolve the newest matching snapshot here instead, so a converge always
+    # renders the current bake; between converges the refresh timer below
+    # adopts new bakes the same way. Skipped under qemu (no API, no fleet
+    # ever boots): the template falls back to a stock image name there.
+    # check_mode false: a read-only GET, and running it keeps a --check diff
+    # faithful to what a real converge would render.
+    - name: Resolve the newest CI worker snapshot from the Hetzner API
+      when: not qemu_test
+      check_mode: false
+      uri:
+        url: >-
+          https://api.hetzner.cloud/v1/images?type=snapshot&status=available&label_selector={{
+          gitlab_runner_image_selector | urlencode }}&sort=created:desc&per_page=1
+        headers:
+          Authorization: "Bearer {{ gitlab_runner_hcloud_token }}"
+        return_content: true
+      register: gitlab_runner_image_lookup
+
+    - name: Assert the worker image selector matched a snapshot
       when: not qemu_test
       assert:
         that:
-          - gitlab_runner_image | default('') | string is match('^[0-9]+$')
+          - gitlab_runner_image_lookup.json.images | length > 0
         fail_msg: >-
-          gitlab_runner_image ({{ gitlab_runner_image | default('unset') }}) is
-          not a numeric snapshot id for {{ inventory_hostname }}. The instance
+          No available Hetzner snapshot matches
+          {{ gitlab_runner_image_selector }} in the CI project. The instance
           executor runs each job as a shell ON the fleet VM, so the image must
-          be the numeric snapshot id of a role=ci-worker snapshot built by
-          `mise run packer:worker`. Pin it in host_vars and re-pin after each
-          worker rebuild.
+          be a baked role=ci-worker snapshot -- build one with
+          `mise run packer:worker`.
+
+    - name: Pin the resolved worker image for this converge
+      when: not qemu_test
+      set_fact:
+        gitlab_runner_resolved_image: "{{ gitlab_runner_image_lookup.json.images[0].id }}"
 
     - name: Set up gitlab_runner system user, group, and config dir
       import_role:
@@ -120,6 +140,53 @@
         backup: true
         validate: python3 -c 'import {{ "tomllib" if ansible_distribution_version is version("24.04", ">=") else "tomli" }} as t, sys; t.load(open(sys.argv[1], "rb"))' %s
       become: true
+
+    # Service code from the repo lives at /opt/<svc>; state stays under
+    # /mnt/services/<svc> (CLAUDE.md).
+    - name: Create /opt/gitlab_runner
+      file:
+        path: /opt/gitlab_runner
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
+    - name: Install the worker image refresh script
+      copy:
+        src: update_worker_image.py
+        dest: /opt/gitlab_runner/update_worker_image.py
+        owner: root
+        group: root
+        mode: "0755"
+        backup: true
+        validate: python3 -m py_compile %s
+      become: true
+
+    # Between converges, adopt freshly-baked worker snapshots with no commit
+    # and no converge: the script resolves the newest snapshot matching
+    # gitlab_runner_image_selector and rewrites config.toml's image line in
+    # place; gitlab-runner hot-reloads the file within seconds. run_as the
+    # service user: the config is 0600 gitlab_runner-owned and the script
+    # needs nothing more. Under qemu the placeholder token makes every fire
+    # fail loudly without touching the config -- harmless on a throwaway
+    # fixture; _verify exercises the script end-to-end against a local API
+    # stub instead.
+    - name: Install gitlab_runner_image_refresh timer
+      import_role:
+        name: systemd_timer
+        tasks_from: install
+      vars:
+        systemd_timer_args:
+          name: gitlab_runner_image_refresh
+          description: Adopt the newest CI worker snapshot into gitlab-runner config
+          on_calendar: "*:0/15"
+          exec_start: >-
+            /usr/bin/python3 /opt/gitlab_runner/update_worker_image.py
+            --config /mnt/services/gitlab_runner/config.toml
+            --selector {{ gitlab_runner_image_selector }}
+          run_as: gitlab_runner
+          condition: "{{ not (ansible_check_mode and gitlab_runner_user.changed) }}"
 
     - name: Install gitlab_runner.service
       import_role:
