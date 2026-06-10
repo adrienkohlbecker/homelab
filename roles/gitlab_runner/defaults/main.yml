@@ -19,19 +19,23 @@ gitlab_runner_enabled: false
 # name, so it must be the id -- re-pin after each worker rebuild.
 gitlab_runner_image: "ubuntu-24.04"
 
-# Single Hetzner location (the plugin's `location` is not a list). Pick one with
-# good capacity for the chosen server type.
-gitlab_runner_location: "fsn1"
+# Single Hetzner location (the plugin's `location` is not a list). These are
+# the real fleet values -- fox is by design the only host that ever enables
+# this role, so its sizing lives here rather than as host_vars overrides of
+# fictional defaults.
+gitlab_runner_location: "nbg1"
 
-# Single Hetzner server type for the fleet. capacity_per_instance below is a
-# static GitLab Runner value (the manager can't read a booted instance's RAM),
-# so it's paired with one type here rather than a fallback list.
-gitlab_runner_server_type: "cpx41"
+# Single Hetzner server type for the fleet: dedicated-vCPU ccx33 (8 vCPU /
+# 32 GiB). capacity_per_instance below is a static GitLab Runner value (the
+# manager can't read a booted instance's RAM), so it's paired with one type
+# here rather than a fallback list.
+gitlab_runner_server_type: "ccx33"
 
-# Concurrent jobs ONE instance runs. Static (gitlab-runner can't read a booted
-# VM's RAM) -- size it to the server type's RAM: a qemu cell wants ~4 GiB, leave
-# headroom for the worker OS. 1 is the safe floor (one job per instance).
-gitlab_runner_capacity_per_instance: 1
+# Concurrent jobs ONE instance runs: one per dedicated vCPU (ccx33 = 8).
+# Nominally 8 * ~4 GiB qemu cells = all 32 GiB with nothing left for the
+# worker OS, but cell guests rarely touch their full allocation -- the OS
+# headroom comes from qemu memory overcommit slack, not a reserved margin.
+gitlab_runner_capacity_per_instance: 8
 
 # Number of fleet servers a burst may scale to ("one busy box, occasionally two"
 # per the design note). Global `concurrent` = this * capacity_per_instance.
