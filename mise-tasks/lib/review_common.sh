@@ -135,42 +135,32 @@ EOF
 }
 
 review_main() {
-  if [ "$#" -gt 0 ]; then
-    if [ "$#" -eq 1 ] && [[ "$1" == *..* ]]; then
-      scope="explicit revision range: $1"
-      git diff --stat --patch --find-renames --find-copies "$1" >"$diff_file"
-    elif [ "$#" -eq 1 ] && git rev-parse --verify -q "$1^{commit}" >/dev/null; then
-      scope="explicit commit: $1"
-      git show --stat --patch --find-renames --find-copies --format=fuller "$1" >"$diff_file"
-    elif [ "$repo" != "$main_worktree" ]; then
-      scope="pathspec worktree changes: $base_ref...HEAD plus local changes -- $*"
-      git diff --stat --patch --find-renames --find-copies "$base_ref...HEAD" -- "$@" >"$diff_file"
-      append_local_diffs "$@"
-    elif ! git diff --quiet HEAD -- "$@" || has_untracked "$@"; then
-      scope="pathspec uncommitted changes on $current_branch: $*"
-      git diff --stat --patch --find-renames --find-copies HEAD -- "$@" >"$diff_file"
-      append_untracked_diffs "$@"
-    else
-      local last_commit
-      last_commit=$(git log -1 --format=%H -- "$@" || true)
-      if [ -z "$last_commit" ]; then
-        echo "$agent_label: no changes or commits found for pathspec: $*" >&2
-        exit 1
-      fi
-      scope="pathspec last commit on $current_branch: $last_commit -- $*"
-      git show --stat --patch --find-renames --find-copies --format=fuller "$last_commit" -- "$@" >"$diff_file"
-    fi
+  # An empty "$@" is an empty git pathspec, i.e. the whole tree, so the
+  # with-arguments and without-arguments cases share one cascade. Only the
+  # range/commit forms need an actual argument.
+  if [ "$#" -eq 1 ] && [[ "$1" == *..* ]]; then
+    scope="explicit revision range: $1"
+    git diff --stat --patch --find-renames --find-copies "$1" >"$diff_file"
+  elif [ "$#" -eq 1 ] && git rev-parse --verify -q "$1^{commit}" >/dev/null; then
+    scope="explicit commit: $1"
+    git show --stat --patch --find-renames --find-copies --format=fuller "$1" >"$diff_file"
   elif [ "$repo" != "$main_worktree" ]; then
-    scope="worktree changes: $base_ref...HEAD plus local changes"
-    git diff --stat --patch --find-renames --find-copies "$base_ref...HEAD" >"$diff_file"
-    append_local_diffs
-  elif ! git diff --quiet HEAD -- . || has_untracked; then
-    scope="uncommitted changes on $current_branch"
-    git diff --stat --patch --find-renames --find-copies HEAD -- . >"$diff_file"
-    append_untracked_diffs
+    scope="worktree changes: $base_ref...HEAD plus local changes${*:+ -- $*}"
+    git diff --stat --patch --find-renames --find-copies "$base_ref...HEAD" -- "$@" >"$diff_file"
+    append_local_diffs "$@"
+  elif ! git diff --quiet HEAD -- "$@" || has_untracked "$@"; then
+    scope="uncommitted changes on $current_branch${*:+ -- $*}"
+    git diff --stat --patch --find-renames --find-copies HEAD -- "$@" >"$diff_file"
+    append_untracked_diffs "$@"
   else
-    scope="last commit on $current_branch: HEAD"
-    git show --stat --patch --find-renames --find-copies --format=fuller HEAD >"$diff_file"
+    local last_commit
+    last_commit=$(git log -1 --format=%H -- "$@" || true)
+    if [ -z "$last_commit" ]; then
+      echo "$agent_label: no changes or commits found for pathspec: $*" >&2
+      exit 1
+    fi
+    scope="last commit on $current_branch: $last_commit${*:+ -- $*}"
+    git show --stat --patch --find-renames --find-copies --format=fuller "$last_commit" -- "$@" >"$diff_file"
   fi
 
   if [ ! -s "$diff_file" ]; then
