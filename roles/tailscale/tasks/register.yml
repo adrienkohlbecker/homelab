@@ -217,9 +217,11 @@
 - name: register | Determine whether advertised routes need headscale approval
   set_fact:
     tailscale_approve_routes_needed: >-
-      {{ (not tailscale_running)
-         or ((tailscale_desired_routes | sort)
-             != (((tailscale_prefs.stdout | default('{}', true) | from_json).AdvertiseRoutes | default([])) | sort)) }}
+      {{ (tailscale_desired_routes | length > 0)
+         and ((not tailscale_running)
+              or (tailscale_reconcile_headscale_routes | bool)
+              or ((tailscale_desired_routes | sort)
+                  != (((tailscale_prefs.stdout | default('{}', true) | from_json).AdvertiseRoutes | default([])) | sort))) }}
   tags:
     - tailscale
 
@@ -253,8 +255,9 @@
 # Route approval is a second opt-in on the control server, keyed by the node's
 # headscale ID (assigned at registration). Look the node up by its given name
 # (= this host's short hostname) on the headscale host.
-# NB: this is gated on initial registration or local advertised-route drift so
-# steady-state converges do not depend on the headscale host being reachable.
+# NB: this is gated on initial registration, local advertised-route drift, or an
+# explicit tailscale_reconcile_headscale_routes repair run, so steady-state
+# converges do not depend on the headscale host being reachable.
 # If `tailscale set` above changed the advertised routes, the client propagates
 # the new set to headscale asynchronously. `approve-routes` is a policy
 # operation (replaces the approved set) that does not require the advertisement
