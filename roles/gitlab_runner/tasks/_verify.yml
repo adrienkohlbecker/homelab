@@ -75,3 +75,124 @@
     name: gitlab_runner.service
     state: stopped
   become: true
+
+# --- worker image refresh: functional test against a local API stub ---------
+# The real Hetzner API is unreachable from the harness (placeholder token), so
+# serve a canned /images response with http.server (it strips the query
+# string, so the file name `images` matches any selector) and point the
+# script at it. The rewrite runs against a COPY of the rendered config -- the
+# code path is identical to the timer's in-place rewrite, and the real config
+# stays pristine.
+- name: _verify | Confirm the image refresh timer is active
+  systemd:
+    name: gitlab_runner_image_refresh.timer
+  register: _gitlab_runner_refresh_timer
+  failed_when: _gitlab_runner_refresh_timer.status.ActiveState != "active"
+  become: true
+
+- name: _verify | Create the API stub directory
+  file:
+    path: /tmp/gitlab_runner_stub
+    state: directory
+    mode: "0755"
+
+- name: _verify | Stage the API stub response
+  copy:
+    dest: /tmp/gitlab_runner_stub/images
+    content: '{"images": [{"id": 424242, "created": "2026-01-01T00:00:00+00:00"}]}'
+    mode: "0644"
+
+- name: _verify | Start the API stub server
+  command: >-
+    systemd-run --unit gitlab_runner_api_stub
+    --working-directory /tmp/gitlab_runner_stub
+    python3 -m http.server 18099 --bind 127.0.0.1
+  changed_when: true
+  become: true
+
+- name: _verify | Wait for the API stub to serve
+  uri:
+    url: http://127.0.0.1:18099/images
+  register: _gitlab_runner_stub_up
+  until: _gitlab_runner_stub_up.status | default(0) == 200
+  retries: 10
+  delay: 1
+
+- name: _verify | Copy the rendered config for the rewrite test
+  copy:
+    src: /mnt/services/gitlab_runner/config.toml
+    remote_src: true
+    dest: /tmp/gitlab_runner_stub/config.toml
+    mode: "0600"
+  become: true
+
+- name: _verify | Refresh script adopts the stub snapshot id
+  command: >-
+    python3 /opt/gitlab_runner/update_worker_image.py
+    --config /tmp/gitlab_runner_stub/config.toml
+    --selector role=ci-worker
+    --endpoint http://127.0.0.1:18099
+  register: _gitlab_runner_refresh
+  changed_when: false
+  failed_when: "'-> 424242' not in _gitlab_runner_refresh.stdout"
+  become: true
+
+# Surgical-edit guarantee: the rewrite must change the image line and nothing
+# else -- a TOML re-dump would shred comments/layout and could reorder the
+# secrets. Exactly 2 diff lines = one removed + one added.
+- name: _verify | Rewrite touched only the image line
+  shell: |
+    set -euo pipefail
+    changed=$(diff /mnt/services/gitlab_runner/config.toml /tmp/gitlab_runner_stub/config.toml || true)
+    printf "%s\n" "$changed" | grep -c "^[<>]" || true
+  args:
+    executable: /bin/bash
+  register: _gitlab_runner_refresh_diff
+  changed_when: false
+  failed_when: _gitlab_runner_refresh_diff.stdout != "2"
+  become: true
+
+- name: _verify | Rewrite preserved the config file mode
+  stat:
+    path: /tmp/gitlab_runner_stub/config.toml
+  register: _gitlab_runner_refresh_stat
+  failed_when: _gitlab_runner_refresh_stat.stat.mode != "0600"
+  become: true
+
+- name: _verify | Refresh script no-ops when the image is already current
+  command: >-
+    python3 /opt/gitlab_runner/update_worker_image.py
+    --config /tmp/gitlab_runner_stub/config.toml
+    --selector role=ci-worker
+    --endpoint http://127.0.0.1:18099
+  register: _gitlab_runner_refresh_noop
+  changed_when: false
+  failed_when: "'already current' not in _gitlab_runner_refresh_noop.stdout"
+  become: true
+
+- name: _verify | Stage an empty API stub response
+  copy:
+    dest: /tmp/gitlab_runner_stub/images
+    content: '{"images": []}'
+    mode: "0644"
+
+# The no-matching-snapshot path must fail loudly (a failed timer unit on prod
+# is the alarm that a bake went missing) and must not touch the config.
+- name: _verify | Refresh script fails loudly when no snapshot matches
+  command: >-
+    python3 /opt/gitlab_runner/update_worker_image.py
+    --config /tmp/gitlab_runner_stub/config.toml
+    --selector role=ci-worker
+    --endpoint http://127.0.0.1:18099
+  register: _gitlab_runner_refresh_empty
+  changed_when: false
+  failed_when: >-
+    _gitlab_runner_refresh_empty.rc == 0
+    or 'no available snapshot' not in _gitlab_runner_refresh_empty.stderr
+  become: true
+
+- name: _verify | Stop the API stub server
+  systemd:
+    name: gitlab_runner_api_stub.service
+    state: stopped
+  become: true

@@ -1,6 +1,6 @@
 # Off by default; a host enabling the runner sets the two required secrets
 # (gitlab_runner_token, gitlab_runner_hcloud_token -- asserted in
-# tasks/main.yml) and a gitlab worker image, then flips this true.
+# tasks/main.yml), then flips this true.
 #
 # defaults/ (not vars/) per CLAUDE.md: role vars sit ABOVE host_vars and would
 # mask host overrides; defaults sit below, so host_vars wins. Everything here is
@@ -9,15 +9,16 @@
 # config.toml.j2 rather than surfaced here.
 gitlab_runner_enabled: false
 
-# Hetzner image the ephemeral fleet boots. The instance executor runs each job
-# as a shell ON the VM, so the image must already carry gitlab-runner plus the
-# job toolchain (git; qemu/packer for the CI cells). The stock "ubuntu-24.04"
-# base suits only trivial jobs and the role's assert rejects it on a real host:
-# pin the NUMERIC SNAPSHOT ID of a role=ci-worker snapshot built by `mise run
-# packer:worker` (it bakes in gitlab-runner + the qemu/packer toolchain). The
-# fleeting plugin resolves an image by id/name and Hetzner snapshots have no
-# name, so it must be the id -- re-pin after each worker rebuild.
-gitlab_runner_image: "ubuntu-24.04"
+# Label selector picking the Hetzner image the ephemeral fleet boots: the
+# newest available snapshot carrying this label, as baked + labeled by `mise
+# run packer:worker` (gitlab-runner + the qemu/packer job toolchain aboard --
+# the instance executor runs each job as a shell ON the VM, so a stock base
+# image would ship a fleet with no toolchain). Resolved to a numeric snapshot
+# id at converge time AND every 15 min by the gitlab_runner_image_refresh
+# timer, so a fresh bake is adopted with no commit or converge. Rollback from
+# a bad bake: delete its snapshot in the CI project (`hcloud image delete`) --
+# both resolvers then fall back to the previous newest.
+gitlab_runner_image_selector: "role=ci-worker"
 
 # Single Hetzner location (the plugin's `location` is not a list). These are
 # the real fleet values -- fox is by design the only host that ever enables

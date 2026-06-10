@@ -37,11 +37,11 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
 
   # Jobs run as a shell directly on the ephemeral VM -- /dev/kvm is native, no
   # container-in-container, and the repo clone lands in ~/builds ON THE VM (not
-  # on this manager). Image requirements: see gitlab_runner_image in
+  # on this manager). Image requirements: see gitlab_runner_image_selector in
   # defaults/main.yml. No [runners.instance] section on purpose: its only
   # knob, allowed_images, applies just under VM Isolation (a nested-VM
   # feature we don't use) -- without it jobs cannot request an image at all,
-  # so there is no value to maintain. The image pin is plugin_config.image
+  # so there is no value to maintain. The image is plugin_config.image
   # below.
 
   [runners.autoscaler]
@@ -79,7 +79,12 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
       token = "{{ gitlab_runner_hcloud_token }}"
       location = "{{ gitlab_runner_location }}"
       server_type = "{{ gitlab_runner_server_type }}"
-      image = "{{ gitlab_runner_image }}"
+      # Newest role=ci-worker snapshot, resolved at converge time; between
+      # converges the gitlab_runner_image_refresh timer rewrites this one line
+      # in place as new bakes land (gitlab-runner hot-reloads config.toml, so
+      # adoption needs no restart). Under qemu no fleet ever boots -- a stock
+      # image name keeps the rendered TOML valid.
+      image = "{{ gitlab_runner_resolved_image | default('ubuntu-24.04') }}"
       # Stamp every ephemeral instance so a leaked/orphaned VM (manager died
       # mid-provision) is greppable: `hcloud server list -l role=ci`.
       labels = { role = "ci", manager = "{{ inventory_hostname }}" }
