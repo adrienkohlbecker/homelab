@@ -53,11 +53,11 @@ HCLOUD_TOKEN_OP = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
 HOMELAB_CI_DIR = '{{vars.homelab_ci_dir}}'
-ZBM_VERSION = "3.1.0"
+ZBM_VERSION = "3.0.1"
 # Kernel minor version baked into the builder image (KERNELS=linux<ver> build
 # arg) and embedded in the tarball name. Single kernel in the image means
 # generate-zbm picks it up automatically; no Kernel.Version needed in config.yaml.
-ZBM_KERNEL_VERSION = "6.18"
+ZBM_KERNEL_VERSION = "6.1"
 # Home Assistant long-lived access token -- consumed by mise-tasks/ha/sync.py
 # to call /api/services/<domain>/reload after pushing the GUI YAML. Minted
 # in HA UI under Profile > Security > Long-Lived Access Tokens. The
