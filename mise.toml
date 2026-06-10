@@ -49,6 +49,17 @@ TF_VAR_mailgun_api_key = "op://Lab/j6iayri7rcsq27nym5z7u37jgu/password"
 # - `mise run tf` runs under `op run --` which maps _OP → HCLOUD_TOKEN.
 # - packer scripts source _hcloud_token.sh (CI token or op run re-exec).
 HCLOUD_TOKEN_OP = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
+# Dedicated homelab-ci project token (terraform/hetzner_ci.tf provider alias;
+# worker snapshot bakes). Same two-consumer split as above: TF_VAR_* resolves
+# under `mise run tf`'s op run; the _CI_OP form is picked up by
+# mise-tasks/packer/worker.sh so worker snapshots land in the CI project,
+# where the fleeting plugin's project-scoped token can see them. Create the
+# project + token + 1P item per the bootstrap comment in
+# terraform/hetzner_ci.tf, then replace the item-ids below -- until then
+# `op run` fails on these refs, which blocks `mise run tf` and
+# `mise run packer:worker`.
+TF_VAR_hcloud_ci_token = "op://Lab/buz7a2s327niiv2bet74apjreq/password"
+HCLOUD_TOKEN_CI_OP = "op://Lab/buz7a2s327niiv2bet74apjreq/password"
 # Expose [vars] entries as env so file-based mise-tasks/ scripts can read
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
