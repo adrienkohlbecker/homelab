@@ -157,21 +157,21 @@ run = "ruff check ."
 
 [tasks."lint:yaml"]
 description = "Run yamllint on tracked YAML files"
-run = "git ls-files -z '*.yml' '*.yaml' | xargs -0 yamllint"
+run = "lint/git_ls_existing.sh '*.yml' '*.yaml' | xargs -0 yamllint"
 
 [tasks."lint:shell"]
 description = "Run shellcheck on tracked shell scripts"
-run = "git ls-files -z '*.sh' | xargs -0 shellcheck"
+run = "lint/git_ls_existing.sh '*.sh' | xargs -0 shellcheck"
 
 [tasks."lint:shfmt"]
 description = "Check shell script formatting (shfmt)"
-run = "git ls-files -z '*.sh' | xargs -0 shfmt -i 2 -d"
+run = "lint/git_ls_existing.sh '*.sh' | xargs -0 shfmt -i 2 -d"
 
 [tasks."lint:lua"]
 description = "Lint Lua filters (stylua --check + selene)"
 run = [
-  "git ls-files -z '*.lua' | xargs -0 stylua --config-path lint/stylua.toml --check",
-  "git ls-files -z '*.lua' | xargs -0 selene --config lint/selene.toml",
+  "lint/git_ls_existing.sh '*.lua' | xargs -0 stylua --config-path lint/stylua.toml --check",
+  "lint/git_ls_existing.sh '*.lua' | xargs -0 selene --config lint/selene.toml",
 ]
 
 [tasks."lint:topology"]
@@ -194,7 +194,7 @@ run = "if [ -d notes/.git ]; then cd notes && mise run lint; else echo 'lint:not
 
 [tasks."lint:toml"]
 description = "Check TOML formatting (taplo)"
-run = "git ls-files -z '*.toml' | xargs -0 taplo fmt --check"
+run = "lint/git_ls_existing.sh '*.toml' | xargs -0 taplo fmt --check"
 
 [tasks.test]
 description = "Run Python unit tests (pytest)"
@@ -237,11 +237,11 @@ run = "mise fmt"
 
 [tasks."fmt:shfmt"]
 description = "Format shell scripts (shfmt)"
-run = "git ls-files -z '*.sh' | xargs -0 shfmt -i 2 -w"
+run = "lint/git_ls_existing.sh '*.sh' | xargs -0 shfmt -i 2 -w"
 
 [tasks."fmt:lua"]
 description = "Format Lua filters (stylua)"
-run = "git ls-files -z '*.lua' | xargs -0 stylua --config-path lint/stylua.toml"
+run = "lint/git_ls_existing.sh '*.lua' | xargs -0 stylua --config-path lint/stylua.toml"
 
 [tasks."fmt:markdown"]
 description = "Fix Markdown formatting (CLAUDE.md + README.md)"
@@ -253,7 +253,7 @@ run = "if [ -d notes/.git ]; then cd notes && mise run fmt; else echo 'fmt:notes
 
 [tasks."fmt:toml"]
 description = "Format TOML files (taplo)"
-run = "git ls-files -z '*.toml' | xargs -0 taplo fmt"
+run = "lint/git_ls_existing.sh '*.toml' | xargs -0 taplo fmt"
 
 [tasks."tf"]
 description = "tofu (forwards subcommand + args)"
