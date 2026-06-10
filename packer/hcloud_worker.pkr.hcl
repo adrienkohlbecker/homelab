@@ -1,7 +1,7 @@
 # Hetzner Cloud CI worker image. Builds a snapshot with all tooling
-# pre-installed so an ephemeral CCX instance can boot, register as a
-# GitHub Actions runner, and start running QEMU-based test cells within
-# minutes. No ZFS — plain ext4 root on a stock Ubuntu 24.04 base.
+# pre-installed (including the gitlab-runner binary) so an ephemeral CCX
+# instance the fleeting autoscaler provisions can boot and run QEMU-based test
+# cells within minutes. No ZFS — plain ext4 root on a stock Ubuntu 24.04 base.
 #
 # Build: `mise run packer:worker`
 # The snapshot is labelled role=ci-worker,ubuntu=noble so terraform /
@@ -95,8 +95,8 @@ build {
   }
 
   provisioner "file" {
-    source      = "${path.root}/../roles/github_runner/vars/main.yml"
-    destination = "/tmp/github_runner_vars.yml"
+    source      = "${path.root}/../roles/gitlab_runner/vars/main.yml"
+    destination = "/tmp/gitlab_runner_vars.yml"
   }
 
   provisioner "shell" {
