@@ -32,9 +32,10 @@ Type=simple
 User=gitlab_runner
 Group=gitlab_runner
 WorkingDirectory=/mnt/services/gitlab_runner
-# nologin service user has no real home; point HOME at the working dir so the
-# fleeting connector's ssh known_hosts and any runner cache land on a writable,
-# owned path rather than failing against an unset/unwritable HOME.
+# nologin service user has no real home; point HOME at the working dir so any
+# runner cache lands on a writable, owned path rather than failing against an
+# unset/unwritable HOME. (Not for ssh known_hosts: the fleeting connector does
+# no host-key verification at all -- see the trust note in tasks/main.yml.)
 Environment=HOME=/mnt/services/gitlab_runner
 ExecStart=/usr/local/bin/gitlab-runner run \
     --config /mnt/services/gitlab_runner/config.toml \
@@ -43,13 +44,13 @@ Restart=always
 RestartSec=10
 # gitlab-runner drains gracefully on SIGQUIT: it stops claiming new jobs and
 # waits for in-flight fleet jobs to finish, bounded by config.toml's
-# shutdown_timeout (~30 min), then exits. TimeoutStopSec=infinity defers that
-# bound entirely to shutdown_timeout so systemd never SIGKILLs mid-drain (the
-# pattern GitLab's own service docs use) -- without it, a TimeoutStopSec shorter
-# than shutdown_timeout would truncate the drain. Restart=always + the next
-# converge recover a genuinely wedged manager.
+# shutdown_timeout (1800s), then exits. TimeoutStopSec sits just past that
+# bound as the SIGKILL backstop: long enough that systemd never truncates a
+# healthy drain, short enough that a manager too wedged to honor SIGQUIT
+# cannot block stop/restart -- and with them converge and host reboot --
+# forever.
 KillSignal=SIGQUIT
-TimeoutStopSec=infinity
+TimeoutStopSec=1860
 
 [Install]
 WantedBy=multi-user.target

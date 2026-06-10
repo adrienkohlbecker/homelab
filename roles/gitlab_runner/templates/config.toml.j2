@@ -17,11 +17,14 @@ log_format = "json"
 # claiming jobs and waits up to this many seconds for in-flight fleet jobs to
 # finish before force-exiting. The default is 30s -- far too short to wind a CI
 # job down -- so hold it ~30 min, enough to cover the longest jobs (packer
-# builds). The unit's TimeoutStopSec=infinity defers to this bound so systemd
-# never SIGKILLs mid-drain.
+# builds). The unit's TimeoutStopSec sits just past this bound (1860s) so
+# systemd only SIGKILLs a manager too wedged to run the drain at all.
 shutdown_timeout = 1800
 # Prometheus metrics + pprof, loopback-only (fox's netdata go.d prometheus
-# collector scrapes it). Unauthenticated -- never the public surface.
+# collector scrapes it). Unauthenticated, and the pprof debug endpoints cannot
+# be disabled separately from metrics -- accepted on loopback (any local
+# process can trigger profiling), but re-evaluate if this listener ever moves
+# off 127.0.0.1.
 listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
 
 [[runners]]
@@ -34,11 +37,13 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
 
   # Jobs run as a shell directly on the ephemeral VM -- /dev/kvm is native, no
   # container-in-container, and the repo clone lands in ~/builds ON THE VM (not
-  # on this manager). The VM image must carry the job toolchain (git, the
-  # qemu/packer deps): point gitlab_runner_image at the baked worker snapshot.
+  # on this manager). Image requirements: see gitlab_runner_image in
+  # defaults/main.yml.
   [runners.instance]
-    # Only the baked worker snapshot is ever wanted; pin it so a pipeline
-    # cannot request an arbitrary image for the instance executor.
+    # Defense-in-depth only: allowed_images is consulted just when VM
+    # Isolation is enabled (it is not here); the real pin is
+    # plugin_config.image below, and pooled instances (max_use_count = 0)
+    # leave no per-job image choice anyway.
     allowed_images = ["{{ gitlab_runner_image }}"]
 
   [runners.autoscaler]
@@ -49,12 +54,22 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
     plugin = "fleeting-plugin-hetzner"
     capacity_per_instance = {{ gitlab_runner_capacity_per_instance }}
     # Reuse a warm instance for many jobs (0 = unlimited) rather than per-job
-    # ephemeral; it self-deletes after the idle window below.
+    # ephemeral; it self-deletes after the idle window below. Safe ONLY while
+    # every pipeline is operator-authored (runner locked to this project, no
+    # fork MR pipelines): concurrent and successive jobs share the VM as root,
+    # so flip to 1 the day any less-trusted pipeline source appears.
     max_use_count = 0
     max_instances = {{ gitlab_runner_max_instances }}
-    # Gate the first job on cloud-init finishing (exit 2 == disabled, OK) AND
-    # the runner binary being present, so a mis-baked snapshot (stock image, no
-    # toolchain) fails readiness loudly here instead of at job dispatch.
+    # Delete provisioned instances on a clean manager shutdown instead of
+    # leaving them to be re-adopted: trades the warm window across a restart
+    # for a no-orphan guarantee (the labels below stay as the manual backstop
+    # for an unclean death).
+    delete_instances_on_shutdown = true
+    # Gate the first job on cloud-init finishing AND the runner binary being
+    # present, so a mis-baked snapshot (stock image, no toolchain) fails
+    # readiness loudly here instead of at job dispatch. cloud-init exit 2 ==
+    # degraded (recoverable errors) -- accepted, since the gitlab-runner
+    # presence check is the real gate.
     instance_ready_command = "cloud-init status --wait || test $? -eq 2 && command -v gitlab-runner"
 
     [runners.autoscaler.plugin_config]
