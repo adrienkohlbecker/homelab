@@ -6,11 +6,13 @@
 # fleeting-plugin-hetzner. This host holds NO job payloads -- it only talks to
 # gitlab.com and provisions/SSHes into the scale-from-zero fleet.
 {% set _name = inventory_hostname ~ '-hetzner' %}
-# Global ceiling = per-instance capacity * the instance cap. Tune
-# gitlab_runner_capacity_per_instance to the chosen server type's RAM (a qemu
-# cell wants ~4 GB, so e.g. ~3 on a 16 GB cpx41).
+# Global ceiling = jobs-per-instance * number of fleet servers. Size
+# gitlab_runner_capacity_per_instance to the server type's RAM (a qemu cell
+# wants ~4 GiB; leave headroom for the worker OS).
 concurrent = {{ gitlab_runner_capacity_per_instance * gitlab_runner_max_instances }}
-check_interval = 3
+# JSON manager logs parse cleanly in fluentbit (the repo's only log consumer);
+# the default `runner` format is ANSI-decorated and needs a custom parser.
+log_format = "json"
 # Graceful-shutdown drain: on SIGQUIT (systemctl stop/restart) the manager stops
 # claiming jobs and waits up to this many seconds for in-flight fleet jobs to
 # finish before force-exiting. The default is 30s -- far too short to wind a CI
@@ -35,7 +37,9 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
   # on this manager). The VM image must carry the job toolchain (git, the
   # qemu/packer deps): point gitlab_runner_image at the baked worker snapshot.
   [runners.instance]
-    allowed_images = ["*"]
+    # Only the baked worker snapshot is ever wanted; pin it so a pipeline
+    # cannot request an arbitrary image for the instance executor.
+    allowed_images = ["{{ gitlab_runner_image }}"]
 
   [runners.autoscaler]
     # PATH-resolved binary name (host-native install at /usr/local/bin), NOT the
@@ -48,8 +52,10 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
     # ephemeral; it self-deletes after the idle window below.
     max_use_count = 0
     max_instances = {{ gitlab_runner_max_instances }}
-    # Block the first job until cloud-init finishes (exit 2 == disabled, OK).
-    instance_ready_command = "cloud-init status --wait || test $? -eq 2"
+    # Gate the first job on cloud-init finishing (exit 2 == disabled, OK) AND
+    # the runner binary being present, so a mis-baked snapshot (stock image, no
+    # toolchain) fails readiness loudly here instead of at job dispatch.
+    instance_ready_command = "cloud-init status --wait || test $? -eq 2 && command -v gitlab-runner"
 
     [runners.autoscaler.plugin_config]
       name = "{{ _name }}"
@@ -61,6 +67,9 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
       location = "{{ gitlab_runner_location }}"
       server_type = "{{ gitlab_runner_server_type }}"
       image = "{{ gitlab_runner_image }}"
+      # Stamp every ephemeral instance so a leaked/orphaned VM (manager died
+      # mid-provision) is greppable: `hcloud server list -l role=ci`.
+      labels = { role = "ci", manager = "{{ inventory_hostname }}" }
 
     [runners.autoscaler.connector_config]
       username = "root"
