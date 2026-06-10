@@ -77,6 +77,14 @@
       {{ swap_zvol.dataset }}) not active: {{ _swap_verify_swapon.stdout }}
   become: true
 
+- name: _verify | Zvol swap is not selected for initramfs resume
+  when: swap_zvol is defined and zfs_root
+  slurp:
+    src: /etc/initramfs-tools/conf.d/resume
+  become: true
+  register: _swap_verify_resume_conf
+  failed_when: (_swap_verify_resume_conf.content | b64decode | trim) != 'RESUME=none'
+
 - name: _verify | Resolve partition device path
   when: swap_partition is defined
   command: readlink -f {{ swap_partition.device }}

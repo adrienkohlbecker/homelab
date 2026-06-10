@@ -235,6 +235,49 @@
   tags:
     - swap
 
+# initramfs-tools auto-selects the largest non-ephemeral swap device as a
+# hibernate resume target. A ZFS zvol appears only after the initramfs loads ZFS
+# and imports rpool, so the local-premount resume script waits 30 seconds for a
+# device that cannot exist yet. These hosts do not hibernate; keep swap, but
+# make the initramfs skip resume probing.
+- name: Disable initramfs hibernate resume for zvol swap
+  when: swap_zvol is defined and zfs_root
+  copy:
+    dest: /etc/initramfs-tools/conf.d/resume
+    content: "RESUME=none\n"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: grep -qx RESUME=none %s
+  register: swap_resume_conf
+  become: true
+  tags:
+    - swap
+
+- name: Rebuild initramfs after resume policy change
+  when:
+    - swap_zvol is defined and zfs_root
+    - swap_resume_conf.changed
+    - not ansible_check_mode
+  command: update-initramfs -u -k all
+  changed_when: true
+  become: true
+  tags:
+    - swap
+
+- name: Ask to reboot after resume policy change
+  when: swap_zvol is defined and zfs_root and swap_resume_conf.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - swap
+
 #######################################################################
 # Raw-partition swap (no formatting; takes the device as-is)
 #######################################################################
