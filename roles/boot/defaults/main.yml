@@ -6,6 +6,17 @@
 #   boot_serial_console: "earlycon=uart8250,io,0x3f8 console=ttyS0,115200"
 boot_serial_console: ""
 
+# ZFS-root hosts have no LVM PV/VG/LV state: root and swap live on ZFS, and
+# package-level reverse dependencies can still keep lvm2/dm-event/multipath
+# installed. Mask the idle monitor entry points so they cannot add boot or
+# shutdown waits, while leaving the packages available for libvirt/cryptsetup
+# dependencies.
+boot_disable_lvm_services: "{{ zfs_root | default(false) }}"
+
+# Temporary initramfs-tools tracing. When enabled, the next boot writes
+# /run/initramfs/initramfs.debug, useful for timing pre-root scripts.
+boot_initramfs_debug: false
+
 # EFI NVRAM boot entries to manage declaratively. Each entry becomes a
 # Boot#### variable in NVRAM via efibootmgr. Entries with multi_disk: true
 # expand to per-disk variants on mdadm-EFI hosts (one entry per component

@@ -78,6 +78,36 @@
   changed_when: false
   become: true
 
+- name: _verify | Probe managed LVM and multipath unit files # noqa: command-instead-of-module
+  when: boot_disable_lvm_services | bool
+  command: systemctl list-unit-files {{ item }}
+  loop:
+    - lvm2-monitor.service
+    - lvm2-lvmpolld.service
+    - dm-event.service
+    - multipathd.service
+    - lvm2-lvmpolld.socket
+    - dm-event.socket
+    - multipathd.socket
+  register: _boot_verify_lvm_unit_files
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Installed LVM and multipath monitor units are masked # noqa: command-instead-of-module
+  when:
+    - boot_disable_lvm_services | bool
+    - item.rc == 0
+    - item.stdout_lines | select('match', '^' ~ (item.item | regex_escape) ~ '\s') | list | length > 0
+  command: systemctl is-enabled {{ item.item }}
+  register: _boot_verify_lvm_unit_state
+  changed_when: false
+  failed_when: _boot_verify_lvm_unit_state.stdout | trim != 'masked'
+  loop: "{{ _boot_verify_lvm_unit_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  become: true
+
 # The 'default' fragment carries the base console args. On test VMs (qemu) this
 # includes earlycon + serial for harness output capture; on prod (no legacy UART)
 # it's just console=tty0.
@@ -110,6 +140,15 @@
       Expected: {{ _expected | trim }}
       Got: {{ _boot_verify_cmdline.stdout }}
 
+- name: _verify | Commandline carries initramfs debug when enabled
+  when: not grub_bootloader and (boot_initramfs_debug | bool)
+  assert:
+    that:
+      - "'debug' in _boot_verify_cmdline.stdout.split()"
+    fail_msg: >-
+      org.zfsbootmenu:commandline is missing debug from the
+      initramfs_debug fragment: {{ _boot_verify_cmdline.stdout }}
+
 # /proc/cmdline exposes the args the running kernel actually booted with.
 # Post-reboot this proves the ZBM property propagated through the boot chain,
 # not just that the ZFS property was set. Skipped on aarch64 (no reboot above).
@@ -141,6 +180,25 @@
     fail_msg: >-
       /proc/cmdline does not carry earlycon= after reboot — the
       ZBM serial args may not have propagated: {{ _cmdline }}
+
+- name: _verify | Running kernel booted with initramfs debug when enabled
+  when: not grub_bootloader and ansible_architecture != 'aarch64' and (boot_initramfs_debug | bool)
+  vars:
+    _cmdline: "{{ _boot_verify_proc_cmdline.content | b64decode }}"
+  assert:
+    that:
+      - "'debug' in _cmdline.split()"
+    fail_msg: >-
+      /proc/cmdline does not carry debug after reboot — the ZBM property may
+      not have propagated: {{ _cmdline }}
+
+- name: _verify | Initramfs debug log exists when enabled
+  when: not grub_bootloader and ansible_architecture != 'aarch64' and (boot_initramfs_debug | bool)
+  stat:
+    path: /run/initramfs/initramfs.debug
+  register: _boot_verify_initramfs_debug
+  become: true
+  failed_when: not _boot_verify_initramfs_debug.stat.exists
 
 # --- EFI NVRAM boot entries ---
 

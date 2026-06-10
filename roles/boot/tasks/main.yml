@@ -52,6 +52,45 @@
   tags:
     - boot
 
+# These units are useful only when the host has LVM or multipath state to
+# monitor. The packages may remain installed as dependencies, so manage the
+# systemd entry points instead of purging shared storage tooling.
+- name: Probe unused LVM and multipath unit files # noqa: command-instead-of-module
+  when: boot_disable_lvm_services | bool
+  command: systemctl list-unit-files {{ item }}
+  loop:
+    - lvm2-monitor.service
+    - lvm2-lvmpolld.service
+    - dm-event.service
+    - multipathd.service
+    - lvm2-lvmpolld.socket
+    - dm-event.socket
+    - multipathd.socket
+  register: boot_lvm_unit_files
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - boot
+
+- name: Disable unused LVM and multipath monitor units
+  when:
+    - boot_disable_lvm_services | bool
+    - item.rc == 0
+    - item.stdout_lines | select('match', '^' ~ (item.item | regex_escape) ~ '\s') | list | length > 0
+  systemd:
+    name: "{{ item.item }}"
+    enabled: false
+    masked: true
+    state: stopped
+  loop: "{{ boot_lvm_unit_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  become: true
+  tags:
+    - boot
+
 # Pull all modules into the initramfs (not just the build host's loaded set) so
 # the image boots on bare-metal controllers/NICs the builder didn't have
 # (lab/pug carry server-class HBAs). MODULES=most is the default on these images
@@ -107,6 +146,18 @@
     boot_cmdline_args:
       name: default
       contents: "{{ _console_cmdline }}"
+  tags:
+    - boot
+
+- name: Set initramfs debug command line
+  import_role:
+    name: boot
+    tasks_from: cmdline
+  vars:
+    boot_cmdline_args:
+      name: initramfs_debug
+      contents: "{{ (boot_initramfs_debug | bool) | ternary('debug', '') }}"
+      grub_scope: default
   tags:
     - boot
 
