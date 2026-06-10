@@ -74,21 +74,26 @@ lint:
     # identity so the prod identity — undecryptable here — isn't attempted;
     # without this, syntax-check of prod playbooks errors out.
     ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
+    # /builds is world-writable on hosted runners, which makes ansible skip
+    # ansible.cfg discovery from the cwd; pinning the path bypasses that
+    # check so syntax-check runs with the repo config (inventory, vault ids).
+    ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
   script:
     - mise install
     - uv sync --locked
     - mise run lint
 
-# Hermetic pytest suite (testpaths=unit_tests). Needs only python + uv from
-# the toolchain, so it installs just those two and pulls the cache without
-# writing it back — otherwise its subset would race lint's full tool tree
-# for the same cache key and whichever uploads last would win.
+# Hermetic pytest suite (testpaths=unit_tests). Installs the full tool tree
+# even though it only needs python + uv: `mise run` auto-installs whatever is
+# missing anyway, so a partial install just moves the rest to task time (with
+# noisy resolution warnings). The cache is pull-only — lint owns the upload,
+# so the two jobs never race the same cache key.
 unit_tests:
   extends: .hosted
   timeout: 15m
   cache:
     policy: pull
   script:
-    - mise install python uv
+    - mise install
     - uv sync --locked
     - mise run test
