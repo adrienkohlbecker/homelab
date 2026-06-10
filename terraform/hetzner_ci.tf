@@ -10,10 +10,10 @@
 # fox/home, which stay in the main project under the main token. Design:
 # notes/ci_ephemeral_hetzner_workers.md.
 #
-# What lives in the project: the ci_worker firewall below, the role=ci-worker
-# worker snapshots baked by `mise run packer:worker`, and the ephemeral
-# servers the fleeting plugin provisions at runtime (plugin-owned, never
-# terraform-managed).
+# What lives in the project: the ci_worker + ci_builder firewalls below, the
+# role=ci-worker worker snapshots baked by `mise run packer:worker`, and the
+# ephemeral servers the fleeting plugin provisions at runtime (plugin-owned,
+# never terraform-managed).
 #
 # Bootstrap (manual, once):
 #   1. Cloud Console -> create project "homelab-ci".
@@ -39,17 +39,16 @@ provider "hcloud" {
   token = var.hcloud_ci_token
 }
 
-# SSH-only firewall for ephemeral CI worker instances (packer build +
-# runtime). Default-drop inbound with only 22/tcp open to the fleet's two
-# operators: the home WAN (packer image builds, manual debugging) and fox
-# (the gitlab_runner fleeting manager SSHes into workers over their public
-# IPs -- fox itself lives in the main project, so its address crosses
-# projects here as a plain IP literal). Packer attaches this by name during
-# image builds; the label selector below additionally auto-applies it to
-# every instance the fleeting plugin creates (stamped role=ci by
-# roles/gitlab_runner's config.toml) -- the plugin itself has no firewall
-# support, so without the selector each worker's root sshd would sit
-# world-open for its whole warm window.
+# SSH-only firewall for the ephemeral CI worker fleet at runtime.
+# Default-drop inbound with only 22/tcp open to the fleet's two operators:
+# the home WAN (manual debugging) and fox (the gitlab_runner fleeting
+# manager SSHes into workers over their public IPs -- fox itself lives in
+# the main project, so its address crosses projects here as a plain IP
+# literal). The label selector auto-applies it to every instance the
+# fleeting plugin creates (stamped role=ci by roles/gitlab_runner's
+# config.toml) -- the plugin itself has no firewall support, so without the
+# selector each worker's root sshd would sit world-open for its whole warm
+# window.
 resource "hcloud_firewall" "ci_worker" {
   provider = hcloud.ci
   name     = "ci-worker"
@@ -67,5 +66,27 @@ resource "hcloud_firewall" "ci_worker" {
 
   apply_to {
     label_selector = "role=ci"
+  }
+}
+
+# Firewall for the packer build VM that bakes worker snapshots
+# (packer/hcloud_worker.pkr.hcl attaches it by name; no label selector --
+# nothing should pick this up automatically). SSH stays world-open because
+# the bake runs from gitlab.com hosted runners, whose egress IPs are
+# dynamic Google Cloud addresses with no published range -- allowlisting
+# "GCP us-east1" would admit anyone with a rented VM there while adding a
+# maintenance treadmill. Accepted exposure: key-only auth (packer injects
+# an ephemeral ed25519 key, cloud images ship no root password) on a
+# packer-managed VM that lives ~15 minutes and runs no job payloads.
+resource "hcloud_firewall" "ci_builder" {
+  provider = hcloud.ci
+  name     = "ci-builder"
+
+  rule {
+    description = "SSH (packer from gitlab.com hosted runners -- dynamic IPs)"
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "22"
+    source_ips  = ["0.0.0.0/0", "::/0"]
   }
 }

@@ -35,8 +35,8 @@ variable "server_type" {
 
 variable "firewalls" {
   type        = list(string)
-  default     = ["ci-worker"]
-  description = "Hetzner firewall names to attach to the build server."
+  default     = ["ci-builder"]
+  description = "Hetzner firewall names to attach to the build server. ci-builder (terraform/hetzner_ci.tf) leaves SSH world-open: builds run from gitlab.com hosted runners, whose egress IPs are dynamic Google Cloud addresses with no allowlistable range. Key-only auth on an ephemeral packer-managed VM; the locked-down ci-worker firewall still label-applies to the runtime fleet."
 }
 
 variable "mise_github_token" {
