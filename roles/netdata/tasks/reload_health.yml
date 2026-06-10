@@ -3,6 +3,6 @@
 # disks/timex un-silence edits in alerts.yml share one definition of the
 # reload command. The caller gates the import with its own `when:`.
 - name: reload_health | Reload netdata health configuration
-  command: netdatacli reload-health
+  command: timeout --kill-after=5s 30s netdatacli reload-health
   changed_when: true
   become: true
