@@ -16,14 +16,28 @@ cmd=$(jq -r '.tool_input.command // empty' <<<"$input")
 cwd=$(jq -r '.cwd // empty' <<<"$input")
 
 # Only act on `git push` invocations -- not `git push --help`, `git status`,
-# or anything else routed through Bash. Token-level match (not substring) so
-# `git push-pr-helper`-style false positives don't trigger; the `git -C <dir>`
-# forms are caught too since the repo's worktree flows push with `git -C`.
-case "$cmd" in
-"git push" | "git push "*) ;;
-"git -C "*" push" | "git -C "*" push "*) ;;
-*) exit 0 ;;
-esac
+# or anything else routed through Bash. Check individual shell segments so a
+# chained command such as `git status && git push` still gets gated.
+normalized=${cmd//$'\n'/;}
+normalized=${normalized//&&/$'\n'}
+normalized=${normalized//||/$'\n'}
+normalized=${normalized//;/$'\n'}
+
+needs_lint=false
+while IFS= read -r segment; do
+  segment=${segment#"${segment%%[![:space:]]*}"}
+  case "$segment" in
+  "git push --help" | "git push -h" | "git push help" | "git -C "*" push --help" | "git -C "*" push -h" | "git -C "*" push help")
+    continue
+    ;;
+  "git push" | "git push "* | "git -C "*" push" | "git -C "*" push "*)
+    needs_lint=true
+    break
+    ;;
+  esac
+done <<<"$normalized"
+
+[ "$needs_lint" = true ] || exit 0
 
 [ -n "$cwd" ] || cwd=$(pwd)
 root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
