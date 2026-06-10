@@ -711,12 +711,13 @@ default_selection "{{ 'Ubuntu (Linux EFI Stub)' if ansible_architecture == 'aarc
 
 # Twin of the image-build refind.conf in packer/scripts/chroot.sh, with the
 # converge-time theme and backup-loader submenu added.
+{% set _zbm_launch_cmdline = [refind_zbm_cmdline, refind_zbm_extra_cmdline | default(''), _console_cmdline] | map('trim') | reject('equalto', '') | join(' ') %}
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/VMLINUZ.EFI
-    options "{{ refind_zbm_cmdline }} {{ _console_cmdline }} zbm.skip"
+    options "{{ _zbm_launch_cmdline }} zbm.skip"
     icon /EFI/refind/themes/refind-theme-regular/icons/128-48/os_ubuntu.png
     submenuentry "Show ZFSBootMenu" {
-      options "{{ refind_zbm_cmdline }} {{ _console_cmdline }} zbm.show"
+      options "{{ _zbm_launch_cmdline }} zbm.show"
     }
     # VMLINUZ-BACKUP.EFI is seeded by the zfsbootmenu role as a copy of the
     # primary at install time, so this manual recovery entry resolves on a
@@ -732,10 +733,10 @@ menuentry "Ubuntu (ZBM)" {
 menuentry "Ubuntu (ZBM, Components)" {
     loader /EFI/ZBM/vmlinux-bootmenu
     initrd /EFI/ZBM/initramfs-bootmenu.img
-    options "{{ refind_zbm_cmdline }} {{ _console_cmdline }} zbm.skip"
+    options "{{ _zbm_launch_cmdline }} zbm.skip"
     icon /EFI/refind/themes/refind-theme-regular/icons/128-48/os_ubuntu.png
     submenuentry "Show ZFSBootMenu" {
-      options "{{ refind_zbm_cmdline }} {{ _console_cmdline }} zbm.show"
+      options "{{ _zbm_launch_cmdline }} zbm.show"
     }
 }
 

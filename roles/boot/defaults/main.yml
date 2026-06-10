@@ -17,6 +17,10 @@ boot_disable_lvm_services: "{{ zfs_root | default(false) }}"
 # /run/initramfs/initramfs.debug, useful for timing pre-root scripts.
 boot_initramfs_debug: false
 
+# Temporary target-kernel tracing appended to the command line that ZBM passes
+# to the selected boot environment via org.zfsbootmenu:commandline.
+boot_target_debug_cmdline: ""
+
 # EFI NVRAM boot entries to manage declaratively. Each entry becomes a
 # Boot#### variable in NVRAM via efibootmgr. Entries with multi_disk: true
 # expand to per-disk variants on mdadm-EFI hosts (one entry per component
