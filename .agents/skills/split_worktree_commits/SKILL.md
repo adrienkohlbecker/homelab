@@ -10,7 +10,7 @@ You have a worktree with N independent edits across one or more files. Land each
 ## Pre-flight checks (always)
 
 1. Run `git status` and `git diff --stat`. Confirm the changed files match the findings list the user is working from.
-2. **Refuse to operate on files matching `templates/*.j2` that reference `*_password` / `*_token` / `*_secret`** — vault-rendering templates must be staged whole-file or not at all, per `CLAUDE.md → Commit & PR Guidelines`. If such a file is in the changeset, stage it whole-file in its own commit *before* invoking this skill on the rest.
+2. **Refuse to operate on files matching `templates/*.j2` that reference `*_password` / `*_token` / `*_secret`** — vault-rendering templates must be staged whole-file or not at all, per `AGENTS.md → Commit & PR Guidelines`. If such a file is in the changeset, stage it whole-file in its own commit *before* invoking this skill on the rest.
 3. Confirm working tree state is otherwise clean (no unrelated uncommitted changes you didn't introduce).
 
 ## Recipe — one finding at a time
@@ -24,7 +24,7 @@ For each finding the user wants to commit separately:
 4. **Always** run `git diff --staged` and visually verify the staged content matches your intent. The `printf` pattern bypasses interactive confirmation that would otherwise catch a miscount.
 5. If the staged diff doesn't match → `git reset HEAD <file>` and retry. **Do not** revert the worktree to redo the edits from scratch — wastes effort, loses tested state, and risks dropping comment/decision detail.
 6. Show the user the staged diff and the proposed commit message. Wait for approval.
-7. `git commit` with a one-line subject + short body explaining the finding. Conventions from `CLAUDE.md → Commit & PR Guidelines`: short imperative subject, prefix with role/area when useful.
+7. `git commit` with a one-line subject + short body explaining the finding. Conventions from `AGENTS.md → Commit & PR Guidelines`: short imperative subject, prefix with role/area when useful.
 8. After commit: `git status` confirms the remaining hunks are still unstaged in the worktree.
 
 ## When hunks merge into one (and you want them split)
