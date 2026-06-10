@@ -129,3 +129,36 @@ ci_image:
         docker tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE/ci:latest"
         docker push "$CI_REGISTRY_IMAGE/ci:latest"
       fi
+
+# Rebake of the pre-baked Hetzner Cloud CI worker snapshot (`mise run
+# packer:worker`: packer/hcloud_worker.pkr.hcl + provision_worker.sh, with
+# location fallback and old-snapshot pruning). Manual- and master-only, like
+# the hetzner-worker workflow it ports: packer only drives the Hetzner API
+# and SSHes into the build VM's public address, so a hosted runner
+# orchestrates it fine. The fox manager adopts the fresh snapshot on its own
+# within 15 minutes (the gitlab_runner_image_refresh timer resolves the
+# newest role=ci-worker snapshot and hot-reloads config.toml) — no converge,
+# no other step. Rollback from a bad bake: `hcloud image delete <id>`.
+#
+# Required CI/CD variable: HCLOUD_TOKEN — the DEDICATED homelab-ci project's
+# read/write token (terraform/hetzner_ci.tf), never the homelab project's:
+# the snapshot must land where the fleeting plugin's token can see it, and a
+# leak from CI must stop at the disposable fleet.
+worker_image:
+  extends: .hosted
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      # A skipped manual job must not hold the pipeline in "blocked".
+      allow_failure: true
+  # One bake at a time across pipelines, and never auto-cancelled: a killed
+  # run can orphan the packer build server on Hetzner.
+  resource_group: worker_image
+  interruptible: false
+  timeout: 30m
+  script:
+    # Fail with a clear message rather than letting the task fall back to
+    # its 1Password path (op is not in the ci image).
+    - test -n "${HCLOUD_TOKEN:-}" || { echo "HCLOUD_TOKEN CI/CD variable is not set" >&2; exit 1; }
+    - uv sync --locked
+    - mise run packer:worker
