@@ -36,3 +36,13 @@ jobs:
   - name: headscale
     url: http://127.0.0.1:{{ service_ports.headscale_metrics }}/metrics
     autodetection_retry: 60
+{% if gitlab_runner_enabled | default(false) %}
+
+  # gitlab_runner runs on the host fronting the fleeting autoscaler (fox).
+  # Loopback scrape of the unauthenticated metrics listener (config.toml
+  # listen_address). Rendered only where the runner is enabled; list it in that
+  # host's netdata_collectors so the presence alert doubles as a liveness signal.
+  - name: gitlab_runner
+    url: http://127.0.0.1:{{ service_ports.gitlab_runner }}/metrics
+    autodetection_retry: 60
+{% endif %}

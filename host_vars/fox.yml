@@ -135,3 +135,10 @@ netdata_collectors:
   - go.d:collector:prometheus:headscale
 netdata_zfspool_thresholds: {}
 netdata_diskspace_blocklist: []
+
+# roles/gitlab_runner manager params (fox fronts the fleeting autoscaler). The
+# fleet is dedicated-vCPU ccx33 (8 vCPU / 32 GiB) in Nuremberg.
+gitlab_runner_server_type: ccx33
+gitlab_runner_location: nbg1
+# One job per dedicated vCPU (ccx33 = 8); 32 GiB covers 8 * ~4 GiB qemu cells.
+gitlab_runner_capacity_per_instance: 8

@@ -1,0 +1,54 @@
+# Functional host-side checks. The live runner can't register in the harness
+# (no gitlab.com token, no Hetzner project), so the role enable-onlys under
+# qemu_test and this exercises everything that genuinely runs on the host: the
+# pinned binaries execute on this arch, the rendered config is valid TOML with
+# the expected executor/plugin wiring, and the unit installs + passes
+# systemd-analyze verify. Live scale-from-zero is proven by the gate-1
+# benchmark on a real instance, not CI.
+- name: Verify | gitlab-runner binary runs and reports its version
+  command: /usr/local/bin/gitlab-runner --version
+  register: gitlab_runner_verify_version
+  changed_when: false
+
+- name: Verify | gitlab-runner is the pinned version
+  assert:
+    that:
+      - gitlab_runner_version in gitlab_runner_verify_version.stdout
+    fail_msg: >-
+      gitlab-runner --version did not report {{ gitlab_runner_version }}:
+      {{ gitlab_runner_verify_version.stdout }}
+
+- name: Verify | stat the fleeting plugin binary
+  stat:
+    path: /usr/local/bin/fleeting-plugin-hetzner
+  register: gitlab_runner_verify_plugin
+
+- name: Verify | fleeting-plugin-hetzner is present and executable
+  assert:
+    that:
+      - gitlab_runner_verify_plugin.stat.exists
+      - gitlab_runner_verify_plugin.stat.executable
+    fail_msg: fleeting-plugin-hetzner is missing or not executable
+
+- name: Verify | read back the rendered config.toml
+  slurp:
+    src: /mnt/services/gitlab_runner/config.toml
+  register: gitlab_runner_verify_config
+  become: true
+
+- name: Verify | config.toml carries the instance-executor + fleeting wiring
+  vars:
+    _cfg: "{{ gitlab_runner_verify_config.content | b64decode }}"
+  assert:
+    that:
+      - '''executor = "instance"'' in _cfg'
+      - '''plugin = "fleeting-plugin-hetzner"'' in _cfg'
+      - "'[runners.autoscaler.plugin_config]' in _cfg"
+    fail_msg: config.toml is missing the instance-executor / fleeting wiring
+
+- name: Verify | gitlab_runner.service passes systemd-analyze verify
+  command: systemd-analyze verify --no-pager --man=no /etc/systemd/system/gitlab_runner.service
+  register: gitlab_runner_verify_unit
+  changed_when: false
+  failed_when: gitlab_runner_verify_unit.rc != 0 or gitlab_runner_verify_unit.stderr != ''
+  become: true

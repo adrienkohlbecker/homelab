@@ -1,0 +1,35 @@
+# Off by default; a host enabling the runner sets the two required secrets
+# (gitlab_runner_token, gitlab_runner_hcloud_token -- asserted in
+# tasks/main.yml) and a gitlab worker image, then flips this true.
+#
+# defaults/ (not vars/) per CLAUDE.md: role vars sit ABOVE host_vars and would
+# mask host overrides; defaults sit below, so host_vars wins. Everything here is
+# host-overridable deploy-tuning. Single-use constants that never vary
+# (gitlab.com URL, the runner name, the idle policy) are inlined in
+# config.toml.j2 rather than surfaced here.
+gitlab_runner_enabled: false
+
+# OS image the ephemeral fleet boots. The instance executor runs each job as a
+# shell ON the VM, so the image must already carry gitlab-runner plus the job
+# toolchain (git; qemu/packer for the CI cells). A base ubuntu image suits only
+# trivial jobs; point this at a worker snapshot id built by `mise run
+# packer:worker` (which bakes in gitlab-runner + the qemu/packer toolchain).
+gitlab_runner_image: "ubuntu-24.04"
+
+# Single Hetzner location (the plugin's `location` is not a list). Pick one with
+# good capacity for the chosen server type.
+gitlab_runner_location: "fsn1"
+
+# Single Hetzner server type for the fleet. capacity_per_instance below is a
+# static GitLab Runner value (the manager can't read a booted instance's RAM),
+# so it's paired with one type here rather than a fallback list.
+gitlab_runner_server_type: "cpx41"
+
+# Concurrent jobs one instance runs. Static -- size it to the server type's RAM
+# (a qemu cell wants ~4 GB, leaving headroom for the worker OS: ~3 on a 16 GB
+# cpx41). 1 is the safe floor (one job per instance); bump for a bigger box.
+gitlab_runner_capacity_per_instance: 1
+
+# Instance-count ceiling for a burst ("one busy box, occasionally two" per the
+# design note). The global `concurrent` cap is this times capacity_per_instance.
+gitlab_runner_max_instances: 2

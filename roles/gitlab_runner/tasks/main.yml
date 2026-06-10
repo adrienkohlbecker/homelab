@@ -1,0 +1,121 @@
+# GitLab Runner manager (host-native binary; instance executor + fleeting
+# autoscaler -> Hetzner Cloud). Runs on fox (the only internet-facing host; the
+# manager holds no job payloads, so a token-on-the-manager beats a
+# token-on-the-worker) and on box as the CI fixture. Gated on
+# gitlab_runner_enabled.
+#
+# No nginx vhost and no homepage bookmark on purpose: this service exposes no
+# operator-facing HTTP surface. The runner UI is gitlab.com itself; the only
+# local listener is the loopback Prometheus metrics endpoint (for netdata).
+- name: GitLab Runner manager
+  when: gitlab_runner_enabled | default(false)
+  tags:
+    - gitlab_runner
+  block:
+    # Required inputs live in host_vars and the role asserts them (CLAUDE.md).
+    # Both render straight into config.toml, so an unset value would boot a
+    # runner that silently fails to register / can't reach Hetzner -- catch it
+    # loudly here instead. Non-empty, not just defined: a mistyped vault key
+    # renders to "" which passes `is defined`.
+    - name: Assert required gitlab_runner secrets are set
+      assert:
+        that:
+          - gitlab_runner_token | default('') | length > 0
+          - gitlab_runner_hcloud_token | default('') | length > 0
+        fail_msg: >-
+          gitlab_runner_enabled is true but gitlab_runner_token and/or
+          gitlab_runner_hcloud_token is unset for {{ inventory_hostname }}.
+          Create a project runner on gitlab.com (-> glrt- auth token) and a
+          project-scoped Hetzner Cloud API token for the dedicated CI project,
+          then vault both into host_vars/{{ inventory_hostname }}.yml.
+
+    - name: Set up gitlab_runner system user, group, and config dir
+      import_role:
+        name: service_user
+        tasks_from: user
+      vars:
+        service_user_args:
+          name: gitlab_runner
+
+    # python3-tomli for the config.toml validate below (stdlib tomllib only
+    # landed in 3.11; fox is jammy/3.10). apt-idempotent where already present.
+    - name: Install host dependencies for gitlab_runner
+      apt:
+        pkg:
+          - python3-tomli
+        install_recommends: false
+        cache_valid_time: 3600
+      become: true
+
+    # checksum: drives re-download on a version bump (sha mismatch forces fetch)
+    # and surfaces tampering on the plain-https URL.
+    - name: Download gitlab-runner binary
+      when: not (ansible_check_mode and gitlab_runner_user.changed)
+      get_url:
+        url: "{{ gitlab_runner_archive[ansible_architecture].url }}"
+        dest: /usr/local/bin/gitlab-runner
+        checksum: "sha256:{{ gitlab_runner_archive[ansible_architecture].sha256 }}"
+        owner: root
+        group: root
+        mode: "0755"
+        backup: true
+      become: true
+      register: gitlab_runner_binary
+
+    - name: Download fleeting-plugin-hetzner binary
+      when: not (ansible_check_mode and gitlab_runner_user.changed)
+      get_url:
+        url: "{{ gitlab_runner_fleeting_hetzner_archive[ansible_architecture].url }}"
+        dest: /usr/local/bin/fleeting-plugin-hetzner
+        checksum: "sha256:{{ gitlab_runner_fleeting_hetzner_archive[ansible_architecture].sha256 }}"
+        owner: root
+        group: root
+        mode: "0755"
+        backup: true
+      become: true
+      register: gitlab_runner_fleeting_binary
+
+    # 0600 + owned by the runner: holds both the glrt- runner token and the
+    # hcloud API token. validate parses the rendered TOML (gitlab-runner falls
+    # back to defaults on a parse error, so catch typos here).
+    - name: Render gitlab-runner config.toml
+      when: not (ansible_check_mode and gitlab_runner_user.changed)
+      template:
+        src: config.toml.j2
+        dest: /mnt/services/gitlab_runner/config.toml
+        owner: gitlab_runner
+        group: gitlab_runner
+        mode: "0600"
+        backup: true
+        validate: python3 -c 'import tomli, sys; tomli.load(open(sys.argv[1], "rb"))' %s
+      become: true
+      register: gitlab_runner_config
+
+    - name: Install gitlab_runner.service
+      import_role:
+        name: systemd_unit
+        tasks_from: install
+      vars:
+        systemd_unit_args:
+          src: gitlab_runner.service.j2
+          condition: "{{ not (ansible_check_mode and gitlab_runner_user.changed) }}"
+
+    # Live registration needs a real gitlab.com runner token and a real Hetzner
+    # project token to init the fleeting plugin -- neither exists in the qemu
+    # harness, so enable-only under qemu_test and let _verify exercise the
+    # host-side artifacts. Prod (fox) starts the manager for real. restart
+    # propagates a config or binary change.
+    - name: Enable and start gitlab_runner.service
+      import_role:
+        name: systemd_unit
+        tasks_from: service
+      vars:
+        systemd_unit_args:
+          src: gitlab_runner.service.j2
+          start: "{{ not (qemu_test | default(false)) }}"
+          restart: >-
+            {{ gitlab_runner_service_result.changed
+               or gitlab_runner_config.changed
+               or gitlab_runner_binary.changed
+               or gitlab_runner_fleeting_binary.changed }}
+          condition: "{{ not (ansible_check_mode and gitlab_runner_user.changed) }}"

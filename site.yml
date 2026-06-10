@@ -61,6 +61,7 @@
   roles:
     - headscale
     - fail2ban
+    - gitlab_runner
 
 - name: Lab and Pug
   hosts: box,lab,pug

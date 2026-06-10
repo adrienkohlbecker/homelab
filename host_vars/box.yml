@@ -179,6 +179,16 @@ has_transcoding_acceleration: true
 github_runner_instances:
   - { repo: homelab, suffix: test1, owner: adrienkohlbecker, labels: "self-hosted,test" }
 
+# roles/gitlab_runner CI fixture. Enabled so the role exercises its full
+# host-side path under the harness (binary downloads, config.toml render +
+# TOML validate, unit install + systemd-analyze verify). The tokens are
+# throwaway placeholders -- the role's qemu_test gate skips `systemctl start`,
+# so the manager never actually contacts gitlab.com or Hetzner with them, and
+# _verify only checks the static artifacts. No blast radius.
+gitlab_runner_enabled: true
+gitlab_runner_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
+gitlab_runner_hcloud_token: test-hcloud-placeholder-do-not-use
+
 # roles/tailscale test config. The control-plane pointers (login_server,
 # headscale_host, headscale_user) are environment constants in group_vars/test.yml;
 # the pre-auth key is minted on-the-fly by main.yml at registration. Only the

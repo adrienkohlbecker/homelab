@@ -1,0 +1,77 @@
+#jinja2: lstrip_blocks: True
+# Managed by ansible (roles/gitlab_runner) -- do not edit on the host.
+#
+# GitLab Runner manager config: the `instance` executor + the fleeting
+# autoscaler driving ephemeral Hetzner Cloud servers via
+# fleeting-plugin-hetzner. This host holds NO job payloads -- it only talks to
+# gitlab.com and provisions/SSHes into the scale-from-zero fleet.
+{% set _name = inventory_hostname ~ '-hetzner' %}
+# Global ceiling = per-instance capacity * the instance cap. Tune
+# gitlab_runner_capacity_per_instance to the chosen server type's RAM (a qemu
+# cell wants ~4 GB, so e.g. ~3 on a 16 GB cpx41).
+concurrent = {{ gitlab_runner_capacity_per_instance * gitlab_runner_max_instances }}
+check_interval = 3
+# Graceful-shutdown drain: on SIGQUIT (systemctl stop/restart) the manager stops
+# claiming jobs and waits up to this many seconds for in-flight fleet jobs to
+# finish before force-exiting. The default is 30s -- far too short to wind a CI
+# job down -- so hold it ~30 min, enough to cover the longest jobs (packer
+# builds). The unit's TimeoutStopSec=infinity defers to this bound so systemd
+# never SIGKILLs mid-drain.
+shutdown_timeout = 1800
+# Prometheus metrics + pprof, loopback-only (fox's netdata go.d prometheus
+# collector scrapes it). Unauthenticated -- never the public surface.
+listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
+
+[[runners]]
+  name = "{{ _name }}"
+  url = "https://gitlab.com"
+  # glrt- authentication token from creating the runner in the GitLab project
+  # (Settings -> CI/CD -> Runners -> New project runner). Vaulted in host_vars.
+  token = "{{ gitlab_runner_token }}"
+  executor = "instance"
+
+  # Jobs run as a shell directly on the ephemeral VM -- /dev/kvm is native, no
+  # container-in-container, and the repo clone lands in ~/builds ON THE VM (not
+  # on this manager). The VM image must carry the job toolchain (git, the
+  # qemu/packer deps): point gitlab_runner_image at the baked worker snapshot.
+  [runners.instance]
+    allowed_images = ["*"]
+
+  [runners.autoscaler]
+    # PATH-resolved binary name (host-native install at /usr/local/bin), NOT the
+    # `name:version` OCI form -- that would make gitlab-runner re-download the
+    # plugin via `fleeting install` instead of using the pinned, sha256-checked
+    # binary from vars/main.yml.
+    plugin = "fleeting-plugin-hetzner"
+    capacity_per_instance = {{ gitlab_runner_capacity_per_instance }}
+    # Reuse a warm instance for many jobs (0 = unlimited) rather than per-job
+    # ephemeral; it self-deletes after the idle window below.
+    max_use_count = 0
+    max_instances = {{ gitlab_runner_max_instances }}
+    # Block the first job until cloud-init finishes (exit 2 == disabled, OK).
+    instance_ready_command = "cloud-init status --wait || test $? -eq 2"
+
+    [runners.autoscaler.plugin_config]
+      name = "{{ _name }}"
+      # Project-scoped Hetzner Cloud API token for the DEDICATED CI project --
+      # blast radius must not reach fox/home. Vaulted in host_vars; the plugin
+      # also honours $HCLOUD_TOKEN, but keeping it in-config holds both secrets
+      # in the one 0600 file.
+      token = "{{ gitlab_runner_hcloud_token }}"
+      location = "{{ gitlab_runner_location }}"
+      server_type = "{{ gitlab_runner_server_type }}"
+      image = "{{ gitlab_runner_image }}"
+
+    [runners.autoscaler.connector_config]
+      username = "root"
+      # fox is not in the CI project's private network, so reach instances on
+      # their public address. The plugin injects an ephemeral SSH key per
+      # instance -- no static credential to manage here.
+      use_external_addr = true
+
+    [[runners.autoscaler.policy]]
+      # Scale-to-zero when idle (no always-on bill); a burst spins up to
+      # max_instances and each lingers 30m after its last job (the warm window)
+      # before the plugin deletes it.
+      idle_count = 0
+      idle_time = "30m"
