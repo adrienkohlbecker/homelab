@@ -1,0 +1,8 @@
+- name: _setup | Ensure /mnt/scratch exists
+  file:
+    path: /mnt/scratch
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true

@@ -16,6 +16,23 @@
     system: true
   become: true
 
+# homelab_ci is created by the homelab_ci role (runs before github_runner
+# in site.yml); synthesize it here so the standalone test fixture has it.
+- name: _setup | Synthesize homelab_ci group
+  group:
+    name: homelab_ci
+    state: present
+    system: true
+  become: true
+
+- name: _setup | Ensure /mnt/scratch/homelab_ci exists for the github_runner owner task
+  file:
+    path: /mnt/scratch/homelab_ci
+    state: directory
+    group: homelab_ci
+    mode: "02775"
+  become: true
+
 # Apply subid with the same shape prod uses: a base 65536 range plus a
 # 1-count range for the kvm gid. CLAUDE.md "Why the literal `1`" calls
 # out that rootless podman builds the container gidmap shortest-range-

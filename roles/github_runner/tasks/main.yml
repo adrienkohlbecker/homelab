@@ -96,7 +96,7 @@
       # design. Suppress the helper's default config-dir creation.
       config_dir: false
       home_mode: "0755"
-      extra_groups: [ kvm ]
+      extra_groups: [ kvm, homelab_ci ]
   tags:
     - github_runner
 
@@ -128,19 +128,15 @@
   tags:
     - github_runner
 
-# Both the CI runner (github_runner) and the operator (ak, in the kvm group)
-# need to write here: CI publishes packer artifacts; ak runs packer:build locally.
-# Both are in the kvm group, so kvm group-write avoids adding ak to the
-# github_runner group (which would grant broader access to runner state).
-# setgid (02775) ensures files created by either user inherit the kvm group;
-# build.sh/seed-deps.sh set umask 002 so new files also get group-write.
-- name: Create /mnt/scratch/homelab_ci packer artifacts dir
+# Directory and ACL are created by the homelab_ci role; this task just ensures
+# the owner is github_runner so the runner process can manage its artifacts.
+- name: Set /mnt/scratch/homelab_ci owner to github_runner
   when: not (ansible_check_mode and github_runner_user.changed)
   file:
     path: /mnt/scratch/homelab_ci
     state: directory
     owner: github_runner
-    group: kvm
+    group: homelab_ci
     mode: "02775"
   become: true
   tags:

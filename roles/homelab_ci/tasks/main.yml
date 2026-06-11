@@ -1,0 +1,44 @@
+- name: Create homelab_ci group
+  group:
+    name: homelab_ci
+    state: present
+    system: true
+  become: true
+  tags:
+    - homelab_ci
+
+- name: Install acl package
+  apt:
+    name: acl
+    state: present
+  become: true
+  tags:
+    - homelab_ci
+
+# Both CI (github_runner) and the operator (ak, in homelab_ci group) write
+# here: CI publishes packer artifacts; ak runs packer:build locally.
+# Owner is set to github_runner by that role. The default ACL propagates
+# homelab_ci:rw to all new files and subdirectories -- including
+# packer-plugin-qemu's port reservation files (hardcoded 0600 by the
+# plugin) so either user can open them regardless of who created them.
+- name: Create /mnt/scratch/homelab_ci packer artifacts dir
+  file:
+    path: /mnt/scratch/homelab_ci
+    state: directory
+    group: homelab_ci
+    mode: "02775"
+  become: true
+  tags:
+    - homelab_ci
+
+- name: Set default homelab_ci:rw ACL on homelab_ci
+  ansible.posix.acl:
+    path: /mnt/scratch/homelab_ci
+    entity: homelab_ci
+    etype: group
+    permissions: rw
+    default: true
+    state: present
+  become: true
+  tags:
+    - homelab_ci
