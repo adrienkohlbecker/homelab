@@ -110,6 +110,7 @@
     - plex
     - tautulli
     - gitea
+    - homelab_ci
     - github_runner
     - transmission
     - getmail

@@ -1,0 +1,30 @@
+- name: _verify | Group homelab_ci exists
+  command:
+    argv:
+      - getent
+      - group
+      - homelab_ci
+  changed_when: false
+  become: true
+
+- name: _verify | CI artifacts dir exists with homelab_ci group and setgid
+  stat:
+    path: /mnt/scratch/homelab_ci
+  register: homelab_ci_verify_dir
+  become: true
+  failed_when: >-
+    not homelab_ci_verify_dir.stat.exists
+    or not homelab_ci_verify_dir.stat.isdir
+    or homelab_ci_verify_dir.stat.gr_name != 'homelab_ci'
+    or not homelab_ci_verify_dir.stat.sgid
+
+- name: _verify | CI artifacts dir has default homelab_ci:rw ACL
+  command:
+    argv:
+      - getfacl
+      - --omit-header
+      - /mnt/scratch/homelab_ci
+  register: homelab_ci_verify_acl
+  changed_when: false
+  failed_when: "'default:group:homelab_ci:rw' not in homelab_ci_verify_acl.stdout"
+  become: true

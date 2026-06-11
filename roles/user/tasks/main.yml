@@ -81,13 +81,15 @@
 # so membership lets the operator tail logs over SSH without sudo -- the
 # diagnostic reads CLAUDE.md treats as pre-authorized. kvm owns /dev/kvm,
 # so membership lets the operator boot qemu VMs (test harness, ad-hoc libvirt)
-# without sudo. append is load-bearing: without it `groups:` replaces the
-# supplementary set and would strip sudo.
+# without sudo. homelab_ci gives read/write access to the shared CI artifacts
+# dir and its default ACL (packer artifacts, port reservation files). append
+# is load-bearing: without it `groups:` replaces the supplementary set and
+# would strip sudo.
 - name: Set login shell and supplementary groups
   user:
     name: "{{ ansible_user_id }}"
     shell: /bin/zsh
-    groups: [ adm, kvm ]
+    groups: [ adm, kvm, homelab_ci ]
     append: true
   become: true
   tags:
