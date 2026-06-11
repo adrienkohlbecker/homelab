@@ -1,0 +1,15 @@
+# This is a configuration file for /etc/init.d/chrony and
+# /lib/systemd/system/chrony.service; it allows you to pass various options to
+# the chrony daemon without editing the init script or service file.
+
+# Options to pass to chrony.
+# -4 forces NTS-KE and NTP over IPv4: fox has working IPv6 routing, but
+# outbound NTS-KE TCP/4460 over IPv6 times out to all configured NTS
+# providers, and chronyd waits through repeated IPv6 failures before falling
+# back to IPv4, delaying authenticated time sync for over an hour after boot.
+# Keep NTS required, but resolve and connect over IPv4.
+DAEMON_OPTS="-F 1 -4"
+
+# Sync system clock in containers or without CAP_SYS_TIME (likely to fail)
+# See /usr/share/doc/chrony/README.container for details.
+SYNC_IN_CONTAINER="no"
