@@ -81,6 +81,10 @@ HA_API_TOKEN = "op://Lab/pfcoggyhvncfnr6rt6p5zbnuja/password"
 CHECKPOINT_DISABLE = "1"
 
 [tools]
+# The test harness's EC2 backend (test/machine.py) shells out to the aws CLI
+# for every cell operation — deliberately no boto3 in uv.lock
+# (notes/ci_aws_test_cells.md, "Shape").
+awscli = "2.35.2"
 opentofu = "1.11.6"
 packer = "1.15.3"
 python = "3.14"
