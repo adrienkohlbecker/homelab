@@ -64,9 +64,13 @@
   become: true
 
 - name: _setup | Symlink fixture disk to a stable by-id path
+  # macos_vm_qemu_test_disk_id, not macos_vm_disk_id: main.yml set_facts the
+  # latter from the former under qemu_test, but _setup runs as a separate
+  # harness invocation that never sees that set_fact — here macos_vm_disk_id
+  # is still the empty default and the dest would degrade to /dev/disk/by-id/.
   file:
     src: "{{ macos_vm_test_loop.content | b64decode | trim }}"
-    dest: "/dev/disk/by-id/{{ macos_vm_disk_id }}"
+    dest: "/dev/disk/by-id/{{ macos_vm_qemu_test_disk_id }}"
     state: link
     force: true
   become: true
