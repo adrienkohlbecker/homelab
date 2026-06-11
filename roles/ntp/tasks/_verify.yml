@@ -26,7 +26,7 @@
 - name: _verify | Chronyd runs IPv4-only for NTS-KE
   assert:
     that:
-      - ntp_verify_chronyd_process.stdout is search('(^| )chronyd .* -4( |$)')
+      - ntp_verify_chronyd_process.stdout is search('/chronyd .* -4( |$)')
     fail_msg: >-
       chronyd is not running with -4, so broken IPv6 NTS-KE can delay
       authenticated sync (processes: {{ ntp_verify_chronyd_process.stdout_lines }})
