@@ -59,6 +59,20 @@ wipe_disk() {
   sgdisk --zap-all "$1"
 }
 
+# Map (disk, partition number) to the kernel partition device. Same
+# table as provision.sh's partdev: vd*/sd*/hd* concatenate the digit,
+# nvme/mmcblk/loop/md need a 'p' separator (the AWS ebssurrogate build
+# instance exposes EBS volumes as /dev/nvme*n1), by-id symlinks use
+# '-partN'.
+partdev() {
+  local disk="$1" n="$2"
+  case "$disk" in
+  /dev/disk/by-id/*) echo "${disk}-part${n}" ;;
+  /dev/nvme[0-9]*n[0-9]* | /dev/mmcblk[0-9]* | /dev/loop[0-9]* | /dev/md[0-9]*) echo "${disk}p${n}" ;;
+  *) echo "${disk}${n}" ;;
+  esac
+}
+
 # Defaults applied to every pool. -O exec= intentionally omitted
 # (default exec=on) because rootless-container bind-mounts inherit
 # the source mount's noexec flag, which surfaces as EACCES on execve
@@ -119,11 +133,11 @@ create_tank_mouse() {
     # autotrim=on matches lab prod (and the zfs role asserts it via
     # zfs_pool_properties); mouse below stays at the default off.
     zpool create -f -o autotrim=on "${ZPOOL_OPTS[@]}" \
-      tank raidz2 "${tm1}1" "${tm2}1" "$tank3" "$tank4"
+      tank raidz2 "$(partdev "$tm1" 1)" "$(partdev "$tm2" 1)" "$tank3" "$tank4"
   fi
   if ! zpool list -H mouse >/dev/null 2>&1; then
     zpool create -f -o autotrim=off "${ZPOOL_OPTS[@]}" \
-      mouse mirror "${tm1}2" "${tm2}2"
+      mouse mirror "$(partdev "$tm1" 2)" "$(partdev "$tm2" 2)"
   fi
 }
 
