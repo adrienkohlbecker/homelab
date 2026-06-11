@@ -32,6 +32,24 @@
       authenticated sync (processes: {{ ntp_verify_chronyd_process.stdout_lines }})
     success_msg: chronyd is running with -4 for IPv4-only NTS-KE
 
+# The -4 above rides DAEMON_OPTS in the diverted /etc/default/chrony; a
+# chrony.service.d override would silently shadow or fight it (Environment=
+# loses to EnvironmentFile=, ExecStart= replaces the wrapper line), so the
+# role guarantees none exists.
+- name: _verify | Stat the chrony drop-in directory
+  stat:
+    path: /etc/systemd/system/chrony.service.d
+  register: ntp_verify_dropin_dir
+  become: true
+
+- name: _verify | No drop-in shadows the chrony unit
+  assert:
+    that: not ntp_verify_dropin_dir.stat.exists
+    fail_msg: >-
+      /etc/systemd/system/chrony.service.d exists; a drop-in there can
+      silently override the DAEMON_OPTS delivered via /etc/default/chrony
+    success_msg: no chrony.service.d drop-in present
+
 - name: _verify | Read the running chrony.conf
   slurp:
     src: /etc/chrony/chrony.conf
