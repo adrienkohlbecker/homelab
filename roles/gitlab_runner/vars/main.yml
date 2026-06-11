@@ -1,5 +1,5 @@
-# Pinned binaries. Both are single static Go executables installed straight
-# into /usr/local/bin (no apt repo, no container). Bumping = edit the version
+# Pinned binary: a single static Go executable installed straight into
+# /usr/local/bin (no apt repo, no container). Bumping = edit the version
 # constant plus the URL and sha256 for every arch in lockstep, then re-apply;
 # the unit's next restart picks up the new binary.
 #
@@ -8,8 +8,6 @@
 # pins. ansible_architecture (x86_64 / aarch64) keys map onto upstream's
 # amd64 / arm64 asset names. The sha256s were computed from the published
 # binaries on 2026-06-10.
-
-# GitLab Runner manager. Drives the instance executor + fleeting autoscaler.
 gitlab_runner_version: "19.0.1"
 gitlab_runner_archive:
   x86_64:
@@ -18,15 +16,3 @@ gitlab_runner_archive:
   aarch64:
     url: "https://gitlab-runner-downloads.s3.amazonaws.com/v19.0.1/binaries/gitlab-runner-linux-arm64"
     sha256: "fd2d07bf3ee40b495cf0affa46257407dbba9c18e46d6a91001dee938d8b10ac"
-
-# fleeting-plugin-hetzner: Hetzner-developed/-supported fleeting plugin the
-# autoscaler shells out to (resolved by name from $PATH -- see config.toml.j2).
-# Distributed as generic-package assets on gitlab.com (project id 54767125).
-gitlab_runner_fleeting_hetzner_version: "1.4.4"
-gitlab_runner_fleeting_hetzner_archive:
-  x86_64:
-    url: "https://gitlab.com/api/v4/projects/54767125/packages/generic/releases/v1.4.4/fleeting-plugin-hetzner-linux-amd64"
-    sha256: "9741cd21e9a031502f71525200c68b76acfd3a7bd6502c4d32dccfd5c731ab98"
-  aarch64:
-    url: "https://gitlab.com/api/v4/projects/54767125/packages/generic/releases/v1.4.4/fleeting-plugin-hetzner-linux-arm64"
-    sha256: "0d45d35984168ef2a7bee6cf497424765d903e418f9aff9015cc79ad1b8c26e1"

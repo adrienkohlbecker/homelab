@@ -61,6 +61,11 @@
   roles:
     - headscale
     - fail2ban
+    # subid before gitlab_runner: the runner's rootless podman (Docker
+    # executor socket) needs gitlab_runner's subordinate-id range rendered
+    # first. box gets subid again in the Lab and Pug play below — idempotent,
+    # same host_vars source.
+    - subid
     - gitlab_runner
 
 - name: Lab and Pug

@@ -38,7 +38,7 @@ jobs:
     autodetection_retry: 60
 {% if gitlab_runner_enabled | default(false) %}
 
-  # gitlab_runner runs on the host fronting the fleeting autoscaler (fox).
+  # gitlab_runner runs on the host orchestrating the AWS test cells (fox).
   # Loopback scrape of the unauthenticated metrics listener (config.toml
   # listen_address). Rendered only where the runner is enabled; list it in that
   # host's netdata_collectors so the presence alert doubles as a liveness signal.

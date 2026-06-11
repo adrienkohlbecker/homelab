@@ -1,78 +1,40 @@
-# GitLab Runner manager (host-native binary; instance executor + fleeting
-# autoscaler -> Hetzner Cloud). Runs on fox (the only internet-facing host; the
-# manager holds no job payloads, so a token-on-the-manager beats a
-# token-on-the-worker) and on box as the CI fixture. Gated on
-# gitlab_runner_enabled.
+# GitLab Runner (host-native binary; Docker executor against the runner
+# user's rootless podman socket). Runs on fox — the orchestration point for
+# the AWS test cells (notes/ci_aws_test_cells.md): jobs run
+# `testrole.py <role> --backend aws` inside the project CI image and drive
+# EC2 from there, so the heavy lifting never happens on fox itself. box is
+# the CI fixture. Gated on gitlab_runner_enabled.
+#
+# The Docker executor keeps branch code inside a job container rather than
+# running it directly as the runner user. The runner still holds podman
+# socket access to start those containers, so this is not a
+# hostile-multi-tenant boundary — the runner is locked to this project and
+# every pipeline is operator-authored.
 #
 # No nginx vhost and no homepage bookmark on purpose: this service exposes no
 # operator-facing HTTP surface. The runner UI is gitlab.com itself; the only
 # local listener is the loopback Prometheus metrics endpoint (for netdata).
-#
-# Accepted risk: the fleeting SSH connector does no host-key verification
-# (ssh.InsecureIgnoreHostKey upstream) and workers are reached over their
-# public addresses, so an on-path attacker between this host and Hetzner could
-# impersonate a fresh worker and harvest the job payload + CI tokens. On-path
-# positioning is outside the homelab threat model; revisit (private network +
-# use_external_addr=false) if that changes.
-- name: GitLab Runner manager
+- name: GitLab Runner
   when: gitlab_runner_enabled | default(false)
   tags:
     - gitlab_runner
   block:
-    # Required inputs live in host_vars and the role asserts them (CLAUDE.md).
-    # Both render straight into config.toml, so an unset value would boot a
-    # runner that silently fails to register / can't reach Hetzner -- catch it
-    # loudly here instead. Non-empty, not just defined: a mistyped vault key
-    # renders to "" which passes `is defined`.
-    - name: Assert required gitlab_runner secrets are set
+    # Required input lives in host_vars and the role asserts it (CLAUDE.md).
+    # It renders straight into config.toml, so an unset value would boot a
+    # runner that silently fails to register -- catch it loudly here instead.
+    # Non-empty, not just defined: a mistyped vault key renders to "" which
+    # passes `is defined`.
+    - name: Assert the required gitlab_runner secret is set
       assert:
         that:
           - gitlab_runner_token | default('') | length > 0
-          - gitlab_runner_hcloud_token | default('') | length > 0
         fail_msg: >-
-          gitlab_runner_enabled is true but gitlab_runner_token and/or
-          gitlab_runner_hcloud_token is unset for {{ inventory_hostname }}.
-          Create a project runner on gitlab.com (-> glrt- auth token) and a
-          project-scoped Hetzner Cloud API token for the dedicated CI project,
-          then vault both into host_vars/{{ inventory_hostname }}.yml.
-
-    # The fleeting plugin resolves `image` by name or id only and Hetzner
-    # snapshots have no name, so the rendered value must be a numeric snapshot
-    # id -- which would go stale on every worker rebake if pinned by hand.
-    # Resolve the newest matching snapshot here instead, so a converge always
-    # renders the current bake; between converges the refresh timer below
-    # adopts new bakes the same way. Skipped under qemu (no API, no fleet
-    # ever boots): the template falls back to a stock image name there.
-    # check_mode false: a read-only GET, and running it keeps a --check diff
-    # faithful to what a real converge would render.
-    - name: Resolve the newest CI worker snapshot from the Hetzner API
-      when: not qemu_test
-      check_mode: false
-      uri:
-        url: >-
-          https://api.hetzner.cloud/v1/images?type=snapshot&status=available&label_selector={{
-          gitlab_runner_image_selector | urlencode }}&sort=created:desc&per_page=1
-        headers:
-          Authorization: "Bearer {{ gitlab_runner_hcloud_token }}"
-        return_content: true
-      register: gitlab_runner_image_lookup
-
-    - name: Assert the worker image selector matched a snapshot
-      when: not qemu_test
-      assert:
-        that:
-          - gitlab_runner_image_lookup.json.images | length > 0
-        fail_msg: >-
-          No available Hetzner snapshot matches
-          {{ gitlab_runner_image_selector }} in the CI project. The instance
-          executor runs each job as a shell ON the fleet VM, so the image must
-          be a baked role=ci-worker snapshot -- build one with
-          `mise run packer:worker`.
-
-    - name: Pin the resolved worker image for this converge
-      when: not qemu_test
-      set_fact:
-        gitlab_runner_resolved_image: "{{ gitlab_runner_image_lookup.json.images[0].id }}"
+          gitlab_runner_enabled is true but gitlab_runner_token is unset for
+          {{ inventory_hostname }}. Create a project runner on gitlab.com
+          (Settings -> CI/CD -> Runners -> New project runner) with the
+          fox-docker-aws tag, run-untagged off, locked to the project, and
+          protected; then vault the glrt- token into
+          host_vars/{{ inventory_hostname }}.yml.
 
     - name: Set up gitlab_runner system user, group, and config dir
       import_role:
@@ -81,6 +43,12 @@
       vars:
         service_user_args:
           name: gitlab_runner
+          # Real passwd home (the unit's Environment=HOME matches): the
+          # user-scope `systemctl enable podman.socket` below writes
+          # ~/.config/systemd/user/, which fails against the /nonexistent
+          # sentinel. The config-dir task creates the directory; createhome
+          # stays off so useradd doesn't race it.
+          home: /mnt/services/gitlab_runner
 
     # python3-tomli backs the config.toml validate below where stdlib tomllib is
     # absent (it landed in 3.11; jammy/22.04 ships 3.10). Gate on the Ubuntu
@@ -110,25 +78,56 @@
       become: true
       register: gitlab_runner_binary
 
-    - name: Download fleeting-plugin-hetzner binary
-      when: not (ansible_check_mode and gitlab_runner_user.changed)
-      get_url:
-        url: "{{ gitlab_runner_fleeting_hetzner_archive[ansible_architecture].url }}"
-        dest: /usr/local/bin/fleeting-plugin-hetzner
-        checksum: "sha256:{{ gitlab_runner_fleeting_hetzner_archive[ansible_architecture].sha256 }}"
-        owner: root
-        group: root
-        mode: "0755"
-        backup: true
-      become: true
-      register: gitlab_runner_fleeting_binary
+    # Linger so rootless podman has a user systemd manager up at all times:
+    # crun makes sd-bus calls when creating containers, which fail with
+    # "Permission denied" without one. The helper enables linger and waits
+    # for user@<uid>.service (which provides the dbus + cgroup hierarchy
+    # crun expects) so the socket tasks below find a live bus. Same shape as
+    # roles/github_runner -- rootless podman is the one accepted user-scope
+    # exception (CLAUDE.md "Prefer system-scope systemd units").
+    #
+    # Prerequisite: the subid role must have rendered a subordinate-id range
+    # for gitlab_runner (site.yml orders it before this role; host_vars list
+    # the user). Without it the first job container fails uid-mapping.
+    - name: Turn on linger
+      import_role:
+        name: linger
+        tasks_from: linger
+      vars:
+        linger_args:
+          name: gitlab_runner
+          uid: "{{ gitlab_runner_user.uid }}"
 
-    # 0600 + owned by the runner: holds both the glrt- runner token and the
-    # hcloud API token. validate parses the rendered TOML (gitlab-runner falls
-    # back to defaults on a parse error, so catch typos here). A bare TOML
-    # parse is the best validate available: `gitlab-runner verify` is a live
-    # server check (dials gitlab.com with the configured token), not an
-    # offline lint -- upstream ships none.
+    # The Docker executor dials this socket (config.toml [runners.docker]
+    # host); socket-activated, so the podman service itself only runs while
+    # jobs do. Storage rides the podman role's system config
+    # (rootless_storage_path on the /var/lib/containers zvol -- overlay on
+    # ext4, not ZFS); no per-user storage.conf needed since jobs are plain
+    # containers (no uidmapped siblings, unlike github_runner).
+    - name: Enable rootless podman socket
+      when: not (ansible_check_mode and (gitlab_runner_user.changed or gitlab_runner_lingered))
+      systemd:
+        name: podman.socket
+        enabled: true
+        scope: user
+      become: true
+      become_user: gitlab_runner
+
+    - name: Start rootless podman socket
+      when: not (ansible_check_mode and (gitlab_runner_user.changed or gitlab_runner_lingered))
+      systemd:
+        name: podman.socket
+        state: started
+        scope: user
+      become: true
+      become_user: gitlab_runner
+
+    # 0600 + owned by the runner: holds the glrt- runner token. validate
+    # parses the rendered TOML (gitlab-runner falls back to defaults on a
+    # parse error, so catch typos here). A bare TOML parse is the best
+    # validate available: `gitlab-runner verify` is a live server check
+    # (dials gitlab.com with the configured token), not an offline lint --
+    # upstream ships none.
     - name: Render gitlab-runner config.toml
       when: not (ansible_check_mode and gitlab_runner_user.changed)
       template:
@@ -141,53 +140,6 @@
         validate: python3 -c 'import {{ "tomllib" if ansible_distribution_version is version("24.04", ">=") else "tomli" }} as t, sys; t.load(open(sys.argv[1], "rb"))' %s
       become: true
 
-    # Service code from the repo lives at /opt/<svc>; state stays under
-    # /mnt/services/<svc> (CLAUDE.md).
-    - name: Create /opt/gitlab_runner
-      file:
-        path: /opt/gitlab_runner
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-      become: true
-
-    - name: Install the worker image refresh script
-      copy:
-        src: update_worker_image.py
-        dest: /opt/gitlab_runner/update_worker_image.py
-        owner: root
-        group: root
-        mode: "0755"
-        backup: true
-        validate: python3 -m py_compile %s
-      become: true
-
-    # Between converges, adopt freshly-baked worker snapshots with no commit
-    # and no converge: the script resolves the newest snapshot matching
-    # gitlab_runner_image_selector and rewrites config.toml's image line in
-    # place; gitlab-runner hot-reloads the file within seconds. run_as the
-    # service user: the config is 0600 gitlab_runner-owned and the script
-    # needs nothing more. Under qemu the placeholder token makes every fire
-    # fail loudly without touching the config -- harmless on a throwaway
-    # fixture; _verify exercises the script end-to-end against a local API
-    # stub instead.
-    - name: Install gitlab_runner_image_refresh timer
-      import_role:
-        name: systemd_timer
-        tasks_from: install
-      vars:
-        systemd_timer_args:
-          name: gitlab_runner_image_refresh
-          description: Adopt the newest CI worker snapshot into gitlab-runner config
-          on_calendar: "*:0/15"
-          exec_start: >-
-            /usr/bin/python3 /opt/gitlab_runner/update_worker_image.py
-            --config /mnt/services/gitlab_runner/config.toml
-            --selector {{ gitlab_runner_image_selector }}
-          run_as: gitlab_runner
-          condition: "{{ not (ansible_check_mode and gitlab_runner_user.changed) }}"
-
     - name: Install gitlab_runner.service
       import_role:
         name: systemd_unit
@@ -197,10 +149,9 @@
           src: gitlab_runner.service.j2
           condition: "{{ not (ansible_check_mode and gitlab_runner_user.changed) }}"
 
-    # Live registration needs a real gitlab.com runner token and a real Hetzner
-    # project token to init the fleeting plugin -- neither exists in the qemu
-    # harness, so enable-only under qemu_test and let _verify exercise the
-    # host-side artifacts. Prod (fox) starts the manager for real. restart
+    # Live registration needs a real gitlab.com runner token -- none exists in
+    # the qemu harness, so enable-only under qemu_test and let _verify exercise
+    # the host-side artifacts. Prod (fox) starts the runner for real. restart
     # propagates a unit or binary change only -- NOT a config change:
     # gitlab-runner hot-reloads config.toml every 3s, and the one rendered
     # setting that genuinely needs a restart (listen_address) comes from the
@@ -216,6 +167,5 @@
           start: "{{ not qemu_test }}"
           restart: >-
             {{ gitlab_runner_service_result.changed
-               or gitlab_runner_binary.changed
-               or gitlab_runner_fleeting_binary.changed }}
+               or gitlab_runner_binary.changed }}
           condition: "{{ not (ansible_check_mode and (gitlab_runner_service_result.changed or gitlab_runner_user.changed)) }}"

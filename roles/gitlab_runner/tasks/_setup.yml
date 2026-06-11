@@ -1,0 +1,24 @@
+# Test-harness setup for roles/gitlab_runner. The runner is a host-native
+# binary whose Docker executor needs gitlab_runner's rootless podman stack;
+# this brings up the two prerequisites the role assumes site.yml provides
+# on prod (subid ranges, the podman storage layout).
+
+# Subordinate-id range for gitlab_runner's rootless podman. On prod the
+# subid role runs earlier in site.yml with the user listed in host_vars;
+# the standalone fixture applies it here.
+- name: _setup | Apply subid role for gitlab_runner
+  import_role:
+    name: subid
+  vars:
+    subid_users:
+      - gitlab_runner
+
+# Run the podman role's install.yml so the test VM gets the same storage
+# layout prod does: rpool/podman zvol mounted at /var/lib/containers,
+# /var/lib/containers/rootless with sticky-bit perms, the system
+# storage.conf with the right graphroot. Additive on box_deps (which
+# pre-bakes podman) and the full install path on a plain fixture.
+- name: _setup | Install podman with prod-shape storage layout
+  import_role:
+    name: podman
+    tasks_from: install

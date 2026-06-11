@@ -133,8 +133,14 @@ netdata_collectors:
   - go.d:collector:wireguard:wireguard
   - go.d:collector:x509check:host_cert
   - go.d:collector:prometheus:headscale
-  # Doubles as a manager liveness signal: the presence alert fires if the
+  # Doubles as a runner liveness signal: the presence alert fires if the
   # gitlab_runner scrape goes missing (its config.toml metrics endpoint dies).
   - go.d:collector:prometheus:gitlab_runner
 netdata_zfspool_thresholds: {}
 netdata_diskspace_blocklist: []
+
+# gitlab_runner's rootless podman (the Docker executor socket) needs a
+# subordinate-id range; the subid role runs just before gitlab_runner in the
+# fox play (site.yml).
+subid_users:
+  - gitlab_runner

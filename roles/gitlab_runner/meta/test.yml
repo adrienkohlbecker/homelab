@@ -1,15 +1,15 @@
-# Host-native (no podman/nginx), so the plain box fixture is enough -- no need
-# for box_deps' pre-baked container stack. The instance executor + fleeting
-# autoscaler can't reach gitlab.com / Hetzner in the harness, so the role
-# enable-onlys under qemu_test and _verify exercises the host-side artifacts
-# (binaries run, config.toml valid, unit smoke-starts). Live scale-from-zero is
-# the gate-1 benchmark on a real instance, outside CI.
+# The Docker executor needs gitlab_runner's rootless podman stack, so
+# _setup.yml imports podman/install (and subid); box_deps pre-bakes the
+# podman backports + install, saving ~140s per run. The runner itself can't
+# register in the harness (no gitlab.com token), so the role enable-onlys
+# under qemu_test and _verify exercises the host-side artifacts (binary
+# runs, rootless socket serves, config.toml valid, unit smoke-starts).
 machines:
-  box:
+  box_deps:
 
-# Release-divergent: the config.toml validate and update_worker_image.py both
-# import tomllib on >= 24.04 and the tomli backport below it (jammy ships
-# python 3.10, no tomllib); the default cell is jammy, so a noble cell
-# exercises the tomllib branch -- the one a noble-based prod host would take.
+# Release-divergent: the config.toml validate imports tomllib on >= 24.04 and
+# the tomli backport below it (jammy ships python 3.10, no tomllib); the
+# default cell is jammy, so a noble cell exercises the tomllib branch -- the
+# one a noble-based prod host would take.
 ubuntu:
   - noble
