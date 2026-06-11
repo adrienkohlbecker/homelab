@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import contextlib
 import csv
+import os
 import signal
 import sys
 import time
@@ -472,6 +473,17 @@ def main() -> int:
 
     if args.jobs < 1:
         print("Error: --jobs must be at least 1", file=sys.stderr)
+        return 1
+
+    # Batch AWS runs aren't supported yet: the GitLab child pipeline fans out
+    # one job per cell instead (notes/ci_aws_test_cells.md). Refuse loudly
+    # rather than letting the env default leak into every child testrole.py.
+    if os.environ.get("HOMELAB_TEST_BACKEND", "qemu") != "qemu" or "--backend" in args.role_args:
+        print(
+            "Error: testall.py only supports the qemu backend; "
+            "run testrole.py --backend aws per role, or let CI fan out cells",
+            file=sys.stderr,
+        )
         return 1
 
     conflicts = [a for a in args.role_args if a in TESTROLE_OWNED_FLAGS]
