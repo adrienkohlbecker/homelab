@@ -31,11 +31,16 @@
   command: mknod -m 0660 /dev/dri/renderD128 c 226 128
   args:
     creates: /dev/dri/renderD128
+  register: test_fake_render_device_mknod
   become: true
 
 # mknod -m set the mode atomically at creation (no default-mode window); mknod
-# can't set the group, so the file module owns that.
+# can't set the group, so the file module owns that. Check mode never runs the
+# mknod (creates: only predicts it), so gate the chgrp on the device actually
+# existing — jellyfin imports this from converge, which the harness also runs
+# under --check.
 - name: fake_render_device | Set device group
+  when: not (ansible_check_mode and test_fake_render_device_mknod.changed)
   file:
     path: /dev/dri/renderD128
     owner: root
