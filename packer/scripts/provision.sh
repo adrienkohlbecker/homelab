@@ -45,6 +45,12 @@ DISKS_COUNT=$(wc -w <<<"$DISKS")
 export HOSTNAME=ubuntu
 export USERNAME=vagrant
 
+# Directory holding the sibling scripts (chroot.sh, pools.sh). The qemu
+# build VM's packer file-provisioner lands them in /home/vagrant; the AWS
+# ebssurrogate build VM logs in as ubuntu and its wrapper exports the
+# right home (packer/scripts/aws_provision.sh).
+SCRIPTS_DIR="${SCRIPTS_DIR:-/home/vagrant}"
+
 # Map (disk, partition number) to the kernel/udev partition device.
 # vd*/sd*/hd* tack the digit on directly; nvme/mmcblk/loop/md need a
 # 'p' separator; /dev/disk/by-id symlinks use '-partN'. Passing
@@ -327,14 +333,14 @@ cp /etc/hostid /mnt/etc
 # vars must be exported explicitly. DISKS rides as a space-delimited
 # string (not a bash array, which bash refuses to put in env); chroot.sh
 # consumes it the same way via unquoted `for d in $DISKS` word-splitting.
-unshare --mount --propagation private arch-chroot /mnt bash </home/vagrant/chroot.sh
+unshare --mount --propagation private arch-chroot /mnt bash <"$SCRIPTS_DIR/chroot.sh"
 
 # Create the non-rpool ZFS pools requested by the variant (apoc/dozer/
 # tank/mouse). Runs while /mnt is still rpool's root so pools.sh can
 # copy /etc/zfs/zpool.cache into the shipped install -- without that,
 # zfs-import-cache.service on first boot has nothing to import and the
 # pools are present on disk but unmounted.
-bash /home/vagrant/pools.sh
+bash "$SCRIPTS_DIR/pools.sh"
 
 # Only the rpool root dataset itself remains mounted in the host namespace.
 zfs unmount "rpool/ROOT/$UBUNTU_NAME"
