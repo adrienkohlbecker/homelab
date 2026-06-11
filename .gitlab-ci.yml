@@ -1,4 +1,4 @@
-# GitLab CI pipeline (Path B of notes/ci_ephemeral_hetzner_workers.md).
+# GitLab CI pipeline (notes/ci_aws_test_cells.md).
 #
 # Two runner pools:
 #   - gitlab.com hosted runners take the cheap stateless jobs (lint, unit
@@ -6,12 +6,12 @@
 #     makes the minutes effectively free. They can't reach the home network
 #     (so no nexus); they run in the project-registry ci image published by
 #     the ci_image job below.
-#   - the fox fleet (roles/gitlab_runner: `instance` executor +
-#     fleeting-plugin-hetzner, scale-to-zero Hetzner workers with the
-#     toolchain baked into the snapshot) takes the heavy jobs. Its runner is
-#     tag-only — fleet jobs carry `tags: [fox-fleeting-hetzner]`. First
-#     aboard: qemu_images below; still to come: the qemu role matrix, site
-#     test.
+#   - fox's Docker-executor runner (roles/gitlab_runner) takes the AWS-cell
+#     jobs: each runs in a CI-image container on fox and drives single-use
+#     EC2 spot instances over the aws CLI + SSH. The runner is tag-only —
+#     cell jobs carry `tags: [fox-docker-aws]`. First aboard: ami_images
+#     below; still to come: the role-test matrix as a dynamic child
+#     pipeline, site test.
 #
 # Migration in progress: the heavy jobs still run on GitHub Actions
 # (.github/workflows/).
@@ -133,18 +133,17 @@ ci_image:
 
 # Rebake of the pre-baked Hetzner Cloud CI worker snapshot (`mise run
 # packer:worker`: packer/hcloud_worker.pkr.hcl + provision_worker.sh, with
-# location fallback and old-snapshot pruning). Manual- and master-only, like
-# the hetzner-worker workflow it ports: packer only drives the Hetzner API
-# and SSHes into the build VM's public address, so a hosted runner
-# orchestrates it fine. The fox manager adopts the fresh snapshot on its own
-# within 15 minutes (the gitlab_runner_image_refresh timer resolves the
-# newest role=ci-worker snapshot and hot-reloads config.toml) — no converge,
-# no other step. Rollback from a bad bake: `hcloud image delete <id>`.
+# location fallback and old-snapshot pruning). Manual- and master-only:
+# packer only drives the Hetzner API and SSHes into the build VM's public
+# address, so a hosted runner orchestrates it fine. Nothing consumes the
+# snapshot since the fleeting fleet was retired for the AWS cells
+# (roles/gitlab_runner is a Docker executor now); this job is kept as the
+# fleet rollback path until gate D of notes/ci_aws_test_cells.md
+# decommissions the Hetzner CI project wholesale.
 #
 # Required CI/CD variable: HCLOUD_TOKEN — the DEDICATED homelab-ci project's
 # read/write token (terraform/hetzner_ci.tf), never the homelab project's:
-# the snapshot must land where the fleeting plugin's token can see it, and a
-# leak from CI must stop at the disposable fleet.
+# a leak from CI must stop at the disposable CI project.
 worker_image:
   extends: .hosted
   rules:
@@ -164,62 +163,47 @@ worker_image:
     - uv sync --locked
     - mise run packer:worker
 
-# Rebuild of the qemu test fixture images (the packer-images workflow's
-# cells, rebuilt for the fleet): one parallel job per (source, release)
-# cell, like the GH matrix. One job = one ~4 GiB build VM, so the runner's
-# capacity_per_instance slot accounting stays honest (a multi-source packer
-# invocation would fork 3 VMs from a single slot), and one cell's failure
-# can't tear down its siblings. box cells boot a second, sequential VM for
-# the box_deps seed. Runs ON a fleet worker — native /dev/kvm, the packer
-# plugin tree and ISO/cloud-image caches pre-baked by provision_worker.sh —
-# landing artifacts at /mnt/scratch/homelab_ci (HOMELAB_CI_DIR).
-#
-# The artifacts currently live and die with the ephemeral worker: where they
-# persist (worker re-snapshot, registry, R2 — the candidates in
-# notes/ci_ephemeral_hetzner_workers.md "Artifact storage") is deliberately
-# not decided yet. Until then this job validates the full build + seed path
-# on fleet hardware. The hetzner source (fox's boot image) is excluded, as
-# in the GH packer-images workflow: it publishes a main-project snapshot and
-# will get its own job.
-qemu_images:
+# Bake + promote the EC2 test-cell AMIs (notes/ci_aws_test_cells.md): one
+# parallel job per (machine, release) cell via the amazon-ebssurrogate
+# builder — no KVM anywhere, so this runs on fox's Docker-executor runner
+# (the job is an aws-CLI/packer orchestration loop; the build VM is an EC2
+# instance). Manual and protected-ref only: AWS auth is GitLab OIDC into the
+# bake role (terraform/aws_ci.tf), whose trust policy only accepts master —
+# branch pipelines cannot publish AMIs. The promote step moves the
+# /homelab-ci/ami/<machine>/<ubuntu> SSM parameter the harness resolves;
+# rollback is re-putting the previous value (ssm get-parameter-history).
+# resolute is absent until Canonical publishes a stable-channel AMI for it.
+ami_images:
   rules:
-    - when: manual
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+      when: manual
       # A skipped manual job must not hold the pipeline in "blocked".
       allow_failure: true
   tags:
-    - fox-fleeting-hetzner
+    - fox-docker-aws
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
   parallel:
     matrix:
-      - SOURCE: [ box, lab, pug ]
-        UBUNTU: [ jammy, noble, resolute ]
-  # One build per cell across pipelines (the GH per-cell concurrency
-  # group), and never auto-cancelled: a killed run leaves half-built trees
-  # and orphaned build VMs on a possibly-shared worker.
-  resource_group: qemu_images-$SOURCE-$UBUNTU
+      - MACHINE: [ box, pug, lab ]
+        UBUNTU: [ jammy, noble ]
+  # One bake per cell across pipelines, serializing the candidate smoke +
+  # SSM promotion so two manual jobs cannot race the same parameter; never
+  # auto-cancelled — a killed run can orphan the EC2 build instance.
+  resource_group: ami-$MACHINE-$UBUNTU
   interruptible: false
-  # GH gave each cell 90 min on lab hardware; ccx33 should come in well
-  # under.
-  timeout: 90m
-  variables:
-    # seed-deps boots box and runs ansible against it, loading test-vaulted
-    # host_vars — restrict to the test identity so the absent prod password
-    # isn't attempted (HOMELAB_VAULT_PASSWORD_TEST is a project variable).
-    ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
-    ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
+  timeout: 60m
   script:
-    # Same drift self-heal as .hosted, against the worker's /opt/mise tree.
+    # Same drift self-heal as .hosted, against the image's /opt/mise tree.
     - mise install
     - uv sync --locked
-    # No-op while the snapshot's pre-baked plugin tree is current; covers a
-    # commit bumping required_plugins ahead of the next worker_image bake.
-    - mise run packer:init
-    - |
-      set -euo pipefail
-      # --upstream: fleet workers can't reach the lab Nexus proxy, so pull
-      # apt + the cloud image (and its checksum file) straight from Ubuntu.
-      # The worker snapshot pre-seeds the packer ISO cache, so the cloud
-      # image itself is usually already on disk.
-      mise run packer:build "$SOURCE" --ubuntu "$UBUNTU" --upstream
-      if [ "$SOURCE" = "box" ]; then
-        mise run packer:seed-deps --ubuntu "$UBUNTU"
-      fi
+    # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
+    # AssumeRoleWithWebIdentity provider wants a file path.
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
+    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
+    - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
+    - export AWS_ROLE_SESSION_NAME="ami-images-$CI_JOB_ID"
+    # Smoke the OIDC chain before spending 20+ min on a bake.
+    - aws --region eu-central-1 sts get-caller-identity
+    - mise run packer:ami "$MACHINE" --ubuntu "$UBUNTU" --promote
