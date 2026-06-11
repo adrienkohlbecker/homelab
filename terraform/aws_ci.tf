@@ -56,6 +56,12 @@ resource "aws_subnet" "ci" {
   cidr_block        = cidrsubnet(aws_vpc.ci.cidr_block, 8, each.value)
   ipv6_cidr_block   = cidrsubnet(aws_vpc.ci.ipv6_cidr_block, 8, each.value)
 
+  # Public IPv4 rides the subnet default rather than a launch-template
+  # network_interfaces block: the harness overrides the subnet per launch
+  # with a top-level --subnet-id, which EC2 rejects when the template
+  # carries an explicit network-interface spec.
+  map_public_ip_on_launch = true
+
   tags = {
     Name = "homelab-ci-${each.key}"
     role = "ci"
@@ -272,6 +278,7 @@ resource "aws_iam_role_policy" "ci_cell" {
           [for s in aws_subnet.ci : s.arn],
           [
             aws_security_group.ci_cell.arn,
+            aws_key_pair.ci_vagrant.arn,
             "arn:aws:ec2:${local.ci_aws_region}::image/*",
             "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:network-interface/*",
             "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:spot-instances-request/*",
@@ -299,11 +306,12 @@ resource "aws_iam_role_policy" "ci_cell" {
           StringEquals = { "ec2:ResourceTag/role" = "ci-cell" }
         }
       },
-      # Describe* supports no resource-level scoping in EC2.
+      # Describe* supports no resource-level scoping in EC2. DescribeSubnets
+      # lets the harness discover the CI subnets by tag to pick one per launch.
       {
         Sid      = "Describe"
         Effect   = "Allow"
-        Action   = ["ec2:DescribeInstances", "ec2:DescribeInstanceStatus"]
+        Action   = ["ec2:DescribeInstances", "ec2:DescribeInstanceStatus", "ec2:DescribeSubnets"]
         Resource = "*"
       },
       # AMI resolution: our parameters plus Canonical's public ones (minimal).
@@ -418,6 +426,20 @@ resource "aws_iam_role_policy" "ci_bake" {
   })
 }
 
+# ─── Cell SSH key ────────────────────────────────────────────────────────────
+# The well-known vagrant insecure keypair (packer/vagrant.key) — the same key
+# the qemu fixtures bake and the harness already authenticates with. Public
+# by design; the ci_cell security group is the actual boundary. Registered as
+# an EC2 keypair so cloud-init on minimal's Canonical AMI (which has no baked
+# key) installs it for the ubuntu user.
+
+resource "aws_key_pair" "ci_vagrant" {
+  key_name   = "homelab-ci-vagrant"
+  public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y spox@vagrant-dev"
+
+  tags = { role = "ci" }
+}
+
 # ─── Launch templates ────────────────────────────────────────────────────────
 # One per machine. The AMI is deliberately NOT set here: the harness passes
 # --image-id resolve:ssm:/homelab-ci/ami/<machine>/<ubuntu> per launch, so a
@@ -466,13 +488,16 @@ resource "aws_launch_template" "ci_cell" {
   # No iam_instance_profile: cells are converged over SSH from fox and never
   # call AWS APIs themselves.
 
-  # Subnet (and thus AZ) is chosen by the harness at launch; the template
-  # carries everything subnet-independent.
-  network_interfaces {
-    associate_public_ip_address = true
-    security_groups             = [aws_security_group.ci_cell.id]
-    delete_on_termination       = true
-  }
+  # Subnet (and thus AZ) is chosen by the harness at launch via a top-level
+  # --subnet-id, so the template must NOT carry a network_interfaces block
+  # (EC2 rejects mixing the two). Public IPv4 comes from the subnet's
+  # map_public_ip_on_launch; the SG rides the top-level field.
+  vpc_security_group_ids = [aws_security_group.ci_cell.id]
+
+  # Ignored by the baked images (no cloud-init — the vagrant key is baked by
+  # chroot.sh), consumed by minimal's Canonical AMI where cloud-init installs
+  # it for the ubuntu user. Same key, same SG-as-boundary trust model.
+  key_name = aws_key_pair.ci_vagrant.key_name
 
   tag_specifications {
     resource_type = "instance"
