@@ -162,7 +162,10 @@ run = "packer fmt -check -recursive packer"
 [tasks."lint:packer-validate"]
 description = "Validate Packer template syntax"
 dir = "{{config_root}}/packer"
-run = "packer validate -syntax-only ."
+# aws/ is its own packer configuration (shares variable names with
+# qemu.pkr.hcl, so it can't sit in the same directory-mode namespace);
+# directory-mode validate doesn't recurse, so list it explicitly.
+run = ["packer validate -syntax-only .", "packer validate -syntax-only aws"]
 
 [tasks."lint:python"]
 description = "Check Python formatting (black)"
