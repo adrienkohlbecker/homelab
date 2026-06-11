@@ -46,6 +46,9 @@ UBUNTU_RELEASES: dict[str, str] = {
 }
 DEFAULT_UBUNTU = "jammy"
 SSH_KEY = "packer/vagrant.key"
+# Loopback endpoint for the QEMU backend: hostfwd binds, VNC displays, and
+# the default Machine.ssh_host all live here. Non-QEMU backends override
+# ssh_host per instance (e.g. an EC2 public IP) and never touch this.
 SSH_HOST = "127.0.0.1"
 
 TOPOLOGY_PATH = Path(__file__).parent.parent / "data" / "network_topology.yml"
@@ -340,6 +343,10 @@ class Machine:
     # / $HOMELAB_WORKDIR_PARENT so CI workflows can keep the qcow2 tree
     # mounted ro and stage the per-run TempDir somewhere ephemeral.
     workdir_parent: Path | None = None
+    # SSH endpoint host. Loopback for the QEMU backend (hostfwd), a public
+    # IP for backends whose guest is directly reachable (EC2). Every SSH/scp/
+    # ansible invocation and the banner probe read this, never SSH_HOST.
+    ssh_host: str = SSH_HOST
     # Filename (under the per-run workdir) where qemu writes its pidfile.
     idfile: str = dataclasses.field(default="pid", init=False)
 
@@ -510,7 +517,7 @@ class Machine:
             *self._ssh_options(),
             "-o",
             "ForwardAgent=yes",
-            f"{self.ssh_user}@{SSH_HOST}",
+            f"{self.ssh_user}@{self.ssh_host}",
         ]
         return [*base, shlex.join(cmd)] if cmd else base
 
@@ -532,7 +539,7 @@ class Machine:
             "-o",
             "ForwardAgent=yes",
             local,
-            f"{self.ssh_user}@{SSH_HOST}:{remote}",
+            f"{self.ssh_user}@{self.ssh_host}:{remote}",
         ]
 
     def ansible_env(self) -> dict[str, str]:
@@ -564,7 +571,7 @@ class Machine:
             "-e",
             f"ansible_ssh_port={self.ssh_port}",
             "-e",
-            f"ansible_ssh_host={SSH_HOST}",
+            f"ansible_ssh_host={self.ssh_host}",
             "-e",
             f"ansible_ssh_user={self.ssh_user}",
             "-e",
@@ -750,7 +757,7 @@ class Machine:
 
         try:
             reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(SSH_HOST, self.ssh_port),
+                asyncio.open_connection(self.ssh_host, self.ssh_port),
                 timeout=2,
             )
         except (OSError, TimeoutError):
