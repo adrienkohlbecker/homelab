@@ -1,24 +1,25 @@
 #jinja2: lstrip_blocks: True
 # Managed by ansible (roles/gitlab_runner) -- do not edit on the host.
 #
-# GitLab Runner manager config: the `instance` executor + the fleeting
-# autoscaler driving ephemeral Hetzner Cloud servers via
-# fleeting-plugin-hetzner. This host holds NO job payloads -- it only talks to
-# gitlab.com and provisions/SSHes into the scale-from-zero fleet.
-{% set _name = inventory_hostname ~ '-hetzner' %}
-# Global ceiling = jobs-per-instance * number of fleet servers. Size
-# gitlab_runner_capacity_per_instance to the server type's RAM (a qemu cell
-# wants ~4 GiB; leave headroom for the worker OS).
-concurrent = {{ gitlab_runner_capacity_per_instance * gitlab_runner_max_instances }}
-# JSON manager logs parse cleanly in fluentbit (the repo's only log consumer);
-# the default `runner` format is ANSI-decorated and needs a custom parser.
+# GitLab Runner config: Docker executor against gitlab_runner's rootless
+# podman socket. Jobs for the AWS test cells (notes/ci_aws_test_cells.md) run
+# inside the project CI image on this host and drive single-use EC2 spot
+# instances from there -- the container is the orchestration sandbox, not the
+# test fixture. Tags / locked / run-untagged / protected all live server-side
+# with the glrt- runner registration, not in this file.
+# Orchestration slots, not compute: each job is an `aws`-CLI/ssh/ansible
+# loop against a remote EC2 cell, so the bound is fox's memory for idle
+# CI-image containers, not CPU. Real capacity is the spot vCPU quota.
+concurrent = {{ gitlab_runner_concurrent }}
+# JSON logs parse cleanly in fluentbit (the repo's only log consumer); the
+# default `runner` format is ANSI-decorated and needs a custom parser.
 log_format = "json"
-# Graceful-shutdown drain: on SIGQUIT (systemctl stop/restart) the manager stops
-# claiming jobs and waits up to this many seconds for in-flight fleet jobs to
-# finish before force-exiting. The default is 30s -- far too short to wind a CI
-# job down -- so hold it ~30 min, enough to cover the longest jobs (packer
-# builds). The unit's TimeoutStopSec sits just past this bound (1860s) so
-# systemd only SIGKILLs a manager too wedged to run the drain at all.
+# Graceful-shutdown drain: on SIGQUIT (systemctl stop/restart) the runner stops
+# claiming jobs and waits up to this many seconds for in-flight jobs to finish
+# before force-exiting. The default is 30s -- far too short to wind a cell
+# matrix down -- so hold it ~30 min, enough to cover the longest jobs (AMI
+# bakes). The unit's TimeoutStopSec sits just past this bound (1860s) so
+# systemd only SIGKILLs a runner too wedged to run the drain at all.
 shutdown_timeout = 1800
 # Prometheus metrics + pprof, loopback-only (fox's netdata go.d prometheus
 # collector scrapes it). Unauthenticated, and the pprof debug endpoints cannot
@@ -28,77 +29,23 @@ shutdown_timeout = 1800
 listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
 
 [[runners]]
-  name = "{{ _name }}"
+  name = "{{ inventory_hostname }}-docker-aws"
   url = "https://gitlab.com"
   # glrt- authentication token from creating the runner in the GitLab project
   # (Settings -> CI/CD -> Runners -> New project runner). Vaulted in host_vars.
   token = "{{ gitlab_runner_token }}"
-  executor = "instance"
+  executor = "docker"
 
-  # Jobs run as a shell directly on the ephemeral VM -- /dev/kvm is native, no
-  # container-in-container, and the repo clone lands in ~/builds ON THE VM (not
-  # on this manager). Image requirements: see gitlab_runner_image_selector in
-  # defaults/main.yml. No [runners.instance] section on purpose: its only
-  # knob, allowed_images, applies just under VM Isolation (a nested-VM
-  # feature we don't use) -- without it jobs cannot request an image at all,
-  # so there is no value to maintain. The image is plugin_config.image
-  # below.
-
-  [runners.autoscaler]
-    # PATH-resolved binary name (host-native install at /usr/local/bin), NOT the
-    # `name:version` OCI form -- that would make gitlab-runner re-download the
-    # plugin via `fleeting install` instead of using the pinned, sha256-checked
-    # binary from vars/main.yml.
-    plugin = "fleeting-plugin-hetzner"
-    capacity_per_instance = {{ gitlab_runner_capacity_per_instance }}
-    # Reuse a warm instance for many jobs (0 = unlimited) rather than per-job
-    # ephemeral; it self-deletes after the idle window below. Safe ONLY while
-    # every pipeline is operator-authored (runner locked to this project, no
-    # fork MR pipelines): concurrent and successive jobs share the VM as root,
-    # so flip to 1 the day any less-trusted pipeline source appears.
-    max_use_count = 0
-    max_instances = {{ gitlab_runner_max_instances }}
-    # Delete provisioned instances on a clean manager shutdown instead of
-    # leaving them to be re-adopted: trades the warm window across a restart
-    # for a no-orphan guarantee (the labels below stay as the manual backstop
-    # for an unclean death).
-    delete_instances_on_shutdown = true
-    # Gate the first job on cloud-init finishing AND the runner binary being
-    # present, so a mis-baked snapshot (stock image, no toolchain) fails
-    # readiness loudly here instead of at job dispatch. cloud-init exit 2 ==
-    # degraded (recoverable errors) -- accepted, since the gitlab-runner
-    # presence check is the real gate.
-    instance_ready_command = "cloud-init status --wait || test $? -eq 2 && command -v gitlab-runner"
-
-    [runners.autoscaler.plugin_config]
-      name = "{{ _name }}"
-      # Project-scoped Hetzner Cloud API token for the DEDICATED CI project --
-      # blast radius must not reach fox/home. Vaulted in host_vars; the plugin
-      # also honours $HCLOUD_TOKEN, but keeping it in-config holds both secrets
-      # in the one 0600 file.
-      token = "{{ gitlab_runner_hcloud_token }}"
-      location = "{{ gitlab_runner_location }}"
-      server_type = "{{ gitlab_runner_server_type }}"
-      # Newest role=ci-worker snapshot, resolved at converge time; between
-      # converges the gitlab_runner_image_refresh timer rewrites this one line
-      # in place as new bakes land (gitlab-runner hot-reloads config.toml, so
-      # adoption needs no restart). Under qemu no fleet ever boots -- a stock
-      # image name keeps the rendered TOML valid.
-      image = "{{ gitlab_runner_resolved_image | default('ubuntu-24.04') }}"
-      # Stamp every ephemeral instance so a leaked/orphaned VM (manager died
-      # mid-provision) is greppable: `hcloud server list -l role=ci`.
-      labels = { role = "ci", manager = "{{ inventory_hostname }}" }
-
-    [runners.autoscaler.connector_config]
-      username = "root"
-      # fox is not in the CI project's private network, so reach instances on
-      # their public address. The plugin injects an ephemeral SSH key per
-      # instance -- no static credential to manage here.
-      use_external_addr = true
-
-    [[runners.autoscaler.policy]]
-      # Scale-to-zero when idle (no always-on bill); a burst spins up to
-      # max_instances and each lingers 30m after its last job (the warm window)
-      # before the plugin deletes it.
-      idle_count = 0
-      idle_time = "30m"
+  [runners.docker]
+    # gitlab_runner's rootless podman socket (socket-activated; linger keeps
+    # the user manager alive). Rootless keeps the runner non-root-equivalent
+    # on this host -- same shape as roles/github_runner's DooD socket.
+    host = "unix:///run/user/{{ gitlab_runner_user.uid }}/podman/podman.sock"
+    # Default job image: the project CI image (mise tool tree + warm uv
+    # cache baked in -- see .gitlab-ci.yml's ci_image job). Jobs may still
+    # name another image; the runner is locked to this project so there is
+    # no allowed_images policy to maintain.
+    image = "registry.gitlab.com/adrienkohlbecker/homelab/ci:latest"
+    # Job containers orchestrate remote EC2 cells over ssh/https only -- no
+    # devices, no nested containers, no privileges.
+    privileged = false

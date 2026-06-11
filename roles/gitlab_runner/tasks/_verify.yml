@@ -1,29 +1,55 @@
 # Functional host-side checks. The live runner can't register in the harness
-# (no gitlab.com token, no Hetzner project), so the role enable-onlys under
-# qemu_test and this exercises everything that genuinely runs on the host: the
-# pinned binaries execute on this arch, and the unit starts, stays up, and
-# serves its metrics listener. Live scale-from-zero is proven by the gate-1
-# benchmark on a real instance, not CI.
+# (no gitlab.com token), so the role enable-onlys under qemu_test and this
+# exercises everything that genuinely runs on the host: the pinned binary
+# executes on this arch, the rootless podman socket the Docker executor dials
+# actually serves, and the unit starts, stays up, and serves its metrics
+# listener. A real job dispatch needs gitlab.com and is proven by the gate-B/C
+# runs on fox, not CI.
 - name: _verify | Pinned gitlab-runner binary runs on this arch
   command: /usr/local/bin/gitlab-runner --version
   register: _gitlab_runner_version
   changed_when: false
   failed_when: gitlab_runner_version not in _gitlab_runner_version.stdout
 
-- name: _verify | Pinned fleeting-plugin-hetzner binary runs on this arch
-  command: /usr/local/bin/fleeting-plugin-hetzner --version
-  register: _gitlab_runner_plugin_version
+- name: _verify | Rootless podman.socket is active under gitlab_runner
+  systemd:
+    name: podman.socket
+    scope: user
+  register: _gitlab_runner_podman_sock
+  failed_when: _gitlab_runner_podman_sock.status.ActiveState != "active"
+  become: true
+  become_user: gitlab_runner
+
+- name: _verify | Resolve gitlab_runner uid for its socket path
+  command: id -u gitlab_runner
+  register: _gitlab_runner_uid
   changed_when: false
-  failed_when: >-
-    gitlab_runner_fleeting_hetzner_version
-    not in _gitlab_runner_plugin_version.stdout
+  become: true
+
+# Functional: drive the exact socket config.toml points the Docker executor
+# at. `podman info` over the URL exercises socket activation, the user
+# manager (linger), and the storage stack end-to-end -- an inert socket file
+# would pass a stat but fail this.
+- name: _verify | Docker-executor socket answers podman info
+  command: >-
+    podman --url unix:///run/user/{{ _gitlab_runner_uid.stdout }}/podman/podman.sock info
+  register: _gitlab_runner_podman_info
+  changed_when: false
+  failed_when: "'graphRoot' not in _gitlab_runner_podman_info.stdout"
+  become: true
+  become_user: gitlab_runner
+
+- name: _verify | Rendered config dials that same socket
+  command: grep -F 'unix:///run/user/{{ _gitlab_runner_uid.stdout }}/podman/podman.sock' /mnt/services/gitlab_runner/config.toml
+  changed_when: false
+  become: true
 
 # Functional unit-start smoke: the role enable-onlys under qemu_test, so start
-# the manager by hand. gitlab-runner run stays up on a placeholder token
+# the runner by hand. gitlab-runner run stays up on a placeholder token
 # (registration fails async, the loop keeps retrying), so Type=simple reaches
 # active -- proving User=/Group=/WorkingDirectory=/HOME=/ExecStart all
 # resolve, which a static parse cannot.
-- name: _verify | Start the manager to drive the unit's ExecStart
+- name: _verify | Start the runner to drive the unit's ExecStart
   systemd:
     name: gitlab_runner.service
     state: started
@@ -44,7 +70,7 @@
 # input to fox's netdata presence alert (go.d prometheus collector), so a
 # broken listen_address must fail here, not silently on prod. Same URL netdata
 # scrapes.
-- name: _verify | Manager serves prometheus metrics on its loopback port
+- name: _verify | Runner serves prometheus metrics on its loopback port
   uri:
     url: http://127.0.0.1:{{ service_ports.gitlab_runner }}/metrics
     status_code: 200
@@ -56,9 +82,9 @@
   until: _gitlab_runner_metrics.status | default(0) == 200
 
 # Type=simple is `active` the instant ExecStart forks, so the wait above can
-# catch the brief active window of a crash-looping manager; re-read after the
+# catch the brief active window of a crash-looping runner; re-read after the
 # metrics probe (several seconds of runtime) and assert it never restarted.
-- name: _verify | Manager stayed up since the smoke start
+- name: _verify | Runner stayed up since the smoke start
   systemd:
     name: gitlab_runner.service
   register: _gitlab_runner_settled
@@ -68,131 +94,10 @@
   become: true
 
 # SIGQUIT with zero in-flight jobs drains instantly, so stop won't hang on the
-# unit's stop timeout. Leaves the manager stopped (qemu has no upstream to
+# unit's stop timeout. Leaves the runner stopped (qemu has no upstream to
 # register against anyway).
-- name: _verify | Stop the manager after smoke
+- name: _verify | Stop the runner after smoke
   systemd:
     name: gitlab_runner.service
-    state: stopped
-  become: true
-
-# --- worker image refresh: functional test against a local API stub ---------
-# The real Hetzner API is unreachable from the harness (placeholder token), so
-# serve a canned /images response with http.server (it strips the query
-# string, so the file name `images` matches any selector) and point the
-# script at it. The rewrite runs against a COPY of the rendered config -- the
-# code path is identical to the timer's in-place rewrite, and the real config
-# stays pristine.
-- name: _verify | Confirm the image refresh timer is active
-  systemd:
-    name: gitlab_runner_image_refresh.timer
-  register: _gitlab_runner_refresh_timer
-  failed_when: _gitlab_runner_refresh_timer.status.ActiveState != "active"
-  become: true
-
-- name: _verify | Create the API stub directory
-  file:
-    path: /tmp/gitlab_runner_stub
-    state: directory
-    mode: "0755"
-
-- name: _verify | Stage the API stub response
-  copy:
-    dest: /tmp/gitlab_runner_stub/images
-    content: '{"images": [{"id": 424242, "created": "2026-01-01T00:00:00+00:00"}]}'
-    mode: "0644"
-
-- name: _verify | Start the API stub server
-  command: >-
-    systemd-run --unit gitlab_runner_api_stub
-    --working-directory /tmp/gitlab_runner_stub
-    python3 -m http.server 18099 --bind 127.0.0.1
-  changed_when: true
-  become: true
-
-- name: _verify | Wait for the API stub to serve
-  uri:
-    url: http://127.0.0.1:18099/images
-  register: _gitlab_runner_stub_up
-  until: _gitlab_runner_stub_up.status | default(0) == 200
-  retries: 10
-  delay: 1
-
-- name: _verify | Copy the rendered config for the rewrite test
-  copy:
-    src: /mnt/services/gitlab_runner/config.toml
-    remote_src: true
-    dest: /tmp/gitlab_runner_stub/config.toml
-    mode: "0600"
-  become: true
-
-- name: _verify | Refresh script adopts the stub snapshot id
-  command: >-
-    python3 /opt/gitlab_runner/update_worker_image.py
-    --config /tmp/gitlab_runner_stub/config.toml
-    --selector role=ci-worker
-    --endpoint http://127.0.0.1:18099
-  register: _gitlab_runner_refresh
-  changed_when: false
-  failed_when: "'-> 424242' not in _gitlab_runner_refresh.stdout"
-  become: true
-
-# Surgical-edit guarantee: the rewrite must change the image line and nothing
-# else -- a TOML re-dump would shred comments/layout and could reorder the
-# secrets. Exactly 2 diff lines = one removed + one added.
-- name: _verify | Rewrite touched only the image line
-  shell: |
-    set -euo pipefail
-    changed=$(diff /mnt/services/gitlab_runner/config.toml /tmp/gitlab_runner_stub/config.toml || true)
-    printf "%s\n" "$changed" | grep -c "^[<>]" || true
-  args:
-    executable: /bin/bash
-  register: _gitlab_runner_refresh_diff
-  changed_when: false
-  failed_when: _gitlab_runner_refresh_diff.stdout != "2"
-  become: true
-
-- name: _verify | Rewrite preserved the config file mode
-  stat:
-    path: /tmp/gitlab_runner_stub/config.toml
-  register: _gitlab_runner_refresh_stat
-  failed_when: _gitlab_runner_refresh_stat.stat.mode != "0600"
-  become: true
-
-- name: _verify | Refresh script no-ops when the image is already current
-  command: >-
-    python3 /opt/gitlab_runner/update_worker_image.py
-    --config /tmp/gitlab_runner_stub/config.toml
-    --selector role=ci-worker
-    --endpoint http://127.0.0.1:18099
-  register: _gitlab_runner_refresh_noop
-  changed_when: false
-  failed_when: "'already current' not in _gitlab_runner_refresh_noop.stdout"
-  become: true
-
-- name: _verify | Stage an empty API stub response
-  copy:
-    dest: /tmp/gitlab_runner_stub/images
-    content: '{"images": []}'
-    mode: "0644"
-
-# The no-matching-snapshot path must fail loudly (a failed timer unit on prod
-# is the alarm that a bake went missing) and must not touch the config.
-- name: _verify | Refresh script fails loudly when no snapshot matches
-  command: >-
-    python3 /opt/gitlab_runner/update_worker_image.py
-    --config /tmp/gitlab_runner_stub/config.toml
-    --selector role=ci-worker
-    --endpoint http://127.0.0.1:18099
-  register: _gitlab_runner_refresh_empty
-  changed_when: false
-  failed_when: >-
-    _gitlab_runner_refresh_empty.rc == 0
-    or 'no available snapshot' not in _gitlab_runner_refresh_empty.stderr
-  become: true
-
-- name: _verify | Stop the API stub server
-  systemd:
-    name: gitlab_runner_api_stub.service
     state: stopped
   become: true

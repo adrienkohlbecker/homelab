@@ -1,43 +1,16 @@
-# Off by default; a host enabling the runner sets the two required secrets
-# (gitlab_runner_token, gitlab_runner_hcloud_token -- asserted in
-# tasks/main.yml), then flips this true.
+# Off by default; a host enabling the runner sets the required secret
+# (gitlab_runner_token -- asserted in tasks/main.yml), then flips this true.
 #
 # defaults/ (not vars/) per CLAUDE.md: role vars sit ABOVE host_vars and would
 # mask host overrides; defaults sit below, so host_vars wins. Everything here is
 # host-overridable deploy-tuning. Single-use constants that never vary
-# (gitlab.com URL, the runner name, the idle policy) are inlined in
+# (gitlab.com URL, the runner name, the CI image) are inlined in
 # config.toml.j2 rather than surfaced here.
 gitlab_runner_enabled: false
 
-# Label selector picking the Hetzner image the ephemeral fleet boots: the
-# newest available snapshot carrying this label, as baked + labeled by `mise
-# run packer:worker` (gitlab-runner + the qemu/packer job toolchain aboard --
-# the instance executor runs each job as a shell ON the VM, so a stock base
-# image would ship a fleet with no toolchain). Resolved to a numeric snapshot
-# id at converge time AND every 15 min by the gitlab_runner_image_refresh
-# timer, so a fresh bake is adopted with no commit or converge. Rollback from
-# a bad bake: delete its snapshot in the CI project (`hcloud image delete`) --
-# both resolvers then fall back to the previous newest.
-gitlab_runner_image_selector: "role=ci-worker"
-
-# Single Hetzner location (the plugin's `location` is not a list). These are
-# the real fleet values -- fox is by design the only host that ever enables
-# this role, so its sizing lives here rather than as host_vars overrides of
-# fictional defaults.
-gitlab_runner_location: "nbg1"
-
-# Single Hetzner server type for the fleet: dedicated-vCPU ccx33 (8 vCPU /
-# 32 GiB). capacity_per_instance below is a static GitLab Runner value (the
-# manager can't read a booted instance's RAM), so it's paired with one type
-# here rather than a fallback list.
-gitlab_runner_server_type: "ccx33"
-
-# Concurrent jobs ONE instance runs: one per dedicated vCPU (ccx33 = 8).
-# Nominally 8 * ~4 GiB qemu cells = all 32 GiB with nothing left for the
-# worker OS, but cell guests rarely touch their full allocation -- the OS
-# headroom comes from qemu memory overcommit slack, not a reserved margin.
-gitlab_runner_capacity_per_instance: 8
-
-# Number of fleet servers a burst may scale to ("one busy box, occasionally two"
-# per the design note). Global `concurrent` = this * capacity_per_instance.
-gitlab_runner_max_instances: 2
+# Concurrent jobs this runner executes. Each is an orchestration loop (aws
+# CLI + ssh/ansible against a remote EC2 cell) inside a CI-image container,
+# so the bound is fox's memory for the idle containers -- the real test
+# capacity is the EC2 spot vCPU quota, governed separately
+# (notes/ci_aws_test_cells.md).
+gitlab_runner_concurrent: 8
