@@ -77,6 +77,17 @@
   tags:
     - user
 
+# homelab_ci role runs in the Lab roles play (after Base machine install);
+# create the group here so it exists when the operator is added to it below.
+- name: Create homelab_ci group
+  group:
+    name: homelab_ci
+    state: present
+    system: true
+  become: true
+  tags:
+    - user
+
 # adm owns most of /var/log (syslog, auth.log, journal via systemd-journal),
 # so membership lets the operator tail logs over SSH without sudo -- the
 # diagnostic reads CLAUDE.md treats as pre-authorized. kvm owns /dev/kvm,
