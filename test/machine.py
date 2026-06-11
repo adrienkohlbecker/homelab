@@ -7,6 +7,7 @@ import errno
 import fcntl
 import functools
 import ipaddress
+import json
 import os
 import platform
 import shlex
@@ -16,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import ClassVar, NamedTuple, Self
 
@@ -24,6 +26,7 @@ import yaml
 from arch import ArchProfile, detect_host_arch, uefi_code_path_for
 from setup_mitogen import ensure_mitogen_symlink
 from utils import (
+    CommandFailedException,
     CommandResult,
     build_seed_iso,
     print_cmd_line,
@@ -861,6 +864,15 @@ class Machine:
             "--failed",
             "--no-pager",
         )
+
+    async def failure_was_spot_interruption(self) -> bool:
+        """Classify a cell failure post-hoc; only the EC2 backend can say yes.
+
+        Called by testrole.py after a CommandFailedException so a reclaimed
+        spot instance surfaces as exit code 86 (GitLab retries once) instead
+        of an ordinary role failure.
+        """
+        return False
 
     def cleanup_logs(self) -> None:
         """Remove all per-run log artifacts."""
@@ -1867,3 +1879,378 @@ class QemuMachine(Machine):
     async def _find_ssh_port(self) -> None:
         """Port was pre-picked in prepare(); nothing to discover at boot."""
         return
+
+
+class Ec2Machine(Machine):
+    """Run the role test against a single-use EC2 spot instance.
+
+    The cell is launched from a terraform-owned launch template
+    (ci-cell-<machine>, terraform/aws_ci.tf), its AMI resolved through the
+    /homelab-ci/ami/<machine>/<ubuntu> SSM parameter, converged over SSH at
+    its public IP, and terminated at cell end with a one-time EventBridge
+    Scheduler entry as the orphan backstop. Everything is `aws` CLI
+    subprocesses — deliberately no boto3 (see notes/ci_aws_test_cells.md,
+    "Shape"): subprocess waits compose with asyncio, every call lands in
+    the .ansi log as a copy-paste-reproducible command, and ~5 sparse calls
+    per cell never earn botocore's presence in uv.lock.
+    """
+
+    REGION: ClassVar[str] = "eu-central-1"
+    # Composed from fixed account + role names (terraform/aws_ci.tf) rather
+    # than plumbed through env: both are stable, public-repo-safe literals.
+    SCHEDULER_ROLE_ARN: ClassVar[str] = "arn:aws:iam::000390721279:role/homelab-ci-cell-scheduler"
+    # Backstop margin on top of machine_timeout before the Scheduler entry
+    # terminates an orphaned instance. Generous on purpose: it only matters
+    # when the harness died without cleanup, and a --keep debugging session
+    # gets that much time before the instance disappears underneath it.
+    EXPIRES_GRACE_SECONDS: ClassVar[int] = 1800
+
+    def __init__(
+        self,
+        machine: str,
+        role: str,
+        keep_vm: bool,
+        ubuntu_name: str,
+        machine_timeout: int,
+        upstream_mirrors: bool = False,
+        *,
+        workdir_parent: Path | None = None,
+    ):
+        try:
+            spec = QEMU_MACHINE_SPECS[machine]
+        except KeyError:
+            raise AttributeError(f"Unknown machine: {machine}") from None
+
+        self.instance_id: str | None = None
+        self._schedule_name: str | None = None
+        self._expires_display: str = ""
+
+        super().__init__(
+            ssh_port=22,
+            # Set in ensure_booted() once the instance has a public IP;
+            # empty until then so a premature SSH attempt fails loudly
+            # instead of probing the operator's own loopback sshd.
+            ssh_host="",
+            ssh_user=spec.ssh_user,
+            ansible_args=_qemu_ansible_args(spec),
+            inventory_host=spec.inventory_host,
+            machine=machine,
+            role=role,
+            keep_vm=keep_vm,
+            ubuntu_name=ubuntu_name,
+            machine_timeout=machine_timeout,
+            # Forced on regardless of the flag: cells run in AWS where the
+            # lab Nexus is unreachable, so the mirrors playbook must write
+            # upstream sources. The memory/disk shape mirrors qemu via the
+            # launch template (terraform), not harness-side specs.
+            upstream_mirrors=True,
+            workdir_parent=workdir_parent,
+        )
+        # qemu truncates boot_file on every boot(); the EC2 backend only
+        # writes it on failure (console output), so drop a stale one from a
+        # prior qemu run of the same triple up front.
+        self.boot_file.unlink(missing_ok=True)
+
+    def _preflight(self) -> None:
+        self._require_binary(
+            "aws",
+            "Install via `mise install` (pinned in mise.toml [tools]).",
+        )
+
+    async def _aws(self, *args: str, check: bool = True, quiet: bool = False) -> CommandResult:
+        return await run_command(["aws", "--region", self.REGION, *args], check=check, quiet=quiet)
+
+    async def _pick_subnet(self) -> str:
+        """Pick one of the CI VPC's public subnets, stably per run.
+
+        Discovery is tag-based so terraform can renumber subnets without a
+        harness change. The pick is derived from the per-run workdir name:
+        stable within the run (retried CLI calls reuse it via the client
+        token below) while spreading concurrent cells across AZs.
+        """
+        result = await self._aws(
+            "ec2",
+            "describe-subnets",
+            "--filters",
+            "Name=tag:Name,Values=homelab-ci-*",
+            "--query",
+            "Subnets[].SubnetId",
+            "--output",
+            "text",
+        )
+        subnets = sorted(" ".join(result.stdout).split())
+        if not subnets:
+            raise RuntimeError("No homelab-ci-* subnets found in eu-central-1 — has terraform/aws_ci.tf been applied?")
+        seed = sum(Path(self.workdir.name).name.encode())
+        return subnets[seed % len(subnets)]
+
+    async def boot(self) -> None:
+        """Launch the spot instance, then arm the termination backstop."""
+        subnet_id = await self._pick_subnet()
+
+        # Deterministic client token: unique per run (workdir basename is a
+        # fresh mkdtemp suffix), stable across CLI retries, and bound to the
+        # chosen subnet so a retry can never land the request in another AZ
+        # under the same token. EC2 caps tokens at 64 chars.
+        client_token = f"{Path(self.workdir.name).name}-{subnet_id.removeprefix('subnet-')}"[:64]
+
+        expires_at = datetime.now(UTC) + timedelta(seconds=self.machine_timeout + self.EXPIRES_GRACE_SECONDS)
+        expires_expr = expires_at.strftime("%Y-%m-%dT%H:%M:%S")
+        self._expires_display = f"{expires_expr}Z"
+
+        tags = {
+            # role=ci-cell rides the launch template too; repeating it here
+            # keeps the IAM aws:RequestTag condition satisfied under either
+            # merge semantics for template-vs-request tag specifications.
+            "role": "ci-cell",
+            "machine": self.machine,
+            "ubuntu": self.ubuntu_name,
+            "role_under_test": self.role,
+            "pipeline_id": os.environ.get("CI_PIPELINE_ID", "local"),
+            "job_id": os.environ.get("CI_JOB_ID", "local"),
+            "expires_at": self._expires_display,
+        }
+        tag_spec = "ResourceType=instance,Tags=[" + ",".join(f"{{Key={k},Value={v}}}" for k, v in tags.items()) + "]"
+
+        result = await self._aws(
+            "ec2",
+            "run-instances",
+            "--launch-template",
+            f"LaunchTemplateName=ci-cell-{self.machine}",
+            "--image-id",
+            f"resolve:ssm:/homelab-ci/ami/{self.machine}/{self.ubuntu_name}",
+            "--subnet-id",
+            subnet_id,
+            "--client-token",
+            client_token,
+            "--tag-specifications",
+            tag_spec,
+            "--query",
+            "Instances[0].InstanceId",
+            "--output",
+            "text",
+        )
+        self.instance_id = result.stdout[-1].strip()
+        if not self.instance_id.startswith("i-"):
+            raise RuntimeError(f"run-instances returned no instance id: {result.stdout!r}")
+        print_line(f"Launched {self.instance_id} (subnet {subnet_id}, backstop {self._expires_display})")
+
+        await self._arm_backstop(expires_expr)
+
+    async def _arm_backstop(self, expires_expr: str) -> None:
+        """Create the one-time Scheduler entry that terminates this cell.
+
+        Runs immediately after launch: a cell without a backstop is the one
+        failure mode that bills forever, so if the schedule can't be created
+        the instance is terminated and the cell fails. ActionAfterCompletion
+        DELETE makes a fired schedule self-clean; stop() deletes it on the
+        normal path.
+        """
+        assert self.instance_id is not None
+        self._schedule_name = f"ci-cell-{self.instance_id}"
+        target = json.dumps(
+            {
+                "Arn": "arn:aws:scheduler:::aws-sdk:ec2:terminateInstances",
+                "RoleArn": self.SCHEDULER_ROLE_ARN,
+                "Input": json.dumps({"InstanceIds": [self.instance_id]}),
+            }
+        )
+        try:
+            await self._aws(
+                "scheduler",
+                "create-schedule",
+                "--name",
+                self._schedule_name,
+                "--schedule-expression",
+                f"at({expires_expr})",
+                "--schedule-expression-timezone",
+                "UTC",
+                "--flexible-time-window",
+                "Mode=OFF",
+                "--action-after-completion",
+                "DELETE",
+                "--target",
+                target,
+            )
+        except CommandFailedException:
+            print_line("Backstop schedule creation failed; terminating the instance", error=True)
+            self._schedule_name = None
+            await self._aws("ec2", "terminate-instances", "--instance-ids", self.instance_id, check=False)
+            raise
+
+    async def ensure_booted(self) -> None:
+        """Wait for running state, then read the public IP into ssh_host.
+
+        `aws ec2 wait` polls bounded (40 × 15 s) so a stuck launch surfaces
+        as a clear failure, never a silent hang — same flake policy as the
+        qemu paths.
+        """
+        assert self.instance_id is not None
+        await self._aws("ec2", "wait", "instance-running", "--instance-ids", self.instance_id)
+        result = await self._aws(
+            "ec2",
+            "describe-instances",
+            "--instance-ids",
+            self.instance_id,
+            "--query",
+            "Reservations[0].Instances[0].PublicIpAddress",
+            "--output",
+            "text",
+        )
+        ip = result.stdout[-1].strip()
+        if not ip or ip == "None":
+            raise RuntimeError(f"Instance {self.instance_id} has no public IP: {result.stdout!r}")
+        self.ssh_host = ip
+
+    async def _find_ssh_port(self) -> None:
+        """Always 22; the host was resolved in ensure_booted()."""
+        return
+
+    async def _instance_state(self) -> str | None:
+        """Current EC2 state name, or None when the instance is unknown."""
+        assert self.instance_id is not None
+        result = await self._aws(
+            "ec2",
+            "describe-instances",
+            "--instance-ids",
+            self.instance_id,
+            "--query",
+            "Reservations[0].Instances[0].State.Name",
+            "--output",
+            "text",
+            check=False,
+            quiet=True,
+        )
+        if result.exitcode != 0:
+            return None
+        state = result.stdout[-1].strip() if result.stdout else ""
+        return state or None
+
+    async def failure_was_spot_interruption(self) -> bool:
+        """True iff the instance was reclaimed (or vanished) underneath us.
+
+        Post-hoc classification per the design note: no live IMDS watcher.
+        A reservation that disappeared outside harness cleanup counts as
+        interrupted too — nothing else removes a ci-cell mid-run.
+        """
+        if self.instance_id is None:
+            return False
+        result = await self._aws(
+            "ec2",
+            "describe-instances",
+            "--instance-ids",
+            self.instance_id,
+            "--query",
+            "Reservations[0].Instances[0].{state: State.Name, reason: StateReason.Code}",
+            "--output",
+            "json",
+            check=False,
+            quiet=True,
+        )
+        if result.exitcode != 0:
+            return True
+        try:
+            info = json.loads("\n".join(result.stdout))
+        except json.JSONDecodeError:
+            return False
+        if not isinstance(info, dict):
+            return True
+        if (
+            info.get("state") in ("shutting-down", "terminated")
+            and info.get("reason") == "Server.SpotInstanceTermination"
+        ):
+            print_line(f"Spot interruption detected on {self.instance_id}", error=True)
+            return True
+        return False
+
+    def print_ssh_instructions(self) -> None:
+        super().print_ssh_instructions()
+        print_line(f"Note: the backstop terminates {self.instance_id} at {self._expires_display} UTC")
+
+    async def wait(self) -> None:
+        """Poll instance state until it terminates (--keep debug sessions).
+
+        There is no local child process to await; the user either Ctrl+Cs
+        (CancelledError → stop()) or the expires_at backstop terminates the
+        instance, which ends this loop.
+        """
+        while await self._instance_state() not in (None, "terminated"):
+            await asyncio.sleep(15)
+
+    async def collect_failure_artifacts(self) -> None:
+        """Console output first (works even when SSH is gone), then base SSH captures."""
+        if self.instance_id is not None:
+            result = await self._aws(
+                "ec2",
+                "get-console-output",
+                "--instance-id",
+                self.instance_id,
+                "--latest",
+                "--query",
+                "Output",
+                "--output",
+                "text",
+                check=False,
+                quiet=True,
+            )
+            if result.exitcode == 0 and result.stdout:
+                self.boot_file.write_text("\n".join(result.stdout) + "\n")
+                print_line(f"Console output: {self.boot_file}")
+        if self.ssh_host:
+            await super().collect_failure_artifacts()
+
+    async def stop(self) -> None:
+        """Terminate the cell, drop the backstop schedule, then base cleanup."""
+        try:
+            if self.instance_id is not None:
+                # Shielded like qemu's pidfile kill: a second SIGINT
+                # mid-cleanup must not leave a billing instance behind.
+                await asyncio.shield(self._teardown_cell())
+        finally:
+            await super().stop()
+
+    async def _teardown_cell(self) -> None:
+        assert self.instance_id is not None
+        await self._aws("ec2", "terminate-instances", "--instance-ids", self.instance_id, check=False)
+        if self._schedule_name is not None:
+            # Already-fired (ActionAfterCompletion=DELETE) or already-deleted
+            # schedules return ResourceNotFoundException — success for us.
+            await self._aws("scheduler", "delete-schedule", "--name", self._schedule_name, check=False)
+
+
+BACKEND_CHOICES: tuple[str, ...] = ("qemu", "aws")
+
+
+def create_machine(
+    backend: str,
+    *,
+    machine: str,
+    role: str,
+    keep_vm: bool,
+    ubuntu_name: str,
+    machine_timeout: int,
+    upstream_mirrors: bool = False,
+    workdir_parent: Path | None = None,
+) -> Machine:
+    """Backend-aware machine factory shared by testrole.py (and later testall.py)."""
+    if backend == "qemu":
+        return QemuMachine(
+            machine=machine,
+            role=role,
+            keep_vm=keep_vm,
+            ubuntu_name=ubuntu_name,
+            machine_timeout=machine_timeout,
+            upstream_mirrors=upstream_mirrors,
+            workdir_parent=workdir_parent,
+        )
+    if backend == "aws":
+        return Ec2Machine(
+            machine=machine,
+            role=role,
+            keep_vm=keep_vm,
+            ubuntu_name=ubuntu_name,
+            machine_timeout=machine_timeout,
+            upstream_mirrors=upstream_mirrors,
+            workdir_parent=workdir_parent,
+        )
+    raise ValueError(f"Unknown backend {backend!r}; known: {BACKEND_CHOICES}")
