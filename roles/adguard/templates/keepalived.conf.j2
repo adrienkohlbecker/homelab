@@ -12,7 +12,11 @@ vrrp_script adguard_healthcheck {
   init_fail
 }
 
-vrrp_instance adguard {
+# The instance carries the DNS VIP, not the resolver implementation: the
+# name stays era-neutral across resolver swaps. The vrrp_script/notify
+# identifiers keep the adguard_ prefix -- they genuinely probe this
+# role's service.
+vrrp_instance dns {
   state     BACKUP
   interface {{ default_interface }}
 
