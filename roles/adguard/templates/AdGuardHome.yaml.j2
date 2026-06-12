@@ -337,7 +337,46 @@ clients:
     rdns: true
     dhcp: true
     hosts: true
-  persistent: []
+{#
+  The bridge gateway is this host's own traffic: netavark's hairpin DNAT
+  masquerades host-local and container queries to a published port into
+  10.88.0.1, so the host plus every container resolving through aardvark
+  collapse into one client. Label it honestly instead of showing
+  host.containers.internal. Serialization parity with AdGuard's startup
+  rewrite: field order mirrors the clientObject struct
+  (internal/home/clients.go), and the uid is pinned -- AdGuard would
+  otherwise generate a random UUIDv7 on first load and the file would
+  re-template (and restart DNS) on the next converge.
+#}
+  persistent:
+    - safe_search:
+        enabled: false
+        bing: true
+        duckduckgo: true
+        ecosia: true
+        google: true
+        pixabay: true
+        yandex: true
+        youtube: true
+      blocked_services:
+        schedule:
+          time_zone: {{ system_timezone }}
+        ids: []
+      name: {{ inventory_hostname }} (host + containers)
+      ids:
+        - 10.88.0.1
+      tags: []
+      upstreams: []
+      uid: 01970612-0000-7000-8000-000000000001
+      upstreams_cache_size: 0
+      upstreams_cache_enabled: false
+      use_global_settings: true
+      filtering_enabled: false
+      parental_enabled: false
+      safebrowsing_enabled: false
+      use_global_blocked_services: true
+      ignore_querylog: false
+      ignore_statistics: false
 log:
   enabled: true
   file: ""
