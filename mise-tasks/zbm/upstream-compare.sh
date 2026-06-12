@@ -30,7 +30,7 @@ x86_64) ;;
   ;;
 esac
 
-for required in curl git podman sha256sum tar; do
+for required in curl docker git sha256sum tar; do
   if ! command -v "$required" >/dev/null 2>&1; then
     echo "missing required command: ${required}" >&2
     exit 1
@@ -102,7 +102,7 @@ for source in "${overlay_sources[@]}"; do
   fi
 done
 
-if ! podman image exists "$builder_tag"; then
+if ! docker image inspect "$builder_tag" >/dev/null 2>&1; then
   echo "comparison builder image not found: ${builder_tag}" >&2
   echo "run 'mise run zbm:builder-image' first, or set ZBM_COMPARE_BUILDER_IMAGE" >&2
   exit 1
@@ -182,11 +182,13 @@ done
 WRAPPER
   chmod +x "${wrapper_dir}/realpath"
 fi
-real_podman="$(command -v podman)"
+# Upstream make-binary.sh hardcodes `podman`, so the wrapper file must carry
+# that name — but it execs docker, the one CLI these scripts use everywhere.
+docker_bin="$(command -v docker)"
 {
   printf '#!/usr/bin/env bash\n'
   printf 'set -euo pipefail\n'
-  printf 'real_podman=%q\n' "$real_podman"
+  printf 'docker_bin=%q\n' "$docker_bin"
   cat <<'WRAPPER'
 args=()
 while [ "$#" -gt 0 ]; do
@@ -202,7 +204,7 @@ while [ "$#" -gt 0 ]; do
   args+=( "$1" )
   shift
 done
-exec "$real_podman" "${args[@]}"
+exec "$docker_bin" "${args[@]}"
 WRAPPER
 } >"${wrapper_dir}/podman"
 chmod +x "${wrapper_dir}/podman"
@@ -291,7 +293,7 @@ lsinitrd_to() {
 
   mount_root="$(dirname "$image")"
   mount_image="/work/${image#"${mount_root}/"}"
-  podman run --rm \
+  docker run --rm \
     --entrypoint /usr/bin/lsinitrd \
     -v "${mount_root}:/work:ro" \
     "$builder_tag" \

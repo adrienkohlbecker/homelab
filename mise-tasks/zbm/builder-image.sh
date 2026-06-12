@@ -72,28 +72,26 @@ git -C "$src_dir" clean -fdx >/dev/null
 # DHCP client).
 img="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
 
-# Registry-backed layer cache in the on-lab Nexus homelab docker repo. The ref
-# defaults to the shared tag here -- the single source of truth for its registry
-# path + version + arch, so CI and the workstation can't drift. Set
-# ZBM_BUILDER_CACHE_REF empty to opt out of caching entirely. --cache-from pulls
-# prior layers so a build reuses the slow xbps-install layers even after the
-# local buildkitd cache is pruned; cache import is best-effort, so a miss or an
-# unauthenticated 401/404 is a non-fatal warning. --cache-to type=registry,mode=max
-# pushes cache manifests for EVERY intermediate layer to the registry during the
-# build (not just the final image's layers as inline would). This makes cache
-# hits granular at the xbps-install layer level even across version bumps, and
-# removes the ordering constraint between the push and the perlfix podman commit
-# below (inline cache was stripped by podman commit, so inline had to push first).
-# Default empty so local workstation builds don't attempt an anonymous pull
-# from a LAN-only Nexus. CI sets ZBM_BUILDER_CACHE_REF explicitly (zbm-build.yml).
+# Registry-backed layer cache in the homelab GitLab project's container
+# registry. --cache-from pulls prior layers so a build reuses the slow
+# xbps-install layers even after the local buildkitd cache is pruned; cache
+# import is best-effort, so a miss or an unauthenticated 401/404 is a
+# non-fatal warning. --cache-to type=registry,mode=max pushes cache manifests
+# for EVERY intermediate layer to the registry during the build (not just the
+# final image's layers as inline would). This makes cache hits granular at
+# the xbps-install layer level even across version bumps, and removes the
+# ordering constraint between the push and the perlfix docker commit below
+# (inline cache was stripped by the commit, so inline had to push first).
+# Default empty so local workstation builds stay self-contained; the
+# .gitlab-ci.yml zbm_build job sets ZBM_BUILDER_CACHE_REF explicitly.
 : "${ZBM_BUILDER_CACHE_REF:=}"
 cache_args=()
 if [ -n "$ZBM_BUILDER_CACHE_REF" ]; then
   cache_args+=(--cache-from "type=registry,ref=${ZBM_BUILDER_CACHE_REF}")
   if [ -n "${CI:-}" ]; then
     # type=registry pushes cache manifests directly during the build; no separate
-    # podman push step needed. Gated on $CI (set by GitHub Actions) so local
-    # workstation builds don't attempt an unauthenticated push.
+    # push step needed. Gated on $CI (set by GitLab CI) so local workstation
+    # builds don't attempt an unauthenticated push.
     cache_args+=(--cache-to "type=registry,ref=${ZBM_BUILDER_CACHE_REF},mode=max")
   fi
 fi
@@ -114,26 +112,29 @@ docker buildx build \
 # file, but it lands missing from the built image while perl's other modules are
 # fine), so generate-zbm dies at "use Pod::Usage" with "Can't locate Pod/Usage.pm".
 # perl-Pod-Usage is only a virtual provide of perl, so it can't be pulled as a
-# package -- but re-extracting perl via podman (which unpacks it correctly)
-# restores the file. The quirk is specific to the rootless buildkitd builder the
-# CI zbm_build step uses; a Mac podman-machine buildx build unpacks perl intact,
-# so this re-extract is a once-per-image-build no-op there.
+# package -- but re-extracting perl via a plain container run (which unpacks
+# it correctly) restores the file. The quirk only ever reproduced under a rootless buildkitd
+# (the retired GitHub lab-runner path); the CI dind builder and Mac
+# podman-machine builds unpack perl intact, making this a cheap
+# once-per-image-build no-op kept as insurance.
 #
-# Runs AFTER the cache push above, never gated: podman commit strips BuildKit's
+# Runs AFTER the cache push above, never gated: the commit strips BuildKit's
 # inline-cache metadata, so the pushed ref must be the unmodified buildx output,
 # and the local image always needs the fix before build.sh runs generate-zbm.
+# No -q on the commit: output is discarded anyway, and the docker CLI has no
+# such flag.
 ctr="zbm_perlfix_$$"
-podman rm -f "$ctr" >/dev/null 2>&1 || true
-trap 'podman rm -f "$ctr" >/dev/null 2>&1 || true' EXIT
-podman run --name "$ctr" --entrypoint /usr/bin/xbps-install "$img" -fy perl
-podman commit -q \
+docker rm -f "$ctr" >/dev/null 2>&1 || true
+trap 'docker rm -f "$ctr" >/dev/null 2>&1 || true' EXIT
+docker run --name "$ctr" --entrypoint /usr/bin/xbps-install "$img" -fy perl
+docker commit \
   --change 'ENTRYPOINT ["/build-init.sh"]' \
   --change 'ENV DRACUT_NO_XATTR=1' \
   "$ctr" "$img" >/dev/null
-podman rm -f "$ctr" >/dev/null
+docker rm -f "$ctr" >/dev/null
 trap - EXIT
 
-podman run --rm --entrypoint /usr/bin/bash "$img" -lc '
+docker run --rm --entrypoint /usr/bin/bash "$img" -lc '
   set -euo pipefail
   command -v dropbear >/dev/null
   test -f /usr/lib/dracut/modules.d/60crypt-ssh/module-setup.sh

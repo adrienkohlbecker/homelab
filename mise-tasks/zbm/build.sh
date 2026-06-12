@@ -33,13 +33,13 @@ if [ ! -d "$src_dir/.git" ]; then
   exit 1
 fi
 
-builder_entrypoint="$(podman image inspect "$builder_tag" --format '{{json .Config.Entrypoint}}' 2>/dev/null || true)"
+builder_entrypoint="$(docker image inspect "$builder_tag" --format '{{json .Config.Entrypoint}}' 2>/dev/null || true)"
 if [ "$builder_entrypoint" != '["/build-init.sh"]' ]; then
   echo "ZBM builder image ${builder_tag} has entrypoint ${builder_entrypoint:-<missing>}, expected [\"/build-init.sh\"]" >&2
   echo "run 'mise run zbm:builder-image' to rebuild the upstream-compatible local builder image" >&2
   exit 1
 fi
-if ! podman run --rm --entrypoint /usr/bin/bash "$builder_tag" -lc 'command -v dropbear >/dev/null && test -f /usr/lib/dracut/modules.d/60crypt-ssh/module-setup.sh'; then
+if ! docker run --rm --entrypoint /usr/bin/bash "$builder_tag" -lc 'command -v dropbear >/dev/null && test -f /usr/lib/dracut/modules.d/60crypt-ssh/module-setup.sh'; then
   echo "ZBM builder image ${builder_tag} is missing dropbear or the crypt-ssh dracut module" >&2
   echo "run 'mise run zbm:builder-image' to rebuild the recovery-capable local builder image" >&2
   exit 1
@@ -89,11 +89,13 @@ done
 WRAPPER
   chmod +x "${wrapper_dir}/realpath"
 fi
-real_podman="$(command -v podman)"
+# Upstream make-binary.sh hardcodes `podman`, so the wrapper file must carry
+# that name — but it execs docker, the one CLI these scripts use everywhere.
+docker_bin="$(command -v docker)"
 {
   printf '#!/usr/bin/env bash\n'
   printf 'set -euo pipefail\n'
-  printf 'real_podman=%q\n' "$real_podman"
+  printf 'docker_bin=%q\n' "$docker_bin"
   cat <<'WRAPPER'
 args=()
 while [ "$#" -gt 0 ]; do
@@ -109,7 +111,7 @@ while [ "$#" -gt 0 ]; do
   args+=( "$1" )
   shift
 done
-exec "$real_podman" "${args[@]}"
+exec "$docker_bin" "${args[@]}"
 WRAPPER
 } >"${wrapper_dir}/podman"
 chmod +x "${wrapper_dir}/podman"
@@ -267,7 +269,7 @@ print(doc['Kernel']['CommandLine'])
 " >"$out_dir/cmdline"
 
 initramfs_listing="$(
-  podman run --rm \
+  docker run --rm \
     --entrypoint /usr/bin/lsinitrd \
     -v "$out_dir:/output:ro" \
     "$builder_tag" \

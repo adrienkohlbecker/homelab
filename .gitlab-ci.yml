@@ -207,3 +207,92 @@ ami_images:
     # Smoke the OIDC chain before spending 20+ min on a bake.
     - aws --region eu-central-1 sts get-caller-identity
     - mise run packer:ami "$MACHINE" --ubuntu "$UBUNTU" --promote
+
+# Manual rebuild of the custom ZFSBootMenu recovery image (zbm/,
+# mise-tasks/zbm/). Heavy (clones ZBM, xbps-installs a Void toolchain, runs
+# buildx), so never part of the regular pipeline: dispatch it after bumping
+# ZBM_VERSION / the zbm/ overlay, verify the artifacts, then pin the new
+# tarball version in roles/zfsbootmenu/vars/main.yml +
+# packer/scripts/chroot.sh.
+#
+# Runs docker-in-docker on a hosted runner: buildx with a docker-container
+# builder against the dind service (the upstream Dockerfile needs real
+# BuildKit for heredoc RUN blocks); the zbm scripts drive the docker CLI
+# throughout — here against dind, on workstations against the podman
+# socket's docker-compatible API. The builder layer cache lives in this
+# project's container registry (zbm-builder:v<version>-<arch>), pushed back
+# under the job token; the tarball publishes to the generic package registry
+# from master only (branch dispatches keep the job artifacts).
+zbm_build:
+  extends: .hosted
+  rules:
+    - when: manual
+      # A skipped manual job must not hold the pipeline in "blocked".
+      allow_failure: true
+  services:
+    - docker:28.3.3-dind
+  # xbps-install + dracut parallelize poorly but the buildx layer pulls and
+  # the ~1.5 GB --load benefit from the medium tier's extra cores and IO.
+  tags:
+    - saas-linux-medium-amd64
+  # Serialize across pipelines: concurrent builds would race on the shared
+  # registry cache ref; never auto-cancel a build mid cache-push/publish.
+  resource_group: zbm_build
+  interruptible: false
+  timeout: 60m
+  variables:
+    # The ci image is plain ubuntu — not the docker: image whose entrypoint
+    # autodetects dind TLS — so point the CLI at the service explicitly.
+    # /certs/client is the volume hosted runners share between the job and
+    # service containers.
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "/certs/client"
+  artifacts:
+    expire_in: 30 days
+    paths:
+      - zbm-build/**/*-bootmenu
+      - zbm-build/**/*-bootmenu.img
+      - zbm-build/**/zfsbootmenu.EFI
+      - zbm-build/**/ssh_host_ed25519_key.pub
+      - zbm-build/**/*.tar.gz
+      - zbm-build/**/*.sha256sum
+  script:
+    - mise install
+    - uv sync --locked
+    # Bounded wait for dind to finish generating its TLS certs and serve.
+    - timeout 60 bash -c 'until docker info >/dev/null 2>&1; do sleep 1; done'
+    # The default docker driver can't export cache to a registry; a
+    # docker-container builder can, and --load imports the result into the
+    # dind daemon where the scripts' post-build container runs read it.
+    - docker buildx create --name zbm --driver docker-container --use
+    - docker buildx inspect --bootstrap zbm
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - |
+      set -euo pipefail
+      ZBM_VERSION="$(awk -F'"' '/^ZBM_VERSION/{print $2; exit}' mise.toml)"
+      ZBM_KERNEL_VERSION="$(awk -F'"' '/^ZBM_KERNEL_VERSION/{print $2; exit}' mise.toml)"
+      [ -n "$ZBM_VERSION" ] && [ -n "$ZBM_KERNEL_VERSION" ] || { echo "could not read ZBM_VERSION/ZBM_KERNEL_VERSION from mise.toml" >&2; exit 1; }
+      ARCH="$(uname -m)"
+      export ZBM_BUILD_SUFFIX="-ci.${CI_PIPELINE_ID}.${CI_JOB_ID}"
+      export ZBM_BUILDER_CACHE_REF="${CI_REGISTRY_IMAGE}/zbm-builder:v${ZBM_VERSION}-${ARCH}"
+      echo "Building ZFSBootMenu v${ZBM_VERSION}${ZBM_BUILD_SUFFIX} for ${ARCH}"
+      mise run zbm:builder-image
+      mise run zbm:build
+      # Turn "it ran" into an assertion: the tarball exists and carries the
+      # components kernel + initrd and the renamed unified EFI.
+      tarball="zbm-build/${ARCH}/zfsbootmenu-v${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX}-${ARCH}.tar.gz"
+      test -f "$tarball" || { echo "tarball not produced: $tarball" >&2; exit 1; }
+      members="$(tar tzf "$tarball")"
+      echo "$members"
+      for f in initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub; do
+        grep -qxF "$f" <<<"$members" || { echo "missing $f in tarball" >&2; exit 1; }
+      done
+      grep -qE '^vmlin.*-bootmenu$' <<<"$members" || { echo "missing vmlin*-bootmenu kernel in tarball" >&2; exit 1; }
+      echo "ZBM tarball OK: $tarball"
+      # Publish via the job token (upload.sh prefers CI_JOB_TOKEN); master
+      # only, so a branch dispatch cannot ship a pinnable version.
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        mise run zbm:upload
+      fi

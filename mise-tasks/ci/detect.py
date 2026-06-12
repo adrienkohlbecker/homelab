@@ -103,9 +103,10 @@ CI_IMAGE_INPUT_PATTERNS: list[str] = [
     r"packer/hcloud_worker\.pkr\.hcl",
 ]
 
-# The custom ZFSBootMenu recovery image is built out-of-band — not a role, not a
-# packer source. A change under either of these dirs triggers the zbm-build
-# validation job (rebuilds the builder image + tarball; no upload).
+# The custom ZFSBootMenu recovery image is built out-of-band — not a role, not
+# a packer source, and built by the manual zbm_build GitLab CI job rather than
+# anything this matrix dispatches. zbm_changed flags changes under these paths
+# for a future auto-validation hookup; nothing consumes it yet.
 ZBM_PATH_PATTERNS: list[str] = [
     r"zbm/",
     r"mise-tasks/zbm/",

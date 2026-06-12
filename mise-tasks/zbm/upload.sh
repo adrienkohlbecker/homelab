@@ -7,32 +7,17 @@
 # version strings unconditionally; no DELETE required. Downloads are
 # anonymous (public project) — only this publish path needs auth.
 #
-# Credential: GITLAB_ZBM_DEPLOY_TOKEN, a project deploy token scoped to
-# write_package_registry.
-#   CI:          injected by the zbm-build workflow step (pushed to the repo
-#                secret by terraform/github.tf).
-#   Workstation: op:// reference from mise.toml [env]; re-exec under
-#                op run -- to resolve it.
+# Auth, by environment:
+#   GitLab CI:   CI_JOB_TOKEN (the zbm_build job) — built-in write access to
+#                this project's package registry, no standing secret. curl,
+#                not glab: glab only authenticates via PRIVATE-TOKEN/Bearer
+#                (a PAT shape job tokens are not valid as), while the
+#                packages API honors job tokens solely through the JOB-TOKEN
+#                header.
+#   Workstation: the operator's authenticated glab CLI (`glab auth login`),
+#                covering the locally-built aarch64 tarballs CI does not
+#                produce. No deploy token to mint or store.
 set -euo pipefail
-
-# Re-exec under op run -- only on the workstation (CI is not set) when the
-# token is still an unresolved op:// reference.
-if [[ -z "${CI:-}" ]] &&
-  [[ "${GITLAB_ZBM_DEPLOY_TOKEN:-}" == op://* ]] &&
-  [[ -z "${_ZBM_UPLOAD_OP_RESOLVED:-}" ]]; then
-  export _ZBM_UPLOAD_OP_RESOLVED=1
-  exec op run -- "$0" "$@"
-fi
-
-# Skip gracefully when the token is unavailable or still an unresolved op://
-# ref (e.g., CI before the deploy token secret is provisioned by terraform
-# apply).
-if [[ -z "${GITLAB_ZBM_DEPLOY_TOKEN:-}" ]] ||
-  [[ "${GITLAB_ZBM_DEPLOY_TOKEN:-}" == op://* ]]; then
-  echo "GITLAB_ZBM_DEPLOY_TOKEN not available; skipping upload" \
-    "(run 'mise run tf apply' to provision the deploy token secret)" >&2
-  exit 0
-fi
 
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 out_dir="${MISE_CONFIG_ROOT}/zbm-build/${arch}"
@@ -59,18 +44,33 @@ done
 version="${tarball#zfsbootmenu-}"
 version="${version%.tar.gz}"
 
-dest_base="https://gitlab.com/api/v4/projects/83079143/packages/generic/zfsbootmenu/${version}"
-# Keep the token out of argv (visible in ps) by feeding curl a config file.
-header_file="$(mktemp)"
-chmod 600 "$header_file"
-trap 'rm -f "$header_file"' EXIT
-printf 'header = "DEPLOY-TOKEN: %s"\n' "$GITLAB_ZBM_DEPLOY_TOKEN" >"$header_file"
-unset GITLAB_ZBM_DEPLOY_TOKEN
+project_id="${CI_PROJECT_ID:-83079143}"
+api_path="projects/${project_id}/packages/generic/zfsbootmenu/${version}"
+
+if [[ -n "${CI_JOB_TOKEN:-}" ]]; then
+  # Keep the token out of argv (visible in ps) by feeding curl a config file.
+  header_file="$(mktemp)"
+  chmod 600 "$header_file"
+  trap 'rm -f "$header_file"' EXIT
+  printf 'header = "JOB-TOKEN: %s"\n' "$CI_JOB_TOKEN" >"$header_file"
+else
+  # The repo's origin is GitHub, so pin glab to the gitlab.com identity
+  # rather than letting it guess a host from the remote.
+  export GITLAB_HOST=gitlab.com
+  glab auth status >/dev/null 2>&1 || {
+    echo "glab is not authenticated against gitlab.com — run 'glab auth login'" >&2
+    exit 1
+  }
+fi
 
 for name in "$tarball" "$sha256sum_file"; do
-  curl --fail-with-body -sS --retry 3 --retry-delay 5 --retry-connrefused \
-    --config "$header_file" \
-    --upload-file "${out_dir}/${name}" "${dest_base}/${name}"
-  echo
+  if [[ -n "${CI_JOB_TOKEN:-}" ]]; then
+    curl --fail-with-body -sS --retry 3 --retry-delay 5 --retry-connrefused \
+      --config "$header_file" \
+      --upload-file "${out_dir}/${name}" "${CI_API_V4_URL}/${api_path}/${name}"
+    echo
+  else
+    glab api "${api_path}/${name}" -X PUT --input "${out_dir}/${name}" >/dev/null
+  fi
   echo "published ${name}"
 done
