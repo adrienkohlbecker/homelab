@@ -25,7 +25,7 @@
 # incremented. Counters were reset earlier (before the UDP probe sweep),
 # so this section adds to the same counter state.
 - name: _verify_drops | Input — TCP-ACK (no SYN) from extns to :80 hits the non-SYN drop
-  command: ip netns exec extns hping3 -A -p 80 -c 1 --quiet 10.99.0.1
+  command: ip netns exec extns hping3 -A -p 80 -c 1 --quiet 192.0.2.1
   changed_when: false
   failed_when: false
   become: true
@@ -74,7 +74,7 @@
               chksum = (chksum & 0xFFFF) + (chksum >> 16)
           chksum = ~chksum & 0xFFFF
           pkt = struct.pack("!BBHHH", 8, 0, chksum, icmp_id, 0)
-          sock.sendto(pkt, ("10.99.0.1", 0))
+          sock.sendto(pkt, ("192.0.2.1", 0))
   become: true
 
 - name: _verify_drops | Input — ICMP echo flood (varying IDs) overflows the rate-limit
@@ -86,7 +86,7 @@
 # Silenced-noise (dport 1900/SSDP) — sending UDP to any port in the
 # silenced set should land on that rule, not the catch-all.
 - name: _verify_drops | Input — UDP to silenced-noise port hits the silenced-noise drop  # noqa: risky-shell-pipe
-  shell: echo ping | ip netns exec extns nc -u -w 1 10.99.0.1 1900
+  shell: echo ping | ip netns exec extns nc -u -w 1 192.0.2.1 1900
   args: { executable: /bin/bash }
   changed_when: false
   failed_when: false
@@ -95,7 +95,7 @@
 # NetBIOS silenced-noise — UDP to dport 137 must land on the NetBIOS
 # silence rule, not the catch-all.
 - name: _verify_drops | Input — UDP to NetBIOS port 137 hits the NetBIOS silenced-noise drop  # noqa: risky-shell-pipe
-  shell: echo ping | ip netns exec extns nc -u -w 1 10.99.0.1 137
+  shell: echo ping | ip netns exec extns nc -u -w 1 192.0.2.1 137
   args: { executable: /bin/bash }
   changed_when: false
   failed_when: false
@@ -104,7 +104,7 @@
 # Catch-all (UDP to a port with no rule, no listener, no scope match)
 # — falls through to the trailing counter-drop.
 - name: _verify_drops | Input — UDP to unscoped 18181 hits the catch-all drop  # noqa: risky-shell-pipe
-  shell: echo ping | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 10.99.0.1 18181
+  shell: echo ping | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 192.0.2.1 18181
   args: { executable: /bin/bash }
   changed_when: false
   failed_when: false
@@ -120,7 +120,7 @@
 # drops the iif scope (`ip saddr ... ip protocol vrrp accept`) would
 # accept this packet and increment the counter.
 - name: _verify_drops | Input — VRRP (proto 112) on wg0 ingress doesn't match the WAN-iif rule
-  command: ip netns exec extns hping3 --rawip -H 112 -c 1 -d 0 --quiet 10.99.0.1
+  command: ip netns exec extns hping3 --rawip -H 112 -c 1 -d 0 --quiet 192.0.2.1
   changed_when: false
   failed_when: false
   become: true

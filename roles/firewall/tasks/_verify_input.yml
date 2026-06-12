@@ -11,19 +11,19 @@
 
 # Unscoped INPUT allow / catch-all reject — baseline coverage.
 - name: _verify_input | INPUT allow — port 80 reachable from extns (unscoped)
-  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:80/
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:80/
   changed_when: false
   failed_when: false
   become: true
 
 - name: _verify_input | INPUT deny — port 18080 (no rule, no listener) hits catch-all
-  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:18080/
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:18080/
   changed_when: false
   failed_when: false
   become: true
 
 - name: _verify_input | INPUT allow — port 443 reachable from extns (unscoped)
-  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:443/
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:443/
   changed_when: false
   failed_when: false
   become: true
@@ -47,7 +47,7 @@
 # connection; rc=0 means the SYN-ACK landed, rc!=0 means the catch-all
 # fired.
 - name: _verify_input | INPUT allow — SSH (22/tcp) reachable from extns (unscoped)
-  shell: ip netns exec extns timeout 3 bash -c "exec 3<>/dev/tcp/10.99.0.1/22"
+  shell: ip netns exec extns timeout 3 bash -c "exec 3<>/dev/tcp/192.0.2.1/22"
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -65,7 +65,7 @@
   changed_when: false
 
 - name: _verify_input | INPUT — wireguard (51820/udp) rejected when ingressing on wg0  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 10.99.0.1 51820
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 192.0.2.1 51820
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -76,7 +76,7 @@
 # confirming wg0 ingress is rejected, which catches a regression that
 # drops the iif scope and exposes 51413 to wg peers.
 - name: _verify_input | INPUT — transmission (51413/tcp) rejected on wg0 ingress (iif scope)
-  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:51413/
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:51413/
   changed_when: false
   failed_when: false
   become: true
@@ -97,7 +97,7 @@
   become: true
 
 - name: _verify_input | INPUT — mosh (60000/udp) reachable from wireguard source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_wg }} 10.99.0.1 60000
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_wg }} 192.0.2.1 60000
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -105,7 +105,7 @@
 - name: _verify_input | INPUT — Samba (445/tcp) reachable from wireguard source
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_wg }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
+      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:445/
   changed_when: false
   failed_when: false
   become: true
@@ -113,7 +113,7 @@
 - name: _verify_input | INPUT — nut (3493/tcp) reachable from wireguard source
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_wg }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
+      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ service_ports.nut }}/
   changed_when: false
   failed_when: false
   become: true
@@ -121,7 +121,7 @@
 # mDNS rule requires iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously.
 # wg saddr fails the saddr half — counter must not increment.
 - name: _verify_input | INPUT — mDNS (5353/udp) sent from wg saddr (saddr scope rejects)  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_wg }} 10.99.0.1 5353
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_wg }} 192.0.2.1 5353
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -131,7 +131,7 @@
 # --rawip -H 2 sends an IGMP (protocol 2) datagram (same mechanism as
 # the VRRP proto-112 negative probe).
 - name: _verify_input | INPUT — IGMP (proto 2) reaches the igmp_accept rule
-  command: ip netns exec extns hping3 --rawip -H 2 -c 1 -d 0 --quiet 10.99.0.1
+  command: ip netns exec extns hping3 --rawip -H 2 -c 1 -d 0 --quiet 192.0.2.1
   changed_when: false
   failed_when: false
   become: true
@@ -148,7 +148,7 @@
   become: true
 
 - name: _verify_input | INPUT — mosh (60000/udp) rejected from home_LAN source via wg0 (iif/saddr mismatch)  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_home }} 10.99.0.1 60000
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_home }} 192.0.2.1 60000
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -156,7 +156,7 @@
 - name: _verify_input | INPUT — Samba (445/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_home }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
+      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:445/
   changed_when: false
   failed_when: false
   become: true
@@ -164,24 +164,24 @@
 - name: _verify_input | INPUT — nut (3493/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_home }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
+      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ service_ports.nut }}/
   changed_when: false
   failed_when: false
   become: true
 
 - name: _verify_input | INPUT — mDNS (5353/udp) sent from home_LAN saddr via wg0 (iif scope rejects)  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_home }} 10.99.0.1 5353
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_home }} 192.0.2.1 5353
   args: { executable: /bin/bash }
   changed_when: false
   become: true
 
 # --- probe_nonscope group (out-of-scope negatives) -------------------
-# probe_nonscope (10.99.0.2 primary on veth_ext) is in neither
+# probe_nonscope (192.0.2.2 primary on veth_ext) is in neither
 # $HOME_LAN nor $WG_SUBNET nor $PODMAN_DEFAULT — every saddr-scoped
 # rule must reject it. No bind task: the primary alias is in place
 # from the netns setup above.
 - name: _verify_input | INPUT — mosh (60000/udp) rejected from non-scope source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 10.99.0.1 60000
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 192.0.2.1 60000
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -189,7 +189,7 @@
 - name: _verify_input | INPUT — Samba (445/tcp) rejected from non-scope source
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_nonscope }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
+      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:445/
   changed_when: false
   failed_when: false
   become: true
@@ -197,7 +197,7 @@
 - name: _verify_input | INPUT — nut (3493/tcp) rejected from non-scope source
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_nonscope }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
+      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ service_ports.nut }}/
   changed_when: false
   failed_when: false
   become: true
@@ -213,7 +213,7 @@
   become: true
 
 - name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from default-bridge source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_podman }} 10.99.0.1 5333
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_podman }} 192.0.2.1 5333
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -235,13 +235,13 @@
 - name: _verify_input | INPUT — nut (3493/tcp) reachable from podman_bridge_pool source
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_podman_pool }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:3493/
+      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:3493/
   changed_when: false
   failed_when: false
   become: true
 
 - name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from non-default-bridge source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_podman_pool }} 10.99.0.1 5333
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_podman_pool }} 192.0.2.1 5333
   args: { executable: /bin/bash }
   changed_when: false
   become: true
