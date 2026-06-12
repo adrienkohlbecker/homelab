@@ -528,13 +528,13 @@ resource "aws_launch_template" "ci_cell" {
 # machine through the same /homelab-ci/ami/<machine>/<ubuntu> shape. A tofu
 # apply refreshes the alias to Canonical's current AMI. Parameters for the
 # baked machines (box/box_deps/pug/lab) are written by the packer:ami
-# pipeline, not managed here. resolute has no stable channel yet; add it to
-# the map when Canonical publishes one.
+# pipeline, not managed here.
 
 data "aws_ssm_parameter" "canonical_ubuntu" {
   for_each = {
-    jammy = "/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
-    noble = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+    jammy    = "/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+    noble    = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+    resolute = "/aws/service/canonical/ubuntu/server/26.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
   }
   name = each.value
 }

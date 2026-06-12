@@ -47,11 +47,11 @@ locals {
   region = "eu-central-1"
 
   # Canonical's per-release AMI name patterns (owner 099720109477). noble
-  # moved to the gp3 path. resolute is deliberately absent — Canonical
-  # publishes no stable-channel AMI for it yet; the lookup fails loudly.
+  # and later use the gp3 path.
   source_ami_names = {
-    jammy = "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
-    noble = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
+    jammy    = "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
+    noble    = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
+    resolute = "ubuntu/images/hvm-ssd-gp3/ubuntu-resolute-26.04-amd64-server-*"
   }
 
   # Mirror of qemu.pkr.hcl's variant_config, reshaped for EBS: sizes are
