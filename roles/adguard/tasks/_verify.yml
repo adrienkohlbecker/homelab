@@ -1,14 +1,16 @@
-- name: _verify | Slurp rendered keepalived conf
-  slurp:
-    src: /etc/keepalived/conf.d/adguard.conf
-  register: adguard_keepalived_rendered
+# _setup imports the full keepalived role, so the fragment is actually
+# loaded by a running daemon here. The vmac child existing is the live
+# proof of `use_vmac` + `vmac_xmit_base`: without them the VIP would ride
+# eth0's primary MAC and UniFi's per-MAC client tracker would flip the
+# host's client entry to the DNS VIP on prod.
+- name: _verify | Keepalived raised the dedicated VRRP vmac interface
+  command: ip -o link show vrrp.{{ dns_keepalived_vrid }}
+  register: adguard_verify_vmac
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: adguard_verify_vmac.rc == 0
   become: true
-
-- name: _verify | Keepalived conf opts the VIP onto a dedicated VRRP vmac
-  assert:
-    that:
-      - "'use_vmac' in (adguard_keepalived_rendered.content | b64decode)"
-      - "'vmac_xmit_base' in (adguard_keepalived_rendered.content | b64decode)"
 
 - name: _verify | Container reports healthy
   command: /usr/bin/podman healthcheck run adguard
@@ -53,6 +55,43 @@
   failed_when: external_ips.box not in adguard_verify_splithorizon.stdout
   become: true
 
+# Recursive resolution through the DoH upstream chain -- every other dig
+# here hits a local rewrite, so without this a broken upstream config
+# (bad DoH URL, bootstrap failure) would pass _verify while real client
+# queries fail. The upstream leg is HTTPS/TCP, so qemu SLIRP's UDP
+# flakiness doesn't apply to it.
+- name: _verify | Upstream resolution answers through DoH
+  command: dig +short +timeout=2 +tries=2 @{{ ansible_facts.default_ipv4.address }} example.com A
+  register: adguard_verify_upstream
+  changed_when: false
+  failed_when: adguard_verify_upstream.stdout_lines | length == 0
+  retries: 30
+  delay: 2
+  until: adguard_verify_upstream.stdout_lines | length > 0
+
+# Blocking is enforced, not just configured: doubleclick.net is an exact
+# entry in the test adlist (group_vars/test.yml), so the filtering engine
+# must report it filtered. The API check is robust against blocking_mode
+# answer-shape changes.
+- name: _verify | Filtering engine blocks a listed domain
+  uri:
+    url: http://127.0.0.1:{{ service_ports.adguard }}/control/filtering/check_host?name=doubleclick.net
+    return_content: true
+    status_code: 200
+  register: adguard_verify_blocked
+  retries: 30
+  delay: 2
+  until: (adguard_verify_blocked.json | default({})).reason | default('') is match('Filtered')
+  failed_when: (adguard_verify_blocked.json | default({})).reason | default('') is not match('Filtered')
+
+# The user_rules undelegated-suffix guard answers locally (0.0.0.0 under
+# blocking_mode default) instead of leaking the query upstream.
+- name: _verify | Undelegated suffix is answered locally
+  command: dig +short +timeout=2 +tries=2 @{{ ansible_facts.default_ipv4.address }} printer.lan A
+  register: adguard_verify_undelegated
+  changed_when: false
+  failed_when: "'0.0.0.0' not in adguard_verify_undelegated.stdout_lines"
+
 - name: _verify | AdGuard filter lists are populated
   uri:
     url: http://127.0.0.1:{{ service_ports.adguard }}/control/filtering/status
@@ -95,6 +134,7 @@
   failed_when: >-
     adguard_verify_admin_gate.status != 302
     or 'auth.' not in (adguard_verify_admin_gate.location | default(''))
+    or ('rd=https://adguard.' ~ inventory_hostname ~ '.' ~ domain) not in (adguard_verify_admin_gate.location | default(''))
   become: true
 
 - name: _verify | Reboot guard service is active
