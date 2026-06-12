@@ -222,22 +222,23 @@ whitelist_filters: []
    a plain scalar, while entries starting with ! or | must be
    single-quoted, matching how yaml.v3 writes them back. #}
 user_rules:
-  - '! Answered locally (0.0.0.0 under blocking_mode default): these names can'
-  - '! never resolve publicly, so internal hostnames and typos must not leak to'
-  - '! the DoH upstreams. Parity with the retired dnscrypt-proxy'
+  - '! Answered NXDOMAIN locally (the RFC 6762 expectation for .local): these'
+  - '! names can never resolve publicly, so internal hostnames and typos must'
+  - '! not leak to the DoH upstreams. dnsrewrite answers count as rewrites in'
+  - '! statistics, not blocks. Parity with the retired dnscrypt-proxy'
   - '! block_unqualified / block_undelegated toggles.'
   - '! Single-label names. Never matches adguard.home or pi.hole (they carry a'
   - '! dot) nor IPv6 literals (the colon exclusion): AdGuard checks HTTPS-record'
   - '! ipv6hints as hostnames, and a dot-only guard would swallow every HTTPS'
   - '! answer carrying one, silently blocking type-65 for half the internet.'
-  - /^[^.:]+$/
+  - /^[^.:]+$/$dnsrewrite=NXDOMAIN
   - '! Undelegated LAN suffixes. `home` and `hole` stay unblocked -- the'
   - '! adguard.home and pi.hole rewrites live under them.'
-  - '||lan^'
-  - '||local^'
-  - '||internal^'
-  - '||test^'
-  - '||home.arpa^'
+  - '||lan^$dnsrewrite=NXDOMAIN'
+  - '||local^$dnsrewrite=NXDOMAIN'
+  - '||internal^$dnsrewrite=NXDOMAIN'
+  - '||test^$dnsrewrite=NXDOMAIN'
+  - '||home.arpa^$dnsrewrite=NXDOMAIN'
 dhcp:
   enabled: false
   interface_name: ""
