@@ -538,7 +538,7 @@ locals {
 resource "aws_launch_template" "ci_cell" {
   for_each = local.ci_machine_instance_types
 
-  name                   = "ci-cell-${each.key}"
+  name                   = "homelab-ci-cell-${each.key}"
   description            = "homelab CI test cell (${each.key})"
   update_default_version = true
 
@@ -594,7 +594,7 @@ resource "aws_launch_template" "ci_cell" {
   }
 
   tags = {
-    Name    = "ci-cell-${each.key}"
+    Name    = "homelab-ci-cell-${each.key}"
     role    = "ci"
     machine = each.key
   }
