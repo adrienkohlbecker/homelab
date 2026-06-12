@@ -1,0 +1,13 @@
+#!/bin/bash
+set -euo pipefail
+
+# Certbot runs every deploy/ hook for every renewed lineage; only the
+# host cert feeds adguard DoT.
+[ "${RENEWED_LINEAGE:-}" = "/etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}" ] || exit 0
+
+install -o {{ adguard_user.uid }} -g {{ adguard_user.group }} -m 0600 \
+  "$RENEWED_LINEAGE/fullchain.pem" "$RENEWED_LINEAGE/privkey.pem" \
+  /mnt/services/adguard/conf/tls/
+
+# AdGuard only loads certificates at startup; restart to serve the new pair.
+systemctl restart adguard

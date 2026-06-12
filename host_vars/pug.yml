@@ -56,6 +56,12 @@ fan2go_enabled: true
 dns_keepalived_priority: 10
 netdata_keepalived_vrrp_enabled: true
 
+# dns.{{ domain }} is the DoT (Private DNS) name: it resolves to the DNS
+# VIP via an adguard rewrite, so whichever DNS peer holds the VIP must
+# present a cert covering it. Mirrored in host_vars/lab.yml.
+certbot_extra_sans:
+  - dns.{{ domain }}
+
 netdata_contexts:
   conntrack:       netfilter.conntrack_sockets
   containers:      cgroup.cpu_limit

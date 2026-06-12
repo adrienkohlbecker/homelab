@@ -61,6 +61,7 @@ ExecStart=/usr/bin/podman run \
    validated by the role's input assert. #}
     --publish {{ dns_keepalived_ip }}:53:53/udp \
     --publish {{ dns_keepalived_ip }}:53:53/tcp \
+    --publish {{ dns_keepalived_ip }}:853:853/tcp \
     --publish 127.0.0.1:{{ service_ports.adguard }}:3000/tcp \
     --health-cmd         '["getent","hosts","adguard.home"]' \
     --health-startup-cmd '["getent","hosts","adguard.home"]' \
