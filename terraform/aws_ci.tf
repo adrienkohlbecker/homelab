@@ -410,10 +410,12 @@ resource "aws_iam_role_policy" "ci_bake" {
         Sid    = "PackerBake"
         Effect = "Allow"
         Action = [
-          # Build instance lifecycle.
+          # Build instance lifecycle. ModifyInstanceAttribute is packer's
+          # ENA-enable step (ena_support = true in packer/aws/ami.pkr.hcl,
+          # load-bearing: Nitro instance types refuse non-ENA AMIs).
           "ec2:RunInstances", "ec2:StopInstances", "ec2:TerminateInstances",
           "ec2:DescribeInstances", "ec2:DescribeInstanceStatus",
-          "ec2:GetConsoleOutput",
+          "ec2:GetConsoleOutput", "ec2:ModifyInstanceAttribute",
           # ebssurrogate volumes and the snapshots behind the AMI.
           "ec2:CreateVolume", "ec2:DeleteVolume", "ec2:AttachVolume",
           "ec2:DetachVolume", "ec2:DescribeVolumes",
