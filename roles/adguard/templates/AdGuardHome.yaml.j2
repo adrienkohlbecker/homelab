@@ -28,20 +28,26 @@ dns:
   ratelimit_whitelist: []
   refuse_any: true
   upstream_dns:
-    # Primary resolver: Cloudflare DoH keeps household DNS encrypted over
-    # normal HTTPS/443 and avoids EDNS Client Subnet, favoring privacy over
-    # occasionally sharper CDN geo-steering.
+{#
+  Primary resolver: Cloudflare DoH keeps household DNS encrypted over normal
+  HTTPS/443 and avoids EDNS Client Subnet, favoring privacy over occasionally
+  sharper CDN geo-steering.
+#}
     - https://cloudflare-dns.com/dns-query
   upstream_dns_file: ""
   bootstrap_dns:
-    # Bootstrap must be plain DNS; it resolves DoH hostnames before encrypted
-    # upstreams are reachable. Keep using the shared bootstrap escape hatch.
+{#
+  Bootstrap must be plain DNS; it resolves DoH hostnames before encrypted
+  upstreams are reachable. Keep using the shared bootstrap escape hatch.
+#}
 {% for resolver in bootstrap_dns_resolver %}
     - {{ resolver ~ ':53' }}
 {% endfor %}
   fallback_dns:
-    # Fallback resolver: Google DoH is a broad, reliable secondary when
-    # Cloudflare is unavailable. ECS stays disabled below for privacy.
+{#
+  Fallback resolver: Google DoH is a broad, reliable secondary when Cloudflare
+  is unavailable. ECS stays disabled below for privacy.
+#}
     - https://dns.google/dns-query
   upstream_mode: load_balance
   fastest_timeout: 1s
@@ -168,25 +174,25 @@ filtering:
     - domain: adguard.home
       answer: 127.0.0.1
       enabled: true
-    - domain: pug.fahm.fr
+    - domain: pug.{{ domain }}
       answer: {{ external_ips.pug }}
       enabled: true
-    - domain: '*.pug.fahm.fr'
+    - domain: '*.pug.{{ domain }}'
       answer: {{ external_ips.pug }}
       enabled: true
-    - domain: lab.fahm.fr
+    - domain: lab.{{ domain }}
       answer: {{ external_ips.lab }}
       enabled: true
-    - domain: '*.lab.fahm.fr'
+    - domain: '*.lab.{{ domain }}'
       answer: {{ external_ips.lab }}
       enabled: true
-    - domain: box.fahm.fr
+    - domain: box.{{ domain }}
       answer: {{ external_ips.box }}
       enabled: true
-    - domain: '*.box.fahm.fr'
+    - domain: '*.box.{{ domain }}'
       answer: {{ external_ips.box }}
       enabled: true
-    - domain: auth.fahm.fr
+    - domain: auth.{{ domain }}
       answer: {{ external_ips.lab }}
       enabled: true
   safe_fs_patterns: []
