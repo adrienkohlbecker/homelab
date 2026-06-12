@@ -658,18 +658,3 @@ resource "aws_budgets_budget" "ci" {
     subscriber_email_addresses = ["adrien.kohlbecker@gmail.com"]
   }
 }
-
-# ─── Outputs ─────────────────────────────────────────────────────────────────
-# Apply-time cross-checks only: nothing reads outputs — CI jobs and the
-# harness hardcode the ARNs as stable, public-repo-safe literals
-# (.gitlab-ci.yml, test/machine.py) and discover subnets by tag.
-
-output "ci_cell_role_arn" {
-  description = "Must match the AWS_ROLE_ARN literal test-cell jobs export (.gitlab-ci.yml)."
-  value       = aws_iam_role.ci_cell.arn
-}
-
-output "ci_bake_role_arn" {
-  description = "Must match the AWS_ROLE_ARN literal in the ami_images job (.gitlab-ci.yml)."
-  value       = aws_iam_role.ci_bake.arn
-}
