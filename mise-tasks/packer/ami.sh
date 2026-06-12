@@ -70,13 +70,16 @@ echo "==> Every EBS mapping sets DeleteOnTermination=true"
 param="/homelab-ci/ami/${machine}/${ubuntu}"
 if [ "${usage_promote:-false}" != "true" ]; then
   echo "==> Candidate only (no --promote). Smoke it, then promote with:"
-  echo "    aws --region ${region} ssm put-parameter --name ${param} --type String --value ${ami} --overwrite"
+  echo "    aws --region ${region} ssm put-parameter --name ${param} --type String --data-type aws:ec2:image --value ${ami} --overwrite"
   exit 0
 fi
 
+# data-type aws:ec2:image has EC2 validate the value is a real, available
+# AMI at write time, so a bad promotion fails here, not at cell launch.
 aws --region "$region" ssm put-parameter \
   --name "$param" \
   --type String \
+  --data-type aws:ec2:image \
   --value "$ami" \
   --overwrite
 echo "==> Promoted ${ami} to ${param}"
