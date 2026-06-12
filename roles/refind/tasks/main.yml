@@ -304,6 +304,28 @@
   tags:
     - refind
 
+# Mirror the config next to the firmware-fallback binary. rEFInd only reads
+# refind.conf from its own directory, so the fallback copy at \EFI\BOOT
+# otherwise boots config-less — 20s default countdown, then the first
+# auto-scanned loader (the ZBM image) with empty load options: no zbm.skip
+# and no serial console args. With the mirror, an NVRAM-wipe recovery boot
+# (and every boot on EC2 test cells, whose NVRAM starts empty) behaves
+# exactly like the normal NVRAM-entry path, minus theme and keymap driver
+# (both resolve relative to rEFInd's own directory; rEFInd skips a missing
+# include and falls back to text mode).
+- name: Mirror refind.conf to the firmware-fallback directory  # noqa: require-backup
+  when: not (ansible_check_mode and refind_conf.changed)
+  copy:
+    src: /boot/efi/EFI/refind/refind.conf
+    dest: /boot/efi/EFI/BOOT/refind.conf
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - refind
+
 - name: Configure refind theme  # noqa: require-backup
   copy:
     src: theme.conf

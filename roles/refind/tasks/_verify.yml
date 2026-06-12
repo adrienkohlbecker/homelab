@@ -63,6 +63,20 @@
       - "'include themes/refind-theme-regular/theme.conf' in _conf"
     fail_msg: "refind.conf missing expected boot directives"
 
+- name: _verify | Read the firmware-fallback refind.conf mirror
+  slurp:
+    src: /boot/efi/EFI/BOOT/refind.conf
+  register: _refind_verify_fallback_conf
+  become: true
+
+- name: _verify | Fallback refind.conf is an exact mirror of the primary
+  assert:
+    that: _refind_verify_fallback_conf.content == _refind_verify_conf.content
+    fail_msg: >-
+      /boot/efi/EFI/BOOT/refind.conf differs from
+      /boot/efi/EFI/refind/refind.conf — the fallback boot path (empty/wiped
+      NVRAM) would use a stale config.
+
 - name: _verify | Stat the loader referenced by the menuentry
   stat:
     path: /boot/efi/EFI/ZBM/VMLINUZ.EFI
