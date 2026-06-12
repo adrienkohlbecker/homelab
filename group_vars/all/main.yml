@@ -97,13 +97,14 @@ email_domain: noreply.{{ domain }}
 # external timestamps; containers render user-visible times in local.
 system_timezone: Europe/Paris
 
-# Public anycast resolver used to escape bootstrap dependency cycles --
-# the pihole container's fallback nameserver, the list-update container's
-# only resolver (host resolv.conf points at the DHCP-supplied pihole LAN
-# address, a black hole from inside an unrelated container), and the qemu
-# test fixture's
-# bootstrap before pihole comes up.
-bootstrap_dns_resolver: 1.1.1.1
+# Public anycast resolvers used to escape bootstrap dependency cycles --
+# the DNS container's fallback nameserver, the list-update container's
+# only resolver (host resolv.conf points at the DHCP-supplied DNS VIP,
+# a black hole from inside an unrelated container), and the qemu test
+# fixture's bootstrap before AdGuard Home comes up.
+bootstrap_dns_resolver:
+  - 1.1.1.1
+  - 1.0.0.1
 
 # systemd-journald storage backend. persistent → /var/log/journal/<machine-id>/
 # (rides ZFS snapshots/replication on prod). Override to volatile on transient
