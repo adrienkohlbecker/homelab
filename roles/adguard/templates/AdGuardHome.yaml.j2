@@ -11,6 +11,13 @@ http:
     insecure_enabled: false
   address: 0.0.0.0:3000
   session_ttl: 30d
+{#
+  No app-level users: the admin UI/API is only published on the host
+  loopback and fronted by the Authelia-gated nginx vhost (auth: required
+  in tasks/main.yml), which is the sole LAN ingress. Host-local processes
+  and co-located containers can reach the API unauthenticated -- accepted
+  for this home environment.
+#}
 users: []
 auth_attempts: 5
 block_auth_min: 15
@@ -22,7 +29,12 @@ dns:
     - 0.0.0.0
   port: 53
   anonymize_client_ip: false
-  ratelimit: 10000
+{#
+  Per-client (/32) request budget. The upstream default of 20 rps is too
+  tight for a busy household client; 300 keeps one misbehaving LAN/IoT
+  device from monopolizing the resolver without throttling real use.
+#}
+  ratelimit: 300
   ratelimit_subnet_len_ipv4: 32
   ratelimit_subnet_len_ipv6: 64
   ratelimit_whitelist: []
@@ -54,15 +66,28 @@ dns:
   allowed_clients: []
   disallowed_clients: []
   blocked_hosts: []
+{#
+  X-Forwarded-For is honored only from nginx's path into the container:
+  the loopback publish DNATs onto the default podman network, so requests
+  arrive sourced from that network's gateway. Trust exactly that address,
+  not the whole bridge range -- any co-located container could otherwise
+  forge its client identity.
+#}
   trusted_proxies:
     - 127.0.0.0/8
     - ::1/128
-    - {{ podman_bridge_pool }}
+    - {{ podman_default_network | ansible.utils.ipaddr('1') | ansible.utils.ipaddr('address') }}/32
   cache_enabled: true
   cache_size: 4194304
   cache_ttl_min: 0
   cache_ttl_max: 0
-  cache_optimistic: false
+{#
+  Serve-stale: during a WAN or DoH-upstream outage, answer cached names
+  with expired data (TTL 30s) while refreshing in the background, instead
+  of going dark for the whole household. Entries older than 12h are
+  evicted rather than served.
+#}
+  cache_optimistic: true
   cache_optimistic_answer_ttl: 30s
   cache_optimistic_max_age: 12h
   bogus_nxdomain: []
@@ -85,7 +110,11 @@ dns:
   use_dns64: false
   dns64_prefixes: []
   serve_http3: false
-  use_http3_upstreams: false
+{#
+  Both DoH upstreams speak HTTP/3; QUIC's faster reconnects shave tail
+  latency after idle periods. Falls back to HTTP/2 if UDP/443 is blocked.
+#}
+  use_http3_upstreams: true
   serve_plain_dns: true
   hostsfile_enabled: false
   pending_requests:
@@ -104,35 +133,65 @@ tls:
   certificate_path: ""
   private_key_path: ""
   strict_sni_check: false
+{#
+  Query log disabled entirely: it is browsing-history-equivalent data for
+  the whole household, and /mnt/services/adguard/work rides ZFS snapshots
+  plus off-host replication, where snapshot retention would keep it far
+  beyond any in-app interval. Aggregate statistics below stay on for the
+  dashboard.
+#}
 querylog:
   dir_path: ""
   ignored: []
   interval: 30d
   size_memory: 1000
-  enabled: true
+  enabled: false
   ignored_enabled: false
-  file_enabled: true
+  file_enabled: false
 statistics:
   dir_path: ""
-  ignored: []
+{#
+  The keepalived healthcheck digs adguard.home every second per host;
+  without this the synthetic probes drown the top-domains statistics.
+#}
+  ignored:
+    - adguard.home
   interval: 10d
   enabled: true
-  ignored_enabled: false
+  ignored_enabled: true
 filters:
-{% for url in pihole_adlists %}
+{% for url in adguard_adlists %}
   - enabled: true
     url: {{ url }}
     name: blocklist_{{ loop.index }}
     id: {{ loop.index }}
 {% endfor %}
 whitelist_filters:
-{% for url in pihole_whitelists %}
+{% for url in adguard_whitelists %}
   - enabled: true
     url: {{ url }}
     name: allowlist_{{ loop.index }}
     id: {{ 1000 + loop.index }}
 {% endfor %}
-user_rules: []
+{#
+  Parity with the retired dnscrypt-proxy block_unqualified /
+  block_undelegated toggles: single-label names and undelegated LAN
+  suffixes can never resolve publicly, so answer them locally (0.0.0.0
+  under blocking_mode default) instead of leaking internal hostnames and
+  typos to the DoH upstreams. `home` is deliberately not blocked --
+  adguard.home (the healthcheck rewrite above) lives under it; the
+  single-label regex never matches it since it carries a dot.
+#}
+{# The regex rule is deliberately unquoted: AdGuard rewrites this file on
+   startup and serializes it as a plain scalar -- a quoted rendering here
+   would re-template (and restart) on every converge. #}
+user_rules:
+  - /^[^.]+$/
+  - '||lan^'
+  - '||local^'
+  - '||internal^'
+  - '||test^'
+  - '||home.arpa^'
 dhcp:
   enabled: false
   interface_name: ""
