@@ -89,10 +89,8 @@ headscale_oidc_client_id: headscale
 # itself consumes to lab's physical IP, which wg0 routes as a cross-site host
 # /32:
 #   - auth.fahm.fr: Headscale OIDC discovery at startup.
-#   - nexus.lab.fahm.fr: ZFSBootMenu release artifacts.
 etc_hosts_entries:
   auth.fahm.fr: "{{ network.hosts.lab.physical }}"
-  nexus.lab.fahm.fr: "{{ network.hosts.lab.physical }}"
 
 # Trimmed from the pug-derived list to what a Hetzner cloud VM actually
 # exposes. Dropped contexts: powercap (no Intel RAPL in a VM), zfs (no ZFS
