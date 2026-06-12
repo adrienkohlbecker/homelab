@@ -134,6 +134,13 @@ locals {
   # the same var (dns_fahm_fr.tf) via local.fahm_fr_wan_records -- single source now.
   home_wan_ip = var.home_wan_ip
 
+  # The operator's laptop SSH public key, mirroring the `laptop` entry in
+  # group_vars/all/main.yml ssh_public_keys -- kept as a literal because
+  # public keys aren't secret and terraform doesn't read ansible group_vars.
+  # Consumed by both the Hetzner project key (hetzner.tf) and the EC2 CI
+  # keypair (aws_ci.tf); rotate all the copies together.
+  operator_ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEFQDmZidqILmoI6o9f8KLz+0hJad+Xh4Lm5OLsYDZTa adrien.kohlbecker@gmail.com"
+
   # data/network_topology.yml is the canonical IP topology, also
   # consumed by ansible (group_vars/all/network.yml — same source of
   # truth, parallel consumer). `network` loads it verbatim;

@@ -26,13 +26,10 @@ variable "hetzner_network_zone" {
 }
 
 # The operator's laptop SSH key, registered in the project so the instance's
-# cloud-init injects it into the `ak` user (Ansible's first hop). Mirrors the
-# `laptop` entry in group_vars/all/main.yml's ssh_public_keys -- kept as a
-# literal here since public keys aren't secret and terraform doesn't read
-# ansible group_vars.
+# cloud-init injects it into the `ak` user (Ansible's first hop).
 resource "hcloud_ssh_key" "laptop" {
   name       = "laptop"
-  public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEFQDmZidqILmoI6o9f8KLz+0hJad+Xh4Lm5OLsYDZTa adrien.kohlbecker@gmail.com"
+  public_key = local.operator_ssh_public_key
 }
 
 # Reserved public IPv4 -- stable across instance rebuilds and is what

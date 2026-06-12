@@ -513,7 +513,7 @@ resource "aws_iam_service_linked_role" "spot" {
 
 resource "aws_key_pair" "ci_operator" {
   key_name   = "homelab-ci-operator"
-  public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEFQDmZidqILmoI6o9f8KLz+0hJad+Xh4Lm5OLsYDZTa adrien.kohlbecker@gmail.com"
+  public_key = local.operator_ssh_public_key
 
   tags = { role = "ci" }
 }
