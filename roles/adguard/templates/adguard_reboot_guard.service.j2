@@ -3,11 +3,15 @@ Description=DNS reboot guard
 Documentation=file:///usr/local/sbin/adguard_reboot_guard
 After=network-online.target keepalived.service
 Wants=network-online.target keepalived.service
+StartLimitInterval=600
+StartLimitBurst=3
 
 [Service]
-Type=simple
+Type=exec
 Restart=always
 RestartSec=5
+TimeoutStopSec=30
+SyslogIdentifier=%N
 ExecStart=/usr/local/sbin/adguard_reboot_guard
 
 [Install]
