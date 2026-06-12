@@ -7,3 +7,4 @@
 # like packer/artifacts, the task uses a real symlink instead — edit the
 # task directly.
 .ansible-mitogen-strategy
+mise.local.toml
