@@ -49,3 +49,9 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
     # Job containers orchestrate remote EC2 cells over ssh/https only -- no
     # devices, no nested containers, no privileges.
     privileged = false
+    # Job containers don't inherit the host's /etc/hosts, and public DNS may
+    # point lab-hosted names at Tailscale addresses fox can't reach -- pin
+    # the one name jobs consume (packer:ami stages the ZBM tarball from the
+    # lab Nexus) to lab's physical IP, same as the host-level pin in
+    # host_vars/fox.yml etc_hosts_entries.
+    extra_hosts = ["nexus.lab.fahm.fr:{{ network.hosts.lab.physical }}"]
