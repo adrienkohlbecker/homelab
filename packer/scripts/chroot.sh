@@ -10,6 +10,8 @@ set -euxo pipefail
 #   PARTITIONS_EFI, PARTITIONS_SWAP, HOSTNAME, USERNAME.
 #   PARTITIONS_SWAP is only set for single-disk (LAYOUT=""); mirror
 #   variants swap on the rpool/swap zvol provision.sh creates.
+# - Optional: REFIND_TIMEOUT (default 3) — rEFInd menu countdown in
+#   seconds; aws_provision.sh sets -1 (boot default immediately).
 # All list-shaped vars are space-delimited strings (bash arrays don't
 # survive `export`); use them unquoted to word-split.
 
@@ -502,8 +504,15 @@ else
   refind_dont_scan_dirs="EFI:/EFI/ZBM"
 fi
 
+# Menu countdown. 3 matches the role template (a converge overwrites this
+# file with that value); the AWS bake sets -1 so EC2 cells, which boot
+# unwatched via the firmware-fallback path, skip the countdown entirely
+# (~6s/boot measured) — the EC2 serial console is interactive, so holding
+# a key during rEFInd startup still reaches the menu.
+REFIND_TIMEOUT="${REFIND_TIMEOUT:-3}"
+
 cat <<EOF >/boot/efi/EFI/refind/refind.conf
-timeout 3
+timeout $REFIND_TIMEOUT
 default_selection "$refind_default_selection"
 dont_scan_dirs $refind_dont_scan_dirs
 
