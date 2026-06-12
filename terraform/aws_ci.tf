@@ -539,16 +539,22 @@ resource "aws_key_pair" "ci_operator" {
 # One per machine. The AMI is deliberately NOT set here: the harness passes
 # --image-id resolve:ssm:/homelab-ci/ami/<machine>/<ubuntu> per launch, so a
 # bake promotion never touches terraform. Disk layout (multi-disk pug/lab)
-# lives in the AMI's block device mapping, not here. Instance types are the
-# gate-C tuning knob; t3a sizes mirror the qemu specs' memory for gate B.
+# lives in the AMI's block device mapping, not here. Instance types settled
+# by the gate-C benchmark (notes/ci_aws_test_cells.md): apt/dpkg-heavy cells
+# are CPU-bound, and c6a.large (dedicated Zen3) runs them ~1.5-1.6x faster
+# than t3a.medium (burstable Zen1) at near-identical per-cell cost — the
+# higher rate is offset by the shorter run. minimal stays burstable: its
+# cells already beat the lab baseline and never sustain CPU. Re-benchmark
+# candidates with HOMELAB_EC2_INSTANCE_TYPE (test/machine.py) before
+# changing these.
 
 locals {
   ci_machine_instance_types = {
-    minimal  = "t3a.small"  # 2 GiB, mirrors qemu minimal
-    box      = "t3a.medium" # 4 GiB
-    box_deps = "t3a.large"  # 8 GiB; box_deps needs >4 GiB (see QEMU_MACHINE_SPECS)
-    pug      = "t3a.medium"
-    lab      = "t3a.medium"
+    minimal  = "t3a.small" # 2 GiB, mirrors qemu minimal
+    box      = "c6a.large" # 2 vCPU / 4 GiB
+    box_deps = "m6a.large" # box-class Zen3 cores with the 8 GiB floor (>4 needed, see QEMU_MACHINE_SPECS)
+    pug      = "c6a.large"
+    lab      = "c6a.large"
   }
 }
 
