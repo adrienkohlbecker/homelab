@@ -5,20 +5,8 @@
 # EventBridge Scheduler execution role, and the budget tripwire. Changing an
 # instance type or spot policy happens here, never in test/.
 #
-# Bootstrap (manual, once, after apply):
-#   1. Until the first packer:ami bake, seed the box AMI parameter from the
-#      gate-A artifact so the harness can resolve it:
-#        aws ssm put-parameter --region eu-central-1 \
-#          --name /homelab-ci/ami/box/noble --type String \
-#          --data-type aws:ec2:image \
-#          --value ami-08f50eebedb583d9f --overwrite
-#      That artifact predates the operator-key bake and still authorizes the
-#      vagrant key only — `ssh-add packer/vagrant.key` until a real bake
-#      replaces it (the harness itself passes no -i for EC2 cells).
-#   2. At GitLab cutover nothing is configured project-side: jobs export
-#      AWS_ROLE_ARN as hardcoded in-script literals (.gitlab-ci.yml already
-#      does for the bake role; cell jobs follow suit) — the ARNs are stable,
-#      public-repo-safe values, not CI/CD variables.
+# First-apply bootstrap (AMI parameter seeding, GitLab cutover):
+# notes/ci_aws_test_cells.md, "Bootstrap".
 
 locals {
   ci_aws_region = "eu-central-1"
