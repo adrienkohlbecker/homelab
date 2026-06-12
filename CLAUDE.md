@@ -49,9 +49,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 ## Workflows — use the skill, don't reinvent
 
 - `/triage <service>` — investigate a service end-to-end (resolve host(s), gather state, summarize).
-- `/split_worktree_commits` — split a multi-finding worktree into per-finding commits.
 - `/new_podman_role` — scaffold a new podman service role per *Podman Service Conventions*.
-- `/cross_review [target]` — have the *other* agent (Claude ↔ Codex) review changes, via `mise run {claude,codex}:review`.
 
 Skills and hook scripts are agent-neutral and live once under `.agents/` (`skills/`, `hooks/`). Codex discovers `.agents/skills/` natively; Claude Code reads it through the `.claude/skills` symlink. Hooks are wired per-agent — `.claude/settings.json` (via `$CLAUDE_PROJECT_DIR`) and `.codex/hooks.json` (via `git rev-parse --show-toplevel`; codex trust-hashes each entry, so re-trust with `/hooks` after editing). New skills go in `.agents/skills/<name>/SKILL.md` and reference `AGENTS.md` (a symlink to CLAUDE.md), not CLAUDE.md, so wording stays agent-neutral.
 
@@ -212,7 +210,7 @@ GitHub Actions on lab via `github_runner`. Internals: [notes/github_runner_desig
 
 Descriptive imperative subjects; prefix with role when it helps. Body: summary + motivation, max two paragraphs.
 
-**Splitting:** use `/split_worktree_commits`. **Always `git diff --staged` before `git commit`.** **Never stage a vault-rendering template hunk-by-hunk** — files with rendered secrets must be staged whole-file or not at all.
+**Always `git diff --staged` before `git commit`.** **Never stage a vault-rendering template hunk-by-hunk** — files with rendered secrets must be staged whole-file or not at all.
 
 ## Security & Configuration Tips
 

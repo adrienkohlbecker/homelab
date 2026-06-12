@@ -46,59 +46,5 @@
         ]
       }
     ]
-  },
-  "permissions": {
-    "allow": [
-      "Bash(mise run lint:ansible-changed *)",
-      "Bash(mise run lint*)",
-      "Bash(mise run tf plan*)",
-      "Bash(mise run tf validate*)",
-      "Bash(mise run tf providers*)",
-      "Bash(.venv/bin/python test/testrole.py *)",
-      "Bash(.venv/bin/ansible-lint *)",
-      "Bash(ansible-lint *)",
-      "Bash(source .venv/bin/activate*)",
-      "Bash(test/testrole.py *)",
-      "Bash(python test/testrole.py *)",
-      "Bash(/Users/ak/Work/homelab/test/testrole.py *)",
-      "Bash(python3 *)",
-      "Bash(uv run *)",
-      "Bash(curl -sL https://raw.githubusercontent.com/*)",
-      "Bash(git -C /Users/ak/Work/homelab *)",
-      "Bash(ssh lab sudo podman network *)",
-      "Bash(ssh lab sudo podman ps*)",
-      "Bash(ssh lab sudo podman inspect *)",
-      "Bash(ssh lab sudo podman exec * cat *)",
-      "Bash(ssh lab sudo podman exec * getent *)",
-      "Bash(ssh lab sudo systemctl status *)",
-      "Bash(ssh lab sudo journalctl *)",
-      "Bash(ssh lab sudo ss *)",
-      "Bash(ssh lab sudo nft list *)",
-      "Bash(ssh lab sudo ip *)",
-      "Bash(ssh pug sudo podman network *)",
-      "Bash(ssh pug sudo podman ps*)",
-      "Bash(ssh pug sudo podman inspect *)",
-      "Bash(ssh pug sudo podman exec * cat *)",
-      "Bash(ssh pug sudo podman exec * getent *)",
-      "Bash(ssh pug sudo systemctl status *)",
-      "Bash(ssh pug sudo journalctl *)",
-      "Bash(ssh pug sudo ss *)",
-      "Bash(ssh pug sudo nft list *)",
-      "Bash(ssh pug sudo ip *)",
-      "WebFetch(domain:docs.podman.io)",
-      "WebFetch(domain:docs.zfsbootmenu.org)",
-      "WebFetch(domain:docs.voidlinux.org)",
-      "WebFetch(domain:man.voidlinux.org)",
-      "WebFetch(domain:openzfs.github.io)",
-      "WebFetch(domain:docs.fluentbit.io)",
-      "WebFetch(domain:registry.terraform.io)",
-      "WebFetch(domain:www.authelia.com)",
-      "WebFetch(domain:docs.gitea.com)",
-      "WebFetch(domain:gitea.com)",
-      "WebFetch(domain:docs.seerr.dev)"
-    ]
-  },
-  "worktree": {
-    "baseRef": "head"
   }
 }
