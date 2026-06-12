@@ -45,7 +45,7 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
     # cache baked in -- see .gitlab-ci.yml's ci_image job). Jobs may still
     # name another image; the runner is locked to this project so there is
     # no allowed_images policy to maintain.
-    image = "registry.gitlab.com/adrienkohlbecker/homelab/ci:latest"
+    image = "registry.gitlab.com/akohlbecker/homelab/ci:latest"
     # Job containers orchestrate remote EC2 cells over ssh/https only -- no
     # devices, no nested containers, no privileges.
     privileged = false

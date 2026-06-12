@@ -14,7 +14,7 @@ locals {
   # is the only identity binding (IAM has no condition key for GitLab's
   # immutable project_id), so this namespace must never be released — a
   # re-registered username could recreate the project and mint valid tokens.
-  ci_gitlab_project = "adrienkohlbecker/homelab"
+  ci_gitlab_project = "akohlbecker/homelab"
   ci_account_id     = data.aws_caller_identity.current.account_id
 }
 
