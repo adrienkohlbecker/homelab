@@ -2024,9 +2024,17 @@ class Ec2Machine(Machine):
         }
         tag_spec = "ResourceType=instance,Tags=[" + ",".join(f"{{Key={k},Value={v}}}" for k, v in tags.items()) + "]"
 
+        # Instance-type override on top of the launch template — the
+        # benchmarking instrument for tuning the per-machine types that
+        # live in terraform (ci_machine_instance_types). In CI the cell
+        # role's IAM condition pins ec2:InstanceType to the approved set,
+        # so this can only deviate under operator credentials.
+        type_override = os.environ.get("HOMELAB_EC2_INSTANCE_TYPE")
+
         result = await self._aws(
             "ec2",
             "run-instances",
+            *(["--instance-type", type_override] if type_override else []),
             "--launch-template",
             f"LaunchTemplateName=homelab-ci-cell-{self.machine}",
             "--image-id",
