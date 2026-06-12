@@ -211,10 +211,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         metavar="PATH",
-        help="After port allocation (before qemu starts), write one "
+        help="As soon as the ports are allocated, write one "
         "'HOST_PORT GUEST_PORT' line per --extra-hostfwd to PATH. "
-        "Useful in --foreground mode where the serial console immediately "
-        "floods the terminal and the printed port line scrolls away.",
+        "Lets scripts and second terminals find the forwarded ports — in "
+        "--foreground mode the serial console immediately floods the "
+        "terminal and the printed port line scrolls away.",
     )
 
     args = parser.parse_args()
@@ -258,7 +259,17 @@ def _dump_boot_console(m: QemuMachine, lines: int = 200) -> None:
     print_line("--- end boot console ---")
 
 
-async def _run_async(m: QemuMachine, *, wait_for_ssh: bool, exit_after_ready: bool, seed: Path | None) -> None:
+def _write_hostfwds(m: QemuMachine, path: Path | None) -> None:
+    if path is None:
+        return
+    with path.open("w") as fh:
+        for guest_port, host_port in m.extra_hostfwd_ports.items():
+            fh.write(f"{host_port} {guest_port}\n")
+
+
+async def _run_async(
+    m: QemuMachine, *, wait_for_ssh: bool, exit_after_ready: bool, seed: Path | None, write_hostfwds: Path | None
+) -> None:
     """Default flow: prepare + boot + ensure_ssh + wait, all under asyncio.
 
     With exit_after_ready, skip the m.wait() block — the async with unwinds
@@ -274,6 +285,7 @@ async def _run_async(m: QemuMachine, *, wait_for_ssh: bool, exit_after_ready: bo
     assert task is not None
     with cancel_on_signal(task):
         async with m:
+            _write_hostfwds(m, write_hostfwds)
             await m.ensure_booted()
             print_line("Booted")
             if wait_for_ssh:
@@ -349,10 +361,7 @@ def _run_foreground(m: QemuMachine, write_hostfwds: Path | None = None) -> int:
         asyncio.run(m.prepare())
         for guest_port, host_port in m.extra_hostfwd_ports.items():
             print_line(f"Extra hostfwd: 127.0.0.1:{host_port} -> guest:{guest_port}")
-        if write_hostfwds is not None:
-            with write_hostfwds.open("w") as fh:
-                for guest_port, host_port in m.extra_hostfwd_ports.items():
-                    fh.write(f"{host_port} {guest_port}\n")
+        _write_hostfwds(m, write_hostfwds)
         cmd = m._boot_command()
         print_cmd_line(cmd)
         proc = subprocess.Popen(cmd)
@@ -409,6 +418,7 @@ def main() -> int:
                     wait_for_ssh=not args.no_ssh_wait,
                     exit_after_ready=args.exit_after_ready,
                     seed=args.seed,
+                    write_hostfwds=args.write_hostfwds,
                 )
             )
     except asyncio.CancelledError:
