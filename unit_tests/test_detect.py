@@ -196,14 +196,10 @@ class TestPackerSourcesFor:
     @pytest.mark.parametrize(
         "path, expected",
         [
-            ("packer/hcloud_worker.pkr.hcl", {"worker"}),
-            ("packer/scripts/provision_worker.sh", {"worker"}),
-            ("mise-tasks/packer/worker.sh", {"worker"}),
-            ("roles/github_runner/vars/main.yml", {"worker"}),
-            ("packer/ubuntu_images.json", {"qemu", "worker"}),
+            ("packer/ubuntu_images.json", {"qemu"}),
             ("mise-tasks/packer/hetzner.sh", {"hetzner_upload"}),
-            ("mise-tasks/packer/_hcloud_token.sh", {"hetzner_upload", "worker"}),
-            ("mise-tasks/packer/hcloud-prune-snapshots.sh", {"hetzner_upload", "worker"}),
+            ("mise-tasks/packer/_hcloud_token.sh", {"hetzner_upload"}),
+            ("mise-tasks/packer/hcloud-prune-snapshots.sh", {"hetzner_upload"}),
             ("packer/qemu.pkr.hcl", {"qemu"}),
             ("packer/scripts/chroot.sh", {"qemu"}),
             ("mise-tasks/packer/build", {"qemu"}),

@@ -83,14 +83,10 @@ PACKER_PATH_PATTERNS: list[str] = [
 # mise-tasks/packer/ file not explicitly listed falls through to "qemu"
 # (safe default).
 PACKER_SOURCE_MAP: list[tuple[str, list[str]]] = [
-    (r"packer/hcloud_worker\.pkr\.hcl", ["worker"]),
-    (r"packer/scripts/provision_worker\.sh", ["worker"]),
-    (r"mise-tasks/packer/worker\.sh", ["worker"]),
-    (r"roles/github_runner/vars/main\.yml", ["worker"]),
-    (r"packer/ubuntu_images\.json", ["qemu", "worker"]),
+    (r"packer/ubuntu_images\.json", ["qemu"]),
     (r"mise-tasks/packer/hetzner\.sh", ["hetzner_upload"]),
-    (r"mise-tasks/packer/_hcloud_token\.sh", ["hetzner_upload", "worker"]),
-    (r"mise-tasks/packer/hcloud-prune-snapshots\.sh", ["hetzner_upload", "worker"]),
+    (r"mise-tasks/packer/_hcloud_token\.sh", ["hetzner_upload"]),
+    (r"mise-tasks/packer/hcloud-prune-snapshots\.sh", ["hetzner_upload"]),
 ]
 _PACKER_SOURCE_MAP_COMPILED = [(re.compile(r"^" + pat + r"$"), srcs) for pat, srcs in PACKER_SOURCE_MAP]
 
@@ -100,7 +96,6 @@ CI_IMAGE_INPUT_PATTERNS: list[str] = [
     r"pyproject\.toml",
     r"uv\.lock",
     r"packer/qemu\.pkr\.hcl",
-    r"packer/hcloud_worker\.pkr\.hcl",
 ]
 
 # The custom ZFSBootMenu recovery image is built out-of-band — not a role, not

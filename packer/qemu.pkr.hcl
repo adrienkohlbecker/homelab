@@ -53,8 +53,7 @@ locals {
   arch_raw = trimspace(data.external-raw.host_arch.result)
   arch     = local.arch_raw == "arm64" ? "aarch64" : local.arch_raw
 
-  # Cloud image pins (snapshot date + sha256) live in ubuntu_images.json
-  # — single source of truth shared with packer/scripts/provision_worker.sh.
+  # Cloud image pins (snapshot date + sha256) live in ubuntu_images.json.
   # Bump when refreshing; older snapshots eventually fall out of the
   # upstream listing (and out of the Nexus proxy cache).
   ubuntu_images   = jsondecode(file("ubuntu_images.json"))

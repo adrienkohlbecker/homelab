@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #MISE description="Prune old Hetzner Cloud snapshots, keeping newest 2 + any running server's image"
-#USAGE arg "<selector>" help="Label selector for snapshots to prune (e.g. 'role=ci-worker,ubuntu=noble')"
+#USAGE arg "<selector>" help="Label selector for snapshots to prune (e.g. 'os=ubuntu-zfs,ubuntu=jammy')"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
-# Callers (packer:hetzner, packer:worker) resolve the token before
-# invoking this script; it must already be a real token, not an op:// ref.
+# The caller (packer:hetzner) resolves the token before invoking this
+# script; it must already be a real token, not an op:// ref.
 [ -n "${HCLOUD_TOKEN:-}" ] || {
   echo "HCLOUD_TOKEN is unset" >&2
   exit 1

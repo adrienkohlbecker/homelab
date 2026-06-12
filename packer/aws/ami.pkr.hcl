@@ -18,7 +18,7 @@
 # Lives in its own directory (not beside qemu.pkr.hcl): packer loads all
 # sibling *.pkr.hcl files as a single configuration, and this template shares
 # variable names (ubuntu_name) with the qemu one. mise run packer:ami invokes
-# it file-targeted, mirroring how hcloud_worker.pkr.hcl is driven.
+# it directory-targeted.
 #
 # The shipped cell image is byte-identical in content to the qemu target
 # (image_target=qemu in variant_config): gate A proved that image boots

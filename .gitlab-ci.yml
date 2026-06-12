@@ -131,38 +131,6 @@ ci_image:
         docker push "$CI_REGISTRY_IMAGE/ci:latest"
       fi
 
-# Rebake of the pre-baked Hetzner Cloud CI worker snapshot (`mise run
-# packer:worker`: packer/hcloud_worker.pkr.hcl + provision_worker.sh, with
-# location fallback and old-snapshot pruning). Manual- and master-only:
-# packer only drives the Hetzner API and SSHes into the build VM's public
-# address, so a hosted runner orchestrates it fine. Nothing consumes the
-# snapshot since the fleeting fleet was retired for the AWS cells
-# (roles/gitlab_runner is a Docker executor now); this job is kept as the
-# fleet rollback path until gate D of notes/ci_aws_test_cells.md
-# decommissions the Hetzner CI project wholesale.
-#
-# Required CI/CD variable: HCLOUD_TOKEN — the DEDICATED homelab-ci project's
-# read/write token (terraform/hetzner_ci.tf), never the homelab project's:
-# a leak from CI must stop at the disposable CI project.
-worker_image:
-  extends: .hosted
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      when: manual
-      # A skipped manual job must not hold the pipeline in "blocked".
-      allow_failure: true
-  # One bake at a time across pipelines, and never auto-cancelled: a killed
-  # run can orphan the packer build server on Hetzner.
-  resource_group: worker_image
-  interruptible: false
-  timeout: 30m
-  script:
-    # Fail with a clear message rather than letting the task fall back to
-    # its 1Password path (op is not in the ci image).
-    - test -n "${HCLOUD_TOKEN:-}" || { echo "HCLOUD_TOKEN CI/CD variable is not set" >&2; exit 1; }
-    - uv sync --locked
-    - mise run packer:worker
-
 # Bake + promote the EC2 test-cell AMIs (notes/ci_aws_test_cells.md): one
 # parallel job per (machine, release) cell via the amazon-ebssurrogate
 # builder — no KVM anywhere, so this runs on fox's Docker-executor runner
@@ -220,9 +188,10 @@ ami_images:
 #
 # Required CI/CD variable: HCLOUD_TOKEN_HOMELAB (masked + protected) — the
 # homelab Hetzner project's read/write token: the snapshot must land in the
-# project fox lives in. This is the deliberate exception to worker_image's
-# CI-project-token-only rule, scoped to a protected-ref manual job; it held
-# the same blast radius as a GitHub repo secret before the migration.
+# project fox lives in. The explicit _HOMELAB suffix guards the wrong-token
+# mistake (a stale CI-project token converges and publishes silently into
+# the wrong project); exposure is scoped to this protected-ref manual job,
+# the same blast radius the GitHub repo secret had before the migration.
 fox_image:
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true"
@@ -242,8 +211,7 @@ fox_image:
   timeout: 90m
   variables:
     # The bake half and the upload half read the same env var; map the
-    # homelab-project token in without clobbering worker_image's meaning
-    # of HCLOUD_TOKEN at the project-variable level.
+    # explicitly-named project variable onto the name hcloud tooling reads.
     HCLOUD_TOKEN: $HCLOUD_TOKEN_HOMELAB
   script:
     # Fail before the 20+ min bake, not after it, when the variable is
