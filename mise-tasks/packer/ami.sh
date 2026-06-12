@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 #MISE description="Bake an EC2 test-cell AMI (amazon-ebssurrogate; no KVM needed) and optionally promote it"
 #MISE interactive=true
-#USAGE arg "<machine>" help="Machine to bake: box, pug, or lab"
-#USAGE complete "machine" run="printf 'box\npug\nlab\n'"
+#USAGE arg "<machine>" help="Machine to bake: box, pug, lab, or box_deps (derived from the promoted box AMI)"
+#USAGE complete "machine" run="printf 'box\npug\nlab\nbox_deps\n'"
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="jammy"
 #USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
 #USAGE flag "--promote" help="After a successful bake + mapping check, write the AMI id to the /homelab-ci/ami/<machine>/<ubuntu> SSM parameter the harness resolves. Without it the bake prints the candidate AMI id and the promote command."
+#USAGE flag "--ssh-key <path>" help="box_deps only: private key authorized on the box AMI (CI passes the CI_CELL_SSH_KEY file variable; locally the ssh agent supplies the operator identity)"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
@@ -14,12 +15,38 @@ machine="${usage_machine}"
 ubuntu="${usage_ubuntu}"
 
 case "$machine" in
-box | pug | lab) ;;
+box | pug | lab | box_deps) ;;
 *)
-  echo "Error: machine must be box, pug, or lab (got '$machine')" >&2
+  echo "Error: machine must be box, pug, lab, or box_deps (got '$machine')" >&2
   exit 1
   ;;
 esac
+
+# box/pug/lab install from scratch under the ebssurrogate builder; box_deps
+# boots the promoted box AMI and converges packer/seed_deps.yml onto it
+# under amazon-ebs (see the source comment in packer/aws/ami.pkr.hcl).
+only="amazon-ebssurrogate.${machine}"
+extra_vars=()
+if [ "$machine" = "box_deps" ]; then
+  only="amazon-ebs.box_deps"
+  # Resolve the parent here rather than in HCL so the derivation always
+  # starts from the *promoted* box, never a most-recent candidate.
+  src_ami=$(aws --region "$region" ssm get-parameter \
+    --name "/homelab-ci/ami/box/${ubuntu}" \
+    --query Parameter.Value --output text)
+  echo "==> Deriving from promoted box AMI ${src_ami}"
+  extra_vars+=(-var "box_deps_source_ami=${src_ami}")
+  if [ -n "${usage_ssh_key:-}" ]; then
+    # GitLab file-type CI/CD variables land group/world-readable; ssh
+    # refuses unprotected private keys.
+    chmod 600 "${usage_ssh_key}"
+    extra_vars+=(-var "cell_ssh_key=${usage_ssh_key}")
+  fi
+  # The seed converge runs bare ansible-playbook (packer's ansible
+  # provisioner), outside the harness that normally repairs the
+  # .ansible-mitogen-strategy symlink ansible.cfg points at.
+  uv run python test/setup_mitogen.py
+fi
 
 # --on-error=ask keeps the failed build instance up for SSH debugging when a
 # human is at the terminal; CI gets cleanup so a failure can't leave a
@@ -39,10 +66,11 @@ packer build \
   -timestamp-ui \
   -warn-on-undeclared-var \
   "--on-error=${on_error}" \
-  -only="amazon-ebssurrogate.${machine}" \
+  -only="${only}" \
   -var "ubuntu_name=${ubuntu}" \
   -var "build_id=${CI_PIPELINE_ID:-local}" \
   -var "manifest_path=${manifest}" \
+  ${extra_vars[@]+"${extra_vars[@]}"} \
   packer/aws
 
 ami=$(python3 -c '

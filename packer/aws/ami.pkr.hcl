@@ -32,6 +32,11 @@ packer {
       version = "~> 1"
       source  = "github.com/hashicorp/amazon"
     }
+    # box_deps seed converge (the amazon-ebs build below).
+    ansible = {
+      version = "~> 1"
+      source  = "github.com/hashicorp/ansible"
+    }
   }
 }
 
@@ -57,6 +62,18 @@ variable "hetzner_image_path" {
   description = "Local path the hetzner source's gzipped raw disk image downloads to; mise-tasks/packer/hetzner-bake.sh passes the per-release path."
 }
 
+variable "box_deps_source_ami" {
+  type        = string
+  default     = ""
+  description = "AMI id the box_deps derivation layers onto. mise-tasks/packer/ami.sh resolves it from the /homelab-ci/ami/box/<ubuntu> SSM parameter so the seed always starts from the promoted box, never a most-recent candidate."
+}
+
+variable "cell_ssh_key" {
+  type        = string
+  default     = ""
+  description = "Path to a private key authorized on the box AMI (the homelab-ci-cell identity in operator_ssh_keys). Empty = the local ssh agent supplies the operator key. CI passes the CI_CELL_SSH_KEY file variable."
+}
+
 locals {
   region = "eu-central-1"
 
@@ -73,9 +90,9 @@ locals {
   # disk paths are EBS mapping names the build instance resolves via
   # aws_provision.sh. rpool_disks = how many leading disks form $DISKS
   # (the rpool); the rest are $EXTRA_DISKS for pools.sh. box_deps is not a
-  # source here, same as the qemu path: it derives from box by launching
-  # the box AMI and seeding deps (see the design note). minimal needs no
-  # bake at all (Canonical AMI alias in terraform/aws_ci.tf).
+  # variant here: it derives from the promoted box AMI under the amazon-ebs
+  # source below, same as the qemu path derives box_deps from box. minimal
+  # needs no bake at all (Canonical AMI alias in terraform/aws_ci.tf).
   variant_config = {
     box = {
       rpool_disks  = 1
@@ -140,8 +157,14 @@ locals {
   # ci-cell security group. Matches terraform's aws_key_pair.ci_operator
   # (minimal's cloud-init path); the harness relies on the operator's ssh
   # agent for the private half.
+  #
+  # homelab-ci-cell is the dedicated CI identity: GitLab jobs that SSH into
+  # cells (today the box_deps seed bake, later the role-test matrix) get its
+  # private half through the CI_CELL_SSH_KEY protected file variable —
+  # never the operator's personal key.
   operator_ssh_keys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEFQDmZidqILmoI6o9f8KLz+0hJad+Xh4Lm5OLsYDZTa adrien.kohlbecker@gmail.com",
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAIGpIVsLZs1aYR0J1Tppi8AoRMhCFjN6eGQAXG4DbsQ homelab-ci-cell",
   ]
 
   common_tags = {
@@ -369,6 +392,57 @@ source "amazon-ebssurrogate" "lab" {
   run_volume_tags = merge(local.common_tags, { machine = "lab" })
 }
 
+# box_deps derives from the promoted box AMI: boot it, converge
+# packer/seed_deps.yml over SSH (the same playbook the qemu derivation runs
+# via test/launch.py --seed), stop, create-image. amazon-ebs rather than
+# another ebssurrogate source because the seed needs a *booted* box, not an
+# attached volume: the play reboots into the HWE kernel mid-run so podman
+# bakes native-overlayfs storage config, and the podman/nginx roles start
+# real services. No temporary keypair — the image has no cloud-init to
+# install one, so SSH rides a key already baked into the box AMI
+# (operator_ssh_keys: the operator's via agent locally, homelab-ci-cell via
+# var.cell_ssh_key in CI).
+source "amazon-ebs" "box_deps" {
+  region = local.region
+  # The cell launch template's box_deps type (terraform
+  # ci_machine_instance_types): the seed itself is apt-bound and would fit
+  # smaller, but reusing the cell shape keeps one less number to reconcile.
+  instance_type = "m6a.large"
+  ssh_username  = "vagrant"
+  ssh_interface = "public_ip"
+
+  ssh_agent_auth       = var.cell_ssh_key == ""
+  ssh_private_key_file = var.cell_ssh_key != "" ? var.cell_ssh_key : null
+
+  associate_public_ip_address = true
+
+  subnet_filter {
+    filters = { "tag:Name" = "homelab-ci-*" }
+    random  = true
+  }
+  security_group_filter {
+    filters = { "tag:Name" = "homelab-ci-cell" }
+  }
+
+  source_ami = var.box_deps_source_ami
+
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
+
+  # Stop + create-image: boot mode, ENA, and the block-device mapping all
+  # inherit from the box parent.
+  ami_name = "homelab-ci-box_deps-${var.ubuntu_name}-{{timestamp}}"
+  # ASCII only: EC2 rejects anything beyond it in AMI descriptions.
+  ami_description = "homelab CI test fixture (box_deps, ${var.ubuntu_name}): box + pre-baked podman/nginx"
+
+  tags            = merge(local.common_tags, { machine = "box_deps", Name = "homelab-ci-box_deps-${var.ubuntu_name}" })
+  snapshot_tags   = merge(local.common_tags, { machine = "box_deps" })
+  run_tags        = merge(local.common_tags, { machine = "box_deps", Name = "packer-homelab-ci-box_deps" })
+  run_volume_tags = merge(local.common_tags, { machine = "box_deps" })
+}
+
 # The fox boot image: same surrogate flow, but the artifact is the raw disk
 # downloaded by the build-block provisioners below, not an AMI — the builder
 # offers no skip for AMI registration, so hetzner-bake.sh deregisters the
@@ -526,6 +600,60 @@ build {
     direction   = "download"
     source      = "/home/ubuntu/hetzner.raw.gz"
     destination = var.hetzner_image_path
+  }
+
+  post-processor "manifest" {
+    output = var.manifest_path
+  }
+}
+
+# box_deps: its own build block — the surrogate build's file/shell
+# provisioners (aws_provision.sh) install an OS onto blank volumes, while
+# this one converges a playbook inside an already-running box.
+build {
+  sources = ["source.amazon-ebs.box_deps"]
+
+  # SSH up != boot complete — the same settle gate the qemu seed path
+  # (test/launch.py --seed) applies before converging. Bounded; non-running
+  # final states (degraded, maintenance) fail the bake.
+  provisioner "shell" {
+    inline = ["timeout 300 systemctl is-system-running --wait"]
+  }
+
+  provisioner "ansible" {
+    playbook_file = "${path.root}/../seed_deps.yml"
+    user          = "vagrant"
+    # Direct connection: ansible talks to the cell's public IP itself, so
+    # the play's mid-run reboot (HWE kernel on jammy) reconnects exactly as
+    # it does under the test harness; packer's communicator sits idle.
+    use_proxy = false
+    # Reproduce the harness inventory semantics: host `box` in group `test`
+    # (host_vars/box.yml fixture vars + the test vault), with the generated
+    # inventory placed at the repo root so ansible's inventory-adjacent
+    # group_vars/host_vars lookup resolves — packer/seed_deps.yml has no
+    # vars siblings of its own.
+    host_alias          = "box"
+    groups              = ["test"]
+    inventory_directory = path.cwd
+    # CI checkouts are world-writable, which makes ansible skip ansible.cfg
+    # discovery from the cwd; pin it so the repo config (mitogen strategy,
+    # vault ids, host_key_checking=False) applies. ami.sh repairs the
+    # .ansible-mitogen-strategy symlink the cfg points at before building.
+    # Role search is playbook-dir-relative (packer/roles), so the repo's
+    # roles/ tree needs pinning too.
+    ansible_env_vars = [
+      "ANSIBLE_CONFIG=${path.cwd}/ansible.cfg",
+      "ANSIBLE_ROLES_PATH=${path.cwd}/roles",
+    ]
+    extra_arguments = concat(
+      # Clear nexus_url so the mirror_* Jinja in group_vars resolves to
+      # upstream URLs — the lab Nexus is unreachable from AWS (same switch
+      # the harness's --upstream-mirrors path passes).
+      ["-e", "nexus_url="],
+      # With agent auth packer has no key file to hand ansible; with an
+      # explicit key, pass it through so the direct connection uses it too.
+      var.cell_ssh_key != "" ? ["-e", "ansible_ssh_private_key_file=${var.cell_ssh_key}"] : [],
+    )
   }
 
   post-processor "manifest" {

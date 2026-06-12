@@ -176,6 +176,55 @@ ami_images:
     - aws --region eu-central-1 sts get-caller-identity
     - mise run packer:ami "$MACHINE" --ubuntu "$UBUNTU" --promote
 
+# Derive the box_deps AMIs from the promoted box AMIs: the same packer:ami
+# pipeline as ami_images, but the amazon-ebs source (packer/aws/ami.pkr.hcl)
+# boots the box AMI and converges packer/seed_deps.yml onto it over SSH —
+# the AWS counterpart of `mise run packer:seed-deps`. Manual and
+# protected-ref only, like ami_images (same OIDC bake role). Dispatch it
+# after every box promotion for the release, mirroring the qemu rule
+# (packer:seed-deps after every packer:build box).
+#
+# Required CI/CD variable: CI_CELL_SSH_KEY (file, protected) — the private
+# half of the homelab-ci-cell key whose public half ami.pkr.hcl bakes into
+# the cell AMIs (operator_ssh_keys). Prerequisite: the box AMI for the
+# release was baked with that key aboard, or SSH to the seed instance is
+# refused.
+ami_box_deps:
+  rules:
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+      when: manual
+      # A skipped manual job must not hold the pipeline in "blocked".
+      allow_failure: true
+  tags:
+    - fox-docker-aws
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  parallel:
+    matrix:
+      - UBUNTU: [ jammy, noble, resolute ]
+  # One seed bake per release across pipelines, serializing the SSM
+  # promotion; never auto-cancelled — a killed run can orphan the on-demand
+  # seed instance.
+  resource_group: ami-box_deps-$UBUNTU
+  interruptible: false
+  timeout: 60m
+  script:
+    # Fail before the launch, not at the SSH wait, when the key is missing.
+    - test -n "${CI_CELL_SSH_KEY:-}" || { echo "CI_CELL_SSH_KEY CI/CD variable is not set" >&2; exit 1; }
+    # Same drift self-heal as .hosted, against the image's /opt/mise tree.
+    - mise install
+    - uv sync --locked
+    # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
+    # AssumeRoleWithWebIdentity provider wants a file path.
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
+    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
+    - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
+    - export AWS_ROLE_SESSION_NAME="ami-box-deps-$CI_JOB_ID"
+    # Smoke the OIDC chain before spending 15+ min on a seed converge.
+    - aws --region eu-central-1 sts get-caller-identity
+    - mise run packer:ami box_deps --ubuntu "$UBUNTU" --ssh-key "$CI_CELL_SSH_KEY" --promote
+
 # Bake + publish fox's Hetzner Cloud boot image. The image is built by the
 # same pools.sh/chroot.sh install as the cell AMIs, on an EC2 surrogate
 # volume (packer/aws, IMAGE_TARGET=hetzner — no KVM; the byproduct AMI is
