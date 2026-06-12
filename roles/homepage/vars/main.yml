@@ -23,7 +23,7 @@ homepage_bookmarks:
     - { name: MinIO,         abbr: MN, sub: minio,        icon: minio }
     - { name: InfluxDB,      abbr: IF, sub: influxdb,     icon: influxdb }
     - { name: Uptime Kuma,   abbr: UK, sub: kuma,         icon: uptime-kuma }
-    - { name: Pi-hole,       abbr: PH, sub: pihole,       icon: pi-hole, path: /admin/ }
+    - { name: AdGuard Home,  abbr: AH, sub: adguard,      icon: adguard-home }
     - { name: Netdata (lab), abbr: NL, sub: netdata,      icon: netdata }
     - { name: Netdata (pug), abbr: NP, sub: netdata,      icon: netdata, host: pug }
     - { name: Netdata (fox), abbr: NF, sub: netdata,      icon: netdata, host: fox }

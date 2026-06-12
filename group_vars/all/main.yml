@@ -37,9 +37,9 @@ zfs_mount_cache_datasets:
 
 macvlan_blocks: []
 etc_hosts_entries:
-  # auth.fahm.fr is a pihole custom DNS entry (→ lab's LAN IP). When pihole
+  # auth.fahm.fr is a custom DNS entry (→ lab's LAN IP). When DNS
   # is under load, Go-runtime DNS lookups (gitea OIDC, headscale) time out
-  # waiting for a UDP response. Pinning it here bypasses pihole entirely.
+  # waiting for a UDP response. Pinning it here bypasses the DNS VIP entirely.
   auth.fahm.fr: "{{ network.hosts.lab.physical }}"
 fail2ban_enabled: false
 has_transcoding_acceleration: false
@@ -121,7 +121,7 @@ influxdb_root_org: home
 # Ports each host-level service publishes. Single source of truth for unit
 # templates (--publish for loopback-bound podman services, ListenStream= for
 # native daemons), nginx proxy_pass, firewall rules, and cross-role consumers
-# (pihole's dnscrypt upstream, etc.). Migrate roles to consume from here as
+# (AdGuard Home's dnscrypt upstream, etc.). Migrate roles to consume from here as
 # they get touched; for collisions, this is the place to grep.
 service_ports:
   # Authelia's upstream default is 9091 but that collides with
@@ -130,6 +130,7 @@ service_ports:
   # roles/authelia/templates/configuration.yml.j2 server.address);
   # only the host-side --publish maps to this port.
   authelia: 9092
+  adguard: 9874
   bazarr: 6767
   dnscrypt_proxy: 5053
   eaton_ipp: 4680
@@ -182,10 +183,6 @@ service_ports:
   # container.
   nexus: 8082
   nut: 3493
-  # pihole admin UI (lighttpd in the container), loopback-only -- nginx
-  # fronts it on the pihole subdomain behind authelia. The container's
-  # internal listener is :80; only the host-side --publish maps to this.
-  pihole: 8943
   # Plex's well-known port, published on 0.0.0.0 for direct native-client
   # connections (not loopback-only like its siblings); nginx also fronts it.
   plex: 32400

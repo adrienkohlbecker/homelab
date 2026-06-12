@@ -188,7 +188,6 @@ netdata_collectors:
   - go.d:collector:logind:logind
   - go.d:collector:nginx:local
   - go.d:collector:nvme:nvme
-  - go.d:collector:pihole:local
   - go.d:collector:prometheus:fluentbit
   - go.d:collector:prometheus:kuma
   - go.d:collector:prometheus:minio
@@ -313,7 +312,7 @@ github_runner_instances:
   - { repo: homelab, suffix: gen4, owner: adrienkohlbecker, labels: "self-hosted,lab" }
 
 # auth.{{ domain }} is an apex-zone CNAME → lab.{{ domain }} (public DNS), with a
-# pihole override resolving the LAN clients to lab's internal IP. The
+# local DNS override resolving the LAN clients to lab's internal IP. The
 # per-host wildcard cert covers `*.lab.{{ domain }}` but NOT apex names, so
 # the Authelia portal needs auth.{{ domain }} on its SAN list. Adding entries
 # here trips the SAN-drift detector in roles/certbot and force-renews.
@@ -323,7 +322,7 @@ certbot_extra_sans:
 # Tailscale home exit node (mesh client registering against the fox headscale
 # control plane -- see notes/headscale_mesh_redesign.md §C). HA pair with pug.
 # Advertise the physical partition. On Trusted WiFi, DHCP's more-specific
-# 10.123.0.0/21 option-121 route wins and pihole's VIP stays local; off-home,
+# 10.123.0.0/21 option-121 route wins and the DNS VIP stays local; off-home,
 # this /18 reaches the physical sites without selecting an exit node.
 tailscale_advertise_routes: "10.123.0.0/18"
 tailscale_advertise_exit_node: true

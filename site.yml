@@ -83,7 +83,7 @@
     - nut_server
     - resolved
     - dnscrypt_proxy
-    - pihole
+    - adguard
     - docker_client
     - subid
     - tailscale
@@ -167,18 +167,18 @@
       tags:
         - always
       block:
-        - name: Assert pihole keepalived priorities are distinct
+        - name: Assert DNS keepalived priorities are distinct
           assert:
             that:
               - (pihole_keepalived_peers | map('extract', hostvars, 'pihole_keepalived_priority') | unique | list | length)
                 == (pihole_keepalived_peers | length)
             fail_msg: >-
-              pihole_keepalived_priority must be distinct across all peers
+              DNS keepalived priorities must be distinct across all peers
               ({{ pihole_keepalived_peers | map('extract', hostvars, 'pihole_keepalived_priority') | list }}).
               Equal priorities defeat the yield-based race protection.
 
-        - name: Probe peer pihole before reboot
-          command: dig +short +timeout=3 +tries=2 @{{ item }} pi.hole
+        - name: Probe peer DNS before reboot
+          command: dig +short +timeout=3 +tries=2 @{{ item }} adguard.home
           loop: "{{ _reboot_dns_ips }}"
           register: _reboot_dns_probe
           changed_when: false
@@ -188,7 +188,7 @@
           when: _reboot_dns_probe.results | selectattr('rc', 'eq', 0) | selectattr('stdout') | list | length == 0
           fail:
             msg: >-
-              No pihole peer is answering DNS — refusing to reboot to preserve
+              No DNS peer is answering — refusing to reboot to preserve
               DNS availability. Recover a peer first, or rm /var/run/reboot-required.
 
         - name: Yield to higher-priority DNS peer (race protection)
@@ -199,9 +199,9 @@
               Lower keepalived priority — yielding 30s in case a higher-priority
               peer is rebooting concurrently
 
-        - name: Re-probe peer pihole after yield
+        - name: Re-probe peer DNS after yield
           when: _reboot_is_lowest_priority | bool
-          command: dig +short +timeout=3 +tries=2 @{{ item }} pi.hole
+          command: dig +short +timeout=3 +tries=2 @{{ item }} adguard.home
           loop: "{{ _reboot_dns_ips }}"
           register: _reboot_dns_reprobe
           changed_when: false
@@ -211,7 +211,7 @@
           when:
             - _reboot_is_lowest_priority | bool
             - _reboot_dns_reprobe.results | selectattr('rc', 'eq', 0) | selectattr('stdout') | list | length == 0
-          command: dig +short +timeout=3 +tries=2 @{{ item }} pi.hole
+          command: dig +short +timeout=3 +tries=2 @{{ item }} adguard.home
           loop: "{{ _reboot_dns_ips }}"
           register: _reboot_dns_wait
           until: _reboot_dns_wait.rc == 0 and _reboot_dns_wait.stdout | default('') | length > 0
@@ -227,12 +227,12 @@
             - _reboot_dns_wait.results | default([]) | selectattr('rc', 'eq', 0) | selectattr('stdout') | list | length == 0
           fail:
             msg: >-
-              No pihole peer recovered DNS after 5 min — refusing to reboot.
+              No DNS peer recovered after 5 min — refusing to reboot.
               Investigate the peers manually.
 
     # Graceful VIP drain: stop keepalived before the reboot so the peer
-    # claims the VIP via the priority-0 VRRP advertisement *before* pihole
-    # shuts down. Without this, systemd stops both concurrently — pihole
+    # claims the VIP via the priority-0 VRRP advertisement before DNS
+    # shuts down. Without this, systemd stops both concurrently; DNS
     # can die first, leaving the VIP on a host with no DNS for the ~2s
     # until the healthcheck FAULT triggers failover.
     #
@@ -254,7 +254,7 @@
           become: true
 
         - name: Verify peer claimed the VIP
-          command: dig +short +timeout=5 +tries=3 @{{ pihole_keepalived_ip }} pi.hole
+          command: dig +short +timeout=5 +tries=3 @{{ pihole_keepalived_ip }} adguard.home
           register: _reboot_vip_check
           until: _reboot_vip_check.rc == 0 and _reboot_vip_check.stdout | default('') | length > 0
           retries: 6
@@ -266,7 +266,7 @@
           when: (_reboot_vip_check.rc | default(1) != 0) or (_reboot_vip_check.stdout | default('') | length == 0)
           fail:
             msg: >-
-              Pihole VIP {{ pihole_keepalived_ip }} is not answering DNS after
+              DNS VIP {{ pihole_keepalived_ip }} is not answering after
               keepalived stop — peer may not have claimed it. Keepalived will
               be restarted by the rescue block. Investigate the peer manually.
       rescue:

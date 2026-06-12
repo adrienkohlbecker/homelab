@@ -1,0 +1,89 @@
+#!/bin/bash
+set -euo pipefail
+
+PEER_IPS=(
+{% for peer in pihole_keepalived_peers | reject('eq', inventory_hostname) | sort %}
+  {{ external_ips[peer] }}
+{% endfor %}
+)
+
+LOCK_PID=
+JCTL_PID=
+
+take_lock() {
+  if [ -z "${LOCK_PID:-}" ]; then
+    systemd-inhibit \
+      --what=shutdown \
+      --mode=block \
+      --who="adguard_reboot_guard" \
+      --why="No healthy DNS peer - this host is the last DNS server" \
+      sleep infinity &
+    LOCK_PID=$!
+    echo "lock taken - no peer answered DNS" >&2
+  fi
+}
+
+release_lock() {
+  if [ -n "${LOCK_PID:-}" ]; then
+    kill "$LOCK_PID" 2>/dev/null || true
+    wait "$LOCK_PID" 2>/dev/null || true
+    LOCK_PID=
+    echo "lock released - peer is healthy" >&2
+  fi
+}
+
+check_peers() {
+  for ip in "${PEER_IPS[@]}"; do
+    if dig +timeout=3 +tries=2 "@${ip}" adguard.home >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+update_lock() {
+  if check_peers; then
+    release_lock
+  else
+    take_lock
+  fi
+}
+
+cleanup() {
+  exec 3<&- 2>/dev/null || true
+  if [ -n "${JCTL_PID:-}" ]; then
+    kill "${JCTL_PID}" 2>/dev/null || true
+    wait "${JCTL_PID}" 2>/dev/null || true
+  fi
+  release_lock
+  exit 0
+}
+trap cleanup SIGTERM SIGINT
+
+update_lock
+
+while true; do
+  exec 3< <(exec journalctl _SYSTEMD_UNIT=keepalived.service \
+    SYSLOG_IDENTIFIER=adguard-keepalived -f -n 0 -o cat 2>/dev/null)
+  JCTL_PID=$!
+
+  while IFS= read -r -t 30 line <&3; do
+    case "$line" in
+      *BACKUP*)
+        update_lock
+        ;;
+      *MASTER*|*FAULT*|*STOP*)
+        update_lock
+        ;;
+    esac
+  done
+
+  exec 3<&-
+  kill "${JCTL_PID}" 2>/dev/null || true
+  wait "${JCTL_PID}" 2>/dev/null || true
+  JCTL_PID=
+
+  echo "journal follower exited - restarting after backoff" >&2
+  sleep 5
+  update_lock
+done

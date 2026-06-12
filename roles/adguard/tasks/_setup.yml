@@ -1,0 +1,55 @@
+- name: _setup | Install nginx
+  import_role:
+    name: test
+    tasks_from: nginx
+
+- name: _setup | Install authelia stub in gate mode
+  import_role:
+    name: test
+    tasks_from: authelia_stub
+  vars:
+    test_authelia_stub_args:
+      mode: gate
+
+- name: _setup | Install podman
+  import_role:
+    name: podman
+    tasks_from: install
+
+- name: _setup | Install bash functions
+  import_role:
+    name: bash
+
+- name: _setup | Install dependencies
+  apt:
+    pkg:
+      - dnsutils
+      - keepalived
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
+- name: _setup | Ensure keepalived conf.d exists
+  file:
+    dest: /etc/keepalived/conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+
+- name: _setup | Configure resolved
+  shell: |
+    set -euo pipefail
+
+    systemctl disable systemd-resolved.service
+    systemctl stop systemd-resolved
+    {
+    {% for resolver in bootstrap_dns_resolver %}
+      echo "nameserver {{ resolver }}"
+    {% endfor %}
+    } > /etc/resolv.conf
+  args:
+    executable: /bin/bash
+    removes: '{{ "/etc/systemd/system/sysinit.target.wants/systemd-resolved.service" if ansible_distribution_major_version != "22" else "/etc/systemd/system/multi-user.target.wants/systemd-resolved.service" }}'
+  become: true

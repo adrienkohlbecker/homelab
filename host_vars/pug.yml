@@ -87,7 +87,6 @@ netdata_collectors:
   - go.d:collector:logind:logind
   - go.d:collector:nginx:local
   - go.d:collector:nvme:nvme
-  - go.d:collector:pihole:local
   - go.d:collector:prometheus:fluentbit
   - go.d:collector:sensors:sensors
   - go.d:collector:smartctl:smartctl
@@ -112,7 +111,7 @@ netdata_diskspace_blocklist:
 
 # Tailscale home exit node (HA pair with lab -- see notes/headscale_mesh_redesign.md §C).
 # Advertise the physical partition. On Trusted WiFi, DHCP's more-specific
-# 10.123.0.0/21 option-121 route wins and pihole's VIP stays local; off-home,
+# 10.123.0.0/21 option-121 route wins and the DNS VIP stays local; off-home,
 # this /18 reaches the physical sites without selecting an exit node.
 tailscale_advertise_routes: "10.123.0.0/18"
 tailscale_advertise_exit_node: true
