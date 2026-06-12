@@ -172,6 +172,11 @@ worker_image:
 # branch pipelines cannot publish AMIs. The promote step moves the
 # /homelab-ci/ami/<machine>/<ubuntu> SSM parameter the harness resolves;
 # rollback is re-putting the previous value (ssm get-parameter-history).
+#
+# packer:ami pre-stages the ZBM tarball from nexus.lab.fahm.fr, so this job
+# needs nexus reachability from inside the runner container (fox pins the
+# name to lab's wg0 IP in /etc/hosts, but job containers don't inherit it —
+# wire extra_hosts in the runner's config.toml when first exercising this).
 ami_images:
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true"

@@ -20,7 +20,7 @@
 #    be changed after pool creation; getting it wrong loses perf.
 #  - sync the host clock (chronyd -q / ntpdate / similar) before
 #    invoking the script. RTC at 1970 or factory default trips TLS
-#    cert verification on the gitea.lab.fahm.fr ZBM tarball pull.
+#    cert verification on the nexus.lab.fahm.fr ZBM tarball pull.
 #  - disable secure boot in firmware setup. rEFInd's EFI binary is
 #    signed by the rEFInd project, not Microsoft, so secure-boot-
 #    enforcing OEM firmware (locked-down Lenovo / Dell / etc.) will
@@ -314,6 +314,17 @@ debootstrap --verbose "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR" || {
 
 cp /etc/hostid /mnt/etc
 
+# Pre-staged ZFSBootMenu artifacts: the lab Nexus that serves the ZBM
+# tarball is unreachable from AWS build VMs, so the bake orchestrator
+# downloads tarball + .sha256sum up front and packer ships them here
+# (mise-tasks/packer/ami.sh + packer/aws/ami.pkr.hcl set ZBM_STAGE_DIR).
+# Copied into the chroot and consumed via a file:// ZBM_URL_BASE; removed
+# again after the chroot step so the shipped image carries no leftovers.
+if [ -n "${ZBM_STAGE_DIR:-}" ]; then
+  cp -r "$ZBM_STAGE_DIR" /mnt/tmp/zbm
+  export ZBM_URL_BASE="file:///tmp/zbm"
+fi
+
 # Chroot into the new OS via arch-chroot (arch-install-scripts). It
 # bind-mounts proc/sys/dev/devpts/run/efivarfs and /etc/resolv.conf
 # under /mnt for the chroot's lifetime, so apt can resolve hostnames
@@ -334,6 +345,8 @@ cp /etc/hostid /mnt/etc
 # string (not a bash array, which bash refuses to put in env); chroot.sh
 # consumes it the same way via unquoted `for d in $DISKS` word-splitting.
 unshare --mount --propagation private arch-chroot /mnt bash <"$SCRIPTS_DIR/chroot.sh"
+
+rm -rf /mnt/tmp/zbm
 
 # Create the non-rpool ZFS pools requested by the variant (apoc/dozer/
 # tank/mouse). Runs while /mnt is still rpool's root so pools.sh can

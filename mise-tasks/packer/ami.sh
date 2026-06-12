@@ -32,8 +32,23 @@ fi
 packer init packer/aws
 
 manifest=$(mktemp)
-trap 'rm -f "$manifest"' EXIT
+zbm_stage=$(mktemp -d)
+trap 'rm -rf "$manifest" "$zbm_stage"' EXIT
 rm -f "$manifest" # manifest post-processor refuses to overwrite a non-manifest file
+
+# chroot.sh installs the repo-built ZFSBootMenu tarball, which only the lab
+# Nexus serves — unreachable from the EC2 build VM. Download it here (the
+# orchestrator, workstation or fox, reaches Nexus) and let packer ship it;
+# chroot.sh then reads it via a file:// URL and still verifies the sha256.
+# The version constant lives in chroot.sh; the first ZBM_VERSION= match is
+# the x86_64 case branch, the only arch EC2 bakes.
+zbm_version=$(awk -F= '/^[[:space:]]*ZBM_VERSION=/ {print $2; exit}' packer/scripts/chroot.sh)
+zbm_tarball="zfsbootmenu-${zbm_version}.tar.gz"
+echo "==> Staging ${zbm_tarball} from the lab Nexus"
+curl -fSL --retry 3 --retry-connrefused -o "${zbm_stage}/${zbm_tarball}" \
+  "https://nexus.lab.fahm.fr/repository/zbm/${zbm_tarball}"
+curl -fsSL --retry 3 --retry-connrefused -o "${zbm_stage}/${zbm_tarball}.sha256sum" \
+  "https://nexus.lab.fahm.fr/repository/zbm/${zbm_tarball}.sha256sum"
 
 packer build \
   -timestamp-ui \
@@ -43,6 +58,7 @@ packer build \
   -var "ubuntu_name=${ubuntu}" \
   -var "build_id=${CI_PIPELINE_ID:-local}" \
   -var "manifest_path=${manifest}" \
+  -var "zbm_stage_dir=${zbm_stage}" \
   packer/aws
 
 ami=$(python3 -c '
