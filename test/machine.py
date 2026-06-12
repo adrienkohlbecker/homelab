@@ -1888,7 +1888,7 @@ class Ec2Machine(Machine):
     """Run the role test against a single-use EC2 spot instance.
 
     The cell is launched from a terraform-owned launch template
-    (ci-cell-<machine>, terraform/aws_ci.tf), its AMI resolved through the
+    (homelab-ci-cell-<machine>, terraform/aws_ci.tf), its AMI resolved through the
     /homelab-ci/ami/<machine>/<ubuntu> SSM parameter, converged over SSH at
     its public IP, and terminated at cell end with a one-time EventBridge
     Scheduler entry as the orphan backstop. Everything is `aws` CLI
@@ -2023,7 +2023,7 @@ class Ec2Machine(Machine):
             "ec2",
             "run-instances",
             "--launch-template",
-            f"LaunchTemplateName=ci-cell-{self.machine}",
+            f"LaunchTemplateName=homelab-ci-cell-{self.machine}",
             "--image-id",
             f"resolve:ssm:/homelab-ci/ami/{self.machine}/{self.ubuntu_name}",
             "--subnet-id",
