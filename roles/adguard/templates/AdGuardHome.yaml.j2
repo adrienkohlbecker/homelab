@@ -226,8 +226,11 @@ user_rules:
   - '! never resolve publicly, so internal hostnames and typos must not leak to'
   - '! the DoH upstreams. Parity with the retired dnscrypt-proxy'
   - '! block_unqualified / block_undelegated toggles.'
-  - '! Single-label names. Never matches adguard.home or pi.hole: they carry a dot.'
-  - /^[^.]+$/
+  - '! Single-label names. Never matches adguard.home or pi.hole (they carry a'
+  - '! dot) nor IPv6 literals (the colon exclusion): AdGuard checks HTTPS-record'
+  - '! ipv6hints as hostnames, and a dot-only guard would swallow every HTTPS'
+  - '! answer carrying one, silently blocking type-65 for half the internet.'
+  - /^[^.:]+$/
   - '! Undelegated LAN suffixes. `home` and `hole` stay unblocked -- the'
   - '! adguard.home and pi.hole rewrites live under them.'
   - '||lan^'
