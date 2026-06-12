@@ -99,19 +99,14 @@ resource "aws_security_group" "ci_cell" {
   vpc_id      = aws_vpc.ci.id
 
   ingress {
-    description = "SSH from fox"
+    description = "SSH from fox + home WAN"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["${hcloud_primary_ip.fox.ip_address}/32"]
-  }
-
-  ingress {
-    description = "SSH from home WAN"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["${local.home_wan_ip}/32"]
+    cidr_blocks = [
+      "${hcloud_primary_ip.fox.ip_address}/32",
+      "${local.home_wan_ip}/32",
+    ]
   }
 
   egress {
