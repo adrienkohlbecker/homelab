@@ -530,3 +530,26 @@
     - /mnt/services/gitea_runner
     - /mnt/scratch/gitea_runner
   become: true
+
+# ---- dnscrypt_proxy (was box,lab,pug; adguard now resolves via DoH directly) ----
+- name: Retire dnscrypt-proxy socket override drop-in
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      for: dnscrypt-proxy.socket
+
+- name: Purge dnscrypt-proxy package
+  apt:
+    name: dnscrypt-proxy
+    state: absent
+    purge: true
+    autoremove: true
+  become: true
+
+- name: Remove dnscrypt-proxy query log directory
+  file:
+    path: /var/log/dnscrypt-proxy
+    state: absent
+  become: true
