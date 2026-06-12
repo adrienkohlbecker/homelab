@@ -320,9 +320,11 @@ cp /etc/hostid /mnt/etc
 # (mise-tasks/packer/ami.sh + packer/aws/ami.pkr.hcl set ZBM_STAGE_DIR).
 # Copied into the chroot and consumed via a file:// ZBM_URL_BASE; removed
 # again after the chroot step so the shipped image carries no leftovers.
+# /var/tmp, NOT /tmp: arch-chroot mounts a private tmpfs over the chroot's
+# /tmp, which would shadow anything staged there.
 if [ -n "${ZBM_STAGE_DIR:-}" ]; then
-  cp -r "$ZBM_STAGE_DIR" /mnt/tmp/zbm
-  export ZBM_URL_BASE="file:///tmp/zbm"
+  cp -r "$ZBM_STAGE_DIR" /mnt/var/tmp/zbm
+  export ZBM_URL_BASE="file:///var/tmp/zbm"
 fi
 
 # Chroot into the new OS via arch-chroot (arch-install-scripts). It
@@ -346,7 +348,7 @@ fi
 # consumes it the same way via unquoted `for d in $DISKS` word-splitting.
 unshare --mount --propagation private arch-chroot /mnt bash <"$SCRIPTS_DIR/chroot.sh"
 
-rm -rf /mnt/tmp/zbm
+rm -rf /mnt/var/tmp/zbm
 
 # Create the non-rpool ZFS pools requested by the variant (apoc/dozer/
 # tank/mouse). Runs while /mnt is still rpool's root so pools.sh can
