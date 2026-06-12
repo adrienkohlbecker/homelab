@@ -5,6 +5,16 @@ homelab_ci_dir = '{% if os() == "macos" %}{{config_root}}/packer/artifacts{% els
 CLOUDFLARE_API_TOKEN = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/password"
 NEXUS_USERNAME = "op://Lab/u2lem3tvichptsn37new73ftv4/username"
 NEXUS_PASSWORD = "op://Lab/u2lem3tvichptsn37new73ftv4/password"
+# GitLab project deploy token (write_package_registry on akohlbecker/homelab)
+# for publishing ZFSBootMenu tarballs to the generic package registry:
+# workstation `mise run zbm:upload` re-execs under op run to resolve it, and
+# the TF_VAR form feeds terraform/github.tf's GITLAB_ZBM_DEPLOY_TOKEN repo
+# secret for the zbm-build workflow. Bootstrap: mint the token in the GitLab
+# UI (Settings > Repository > Deploy tokens), store it in a 1P password item,
+# then replace the item-id and uncomment — an unresolvable op:// ref here
+# would break every `op run`-wrapped task.
+# GITLAB_ZBM_DEPLOY_TOKEN = "op://Lab/REPLACE_WITH_ITEM_ID/password"
+# TF_VAR_gitlab_zbm_deploy_token = "op://Lab/REPLACE_WITH_ITEM_ID/password"
 # MinIO creds for the tofu s3 backend (state in bucket "terraform" on
 # minio-api.lab.fahm.fr) are NOT set here: they flow through [profile minio]
 # (minio-credential-process) referenced by the backend block in main.tf. Keeping

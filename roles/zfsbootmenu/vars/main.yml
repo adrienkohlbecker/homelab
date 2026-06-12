@@ -1,17 +1,23 @@
 ---
-# ZFSBootMenu tarballs are built by mise-tasks/zbm/build.sh and uploaded to the
-# Nexus zbm raw repository. Each tarball contains the unified EFI image,
+# ZFSBootMenu tarballs are built by mise-tasks/zbm/build.sh and published to
+# the homelab GitLab project's generic package registry (project 83079143 =
+# akohlbecker/homelab; numeric id keeps the path free of an encoded slash).
+# The project is public, so downloads are anonymous. mirror_gitlab keeps test
+# fixtures on the lab Nexus proxy: their strict-DoT bootstrap DNS cannot
+# resolve public names (only nexus rides the seeded /etc/hosts), and the
+# cache spares gitlab.com a ~130 MB pull per cell. Prod (nexus_url == "")
+# dials gitlab.com directly. Each tarball contains the unified EFI image,
 # components-mode kernel/initrd, and the cmdline used by rEFInd on aarch64.
-zfsbootmenu_repository_url: "https://{{ nexus_url if (nexus_url | length > 0) else 'nexus.lab.fahm.fr' }}/repository/zbm"
+zfsbootmenu_repository_url: "{{ mirror_gitlab }}/api/v4/projects/83079143/packages/generic/zfsbootmenu"
 zfsbootmenu_release:
   x86_64:
     version: v3.1.0-linux6.18-ci.27033469422.1-x86_64
-    url: "{{ zfsbootmenu_repository_url }}/zfsbootmenu-v3.1.0-linux6.18-ci.27033469422.1-x86_64.tar.gz"
-    sha256_url: "{{ zfsbootmenu_repository_url }}/zfsbootmenu-v3.1.0-linux6.18-ci.27033469422.1-x86_64.tar.gz.sha256sum"
+    url: "{{ zfsbootmenu_repository_url }}/v3.1.0-linux6.18-ci.27033469422.1-x86_64/zfsbootmenu-v3.1.0-linux6.18-ci.27033469422.1-x86_64.tar.gz"
+    sha256_url: "{{ zfsbootmenu_repository_url }}/v3.1.0-linux6.18-ci.27033469422.1-x86_64/zfsbootmenu-v3.1.0-linux6.18-ci.27033469422.1-x86_64.tar.gz.sha256sum"
   aarch64:
     version: v3.1.0-linux6.18-local.20260605230757-aarch64
-    url: "{{ zfsbootmenu_repository_url }}/zfsbootmenu-v3.1.0-linux6.18-local.20260605230757-aarch64.tar.gz"
-    sha256_url: "{{ zfsbootmenu_repository_url }}/zfsbootmenu-v3.1.0-linux6.18-local.20260605230757-aarch64.tar.gz.sha256sum"
+    url: "{{ zfsbootmenu_repository_url }}/v3.1.0-linux6.18-local.20260605230757-aarch64/zfsbootmenu-v3.1.0-linux6.18-local.20260605230757-aarch64.tar.gz"
+    sha256_url: "{{ zfsbootmenu_repository_url }}/v3.1.0-linux6.18-local.20260605230757-aarch64/zfsbootmenu-v3.1.0-linux6.18-local.20260605230757-aarch64.tar.gz.sha256sum"
 
 zfsbootmenu_artifact: "{{ zfsbootmenu_artifact_override | default(zfsbootmenu_release[ansible_architecture]) }}"
 zfsbootmenu_cache_dir: "/var/cache/zfsbootmenu/{{ zfsbootmenu_artifact.version }}"

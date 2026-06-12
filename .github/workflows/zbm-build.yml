@@ -159,16 +159,15 @@ jobs:
           grep -qE '^vmlin.*-bootmenu$' <<<"$members" || { echo "missing vmlin*-bootmenu kernel in tarball" >&2; exit 1; }
           echo "ZBM tarball OK: $tarball"
 
-      # Push the CI build to the private on-lab Nexus raw repo (zbm). Each run
-      # creates a new per-(version,suffix,arch) file (write_policy=ALLOW).
-      # Only on master — branch builds go to GitHub artifacts only. upload.sh
-      # skips gracefully if NEXUS_ZBM_* aren't provisioned yet (terraform apply
-      # pending) so the build still passes.
-      - name: Upload the built tarball to Nexus
+      # Publish the CI build to the homelab GitLab project's generic package
+      # registry. Each run creates a new per-(version,suffix,arch) package
+      # version. Only on master — branch builds go to GitHub artifacts only.
+      # upload.sh skips gracefully if the deploy token secret isn't
+      # provisioned yet (terraform apply pending) so the build still passes.
+      - name: Publish the built tarball to the GitLab package registry
         if: github.ref == 'refs/heads/master'
         env:
-          NEXUS_ZBM_USERNAME: ${{ secrets.NEXUS_ZBM_USERNAME }}
-          NEXUS_ZBM_PASSWORD: ${{ secrets.NEXUS_ZBM_PASSWORD }}
+          GITLAB_ZBM_DEPLOY_TOKEN: ${{ secrets.GITLAB_ZBM_DEPLOY_TOKEN }}
         run: mise run zbm:upload
 
       - name: Remove buildx builder

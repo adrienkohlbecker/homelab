@@ -20,7 +20,7 @@
 #    be changed after pool creation; getting it wrong loses perf.
 #  - sync the host clock (chronyd -q / ntpdate / similar) before
 #    invoking the script. RTC at 1970 or factory default trips TLS
-#    cert verification on the nexus.lab.fahm.fr ZBM tarball pull.
+#    cert verification on the gitlab.com ZBM tarball pull.
 #  - disable secure boot in firmware setup. rEFInd's EFI binary is
 #    signed by the rEFInd project, not Microsoft, so secure-boot-
 #    enforcing OEM firmware (locked-down Lenovo / Dell / etc.) will

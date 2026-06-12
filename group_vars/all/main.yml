@@ -255,6 +255,7 @@ mirror_apt_mise: 'https://{{ nexus_url ~ "/repository/mise" if nexus_url else "m
 mirror_apt_1password: 'https://{{ nexus_url ~ "/repository/1password" if (nexus_url and ansible_architecture != "aarch64") else "downloads.1password.com/linux/debian/" ~ ((ansible_architecture == "aarch64") | ternary("arm64", "amd64")) }}'
 
 mirror_github: 'https://{{ nexus_url ~ "/repository/github" if nexus_url else "github.com" }}'
+mirror_gitlab: 'https://{{ nexus_url ~ "/repository/gitlab" if nexus_url else "gitlab.com" }}'
 mirror_raw_githubusercontent: 'https://{{ nexus_url ~ "/repository/raw-githubusercontent" if nexus_url else "raw.githubusercontent.com" }}'
 mirror_minio: 'https://{{ nexus_url ~ "/repository/minio" if nexus_url else "dl.min.io" }}'
 mirror_gitea_dl: 'https://{{ nexus_url ~ "/repository/gitea-dl" if nexus_url else "dl.gitea.com" }}'
