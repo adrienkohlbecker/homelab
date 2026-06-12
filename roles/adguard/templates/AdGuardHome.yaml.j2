@@ -144,7 +144,12 @@ tls:
   these hosts, and a non-zero port would make DDR advertise a DoH
   endpoint nothing publishes. Same reason port_dns_over_quic is 0 --
   only DoT 853/tcp is published on the VIP, and DDR must not advertise
-  more than that.
+  more than that. In practice DDR answers empty either way: AdGuard
+  omits DoT records unless the cert carries IP SANs (AGH#4927, per the
+  DDR verified-discovery rules), which a public CA can never issue for
+  an RFC1918 VIP. Encrypted discovery rides Android Private DNS and
+  DHCP DNR instead; handle_ddr stays on as it self-activates should
+  the cert or protocol set ever allow it.
 #}
   port_https: 0
   port_dns_over_tls: 853
