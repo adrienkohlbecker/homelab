@@ -66,6 +66,19 @@
   delay: 2
   until: (adguard_verify_blocked.json | default({})).reason | default('') is match('Filtered')
 
+# Real TLS handshake against the VIP publish (dig +tls skips CA
+# validation without +tls-ca, so the snakeoil fixture cert passes), and
+# the answer proves the dns.<domain> rewrite Private-DNS clients rely on.
+# This is also the only probe on the VIP socket itself -- the others all
+# target the host address.
+- name: _verify | DoT on the VIP answers with the rewrite
+  command: dig +short +tls +timeout=3 +tries=2 @{{ dns_keepalived_ip }} dns.{{ domain }} A
+  register: adguard_verify_dot
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: dns_keepalived_ip in adguard_verify_dot.stdout_lines
+
 # The user_rules undelegated-suffix guard answers locally (0.0.0.0 under
 # blocking_mode default) instead of leaking the query upstream.
 - name: _verify | Undelegated suffix is answered locally

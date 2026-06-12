@@ -119,19 +119,35 @@ dns:
   hostsfile_enabled: false
   pending_requests:
     enabled: true
+{#
+  DoT for household clients: Android Private DNS auto-upgrades
+  opportunistically to the VIP, DDR (handle_ddr above) advertises the
+  endpoint to Windows 11 / Apple clients, and strict-mode clients pin
+  dns.<domain> -- the server_name doubles as the DDR SVCB target and
+  the SNI clients validate. The name rides the per-host cert through
+  certbot_extra_sans on both DNS peers and resolves to the VIP via the
+  rewrite below.
+#}
 tls:
-  enabled: false
-  server_name: ""
+  enabled: true
+  server_name: dns.{{ domain }}
   force_https: false
-  port_https: 443
+{#
+  port_https 0 keeps the in-app HTTPS/DoH server off: nginx owns 443 on
+  these hosts, and a non-zero port would make DDR advertise a DoH
+  endpoint nothing publishes. Same reason port_dns_over_quic is 0 --
+  only DoT 853/tcp is published on the VIP, and DDR must not advertise
+  more than that.
+#}
+  port_https: 0
   port_dns_over_tls: 853
-  port_dns_over_quic: 853
+  port_dns_over_quic: 0
   port_dnscrypt: 0
   dnscrypt_config_file: ""
   certificate_chain: ""
   private_key: ""
-  certificate_path: ""
-  private_key_path: ""
+  certificate_path: /opt/adguardhome/conf/tls/fullchain.pem
+  private_key_path: /opt/adguardhome/conf/tls/privkey.pem
   strict_sni_check: false
 {#
   Query log disabled entirely: it is browsing-history-equivalent data for
@@ -264,6 +280,9 @@ filtering:
       enabled: true
     - domain: auth.{{ domain }}
       answer: {{ external_ips.lab }}
+      enabled: true
+    - domain: dns.{{ domain }}
+      answer: {{ dns_keepalived_ip }}
       enabled: true
   safe_fs_patterns: []
   safebrowsing_cache_size: 1048576

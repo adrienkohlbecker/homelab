@@ -50,8 +50,61 @@
   loop:
     - path: /mnt/services/adguard/conf
       mode: "0755"
+    - path: /mnt/services/adguard/conf/tls
+      mode: "0700"
     - path: /mnt/services/adguard/work
       mode: "0700"
+  become: true
+  tags:
+    - adguard
+
+# The container user can't read the letsencrypt key in place: live/ and
+# archive/ are deliberately 0750 root:ssl-cert with root-only privkeys
+# (see roles/certbot -- group-readable wildcard keys are a forever-cert
+# blast radius). Copy the pair into service state owned by the adguard
+# user instead; renewals re-copy through the certbot deploy hook below.
+- name: Copy host certificate for DoT
+  when: not (ansible_check_mode and adguard_user.changed)
+  copy:
+    src: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/{{ item }}
+    remote_src: true
+    dest: /mnt/services/adguard/conf/tls/{{ item }}
+    owner: "{{ adguard_user.uid }}"
+    group: "{{ adguard_user.group }}"
+    mode: "0600"
+    backup: true
+  loop:
+    - fullchain.pem
+    - privkey.pem
+  register: adguard_tls_certs
+  become: true
+  tags:
+    - adguard
+
+# The deploy/ hook dir normally comes with the certbot package, which the
+# adguard test fixture deliberately omits (snakeoil certs instead); create
+# it so the hook task below works on both.
+- name: Create certbot deploy hook directory
+  file:
+    dest: /etc/letsencrypt/renewal-hooks/deploy
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - adguard
+
+- name: Install certbot deploy hook for DoT certs
+  when: not (ansible_check_mode and adguard_user.changed)
+  template:
+    src: adguard_certbot_deploy.j2
+    dest: /etc/letsencrypt/renewal-hooks/deploy/adguard
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
   become: true
   tags:
     - adguard
@@ -68,6 +121,7 @@
     validate: >-
       /usr/bin/podman run --rm
       --volume %s:/tmp/AdGuardHome.yaml:ro
+      --volume /mnt/services/adguard/conf/tls:/opt/adguardhome/conf/tls:ro
       {{ adguard_image }}
       --no-check-update
       --no-permcheck
@@ -113,7 +167,7 @@
     systemd_unit_args:
       src: adguard
       condition: "{{ not (ansible_check_mode and (adguard_service_result.changed or adguard_user.changed)) }}"
-      restart: "{{ adguard_service_result.changed or adguard_config.changed }}"
+      restart: "{{ adguard_service_result.changed or adguard_config.changed or adguard_tls_certs.changed }}"
       throttle: 1
   tags:
     - adguard
