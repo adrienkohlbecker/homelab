@@ -123,9 +123,13 @@ locals {
     build_id = var.build_id
   }
 
-  # The shipped image always points at upstream mirrors (the lab Nexus is
-  # unreachable from AWS, and chroot.sh writes upstream into the final
-  # sources.list regardless).
+  # Build-time fetches ride Canonical's in-region EC2 mirror (close, fast,
+  # free egress); the shipped sources.list still gets the canonical upstream
+  # pair (chroot.sh writes the *_UPSTREAM values into the final image — the
+  # lab Nexus is unreachable from AWS either way). The regional mirror only
+  # carries the archive suites; security stays on security.ubuntu.com, same
+  # split the stock Canonical AMIs use.
+  regional_archive  = "http://${local.region}.ec2.archive.ubuntu.com/ubuntu"
   upstream_archive  = "http://archive.ubuntu.com/ubuntu"
   upstream_security = "http://security.ubuntu.com/ubuntu"
 }
@@ -135,8 +139,12 @@ locals {
 # machine difference here is the launch_block_device_mappings *blocks*.
 
 source "amazon-ebssurrogate" "box" {
-  region        = local.region
-  instance_type = "t3a.medium"
+  region = local.region
+  # Compute-optimized for the bake (the cells themselves ride the cheaper
+  # t3a launch templates): the chroot install is CPU-bound on dpkg/zstd/
+  # initramfs work, and 4 sustained vCPUs roughly halve it vs t3a.medium.
+  # ~30 min on-demand is still pennies; bakes are rare and manual.
+  instance_type = "c6a.xlarge"
   ssh_username  = "ubuntu"
   ssh_interface = "public_ip"
 
@@ -201,8 +209,12 @@ source "amazon-ebssurrogate" "box" {
 }
 
 source "amazon-ebssurrogate" "pug" {
-  region        = local.region
-  instance_type = "t3a.medium"
+  region = local.region
+  # Compute-optimized for the bake (the cells themselves ride the cheaper
+  # t3a launch templates): the chroot install is CPU-bound on dpkg/zstd/
+  # initramfs work, and 4 sustained vCPUs roughly halve it vs t3a.medium.
+  # ~30 min on-demand is still pennies; bakes are rare and manual.
+  instance_type = "c6a.xlarge"
   ssh_username  = "ubuntu"
   ssh_interface = "public_ip"
 
@@ -264,8 +276,12 @@ source "amazon-ebssurrogate" "pug" {
 }
 
 source "amazon-ebssurrogate" "lab" {
-  region        = local.region
-  instance_type = "t3a.medium"
+  region = local.region
+  # Compute-optimized for the bake (the cells themselves ride the cheaper
+  # t3a launch templates): the chroot install is CPU-bound on dpkg/zstd/
+  # initramfs work, and 4 sustained vCPUs roughly halve it vs t3a.medium.
+  # ~30 min on-demand is still pennies; bakes are rare and manual.
+  instance_type = "c6a.xlarge"
   ssh_username  = "ubuntu"
   ssh_interface = "public_ip"
 
@@ -363,9 +379,9 @@ build {
       "SWAP_SIZE"   = local.variant_config[source.name].swap_size
       "EXTRA_POOLS" = local.variant_config[source.name].extra_pools
       "UBUNTU_NAME" = "${var.ubuntu_name}"
-      # Upstream both at build time and in the shipped sources.list — the
-      # lab Nexus is unreachable from AWS.
-      "UBUNTU_MIRROR"                   = local.upstream_archive
+      # In-region mirror at build time, upstream in the shipped sources.list
+      # (the *_UPSTREAM pair) — see the regional_archive comment above.
+      "UBUNTU_MIRROR"                   = local.regional_archive
       "UBUNTU_MIRROR_SECURITY"          = local.upstream_security
       "UBUNTU_MIRROR_UPSTREAM"          = local.upstream_archive
       "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.upstream_security
