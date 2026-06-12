@@ -425,6 +425,20 @@ source "amazon-ebssurrogate" "hetzner" {
     }
   }
 
+  # Grow the build instance's root: the staging provisioner below dd+gzips
+  # the surrogate volume into /home/ubuntu, and the stock Canonical root
+  # (8G) cannot hold even a well-compressed 20G image next to the OS. 30G
+  # covers the incompressible worst case. Launch-only — omitted from the
+  # byproduct AMI. No `encrypted` here: this mapping reuses the source
+  # AMI's root snapshot, whose encryption state cannot change at launch.
+  launch_block_device_mappings {
+    device_name           = "/dev/sda1"
+    volume_size           = 30
+    volume_type           = "gp3"
+    delete_on_termination = true
+    omit_from_artifact    = true
+  }
+
   ami_root_device {
     source_device_name    = "/dev/xvdf"
     device_name           = "/dev/sda1"
@@ -499,8 +513,11 @@ build {
     inline = [
       "set -euo pipefail",
       "disk=\"$(cut -d' ' -f1 /home/ubuntu/resolved_disks)\"",
+      "echo \"==> staging $disk as /home/ubuntu/hetzner.raw.gz\"",
+      "df -h /home/ubuntu",
       "sudo dd if=\"$disk\" bs=64M | gzip >/home/ubuntu/hetzner.raw.gz",
       "ls -lh /home/ubuntu/hetzner.raw.gz",
+      "df -h /home/ubuntu",
     ]
   }
 
