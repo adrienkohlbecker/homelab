@@ -66,4 +66,11 @@ export DISKS EXTRA_DISKS
 SCRIPTS_DIR=$(cd "$(dirname "$0")" && pwd)
 export SCRIPTS_DIR
 
+# EC2 cells boot unwatched via the firmware-fallback rEFInd (empty NVRAM),
+# so the menu countdown is pure dead time — measured ~6s per boot on a
+# box/jammy cell. -1 boots the default selection immediately; the menu
+# stays reachable by holding a key during rEFInd startup on the
+# interactive EC2 serial console.
+export REFIND_TIMEOUT=-1
+
 exec bash "$SCRIPTS_DIR/provision.sh"
