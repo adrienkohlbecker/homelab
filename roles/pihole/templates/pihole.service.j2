@@ -113,7 +113,9 @@ ExecStart=/usr/bin/podman run \
     --env PIHOLE_UID={{ pihole_user.uid }} \
     --env PIHOLE_GID={{ pihole_user.group }} \
     --dns=127.0.0.1 \
-    --dns={{ bootstrap_dns_resolver }} \
+{% for resolver in bootstrap_dns_resolver %}
+    --dns={{ resolver }} \
+{% endfor %}
 {# Static /etc/hosts overrides inside the container, sharing the same #}
 {# `etc_hosts_entries` map roles/hostname renders into /etc/hosts on the #}
 {# test box. Bypasses pihole's own split-horizon wildcard #}

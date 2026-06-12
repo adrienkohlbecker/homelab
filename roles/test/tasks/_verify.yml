@@ -187,9 +187,11 @@
   assert:
     that:
       - "'+DNSOverTLS' in test_resolvectl_global_protocols"
-      - bootstrap_dns_resolver in test_resolvectl.stdout
+      - >-
+        (bootstrap_dns_resolver | select('in', test_resolvectl.stdout) | list | length)
+        == (bootstrap_dns_resolver | length)
     fail_msg: >-
-      systemd-resolved isn't enforcing DNS-over-TLS via {{ bootstrap_dns_resolver }};
+      systemd-resolved isn't enforcing DNS-over-TLS via {{ bootstrap_dns_resolver | join(', ') }};
       the 10-test-dns-over-tls.conf drop-in didn't take effect, so queries can fall
       back to UDP and revive the SLIRP UDP-drop flakes it exists to prevent. Global
       Protocols line: {{ test_resolvectl_global_protocols }}

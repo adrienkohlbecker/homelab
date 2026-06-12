@@ -19,7 +19,7 @@
     group: root
     content: |
       [Resolve]
-      DNS={{ bootstrap_dns_resolver }}
+      DNS={{ bootstrap_dns_resolver | join(' ') }}
       FallbackDNS=
       DNSOverTLS=yes
       Domains=~.
