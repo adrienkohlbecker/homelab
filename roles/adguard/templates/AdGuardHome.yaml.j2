@@ -339,17 +339,158 @@ clients:
     dhcp: true
     hosts: true
 {#
+  Serialization parity with AdGuard's startup rewrite: field order
+  mirrors the clientObject struct (internal/home/clients.go), entries
+  are listed sorted by name (AdGuard writes them back via
+  Storage.RangeByName), and uids are pinned -- AdGuard would otherwise
+  generate a random UUIDv7 on first load and the file would re-template
+  (and restart DNS) on the next converge.
+#}
+  persistent:
+{#
+  Scheduled distraction blocking for the operator phone (static lease in
+  data/network_topology.yml). The schedule is inverted from intuition: it
+  lists the PAUSE windows when the services are allowed, and blocking
+  applies outside them (filtering/blocked.go gates on !Contains). So
+  "blocked 22:45-07:00 except Friday and Saturday nights" renders as
+  allow 07:00-22:45 weekdays, through midnight on Friday, all of
+  Saturday, and from midnight on Sunday. Durations must match
+  timeutil.Duration rendering exactly (0s / 7h / 22h45m, and 24h
+  serializes as 1d). use_global_blocked_services false is load-bearing:
+  true would make AdGuard ignore this list entirely.
+#}
+    - safe_search:
+        enabled: false
+        bing: true
+        duckduckgo: true
+        ecosia: true
+        google: true
+        pixabay: true
+        yandex: true
+        youtube: true
+      blocked_services:
+        schedule:
+          time_zone: {{ system_timezone }}
+          sun:
+            start: 0s
+            end: 22h45m
+          mon:
+            start: 7h
+            end: 22h45m
+          tue:
+            start: 7h
+            end: 22h45m
+          wed:
+            start: 7h
+            end: 22h45m
+          thu:
+            start: 7h
+            end: 22h45m
+          fri:
+            start: 7h
+            end: 1d
+          sat:
+            start: 0s
+            end: 1d
+        ids:
+          - 4chan
+          - 500px
+          - 9gag
+          - activision_blizzard
+          - aliexpress
+          - amazon
+          - amazon_streaming
+          - apple_streaming
+          - battle_net
+          - betano
+          - betfair
+          - betway
+          - bigo_live
+          - blaze
+          - blizzard_entertainment
+          - bluesky
+          - clubhouse
+          - crunchyroll
+          - dailymotion
+          - discord
+          - discoveryplus
+          - disneyplus
+          - ebay
+          - electronic_arts
+          - epic_games
+          - espn
+          - facebook
+          - fifa
+          - gog
+          - hbomax
+          - hulu
+          - imgur
+          - instagram
+          - io_interactive
+          - leagueoflegends
+          - linkedin
+          - max
+          - meta_ai
+          - minecraft
+          - nebula
+          - netflix
+          - nintendo
+          - nvidia
+          - odysee
+          - onlyfans
+          - origin
+          - paramountplus
+          - peacock_tv
+          - pinterest
+          - playstation
+          - plenty_of_fish
+          - pluto_tv
+          - rakuten_viki
+          - reddit
+          - riot_games
+          - roblox
+          - rockstar_games
+          - samsung_tv_plus
+          - shein
+          - snapchat
+          - steam
+          - temu
+          - tiktok
+          - tinder
+          - tumblr
+          - twitch
+          - twitter
+          - ubisoft
+          - valorant
+          - vimeo
+          - vk
+          - wargaming
+          - warnerbrosgames
+          - wizz
+          - xboxlive
+          - youtube
+      name: Adrien phone
+      ids:
+        - 10.123.5.10
+      tags: []
+      upstreams: []
+      uid: 01970612-0000-7000-8000-000000000002
+      upstreams_cache_size: 0
+      upstreams_cache_enabled: false
+      use_global_settings: true
+      filtering_enabled: false
+      parental_enabled: false
+      safebrowsing_enabled: false
+      use_global_blocked_services: false
+      ignore_querylog: false
+      ignore_statistics: false
+{#
   The bridge gateway is this host's own traffic: netavark's hairpin DNAT
   masquerades host-local and container queries to a published port into
   10.88.0.1, so the host plus every container resolving through aardvark
   collapse into one client. Label it honestly instead of showing
-  host.containers.internal. Serialization parity with AdGuard's startup
-  rewrite: field order mirrors the clientObject struct
-  (internal/home/clients.go), and the uid is pinned -- AdGuard would
-  otherwise generate a random UUIDv7 on first load and the file would
-  re-template (and restart DNS) on the next converge.
+  host.containers.internal.
 #}
-  persistent:
     - safe_search:
         enabled: false
         bing: true
