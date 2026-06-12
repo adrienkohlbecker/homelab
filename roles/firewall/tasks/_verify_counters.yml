@@ -95,7 +95,6 @@
     # positively (slirp doesn't carry the right saddr on WAN ingress);
     # both mdns probes are negative.
     mosh_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'mosh_accept') | first).packets }}"
-    dnscrypt_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'dnscrypt_accept') | first).packets }}"
     aardvark_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'aardvark_accept') | first).packets }}"
     wireguard_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'wireguard_accept') | first).packets }}"
     mdns_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'mdns_accept') | first).packets }}"
@@ -122,7 +121,6 @@
       - input_catchall_pkts | int >= 1
       - vrrp_pkts | int == 0
       - mosh_pkts | int >= 1
-      - dnscrypt_pkts | int >= 1
       - aardvark_pkts | int >= 2  # two probes: default-bridge + non-default-bridge
       - wireguard_pkts | int >= 1
       - mdns_pkts | int == 0  # both probes negative (iif + saddr scope rejections)

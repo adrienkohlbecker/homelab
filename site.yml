@@ -82,7 +82,6 @@
     - keepalived
     - nut_server
     - resolved
-    - dnscrypt_proxy
     - adguard
     - docker_client
     - subid

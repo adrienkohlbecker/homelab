@@ -36,7 +36,7 @@
     _firewall_probe_podman_pool: "{{ podman_bridge_pool | ansible.utils.ipmath(250) }}"
     # Non-scope source: in-subnet on the netns veth (10.99.0.0/24, see
     # the topology header above) but outside any allowlisted saddr —
-    # used by the OOS negative probes (samba, nut, mosh, dnscrypt).
+    # used by the OOS negative probes (samba, nut, mosh).
     _firewall_probe_nonscope: 10.99.0.2
     # Container target for crafted-packet probes — an unused IP in
     # podman_default_network; not a real container, just a destination
