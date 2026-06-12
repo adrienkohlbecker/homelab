@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-#MISE description="Upload a pre-built ZFS-root disk image to a Hetzner Cloud snapshot (mechanic 2). Build the image first with `mise run packer:build hetzner`."
-#USAGE arg "[image]" help="Path to the rpool .raw disk image (default: the packer:build hetzner artifact for --ubuntu)"
+#MISE description="Upload a pre-built ZFS-root disk image to a Hetzner Cloud snapshot (mechanic 2). Build the image first with `mise run packer:hetzner-bake` (EC2) or `mise run packer:build hetzner` (qemu/KVM)."
+#USAGE arg "[image]" help="Path to the rpool disk image, raw or raw.gz (default: the packer:build hetzner artifact for --ubuntu)"
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu codename -- snapshot label + default image path" default="jammy"
 #USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
@@ -86,9 +86,13 @@ ssh_rescue 'findmnt -no FSTYPE / | grep -q overlay' || {
 
 # --- phase 2: stream the image onto /dev/sda ---
 # gzip (universally present in the Debian rescue) keeps the mostly-empty 20G
-# image small on the wire; conv=sparse skips zero blocks on write.
+# image small on the wire; conv=sparse skips zero blocks on write. A .raw.gz
+# (the packer:hetzner-bake artifact) is already wire-ready and streams as-is.
 echo "==> streaming the Hetzner image onto /dev/sda (this takes a few minutes)"
-gzip -c "$IMG" | ssh_rescue 'gzip -d | dd of=/dev/sda bs=64M conv=sparse status=progress; sync'
+case "$IMG" in
+*.gz) cat "$IMG" ;;
+*) gzip -c "$IMG" ;;
+esac | ssh_rescue 'gzip -d | dd of=/dev/sda bs=64M conv=sparse status=progress; sync'
 
 # --- phase 3: snapshot ---
 echo "==> powering off + snapshotting"

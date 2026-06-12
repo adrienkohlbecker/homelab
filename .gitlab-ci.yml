@@ -10,8 +10,8 @@
 #     jobs: each runs in a CI-image container on fox and drives single-use
 #     EC2 spot instances over the aws CLI + SSH. The runner is tag-only —
 #     cell jobs carry `tags: [fox-docker-aws]`. First aboard: ami_images
-#     below; still to come: the role-test matrix as a dynamic child
-#     pipeline, site test.
+#     and fox_image below; still to come: the role-test matrix as a
+#     dynamic child pipeline, site test.
 #
 # Migration in progress: the heavy jobs still run on GitHub Actions
 # (.github/workflows/).
@@ -207,6 +207,62 @@ ami_images:
     # Smoke the OIDC chain before spending 20+ min on a bake.
     - aws --region eu-central-1 sts get-caller-identity
     - mise run packer:ami "$MACHINE" --ubuntu "$UBUNTU" --promote
+
+# Bake + publish fox's Hetzner Cloud boot image. The image is built by the
+# same pools.sh/chroot.sh install as the cell AMIs, on an EC2 surrogate
+# volume (packer/aws, IMAGE_TARGET=hetzner — no KVM; the byproduct AMI is
+# deregistered right after the bake), downloaded as a raw.gz, then `mise run
+# packer:hetzner` streams it onto a temp Hetzner server in rescue mode and
+# snapshots it (pruning all but the 2 newest). Manual and protected-ref only, like ami_images: AWS auth is the
+# same GitLab OIDC bake role (master-only trust policy), and the published
+# snapshot is project-global — terraform's data.hcloud_image selects by
+# most_recent, so it silently becomes fox's next boot image on rebuild.
+#
+# Required CI/CD variable: HCLOUD_TOKEN_HOMELAB (masked + protected) — the
+# homelab Hetzner project's read/write token: the snapshot must land in the
+# project fox lives in. This is the deliberate exception to worker_image's
+# CI-project-token-only rule, scoped to a protected-ref manual job; it held
+# the same blast radius as a GitHub repo secret before the migration.
+fox_image:
+  rules:
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+      when: manual
+      # A skipped manual job must not hold the pipeline in "blocked".
+      allow_failure: true
+  tags:
+    - fox-docker-aws
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  # One image pipeline at a time: two runs would race the snapshot family
+  # (create_image + prune-to-2-newest); never auto-cancelled — a killed run
+  # can orphan the EC2 build instance or the temp Hetzner upload server.
+  resource_group: fox_image
+  interruptible: false
+  timeout: 90m
+  variables:
+    # The bake half and the upload half read the same env var; map the
+    # homelab-project token in without clobbering worker_image's meaning
+    # of HCLOUD_TOKEN at the project-variable level.
+    HCLOUD_TOKEN: $HCLOUD_TOKEN_HOMELAB
+  script:
+    # Fail before the 20+ min bake, not after it, when the variable is
+    # missing (op is not in the ci image, so there is no fallback).
+    - test -n "${HCLOUD_TOKEN:-}" || { echo "HCLOUD_TOKEN_HOMELAB CI/CD variable is not set" >&2; exit 1; }
+    # Same drift self-heal as .hosted, against the image's /opt/mise tree.
+    - mise install
+    - uv sync --locked
+    # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
+    # AssumeRoleWithWebIdentity provider wants a file path.
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
+    - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
+    - export AWS_ROLE_SESSION_NAME="fox-image-$CI_JOB_ID"
+    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
+    # Smoke the OIDC chain before spending 20+ min on a bake.
+    - aws --region eu-central-1 sts get-caller-identity
+    # fox runs a jammy root in prod; the bake stays jammy-only.
+    - mise run packer:hetzner-bake --ubuntu jammy
+    - mise run packer:hetzner -- packer/artifacts/hetzner/jammy.raw.gz --ubuntu jammy
 
 # Manual rebuild of the custom ZFSBootMenu recovery image (zbm/,
 # mise-tasks/zbm/). Heavy (clones ZBM, xbps-installs a Void toolchain, runs

@@ -66,11 +66,20 @@ export DISKS EXTRA_DISKS
 SCRIPTS_DIR=$(cd "$(dirname "$0")" && pwd)
 export SCRIPTS_DIR
 
+# Surface the resolved kernel devices for follow-up provisioners: the
+# hetzner image export (packer/aws/ami.pkr.hcl) reads the rpool disk back
+# off the instance and only knows the mapping name.
+echo "$DISKS" >"$SCRIPTS_DIR/resolved_disks"
+
 # EC2 cells boot unwatched via the firmware-fallback rEFInd (empty NVRAM),
 # so the menu countdown is pure dead time — measured ~6s per boot on a
 # box/jammy cell. -1 boots the default selection immediately; the menu
 # stays reachable by holding a key during rEFInd startup on the
-# interactive EC2 serial console.
-export REFIND_TIMEOUT=-1
+# interactive EC2 serial console. The hetzner image keeps the countdown:
+# on fox it's the operator's window to reach ZBM/recovery from the
+# Hetzner console.
+if [ "${IMAGE_TARGET:-qemu}" != "hetzner" ]; then
+  export REFIND_TIMEOUT=-1
+fi
 
 exec bash "$SCRIPTS_DIR/provision.sh"

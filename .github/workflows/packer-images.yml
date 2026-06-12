@@ -1,7 +1,8 @@
 name: packer-images
 # Manual QEMU fixture image rebuilds for test machines. This intentionally
-# excludes the hetzner source, which is the fox boot image and has its own
-# workflow because it can publish a project-global Hetzner Cloud snapshot.
+# excludes the hetzner source, which is the fox boot image and bakes on
+# GitLab CI (the fox_image job in .gitlab-ci.yml) because it publishes a
+# project-global Hetzner Cloud snapshot.
 on:
   workflow_dispatch:
     inputs:

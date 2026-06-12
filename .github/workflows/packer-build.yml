@@ -1,8 +1,8 @@
 name: packer-build
 # Reusable implementation for manual packer image workflows. Callers pass the
 # source and Ubuntu matrices explicitly; this file owns the actual build cells.
-# No direct workflow_dispatch: use packer-images for test fixtures or fox-image
-# for the Hetzner Cloud boot image.
+# No direct workflow_dispatch: use packer-images for test fixtures. The fox
+# Hetzner Cloud boot image bakes on GitLab CI (fox_image in .gitlab-ci.yml).
 on:
   workflow_call:
     inputs:
@@ -11,7 +11,7 @@ on:
         type: string
         required: true
       ubuntu_matrix:
-        description: 'JSON array of Ubuntu codenames to build each source for, crossed with sources_matrix (e.g. ["jammy","noble","resolute"] for box, ["jammy"] for pug/lab/hetzner).'
+        description: 'JSON array of Ubuntu codenames to build each source for, crossed with sources_matrix (e.g. ["jammy","noble","resolute"] for box, ["jammy"] for pug/lab).'
         type: string
         required: false
         default: '["jammy"]'
@@ -35,12 +35,6 @@ jobs:
     # the pool model: lab-vm = 6 runners that take VM workloads (packer-build +
     # test-role); lab = 4 runners that take everything else.
     #
-    # `hetzner` builds the rpool disk image (its verify-boot post-processor is
-    # excepted -- the cloud-init-only image has no harness machine spec), then
-    # on a master push the build cell publishes it as a Hetzner Cloud snapshot
-    # via `mise run packer:hetzner` (HCLOUD_TOKEN from a repo secret). Feature
-    # branches build the disk but skip the publish -- see that step below.
-    #
     # Why one job per cell instead of packer's internal parallel builds in a
     # single job: each build VM then occupies one lab-vm runner slot, and
     # fail-fast:false keeps one cell's failure from cancelling its siblings
@@ -53,9 +47,9 @@ jobs:
     # timeout is per-cell (90 min).
     strategy:
       fail-fast: false
-      # source x ubuntu. box/lab/pug can build all supported releases; hetzner
-      # stays jammy-only because fox runs jammy in prod. The cross is shaped
-      # entirely by the two input arrays from the caller.
+      # source x ubuntu. box can build all supported releases; pug/lab stay
+      # jammy-only. The cross is shaped entirely by the two input arrays from
+      # the caller.
       matrix:
         source: ${{ fromJSON(inputs.sources_matrix) }}
         ubuntu: ${{ fromJSON(inputs.ubuntu_matrix) }}
@@ -120,28 +114,6 @@ jobs:
             args+=(--no-publish)
           fi
           mise run packer:build "${args[@]}"
-      - name: Publish Hetzner snapshot
-        # Turn the rpool disk this cell just built into a Hetzner Cloud snapshot
-        # (mise run packer:hetzner: temp cpx22 -> rescue -> dd onto /dev/sda ->
-        # create_image, then prune all but the 2 newest). Master + jammy only: a
-        # snapshot is a project-global resource that terraform's
-        # data.hcloud_image selects by most_recent, so a feature-branch -- or
-        # off-release -- publish could silently become fox's next boot image
-        # (fox runs a jammy root). HCLOUD_TOKEN is a repo secret set manually via
-        # `gh secret set` (kept out of terraform state -- see terraform/github.tf);
-        # hetzner.sh skips its op re-exec when the token is already resolved.
-        # Reads the disk built by the step above from the shared qemu volume.
-        if: matrix.source == 'hetzner' && matrix.ubuntu == 'jammy' && github.ref == 'refs/heads/master'
-        env:
-          PACKER_UBUNTU: ${{ matrix.ubuntu }}
-          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
-        run: |
-          set -euo pipefail
-          args=()
-          if [ -n "$PACKER_UBUNTU" ]; then
-            args+=(--ubuntu "$PACKER_UBUNTU")
-          fi
-          mise run packer:hetzner "${args[@]}"
       - name: Seed box_deps on top of box
         # box_deps is a derivation: mise-tasks/packer/seed-deps.sh stages a
         # reflink-copy of box's artifacts, boots them via launch.py
