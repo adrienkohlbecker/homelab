@@ -201,38 +201,14 @@
   failed_when: false
   become: true
 
-- name: _verify_input | INPUT — dnscrypt (5053/udp) rejected from non-scope source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 10.99.0.1 {{ service_ports.dnscrypt_proxy }}
-  args: { executable: /bin/bash }
-  changed_when: false
-  become: true
-
 # --- probe_podman group (default-bridge-source positives) ------------
-# Container DNS (5053 dnscrypt, 5333 aardvark) — consumers live on the
-# default podman bridge, so positive probes source-bind from
-# probe_podman (in $PODMAN_DEFAULT). nc -u sends a single UDP packet
-# source-bound to the alias; the named counter is the assertion.
-# Dnscrypt also has a TCP probe to lock in the `meta l4proto { tcp,
-# udp }` scope — a regression to UDP-only would silently bring back
-# the ~2 TCP drops/day pihole used to see when falling back to TCP on
-# UDP-truncated responses.
+# Container DNS (5333 aardvark) — consumers live on the default podman
+# bridge, so positive probes source-bind from probe_podman (in
+# $PODMAN_DEFAULT). nc -u sends a single UDP packet source-bound to the
+# alias; the named counter is the assertion.
 - name: _verify_input | Bind probe_podman on extns veth (default-bridge-source probes)
   command: ip -n extns addr replace {{ _firewall_probe_podman }}/32 dev veth_ext
   changed_when: true
-  become: true
-
-- name: _verify_input | INPUT — dnscrypt (5053/udp) reachable from container source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_podman }} 10.99.0.1 {{ service_ports.dnscrypt_proxy }}
-  args: { executable: /bin/bash }
-  changed_when: false
-  become: true
-
-- name: _verify_input | INPUT — dnscrypt (5053/tcp) reachable from container source
-  command: >
-    ip netns exec extns curl --interface {{ _firewall_probe_podman }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.dnscrypt_proxy }}/
-  changed_when: false
-  failed_when: false
   become: true
 
 - name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from default-bridge source  # noqa: risky-shell-pipe

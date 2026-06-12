@@ -1,7 +1,0 @@
-# Release-divergent: the config template branches on the dnscrypt-proxy major
-# version. jammy (22.04) and noble (24.04) both ship 2.0.45 (singular
-# fallback_resolver); resolute (26.04) ships 2.1.x (plural bootstrap_resolvers).
-# So the resolute cell -- not noble -- covers the non-default branch; noble
-# renders identically to the jammy default cell.
-ubuntu:
-  - resolute

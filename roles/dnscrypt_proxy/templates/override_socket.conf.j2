@@ -1,9 +1,0 @@
-# Both empty-resets go first: systemd's `ListenStream=` / `ListenDatagram=`
-# empty assignment clears the WHOLE Listen list (not just the matching type),
-# so an interleaved reset+add+reset+add wipes the freshly-added entry on the
-# second reset. With the two resets up front, the two adds compose cleanly.
-[Socket]
-ListenStream=
-ListenDatagram=
-ListenStream=0.0.0.0:{{ service_ports.dnscrypt_proxy }}
-ListenDatagram=0.0.0.0:{{ service_ports.dnscrypt_proxy }}

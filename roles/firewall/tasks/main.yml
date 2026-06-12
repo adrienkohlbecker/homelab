@@ -28,7 +28,7 @@
 # nftables.service before our drop-in / template lands. Without it
 # there's a sub-second window where stock Ubuntu's example ruleset
 # (or no ruleset) is active. Matches the pattern used by keepalived /
-# fail2ban / dnscrypt_proxy.
+# fail2ban.
 - name: Install nftables
   apt:
     pkg:
