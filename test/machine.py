@@ -350,6 +350,12 @@ class Machine:
     # IP for backends whose guest is directly reachable (EC2). Every SSH/scp/
     # ansible invocation and the banner probe read this, never SSH_HOST.
     ssh_host: str = SSH_HOST
+    # Private key handed to ssh/scp/ansible via -i. The QEMU fixtures bake
+    # the well-known vagrant key; EC2 cells bake the operator's public key
+    # instead (terraform/aws_ci.tf + packer/aws/ami.pkr.hcl), whose private
+    # half only ever lives in the operator's ssh agent — None means "no -i,
+    # let the agent supply the identity".
+    ssh_key: str | None = SSH_KEY
     # Filename (under the per-run workdir) where qemu writes its pidfile.
     idfile: str = dataclasses.field(default="pid", init=False)
 
@@ -513,8 +519,7 @@ class Machine:
         # agent-less).
         base = [
             "ssh",
-            "-i",
-            SSH_KEY,
+            *(["-i", self.ssh_key] if self.ssh_key else []),
             "-p",
             str(self.ssh_port),
             *self._ssh_options(),
@@ -534,8 +539,7 @@ class Machine:
         """
         return [
             "scp",
-            "-i",
-            SSH_KEY,
+            *(["-i", self.ssh_key] if self.ssh_key else []),
             "-P",
             str(self.ssh_port),
             *self._ssh_options(),
@@ -577,8 +581,7 @@ class Machine:
             f"ansible_ssh_host={self.ssh_host}",
             "-e",
             f"ansible_ssh_user={self.ssh_user}",
-            "-e",
-            f"ansible_ssh_private_key_file={SSH_KEY}",
+            *(["-e", f"ansible_ssh_private_key_file={self.ssh_key}"] if self.ssh_key else []),
             # Static playbooks declare `hosts: all`; --limit pins the play to
             # the inventory host we actually provisioned.
             "--limit",
@@ -1931,6 +1934,10 @@ class Ec2Machine(Machine):
             # empty until then so a premature SSH attempt fails loudly
             # instead of probing the operator's own loopback sshd.
             ssh_host="",
+            # Cells authorize the operator's public key (baked for
+            # box/pug/lab, cloud-init via the LT key pair for minimal) —
+            # no key file in the repo; the ssh agent supplies the identity.
+            ssh_key=None,
             ssh_user=spec.ssh_user,
             ansible_args=_qemu_ansible_args(spec),
             inventory_host=spec.inventory_host,

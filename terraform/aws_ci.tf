@@ -11,6 +11,9 @@
 #        aws ssm put-parameter --region eu-central-1 \
 #          --name /homelab-ci/ami/box/noble --type String \
 #          --value ami-08f50eebedb583d9f --overwrite
+#      That artifact predates the operator-key bake and still authorizes the
+#      vagrant key only — `ssh-add packer/vagrant.key` until a real bake
+#      replaces it (the harness itself passes no -i for EC2 cells).
 #   2. At GitLab cutover, set the project CI/CD variables AWS_ROLE_ARN
 #      (ci_cell_role_arn output) for cell jobs and the bake role for
 #      protected ami_images jobs.
@@ -106,8 +109,9 @@ resource "aws_route_table_association" "ci" {
 # ─── Security group ──────────────────────────────────────────────────────────
 # 22/tcp from the fleet's two operators: fox (the runner host converging cells
 # over SSH) and the home WAN (deliberate operator access for debugging, not a
-# separate emergency profile). Cells authenticate with the baked vagrant key;
-# this group is the trust boundary that replaces qemu's loopback hostfwd.
+# separate emergency profile). Cells authenticate with the baked operator key
+# (aws_key_pair.ci_operator below); this group is the second boundary that
+# replaces qemu's loopback hostfwd.
 
 resource "aws_security_group" "ci_cell" {
   name        = "homelab-ci-cell"
@@ -278,7 +282,7 @@ resource "aws_iam_role_policy" "ci_cell" {
           [for s in aws_subnet.ci : s.arn],
           [
             aws_security_group.ci_cell.arn,
-            aws_key_pair.ci_vagrant.arn,
+            aws_key_pair.ci_operator.arn,
             "arn:aws:ec2:${local.ci_aws_region}::image/*",
             "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:network-interface/*",
             "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:spot-instances-request/*",
@@ -427,15 +431,18 @@ resource "aws_iam_role_policy" "ci_bake" {
 }
 
 # ─── Cell SSH key ────────────────────────────────────────────────────────────
-# The well-known vagrant insecure keypair (packer/vagrant.key) — the same key
-# the qemu fixtures bake and the harness already authenticates with. Public
-# by design; the ci_cell security group is the actual boundary. Registered as
-# an EC2 keypair so cloud-init on minimal's Canonical AMI (which has no baked
-# key) installs it for the ubuntu user.
+# The operator's personal public key (group_vars/all/main.yml
+# ssh_public_keys) — NOT the well-known vagrant key the qemu fixtures bake:
+# cells sit on public IPs, so unlike the loopback-hostfwd qemu path the key
+# is a real boundary alongside the security group. The private half lives
+# only in the operator's ssh agent; the harness passes no -i for EC2 cells.
+# Registered as an EC2 keypair so cloud-init on minimal's Canonical AMI
+# (which has no baked key) installs it for the ubuntu user; the baked
+# machines get the same key from packer/aws/ami.pkr.hcl's SSH_KEY_PUB.
 
-resource "aws_key_pair" "ci_vagrant" {
-  key_name   = "homelab-ci-vagrant"
-  public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y spox@vagrant-dev"
+resource "aws_key_pair" "ci_operator" {
+  key_name   = "homelab-ci-operator"
+  public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEFQDmZidqILmoI6o9f8KLz+0hJad+Xh4Lm5OLsYDZTa adrien.kohlbecker@gmail.com"
 
   tags = { role = "ci" }
 }
@@ -494,10 +501,10 @@ resource "aws_launch_template" "ci_cell" {
   # map_public_ip_on_launch; the SG rides the top-level field.
   vpc_security_group_ids = [aws_security_group.ci_cell.id]
 
-  # Ignored by the baked images (no cloud-init — the vagrant key is baked by
-  # chroot.sh), consumed by minimal's Canonical AMI where cloud-init installs
-  # it for the ubuntu user. Same key, same SG-as-boundary trust model.
-  key_name = aws_key_pair.ci_vagrant.key_name
+  # Ignored by the baked images (no cloud-init — the operator key is baked
+  # by chroot.sh via SSH_KEY_PUB), consumed by minimal's Canonical AMI where
+  # cloud-init installs it for the ubuntu user. Same key either way.
+  key_name = aws_key_pair.ci_operator.key_name
 
   tag_specifications {
     resource_type = "instance"
