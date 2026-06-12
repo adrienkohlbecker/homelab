@@ -10,6 +10,7 @@
 #      gate-A artifact so the harness can resolve it:
 #        aws ssm put-parameter --region eu-central-1 \
 #          --name /homelab-ci/ami/box/noble --type String \
+#          --data-type aws:ec2:image \
 #          --value ami-08f50eebedb583d9f --overwrite
 #      That artifact predates the operator-key bake and still authorizes the
 #      vagrant key only — `ssh-add packer/vagrant.key` until a real bake
@@ -622,9 +623,12 @@ data "aws_ssm_parameter" "canonical_ubuntu" {
 resource "aws_ssm_parameter" "ci_ami_minimal" {
   for_each = data.aws_ssm_parameter.canonical_ubuntu
 
-  name  = "/homelab-ci/ami/minimal/${each.key}"
-  type  = "String"
-  value = each.value.value
+  name = "/homelab-ci/ami/minimal/${each.key}"
+  type = "String"
+  # EC2 validates the value is a well-formed, existing AMI at write time,
+  # so a bad alias fails the apply instead of the next cell launch.
+  data_type = "aws:ec2:image"
+  value     = each.value.value
 
   tags = {
     role    = "ci-ami"
