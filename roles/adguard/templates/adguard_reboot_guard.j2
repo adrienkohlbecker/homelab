@@ -1,8 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
+{# udm is excluded: its last-resort dnsmasq failover has no adguard.home
+   record, so it can never satisfy check_peers -- it serves degraded DNS,
+   not a healthy peer worth releasing the reboot lock for, and probing it
+   would only add dead dig timeouts to every cycle. #}
 PEER_IPS=(
-{% for peer in pihole_keepalived_peers | reject('eq', inventory_hostname) | sort %}
+{% for peer in dns_keepalived_peers | reject('eq', inventory_hostname) | reject('eq', 'udm') | sort %}
   {{ external_ips[peer] }}
 {% endfor %}
 )

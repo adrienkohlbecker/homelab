@@ -24,19 +24,20 @@
   apt:
     pkg:
       - dnsutils
-      - keepalived
     install_recommends: false
     cache_valid_time: 3600
   become: true
 
-- name: _setup | Ensure keepalived conf.d exists
-  file:
-    dest: /etc/keepalived/conf.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0750"
-  become: true
+# The real keepalived role (not just the package): it supplies the base
+# conf whose `include conf.d/*.conf` actually loads the fragment this role
+# renders, the ExecStartPre/ExecReload `keepalived -t` validate gates, and
+# the ip_nonlocal_bind sysctl that lets the service unit publish the VIP
+# sockets on a host that doesn't hold the address. With those in place the
+# role's "Reload keepalived" task starts the daemon for real and _verify
+# can probe the live VRRP vmac instead of grepping the rendered fragment.
+- name: _setup | Install keepalived
+  import_role:
+    name: keepalived
 
 - name: _setup | Configure resolved
   shell: |

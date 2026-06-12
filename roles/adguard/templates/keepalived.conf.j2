@@ -5,6 +5,10 @@ vrrp_script adguard_healthcheck {
   rise      1
   fall      2
   user      root
+  # Start the script in FAILED state so keepalived enters FAULT on every
+  # restart and only transitions out once the healthcheck passes once --
+  # a deterministic gate on adguard's actual health rather than a wallclock
+  # startup delay.
   init_fail
 }
 
@@ -12,27 +16,55 @@ vrrp_instance adguard {
   state     BACKUP
   interface {{ default_interface }}
 
+  # Create a dedicated macvlan child `vrrp.{{ dns_keepalived_vrid }}` on
+  # eth0 with the VRRP standard MAC 00:00:5e:00:01:{{ '%02x' % dns_keepalived_vrid }} and
+  # carry the VIP on it. Without use_vmac the VIP rides eth0's primary MAC
+  # and the periodic GARP below (which announces VIP→hostMAC) trips UniFi's
+  # last-write-wins client tracker — the host's UniFi client entry flips
+  # from its primary IP to the DNS VIP. A dedicated vmac splits that
+  # into two distinct UniFi clients (host + VIP) and keeps both stable.
   use_vmac
+  # Source outbound traffic on eth0, not the vmac. Two reasons: the firewall
+  # scopes the VRRP-accept rule to iifname $WAN_IFACE (= eth0; see
+  # roles/firewall/templates/nftables.conf.j2), so peer adverts must continue
+  # to ingress on eth0; and adguard's reply traffic for the VIP keeps its
+  # existing L2 path instead of acquiring the vmac as egress iface.
   vmac_xmit_base
 
   check_unicast_src
 
   unicast_src_ip {{ external_ips[inventory_hostname] }}
   unicast_peer {
-    {% for name in pihole_keepalived_peers | select("ne", inventory_hostname) | sort %}
+    {% for name in dns_keepalived_peers | select("ne", inventory_hostname) | sort %}
     {{ external_ips[name] }}
     {% endfor %}
   }
 
-  virtual_router_id {{ pihole_keepalived_vrid }}
-  priority          {{ pihole_keepalived_priority }}
+  virtual_router_id {{ dns_keepalived_vrid }}
+  priority          {{ dns_keepalived_priority }}
   advert_int        1
+
+  # Delay a recovered higher-priority node from reclaiming the VIP for
+  # 60s, so a flapping resolver doesn't yank the VIP back (re-churning the
+  # GARP / UniFi MAC update) the instant its healthcheck rises again. Plain
+  # preempt (no nopreempt) is kept so the MASTER does eventually reclaim.
   preempt_delay     60
 
+  # No explicit track_interface: keepalived tracks the instance's own
+  # `interface` for link state, so re-listing eth0 is redundant — keepalived
+  # ignores it ("since own interface") and the warning makes `keepalived -t`
+  # exit non-zero, failing the ExecReload validate gate. With use_vmac the
+  # instance rides a vmac child of eth0; if eth0 drops, the vmac follows.
+
   virtual_ipaddress {
-    {{ pihole_keepalived_ip }}/32
+    {{ dns_keepalived_ip }}/32
   }
 
+  # Periodic gratuitous ARP so any LAN cache that picks up a wrong MAC
+  # for the VIP self-heals within ~1 minute. With use_vmac above, GARPs
+  # advertise VIP→vmac-MAC (00:00:5e:00:01:{{ '%02x' % dns_keepalived_vrid }}), so a stale cache
+  # pointing at the previous MASTER's vmac gets refreshed within the
+  # refresh window.
   garp_master_repeat 3
   garp_master_refresh 60
 
@@ -40,5 +72,9 @@ vrrp_instance adguard {
     adguard_healthcheck
   }
 
+  # Unified notify fires for all transitions (MASTER/BACKUP/FAULT) and also
+  # STOP (SIGTERM during the throttled rolling restart), leaving a breadcrumb
+  # in the journal at exactly the planned VIP handoff. The reboot guard
+  # (adguard_reboot_guard) follows these lines to re-check peer health.
   notify "/usr/bin/logger -t adguard-keepalived"
 }
