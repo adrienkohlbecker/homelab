@@ -171,13 +171,16 @@ resource "aws_iam_role" "ci_cell_scheduler" {
       Principal = { Service = "scheduler.amazonaws.com" }
       Action    = "sts:AssumeRole"
       Condition = {
+        # Confused-deputy guard. aws:SourceArn must be a schedule GROUP —
+        # scoping it to a schedule or schedule-name prefix is explicitly
+        # unsupported (docs: "Confused deputy prevention in EventBridge
+        # Scheduler") and fails every CreateSchedule with "execution role
+        # must allow ... to assume the role". Per-cell scoping isn't lost:
+        # the permission policy below only terminates role=ci-cell
+        # instances regardless of which schedule fires it.
         StringEquals = {
           "aws:SourceAccount" = local.ci_account_id
-        }
-        # Confused-deputy guard: only the ci-cell-* schedules the cell role
-        # may create can assume this terminate-capable role.
-        ArnLike = {
-          "aws:SourceArn" = "arn:aws:scheduler:${local.ci_aws_region}:${local.ci_account_id}:schedule/default/ci-cell-*"
+          "aws:SourceArn"     = "arn:aws:scheduler:${local.ci_aws_region}:${local.ci_account_id}:schedule-group/default"
         }
       }
     }]
