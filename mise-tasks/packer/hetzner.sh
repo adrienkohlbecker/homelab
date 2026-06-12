@@ -64,8 +64,13 @@ for _ in $(seq 1 60); do
   [ "$(sstatus)" = "running" ] && break
   sleep 2
 done
+[ "$(sstatus)" = "running" ] || {
+  echo "server never reached running (status: $(sstatus))" >&2
+  exit 1
+}
 id=$(sid)
 IP=$(sip)
+echo "==> server $id up at $IP"
 
 echo "==> enabling rescue + hard reset"
 api POST "/servers/$id/actions/enable_rescue" "{\"type\":\"linux64\",\"ssh_keys\":[$kid]}" >/dev/null
@@ -78,6 +83,10 @@ for _ in $(seq 1 40); do
   ssh_rescue true 2>/dev/null && break
   sleep 4
 done
+ssh_rescue true || {
+  echo "rescue ssh never came up at $IP" >&2
+  exit 1
+}
 # Confirm we're actually in rescue (overlay root), not the installed OS.
 ssh_rescue 'findmnt -no FSTYPE / | grep -q overlay' || {
   echo "server did not enter rescue" >&2
@@ -88,7 +97,7 @@ ssh_rescue 'findmnt -no FSTYPE / | grep -q overlay' || {
 # gzip (universally present in the Debian rescue) keeps the mostly-empty 20G
 # image small on the wire; conv=sparse skips zero blocks on write. A .raw.gz
 # (the packer:hetzner-bake artifact) is already wire-ready and streams as-is.
-echo "==> streaming the Hetzner image onto /dev/sda (this takes a few minutes)"
+echo "==> streaming $IMG ($(du -h "$IMG" | cut -f1)) onto /dev/sda (this takes a few minutes)"
 case "$IMG" in
 *.gz) cat "$IMG" ;;
 *) gzip -c "$IMG" ;;
@@ -101,13 +110,23 @@ for _ in $(seq 1 30); do
   [ "$(sstatus)" = "off" ] && break
   sleep 2
 done
+# Refuse to snapshot a running server: the image must capture quiesced disks.
+[ "$(sstatus)" = "off" ] || {
+  echo "server never powered off (status: $(sstatus))" >&2
+  exit 1
+}
 imgid=$(api POST "/servers/$id/actions/create_image" "$(python3 -c 'import json,sys;print(json.dumps({"type":"snapshot","description":"ubuntu-zfs-"+sys.argv[1]+"-"+sys.argv[2],"labels":{"os":"ubuntu-zfs","ubuntu":sys.argv[1]}}))' "$UBUNTU" "$(date '+%Y%m%d%H%M%S')")" | pyget 'd["image"]["id"]')
 echo "==> snapshot image id=$imgid (waiting for available)"
+st=""
 for _ in $(seq 1 120); do
   st=$(api GET "/images/$imgid" | pyget 'd["image"]["status"]')
   [ "$st" = "available" ] && break
   sleep 5
 done
+[ "$st" = "available" ] || {
+  echo "snapshot $imgid never became available (status: $st)" >&2
+  exit 1
+}
 
 mise run packer:hcloud-prune-snapshots -- "os=ubuntu-zfs,ubuntu=$UBUNTU"
 
