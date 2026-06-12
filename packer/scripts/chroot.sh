@@ -214,6 +214,14 @@ apt-get upgrade --yes
 
 apt-mark hold 'grub*'
 
+# Defer initramfs generation to the single explicit rebuild further down:
+# the kernel, zfs-initramfs, and (on mirror variants) mdadm postinsts would
+# otherwise each regenerate it — four builds per bake, all discarded by the
+# final one. The divert survives package installs, so every postinst hits
+# the /bin/true stand-in until the divert is removed.
+dpkg-divert --local --rename --add /usr/sbin/update-initramfs
+ln -s /bin/true /usr/sbin/update-initramfs
+
 # Bootstrap kernel: just linux-generic. On jammy this lands the 5.15 GA
 # kernel, on noble+ a 6.x. Noble+ is fine as-is for the +0:N:1 fake-root
 # uidmap pattern; jammy's 5.15 + ext4 + fuse-overlayfs reports
@@ -330,14 +338,17 @@ echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 # Pull all available modules into initramfs (rather than just the
 # build host's currently-loaded set) so the shipped image boots on
 # bare-metal hardware whose controllers/NICs the build host didn't
-# happen to have. Costs ~30 MiB qcow2-compressed. Set right before
-# the final rebuild so we don't have to worry about earlier postinst-
-# driven update-initramfs calls.
+# happen to have. Costs ~30 MiB qcow2-compressed. Set before the
+# one-and-only build below (postinst-driven builds are diverted above).
 sed -i 's/^MODULES=.*/MODULES=most/' /etc/initramfs-tools/initramfs.conf
 
-# Update initramfs
+# Restore the real update-initramfs and generate the initramfs once, now
+# that MODULES=most and every package is in place. -c (not -u): the divert
+# means no initramfs exists yet to update.
 
-update-initramfs -u -k all
+rm /usr/sbin/update-initramfs
+dpkg-divert --local --rename --remove /usr/sbin/update-initramfs
+update-initramfs -c -k all
 
 # Mount EFI filesystem
 
