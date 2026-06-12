@@ -539,7 +539,9 @@ resource "aws_launch_template" "ci_cell" {
 
 data "aws_ssm_parameter" "canonical_ubuntu" {
   for_each = {
-    jammy    = "/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+    # jammy predates Canonical's gp3 layout and only publishes ebs-gp2
+    # (matching its hvm-ssd AMI name pattern in packer/aws/ami.pkr.hcl).
+    jammy    = "/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id"
     noble    = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
     resolute = "/aws/service/canonical/ubuntu/server/26.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
   }
