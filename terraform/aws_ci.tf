@@ -156,14 +156,13 @@ resource "aws_default_security_group" "ci" {
 # + AWS_WEB_IDENTITY_TOKEN_FILE, and AssumeRoleWithWebIdentity into one of the
 # two roles below. No static AWS keys anywhere in CI.
 
-data "tls_certificate" "gitlab" {
-  url = "https://gitlab.com"
-}
-
+# No thumbprint_list: for issuers served behind publicly trusted CAs
+# (gitlab.com qualifies) AWS validates against its own root-CA library and
+# ignores thumbprints, so pinning one would only add a live TLS fetch at
+# plan time and spurious diffs on certificate rotation.
 resource "aws_iam_openid_connect_provider" "gitlab" {
-  url             = "https://gitlab.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [data.tls_certificate.gitlab.certificates[0].sha1_fingerprint]
+  url            = "https://gitlab.com"
+  client_id_list = ["sts.amazonaws.com"]
 
   tags = {
     Name = "gitlab.com"
