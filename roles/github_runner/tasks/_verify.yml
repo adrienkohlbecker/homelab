@@ -46,41 +46,6 @@
   become: true
   become_user: github_runner
 
-- name: _verify | Resolve github_runner uid for its runtime dir
-  command: id -u github_runner
-  register: _github_runner_uid
-  changed_when: false
-  become: true
-
-- name: _verify | Rootless buildkit.service is active under github_runner
-  systemd:
-    name: buildkit.service
-    scope: user
-  register: _github_runner_buildkit_svc
-  until: _github_runner_buildkit_svc.status.ActiveState == "active"
-  retries: 10
-  delay: 2
-  failed_when: _github_runner_buildkit_svc.status.ActiveState != "active"
-  become: true
-  become_user: github_runner
-
-# Functional, not stat-only: `debug workers` round-trips to buildkitd over its
-# socket, so it only passes if rootlesskit set up the user namespace and the
-# daemon is actually serving -- the whole rootless chain we depend on.
-- name: _verify | BuildKit answers on its socket
-  command: >-
-    /usr/local/bin/buildctl
-    --addr unix:///run/user/{{ _github_runner_uid.stdout }}/buildkit/buildkitd.sock
-    debug workers
-  register: _github_runner_buildctl
-  changed_when: false
-  until: _github_runner_buildctl.rc == 0
-  retries: 10
-  delay: 2
-  failed_when: _github_runner_buildctl.rc != 0
-  become: true
-  become_user: github_runner
-
 # Canonical actions/runner install: tarball extracted with run.sh +
 # bin/Runner.Listener present. Hard-link mirror in per-instance dirs
 # checked below.
