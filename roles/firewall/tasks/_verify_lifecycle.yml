@@ -18,7 +18,7 @@
   become: true
 
 - name: _verify_lifecycle | FORWARD/DNAT after re-apply — published 32400 still reachable
-  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://10.99.0.1:32400/
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://192.0.2.1:32400/
   register: firewall_verify_after_reapply
   changed_when: false
   failed_when: firewall_verify_after_reapply.rc != 0 or 'firewall-verify-ok' not in firewall_verify_after_reapply.stdout

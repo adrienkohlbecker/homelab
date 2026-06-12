@@ -4,7 +4,7 @@
 
 # FORWARD/DNAT — published container reachable via wg0 ingress.
 - name: _verify_forward | FORWARD/DNAT — published 32400 reachable via wg0 ingress
-  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://10.99.0.1:32400/
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://192.0.2.1:32400/
   register: firewall_verify_container
   changed_when: false
   failed_when: firewall_verify_container.rc != 0 or 'firewall-verify-ok' not in firewall_verify_container.stdout
@@ -100,6 +100,6 @@
 
 # ICMP rate-limit ACCEPT path. One ping is well below 10/sec.
 - name: _verify_forward | ICMP — ping from extns is accepted
-  command: ip netns exec extns ping -c 1 -W 2 10.99.0.1
+  command: ip netns exec extns ping -c 1 -W 2 192.0.2.1
   changed_when: false
   become: true
