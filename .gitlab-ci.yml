@@ -186,12 +186,11 @@ ami_images:
 # snapshot is project-global — terraform's data.hcloud_image selects by
 # most_recent, so it silently becomes fox's next boot image on rebuild.
 #
-# Required CI/CD variable: HCLOUD_TOKEN_HOMELAB (masked + protected) — the
-# homelab Hetzner project's read/write token: the snapshot must land in the
-# project fox lives in. The explicit _HOMELAB suffix guards the wrong-token
-# mistake (a stale CI-project token converges and publishes silently into
-# the wrong project); exposure is scoped to this protected-ref manual job,
-# the same blast radius the GitHub repo secret had before the migration.
+# Required CI/CD variable: HCLOUD_TOKEN (masked + protected) — the homelab
+# Hetzner project's read/write token: the snapshot must land in the project
+# fox lives in (the only Hetzner project since the homelab-ci teardown).
+# Exposure is scoped to this protected-ref manual job, the same blast
+# radius the GitHub repo secret had before the migration.
 fox_image:
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true"
@@ -209,14 +208,10 @@ fox_image:
   resource_group: fox_image
   interruptible: false
   timeout: 90m
-  variables:
-    # The bake half and the upload half read the same env var; map the
-    # explicitly-named project variable onto the name hcloud tooling reads.
-    HCLOUD_TOKEN: $HCLOUD_TOKEN_HOMELAB
   script:
     # Fail before the 20+ min bake, not after it, when the variable is
     # missing (op is not in the ci image, so there is no fallback).
-    - test -n "${HCLOUD_TOKEN:-}" || { echo "HCLOUD_TOKEN_HOMELAB CI/CD variable is not set" >&2; exit 1; }
+    - test -n "${HCLOUD_TOKEN:-}" || { echo "HCLOUD_TOKEN CI/CD variable is not set" >&2; exit 1; }
     # Same drift self-heal as .hosted, against the image's /opt/mise tree.
     - mise install
     - uv sync --locked
