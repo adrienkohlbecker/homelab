@@ -87,6 +87,17 @@
   changed_when: false
   failed_when: "'0.0.0.0' not in adguard_verify_undelegated.stdout_lines"
 
+# AdGuard checks HTTPS-record ipv6hints as hostnames against the filters
+# (filterSVCBHint), so an over-broad rule swallows every type-65 answer
+# that carries one. cloudflare-dns.com reliably publishes such a record.
+- name: _verify | HTTPS-type answers survive response filtering
+  command: dig +short +timeout=2 +tries=2 @{{ ansible_facts.default_ipv4.address }} cloudflare-dns.com HTTPS
+  register: adguard_verify_https_rr
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: adguard_verify_https_rr.stdout_lines | length > 0
+
 - name: _verify | Compatibility rewrite pi.hole answers loopback
   command: dig +short +timeout=2 +tries=2 @{{ ansible_facts.default_ipv4.address }} pi.hole A
   register: adguard_verify_pihole
