@@ -2,7 +2,7 @@
 # (eth0 + macvlan children mac_mgmt/mac_iot sharing one L2, plus
 # virbr0/podman*/iot VLAN) hear their own mDNS announcements echoed back via a sibling
 # interface and rename to <host>-NNNN every time a netlink address-
-# change fires — e.g. keepalived adding the pihole VIP to eth0 on
+# change fires — e.g. keepalived adding the DNS VIP to eth0 on
 # MASTER transition.
 [server]
 allow-interfaces={{ default_interface }}

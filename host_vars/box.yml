@@ -102,7 +102,7 @@ zfs_autobackup_sources:
     dest_dataset: ""
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFyjxLhHELJkvSWbVs696fArHKeBM6k6EvmqDckAic5Z root@box
 
-pihole_keepalived_priority: 5
+dns_keepalived_priority: 5
 
 # box runs fail2ban (it's in the box,fox play as the test fixture for fox);
 # this flag tells netdata to deploy the fail2ban collector + alert here, and

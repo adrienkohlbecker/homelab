@@ -101,14 +101,14 @@ policy:
   path: /etc/headscale/acl.hujson
 
 # MagicDNS resolves tailnet names under base_domain (must differ from the
-# server_url FQDN). All other queries forward to pihole over the mesh. The
+# server_url FQDN). All other queries forward to adguard over the mesh. The
 # lab/pug Tailscale nodes advertise the 10.123.0.0/18 physical partition,
 # deliberately less specific than the 10.123.0.0/21 classless static route
 # pushed on the Trusted VLAN, so Trusted clients prefer the local gateway while
-# roaming clients keep pihole and the physical sites reachable.
+# roaming clients keep adguard and the physical sites reachable.
 dns:
   magic_dns: true
-  # Send ALL queries from roaming devices to pihole, not just tailnet/MagicDNS
+  # Send ALL queries from roaming devices to adguard, not just tailnet/MagicDNS
   # names. Without this, a device on foreign WiFi resolves via that network's DNS
   # and loses adblock + split-horizon *.fahm.fr. The cost is that the advertised
   # route must be accepted by the client; otherwise DNS is unreachable until the
@@ -119,13 +119,13 @@ dns:
   base_domain: ts.{{ domain }}
   nameservers:
     global:
-      - {{ external_ips.pihole }}
+      - {{ external_ips.dns }}
     split: {}
   search_domains: []
 {% if headscale_derp_ipv4 is defined %}
   # Pin the control-plane FQDN into MagicDNS so a roaming device can still resolve
-  # it when the pihole chain (the global nameserver above) is unreachable. With
-  # override_local_dns on, all queries go to pihole, so without this a pihole
+  # it when the DNS-VIP chain (the global nameserver above) is unreachable. With
+  # override_local_dns on, all queries go to the VIP, so without this a DNS
   # outage leaves a client unable to re-resolve headscale to recover. Points at
   # fox's public IPs (same addresses fox.fahm.fr resolves to). fox-only: gated on
   # the DERP IPs, unset under the box harness where server_url is a loopback URL.

@@ -1,7 +1,7 @@
 # Managed by ansible (roles/netdata/templates/charts_d_keepalived_vrrp.conf.j2).
 # Sourced by /usr/libexec/netdata/charts.d/keepalived_vrrp.chart.sh before
 # keepalived_vrrp_check. Only deployed when netdata_keepalived_vrrp_enabled is true.
-keepalived_vrrp_vip="{{ netdata_keepalived_vrrp_ip | default(pihole_keepalived_ip) }}"
+keepalived_vrrp_vip="{{ netdata_keepalived_vrrp_ip | default(dns_keepalived_ip) }}"
 {% if netdata_keepalived_vrrp_update_every is defined %}
 keepalived_vrrp_update_every={{ netdata_keepalived_vrrp_update_every }}
 {% endif %}

@@ -4,7 +4,7 @@
 # **Status: live.** Wired into `group_vars/all/network.yml`, which
 # loads this file via `lookup('file', ...) | from_yaml` and derives
 # the consumer-facing vars (`site_subnets`, `external_ips`,
-# `wireguard_subnet`, `pihole_keepalived_ip`, plus the `address:`
+# `wireguard_subnet`, `dns_keepalived_ip`, plus the `address:`
 # fields of every entry in `wireguard_peers`). Edits here flow into
 # the prod inventory automatically; design rationale in
 # `notes/network_review.md`. Test hosts use a separate 10.234.0.0/16
@@ -63,7 +63,7 @@ sites:
     # Route-precedence contract with the Tailscale mesh: Trusted VLAN DHCP
     # pushes this /21 as option 121, while lab/pug advertise the less-specific
     # physical partition (10.123.0.0/18) to Headscale. Trusted clients then
-    # prefer the local UDM gateway for pihole's VIP; roaming clients use
+    # prefer the local UDM gateway for the DNS VIP; roaming clients use
     # Tailscale.
     cidr: 10.123.0.0/21
     gateway: 10.123.0.1
@@ -148,7 +148,7 @@ wireguard:
     phone:        10.123.66.65
 
 virtual_ips:
-  pihole: 10.123.1.224
+  dns: 10.123.1.224
 
 # Static device leases. Authoritative source is the UniFi Network UI
 # (UDM-Pro); this list is documentation and may drift. Each entry

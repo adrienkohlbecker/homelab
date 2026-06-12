@@ -55,7 +55,7 @@ _LOG_FH = None
 _LOG_PATH = None
 
 # The nameserver passt advertises to the guest over DHCP (-D). This is the lab
-# pihole keepalived VIP (data/network_topology.yml -> virtual_ips.pihole): a
+# DNS keepalived VIP (data/network_topology.yml -> virtual_ips.dns): a
 # real, reachable, split-horizon resolver that answers both nexus.lab.fahm.fr
 # (internal) and archive.ubuntu.com (upstream), which the early base-image apt
 # needs before the apt mirror is rewritten to nexus.
@@ -68,7 +68,7 @@ _LOG_PATH = None
 # resolv.conf resolver, and it has no working path to a loopback upstream. So
 # hand the guest a routable resolver instead and let passt NAT its queries out
 # the container bridge -- the guest's DNS to <VIP>:53 then rides the same
-# container -> VIP -> pihole DNAT path the firewall already permits (roles/
+# container -> VIP -> adguard DNAT path the firewall already permits (roles/
 # firewall: "container -> VIP -> container" accept). The passt NIC path only
 # runs in lab CI (a dev-Mac `packer:build` execs slirp untouched), so coupling
 # to lab's resolver here is acceptable.

@@ -19,13 +19,13 @@
 - name: Validate required variables
   assert:
     that:
-      - pihole_keepalived_ip is defined
-      - pihole_keepalived_vrid is defined
-      - pihole_keepalived_priority is defined
-      - (pihole_keepalived_priority | default(0) | int) > 0
-      - (pihole_keepalived_priority | default(0) | int) <= 255
-      - pihole_keepalived_peers is defined
-      - pihole_keepalived_peers | length > 0
+      - dns_keepalived_ip is defined
+      - dns_keepalived_vrid is defined
+      - dns_keepalived_priority is defined
+      - (dns_keepalived_priority | default(0) | int) > 0
+      - (dns_keepalived_priority | default(0) | int) <= 255
+      - dns_keepalived_peers is defined
+      - dns_keepalived_peers | length > 0
       - inventory_hostname in external_ips
       - udm_dns_failover_heartbeat_url is defined
       # The heartbeat template appends ?status=up / ?status=down, so the
@@ -40,7 +40,7 @@
       # on it at runtime).
       - udm_dns_failover_interface is regex("^[a-zA-Z0-9._-]+$")
     fail_msg: >-
-      udm_dns_failover requires pihole_keepalived_{ip,vrid,priority,peers},
+      udm_dns_failover requires dns_keepalived_{ip,vrid,priority,peers},
       an external_ips entry, and udm_dns_failover_heartbeat_url.
   tags:
     - udm_dns_failover
@@ -213,7 +213,7 @@
 
 - name: Check VRRP iptables rule per peer
   command: iptables -w 5 -C INPUT -i {{ udm_dns_failover_interface }} -s {{ item }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
-  loop: "{{ pihole_keepalived_peers | select('ne', inventory_hostname) | map('extract', external_ips) | sort }}"
+  loop: "{{ dns_keepalived_peers | select('ne', inventory_hostname) | map('extract', external_ips) | sort }}"
   register: udm_dns_failover_iptables_check
   changed_when: false
   failed_when: false
