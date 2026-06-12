@@ -20,7 +20,10 @@
 
 locals {
   ci_aws_region = "eu-central-1"
-  # GitLab project whose OIDC tokens may assume the CI roles.
+  # GitLab project whose OIDC tokens may assume the CI roles. The sub claim
+  # is the only identity binding (IAM has no condition key for GitLab's
+  # immutable project_id), so this namespace must never be released — a
+  # re-registered username could recreate the project and mint valid tokens.
   ci_gitlab_project = "adrienkohlbecker/homelab"
   ci_account_id     = data.aws_caller_identity.current.account_id
 }
@@ -189,6 +192,11 @@ resource "aws_iam_role" "ci_cell_scheduler" {
         StringEquals = {
           "aws:SourceAccount" = local.ci_account_id
         }
+        # Confused-deputy guard: only the ci-cell-* schedules the cell role
+        # may create can assume this terminate-capable role.
+        ArnLike = {
+          "aws:SourceArn" = "arn:aws:scheduler:${local.ci_aws_region}:${local.ci_account_id}:schedule/default/ci-cell-*"
+        }
       }
     }]
   })
@@ -216,9 +224,10 @@ resource "aws_iam_role_policy" "ci_cell_scheduler" {
 }
 
 # ─── Cell role ───────────────────────────────────────────────────────────────
-# Assumed by test-cell jobs (any ref in the project — branch pipelines run
-# role tests too). Deny-by-default in shape: RunInstances only through the
-# ci-cell launch templates into the CI subnets/SG with the role=ci-cell tag,
+# Assumed by test-cell jobs (any branch in the project — branch pipelines run
+# role tests too; tag pipelines don't, so they get nothing). Deny-by-default
+# in shape: RunInstances only through the cell launch templates into the CI
+# subnets/SG with the role=ci-cell tag and the templates' instance types,
 # terminate/console only for ci-cell instances, PassRole only of the
 # scheduler role to EventBridge Scheduler.
 
@@ -236,7 +245,7 @@ resource "aws_iam_role" "ci_cell" {
           "gitlab.com:aud" = "sts.amazonaws.com"
         }
         StringLike = {
-          "gitlab.com:sub" = "project_path:${local.ci_gitlab_project}:ref_type:*:ref:*"
+          "gitlab.com:sub" = "project_path:${local.ci_gitlab_project}:ref_type:branch:ref:*"
         }
       }
     }]
@@ -252,24 +261,55 @@ resource "aws_iam_role_policy" "ci_cell" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # RunInstances splits in two statements because aws:RequestTag only
+      # RunInstances splits across statements because aws:RequestTag only
       # evaluates against resources that receive tags in the request
       # (instance + volume, via the launch template tag_specifications);
-      # putting it on subnet/SG/AMI ARNs would deny every launch.
+      # putting it on subnet/SG/AMI ARNs would deny every launch. The
+      # instance statement also pins the instance type: launch-template
+      # values are caller-overridable at run-instances time, so without it
+      # a leaked token could launch metal sizes through the template.
       {
-        Sid    = "RunTagged"
-        Effect = "Allow"
-        Action = "ec2:RunInstances"
-        Resource = [
-          "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*",
-          "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:volume/*",
-        ]
+        Sid      = "RunTaggedInstance"
+        Effect   = "Allow"
+        Action   = "ec2:RunInstances"
+        Resource = "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*"
+        Condition = {
+          StringEquals = {
+            "aws:RequestTag/role" = "ci-cell"
+            "ec2:InstanceType"    = distinct(values(local.ci_machine_instance_types))
+          }
+          ArnEquals = {
+            "ec2:LaunchTemplate" = [for lt in aws_launch_template.ci_cell : lt.arn]
+          }
+        }
+      },
+      # ec2:InstanceType is not in the volume resource's condition context,
+      # so the volume statement carries only the tag + template conditions.
+      {
+        Sid      = "RunTaggedVolume"
+        Effect   = "Allow"
+        Action   = "ec2:RunInstances"
+        Resource = "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:volume/*"
         Condition = {
           StringEquals = {
             "aws:RequestTag/role" = "ci-cell"
           }
           ArnEquals = {
             "ec2:LaunchTemplate" = [for lt in aws_launch_template.ci_cell : lt.arn]
+          }
+        }
+      },
+      # AMIs sit apart from the other supporting resources to pin the owner:
+      # self-baked images plus Canonical's (minimal). Without the condition
+      # the token could launch any public or marketplace AMI.
+      {
+        Sid      = "RunImage"
+        Effect   = "Allow"
+        Action   = "ec2:RunInstances"
+        Resource = "arn:aws:ec2:${local.ci_aws_region}::image/*"
+        Condition = {
+          StringEquals = {
+            "ec2:Owner" = [local.ci_account_id, "099720109477"]
           }
         }
       },
@@ -283,7 +323,6 @@ resource "aws_iam_role_policy" "ci_cell" {
           [
             aws_security_group.ci_cell.arn,
             aws_key_pair.ci_operator.arn,
-            "arn:aws:ec2:${local.ci_aws_region}::image/*",
             "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:network-interface/*",
             "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:spot-instances-request/*",
           ]
@@ -318,17 +357,15 @@ resource "aws_iam_role_policy" "ci_cell" {
         Action   = ["ec2:DescribeInstances", "ec2:DescribeInstanceStatus", "ec2:DescribeSubnets"]
         Resource = "*"
       },
-      # AMI resolution: our parameters plus Canonical's public ones (minimal).
-      # GetParameters (plural) is what EC2 calls server-side for resolve:ssm:
-      # image IDs in RunInstances.
+      # AMI resolution: GetParameters (plural) is what EC2 calls server-side
+      # for resolve:ssm: image IDs in RunInstances. Only our namespace —
+      # minimal's alias parameter (below) already carries the resolved
+      # Canonical AMI id, so cells never read Canonical's public path.
       {
-        Sid    = "ResolveAmi"
-        Effect = "Allow"
-        Action = ["ssm:GetParameter", "ssm:GetParameters"]
-        Resource = [
-          "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/ami/*",
-          "arn:aws:ssm:${local.ci_aws_region}::parameter/aws/service/canonical/*",
-        ]
+        Sid      = "ResolveAmi"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter", "ssm:GetParameters"]
+        Resource = "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/ami/*"
       },
       # Per-cell one-time termination schedules.
       {
@@ -416,7 +453,9 @@ resource "aws_iam_role_policy" "ci_bake" {
           StringEquals = { "aws:RequestedRegion" = local.ci_aws_region }
         }
       },
-      # Candidate write + current promotion of /homelab-ci/ami/* parameters.
+      # Candidate write + current promotion of the baked machines' AMI
+      # parameters. minimal's aliases are terraform-owned (ci_ami_minimal
+      # below), so the bake role must not be able to clobber them.
       {
         Sid    = "PromoteAmi"
         Effect = "Allow"
@@ -424,7 +463,11 @@ resource "aws_iam_role_policy" "ci_bake" {
           "ssm:PutParameter", "ssm:GetParameter", "ssm:GetParameters",
           "ssm:DescribeParameters", "ssm:AddTagsToResource",
         ]
-        Resource = "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/ami/*"
+        Resource = [
+          for m in keys(local.ci_machine_instance_types) :
+          "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/ami/${m}/*"
+          if m != "minimal"
+        ]
       },
     ]
   })
