@@ -85,6 +85,7 @@
     state: present
     system: true
   become: true
+  register: user_homelab_ci_group
   tags:
     - user
 
@@ -95,8 +96,11 @@
 # without sudo. homelab_ci gives read/write access to the shared CI artifacts
 # dir and its default ACL (packer artifacts, port reservation files). append
 # is load-bearing: without it `groups:` replaces the supplementary set and
-# would strip sudo.
+# would strip sudo. Check-mode gate: on a host that has never converged the
+# group, the task above only reports creation and this one would fail on
+# the missing group.
 - name: Set login shell and supplementary groups
+  when: not (ansible_check_mode and user_homelab_ci_group.changed)
   user:
     name: "{{ ansible_user_id }}"
     shell: /bin/zsh
