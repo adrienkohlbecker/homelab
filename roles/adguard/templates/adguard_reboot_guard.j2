@@ -34,7 +34,7 @@ release_lock() {
 
 check_peers() {
   for ip in "${PEER_IPS[@]}"; do
-    if dig +timeout=3 +tries=2 "@${ip}" adguard.home >/dev/null 2>&1; then
+    if dig +short +timeout=3 +tries=2 "@${ip}" adguard.home A | grep -Fxq 127.0.0.1; then
       return 0
     fi
   done

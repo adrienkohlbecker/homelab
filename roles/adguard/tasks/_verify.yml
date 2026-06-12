@@ -28,6 +28,15 @@
   until: adguard_verify_hc_script.rc == 0
   become: true
 
+- name: _verify | Host DNS socket resolves the healthcheck name
+  command: dig +short +timeout=2 +tries=2 @{{ ansible_facts.default_ipv4.address }} adguard.home A
+  register: adguard_verify_host_dns
+  changed_when: false
+  failed_when: "'127.0.0.1' not in adguard_verify_host_dns.stdout_lines"
+  retries: 30
+  delay: 2
+  until: "'127.0.0.1' in adguard_verify_host_dns.stdout_lines"
+
 - name: _verify | DNS healthcheck name resolves locally
   command: /usr/bin/podman exec adguard getent hosts adguard.home
   register: adguard_verify_local
