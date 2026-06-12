@@ -358,7 +358,11 @@ mount /boot/efi
 # ZBM menu remains available even though the default boot path is the Linux
 # EFI-stub entry below. rEFInd ships as refind_x64.efi on x86_64 and
 # refind_aa64.efi on aarch64 ($REFIND_NAME, derived from `uname -m` above).
-ZBM_URL="https://nexus.lab.fahm.fr/repository/zbm/zfsbootmenu-$ZBM_VERSION.tar.gz"
+#
+# ZBM_URL_BASE override: build VMs that cannot reach the lab Nexus (AWS
+# bakes) get the tarball pre-staged into the chroot by provision.sh and
+# consume it via a file:// base — curl handles both schemes identically.
+ZBM_URL="${ZBM_URL_BASE:-https://nexus.lab.fahm.fr/repository/zbm}/zfsbootmenu-$ZBM_VERSION.tar.gz"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
