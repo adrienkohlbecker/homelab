@@ -155,8 +155,8 @@ influxdb_authelia_user: testuser
 filebrowser_basic_auth_user: changeme
 filebrowser_basic_auth_password: changeme
 netdata_alerts_token: changeme_netdata_alerts_token_16chars_min
-# Override prod's firebog tick meta-list (fans out to ~50 external adlists
-# that bypass the nexus cache) with a single small list served through the
+# Override prod's expanded firebog tick set (~26 lists, many bypassing
+# the nexus cache) with a single small list served through the
 # raw-githubusercontent mirror. Keeps the filter download + rule-count
 # checks exercised end-to-end at a fraction of the runtime.
 adguard_adlists:
