@@ -279,7 +279,14 @@ filtering:
   protection_enabled: true
 clients:
   runtime_sources:
-    whois: true
+{#
+  WHOIS only labels public client IPs over cleartext TCP/43 -- every
+  client here is RFC1918, so it is dead weight with an external-egress
+  footprint. rDNS stays on: private PTRs resolve through
+  local_ptr_upstreams (the UDM), so dashboard names come from DHCP
+  without leaving the LAN.
+#}
+    whois: false
     arp: true
     rdns: true
     dhcp: true
