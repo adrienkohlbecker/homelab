@@ -545,6 +545,17 @@ EOF
 
 fi
 
+# Mirror the config next to the fallback binary. rEFInd only reads
+# refind.conf from its own directory, so the fallback copy at \EFI\BOOT
+# otherwise runs config-less: 20s default countdown, then the first
+# auto-scanned loader (the ZBM image) with empty load options — no zbm.skip
+# (ZBM's own menu wait) and no serial console args (silent boot). That is
+# the normal boot path on EC2 cells, whose UEFI NVRAM starts empty (boot
+# entries do not ride an AMI); measured at ~26s of pure countdown per boot.
+# qemu fixtures boot via the baked NVRAM entry (the harness reuses
+# efivars.fd) and never read this copy.
+cp /boot/efi/EFI/refind/refind.conf /boot/efi/EFI/BOOT/refind.conf
+
 # Configure EFI boot entries. rEFInd is the firmware entry for the image. On
 # aarch64, the Linux EFI-stub boot path is the manual rEFInd menuentry above;
 # its kernel command line lives in refind.conf `options`.
