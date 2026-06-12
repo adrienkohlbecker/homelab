@@ -50,10 +50,11 @@ ExecStart=/usr/bin/podman run \
 {% endfor %}
     --publish {{ ansible_facts.default_ipv4.address }}:53:53/udp \
     --publish {{ ansible_facts.default_ipv4.address }}:53:53/tcp \
-{% if not qemu_test and pihole_keepalived_ip | ansible.utils.ipaddr %}
-    --publish {{ pihole_keepalived_ip }}:53:53/udp \
-    --publish {{ pihole_keepalived_ip }}:53:53/tcp \
-{% endif %}
+{# The VIP publish works on the BACKUP node (address not locally held)
+   thanks to roles/keepalived's ip_nonlocal_bind sysctl; the address is
+   validated by the role's input assert. #}
+    --publish {{ dns_keepalived_ip }}:53:53/udp \
+    --publish {{ dns_keepalived_ip }}:53:53/tcp \
     --publish 127.0.0.1:{{ service_ports.adguard }}:3000/tcp \
     --health-cmd         '["getent","hosts","adguard.home"]' \
     --health-startup-cmd '["getent","hosts","adguard.home"]' \
