@@ -159,6 +159,10 @@ statistics:
   interval: 10d
   enabled: true
   ignored_enabled: true
+{# An empty list must render `[]`, not a bare key (YAML null): AdGuard's
+   startup rewrite serializes empty lists as `[]`, and any mismatch with
+   that rendering re-templates -- and restarts DNS -- on every converge. #}
+{% if adguard_adlists %}
 filters:
 {% for url in adguard_adlists %}
   - enabled: true
@@ -166,6 +170,10 @@ filters:
     name: blocklist_{{ loop.index }}
     id: {{ loop.index }}
 {% endfor %}
+{% else %}
+filters: []
+{% endif %}
+{% if adguard_whitelists %}
 whitelist_filters:
 {% for url in adguard_whitelists %}
   - enabled: true
@@ -173,6 +181,9 @@ whitelist_filters:
     name: allowlist_{{ loop.index }}
     id: {{ 1000 + loop.index }}
 {% endfor %}
+{% else %}
+whitelist_filters: []
+{% endif %}
 {#
   Parity with the retired dnscrypt-proxy block_unqualified /
   block_undelegated toggles: single-label names and undelegated LAN
