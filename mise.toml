@@ -49,11 +49,6 @@ TF_VAR_mailgun_api_key = "op://Lab/j6iayri7rcsq27nym5z7u37jgu/password"
 # - `mise run tf` runs under `op run --` which maps _OP → HCLOUD_TOKEN.
 # - packer scripts source _hcloud_token.sh (CI token or op run re-exec).
 HCLOUD_TOKEN_OP = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
-# Dedicated homelab-ci project token. The project is decommissioned (AWS
-# cells replaced the worker fleet); this ref feeds terraform/hetzner_ci.tf's
-# residual provider alias only until the firewall destroy is applied — then
-# both go (teardown sequence in that file).
-TF_VAR_hcloud_ci_token = "op://Lab/buz7a2s327niiv2bet74apjreq/password"
 # Expose [vars] entries as env so file-based mise-tasks/ scripts can read
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
