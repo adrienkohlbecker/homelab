@@ -1,0 +1,44 @@
+vrrp_script adguard_healthcheck {
+  script    /usr/local/bin/adguard_healthcheck
+  interval  1
+  timeout   5
+  rise      1
+  fall      2
+  user      root
+  init_fail
+}
+
+vrrp_instance adguard {
+  state     BACKUP
+  interface {{ default_interface }}
+
+  use_vmac
+  vmac_xmit_base
+
+  check_unicast_src
+
+  unicast_src_ip {{ external_ips[inventory_hostname] }}
+  unicast_peer {
+    {% for name in pihole_keepalived_peers | select("ne", inventory_hostname) | sort %}
+    {{ external_ips[name] }}
+    {% endfor %}
+  }
+
+  virtual_router_id {{ pihole_keepalived_vrid }}
+  priority          {{ pihole_keepalived_priority }}
+  advert_int        1
+  preempt_delay     60
+
+  virtual_ipaddress {
+    {{ pihole_keepalived_ip }}/32
+  }
+
+  garp_master_repeat 3
+  garp_master_refresh 60
+
+  track_script {
+    adguard_healthcheck
+  }
+
+  notify "/usr/bin/logger -t adguard-keepalived"
+}

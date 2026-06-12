@@ -1,0 +1,69 @@
+#jinja2: lstrip_blocks: True
+# adguard.service ##################################################################
+[Unit]
+Description=adguard
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+{% if zfs_has_services_mount %}
+After=zfs_mount_mnt_services.service
+Requires=zfs_mount_mnt_services.service
+{% endif %}
+After=zfs_autosnapshot.target
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=always
+Delegate=yes
+TimeoutSec=60
+RestartSec=5
+Type=notify
+NotifyAccess=all
+SyslogIdentifier=%N
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name adguard \
+    --init \
+    --log-driver journald \
+    --log-opt tag="adguard" \
+    --user {{ adguard_user.uid }}:{{ adguard_user.group }} \
+    --env TZ={{ system_timezone }} \
+    --volume /mnt/services/adguard/conf:/opt/adguardhome/conf \
+    --volume /mnt/services/adguard/work:/opt/adguardhome/work \
+    --dns=127.0.0.1 \
+{% for resolver in bootstrap_dns_resolver %}
+    --dns={{ resolver }} \
+{% endfor %}
+    --publish {{ ansible_facts.default_ipv4.address }}:53:53/udp \
+    --publish {{ ansible_facts.default_ipv4.address }}:53:53/tcp \
+{% if not qemu_test and pihole_keepalived_ip | ansible.utils.ipaddr %}
+    --publish {{ pihole_keepalived_ip }}:53:53/udp \
+    --publish {{ pihole_keepalived_ip }}:53:53/tcp \
+{% endif %}
+    --publish 127.0.0.1:{{ service_ports.adguard }}:3000/tcp \
+    --health-cmd         '["getent","hosts","adguard.home"]' \
+    --health-startup-cmd '["getent","hosts","adguard.home"]' \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    --health-start-period "30s" \
+    --stop-timeout 30 \
+    {{ adguard_image }}
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=multi-user.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

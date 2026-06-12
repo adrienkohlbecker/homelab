@@ -1,0 +1,337 @@
+- name: Assert required adguard inputs are set
+  assert:
+    that:
+      - pihole_keepalived_ip is defined
+      - pihole_keepalived_vrid is defined
+      - pihole_keepalived_priority is defined
+      - (pihole_keepalived_priority | default(0) | int) > 0
+      - (pihole_keepalived_priority | default(0) | int) <= 255
+      - pihole_keepalived_peers is defined
+      - pihole_keepalived_peers | length > 0
+      - inventory_hostname in external_ips
+      - pihole_adlists is defined
+      - pihole_whitelists is defined
+      - (pihole_adlists | default([]) | select('search', '\s') | list | length) == 0
+      - (pihole_whitelists | default([]) | select('search', '\s') | list | length) == 0
+    fail_msg: >-
+      adguard requires the existing DNS VIP inputs
+      pihole_keepalived_{ip,vrid,priority,peers}, an external_ips entry for
+      this host, and the pihole_adlists / pihole_whitelists lists with no
+      whitespace in any URL.
+  tags:
+    - adguard
+
+- name: Set up adguard system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: adguard
+  tags:
+    - adguard
+
+- name: Create adguard directories
+  when: not (ansible_check_mode and adguard_user.changed)
+  file:
+    dest: "{{ item.path }}"
+    state: directory
+    owner: "{{ adguard_user.uid }}"
+    group: "{{ adguard_user.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: /mnt/services/adguard/conf
+      mode: "0755"
+    - path: /mnt/services/adguard/work
+      mode: "0700"
+  become: true
+  tags:
+    - adguard
+
+- name: Configure adguard
+  when: not (ansible_check_mode and adguard_user.changed)
+  template:
+    src: AdGuardHome.yaml.j2
+    dest: /mnt/services/adguard/conf/AdGuardHome.yaml
+    owner: "{{ adguard_user.uid }}"
+    group: "{{ adguard_user.group }}"
+    mode: "0600"
+    backup: true
+    validate: >-
+      /usr/bin/podman run --rm
+      --volume %s:/tmp/AdGuardHome.yaml:ro
+      {{ adguard_image }}
+      --no-check-update
+      --no-permcheck
+      --check-config
+      --config /tmp/AdGuardHome.yaml
+      --work-dir /tmp
+  register: adguard_config
+  become: true
+  tags:
+    - adguard
+
+- name: Remove retired pihole service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: pihole.service
+  tags:
+    - adguard
+
+- name: Install adguard service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: adguard.service.j2
+      condition: "{{ not (ansible_check_mode and adguard_user.changed) }}"
+  tags:
+    - adguard
+
+- name: Enable adguard service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: adguard
+      condition: "{{ not (ansible_check_mode and (adguard_service_result.changed or adguard_user.changed)) }}"
+      restart: "{{ adguard_service_result.changed or adguard_config.changed }}"
+      throttle: 1
+  tags:
+    - adguard
+
+- name: Configure health script
+  copy:
+    src: adguard_healthcheck.sh
+    dest: /usr/local/bin/adguard_healthcheck
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - adguard
+
+- name: Remove retired pihole health script
+  file:
+    path: /usr/local/bin/pihole_healthcheck
+    state: absent
+  become: true
+  tags:
+    - adguard
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: adguard
+      proxy_pass: http://127.0.0.1:{{ service_ports.adguard }}/
+      auth: required
+  tags:
+    - adguard
+
+- name: Remove retired pihole nginx site
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: pihole
+      state: absent
+  tags:
+    - adguard
+
+- name: Configure keepalived
+  tags:
+    - adguard
+  block:
+    - name: Check for retired pihole keepalived fragment
+      stat:
+        path: /etc/keepalived/conf.d/pihole.conf
+      register: adguard_retired_keepalived
+      become: true
+
+    - name: Preserve retired pihole keepalived fragment during migration
+      when: adguard_retired_keepalived.stat.exists
+      copy:
+        remote_src: true
+        src: /etc/keepalived/conf.d/pihole.conf
+        dest: /etc/keepalived/conf.d/pihole.conf.adguard_migration_backup
+        owner: root
+        group: root
+        mode: "0640"
+        backup: true
+      become: true
+
+    - name: Remove retired pihole keepalived fragment
+      file:
+        path: /etc/keepalived/conf.d/pihole.conf
+        state: absent
+      register: adguard_retired_keepalived_removed
+      become: true
+
+    - name: Render the DNS keepalived fragment
+      template:
+        src: keepalived.conf.j2
+        dest: /etc/keepalived/conf.d/adguard.conf
+        owner: root
+        group: root
+        mode: "0640"
+        backup: true
+      register: adguard_keepalived_cfg
+      become: true
+
+    - name: Reload keepalived
+      when: adguard_keepalived_cfg.changed or adguard_retired_keepalived_removed.changed
+      systemd:
+        name: keepalived
+        state: reloaded
+        enabled: true
+      become: true
+      throttle: 1
+
+    - name: Remove retired keepalived migration backup
+      file:
+        path: /etc/keepalived/conf.d/pihole.conf.adguard_migration_backup
+        state: absent
+      become: true
+  rescue:
+    - name: Restore previous adguard keepalived fragment  # noqa: require-backup
+      when: adguard_keepalived_cfg is defined and "backup_file" in adguard_keepalived_cfg
+      copy:
+        remote_src: true
+        src: "{{ adguard_keepalived_cfg.backup_file }}"
+        dest: /etc/keepalived/conf.d/adguard.conf
+        owner: root
+        group: root
+        mode: "0640"
+      become: true
+    - name: Check retired keepalived migration backup
+      stat:
+        path: /etc/keepalived/conf.d/pihole.conf.adguard_migration_backup
+      register: adguard_retired_keepalived_backup
+      become: true
+    - name: Restore retired pihole keepalived fragment  # noqa: require-backup
+      when: adguard_retired_keepalived_backup.stat.exists | default(false)
+      copy:
+        remote_src: true
+        src: /etc/keepalived/conf.d/pihole.conf.adguard_migration_backup
+        dest: /etc/keepalived/conf.d/pihole.conf
+        owner: root
+        group: root
+        mode: "0640"
+      become: true
+    - name: Remove the adguard keepalived fragment backup
+      when: adguard_keepalived_cfg is defined and "backup_file" in adguard_keepalived_cfg
+      file:
+        path: "{{ adguard_keepalived_cfg.backup_file }}"
+        state: absent
+      become: true
+    - name: Remove the retired keepalived migration backup
+      file:
+        path: /etc/keepalived/conf.d/pihole.conf.adguard_migration_backup
+        state: absent
+      become: true
+    - name: Remove the freshly-added adguard keepalived fragment
+      when:
+        - adguard_keepalived_cfg is defined
+        - adguard_keepalived_cfg.changed
+        - '"backup_file" not in adguard_keepalived_cfg'
+      file:
+        path: /etc/keepalived/conf.d/adguard.conf
+        state: absent
+      become: true
+    - name: Fail after restoring keepalived fragment
+      fail:
+        msg: >-
+          keepalived rejected the rendered DNS fragment on reload; the previous
+          fragment was restored or the freshly added fragment was removed.
+
+- name: Create logind conf.d directory
+  file:
+    dest: /etc/systemd/logind.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - adguard
+
+- name: Remove retired pihole reboot guard service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: pihole_reboot_guard.service
+  tags:
+    - adguard
+
+- name: Remove retired pihole reboot guard files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/sbin/pihole_reboot_guard
+    - /etc/systemd/logind.conf.d/pihole_reboot_guard.conf
+  become: true
+  tags:
+    - adguard
+
+- name: Extend logind inhibitor delay for the reboot guard
+  copy:
+    content: |
+      [Login]
+      InhibitDelayMaxSec=300
+    dest: /etc/systemd/logind.conf.d/adguard_reboot_guard.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - adguard
+
+- name: Install DNS reboot guard script
+  template:
+    src: adguard_reboot_guard.j2
+    dest: /usr/local/sbin/adguard_reboot_guard
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  register: adguard_reboot_guard_script
+  become: true
+  tags:
+    - adguard
+
+- name: Install DNS reboot guard service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: adguard_reboot_guard.service.j2
+  tags:
+    - adguard
+
+- name: Enable DNS reboot guard
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: adguard_reboot_guard
+      restart: "{{ adguard_reboot_guard_service_result.changed or adguard_reboot_guard_script.changed }}"
+  tags:
+    - adguard

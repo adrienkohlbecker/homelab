@@ -1,0 +1,14 @@
+[Unit]
+Description=DNS reboot guard
+Documentation=file:///usr/local/sbin/adguard_reboot_guard
+After=network-online.target keepalived.service
+Wants=network-online.target keepalived.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+ExecStart=/usr/local/sbin/adguard_reboot_guard
+
+[Install]
+WantedBy=multi-user.target
