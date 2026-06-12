@@ -4,6 +4,12 @@
 Description=adguard
 After=network-online.target
 Wants=network-online.target
+{# systemd.special(7): name-resolution providers order themselves before
+   nss-lookup.target and pull it in, so boot-time consumers that wait on
+   it (After=nss-lookup.target) only start once this resolver answers
+   (--sdnotify=healthy gates active on a passing health probe). #}
+Before=nss-lookup.target
+Wants=nss-lookup.target
 StartLimitInterval=600
 StartLimitBurst=3
 {% if zfs_root %}
