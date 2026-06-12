@@ -15,8 +15,15 @@ http:
   No app-level users: the admin UI/API is only published on the host
   loopback and fronted by the Authelia-gated nginx vhost (auth: required
   in tasks/main.yml), which is the sole LAN ingress. Host-local processes
-  and co-located containers can reach the API unauthenticated -- accepted
-  for this home environment.
+  and every container on the default podman bridge can reach the API
+  unauthenticated -- and it controls upstreams/rewrites, so a compromised
+  co-located container could hijack household DNS. Accepted for this home
+  environment, the same trade as the cross-bridge DNAT gap documented in
+  roles/firewall. The obvious hardenings do not work here: binding
+  127.0.0.1 breaks the loopback publish (the DNAT targets the container
+  IP, verified on the harness), and netavark does not isolate podman
+  networks under our nftables setup even with isolate=true. Platform
+  isolation fix tracked in notes/SOMEDAY.md.
 #}
 users: []
 auth_attempts: 5
