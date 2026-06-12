@@ -52,14 +52,15 @@
   changed_when: false
   become: true
 
-# Wireguard 51820 is scoped to -i WAN. Two probes — positive via
-# the controller-side UDP hostfwd (slirp ingresses on enp0s2, which
-# is the WAN iface in the test VM) and negative from the netns where
-# traffic always ingresses on wg0.
+# Wireguard 51820 is scoped to -i WAN. Two probes — positive via the
+# controller-side WAN endpoint (qemu: slirp UDP hostfwd, ingressing on
+# enp0s2, the WAN iface in the test VM; EC2: the cell's public IP
+# through the security group's 51820/udp allow) and negative from the
+# netns where traffic always ingresses on wg0.
 - name: _verify_input | INPUT allow — wireguard (51820/udp) reachable on WAN iface from controller  # noqa: risky-shell-pipe
   delegate_to: localhost
   shell: |
-    echo . | nc -u -w 1 127.0.0.1 {{ wan_udp_test_port }} >/dev/null 2>&1 || true
+    echo . | nc -u -w 1 {{ wan_probe_host }} {{ wan_udp_test_port }} >/dev/null 2>&1 || true
   args: { executable: /bin/bash }
   changed_when: false
 

@@ -391,19 +391,22 @@ class Machine:
     # imagedir with no packer history).
     _publish_lock_fd: int = dataclasses.field(default=-1, init=False)
     peak_rss_kb: int = dataclasses.field(default=0, init=False)
-    # Auxiliary slirp hostfwds. Pre-picked free 127.0.0.1 ports map
-    # the controller side to specific VM ports so `delegate_to:
-    # localhost` probes can exercise rules keying on the WAN interface
-    # (traffic originating inside the VM never ingresses on enp0s2 via
-    # slirp's user-mode net). Two protocols since slirp keeps TCP/UDP
-    # forwards in separate namespaces.
-    #   wan_tcp_test_port      → controller TCP → VM:32400 (iptables _verify
-    #                        busybox-httpd publish target)
-    #   wan_udp_test_port  → controller UDP → VM:51820 (iptables _verify
-    #                        wireguard ACCEPT rule, scoped -i WAN)
-    # 0 = unset (non-QEMU machine, or before prepare() picks one).
+    # Controller-side WAN probe endpoint, so `delegate_to: localhost`
+    # probes in roles/firewall's _verify can exercise rules keying on the
+    # WAN interface (traffic originating inside the VM never ingresses on
+    # the WAN iface). Each backend supplies its own path to the same two
+    # VM ports:
+    #   QEMU: slirp hostfwds — pre-picked free 127.0.0.1 ports mapped to
+    #     VM:32400 (TCP, _verify busybox-httpd publish target) and
+    #     VM:51820 (UDP, wireguard ACCEPT rule scoped -i WAN). Two
+    #     forwards since slirp keeps TCP/UDP in separate namespaces.
+    #   EC2: the cell's public IP with the real port numbers — genuine
+    #     WAN ingress through the security group's matching allows
+    #     (terraform/aws_ci.tf ci_cell).
+    # Ports 0 = unset (before the backend resolved its endpoint).
     wan_tcp_test_port: int = dataclasses.field(default=0, init=False)
     wan_udp_test_port: int = dataclasses.field(default=0, init=False)
+    wan_probe_host: str = dataclasses.field(default=SSH_HOST, init=False)
 
     def __post_init__(self) -> None:
         if self.ubuntu_name not in UBUNTU_RELEASES:
@@ -591,13 +594,15 @@ class Machine:
             # on disk.
             "-e",
             f"_role_under_test={self.role}",
-            # Auxiliary slirp hostfwd ports (controller-side) for verify
-            # probes that delegate_to: localhost. 0 when not applicable
-            # (non-QEMU machine, or before prepare() ran).
+            # Controller-side WAN probe endpoint for verify probes that
+            # delegate_to: localhost (see the wan_* field comment). Ports
+            # are 0 before the backend resolved its endpoint.
             "-e",
             f"wan_tcp_test_port={self.wan_tcp_test_port}",
             "-e",
             f"wan_udp_test_port={self.wan_udp_test_port}",
+            "-e",
+            f"wan_probe_host={self.wan_probe_host}",
             "--inventory",
             "test/inventory.ini",
             *self.ansible_args,
@@ -2108,6 +2113,13 @@ class Ec2Machine(Machine):
         if not ip or ip == "None":
             raise RuntimeError(f"Instance {self.instance_id} has no public IP: {result.stdout!r}")
         self.ssh_host = ip
+        # WAN probe endpoint: the public IP with the real port numbers —
+        # the security group allows 32400/tcp + 51820/udp from fox and the
+        # home WAN, so the controller-side probes ingress on the cell's
+        # WAN iface exactly like real Internet traffic.
+        self.wan_probe_host = ip
+        self.wan_tcp_test_port = 32400
+        self.wan_udp_test_port = 51820
 
     async def _find_ssh_port(self) -> None:
         """Always 22; the host was resolved in ensure_booted()."""
