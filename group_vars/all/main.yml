@@ -359,14 +359,14 @@ podman_bridge_pool: 10.89.0.0/16
 # (if box ever ran this role on the LAN at vrid 1) let it join the prod
 # election. box still renders its own fragment fine -- it just excludes
 # itself, same as the prod hosts do.
-pihole_keepalived_peers:
+dns_keepalived_peers:
   - lab
   - pug
   - udm
-pihole_keepalived_vrid: 1
-pihole_adlists:
+dns_keepalived_vrid: 1
+adguard_adlists:
   - https://v.firebog.net/hosts/lists.php?type=tick
-pihole_whitelists:
+adguard_whitelists:
   - "{{ mirror_raw_githubusercontent }}/anudeepND/whitelist/master/domains/whitelist.txt"
   - "{{ mirror_raw_githubusercontent }}/cedwards4038/pihole-whitelist/main/whitelist.txt"
   - "{{ mirror_raw_githubusercontent }}/anudeepND/whitelist/master/domains/optional-list.txt"

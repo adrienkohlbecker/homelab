@@ -14,11 +14,14 @@ vrrp_script pihole_healthcheck {
   init_fail
 }
 
-# The instance name `pihole` (and the pihole-* identifiers throughout) is
-# deliberately shared with the lab/pug peers, not a copy-paste leftover:
-# this is the same VRRP group as roles/pihole, so the vrid/advert_int/VIP
-# here MUST stay equal to roles/pihole/templates/keepalived.conf.j2. Only
-# priority, use_vmac, and interface legitimately differ per peer.
+# The udm-local identifiers stay `pihole` (instance name, fragment file,
+# healthcheck script): VRRP interop is keyed on vrid/advert_int/VIP, not
+# on names, so they are free to differ per node, and renaming them would
+# churn /data on the UDM for zero behavioural gain. This is the same VRRP
+# group as roles/adguard (whose instance is named `adguard`), so the
+# vrid/advert_int/VIP here MUST stay equal to
+# roles/adguard/templates/keepalived.conf.j2. Only priority, use_vmac,
+# interface, and the instance name legitimately differ per peer.
 vrrp_instance pihole {
   state     BACKUP
   interface {{ udm_dns_failover_interface }}
@@ -37,31 +40,30 @@ vrrp_instance pihole {
 
   unicast_src_ip {{ external_ips[inventory_hostname] }}
   unicast_peer {
-    {% for name in pihole_keepalived_peers | select("ne", inventory_hostname) | sort %}
+    {% for name in dns_keepalived_peers | select("ne", inventory_hostname) | sort %}
     {{ external_ips[name] }}
     {% endfor %}
   }
 
-  virtual_router_id {{ pihole_keepalived_vrid }}
-  priority          {{ pihole_keepalived_priority }}
+  virtual_router_id {{ dns_keepalived_vrid }}
+  priority          {{ dns_keepalived_priority }}
   advert_int        1
 
-  # Delay a recovered higher-priority peer (lab/pug) from reclaiming the VIP
-  # for 60s so a flapping peer doesn't yank DNS back and forth. Plain preempt
-  # (no nopreempt) is kept so a recovered peer does eventually reclaim and the
-  # UDM falls back to BACKUP.
+  # Delay a recovered higher-priority peer (lab/pug adguard) from reclaiming
+  # the VIP for 60s so a flapping peer doesn't yank DNS back and forth. Plain
+  # preempt (no nopreempt) is kept so a recovered peer does eventually reclaim
+  # and the UDM falls back to BACKUP.
   preempt_delay     60
 
   # No explicit track_interface: keepalived already tracks the instance's own
   # `interface` (above) for link state, so re-listing it is redundant --
   # keepalived ignores it ("since own interface") and that warning makes
-  # `keepalived -t` exit non-zero, failing the validate gate. (pihole's
-  # fragment lists it because its use_vmac moves the instance onto a vmac
-  # child, leaving the physical a *different* interface worth tracking; this
-  # role omits use_vmac, so there is nothing extra to track.)
+  # `keepalived -t` exit non-zero, failing the validate gate. (The lab/pug
+  # fragment omits it for the same reason -- see the track_interface note in
+  # roles/adguard/templates/keepalived.conf.j2.)
 
   virtual_ipaddress {
-    {{ pihole_keepalived_ip }}/32
+    {{ dns_keepalived_ip }}/32
   }
 
   # Periodic gratuitous ARP so any LAN cache holding a stale MAC for the VIP

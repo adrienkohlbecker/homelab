@@ -1,8 +1,8 @@
 127.0.0.1 localhost
-{# Short name only — the FQDN intentionally lives in DNS (pihole), not #}
+{# Short name only — the FQDN intentionally lives in DNS (adguard), not #}
 {# /etc/hosts. Reason: podman's base_hosts_file copies the host's #}
 {# /etc/hosts into containers, so a `127.0.1.1 lab.fahm.fr` entry inside #}
-{# pihole's container would make dnsmasq answer 127.0.1.1 for lab.fahm.fr #}
+{# adguard's container would make it answer 127.0.1.1 for lab.fahm.fr #}
 {# (hosts-file lookup wins over `address=/lab.fahm.fr/...`). Public DNS #}
 {# CNAMEs every *.lab.fahm.fr subdomain to lab.fahm.fr, so the override #}
 {# silently breaks every LAN-side lookup for subdomains as well. #}
@@ -18,7 +18,7 @@
 # names. Override per host only when that host needs a private route public DNS
 # cannot express, or in group_vars/test.yml so test boxes resolve lab-internal
 # hostnames to LAN IPs reachable from inside qemu user-mode networking. The
-# same map drives roles/pihole's container --add-host flags.
+# same map drives roles/adguard's container --add-host flags.
 {% for host, ip in etc_hosts_entries.items() %}
 {{ ip }} {{ host }}
 {% endfor %}

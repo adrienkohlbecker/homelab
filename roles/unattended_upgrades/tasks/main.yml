@@ -2,7 +2,7 @@
   apt:
     pkg:
       # provides /var/run/reboot-required sentinel (consumed by site.yml
-      # reboot check, boot, firewall, pihole reboot guard, etc.)
+      # reboot check, boot, firewall, DNS reboot guard, etc.)
       - update-notifier-common
       - unattended-upgrades
     cache_valid_time: 3600

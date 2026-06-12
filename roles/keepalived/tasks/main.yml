@@ -10,7 +10,7 @@
 #    before the next converge loses the VIP (on an inactive unit
 #    `state: reloaded` also starts it, bringing the VIP up the same
 #    converge). Copy the "Reload keepalived" task from
-#    roles/pihole/tasks/main.yml verbatim:
+#    roles/adguard/tasks/main.yml verbatim:
 #
 #        - name: Reload keepalived
 #          when: <tenant>_keepalived_cfg.changed
@@ -54,10 +54,12 @@
 #    site.yml order, or a tags-limited run) leaves the unit gated-off
 #    until the next converge.
 #
-# Current tenants: roles/pihole. Adding a new tenant (e.g. the
-# wireguard-VIP follow-up): mirror roles/pihole/tasks/main.yml:238
-# and roles/pihole/templates/keepalived.conf.j2 — the conf.d
-# fragment format is unconstrained by this role.
+# Current tenants: roles/adguard (lab/pug) and roles/udm_dns_failover
+# (same VRRP group from the UDM side). Adding a new tenant (e.g. the
+# wireguard-VIP follow-up): mirror the keepalived block in
+# roles/adguard/tasks/main.yml and roles/adguard/templates/
+# keepalived.conf.j2 — the conf.d fragment format is unconstrained by
+# this role.
 - name: Install keepalived
   apt:
     pkg:
@@ -73,7 +75,7 @@
 # on a local interface, so on the keepalived secondary (where the
 # VIP isn't currently held) the bind fails with "cannot assign
 # requested address". Setting this once globally lets services
-# (e.g. pihole on the keepalived VIP) bind regardless of who owns
+# (e.g. adguard on the keepalived VIP) bind regardless of who owns
 # the VIP at any given moment.
 - name: Install ip_nonlocal_bind sysctl
   ansible.posix.sysctl:

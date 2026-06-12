@@ -78,7 +78,7 @@
   command: ip -4 -oneline addr show dev {{ udm_dns_failover_interface }}
   register: _udm_dns_failover_vip
   changed_when: false
-  until: pihole_keepalived_ip in _udm_dns_failover_vip.stdout
+  until: dns_keepalived_ip in _udm_dns_failover_vip.stdout
   retries: 10
   delay: 2
   become: true
@@ -94,7 +94,7 @@
   command: >-
     iptables -w 5 -C INPUT -i {{ udm_dns_failover_interface }} -s {{ item }}
     -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
-  loop: "{{ pihole_keepalived_peers | select('ne', inventory_hostname) | map('extract', external_ips) | sort }}"
+  loop: "{{ dns_keepalived_peers | select('ne', inventory_hostname) | map('extract', external_ips) | sort }}"
   changed_when: false
   become: true
 
@@ -163,7 +163,7 @@
   command: ip -4 -oneline addr show dev {{ udm_dns_failover_interface }}
   register: _udm_dns_failover_vip_after
   changed_when: false
-  failed_when: pihole_keepalived_ip not in _udm_dns_failover_vip_after.stdout
+  failed_when: dns_keepalived_ip not in _udm_dns_failover_vip_after.stdout
   become: true
 
 # Drop-in probe (finding 9): a malformed fragment must not reach the live
@@ -203,7 +203,7 @@
   command: ip -4 -oneline addr show dev {{ udm_dns_failover_interface }}
   register: _udm_dns_failover_vip_reload
   changed_when: false
-  failed_when: pihole_keepalived_ip not in _udm_dns_failover_vip_reload.stdout
+  failed_when: dns_keepalived_ip not in _udm_dns_failover_vip_reload.stdout
   become: true
 
 - name: _verify | Remove the reload-validate probe fragment

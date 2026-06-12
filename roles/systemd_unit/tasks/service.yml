@@ -20,7 +20,7 @@
 #                     reset-failed steps are deliberately not throttled, so
 #                     on an HA pair both nodes may pull/clear concurrently;
 #                     only the restart/reload state-change serializes. A
-#                     multi-host HA service (pihole on the lab+pug pair) sets
+#                     multi-host HA service (adguard on the lab+pug pair) sets
 #                     throttle: 1 so the restart serializes across the batch
 #                     and one node keeps serving.
 #

@@ -156,24 +156,24 @@
       when:
         - not ansible_check_mode
         - reboot_required.stat.exists
-        - inventory_hostname in pihole_keepalived_peers
+        - inventory_hostname in dns_keepalived_peers
       vars:
-        _reboot_dns_peers: "{{ pihole_keepalived_peers | reject('eq', inventory_hostname) | list }}"
+        _reboot_dns_peers: "{{ dns_keepalived_peers | reject('eq', inventory_hostname) | list }}"
         _reboot_dns_ips: "{{ _reboot_dns_peers | map('extract', external_ips) | list }}"
         _reboot_is_lowest_priority: >-
-          {{ pihole_keepalived_priority <
-             (_reboot_dns_peers | map('extract', hostvars, 'pihole_keepalived_priority') | max) }}
+          {{ dns_keepalived_priority <
+             (_reboot_dns_peers | map('extract', hostvars, 'dns_keepalived_priority') | max) }}
       tags:
         - always
       block:
         - name: Assert DNS keepalived priorities are distinct
           assert:
             that:
-              - (pihole_keepalived_peers | map('extract', hostvars, 'pihole_keepalived_priority') | unique | list | length)
-                == (pihole_keepalived_peers | length)
+              - (dns_keepalived_peers | map('extract', hostvars, 'dns_keepalived_priority') | unique | list | length)
+                == (dns_keepalived_peers | length)
             fail_msg: >-
               DNS keepalived priorities must be distinct across all peers
-              ({{ pihole_keepalived_peers | map('extract', hostvars, 'pihole_keepalived_priority') | list }}).
+              ({{ dns_keepalived_peers | map('extract', hostvars, 'dns_keepalived_priority') | list }}).
               Equal priorities defeat the yield-based race protection.
 
         - name: Probe peer DNS before reboot
@@ -242,7 +242,7 @@
       when:
         - not ansible_check_mode
         - reboot_required.stat.exists
-        - inventory_hostname in pihole_keepalived_peers
+        - inventory_hostname in dns_keepalived_peers
       tags:
         - always
       block:
@@ -253,7 +253,7 @@
           become: true
 
         - name: Verify peer claimed the VIP
-          command: dig +short +timeout=5 +tries=3 @{{ pihole_keepalived_ip }} adguard.home
+          command: dig +short +timeout=5 +tries=3 @{{ dns_keepalived_ip }} adguard.home
           register: _reboot_vip_check
           until: _reboot_vip_check.rc == 0 and _reboot_vip_check.stdout | default('') | length > 0
           retries: 6
@@ -265,7 +265,7 @@
           when: (_reboot_vip_check.rc | default(1) != 0) or (_reboot_vip_check.stdout | default('') | length == 0)
           fail:
             msg: >-
-              DNS VIP {{ pihole_keepalived_ip }} is not answering after
+              DNS VIP {{ dns_keepalived_ip }} is not answering after
               keepalived stop — peer may not have claimed it. Keepalived will
               be restarted by the rescue block. Investigate the peer manually.
       rescue:

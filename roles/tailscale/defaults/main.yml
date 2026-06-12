@@ -19,7 +19,7 @@ tailscale_advertise_routes: ""
 tailscale_advertise_exit_node: false
 
 # Roaming clients consume headscale MagicDNS; the server hosts keep their own
-# resolv.conf (pihole/systemd-resolved), so don't let tailscale rewrite it.
+# resolv.conf (adguard/systemd-resolved), so don't let tailscale rewrite it.
 tailscale_accept_dns: false
 
 # Tailscale CLI path. lab/pug use apt's `tailscale` on PATH; bunk (DSM) overrides

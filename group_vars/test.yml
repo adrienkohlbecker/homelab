@@ -7,9 +7,9 @@ nexus_url: nexus.lab.fahm.fr
 #      hostnames to reachable LAN IPs instead of the WAN IP that public
 #      DNS returns (the WAN IP isn't routable from inside qemu user-mode
 #      networking).
-#   2. roles/pihole/templates/pihole.service.j2 plumbs them as podman
-#      --add-host flags, bypassing pihole's own split-horizon wildcard
-#      (which resolves *.lab.fahm.fr to the fake test external_ips.lab).
+#   2. roles/adguard/templates/adguard.service.j2 plumbs them as podman
+#      --add-host flags, bypassing adguard's own split-horizon rewrites
+#      (which resolve *.lab.fahm.fr to the fake test external_ips.lab).
 # Production keeps the map empty, so both consumers render no overrides.
 # Values reference `prod_network` (not `network`) because these hostnames
 # MUST point at the live LAN, not the gsub'd test subnet.
@@ -20,7 +20,7 @@ etc_hosts_entries:
 # Test overrides `network` (from group_vars/all/network.yml's
 # `prod_network` default) with a gsub'd 10.234.x view: same shape as
 # prod, disjoint subnet. Consumer vars (site_subnets, external_ips,
-# wireguard_subnet, pihole_keepalived_ip) derive from `network` so
+# wireguard_subnet, dns_keepalived_ip) derive from `network` so
 # they automatically pick up the gsub.
 network: "{{ prod_network | to_yaml | replace('10.123', '10.234') | from_yaml }}"
 
@@ -152,17 +152,14 @@ influxdb_root_password: changeme
 # above (testuser) so the test fixture's rendered nginx config has a
 # concrete map entry to grep for in _verify.
 influxdb_authelia_user: testuser
-# Feeds only the (disabled) netdata go.d/pihole collector; see the
-# prod.yml definition. Admin auth is via authelia, so pihole needs none.
-pihole_password: changeme
 filebrowser_basic_auth_user: changeme
 filebrowser_basic_auth_password: changeme
 netdata_alerts_token: changeme_netdata_alerts_token_16chars_min
 # Override prod's firebog tick meta-list (fans out to ~50 external adlists
 # that bypass the nexus cache) with a single small list served through the
-# raw-githubusercontent mirror. Keeps `pihole -g` exercised end-to-end at a
-# fraction of the runtime.
-pihole_adlists:
+# raw-githubusercontent mirror. Keeps the filter download + rule-count
+# checks exercised end-to-end at a fraction of the runtime.
+adguard_adlists:
   - "{{ mirror_raw_githubusercontent }}/anudeepND/blacklist/master/adservers.txt"
 telegram_seerr_bot_token: changeme
 telegram_netdata_bot_token: changeme

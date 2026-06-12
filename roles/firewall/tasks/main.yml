@@ -134,7 +134,7 @@
     # Loose reverse-path (rp_filter=2): drop packets whose source isn't
     # routable via ANY interface (still catches RFC1918-on-WAN spoofs),
     # but tolerate the asymmetric paths this host's macvlan topology
-    # creates. lab carries the keepalived pihole VIP on a `vrrp.N`
+    # creates. lab carries the keepalived DNS VIP on a `vrrp.N`
     # macvlan that shares eth0's L2 segment, so VRRP-unicast and LAN
     # broadcast/multicast legitimately ingress on an iface other than
     # the one their source routes back through. Strict (=1) would drop

@@ -5,7 +5,7 @@
 # Inputs: caller passes a single dict `netdata_args` with keys
 #   src         required; file under the calling role's files/ (copy) or
 #               templates/ (template, when src ends in .j2)
-#   dest        required; path relative to /etc/netdata/ (e.g. go.d/pihole.conf)
+#   dest        required; path relative to /etc/netdata/ (e.g. go.d/smartctl.conf)
 #   mode        optional, default '0644'
 #   condition   optional bool, default true; gates the whole call
 #   restart     optional bool, default true; restart netdata after a change

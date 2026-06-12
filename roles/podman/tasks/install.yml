@@ -176,7 +176,7 @@
 # - default_subnet: pin the *default* podman network's subnet to
 #   podman_default_network. Podman's compiled-in default happens to
 #   equal it today, so the firewall's PODMAN_DEFAULT egress/DNS rules
-#   and pihole's upstream line up by coincidence; pinning makes it
+#   and adguard's upstream line up by coincidence; pinning makes it
 #   explicit so an upstream change to the built-in default can't
 #   silently move the default network out from under those rules.
 # - default_subnet_pools: shrink the upstream 5-range list to just
@@ -192,7 +192,7 @@
 #   / podman_bridge_pool (group_vars/all/main.yml defaults -- unlike the
 #   per-host podman_zvol_size they always resolve, so no assert here).
 # - dns_bind_port: move aardvark-dns off port 53 so it doesn't fight
-#   with services (pihole) that bind on the bridge-gateway interface.
+#   with services (adguard) that bind on the bridge-gateway interface.
 #   netavark redirects container DNS queries to gateway:5333 via
 #   iptables; nothing on the host changes from the container POV.
 # - firewall_driver: native nftables, not iptables-nft compat. Lands
