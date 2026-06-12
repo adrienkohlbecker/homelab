@@ -190,3 +190,6 @@ static_leases:
   daikin_adrien:           { ip: 10.123.4.28, site: home, vlan: iot }
   daikin_kitchen:          { ip: 10.123.4.29, site: home, vlan: iot }
   daikin_tv:               { ip: 10.123.4.30, site: home, vlan: iot }
+
+  # adguard keys its scheduled-blocking client on this IP (roles/adguard).
+  adrien_phone: { ip: 10.123.5.10, site: home, vlan: trusted }
