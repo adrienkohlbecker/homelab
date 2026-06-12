@@ -322,19 +322,6 @@ cp /etc/hostid /mnt/etc
 # regardless. Removed before the image is sealed.
 echo force-unsafe-io >/mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
 
-# Pre-staged ZFSBootMenu artifacts: the lab Nexus that serves the ZBM
-# tarball is unreachable from AWS build VMs, so the bake orchestrator
-# downloads tarball + .sha256sum up front and packer ships them here
-# (mise-tasks/packer/ami.sh + packer/aws/ami.pkr.hcl set ZBM_STAGE_DIR).
-# Copied into the chroot and consumed via a file:// ZBM_URL_BASE; removed
-# again after the chroot step so the shipped image carries no leftovers.
-# /var/tmp, NOT /tmp: arch-chroot mounts a private tmpfs over the chroot's
-# /tmp, which would shadow anything staged there.
-if [ -n "${ZBM_STAGE_DIR:-}" ]; then
-  cp -r "$ZBM_STAGE_DIR" /mnt/var/tmp/zbm
-  export ZBM_URL_BASE="file:///var/tmp/zbm"
-fi
-
 # Chroot into the new OS via arch-chroot (arch-install-scripts). It
 # bind-mounts proc/sys/dev/devpts/run/efivarfs and /etc/resolv.conf
 # under /mnt for the chroot's lifetime, so apt can resolve hostnames
@@ -356,7 +343,6 @@ fi
 # consumes it the same way via unquoted `for d in $DISKS` word-splitting.
 unshare --mount --propagation private arch-chroot /mnt bash <"$SCRIPTS_DIR/chroot.sh"
 
-rm -rf /mnt/var/tmp/zbm
 rm /mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
 
 # Create the non-rpool ZFS pools requested by the variant (apoc/dozer/

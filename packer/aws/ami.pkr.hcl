@@ -43,11 +43,6 @@ variable "manifest_path" {
   description = "Where the manifest post-processor writes the artifact list; mise-tasks/packer/ami.sh parses the AMI id out of it."
 }
 
-variable "zbm_stage_dir" {
-  type        = string
-  description = "Local dir holding the pre-downloaded ZFSBootMenu tarball + .sha256sum. The build VM cannot fetch them itself (the lab Nexus is unreachable from EC2); mise-tasks/packer/ami.sh populates this dir before the build."
-}
-
 locals {
   region = "eu-central-1"
 
@@ -354,17 +349,6 @@ build {
     destination = "/home/ubuntu/"
   }
 
-  # Pre-staged ZBM artifacts (see var.zbm_stage_dir). The destination dir
-  # must pre-exist for a directory-contents upload, hence the mkdir.
-  provisioner "shell" {
-    inline = ["mkdir -p /home/ubuntu/zbm_stage"]
-  }
-
-  provisioner "file" {
-    source      = "${var.zbm_stage_dir}/"
-    destination = "/home/ubuntu/zbm_stage"
-  }
-
   provisioner "shell" {
     inline = [
       "chmod +x /home/ubuntu/*.sh",
@@ -388,9 +372,6 @@ build {
       "SSH_KEY_PUB"                     = join("\n", local.operator_ssh_keys)
       "IMAGE_TARGET"                    = "qemu"
       "ZFS_ARC_MAX"                     = ""
-      # provision.sh copies this into the chroot and flips ZBM_URL_BASE to
-      # file:// so chroot.sh never dials the unreachable lab Nexus.
-      "ZBM_STAGE_DIR" = "/home/ubuntu/zbm_stage"
     }
   }
 
