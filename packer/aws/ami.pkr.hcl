@@ -102,8 +102,14 @@ locals {
     name => join(" ", slice(local.variant_devices[name], cfg.rpool_disks, length(local.variant_devices[name])))
   }
 
-  vagrant_ssh_keys = [
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key",
+  # The operator's personal public key (group_vars/all/main.yml
+  # ssh_public_keys), NOT the well-known vagrant key the qemu fixtures bake:
+  # cells sit on public IPs, so the key is a real boundary alongside the
+  # ci-cell security group. Matches terraform's aws_key_pair.ci_operator
+  # (minimal's cloud-init path); the harness relies on the operator's ssh
+  # agent for the private half.
+  operator_ssh_keys = [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEFQDmZidqILmoI6o9f8KLz+0hJad+Xh4Lm5OLsYDZTa adrien.kohlbecker@gmail.com",
   ]
 
   common_tags = {
@@ -347,7 +353,7 @@ build {
       "UBUNTU_MIRROR_SECURITY"          = local.upstream_security
       "UBUNTU_MIRROR_UPSTREAM"          = local.upstream_archive
       "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.upstream_security
-      "SSH_KEY_PUB"                     = join("\n", local.vagrant_ssh_keys)
+      "SSH_KEY_PUB"                     = join("\n", local.operator_ssh_keys)
       "IMAGE_TARGET"                    = "qemu"
       "ZFS_ARC_MAX"                     = ""
     }
