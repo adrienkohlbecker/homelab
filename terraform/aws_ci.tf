@@ -473,6 +473,36 @@ resource "aws_iam_role_policy" "ci_bake" {
   })
 }
 
+# ─── Account guards ──────────────────────────────────────────────────────────
+# Regional one-liners that bound what any principal — including a compromised
+# CI role — can do, at zero standing cost.
+
+# Nothing in this account should ever be shared publicly; the bake role holds
+# ModifyImageAttribute/ModifySnapshotAttribute on *, so block the
+# public-sharing path account-wide.
+resource "aws_ec2_image_block_public_access" "ci" {
+  state = "block-new-sharing"
+}
+
+resource "aws_ebs_snapshot_block_public_access" "ci" {
+  state = "block-all-sharing"
+}
+
+# IMDSv2 as the regional floor for every launch path (console debugging,
+# future templates), not just the cell templates that already require it.
+resource "aws_ec2_instance_metadata_defaults" "ci" {
+  http_tokens                 = "required"
+  http_put_response_hop_limit = 1
+}
+
+# Spot launches need the EC2 Spot service-linked role to exist, and the cell
+# role (rightly) cannot create service-linked roles — without this, the first
+# spot launch in a fresh account fails with an opaque AuthFailure. If the
+# account already grew it out of band, `tofu import` it instead of applying.
+resource "aws_iam_service_linked_role" "spot" {
+  aws_service_name = "spot.amazonaws.com"
+}
+
 # ─── Cell SSH key ────────────────────────────────────────────────────────────
 # The operator's personal public key (group_vars/all/main.yml
 # ssh_public_keys) — NOT the well-known vagrant key the qemu fixtures bake:
@@ -606,8 +636,11 @@ resource "aws_ssm_parameter" "ci_ami_minimal" {
 }
 
 # ─── Budget tripwire ─────────────────────────────────────────────────────────
-# Account-wide (the account holds nothing but CI): actual-spend alert at 80%
-# and forecast alert at 100% of $10/mo.
+# Account-wide (the account holds nothing but CI), $10/mo. Alert-only —
+# budgets ride Cost Explorer data that lags hours, and forecast alerts need
+# weeks of billing history before AWS emits them at all — so the hard spend
+# ceilings are the cell role's instance-type pin and the spot quota; this is
+# the operator's tripwire, not containment.
 
 resource "aws_budgets_budget" "ci" {
   name         = "homelab-ci"
@@ -619,6 +652,14 @@ resource "aws_budgets_budget" "ci" {
   notification {
     comparison_operator        = "GREATER_THAN"
     threshold                  = 80
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = ["adrien.kohlbecker@gmail.com"]
+  }
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 100
     threshold_type             = "PERCENTAGE"
     notification_type          = "ACTUAL"
     subscriber_email_addresses = ["adrien.kohlbecker@gmail.com"]
