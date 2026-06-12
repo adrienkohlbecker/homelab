@@ -125,8 +125,8 @@
 
 - name: Deploy VRRP fragment
   template:
-    src: pihole.conf.j2
-    dest: /data/keepalived/pihole.conf
+    src: dns.conf.j2
+    dest: /data/keepalived/dns.conf
     owner: root
     group: root
     mode: "0640"
@@ -174,8 +174,8 @@
 
 - name: Symlink VRRP fragment
   file:
-    src: /data/keepalived/pihole.conf
-    dest: /etc/keepalived/conf.d/pihole.conf
+    src: /data/keepalived/dns.conf
+    dest: /etc/keepalived/conf.d/dns.conf
     state: link
     force: true
   become: true
@@ -185,9 +185,24 @@
 - name: Symlink healthcheck script
   file:
     src: /data/keepalived/healthcheck.sh
-    dest: /usr/local/bin/pihole_healthcheck
+    dest: /usr/local/bin/dnsmasq_healthcheck
     state: link
     force: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+# Tombstones for the pihole-era identifier names. The fragment removals are
+# load-bearing, not tidiness: a leftover conf.d/pihole.conf would make the
+# include glob double-define the vrid and fail every keepalived -t gate.
+- name: Remove pihole-era keepalived artifacts
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /data/keepalived/pihole.conf
+    - /etc/keepalived/conf.d/pihole.conf
+    - /usr/local/bin/pihole_healthcheck
   become: true
   tags:
     - udm_dns_failover
@@ -421,7 +436,7 @@
       copy:
         remote_src: true
         src: "{{ udm_dns_failover_vrrp_conf.backup_file }}"
-        dest: /data/keepalived/pihole.conf
+        dest: /data/keepalived/dns.conf
         owner: root
         group: root
         mode: "0640"
@@ -435,7 +450,7 @@
     - name: Remove the freshly-added VRRP fragment
       when: 'udm_dns_failover_vrrp_conf.changed and "backup_file" not in udm_dns_failover_vrrp_conf'
       file:
-        path: /data/keepalived/pihole.conf
+        path: /data/keepalived/dns.conf
         state: absent
       become: true
     - name: Restore previous base config after failed validation  # noqa: require-backup
@@ -465,7 +480,7 @@
         msg: >-
           keepalived -t failed on the assembled config; the previous configs
           were restored from backup. Inspect the validate output above --
-          /data/keepalived/pihole.conf or keepalived.conf is malformed.
+          /data/keepalived/dns.conf or keepalived.conf is malformed.
 
 # keepalived -t passes even when conf.d/*.conf is a dangling symlink (zero
 # vrrp_instances): the daemon would then run, healthy and pointless, never
@@ -473,7 +488,7 @@
 # instance before starting.
 - name: Assert the VRRP instance is present in the assembled config
   when: not ansible_check_mode
-  command: grep -q '^vrrp_instance pihole' /etc/keepalived/conf.d/pihole.conf
+  command: grep -q '^vrrp_instance dns' /etc/keepalived/conf.d/dns.conf
   changed_when: false
   become: true
   tags:
