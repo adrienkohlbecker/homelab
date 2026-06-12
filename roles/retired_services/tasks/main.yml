@@ -553,3 +553,115 @@
     path: /var/log/dnscrypt-proxy
     state: absent
   become: true
+
+# ---- pihole (was lab,pug; replaced by adguard on the same DNS VIP) ----
+# Ordering contract for the cutover converge: this play (base) runs before
+# the lab/pug service play, so pihole's :53 publish and its keepalived
+# fragment are gone before roles/adguard binds the same sockets and renders
+# its own fragment. Between the two, the UDM's dnsmasq failover holds the
+# VIP -- converge one host at a time (--limit lab, then pug) so the peer
+# keeps serving full DNS through the gap.
+- name: Retire pihole service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: pihole.service
+
+# No keepalived reload here: roles/keepalived (which runs after this role)
+# stops the unit if this was the only fragment, and roles/adguard's own
+# render+reload picks the removal up when it drops the successor fragment
+# the same converge.
+- name: Remove pihole keepalived fragment
+  file:
+    path: /etc/keepalived/conf.d/pihole.conf
+    state: absent
+  become: true
+
+- name: Retire pihole nginx site
+  when: retired_services_have_nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: pihole
+      state: absent
+
+- name: Remove pihole podman secret
+  when: retired_services_have_podman
+  containers.podman.podman_secret:
+    name: pihole_password
+    state: absent
+  become: true
+
+- name: Retire pihole reboot guard service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: pihole_reboot_guard.service
+
+- name: Remove pihole scripts and drop-ins
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/pihole_healthcheck
+    - /usr/local/sbin/pihole_reboot_guard
+    - /etc/systemd/logind.conf.d/pihole_reboot_guard.conf
+  become: true
+
+# The netdata go.d job config written by the retired role, plus the module
+# enable that went with it. `pihole: no` (rather than deleting the line)
+# keeps go.d from autodetect-probing the dead loopback port on every start.
+# netdata picks both up on its next restart; no forced restart here.
+- name: Remove netdata pihole collector job
+  file:
+    path: /etc/netdata/go.d/pihole.conf
+    state: absent
+  become: true
+
+- name: Probe for go.d.conf
+  stat:
+    path: /etc/netdata/go.d.conf
+  register: retired_services_godconf
+  become: true
+
+- name: Disable pihole collector in go.d.conf
+  when: retired_services_godconf.stat.exists
+  lineinfile:
+    path: /etc/netdata/go.d.conf
+    regexp: '^[#\s]*pihole:\s+'
+    line: '  pihole: no'
+    backup: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
+  become: true
+
+# fluentbit re-renders its conf without the pihole tails earlier in this
+# play; these are the orphaned parser file and tail-cursor DBs.
+- name: Remove fluentbit pihole parser and cursors
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/fluent-bit/parsers_pihole.conf
+    - /var/lib/fluent-bit/pihole_ftl.db
+    - /var/lib/fluent-bit/pihole_webserver.db
+    - /var/lib/fluent-bit/pihole_gravity.db
+  become: true
+
+# DESTRUCTIVE: /mnt/services/pihole holds the updatelists sentinel,
+# /mnt/services/sqlite/pihole the FTL gravity/history DBs, /var/log/pihole
+# the FTL and lighttpd logs. Recovery rides the daily ZFS snapshots.
+- name: Remove pihole state directories
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /mnt/services/pihole
+    - /mnt/services/sqlite/pihole
+    - /var/log/pihole
+  become: true

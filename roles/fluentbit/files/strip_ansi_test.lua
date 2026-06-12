@@ -28,10 +28,10 @@ do
     check("sgr.compound", rec.log, "OK done")
 end
 
--- Cursor moves (pihole gravity cron style): erase-line + column-home.
+-- Cursor moves (erase-line + column-home).
 do
     local rec = { log = "\27[2K\27[1Gprogress 50%" }
-    strip_ansi("pihole_gravity", 0, rec)
+    strip_ansi("svc.cron.service", 0, rec)
     check("cursor.clean", rec.log, "progress 50%")
 end
 

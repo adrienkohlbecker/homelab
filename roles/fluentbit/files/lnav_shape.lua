@@ -73,22 +73,6 @@ local EXCLUDE_FROM_FIELDS = {
     _level = true,
 }
 
--- pihole-FTL's own level tokens -> lnav level. NOTICE maps to info (matching
--- level_from_message's treatment); DEBUG_<category> variants are handled by
--- prefix below. Anything unrecognised falls back to info so an FTL record
--- always has a predictable level.
-local FTL_LEVEL = {
-    FATAL = "fatal",
-    CRIT = "fatal",
-    ERR = "error",
-    ERROR = "error",
-    WARNING = "warn",
-    WARN = "warn",
-    INFO = "info",
-    NOTICE = "info",
-    DEBUG = "debug",
-}
-
 -- Tags whose tail input has a dedicated parser. Each parser sets a signature
 -- field only on a successful match, so its presence is the discriminant for
 -- "this line parsed". A record that reaches the shaper on one of these tags
@@ -97,7 +81,6 @@ local FTL_LEVEL = {
 -- masquerading as a plain message. parser names the file/stanza to fix.
 local PARSE_DISCRIMINANT = {
     ["nginx.access"] = { field = "status", parser = "nginx_access_custom" },
-    ["pihole_ftl"] = { field = "ftl_level", parser = "pihole_ftl" },
 }
 
 function shape_lnav(tag, ts, record)
@@ -126,31 +109,6 @@ function shape_lnav(tag, ts, record)
     local status = record["status"]
     if tag == "nginx.access" and type(status) == "number" and status >= 500 then
         level = "error"
-    end
-
-    -- pihole-FTL carries its own authoritative level in the prefix (extracted
-    -- as ftl_level by the parser). Map it directly instead of trusting the
-    -- generic keyword scan, which would misread a body like "... SQL error ..."
-    -- on an INFO line. Promote the parsed body to the message (via log, which
-    -- the shaper already reads) so the redundant timestamp/level/pid prefix is
-    -- not repeated under lnav's line-format; a non-matching line has no body
-    -- and keeps its raw log line as the message.
-    if tag == "pihole_ftl" then
-        local ftl_level = record["ftl_level"]
-        if type(ftl_level) == "string" then
-            local mapped = FTL_LEVEL[ftl_level]
-            if not mapped and string.sub(ftl_level, 1, 5) == "DEBUG" then
-                mapped = FTL_LEVEL.DEBUG
-            end
-            if mapped then
-                level = mapped
-            end
-        end
-        local body = record["body"]
-        if type(body) == "string" then
-            record["log"] = body
-            record["body"] = nil
-        end
     end
 
     -- Parse-failure detection: a record on a parsed tag (PARSE_DISCRIMINANT)

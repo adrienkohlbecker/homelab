@@ -84,28 +84,6 @@
   tags:
     - netdata
 
-# Enable the go.d pihole module. It was held off (`pihole: no`) under the
-# old 1.46.x apt pin, whose pihole module predates Pi-hole v6's REST API and
-# could only spam connection errors. netdata is now pinned to 2.x (see
-# install.yml), whose v6-aware module talks to the FTL API -- the pihole role
-# templates the matching go.d/pihole.conf job (url 127.0.0.1:{{ service_ports.pihole }},
-# password-authenticated). Flipping this to `yes` also undoes the `pihole: no`
-# already written into go.d.conf on hosts converged under the old pin. On hosts
-# without the pihole role (fox), go.d autodetects and fails harmlessly (no job
-# config, no status chart, no alarm -- just log noise).
-- name: Enable pihole collector in go.d.conf
-  when: not (ansible_check_mode and netdata_godconf_copy.changed)
-  lineinfile:
-    path: /etc/netdata/go.d.conf
-    regexp: '^[#\s]*pihole:\s+'
-    line: '  pihole: yes'
-    backup: true
-    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-  register: netdata_godconf_pihole
-  become: true
-  tags:
-    - netdata
-
 - name: Configure docker metrics
   import_role:
     name: netdata
@@ -235,6 +213,6 @@
     systemd_unit_args:
       src: netdata
       condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
-      restart: "{{ netdata_conf.changed or netdata_cloud_conf.changed or netdata_health_alarm_notify.changed or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed or netdata_godconf_copy.changed or netdata_godconf_pihole.changed or (netdata_podman_socket_drop.changed | default(false)) }}"
+      restart: "{{ netdata_conf.changed or netdata_cloud_conf.changed or netdata_health_alarm_notify.changed or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed or netdata_godconf_copy.changed or (netdata_podman_socket_drop.changed | default(false)) }}"
   tags:
     - netdata

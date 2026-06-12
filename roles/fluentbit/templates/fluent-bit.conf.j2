@@ -14,7 +14,6 @@
     # copy, so a relative Parsers_File would resolve against the temp dir and
     # fail to load. The role deploys these parser files before this validate.
     Parsers_File      /etc/fluent-bit/parsers_nginx.conf
-    Parsers_File      /etc/fluent-bit/parsers_pihole.conf
     # HTTP_Server exposes /api/v1/metrics/prometheus on the loopback for
     # netdata's prometheus collector. The output_dropped_records_total
     # counter increases when fluent-bit exhausts retries against an
@@ -100,14 +99,10 @@
     storage.pause_on_chunks_overlimit  on
 
 # File-backed service logs that can't be routed to journald in their
-# own config (or where the volume/UI dependency makes that the wrong
-# call): pihole's FTL.log is parsed by the admin web UI's diagnosis view and
-# can't be redirected without breaking it; pihole's lighttpd access +
-# gravity-update logs live inside the container with no exposed override knob,
-# so we tail what the container writes to the bind-mounted host dir; the host
-# package-management subsystem (apt / dpkg / unattended-upgrades / alternatives
-# / ubuntu-pro-client) has no journald routing knob at all; auditd's audit.log
-# is the sole audit-record channel after roles/journald disabled the parallel
+# own config: the host package-management subsystem (apt / dpkg /
+# unattended-upgrades / alternatives / ubuntu-pro-client) has no
+# journald routing knob at all; auditd's audit.log is the sole
+# audit-record channel after roles/journald disabled the parallel
 # kernel-netlink subscription.
 #
 # Companion log paths we *don't* tail but keep on disk for local
@@ -117,9 +112,6 @@
 #  - /var/log/zfs_autobackup/*.log   -- rsync --log-file with per-file
 #    change records; useful for "why didn't file X land on bunk" but
 #    too verbose / too NAS-specific for the operator triage stream.
-#  - /var/log/pihole/pihole.log      -- raw per-query DNS log
-#    (~16 MB/day on lab); privacy-sensitive and FTL.log already
-#    summarises the operational signal.
 #
 # Migrated to journald in their own role, so the systemd input above
 # already covers them: fail2ban (logtarget=SYSTEMD-JOURNAL in
@@ -133,70 +125,6 @@
 # rotation so the tail buffer flushes -- matches the nginx tails'
 # choice for the same reason. service lands at the tag (lowercased) via
 # lnav_shape's fallback branch.
-
-# pihole's FTL daemon (the actual DNS resolver + API) writes FTL.log
-# directly inside the container at /var/log/pihole/FTL.log, which is
-# bind-mounted to the host of the same path. Distinct from the pihole
-# container's stdout-to-journald (which carries the lighttpd/s6
-# startup chatter, not the FTL runtime trace). Not routed to journald
-# because the pihole admin web UI's "Tools -> Pi-hole diagnosis" view
-# parses this file directly; redirecting would break the UI.
-[INPUT]
-    Name              tail
-    Tag               pihole_ftl
-    Path              /var/log/pihole/FTL.log
-    DB                /var/lib/fluent-bit/pihole_ftl.db
-    db.locking        on
-    Path_Key          filepath
-    Read_from_Head    off
-    Skip_Long_Lines   on
-    Skip_Empty_Lines  on
-    Rotate_Wait       30
-    Buffer_Max_Size   256k
-    storage.type      filesystem
-    storage.pause_on_chunks_overlimit  on
-
-# pihole's admin lighttpd access log. Not routed to journald because
-# the pihole container ships its own lighttpd config with no exposed
-# accesslog.filename knob, and bind-mounting an override is invasive
-# for ~100 bytes/day. The pihole DNS query log (pihole.log) is
-# deliberately not tailed -- ~16 MB/day on lab, per-query DNS traces
-# with no operational value beyond what FTL.log already summarises,
-# and privacy-sensitive.
-[INPUT]
-    Name              tail
-    Tag               pihole_webserver
-    Path              /var/log/pihole/webserver.log
-    DB                /var/lib/fluent-bit/pihole_webserver.db
-    db.locking        on
-    Path_Key          filepath
-    Read_from_Head    off
-    Skip_Long_Lines   on
-    Skip_Empty_Lines  on
-    Rotate_Wait       30
-    Buffer_Max_Size   256k
-    storage.type      filesystem
-    storage.pause_on_chunks_overlimit  on
-
-# pihole's gravity-update cron output. Carries the blocklist refresh
-# trace (sources fetched, entries added/skipped, errors); useful to
-# spot the day a blocklist starts 404'ing and the gravity dataset
-# silently shrinks. Cron writes ANSI escape codes (cursor moves,
-# bracket characters) into the file; fluent-bit ships them as-is.
-[INPUT]
-    Name              tail
-    Tag               pihole_gravity
-    Path              /var/log/pihole/pihole_updateGravity.log
-    DB                /var/lib/fluent-bit/pihole_gravity.db
-    db.locking        on
-    Path_Key          filepath
-    Read_from_Head    off
-    Skip_Long_Lines   on
-    Skip_Empty_Lines  on
-    Rotate_Wait       30
-    Buffer_Max_Size   256k
-    storage.type      filesystem
-    storage.pause_on_chunks_overlimit  on
 
 # auditd's authoritative file. The systemd-journald-audit.socket is
 # disabled by roles/journald (Audit=no in journald.conf), so this
@@ -389,19 +317,6 @@
     Reserve_Data      On
     Preserve_Key      On
 
-# Parse pihole-FTL lines into level / body / pid / thread (see
-# parsers_pihole.conf). Preserve_Key keeps the raw line under `log` as the
-# fallback message for any line that does not match the FTL prefix; for lines
-# that do, lnav_shape maps ftl_level to the record level and promotes `body`
-# to the message so the timestamp/level/pid prefix is not repeated.
-[FILTER]
-    Name              parser
-    Match             pihole_ftl
-    Key_Name          log
-    Parser            pihole_ftl
-    Reserve_Data      On
-    Preserve_Key      On
-
 # Join python / go / java / ruby tracebacks into a single record per
 # stack so lnav doesn't scatter the frames across 10+ rows. Records
 # arrive pre-partitioned by systemd unit (the input's Tag svc.* wildcard
@@ -444,8 +359,8 @@
 
 # Strip ANSI escape sequences (colour/SGR codes, cursor moves) from the
 # message. seerr (jellyseerr) wraps its level token in colour codes and
-# pihole's gravity cron writes cursor moves; both ship the raw bytes to
-# journald. Besides the visual noise, the colour bytes hug the level word
+# ships the raw bytes to journald. Besides the visual noise, the colour
+# bytes hug the level word
 # (\x1b[34mdebug\x1b[39m) and break level_from_message's word-boundary keyword
 # scan -- a colourised debug/warn would misclassify as info -- so this runs
 # before that filter.
