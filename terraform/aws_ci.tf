@@ -28,8 +28,7 @@ data "aws_caller_identity" "current" {}
 # and the toolchain pulls from GitHub releases.
 
 resource "aws_vpc" "ci" {
-  cidr_block           = "10.99.0.0/16"
-  enable_dns_hostnames = true
+  cidr_block = "10.99.0.0/16"
 
   tags = {
     Name = "homelab-ci"
