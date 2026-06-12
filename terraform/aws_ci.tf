@@ -31,17 +31,15 @@ locals {
 data "aws_caller_identity" "current" {}
 
 # ─── Networking ──────────────────────────────────────────────────────────────
-# Dedicated CI VPC: dual-stack public subnets across 3 AZs, IGW only — no NAT
+# Dedicated CI VPC: public IPv4 subnets across 3 AZs, IGW only — no NAT
 # gateway (a ~$32/mo standing trap). Each cell gets an ephemeral public IPv4
-# ($0.005/hr while running). IPv6-only was investigated and rejected:
-# github.com and objects.githubusercontent.com have no AAAA and the toolchain
-# pulls from GitHub releases.
+# ($0.005/hr while running). IPv6 — including IPv6-only — was investigated
+# and rejected: github.com and objects.githubusercontent.com have no AAAA
+# and the toolchain pulls from GitHub releases.
 
 resource "aws_vpc" "ci" {
-  cidr_block                       = "10.99.0.0/16"
-  assign_generated_ipv6_cidr_block = true
-  enable_dns_support               = true
-  enable_dns_hostnames             = true
+  cidr_block           = "10.99.0.0/16"
+  enable_dns_hostnames = true
 
   tags = {
     Name = "homelab-ci"
@@ -50,7 +48,7 @@ resource "aws_vpc" "ci" {
 }
 
 resource "aws_subnet" "ci" {
-  # idx doubles as the IPv4 third octet and the IPv6 subnet index.
+  # The value is the IPv4 third octet.
   for_each = {
     a = 0
     b = 1
@@ -60,7 +58,6 @@ resource "aws_subnet" "ci" {
   vpc_id            = aws_vpc.ci.id
   availability_zone = "${local.ci_aws_region}${each.key}"
   cidr_block        = cidrsubnet(aws_vpc.ci.cidr_block, 8, each.value)
-  ipv6_cidr_block   = cidrsubnet(aws_vpc.ci.ipv6_cidr_block, 8, each.value)
 
   # Public IPv4 rides the subnet default rather than a launch-template
   # network_interfaces block: the harness overrides the subnet per launch
@@ -83,30 +80,21 @@ resource "aws_internet_gateway" "ci" {
   }
 }
 
-resource "aws_route_table" "ci" {
-  vpc_id = aws_vpc.ci.id
+# The default route rides the VPC's main route table: every subnet in this
+# single-purpose VPC falls back to it, so a dedicated table plus per-subnet
+# associations would only restate that fallback.
+resource "aws_default_route_table" "ci" {
+  default_route_table_id = aws_vpc.ci.default_route_table_id
 
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.ci.id
   }
 
-  route {
-    ipv6_cidr_block = "::/0"
-    gateway_id      = aws_internet_gateway.ci.id
-  }
-
   tags = {
     Name = "homelab-ci"
     role = "ci"
   }
-}
-
-resource "aws_route_table_association" "ci" {
-  for_each = aws_subnet.ci
-
-  subnet_id      = each.value.id
-  route_table_id = aws_route_table.ci.id
 }
 
 # ─── Security group ──────────────────────────────────────────────────────────
@@ -138,16 +126,27 @@ resource "aws_security_group" "ci_cell" {
   }
 
   egress {
-    description      = "All outbound"
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
     Name = "homelab-ci-cell"
+    role = "ci"
+  }
+}
+
+# Adopt the VPC's auto-created default security group and strip its stock
+# allow-all rules: nothing launches with it (cells pin ci_cell via the
+# launch template), so codify that as zero rules.
+resource "aws_default_security_group" "ci" {
+  vpc_id = aws_vpc.ci.id
+
+  tags = {
+    Name = "homelab-ci-default-empty"
     role = "ci"
   }
 }
