@@ -79,13 +79,13 @@
   delay: 2
   until: dns_keepalived_ip in adguard_verify_dot.stdout_lines
 
-# The user_rules undelegated-suffix guard answers locally (0.0.0.0 under
-# blocking_mode default) instead of leaking the query upstream.
-- name: _verify | Undelegated suffix is answered locally
-  command: dig +short +timeout=2 +tries=2 @{{ ansible_facts.default_ipv4.address }} printer.lan A
+# The user_rules undelegated-suffix guard answers NXDOMAIN locally
+# instead of leaking the query upstream.
+- name: _verify | Undelegated suffix is answered NXDOMAIN locally
+  command: dig +timeout=2 +tries=2 @{{ ansible_facts.default_ipv4.address }} printer.lan A
   register: adguard_verify_undelegated
   changed_when: false
-  failed_when: "'0.0.0.0' not in adguard_verify_undelegated.stdout_lines"
+  failed_when: "'status: NXDOMAIN' not in adguard_verify_undelegated.stdout"
 
 # AdGuard checks HTTPS-record ipv6hints as hostnames against the filters
 # (filterSVCBHint), so an over-broad rule swallows every type-65 answer
