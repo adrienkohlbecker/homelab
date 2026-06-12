@@ -1,7 +1,7 @@
 -- Strip ANSI escape sequences (SGR colour codes, cursor moves) from the log
 -- message. Some services ship raw escape bytes to journald: seerr (jellyseerr)
--- wraps its level token in colour codes (\x1b[34mdebug\x1b[39m), and pihole's
--- gravity cron writes cursor-move sequences. Beyond the visual noise in lnav,
+-- wraps its level token in colour codes (\x1b[34mdebug\x1b[39m). Beyond the
+-- visual noise in lnav,
 -- the colour bytes hug the level word, so level_from_message's word-boundary
 -- keyword scan cannot match a colourised "debug"/"warn" and misclassifies it
 -- as info. This runs before level_from_message so both the classification and
