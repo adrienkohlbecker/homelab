@@ -1,0 +1,10 @@
+#!/bin/bash
+set -euo pipefail
+
+expected_answer="127.0.0.1"
+answer="$(dig +short +timeout=1 +tries=2 @{{ ansible_facts.default_ipv4.address }} adguard.home A | awk 'NF { print; exit }')"
+
+if [ "$answer" != "$expected_answer" ]; then
+  echo >&2 "Error: adguard.home returned ${answer:-<empty>}, expected $expected_answer"
+  exit 1
+fi

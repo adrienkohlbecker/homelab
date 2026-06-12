@@ -71,13 +71,17 @@
   tags:
     - adguard
 
-- name: Remove retired pihole service
-  import_role:
-    name: systemd_unit
-    tasks_from: remove
-  vars:
-    systemd_unit_args:
-      dest: pihole.service
+- name: Configure health script
+  template:
+    src: adguard_healthcheck.sh.j2
+    dest: /usr/local/bin/adguard_healthcheck
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  register: adguard_health_script
+  become: true
   tags:
     - adguard
 
@@ -89,6 +93,16 @@
     systemd_unit_args:
       src: adguard.service.j2
       condition: "{{ not (ansible_check_mode and adguard_user.changed) }}"
+  tags:
+    - adguard
+
+- name: Stop retired pihole service before binding DNS
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: pihole.service
   tags:
     - adguard
 
@@ -105,27 +119,6 @@
   tags:
     - adguard
 
-- name: Configure health script
-  copy:
-    src: adguard_healthcheck.sh
-    dest: /usr/local/bin/adguard_healthcheck
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-    validate: bash -n %s
-  become: true
-  tags:
-    - adguard
-
-- name: Remove retired pihole health script
-  file:
-    path: /usr/local/bin/pihole_healthcheck
-    state: absent
-  become: true
-  tags:
-    - adguard
-
 - name: Configure nginx
   import_role:
     name: nginx
@@ -135,17 +128,6 @@
       subdomain: adguard
       proxy_pass: http://127.0.0.1:{{ service_ports.adguard }}/
       auth: required
-  tags:
-    - adguard
-
-- name: Remove retired pihole nginx site
-  import_role:
-    name: nginx
-    tasks_from: site
-  vars:
-    nginx_site_args:
-      subdomain: pihole
-      state: absent
   tags:
     - adguard
 
@@ -187,6 +169,17 @@
         mode: "0640"
         backup: true
       register: adguard_keepalived_cfg
+      become: true
+
+    - name: Assert the DNS VRRP instance is present
+      when: not ansible_check_mode
+      command:
+        argv:
+          - grep
+          - -q
+          - ^vrrp_instance adguard
+          - /etc/keepalived/conf.d/adguard.conf
+      changed_when: false
       become: true
 
     - name: Reload keepalived
@@ -254,6 +247,37 @@
         msg: >-
           keepalived rejected the rendered DNS fragment on reload; the previous
           fragment was restored or the freshly added fragment was removed.
+
+- name: Verify adguard answers before removing retired pihole artifacts
+  when: not ansible_check_mode
+  command: dig +short +timeout=2 +tries=2 @{{ ansible_facts.default_ipv4.address }} adguard.home A
+  register: adguard_cutover_dns
+  changed_when: false
+  failed_when: "'127.0.0.1' not in adguard_cutover_dns.stdout_lines"
+  retries: 15
+  delay: 2
+  until: "'127.0.0.1' in adguard_cutover_dns.stdout_lines"
+  tags:
+    - adguard
+
+- name: Remove retired pihole health script
+  file:
+    path: /usr/local/bin/pihole_healthcheck
+    state: absent
+  become: true
+  tags:
+    - adguard
+
+- name: Remove retired pihole nginx site
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: pihole
+      state: absent
+  tags:
+    - adguard
 
 - name: Create logind conf.d directory
   file:
