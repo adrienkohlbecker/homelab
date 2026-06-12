@@ -386,10 +386,50 @@
   tags:
     - github_runner
 
-# Rootless buildkitd for the zbm-build CI job (needs linger + the rootless
-# podman socket above, since `docker buildx --load` imports into it).
-- name: Set up rootless buildkit
-  import_tasks: buildkitd.yml
+# Tombstone: the rootless buildkitd rig (buildkitd/rootlesskit under /opt,
+# symlinks on PATH, a buildkit.service user unit and its build cache) served
+# the GitHub zbm-build workflow, retired when the ZBM image build moved to
+# GitLab CI's dind zbm_build job. No-op on fresh installs; drop this block
+# once lab has converged past it.
+- name: Remove retired rootless buildkit user service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: buildkit.service
+      user: github_runner
+      condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
+  tags:
+    - github_runner
+
+- name: Find retired buildkit + rootlesskit installs under /opt
+  find:
+    paths: /opt
+    patterns:
+      - "buildkit-*"
+      - "rootlesskit-*"
+    file_type: any
+    recurse: false
+  register: github_runner_buildkit_leftovers
+  become: true
+  tags:
+    - github_runner
+
+- name: Remove retired buildkit + rootlesskit files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop: >-
+    {{ (github_runner_buildkit_leftovers.files | map(attribute='path') | list)
+       + ['/usr/local/bin/buildkitd',
+          '/usr/local/bin/buildctl',
+          '/usr/local/bin/buildkit-runc',
+          '/usr/local/bin/rootlesskit',
+          '/mnt/scratch/github_runner/.local/share/buildkit'] }}
+  become: true
+  tags:
+    - github_runner
 
 - name: Install podman prune timer for github_runner
   import_role:
