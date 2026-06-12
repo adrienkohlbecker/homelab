@@ -314,6 +314,14 @@ debootstrap --verbose "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR" || {
 
 cp /etc/hostid /mnt/etc
 
+# Build-time dpkg I/O mode: dpkg fsyncs every unpacked file by default,
+# which dominates the chroot install's wall-clock on network-backed disks
+# (EBS on the AWS bake) and still costs plenty locally. A build that
+# crashes mid-install is rebuilt, never booted, so per-file durability buys
+# nothing — and the shipped image is quiesced by the zpool export below
+# regardless. Removed before the image is sealed.
+echo force-unsafe-io >/mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
+
 # Pre-staged ZFSBootMenu artifacts: the lab Nexus that serves the ZBM
 # tarball is unreachable from AWS build VMs, so the bake orchestrator
 # downloads tarball + .sha256sum up front and packer ships them here
@@ -349,6 +357,7 @@ fi
 unshare --mount --propagation private arch-chroot /mnt bash <"$SCRIPTS_DIR/chroot.sh"
 
 rm -rf /mnt/var/tmp/zbm
+rm /mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
 
 # Create the non-rpool ZFS pools requested by the variant (apoc/dozer/
 # tank/mouse). Runs while /mnt is still rpool's root so pools.sh can
