@@ -364,8 +364,45 @@ dns_keepalived_peers:
   - pug
   - udm
 dns_keepalived_vrid: 1
+# Expanded snapshot of the firebog "tick" collection (2026-06-12).
+# AdGuard has no meta-list fan-out -- feeding it the lists.php URL
+# parses the URL lines as 25 bogus filter rules and blocks nothing
+# (verified empirically), so the collection is pinned here expanded.
+# Refresh by re-expanding https://v.firebog.net/hosts/lists.php?type=tick.
+# github-raw lists ride the nexus mirror like the whitelists below.
 adguard_adlists:
-  - https://v.firebog.net/hosts/lists.php?type=tick
+  - "{{ mirror_raw_githubusercontent }}/PolishFiltersTeam/KADhosts/master/KADhosts.txt"
+  - "{{ mirror_raw_githubusercontent }}/FadeMind/hosts.extras/master/add.Spam/hosts"
+  - https://v.firebog.net/hosts/static/w3kbl.txt
+  - https://adaway.org/hosts.txt
+  - https://v.firebog.net/hosts/AdguardDNS.txt
+  - https://v.firebog.net/hosts/Admiral.txt
+  - "{{ mirror_raw_githubusercontent }}/anudeepND/blacklist/master/adservers.txt"
+  - https://v.firebog.net/hosts/Easylist.txt
+  - https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext
+  - "{{ mirror_raw_githubusercontent }}/FadeMind/hosts.extras/master/UncheckyAds/hosts"
+  - "{{ mirror_raw_githubusercontent }}/bigdargon/hostsVN/master/hosts"
+  - https://v.firebog.net/hosts/Easyprivacy.txt
+  - https://v.firebog.net/hosts/Prigent-Ads.txt
+  - "{{ mirror_raw_githubusercontent }}/FadeMind/hosts.extras/master/add.2o7Net/hosts"
+  - "{{ mirror_raw_githubusercontent }}/crazy-max/WindowsSpyBlocker/master/data/hosts/spy.txt"
+  - https://hostfiles.frogeye.fr/firstparty-trackers-hosts.txt
+  - "{{ mirror_raw_githubusercontent }}/DandelionSprout/adfilt/master/Alternate%20versions%20Anti-Malware%20List/AntiMalwareHosts.txt"
+  - https://v.firebog.net/hosts/Prigent-Crypto.txt
+  - "{{ mirror_raw_githubusercontent }}/FadeMind/hosts.extras/master/add.Risk/hosts"
+  - https://phishing.army/download/phishing_army_blocklist_extended.txt
+  - https://gitlab.com/quidsup/notrack-blocklists/raw/master/notrack-malware.txt
+  - "{{ mirror_raw_githubusercontent }}/Spam404/lists/master/main-blacklist.txt"
+  - "{{ mirror_raw_githubusercontent }}/AssoEchap/stalkerware-indicators/master/generated/hosts"
+  - https://urlhaus.abuse.ch/downloads/hostfile/
+  - https://lists.cyberhost.uk/malware.txt
+  # Encrypted-DNS bypass control (hagezi): blocks resolution of public
+  # DoH/DoT server hostnames (dns.google, cloudflare-dns.com,
+  # mask.icloud.com, ...) so clients fall back to the DHCP resolver.
+  # Safe for adguard itself: its own upstream hostnames resolve through
+  # bootstrap_dns, which bypasses filtering. Pairs with the UDM-side
+  # 853 block -- see notes/dns_architecture.md.
+  - "{{ mirror_raw_githubusercontent }}/hagezi/dns-blocklists/main/adblock/doh.txt"
 adguard_whitelists:
   - "{{ mirror_raw_githubusercontent }}/anudeepND/whitelist/master/domains/whitelist.txt"
   - "{{ mirror_raw_githubusercontent }}/cedwards4038/pihole-whitelist/main/whitelist.txt"
