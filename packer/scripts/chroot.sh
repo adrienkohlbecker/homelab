@@ -357,11 +357,11 @@ mount /boot/efi
 
 # Install ZFSBootMenu
 #
-# ZBM is built + uploaded out-of-band by `mise run zbm:build && zbm:upload`
+# ZBM is built + published out-of-band by `mise run zbm:build && zbm:upload`
 # (mise.toml's [vars] zbm_version drives those). The version installed
 # here is decoupled — it's the $ZBM_VERSION constant set at the top of
-# this script. Bump it once a new tarball has been built + uploaded to
-# Nexus and verified.
+# this script. Bump it once a new tarball has been built + published to
+# the GitLab generic package registry and verified.
 #
 # The tarball carries both the unified ZBM EFI image and the components-mode
 # kernel + initrd. The shipped default ZBM entry uses the unified image
@@ -370,10 +370,10 @@ mount /boot/efi
 # EFI-stub entry below. rEFInd ships as refind_x64.efi on x86_64 and
 # refind_aa64.efi on aarch64 ($REFIND_NAME, derived from `uname -m` above).
 #
-# ZBM_URL_BASE override: build VMs that cannot reach the lab Nexus (AWS
-# bakes) get the tarball pre-staged into the chroot by provision.sh and
-# consume it via a file:// base — curl handles both schemes identically.
-ZBM_URL="${ZBM_URL_BASE:-https://nexus.lab.fahm.fr/repository/zbm}/zfsbootmenu-$ZBM_VERSION.tar.gz"
+# The registry path is project 83079143 = akohlbecker/homelab (numeric id
+# keeps the path free of an encoded slash); the project is public, so the
+# pull is anonymous.
+ZBM_URL="https://gitlab.com/api/v4/projects/83079143/packages/generic/zfsbootmenu/$ZBM_VERSION/zfsbootmenu-$ZBM_VERSION.tar.gz"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
