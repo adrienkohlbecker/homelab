@@ -44,28 +44,6 @@ resource "github_actions_secret" "nexus_password" {
   }
 }
 
-# Scoped publish credential for the ZFSBootMenu tarballs, consumed by the
-# zbm-build workflow (mise-tasks/zbm/upload.sh) to PUT to the homelab GitLab
-# project's generic package registry. The value is a GitLab project deploy
-# token scoped to write_package_registry, minted in the GitLab UI (Settings >
-# Repository > Deploy tokens) and kept in 1Password; rotation is mint a new
-# token, update the 1P item, re-apply.
-variable "gitlab_zbm_deploy_token" {
-  type      = string
-  sensitive = true
-
-  validation {
-    condition     = length(var.gitlab_zbm_deploy_token) > 0
-    error_message = "gitlab_zbm_deploy_token must be non-empty (resolved via TF_VAR_gitlab_zbm_deploy_token from 1Password through `op run`)."
-  }
-}
-
-resource "github_actions_secret" "gitlab_zbm_deploy_token" {
-  repository  = "homelab"
-  secret_name = "GITLAB_ZBM_DEPLOY_TOKEN"
-  value       = var.gitlab_zbm_deploy_token
-}
-
 # MISE_GITHUB_TOKEN raises mise's anonymous 60/hr GitHub API rate limit
 # during `mise install` in the ci-image workflow. mise just
 # needs an authenticated token; the value here is a dedicated

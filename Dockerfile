@@ -97,6 +97,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# docker CLI + buildx plugin for the GitLab zbm_build job, whose scripts
+# drive docker directly against the pipeline's dind service. From Docker's
+# own apt repo — noble's docker.io would drag in the full daemon. Repo URL
+# mirror-gated like the base sources above (group_vars mirror_apt_docker
+# shape); the signing key comes from download.docker.com either way — the
+# lab build host reaches it fine, it is one tiny fetch, and the Signed-By
+# trust chain stays upstream.
+RUN install -dm 755 /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      | gpg --dearmor -o /etc/apt/keyrings/docker-archive-keyring.gpg && \
+    if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
+      docker_repo="https://nexus.lab.fahm.fr/repository/docker-ce"; \
+    else \
+      docker_repo="https://download.docker.com/linux/ubuntu"; \
+    fi && \
+    echo "deb [signed-by=/etc/apt/keyrings/docker-archive-keyring.gpg] ${docker_repo} noble stable" \
+      > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && apt-get install -y --no-install-recommends \
+      docker-ce-cli docker-buildx-plugin && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install mise via its apt repo — bypasses the tar-with-setgid-bit issue
 # that the curl|sh installer hits under rootless podman build (the buildah
 # userns doesn't allow tar to preserve those bits, even for files mise
