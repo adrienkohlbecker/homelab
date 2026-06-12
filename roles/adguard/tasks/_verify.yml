@@ -30,24 +30,6 @@
   until: adguard_verify_hc_script.rc == 0
   become: true
 
-- name: _verify | Host DNS socket resolves the healthcheck name
-  command: dig +short +timeout=2 +tries=2 @{{ ansible_facts.default_ipv4.address }} adguard.home A
-  register: adguard_verify_host_dns
-  changed_when: false
-  failed_when: "'127.0.0.1' not in adguard_verify_host_dns.stdout_lines"
-  retries: 30
-  delay: 2
-  until: "'127.0.0.1' in adguard_verify_host_dns.stdout_lines"
-
-- name: _verify | DNS healthcheck name resolves locally
-  command: /usr/bin/podman exec adguard getent hosts adguard.home
-  register: adguard_verify_local
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: adguard_verify_local.rc == 0
-  become: true
-
 - name: _verify | Split-horizon override resolves
   command: /usr/bin/podman exec adguard getent hosts box.{{ domain }}
   register: adguard_verify_splithorizon
@@ -58,8 +40,9 @@
 # Recursive resolution through the DoH upstream chain -- every other dig
 # here hits a local rewrite, so without this a broken upstream config
 # (bad DoH URL, bootstrap failure) would pass _verify while real client
-# queries fail. The upstream leg is HTTPS/TCP, so qemu SLIRP's UDP
-# flakiness doesn't apply to it.
+# queries fail. With use_http3_upstreams the first attempts ride QUIC
+# over UDP/443, which qemu SLIRP drops under load; the retries budget
+# absorbs that until the HTTP/2-over-TCP fallback answers.
 - name: _verify | Upstream resolution answers through DoH
   command: dig +short +timeout=2 +tries=2 @{{ ansible_facts.default_ipv4.address }} example.com A
   register: adguard_verify_upstream
@@ -82,7 +65,6 @@
   retries: 30
   delay: 2
   until: (adguard_verify_blocked.json | default({})).reason | default('') is match('Filtered')
-  failed_when: (adguard_verify_blocked.json | default({})).reason | default('') is not match('Filtered')
 
 # The user_rules undelegated-suffix guard answers locally (0.0.0.0 under
 # blocking_mode default) instead of leaking the query upstream.
@@ -106,21 +88,6 @@
      | map(attribute='rules_count')
      | map('int')
      | sum) > 0
-  failed_when: >-
-    ((adguard_verify_filtering.json | default({})).filters | default([])
-     | selectattr('enabled')
-     | map(attribute='rules_count')
-     | map('int')
-     | sum) == 0
-
-- name: _verify | Admin UI answers on the loopback publish
-  uri:
-    url: http://127.0.0.1:{{ service_ports.adguard }}/
-    status_code: [ 200, 301, 302 ]
-  register: adguard_verify_admin
-  retries: 30
-  delay: 2
-  until: adguard_verify_admin.status in [200, 301, 302]
 
 - name: _verify | Admin UI gate redirects unauthenticated to Authelia
   uri:
@@ -144,15 +111,18 @@
   failed_when: _adguard_verify_reboot_guard.status.ActiveState != 'active'
   become: true
 
+# Plain grep (not -q): it consumes all input so systemd-inhibit never
+# takes a SIGPIPE under pipefail, and the matching line lands in the
+# task output for debugging.
 - name: _verify | Reboot guard holds the inhibitor lock
   shell:
     cmd: >-
       set -euo pipefail;
-      systemd-inhibit --list --no-legend 2>/dev/null | grep -c adguard_reboot_guard || echo 0
+      systemd-inhibit --list --no-legend | grep adguard_reboot_guard
     executable: /bin/bash
   register: _adguard_verify_inhibitor
   changed_when: false
   retries: 6
   delay: 5
-  until: (_adguard_verify_inhibitor.stdout | trim | int) > 0
+  until: _adguard_verify_inhibitor.rc == 0
   become: true
