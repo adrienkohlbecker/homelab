@@ -176,9 +176,11 @@ statistics:
 {#
   The keepalived healthcheck digs adguard.home every second per host;
   without this the synthetic probes drown the top-domains statistics.
+  pi.hole is the same class of noise: only operator probes ever ask it.
 #}
   ignored:
     - adguard.home
+    - pi.hole
   interval: 10d
   enabled: true
   ignored_enabled: true
@@ -207,20 +209,22 @@ whitelist_filters:
 {% else %}
 whitelist_filters: []
 {% endif %}
-{#
-  Parity with the retired dnscrypt-proxy block_unqualified /
-  block_undelegated toggles: single-label names and undelegated LAN
-  suffixes can never resolve publicly, so answer them locally (0.0.0.0
-  under blocking_mode default) instead of leaking internal hostnames and
-  typos to the DoH upstreams. `home` is deliberately not blocked --
-  adguard.home (the healthcheck rewrite above) lives under it; the
-  single-label regex never matches it since it carries a dot.
-#}
-{# The regex rule is deliberately unquoted: AdGuard rewrites this file on
-   startup and serializes it as a plain scalar -- a quoted rendering here
-   would re-template (and restart) on every converge. #}
+{# Entries starting with ! are adblock-style comments: data to AdGuard,
+   shown in the Custom filtering rules UI, and preserved by its startup
+   rewrite (which strips YAML comments -- hence Jinja comments elsewhere
+   in this file). Serialization parity with that rewrite, or the file
+   re-templates and restarts DNS on every converge: the regex must stay
+   a plain scalar, while entries starting with ! or | must be
+   single-quoted, matching how yaml.v3 writes them back. #}
 user_rules:
+  - '! Answered locally (0.0.0.0 under blocking_mode default): these names can'
+  - '! never resolve publicly, so internal hostnames and typos must not leak to'
+  - '! the DoH upstreams. Parity with the retired dnscrypt-proxy'
+  - '! block_unqualified / block_undelegated toggles.'
+  - '! Single-label names. Never matches adguard.home or pi.hole: they carry a dot.'
   - /^[^.]+$/
+  - '! Undelegated LAN suffixes. `home` and `hole` stay unblocked -- the'
+  - '! adguard.home and pi.hole rewrites live under them.'
   - '||lan^'
   - '||local^'
   - '||internal^'
@@ -265,6 +269,14 @@ filtering:
   safebrowsing_block_host: standard-block.dns.adguard.com
   rewrites:
     - domain: adguard.home
+      answer: 127.0.0.1
+      enabled: true
+{#
+  pihole-era compatibility name: anything still asking pi.hole (operator
+  muscle memory, leftover dashboards) gets the same loopback answer.
+  Ignored in statistics above alongside adguard.home.
+#}
+    - domain: pi.hole
       answer: 127.0.0.1
       enabled: true
     - domain: pug.{{ domain }}

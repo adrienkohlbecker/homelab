@@ -87,6 +87,12 @@
   changed_when: false
   failed_when: "'0.0.0.0' not in adguard_verify_undelegated.stdout_lines"
 
+- name: _verify | Compatibility rewrite pi.hole answers loopback
+  command: dig +short +timeout=2 +tries=2 @{{ ansible_facts.default_ipv4.address }} pi.hole A
+  register: adguard_verify_pihole
+  changed_when: false
+  failed_when: "'127.0.0.1' not in adguard_verify_pihole.stdout_lines"
+
 - name: _verify | AdGuard filter lists are populated
   uri:
     url: http://127.0.0.1:{{ service_ports.adguard }}/control/filtering/status
