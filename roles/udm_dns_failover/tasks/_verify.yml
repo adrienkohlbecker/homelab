@@ -25,7 +25,7 @@
     path: "{{ item }}"
   loop:
     - /data/keepalived/keepalived.conf
-    - /data/keepalived/pihole.conf
+    - /data/keepalived/dns.conf
     - /data/keepalived/healthcheck.sh
   register: _udm_dns_failover_data_masters
   become: true
@@ -44,8 +44,8 @@
     path: "{{ item }}"
   loop:
     - /etc/keepalived/keepalived.conf
-    - /etc/keepalived/conf.d/pihole.conf
-    - /usr/local/bin/pihole_healthcheck
+    - /etc/keepalived/conf.d/dns.conf
+    - /usr/local/bin/dnsmasq_healthcheck
   register: _udm_dns_failover_symlinks
   become: true
 
@@ -54,7 +54,7 @@
     that:
       - _udm_dns_failover_symlinks.results | map(attribute='stat.islnk') | list == [true, true, true]
       - _udm_dns_failover_symlinks.results[0].stat.lnk_target == '/data/keepalived/keepalived.conf'
-      - _udm_dns_failover_symlinks.results[1].stat.lnk_target == '/data/keepalived/pihole.conf'
+      - _udm_dns_failover_symlinks.results[1].stat.lnk_target == '/data/keepalived/dns.conf'
       - _udm_dns_failover_symlinks.results[2].stat.lnk_target == '/data/keepalived/healthcheck.sh'
 
 - name: _verify | Keepalived is active and enabled
@@ -67,7 +67,7 @@
   become: true
 
 - name: _verify | The loopback healthcheck passes (init_fail gate clears)
-  command: /usr/local/bin/pihole_healthcheck
+  command: /usr/local/bin/dnsmasq_healthcheck
   changed_when: false
   become: true
 
@@ -308,7 +308,7 @@
   copy:
     content: |
       # no vrrp_instance here -- keepalived -t passes but there is nothing to run
-    dest: /data/keepalived/pihole.conf
+    dest: /data/keepalived/dns.conf
     owner: root
     group: root
     mode: "0640"

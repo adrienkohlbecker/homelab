@@ -1,5 +1,5 @@
-vrrp_script pihole_healthcheck {
-  script    /usr/local/bin/pihole_healthcheck
+vrrp_script dnsmasq_healthcheck {
+  script    /usr/local/bin/dnsmasq_healthcheck
   interval  1
   timeout   5
   rise      1
@@ -14,15 +14,14 @@ vrrp_script pihole_healthcheck {
   init_fail
 }
 
-# The udm-local identifiers stay `pihole` (instance name, fragment file,
-# healthcheck script): VRRP interop is keyed on vrid/advert_int/VIP, not
-# on names, so they are free to differ per node, and renaming them would
-# churn /data on the UDM for zero behavioural gain. This is the same VRRP
-# group as roles/adguard (whose instance is named `adguard`), so the
-# vrid/advert_int/VIP here MUST stay equal to
-# roles/adguard/templates/keepalived.conf.j2. Only priority, use_vmac,
-# interface, and the instance name legitimately differ per peer.
-vrrp_instance pihole {
+# The instance name matches roles/adguard's (`dns`) for uniform journal
+# greps, though VRRP interop is keyed on vrid/advert_int/VIP, not names.
+# Same VRRP group as roles/adguard, so the vrid/advert_int/VIP here MUST
+# stay equal to roles/adguard/templates/keepalived.conf.j2. Only priority,
+# use_vmac, and interface legitimately differ per peer. The healthcheck
+# identifiers carry the dnsmasq_ prefix: they probe the UDM's own dnsmasq,
+# this node's last-resort resolver.
+vrrp_instance dns {
   state     BACKUP
   interface {{ udm_dns_failover_interface }}
 
@@ -73,7 +72,7 @@ vrrp_instance pihole {
   garp_master_refresh 60
 
   track_script {
-    pihole_healthcheck
+    dnsmasq_healthcheck
   }
 
   # notify omitted: keepalived 2.2.7 + enable_script_security on the UDM
