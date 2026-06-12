@@ -169,3 +169,33 @@
             {{ gitlab_runner_service_result.changed
                or gitlab_runner_binary.changed }}
           condition: "{{ not (ansible_check_mode and (gitlab_runner_service_result.changed or gitlab_runner_user.changed)) }}"
+
+    # Tombstones for the instance-executor install (fleeting autoscaler ->
+    # Hetzner Cloud), which left artifacts on fox that nothing above manages.
+    # Each removal is idempotent (no-op once the artifact is gone), so these
+    # stay as tombstones rather than one-shot cleanups. The timer remove also
+    # clears its netdata systemd_timers metadata -- a leftover
+    # /etc/netdata/charts.d/systemd_timers.d/gitlab_runner_image_refresh.conf
+    # would fire systemd_timer_overdue CRITICAL forever against a timer that
+    # no longer exists.
+    - name: Remove the retired gitlab_runner_image_refresh timer
+      import_role:
+        name: systemd_timer
+        tasks_from: remove
+      vars:
+        systemd_timer_args:
+          name: gitlab_runner_image_refresh
+
+    - name: Remove the retired fleeting-plugin-hetzner binary
+      file:
+        path: /usr/local/bin/fleeting-plugin-hetzner
+        state: absent
+      become: true
+
+    # Held only the worker-image refresh script the timer drove; the Docker
+    # executor ships no service code of its own.
+    - name: Remove the retired /opt/gitlab_runner dir
+      file:
+        path: /opt/gitlab_runner
+        state: absent
+      become: true
