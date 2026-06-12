@@ -79,6 +79,8 @@
   tags:
     - adguard
 
+# No restart wiring on change: keepalived re-execs the script by path
+# every check interval, so a new rendering takes effect on its own.
 - name: Configure health script
   template:
     src: adguard_healthcheck.sh.j2
@@ -88,7 +90,6 @@
     mode: "0755"
     backup: true
     validate: bash -n %s
-  register: adguard_health_script
   become: true
   tags:
     - adguard
