@@ -45,6 +45,9 @@ ExecStart=/usr/bin/podman run \
 {% for resolver in bootstrap_dns_resolver %}
     --dns={{ resolver }} \
 {% endfor %}
+{% for host, ip in etc_hosts_entries.items() %}
+    --add-host={{ host }}:{{ ip }} \
+{% endfor %}
     --publish {{ ansible_facts.default_ipv4.address }}:53:53/udp \
     --publish {{ ansible_facts.default_ipv4.address }}:53:53/tcp \
 {% if not qemu_test and pihole_keepalived_ip | ansible.utils.ipaddr %}
