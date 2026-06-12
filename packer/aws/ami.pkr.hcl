@@ -453,10 +453,18 @@ build {
   }
 
   provisioner "shell" {
-    inline = [
-      "chmod +x /home/ubuntu/*.sh",
-      "sudo -HE /home/ubuntu/aws_provision.sh",
-    ]
+    # Resolute ships sudo-rs as the default `sudo` alternative (priority 50 vs
+    # classic sudo's 40). sudo-rs ignores `-E`, which strips the env block
+    # below (DISKS dies as unbound in aws_provision.sh). Switch the
+    # alternative back to classic sudo on resolute only, same as the qemu
+    # bake; jammy/noble ship classic sudo as the default already.
+    inline = concat(
+      var.ubuntu_name == "resolute" ? ["sudo update-alternatives --set sudo /usr/bin/sudo.ws"] : [],
+      [
+        "chmod +x /home/ubuntu/*.sh",
+        "sudo -HE /home/ubuntu/aws_provision.sh",
+      ],
+    )
     env = {
       "SOURCE_NAME" = "${source.name}"
       # Mapping names; aws_provision.sh resolves them to /dev/nvme*n1.
