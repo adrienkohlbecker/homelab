@@ -4,7 +4,7 @@
 #USAGE arg "<machine>" help="Machine to bake: box, pug, or lab"
 #USAGE complete "machine" run="printf 'box\npug\nlab\n'"
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="jammy"
-#USAGE complete "ubuntu" run="printf 'jammy\nnoble\n'"
+#USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
 #USAGE flag "--promote" help="After a successful bake + mapping check, write the AMI id to the /homelab-ci/ami/<machine>/<ubuntu> SSM parameter the harness resolves. Without it the bake prints the candidate AMI id and the promote command."
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail

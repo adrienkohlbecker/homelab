@@ -172,7 +172,6 @@ worker_image:
 # branch pipelines cannot publish AMIs. The promote step moves the
 # /homelab-ci/ami/<machine>/<ubuntu> SSM parameter the harness resolves;
 # rollback is re-putting the previous value (ssm get-parameter-history).
-# resolute is absent until Canonical publishes a stable-channel AMI for it.
 ami_images:
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true"
@@ -187,7 +186,7 @@ ami_images:
   parallel:
     matrix:
       - MACHINE: [ box, pug, lab ]
-        UBUNTU: [ jammy, noble ]
+        UBUNTU: [ jammy, noble, resolute ]
   # One bake per cell across pipelines, serializing the candidate smoke +
   # SSM promotion so two manual jobs cannot race the same parameter; never
   # auto-cancelled — a killed run can orphan the EC2 build instance.
