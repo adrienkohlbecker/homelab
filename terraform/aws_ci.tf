@@ -15,9 +15,10 @@
 #      That artifact predates the operator-key bake and still authorizes the
 #      vagrant key only — `ssh-add packer/vagrant.key` until a real bake
 #      replaces it (the harness itself passes no -i for EC2 cells).
-#   2. At GitLab cutover, set the project CI/CD variables AWS_ROLE_ARN
-#      (ci_cell_role_arn output) for cell jobs and the bake role for
-#      protected ami_images jobs.
+#   2. At GitLab cutover nothing is configured project-side: jobs export
+#      AWS_ROLE_ARN as hardcoded in-script literals (.gitlab-ci.yml already
+#      does for the bake role; cell jobs follow suit) — the ARNs are stable,
+#      public-repo-safe values, not CI/CD variables.
 
 locals {
   ci_aws_region = "eu-central-1"
@@ -677,23 +678,16 @@ resource "aws_budgets_budget" "ci" {
 }
 
 # ─── Outputs ─────────────────────────────────────────────────────────────────
+# Apply-time cross-checks only: nothing reads outputs — CI jobs and the
+# harness hardcode the ARNs as stable, public-repo-safe literals
+# (.gitlab-ci.yml, test/machine.py) and discover subnets by tag.
 
 output "ci_cell_role_arn" {
-  description = "AWS_ROLE_ARN for test-cell CI jobs (GitLab OIDC)."
+  description = "Must match the AWS_ROLE_ARN literal test-cell jobs export (.gitlab-ci.yml)."
   value       = aws_iam_role.ci_cell.arn
 }
 
 output "ci_bake_role_arn" {
-  description = "AWS_ROLE_ARN for protected ami_images bake jobs (GitLab OIDC)."
+  description = "Must match the AWS_ROLE_ARN literal in the ami_images job (.gitlab-ci.yml)."
   value       = aws_iam_role.ci_bake.arn
-}
-
-output "ci_cell_scheduler_role_arn" {
-  description = "Execution role ARN the harness passes to EventBridge Scheduler for the per-cell termination backstop."
-  value       = aws_iam_role.ci_cell_scheduler.arn
-}
-
-output "ci_subnet_ids" {
-  description = "CI VPC public subnet IDs, one per AZ."
-  value       = { for k, s in aws_subnet.ci : k => s.id }
 }
