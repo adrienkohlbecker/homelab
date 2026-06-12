@@ -222,9 +222,15 @@ PY
 cp "${repo_root}/zbm/dracut.conf.d/recovery.conf" "${work_src}/etc/zfsbootmenu/recovery.conf.d/zz-homelab-recovery.conf"
 cp "${repo_root}/zbm/dracut.conf.d/user_hooks.conf" "${work_src}/etc/zfsbootmenu/recovery.conf.d/zz-homelab-user-hooks.conf"
 
+# Upstream stages its config and output trees under a bare mktemp -d and
+# bind-mounts them into the build container. Bind-mount sources resolve on
+# the docker daemon's filesystem, and under GitLab dind only the job
+# checkout is shared with the daemon — a /tmp source reads back empty. Keep
+# the temp tree inside the workdir so both sides see the same files.
+mkdir -p "${workdir}/tmp"
 (
   cd "$work_src"
-  ./releng/make-binary.sh "$zbm_base_version" "$builder_tag"
+  TMPDIR="${workdir}/tmp" ./releng/make-binary.sh "$zbm_base_version" "$builder_tag"
 )
 
 asset_base="zfsbootmenu-recovery-${upstream_arch}-v${zbm_base_version}-linux${ZBM_KERNEL_VERSION}"
