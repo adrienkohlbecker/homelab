@@ -263,26 +263,15 @@ samba_shares:
 # user's ranges and invalidates their existing rootless podman storage.
 # Append new entries at the end; don't sort.
 #
-# gitea_runner is decommissioned (the role is gone; retired_services tears
-# down its units/state), but its slot is RETAINED here: the user is left in
-# place (per retired_services' uid-reuse policy) and removing the first entry
-# would shift spouse + github_runner down a range, invalidating github_runner's
-# live rootless podman storage. Keep the placeholder, don't reclaim the slot.
+# gitea_runner and github_runner are both decommissioned (their roles are gone;
+# retired_services tears down units/state), but their slots are RETAINED here:
+# the users are left in place (per retired_services' uid-reuse policy) and
+# removing an earlier entry would shift the others down a range. Keep the
+# placeholders, don't reclaim the slots.
 subid_users:
   - gitea_runner
   - "{{ spouse_firstname }}"
   - github_runner
-
-# Expose the host kvm gid inside github_runner's rootless userns so
-# `--group-add <kvm-gid>` on a podman-spawned container (test workflows
-# running qemu) actually grants /dev/kvm access. Without this, the gid
-# isn't in the user's subgidmap and the --group-add is silently ignored
-# and qemu fails with "Could not access KVM kernel module: Permission
-# denied". The subid role looks up the kvm gid via getent so we don't
-# hardcode it here.
-subid_extra_subgid_groups:
-  - user: github_runner
-    group: kvm
 
 has_transcoding_acceleration: true
 z2m_start_service: true
@@ -292,24 +281,6 @@ z2m_start_service: true
 plex_extra_library_binds:
   - { src: "/mnt/data/MacbookPro/Music/iTunes/iTunes Media/Music", dest: /itunes }
   - { src: /mnt/data/Musique/Records, dest: /records }
-
-# Pool partitioning for the CI concurrency rework: lab-vm runners take
-# packer-build + test-role jobs (capped at 6 concurrent VMs by pool
-# size); lab runners take everything else (lint, ci-image, detect,
-# notify, wait-for-*). Pools are disjoint -- a `runs-on: [self-hosted,
-# lab]` job won't land on a lab-vm runner and vice versa, so VM jobs
-# can never starve non-VM jobs of slots. See notes/concurrency_rework.md.
-github_runner_instances:
-  - { repo: homelab, suffix: vm1,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
-  - { repo: homelab, suffix: vm2,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
-  - { repo: homelab, suffix: vm3,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
-  - { repo: homelab, suffix: vm4,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
-  - { repo: homelab, suffix: vm5,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
-  - { repo: homelab, suffix: vm6,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
-  - { repo: homelab, suffix: gen1, owner: adrienkohlbecker, labels: "self-hosted,lab" }
-  - { repo: homelab, suffix: gen2, owner: adrienkohlbecker, labels: "self-hosted,lab" }
-  - { repo: homelab, suffix: gen3, owner: adrienkohlbecker, labels: "self-hosted,lab" }
-  - { repo: homelab, suffix: gen4, owner: adrienkohlbecker, labels: "self-hosted,lab" }
 
 # auth.{{ domain }} is an apex-zone CNAME → lab.{{ domain }} (public DNS), with a
 # local DNS override resolving the LAN clients to lab's internal IP. The

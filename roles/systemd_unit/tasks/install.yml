@@ -80,7 +80,7 @@
 # vanishes at logout. /var/lib/systemd/linger/<user> is the marker
 # `loginctl enable-linger` creates; a stat is enough and avoids a busctl
 # dependency. Callers wire linger up at user-creation time (roles/user,
-# roles/github_runner) — this check is the guardrail for the next consumer
+# roles/gitlab_runner) — this check is the guardrail for the next consumer
 # that forgets.
 # Task name references the caller var (systemd_unit_args.user, set
 # at import time via import_role.vars:) rather than the set_fact'd
@@ -198,7 +198,7 @@
     # For user-scope installs (user: <non-root>, /etc/systemd/user) the unit
     # is verified by path against the default (system) manager context --
     # --user is intentionally not passed. The path-based load still catches
-    # syntax and common dependency errors (github_runner's user units rely on
+    # syntax and common dependency errors (user-scope unit installs rely on
     # this), and skipping --user avoids surfacing user-manager-only
     # resolution differences that the strict `stderr != ''` check would turn
     # into a spurious rollback.

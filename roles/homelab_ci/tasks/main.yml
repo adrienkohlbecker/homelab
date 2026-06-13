@@ -15,12 +15,11 @@
   tags:
     - homelab_ci
 
-# Both CI (github_runner) and the operator (ak, in homelab_ci group) write
-# here: CI publishes packer artifacts; ak runs packer:build locally.
-# Owner is set to github_runner by that role. The default ACL propagates
-# homelab_ci:rw to all new files and subdirectories -- including
-# packer-plugin-qemu's port reservation files (hardcoded 0600 by the
-# plugin) so either user can open them regardless of who created them.
+# The operator (ak, in the homelab_ci group) runs packer:build locally to
+# publish qemu test-fixture artifacts here. The setgid group + default ACL
+# propagate homelab_ci:rw to all new files and subdirectories -- including
+# packer-plugin-qemu's port reservation files (hardcoded 0600 by the plugin)
+# -- so any group member can open them regardless of who created them.
 - name: Create /mnt/scratch/homelab_ci packer artifacts dir
   file:
     path: /mnt/scratch/homelab_ci

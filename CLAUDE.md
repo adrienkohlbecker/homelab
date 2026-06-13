@@ -17,7 +17,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 
 - **DO NOT use Ansible handlers for service restarts.** Handlers run at end-of-play, which doesn't compose with the `systemd_unit` helper's pre-pull-then-start ordering. Drive restarts via the helper's inline OR chain on `*_result.changed` / `*_rotated`. See *Helper roles → systemd_unit*.
 - **DO NOT drop a container's `--health-cmd`** in favour of external monitoring (kuma, `_verify.yml`). Without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state and podman won't auto-restart on quiet HTTP failure. See *Healthchecks*.
-- **DO NOT default required service inputs in `vars/main.yml`** — role vars sit *above* host_vars in ansible's precedence ladder and silently mask host-level overrides. Required inputs live in `host_vars`/`group_vars` and the role must `assert:` they're set. `defaults/main.yml` is fine for optional host-overridable values since it sits *below* host_vars. Canonical: [roles/github_runner/defaults/main.yml](roles/github_runner/defaults/main.yml).
+- **DO NOT default required service inputs in `vars/main.yml`** — role vars sit *above* host_vars in ansible's precedence ladder and silently mask host-level overrides. Required inputs live in `host_vars`/`group_vars` and the role must `assert:` they're set. `defaults/main.yml` is fine for optional host-overridable values since it sits *below* host_vars. Canonical: [roles/gitlab_runner/defaults/main.yml](roles/gitlab_runner/defaults/main.yml).
 - **DO NOT run state-mutating commands on prod hosts (`lab`/`pug`/`bunk`) without explicit ack.** Diagnostic SSH is pre-authorized; mutations are not. See *Debugging prod hosts directly*.
 
 ## Project Structure & Module Organization
@@ -176,7 +176,7 @@ Three paths, preferred order:
 
 ### Prefer system-scope systemd units
 
-Default for new timers/services is **system-scope**. Reach for user-scope (linger) only when fundamentally required — today just rootless podman ([roles/github_runner/](roles/github_runner/)). When hardening, `systemd-analyze security <unit>` lists cheap wins.
+Default for new timers/services is **system-scope**. Reach for user-scope (linger) only when fundamentally required — today just rootless podman ([roles/gitlab_runner/](roles/gitlab_runner/)). When hardening, `systemd-analyze security <unit>` lists cheap wins.
 
 ### Inter-container DNS
 
@@ -202,9 +202,9 @@ Details in [notes/test_environment_design.md](notes/test_environment_design.md).
 
 ## Continuous Integration
 
-GitHub Actions on lab via `github_runner`. Internals: [notes/github_runner_design.md](notes/github_runner_design.md). Workflows: `ci` (push/nightly/dispatch; `detect` fans out per-role matrix), `lint`, `test`, `packer-build`, `ci-image`.
+GitLab CI ([.gitlab-ci.yml](.gitlab-ci.yml)) on the off-fox orchestrator, driving single-use AWS EC2 test cells (one per role×machine). `detect` ([mise-tasks/ci/detect.py](mise-tasks/ci/detect.py) `gitlab`) classifies the diff and writes a dynamic child pipeline — one `test_cells` job per cell — alongside `lint` and `unit_tests`. Image bakes (`ami_images`, `ami_box_deps`, `fox_image`, `zbm_build`, `ci_image`) are manual jobs. Design + cost model: [notes/ci_aws_test_cells.md](notes/ci_aws_test_cells.md).
 
-**Escalation:** `minimal:` in `meta/test.yml` `machines:` adds a cell; `ubuntu:` list adds per-release cells (propagate down role-deps on push). **Local-debug:** `CI_BASE_REF=HEAD~5 mise run ci:detect-roles` previews matrix; `mise run ci:role-deps <helper>` lists consumers. CI secrets: [notes/runbooks/ci_secrets.md](notes/runbooks/ci_secrets.md).
+**Escalation:** `minimal:` in `meta/test.yml` `machines:` adds a cell; `ubuntu:` list adds per-release cells; `aws_skip:` drops a cell from the EC2 pipeline only (qemu keeps it). **Local-debug:** `CI_BASE_REF=HEAD~5 mise run ci:detect-roles` previews the role matrix; `mise run ci:role-deps <helper>` lists consumers. CI secrets: [notes/runbooks/ci_secrets.md](notes/runbooks/ci_secrets.md).
 
 ## Commit & Pull Request Guidelines
 

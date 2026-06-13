@@ -56,8 +56,8 @@
 
     # Second scenario: createhome + home_mode override. Confirms the helper
     # chmods the home dir to the caller-requested mode instead of relying
-    # on /etc/login.defs HOME_MODE. Exercised by github_runner today to
-    # work around a crun-bind-mount-stat EACCES under 0750.
+    # on /etc/login.defs HOME_MODE. Motivated by a rootless-podman service
+    # user working around a crun-bind-mount-stat EACCES under 0750.
     - name: _verify | Provision a test user with createhome + home_mode override
       import_role:
         name: service_user

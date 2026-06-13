@@ -39,7 +39,7 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
   [runners.docker]
     # gitlab_runner's rootless podman socket (socket-activated; linger keeps
     # the user manager alive). Rootless keeps the runner non-root-equivalent
-    # on this host -- same shape as roles/github_runner's DooD socket.
+    # on this host.
     host = "unix:///run/user/{{ gitlab_runner_user.uid }}/podman/podman.sock"
     # Default job image: the project CI image (mise tool tree + warm uv
     # cache baked in -- see .gitlab-ci.yml's ci_image job). Jobs may still

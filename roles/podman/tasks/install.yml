@@ -207,7 +207,7 @@
 # - default_rootless_network_cmd: back rootless egress with pasta
 #   instead of the slirp4netns default. Rootless-only key (rootful
 #   podman ignores it), so it's consulted just on the hosts that run
-#   rootless podman -- the CI runner (github_runner) --
+#   rootless podman -- the CI runner (gitlab_runner) --
 #   and is inert everywhere else. pasta shares passt's robust UDP
 #   datapath, so a rootless container's outbound DNS/UDP no longer drops
 #   datagrams under load the way slirp4netns does. Needs podman >= 4.4

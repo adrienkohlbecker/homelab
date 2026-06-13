@@ -399,10 +399,9 @@ def main() -> int:
     # sweep_stale_workdirs keeps parallel workers from racing on each other's
     # freshly-minted workdirs.
     #
-    # Scope is imagedir-only. CI's --workdir-parent points at a per-cell
-    # host bind-mount (see .github/workflows/test.yml) so no two cells share
-    # state and a host-side tmpfiles.d entry in the github_runner role reaps
-    # stale per-cell dirs -- no in-harness sweep needed there.
+    # Scope is imagedir-only, and it only matters for local parallel runs:
+    # under CI each cell is its own single-use EC2 instance, so no two cells
+    # share an imagedir to race on.
     #
     # qemu-only: the aws backend stages its workdir under the system tmp and
     # the imagedir mount may not exist at all on the runner container.

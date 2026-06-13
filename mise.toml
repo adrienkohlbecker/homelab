@@ -23,11 +23,6 @@ TF_VAR_home_wan_ip = "op://Lab/5f2xqajiofg6eyqazndtpcldkm/Home IP"
 TF_VAR_spouse_email = "op://Lab/5f2xqajiofg6eyqazndtpcldkm/Spouse Email"
 TF_VAR_spouse_initials = "op://Lab/5f2xqajiofg6eyqazndtpcldkm/Spouse Initials"
 TF_VAR_couple_alias = "op://Lab/5f2xqajiofg6eyqazndtpcldkm/Couple Alias"
-# Dedicated fine-grained GitHub PAT (no scopes) pushed by terraform to
-# the MISE_GITHUB_TOKEN repo secret -- raises mise's anon 60/hr API
-# rate limit during the ci-image workflow's `mise install`
-# step. See terraform/github.tf for the rotation path.
-TF_VAR_mise_github_token = "op://Lab/zs75mteaj6dk422zta2zpbuaki/password"
 TF_VAR_google_idp_client_id = "op://Lab/7vvqblbfyep2yb7lxi544dy22a/username"
 TF_VAR_google_idp_client_secret = "op://Lab/7vvqblbfyep2yb7lxi544dy22a/password"
 # Gandi Personal Access Token -- minted in Gandi UI under Account >
