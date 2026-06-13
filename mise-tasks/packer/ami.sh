@@ -13,6 +13,9 @@ set -euo pipefail
 region=eu-central-1
 machine="${usage_machine}"
 ubuntu="${usage_ubuntu}"
+# Normalised private-key copy for the box_deps seed (set below); the EXIT
+# trap removes it whether or not the box_deps branch creates one.
+cell_key=""
 
 case "$machine" in
 box | pug | lab | box_deps) ;;
@@ -37,10 +40,17 @@ if [ "$machine" = "box_deps" ]; then
   echo "==> Deriving from promoted box AMI ${src_ami}"
   extra_vars+=(-var "box_deps_source_ami=${src_ami}")
   if [ -n "${usage_ssh_key:-}" ]; then
-    # GitLab file-type CI/CD variables land group/world-readable; ssh
-    # refuses unprotected private keys.
-    chmod 600 "${usage_ssh_key}"
-    extra_vars+=(-var "cell_ssh_key=${usage_ssh_key}")
+    # GitLab file-type CI/CD variables arrive world-readable and, worse,
+    # without the trailing newline OpenSSH requires (and sometimes with CRLF):
+    # the real ssh binary ansible/mitogen shells out to rejects such a key
+    # ("error in libcrypto"), even though packer's Go SSH client tolerates it
+    # and connects. Normalise into a private 600 copy -- strip CR, guarantee a
+    # single trailing newline -- and hand both packer and ansible that copy,
+    # never the original (which may be the operator's real key locally).
+    cell_key=$(mktemp)
+    chmod 600 "${cell_key}"
+    printf '%s\n' "$(tr -d '\r' <"${usage_ssh_key}")" >"${cell_key}"
+    extra_vars+=(-var "cell_ssh_key=${cell_key}")
   fi
   # The seed converge runs bare ansible-playbook (packer's ansible
   # provisioner), outside the harness that normally repairs the
@@ -57,7 +67,7 @@ if [ -t 0 ] && [ -z "${CI:-}" ]; then
 fi
 
 manifest=$(mktemp)
-trap 'rm -rf "$manifest"' EXIT
+trap 'rm -rf "$manifest" ${cell_key:+"$cell_key"}' EXIT
 rm -f "$manifest" # manifest post-processor refuses to overwrite a non-manifest file
 
 packer build \
