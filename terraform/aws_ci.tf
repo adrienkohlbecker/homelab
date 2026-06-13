@@ -318,7 +318,11 @@ resource "aws_iam_role_policy" "ci_cell" {
       },
       # AMIs sit apart from the other supporting resources to pin the owner:
       # self-baked images plus Canonical's (minimal). Without the condition
-      # the token could launch any public or marketplace AMI.
+      # the token could launch any public or marketplace AMI. Canonical's
+      # public Ubuntu images surface under the "amazon" owner-alias, so
+      # ec2:Owner reports "amazon" rather than account 099720109477 — match
+      # the alias to allow the minimal machine's Canonical AMI, while the
+      # account id keeps the self-baked box/pug/lab images launchable.
       {
         Sid      = "RunImage"
         Effect   = "Allow"
@@ -326,7 +330,7 @@ resource "aws_iam_role_policy" "ci_cell" {
         Resource = "arn:aws:ec2:${local.ci_aws_region}::image/*"
         Condition = {
           StringEquals = {
-            "ec2:Owner" = [local.ci_account_id, "099720109477"]
+            "ec2:Owner" = [local.ci_account_id, "amazon"]
           }
         }
       },
