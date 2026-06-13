@@ -16,6 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("config_plist", type=Path)
     parser.add_argument("--prev-lang-kbd", required=True)
     parser.add_argument("--apple-locale", required=True)
+    parser.add_argument("--boot-args", required=True)
     return parser.parse_args()
 
 
@@ -30,6 +31,7 @@ def main() -> None:
 
     desired = {
         "AppleLocale": args.apple_locale,
+        "boot-args": args.boot_args,
         "prev-lang:kbd": args.prev_lang_kbd.encode("ascii"),
     }
 

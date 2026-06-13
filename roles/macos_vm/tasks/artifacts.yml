@@ -55,20 +55,20 @@
     backup: true
   become: true
 
-- name: artifacts | Create locale-patched OpenCore cache image
+- name: artifacts | Create config-patched OpenCore cache image
   when: not ansible_check_mode
   ansible.builtin.command:
     argv:
       - cp
       - --reflink=auto
       - "{{ macos_vm_artifacts_dir }}/OpenCore.qcow2"
-      - "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_locale_id }}.qcow2"
-    creates: "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_locale_id }}.qcow2"
+      - "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_config_id }}.qcow2"
+    creates: "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_config_id }}.qcow2"
   become: true
-  register: macos_vm_opencore_locale_image
+  register: macos_vm_opencore_config_image
 
-- name: artifacts | Patch locale defaults into OpenCore cache image
-  when: macos_vm_opencore_locale_image.changed
+- name: artifacts | Patch OpenCore config defaults into cache image
+  when: macos_vm_opencore_config_image.changed
   block:
     - name: artifacts | Load nbd kernel module
       modprobe:
@@ -98,7 +98,7 @@
         argv:
           - qemu-nbd
           - "--connect={{ macos_vm_opencore_patch_nbd_device }}"
-          - "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_locale_id }}.qcow2"
+          - "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_config_id }}.qcow2"
       become: true
       changed_when: true
 
@@ -129,11 +129,13 @@
           - "{{ macos_vm_opencore_prev_lang_kbd }}"
           - --apple-locale
           - "{{ macos_vm_opencore_apple_locale }}"
+          - --boot-args
+          - "{{ macos_vm_opencore_boot_args }}"
       become: true
-      register: macos_vm_opencore_locale_patch
-      changed_when: "'changed' in macos_vm_opencore_locale_patch.stdout"
+      register: macos_vm_opencore_config_patch
+      changed_when: "'changed' in macos_vm_opencore_config_patch.stdout"
 
-    - name: artifacts | Flush OpenCore locale image writes
+    - name: artifacts | Flush OpenCore config image writes
       ansible.builtin.command:
         argv:
           - sync
@@ -168,10 +170,10 @@
         state: absent
       become: true
 
-- name: artifacts | Set locale OpenCore cache image ownership
+- name: artifacts | Set config OpenCore cache image ownership
   when: not ansible_check_mode
   file:
-    path: "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_locale_id }}.qcow2"
+    path: "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_config_id }}.qcow2"
     owner: libvirt-qemu
     group: kvm
     mode: "0644"
@@ -185,7 +187,7 @@
   when:
     - not ansible_check_mode
   copy:
-    src: "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_locale_id }}.qcow2"
+    src: "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_config_id }}.qcow2"
     dest: "{{ macos_vm_workdir }}/OpenCore.qcow2"
     remote_src: true
     owner: libvirt-qemu
