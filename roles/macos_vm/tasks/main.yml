@@ -20,16 +20,17 @@
       - macos_vm_memory_mib | int >= 4096
       - macos_vm_opencore_prev_lang_kbd is match('^[A-Za-z]{2}(-[A-Za-z]{2})?:[0-9]+$')
       - macos_vm_opencore_apple_locale is match('^[a-z]{2}_[A-Z]{2}$')
+      - macos_vm_opencore_boot_args | length > 0
     fail_msg: |
       macos_vm_disk_id must be set in host_vars to a stable /dev/disk/by-id name
       (e.g. ata-Samsung_SSD_870_EVO_500GB_S6PWNX...) AFTER the spare SSD is plugged in.
   tags:
     - macos_vm
 
-- name: Compute OpenCore locale image id
+- name: Compute OpenCore config image id
   set_fact:
-    macos_vm_opencore_locale_id: >-
-      {{ (macos_vm_opencore_prev_lang_kbd ~ '|' ~ macos_vm_opencore_apple_locale) | hash('sha1') }}
+    macos_vm_opencore_config_id: >-
+      {{ (macos_vm_opencore_prev_lang_kbd ~ '|' ~ macos_vm_opencore_apple_locale ~ '|' ~ macos_vm_opencore_boot_args) | hash('sha1') }}
   tags:
     - macos_vm
 
