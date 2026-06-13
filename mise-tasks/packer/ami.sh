@@ -10,6 +10,9 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
+# shellcheck source=_bake_backstop.sh
+source "$(dirname "$0")/_bake_backstop.sh"
+
 region=eu-central-1
 machine="${usage_machine}"
 ubuntu="${usage_ubuntu}"
@@ -67,8 +70,17 @@ if [ -t 0 ] && [ -z "${CI:-}" ]; then
 fi
 
 manifest=$(mktemp)
-trap 'rm -rf "$manifest" ${cell_key:+"$cell_key"}' EXIT
+backstop_state=$(mktemp)
+backstop_pid=""
+trap 'bake_backstop_disarm "$region" "$backstop_state" "$backstop_pid"; rm -rf "$manifest" "$backstop_state" ${cell_key:+"$cell_key"}' EXIT
 rm -f "$manifest" # manifest post-processor refuses to overwrite a non-manifest file
+
+# Arm the orphan backstop (CI-only, inside the helper) in the background: it
+# polls for the instance packer is about to launch and schedules its
+# termination, surviving a job-timeout SIGKILL that would skip the trap above.
+# box_deps tags its instance machine=box_deps, matching $machine here.
+bake_backstop_arm "$region" "${CI_PIPELINE_ID:-local}" "$machine" "$ubuntu" "$backstop_state" &
+backstop_pid=$!
 
 packer build \
   -timestamp-ui \
