@@ -272,9 +272,10 @@ fox_image:
     - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
     # Smoke the OIDC chain before spending 20+ min on a bake.
     - aws --region eu-central-1 sts get-caller-identity
-    # fox runs a jammy root in prod; the bake stays jammy-only.
+    # fox runs a jammy root in prod; the bake stays jammy-only. hetzner-bake
+    # does the whole job: stand up the Hetzner rescue server, bake on EC2
+    # while streaming the disk straight onto it, then snapshot.
     - mise run packer:hetzner-bake --ubuntu jammy
-    - mise run packer:hetzner -- packer/artifacts/hetzner/jammy.raw.gz --ubuntu jammy
 
 # Manual rebuild of the custom ZFSBootMenu recovery image (zbm/,
 # mise-tasks/zbm/). Heavy (clones ZBM, xbps-installs a Void toolchain, runs

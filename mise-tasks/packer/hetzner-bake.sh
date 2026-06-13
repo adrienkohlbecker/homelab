@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-#MISE description="Bake the Hetzner Cloud boot image on an EC2 surrogate volume (mechanic 1, no KVM) and download it as a raw.gz. Upload it with `mise run packer:hetzner`."
+#MISE description="Bake fox's Hetzner Cloud boot image on an EC2 surrogate (mechanic 1, no KVM) and publish it as a Hetzner snapshot. The build instance streams its disk straight onto a temp rescue server -- no 20G image touches the runner."
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="jammy"
 #USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
+# shellcheck source=_hcloud_token.sh
+source "$(dirname "$0")/_hcloud_token.sh"
+# shellcheck source=_hetzner_rescue.sh
+source "$(dirname "$0")/_hetzner_rescue.sh"
+
 ubuntu="${usage_ubuntu}"
-out="packer/artifacts/hetzner/${ubuntu}.raw.gz"
+region=eu-central-1
 
 # --on-error=ask keeps the failed build instance up for SSH debugging when a
 # human is at the terminal; CI gets cleanup so a failure can't leave a
@@ -16,17 +21,24 @@ if [ -t 0 ] && [ -z "${CI:-}" ]; then
   on_error=ask
 fi
 
-region=eu-central-1
+# Stand up the rescue server first so it is waiting in rescue mode when the
+# bake's final provisioner streams the disk onto its /dev/sda. The trap tears
+# it down on any failure (including a failed bake). It sits idle in rescue for
+# the ~20min bake -- a cpx22 hour is pennies.
+rescue_init
+trap rescue_cleanup EXIT
+rescue_create
 
 packer init packer/aws
 
 manifest=$(mktemp)
-trap 'rm -rf "$manifest"' EXIT
+trap 'rm -rf "$manifest"; rescue_cleanup' EXIT
 rm -f "$manifest" # manifest post-processor refuses to overwrite a non-manifest file
 
-mkdir -p "$(dirname "$out")"
-rm -f "$out"
-
+# The hetzner source's final provisioner pipes `dd | gzip` from the surrogate
+# volume into the rescue server's `gunzip | dd of=/dev/sda` (KEY authorizes
+# the build instance; RESCUE_IP is its target). packer still registers a
+# byproduct AMI -- ebssurrogate cannot skip it -- which we drop below.
 packer build \
   -timestamp-ui \
   -warn-on-undeclared-var \
@@ -35,13 +47,12 @@ packer build \
   -var "ubuntu_name=${ubuntu}" \
   -var "build_id=${CI_PIPELINE_ID:-local}" \
   -var "manifest_path=${manifest}" \
-  -var "hetzner_image_path=${out}" \
+  -var "hetzner_rescue_ip=${RESCUE_IP}" \
+  -var "hetzner_rescue_key=${KEY}" \
   packer/aws
 
-# The artifact is the downloaded raw.gz; the registered AMI is a byproduct
-# (ebssurrogate cannot skip registration). Drop it — snapshot first lookup,
-# then deregister — before asserting the download, so a failed download
-# never leaves a stray AMI billing for its snapshot.
+# Drop the byproduct AMI -- snapshot lookup first, then deregister -- so a
+# stray AMI never bills for its snapshot after the disk is already on Hetzner.
 ami=$(python3 -c '
 import json, sys
 manifest = json.load(open(sys.argv[1]))
@@ -55,12 +66,6 @@ for snap in $snapshots; do
 done
 echo "==> Deregistered byproduct ${ami} (snapshots: ${snapshots:-none})"
 
-# Turn "packer exited 0" into an assertion on the artifact this task is for.
-test -s "$out" || {
-  echo "image not downloaded: $out" >&2
-  exit 1
-}
-gzip -t "$out"
-
-echo "==> Baked $out ($(du -h "$out" | cut -f1))"
-echo "    Publish: mise run packer:hetzner -- $out --ubuntu $ubuntu"
+# The disk is already written to the rescue server's /dev/sda by the bake's
+# stream provisioner; turn it into the published snapshot.
+rescue_snapshot "$ubuntu"

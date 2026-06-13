@@ -9,11 +9,12 @@
 #
 # The `hetzner` source rides the same surrogate mechanism but ships no AMI:
 # it bakes fox's Hetzner Cloud boot image (IMAGE_TARGET=hetzner) onto its one
-# surrogate volume, dd+gzips that volume back off the build instance, and
-# downloads it as a raw.gz for `mise run packer:hetzner` to stream onto a
-# Hetzner snapshot. ebssurrogate cannot skip AMI registration, so the bake
-# leaves a byproduct AMI that mise-tasks/packer/hetzner-bake.sh deregisters
-# (snapshot included) right after the build.
+# surrogate volume, then dd+gzips that volume straight off the build instance
+# and onto a waiting Hetzner rescue server's /dev/sda (no image touches the
+# runner). mise-tasks/packer/hetzner-bake.sh stands the rescue server up
+# first and snapshots it after. ebssurrogate cannot skip AMI registration, so
+# the bake leaves a byproduct AMI that hetzner-bake.sh deregisters (snapshot
+# included) right after the build.
 #
 # Lives in its own directory (not beside qemu.pkr.hcl): packer loads all
 # sibling *.pkr.hcl files as a single configuration, and this template shares
@@ -56,10 +57,16 @@ variable "manifest_path" {
   description = "Where the manifest post-processor writes the artifact list; mise-tasks/packer/ami.sh parses the AMI id out of it."
 }
 
-variable "hetzner_image_path" {
+variable "hetzner_rescue_ip" {
   type        = string
-  default     = "packer/artifacts/hetzner/image.raw.gz"
-  description = "Local path the hetzner source's gzipped raw disk image downloads to; mise-tasks/packer/hetzner-bake.sh passes the per-release path."
+  default     = ""
+  description = "Public IP of the Hetzner rescue server the hetzner source streams its baked disk onto. mise-tasks/packer/hetzner-bake.sh sets it after creating the rescue server; empty fails the stream provisioner (the hetzner source has no other artifact)."
+}
+
+variable "hetzner_rescue_key" {
+  type        = string
+  default     = "/dev/null"
+  description = "Path to the ephemeral private key authorized on the Hetzner rescue server, uploaded to the build instance for the direct stream. mise-tasks/packer/hetzner-bake.sh passes the key it registered; the /dev/null default only keeps `packer validate` happy (the empty rescue_ip fails the stream first)."
 }
 
 variable "box_deps_source_ami" {
@@ -443,11 +450,12 @@ source "amazon-ebs" "box_deps" {
   run_volume_tags = merge(local.common_tags, { machine = "box_deps" })
 }
 
-# The fox boot image: same surrogate flow, but the artifact is the raw disk
-# downloaded by the build-block provisioners below, not an AMI — the builder
-# offers no skip for AMI registration, so hetzner-bake.sh deregisters the
-# byproduct right after the build. The bake instance and volume choices
-# mirror box's.
+# The fox boot image: same surrogate flow, but there is no AMI artifact to
+# keep. The build-block provisioner below streams the finished surrogate
+# volume straight onto a waiting Hetzner rescue server (dd | gzip | ssh), so
+# no 20G image ever lands on the runner. The builder offers no skip for AMI
+# registration, so hetzner-bake.sh deregisters the byproduct right after the
+# build. The bake instance and volume choices mirror box's.
 source "amazon-ebssurrogate" "hetzner" {
   region = local.region
   # Compute-optimized for the bake (the chroot install is CPU-bound on
@@ -483,7 +491,7 @@ source "amazon-ebssurrogate" "hetzner" {
   }
 
   ami_name                = "homelab-hetzner-${var.ubuntu_name}-{{timestamp}}"
-  ami_description         = "fox Hetzner Cloud boot image (${var.ubuntu_name}) — bake byproduct, deregistered after download"
+  ami_description         = "fox Hetzner Cloud boot image (${var.ubuntu_name}) — bake byproduct, deregistered after the stream"
   ami_virtualization_type = "hvm"
   ena_support             = true
   boot_mode               = "uefi"
@@ -497,20 +505,6 @@ source "amazon-ebssurrogate" "hetzner" {
       encrypted             = true
       delete_on_termination = true
     }
-  }
-
-  # Grow the build instance's root: the staging provisioner below dd+gzips
-  # the surrogate volume into /home/ubuntu, and the stock Canonical root
-  # (8G) cannot hold even a well-compressed 20G image next to the OS. 30G
-  # covers the incompressible worst case. Launch-only — omitted from the
-  # byproduct AMI. No `encrypted` here: this mapping reuses the source
-  # AMI's root snapshot, whose encryption state cannot change at launch.
-  launch_block_device_mappings {
-    device_name           = "/dev/sda1"
-    volume_size           = 30
-    volume_type           = "gp3"
-    delete_on_termination = true
-    omit_from_artifact    = true
   }
 
   ami_root_device {
@@ -576,30 +570,36 @@ build {
     }
   }
 
-  # hetzner only: pull the finished image off the quiesced surrogate volume
-  # (provision.sh exported the pools as its last step). aws_provision.sh
-  # leaves the resolved NVMe device list in resolved_disks — the mapping
-  # name /dev/xvdf doesn't exist on Nitro. gzip keeps the mostly-empty 20G
-  # transfer small; packer:hetzner streams the .gz as-is.
+  # hetzner only: the ephemeral private key hetzner-bake.sh registered on the
+  # rescue server, so the build instance can ssh there for the stream below.
+  provisioner "file" {
+    only        = ["amazon-ebssurrogate.hetzner"]
+    source      = var.hetzner_rescue_key
+    destination = "/home/ubuntu/rescue_key"
+  }
+
+  # hetzner only: stream the finished image straight onto the rescue server's
+  # /dev/sda — no file ever lands on the runner. provision.sh exported the
+  # pools as its last step, so the volume is quiesced; aws_provision.sh left
+  # the resolved NVMe device in resolved_disks (the mapping name /dev/xvdf
+  # doesn't exist on Nitro). pigz (parallel, all 4 vCPUs) compresses far
+  # faster than single-threaded gzip; mbuffer on each end absorbs network
+  # jitter so neither dd stalls. The rescue-side pipeline mirrors RESCUE_RECV
+  # in mise-tasks/packer/_hetzner_rescue.sh — keep the two in sync.
   provisioner "shell" {
     only           = ["amazon-ebssurrogate.hetzner"]
     inline_shebang = "/bin/bash -e"
     inline = [
       "set -euo pipefail",
+      "rescue_ip='${var.hetzner_rescue_ip}'",
+      "[ -n \"$rescue_ip\" ] || { echo 'hetzner_rescue_ip unset — build the hetzner image via mise run packer:hetzner-bake' >&2; exit 1; }",
+      "chmod 600 /home/ubuntu/rescue_key",
+      "sudo apt-get update -qq && sudo apt-get install -y -qq pigz mbuffer",
       "disk=\"$(cut -d' ' -f1 /home/ubuntu/resolved_disks)\"",
-      "echo \"==> staging $disk as /home/ubuntu/hetzner.raw.gz\"",
-      "df -h /home/ubuntu",
-      "sudo dd if=\"$disk\" bs=64M | gzip >/home/ubuntu/hetzner.raw.gz",
-      "ls -lh /home/ubuntu/hetzner.raw.gz",
-      "df -h /home/ubuntu",
+      "echo \"==> streaming $disk -> root@$rescue_ip:/dev/sda\"",
+      "sudo dd if=\"$disk\" bs=64M | pigz | mbuffer -m 512M | ssh -i /home/ubuntu/rescue_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 \"root@$rescue_ip\" 'mbuffer -q -m 512M | pigz -d | dd of=/dev/sda bs=64M conv=sparse status=progress; sync'",
+      "echo '==> stream complete'",
     ]
-  }
-
-  provisioner "file" {
-    only        = ["amazon-ebssurrogate.hetzner"]
-    direction   = "download"
-    source      = "/home/ubuntu/hetzner.raw.gz"
-    destination = var.hetzner_image_path
   }
 
   post-processor "manifest" {
