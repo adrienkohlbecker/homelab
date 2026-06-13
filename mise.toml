@@ -104,6 +104,10 @@ run = ['packer init "$@" .', 'packer init "$@" aws']
 description = "Remove leftover tmpdirs from failed packer builds and test-harness runs"
 run = 'rm -rf "{{vars.homelab_ci_dir}}"/.build-* "{{vars.homelab_ci_dir}}"/tmp*'
 
+[tasks."packer:deregister-ami"]
+description = "Deregister an AMI and delete its backing snapshots (eu-central-1). Usage: mise run packer:deregister-ami -- ami-xxxx"
+run = 'ami="${1:?usage: mise run packer:deregister-ami -- <ami-id>}"; snaps=$(aws --region eu-central-1 ec2 describe-images --image-ids "$ami" --query "Images[0].BlockDeviceMappings[?Ebs].Ebs.SnapshotId" --output text) && aws --region eu-central-1 ec2 deregister-image --image-id "$ami" && for s in $snaps; do aws --region eu-central-1 ec2 delete-snapshot --snapshot-id "$s"; done'
+
 [tasks.lint]
 description = "Run all linters"
 depends = [
