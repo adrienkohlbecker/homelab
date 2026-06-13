@@ -14,3 +14,19 @@ gitlab_runner_enabled: false
 # capacity is the EC2 spot vCPU quota, governed separately
 # (notes/ci_aws_test_cells.md).
 gitlab_runner_concurrent: 8
+
+# Memory ceiling on the rootless runner's user slice (user-<uid>.slice). The
+# Docker-executor job containers run under that slice via the rootless podman
+# socket -- NOT under gitlab_runner.service (which sits in system.slice) -- so
+# capping the slice bounds the entire CI footprint at once: the runner manager
+# plus every concurrent job container. On a co-tenant host (fox runs the
+# headscale control plane + its nginx front alongside the runner) this keeps a
+# wide fan-out from pushing the host into swap and OOM-threatening the tunnel
+# control plane. The cap is host-RAM-dependent with no sane universal value, so
+# it's opt-in: the enabling host sets these in host_vars. Empty max = no cap
+# (the slice drop-in is removed). MemoryHigh throttles + reclaims (soft) before
+# MemoryMax hard-OOMs within the slice, so the CI tree self-limits under
+# pressure rather than the kernel picking a global victim -- set High below Max.
+# See notes/ci_aws_test_cells.md "Fox host protection".
+gitlab_runner_memory_high: ""
+gitlab_runner_memory_max: ""

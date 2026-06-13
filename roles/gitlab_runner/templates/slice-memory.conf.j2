@@ -1,0 +1,11 @@
+#jinja2: lstrip_blocks: True
+# Managed by ansible (roles/gitlab_runner) -- do not edit on the host.
+# Memory ceiling on the rootless runner's user-<uid>.slice, where the
+# Docker-executor job containers live. Bounds the whole CI fan-out so it can't
+# swap out a co-tenant control plane. See defaults/main.yml + the
+# notes/ci_aws_test_cells.md "Fox host protection" section.
+[Slice]
+{% if gitlab_runner_memory_high | default('') | length > 0 %}
+MemoryHigh={{ gitlab_runner_memory_high }}
+{% endif %}
+MemoryMax={{ gitlab_runner_memory_max }}

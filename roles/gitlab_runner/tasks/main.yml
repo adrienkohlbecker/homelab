@@ -170,6 +170,65 @@
                or gitlab_runner_binary.changed }}
           condition: "{{ not (ansible_check_mode and (gitlab_runner_service_result.changed or gitlab_runner_user.changed)) }}"
 
+    # Bound the rootless runner's user slice so a wide CI fan-out can't exhaust
+    # host RAM and swap out a co-tenant control plane (fox: headscale + nginx).
+    # The job containers live under user-<uid>.slice (rootless podman), not
+    # under gitlab_runner.service in system.slice, so the cap goes on the slice.
+    # Opt-in via host_vars (host-RAM-dependent); removed as a tombstone when
+    # unconfigured. uid is service_user-allocated, so check-mode-gate the
+    # fresh-user case where it only reports creation.
+    - name: Cap the rootless runner user slice memory
+      when: not (ansible_check_mode and gitlab_runner_user.changed)
+      vars:
+        _slice_dropin_dir: /etc/systemd/system/user-{{ gitlab_runner_user.uid }}.slice.d
+      block:
+        - name: Create the runner user-slice drop-in dir
+          when: gitlab_runner_memory_max | default('') | length > 0
+          file:
+            path: "{{ _slice_dropin_dir }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+          become: true
+
+        # No validate: a drop-in can't be checked at the template's temp path
+        # (systemd-analyze needs the parent unit on the live search path), and
+        # unlike a malformed unit file a bad resource-control value doesn't
+        # brick daemon-reload -- systemd logs-and-ignores it. _verify asserts
+        # the cap actually landed finite on the live slice, which is the
+        # stronger functional check.
+        - name: Render the runner user-slice memory cap
+          when: gitlab_runner_memory_max | default('') | length > 0
+          template:
+            src: slice-memory.conf.j2
+            dest: "{{ _slice_dropin_dir }}/50-memory.conf"
+            owner: root
+            group: root
+            mode: "0644"
+            backup: true
+          become: true
+          register: gitlab_runner_slice_cap
+
+        - name: Remove the runner user-slice memory cap when unconfigured
+          when: gitlab_runner_memory_max | default('') | length == 0
+          file:
+            path: "{{ _slice_dropin_dir }}/50-memory.conf"
+            state: absent
+          become: true
+          register: gitlab_runner_slice_cap_removed
+
+        # daemon-reload re-reads the slice drop-in and applies (or lifts)
+        # MemoryMax/MemoryHigh on the live cgroup -- no restart needed.
+        - name: Apply the user-slice memory cap change
+          when: >-
+            gitlab_runner_slice_cap.changed
+            or gitlab_runner_slice_cap_removed.changed
+          systemd:
+            daemon_reload: true
+            scope: system
+          become: true
+
     # Tombstones for the instance-executor install (fleeting autoscaler ->
     # Hetzner Cloud), which left artifacts on fox that nothing above manages.
     # Each removal is idempotent (no-op once the artifact is gone), so these

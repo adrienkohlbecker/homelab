@@ -231,3 +231,12 @@ subid_users:
 # slice run; the real test-capacity ceiling is the EC2 spot vCPU quota, not
 # fox. See notes/ci_aws_test_cells.md.
 gitlab_runner_concurrent: 24
+
+# Cap the rootless runner's user slice (all job containers + podman) so a wide
+# matrix can't push the 3.7 GiB host into swap and OOM-threaten the co-tenant
+# headscale control plane + its nginx front. MemoryHigh throttles + reclaims
+# ~2/3 in before the MemoryMax kill ceiling, leaving ~700 MiB headroom for
+# headscale/nginx/tailscaled/OS. Interim measure: Phase 1 moves orchestration
+# off fox entirely. See notes/ci_aws_test_cells.md "Fox host protection".
+gitlab_runner_memory_high: 2.5G
+gitlab_runner_memory_max: 3G
