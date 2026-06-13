@@ -115,12 +115,53 @@ if [ -n "$leaky" ]; then
 fi
 echo "==> Every EBS mapping sets DeleteOnTermination=true"
 
+# Reap superseded AMIs for this exact (machine, ubuntu): deregister every
+# self-owned homelab-ci-<machine>-<ubuntu>-* image except the two we must keep
+# -- the one just promoted and the one it replaced -- deleting each one's
+# backing snapshots. Without this the pipeline registers a fresh AMI plus
+# several snapshots (the ZBM images map multiple volumes) on every run and
+# nothing reaps the old ones, so they accumulate unbounded. Sparing the
+# previous AMI preserves the one-step rollback the promote message advertises;
+# anything older than that has no rollback path and just bills. The name filter
+# pins both machine and release, so box never touches box_deps (the `_deps`
+# breaks the `homelab-ci-box-<ubuntu>-` anchor) and jammy never touches noble.
+# Best-effort throughout: a cleanup hiccup must not fail an already-good promote.
+prune_superseded_amis() {
+  local region="$1" machine="$2" ubuntu="$3" keep="$4" keep_prev="${5:-}" ami snaps snap
+  for ami in $(aws --region "$region" ec2 describe-images --owners self \
+    --filters "Name=name,Values=homelab-ci-${machine}-${ubuntu}-*" \
+    --query 'Images[].ImageId' --output text 2>/dev/null); do
+    [ "$ami" = "None" ] && continue
+    [ "$ami" = "$keep" ] && continue
+    [ -n "$keep_prev" ] && [ "$ami" = "$keep_prev" ] && continue
+    snaps=$(aws --region "$region" ec2 describe-images --image-ids "$ami" \
+      --query 'Images[0].BlockDeviceMappings[?Ebs != null].Ebs.SnapshotId' \
+      --output text 2>/dev/null) || snaps=""
+    aws --region "$region" ec2 deregister-image --image-id "$ami" >/dev/null 2>&1 || {
+      echo "prune: could not deregister superseded $ami" >&2
+      continue
+    }
+    for snap in $snaps; do
+      [ "$snap" = "None" ] && continue
+      aws --region "$region" ec2 delete-snapshot --snapshot-id "$snap" >/dev/null 2>&1 ||
+        echo "prune: could not delete snapshot $snap" >&2
+    done
+    echo "==> pruned superseded ${ami} (snapshots: ${snaps:-none})"
+  done
+  return 0 # best-effort: never let a cleanup hiccup fail an already-good promote
+}
+
 param="/homelab-ci/ami/${machine}/${ubuntu}"
 if [ "${usage_promote:-false}" != "true" ]; then
   echo "==> Candidate only (no --promote). Smoke it, then promote with:"
   echo "    aws --region ${region} ssm put-parameter --name ${param} --type String --data-type aws:ec2:image --value ${ami} --overwrite"
   exit 0
 fi
+
+# Capture the outgoing AMI before overwriting so the prune below can spare it
+# (empty on the first-ever promote, when the parameter does not yet exist).
+prev_ami=$(aws --region "$region" ssm get-parameter --name "$param" \
+  --query Parameter.Value --output text 2>/dev/null || true)
 
 # data-type aws:ec2:image has EC2 validate the value is a real, available
 # AMI at write time, so a bad promotion fails here, not at cell launch.
@@ -132,3 +173,6 @@ aws --region "$region" ssm put-parameter \
   --overwrite
 echo "==> Promoted ${ami} to ${param}"
 echo "    Rollback: re-put the previous value (aws ssm get-parameter-history --name ${param})"
+
+# Reap everything older than the promoted+previous pair (see the function note).
+prune_superseded_amis "$region" "$machine" "$ubuntu" "$ami" "$prev_ami"
