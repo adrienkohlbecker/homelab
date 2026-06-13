@@ -17,12 +17,15 @@
 # The universal-package-install Docker Mod (DOCKER_MODS in the unit) installs
 # ffmpeg at init so nzbToMedia's check_media (autoProcessMedia.cfg) has ffprobe.
 # Confirm it landed: nothing else exercises the mod, and a missing ffprobe
-# silently degrades post-processing.
+# silently degrades post-processing. The mod apt-installs ffmpeg from upstream
+# at container init; on a cold EC2 cell that fetch runs past the 60s (30x2)
+# this used to wait, so allow 120s (60x2). If it still misses, the mod's repo
+# is unreachable from the cell (a mirror question), not a timing one.
 - name: _verify | The universal-package-install mod installed ffprobe in the container
   command: podman exec sabnzbd ffprobe -version
   register: _sabnzbd_ffprobe
   changed_when: false
-  retries: 30
+  retries: 60
   delay: 2
   until: _sabnzbd_ffprobe.rc == 0
   become: true

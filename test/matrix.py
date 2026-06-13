@@ -100,6 +100,44 @@ def skip_for(role: str) -> set[tuple[str, str]]:
     return out
 
 
+def aws_skip_for(role: str) -> set[tuple[str, str]]:
+    """(machine, ubuntu) cells this role declares as aws-backend-incompatible.
+
+    Same `cell-spec -> reason` shape as `skip:`, but drops cells ONLY from the
+    aws (EC2 cell) backend — the qemu matrix keeps them. For roles whose path
+    cannot run on a vanilla EC2 cell: keepalived VIPs and macvlan need L2 the
+    VPC forbids; a host role targets infra a cell lacks. Like `skip:`, not a
+    substitute for a fix — `testrole.py <role> --machine <m>` (qemu) still
+    exercises the cell, and the qemu CI matrix never drops it.
+    """
+    skip = _read_role_meta(role).get("aws_skip") or {}
+    out: set[tuple[str, str]] = set()
+    for spec in skip:
+        parts = str(spec).split(":")
+        machine = parts[0]
+        ubuntu = parts[1] if len(parts) > 1 else DEFAULT_UBUNTU
+        out.add((machine, ubuntu))
+    return out
+
+
+def drop_aws_skipped(specs: list[str]) -> tuple[list[str], list[str]]:
+    """Partition CI specs into (kept, dropped) by each role's aws_skip:.
+
+    Called only by the aws (EC2 cell) child-pipeline generator — the qemu
+    matrix never applies it. Returns the dropped specs too so the caller can
+    log them: a silent drop would read as "covered" when it wasn't.
+    """
+    kept: list[str] = []
+    dropped: list[str] = []
+    for spec in specs:
+        cell = ci_spec_to_cell(spec)
+        if (cell.machine, cell.ubuntu) in aws_skip_for(cell.role):
+            dropped.append(spec)
+        else:
+            kept.append(spec)
+    return kept, dropped
+
+
 def build_role_cells(role: str) -> list[TestCell]:
     """Expand a single role into its test cells.
 

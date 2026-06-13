@@ -67,21 +67,27 @@ def main() -> int:
         # run. A mapping of cell-spec -> reason; the reason is mandatory so
         # a skip can't rot into a silent permanent exclusion. cell-spec is
         # `machine` (the jammy cell) or `machine:codename` (a release cell).
-        skip = data.get("skip")
-        if skip is not None:
-            if not isinstance(skip, dict):
-                errors.append(f"{meta}: skip must be a mapping of cell-spec -> reason, got {type(skip).__name__}")
-            else:
-                for spec, reason in skip.items():
-                    parts = str(spec).split(":")
-                    if parts[0] not in MACHINE_CHOICES:
-                        errors.append(f"{meta}: skip {spec!r}: machine {parts[0]!r} not in {sorted(MACHINE_CHOICES)}")
-                    if len(parts) > 1 and parts[1] not in UBUNTU_RELEASES:
-                        errors.append(f"{meta}: skip {spec!r}: ubuntu {parts[1]!r} not in {sorted(UBUNTU_RELEASES)}")
-                    if len(parts) > 2:
-                        errors.append(f"{meta}: skip {spec!r}: too many ':' (want machine or machine:codename)")
-                    if not reason or not str(reason).strip():
-                        errors.append(f"{meta}: skip {spec!r}: needs a non-empty reason")
+        # skip: quarantines a cell on every backend; aws_skip: drops it only
+        # from the aws (EC2 cell) matrix (the qemu matrix keeps it). Both share
+        # the cell-spec -> mandatory-reason shape so a quarantine can't rot into
+        # a silent permanent exclusion.
+        for key in ("skip", "aws_skip"):
+            mapping = data.get(key)
+            if mapping is None:
+                continue
+            if not isinstance(mapping, dict):
+                errors.append(f"{meta}: {key} must be a mapping of cell-spec -> reason, got {type(mapping).__name__}")
+                continue
+            for spec, reason in mapping.items():
+                parts = str(spec).split(":")
+                if parts[0] not in MACHINE_CHOICES:
+                    errors.append(f"{meta}: {key} {spec!r}: machine {parts[0]!r} not in {sorted(MACHINE_CHOICES)}")
+                if len(parts) > 1 and parts[1] not in UBUNTU_RELEASES:
+                    errors.append(f"{meta}: {key} {spec!r}: ubuntu {parts[1]!r} not in {sorted(UBUNTU_RELEASES)}")
+                if len(parts) > 2:
+                    errors.append(f"{meta}: {key} {spec!r}: too many ':' (want machine or machine:codename)")
+                if not reason or not str(reason).strip():
+                    errors.append(f"{meta}: {key} {spec!r}: needs a non-empty reason")
 
     if errors:
         for e in errors:
