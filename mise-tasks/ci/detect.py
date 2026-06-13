@@ -882,9 +882,15 @@ def _cell_before_script() -> list[str]:
         "aws --region eu-central-1 sts get-caller-identity",
         # The Ec2Machine SSHes as the operator identity over the agent (no key
         # file in the repo); load the dedicated cell key into a fresh agent.
-        'chmod 600 "$CI_CELL_SSH_KEY"',
+        # GitLab file-type variables arrive without the trailing newline
+        # OpenSSH requires (and sometimes with CRLF), so ssh-add rejects the
+        # raw variable with "error in libcrypto"; normalise into a private 600
+        # copy -- strip CR, guarantee a trailing newline -- before loading it.
+        'cell_key="$(mktemp)"',
+        'chmod 600 "$cell_key"',
+        'printf \'%s\\n\' "$(tr -d \'\\r\' < "$CI_CELL_SSH_KEY")" > "$cell_key"',
         'eval "$(ssh-agent -s)"',
-        'ssh-add "$CI_CELL_SSH_KEY"',
+        'ssh-add "$cell_key"',
         # Each cell has its own public IP, so the anon GitHub rate limit is far
         # less of a risk than on GitHub Actions' single-NAT lab — but pass the
         # PAT through to the guest's `mise install` when one is configured.
