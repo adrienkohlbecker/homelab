@@ -6,19 +6,15 @@
 # converge still runs on the remote EC2 cell (the orchestrator only drives ssh +
 # boto3), so this is a fan-out *scheduler*, not where the heavy lifting lands.
 #
-# server_type ccx33: 8 *dedicated* vCPU / 32 GiB / 240 GiB local NVMe. Dedicated
-# (no noisy-neighbour CPU steal) keeps the IO measurement clean, and it's the
-# real shape we can provision — the Hetzner project's dedicated-core quota caps
-# at 8, so ccx43 (16 vCPU, matching the experiment's c6a.4xlarge) needs a quota
-# bump first. 8 cores is half that box, so the 60 container-starts ramp
-# staggered rather than truly simultaneous; watch CPU *and* IO-PSI during the
-# burst so a CPU-bound ramp (the throughput limiter, a sizing signal for prod)
-# isn't misread as a clean IO result. The open question this box
-# answers: the 2026-06-13 AWS experiment found a baseline-gp3 IOPS wall (60
-# concurrent container-starts off the 3.27 GB CI image + ~145 checkouts saturated
-# IO-PSI to 99%; 16000 provisioned IOPS was the load-bearing fix). Hetzner local
-# NVMe should clear that wall for free — this box is where we PROVE it, by driving
-# a real ROLES=ALL 60-burst and watching IO-PSI. Validate, don't assume.
+# server_type: the orchestrator box under benchmark. The ccx33 run PROVED Hetzner
+# local NVMe clears the baseline-gp3 IOPS wall outright — the 60-wide
+# container-start burst peaked at IO-PSI ~6% (full) vs gp3's 99% collapse — and
+# that CPU, not disk, is the limiter: each cell's `uv sync` venv build plus the
+# ansible controller both run on the orchestrator (~one per cell). So the open
+# question is now purely how many cores a *keep-running* box needs. We benchmark
+# the affordable shared types against the 60-wide full-universe fan-out, watching
+# CPU-PSI and %st (steal). Currently: cx43 (shared vCPU). See
+# notes/ci_aws_test_cells.md (Path to 60).
 #
 # Auth/token: same HCLOUD_TOKEN op:// wiring as hetzner.tf (the `tf` task's
 # `op run --` wrapper). Reuses hcloud_ssh_key.laptop registered there.
@@ -60,7 +56,7 @@ data "hcloud_image" "ubuntu_2404" {
 
 resource "hcloud_server" "orchestrator" {
   name        = "orchestrator"
-  server_type = "ccx33"
+  server_type = "cx43"
   image       = data.hcloud_image.ubuntu_2404.id
   location    = var.hetzner_location
   ssh_keys    = [hcloud_ssh_key.laptop.name]
@@ -82,10 +78,18 @@ resource "hcloud_server" "orchestrator" {
     ignore_changes = [user_data, ssh_keys]
   }
 
-  # Boot with the fleet's `ak` user (sudo, key-only) so Ansible connects as `ak`
-  # from first boot — the `user` role configures the existing login user, it
-  # doesn't create it. Root SSH locked at the sshd level from first boot; the
-  # `ssh` role's sshd_config takes over at converge. Mirrors hetzner.tf.
+  # Boot with the fleet's `ak` user (sudo, key-only) so SSH connects as `ak`
+  # from first boot. Root SSH locked at the sshd level. The runcmd block then
+  # provisions the box into a ready-to-register CI orchestrator: docker.io (the
+  # executor), gitlab-runner (the runner itself), and mise — the same three
+  # installs done by hand for the first ccx33 test, baked here so the box can be
+  # torn down and rebuilt at a different server_type (cx43 / cpx42 / ...) with one
+  # `tofu apply` for repeated CPU/throughput benchmark runs. Runner
+  # REGISTRATION stays manual: the glrt- token is a secret and must never land
+  # in committed user_data — after a rebuild, `gitlab-runner register` + set
+  # concurrent=60 (see notes/ci_aws_test_cells.md, Path to 60). ignore_changes
+  # on user_data below means editing this never disturbs a running box; it only
+  # takes effect on a deliberate taint/replace.
   user_data = <<-EOT
     #cloud-config
     disable_root: true
@@ -105,5 +109,10 @@ resource "hcloud_server" "orchestrator" {
           PermitRootLogin no
     runcmd:
       - [systemctl, restart, ssh]
+      - [bash, -c, "curl -sL https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh | bash"]
+      - [bash, -c, "install -dm755 /etc/apt/keyrings && wget -qO- https://mise.jdx.dev/gpg-key.pub | gpg --dearmor -o /etc/apt/keyrings/mise-archive-keyring.gpg && echo 'deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg arch=amd64] https://mise.jdx.dev/deb stable main' > /etc/apt/sources.list.d/mise.list"]
+      - [apt-get, update]
+      - [apt-get, install, -y, docker.io, gitlab-runner, mise]
+      - [usermod, -aG, docker, gitlab-runner]
   EOT
 }
