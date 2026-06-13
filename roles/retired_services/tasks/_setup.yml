@@ -64,6 +64,64 @@
     - gitea_runner
   become: true
 
+# github_runner was an *instantiated* template unit (github_runner@<inst>.service)
+# backed by a lingering user manager, unlike the plain stubs above. Plant the
+# template + one enabled instance so the converge exercises the real find ->
+# stop -> template-removal path: a stop/disable on a still-present bare template
+# answers "unknown state" (NOT the tolerated "could not find"), so only a
+# present template surfaces it -- a fresh host no-ops the whole block. The
+# linger-backed user-scope prune timer is left unplanted: it is marker-gated and
+# no-ops here, matching the box/pug/fox steady state (and needs no github_runner
+# user, which this fixture deliberately doesn't create).
+- name: _setup | Plant the github_runner template unit
+  copy:
+    dest: /etc/systemd/system/github_runner@.service
+    content: |
+      [Unit]
+      Description=retired_services test stub (github_runner@%i)
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/true
+      RemainAfterExit=yes
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Enable a github_runner template instance
+  systemd:
+    name: github_runner@1.service
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
+- name: _setup | Plant github_runner launcher and tmpfiles rule
+  copy:
+    dest: "{{ item }}"
+    content: "retired_services test stub\n"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - /etc/tmpfiles.d/github_runner.conf
+    - /usr/local/bin/github_runner_run
+  become: true
+
+- name: _setup | Plant github_runner runner tree and scratch home
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /opt/actions-runner
+    - /mnt/scratch/github_runner
+  become: true
+
 - name: _setup | Plant /mnt/services state dirs
   file:
     path: "/mnt/services/{{ item }}"
