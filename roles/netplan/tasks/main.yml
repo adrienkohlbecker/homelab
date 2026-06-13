@@ -1,9 +1,10 @@
-# fox runs this role from the shared Base play but defines no `netplan`
-# host var -- it keeps the Hetzner cloud-init networking. Gate the whole
-# role on `netplan is defined`: `meta: end_role` does NOT short-circuit a
-# role invoked via a play's `roles:` keyword (it only ends dynamically-
-# included roles), so it can't carry this gate. Without it the cloud-init
-# cleanup task below would delete fox's only network config.
+# Gate the whole role on `netplan is defined`: `meta: end_role` does NOT
+# short-circuit a role invoked via a play's `roles:` keyword (it only ends
+# dynamically-included roles), so it can't carry this gate. Without it the
+# cloud-init cleanup task below would delete the network config of any host
+# that has no `netplan` host var. Every host the base play targets currently
+# defines one (fox included -- see host_vars/fox.yml), but the gate keeps the
+# role safe to apply to a future cloud-init-managed host.
 - name: Configure host networking via netplan
   when: netplan is defined
   tags:

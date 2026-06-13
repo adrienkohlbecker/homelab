@@ -11,6 +11,54 @@
 # without routing whole home subnets. Provisioned by terraform/hetzner.tf;
 # reached at fox.fahm.fr (public A -> reserved primary IP).
 
+# Networking is ansible-managed (not Hetzner cloud-init). The stock
+# 50-cloud-init.yaml matched both NICs by MAC, and the private-net NIC's MAC no
+# longer matched the live interface -- Hetzner reassigns the private-net MAC on
+# detach/reattach -- so networkd left enp7s0 off/unmanaged and 10.123.55.2 (the
+# `hetzner` topology IP, assigned via terraform/hetzner.tf hcloud_server_network)
+# never came up. The netplan role renders this and deletes the cloud-init file.
+#
+# Neither NIC is matched by MAC. Both are virtio_net, so match.driver can't
+# disambiguate the way lab/pug do; instead each is matched by its predictable
+# PCI name, which is stable for the VM and immune to the MAC reshuffle.
+#   - eth0 (public, pci-0000:01:00.0 -> enp1s0): matched by name enp1s0 and
+#     renamed to eth0 via set-name, keeping the familiar interface name. The
+#     generated .network targets eth0, so the live link (already named eth0
+#     from cloud-init) stays managed straight through `netplan apply` with no
+#     unmanaged window, while the enp1s0->eth0 rename bootstraps from the
+#     predictable name on the next boot. DHCP4 for the v4 lease + on-link
+#     default; static v6 with the Hetzner resolvers and the fe80::1 on-link
+#     default route (fox is a dual-stack DERP relay). critical: preserve the
+#     lease across the networkd restart (remote-apply safety; cf. lab/pug).
+#   - enp7s0 (private, pci-0000:07:00.0): already named enp7s0, so keyed
+#     directly -- no set-name needed. dhcp4 pulls 10.123.55.2 from the Hetzner
+#     private-net DHCP. optional: a private-net DHCP hiccup must never block
+#     boot (eth0 is the only boot-critical link); use-dns keeps fox's resolvers
+#     off the private net.
+netplan:
+  ethernets:
+    eth0:
+      match:
+        name: "enp1s0"
+      set-name: eth0
+      dhcp4: true
+      critical: true
+      addresses:
+        - "2a01:4f8:1c1e:e070::1/64"
+      nameservers:
+        addresses:
+          - 2a01:4ff:ff00::add:2
+          - 2a01:4ff:ff00::add:1
+      routes:
+        - to: default
+          via: "fe80::1"
+          on-link: true
+    enp7s0:
+      dhcp4: true
+      dhcp4-overrides:
+        use-dns: false
+      optional: true
+
 zfs_arc_min: 0
 zfs_arc_max: 536870912
 # rpool carries autoexpand=on (chroot.sh sets it so the 20G image grows into
