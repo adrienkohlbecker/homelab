@@ -1997,10 +1997,15 @@ class Ec2Machine(Machine):
             ssh_user=spec.ssh_user,
             # Re-add the cell's baked keys so the `user` role's exclusive
             # authorized_keys rewrite can't lock the harness out mid-converge.
+            # JSON form, not `-e key=value`: the value is two space-separated,
+            # newline-joined key lines, and ansible parses the `key=value` form
+            # with parse_kv, which word-splits the value on whitespace — that
+            # truncates it to a bare `ssh-ed25519` token and crashes the
+            # authorized_key module in parsekey. A JSON object value survives intact.
             ansible_args=[
                 *_qemu_ansible_args(spec),
                 "-e",
-                f"ssh_public_keys_additional={_CELL_AUTHORIZED_PUBLIC_KEYS}",
+                json.dumps({"ssh_public_keys_additional": _CELL_AUTHORIZED_PUBLIC_KEYS}),
             ],
             inventory_host=spec.inventory_host,
             machine=machine,
