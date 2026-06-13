@@ -98,10 +98,7 @@ python.uv_venv_auto = "create|source"
 [tasks."packer:init"]
 description = "packer init (forwards args)"
 dir = "{{config_root}}/packer"
-run = [
-  'packer init "$@" .',
-  'packer init "$@" aws',
-]
+run = ['packer init "$@" .', 'packer init "$@" aws']
 
 [tasks."packer:clean"]
 description = "Remove leftover tmpdirs from failed packer builds and test-harness runs"
