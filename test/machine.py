@@ -1,6 +1,8 @@
 #!/usr/bin/env -S uv run
 
 import asyncio
+import base64
+import binascii
 import contextlib
 import dataclasses
 import errno
@@ -26,7 +28,6 @@ import yaml
 from arch import ArchProfile, detect_host_arch, uefi_code_path_for
 from setup_mitogen import ensure_mitogen_symlink
 from utils import (
-    CommandFailedException,
     CommandResult,
     build_seed_iso,
     print_cmd_line,
@@ -1907,11 +1908,18 @@ class Ec2Machine(Machine):
     (homelab-ci-cell-<machine>, terraform/aws_ci.tf), its AMI resolved through the
     /homelab-ci/ami/<machine>/<ubuntu> SSM parameter, converged over SSH at
     its public IP, and terminated at cell end with a one-time EventBridge
-    Scheduler entry as the orphan backstop. Everything is `aws` CLI
-    subprocesses — deliberately no boto3 (see notes/ci_aws_test_cells.md,
-    "Shape"): subprocess waits compose with asyncio, every call lands in
-    the .ansi log as a copy-paste-reproducible command, and ~5 sparse calls
-    per cell never earn botocore's presence in uv.lock.
+    Scheduler entry as the orphan backstop.
+
+    AWS calls go through in-process boto3 clients, not the `aws` CLI: the
+    pinned awscli is a ~100 MB PyInstaller bundle that cold-starts its embedded
+    Python+botocore on *every* invocation, and `aws ec2 wait` holds one bundle
+    resident through the whole boot — so at 60 concurrent cells the CLI churn,
+    not the ansible converge, dominated fox's CPU/RAM (notes/ci_aws_test_cells.md,
+    "Orchestration cost"). One warm boto3 ec2+scheduler client per cell imports
+    botocore once and reuses it across the ~7 calls; the boot wait becomes a
+    light in-process poll instead of a resident process. Blocking boto3 calls
+    run via asyncio.to_thread so they still compose with the asyncio harness,
+    and each call is logged as its equivalent `aws` command for the .ansi trail.
     """
 
     REGION: ClassVar[str] = "eu-central-1"
@@ -1943,6 +1951,10 @@ class Ec2Machine(Machine):
         self.instance_id: str | None = None
         self._schedule_name: str | None = None
         self._expires_display: str = ""
+        # Warm boto3 clients, built once on first use (see _clients).
+        self._ec2 = None
+        self._scheduler = None
+        self._client_error: type[Exception] = Exception
 
         super().__init__(
             ssh_port=22,
@@ -1975,13 +1987,42 @@ class Ec2Machine(Machine):
         self.boot_file.unlink(missing_ok=True)
 
     def _preflight(self) -> None:
-        self._require_binary(
-            "aws",
-            "Install via `mise install` (pinned in mise.toml [tools]).",
-        )
+        # boto3 is a pinned dependency (pyproject); building the clients here
+        # turns a missing install or broken credential chain into a clear
+        # failure before the first cell call.
+        self._clients()
 
-    async def _aws(self, *args: str, check: bool = True, quiet: bool = False) -> CommandResult:
-        return await run_command(["aws", "--region", self.REGION, *args], check=check, quiet=quiet)
+    def _clients(self):
+        """Lazily build the warm ec2 + scheduler clients, reused for the cell.
+
+        Credentials come from boto3's default chain — the same env the CLI
+        used (AWS_ROLE_ARN + AWS_WEB_IDENTITY_TOKEN_FILE in CI, the operator
+        profile locally). Imported here, not at module load, so qemu-only runs
+        and tooling that imports machine.py never pull in botocore.
+        """
+        if self._ec2 is None:
+            import boto3
+            from botocore.exceptions import ClientError
+
+            session = boto3.session.Session(region_name=self.REGION)
+            self._ec2 = session.client("ec2")
+            self._scheduler = session.client("scheduler")
+            self._client_error = ClientError
+        return self._ec2, self._scheduler
+
+    async def _call(self, service: str, op: str, *, log: str | None = None, **kwargs):
+        """Run a boto3 operation off-thread so it composes with asyncio.
+
+        *op* is the snake_case client method; *log*, when given, is echoed to
+        the transcript as the equivalent `aws` command. Botocore clients are
+        thread-safe and one cell issues its calls sequentially, so the default
+        executor is fine.
+        """
+        ec2, scheduler = self._clients()
+        client = ec2 if service == "ec2" else scheduler
+        if log:
+            print_line(log)
+        return await asyncio.to_thread(getattr(client, op), **kwargs)
 
     async def _pick_subnet(self) -> str:
         """Pick one of the CI VPC's public subnets, stably per run.
@@ -1991,17 +2032,13 @@ class Ec2Machine(Machine):
         stable within the run (retried CLI calls reuse it via the client
         token below) while spreading concurrent cells across AZs.
         """
-        result = await self._aws(
+        resp = await self._call(
             "ec2",
-            "describe-subnets",
-            "--filters",
-            "Name=tag:Name,Values=homelab-ci-*",
-            "--query",
-            "Subnets[].SubnetId",
-            "--output",
-            "text",
+            "describe_subnets",
+            log="aws ec2 describe-subnets --filters Name=tag:Name,Values=homelab-ci-*",
+            Filters=[{"Name": "tag:Name", "Values": ["homelab-ci-*"]}],
         )
-        subnets = sorted(" ".join(result.stdout).split())
+        subnets = sorted(s["SubnetId"] for s in resp["Subnets"])
         if not subnets:
             raise RuntimeError("No homelab-ci-* subnets found in eu-central-1 — has terraform/aws_ci.tf been applied?")
         seed = sum(Path(self.workdir.name).name.encode())
@@ -2033,37 +2070,41 @@ class Ec2Machine(Machine):
             "job_id": os.environ.get("CI_JOB_ID", "local"),
             "expires_at": self._expires_display,
         }
-        tag_spec = "ResourceType=instance,Tags=[" + ",".join(f"{{Key={k},Value={v}}}" for k, v in tags.items()) + "]"
-
         # Instance-type override on top of the launch template — the
         # benchmarking instrument for tuning the per-machine types that
         # live in terraform (ci_machine_instance_types). In CI the cell
         # role's IAM condition pins ec2:InstanceType to the approved set,
         # so this can only deviate under operator credentials.
         type_override = os.environ.get("HOMELAB_EC2_INSTANCE_TYPE")
+        image_id = f"resolve:ssm:/homelab-ci/ami/{self.machine}/{self.ubuntu_name}"
+        run_kwargs = {
+            "LaunchTemplate": {"LaunchTemplateName": f"homelab-ci-cell-{self.machine}"},
+            "ImageId": image_id,
+            "SubnetId": subnet_id,
+            "ClientToken": client_token,
+            # The CLI defaulted count to 1; the API requires both explicitly.
+            "MinCount": 1,
+            "MaxCount": 1,
+            "TagSpecifications": [
+                {"ResourceType": "instance", "Tags": [{"Key": k, "Value": v} for k, v in tags.items()]},
+            ],
+        }
+        if type_override:
+            run_kwargs["InstanceType"] = type_override
 
-        result = await self._aws(
+        resp = await self._call(
             "ec2",
-            "run-instances",
-            *(["--instance-type", type_override] if type_override else []),
-            "--launch-template",
-            f"LaunchTemplateName=homelab-ci-cell-{self.machine}",
-            "--image-id",
-            f"resolve:ssm:/homelab-ci/ami/{self.machine}/{self.ubuntu_name}",
-            "--subnet-id",
-            subnet_id,
-            "--client-token",
-            client_token,
-            "--tag-specifications",
-            tag_spec,
-            "--query",
-            "Instances[0].InstanceId",
-            "--output",
-            "text",
+            "run_instances",
+            log=(
+                f"aws ec2 run-instances --launch-template LaunchTemplateName=homelab-ci-cell-{self.machine}"
+                f" --image-id {image_id} --subnet-id {subnet_id} --client-token {client_token}"
+                + (f" --instance-type {type_override}" if type_override else "")
+            ),
+            **run_kwargs,
         )
-        self.instance_id = result.stdout[-1].strip()
+        self.instance_id = resp["Instances"][0]["InstanceId"]
         if not self.instance_id.startswith("i-"):
-            raise RuntimeError(f"run-instances returned no instance id: {result.stdout!r}")
+            raise RuntimeError(f"run-instances returned no instance id: {resp!r}")
         print_line(f"Launched {self.instance_id} (subnet {subnet_id}, backstop {self._expires_display})")
 
         await self._arm_backstop(expires_expr)
@@ -2079,34 +2120,31 @@ class Ec2Machine(Machine):
         """
         assert self.instance_id is not None
         self._schedule_name = f"ci-cell-{self.instance_id}"
-        target = json.dumps(
-            {
-                "Arn": "arn:aws:scheduler:::aws-sdk:ec2:terminateInstances",
-                "RoleArn": self.SCHEDULER_ROLE_ARN,
-                "Input": json.dumps({"InstanceIds": [self.instance_id]}),
-            }
-        )
+        target = {
+            "Arn": "arn:aws:scheduler:::aws-sdk:ec2:terminateInstances",
+            "RoleArn": self.SCHEDULER_ROLE_ARN,
+            # Input is a JSON *string* nested inside the target.
+            "Input": json.dumps({"InstanceIds": [self.instance_id]}),
+        }
         try:
-            await self._aws(
+            await self._call(
                 "scheduler",
-                "create-schedule",
-                "--name",
-                self._schedule_name,
-                "--schedule-expression",
-                f"at({expires_expr})",
-                "--schedule-expression-timezone",
-                "UTC",
-                "--flexible-time-window",
-                "Mode=OFF",
-                "--action-after-completion",
-                "DELETE",
-                "--target",
-                target,
+                "create_schedule",
+                log=f"aws scheduler create-schedule --name {self._schedule_name} --schedule-expression at({expires_expr})",
+                Name=self._schedule_name,
+                ScheduleExpression=f"at({expires_expr})",
+                ScheduleExpressionTimezone="UTC",
+                FlexibleTimeWindow={"Mode": "OFF"},
+                ActionAfterCompletion="DELETE",
+                Target=target,
             )
-        except CommandFailedException:
+        except self._client_error:
             print_line("Backstop schedule creation failed; terminating the instance", error=True)
             self._schedule_name = None
-            await self._aws("ec2", "terminate-instances", "--instance-ids", self.instance_id, check=False)
+            try:
+                await self._call("ec2", "terminate_instances", InstanceIds=[self.instance_id])
+            except self._client_error:
+                pass  # best-effort cleanup; re-raise the original schedule failure
             raise
 
     async def ensure_booted(self) -> None:
@@ -2117,20 +2155,31 @@ class Ec2Machine(Machine):
         qemu paths.
         """
         assert self.instance_id is not None
-        await self._aws("ec2", "wait", "instance-running", "--instance-ids", self.instance_id)
-        result = await self._aws(
-            "ec2",
-            "describe-instances",
-            "--instance-ids",
-            self.instance_id,
-            "--query",
-            "Reservations[0].Instances[0].PublicIpAddress",
-            "--output",
-            "text",
-        )
-        ip = result.stdout[-1].strip()
-        if not ip or ip == "None":
-            raise RuntimeError(f"Instance {self.instance_id} has no public IP: {result.stdout!r}")
+        # In-process replacement for `aws ec2 wait instance-running`: the CLI
+        # waiter holds a resident ~100 MB awscli bundle polling for the whole
+        # boot, ×concurrency. Same bound as the waiter (40 × 15 s) so a stuck
+        # launch still surfaces as a clear failure, never a silent hang. The
+        # describe that flips to running also carries the public IP, so the
+        # separate IP lookup the CLI path needed folds in here.
+        print_line(f"aws ec2 wait instance-running --instance-ids {self.instance_id}")
+        ip = None
+        for _ in range(40):
+            try:
+                resp = await self._call("ec2", "describe_instances", InstanceIds=[self.instance_id])
+            except self._client_error:
+                # Eventual consistency right after run-instances: the id may
+                # 404 for a beat. Treat as not-ready and keep polling.
+                await asyncio.sleep(15)
+                continue
+            inst = resp["Reservations"][0]["Instances"][0]
+            if inst["State"]["Name"] == "running":
+                ip = inst.get("PublicIpAddress")
+                break
+            await asyncio.sleep(15)
+        else:
+            raise RuntimeError(f"Instance {self.instance_id} not running after 40×15 s")
+        if not ip:
+            raise RuntimeError(f"Instance {self.instance_id} has no public IP")
         self.ssh_host = ip
         # WAN probe endpoint: the public IP with the real port numbers —
         # the security group allows 32400/tcp + 51820/udp from fox and the
@@ -2147,22 +2196,14 @@ class Ec2Machine(Machine):
     async def _instance_state(self) -> str | None:
         """Current EC2 state name, or None when the instance is unknown."""
         assert self.instance_id is not None
-        result = await self._aws(
-            "ec2",
-            "describe-instances",
-            "--instance-ids",
-            self.instance_id,
-            "--query",
-            "Reservations[0].Instances[0].State.Name",
-            "--output",
-            "text",
-            check=False,
-            quiet=True,
-        )
-        if result.exitcode != 0:
+        try:
+            resp = await self._call("ec2", "describe_instances", InstanceIds=[self.instance_id])
+        except self._client_error:
             return None
-        state = result.stdout[-1].strip() if result.stdout else ""
-        return state or None
+        reservations = resp.get("Reservations", [])
+        if not reservations or not reservations[0].get("Instances"):
+            return None
+        return reservations[0]["Instances"][0]["State"]["Name"] or None
 
     async def failure_was_spot_interruption(self) -> bool:
         """True iff the instance was reclaimed (or vanished) underneath us.
@@ -2173,30 +2214,19 @@ class Ec2Machine(Machine):
         """
         if self.instance_id is None:
             return False
-        result = await self._aws(
-            "ec2",
-            "describe-instances",
-            "--instance-ids",
-            self.instance_id,
-            "--query",
-            "Reservations[0].Instances[0].{state: State.Name, reason: StateReason.Code}",
-            "--output",
-            "json",
-            check=False,
-            quiet=True,
-        )
-        if result.exitcode != 0:
-            return True
         try:
-            info = json.loads("\n".join(result.stdout))
-        except json.JSONDecodeError:
-            return False
-        if not isinstance(info, dict):
+            resp = await self._call("ec2", "describe_instances", InstanceIds=[self.instance_id])
+        except self._client_error:
+            # A reservation that vanished outside harness cleanup counts as
+            # interrupted — nothing else removes a ci-cell mid-run.
             return True
-        if (
-            info.get("state") in ("shutting-down", "terminated")
-            and info.get("reason") == "Server.SpotInstanceTermination"
-        ):
+        reservations = resp.get("Reservations", [])
+        if not reservations or not reservations[0].get("Instances"):
+            return True
+        inst = reservations[0]["Instances"][0]
+        state = inst.get("State", {}).get("Name")
+        reason = inst.get("StateReason", {}).get("Code")
+        if state in ("shutting-down", "terminated") and reason == "Server.SpotInstanceTermination":
             print_line(f"Spot interruption detected on {self.instance_id}", error=True)
             return True
         return False
@@ -2218,21 +2248,20 @@ class Ec2Machine(Machine):
     async def collect_failure_artifacts(self) -> None:
         """Console output first (works even when SSH is gone), then base SSH captures."""
         if self.instance_id is not None:
-            result = await self._aws(
-                "ec2",
-                "get-console-output",
-                "--instance-id",
-                self.instance_id,
-                "--latest",
-                "--query",
-                "Output",
-                "--output",
-                "text",
-                check=False,
-                quiet=True,
-            )
-            if result.exitcode == 0 and result.stdout:
-                self.boot_file.write_text("\n".join(result.stdout) + "\n")
+            try:
+                resp = await self._call("ec2", "get_console_output", InstanceId=self.instance_id, Latest=True)
+            except self._client_error:
+                resp = None
+            output = resp.get("Output") if resp else None
+            if output:
+                # The GetConsoleOutput API returns Output base64-encoded (the
+                # CLI decoded it for us); boto3 hands back the raw field. Decode
+                # when it is base64, else fall back to the value as-is.
+                try:
+                    text = base64.b64decode(output, validate=True).decode("utf-8", errors="replace")
+                except (binascii.Error, ValueError):
+                    text = output
+                self.boot_file.write_text(text if text.endswith("\n") else text + "\n")
                 print_line(f"Console output: {self.boot_file}")
         if self.ssh_host:
             await super().collect_failure_artifacts()
@@ -2249,11 +2278,25 @@ class Ec2Machine(Machine):
 
     async def _teardown_cell(self) -> None:
         assert self.instance_id is not None
-        await self._aws("ec2", "terminate-instances", "--instance-ids", self.instance_id, check=False)
+        try:
+            await self._call(
+                "ec2",
+                "terminate_instances",
+                log=f"aws ec2 terminate-instances --instance-ids {self.instance_id}",
+                InstanceIds=[self.instance_id],
+            )
+        except self._client_error:
+            pass  # best-effort teardown; the backstop schedule still covers it
         if self._schedule_name is not None:
-            # Already-fired (ActionAfterCompletion=DELETE) or already-deleted
-            # schedules return ResourceNotFoundException — success for us.
-            await self._aws("scheduler", "delete-schedule", "--name", self._schedule_name, check=False)
+            try:
+                await self._call(
+                    "scheduler",
+                    "delete_schedule",
+                    log=f"aws scheduler delete-schedule --name {self._schedule_name}",
+                    Name=self._schedule_name,
+                )
+            except self._client_error:
+                pass  # already-fired (ActionAfterCompletion=DELETE) or already-deleted
 
 
 BACKEND_CHOICES: tuple[str, ...] = ("qemu", "aws")
