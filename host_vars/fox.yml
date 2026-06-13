@@ -224,13 +224,15 @@ subid_users:
 
 # Orchestration slots above the role default of 8. Each cell job is an
 # ansible/mitogen + aws-CLI loop driving a remote EC2 cell, measured at ~100 MB
-# avg / ~190 MB peak RSS on fox (3.7 GiB / 2 vCPU). At a full 8-cell matrix fox
-# sat at 1.4 GiB free with zram swap near-idle and memory-PSI full <1%, so RAM
-# is not the bind; the 2 vCPUs are (orchestration is mostly ssh/aws wait, so
-# even that has slack). 24 keeps a comfortable RAM margin while letting a wider
-# slice run; the real test-capacity ceiling is the EC2 spot vCPU quota, not
-# fox. See notes/ci_aws_test_cells.md.
-gitlab_runner_concurrent: 24
+# avg / ~190 MB peak RSS on fox (3.7 GiB / 2 vCPU). 24 overcommitted the host
+# once the headscale + nginx + tailscaled co-tenancy is accounted for: a wide
+# matrix drove the runner slice past RAM into heavy swap (load ~40, mem-PSI
+# full ~14%, ~2.3 GiB swapped), so the real bound is RAM for the resident job
+# containers, not the 2 vCPU (orchestration is mostly ssh/aws wait). 16 keeps
+# the steady-state demand under RAM; gitlab_runner_memory_{high,max} below is
+# the hard guardrail under that. The real test-capacity ceiling is the EC2 spot
+# vCPU quota, not fox. See notes/ci_aws_test_cells.md.
+gitlab_runner_concurrent: 16
 
 # Cap the rootless runner's user slice (all job containers + podman) so a wide
 # matrix can't push the 3.7 GiB host into swap and OOM-threaten the co-tenant
