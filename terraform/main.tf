@@ -141,6 +141,14 @@ locals {
   # keypair (aws_ci.tf); rotate all the copies together.
   operator_ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEFQDmZidqILmoI6o9f8KLz+0hJad+Xh4Lm5OLsYDZTa adrien.kohlbecker@gmail.com"
 
+  # The dedicated CI identity (homelab-ci-cell): GitLab jobs SSH into cells
+  # with its private half via the CI_CELL_SSH_KEY file variable, never the
+  # operator's personal key. Baked AMIs authorize both keys through packer's
+  # operator_ssh_keys; minimal's Canonical AMI gets both via cloud-init
+  # user_data (aws_ci.tf launch template). Mirror of packer/aws/ami.pkr.hcl's
+  # operator_ssh_keys -- rotate the copies together.
+  ci_cell_ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAIGpIVsLZs1aYR0J1Tppi8AoRMhCFjN6eGQAXG4DbsQ homelab-ci-cell"
+
   # data/network_topology.yml is the canonical IP topology, also
   # consumed by ansible (group_vars/all/network.yml — same source of
   # truth, parallel consumer). `network` loads it verbatim;
