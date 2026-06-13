@@ -196,7 +196,8 @@ RUN mkdir -p /etc/mise && \
 # both during this init and at runtime, so the same /opt/packer/plugins
 # tree is found by `packer build` later.
 ENV PACKER_PLUGIN_PATH=/opt/packer/plugins
-COPY packer/qemu.pkr.hcl packer/aws/ami.pkr.hcl ./packer/
+COPY packer/qemu.pkr.hcl ./packer/
+COPY packer/aws/ami.pkr.hcl ./packer/aws/
 RUN mise run packer:init && rm -rf ./packer
 
 WORKDIR /

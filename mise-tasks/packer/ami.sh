@@ -56,8 +56,6 @@ if [ -t 0 ] && [ -z "${CI:-}" ]; then
   on_error=ask
 fi
 
-packer init packer/aws
-
 manifest=$(mktemp)
 trap 'rm -rf "$manifest"' EXIT
 rm -f "$manifest" # manifest post-processor refuses to overwrite a non-manifest file
