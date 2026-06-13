@@ -103,7 +103,7 @@ wireguard_keys:
 # live here, not per-host. No vaulted auth key: roles/tailscale mints a single-
 # use pre-auth key from fox at registration time (delegated there), under the
 # headscale user below -- the role auto-creates that user on first registration.
-tailscale_login_server: "https://headscale.fox.{{ domain }}"
+tailscale_login_server: "https://headscale.{{ domain }}"
 tailscale_headscale_host: fox
 tailscale_headscale_user: servers
 
@@ -1142,7 +1142,7 @@ authelia_oidc_clients:
       643330366236396438346563383762313731
     authorization_policy: two_factor
     redirect_uris:
-      - 'https://headscale.fox.{{ domain }}/oidc/callback'
+      - 'https://headscale.{{ domain }}/oidc/callback'
 
 gitlab_runner_enabled: true
 gitlab_runner_token: !vault |
