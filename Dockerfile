@@ -143,16 +143,34 @@ RUN install -dm 755 /etc/apt/keyrings && \
 # the bind-mounted GITHUB_WORKSPACE (a different filesystem than the
 # cache), so uv's default hardlink fails and falls back to copy with a
 # warning anyway -- this just makes the copy the deliberate path.
+# Bake the resolved venv into the image and reuse it at runtime, instead of
+# rebuilding a per-checkout .venv in every job. The 60-wide CI fan-out
+# otherwise rebuilds this venv 60x concurrently, and copy-mode materialization
+# of ansible/boto3/awscli is CPU-bound -- it dominated the orchestrator's
+# start-burst (uv pegging cores). UV_PROJECT_ENVIRONMENT pins the venv to
+# /opt/venv (a read-only image layer shared by every job via the overlay), so a
+# cell's `uv sync --locked` is a no-op verify when the checkout's lock matches
+# the image, and copies-up + drift-heals only when it actually moved.
+# MISE_PYTHON_UV_VENV_AUTO=false stops mise from auto-creating/activating a
+# workspace ./.venv that would shadow /opt/venv (it exports VIRTUAL_ENV, which
+# uv prefers over UV_PROJECT_ENVIRONMENT). UV_COMPILE_BYTECODE precompiles .pyc
+# into the baked venv so the read-only runtime venv never recompiles in-memory
+# on each import. This is the image env only -- local dev keeps uv_venv_auto.
 ENV UV_CACHE_DIR=/opt/uv-cache \
-    UV_LINK_MODE=copy
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_COMPILE_BYTECODE=1 \
+    MISE_PYTHON_UV_VENV_AUTO=false
 
 # Pre-resolve everything mise.toml asks for (python 3.14, uv, terraform,
-# packer, shellcheck, shfmt, tflint), then warm uv's wheel cache
-# by syncing the dependency tree once. The resulting .venv is discarded
-# because it's tied to /tmp/build and per-checkout venvs at workflow
-# time will be built against the actual GITHUB_WORKSPACE checkout — but
-# the cached wheels in /opt/uv-cache stay and make those `uv sync` calls
-# resolve in seconds instead of minutes.
+# packer, shellcheck, shfmt, tflint), then build the dependency tree once
+# into /opt/venv (UV_PROJECT_ENVIRONMENT above). Both the wheel cache
+# (/opt/uv-cache) and the resolved venv (/opt/venv) ship in the image:
+# runtime `uv sync --locked` no-ops against the baked venv when the lock
+# matches, and the cache covers the drift-heal when it doesn't. --link-mode
+# hardlink (overriding the global copy) dedupes /opt/venv against
+# /opt/uv-cache -- same filesystem at build time -- so baking the venv
+# barely grows the image.
 WORKDIR /tmp/build
 COPY mise.toml pyproject.toml uv.lock ./
 
@@ -177,8 +195,7 @@ RUN --mount=type=secret,id=mise_github_token \
     else \
       mise install; \
     fi && \
-    mise exec -- uv sync --frozen && \
-    rm -rf /tmp/build/.venv
+    mise exec -- uv sync --frozen --link-mode hardlink
 
 # Extract just the [tools] section into a global config. mise shims
 # (uv, opentofu, etc.) can then resolve their version from any CWD;
