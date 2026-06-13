@@ -509,6 +509,12 @@ EMPTY_SHA = "0" * 40
 # per-cell job loop and the site_test/no_cells branches are templated.
 _CHILD_TEMPLATE = Path(__file__).parent / "test_child.yml.j2"
 
+# The GitLab pipeline UI only renders the first 100 jobs of a stage, so the
+# full-universe matrix (140+ cells) spills off-screen in a single stage. Split
+# the cells evenly across two display stages (test1 / test2); the cell jobs
+# carry `needs: []` (DAG form) so test2 doesn't wait on test1 — the split is
+# purely a display grouping, every cell still starts in parallel.
+
 
 def _parse_cell_spec(spec: str) -> dict:
     """Split a ``role:variant[:ubuntu]`` cell spec into template fields."""
@@ -521,13 +527,29 @@ def _parse_cell_spec(spec: str) -> dict:
     }
 
 
+def _split_cells_into_stages(cells: list[dict]) -> list[dict]:
+    """Split cells evenly across two display stages (test1 / test2).
+
+    The first half lands in test1, the remainder in test2; test2 is omitted
+    when there are not enough cells to fill a second stage (0 or 1 cell).
+    """
+    if not cells:
+        return []
+    mid = (len(cells) + 1) // 2
+    groups = [{"stage": "test1", "cells": cells[:mid]}]
+    if cells[mid:]:
+        groups.append({"stage": "test2", "cells": cells[mid:]})
+    return groups
+
+
 def render_child_pipeline(specs: list[str], site_test: bool) -> str:
     """Render the generated child-pipeline YAML from test_child.yml.j2.
 
     One job per cell spec (``role:variant[:ubuntu]``), each extending the
     shared ``.cell`` scaffold; an optional site-converge job; and a no-op
     placeholder so the artifact is always a valid pipeline even when the
-    downstream trigger is gated off.
+    downstream trigger is gated off. Cells are split evenly across two display
+    stages (test1 / test2) but run as a single DAG (``needs: []``).
     """
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(_CHILD_TEMPLATE.parent)),
@@ -537,8 +559,15 @@ def render_child_pipeline(specs: list[str], site_test: bool) -> str:
         undefined=jinja2.StrictUndefined,
     )
     template = env.get_template(_CHILD_TEMPLATE.name)
+    cells = [_parse_cell_spec(s) for s in specs]
+    cell_groups = _split_cells_into_stages(cells)
+    # site_test / no_cells always live in the first stage, so declare it even
+    # when there are no cells to split.
+    stages = [g["stage"] for g in cell_groups] or ["test1"]
     return template.render(
-        cells=[_parse_cell_spec(s) for s in specs],
+        cells=cells,
+        cell_groups=cell_groups,
+        stages=stages,
         site_test=site_test,
         cell_role_arn=CELL_ROLE_ARN,
     )
