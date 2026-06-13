@@ -7,8 +7,8 @@ configures mirrors (apt/podman/pip via Nexus, or upstream on aws), then
 runs the real site.yml with --limit box. Catches role-ordering and
 cross-role interaction bugs that per-role tests miss.
 
-Exit codes match testrole.py: 0 success, 1 converge failure, 124 timeout,
-130 interrupted.
+Exit codes match testrole.py: 0 success, 1 converge failure, 86 spot
+interruption (EC2 backend), 124 timeout, 130 interrupted.
 """
 
 import argparse
@@ -29,7 +29,13 @@ from machine import (
     imagedir_for_host,
     sweep_stale_workdirs,
 )
-from utils import CommandFailedException, cancel_on_signal, print_line, tee_output
+from utils import (
+    CommandFailedException,
+    SpotInterruptedException,
+    cancel_on_signal,
+    print_line,
+    tee_output,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -113,6 +119,17 @@ async def run_site_test(m: Machine, *, timeout: int) -> None:
                             print_line("Site converge failed")
                             with contextlib.suppress(Exception):
                                 await m.collect_failure_artifacts()
+                            # Post-hoc spot classification (EC2 backend only;
+                            # the base returns False). A reclaimed instance is
+                            # infrastructure noise, not a converge failure —
+                            # exit 86 so the GitLab job retries exactly once.
+                            spot_interrupted = False
+                            with contextlib.suppress(Exception):
+                                spot_interrupted = await m.failure_was_spot_interruption()
+                            if spot_interrupted:
+                                raise SpotInterruptedException(
+                                    "Site converge failure classified as a spot interruption"
+                                ) from None
                             raise
 
                         print_line("Site converge passed")
@@ -164,6 +181,10 @@ def main() -> int:
     with tee_output(m.output_file):
         try:
             asyncio.run(run_site_test(m, timeout=args.timeout))
+        except SpotInterruptedException as exc:
+            print_line(str(exc), error=True)
+            print_line("site_test spot-interrupted", error=True)
+            rc = 86  # reserved for spot interruption; GitLab jobs retry this once
         except CommandFailedException as exc:
             print_line(str(exc), error=True)
             print_line("site_test failed", error=True)
