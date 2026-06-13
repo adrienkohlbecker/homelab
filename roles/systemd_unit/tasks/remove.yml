@@ -87,9 +87,16 @@
       before re-running, or --limit the play to skip this role.
 
 # Tolerate "unit not found" (the steady state we want IS "gone"), but
-# surface genuine errors (permissions, D-Bus unreachable).
+# surface genuine errors (permissions, D-Bus unreachable). Skipped for a
+# template unit (name@.service): the bare template is never itself running or
+# enabled -- only its instances are, and the caller stops/disables those by
+# instance before removing the template -- and systemd answers stop/disable on
+# a still-present template with "unknown state", which is NOT the tolerated
+# "could not find". Deleting the file + daemon-reload below is all that's left.
 - name: remove | Stop and disable {{ systemd_unit_args.dest | default(systemd_unit_args.src | default('?')) }}
-  when: _systemd_unit_condition
+  when:
+    - _systemd_unit_condition
+    - "'@.' not in _systemd_unit_name"
   systemd:
     name: "{{ _systemd_unit_name }}"
     state: stopped

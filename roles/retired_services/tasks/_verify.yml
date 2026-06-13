@@ -12,8 +12,23 @@
     - keepalived_exporter.service
     - hyperdx.service
     - gitea_runner.service
+    # github_runner: the template unit and its enabled instance's
+    # multi-user.target.wants symlink (the find -> stop -> template-remove path).
+    - github_runner@.service
+    - multi-user.target.wants/github_runner@1.service
   register: retired_services_units
   failed_when: retired_services_units.stat.exists
+
+- name: _verify | Decommissioned github_runner launcher, tmpfiles rule, and trees are absent
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/tmpfiles.d/github_runner.conf
+    - /usr/local/bin/github_runner_run
+    - /opt/actions-runner
+    - /mnt/scratch/github_runner
+  register: retired_services_github_runner_files
+  failed_when: retired_services_github_runner_files.stat.exists
 
 - name: _verify | Decommissioned state directories are absent
   stat:
