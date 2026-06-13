@@ -274,14 +274,16 @@ default_interface: "{{ ansible_default_ipv4.interface | mandatory }}"
 
 # wireguard-vanity-keygen -c $NAME/
 # Peer addresses derive from `network.*` (see group_vars/all/network.yml
-# and data/network_topology.yml); endpoints and keys stay literal since
-# they live outside the topology's scope.
+# and data/network_topology.yml). Keys, and the public off-site/home endpoints
+# (fox_endpoint/home_endpoint/bunk_endpoint), are vaulted -- they live outside
+# the public topology's scope. Same-site peers reach each other over the LAN
+# (endpoint.local); only off-site links use the vaulted public IPs as remote.
 wireguard_peers:
   - name: lab
     address: "{{ network.hosts.lab.wireguard }}"
     endpoint:
       local: "{{ external_ips.lab }}:51820"
-      remote: "home.{{ domain }}:51821"
+      remote: "{{ home_endpoint }}:51821"
     is_server: true
     public_key: "{{ wireguard_keys.lab.public_key }}"
     private_key: "{{ wireguard_keys.lab.private_key }}"
@@ -289,7 +291,7 @@ wireguard_peers:
     address: "{{ network.hosts.pug.wireguard }}"
     endpoint:
       local: "{{ external_ips.pug }}:51820"
-      remote: "home.{{ domain }}:51822"
+      remote: "{{ home_endpoint }}:51822"
     is_server: true
     public_key: "{{ wireguard_keys.pug.public_key }}"
     private_key: "{{ wireguard_keys.pug.private_key }}"
@@ -297,7 +299,7 @@ wireguard_peers:
     address: "{{ network.hosts.box.wireguard }}"
     endpoint:
       local: "{{ external_ips.box }}:51820"
-      remote: home.{{ domain }}:51823
+      remote: "{{ home_endpoint }}:51823"
     is_server: true
     public_key: "{{ wireguard_keys.box.public_key }}"
     private_key: "{{ wireguard_keys.box.private_key }}"
@@ -315,7 +317,7 @@ wireguard_peers:
     address: "{{ network.hosts.bunk.wireguard }}"
     endpoint:
       local: "{{ external_ips.bunk }}:51820"
-      remote: "{{ synology_endpoint }}:51820"
+      remote: "{{ bunk_endpoint }}:51820"
     is_server: true
     # Lab and pug are the always-on consumers of the bunk offsite link
     # (nightly zfs autobackup replication). Having them send a 25s
@@ -338,10 +340,14 @@ wireguard_peers:
     # physical /32s. That lets fox reach lab/pug host services without routing
     # whole home subnets. fox's `hetzner` site (network.hosts.fox.site) differs
     # from home/bonniers, so endpoint-selection never treats fox as same-site
-    # and always dials the remote FQDN.
+    # and always dials the remote endpoint.
+    #
+    # fox_endpoint is fox's public Hetzner IP, vaulted -- NOT fox.fahm.fr, which
+    # now resolves to fox's tailnet IP (100.64.0.x). wg0 is the underlay the
+    # tailnet rides on, so it must dial the public IP directly or it deadlocks.
     address: "{{ network.hosts.fox.wireguard }}"
     endpoint:
-      remote: "fox.{{ domain }}:51820"
+      remote: "{{ fox_endpoint }}:51820"
     is_server: true
     keepalive_from: [ lab, pug ]
     public_key: "{{ wireguard_keys.fox.public_key }}"

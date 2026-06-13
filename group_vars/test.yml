@@ -39,7 +39,7 @@ wireguard_peers:
     address: "{{ network.hosts.lab.wireguard }}"
     endpoint:
       local: "{{ external_ips.lab }}:51820"
-      remote: home.{{ domain }}:51823
+      remote: 192.0.2.1:51823
     is_server: true
     public_key: "{{ wireguard_keys.lab.public_key }}"
     private_key: "{{ wireguard_keys.lab.private_key }}"
@@ -47,7 +47,7 @@ wireguard_peers:
     address: "{{ network.hosts.pug.wireguard }}"
     endpoint:
       local: "{{ external_ips.pug }}:51820"
-      remote: home.{{ domain }}:51823
+      remote: 192.0.2.1:51823
     is_server: true
     public_key: "{{ wireguard_keys.pug.public_key }}"
     private_key: "{{ wireguard_keys.pug.private_key }}"
@@ -55,7 +55,7 @@ wireguard_peers:
     address: "{{ network.hosts.box.wireguard }}"
     endpoint:
       local: "{{ external_ips.box }}:51820"
-      remote: home.{{ domain }}:51823
+      remote: 192.0.2.1:51823
     is_server: true
     public_key: "{{ wireguard_keys.box.public_key }}"
     private_key: "{{ wireguard_keys.box.private_key }}"
@@ -128,7 +128,7 @@ wireguard_keys:
     public_key: changeme
     private_key: changeme
 
-synology_endpoint: changeme
+bunk_endpoint: changeme
 certbot_production_certificates: false
 
 podman_zvol_size: '{{ "15GB" | human_to_bytes | string }}'
