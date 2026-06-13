@@ -101,3 +101,17 @@
     name: gitlab_runner.service
     state: stopped
   become: true
+
+# The CI fan-out's job containers live under the runner's user-<uid>.slice
+# (rootless podman), not under gitlab_runner.service. The role caps that slice
+# so a wide matrix can't swap out a co-tenant control plane. Assert the cap
+# actually landed on the live slice (box sets both High + Max in host_vars): a
+# stat of the drop-in file would pass even if systemd never parsed the values.
+- name: _verify | Runner user-slice carries a finite memory cap
+  systemd:
+    name: user-{{ _gitlab_runner_uid.stdout }}.slice
+  register: _gitlab_runner_slice_cap
+  failed_when: >-
+    _gitlab_runner_slice_cap.status.MemoryMax == "infinity"
+    or _gitlab_runner_slice_cap.status.MemoryHigh == "infinity"
+  become: true
