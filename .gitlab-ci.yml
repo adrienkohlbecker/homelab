@@ -71,6 +71,19 @@ default:
 detect:
   extends: .hosted
   stage: prepare
+  # Run on the orchestrator (not SaaS) with pull_policy: always, so detect is the
+  # single authoritative image warm-up: it refreshes ci:latest once per pipeline
+  # into the runner's overlay store *before* emitting the child pipeline (the
+  # cells `needs:` this job's artifact — a hard happens-before). The up-to-60
+  # cells then reuse that warm layer with if-not-present (the runner default), so
+  # the full-universe fan-out pays exactly one image pull, not sixty, and never
+  # runs a stale :latest. Requires the runner's allowed_pull_policies to permit
+  # `always`. See notes/ci_aws_test_cells.md (Phase 1 / package and image caching).
+  image:
+    name: $CI_REGISTRY_IMAGE/ci:latest
+    pull_policy: always
+  tags:
+    - fox-docker-aws
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web"
