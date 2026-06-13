@@ -330,6 +330,14 @@ certbot_extra_sans:
 # this /18 reaches the physical sites without selecting an exit node.
 tailscale_advertise_routes: "10.123.0.0/18"
 tailscale_advertise_exit_node: true
+# Direct public endpoint for roaming clients (symmetric/CGNAT mobile) so home-exit
+# and subnet traffic lands directly instead of relaying through fox's DERP. lab
+# and pug share the home WAN, so each pins a DISTINCT underlay port with its own
+# 1:1 UniFi forward: lab keeps tailscaled's default 41641 (pug uses 41642). The
+# firewall role opens WAN ingress on this port. MANUAL operator step: add the
+# UniFi port-forward WAN:41641 -> lab:41641 (udp).
+tailscale_port: 41641
+tailscale_wan_direct: true
 
 nginx_static_proxies:
   - marantz
