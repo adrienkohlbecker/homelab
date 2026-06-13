@@ -25,6 +25,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import NamedTuple
 
+import jinja2
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
@@ -861,111 +862,44 @@ def _cmd_run(args: list[str]) -> int:
 CELL_ROLE_ARN = "arn:aws:iam::000390721279:role/homelab-ci-cell"
 EMPTY_SHA = "0" * 40
 
-
-def _cell_before_script() -> list[str]:
-    """Shared cell prelude: tool drift self-heal, OIDC into the cell role, ssh agent."""
-    return [
-        # Fail before the launch, not at the SSH wait, when prerequisites are
-        # missing (the same guard style as ami_box_deps / fox_image).
-        'test -n "${CI_CELL_SSH_KEY:-}" || { echo "CI_CELL_SSH_KEY CI/CD variable is not set" >&2; exit 1; }',
-        'test -n "${HOMELAB_VAULT_PASSWORD_TEST:-}" || { echo "HOMELAB_VAULT_PASSWORD_TEST CI/CD variable is not set" >&2; exit 1; }',
-        # Same drift self-heal as .hosted, against the image's /opt/mise tree.
-        "mise install",
-        "uv sync --locked",
-        # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
-        # AssumeRoleWithWebIdentity provider wants a file path.
-        'export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"',
-        'echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"',
-        f"export AWS_ROLE_ARN={CELL_ROLE_ARN}",
-        'export AWS_ROLE_SESSION_NAME="cell-$CI_JOB_ID"',
-        # Smoke the OIDC chain before launching an instance.
-        "aws --region eu-central-1 sts get-caller-identity",
-        # The Ec2Machine SSHes as the operator identity over the agent (no key
-        # file in the repo); load the dedicated cell key into a fresh agent.
-        # GitLab file-type variables arrive without the trailing newline
-        # OpenSSH requires (and sometimes with CRLF), so ssh-add rejects the
-        # raw variable with "error in libcrypto"; normalise into a private 600
-        # copy -- strip CR, guarantee a trailing newline -- before loading it.
-        'cell_key="$(mktemp)"',
-        'chmod 600 "$cell_key"',
-        'printf \'%s\\n\' "$(tr -d \'\\r\' < "$CI_CELL_SSH_KEY")" > "$cell_key"',
-        'eval "$(ssh-agent -s)"',
-        'ssh-add "$cell_key"',
-        # Each cell has its own public IP, so the anon GitHub rate limit is far
-        # less of a risk than on GitHub Actions' single-NAT lab — but pass the
-        # PAT through to the guest's `mise install` when one is configured.
-        'if [ -n "${MISE_GITHUB_TOKEN:-}" ]; then export GITHUB_TOKEN="$MISE_GITHUB_TOKEN"; fi',
-    ]
+# The child pipeline is a Jinja2 template so the static scaffold (`.cell`
+# before_script, artifacts, retry) is reviewable as real YAML; only the
+# per-cell job loop and the site_test/no_cells branches are templated.
+_CHILD_TEMPLATE = Path(__file__).parent / "test_child.yml.j2"
 
 
-def _gitlab_child_doc(specs: list[str], site_test: bool) -> dict:
-    """Build the generated child-pipeline document.
+def _parse_cell_spec(spec: str) -> dict:
+    """Split a ``role:variant[:ubuntu]`` cell spec into template fields."""
+    parts = spec.split(":")
+    return {
+        "spec": spec,
+        "role": parts[0],
+        "variant": parts[1] if len(parts) >= 2 else "box",
+        "ubuntu": parts[2] if len(parts) >= 3 else "jammy",
+    }
+
+
+def render_child_pipeline(specs: list[str], site_test: bool) -> str:
+    """Render the generated child-pipeline YAML from test_child.yml.j2.
 
     One job per cell spec (``role:variant[:ubuntu]``), each extending the
     shared ``.cell`` scaffold; an optional site-converge job; and a no-op
     placeholder so the artifact is always a valid pipeline even when the
     downstream trigger is gated off.
     """
-    doc: dict = {
-        "default": {
-            "interruptible": True,
-            # The fox-docker-aws runner already defaults to this image, but the
-            # child is self-contained, so pin it explicitly.
-            "image": "$CI_REGISTRY_IMAGE/ci:latest",
-            "tags": ["fox-docker-aws"],
-        },
-        "stages": ["test"],
-        ".cell": {
-            "stage": "test",
-            "id_tokens": {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}},
-            # Harness --timeout is 25m (1500s); the job timeout leaves headroom
-            # for the prelude + cell teardown.
-            "timeout": "30m",
-            # testrole.py exits 86 on a post-hoc spot-interruption
-            # classification (notes/ci_aws_test_cells.md); retry the cell once.
-            "retry": {"max": 1, "exit_codes": [86]},
-            "variables": {
-                "HOMELAB_TEST_BACKEND": "aws",
-                # Restrict ansible to the test identity; the prod identity is
-                # undecryptable in CI by design (CLAUDE.md: Vault ids).
-                "ANSIBLE_VAULT_IDENTITY_LIST": "test@vault-client.sh",
-            },
-            "before_script": _cell_before_script(),
-            "artifacts": {
-                "when": "on_failure",
-                "expire_in": "30 days",
-                "paths": ["test/out/"],
-            },
-        },
-    }
-
-    for spec in specs:
-        parts = spec.split(":")
-        role = parts[0]
-        variant = parts[1] if len(parts) >= 2 else "box"
-        ubuntu = parts[2] if len(parts) >= 3 else "jammy"
-        doc[spec] = {
-            "extends": ".cell",
-            "variables": {"ROLE": role, "VARIANT": variant, "UBUNTU": ubuntu},
-            "script": ['test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500'],
-        }
-
-    if site_test:
-        doc["_site_test:box"] = {
-            "extends": ".cell",
-            "timeout": "60m",
-            "script": ["test/site_test.py --timeout 2400"],
-        }
-
-    if not specs and not site_test:
-        # The trigger is gated off (HAVE_CELLS=false) so this never runs; it
-        # only keeps the artifact a syntactically valid pipeline.
-        doc["no_cells"] = {
-            "stage": "test",
-            "script": ['echo "no role-relevant changes; nothing to test"'],
-        }
-
-    return doc
+    env = jinja2.Environment(
+        loader=jinja2.FileSystemLoader(str(_CHILD_TEMPLATE.parent)),
+        trim_blocks=True,
+        lstrip_blocks=True,
+        keep_trailing_newline=True,
+        undefined=jinja2.StrictUndefined,
+    )
+    template = env.get_template(_CHILD_TEMPLATE.name)
+    return template.render(
+        cells=[_parse_cell_spec(s) for s in specs],
+        site_test=site_test,
+        cell_role_arn=CELL_ROLE_ARN,
+    )
 
 
 def _emit_gitlab(matrix: str, site_test: bool, child_path: str, log) -> int:
@@ -974,19 +908,11 @@ def _emit_gitlab(matrix: str, site_test: bool, child_path: str, log) -> int:
     The `test_cells` trigger always runs this child (GitLab evaluates `rules`
     at pipeline-creation time, so a runtime "any cells?" flag can't gate it);
     when there is nothing to test the child carries only the `no_cells`
-    placeholder, which `_gitlab_child_doc` adds.
+    placeholder, which the template adds.
     """
     specs = json.loads(matrix)
 
-    doc = _gitlab_child_doc(specs, site_test)
-    header = (
-        "# Generated by mise-tasks/ci/detect.py — do not edit.\n"
-        "# The parent `detect` job writes this; the `test_cells` trigger runs it.\n"
-    )
-    # width=4096: keep each shell line on one physical line (no scalar folding)
-    # so the generated script is copy-paste-reproducible and parser-quirk-free.
-    body = yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=4096)
-    Path(child_path).write_text(header + body)
+    Path(child_path).write_text(render_child_pipeline(specs, site_test))
 
     log(f"matrix={matrix}")
     log(f"site_test={'true' if site_test else 'false'}")

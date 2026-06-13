@@ -1698,9 +1698,14 @@ class TestCmdRun:
         assert "helper_only" not in captured["roles"]
 
 
-class TestGitlabChildDoc:
+def _render_child_doc(specs: list[str], site_test: bool) -> dict:
+    """Render test_child.yml.j2 and parse it back to a dict for assertions."""
+    return detect.yaml.safe_load(detect.render_child_pipeline(specs, site_test))
+
+
+class TestRenderChildPipeline:
     def test_one_job_per_spec(self) -> None:
-        doc = detect._gitlab_child_doc(["nginx:box", "podman:box:noble"], site_test=False)
+        doc = _render_child_doc(["nginx:box", "podman:box:noble"], site_test=False)
         assert doc["default"]["tags"] == ["fox-docker-aws"]
         assert doc["stages"] == ["test"]
         assert doc[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "aws"
@@ -1713,13 +1718,13 @@ class TestGitlabChildDoc:
         assert "no_cells" not in doc
 
     def test_site_test_job_added(self) -> None:
-        doc = detect._gitlab_child_doc(["nginx:box"], site_test=True)
+        doc = _render_child_doc(["nginx:box"], site_test=True)
         assert "_site_test:box" in doc
         assert doc["_site_test:box"]["timeout"] == "60m"
         assert "no_cells" not in doc
 
     def test_empty_gets_noop_placeholder(self) -> None:
-        doc = detect._gitlab_child_doc([], site_test=False)
+        doc = _render_child_doc([], site_test=False)
         assert "no_cells" in doc
         assert "_site_test:box" not in doc
         # No cell jobs beyond the scaffolding + placeholder.
@@ -1727,10 +1732,16 @@ class TestGitlabChildDoc:
         assert jobs == ["no_cells"]
 
     def test_cell_role_arn_in_before_script(self) -> None:
-        doc = detect._gitlab_child_doc(["nginx:box"], site_test=False)
+        doc = _render_child_doc(["nginx:box"], site_test=False)
         joined = "\n".join(doc[".cell"]["before_script"])
         assert detect.CELL_ROLE_ARN in joined
         assert "ssh-add" in joined
+
+    def test_before_script_printf_normalises_key(self) -> None:
+        # The CR-strip + trailing-newline normalisation must survive the YAML
+        # round-trip exactly (the literal \n is for printf, not a YAML newline).
+        doc = _render_child_doc(["nginx:box"], site_test=False)
+        assert 'printf \'%s\\n\' "$(tr -d \'\\r\' < "$CI_CELL_SSH_KEY")" > "$cell_key"' in doc[".cell"]["before_script"]
 
 
 class TestEmitGitlab:
