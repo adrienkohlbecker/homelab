@@ -56,6 +56,16 @@ SSH_HOST = "127.0.0.1"
 
 TOPOLOGY_PATH = Path(__file__).parent.parent / "data" / "network_topology.yml"
 
+# Absolute path to the repo's ansible.cfg. Pinned via ANSIBLE_CONFIG (see
+# ansible_env) so it loads even when ansible would otherwise skip auto-discovery
+# -- the GitLab CI checkout (/builds/akohlbecker/homelab) is world-writable, and
+# ansible silently ignores an ansible.cfg in a world-writable cwd. Dropping it
+# loses host_key_checking=False, the mitogen strategy, the vault ids, and the
+# UserKnownHostsFile=/dev/null ssh_args, so the first connect to a fresh cell
+# dies on "Host key verification failed". An explicit ANSIBLE_CONFIG bypasses
+# the world-writable skip entirely.
+ANSIBLE_CONFIG_PATH = Path(__file__).parent.parent / "ansible.cfg"
+
 
 def _load_test_topology() -> dict:
     """Load data/network_topology.yml with the 10.123 → 10.234 gsub
@@ -562,6 +572,7 @@ class Machine:
         different filesystem).
         """
         return {
+            "ANSIBLE_CONFIG": str(ANSIBLE_CONFIG_PATH),
             "ANSIBLE_DISPLAY_OK_HOSTS": "true",
             "ANSIBLE_DISPLAY_SKIPPED_HOSTS": "true",
             "ANSIBLE_GATHERING": "smart",
