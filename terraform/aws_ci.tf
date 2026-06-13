@@ -624,8 +624,24 @@ resource "aws_launch_template" "ci_cell" {
 
   # Ignored by the baked images (no cloud-init — the operator key is baked
   # by chroot.sh via SSH_KEY_PUB), consumed by minimal's Canonical AMI where
-  # cloud-init installs it for the ubuntu user. Same key either way.
+  # cloud-init installs it for the ubuntu user.
   key_name = aws_key_pair.ci_operator.key_name
+
+  # minimal's Canonical AMI authorizes a single key via key_name (the
+  # operator's personal key, for local agent-driven runs). The baked AMIs
+  # additionally bake the homelab-ci-cell CI key via packer's
+  # operator_ssh_keys, but minimal has no bake step — so add that second key
+  # through cloud-init here, otherwise CI (whose agent holds only
+  # homelab-ci-cell) cannot SSH into a minimal cell. Baked images ignore
+  # user_data (no cloud-init), so scope it to minimal to avoid a no-op
+  # template churn on the others.
+  user_data = each.key == "minimal" ? base64encode(<<-EOT
+    #cloud-config
+    ssh_authorized_keys:
+      - ${local.operator_ssh_public_key}
+      - ${local.ci_cell_ssh_public_key}
+  EOT
+  ) : null
 
   tag_specifications {
     resource_type = "instance"
