@@ -84,10 +84,26 @@ headscale_oidc_issuer: "https://auth.{{ domain }}"
 fail2ban_enabled: true
 headscale_oidc_client_id: headscale
 
-# fox is not a Tailscale client. Public DNS for lab-hosted names may point at
-# Tailscale addresses for mesh clients, so pin the lab-hosted dependencies fox
-# itself consumes to lab's physical IP, which wg0 routes as a cross-site host
-# /32:
+# fox is a Tailscale node (2026-06-13, reversing the original control-plane-only
+# decision -- see notes/headscale_mesh_redesign.md "fox joins the tailnet"). It
+# advertises a Hetzner exit node (a DE egress alongside the home lab/pug and
+# Bonniers bunk exits) plus its private net 10.123.55.0/24. It registers against
+# its OWN headscale (tailscale_headscale_host: fox in group_vars/prod.yml), the
+# same co-located pattern the box harness already exercises.
+#
+# accept-routes stays OFF (role default): fox reaches lab/pug over wg0, never the
+# mesh, so the tailnet never sits on fox's path home -- the coordination-
+# independent lifeline the redesign note insists on. accept-dns stays OFF too:
+# fox keeps its own resolv.conf and does not consume MagicDNS.
+tailscale_advertise_routes: "10.123.55.0/24"
+tailscale_advertise_exit_node: true
+
+# Pin the lab-hosted dependencies fox consumes to lab's physical IP over wg0.
+# Public DNS for *.lab.fahm.fr now resolves to lab's Tailscale CGNAT address,
+# which fox does NOT route (accept-routes/accept-dns off). More fundamentally,
+# headscale's OIDC discovery runs at startup -- before the tailnet exists, since
+# headscale itself hasn't started yet -- so this dependency CANNOT be served over
+# the mesh and must ride wg0's cross-site host /32:
 #   - auth.fahm.fr: Headscale OIDC discovery at startup.
 etc_hosts_entries:
   auth.fahm.fr: "{{ network.hosts.lab.physical }}"

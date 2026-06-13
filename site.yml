@@ -60,6 +60,12 @@
   hosts: box,fox
   roles:
     - headscale
+    # fox is itself a tailnet node (exit node + subnet router; see
+    # host_vars/fox.yml and notes/headscale_mesh_redesign.md). It registers by
+    # delegating to its OWN headscale, so tailscale must come after it. box gets
+    # tailscale again in the Lab and Pug play below — idempotent, same host_vars
+    # source, same as subid.
+    - tailscale
     - fail2ban
     # subid before gitlab_runner: the runner's rootless podman (Docker
     # executor socket) needs gitlab_runner's subordinate-id range rendered
