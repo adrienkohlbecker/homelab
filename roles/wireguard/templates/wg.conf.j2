@@ -52,14 +52,10 @@ PresharedKey = {{ tuple | join('-') | wireguard_psk(wireguard_psk_seed) }}
 {% if own_peer.is_server and peer.is_server and own_host.site is defined and peer_host.site is defined and peer_host.site == own_host.site and peer.endpoint.local is defined %}
 Endpoint = {{ peer.endpoint.local }}
 {% else %}
-{# Endpoints are IPv4 or FQDN host:port -- this split assumes a single colon,
-   so a bracketed IPv6 literal ([2001:db8::1]:51820) would not parse. #}
-{% set host = peer.endpoint.remote | split(':') | first %}
-{% set port = peer.endpoint.remote | split(':') | last %}
-{% if own_peer.is_server %}
-{% set host = lookup('community.general.dig', host) %}
-{% endif %}
-Endpoint = {{ host }}:{{ port }}
+{# Remote endpoints are bare IP:port literals (the off-site/home public IPs live
+   in the vault, not in DNS), so wg-quick never resolves a name at bring-up and
+   there's no template-time dig. A bracketed IPv6 literal would pass through fine. #}
+Endpoint = {{ peer.endpoint.remote }}
 {% endif %}
 {% endif %}
 {# Peer-pair keepalive: emit PersistentKeepalive only when own_peer is

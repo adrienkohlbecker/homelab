@@ -127,11 +127,12 @@ variable "home_wan_ip" {
 locals {
   cloudflare_account_id = "43f1339d1841088669b616cecc6562de"
 
-  # Home WAN IP (the Freebox public v4), scoping fox's SSH firewall rule to the
-  # home network. Sourced from var.home_wan_ip (TF_VAR via 1Password). Residential,
-  # so it can change -- update the 1Password item if it does (and unblock fox SSH
-  # via the Hetzner Cloud console in the meantime). The home.fahm.fr A record reads
-  # the same var (dns_fahm_fr.tf) via local.fahm_fr_wan_records -- single source now.
+  # Home WAN IP (the Freebox public v4), scoping fox's and the CI cells' SSH
+  # firewall rules to the home network (hetzner.tf, aws_ci.tf). Sourced from
+  # var.home_wan_ip (TF_VAR via 1Password). Residential, so it can change --
+  # update the 1Password item if it does (and unblock fox SSH via the Hetzner
+  # Cloud console in the meantime). It is also vaulted as `home_endpoint` for
+  # wireguard (group_vars), the one place the two stores must stay in sync.
   home_wan_ip = var.home_wan_ip
 
   # The operator's laptop SSH public key, mirroring the `laptop` entry in
