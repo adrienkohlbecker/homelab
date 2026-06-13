@@ -63,11 +63,9 @@ rescue_init
 trap rescue_cleanup EXIT
 rescue_create
 
-manifest=$(mktemp)
 backstop_state=$(mktemp)
 backstop_pid=""
-trap 'bake_backstop_disarm "$region" "$backstop_state" "$backstop_pid"; deregister_byproduct_amis "$region" "$ubuntu"; rm -rf "$manifest" "$backstop_state"; rescue_cleanup' EXIT
-rm -f "$manifest" # manifest post-processor refuses to overwrite a non-manifest file
+trap 'bake_backstop_disarm "$region" "$backstop_state" "$backstop_pid"; deregister_byproduct_amis "$region" "$ubuntu"; rm -rf "$backstop_state"; rescue_cleanup' EXIT
 
 # Arm the orphan backstop (CI-only, inside the helper) in the background: the
 # 90-min job timeout that orphaned a build instance here once (it killed packer
@@ -79,8 +77,9 @@ backstop_pid=$!
 # volume into the rescue server's `zstd -d | dd of=/dev/sda` (KEY authorizes
 # the build instance; RESCUE_IP is its target). packer still registers a
 # byproduct AMI -- ebssurrogate cannot skip it -- which the EXIT trap's
-# deregister_byproduct_amis sweep drops on every path. The manifest is now just
-# the post-processor's sink (kept off the cwd), not the deregister source.
+# deregister_byproduct_amis sweep drops on every path. The hetzner source runs
+# no post-processor (the manifest is box/pug/lab-only), so manifest_path is left
+# at its default and unused here.
 packer build \
   -timestamp-ui \
   -warn-on-undeclared-var \
@@ -88,7 +87,6 @@ packer build \
   -only="amazon-ebssurrogate.hetzner" \
   -var "ubuntu_name=${ubuntu}" \
   -var "build_id=${CI_PIPELINE_ID:-local}" \
-  -var "manifest_path=${manifest}" \
   -var "hetzner_rescue_ip=${RESCUE_IP}" \
   -var "hetzner_rescue_key=${KEY}" \
   packer/aws
