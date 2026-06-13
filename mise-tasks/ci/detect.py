@@ -5,7 +5,11 @@ Complete change-detection logic: mode dispatch, green-base resolution via the
 GitHub API, changed-file classification, role-deps expansion, release-cell
 propagation, matrix bucket splitting, and output emission.
 
-Called from detect-roles.sh (a thin exec wrapper) via ``python3 detect.py run``.
+Two front ends share the classification core:
+  - ``run`` (GitHub Actions): resolves a green base via the GitHub API and
+    emits per-bucket matrix outputs to $GITHUB_OUTPUT (detect-roles.sh wraps it).
+  - ``gitlab`` (GitLab CI): diffs the previous branch tip and writes a
+    generated child pipeline (one job per cell) + a HAVE_CELLS dotenv flag.
 """
 
 import json
@@ -53,6 +57,7 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
     r"uv\.lock",
     r"data/network_topology\.(yml|schema\.json)",
     r"\.github/workflows/[^/]+\.yml",
+    r"\.gitlab-ci\.yml",
     r"mise-tasks/ci/.+",
 ]
 
@@ -836,6 +841,290 @@ def _cmd_run(args: list[str]) -> int:
     return _emit_result(matrix)
 
 
+# ---------------------------------------------------------------------------
+# GitLab dynamic child pipeline
+# ---------------------------------------------------------------------------
+#
+# The GitLab port emits a *generated child pipeline* instead of GitHub's
+# per-bucket matrix outputs. There are no QEMU images or per-release runner
+# pools on AWS — every cell launches the same way (an EC2 spot instance from
+# the homelab-ci-cell-<machine> launch template + the
+# /homelab-ci/ami/<machine>/<ubuntu> AMI), so the bucket split is irrelevant
+# and the matrix collapses to one job per `role:variant[:ubuntu]` cell.
+#
+# The parent `detect` job (.gitlab-ci.yml) runs `detect.py gitlab`, which
+# writes the child YAML (one job per cell, all extending a shared `.cell`
+# scaffold) and a dotenv flag (HAVE_CELLS) that gates the downstream trigger.
+
+# IAM role the harness assumes to launch/terminate cells (terraform/aws_ci.tf);
+# its OIDC trust accepts any branch, so feature-branch pushes can test too.
+CELL_ROLE_ARN = "arn:aws:iam::000390721279:role/homelab-ci-cell"
+EMPTY_SHA = "0" * 40
+
+
+def _cell_before_script() -> list[str]:
+    """Shared cell prelude: tool drift self-heal, OIDC into the cell role, ssh agent."""
+    return [
+        # Fail before the launch, not at the SSH wait, when prerequisites are
+        # missing (the same guard style as ami_box_deps / fox_image).
+        'test -n "${CI_CELL_SSH_KEY:-}" || { echo "CI_CELL_SSH_KEY CI/CD variable is not set" >&2; exit 1; }',
+        'test -n "${HOMELAB_VAULT_PASSWORD_TEST:-}" || { echo "HOMELAB_VAULT_PASSWORD_TEST CI/CD variable is not set" >&2; exit 1; }',
+        # Same drift self-heal as .hosted, against the image's /opt/mise tree.
+        "mise install",
+        "uv sync --locked",
+        # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
+        # AssumeRoleWithWebIdentity provider wants a file path.
+        'export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"',
+        'echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"',
+        f"export AWS_ROLE_ARN={CELL_ROLE_ARN}",
+        'export AWS_ROLE_SESSION_NAME="cell-$CI_JOB_ID"',
+        # Smoke the OIDC chain before launching an instance.
+        "aws --region eu-central-1 sts get-caller-identity",
+        # The Ec2Machine SSHes as the operator identity over the agent (no key
+        # file in the repo); load the dedicated cell key into a fresh agent.
+        'chmod 600 "$CI_CELL_SSH_KEY"',
+        'eval "$(ssh-agent -s)"',
+        'ssh-add "$CI_CELL_SSH_KEY"',
+        # Each cell has its own public IP, so the anon GitHub rate limit is far
+        # less of a risk than on GitHub Actions' single-NAT lab — but pass the
+        # PAT through to the guest's `mise install` when one is configured.
+        'if [ -n "${MISE_GITHUB_TOKEN:-}" ]; then export GITHUB_TOKEN="$MISE_GITHUB_TOKEN"; fi',
+    ]
+
+
+def _gitlab_child_doc(specs: list[str], site_test: bool) -> dict:
+    """Build the generated child-pipeline document.
+
+    One job per cell spec (``role:variant[:ubuntu]``), each extending the
+    shared ``.cell`` scaffold; an optional site-converge job; and a no-op
+    placeholder so the artifact is always a valid pipeline even when the
+    downstream trigger is gated off.
+    """
+    doc: dict = {
+        "default": {
+            "interruptible": True,
+            # The fox-docker-aws runner already defaults to this image, but the
+            # child is self-contained, so pin it explicitly.
+            "image": "$CI_REGISTRY_IMAGE/ci:latest",
+            "tags": ["fox-docker-aws"],
+        },
+        "stages": ["test"],
+        ".cell": {
+            "stage": "test",
+            "id_tokens": {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}},
+            # Harness --timeout is 25m (1500s); the job timeout leaves headroom
+            # for the prelude + cell teardown.
+            "timeout": "30m",
+            # testrole.py exits 86 on a post-hoc spot-interruption
+            # classification (notes/ci_aws_test_cells.md); retry the cell once.
+            "retry": {"max": 1, "exit_codes": [86]},
+            "variables": {
+                "HOMELAB_TEST_BACKEND": "aws",
+                # Restrict ansible to the test identity; the prod identity is
+                # undecryptable in CI by design (CLAUDE.md: Vault ids).
+                "ANSIBLE_VAULT_IDENTITY_LIST": "test@vault-client.sh",
+            },
+            "before_script": _cell_before_script(),
+            "artifacts": {
+                "when": "on_failure",
+                "expire_in": "30 days",
+                "paths": ["test/out/"],
+            },
+        },
+    }
+
+    for spec in specs:
+        parts = spec.split(":")
+        role = parts[0]
+        variant = parts[1] if len(parts) >= 2 else "box"
+        ubuntu = parts[2] if len(parts) >= 3 else "jammy"
+        doc[spec] = {
+            "extends": ".cell",
+            "variables": {"ROLE": role, "VARIANT": variant, "UBUNTU": ubuntu},
+            "script": ['test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500'],
+        }
+
+    if site_test:
+        doc["_site_test:box"] = {
+            "extends": ".cell",
+            "timeout": "60m",
+            "script": ["test/site_test.py --timeout 2400"],
+        }
+
+    if not specs and not site_test:
+        # The trigger is gated off (HAVE_CELLS=false) so this never runs; it
+        # only keeps the artifact a syntactically valid pipeline.
+        doc["no_cells"] = {
+            "stage": "test",
+            "script": ['echo "no role-relevant changes; nothing to test"'],
+        }
+
+    return doc
+
+
+def _emit_gitlab(matrix: str, site_test: bool, child_path: str, log) -> int:
+    """Write the generated child-pipeline YAML.
+
+    The `test_cells` trigger always runs this child (GitLab evaluates `rules`
+    at pipeline-creation time, so a runtime "any cells?" flag can't gate it);
+    when there is nothing to test the child carries only the `no_cells`
+    placeholder, which `_gitlab_child_doc` adds.
+    """
+    specs = json.loads(matrix)
+
+    doc = _gitlab_child_doc(specs, site_test)
+    header = (
+        "# Generated by mise-tasks/ci/detect.py — do not edit.\n"
+        "# The parent `detect` job writes this; the `test_cells` trigger runs it.\n"
+    )
+    # width=4096: keep each shell line on one physical line (no scalar folding)
+    # so the generated script is copy-paste-reproducible and parser-quirk-free.
+    body = yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=4096)
+    Path(child_path).write_text(header + body)
+
+    log(f"matrix={matrix}")
+    log(f"site_test={'true' if site_test else 'false'}")
+    log(f"-> {len(specs)} cell job(s){' + site converge' if site_test else ''}")
+    log(f"-> wrote {child_path}")
+    return 0
+
+
+def _gitlab_change_matrix(event: str, log) -> tuple[str, bool]:
+    """GitLab change-detection: resolve a diff base and compute the cell matrix.
+
+    Returns ``(matrix_json, site_test)``. A full-universe trigger (a
+    cross-cutting path changed, or no usable diff base) returns the whole
+    universe with site_test enabled, mirroring the GitHub flow.
+    """
+    before_sha = os.environ.get("CI_COMMIT_BEFORE_SHA", "")
+    branch = os.environ.get("CI_COMMIT_BRANCH", "")
+    default_branch = os.environ.get("CI_DEFAULT_BRANCH", "master")
+
+    def full_universe(reason):
+        log(f"{reason} -> testing the FULL universe")
+        return _full_universe_matrix(), True
+
+    # Diff base: an explicit override wins (local/preview), else the previous
+    # tip of the branch this push advanced (CI_COMMIT_BEFORE_SHA). That covers
+    # exactly the commits in the push without an API call; the red-push→fix
+    # edge case (only the fix is retested) is acceptable for a solo operator —
+    # a green-base resolver via the GitLab pipelines API is a future refinement
+    # (notes/ci_aws_test_cells.md).
+    ci_base_ref = os.environ.get("CI_BASE_REF", "")
+    if ci_base_ref:
+        base_ref = ci_base_ref
+        log(f"diff base: {base_ref} (CI_BASE_REF override)")
+    elif before_sha and before_sha != EMPTY_SHA:
+        base_ref = before_sha
+        log(f"diff base: {before_sha[:12]} (previous branch tip)")
+    else:
+        return full_universe("no previous commit (new branch / first push)")
+
+    if git_rev_parse(base_ref) is None:
+        log(f"  base {base_ref[:12]} outside shallow checkout; fetching the commit")
+        git_fetch_commit(base_ref)
+    base = git_rev_parse(base_ref)
+    if base is None:
+        return full_universe(f"base ref '{base_ref}' does not resolve")
+
+    changed = git_diff_files(base)
+    head_short = git_rev_parse_short("HEAD")
+    log(f"comparing {base[:12]}..{head_short}: {len(changed)} file(s) changed")
+
+    is_master_push = event == "push" and branch == default_branch
+    classification = classify_changed_files(changed, is_master_push=is_master_push)
+
+    if classification.full_universe_paths:
+        log("full-universe paths changed:")
+        for p in classification.full_universe_paths:
+            log(f"     {p}")
+        return full_universe("full-universe path changed")
+
+    universe = set(list_testable_roles())
+    roles: set[str] = set()
+
+    if classification.packer_sources_affected & {"qemu", "hetzner_upload"}:
+        roles.add("packer")
+
+    if classification.machine_universe:
+        for machine in sorted(classification.machine_universe):
+            match_keys = {machine}
+            if machine == "box":
+                match_keys.add("box_deps")
+            machine_roles = [r for r in universe if match_keys & set(machines_for(r))]
+            log(f"machine-universe changed -> all {machine} roles: {' '.join(machine_roles)}")
+            roles.update(machine_roles)
+
+    deps_map = build_role_deps_map()
+
+    for role in classification.direct_roles:
+        if role in universe:
+            roles.add(role)
+        consumers = deps_map.get(role, [])
+        if consumers:
+            log(f"role '{role}' changed -> consumers: {' '.join(consumers)}")
+        for consumer in consumers:
+            if consumer in universe:
+                roles.add(consumer)
+
+    role_releases = {r: release_ubuntu_for(r) for r in classification.direct_roles}
+    all_consumers = {c for r in classification.direct_roles for c in deps_map.get(r, []) if c in universe}
+    role_machines_map = {c: list(machines_for(c)) for c in all_consumers}
+    release_cells = propagate_release_cells(
+        classification.direct_roles, deps_map, role_machines_map, role_releases, universe
+    )
+    if release_cells:
+        log(f"  propagated release cells: {' '.join(release_cells)}")
+
+    roles_sorted = sorted(roles)
+    if roles_sorted:
+        log(f"roles to test: {' '.join(roles_sorted)}")
+    else:
+        log("no role-relevant changes; matrix will be empty")
+
+    extra = [ci_spec_to_cell(s) for s in release_cells] if release_cells else None
+    matrix = json.dumps(cells_to_ci_specs(build_test_matrix(roles_sorted, extra)))
+    return matrix, False
+
+
+def _cmd_gitlab(args: list[str]) -> int:
+    """Emit the GitLab dynamic child pipeline (.gitlab-ci.yml's `detect` job)."""
+    from argparse import ArgumentParser
+
+    p = ArgumentParser(prog="detect.py gitlab")
+    p.add_argument("--child-path", default="test-child.yml")
+    p.add_argument("--all", action="store_true", help="Force the full universe (debug)")
+    opts = p.parse_args(args)
+
+    def log(msg):
+        print(f"[detect-roles] {msg}", file=sys.stderr)
+
+    if opts.all:
+        log("mode: --all (full universe)")
+        return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, log)
+
+    event = os.environ.get("CI_PIPELINE_SOURCE", "")
+    roles_input = os.environ.get("ROLES", "")
+
+    # A web/manual pipeline with a ROLES variable is the dispatch analog of
+    # GitHub's workflow_dispatch input.
+    if roles_input:
+        log(f"mode: dispatch ROLES='{roles_input}'")
+        if roles_input == "ALL":
+            log("ROLES=ALL -> full universe")
+            return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, log)
+        cells = _build_dispatch_matrix(roles_input)
+        return _emit_gitlab(json.dumps(cells_to_ci_specs(cells)), False, opts.child_path, log)
+
+    if event == "schedule":
+        log("mode: schedule (nightly full build)")
+        return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, log)
+
+    log(f"mode: change detection (source={event or 'local'})")
+    matrix, site_test = _gitlab_change_matrix(event, log)
+    return _emit_gitlab(matrix, site_test, opts.child_path, log)
+
+
 _COMMANDS = {
     "classify": _cmd_classify,
     "split-buckets": _cmd_split_buckets,
@@ -843,6 +1132,7 @@ _COMMANDS = {
     "packer-ubuntu": _cmd_packer_ubuntu,
     "emit": _cmd_emit,
     "run": _cmd_run,
+    "gitlab": _cmd_gitlab,
 }
 
 

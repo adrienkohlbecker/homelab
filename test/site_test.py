@@ -1,8 +1,9 @@
 #!/usr/bin/env -S uv run
 """
-Full site.yml converge on a box VM.
+Full site.yml converge on a box fixture.
 
-Boots a box QEMU VM, configures mirrors (apt/podman/pip via Nexus), then
+Boots a box fixture (qemu VM or, with --backend aws, a single-use EC2 cell),
+configures mirrors (apt/podman/pip via Nexus, or upstream on aws), then
 runs the real site.yml with --limit box. Catches role-ordering and
 cross-role interaction bugs that per-role tests miss.
 
@@ -13,15 +14,18 @@ Exit codes match testrole.py: 0 success, 1 converge failure, 124 timeout,
 import argparse
 import asyncio
 import contextlib
+import os
 import shutil
 import sys
 import traceback
 from pathlib import Path
 
 from machine import (
+    BACKEND_CHOICES,
     DEFAULT_UBUNTU,
-    QemuMachine,
+    Machine,
     UBUNTU_RELEASES,
+    create_machine,
     imagedir_for_host,
     sweep_stale_workdirs,
 )
@@ -38,6 +42,13 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_UBUNTU,
         choices=sorted(UBUNTU_RELEASES),
         help="Ubuntu release codename (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--backend",
+        default=os.environ.get("HOMELAB_TEST_BACKEND", "qemu"),
+        choices=BACKEND_CHOICES,
+        help="Where the fixture runs: a local qemu VM or a single-use EC2 spot instance "
+        "(notes/ci_aws_test_cells.md). Falls back to $HOMELAB_TEST_BACKEND, then qemu.",
     )
     parser.add_argument(
         "--timeout",
@@ -61,7 +72,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def run_site_test(m: QemuMachine, *, timeout: int) -> None:
+async def run_site_test(m: Machine, *, timeout: int) -> None:
     task = asyncio.current_task()
     assert task is not None
 
@@ -133,9 +144,14 @@ async def run_site_test(m: QemuMachine, *, timeout: int) -> None:
 def main() -> int:
     args = parse_args()
 
-    sweep_stale_workdirs(imagedir_for_host())
+    # qemu-only: the aws backend stages its workdir under the system tmp and
+    # the imagedir mount may not exist at all on the runner container
+    # (see testrole.py's matching guard).
+    if args.backend == "qemu":
+        sweep_stale_workdirs(imagedir_for_host())
 
-    m = QemuMachine(
+    m: Machine = create_machine(
+        args.backend,
         machine="box",
         role="_site_test",
         keep_vm=args.keep,

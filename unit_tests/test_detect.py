@@ -1698,6 +1698,95 @@ class TestCmdRun:
         assert "helper_only" not in captured["roles"]
 
 
+class TestGitlabChildDoc:
+    def test_one_job_per_spec(self) -> None:
+        doc = detect._gitlab_child_doc(["nginx:box", "podman:box:noble"], site_test=False)
+        assert doc["default"]["tags"] == ["fox-docker-aws"]
+        assert doc["stages"] == ["test"]
+        assert doc[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "aws"
+        assert doc[".cell"]["retry"]["exit_codes"] == [86]
+        # nginx:box → defaults ubuntu jammy; podman:box:noble → explicit noble.
+        assert doc["nginx:box"]["variables"] == {"ROLE": "nginx", "VARIANT": "box", "UBUNTU": "jammy"}
+        assert doc["podman:box:noble"]["variables"] == {"ROLE": "podman", "VARIANT": "box", "UBUNTU": "noble"}
+        assert doc["nginx:box"]["extends"] == ".cell"
+        assert "_site_test:box" not in doc
+        assert "no_cells" not in doc
+
+    def test_site_test_job_added(self) -> None:
+        doc = detect._gitlab_child_doc(["nginx:box"], site_test=True)
+        assert "_site_test:box" in doc
+        assert doc["_site_test:box"]["timeout"] == "60m"
+        assert "no_cells" not in doc
+
+    def test_empty_gets_noop_placeholder(self) -> None:
+        doc = detect._gitlab_child_doc([], site_test=False)
+        assert "no_cells" in doc
+        assert "_site_test:box" not in doc
+        # No cell jobs beyond the scaffolding + placeholder.
+        jobs = [k for k in doc if k not in ("default", "stages", ".cell")]
+        assert jobs == ["no_cells"]
+
+    def test_cell_role_arn_in_before_script(self) -> None:
+        doc = detect._gitlab_child_doc(["nginx:box"], site_test=False)
+        joined = "\n".join(doc[".cell"]["before_script"])
+        assert detect.CELL_ROLE_ARN in joined
+        assert "ssh-add" in joined
+
+
+class TestEmitGitlab:
+    def test_writes_child_with_cells(self, tmp_path: Path) -> None:
+        child = tmp_path / "child.yml"
+        rc = detect._emit_gitlab(json.dumps(["nginx:box"]), False, str(child), lambda *_: None)
+        assert rc == 0
+        loaded = detect.yaml.safe_load(child.read_text())
+        assert "nginx:box" in loaded
+        assert "no_cells" not in loaded
+
+    def test_site_test_only(self, tmp_path: Path) -> None:
+        child = tmp_path / "child.yml"
+        detect._emit_gitlab(json.dumps([]), True, str(child), lambda *_: None)
+        assert "_site_test:box" in detect.yaml.safe_load(child.read_text())
+
+    def test_empty_writes_valid_noop_pipeline(self, tmp_path: Path) -> None:
+        child = tmp_path / "child.yml"
+        detect._emit_gitlab(json.dumps([]), False, str(child), lambda *_: None)
+        # Always a valid pipeline with at least one job, so the trigger never
+        # fails on an empty child.
+        loaded = detect.yaml.safe_load(child.read_text())
+        assert "no_cells" in loaded
+
+
+class TestCmdGitlab:
+    def test_all_flag_full_universe(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
+        child = tmp_path / "child.yml"
+        rc = detect._cmd_gitlab(["--all", "--child-path", str(child)])
+        assert rc == 0
+        assert "_site_test:box" in detect.yaml.safe_load(child.read_text())
+
+    def test_schedule_full_universe(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CI_PIPELINE_SOURCE", "schedule")
+        monkeypatch.delenv("ROLES", raising=False)
+        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
+        child = tmp_path / "child.yml"
+        rc = detect._cmd_gitlab(["--child-path", str(child)])
+        assert rc == 0
+        loaded = detect.yaml.safe_load(child.read_text())
+        assert "nginx:box" in loaded
+        assert "_site_test:box" in loaded
+
+    def test_dispatch_roles_all(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CI_PIPELINE_SOURCE", "web")
+        monkeypatch.setenv("ROLES", "ALL")
+        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
+        child = tmp_path / "child.yml"
+        assert detect._cmd_gitlab(["--child-path", str(child)]) == 0
+        assert "nginx:box" in detect.yaml.safe_load(child.read_text())
+
+    def test_gitlab_in_commands(self) -> None:
+        assert "gitlab" in detect._COMMANDS
+
+
 class TestMainEntrypoint:
     def test_no_args_returns_2(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.argv", ["detect.py"])
