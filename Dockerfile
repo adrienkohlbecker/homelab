@@ -190,13 +190,13 @@ RUN mkdir -p /etc/mise && \
       > /etc/mise/config.toml
 
 # Pre-install the packer plugins declared in packer/*.pkr.hcl
-# (qemu + external from qemu.pkr.hcl, hcloud from hcloud_worker.pkr.hcl)
+# (qemu + external from qemu.pkr.hcl, aws + ansible from ami.pkr.hcl)
 # so workflows don't have to fetch them on every CI run -- the
 # container's HOME is fresh each time. PACKER_PLUGIN_PATH is honored
 # both during this init and at runtime, so the same /opt/packer/plugins
 # tree is found by `packer build` later.
 ENV PACKER_PLUGIN_PATH=/opt/packer/plugins
-COPY packer/qemu.pkr.hcl packer/hcloud_worker.pkr.hcl ./packer/
+COPY packer/qemu.pkr.hcl packer/aws/ami.pkr.hcl ./packer/
 RUN mise run packer:init && rm -rf ./packer
 
 WORKDIR /
