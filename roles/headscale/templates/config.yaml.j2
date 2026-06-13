@@ -1,13 +1,16 @@
 #jinja2: lstrip_blocks: True
 # Managed by Ansible (roles/headscale). Schema: headscale v0.26.x.
-# server_url follows the repo's <service>.<host>.<domain> convention so the
-# same template renders headscale.box.fahm.fr under the test harness and
-# headscale.fox.fahm.fr in prod. nginx terminates TLS and reverse-proxies to
-# the loopback listener, so headscale itself runs plain HTTP (tls_* empty).
-# The tailscale role's _setup overrides headscale_server_url to the plain-http
-# loopback listener so a real Tailscale client can register against this box
-# under the harness without trusting the snakeoil TLS cert (whose CN/SAN don't
-# match headscale.box.fahm.fr). Prod leaves the default https vhost URL.
+# server_url is the public control-plane + DERP FQDN clients enroll against. The
+# default follows the repo's <service>.<host>.<domain> convention, which the test
+# harness renders (headscale.box.fahm.fr). Prod (fox) overrides it via
+# headscale_server_url to the apex-level headscale.fahm.fr -- a flat public name
+# decoupled from fox.fahm.fr (now the host's Tailscale IP) so an un-enrolled
+# client can still reach the control plane to join (see host_vars/fox.yml +
+# terraform/dns_fahm_fr.tf). nginx terminates TLS and reverse-proxies to the
+# loopback listener, so headscale itself runs plain HTTP (tls_* empty). The
+# tailscale role's _setup overrides headscale_server_url again to the plain-http
+# loopback listener so a real Tailscale client can register under the harness
+# without trusting the snakeoil TLS cert (whose CN/SAN don't match the vhost).
 server_url: {{ headscale_server_url | default('https://headscale.' ~ inventory_hostname ~ '.' ~ domain) }}
 listen_addr: 0.0.0.0:8080
 metrics_listen_addr: 0.0.0.0:9090
@@ -127,14 +130,15 @@ dns:
   # it when the DNS-VIP chain (the global nameserver above) is unreachable. With
   # override_local_dns on, all queries go to the VIP, so without this a DNS
   # outage leaves a client unable to re-resolve headscale to recover. Points at
-  # fox's public IPs (same addresses fox.fahm.fr resolves to). fox-only: gated on
-  # the DERP IPs, unset under the box harness where server_url is a loopback URL.
+  # fox's public IPs (the same addresses headscale.fahm.fr resolves to). fox-only:
+  # gated on the DERP IPs, unset under the box harness where server_url is a
+  # loopback URL.
   extra_records:
-    - name: "headscale.{{ inventory_hostname }}.{{ domain }}"
+    - name: "headscale.{{ domain }}"
       type: "A"
       value: "{{ headscale_derp_ipv4 }}"
 {% if headscale_derp_ipv6 is defined %}
-    - name: "headscale.{{ inventory_hostname }}.{{ domain }}"
+    - name: "headscale.{{ domain }}"
       type: "AAAA"
       value: "{{ headscale_derp_ipv6 }}"
 {% endif %}

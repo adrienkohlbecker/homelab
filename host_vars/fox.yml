@@ -115,6 +115,21 @@ nginx_ipv6: true
 headscale_derp_ipv4: "46.225.182.74"
 headscale_derp_ipv6: "2a01:4f8:1c19:c5d9::"
 
+# The control plane is published at the apex-level headscale.fahm.fr (terraform
+# dns_fahm_fr.tf, real public IPs), decoupled from fox.fahm.fr -- which now
+# resolves to fox's Tailscale CGNAT IP, unreachable by a client not yet enrolled.
+# The headscale template's <service>.<host>.<domain> default (headscale.fox.fahm.fr)
+# would ride the *.fox.fahm.fr CNAME onto that CGNAT address, so override it here.
+# nginx already serves this name (the nginx_site vhost server_name carries the
+# <subdomain>.<domain> form alongside <subdomain>.<host>.<domain>); the cert SAN
+# below makes its TLS cert cover it.
+headscale_server_url: "https://headscale.{{ domain }}"
+
+# fox's issued cert covers fox.fahm.fr + *.fox.fahm.fr; the wildcard does NOT
+# cover the apex-level headscale.fahm.fr control-plane vhost, so add it explicitly.
+certbot_extra_sans:
+  - headscale.{{ domain }}
+
 # Headscale OIDC (user-device enrollment via Authelia), ENABLED. Headless hosts
 # (lab/pug) still enroll via pre-auth keys regardless; this is for the Apple-app
 # enrollment flow. The operator prerequisites (notes/headscale_mesh_redesign.md

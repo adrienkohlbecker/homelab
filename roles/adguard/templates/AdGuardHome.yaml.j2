@@ -306,6 +306,11 @@ filtering:
     - domain: '*.box.{{ domain }}'
       answer: {{ external_ips.box }}
       enabled: true
+{#
+  No fox rewrite: fox is off-home (Hetzner), so the estate reaches it over the
+  tailnet, not a LAN/wg path. fox.fahm.fr therefore resolves to its Tailscale IP
+  for home clients too (the public record, un-overridden) -- same as roaming.
+#}
     - domain: auth.{{ domain }}
       answer: {{ external_ips.lab }}
       enabled: true
