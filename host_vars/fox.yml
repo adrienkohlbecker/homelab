@@ -44,7 +44,7 @@ netplan:
       dhcp4: true
       critical: true
       addresses:
-        - "2a01:4f8:1c1e:e070::1/64"
+        - "2a01:4f8:1c19:c5d9::1/64"
       nameservers:
         addresses:
           - 2a01:4ff:ff00::add:2
