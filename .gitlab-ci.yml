@@ -226,6 +226,7 @@ ami_images:
     # Same drift self-heal as .hosted, against the image's /opt/mise tree.
     - mise install
     - uv sync --locked
+    - mise run packer:init
     # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
     # AssumeRoleWithWebIdentity provider wants a file path.
     - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
@@ -275,6 +276,7 @@ ami_box_deps:
     # Same drift self-heal as .hosted, against the image's /opt/mise tree.
     - mise install
     - uv sync --locked
+    - mise run packer:init
     # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
     # AssumeRoleWithWebIdentity provider wants a file path.
     - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
@@ -324,6 +326,7 @@ fox_image:
     # Same drift self-heal as .hosted, against the image's /opt/mise tree.
     - mise install
     - uv sync --locked
+    - mise run packer:init
     # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
     # AssumeRoleWithWebIdentity provider wants a file path.
     - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"

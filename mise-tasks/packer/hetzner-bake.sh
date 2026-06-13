@@ -29,8 +29,6 @@ rescue_init
 trap rescue_cleanup EXIT
 rescue_create
 
-packer init packer/aws
-
 manifest=$(mktemp)
 trap 'rm -rf "$manifest"; rescue_cleanup' EXIT
 rm -f "$manifest" # manifest post-processor refuses to overwrite a non-manifest file
