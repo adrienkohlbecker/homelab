@@ -36,7 +36,7 @@
 # pulls to root's /var/lib/containers/storage; any other value pulls to
 # that user's /var/lib/containers/rootless/<user>/ store — where the
 # unit's ExecStart will actually look at runtime. Without that branch,
-# a system-scope unit with User=github_runner would silently pre-pull
+# a system-scope unit with a non-root User= would silently pre-pull
 # into root's store and then bust TimeoutStartSec on a cold rootless
 # pull inside systemctl start.
 - name: service | Validate service args
@@ -205,7 +205,7 @@
 # behavior exactly. For a non-root User= the role still needs root to
 # `become` first (system-scope unit lives in /etc/systemd/system), then
 # drops into the user via become_user; the user's linger + podman.sock
-# are the caller's responsibility (see github_runner main.yml for the
+# are the caller's responsibility (see gitlab_runner main.yml for the
 # canonical setup).
 - name: service | Pre-pull podman images referenced by the unit
   when:

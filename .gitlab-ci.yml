@@ -13,11 +13,11 @@
 #     ami_box_deps / fox_image builders, and the role-test matrix + site
 #     test as the `detect` -> `test_cells` dynamic child pipeline below.
 #
-# Migration in progress: GitHub Actions (.github/workflows/) is being retired
-# as these land.
+# This is the sole CI: the former GitHub Actions setup (.github/workflows/) has
+# been retired.
 #
 # Required project CI/CD variable: HOMELAB_VAULT_PASSWORD_TEST — the `test`
-# vault identity's password (masked, same value as the GitHub repo secret).
+# vault identity's password (masked).
 # The prod identity's password is never available to CI by design (CLAUDE.md:
 # Vault ids).
 

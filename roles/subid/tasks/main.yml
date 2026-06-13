@@ -45,7 +45,7 @@
 
 # 0644 (world-readable) is the Ubuntu default. It must stay readable: rootless
 # tools that set up user namespaces themselves rather than via the setuid
-# newuidmap helper (notably rootlesskit, which backs the github_runner buildkitd)
+# newuidmap helper (notably rootlesskit, which backs rootless buildkitd)
 # read /etc/subuid + /etc/subgid directly and fail on a non-readable file. The
 # ranges aren't secret (they're uid/gid allocations), so world-read is fine.
 - name: Apply subuid settings

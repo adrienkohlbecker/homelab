@@ -2,7 +2,7 @@
 # Source this from any mise-tasks/packer/ script that needs HCLOUD_TOKEN.
 #
 # Two resolution paths:
-# 1. HCLOUD_TOKEN already set — CI (GitHub Actions secret) or manual export.
+# 1. HCLOUD_TOKEN already set — CI (GitLab CI/CD variable) or manual export.
 # 2. HCLOUD_TOKEN_OP — op:// ref from mise.toml [env]; re-exec under
 #    `op run --` to resolve it (local workstation).
 

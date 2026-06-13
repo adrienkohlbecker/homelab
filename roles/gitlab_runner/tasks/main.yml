@@ -82,9 +82,9 @@
     # crun makes sd-bus calls when creating containers, which fail with
     # "Permission denied" without one. The helper enables linger and waits
     # for user@<uid>.service (which provides the dbus + cgroup hierarchy
-    # crun expects) so the socket tasks below find a live bus. Same shape as
-    # roles/github_runner -- rootless podman is the one accepted user-scope
-    # exception (CLAUDE.md "Prefer system-scope systemd units").
+    # crun expects) so the socket tasks below find a live bus. Rootless podman
+    # is the one accepted user-scope exception (CLAUDE.md "Prefer system-scope
+    # systemd units").
     #
     # Prerequisite: the subid role must have rendered a subordinate-id range
     # for gitlab_runner (site.yml orders it before this role; host_vars list
@@ -103,7 +103,7 @@
     # jobs do. Storage rides the podman role's system config
     # (rootless_storage_path on the /var/lib/containers zvol -- overlay on
     # ext4, not ZFS); no per-user storage.conf needed since jobs are plain
-    # containers (no uidmapped siblings, unlike github_runner).
+    # containers (no uidmapped siblings).
     - name: Enable rootless podman socket
       when: not (ansible_check_mode and (gitlab_runner_user.changed or gitlab_runner_lingered))
       systemd:

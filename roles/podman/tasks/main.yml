@@ -141,7 +141,7 @@
   tags:
     - podman
 
-# No `condition:` here (unlike the github_runner caller that gates on a
+# No `condition:` here (unlike a service-user caller that gates on a
 # freshly-created user): the operator is the ansible connection
 # user -- always pre-existing -- and linger was enabled for it one task
 # above, so its user manager is guaranteed live when the timer ticks.

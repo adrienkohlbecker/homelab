@@ -673,28 +673,14 @@ class Machine:
         if Path("wireguard").exists():
             Path("wireguard").copy_into(self.workdir.name)
 
-        # mise.toml + uv lock + pyproject are repo-root files that some
-        # roles reference via `{{ playbook_dir }}/<file>` (e.g. github_runner
-        # bakes them into its ci-image container build context).
-        # Stage them so the harness's workdir mirrors what ansible sees
-        # on a production controller run.
+        # mise.toml + uv lock + pyproject are repo-root files a role may
+        # reference via `{{ playbook_dir }}/<file>` during converge. Stage
+        # them so the harness's workdir mirrors what ansible sees on a
+        # production controller run.
         for repo_root_file in ("mise.toml", "pyproject.toml", "uv.lock"):
             src = Path(repo_root_file)
             if src.exists():
                 src.copy_into(self.workdir.name)
-
-        # github_runner's ci-image build COPYs packer/qemu.pkr.hcl
-        # into its container build context (so the image bakes in the
-        # packer plugins our packer-build workflow uses) and our input-
-        # hash gating lookups it from playbook_dir. Stage just the .hcl
-        # file -- copying the whole packer/ tree would also drag in
-        # artifacts/ (multi-GB qcow2s) and scripts/ which aren't needed
-        # by any role under test.
-        packer_src = Path("packer/qemu.pkr.hcl")
-        if packer_src.exists():
-            packer_dest_dir = Path(self.workdir.name) / "packer"
-            packer_dest_dir.mkdir(exist_ok=True)
-            packer_src.copy_into(packer_dest_dir)
 
         # Copy the static role-agnostic playbooks (site / _setup /
         # _verify / _mirrors) into the workdir so ansible loads

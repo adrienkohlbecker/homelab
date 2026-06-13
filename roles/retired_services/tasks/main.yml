@@ -531,6 +531,99 @@
     - /mnt/scratch/gitea_runner
   become: true
 
+# ---- github_runner (was box,lab; the self-hosted GitHub Actions runner fleet,
+# retired together with GitHub Actions in favour of GitLab CI) ----
+# Same two-scope shape as gitea_runner, but the runners were *instantiated*
+# system-scope units (github_runner@<inst>.service, User=github_runner -- up to
+# ten on lab) backed by a lingering user manager that held the rootless
+# podman.socket + podman_prune.timer. The host_vars list that named the instances
+# is gone, so they're discovered from their multi-user.target.wants symlinks and
+# stopped+disabled; then the template unit, user-scope timer, linger, launcher,
+# tmpfiles rule, docker.sock shim, runner tree, and scratch state come down. The
+# github_runner system user is LEFT in place (uid/subid-range reuse, matching the
+# retained subid slot in lab.yml). The GitHub-side registration is NOT removed
+# here -- config.sh remove needs a fresh removal token, so delete the now-offline
+# runners from the repo settings by hand. Idempotent no-op where it never ran
+# (box/pug/fox).
+- name: Stat github_runner linger marker
+  stat:
+    path: /var/lib/systemd/linger/github_runner
+  register: retired_services_github_runner_linger
+  become: true
+
+- name: Find enabled github_runner instance units
+  find:
+    paths: /etc/systemd/system/multi-user.target.wants
+    patterns: github_runner@*.service
+    file_type: any
+  register: retired_services_github_runner_instances
+  become: true
+
+# System daemons first, so each stops before its rootless podman socket does.
+- name: Stop and disable github_runner instances
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop: "{{ retired_services_github_runner_instances.files | map(attribute='path') | map('basename') | list }}"
+  become: true
+
+- name: Retire the github_runner@.service template unit
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: github_runner@.service
+
+# User-scope prune timer (files under /etc/systemd/user); gated on the linger
+# marker so it no-ops where the user manager never ran (box/pug/fox).
+- name: Retire github_runner rootless podman prune timer
+  when: retired_services_github_runner_linger.stat.exists
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: podman_prune
+      user: github_runner
+
+- name: Turn off linger for github_runner
+  when: retired_services_github_runner_linger.stat.exists
+  command:
+    argv:
+      - loginctl
+      - --no-ask-password
+      - disable-linger
+      - github_runner
+    removes: /var/lib/systemd/linger/github_runner
+  become: true
+
+- name: Remove github_runner tmpfiles rule, docker.sock shim, and launcher
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/tmpfiles.d/github_runner.conf
+    - /var/run/docker.sock
+    - /usr/local/bin/github_runner_run
+  become: true
+
+- name: Remove the actions-runner tree
+  file:
+    path: /opt/actions-runner
+    state: absent
+  become: true
+
+# DESTRUCTIVE: /mnt/scratch/github_runner is the system user's home -- rootless
+# podman storage, per-instance workdirs, and runner job caches (scratch, never
+# backed up). /mnt/ci_scratch is a ZFS dataset and is left to zfs_mount.
+- name: Remove github_runner scratch state
+  file:
+    path: /mnt/scratch/github_runner
+    state: absent
+  become: true
+
 # ---- dnscrypt_proxy (was box,lab,pug; adguard now resolves via DoH directly) ----
 - name: Retire dnscrypt-proxy socket override drop-in
   import_role:

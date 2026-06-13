@@ -245,8 +245,6 @@ minio_users:
           30306236333164323136303736333730663864626137313338326364323861376561636535363537
           3439333331616239376132393030323363376233643031383361
 
-github_runner_pat: changeme
-
 # Authelia portal sits at auth.<inventory_hostname>.<domain> in test
 # (auth.box.mhaf.fr for the box fixture), not the apex auth.<domain>
 # that prod uses. Cloudflare's *.box.mhaf.fr wildcard makes the

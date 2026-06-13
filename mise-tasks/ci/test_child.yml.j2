@@ -63,8 +63,8 @@ stages:
     - printf '%s\n' "$(tr -d '\r' < "$CI_CELL_SSH_KEY")" > "$cell_key"
     - eval "$(ssh-agent -s)"
     - ssh-add "$cell_key"
-    # Each cell has its own public IP, so the anon GitHub rate limit is far less
-    # of a risk than on GitHub Actions' single-NAT lab -- but pass the PAT
+    # Each cell egresses from its own public IP, so the anon api.github.com
+    # rate limit mise install can hit is far less of a risk -- but pass the PAT
     # through to the guest's `mise install` when one is configured.
     - if [ -n "${MISE_GITHUB_TOKEN:-}" ]; then export GITHUB_TOKEN="$MISE_GITHUB_TOKEN"; fi
   artifacts:

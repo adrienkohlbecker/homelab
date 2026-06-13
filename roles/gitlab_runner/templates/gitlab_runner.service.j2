@@ -4,8 +4,7 @@
 # /usr/local/bin/gitlab-runner running as the gitlab_runner system user.
 # Docker executor against the user's rootless podman socket -- this
 # process runs job payloads in containers it starts over that socket,
-# never directly as itself. Mirrors the host-native shape of
-# roles/github_runner (no containerisation of the runner itself).
+# never directly as itself. The runner process itself is not containerised.
 [Unit]
 Description=GitLab Runner (Docker executor -> rootless podman)
 After=network-online.target
@@ -25,7 +24,7 @@ Requires=zfs_mount_mnt_services.service
 # Deliberately NOT PartOf=zfs_autosnapshot.target: the runner has no persistent
 # consistency need (config.toml is ansible-rendered; job state lives in
 # throwaway containers), and joining the target would let the nightly 02:00
-# snapshot stop the runner mid-CI -- same call as roles/github_runner.
+# snapshot stop the runner mid-CI.
 
 [Service]
 Type=simple

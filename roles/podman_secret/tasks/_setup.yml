@@ -4,7 +4,7 @@
     tasks_from: install
 
 # Rootless-podman prerequisites for the _verify `user:` scenario, mirroring
-# the github_runner rootless fixture: a real home for the
+# the gitlab_runner rootless fixture: a real home for the
 # per-user secret store, subuid/subgid maps, and linger so the user manager
 # (hence /run/user/<uid>) is up.
 - name: _setup | Ensure /mnt/scratch is world-traversable

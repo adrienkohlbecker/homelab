@@ -146,25 +146,22 @@ samba_shares:
     time_machine_max_size: 1T
 
 subid_users:
-  - github_runner
-  # gitlab_runner's rootless podman (Docker executor socket). Appended after
-  # github_runner so its slot (and live rootless storage uidmap) keeps its
-  # range — same retention rule as lab's list.
+  # gitlab_runner's rootless podman (Docker executor socket).
   - gitlab_runner
 
 # Exercise the extra-subgid-groups loop in the subid role (getent lookup +
-# template rendering). On prod lab this maps the kvm gid into
-# github_runner's userns; here we map the disk group into github_runner's
-# userns as a harmless equivalent. Without this, the loop body never fires.
+# template rendering). On a prod rootless runner this maps the kvm gid into
+# the runner's userns; here we map the disk group into gitlab_runner's userns
+# as a harmless equivalent. Without this, the loop body never fires.
 subid_extra_subgid_groups:
-  - user: github_runner
+  - user: gitlab_runner
     group: disk
 
 # Exercise the extra-subuid-users loop in the subid role (getent lookup +
 # template rendering). On prod this path has no consumers yet; here we
-# map root's uid into github_runner's userns as a harmless equivalent.
+# map root's uid into gitlab_runner's userns as a harmless equivalent.
 subid_extra_subuid_users:
-  - user: github_runner
+  - user: gitlab_runner
     source_user: root
 
 # Flipped to true so jellyfin + plex tests exercise the HW-transcoding
@@ -174,15 +171,6 @@ subid_extra_subuid_users:
 # runtime VAAPI probe inside the container falls back to software, but
 # the ansible-side machinery and container's view of /dev get covered.
 has_transcoding_acceleration: true
-# Stub instance so the github_runner role exercises its per-
-# instance code path under qemu_test (host-level PAT secret creation,
-# per-instance env file write + workdir create, templated unit loads
-# under the instantiated name). The role's qemu_test gate skips the
-# systemd start, so the entrypoint's curl POST to GitHub never fires --
-# this is a static-shape check, not a live runner.
-github_runner_instances:
-  - { repo: homelab, suffix: test1, owner: adrienkohlbecker, labels: "self-hosted,test" }
-
 # roles/gitlab_runner CI fixture. Enabled so the role exercises its full
 # host-side path under the harness (binary download, config.toml render +
 # TOML validate, rootless podman socket bringup, unit install + _verify's

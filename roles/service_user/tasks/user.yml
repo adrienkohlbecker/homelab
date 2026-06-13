@@ -5,7 +5,7 @@
 #                     them before this import (e.g. jellyfin imports the
 #                     media/render groups first).
 #   createhome        optional bool, default false; usually only true when the
-#                     service writes into $HOME (github_runner)
+#                     service writes into $HOME (gitea)
 #   shell             optional, default '/usr/sbin/nologin'
 #   home              optional, default '/nonexistent'
 #   home_mode         optional, default null (= don't touch). When set,

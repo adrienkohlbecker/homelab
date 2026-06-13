@@ -9,8 +9,8 @@
 #USAGE flag "--no-publish" help="Build and verify-boot but skip the install (publish) step. Used by feature-branch CI to validate packer changes without overwriting master's published artifacts."
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
-# Group-write so github_runner and ak (both in kvm) can mutually delete
-# each other's files in the shared /mnt/scratch/homelab_ci dir.
+# Group-write so every homelab_ci-group member can mutually delete each
+# other's files in the shared /mnt/scratch/homelab_ci dir.
 umask 002
 
 # Linux: keep packer's ISO cache off the root FS; falls through to
