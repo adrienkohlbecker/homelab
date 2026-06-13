@@ -26,15 +26,16 @@ trap rescue_cleanup EXIT
 rescue_create
 
 # Stream the image onto /dev/sda via the shared rescue receive pipeline
-# (mbuffer | pigz -d | dd). A .raw.gz is already wire-ready; a raw input is
-# compressed here -- pigz (parallel) when present, else gzip. mbuffer on the
-# send side, when present, smooths the handoff into ssh. Whatever this runner
-# has, the rescue always decodes it (pigz -d reads gzip too).
+# (mbuffer | zstd -dc | dd). Compress with zstd here (parallel via -T0; -1
+# since the payload is already-zstd'd rpool blocks + zeros, so speed beats
+# ratio); a .zst input passes through, a legacy .gz is transcoded. mbuffer on
+# the send side, when present, smooths the handoff into ssh.
 echo "==> streaming $IMG ($(du -h "$IMG" | cut -f1)) onto /dev/sda (this takes a few minutes)"
 sender() {
   case "$IMG" in
-  *.gz) cat "$IMG" ;;
-  *) if command -v pigz >/dev/null; then pigz -c "$IMG"; else gzip -c "$IMG"; fi ;;
+  *.zst) cat "$IMG" ;;
+  *.gz) gzip -dc "$IMG" | zstd -1 -T0 ;;
+  *) zstd -1 -T0 -c "$IMG" ;;
   esac
 }
 if command -v mbuffer >/dev/null; then

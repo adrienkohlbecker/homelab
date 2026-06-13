@@ -582,10 +582,11 @@ build {
   # /dev/sda — no file ever lands on the runner. provision.sh exported the
   # pools as its last step, so the volume is quiesced; aws_provision.sh left
   # the resolved NVMe device in resolved_disks (the mapping name /dev/xvdf
-  # doesn't exist on Nitro). pigz (parallel, all 4 vCPUs) compresses far
-  # faster than single-threaded gzip; mbuffer on each end absorbs network
-  # jitter so neither dd stalls. The rescue-side pipeline mirrors RESCUE_RECV
-  # in mise-tasks/packer/_hetzner_rescue.sh — keep the two in sync.
+  # doesn't exist on Nitro). zstd -T0 (all 4 vCPUs) compresses far faster than
+  # gzip and matches the rpool's own zstd; -1 since the payload is already-
+  # compressed blocks + zeros (speed over ratio). mbuffer on each end absorbs
+  # network jitter so neither dd stalls. The rescue-side pipeline mirrors
+  # RESCUE_RECV in mise-tasks/packer/_hetzner_rescue.sh — keep the two in sync.
   provisioner "shell" {
     only           = ["amazon-ebssurrogate.hetzner"]
     inline_shebang = "/bin/bash -e"
@@ -594,10 +595,10 @@ build {
       "rescue_ip='${var.hetzner_rescue_ip}'",
       "[ -n \"$rescue_ip\" ] || { echo 'hetzner_rescue_ip unset — build the hetzner image via mise run packer:hetzner-bake' >&2; exit 1; }",
       "chmod 600 /home/ubuntu/rescue_key",
-      "sudo apt-get update -qq && sudo apt-get install -y -qq pigz mbuffer",
+      "sudo apt-get update -qq && sudo apt-get install -y -qq zstd mbuffer",
       "disk=\"$(cut -d' ' -f1 /home/ubuntu/resolved_disks)\"",
       "echo \"==> streaming $disk -> root@$rescue_ip:/dev/sda\"",
-      "sudo dd if=\"$disk\" bs=64M | pigz | mbuffer -m 512M | ssh -i /home/ubuntu/rescue_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 \"root@$rescue_ip\" 'mbuffer -q -m 512M | pigz -d | dd of=/dev/sda bs=64M conv=sparse status=progress; sync'",
+      "sudo dd if=\"$disk\" bs=64M | zstd -1 -T0 | mbuffer -m 512M | ssh -i /home/ubuntu/rescue_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 \"root@$rescue_ip\" 'mbuffer -q -m 512M | zstd -dc | dd of=/dev/sda bs=64M conv=sparse status=progress; sync'",
       "echo '==> stream complete'",
     ]
   }

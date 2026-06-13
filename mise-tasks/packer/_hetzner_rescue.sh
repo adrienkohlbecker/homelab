@@ -24,12 +24,12 @@ SERVER="packer-hetzner-upload"
 # Canonical rescue-side receive pipeline, shared by both publish paths. The
 # EC2 stream provisioner (packer/aws/ami.pkr.hcl) hardcodes the same string --
 # keep them in sync. mbuffer absorbs network jitter so the dd write never
-# stalls the TCP stream; pigz -d is gzip-compatible, so a gzip sender (the KVM
-# path's fallback) still decodes here. conv=sparse skips zero blocks on write.
+# stalls the TCP stream; zstd matches the rpool's own on-disk compression and
+# beats gzip on both speed and ratio. conv=sparse skips zero blocks on write.
 # 512M buffer stays well inside the cpx22 rescue's RAM-backed root (~3.7 GB).
-# rescue_create installs pigz + mbuffer before this runs.
+# rescue_create installs zstd + mbuffer before this runs.
 # shellcheck disable=SC2034  # consumed by the scripts that source this lib
-RESCUE_RECV='mbuffer -q -m 512M | pigz -d | dd of=/dev/sda bs=64M conv=sparse status=progress; sync'
+RESCUE_RECV='mbuffer -q -m 512M | zstd -dc | dd of=/dev/sda bs=64M conv=sparse status=progress; sync'
 
 api() { # METHOD PATH [JSON]
   if [ -n "${3:-}" ]; then
@@ -105,11 +105,11 @@ rescue_create() {
     exit 1
   }
 
-  # Parallel decompress (pigz) + a network buffer (mbuffer) for the stream;
-  # the Debian rescue ships neither. apt here has internet + a working mirror.
-  echo "==> installing pigz + mbuffer in the rescue"
-  ssh_rescue 'apt-get update -qq && apt-get install -y -qq pigz mbuffer >/dev/null' || {
-    echo "failed to install pigz/mbuffer in the rescue" >&2
+  # Fast decompress (zstd) + a network buffer (mbuffer) for the stream; the
+  # Debian rescue ships neither. apt here has internet + a working mirror.
+  echo "==> installing zstd + mbuffer in the rescue"
+  ssh_rescue 'apt-get update -qq && apt-get install -y -qq zstd mbuffer >/dev/null' || {
+    echo "failed to install zstd/mbuffer in the rescue" >&2
     exit 1
   }
 }
