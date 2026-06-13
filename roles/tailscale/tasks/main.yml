@@ -30,11 +30,35 @@
   tags:
     - tailscale
 
+# Pin tailscaled's WireGuard underlay port. `tailscale up`/`set` have no port
+# flag -- the listen port is a daemon setting: the apt unit's ExecStart reads
+# --port=${PORT} from this EnvironmentFile. Nodes that share one NAT (lab/pug on
+# the home WAN) pin DISTINCT ports (41641 / 41642) so each maps to its own router
+# port-forward and gets an unambiguous public endpoint -- see tailscale_wan_direct
+# in defaults/main.yml. The package ships PORT="41641", so single-NAT-tenant nodes
+# (fox, bunk) are a no-op at the default.
+- name: Pin tailscaled underlay port in /etc/default/tailscaled
+  lineinfile:
+    path: /etc/default/tailscaled
+    regexp: '^PORT='
+    line: 'PORT="{{ tailscale_port }}"'
+    backup: true
+  register: tailscale_default_port
+  when: not (ansible_check_mode and apt_source_tailscale_changed)
+  become: true
+  tags:
+    - tailscale
+
+# Restart (not just start) when the port changed, so the daemon rebinds before
+# register.yml runs `tailscale up`/`set` against the new endpoint. No handler --
+# the restart is driven inline off the EnvironmentFile change (CLAUDE.md Hard
+# Rules), and must happen before registration, which a handler (end-of-play)
+# can't guarantee.
 - name: Enable and start tailscaled
   systemd:
     name: tailscaled
     enabled: true
-    state: started
+    state: "{{ 'restarted' if tailscale_default_port.changed | default(false) else 'started' }}"
   when: not (ansible_check_mode and apt_source_tailscale_changed)
   become: true
   tags:

@@ -18,6 +18,23 @@ tailscale_advertise_routes: ""
 # lab/pug turn it on in host_vars (home exit), as does bunk (Bonniers exit).
 tailscale_advertise_exit_node: false
 
+# UDP port tailscaled binds for the WireGuard underlay (tailscale's own default is
+# 41641). Pin a DISTINCT port per node when several nodes sit behind ONE NAT
+# (lab/pug share the home WAN): each needs its own forwarded port so its public
+# endpoint is unambiguous -- lab keeps 41641, pug uses 41642. Single-NAT-tenant
+# nodes (fox on its own public IP, bunk at Bonniers) keep the default.
+tailscale_port: 41641
+
+# Whether this node has a static router port-forward exposing its tailscaled
+# underlay (tailscale_port) to the internet, giving it a stable public endpoint so
+# roaming clients (incl. symmetric/CGNAT mobile) reach it DIRECTLY instead of
+# relaying exit-node / subnet traffic through fox's DERP. Off by default; lab/pug
+# turn it on, each paired with a manual UniFi 1:1 forward
+# (WAN:<tailscale_port> -> host:<tailscale_port>). The firewall role opens the
+# matching WAN ingress on tailscale_port. fox does the equivalent via its Hetzner
+# Cloud firewall (terraform), not this flag.
+tailscale_wan_direct: false
+
 # Roaming clients consume headscale MagicDNS; the server hosts keep their own
 # resolv.conf (adguard/systemd-resolved), so don't let tailscale rewrite it.
 tailscale_accept_dns: false

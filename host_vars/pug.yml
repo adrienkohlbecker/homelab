@@ -121,6 +121,14 @@ netdata_diskspace_blocklist:
 # this /18 reaches the physical sites without selecting an exit node.
 tailscale_advertise_routes: "10.123.0.0/18"
 tailscale_advertise_exit_node: true
+# Direct public endpoint for roaming clients (symmetric/CGNAT mobile) so home-exit
+# and subnet traffic lands directly instead of relaying through fox's DERP. pug
+# shares the home WAN with lab, so it pins 41642 (lab keeps the default 41641) to
+# get an unambiguous forwarded endpoint. The firewall role opens WAN ingress on
+# this port. MANUAL operator step: add the UniFi port-forward
+# WAN:41642 -> pug:41642 (udp).
+tailscale_port: 41642
+tailscale_wan_direct: true
 
 nginx_static_proxies:
   - marantz

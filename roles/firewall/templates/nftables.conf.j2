@@ -72,6 +72,9 @@ table inet homelab {
     counter tailscale_input_accept {}
     counter tailscale_forward_accept {}
 {% endif %}
+{% if tailscale_wan_direct | default(false) %}
+    counter tailscale_underlay_accept {}
+{% endif %}
 
     # Admin services (samba/nut/mosh/NetBIOS) require an (iif, saddr)
     # *intersection*, not union: home-LAN saddrs must arrive on the WAN
@@ -165,9 +168,12 @@ table inet homelab {
         # on tailscale0 that terminate on this host -- its 100.x service IPs, and
         # subnet-routed packets whose daddr is this host itself (e.g. a roaming
         # client hitting homepage.lab.fahm.fr -> 10.123.0.2, lab's own LAN IP).
-        # The wireguard *encapsulation* never needs an INPUT rule: tailscaled
+        # The wireguard *encapsulation* normally needs no INPUT rule: tailscaled
         # dials out and NAT-punches, so the data plane is conntrack-established
-        # or DERP-relayed (all outbound). tailscaled installs its own ts-input
+        # or DERP-relayed (all outbound) -- the one exception is the
+        # tailscale_wan_direct underlay accept further down, where a static
+        # router forward makes inbound underlay packets arrive unsolicited.
+        # tailscaled installs its own ts-input
         # accept, but this table's policy-drop input chain shares the input hook
         # and drops the packet regardless (any base chain's drop wins -- the same
         # multi-base-chain interaction the forward chain documents below), so the
@@ -222,6 +228,19 @@ table inet homelab {
         # tracker announces but can't actually connect — visible as
         # external SRC=… DPT=51413 drops in INPUT.
         iifname $WAN_IFACE meta l4proto { tcp, udp } th dport {{ service_ports.transmission_bt }} counter name "input_transmission" accept comment "transmission BT peers (WAN ingress)"
+{% if tailscale_wan_direct | default(false) %}
+
+        # Tailscale direct endpoint: a manual UniFi 1:1 forward DNATs
+        # WAN:{{ tailscale_port }} to this host's tailscaled underlay
+        # (udp/{{ tailscale_port }}), giving it a stable public endpoint so roaming
+        # clients behind symmetric/CGNAT reach it DIRECTLY rather than relaying
+        # exit-node / subnet traffic through fox's DERP. This is the encrypted
+        # WireGuard *underlay* arriving on the WAN iface -- the tailscale0 accept
+        # above only sees the decapsulated inner packets, never this. lab/pug share
+        # the home WAN, so each pins a distinct tailscale_port (41641 / 41642) with
+        # its own forward. iifname $WAN_IFACE so a LAN-side source can't reach it.
+        iifname $WAN_IFACE udp dport {{ tailscale_port }} counter name "tailscale_underlay_accept" accept comment "tailscale direct endpoint (WAN underlay ingress)"
+{% endif %}
 
         # Mosh sessions originate from admin clients on the home LAN
         # or via wireguard, never from raw WAN.
