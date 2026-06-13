@@ -96,9 +96,9 @@
       - >-
         python3 {{ macos_vm_artifacts_dir }}/fetch-macOS-v2.py
         --action download
-        --board-id Mac-7BA5B2D9E42DDD94
-        --mlb 00000000000J80300
-        --os-type {{ macos_vm_macos_version_to_apple[macos_vm_macos_version] }}
+        --board-id {{ macos_vm_recovery_product.board_id }}
+        --mlb {{ macos_vm_recovery_product.mlb }}
+        --os-type {{ macos_vm_recovery_product.os_type }}
         --outdir {{ macos_vm_workdir }}
       - /dev/null
     chdir: "{{ macos_vm_workdir }}"
@@ -106,12 +106,24 @@
   become: true
   register: macos_vm_basesystem_result
   vars:
-    # fetch-macOS-v2.py uses Apple's "AssetSet" naming, not version numbers.
+    macos_vm_recovery_product: "{{ macos_vm_recovery_products[macos_vm_macos_version] }}"
+    # Keep these in sync with fetch-macOS-v2.py's product menu. `--shortname`
+    # is ignored when `--action download` is passed, so provide the resolved
+    # board/MLB/os_type tuple directly.
     # 15 = Sequoia, 14 = Sonoma, 13 = Ventura. Add new entries here.
-    macos_vm_macos_version_to_apple:
-      "15": "default"  # latest released = Sequoia at time of pin
-      "14": "default"
-      "13": "default"
+    macos_vm_recovery_products:
+      "15":
+        board_id: Mac-7BA5B2D9E42DDD94
+        mlb: "00000000000000000"
+        os_type: default
+      "14":
+        board_id: Mac-827FAC58A8FDFA22
+        mlb: "00000000000000000"
+        os_type: default
+      "13":
+        board_id: Mac-4B682C642B45593E
+        mlb: "00000000000000000"
+        os_type: latest
 
 - name: artifacts | Convert BaseSystem DMG to raw image
   when:
