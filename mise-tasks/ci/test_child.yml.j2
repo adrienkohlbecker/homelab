@@ -14,11 +14,17 @@ default:
   tags:
     - fox-docker-aws
 
+# Cells are split evenly across two display stages because the GitLab UI only
+# renders the first 100 jobs of a stage; `needs: []` keeps them one parallel
+# DAG, so test2 never waits on test1.
 stages:
-  - test
+{% for stage in stages %}
+  - {{ stage }}
+{% endfor %}
 
 .cell:
-  stage: test
+  stage: test1
+  needs: []
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: sts.amazonaws.com
@@ -72,16 +78,19 @@ stages:
     expire_in: 30 days
     paths:
       - test/out/
-{% for cell in cells %}
+{% for group in cell_groups %}
+{% for cell in group.cells %}
 
 "{{ cell.spec }}":
   extends: .cell
+  stage: {{ group.stage }}
   variables:
     ROLE: {{ cell.role }}
     VARIANT: {{ cell.variant }}
     UBUNTU: {{ cell.ubuntu }}
   script:
     - test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500
+{% endfor %}
 {% endfor %}
 {% if site_test %}
 
@@ -94,7 +103,7 @@ stages:
 {% if not cells and not site_test %}
 
 no_cells:
-  stage: test
+  stage: test1
   # The trigger is gated off (HAVE_CELLS=false) so this never runs; it only
   # keeps the artifact a syntactically valid pipeline.
   script:
