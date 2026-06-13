@@ -341,6 +341,14 @@ class Machine:
     # @dataclass doesn't promote it to an init field.
     WRAPPER_GRACE_SECONDS: ClassVar[int] = 60
 
+    # Which backend converged this cell, exposed to roles as the `test_backend`
+    # extra-var. NOT derivable from `qemu_test`: an EC2 box cell loads
+    # host_vars/box.yml, so `qemu_test` is true there too. Roles gate the few
+    # probes that assume qemu/prod shape (packer's NVRAM rEFInd entry, netdata's
+    # keepalived VRRP chart) on `test_backend != 'aws'`. ClassVar so @dataclass
+    # doesn't promote it to an init field; Ec2Machine overrides to "aws".
+    TEST_BACKEND: ClassVar[str] = "qemu"
+
     ssh_port: int
     ssh_user: str
     ansible_args: list[str]
@@ -606,6 +614,10 @@ class Machine:
             # on disk.
             "-e",
             f"_role_under_test={self.role}",
+            # Backend discriminator for role probes that assume qemu/prod shape
+            # (see TEST_BACKEND); qemu by default, "aws" on EC2 cells.
+            "-e",
+            f"test_backend={self.TEST_BACKEND}",
             # Controller-side WAN probe endpoint for verify probes that
             # delegate_to: localhost (see the wan_* field comment). Ports
             # are 0 before the backend resolved its endpoint.
@@ -1901,6 +1913,21 @@ class QemuMachine(Machine):
         return
 
 
+# Both public keys cloud-init bakes into every cell's authorized_keys
+# (terraform/aws_ci.tf; the literals are terraform/main.tf's operator_ssh_public_key
+# + ci_cell_ssh_public_key). The `user` role rewrites the connecting user's
+# authorized_keys with `exclusive: true` from `ssh_public_keys`, which on a cell
+# contains neither — so converge-1 would evict the very key the harness is
+# connected with and idempotence's Gathering Facts would be denied (publickey).
+# Re-add both via `ssh_public_keys_additional` (the role appends it before the
+# exclusive write) so whichever key authenticated survives. Public keys, not
+# secrets; kept in sync with terraform/main.tf by hand (they never rotate).
+_CELL_AUTHORIZED_PUBLIC_KEYS = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEFQDmZidqILmoI6o9f8KLz+0hJad+Xh4Lm5OLsYDZTa adrien.kohlbecker@gmail.com\n"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAIGpIVsLZs1aYR0J1Tppi8AoRMhCFjN6eGQAXG4DbsQ homelab-ci-cell"
+)
+
+
 class Ec2Machine(Machine):
     """Run the role test against a single-use EC2 spot instance.
 
@@ -1922,6 +1949,7 @@ class Ec2Machine(Machine):
     and each call is logged as its equivalent `aws` command for the .ansi trail.
     """
 
+    TEST_BACKEND: ClassVar[str] = "aws"
     REGION: ClassVar[str] = "eu-central-1"
     # Composed from fixed account + role names (terraform/aws_ci.tf) rather
     # than plumbed through env: both are stable, public-repo-safe literals.
@@ -1967,7 +1995,13 @@ class Ec2Machine(Machine):
             # no key file in the repo; the ssh agent supplies the identity.
             ssh_key=None,
             ssh_user=spec.ssh_user,
-            ansible_args=_qemu_ansible_args(spec),
+            # Re-add the cell's baked keys so the `user` role's exclusive
+            # authorized_keys rewrite can't lock the harness out mid-converge.
+            ansible_args=[
+                *_qemu_ansible_args(spec),
+                "-e",
+                f"ssh_public_keys_additional={_CELL_AUTHORIZED_PUBLIC_KEYS}",
+            ],
             inventory_host=spec.inventory_host,
             machine=machine,
             role=role,

@@ -188,6 +188,13 @@
 # A green fallback + missing primary entry would silently force every
 # reboot through the fallback chain.
 - name: _verify | REFInd Boot entry registered in NVRAM
+  # NVRAM boot entries are written by chroot.sh's efibootmgr -c into the build
+  # machine's firmware and do NOT ride the AMI: an EC2 cell launches with empty
+  # UEFI NVRAM and boots the firmware-fallback /EFI/BOOT/BOOT<arch>.EFI by
+  # design (notes/ci_aws_test_cells.md, gate C). The fallback + refind.conf +
+  # ZBM checks above still prove the baked boot chain; only this NVRAM-entry
+  # assertion is meaningless on a cell.
+  when: test_backend | default('qemu') != 'aws'
   assert:
     that: >-
       packer_verify_efibootmgr.stdout
@@ -236,6 +243,9 @@
         label: "{{ item.item }}"
 
     - name: _verify | Per-disk "rEFInd (disk N)" NVRAM entries exist
+      # Same as the universal NVRAM assertion above: empty on an EC2 cell, which
+      # boots the firmware fallback rather than a baked NVRAM entry.
+      when: test_backend | default('qemu') != 'aws'
       vars:
         _disk_entries: >-
           {{ packer_verify_efibootmgr.stdout_lines

@@ -187,6 +187,36 @@ class TestSkip:
         assert cells == [matrix.TestCell("box", "jammy", "svc")]
 
 
+class TestAwsSkip:
+    def test_aws_skip_for_parses_machine_and_release(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "svc", {"aws_skip": {"box": "why", "box_deps:resolute": "why"}})
+        assert matrix.aws_skip_for("svc") == {("box", "jammy"), ("box_deps", "resolute")}
+
+    def test_aws_skip_for_empty_when_absent(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "svc")
+        assert matrix.aws_skip_for("svc") == set()
+
+    def test_aws_skip_does_not_affect_qemu_matrix(self, roles_tree: Path) -> None:
+        # aws_skip drops only from the aws child pipeline; build_role_cells (the
+        # qemu matrix) keeps the cell so it stays covered under qemu.
+        _make_role(roles_tree, "svc", {"machines": {"box": None}, "aws_skip": {"box": "L2"}})
+        assert matrix.build_role_cells("svc") == [matrix.TestCell("box", "jammy", "svc")]
+
+    def test_drop_aws_skipped_partitions_specs(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "vip", {"aws_skip": {"box": "keepalived VIP"}})
+        _make_role(roles_tree, "ok")
+        kept, dropped = matrix.drop_aws_skipped(["vip:box", "ok:box", "vip:box_deps"])
+        # vip:box is aws-skipped; vip:box_deps is a different cell (not skipped).
+        assert kept == ["ok:box", "vip:box_deps"]
+        assert dropped == ["vip:box"]
+
+    def test_drop_aws_skipped_honours_release_specs(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "svc", {"aws_skip": {"box_deps:resolute": "chart TBD"}})
+        kept, dropped = matrix.drop_aws_skipped(["svc:box_deps", "svc:box_deps:resolute"])
+        assert kept == ["svc:box_deps"]
+        assert dropped == ["svc:box_deps:resolute"]
+
+
 # ---------------------------------------------------------------------------
 # CI spec conversion
 # ---------------------------------------------------------------------------

@@ -21,7 +21,11 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
-TimeoutSec=120
+# Start deadline for --sdnotify=healthy. seerr runs DB migrations on first boot,
+# which on a cold start (a fresh EC2 test cell, or a prod host's first boot after
+# an image pull) can run past the 120s this used to allow. Generous; Restart=always
+# still recovers a genuinely wedged start.
+TimeoutStartSec=300
 # Exceed the container's --stop-timeout (120s) so a slow graceful shutdown --
 # during which seerr writes settings.json back (the slurp-merge idempotence
 # below depends on that writeback) -- finishes before systemd's stop deadline

@@ -34,6 +34,7 @@ from matrix import (  # noqa: E402
     build_test_matrix,
     cells_to_ci_specs,
     ci_spec_to_cell,
+    drop_aws_skipped,
     list_testable_roles,
     machines_for,
     release_ubuntu_for,
@@ -911,10 +912,17 @@ def _emit_gitlab(matrix: str, site_test: bool, child_path: str, log) -> int:
     placeholder, which the template adds.
     """
     specs = json.loads(matrix)
+    # This generator only ever feeds the aws (EC2 cell) backend, so apply the
+    # backend-aware aws_skip: here — roles whose path can't run on a vanilla
+    # cell (keepalived VIP / macvlan need forbidden L2) stay in the qemu matrix
+    # but are dropped from the cell pipeline. Logged, never silent.
+    specs, dropped = drop_aws_skipped(specs)
 
     Path(child_path).write_text(render_child_pipeline(specs, site_test))
 
-    log(f"matrix={matrix}")
+    log(f"matrix={json.dumps(specs)}")
+    if dropped:
+        log(f"aws_skip: dropped {len(dropped)} cell(s): {' '.join(sorted(dropped))}")
     log(f"site_test={'true' if site_test else 'false'}")
     log(f"-> {len(specs)} cell job(s){' + site converge' if site_test else ''}")
     log(f"-> wrote {child_path}")

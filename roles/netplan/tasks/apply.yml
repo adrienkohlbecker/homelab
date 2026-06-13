@@ -53,12 +53,17 @@
   meta: reset_connection
 
 - name: Wait for SSH to re-establish (canary for the rollback timer)
-  # If this fails (timeout: 60), the auto-rollback (deadline: 90) is
-  # still pending and will restore the prior config. On the next
-  # ansible run from a healthy box we'll see what went wrong.
+  # Timeout sits PAST the 90s auto-rollback deadline so that a backend whose
+  # apply disrupts connectivity longer than a brief flap (an EC2 cell: the
+  # apply bounces ens5 and the carrier takes tens of seconds to settle) still
+  # heals — either on its own or via the rollback restoring the prior config —
+  # within the canary instead of tripping it. On qemu the apply doesn't sever
+  # SSH, so the connection returns within the 5s delay and the wider window is
+  # never spent. If this still times out, the rollback has already restored the
+  # prior config and the next run from a healthy box shows what went wrong.
   wait_for_connection:
     delay: 5
-    timeout: 60
+    timeout: 120
 
 - name: Confirm the async netplan apply actually exited 0
   # wait_for_connection only proves SSH came back, not that netplan
@@ -77,12 +82,13 @@
 - name: Touch cancel-marker so the timer no-ops when it fires
   # Belt: even if the timer fires between this touch and the stop below,
   # the marker is now present, so netplan_rollback.service's
-  # ConditionPathExists skips the rollback. The race window stays inside
-  # the timer's 90 s: from arming to here is reset_connection +
-  # wait_for_connection (≤65 s) + the async reap, and the reap is capped
-  # by the apply's `async: 30` (it usually returns in ~1-2 s, not the full
-  # 15 s the retries allow) -- comfortably under 90 s even allowing for the
-  # connection-reset overhead the 65 s figure omits.
+  # ConditionPathExists skips the rollback. On the normal path (qemu/prod, and
+  # the apply doesn't sever SSH) wait_for_connection returns within its 5 s
+  # delay, so arming-to-here is well under the timer's 90 s and no rollback
+  # fires. Only when the apply disrupts SSH for tens of seconds (an EC2 cell)
+  # can this land after the 90 s deadline — by then the rollback has already
+  # done its job restoring the prior config, and the marker merely blocks a
+  # second firing.
   file:
     path: /run/netplan_keep
     state: touch
@@ -96,10 +102,12 @@
   # removing it here avoids racing with the async netplan apply that
   # may still be reading it via --state.
   #
-  # No failed_when: false: we only reach here after the apply confirmed
-  # (the canary passed), so the rollback service never fired — stopping an
-  # active timer and an inactive service is a clean no-op. A stop that does
-  # error means a unit is wedged, which should surface rather than be masked.
+  # No failed_when: false: we only reach here after the canary passed. On the
+  # normal path the rollback service never fired (stopping an active timer +
+  # inactive service is a clean no-op); on a slow-recovery backend it may have
+  # fired and completed (stopping an inactive, already-finished service is the
+  # same clean no-op). Either way a stop that errors means a unit is wedged,
+  # which should surface rather than be masked.
   systemd:
     name: "{{ item }}"
     state: stopped
