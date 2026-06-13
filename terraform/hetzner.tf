@@ -57,12 +57,14 @@ resource "hcloud_primary_ip" "fox_v6" {
 }
 
 # Default-drop inbound (an attached hcloud firewall drops anything not
-# explicitly allowed; outbound stays open with no `out` rules). Only the mesh
-# control plane is reachable from the internet: 443/tcp (Headscale control API
-# + DERP relay, TLS-terminated by nginx) and 3478/udp (embedded DERP STUN for
-# NAT traversal) -- both MUST stay world-open, since every tailnet client hits
-# them from arbitrary IPs and the DERP map is embedded-only (no third-party
-# relay fallback). 51820/udp (wg0 backbone) and 22/tcp (SSH) are scoped to the
+# explicitly allowed; outbound stays open with no `out` rules). Three ports stay
+# world-open because every tailnet client hits them from arbitrary IPs: 443/tcp
+# (Headscale control API + DERP relay, TLS-terminated by nginx) and 3478/udp
+# (embedded DERP STUN for NAT traversal) -- both load-bearing since the DERP map
+# is embedded-only (no third-party relay fallback) -- plus 41641/udp (tailscaled
+# WireGuard underlay), so clients using fox as an exit node / subnet router reach
+# its tailscaled DIRECTLY instead of hairpinning through fox's own embedded DERP.
+# 51820/udp (wg0 backbone) and 22/tcp (SSH) are scoped to the
 # home WAN IP only (local.home_wan_ip): fox's only wg0 initiators are lab+pug
 # (keepalive_from: [lab, pug]), both behind the home WAN, and fox is
 # administered from home -- so neither needs internet exposure. If the home WAN
@@ -83,6 +85,14 @@ resource "hcloud_firewall" "fox" {
     direction   = "in"
     protocol    = "udp"
     port        = "3478"
+    source_ips  = ["0.0.0.0/0", "::/0"]
+  }
+
+  rule {
+    description = "tailscale direct (fox as exit node / subnet router)"
+    direction   = "in"
+    protocol    = "udp"
+    port        = "41641"
     source_ips  = ["0.0.0.0/0", "::/0"]
   }
 

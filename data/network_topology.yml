@@ -131,7 +131,7 @@ hosts:
   pom:  { site: home,     slot: 2, physical: 10.123.0.4,  wireguard: 10.123.64.4, status: planned }
   box:  { site: home,     slot: 3, physical: 10.123.0.5,  wireguard: 10.123.64.5 }
   bunk: { site: bonniers,          physical: 10.123.57.3, wireguard: 10.123.121.3, tailscale: 100.64.0.5 }
-  fox:  { site: hetzner,           physical: 10.123.55.2, wireguard: 10.123.119.2 }
+  fox:  { site: hetzner,           physical: 10.123.55.2, wireguard: 10.123.119.2, tailscale: 100.64.0.6 }
 
 # Wireguard overlay. Server peer addresses are `hosts.<n>.wireguard`;
 # the set of servers is simply the hosts with wireguard configured
