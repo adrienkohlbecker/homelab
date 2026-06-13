@@ -2,14 +2,14 @@
 """CI change-detection pipeline.
 
 Complete change-detection logic: mode dispatch, green-base resolution via the
-GitHub API, changed-file classification, role-deps expansion, release-cell
+host CI API, changed-file classification, role-deps expansion, release-cell
 propagation, matrix bucket splitting, and output emission.
 
 Two front ends share the classification core:
-  - ``run`` (GitHub Actions): resolves a green base via the GitHub API and
-    emits per-bucket matrix outputs to $GITHUB_OUTPUT (detect-roles.sh wraps it).
-  - ``gitlab`` (GitLab CI): diffs the previous branch tip and writes a
-    generated child pipeline (one job per cell) + a HAVE_CELLS dotenv flag.
+  - ``run`` (GitHub Actions): resolves a green base via the GitHub Actions API
+    and emits per-bucket matrix outputs to $GITHUB_OUTPUT (detect-roles.sh wraps it).
+  - ``gitlab`` (GitLab CI): resolves a green base via the GitLab pipelines API
+    and writes a generated child pipeline (one job per cell).
 """
 
 import json
@@ -558,6 +558,191 @@ def resolve_green_base(
 
 
 # ---------------------------------------------------------------------------
+# GitLab API — green-base resolution
+# ---------------------------------------------------------------------------
+#
+# The GitLab analog of resolve_green_base: instead of GitHub Actions workflow
+# runs, query the project's pipeline history for the newest *successful*
+# pipeline whose commit is an ancestor of HEAD, and diff against that. This
+# turns a red-push -> fix sequence into "retest everything since the last
+# fully-green commit" rather than only the fix's own diff (all that
+# CI_COMMIT_BEFORE_SHA alone covers).
+#
+# A green base is a `push` or `schedule` pipeline: the `web` source is the
+# manual ROLES dispatch (a partial matrix, like GitHub's workflow_dispatch —
+# never a base), and `parent_pipeline` is the generated cell child (same sha as
+# its push parent, redundant). One pipeline per push covers lint + unit tests +
+# the whole cell matrix, so a `success` status is already a strong green —
+# GitLab has no nightly gate that can pass with the matrix suppressed, so no
+# per-workflow path filter or matrix-actually-ran check is needed (unlike the
+# GitHub side's CI_WORKFLOW / nightly_actually_tested guards).
+#
+# Ancestry is checked locally with git (merge-base --is-ancestor), fetching the
+# candidate on demand when it sits outside the shallow checkout — the same
+# fetch-on-demand fallback the base-resolution callers already use, so it needs
+# no second API surface (GitHub used the compare API only to avoid fetching).
+
+GREEN_BASE_SOURCES = ("push", "schedule")
+
+
+def _gl_api_get(
+    url: str,
+    token: str,
+    *,
+    token_kind: str = "job",
+    retries: int = 4,
+    retry_delay: float = 2.0,
+) -> dict | list | None:
+    """GET a GitLab REST API endpoint with retries.  Returns parsed JSON or None.
+
+    token_kind selects the auth header: "private" for a PAT / project access
+    token (PRIVATE-TOKEN), "job" for the pipeline's CI_JOB_TOKEN (JOB-TOKEN).
+    A 401/403 is terminal (the token is wrong or lacks read_api) — don't burn
+    the retry budget on it; the caller falls back to the previous-tip base.
+    """
+    header = "PRIVATE-TOKEN" if token_kind == "private" else "JOB-TOKEN"
+    req = urllib.request.Request(url, headers={header: token})
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403):
+                return None
+            if attempt < retries:
+                time.sleep(retry_delay)
+            else:
+                return None
+        except (urllib.error.URLError, OSError):
+            if attempt < retries:
+                time.sleep(retry_delay)
+            else:
+                return None
+    return None
+
+
+def is_local_ancestor(sha: str, head: str = "HEAD") -> bool:
+    """True when sha is an ancestor of head in the local history.
+
+    Fetches the commit on demand when the shallow checkout lacks it.  A commit
+    is its own ancestor, so an identical sha resolves True (matching the GitHub
+    side, which accepts compare status "identical").
+    """
+    if git_rev_parse(sha) is None:
+        git_fetch_commit(sha)
+    if git_rev_parse(sha) is None:
+        return False
+    return _git("merge-base", "--is-ancestor", sha, head, check=False).returncode == 0
+
+
+def newest_green_pipeline(
+    branch: str,
+    *,
+    head_sha: str,
+    project_api: str,
+    token: str,
+    token_kind: str,
+    log_fn,
+    max_pages: int = 5,
+) -> str | None:
+    """Find the newest successful push/schedule pipeline on branch that is an ancestor of head."""
+    log_fn(f"  searching green pipelines on '{branch}'...")
+    page = 1
+    while page <= max_pages:
+        params = urllib.parse.urlencode(
+            {
+                "ref": branch,
+                "status": "success",
+                "order_by": "id",
+                "sort": "desc",
+                "per_page": 100,
+                "page": page,
+            }
+        )
+        url = f"{project_api}/pipelines?{params}"
+        data = _gl_api_get(url, token, token_kind=token_kind)
+        if data is None:
+            log_fn(f"  pipelines query failed on '{branch}' (page {page})")
+            return None
+        if not data:
+            break
+        for pipe in data:
+            sha = pipe.get("sha", "")
+            source = pipe.get("source", "")
+            created = pipe.get("created_at", "")
+            if not sha or source not in GREEN_BASE_SOURCES:
+                continue
+            if is_local_ancestor(sha, head_sha):
+                log_fn(f"  green ancestor: {sha[:12]} ({created}, {source})")
+                return sha
+            log_fn(f"    skip {sha[:12]} ({created}): not an ancestor of HEAD")
+        page += 1
+    log_fn(f"  no green ancestor on '{branch}' (searched {page - 1} page(s))")
+    return None
+
+
+def resolve_green_base_gitlab(
+    *,
+    project_api: str,
+    token: str,
+    token_kind: str,
+    branch: str,
+    head_sha: str,
+    default_branch: str = "master",
+    log_fn,
+) -> str | None:
+    """Resolve the diff base to the newest green pipeline ancestor (branch, then default)."""
+    if not (project_api and token and branch and head_sha):
+        return None
+    sha = newest_green_pipeline(
+        branch,
+        head_sha=head_sha,
+        project_api=project_api,
+        token=token,
+        token_kind=token_kind,
+        log_fn=log_fn,
+    )
+    if sha is None and branch != default_branch:
+        log_fn(f"  none on '{branch}'; falling back to default branch '{default_branch}'")
+        sha = newest_green_pipeline(
+            default_branch,
+            head_sha=head_sha,
+            project_api=project_api,
+            token=token,
+            token_kind=token_kind,
+            log_fn=log_fn,
+        )
+    return sha
+
+
+def _gitlab_green_base(branch: str, head_sha: str, default_branch: str, log) -> str | None:
+    """Gather GitLab CI env and resolve the newest green pipeline ancestor.
+
+    Prefers an explicit read_api token (GITLAB_API_TOKEN) and falls back to the
+    pipeline's CI_JOB_TOKEN.  Returns None — the caller then drops to the
+    previous-tip base — when no token is present, the API is unreachable, or
+    the token is rejected.
+    """
+    api_url = os.environ.get("CI_API_V4_URL", "")
+    project_id = os.environ.get("CI_PROJECT_ID", "")
+    pat = os.environ.get("GITLAB_API_TOKEN", "")
+    job_token = os.environ.get("CI_JOB_TOKEN", "")
+    token, token_kind = (pat, "private") if pat else (job_token, "job")
+    if not (api_url and project_id and token and head_sha and branch):
+        log("  green base unavailable (need CI_API_V4_URL + CI_PROJECT_ID + a token + branch); using previous-tip base")
+        return None
+    return resolve_green_base_gitlab(
+        project_api=f"{api_url}/projects/{project_id}",
+        token=token,
+        token_kind=token_kind,
+        branch=branch,
+        head_sha=head_sha,
+        default_branch=default_branch,
+        log_fn=log,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Role dependency map
 # ---------------------------------------------------------------------------
 
@@ -938,27 +1123,33 @@ def _gitlab_change_matrix(event: str, log) -> tuple[str, bool]:
     """
     before_sha = os.environ.get("CI_COMMIT_BEFORE_SHA", "")
     branch = os.environ.get("CI_COMMIT_BRANCH", "")
+    head_sha = os.environ.get("CI_COMMIT_SHA", "")
     default_branch = os.environ.get("CI_DEFAULT_BRANCH", "master")
 
     def full_universe(reason):
         log(f"{reason} -> testing the FULL universe")
         return _full_universe_matrix(), True
 
-    # Diff base: an explicit override wins (local/preview), else the previous
-    # tip of the branch this push advanced (CI_COMMIT_BEFORE_SHA). That covers
-    # exactly the commits in the push without an API call; the red-push→fix
-    # edge case (only the fix is retested) is acceptable for a solo operator —
-    # a green-base resolver via the GitLab pipelines API is a future refinement
-    # (notes/ci_aws_test_cells.md).
+    # Diff base, in priority order:
+    #   1. CI_BASE_REF                  -- explicit override (local/preview).
+    #   2. newest green pipeline ancestor -- the last fully-green commit, via the
+    #      GitLab pipelines API; turns a red-push -> fix sequence into "retest
+    #      everything since green" instead of only the fix's own diff.
+    #   3. CI_COMMIT_BEFORE_SHA         -- the previous branch tip, when no green
+    #      base resolves (no/rejected token, API down, or none found).
+    #   4. full universe                -- nothing to diff against (new branch).
     ci_base_ref = os.environ.get("CI_BASE_REF", "")
     if ci_base_ref:
         base_ref = ci_base_ref
         log(f"diff base: {base_ref} (CI_BASE_REF override)")
+    elif green := _gitlab_green_base(branch, head_sha, default_branch, log):
+        base_ref = green
+        log(f"diff base: {green[:12]} (last green pipeline)")
     elif before_sha and before_sha != EMPTY_SHA:
         base_ref = before_sha
         log(f"diff base: {before_sha[:12]} (previous branch tip)")
     else:
-        return full_universe("no previous commit (new branch / first push)")
+        return full_universe("no green base and no previous commit (new branch / first push)")
 
     if git_rev_parse(base_ref) is None:
         log(f"  base {base_ref[:12]} outside shallow checkout; fetching the commit")

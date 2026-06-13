@@ -1148,6 +1148,312 @@ class TestResolveGreenBase:
 
 
 # ---------------------------------------------------------------------------
+# GitLab API — green-base resolution
+# ---------------------------------------------------------------------------
+
+
+class _FakeListResponse:
+    """urlopen mock returning a JSON list (the pipelines endpoint shape)."""
+
+    def __init__(self, data: list):
+        self._data = json.dumps(data).encode()
+
+    def read(self):
+        return self._data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        pass
+
+
+class TestGlApiGet:
+    def test_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect.urllib.request,
+            "urlopen",
+            lambda req, timeout=None: _FakeListResponse([{"sha": "abc"}]),
+        )
+        assert detect._gl_api_get("http://x/pipelines", "tok") == [{"sha": "abc"}]
+
+    def test_sends_job_token_header(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen = {}
+
+        def mock_urlopen(req, timeout=None):
+            seen["headers"] = dict(req.headers)
+            return _FakeListResponse([])
+
+        monkeypatch.setattr(detect.urllib.request, "urlopen", mock_urlopen)
+        detect._gl_api_get("http://x", "jobtok", token_kind="job")
+        # urllib capitalizes header names: JOB-TOKEN -> Job-token.
+        assert seen["headers"].get("Job-token") == "jobtok"
+
+    def test_sends_private_token_header(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen = {}
+
+        def mock_urlopen(req, timeout=None):
+            seen["headers"] = dict(req.headers)
+            return _FakeListResponse([])
+
+        monkeypatch.setattr(detect.urllib.request, "urlopen", mock_urlopen)
+        detect._gl_api_get("http://x", "pat", token_kind="private")
+        assert seen["headers"].get("Private-token") == "pat"
+
+    def test_auth_error_not_retried(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        attempts = {"n": 0}
+
+        def mock_urlopen(req, timeout=None):
+            attempts["n"] += 1
+            raise urllib.error.HTTPError("http://x", 403, "Forbidden", {}, None)
+
+        monkeypatch.setattr(detect.urllib.request, "urlopen", mock_urlopen)
+        monkeypatch.setattr(detect.time, "sleep", lambda _: None)
+        assert detect._gl_api_get("http://x", "tok", retries=4) is None
+        assert attempts["n"] == 1
+
+    def test_transient_http_error_retried(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        attempts = {"n": 0}
+
+        def mock_urlopen(req, timeout=None):
+            attempts["n"] += 1
+            if attempts["n"] < 2:
+                raise urllib.error.HTTPError("http://x", 502, "Bad Gateway", {}, None)
+            return _FakeListResponse([{"ok": 1}])
+
+        monkeypatch.setattr(detect.urllib.request, "urlopen", mock_urlopen)
+        monkeypatch.setattr(detect.time, "sleep", lambda _: None)
+        assert detect._gl_api_get("http://x", "tok", retries=2) == [{"ok": 1}]
+
+    def test_all_retries_fail(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect.urllib.request,
+            "urlopen",
+            lambda req, timeout=None: (_ for _ in ()).throw(urllib.error.URLError("down")),
+        )
+        monkeypatch.setattr(detect.time, "sleep", lambda _: None)
+        assert detect._gl_api_get("http://x", "tok", retries=2) is None
+
+
+class TestIsLocalAncestor:
+    def test_ancestor(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
+        monkeypatch.setattr(detect, "_git", lambda *a, **kw: _fake_git_result("", returncode=0))
+        assert detect.is_local_ancestor("abc", "HEAD") is True
+
+    def test_not_ancestor(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
+        monkeypatch.setattr(detect, "_git", lambda *a, **kw: _fake_git_result("", returncode=1))
+        assert detect.is_local_ancestor("abc", "HEAD") is False
+
+    def test_fetches_when_missing_then_resolves(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        state = {"present": False}
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc" if state["present"] else None)
+
+        def fake_fetch(sha):
+            state["present"] = True
+            return True
+
+        monkeypatch.setattr(detect, "git_fetch_commit", fake_fetch)
+        monkeypatch.setattr(detect, "_git", lambda *a, **kw: _fake_git_result("", returncode=0))
+        assert detect.is_local_ancestor("abc", "HEAD") is True
+
+    def test_unfetchable_returns_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: None)
+        monkeypatch.setattr(detect, "git_fetch_commit", lambda sha: False)
+        called = {"git": False}
+
+        def mock_git(*a, **kw):
+            called["git"] = True
+            return _fake_git_result("", returncode=0)
+
+        monkeypatch.setattr(detect, "_git", mock_git)
+        assert detect.is_local_ancestor("abc", "HEAD") is False
+        # never reaches merge-base once the commit can't be made local
+        assert called["git"] is False
+
+
+class TestNewestGreenPipeline:
+    @staticmethod
+    def _kw(**overrides):
+        defaults = dict(
+            head_sha="head",
+            project_api="http://api/projects/1",
+            token="t",
+            token_kind="job",
+            log_fn=lambda m: None,
+        )
+        defaults.update(overrides)
+        return defaults
+
+    def test_finds_first_ancestor(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect,
+            "_gl_api_get",
+            lambda url, token, **kw: [
+                {"sha": "newsha", "source": "push", "created_at": "2026-01-02"},
+            ],
+        )
+        monkeypatch.setattr(detect, "is_local_ancestor", lambda sha, head: True)
+        assert detect.newest_green_pipeline("master", **self._kw()) == "newsha"
+
+    def test_skips_non_base_sources(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # A web (manual ROLES dispatch) and a parent_pipeline (cell child) are
+        # skipped; the push behind them is the real base.
+        monkeypatch.setattr(
+            detect,
+            "_gl_api_get",
+            lambda url, token, **kw: (
+                [
+                    {"sha": "websha", "source": "web", "created_at": "2026-01-03"},
+                    {"sha": "childsha", "source": "parent_pipeline", "created_at": "2026-01-03"},
+                    {"sha": "pushsha", "source": "push", "created_at": "2026-01-01"},
+                ]
+                if "&page=1" in url
+                else []
+            ),
+        )
+        seen = []
+
+        def fake_anc(sha, head):
+            seen.append(sha)
+            return True
+
+        monkeypatch.setattr(detect, "is_local_ancestor", fake_anc)
+        assert detect.newest_green_pipeline("master", **self._kw()) == "pushsha"
+        # ancestry is only ever checked for the push pipeline
+        assert seen == ["pushsha"]
+
+    def test_skips_non_ancestor_then_paginates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def mock_api(url, token, **kw):
+            if "&page=1" in url:
+                return [{"sha": "divsha", "source": "push", "created_at": "2026-01-05"}]
+            if "&page=2" in url:
+                return [{"sha": "oldgreen", "source": "schedule", "created_at": "2026-01-01"}]
+            return []
+
+        monkeypatch.setattr(detect, "_gl_api_get", mock_api)
+        monkeypatch.setattr(detect, "is_local_ancestor", lambda sha, head: sha == "oldgreen")
+        logs = []
+        result = detect.newest_green_pipeline("master", **self._kw(log_fn=logs.append))
+        assert result == "oldgreen"
+        assert any("not an ancestor" in m for m in logs)
+
+    def test_none_when_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_gl_api_get", lambda url, token, **kw: [])
+        assert detect.newest_green_pipeline("master", **self._kw()) is None
+
+    def test_none_on_api_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_gl_api_get", lambda url, token, **kw: None)
+        logs = []
+        assert detect.newest_green_pipeline("master", **self._kw(log_fn=logs.append)) is None
+        assert any("query failed" in m for m in logs)
+
+
+class TestResolveGreenBaseGitlab:
+    @staticmethod
+    def _kw(**overrides):
+        defaults = dict(
+            project_api="http://api/projects/1",
+            token="t",
+            token_kind="job",
+            head_sha="head",
+            log_fn=lambda m: None,
+        )
+        defaults.update(overrides)
+        return defaults
+
+    def test_found_on_branch(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect,
+            "newest_green_pipeline",
+            lambda branch, **kw: "feat_green" if branch == "feat" else None,
+        )
+        assert detect.resolve_green_base_gitlab(branch="feat", **self._kw()) == "feat_green"
+
+    def test_falls_back_to_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect,
+            "newest_green_pipeline",
+            lambda branch, **kw: None if branch == "feat" else "default_green",
+        )
+        logs = []
+        result = detect.resolve_green_base_gitlab(
+            branch="feat", default_branch="master", **self._kw(log_fn=logs.append)
+        )
+        assert result == "default_green"
+        assert any("falling back" in m for m in logs)
+
+    def test_no_fallback_when_on_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = {"n": 0}
+
+        def mock(branch, **kw):
+            calls["n"] += 1
+            return None
+
+        monkeypatch.setattr(detect, "newest_green_pipeline", mock)
+        assert detect.resolve_green_base_gitlab(branch="master", default_branch="master", **self._kw()) is None
+        assert calls["n"] == 1
+
+    def test_missing_inputs_return_none(self) -> None:
+        assert detect.resolve_green_base_gitlab(branch="", **self._kw()) is None
+        assert detect.resolve_green_base_gitlab(branch="m", **self._kw(token="")) is None
+        assert detect.resolve_green_base_gitlab(branch="m", **self._kw(project_api="")) is None
+        assert detect.resolve_green_base_gitlab(branch="m", **self._kw(head_sha="")) is None
+
+
+class TestGitlabGreenBaseEnv:
+    def _env(self, monkeypatch, **kv):
+        for k in ("CI_API_V4_URL", "CI_PROJECT_ID", "GITLAB_API_TOKEN", "CI_JOB_TOKEN"):
+            monkeypatch.delenv(k, raising=False)
+        for k, v in kv.items():
+            monkeypatch.setenv(k, v)
+
+    def test_prefers_private_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._env(
+            monkeypatch,
+            CI_API_V4_URL="http://api",
+            CI_PROJECT_ID="1",
+            GITLAB_API_TOKEN="pat",
+            CI_JOB_TOKEN="jobtok",
+        )
+        seen = {}
+
+        def mock_resolve(**kw):
+            seen.update(kw)
+            return "green"
+
+        monkeypatch.setattr(detect, "resolve_green_base_gitlab", mock_resolve)
+        assert detect._gitlab_green_base("master", "head", "master", lambda m: None) == "green"
+        assert seen["token"] == "pat"
+        assert seen["token_kind"] == "private"
+        assert seen["project_api"] == "http://api/projects/1"
+
+    def test_falls_back_to_job_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._env(monkeypatch, CI_API_V4_URL="http://api", CI_PROJECT_ID="1", CI_JOB_TOKEN="jobtok")
+        seen = {}
+
+        def mock_resolve(**kw):
+            seen.update(kw)
+            return "green"
+
+        monkeypatch.setattr(detect, "resolve_green_base_gitlab", mock_resolve)
+        assert detect._gitlab_green_base("master", "head", "master", lambda m: None) == "green"
+        assert seen["token"] == "jobtok"
+        assert seen["token_kind"] == "job"
+
+    def test_none_when_no_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._env(monkeypatch, CI_API_V4_URL="http://api", CI_PROJECT_ID="1")
+        logs = []
+        assert detect._gitlab_green_base("master", "head", "master", logs.append) is None
+        assert any("green base unavailable" in m for m in logs)
+
+    def test_none_when_no_api_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._env(monkeypatch, CI_PROJECT_ID="1", CI_JOB_TOKEN="jobtok")
+        assert detect._gitlab_green_base("master", "head", "master", lambda m: None) is None
+
+
+# ---------------------------------------------------------------------------
 # Role dependency map
 # ---------------------------------------------------------------------------
 

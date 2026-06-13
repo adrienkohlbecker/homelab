@@ -55,9 +55,19 @@ default:
 # There are no QEMU images or per-release runner pools on AWS, so the matrix is
 # a flat list rather than GitHub's jammy/noble/.../lab/pug buckets.
 #
-# The diff base is the previous branch tip (CI_COMMIT_BEFORE_SHA); a
-# full-universe trigger fires on a cross-cutting path change, a new branch, or
-# a schedule/ROLES=ALL dispatch.
+# The diff base is the newest fully-green pipeline ancestor, resolved via the
+# GitLab pipelines API (detect.py: resolve_green_base_gitlab) — so a red-push ->
+# fix sequence retests everything changed since the last green commit, not just
+# the fix's own diff. It falls back to the previous branch tip
+# (CI_COMMIT_BEFORE_SHA) when no green base resolves. A full-universe trigger
+# fires on a cross-cutting path change, a new branch, or a schedule/ROLES=ALL
+# dispatch.
+#
+# Optional CI/CD variable: GITLAB_API_TOKEN (a read_api project access token).
+# detect uses the automatic CI_JOB_TOKEN for the pipelines query by default;
+# set GITLAB_API_TOKEN only if that token can't list pipelines (the job log
+# says "pipelines query failed" / "using previous-tip base"). Either way a
+# failure degrades to the previous-tip base, never to a hard error.
 detect:
   extends: .hosted
   stage: prepare
@@ -66,9 +76,9 @@ detect:
     - if: $CI_PIPELINE_SOURCE == "web"
     - if: $CI_PIPELINE_SOURCE == "push"
   variables:
-    # detect diffs HEAD against the previous branch tip; deep enough for any
-    # realistic push, with a fetch-on-demand fallback in detect.py for a base
-    # outside the shallow checkout.
+    # detect diffs HEAD against the resolved green base; 50 is deep enough for
+    # any realistic push, with a fetch-on-demand fallback in detect.py for a
+    # base (green ancestor or previous tip) outside the shallow checkout.
     GIT_DEPTH: "50"
   timeout: 15m
   script:
