@@ -2,9 +2,9 @@
 """Test matrix generation — single source of truth for CI and local runs.
 
 Reads roles/*/meta/test.yml to produce the (machine, ubuntu, role) cell list
-that both test/testall.py and mise-tasks/ci/detect-roles.sh consume.
+that both test/testall.py and mise-tasks/ci/detect.py consume.
 
-CLI (for detect-roles.sh):
+CLI (JSON, for local inspection / tooling):
   python3 test/matrix.py --json --all                        # full universe
   python3 test/matrix.py --json --dispatch "foo,bar:minimal"  # dispatch input
   python3 test/matrix.py --json --extra C1 C2 -- R1 R2       # push path

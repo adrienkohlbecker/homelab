@@ -204,7 +204,7 @@ Details in [notes/test_environment_design.md](notes/test_environment_design.md).
 
 GitLab CI ([.gitlab-ci.yml](.gitlab-ci.yml)) on the off-fox orchestrator, driving single-use AWS EC2 test cells (one per role×machine). `detect` ([mise-tasks/ci/detect.py](mise-tasks/ci/detect.py) `gitlab`) classifies the diff and writes a dynamic child pipeline — one `test_cells` job per cell — alongside `lint` and `unit_tests`. Image bakes (`ami_images`, `ami_box_deps`, `fox_image`, `zbm_build`, `ci_image`) are manual jobs. Design + cost model: [notes/ci_aws_test_cells.md](notes/ci_aws_test_cells.md).
 
-**Escalation:** `minimal:` in `meta/test.yml` `machines:` adds a cell; `ubuntu:` list adds per-release cells; `aws_skip:` drops a cell from the EC2 pipeline only (qemu keeps it). **Local-debug:** `CI_BASE_REF=HEAD~5 mise run ci:detect-roles` previews the role matrix; `mise run ci:role-deps <helper>` lists consumers. CI secrets: [notes/runbooks/ci_secrets.md](notes/runbooks/ci_secrets.md).
+**Escalation:** `minimal:` in `meta/test.yml` `machines:` adds a cell; `ubuntu:` list adds per-release cells; `aws_skip:` drops a cell from the EC2 pipeline only (qemu keeps it). **Local-debug:** `CI_BASE_REF=HEAD~5 uv run python mise-tasks/ci/detect.py gitlab --child-path /tmp/cells.yml` previews the cell matrix (logged to stderr); `mise run ci:role-deps <helper>` lists consumers. CI secrets: [notes/runbooks/ci_secrets.md](notes/runbooks/ci_secrets.md).
 
 ## Commit & Pull Request Guidelines
 

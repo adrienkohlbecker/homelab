@@ -5,8 +5,8 @@ Walks roles/*/tasks/*.yml, parses YAML, follows block/rescue/always nesting,
 and collects import_role / include_role references. Prints (one per line) the
 roles that consume the given helper.
 
-Used by ci:detect-roles to expand a helper-role change into its set of
-consumer roles. A naive grep would miss `import_role` calls inside `block:`
+Exposed as the ci:role-deps debug task to preview which roles a helper-role
+change expands to. A naive grep would miss `import_role` calls inside `block:`
 sections (nginx and others use blocks heavily); the recursive YAML walk is
 robust against that.
 """
