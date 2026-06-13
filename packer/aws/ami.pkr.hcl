@@ -491,7 +491,7 @@ source "amazon-ebssurrogate" "hetzner" {
   }
 
   ami_name                = "homelab-hetzner-${var.ubuntu_name}-{{timestamp}}"
-  ami_description         = "fox Hetzner Cloud boot image (${var.ubuntu_name}) — bake byproduct, deregistered after the stream"
+  ami_description         = "fox Hetzner Cloud boot image (${var.ubuntu_name}): bake byproduct, deregistered after the stream"
   ami_virtualization_type = "hvm"
   ena_support             = true
   boot_mode               = "uefi"

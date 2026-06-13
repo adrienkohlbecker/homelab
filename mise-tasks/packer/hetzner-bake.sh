@@ -33,8 +33,8 @@ manifest=$(mktemp)
 trap 'rm -rf "$manifest"; rescue_cleanup' EXIT
 rm -f "$manifest" # manifest post-processor refuses to overwrite a non-manifest file
 
-# The hetzner source's final provisioner pipes `dd | gzip` from the surrogate
-# volume into the rescue server's `gunzip | dd of=/dev/sda` (KEY authorizes
+# The hetzner source's final provisioner pipes `dd | zstd` from the surrogate
+# volume into the rescue server's `zstd -d | dd of=/dev/sda` (KEY authorizes
 # the build instance; RESCUE_IP is its target). packer still registers a
 # byproduct AMI -- ebssurrogate cannot skip it -- which we drop below.
 packer build \
