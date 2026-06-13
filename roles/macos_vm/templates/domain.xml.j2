@@ -109,7 +109,7 @@
       <listen type='address' address='{{ macos_vm_vnc_listen }}'/>
     </graphics>
     <video>
-      <model type='vga' vram='32768' heads='1' primary='yes'/>
+      <model type='vmvga' vram='65536' heads='1' primary='yes'/>
     </video>
 
     <memballoon model='none'/>
@@ -128,14 +128,11 @@
     <qemu:arg value='type=2'/>
 
 {% if macos_vm_domain_type == 'kvm' %}
-    <!-- Override libvirt's `-cpu host` with macOS-specific tweaks:
-         vendor=GenuineIntel (cosmetic, host-passthrough already does this),
-         kvm=on / vmware-cpuid-freq=on (timekeeping; without these macOS
-         can hang or panic at boot), +invtsc (stable TSC for timekeeping).
-         Skipped under TCG since kvm=on is invalid and Penryn already
-         reports as Intel. -->
+    <!-- Override libvirt's host CPU with the conservative OSX-KVM baseline.
+         Reporting the real Raptor Lake host can hang early recovery boot;
+         Penryn is the lowest-common-denominator Mac-era model. -->
     <qemu:arg value='-cpu'/>
-    <qemu:arg value='host,vendor=GenuineIntel,kvm=on,vmware-cpuid-freq=on,+invtsc'/>
+    <qemu:arg value='Penryn,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt,check'/>
 {% endif %}
   </qemu:commandline>
 </domain>
