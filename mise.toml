@@ -70,9 +70,10 @@ HA_API_TOKEN = "op://Lab/pfcoggyhvncfnr6rt6p5zbnuja/password"
 CHECKPOINT_DISABLE = "1"
 
 [tools]
-# The test harness's EC2 backend (test/machine.py) shells out to the aws CLI
-# for every cell operation — deliberately no boto3 in uv.lock
-# (notes/ci_aws_test_cells.md, "Shape").
+# The cell prelude's OIDC smoke (aws sts get-caller-identity) and the packer
+# bake scripts (mise-tasks/packer/*.sh) use the aws CLI. The test harness's EC2
+# backend went in-process (boto3) — see test/machine.py Ec2Machine and
+# notes/ci_aws_test_cells.md, "Orchestration cost".
 awscli = "2.35.2"
 opentofu = "1.11.6"
 packer = "1.15.3"

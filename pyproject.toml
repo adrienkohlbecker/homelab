@@ -19,6 +19,7 @@ dependencies = [
   "dnspython>=2.8.0",         # dig
   "pytest>=8.0",
   "check-jsonschema>=0.37.2", # lint:topology (a dep, not uvx, so it's CI-cached)
+  "boto3>=1.40.0",            # test/machine.py Ec2Machine cell lifecycle (in-process; replaces the awscli-v2 bundle cold-start per call)
 ]
 
 [tool.black]
