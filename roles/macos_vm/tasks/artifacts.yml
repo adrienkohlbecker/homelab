@@ -113,11 +113,27 @@
       "14": "default"
       "13": "default"
 
+- name: artifacts | Convert BaseSystem DMG to raw image
+  when:
+    - macos_vm_install_mode
+    - not (ansible_check_mode and (macos_vm_workdir_result.changed or macos_vm_basesystem_result.changed | default(false)))
+  ansible.builtin.command:
+    cmd: >
+      qemu-img convert
+      -f dmg
+      -O raw
+      {{ macos_vm_workdir }}/BaseSystem.dmg
+      {{ macos_vm_workdir }}/BaseSystem.img
+    creates: "{{ macos_vm_workdir }}/BaseSystem.img"
+  become: true
+  register: macos_vm_basesystem_convert_result
+
 - name: artifacts | Set BaseSystem ownership for libvirt-qemu
   when:
     - macos_vm_install_mode
     - not (ansible_check_mode and macos_vm_workdir_result.changed)
     - not (ansible_check_mode and (macos_vm_basesystem_result.changed | default(false)))
+    - not (ansible_check_mode and (macos_vm_basesystem_convert_result.changed | default(false)))
   file:
     path: "{{ item }}"
     owner: libvirt-qemu
@@ -125,5 +141,6 @@
     mode: "0644"
   loop:
     - "{{ macos_vm_workdir }}/BaseSystem.dmg"
+    - "{{ macos_vm_workdir }}/BaseSystem.img"
     - "{{ macos_vm_workdir }}/BaseSystem.chunklist"
   become: true

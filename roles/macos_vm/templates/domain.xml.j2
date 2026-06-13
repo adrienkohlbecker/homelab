@@ -74,7 +74,7 @@
          macos_vm_install_mode: false and re-running the role. -->
     <disk type='file' device='disk'>
       <driver name='qemu' type='raw' cache='writeback'/>
-      <source file='{{ macos_vm_workdir }}/BaseSystem.dmg'/>
+      <source file='{{ macos_vm_workdir }}/BaseSystem.img'/>
       <target dev='sdb' bus='sata'/>
       <boot order='3'/>
     </disk>
