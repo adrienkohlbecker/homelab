@@ -9,6 +9,8 @@ set -euo pipefail
 source "$(dirname "$0")/_hcloud_token.sh"
 # shellcheck source=_hetzner_rescue.sh
 source "$(dirname "$0")/_hetzner_rescue.sh"
+# shellcheck source=_bake_backstop.sh
+source "$(dirname "$0")/_bake_backstop.sh"
 
 ubuntu="${usage_ubuntu}"
 region=eu-central-1
@@ -30,8 +32,16 @@ trap rescue_cleanup EXIT
 rescue_create
 
 manifest=$(mktemp)
-trap 'rm -rf "$manifest"; rescue_cleanup' EXIT
+backstop_state=$(mktemp)
+backstop_pid=""
+trap 'bake_backstop_disarm "$region" "$backstop_state" "$backstop_pid"; rm -rf "$manifest" "$backstop_state"; rescue_cleanup' EXIT
 rm -f "$manifest" # manifest post-processor refuses to overwrite a non-manifest file
+
+# Arm the orphan backstop (CI-only, inside the helper) in the background: the
+# 90-min job timeout that orphaned a build instance here once (it killed packer
+# mid-stream, skipping its cleanup) would skip the trap above too.
+bake_backstop_arm "$region" "${CI_PIPELINE_ID:-local}" "hetzner" "$ubuntu" "$backstop_state" &
+backstop_pid=$!
 
 # The hetzner source's final provisioner pipes `dd | zstd` from the surrogate
 # volume into the rescue server's `zstd -d | dd of=/dev/sda` (KEY authorizes

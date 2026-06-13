@@ -183,11 +183,13 @@ resource "aws_iam_openid_connect_provider" "gitlab" {
 }
 
 # ─── EventBridge Scheduler execution role ────────────────────────────────────
-# Target role for the per-cell one-time termination backstop: immediately
-# after a successful launch the harness creates a one-time schedule invoking
-# EC2 TerminateInstances through this role; normal cleanup deletes the
-# schedule before it fires. Scoped so it can only ever terminate ci-cell
-# instances.
+# Target role for the one-time termination backstops: immediately after a
+# successful launch the harness (per cell) and the packer bake wrappers (per
+# build instance, mise-tasks/packer/_bake_backstop.sh) create a one-time
+# schedule invoking EC2 TerminateInstances through this role; normal cleanup
+# deletes the schedule before it fires. The backstop matters because a CI
+# job-timeout SIGKILL bypasses the wrapper's own on-error cleanup. Scoped so it
+# can only ever terminate ci-cell (test cell) or ci-ami (bake) instances.
 
 resource "aws_iam_role" "ci_cell_scheduler" {
   name = "homelab-ci-cell-scheduler"
@@ -203,8 +205,8 @@ resource "aws_iam_role" "ci_cell_scheduler" {
         # scoping it to a schedule or schedule-name prefix is explicitly
         # unsupported (docs: "Confused deputy prevention in EventBridge
         # Scheduler") and fails every CreateSchedule with "execution role
-        # must allow ... to assume the role". Per-cell scoping isn't lost:
-        # the permission policy below only terminates role=ci-cell
+        # must allow ... to assume the role". Per-instance scoping isn't lost:
+        # the permission policy below only terminates role=ci-cell / ci-ami
         # instances regardless of which schedule fires it.
         StringEquals = {
           "aws:SourceAccount" = local.ci_account_id
@@ -218,7 +220,7 @@ resource "aws_iam_role" "ci_cell_scheduler" {
 }
 
 resource "aws_iam_role_policy" "ci_cell_scheduler" {
-  name = "terminate-ci-cells"
+  name = "terminate-ci-instances"
   role = aws_iam_role.ci_cell_scheduler.id
 
   policy = jsonencode({
@@ -229,7 +231,9 @@ resource "aws_iam_role_policy" "ci_cell_scheduler" {
       Resource = "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*"
       Condition = {
         StringEquals = {
-          "ec2:ResourceTag/role" = "ci-cell"
+          # Test cells (harness backstop) and bake build instances
+          # (_bake_backstop.sh) — nothing else this role can ever reap.
+          "ec2:ResourceTag/role" = ["ci-cell", "ci-ami"]
         }
       }
     }]
@@ -483,6 +487,25 @@ resource "aws_iam_role_policy" "ci_bake" {
           "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/ami/${m}/*"
           if m != "minimal"
         ]
+      },
+      # Per-bake one-time termination schedules (mise-tasks/packer/
+      # _bake_backstop.sh), mirroring the cell role's CellSchedules: a CI
+      # job-timeout SIGKILL bypasses the wrapper's on-error cleanup, so the
+      # schedule is the only thing that reaps an orphaned build instance.
+      {
+        Sid      = "BakeSchedules"
+        Effect   = "Allow"
+        Action   = ["scheduler:CreateSchedule", "scheduler:DeleteSchedule", "scheduler:GetSchedule"]
+        Resource = "arn:aws:scheduler:${local.ci_aws_region}:${local.ci_account_id}:schedule/default/ci-bake-*"
+      },
+      {
+        Sid      = "PassSchedulerRole"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = aws_iam_role.ci_cell_scheduler.arn
+        Condition = {
+          StringEquals = { "iam:PassedToService" = "scheduler.amazonaws.com" }
+        }
       },
     ]
   })
