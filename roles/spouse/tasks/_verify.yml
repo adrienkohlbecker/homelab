@@ -9,8 +9,8 @@
       # getent_passwd[user]: [password, uid, gid, gecos, home, shell] (0-indexed)
       - ansible_facts.getent_passwd[spouse_firstname][5] == '/usr/sbin/nologin'
       - ansible_facts.getent_passwd[spouse_firstname][4] == '/mnt/data/' ~ spouse_firstname
-      # system: false in main.yml gives a stable non-system UID for the arq bucket
-      # and subid range -- assert it stayed that way.
+      # system: false in main.yml gives a stable non-system UID for the arq
+      # bucket -- assert it stayed that way.
       - ansible_facts.getent_passwd[spouse_firstname][1] | int >= 1000
       - ansible_facts.getent_passwd[spouse_firstname][2] | int >= 1000
     fail_msg: >-
