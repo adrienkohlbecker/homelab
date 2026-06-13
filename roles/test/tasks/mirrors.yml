@@ -11,6 +11,22 @@
     group: root
   become: true
 
+- name: mirrors | Select the bootstrap resolver for this backend
+  set_fact:
+    # qemu fixtures run on the operator LAN, where the UDM blocks outbound
+    # DoT (853) from every zone but lets clients reach the household AdGuard
+    # VIP — so they resolve through it like any real client (dns.fahm.fr
+    # cert, validated over the system CA store; the #name is SNI only and is
+    # not itself resolved). AWS cells have no LAN VIP and open public 853, so
+    # they bootstrap off the public anycast pair. Both ride TCP via DoT,
+    # which is what keeps qemu's SLIRP UDP drops from flaking resolution.
+    # prod_network (not network) because the VIP is the live LAN address,
+    # not the gsub'd test subnet.
+    test_dot_servers: >-
+      {{ (prod_network.virtual_ips.dns ~ '#dns.fahm.fr')
+         if test_backend == 'qemu'
+         else (bootstrap_dns_resolver | join(' ')) }}
+
 - name: mirrors | Force DNS-over-TLS so all queries ride TCP
   copy:
     dest: /etc/systemd/resolved.conf.d/10-test-dns-over-tls.conf
@@ -19,7 +35,7 @@
     group: root
     content: |
       [Resolve]
-      DNS={{ bootstrap_dns_resolver | join(' ') }}
+      DNS={{ test_dot_servers }}
       FallbackDNS=
       DNSOverTLS=yes
       Domains=~.

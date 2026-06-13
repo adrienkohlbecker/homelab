@@ -182,19 +182,39 @@
     test_resolvectl_global_protocols: >-
       {{ test_resolvectl.stdout_lines
          | select('search', 'Protocols:') | list | first | default('') }}
+    # Mirror mirrors.yml's backend split: qemu resolves through the household
+    # AdGuard VIP, AWS cells through the public anycast pair.
+    test_expected_resolvers: >-
+      {{ [prod_network.virtual_ips.dns]
+         if test_backend == 'qemu'
+         else bootstrap_dns_resolver }}
 
 - name: _verify | DNS-over-TLS is enforced at the configured resolver
   assert:
     that:
       - "'+DNSOverTLS' in test_resolvectl_global_protocols"
       - >-
-        (bootstrap_dns_resolver | select('in', test_resolvectl.stdout) | list | length)
-        == (bootstrap_dns_resolver | length)
+        (test_expected_resolvers | select('in', test_resolvectl.stdout) | list | length)
+        == (test_expected_resolvers | length)
     fail_msg: >-
-      systemd-resolved isn't enforcing DNS-over-TLS via {{ bootstrap_dns_resolver | join(', ') }};
+      systemd-resolved isn't enforcing DNS-over-TLS via {{ test_expected_resolvers | join(', ') }};
       the 10-test-dns-over-tls.conf drop-in didn't take effect, so queries can fall
       back to UDP and revive the SLIRP UDP-drop flakes it exists to prevent. Global
       Protocols line: {{ test_resolvectl_global_protocols }}
+
+# Functional proof that public resolution actually works end-to-end: the
+# whole reason for the backend-aware resolver. qemu rides the LAN VIP →
+# household AdGuard → DoH upstreams; AWS rides public DoT directly. Retried
+# because a single DoT handshake can lose the first round trip on a cold
+# resolver. wikipedia.org is a neutral name the household filter lists pass.
+- name: _verify | Resolve a public name over the enforced resolver
+  command: resolvectl query --cache=no wikipedia.org
+  register: test_public_resolve
+  changed_when: false
+  become: true
+  retries: 5
+  delay: 3
+  until: test_public_resolve.rc == 0
 
 # nginx fixture: snakeoil certs + prod roles/nginx tasks_from: install.
 
