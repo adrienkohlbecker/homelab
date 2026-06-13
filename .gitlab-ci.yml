@@ -9,17 +9,24 @@
 #   - fox's Docker-executor runner (roles/gitlab_runner) takes the AWS-cell
 #     jobs: each runs in a CI-image container on fox and drives single-use
 #     EC2 spot instances over the aws CLI + SSH. The runner is tag-only —
-#     cell jobs carry `tags: [fox-docker-aws]`. First aboard: ami_images
-#     and fox_image below; still to come: the role-test matrix as a
-#     dynamic child pipeline, site test.
+#     cell jobs carry `tags: [fox-docker-aws]`. Aboard: the ami_images /
+#     ami_box_deps / fox_image builders, and the role-test matrix + site
+#     test as the `detect` -> `test_cells` dynamic child pipeline below.
 #
-# Migration in progress: the heavy jobs still run on GitHub Actions
-# (.github/workflows/).
+# Migration in progress: GitHub Actions (.github/workflows/) is being retired
+# as these land.
 #
 # Required project CI/CD variable: HOMELAB_VAULT_PASSWORD_TEST — the `test`
 # vault identity's password (masked, same value as the GitHub repo secret).
 # The prod identity's password is never available to CI by design (CLAUDE.md:
 # Vault ids).
+
+# `detect` runs first and generates the role-test child pipeline; everything
+# else (lint, unit tests, the test_cells trigger, manual builders) runs in
+# `test`. Jobs without an explicit stage default to `test`.
+stages:
+  - detect
+  - test
 
 default:
   # Only the latest commit's status matters for these jobs — pairs with the
@@ -39,6 +46,59 @@ default:
 # nothing here reads.
 .hosted:
   image: $CI_REGISTRY_IMAGE/ci:latest
+
+# Change detection + dynamic child pipeline (notes/ci_aws_test_cells.md). The
+# GitHub `detect` -> per-bucket `test` workflows collapse to this single pair:
+# `detect` runs the same classification core (mise-tasks/ci/detect.py) and
+# writes a generated child pipeline — one job per `role:variant[:ubuntu]` cell,
+# each launching a single-use EC2 spot instance via the harness's aws backend.
+# There are no QEMU images or per-release runner pools on AWS, so the matrix is
+# a flat list rather than GitHub's jammy/noble/.../lab/pug buckets.
+#
+# The diff base is the previous branch tip (CI_COMMIT_BEFORE_SHA); a
+# full-universe trigger fires on a cross-cutting path change, a new branch, or
+# a schedule/ROLES=ALL dispatch.
+detect:
+  extends: .hosted
+  stage: detect
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "push"
+  variables:
+    # detect diffs HEAD against the previous branch tip; deep enough for any
+    # realistic push, with a fetch-on-demand fallback in detect.py for a base
+    # outside the shallow checkout.
+    GIT_DEPTH: "50"
+  timeout: 15m
+  script:
+    - mise install
+    - uv sync --locked
+    - uv run python mise-tasks/ci/detect.py gitlab
+  artifacts:
+    paths:
+      - test-child.yml
+
+# Run the generated child pipeline. `strategy: depend` mirrors the child's
+# status onto this job, so a failed cell fails the parent pipeline. Always
+# runs — GitLab evaluates `rules` at pipeline-creation time, so the runtime
+# "are there cells?" decision can't gate it here; instead detect writes a
+# single no-op job into the child when nothing is role-relevant (a near-instant
+# child pipeline rather than a skipped trigger).
+test_cells:
+  stage: test
+  needs:
+    - job: detect
+      artifacts: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "push"
+  trigger:
+    include:
+      - artifact: test-child.yml
+        job: detect
+    strategy: depend
 
 lint:
   extends: .hosted
