@@ -27,10 +27,10 @@
 
 - name: Add spouse user
   # Deliberately a non-system user (system: false): the household member needs a
-  # stable login-class uid that owns their arq-<name> backup bucket and rootless
-  # podman subid range, so this can't route through the service_user helper
-  # (which forces system: true). nologin + password "!" disable local and ssh
-  # login; the SMB account registered below is the intended, live access path.
+  # stable login-class uid that owns their arq-<name> backup bucket, so this
+  # can't route through the service_user helper (which forces system: true).
+  # nologin + password "!" disable local and ssh login; the SMB account
+  # registered below is the intended, live access path.
   user:
     name: "{{ spouse_firstname }}"
     group: "{{ spouse_firstname }}"

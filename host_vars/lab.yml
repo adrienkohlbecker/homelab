@@ -258,21 +258,6 @@ samba_shares:
     path: /mnt/eckwersheim
     valid users: ak
 
-# Order is load-bearing: each entry gets a /etc/subuid+/etc/subgid range
-# allocated by index, so inserting in the middle shifts every later
-# user's ranges and invalidates their existing rootless podman storage.
-# Append new entries at the end; don't sort.
-#
-# gitea_runner and github_runner are both decommissioned (their roles are gone;
-# retired_services tears down units/state), but their slots are RETAINED here:
-# the users are left in place (per retired_services' uid-reuse policy) and
-# removing an earlier entry would shift the others down a range. Keep the
-# placeholders, don't reclaim the slots.
-subid_users:
-  - gitea_runner
-  - "{{ spouse_firstname }}"
-  - github_runner
-
 has_transcoding_acceleration: true
 z2m_start_service: true
 
