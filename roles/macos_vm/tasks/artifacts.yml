@@ -82,17 +82,29 @@
   become: true
 
 - name: artifacts | Fetch BaseSystem recovery image
-  when: macos_vm_install_mode
+  when:
+    - macos_vm_install_mode
+    - not (ansible_check_mode and (macos_vm_artifacts_dir_result.changed or macos_vm_workdir_result.changed))
   ansible.builtin.command:
-    cmd: >
-      python3 {{ macos_vm_artifacts_dir }}/fetch-macOS-v2.py
-      --action download
-      --board-id Mac-7BA5B2D9E42DDD94
-      --mlb 00000000000J80300
-      --os {{ macos_vm_macos_version_to_apple[macos_vm_macos_version] }}
+    # fetch-macOS-v2.py calls os.get_terminal_size() while verifying the
+    # chunklist, so give it a pseudo-terminal even though Ansible is non-TTY.
+    argv:
+      - script
+      - -q
+      - -e
+      - -c
+      - >-
+        python3 {{ macos_vm_artifacts_dir }}/fetch-macOS-v2.py
+        --action download
+        --board-id Mac-7BA5B2D9E42DDD94
+        --mlb 00000000000J80300
+        --os-type {{ macos_vm_macos_version_to_apple[macos_vm_macos_version] }}
+        --outdir {{ macos_vm_workdir }}
+      - /dev/null
     chdir: "{{ macos_vm_workdir }}"
     creates: "{{ macos_vm_workdir }}/BaseSystem.dmg"
   become: true
+  register: macos_vm_basesystem_result
   vars:
     # fetch-macOS-v2.py uses Apple's "AssetSet" naming, not version numbers.
     # 15 = Sequoia, 14 = Sonoma, 13 = Ventura. Add new entries here.
@@ -102,7 +114,10 @@
       "13": "default"
 
 - name: artifacts | Set BaseSystem ownership for libvirt-qemu
-  when: macos_vm_install_mode
+  when:
+    - macos_vm_install_mode
+    - not (ansible_check_mode and macos_vm_workdir_result.changed)
+    - not (ansible_check_mode and (macos_vm_basesystem_result.changed | default(false)))
   file:
     path: "{{ item }}"
     owner: libvirt-qemu
@@ -112,4 +127,3 @@
     - "{{ macos_vm_workdir }}/BaseSystem.dmg"
     - "{{ macos_vm_workdir }}/BaseSystem.chunklist"
   become: true
-  ignore_errors: "{{ ansible_check_mode }}"

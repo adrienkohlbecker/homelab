@@ -75,6 +75,12 @@ macvlan_blocks:
     # --network=mac_iot.
     podman_network: true
 
+macos_vm_disk_id: ata-Crucial_CT240M500SSD1_14270C8904C3
+# First SMT sibling of four P-cores. CPUs 12-19 are E-cores on this i5-13500.
+macos_vm_cpu_pinset: "0,2,4,6"
+macos_vm_install_mode: true
+macos_vm_autostart: false
+
 netplan:
   ethernets:
     # match.driver pins each block to a physical PCIe NIC. Without it

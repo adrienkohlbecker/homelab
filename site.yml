@@ -136,6 +136,11 @@
     - nexus
     - homepage
 
+- name: MacOS VM
+  hosts: lab
+  roles:
+    - macos_vm
+
 - name: UDM DNS failover
   hosts: udm
   roles:
