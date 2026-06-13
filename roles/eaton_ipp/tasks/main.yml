@@ -11,12 +11,7 @@
       version: "{{ eaton_ipp_version }}"
       url: "{{ eaton_ipp_release[ansible_architecture].url }}"
       sha256: "{{ eaton_ipp_release[ansible_architecture].sha256 }}"
-      # Eaton's download host is slow and far from eu-central; the default 10s
-      # and even 30s aborted a still-progressing fetch from an EC2 cell. 60s per
-      # attempt (deb_install retries the download 3x) gives a cold cell room. If
-      # it still times out persistently, the URL wants a nexus mirror, not more
-      # retries (notes/ci_aws_test_cells.md, upstream-fetch group).
-      timeout: 60
+      timeout: 30
   tags:
     - eaton_ipp
 
