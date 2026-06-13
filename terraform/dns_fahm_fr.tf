@@ -87,36 +87,29 @@ locals {
   # fail-closed posture. box has no stable Tailscale IP (test fixture,
   # infrequently enrolled) so it keeps its physical address.
   #
-  # fox is NOT here yet: it stays on its public IP (fahm_fr_fox_records below)
-  # until the headscale.fahm.fr control-plane cutover completes, so the legacy
-  # headscale.fox.fahm.fr name keeps resolving while clients migrate. The final
-  # phase moves a_fox here (Tailscale IP, no AdGuard override -- fox is off-home,
-  # reached over the mesh from home too) and drops the public fox records.
+  # fox is here too (Tailscale IP, A-only) with no AdGuard override: it is
+  # off-home (Hetzner), so the estate reaches it over the mesh rather than a
+  # LAN/wg path, same as a roaming client. fox's public IPs now serve only the
+  # headscale.fahm.fr control plane (fahm_fr_headscale_records below).
   fahm_fr_host_records = {
     a_box  = { type = "A", name = "box.fahm.fr", content = local.network.hosts.box.physical }
     a_bunk = { type = "A", name = "bunk.fahm.fr", content = local.network.hosts.bunk.tailscale }
+    a_fox  = { type = "A", name = "fox.fahm.fr", content = local.network.hosts.fox.tailscale }
     a_lab  = { type = "A", name = "lab.fahm.fr", content = local.network.hosts.lab.tailscale }
     a_pug  = { type = "A", name = "pug.fahm.fr", content = local.network.hosts.pug.tailscale }
   }
 
-  # fox's public records -- the reserved Hetzner primary IPs, the one intentional
-  # exception to the fail-closed posture (reachable from the internet so an
-  # un-enrolled client can reach the control plane to join).
-  #
-  # headscale.fahm.fr is fox's control-plane + DERP-relay FQDN, decoupled from
-  # fox.fahm.fr so the *.fox.fahm.fr CNAME chasing fox.fahm.fr can't later drag
-  # the control plane onto the (un-enrolled-unreachable) CGNAT IP. Dual-stack:
-  # the AAAA lets IPv6-only clients reach the relay without NAT64 (nginx [::]:443
-  # on fox, DERP STUN on [::]:3478).
-  #
-  # fox.fahm.fr itself stays public for now (phased cutover): once every client
-  # dials headscale.fahm.fr, the final phase flips a_fox/aaaa_fox out of here and
-  # into fahm_fr_host_records as the Tailscale IP. These locals bypass the
-  # var.fahm_fr_records A/CNAME/TXT/MX validation, so the AAAAs need no schema
-  # change there.
-  fahm_fr_fox_records = {
-    a_fox          = { type = "A", name = "fox.fahm.fr", content = hcloud_primary_ip.fox.ip_address }
-    aaaa_fox       = { type = "AAAA", name = "fox.fahm.fr", content = hcloud_primary_ip.fox_v6.ip_address }
+  # headscale.fahm.fr is fox's control-plane + DERP-relay FQDN, pinned to the
+  # reserved Hetzner primary IPs -- the one intentional exception to the
+  # fail-closed CGNAT posture (reachable from the internet so an un-enrolled
+  # client can reach the control plane to join). It is decoupled from fox.fahm.fr
+  # (now the Tailscale CGNAT IP, in fahm_fr_host_records) so the *.fox.fahm.fr
+  # CNAME chasing fox.fahm.fr can't drag the control plane onto that
+  # unreachable address. Dual-stack: the AAAA lets IPv6-only clients reach the
+  # relay without NAT64 (nginx [::]:443 on fox, DERP STUN on [::]:3478). This
+  # local bypasses the var.fahm_fr_records A/CNAME/TXT/MX validation, so the AAAA
+  # needs no schema change there.
+  fahm_fr_headscale_records = {
     a_headscale    = { type = "A", name = "headscale.fahm.fr", content = hcloud_primary_ip.fox.ip_address }
     aaaa_headscale = { type = "AAAA", name = "headscale.fahm.fr", content = hcloud_primary_ip.fox_v6.ip_address }
   }
@@ -128,7 +121,7 @@ locals {
   fahm_fr_wan_records = {
     a_home = { type = "A", name = "home.fahm.fr", content = var.home_wan_ip }
   }
-  fahm_fr_records = merge(var.fahm_fr_records, local.fahm_fr_host_records, local.fahm_fr_fox_records, local.fahm_fr_wan_records)
+  fahm_fr_records = merge(var.fahm_fr_records, local.fahm_fr_host_records, local.fahm_fr_headscale_records, local.fahm_fr_wan_records)
 }
 
 resource "cloudflare_dns_record" "fahm_fr" {
