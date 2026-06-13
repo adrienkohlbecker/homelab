@@ -25,7 +25,7 @@
 # else (lint, unit tests, the test_cells trigger, manual builders) runs in
 # `test`. Jobs without an explicit stage default to `test`.
 stages:
-  - detect
+  - prepare
   - test
 
 default:
@@ -60,7 +60,7 @@ default:
 # a schedule/ROLES=ALL dispatch.
 detect:
   extends: .hosted
-  stage: detect
+  stage: prepare
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web"
@@ -101,6 +101,7 @@ test_cells:
     strategy: depend
 
 lint:
+  stage: prepare
   extends: .hosted
   # The default (small) hosted runner is 2 vCPU; lint fans its linters out in
   # parallel, so the 4-vCPU medium tier roughly halves the wall-clock.
@@ -129,6 +130,7 @@ lint:
 # missing anyway, so a partial install would just move the rest to task time
 # (with noisy resolution warnings).
 unit_tests:
+  stage: prepare
   extends: .hosted
   timeout: 15m
   script:
@@ -148,6 +150,7 @@ unit_tests:
 # GitHub API rate limit during the in-image `mise install`; without it the
 # build still works, mounted only as a BuildKit secret either way.
 ci_image:
+  stage: prepare
   rules:
     - when: manual
       # A skipped manual job must not hold the pipeline in "blocked".
@@ -202,6 +205,7 @@ ci_image:
 # rollback is re-putting the previous value (ssm get-parameter-history).
 #
 ami_images:
+  stage: prepare
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
@@ -251,6 +255,7 @@ ami_images:
 # release was baked with that key aboard, or SSH to the seed instance is
 # refused.
 ami_box_deps:
+  stage: prepare
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
@@ -303,6 +308,7 @@ ami_box_deps:
 # Exposure is scoped to this protected-ref manual job, the same blast
 # radius the GitHub repo secret had before the migration.
 fox_image:
+  stage: prepare
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
@@ -356,6 +362,7 @@ fox_image:
 # under the job token; the tarball publishes to the generic package registry
 # from master only (branch dispatches keep the job artifacts).
 zbm_build:
+  stage: prepare
   extends: .hosted
   rules:
     - when: manual
