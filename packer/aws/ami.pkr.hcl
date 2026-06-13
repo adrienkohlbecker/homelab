@@ -603,7 +603,15 @@ build {
     ]
   }
 
+  # box/pug/lab only: ami.sh parses the AMI id out of this manifest to promote
+  # it. The hetzner source is excluded — its byproduct AMI is never promoted
+  # (the deliverable is the Hetzner snapshot rescue_snapshot makes, and the
+  # EXIT trap's name sweep deregisters the AMI), so it needs no manifest.
+  # Skipping it also leaves the hetzner build with no post-processor phase,
+  # which is where packer's manifest plugin panicked ("ConfigSpec failed:
+  # connection is shut down") after an otherwise-complete stream.
   post-processor "manifest" {
+    except = ["amazon-ebssurrogate.hetzner"]
     output = var.manifest_path
   }
 }
