@@ -221,7 +221,7 @@
          and ((not tailscale_running)
               or (tailscale_reconcile_headscale_routes | bool)
               or ((tailscale_desired_routes | sort)
-                  != (((tailscale_prefs.stdout | default('{}', true) | from_json).AdvertiseRoutes | default([])) | sort))) }}
+                  != (((tailscale_prefs.stdout | default('{}', true) | from_json).AdvertiseRoutes | default([], true)) | sort))) }}
   tags:
     - tailscale
 
@@ -343,7 +343,7 @@
   when:
     - not ansible_check_mode
     - tailscale_approve_routes_needed
-    - (tailscale_desired_routes | sort) != ((tailscale_node.approved_routes | default([])) | sort)
+    - (tailscale_desired_routes | sort) != ((tailscale_node.approved_routes | default([], true)) | sort)
   changed_when: true
   become: true
   tags:

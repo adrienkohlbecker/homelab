@@ -42,12 +42,12 @@
   assert:
     that:
       - _tailscale_node.id is defined
-      - (_tailscale_desired_routes | symmetric_difference(_tailscale_node.approved_routes | default([]))) | length == 0
+      - (_tailscale_desired_routes | symmetric_difference(_tailscale_node.approved_routes | default([], true))) | length == 0
     fail_msg: >-
       headscale node for {{ ansible_hostname | lower }} is missing, or its
       approved routes don't match the desired set.
       desired={{ _tailscale_desired_routes | sort }}
-      approved={{ _tailscale_node.approved_routes | default([]) | sort }}
+      approved={{ _tailscale_node.approved_routes | default([], true) | sort }}
 
 - name: _verify | Read local preferences (accept-routes, accept-dns)
   command: tailscale debug prefs
@@ -81,7 +81,7 @@
   command: tailscale debug prefs
   register: _tailscale_canary_prefs
   changed_when: false
-  failed_when: "'10.254.254.0/24' not in (_tailscale_canary_prefs.stdout | from_json).AdvertiseRoutes | default([])"
+  failed_when: "'10.254.254.0/24' not in ((_tailscale_canary_prefs.stdout | from_json).AdvertiseRoutes | default([], true))"
   become: true
 
 - name: _verify | Reconcile test -- restore original routes
