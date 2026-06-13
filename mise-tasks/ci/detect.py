@@ -1,15 +1,10 @@
 #!/usr/bin/env python3
-"""CI change-detection pipeline.
+"""CI change-detection pipeline (GitLab).
 
-Complete change-detection logic: mode dispatch, green-base resolution via the
-host CI API, changed-file classification, role-deps expansion, release-cell
-propagation, matrix bucket splitting, and output emission.
-
-Two front ends share the classification core:
-  - ``run`` (GitHub Actions): resolves a green base via the GitHub Actions API
-    and emits per-bucket matrix outputs to $GITHUB_OUTPUT (detect-roles.sh wraps it).
-  - ``gitlab`` (GitLab CI): resolves a green base via the GitLab pipelines API
-    and writes a generated child pipeline (one job per cell).
+The ``gitlab`` subcommand (.gitlab-ci.yml's `detect` job) is the whole story:
+resolve a green base via the GitLab pipelines API, classify the changed files,
+expand role-deps and release cells, and write a generated child pipeline — one
+job per `role:variant[:ubuntu]` cell.
 """
 
 import json
@@ -58,7 +53,6 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
     r"pyproject\.toml",
     r"uv\.lock",
     r"data/network_topology\.(yml|schema\.json)",
-    r"\.github/workflows/[^/]+\.yml",
     r"\.gitlab-ci\.yml",
     r"mise-tasks/ci/.+",
 ]
@@ -197,143 +191,6 @@ def classify_changed_files(
 
 
 # ---------------------------------------------------------------------------
-# Matrix bucket splitting
-# ---------------------------------------------------------------------------
-
-
-class MatrixBuckets(NamedTuple):
-    jammy: list[str]
-    noble: list[str]
-    resolute: list[str]
-    minimal: list[str]
-    lab: list[str]
-    pug: list[str]
-
-
-def split_matrix_buckets(specs: list[str]) -> MatrixBuckets:
-    """Split CI spec strings into per-packer-dependency buckets.
-
-    The machine field (second colon-segment) determines the bucket:
-      box/box_deps + no release or jammy  ->  jammy
-      box/box_deps + noble                ->  noble
-      box/box_deps + resolute             ->  resolute
-      lab                                 ->  lab   (needs packer_lab)
-      pug                                 ->  pug   (needs packer_pug)
-      anything else (minimal)             ->  minimal
-    """
-    jammy: list[str] = []
-    noble: list[str] = []
-    resolute: list[str] = []
-    minimal: list[str] = []
-    lab: list[str] = []
-    pug: list[str] = []
-
-    for spec in specs:
-        parts = spec.split(":")
-        machine = parts[1] if len(parts) >= 2 else ""
-        release = parts[2] if len(parts) >= 3 else ""
-
-        if machine == "lab":
-            lab.append(spec)
-        elif machine == "pug":
-            pug.append(spec)
-        elif machine not in ("box", "box_deps"):
-            minimal.append(spec)
-        elif release == "noble":
-            noble.append(spec)
-        elif release == "resolute":
-            resolute.append(spec)
-        else:
-            jammy.append(spec)
-
-    return MatrixBuckets(
-        jammy=sorted(jammy),
-        noble=sorted(noble),
-        resolute=sorted(resolute),
-        minimal=sorted(minimal),
-        lab=sorted(lab),
-        pug=sorted(pug),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Packer source/ubuntu matrix
-# ---------------------------------------------------------------------------
-
-ALL_PACKER_SOURCES = ["box", "pug", "lab", "hetzner"]
-ALL_PACKER_UBUNTU_RELEASES = ["jammy", "noble", "resolute"]
-DEFAULT_PACKER_UBUNTU_HETZNER = ["jammy"]
-
-
-class PackerSources(NamedTuple):
-    all: list[str]
-    box: list[str]
-    lab: list[str]
-    pug: list[str]
-    hetzner: list[str]
-
-
-def compute_packer_sources(
-    inputs_sources: str = "",
-    *,
-    affected: set[str] | None = None,
-) -> PackerSources:
-    """Compute packer source matrix.
-
-    Priority: dispatch input > file-based affected set > full set.
-    ``affected`` maps source-map tags (qemu, hetzner_upload) to concrete
-    packer sources: "qemu" expands to all QEMU-based sources,
-    "hetzner_upload" adds just the hetzner source.
-    """
-    if inputs_sources:
-        sources = [s for s in inputs_sources.split() if s]
-    elif affected is not None:
-        concrete: set[str] = set()
-        if "qemu" in affected:
-            concrete |= set(ALL_PACKER_SOURCES)
-        if "hetzner_upload" in affected:
-            concrete.add("hetzner")
-        sources = sorted(concrete & set(ALL_PACKER_SOURCES))
-    else:
-        sources = list(ALL_PACKER_SOURCES)
-    return PackerSources(
-        all=sources,
-        box=[s for s in sources if s == "box"],
-        lab=[s for s in sources if s == "lab"],
-        pug=[s for s in sources if s == "pug"],
-        hetzner=[s for s in sources if s == "hetzner"],
-    )
-
-
-class PackerUbuntu(NamedTuple):
-    box: list[str]
-    lab: list[str]
-    pug: list[str]
-    hetzner: list[str]
-
-
-def compute_packer_ubuntu(inputs_ubuntu: str = "") -> PackerUbuntu:
-    """Compute packer Ubuntu release matrix from dispatch input.
-
-    Pinned release applies to all sources.  Empty returns defaults:
-    box/lab/pug build all releases, hetzner stays jammy-only.
-    """
-    if inputs_ubuntu:
-        return PackerUbuntu(
-            box=[inputs_ubuntu],
-            lab=[inputs_ubuntu],
-            pug=[inputs_ubuntu],
-            hetzner=[inputs_ubuntu],
-        )
-    return PackerUbuntu(
-        box=list(ALL_PACKER_UBUNTU_RELEASES),
-        lab=list(ALL_PACKER_UBUNTU_RELEASES),
-        pug=list(ALL_PACKER_UBUNTU_RELEASES),
-        hetzner=list(DEFAULT_PACKER_UBUNTU_HETZNER),
-    )
-
-
-# ---------------------------------------------------------------------------
 # Release-cell propagation
 # ---------------------------------------------------------------------------
 
@@ -401,186 +258,27 @@ def git_fetch_commit(sha: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# GitHub API
-# ---------------------------------------------------------------------------
-
-CI_WORKFLOW = ".github/workflows/ci.yml"
-NIGHTLY_WORKFLOW = ".github/workflows/test-nightly.yml"
-
-
-def _gh_api_get(
-    url: str,
-    token: str,
-    *,
-    retries: int = 4,
-    retry_delay: float = 2.0,
-) -> dict | None:
-    """GET a GitHub REST API endpoint with retries.  Returns parsed JSON or None."""
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-    req = urllib.request.Request(url, headers=headers)
-    for attempt in range(retries + 1):
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                return json.loads(resp.read())
-        except (urllib.error.URLError, urllib.error.HTTPError, OSError):
-            if attempt < retries:
-                time.sleep(retry_delay)
-            else:
-                return None
-    return None
-
-
-def is_ancestor_of_head(
-    sha: str,
-    head_sha: str,
-    *,
-    repo: str,
-    api_url: str,
-    token: str,
-) -> bool:
-    """True when sha is an ancestor of head_sha (via the compare API)."""
-    url = f"{api_url}/repos/{repo}/compare/{sha}...{head_sha}"
-    data = _gh_api_get(url, token, retries=0)
-    if data is None:
-        return False
-    return data.get("status", "") in ("ahead", "identical")
-
-
-def nightly_actually_tested(
-    run_id: int,
-    *,
-    repo: str,
-    api_url: str,
-    token: str,
-) -> bool:
-    """True when a nightly run actually ran tests (not just the gate job)."""
-    url = f"{api_url}/repos/{repo}/actions/runs/{run_id}/jobs?per_page=100"
-    data = _gh_api_get(url, token, retries=0)
-    if data is None:
-        return False
-    return any(j.get("name") != "gate" and j.get("conclusion") == "success" for j in data.get("jobs", []))
-
-
-def newest_green_ancestor(
-    branch: str,
-    *,
-    head_sha: str,
-    repo: str,
-    api_url: str,
-    token: str,
-    log_fn,
-    max_pages: int = 5,
-) -> str | None:
-    """Find the newest green CI/nightly run on branch that is an ancestor of head_sha."""
-    log_fn(f"  searching green ci/nightly runs on '{branch}'...")
-    page = 1
-    while page <= max_pages:
-        params = urllib.parse.urlencode(
-            {
-                "branch": branch,
-                "status": "success",
-                "per_page": 100,
-                "page": page,
-            }
-        )
-        url = f"{api_url}/repos/{repo}/actions/runs?{params}"
-        data = _gh_api_get(url, token)
-        if data is None:
-            log_fn(f"  runs query failed on '{branch}' (page {page})")
-            return None
-        runs = data.get("workflow_runs", [])
-        if not runs:
-            break
-        for run in runs:
-            path = run.get("path", "")
-            event = run.get("event", "")
-            sha = run.get("head_sha", "")
-            created = run.get("created_at", "")
-            rid = run.get("id", 0)
-            if not sha:
-                continue
-            if not ((path == CI_WORKFLOW and event in ("push", "schedule")) or path == NIGHTLY_WORKFLOW):
-                continue
-            # Schedule events and old nightly runs need a sanity check:
-            # the 25h gate may have suppressed the test matrix, leaving
-            # only the gate job — don't count that as a green base.
-            if event != "push" and not nightly_actually_tested(rid, repo=repo, api_url=api_url, token=token):
-                log_fn(f"    skip {sha[:12]} ({created}): nightly skipped its test matrix")
-                continue
-            if is_ancestor_of_head(sha, head_sha, repo=repo, api_url=api_url, token=token):
-                log_fn(f"  green ancestor: {sha[:12]} ({created}, {Path(path).stem})")
-                return sha
-            log_fn(f"    skip {sha[:12]} ({created}): not an ancestor of HEAD")
-        page += 1
-    log_fn(f"  no green ancestor on '{branch}' (searched {page - 1} page(s))")
-    return None
-
-
-def resolve_green_base(
-    *,
-    token: str,
-    repo: str,
-    ref_name: str,
-    head_sha: str,
-    api_url: str = "https://api.github.com",
-    default_branch: str = "master",
-    log_fn,
-) -> str | None:
-    """Resolve the diff base to the newest green ancestor run."""
-    if not token:
-        log_fn("  no GITHUB_TOKEN -- cannot query run history")
-        return None
-    if not repo or not ref_name or not head_sha:
-        return None
-    sha = newest_green_ancestor(
-        ref_name,
-        head_sha=head_sha,
-        repo=repo,
-        api_url=api_url,
-        token=token,
-        log_fn=log_fn,
-    )
-    if sha is None and ref_name != default_branch:
-        log_fn(f"  none on '{ref_name}'; falling back to default branch '{default_branch}'")
-        sha = newest_green_ancestor(
-            default_branch,
-            head_sha=head_sha,
-            repo=repo,
-            api_url=api_url,
-            token=token,
-            log_fn=log_fn,
-        )
-    return sha
-
-
-# ---------------------------------------------------------------------------
 # GitLab API — green-base resolution
 # ---------------------------------------------------------------------------
 #
-# The GitLab analog of resolve_green_base: instead of GitHub Actions workflow
-# runs, query the project's pipeline history for the newest *successful*
-# pipeline whose commit is an ancestor of HEAD, and diff against that. This
-# turns a red-push -> fix sequence into "retest everything since the last
-# fully-green commit" rather than only the fix's own diff (all that
-# CI_COMMIT_BEFORE_SHA alone covers).
+# Query the project's pipeline history for the newest *successful* pipeline
+# whose commit is an ancestor of HEAD, and diff against that. This turns a
+# red-push -> fix sequence into "retest everything since the last fully-green
+# commit" rather than only the fix's own diff (all that CI_COMMIT_BEFORE_SHA
+# alone covers).
 #
 # A green base is a `push` or `schedule` pipeline: the `web` source is the
-# manual ROLES dispatch (a partial matrix, like GitHub's workflow_dispatch —
-# never a base), and `parent_pipeline` is the generated cell child (same sha as
-# its push parent, redundant). One pipeline per push covers lint + unit tests +
-# the whole cell matrix, so a `success` status is already a strong green —
-# GitLab has no nightly gate that can pass with the matrix suppressed, so no
-# per-workflow path filter or matrix-actually-ran check is needed (unlike the
-# GitHub side's CI_WORKFLOW / nightly_actually_tested guards).
+# manual ROLES dispatch (a partial matrix — never a base), and `parent_pipeline`
+# is the generated cell child (same sha as its push parent, redundant). One
+# pipeline per push covers lint + unit tests + the whole cell matrix, so a
+# `success` status is already a strong green — there is no nightly gate that can
+# pass with the matrix suppressed, so no per-pipeline-kind filter or
+# matrix-actually-ran check is needed.
 #
 # Ancestry is checked locally with git (merge-base --is-ancestor), fetching the
 # candidate on demand when it sits outside the shallow checkout — the same
-# fetch-on-demand fallback the base-resolution callers already use, so it needs
-# no second API surface (GitHub used the compare API only to avoid fetching).
+# fetch-on-demand fallback the base resolver already uses, so it needs no
+# second API surface (e.g. a server-side compare).
 
 GREEN_BASE_SOURCES = ("push", "schedule")
 
@@ -625,8 +323,7 @@ def is_local_ancestor(sha: str, head: str = "HEAD") -> bool:
     """True when sha is an ancestor of head in the local history.
 
     Fetches the commit on demand when the shallow checkout lacks it.  A commit
-    is its own ancestor, so an identical sha resolves True (matching the GitHub
-    side, which accepts compare status "identical").
+    is its own ancestor, so an identical sha (HEAD already green) resolves True.
     """
     if git_rev_parse(sha) is None:
         git_fetch_commit(sha)
@@ -782,266 +479,25 @@ def build_role_deps_map() -> dict[str, list[str]]:
 # ---------------------------------------------------------------------------
 
 
-def _cmd_classify(args: list[str]) -> int:
-    is_master = "--master-push" in args
-    paths = [line.strip() for line in sys.stdin if line.strip()]
-    result = classify_changed_files(paths, is_master_push=is_master)
-    d = result._asdict()
-    d["packer_sources_affected"] = sorted(d["packer_sources_affected"])
-    d["machine_universe"] = sorted(d["machine_universe"])
-    print(json.dumps(d))
-    return 0
-
-
-def _cmd_split_buckets(args: list[str]) -> int:
-    if not args:
-        print("usage: detect.py split-buckets <json-array>", file=sys.stderr)
-        return 2
-    specs = json.loads(args[0])
-    result = split_matrix_buckets(specs)
-    print(json.dumps(result._asdict()))
-    return 0
-
-
-def _cmd_packer_sources(args: list[str]) -> int:
-    inputs = args[0] if args else ""
-    result = compute_packer_sources(inputs)
-    print(json.dumps(result._asdict()))
-    return 0
-
-
-def _cmd_packer_ubuntu(args: list[str]) -> int:
-    inputs = args[0] if args else ""
-    result = compute_packer_ubuntu(inputs)
-    print(json.dumps(result._asdict()))
-    return 0
-
-
-def _cmd_emit(args: list[str]) -> int:
-    """Emit CI outputs: matrix buckets and the site-test flag.
-
-    Writes key=value lines to $GITHUB_OUTPUT (CI) or stdout (local).
-    """
-    from argparse import ArgumentParser
-
-    p = ArgumentParser()
-    p.add_argument("--matrix", required=True)
-    p.add_argument("--site-test", default="false")
-    opts = p.parse_args(args)
-
-    specs = json.loads(opts.matrix)
-    matrix_str = json.dumps(specs)
-    buckets = split_matrix_buckets(specs)
-
-    pairs = [
-        ("matrix", matrix_str),
-        ("matrix_jammy", json.dumps(buckets.jammy)),
-        ("matrix_noble", json.dumps(buckets.noble)),
-        ("matrix_resolute", json.dumps(buckets.resolute)),
-        ("matrix_minimal", json.dumps(buckets.minimal)),
-        ("matrix_lab", json.dumps(buckets.lab)),
-        ("matrix_pug", json.dumps(buckets.pug)),
-        ("site_test", opts.site_test),
-    ]
-
-    log_parts = [
-        f"matrix={matrix_str}",
-        f"(jammy={json.dumps(buckets.jammy)}"
-        f" noble={json.dumps(buckets.noble)}"
-        f" resolute={json.dumps(buckets.resolute)}"
-        f" minimal={json.dumps(buckets.minimal)}"
-        f" lab={json.dumps(buckets.lab)}"
-        f" pug={json.dumps(buckets.pug)})",
-        f"site_test={opts.site_test}",
-    ]
-    print(f"[detect-roles] result: {' '.join(log_parts)}", file=sys.stderr)
-
-    github_output = os.environ.get("GITHUB_OUTPUT", "")
-    if github_output:
-        with open(github_output, "a") as f:
-            for k, v in pairs:
-                f.write(f"{k}={v}\n")
-    else:
-        for k, v in pairs:
-            print(f"{k}={v}")
-
-    return 0
-
-
-def _emit_result(
-    matrix: str,
-    *,
-    site_test: bool = False,
-) -> int:
-    """Emit CI outputs via _cmd_emit."""
-    return _cmd_emit(
-        [
-            "--matrix",
-            matrix,
-            "--site-test",
-            "true" if site_test else "false",
-        ]
-    )
-
-
 def _full_universe_matrix() -> str:
     """JSON array of all testable role specs."""
     return json.dumps(cells_to_ci_specs(build_test_matrix(list_testable_roles())))
-
-
-def _cmd_run(args: list[str]) -> int:
-    """Full change-detection pipeline — replaces detect-roles.sh."""
-
-    def log(msg):
-        print(f"[detect-roles] {msg}", file=sys.stderr)
-
-    if "--all" in args:
-        log("mode: --all (full universe)")
-        return _emit_result(_full_universe_matrix(), site_test=True)
-
-    event = os.environ.get("GITHUB_EVENT_NAME", "")
-    inputs_roles = os.environ.get("INPUTS_ROLES", "")
-
-    if event == "workflow_dispatch" and inputs_roles:
-        log(f"mode: workflow_dispatch roles='{inputs_roles}'")
-        if inputs_roles == "ALL":
-            log("roles=ALL -> full universe")
-            return _emit_result(_full_universe_matrix(), site_test=True)
-        cells = _build_dispatch_matrix(inputs_roles)
-        return _emit_result(json.dumps(cells_to_ci_specs(cells)))
-
-    if event == "schedule":
-        log("mode: schedule (nightly full build)")
-        return _emit_result(_full_universe_matrix(), site_test=True)
-
-    head_sha = os.environ.get("GITHUB_SHA", "")
-    ref_name = os.environ.get("GITHUB_REF_NAME", "")
-    github_ref = os.environ.get("GITHUB_REF", "")
-    token = os.environ.get("GITHUB_TOKEN", "")
-    repo = os.environ.get("GITHUB_REPOSITORY", "")
-    api_url = os.environ.get("GITHUB_API_URL", "https://api.github.com")
-    default_branch = os.environ.get("CI_DEFAULT_BRANCH", "master")
-
-    log(
-        f"mode: change detection (event={event or 'local'}, "
-        f"branch={ref_name or '?'}, sha={head_sha[:12] if head_sha else '?'})"
-    )
-
-    def full_universe(reason):
-        log(f"{reason} -> testing the FULL universe")
-        return _emit_result(_full_universe_matrix(), site_test=True)
-
-    ci_base_ref = os.environ.get("CI_BASE_REF", "")
-    if ci_base_ref:
-        base_ref = ci_base_ref
-        log(f"diff base: {base_ref} (CI_BASE_REF override)")
-    elif event == "push":
-        green = resolve_green_base(
-            token=token,
-            repo=repo,
-            ref_name=ref_name,
-            head_sha=head_sha,
-            api_url=api_url,
-            default_branch=default_branch,
-            log_fn=log,
-        )
-        if not green:
-            return full_universe("no green ancestor run found")
-        if git_rev_parse(green) is None:
-            log(f"  base {green[:12]} outside shallow checkout; fetching the commit")
-            git_fetch_commit(green)
-        if git_rev_parse(green) is None:
-            return full_universe(f"green run {green[:12]} unreachable")
-        base_ref = green
-        log(f"diff base: {green[:12]} (last green ci run)")
-    else:
-        base_ref = "HEAD~1"
-        log("diff base: HEAD~1 (non-push: local/preview)")
-
-    base = git_rev_parse(base_ref)
-    if base is None:
-        return full_universe(f"base ref '{base_ref}' does not resolve")
-
-    changed = git_diff_files(base)
-    head_short = git_rev_parse_short("HEAD")
-    log(f"comparing {base[:12]}..{head_short}: {len(changed)} file(s) changed")
-
-    is_master_push = event == "push" and github_ref == "refs/heads/master"
-    classification = classify_changed_files(changed, is_master_push=is_master_push)
-
-    packer_affected = classification.packer_sources_affected or set()
-
-    if packer_affected:
-        log(f"packer sources affected: {' '.join(sorted(packer_affected))}")
-    if classification.full_universe_paths:
-        log("full-universe paths changed:")
-        for p in classification.full_universe_paths:
-            log(f"     {p}")
-        return full_universe("full-universe path changed")
-
-    universe = set(list_testable_roles())
-    roles: set[str] = set()
-    release_cells: list[str] = []
-
-    if packer_affected & {"qemu", "hetzner_upload"}:
-        roles.add("packer")
-
-    if classification.machine_universe:
-        for machine in sorted(classification.machine_universe):
-            match_keys = {machine}
-            if machine == "box":
-                match_keys.add("box_deps")
-            machine_roles = [r for r in universe if match_keys & set(machines_for(r))]
-            log(f"machine-universe changed -> all {machine} roles: {' '.join(machine_roles)}")
-            roles.update(machine_roles)
-
-    deps_map = build_role_deps_map()
-
-    for role in classification.direct_roles:
-        if role in universe:
-            roles.add(role)
-        consumers = deps_map.get(role, [])
-        if consumers:
-            log(f"role '{role}' changed -> consumers: {' '.join(consumers)}")
-        for consumer in consumers:
-            if consumer in universe:
-                roles.add(consumer)
-
-    role_releases = {r: release_ubuntu_for(r) for r in classification.direct_roles}
-    all_consumers = {c for r in classification.direct_roles for c in deps_map.get(r, []) if c in universe}
-    role_machines_map = {c: list(machines_for(c)) for c in all_consumers}
-    release_cells = propagate_release_cells(
-        classification.direct_roles, deps_map, role_machines_map, role_releases, universe
-    )
-    if release_cells:
-        log(f"  propagated release cells: {' '.join(release_cells)}")
-
-    roles_sorted = sorted(roles)
-    if roles_sorted:
-        log(f"roles to test: {' '.join(roles_sorted)}")
-    else:
-        log("no role-relevant changes; matrix will be empty")
-
-    extra = [ci_spec_to_cell(s) for s in release_cells] if release_cells else None
-    matrix = json.dumps(cells_to_ci_specs(build_test_matrix(roles_sorted, extra)))
-
-    return _emit_result(matrix)
 
 
 # ---------------------------------------------------------------------------
 # GitLab dynamic child pipeline
 # ---------------------------------------------------------------------------
 #
-# The GitLab port emits a *generated child pipeline* instead of GitHub's
-# per-bucket matrix outputs. There are no QEMU images or per-release runner
-# pools on AWS — every cell launches the same way (an EC2 spot instance from
-# the homelab-ci-cell-<machine> launch template + the
-# /homelab-ci/ami/<machine>/<ubuntu> AMI), so the bucket split is irrelevant
-# and the matrix collapses to one job per `role:variant[:ubuntu]` cell.
+# The `detect` job emits a *generated child pipeline*. There are no QEMU images
+# or per-release runner pools on AWS — every cell launches the same way (an EC2
+# spot instance from the homelab-ci-cell-<machine> launch template + the
+# /homelab-ci/ami/<machine>/<ubuntu> AMI), so the matrix is one job per
+# `role:variant[:ubuntu]` cell.
 #
-# The parent `detect` job (.gitlab-ci.yml) runs `detect.py gitlab`, which
-# writes the child YAML (one job per cell, all extending a shared `.cell`
-# scaffold) and a dotenv flag (HAVE_CELLS) that gates the downstream trigger.
+# The parent `detect` job (.gitlab-ci.yml) runs `detect.py gitlab`, which writes
+# the child YAML (one job per cell, all extending a shared `.cell` scaffold);
+# the `test_cells` trigger always includes it, so an empty matrix is carried as
+# a single no-op placeholder job rather than a runtime-gated trigger.
 
 # IAM role the harness assumes to launch/terminate cells (terraform/aws_ci.tf);
 # its OIDC trust accepts any branch, so feature-branch pushes can test too.
@@ -1119,7 +575,7 @@ def _gitlab_change_matrix(event: str, log) -> tuple[str, bool]:
 
     Returns ``(matrix_json, site_test)``. A full-universe trigger (a
     cross-cutting path changed, or no usable diff base) returns the whole
-    universe with site_test enabled, mirroring the GitHub flow.
+    universe with site_test enabled.
     """
     before_sha = os.environ.get("CI_COMMIT_BEFORE_SHA", "")
     branch = os.environ.get("CI_COMMIT_BRANCH", "")
@@ -1228,7 +684,7 @@ def _cmd_gitlab(args: list[str]) -> int:
     opts = p.parse_args(args)
 
     def log(msg):
-        print(f"[detect-roles] {msg}", file=sys.stderr)
+        print(f"[detect] {msg}", file=sys.stderr)
 
     if opts.all:
         log("mode: --all (full universe)")
@@ -1237,8 +693,8 @@ def _cmd_gitlab(args: list[str]) -> int:
     event = os.environ.get("CI_PIPELINE_SOURCE", "")
     roles_input = os.environ.get("ROLES", "")
 
-    # A web/manual pipeline with a ROLES variable is the dispatch analog of
-    # GitHub's workflow_dispatch input.
+    # A web/manual pipeline with a ROLES variable is an explicit dispatch:
+    # test exactly those roles (or the full universe when ROLES=ALL).
     if roles_input:
         log(f"mode: dispatch ROLES='{roles_input}'")
         if roles_input == "ALL":
@@ -1257,12 +713,6 @@ def _cmd_gitlab(args: list[str]) -> int:
 
 
 _COMMANDS = {
-    "classify": _cmd_classify,
-    "split-buckets": _cmd_split_buckets,
-    "packer-sources": _cmd_packer_sources,
-    "packer-ubuntu": _cmd_packer_ubuntu,
-    "emit": _cmd_emit,
-    "run": _cmd_run,
     "gitlab": _cmd_gitlab,
 }
 
