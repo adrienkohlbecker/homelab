@@ -48,6 +48,21 @@ sstatus() { api GET "/servers?name=$SERVER" | pyget 'd["servers"][0]["status"] i
 # one. Uses the RESCUE_IP/KEY/KNOWN globals rescue_init + rescue_create set.
 ssh_rescue() { ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN" -o ConnectTimeout=5 "root@$RESCUE_IP" "$@"; }
 
+# True when host:22 has a live sshd, whether or not it accepts our key. rc 0
+# means our ephemeral key was authorized; a "permission denied"/auth-failure
+# message means sshd answered but rejected us -- both prove the OS booted far
+# enough to start sshd. A refused or timed-out connection means it has not (yet)
+# booted. Cross-platform: leans on ssh's own ConnectTimeout, no nc/timeout
+# binary needed (hetzner.sh can run on macOS, which ships neither).
+rescue_sshd_up() { # IP
+  local out
+  out=$(ssh -i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o ConnectTimeout=10 -o PreferredAuthentications=publickey \
+    "root@$1" true 2>&1) && return 0
+  printf '%s' "$out" | grep -qiE 'permission denied|authentication failure|too many authentication'
+}
+
 rescue_init() {
   KEYDIR="$(mktemp -d)"
   KEY="$KEYDIR/id"
@@ -114,8 +129,46 @@ rescue_create() {
   }
 }
 
-# Power off (so the image captures quiesced disks), snapshot /dev/sda, wait
-# for the snapshot to go available, then prune the family to the newest 2.
+# Prove the freshly-created snapshot actually boots before we tear the temp
+# server down: rebuild that same server from the snapshot (this wipes /dev/sda,
+# whose contents we have already captured) and wait for a working sshd. We
+# cannot authenticate -- the image's cloud-init provisions the operator's keys,
+# not our ephemeral rescue key -- but a live sshd proves the kernel booted, the
+# rpool imported, root mounted, and sshd started, which is exactly the failure
+# surface a non-bootable bake would hit. A bad snapshot left in place would
+# otherwise become terraform's newest-matching pick, so on failure we delete it
+# and fail the run.
+rescue_verify_boot() { # IMGID
+  local imgid="$1" waited=0
+  echo "==> verifying boot: rebuilding server $RESCUE_ID from snapshot $imgid"
+  api POST "/servers/$RESCUE_ID/actions/rebuild" \
+    "$(python3 -c 'import json,sys;print(json.dumps({"image":int(sys.argv[1])}))' "$imgid")" >/dev/null
+  # rebuild keeps the prior power state (we powered off to snapshot); make sure
+  # the server is running. poweron is a harmless no-op if rebuild already booted it.
+  api POST "/servers/$RESCUE_ID/actions/poweron" '{}' >/dev/null 2>&1 || true
+
+  # Give it time to POST, import the rpool, mount root, and start sshd before
+  # probing. Bounded poll -- a never-booting image surfaces as a quick failure,
+  # never a silent hang.
+  sleep 40
+  while [ "$waited" -lt 300 ]; do
+    rescue_sshd_up "$RESCUE_IP" && {
+      echo "==> boot verified: $RESCUE_IP reached a live sshd from the snapshot"
+      return 0
+    }
+    sleep 5
+    waited=$((waited + 5))
+  done
+
+  echo "snapshot $imgid did not boot to a working sshd at $RESCUE_IP" >&2
+  echo "    deleting the bad snapshot so terraform never selects it" >&2
+  api DELETE "/images/$imgid" >/dev/null 2>&1 || true
+  exit 1
+}
+
+# Power off (so the image captures quiesced disks), snapshot /dev/sda, wait for
+# the snapshot to go available, rebuild the temp server from it to confirm it
+# boots, then prune the family to the newest 2.
 rescue_snapshot() { # UBUNTU
   local ubuntu="$1" imgid st
   echo "==> powering off + snapshotting"
@@ -141,10 +194,13 @@ rescue_snapshot() { # UBUNTU
     exit 1
   }
 
+  # Confirm the snapshot boots on the same temp server before it is torn down.
+  # Fails the run (and deletes the bad snapshot) if it does not.
+  rescue_verify_boot "$imgid"
+
   mise run packer:hcloud-prune-snapshots -- "os=ubuntu-zfs,ubuntu=$ubuntu"
 
-  echo "==> DONE. Snapshot $imgid labelled os=ubuntu-zfs,ubuntu=$ubuntu."
+  echo "==> DONE. Snapshot $imgid labelled os=ubuntu-zfs,ubuntu=$ubuntu (boot-verified)."
   echo "    Terraform's data.hcloud_image picks the newest matching snapshot automatically;"
   echo "    deploy by recreating a server (tofu taint/replace) — note that wipes the disk."
-  echo "    Validate first: create a throwaway cpx22 from it and confirm cloud-init creates ak."
 }
