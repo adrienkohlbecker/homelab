@@ -33,6 +33,13 @@ macos_vm_mac_address: ""                # auto-generated from inventory_hostname
 macos_vm_vnc_listen: "127.0.0.1"        # tunnel via SSH; or set to a macvlan child IP (e.g. mac_mgmt's host_ip) to expose on mac_mgmt
 macos_vm_vnc_password: ""               # vault, optional
 
+# Recovery defaults seeded through OpenCore NVRAM. `en-US:1` means English UI
+# with Apple's French keyboard layout; `en_FR` means English language with the
+# France region. These affect first boot/recovery defaults, not an installed
+# user's later System Settings choices.
+macos_vm_opencore_prev_lang_kbd: "en-US:1"
+macos_vm_opencore_apple_locale: "en_FR"
+
 # First-install flow. Set to true while the recovery DMG should be attached;
 # flip to false (and re-run the role) after macOS is installed and booting.
 macos_vm_install_mode: true
@@ -45,6 +52,7 @@ macos_vm_autostart: false
 # and per-VM working files (one subdir per VM).
 macos_vm_artifacts_dir: /var/lib/libvirt/images/macos-vm/_artifacts
 macos_vm_workdir: "/var/lib/libvirt/images/macos-vm/{{ macos_vm_name }}"
+macos_vm_opencore_patch_nbd_device: /dev/nbd3
 
 # qemu_test fixture values. _setup.yml fabricates the matching by-id symlink
 # over a loopback disk; install mode stays off so tests avoid the large recovery
