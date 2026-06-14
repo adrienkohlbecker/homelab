@@ -153,13 +153,19 @@ RUN install -dm 755 /etc/apt/keyrings && \
 # the image, and copies-up + drift-heals only when it actually moved.
 # MISE_PYTHON_UV_VENV_AUTO=false stops mise from auto-creating/activating a
 # workspace ./.venv that would shadow /opt/venv (it exports VIRTUAL_ENV, which
-# uv prefers over UV_PROJECT_ENVIRONMENT). UV_COMPILE_BYTECODE precompiles .pyc
-# into the baked venv so the read-only runtime venv never recompiles in-memory
-# on each import. This is the image env only -- local dev keeps uv_venv_auto.
+# uv prefers over UV_PROJECT_ENVIRONMENT). This is the image env only -- local
+# dev keeps uv_venv_auto.
+#
+# UV_COMPILE_BYTECODE is deliberately NOT set here: it's a per-RUN var on the
+# build `uv sync` below, not a persistent env. As a persistent env it would
+# fire on every runtime `uv sync --locked` too, recompiling all ~18k .pyc into
+# the venv (~1.7s of pure CPU) on each of the 60 concurrent cells -- a needless
+# slice of the start-burst, since the bake already compiled them and the paths
+# (/opt/venv) and interpreter are identical at runtime. Scoped to the build, the
+# baked .pyc are reused as-is and the runtime sync stays a 1ms resolve + no-op.
 ENV UV_CACHE_DIR=/opt/uv-cache \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
-    UV_COMPILE_BYTECODE=1 \
     MISE_PYTHON_UV_VENV_AUTO=false
 
 # Pre-resolve everything mise.toml asks for (python 3.14, uv, terraform,
@@ -195,7 +201,7 @@ RUN --mount=type=secret,id=mise_github_token \
     else \
       mise install; \
     fi && \
-    mise exec -- uv sync --frozen --link-mode hardlink
+    UV_COMPILE_BYTECODE=1 mise exec -- uv sync --frozen --link-mode hardlink
 
 # Extract just the [tools] section into a global config. mise shims
 # (uv, opentofu, etc.) can then resolve their version from any CWD;
