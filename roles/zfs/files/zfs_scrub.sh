@@ -18,6 +18,14 @@ f_require_root
 # is watched out-of-band: zfs_health alarms on an expired (40-day) or canceled
 # scrub, and ZED's scrub_finish zedlet mails on a scrub that finished with
 # errors.
+# Stagger the per-pool kick-offs. lab hard-locked ~12s into this run on
+# 2026-06-14, during scrub initiation rather than steady state, so spacing the
+# starts keeps every pool from entering its metadata-read burst in the same
+# instant. A short gap (not full `-w` serialization -- deliberately avoided per
+# the note above) leaves the unit non-blocking and finishes well before the
+# nightly zfs_autosnapshot window. Skipped (already-scrubbing) pools don't
+# consume a slot, so the first pool actually kicked off waits for nothing.
+scrub_started=0
 for pool in $(zpool list -H -o name); do
   # Skip a pool already scrubbing or resilvering: a fresh `zpool scrub` would
   # error out, and a long scrub spanning two monthly fires must not be
@@ -26,6 +34,10 @@ for pool in $(zpool list -H -o name); do
     echo "Scrub/resilver already running on $pool, skipping."
     continue
   fi
+  if [ "$scrub_started" -ne 0 ]; then
+    sleep 120
+  fi
+  scrub_started=1
   echo "Starting scrub on $pool"
   zpool scrub "$pool"
 done
