@@ -27,6 +27,11 @@
   stat:
     path: /proc/sys/kernel/{{ item.name }}
   loop:
+    # nmi_watchdog (the prerequisite arm for hardlockup_panic) is handled
+    # separately — on the kernel cmdline below + the kdump_nmi_watchdog.timer
+    # re-arm — not as a sysctl here: on arm64 the knob exists but the write
+    # never sticks (no perf-NMI detector), so ansible.posix.sysctl would report
+    # changed forever.
     # NMI watchdog: a CPU spinning in interrupt context.
     - { name: hardlockup_panic, value: '1' }
     # Soft watchdog: a task stuck on-CPU for >2*watchdog_thresh.
@@ -258,6 +263,25 @@
   tags:
     - kdump
 
+# Arm the perf-NMI hard-lockup detector at kernel init, before userspace, so it
+# is up from the very first instant of every boot — the boot-time half of the
+# fix (the kdump_nmi_watchdog.timer re-arm below is the other half, for after
+# KVM tears it back down). Unlike crashkernel this carries no grub-package
+# equivalent, so it threads both bootloaders (grub + ZBM). Gated x86_64: that is
+# the whole prod fleet (the arm64 box is test-only), and on arm64 the perf-NMI
+# detector is unavailable so the token is a no-op anyway.
+- name: Enable NMI hard-lockup detector on the kernel commandline
+  when: ansible_architecture == 'x86_64'
+  import_role:
+    name: boot
+    tasks_from: cmdline
+  vars:
+    boot_cmdline_args:
+      name: nmi_watchdog
+      contents: 'nmi_watchdog=1'
+  tags:
+    - kdump
+
 # kdump-tools.service kexec-loads the capture kernel into the memory
 # region reserved by crashkernel= at boot. If the running kernel
 # wasn't booted with the parameter, /sys/kernel/kexec_crash_size is 0
@@ -300,5 +324,66 @@
       condition: "{{ not (ansible_check_mode and kdump_apt_tools.changed) }}"
       start: "{{ (kdump_kexec_crash_size.content | default('') | b64decode | trim | default('0', true) | int) > 0 }}"
       restart: "{{ kdump_tools_cfg.changed }}"
+  tags:
+    - kdump
+
+# The nmi_watchdog cmdline above brings the hard-lockup detector up at boot,
+# but on our KVM hosts (lab, pug) KVM bring-up tears it back down — the
+# blind spot behind the 2026-06-14 lab wedge (hardlockup_panic left with nothing
+# to fire on). An early-boot trace on pug (non-hybrid N100) pinned it: watchdog
+# reads 1 for the whole 0-39s pre-kvm window, then 0 within ~3s of qemu-kvm
+# loading the kvm modules, and stays 0 until re-armed. It IS a userspace-visible
+# kernel teardown (not a sysctl.d/unit write) and reproduces at runtime if you
+# reload the kvm modules and wait ~3s for the lag. A oneshot + OnBootSec timer
+# re-arms it once ~3min in (a manual re-arm at t+180s held for the rest of the
+# boot); the ~3s lag is why we use a fixed offset rather than ordering after
+# qemu-kvm.service (which would race the lag). Gate on qemu-kvm.service's
+# presence — the disable is KVM's doing, so its absence means no disable to
+# undo, and the gate bounds install scope to exactly the hosts that need it.
+- name: Stat qemu-kvm.service (KVM host detection)
+  stat:
+    path: /lib/systemd/system/qemu-kvm.service
+  register: kdump_qemu_kvm_unit
+  become: true
+  tags:
+    - kdump
+
+# Install the oneshot service first so it is on disk when systemd-analyze
+# verify checks the timer's same-stem service reference. The service is
+# timer-triggered (no [Install]), so install-only here — never enabled or
+# started on its own.
+- name: Install NMI watchdog re-arm service unit
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: kdump_nmi_watchdog.service
+      condition: "{{ kdump_qemu_kvm_unit.stat.exists }}"
+  tags:
+    - kdump
+
+- name: Install NMI watchdog re-arm timer unit
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: kdump_nmi_watchdog.timer
+      condition: "{{ kdump_qemu_kvm_unit.stat.exists }}"
+  tags:
+    - kdump
+
+# Enable + start the timer (not the service). Starting it now, already past
+# OnBootSec, triggers an immediate re-arm; at every subsequent boot it fires
+# 3min in. The service it pulls is the one installed above.
+- name: Enable NMI watchdog re-arm timer
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: kdump_nmi_watchdog.timer
+      condition: "{{ kdump_qemu_kvm_unit.stat.exists }}"
   tags:
     - kdump

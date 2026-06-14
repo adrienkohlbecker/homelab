@@ -1,0 +1,19 @@
+[Unit]
+# Re-arm the perf-NMI hard-lockup detector after KVM bring-up disables it.
+# kernel.nmi_watchdog comes up 1 (cmdline) and stays armed through early boot,
+# but ~3s after qemu-kvm.service loads the kvm modules the kernel tears the
+# detector down (nmi_watchdog -> 0), leaving kdump's hardlockup_panic with
+# nothing to fire on -- the blind spot behind the 2026-06-14 lab wedge. Proven
+# by an early-boot trace on pug (a non-hybrid N100): watchdog reads 1 for the
+# whole 0-39s pre-kvm window, then 0 within 3s of the kvm load, and stays 0
+# until re-armed. It IS reproducible at runtime (reload the kvm modules and wait
+# ~3s; an immediate check misses the lag). The teardown is a one-shot boot
+# event, so a single late re-assert holds until the next reboot. Triggered by
+# the paired kdump_nmi_watchdog.timer (OnBootSec), so no [Install]/ordering here.
+Description=Re-arm NMI hard-lockup watchdog after KVM bring-up disables it
+ConditionPathExists=/proc/sys/kernel/nmi_watchdog
+
+[Service]
+Type=oneshot
+SyslogIdentifier=kdump_nmi_watchdog
+ExecStart=/sbin/sysctl -q -w kernel.nmi_watchdog=1

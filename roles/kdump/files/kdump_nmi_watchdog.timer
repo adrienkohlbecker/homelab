@@ -1,0 +1,17 @@
+[Unit]
+# Fire once per boot, after KVM bring-up has disabled the perf-NMI hard-lockup
+# detector, to re-arm it (see kdump_nmi_watchdog.service). The kvm modules
+# (qemu-kvm.service) trigger the disable, but it lands ~3s AFTER the service
+# starts -- so an After=qemu-kvm.service oneshot would race that lag and risk
+# re-arming into the gap, before the disable, getting clobbered. A fixed offset
+# clears both the kvm load and the lagged teardown. 3min sits well past it (kvm
+# loads in the first ~40s; a manual re-arm at t+180s was observed to hold) yet
+# early enough that the detector is back before real load. systemd auto-pairs
+# this with the same-stem .service, so no Unit= is needed.
+Description=Re-arm NMI hard-lockup watchdog after KVM bring-up timer
+
+[Timer]
+OnBootSec=3min
+
+[Install]
+WantedBy=timers.target
