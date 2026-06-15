@@ -87,7 +87,9 @@ macvlan_blocks:
     # --network=mac_iot.
     podman_network: true
 
-macos_vm_disk_id: ata-Crucial_CT240M500SSD1_14270C8904C3
+macos_vm_name: base
+macos_vm_zvol_dataset: dozer/vms/macos/base
+macos_vm_zvol_size: "128000000000"
 # First SMT sibling of four P-cores. CPUs 12-19 are E-cores on this i5-13500.
 macos_vm_cpu_pinset: "0,2,4,6"
 macos_vm_install_mode: true

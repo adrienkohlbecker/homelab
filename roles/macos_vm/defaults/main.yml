@@ -9,8 +9,9 @@ macos_vm_vcpus: 4
 macos_vm_cpu_pinset: ""  # comma-separated list, e.g. "0,2,4,6". Empty = no pinning.
 macos_vm_memory_mib: 12288  # 12 GiB
 
-# Domain type: kvm for production on a real x86 host. The role switches this
-# to qemu under qemu_test so libvirt can validate the x86_64 domain with TCG.
+# QEMU accelerator: kvm for production on a real x86 host. The role switches
+# this to qemu under qemu_test so systemd-analyze can validate the unit without
+# needing nested KVM.
 macos_vm_domain_type: kvm
 
 # SMBIOS profile. iMacPro1,1 supports Sequoia and is the OSX-KVM default.
@@ -18,20 +19,28 @@ macos_vm_domain_type: kvm
 # pass Apple's validity check (no registered purchase date). See notes/macos-vm-design.md.
 macos_vm_smbios_model: "iMacPro1,1"
 
-# Disk source. Block-level passthrough of a physical SSD by stable path.
-# Required — set to e.g. "ata-Samsung_SSD_870_EVO_500GB_S6PWNX0R123456" in host_vars
-# AFTER the disk is plugged in. Role asserts /dev/disk/by-id/<this> exists.
-macos_vm_disk_id: ""
+# Disk source. The role creates a sparse ZFS volume and passes its /dev/zvol
+# path as a raw block device.
+macos_vm_zvol_parent_datasets:
+  - "{{ zfs_dozer_filesystem }}/vms"
+  - "{{ zfs_dozer_filesystem }}/vms/macos"
+macos_vm_zvol_dataset: "{{ zfs_dozer_filesystem }}/vms/macos/{{ macos_vm_name }}"
+# 128 GB, expressed in bytes so it stays decimal rather than GiB.
+macos_vm_zvol_size: "128000000000"
+macos_vm_zvol_volblocksize: 16K
+macos_vm_zvol_compression: zstd
 
-# Networking. macvtap puts the guest directly on the LAN; the macvlan role
-# gives the host its own peer IP so it can reach the guest.
-macos_vm_network_mode: macvtap          # macvtap | nat
-macos_vm_macvtap_parent: eth0           # parent NIC for macvtap "direct" mode
+# Networking. Direct QEMU uses user-mode NAT during install. It is slower than
+# macvtap, but gives Recovery boring DHCP/DNS/egress and avoids libvirt.
+macos_vm_network_mode: nat
+macos_vm_ssh_host_listen: "127.0.0.1"
+macos_vm_ssh_host_port: 2222
 macos_vm_mac_address: ""                # auto-generated from inventory_hostname+name if empty
 
 # Display & input.
 macos_vm_vnc_listen: "127.0.0.1"        # tunnel via SSH; or set to a macvlan child IP (e.g. mac_mgmt's host_ip) to expose on mac_mgmt
 macos_vm_vnc_password: ""               # vault, optional
+macos_vm_vnc_keymap: fr                 # QEMU VNC keymap; keeps AZERTY input aligned with macOS
 
 # Recovery defaults seeded through OpenCore NVRAM. `en-US:1` means English UI
 # with Apple's French keyboard layout; `en_FR` means English language with the
@@ -49,6 +58,7 @@ macos_vm_install_mode: true
 # Autostart on host boot. Leave false until first install completes; flip
 # afterwards. Independent of install_mode so they don't interfere.
 macos_vm_autostart: false
+macos_vm_start_service: false
 
 # Where the role caches downloaded artifacts (shared across all macOS VMs)
 # and per-VM working files (one subdir per VM).
@@ -56,7 +66,5 @@ macos_vm_artifacts_dir: /var/lib/libvirt/images/macos-vm/_artifacts
 macos_vm_workdir: "/var/lib/libvirt/images/macos-vm/{{ macos_vm_name }}"
 macos_vm_opencore_patch_nbd_device: /dev/nbd3
 
-# qemu_test fixture values. _setup.yml fabricates the matching by-id symlink
-# over a loopback disk; install mode stays off so tests avoid the large recovery
-# image download.
-macos_vm_qemu_test_disk_id: ata-MACOS_VM_TEST_DISK
+# qemu_test keeps install mode off so tests avoid the large recovery image
+# download.

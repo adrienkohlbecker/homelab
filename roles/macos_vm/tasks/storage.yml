@@ -1,53 +1,152 @@
-# Block-device passthrough source. The role itself never writes to the
-# physical disk — it only verifies the by-id path exists and is owned such
-# that libvirt-qemu can open it. The user installs macOS interactively via
-# the Recovery installer.
+# Block-device source. The role creates/grows a sparse ZFS volume, then passes
+# its /dev/zvol path to QEMU as a raw block device.
 
-- name: storage | Resolve disk by-id symlink
-  stat:
-    path: "/dev/disk/by-id/{{ macos_vm_disk_id }}"
-  register: macos_vm_disk_stat
+- name: storage | Create macOS zvol parent datasets
+  community.general.zfs:
+    name: "{{ item }}"
+    state: present
+    extra_zfs_properties:
+      mountpoint: none
+  loop: "{{ macos_vm_zvol_parent_datasets }}"
   become: true
 
-- name: storage | Assert passthrough disk is present
+- name: storage | Read current macOS zvol size
+  ansible.builtin.command:
+    cmd: "zfs get -Hp -o value volsize {{ macos_vm_zvol_dataset }}"
+  register: macos_vm_zvol_current
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+
+- name: storage | Assert macOS zvol size probe did not error unexpectedly
+  when:
+    - macos_vm_zvol_current.rc != 0
   assert:
-    that: macos_vm_disk_stat.stat.exists and macos_vm_disk_stat.stat.islnk
-    fail_msg: |
-      /dev/disk/by-id/{{ macos_vm_disk_id }} not found on {{ inventory_hostname }}.
-      Plug in the spare SSD, identify it with `ls -la /dev/disk/by-id/ | grep ata-`,
-      then set macos_vm_disk_id in host_vars to the leaf name (no /dev/disk/by-id/ prefix).
+    that: "'does not exist' in macos_vm_zvol_current.stderr"
+    fail_msg: >-
+      `zfs get volsize {{ macos_vm_zvol_dataset }}` failed unexpectedly
+      (rc={{ macos_vm_zvol_current.rc }}): {{ macos_vm_zvol_current.stderr | trim }}.
+      Refusing to proceed because the zvol shrink guard cannot verify the current size.
 
-- name: storage | Resolve target block device
-  # Following the symlink so we can chown the actual /dev/sdX node.
-  set_fact:
-    macos_vm_disk_dev: "{{ macos_vm_disk_stat.stat.lnk_source | default('') }}"
+- name: storage | Refuse to shrink macOS zvol
+  when:
+    - macos_vm_zvol_current.rc == 0
+  assert:
+    that: (macos_vm_zvol_size | human_to_bytes) >= (macos_vm_zvol_current.stdout | int)
+    fail_msg: >-
+      Refusing to shrink {{ macos_vm_zvol_dataset }} from {{ macos_vm_zvol_current.stdout }}
+      to {{ macos_vm_zvol_size | human_to_bytes }} bytes. Shrinking would corrupt APFS.
+      Create a new smaller zvol and reinstall/restore instead.
 
-- name: storage | Install udev rule giving libvirt-qemu access to the passthrough disk
-  # Survives reboots and disk reseats. Group=kvm matches qemu.conf default.
+- name: storage | Create macOS zvol
+  when: macos_vm_zvol_current.rc != 0
+  community.general.zfs:
+    name: "{{ macos_vm_zvol_dataset }}"
+    state: present
+    extra_zfs_properties:
+      volsize: "{{ macos_vm_zvol_size | human_to_bytes | string }}"
+      volblocksize: "{{ macos_vm_zvol_volblocksize | string }}"
+      compression: "{{ macos_vm_zvol_compression }}"
+      volmode: dev
+      refreservation: "0"
+      logbias: throughput
+      redundant_metadata: most
+  become: true
+  register: macos_vm_zvol_created
+
+- name: storage | Read current macOS zvol block size
+  when: macos_vm_zvol_current.rc == 0
+  ansible.builtin.command:
+    cmd: "zfs get -Hp -o value volblocksize {{ macos_vm_zvol_dataset }}"
+  register: macos_vm_zvol_current_volblocksize
+  changed_when: false
+  check_mode: false
+  become: true
+
+- name: storage | Assert existing macOS zvol block size is correct
+  when: macos_vm_zvol_current.rc == 0
+  assert:
+    that: (macos_vm_zvol_volblocksize | human_to_bytes) == (macos_vm_zvol_current_volblocksize.stdout | int)
+    fail_msg: >-
+      {{ macos_vm_zvol_dataset }} already exists with volblocksize
+      {{ macos_vm_zvol_current_volblocksize.stdout }} bytes, but this role
+      requires {{ macos_vm_zvol_volblocksize | human_to_bytes }} bytes.
+      volblocksize is immutable; destroy and recreate the zvol before applying.
+
+- name: storage | Update existing macOS zvol mutable properties
+  when: macos_vm_zvol_current.rc == 0
+  community.general.zfs:
+    name: "{{ macos_vm_zvol_dataset }}"
+    state: present
+    extra_zfs_properties:
+      volsize: "{{ macos_vm_zvol_size | human_to_bytes | string }}"
+      compression: "{{ macos_vm_zvol_compression }}"
+      volmode: dev
+      refreservation: "0"
+      logbias: throughput
+      redundant_metadata: most
+  become: true
+  register: macos_vm_zvol_updated
+
+- name: storage | Wait for macOS zvol device
+  when:
+    - not (ansible_check_mode and macos_vm_zvol_current.rc != 0)
+  wait_for:
+    path: "/dev/zvol/{{ macos_vm_zvol_dataset }}"
+    timeout: 30
+  become: true
+
+- name: storage | Resolve macOS zvol device path
+  when:
+    - not (ansible_check_mode and macos_vm_zvol_current.rc != 0)
+  command: "readlink -f /dev/zvol/{{ macos_vm_zvol_dataset }}"
+  register: macos_vm_zvol_dev
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+
+- name: storage | Install udev rule giving QEMU access to the zvol
   copy:
-    dest: /etc/udev/rules.d/70-macos-vm-disk.rules
+    dest: "/etc/udev/rules.d/70-macos-vm-{{ macos_vm_name }}-zvol.rules"
     owner: root
     group: root
     mode: "0644"
     backup: true
     content: |
-      # Managed by roles/macos_vm.
-      # Allows the libvirt-qemu user (group kvm) to open the macOS VM's
-      # passthrough block device without weakening permissions on other disks.
-      KERNEL=="sd*", ENV{ID_SERIAL}=="{{ macos_vm_disk_id | regex_replace('^ata-', '') | regex_replace('^scsi-', '') }}", OWNER="libvirt-qemu", GROUP="kvm", MODE="0660"
+      SUBSYSTEM=="block", KERNEL=="zd*", ENV{DEVLINKS}=="*/zvol/{{ macos_vm_zvol_dataset }}*", OWNER="root", GROUP="kvm", MODE="0660"
   become: true
-  register: macos_vm_udev_rule
+  register: macos_vm_zvol_udev_rule
 
-- name: storage | Reload udev rules
-  when: macos_vm_udev_rule.changed
+- name: storage | Reload udev rules for the zvol
+  when: macos_vm_zvol_udev_rule.changed
   ansible.builtin.command:
     cmd: udevadm control --reload-rules
   become: true
   changed_when: true
 
-- name: storage | Trigger udev for the passthrough disk
-  when: macos_vm_udev_rule.changed and macos_vm_disk_dev | length > 0
+- name: storage | Trigger udev for the zvol
+  when:
+    - macos_vm_zvol_udev_rule.changed
+    - macos_vm_zvol_dev is defined
+    - macos_vm_zvol_dev.stdout | default('') | trim | length > 0
   ansible.builtin.command:
-    cmd: "udevadm trigger {{ macos_vm_disk_dev }}"
+    cmd: "udevadm trigger {{ macos_vm_zvol_dev.stdout | trim }}"
   become: true
   changed_when: true
+
+- name: storage | Set macOS zvol permissions for this boot
+  when:
+    - not (ansible_check_mode and macos_vm_zvol_current.rc != 0)
+  file:
+    path: "/dev/zvol/{{ macos_vm_zvol_dataset }}"
+    owner: root
+    group: kvm
+    mode: "0660"
+    follow: true
+  become: true
+
+- name: storage | Set zvol disk source path
+  set_fact:
+    macos_vm_disk_source: "/dev/zvol/{{ macos_vm_zvol_dataset }}"

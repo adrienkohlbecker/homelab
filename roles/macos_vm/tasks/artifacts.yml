@@ -14,7 +14,7 @@
   file:
     path: "{{ macos_vm_artifacts_dir }}"
     state: directory
-    owner: libvirt-qemu
+    owner: root
     group: kvm
     mode: "0755"
   become: true
@@ -24,7 +24,7 @@
   file:
     path: "{{ macos_vm_workdir }}"
     state: directory
-    owner: libvirt-qemu
+    owner: root
     group: kvm
     mode: "0755"
   become: true
@@ -39,7 +39,7 @@
     url: "{{ macos_vm_opencore_qcow2_url }}"
     dest: "{{ macos_vm_artifacts_dir }}/OpenCore.qcow2"
     checksum: "sha256:{{ macos_vm_opencore_qcow2_sha256 }}"
-    owner: libvirt-qemu
+    owner: root
     group: kvm
     mode: "0644"
   become: true
@@ -174,7 +174,7 @@
   when: not ansible_check_mode
   file:
     path: "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_config_id }}.qcow2"
-    owner: libvirt-qemu
+    owner: root
     group: kvm
     mode: "0644"
   become: true
@@ -190,10 +190,52 @@
     src: "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_config_id }}.qcow2"
     dest: "{{ macos_vm_workdir }}/OpenCore.qcow2"
     remote_src: true
-    owner: libvirt-qemu
+    owner: root
     group: kvm
     mode: "0644"
     force: false
+  become: true
+
+- name: artifacts | Check per-VM OVMF vars file
+  stat:
+    path: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
+  register: macos_vm_ovmf_vars
+  become: true
+
+- name: artifacts | Check legacy libvirt OVMF vars file
+  stat:
+    path: "/var/lib/libvirt/qemu/nvram/{{ macos_vm_name }}_VARS.fd"
+  register: macos_vm_legacy_ovmf_vars
+  become: true
+
+- name: artifacts | Migrate legacy libvirt OVMF vars file
+  when:
+    - not macos_vm_ovmf_vars.stat.exists
+    - macos_vm_legacy_ovmf_vars.stat.exists
+  copy:
+    src: "/var/lib/libvirt/qemu/nvram/{{ macos_vm_name }}_VARS.fd"
+    dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
+    remote_src: true
+    owner: root
+    group: kvm
+    mode: "0644"
+    force: false
+    backup: true
+  become: true
+
+- name: artifacts | Stage fresh OVMF vars file
+  when:
+    - not macos_vm_ovmf_vars.stat.exists
+    - not macos_vm_legacy_ovmf_vars.stat.exists
+  copy:
+    src: /usr/share/OVMF/OVMF_VARS.fd
+    dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
+    remote_src: true
+    owner: root
+    group: kvm
+    mode: "0644"
+    force: false
+    backup: true
   become: true
 
 - name: artifacts | Stage fetch-macOS script
@@ -266,17 +308,15 @@
     - macos_vm_install_mode
     - not (ansible_check_mode and (macos_vm_workdir_result.changed or macos_vm_basesystem_result.changed | default(false)))
   ansible.builtin.command:
-    cmd: >
-      qemu-img convert
-      -f dmg
-      -O raw
-      {{ macos_vm_workdir }}/BaseSystem.dmg
-      {{ macos_vm_workdir }}/BaseSystem.img
+    argv:
+      - dmg2img
+      - "{{ macos_vm_workdir }}/BaseSystem.dmg"
+      - "{{ macos_vm_workdir }}/BaseSystem.img"
     creates: "{{ macos_vm_workdir }}/BaseSystem.img"
   become: true
   register: macos_vm_basesystem_convert_result
 
-- name: artifacts | Set BaseSystem ownership for libvirt-qemu
+- name: artifacts | Set BaseSystem ownership for QEMU
   when:
     - macos_vm_install_mode
     - not (ansible_check_mode and macos_vm_workdir_result.changed)
@@ -284,7 +324,7 @@
     - not (ansible_check_mode and (macos_vm_basesystem_convert_result.changed | default(false)))
   file:
     path: "{{ item }}"
-    owner: libvirt-qemu
+    owner: root
     group: kvm
     mode: "0644"
   loop:

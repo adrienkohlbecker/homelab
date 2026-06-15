@@ -1,76 +1,16 @@
 # Test fixture: stand up the bits the role expects on the host.
 #
-# Production hosts get libvirt + the libvirt-qemu user from roles/libvirt
-# earlier in the play; the test harness only runs the role under test, so
-# we install the package set ourselves here. We also fabricate a stable
-# /dev/disk/by-id/ata-* symlink against a loopback file so the role's
-# block-device passthrough validation has something to find.
-#
-# qemu-system-x86 is installed on every arch so libvirt can validate the x86_64
-# domain XML even on aarch64 hosts with TCG. main.yml selects qemu under the
-# qemu_test fixture so the role stays clear of /dev/kvm.
+# qemu-system-x86 is installed on every arch so systemd-analyze can validate
+# the direct QEMU unit even on aarch64 hosts with TCG. main.yml selects qemu
+# under the qemu_test fixture so the role stays clear of /dev/kvm.
 
-- name: _setup | Install libvirt + python bindings
+- name: _setup | Install QEMU dependencies
   apt:
     pkg:
-      - libvirt-daemon-system
-      - libvirt-clients
-      - python3-libvirt
-      - python3-lxml
+      - dmg2img
       - ovmf
+      - qemu-block-extra
+      - qemu-utils
       - qemu-system-x86
     cache_valid_time: 3600
-  become: true
-
-- name: _setup | Start libvirtd
-  systemd:
-    name: libvirtd
-    state: started
-    enabled: true
-  become: true
-
-- name: _setup | Create fixture disk image
-  ansible.builtin.command:
-    cmd: truncate -s 1G /tmp/macos-vm-test-disk.img
-    creates: /tmp/macos-vm-test-disk.img
-  become: true
-
-- name: _setup | Attach fixture disk to a loop device
-  # `losetup --find --show` prints the allocated /dev/loopN. We persist
-  # the path to a sentinel file so the next task is idempotent — the
-  # `creates:` gate makes a re-run a no-op without trying to re-attach.
-  ansible.builtin.shell: |
-    set -euo pipefail
-    losetup --find --show /tmp/macos-vm-test-disk.img > /tmp/macos-vm-test-disk.dev
-  args:
-    executable: /bin/bash
-    creates: /tmp/macos-vm-test-disk.dev
-  become: true
-
-- name: _setup | Read loop device path
-  slurp:
-    src: /tmp/macos-vm-test-disk.dev
-  register: macos_vm_test_loop
-  become: true
-
-- name: _setup | Ensure /dev/disk/by-id exists
-  # The test box has no SATA/SCSI disks attached, so udev never creates
-  # this directory. Create it ourselves; udev coexists fine if real
-  # disks ever show up.
-  file:
-    path: /dev/disk/by-id
-    state: directory
-    mode: "0755"
-  become: true
-
-- name: _setup | Symlink fixture disk to a stable by-id path
-  # macos_vm_qemu_test_disk_id, not macos_vm_disk_id: main.yml set_facts the
-  # latter from the former under qemu_test, but _setup runs as a separate
-  # harness invocation that never sees that set_fact — here macos_vm_disk_id
-  # is still the empty default and the dest would degrade to /dev/disk/by-id/.
-  file:
-    src: "{{ macos_vm_test_loop.content | b64decode | trim }}"
-    dest: "/dev/disk/by-id/{{ macos_vm_qemu_test_disk_id }}"
-    state: link
-    force: true
   become: true
