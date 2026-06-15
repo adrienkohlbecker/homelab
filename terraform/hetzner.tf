@@ -157,6 +157,14 @@ resource "hcloud_server" "fox" {
 
   firewall_ids = [hcloud_firewall.fox.id]
 
+  # No server-side delete_protection: Hetzner's `change_protection` requires the
+  # delete and rebuild flags to be equal, so enabling delete protection would
+  # also enable rebuild_protection -- and an in-place `rebuild` is the only way
+  # to push a freshly built ZFS-root image onto fox WITHOUT a destroy+recreate
+  # that would re-trigger Hetzner's June 2026 price adjustment. Keeping rebuild
+  # unblocked matters more than guarding console/API deletes, so destroy safety
+  # lives entirely in the terraform lifecycle block below (prevent_destroy).
+
   public_net {
     ipv4_enabled = true
     ipv4         = hcloud_primary_ip.fox.id
@@ -170,7 +178,18 @@ resource "hcloud_server" "fox" {
   }
 
   lifecycle {
-    ignore_changes = [user_data, ssh_keys, image]
+    # prevent_destroy: terraform errors at plan time on anything that would
+    # destroy fox -- an explicit `terraform destroy`, or a replacement forced
+    # by some ForceNew attribute. A destroy+recreate would re-provision fox as a
+    # NEW order, locking in the post-15-Jun-2026 CPX22 price (EUR 7.99 -> 19.49)
+    # and wiping the headscale control-plane state. server_type in
+    # ignore_changes makes terraform never issue a rescale (change_type) on
+    # server_type drift -- a rescale is the other action that re-triggers the
+    # new pricing. To deliberately rescale (e.g. once fox is no longer
+    # grandfathered), drop server_type from this list AND edit it above; to
+    # delete, remove prevent_destroy first.
+    prevent_destroy = true
+    ignore_changes  = [user_data, ssh_keys, image, server_type]
   }
 
   # Boot with the fleet's regular `ak` user (sudo, key-only) instead of logging
