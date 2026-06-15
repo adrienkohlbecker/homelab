@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-#MISE description="Rebase worktree <name> onto master, keeping its history linear"
+#MISE description="Rebase a worktree onto master, keeping its history linear"
 #MISE alias="wt:update"
-#USAGE arg "<name>" help="Branch and worktree name"
-#USAGE complete "name" run="git worktree list --porcelain | awk '/^worktree .*\\/.worktrees\\//{n=split($2,a,\"/\"); print a[n]}'"
-# shellcheck disable=SC2154  # usage_name injected by mise from the #USAGE spec
+#USAGE arg "<worktree>" help="Worktree path or branch name"
+#USAGE complete "worktree" run="git worktree list --porcelain | awk '/^worktree /{n++; if(n>1) print substr($0,10)}'"
+# shellcheck disable=SC2154  # usage_worktree injected by mise from the #USAGE spec
 
-# Brings worktree branch <name> current with master -- the symmetric inverse of
+# Brings a worktree branch current with master -- the symmetric inverse of
 # worktree:merge. notes/ is a shared gitignored clone (symlinked per worktree),
 # not a tracked submodule, so the rebase has no submodule gitlink to reconcile:
 # this is a plain `git rebase master`.
@@ -16,11 +16,29 @@
 # main checkout first if you need it.
 set -euo pipefail
 
-repo=$(git worktree list --porcelain | awk '/^worktree / {print $2; exit}')
+repo=$(git worktree list --porcelain | awk '/^worktree / {print substr($0, 10); exit}')
 cd "$repo"
-wt=".worktrees/$usage_name"
-[ -d "$wt" ] || {
-  echo "worktree:update: $wt not found" >&2
+
+# Resolve <worktree> -- a path (as tab-completed) or a branch name -- to the
+# worktree's location, so it works wherever the worktree lives, not only under
+# .worktrees/. A path is canonicalized via rev-parse --show-toplevel (matches
+# git's stored form exactly, resolving symlinks and any subdir-of-worktree);
+# path match wins (it also covers detached worktrees), branch is the fallback.
+# substr keeps paths with spaces intact.
+abs=""
+if [ -d "$usage_worktree" ]; then
+  abs=$(git -C "$usage_worktree" rev-parse --show-toplevel 2>/dev/null || true)
+fi
+wt=$(git -C "$repo" worktree list --porcelain | awk -v abs="$abs" -v b="refs/heads/$usage_worktree" '
+  /^worktree / {p = substr($0, 10)}
+  abs != "" && p == abs {print p; exit}
+  $0 == "branch " b {print p; exit}')
+[ -n "$wt" ] || {
+  echo "worktree:update: no worktree found for '$usage_worktree'" >&2
+  exit 1
+}
+[ "$wt" != "$repo" ] || {
+  echo "worktree:update: refusing to operate on the main worktree" >&2
   exit 1
 }
 main_branch=$(git rev-parse --abbrev-ref HEAD)
