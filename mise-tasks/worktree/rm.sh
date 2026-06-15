@@ -4,14 +4,6 @@
 #USAGE arg "<worktree>" help="Worktree path or branch name"
 #USAGE complete "worktree" run="git worktree list --porcelain | awk '/^worktree /{n++; if(n>1) print substr($0,10)}'"
 # shellcheck disable=SC2154  # usage_worktree injected by mise from the #USAGE spec
-
-# Before deleting the worktree, migrate Claude Code session logs from
-# ~/.claude/projects/<encoded-worktree-path>/ to the main repo's project
-# dir and rewrite the embedded worktree path inside each JSONL so the
-# transcripts remain navigable after the worktree is gone. Claude Code
-# encodes the absolute project path by replacing both `/` and `.` with `-`
-# (so .worktrees/x -> --worktrees-x); the encoding must match exactly or the
-# source dir is never found and the migration silently no-ops.
 set -euo pipefail
 
 repo=$(git worktree list --porcelain | awk '/^worktree / {print substr($0, 10); exit}')
@@ -41,26 +33,6 @@ wt=$(git -C "$repo" worktree list --porcelain | awk -v abs="$abs" -v b="refs/hea
 # Branch to delete after removal (empty for a detached worktree -- nothing to delete).
 branch=$(git -C "$wt" symbolic-ref --quiet --short HEAD || true)
 
-enc_main="${repo//[\/.]/-}"
-enc_wt="${wt//[\/.]/-}"
-src_proj="$HOME/.claude/projects/$enc_wt"
-dst_proj="$HOME/.claude/projects/$enc_main"
-if [ -d "$src_proj" ]; then
-  n=$(find "$src_proj" -maxdepth 1 -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
-  mkdir -p "$dst_proj"
-  # Rewrite the worktree path to the main repo path across every file -- sessions,
-  # nested subagent transcripts, and tool-result captures all embed it. `{}` must
-  # be the last token before `+`, so the rewrite and the move are separate finds.
-  find "$src_proj" -type f -exec perl -i -pe "s|\Q$wt\E|$repo|g" {} +
-  # Move each top-level entry (UUID .jsonl files and UUID/ session dirs) into the
-  # main project dir. Names are session-UUID unique, so nothing clobbers. The
-  # \; form is required here because an argument follows {}.
-  find "$src_proj" -mindepth 1 -maxdepth 1 -exec mv -f {} "$dst_proj/" \;
-  rmdir "$src_proj" 2>/dev/null || true
-  if [ "$n" -gt 0 ]; then
-    echo "Migrated $n Claude session(s); rewrote $wt -> $repo"
-  fi
-fi
 # Worktrees carry gitignored generated state -- the notes/, packer/artifacts,
 # terraform/.terraform and .remember symlinks populate.sh creates -- which
 # `git worktree remove` treats as blocking content, so --force is required to
