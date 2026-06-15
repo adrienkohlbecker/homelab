@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Claude Code WorktreeCreate hook: create the worktree under <repo>/.worktrees/
-# and populate it (notes submodule init etc. via mise-tasks/worktree/populate.sh).
+# and populate it (notes/packer/artifacts symlinks etc. via mise-tasks/worktree/populate.sh).
 # The new worktree path is the hook's return value, so it is the ONLY thing on
 # stdout -- every diagnostic goes to stderr.
 #
@@ -20,7 +20,7 @@ for v in cwd name; do
   }
 done
 
-repo=$(git -C "$cwd" worktree list --porcelain | awk '/^worktree / {print $2; exit}')
+repo=$(git -C "$cwd" worktree list --porcelain | awk '/^worktree / {print substr($0, 10); exit}')
 [ -n "$repo" ] || {
   echo "WorktreeCreate hook: cwd $cwd not in a git repo" >&2
   exit 1

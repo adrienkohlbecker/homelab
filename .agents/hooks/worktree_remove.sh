@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Claude Code WorktreeRemove hook: tear down a worktree created by
-# worktree_create.sh and delete its branch.
+# worktree_create.sh and delete its branch. Works wherever the worktree lives,
+# not only under <repo>/.worktrees/.
 #
-# Before any destructive step, validate that worktree_path is a registered
-# worktree physically under <repo>/.worktrees/ -- a crafted worktree_path two
-# levels below any directory containing a .git would otherwise let the
-# --force remove / branch -D below discard an unrelated checkout or branch.
-# --force is retained deliberately: by the time this fires the worktree tooling
-# (worktree:merge) has already reconciled the notes/ submodule, and this is
-# isolation-cleanup of a known-ours worktree, so refusing on a dirty tree would
-# only strand it.
+# Before any destructive step, confirm git itself reports worktree_path as a
+# registered worktree of this repo (and not the main worktree) -- that check is
+# the real guard against a crafted worktree_path letting the --force remove /
+# branch -D below discard an unrelated checkout or branch. --force is retained
+# deliberately: this is isolation-cleanup of a known-ours worktree, so refusing
+# on a dirty tree (gitignored populate symlinks count as content) would only
+# strand it.
 set -euo pipefail
 
 input=$(cat)
@@ -18,16 +18,20 @@ base=$(jq -r '.base_branch // empty' <<<"$input")
 wt=$(jq -r '.worktree_path // empty' <<<"$input")
 
 [ -n "$wt" ] || exit 0
-main=$(dirname "$(dirname "$wt")")
-[ -d "$main/.git" ] || exit 0
 
-case "$wt" in
-"$main/.worktrees/"*) ;;
-*)
-  echo "WorktreeRemove hook: $wt not under $main/.worktrees/ -- skipping" >&2
+# Canonicalise to git's stored worktree path (resolves symlinks / any subdir),
+# so the registered-worktree check below matches exactly. Bails if the path is
+# already gone or not a git worktree.
+wt=$(git -C "$wt" rev-parse --show-toplevel 2>/dev/null) || exit 0
+
+# Resolve the main worktree from the worktree itself (first `worktree list`
+# entry is always the real repo), so an arbitrary worktree location is fine.
+main=$(git -C "$wt" worktree list --porcelain | awk '/^worktree / {print substr($0, 10); exit}')
+[ -n "$main" ] || exit 0
+[ "$wt" != "$main" ] || {
+  echo "WorktreeRemove hook: $wt is the main worktree -- skipping" >&2
   exit 0
-  ;;
-esac
+}
 
 if ! git -C "$main" worktree list --porcelain | grep -qxF "worktree $wt"; then
   echo "WorktreeRemove hook: $wt is not a registered worktree -- skipping" >&2
