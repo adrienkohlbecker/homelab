@@ -1,0 +1,63 @@
+[Unit]
+Description=macOS VM {{ macos_vm_name }}
+Wants=network-online.target
+After=network-online.target zfs-volumes.target
+ConditionPathExists={{ macos_vm_workdir }}/OpenCore.qcow2
+ConditionPathExists={{ macos_vm_workdir }}/OVMF_VARS.fd
+ConditionPathExists={{ macos_vm_disk_source }}
+{% if macos_vm_install_mode %}
+ConditionPathExists={{ macos_vm_workdir }}/BaseSystem.img
+{% endif %}
+
+[Service]
+Type=simple
+RuntimeDirectory=macos-vm
+RuntimeDirectoryMode=0755
+WorkingDirectory={{ macos_vm_workdir }}
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+KillSignal=SIGTERM
+{% if macos_vm_install_mode %}
+ExecStartPre=/usr/bin/rm -f {{ macos_vm_workdir }}/BaseSystem.overlay.qcow2
+ExecStartPre=/usr/bin/qemu-img create -f qcow2 -F raw -b {{ macos_vm_workdir }}/BaseSystem.img {{ macos_vm_workdir }}/BaseSystem.overlay.qcow2
+ExecStopPost=/usr/bin/rm -f {{ macos_vm_workdir }}/BaseSystem.overlay.qcow2
+{% endif %}
+ExecStart={% if macos_vm_cpu_pinset | length > 0 %}/usr/bin/taskset -c {{ macos_vm_cpu_pinset }} {% endif %}/usr/bin/qemu-system-x86_64 \
+{% if macos_vm_domain_type == 'kvm' %}
+  -enable-kvm \
+{% endif %}
+  -m {{ macos_vm_memory_mib }} \
+{% if macos_vm_domain_type == 'kvm' %}
+  -cpu Penryn,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt,check \
+{% else %}
+  -cpu Penryn,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt,check \
+{% endif %}
+  -machine q35 \
+  -smp {{ macos_vm_vcpus }},cores={{ macos_vm_vcpus }},sockets=1,threads=1 \
+  -device qemu-xhci,id=xhci \
+  -device usb-kbd,id=kbd_xhci,bus=xhci.0 \
+  -device usb-tablet,id=tablet_xhci,bus=xhci.0 \
+  -device isa-applesmc,osk=ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc \
+  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
+  -drive if=pflash,format=raw,file={{ macos_vm_workdir }}/OVMF_VARS.fd \
+  -smbios type=2 \
+  -boot strict=on \
+  -device ich9-ahci,id=sata \
+  -drive id=OpenCoreBoot,if=none,format=qcow2,file={{ macos_vm_workdir }}/OpenCore.qcow2 \
+  -device ide-hd,bus=sata.2,drive=OpenCoreBoot,bootindex=1 \
+{% if macos_vm_install_mode %}
+  -drive id=InstallMedia,if=none,file={{ macos_vm_workdir }}/BaseSystem.overlay.qcow2,format=qcow2 \
+  -device ide-hd,bus=sata.3,drive=InstallMedia,bootindex=3 \
+{% endif %}
+  -drive id=MacZvol,if=none,file={{ macos_vm_disk_source }},format=raw,cache=none,aio=native \
+  -device ide-hd,bus=sata.4,drive=MacZvol,bootindex=2 \
+  -netdev user,id=net0,hostfwd=tcp:{{ macos_vm_ssh_host_listen }}:{{ macos_vm_ssh_host_port }}-:22 \
+  -device virtio-net-pci,netdev=net0,id=net0,mac={{ macos_vm_resolved_mac }} \
+  -k {{ macos_vm_vnc_keymap }} \
+  -vnc {{ macos_vm_vnc_listen }}:0 \
+  -monitor unix:/run/macos-vm/{{ macos_vm_name }}.monitor,server,nowait \
+  -device vmware-svga
+
+[Install]
+WantedBy=multi-user.target
