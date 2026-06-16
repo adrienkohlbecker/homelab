@@ -128,6 +128,26 @@ do
     check("body-only.default", t, "info")
 end
 
+-- 14a. headscale (zerolog) abbreviated INF level right after the timestamp.
+do
+    local t = sev("2026-06-10T08:54:39Z INF Received signal to stop, shutting down gracefully signal=terminated")
+    check("headscale.inf", t, "info")
+end
+
+-- 14b. headscale WRN -- the abbreviated token must map to warn, not fall
+--      through to the info default (the bug the zerolog tokens fix).
+do
+    local t = sev("2026-06-10T08:54:40Z WRN Listening without TLS but ServerURL does not start with http://")
+    check("headscale.wrn", t, "warn")
+end
+
+-- 14c. headscale ERR -- already matched via the "err" keyword; pin it so the
+--      zerolog additions can't regress it.
+do
+    local t = sev("2026-06-14T07:26:08Z ERR user msg: node not found code=404")
+    check("headscale.err", t, "error")
+end
+
 -- 15. nginx.access pre-stamp branch: an upstream modify filter sets
 --     record.severity_text=info so this filter trusts it and does NOT scan
 --     the URL (which here contains "error") for keywords.
