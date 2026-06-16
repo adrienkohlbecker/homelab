@@ -156,5 +156,11 @@
       subdomain: z2m
       proxy_pass: http://127.0.0.1:{{ service_ports.z2m }}/
       auth: required
+      # The WindFront UI pulls device images from zigbee2mqtt.io and device
+      # docs (markdown) from raw.githubusercontent.com; widen img-src/connect-src
+      # past default-src so the browser does not block them.
+      csp_additional: >-
+        img-src https://www.zigbee2mqtt.io {{ nginx_csp_default }};
+        connect-src https://raw.githubusercontent.com {{ nginx_csp_default }}
   tags:
     - z2m
