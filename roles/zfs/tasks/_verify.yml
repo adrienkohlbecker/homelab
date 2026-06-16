@@ -392,3 +392,86 @@
         - /var/tmp/zfs_health_test_0.img
         - /var/tmp/zfs_health_test_1.img
         - /zfs_health_test
+
+# --- Health script scrub-age detection (functional) ---
+# The scrub-age check is the one signal zfs_health owns that ZED structurally
+# cannot give -- a scrub that *didn't* happen emits no event. It can't be driven
+# by corrupting a pool, so exercise it directly: re-run the script with
+# SCRUB_EXPIRE forced to 1 second (the role's env seam) so every pool's last
+# scrub is "expired", and assert the script flags it. rpool here has a real,
+# recent scrub, so this confirms the date-parse + age-comparison path, not just
+# the creation-date fallback.
+- name: _verify | Health scrub-age | Run the script with a 1s scrub-expiry threshold
+  when: zfs_root
+  command: /usr/local/bin/zfs_health
+  environment:
+    SCRUB_EXPIRE: "1"
+  register: _zfs_health_scrub_age
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Health scrub-age | Script flags the expired scrub and exits non-zero
+  when: zfs_root
+  assert:
+    that:
+      - _zfs_health_scrub_age.rc != 0
+      - "'Scrub expired on' in _zfs_health_scrub_age.stderr"
+    fail_msg: >-
+      zfs_health did not flag an expired scrub with SCRUB_EXPIRE=1.
+      rc={{ _zfs_health_scrub_age.rc }} stderr={{ _zfs_health_scrub_age.stderr }}
+
+# --- Health script pool-fault detection (functional) ---
+# Covers the pool-state branch (`zpool status -x`), distinct from the
+# READ/WRITE/CKSUM counter branch the corruption test above exercises. Build a
+# throwaway mirror, take one leg offline to degrade the pool (a clean state
+# change -- no error counters, so this isolates the -x check), and assert the
+# script flags it. qemu-only (zfs_root), torn down in the always: block.
+- name: _verify | Health pool-fault detection
+  when: zfs_root
+  become: true
+  block:
+    - name: _verify | Health pool-fault | Create backing files for a throwaway pool
+      command: truncate -s 64M /var/tmp/zfs_fault_test_{{ item }}.img
+      loop: [0, 1]
+      changed_when: true
+
+    - name: _verify | Health pool-fault | Create a mirror pool over the files
+      command: >-
+        zpool create -f zfs_fault_test mirror
+        /var/tmp/zfs_fault_test_0.img /var/tmp/zfs_fault_test_1.img
+      changed_when: true
+
+    - name: _verify | Health pool-fault | Offline one leg to degrade the pool
+      command: zpool offline zfs_fault_test /var/tmp/zfs_fault_test_0.img
+      changed_when: true
+
+    - name: _verify | Health pool-fault | Run the health script against the degraded pool
+      command: /usr/local/bin/zfs_health
+      register: _zfs_health_degraded
+      changed_when: false
+      failed_when: false
+
+    - name: _verify | Health pool-fault | Script flags the degraded pool and exits non-zero
+      assert:
+        that:
+          - _zfs_health_degraded.rc != 0
+          - "'zpool status -x reports a problem' in _zfs_health_degraded.stderr"
+        fail_msg: >-
+          zfs_health did not flag the DEGRADED pool via the pool-health check.
+          rc={{ _zfs_health_degraded.rc }} stderr={{ _zfs_health_degraded.stderr }}
+
+  always:
+    - name: _verify | Health pool-fault | Destroy the throwaway pool
+      command: zpool destroy zfs_fault_test
+      changed_when: true
+      failed_when: false
+
+    - name: _verify | Health pool-fault | Remove backing files and mountpoint
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/tmp/zfs_fault_test_0.img
+        - /var/tmp/zfs_fault_test_1.img
+        - /zfs_fault_test
