@@ -44,12 +44,14 @@ fi
 # Drive errors — count READ/WRITE/CKSUM on every row whose last three columns
 # are integers, regardless of the row's STATE: a disk can rack up errors and
 # then flip to DEGRADED/FAULTED, and that error count is exactly what we want to
-# surface (the -x check above reports the state; this reports the counts). -e
-# restricts the output to unhealthy/errored vdevs so a healthy 0/0/0 row can
-# never reach the awk; -p forces exact integers (human-formatted 1.5K/2M would
-# slip past the > 0 test).
+# surface (the -x check above reports the state; this reports the counts). The
+# awk's own `> 0` guard already ignores healthy 0/0/0 rows, so we deliberately
+# do NOT pass `-e` (errored-vdevs-only): that flag is OpenZFS 2.3+, and on a 2.2
+# host `zpool status -e` aborts with "invalid option", which under pipefail
+# fails the pipe and silently kills the whole check. -p forces exact integers
+# (human-formatted 1.5K/2M would slip past the > 0 test).
 echo "Checking drive errors..."
-if zpool status -ep | awk '$3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $5 ~ /^[0-9]+$/ { if ($3 + $4 + $5 > 0) found = 1 } END { exit !found }'; then
+if zpool status -p | awk '$3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $5 ~ /^[0-9]+$/ { if ($3 + $4 + $5 > 0) found = 1 } END { exit !found }'; then
   echo >&2 "ERROR :: Detected drive errors (READ/WRITE/CKSUM)"
   ((f_failed += 1))
 fi
