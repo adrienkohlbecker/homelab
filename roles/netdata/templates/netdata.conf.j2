@@ -45,8 +45,14 @@ enabled = no
 
 # ebpf.plugin loads syscall/process eBPF programs and runs as its own ~300 MiB
 # process. Useful for syscall-level forensics, dead weight if nobody looks at it.
+#
+# scripts.d.plugin auto-watches /etc/netdata/scripts.d for scripted collectors;
+# we use charts.d (not scripts.d), so the dir never exists and the plugin logs
+# `start watching '/etc/netdata/scripts.d': no such file or directory` on a
+# loop (~3k/day on lab). Disable it -- charts.d.plugin is unaffected.
 [plugins]
 ebpf = no
+scripts.d = no
 
 [registry]
 enabled = yes
