@@ -178,6 +178,28 @@
   tags:
     - jellyfin
 
+# A version bump can rename the bundled assemblies (3.x shipped
+# IdentityModel.dll; 4.x ships Duende.IdentityModel.dll). unarchive
+# overwrites by name but never prunes, so the prior version's DLL would
+# linger beside the new one and risk an assembly-load conflict. On a
+# version change (sentinel absent) wipe the plugin dir so extract lands a
+# clean set; the OID runtime config lives under plugins/configurations/,
+# not here, so it is untouched.
+- name: Reset SSO plugin dir on a version change
+  when: not jellyfin_sso_sentinel.stat.exists
+  file:
+    path: /mnt/services/jellyfin/plugins/sso
+    state: "{{ item }}"
+    owner: jellyfin
+    group: media
+    mode: "0755"
+  loop:
+    - absent
+    - directory
+  become: true
+  tags:
+    - jellyfin
+
 # Owner jellyfin is required, not cosmetic: the container runs as uid 0
 # mapped to the host jellyfin uid, so root-owned files on the host would
 # be unreadable inside it. unarchive's own content comparison isn't

@@ -85,7 +85,7 @@ ExecStart=/usr/bin/podman run \
     --health-start-period "300s" \
     --stop-signal=SIGINT \
     --stop-timeout 60 \
-    docker.io/jellyfin/jellyfin:10.10.6
+    docker.io/jellyfin/jellyfin:10.11.11
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 

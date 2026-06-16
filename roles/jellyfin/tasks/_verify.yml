@@ -148,8 +148,8 @@
   become: true
   loop:
     - SSO-Auth.dll
-    - IdentityModel.dll
-    - IdentityModel.OidcClient.dll
+    - Duende.IdentityModel.dll
+    - Duende.IdentityModel.OidcClient.dll
     - meta.json
 
 - name: _verify | Assert SSO plugin files present
