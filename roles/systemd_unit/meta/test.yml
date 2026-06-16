@@ -1,4 +1,0 @@
-# _setup installs podman (extract_podman_image parses `podman run --help`);
-# box_deps pre-bakes podman, saving ~140s per test run.
-machines:
-  box_deps:
