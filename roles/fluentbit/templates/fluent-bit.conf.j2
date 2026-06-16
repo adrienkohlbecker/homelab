@@ -317,6 +317,20 @@
     Exclude           SYSTEMD_UNIT ^netdata\.service$
     Exclude           MESSAGE ^voltage sensor '[^']+' transitioned from state
 
+# Same debugfs.plugin mechanism for temperatures: the nct6798 Super-I/O temp
+# inputs (e.g. temp7_PECI_Agent_0 on pug) carry the same uncalibrated
+# chip-default limits as its voltage rails, so the alarm bit flaps clear<->alarm
+# every few minutes (~26/day on pug) -- a known false positive, no health alarm,
+# no notification. Scoped to the `temperature_nct6798-` sensor name prefix so the
+# real ones still flow: drivetemp (drive temps) and coretemp/k10temp (CPU) use
+# kernel-provided thresholds, name differently, and DO raise health alarms.
+[FILTER]
+    Name              grep
+    Match             svc.*
+    Logical_Op        and
+    Exclude           SYSTEMD_UNIT ^netdata\.service$
+    Exclude           MESSAGE ^temperature sensor 'temperature_nct6798-isa-
+
 # homepage_alerts.service is a ~24s timer; systemd emits Starting/Finished
 # plus the unit's own "Deactivated successfully" on every run (~5k each/day on
 # lab). The panel-generation success/failure is visible in the unit state and
