@@ -1,8 +1,0 @@
-gitea_version: "1.26.1"
-gitea_release:
-  x86_64:
-    url: "{{ mirror_gitea_dl }}/gitea/{{ gitea_version }}/gitea-{{ gitea_version }}-linux-amd64"
-    sha256: "324ffd2cc85d567ecd821ad3e19de4abe1c7f94a082b382c1453d4ca7bcf2a7b"
-  aarch64:
-    url: "{{ mirror_gitea_dl }}/gitea/{{ gitea_version }}/gitea-{{ gitea_version }}-linux-arm64"
-    sha256: "0564b51b1823012b9b27a73613712810186fa2d0b5d90fdd1c27b5858df3ed0e"
