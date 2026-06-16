@@ -51,7 +51,6 @@
   register: _jellyfin_symlinks
   become: true
   loop:
-    - library.db
     - jellyfin.db
     - introskipper/introskipper.db
 
