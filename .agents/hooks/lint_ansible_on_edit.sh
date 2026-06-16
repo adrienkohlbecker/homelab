@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Claude Code PostToolUse hook: runs `mise run lint:ansible-changed` after
+# Agent PostToolUse hook: runs `mise run lint:ansible-changed` after
 # Edit/Write/MultiEdit on *.yml / *.yaml. Non-blocking -- the edit always
-# succeeds; on lint failure the output is fed back to Claude so it sees the
+# succeeds; on lint failure the output is fed back to the agent so it sees the
 # regression at edit-time instead of waiting for the next manual run.
 set -euo pipefail
 
@@ -36,9 +36,8 @@ if out=$(mise run lint:ansible-changed 2>&1); then
   exit 0
 fi
 
-# Feed the failure back as additionalContext (guaranteed into Claude's context,
-# wrapped in a system reminder) rather than bare stderr. Non-blocking: the edit
-# already succeeded.
+# Feed the failure back as additionalContext for hook consumers that support it
+# rather than bare stderr. Non-blocking: the edit already succeeded.
 msg=$(printf 'ansible-lint failed (%s):\n%s' "$root" "$out")
 jq -n --arg ctx "$msg" \
   '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $ctx}}'

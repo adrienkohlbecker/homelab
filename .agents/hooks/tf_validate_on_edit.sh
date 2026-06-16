@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Claude Code PostToolUse hook: runs `tofu validate` after Edit/Write/MultiEdit
+# Agent PostToolUse hook: runs `tofu validate` after Edit/Write/MultiEdit
 # on *.tf / *.tfvars. Goes through `mise exec --` rather than the `mise run tf`
 # wrapper so we skip `op run`'s 1Password resolve -- validate is offline-only
 # and doesn't read any of the op:// env refs. Non-blocking; surfaces output to
-# Claude on failure only.
+# the agent on failure only.
 set -euo pipefail
 
 input=$(cat)
@@ -41,9 +41,8 @@ if out=$(mise exec -- tofu validate 2>&1); then
   exit 0
 fi
 
-# Feed the failure back as additionalContext (guaranteed into Claude's context,
-# wrapped in a system reminder) rather than bare stderr. Non-blocking: the edit
-# already succeeded.
+# Feed the failure back as additionalContext for hook consumers that support it
+# rather than bare stderr. Non-blocking: the edit already succeeded.
 msg=$(printf 'tofu validate failed (%s):\n%s' "$tf" "$out")
 jq -n --arg ctx "$msg" \
   '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $ctx}}'

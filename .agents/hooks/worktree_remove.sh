@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Code WorktreeRemove hook: tear down a worktree created by
+# Agent WorktreeRemove hook: tear down a worktree created by
 # worktree_create.sh and delete its branch. Works wherever the worktree lives,
 # not only under <repo>/.worktrees/.
 #
