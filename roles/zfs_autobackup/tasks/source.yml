@@ -26,6 +26,44 @@
   tags:
     - zfs_autobackup
 
+- name: source | Create zfs_autobackup user systemd unit dir
+  when: not (ansible_check_mode and zfs_autobackup_user.changed)
+  file:
+    path: /var/lib/zfs_autobackup/.config/systemd/user
+    state: directory
+    owner: zfs_autobackup
+    group: zfs_autobackup
+    mode: "0755"
+  become: true
+  tags:
+    - zfs_autobackup
+
+# zfs_autobackup is a backup-only login user; it never runs containers. The
+# podman package globally enables podman.service/podman.socket for every user
+# (/etc/systemd/user/{default.target,sockets.target}.wants), so each pull-backup
+# login starts a `systemd --user` manager that eagerly brings up the rootless
+# podman API socket. That then errors daily -- "no subuid ranges found for user
+# zfs_autobackup" -- because this user has (correctly) no subuid range. Masking
+# both units in the user scope (~/.config/systemd/user wins over the system-wide
+# enable) stops the login from touching podman at all. Granting a subuid range
+# would silence the error but legitimise a pointless container socket on a
+# backup account, so mask instead.
+- name: source | Mask podman user units for zfs_autobackup
+  when: not (ansible_check_mode and zfs_autobackup_user.changed)
+  file:
+    path: "/var/lib/zfs_autobackup/.config/systemd/user/{{ item }}"
+    src: /dev/null
+    state: link
+    owner: zfs_autobackup
+    group: zfs_autobackup
+    force: true
+  become: true
+  loop:
+    - podman.service
+    - podman.socket
+  tags:
+    - zfs_autobackup
+
 # The zfs allow machinery runs everywhere ZFS exists -- prod plus the
 # box/lab/pug qemu fixtures (so _verify can exercise it). Only the minimal
 # fixture (vanilla ext4 cloud image, no ZFS) is excluded.

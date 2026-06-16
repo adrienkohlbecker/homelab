@@ -76,6 +76,33 @@
       zfs_autobackup user missing or wrong shell
       ({{ getent_passwd.zfs_autobackup | default('not found') }})
 
+# podman.service/podman.socket are masked in the backup user's scope so its
+# login never spins up the rootless podman API socket (see source.yml). A unit
+# symlinked to /dev/null is what systemd reads as masked, so assert exactly that
+# target -- the functional "no podman on login" is impractical to drive here
+# since the user has no linger and gets a fresh manager per session.
+- name: _verify | Stat masked podman user units
+  stat:
+    path: "/var/lib/zfs_autobackup/.config/systemd/user/{{ item }}"
+  register: zfs_autobackup_verify_mask
+  loop:
+    - podman.service
+    - podman.socket
+  become: true
+
+- name: _verify | Podman user units are masked to /dev/null
+  assert:
+    that:
+      - item.stat.exists
+      - item.stat.islnk
+      - item.stat.lnk_target == "/dev/null"
+    fail_msg: >-
+      {{ item.item }} not masked for zfs_autobackup
+      ({{ item.stat.lnk_target | default('missing') }})
+  loop: "{{ zfs_autobackup_verify_mask.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
 - name: _verify | Stat log directory
   stat:
     path: /var/log/zfs_autobackup
