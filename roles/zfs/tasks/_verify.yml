@@ -323,7 +323,7 @@
   block:
     - name: _verify | Health fault | Create backing files for a throwaway pool
       command: truncate -s 64M /var/tmp/zfs_health_test_{{ item }}.img
-      loop: [0, 1]
+      loop: [ 0, 1 ]
       changed_when: true
 
     - name: _verify | Health fault | Create a mirror pool over the files
@@ -433,7 +433,7 @@
   block:
     - name: _verify | Health pool-fault | Create backing files for a throwaway pool
       command: truncate -s 64M /var/tmp/zfs_fault_test_{{ item }}.img
-      loop: [0, 1]
+      loop: [ 0, 1 ]
       changed_when: true
 
     - name: _verify | Health pool-fault | Create a mirror pool over the files
