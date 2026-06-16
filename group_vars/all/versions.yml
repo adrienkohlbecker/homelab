@@ -1,0 +1,49 @@
+# Container image references for every production service, single source of
+# truth. Each `<svc>_image` is consumed by that role's `*.service.j2` ExecStart
+# (and, where a role's `_verify.yml`/`_setup.yml` runs the same image, by those
+# too -- so a version bump moves the service and its test in lockstep).
+#
+# Use canonical upstream image names here (docker.io/..., ghcr.io/...); mirror
+# redirection to Nexus lives in registries.conf, not in these refs.
+#
+# Test-scaffolding images (busybox/alpine probes, the influxdb _setup fixture)
+# are deliberately NOT centralized here -- they pin throwaway test tooling, not
+# the versions we run in production.
+
+adguard_image:       docker.io/adguard/adguardhome:v0.107.77
+authelia_image:      docker.io/authelia/authelia:4.39.19
+bazarr_image:        docker.io/linuxserver/bazarr:1.5.2
+
+# headscale image, referenced by BOTH the service unit
+# (templates/headscale.service.j2) and the mockoidc OIDC boot-test fixture
+# (tasks/_setup.yml -- mockoidc is a subcommand of this same binary). A single
+# constant so a version bump moves both together; a one-sided bump would
+# silently test the OIDC boot path against a stale mockoidc binary.
+headscale_image:     docker.io/headscale/headscale:0.26.1
+
+homeassistant_image: ghcr.io/home-assistant/home-assistant:2026.6.3
+homepage_image:      ghcr.io/gethomepage/homepage:v1.13
+influxdb_image:      docker.io/influxdb:2.7.11
+jellyfin_image:      docker.io/jellyfin/jellyfin:10.11.11
+kuma_image:          docker.io/louislam/uptime-kuma:2.3.2
+lidarr_image:        docker.io/linuxserver/lidarr:3.1.0
+mosquitto_image:     docker.io/eclipse-mosquitto:2.0.21
+nexus_image:         docker.io/sonatype/nexus3:3.91.1
+plex_image:          docker.io/plexinc/pms-docker:1.43.2.10687-563d026ea
+profilarr_image:     docker.io/santiagosayshey/profilarr:v1.1.3
+radarr_image:        docker.io/linuxserver/radarr:5.26.2
+sabnzbd_image:       docker.io/linuxserver/sabnzbd:5.0.0
+seerr_image:         ghcr.io/seerr-team/seerr:v3.2.0
+
+# Tecnativa's docker-socket-proxy: a minimal HAProxy that filters the Docker
+# API by method/section. Pinned to a release tag; the image is multi-arch
+# (amd64 + arm64). Canonical upstream ref -- registries.conf rewrites it to
+# the Nexus mirror, so don't hard-code a mirror prefix here.
+socket_proxy_image:  ghcr.io/tecnativa/docker-socket-proxy:v0.4.2
+
+sonarr_image:        docker.io/linuxserver/sonarr:4.0.15
+speedtest_image:     ghcr.io/librespeed/speedtest:5.3.3
+tautulli_image:      docker.io/linuxserver/tautulli:2.14.2
+transmission_image:  docker.io/linuxserver/transmission:4.1.1
+wolweb_image:        ghcr.io/sameerdhoot/wolweb:alpine@sha256:4dacd33d9d1d747efa4018a7fcf07c62e3a4afd348c0ef45ca31fe4ecd51c36a
+z2m_image:           ghcr.io/koenkk/zigbee2mqtt:2.12.0

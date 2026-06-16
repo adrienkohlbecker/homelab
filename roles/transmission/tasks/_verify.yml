@@ -52,7 +52,7 @@
 - name: _verify | Transmission RPC accepts the configured credential over the media network
   command: >-
     podman run --rm --network media --entrypoint /usr/bin/transmission-remote
-    docker.io/linuxserver/transmission:4.1.1
+    {{ transmission_image }}
     transmission.dns.podman:9091 --auth transmission:{{ transmission_rpc_password }} --session-info
   become: true
   register: _transmission_auth_ok

@@ -1,6 +1,0 @@
-# headscale container image, referenced by BOTH the service unit
-# (templates/headscale.service.j2) and the mockoidc OIDC boot-test fixture
-# (tasks/_setup.yml -- mockoidc is a subcommand of this same binary). A single
-# constant so a version bump moves both together; a one-sided bump would
-# silently test the OIDC boot path against a stale mockoidc binary.
-headscale_image: docker.io/headscale/headscale:0.26.1

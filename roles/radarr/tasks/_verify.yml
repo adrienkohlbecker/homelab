@@ -60,7 +60,7 @@
 - name: _verify | Radarr is reachable intra-stack at radarr.dns.podman over the media network
   command: >-
     podman run --rm --network media --entrypoint /usr/bin/curl
-    docker.io/linuxserver/radarr:5.26.2
+    {{ radarr_image }}
     -s -o /dev/null -w %{http_code}
     http://radarr.dns.podman:7878/api/v3/system/status
   become: true

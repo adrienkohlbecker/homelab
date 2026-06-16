@@ -37,9 +37,8 @@
     name: macvlan
 
 # Run the real influxdb role so the bootstrap exercises the same image
-# tag + the same `home` org / default bucket the prod host runs against.
-# Replaces a hand-rolled `podman run docker.io/influxdb:2.7.6` that
-# drifted vs prod's 2.7.11 and hand-rolled DOCKER_INFLUXDB_INIT_* env.
+# tag + the same `home` org / default bucket the prod host runs against
+# -- not a hand-rolled `podman run influxdb` that drifts vs prod.
 - name: _setup | Install influxdb
   import_role:
     name: influxdb

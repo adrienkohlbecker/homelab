@@ -56,7 +56,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
     --stop-timeout 120 \
-    docker.io/eclipse-mosquitto:2.0.21
+    {{ mosquitto_image }}
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
