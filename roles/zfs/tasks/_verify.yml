@@ -304,3 +304,91 @@
     path: /mnt/_verify_probe
     state: absent
   become: true
+
+# --- Health script fault detection (functional) ---
+# zfs_health's checks only mean something if they actually fire on a damaged
+# pool -- asserting the script merely "ran" proves nothing, and is exactly how
+# the `zpool status -e` regression hid: the drive-error check silently never
+# executed yet the script still exited 0. Build a throwaway mirror over two
+# backing files, corrupt one leg's data region underneath ZFS, scrub to surface
+# the checksum errors, and assert the script flags them via the drive-error
+# branch. A mirror self-heals, so `zpool status -x` still reports the pool
+# healthy -- this deliberately isolates the READ/WRITE/CKSUM counter check (the
+# one that regressed) from the pool-state check. qemu-only (gated on zfs_root,
+# which the harness sets on box/lab/pug but not the poolless minimal fixture);
+# never prod, and fully torn down at the end of the block.
+- name: _verify | Health fault detection
+  when: zfs_root
+  become: true
+  block:
+    - name: _verify | Health fault | Create backing files for a throwaway pool
+      command: truncate -s 64M /var/tmp/zfs_health_test_{{ item }}.img
+      loop: [0, 1]
+      changed_when: true
+
+    - name: _verify | Health fault | Create a mirror pool over the files
+      command: >-
+        zpool create -f zfs_health_test mirror
+        /var/tmp/zfs_health_test_0.img /var/tmp/zfs_health_test_1.img
+      changed_when: true
+
+    - name: _verify | Health fault | Write incompressible data into the pool
+      command: dd if=/dev/urandom of=/zfs_health_test/payload bs=1M count=16 conv=fsync
+      changed_when: true
+
+    # Overwrite the data region of one leg (4-60 MiB) with random bytes, leaving
+    # the four vdev labels (first/last ~512 KiB) intact so the leg stays ONLINE
+    # and the damage surfaces as checksum errors rather than a missing device.
+    - name: _verify | Health fault | Corrupt one mirror leg underneath ZFS
+      command: >-
+        dd if=/dev/urandom of=/var/tmp/zfs_health_test_0.img
+        bs=1M seek=4 count=56 conv=notrunc
+      changed_when: true
+
+    - name: _verify | Health fault | Flush the corruption to disk
+      command: sync
+      changed_when: false
+
+    - name: _verify | Health fault | Scrub to surface the checksum errors
+      command: zpool scrub zfs_health_test
+      changed_when: true
+
+    - name: _verify | Health fault | Wait for the scrub to finish
+      command: zpool status zfs_health_test
+      register: _zfs_health_scrub
+      until: "'scrub in progress' not in _zfs_health_scrub.stdout"
+      retries: 30
+      delay: 2
+      changed_when: false
+
+    - name: _verify | Health fault | Run the health script against the damaged pool
+      command: /usr/local/bin/zfs_health
+      register: _zfs_health_damaged
+      changed_when: false
+      failed_when: false
+
+    - name: _verify | Health fault | Script flags the drive errors and exits non-zero
+      assert:
+        that:
+          - _zfs_health_damaged.rc != 0
+          - "'Detected drive errors (READ/WRITE/CKSUM)' in _zfs_health_damaged.stderr"
+        fail_msg: >-
+          zfs_health did not flag the corrupted pool via the drive-error check.
+          rc={{ _zfs_health_damaged.rc }} stderr={{ _zfs_health_damaged.stderr }}
+
+  always:
+    # Teardown runs even if an assertion above fails, so a red test leaves no
+    # stray pool/files behind for a re-run on the same (kept) VM.
+    - name: _verify | Health fault | Destroy the throwaway pool
+      command: zpool destroy zfs_health_test
+      changed_when: true
+      failed_when: false
+
+    - name: _verify | Health fault | Remove backing files and mountpoint
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/tmp/zfs_health_test_0.img
+        - /var/tmp/zfs_health_test_1.img
+        - /zfs_health_test
