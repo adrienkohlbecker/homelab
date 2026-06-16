@@ -72,6 +72,15 @@ fi
 # --delete-excluded, this also purges already-shipped backups from bunk. The glob
 # keys on the literal @HH:MM:SS~ suffix so it matches ansible backups but not
 # editor ~ files.
+# --timeout is 600s (the rsync default is 0/off): a dead connection to the NAS
+# should still fail eventually rather than hang until the unit 23h ceiling. 60s
+# was too tight -- a large dataset (tank/data) routinely pauses >60s mid-transfer
+# while the slow Synology checksums/deletes, tripping a code-30 io-timeout. That
+# abort is not just one lost dataset: the offsite loop moves to the next dataset
+# immediately (f_rescue), but bunk rrsync still holds the per-host fcntl flock
+# for the ~1-2s it takes to notice the dropped connection, so the next dataset
+# dies with "Another instance of rrsync is already accessing this directory"
+# (code 12). 600s tolerates the legitimate NAS stalls and removes that cascade.
 f_trace rsync \
   --archive \
   --hard-links \
@@ -80,7 +89,7 @@ f_trace rsync \
   --sparse \
   --delete \
   --delete-excluded \
-  --timeout 60 \
+  --timeout 600 \
   --compress \
   --partial-dir .rsync-partial \
   --fuzzy \
