@@ -59,7 +59,7 @@ seerr_image:         ghcr.io/seerr-team/seerr:v3.2.0  # 2026-04-15
 socket_proxy_image:  ghcr.io/tecnativa/docker-socket-proxy:v0.4.2  # 2025-12-16
 
 sonarr_image:        docker.io/linuxserver/sonarr:4.0.15  # 2025-06-20
-speedtest_image:     ghcr.io/librespeed/speedtest:5.3.3  # 2024-05-24
+speedtest_image:     ghcr.io/librespeed/speedtest:6.1.0  # 2026-04-18
 tautulli_image:      docker.io/linuxserver/tautulli:2.14.2  # 2024-05-18
 transmission_image:  docker.io/linuxserver/transmission:4.1.1  # 2026-02-20
 wolweb_image:        ghcr.io/sameerdhoot/wolweb:alpine@sha256:4dacd33d9d1d747efa4018a7fcf07c62e3a4afd348c0ef45ca31fe4ecd51c36a  # 2025-08-04 (image build; rolling :alpine)
