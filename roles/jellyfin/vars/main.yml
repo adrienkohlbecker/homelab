@@ -24,27 +24,3 @@ jellyfin_scheduled_task_times:
 # prod never creates this user and authenticates with the vaulted token instead.
 jellyfin_test_admin_user: harness
 jellyfin_test_admin_password: harness-fixture-only
-
-# SSO/OIDC plugin (9p4/jellyfin-plugin-sso). Provides the in-app OIDC
-# login flow against Authelia (see notes/jellyfin_sso_rollout.md). The
-# plugin is managed .NET (arch-independent) so there is a single
-# url/sha256, not the x86_64/aarch64 split other artifacts use.
-#
-# VERSION CEILING: Jellyfin refuses to load a plugin whose targetAbi
-# exceeds the server version. The server image is 10.11.11 (see
-# jellyfin.service.j2); v4.0.0.4 targets ABI 10.11.0.0. The older 3.5.x
-# line targets ABI 10.9.0.0 and is the ceiling for 10.10.x — moving back
-# below 10.11 means reverting this pin too.
-#
-# The 4.x zip ships SSO-Auth.dll + Duende.IdentityModel.dll +
-# Duende.IdentityModel.OidcClient.dll + meta.json (meta.json is what makes
-# Jellyfin's plugin manager recognise + enable the plugin). The DLL set
-# differs from the 3.x line (which shipped IdentityModel.dll /
-# IdentityModel.OidcClient.dll), so the extract task wipes the plugin dir
-# on a version change to avoid orphaning the old assemblies, and _verify
-# asserts the 4.x names. The 4.0.0.4 release publishes a sha256 asset
-# directly; the value below was verified against it on download.
-jellyfin_sso_plugin_version: "4.0.0.4"
-jellyfin_sso_plugin:
-  url: https://github.com/9p4/jellyfin-plugin-sso/releases/download/v{{ jellyfin_sso_plugin_version }}/sso-authentication_{{ jellyfin_sso_plugin_version }}.zip
-  sha256: c09f16ba31059a434ddd7f811e4f9608d4b4c4514cc80a5bf1ca33bee61e1107

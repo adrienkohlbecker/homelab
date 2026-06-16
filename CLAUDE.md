@@ -87,7 +87,7 @@ Repo-local skills and hook scripts live once under `.agents/` (`skills/`, `hooks
 
 **Style:**
 
-- Centralize downloadable artifact metadata in `roles/<role>/vars/main.yml`: full URL **adjacent to its sha256**, keyed by `ansible_architecture` (`x86_64`/`aarch64`).
+- Centralize every pinned upstream version — container image tags, downloadable artifacts (debs/tarballs/binaries), and package-manager pins — in [group_vars/all/versions.yml](group_vars/all/versions.yml): full URL **adjacent to its sha256**, keyed by `ansible_architecture` (`x86_64`/`aarch64`) for multi-arch assets. Roles consume the pin by var name (ansible resolves vars globally); a role's `vars/main.yml` keeps only derived/computed values (e.g. arch-selected binary names, paths built from a version), never the raw pin.
 - Every config-writing `copy:`/`template:` carries a best-effort `validate:` that parses the rendered file. Omit rather than invent a fake one. Safe as `validate:` args but **don't** lift into `command:`/`shell:` — embedded quotes break task loading.
 - **Preserve upstream comments in vendored config files.** Deliberate exception to "comments describe current state": the upstream reference *is* current state for a config file.
 - **Don't pin a config value just because it equals the upstream default.** Pin only when load-bearing: documents a dependency, is a deliberate non-default, or is a tuning knob worth surfacing.

@@ -39,7 +39,7 @@
       suites: "{{ ansible_distribution_release }}/"
       pin:
         package: "netdata*"
-        version: "2.*"
+        version: "{{ netdata_version }}"
         priority: 999
   tags:
     - netdata
