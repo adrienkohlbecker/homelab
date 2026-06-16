@@ -50,9 +50,15 @@ enabled = no
 # we use charts.d (not scripts.d), so the dir never exists and the plugin logs
 # `start watching '/etc/netdata/scripts.d': no such file or directory` on a
 # loop (~3k/day on lab). Disable it -- charts.d.plugin is unaffected.
+#
+# tc.plugin reads Linux tc qdisc/class stats and shells out to tc-qos-helper.sh,
+# which only produces useful charts when FireQOS labelled the classes. We run no
+# FireQOS/tc QoS, so the helper logs `Cannot find file tc-qos-helper.conf` and
+# `FireQOS is not installed` on a loop (~130/day on pug) and collects nothing.
 [plugins]
 ebpf = no
 scripts.d = no
+tc = no
 
 [registry]
 enabled = yes
