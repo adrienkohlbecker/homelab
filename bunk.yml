@@ -117,13 +117,35 @@
       tags:
         - tailscale
 
+    # The DSM package hardcodes tailscaled's WireGuard underlay port in its
+    # launcher (PORT="41641" -> --port=$PORT) -- there is no /etc/default/tailscaled
+    # for the lineinfile in roles/tailscale to hit, so patch the launcher directly.
+    # Pinning a distinct port (host_vars: 41643) gives bunk a stable public endpoint
+    # at Bonniers so roaming clients reach its subnet router / exit node directly
+    # instead of relaying through fox's DERP. Re-fires after a package upgrade
+    # re-vendors the script (back to 41641), exactly when it should. The restart
+    # below rebinds the daemon to the new port BEFORE register.yml runs.
+    - name: Pin tailscaled underlay port in the DSM package launcher
+      lineinfile:
+        path: /var/packages/Tailscale/scripts/start-stop-status
+        regexp: '^PORT='
+        line: 'PORT="{{ tailscale_port }}"'
+        backup: true
+      register: bunk_ts_port
+      become: true
+      tags:
+        - tailscale
+
     # synosystemctl isn't on the non-login PATH (unlike the wireguard unit, this
     # is a DSM *package* controller service, managed via synosystemctl per the
-    # `tailscale configure` hint), so use its absolute path. Only restart when the
-    # configure above actually ran -- bouncing the package drops the tunnel.
-    - name: Restart the Tailscale package to apply the new permissions
+    # `tailscale configure` hint), so use its absolute path. Restart when the
+    # permission grant OR the underlay port changed -- both need a package bounce
+    # to take effect (the port rebind must land before register.yml's `tailscale
+    # up`). Gated so steady-state converges don't bounce the package (dropping the
+    # tunnel) needlessly.
+    - name: Restart the Tailscale package to apply permissions or port change
       command: /usr/syno/bin/synosystemctl restart pkgctl-Tailscale.service
-      when: bunk_ts_configure is changed
+      when: bunk_ts_configure is changed or bunk_ts_port is changed
       changed_when: true
       become: true
       tags:

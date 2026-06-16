@@ -41,3 +41,12 @@ tailscale_bin: /var/packages/Tailscale/target/bin/tailscale
 # Stage the pre-auth key under /tmp: DSM has no guaranteed /run tmpfs (the role
 # default). Root-only, single-use, removed right after `tailscale up` consumes it.
 tailscale_authkey_file: /tmp/tailscale_authkey
+# Pin a distinct underlay port so bunk has a stable public endpoint at Bonniers:
+# roaming clients then reach the Bonniers subnet router / exit node DIRECTLY
+# (1:1 router forward) instead of relaying through fox's DERP. Continues the
+# fleet sequence (lab 41641, pug 41642 -- see notes/headscale_mesh_redesign.md).
+# DSM hardcodes the port in the package launcher (not /etc/default/tailscaled as
+# the apt unit does), so bunk.yml patches the start-stop-status script rather
+# than the role's lineinfile path. Requires a manual udp/41643 1:1 forward on the
+# Bonniers router (+ DSM firewall allow if enabled) -- off-fleet, see runbook.
+tailscale_port: 41643
