@@ -23,7 +23,17 @@ headscale_image:     docker.io/headscale/headscale:0.26.1  # 2026-06-06
 
 homeassistant_image: ghcr.io/home-assistant/home-assistant:2026.6.3  # 2026-06-12
 homepage_image:      ghcr.io/gethomepage/homepage:v1.13  # 2026-05-08 (v1.13.0)
-influxdb_image:      docker.io/influxdb:2.7.11  # 2024-11-26
+# Stays on the InfluxDB 2.x line. 3.x is a ground-up Rust rewrite (TSM ->
+# columnar Arrow/Parquet/DataFusion) on a separate track, NOT a version bump:
+# it drops Flux entirely (only SQL/InfluxQL), has no in-place upgrade (TSM data
+# is unreadable -- migration means dual-write + line-protocol backfill), and 3
+# Core regresses on what we use (no built-in UI, ~72h single-query range cap, 5
+# database / 2000 table caps, admin-tokens-only). The 2.x line is maintained
+# (not EOL'd) and keeps Flux, the UI, and scoped tokens, so we ride it.
+# NB: the unsuffixed/`latest` Docker tag now resolves to 3 Core -- keep an
+# explicit 2.x tag pinned here. 2.8.0 did a one-way BoltDB schema upgrade, so
+# back up /mnt/services/influxdb before applying a bump that crosses it.
+influxdb_image:      docker.io/influxdb:2.9.1  # 2026-05-11
 jellyfin_image:      docker.io/jellyfin/jellyfin:10.11.11  # 2026-06-06
 kuma_image:          docker.io/louislam/uptime-kuma:2.3.2  # 2025-05-03
 lidarr_image:        docker.io/linuxserver/lidarr:3.1.0  # 2025-11-16
