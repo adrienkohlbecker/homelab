@@ -294,9 +294,15 @@
       # Jellyfin creates these DBs on first boot, so on a cold host the
       # symlink targets don't exist yet -- pre_create plants empty files
       # so state=link doesn't refuse the dangling symlink.
+      #
+      # Only jellyfin.db (the EF Core store) and the Intro Skipper DB are
+      # managed. The legacy library.db is deliberately absent: 10.11
+      # migrates it into jellyfin.db and renames the old file to
+      # library.db.old, and a fresh 10.11 install never creates library.db
+      # at all -- re-asserting that symlink would only resurrect a link to
+      # the stale pre-migration DB.
       pre_create: true
       links:
-        - /mnt/services/jellyfin/data/library.db
         - /mnt/services/jellyfin/data/jellyfin.db
         - /mnt/services/jellyfin/data/introskipper/introskipper.db
   tags:
