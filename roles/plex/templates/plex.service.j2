@@ -52,7 +52,6 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name plex \
-    --init \
     --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="plex" \
