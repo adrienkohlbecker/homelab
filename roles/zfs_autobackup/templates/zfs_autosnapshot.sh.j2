@@ -56,7 +56,17 @@ f_rescue f_trace zfs_backup_onsite "{{ external_ips[src.host] }}" "{{ src.dest_d
 # sync each dataset to offsite synology
 if ((zfs_backup_local_ok)); then
   for dataset in $(zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'); do
+    offsite_failed_before=$f_failed
     f_rescue f_trace zfs_backup_offsite "{{ external_ips.bunk }}" "$dataset"
+    # If this dataset failed, bunk rrsync receiver may still hold the per-host
+    # fcntl flock for the second or two it takes to notice the dropped
+    # connection. Pause before the next dataset so it does not trip "Another
+    # instance of rrsync is already accessing this directory" -- a code-12 abort
+    # that would lose an otherwise-healthy dataset. Only on failure: a clean
+    # transfer has already released the lock before the next iteration starts.
+    if ((f_failed != offsite_failed_before)); then
+      sleep 10
+    fi
   done
 else
   echo >&2 "Error: local snapshot step failed; skipping offsite replication to avoid pushing a cross-dataset generation skew over last night's consistent copy"
