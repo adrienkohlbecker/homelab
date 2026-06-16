@@ -158,44 +158,56 @@ class TestNormalize:
 
 
 class TestLatestTransitionByAlarm:
-    def test_list_format(self) -> None:
-        log = [
-            {"alarm_id": 1, "unique_id": 10, "transition_id": "tid-old"},
-            {"alarm_id": 1, "unique_id": 20, "transition_id": "tid-new"},
-        ]
-        result = ag.latest_transition_by_alarm(log)
-        assert result == {1: "tid-new"}
-
-    def test_dict_envelope_format(self) -> None:
+    def test_envelope_newest_wins(self) -> None:
+        # Same (alert, instance): the higher `gi` is the current-state transition.
         log = {
-            "data": [
-                {"alarm_id": 1, "unique_id": 10, "transition_id": "tid-a"},
+            "transitions": [
+                {"alert": "cpu", "instance": "system.cpu", "gi": 10, "transition_id": "tid-old"},
+                {"alert": "cpu", "instance": "system.cpu", "gi": 20, "transition_id": "tid-new"},
             ]
         }
         result = ag.latest_transition_by_alarm(log)
-        assert result == {1: "tid-a"}
+        assert result == {("cpu", "system.cpu"): "tid-new"}
+
+    def test_bare_list_accepted(self) -> None:
+        log = [{"alert": "cpu", "instance": "system.cpu", "gi": 1, "transition_id": "tid-a"}]
+        result = ag.latest_transition_by_alarm(log)
+        assert result == {("cpu", "system.cpu"): "tid-a"}
 
     def test_multiple_alarms(self) -> None:
-        log = [
-            {"alarm_id": 1, "unique_id": 5, "transition_id": "t1"},
-            {"alarm_id": 2, "unique_id": 10, "transition_id": "t2"},
-        ]
+        log = {
+            "transitions": [
+                {"alert": "a1", "instance": "c1", "gi": 5, "transition_id": "t1"},
+                {"alert": "a2", "instance": "c2", "gi": 10, "transition_id": "t2"},
+            ]
+        }
         result = ag.latest_transition_by_alarm(log)
-        assert result == {1: "t1", 2: "t2"}
+        assert result == {("a1", "c1"): "t1", ("a2", "c2"): "t2"}
+
+    def test_when_fallback_sort(self) -> None:
+        # No `gi`: fall back to `when` for newest-first ordering.
+        log = {
+            "transitions": [
+                {"alert": "a", "instance": "c", "when": 100, "transition_id": "tid-old"},
+                {"alert": "a", "instance": "c", "when": 200, "transition_id": "tid-new"},
+            ]
+        }
+        assert ag.latest_transition_by_alarm(log) == {("a", "c"): "tid-new"}
 
     def test_empty_log(self) -> None:
         assert ag.latest_transition_by_alarm([]) == {}
-        assert ag.latest_transition_by_alarm({"data": []}) == {}
+        assert ag.latest_transition_by_alarm({"transitions": []}) == {}
+        assert ag.latest_transition_by_alarm({}) == {}
 
-    def test_transition_uuid_fallback(self) -> None:
-        log = [{"alarm_id": 1, "unique_id": 1, "transition_uuid": "uuid-1"}]
-        result = ag.latest_transition_by_alarm(log)
-        assert result == {1: "uuid-1"}
-
-    def test_id_fallback(self) -> None:
-        log = [{"id": 5, "unique_id": 1, "transition_id": "t5"}]
-        result = ag.latest_transition_by_alarm(log)
-        assert result == {5: "t5"}
+    def test_missing_fields_skipped(self) -> None:
+        log = {
+            "transitions": [
+                {"alert": "a", "instance": "c"},  # no transition_id
+                {"instance": "c", "gi": 1, "transition_id": "t"},  # no alert
+                {"alert": "a", "gi": 2, "transition_id": "t"},  # no instance
+            ]
+        }
+        assert ag.latest_transition_by_alarm(log) == {}
 
 
 # ---------------------------------------------------------------------------

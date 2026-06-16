@@ -43,6 +43,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 FETCH_TIMEOUT = 5
 MAX_FETCH_WORKERS = 8
+# Lookback window for the v2 alert-transitions fetch. Active alarms transitioned
+# recently (that is why they are active), so a 7-day window comfortably covers
+# their current-state transition; the v2 endpoint returns nothing for after=0.
+ALERT_TRANSITIONS_WINDOW = 7 * 24 * 3600
 
 # Heroicons-mini filled status glyphs swapped in for the text pill below the
 # narrow-viewport breakpoint. Filled style (fill=currentColor) so the inside
@@ -102,8 +106,8 @@ def parse_hosts(spec: str) -> list[tuple[str, str, str]]:
 
 class _HostClient:
     """One netdata host's persistent connection for the duration of a single
-    _fetch_one call. Reuses one TLS handshake across the 2-3 requests we make
-    per host per run (alarms + alarm_log + per-chart fallbacks).
+    _fetch_one call. Reuses one TLS handshake across the 2 requests we make
+    per host per run (alarms + alert_transitions).
 
     Invariant: each request fully drains the response before the next one.
     http.client.HTTPConnection raises ResponseNotReady on the next
@@ -149,34 +153,33 @@ class _HostClient:
     def alarms(self) -> dict:
         return self._get_json("/api/v1/alarms?active")
 
-    def alarm_log(self, *, chart: str | None = None) -> dict:
-        # Bulk: count=10000 covers a chatty agent's full retained log on lab; the
-        # earlier count=500 was missing alarms whose last transition was >24h old.
-        # Chart-filtered: per-alarm fallback when the bulk fetch still misses.
-        qs = {"count": "10000"}
-        if chart:
-            qs["chart"] = chart
-        return self._get_json(f"/api/v1/alarm_log?{urllib.parse.urlencode(qs)}")
+    def alert_transitions(self) -> dict:
+        # netdata v2 emptied /api/v1/alarm_log (returns HTTP 200 with a zero-byte
+        # body, which is what made the v1 fetch raise JSONDecodeError); the alarm
+        # transition history moved to the faceted /api/v2/alert_transitions. That
+        # endpoint needs a relative `after` window -- after=0 yields no rows --
+        # so look back ALERT_TRANSITIONS_WINDOW. last=10000 covers a chatty
+        # agent's full window.
+        qs = {"after": f"-{ALERT_TRANSITIONS_WINDOW}", "last": "10000"}
+        return self._get_json(f"/api/v2/alert_transitions?{urllib.parse.urlencode(qs)}")
 
 
-def latest_transition_by_alarm(log) -> dict[int, str]:
-    """Map alarm id → most-recent transition_id. The active-alarms endpoint
-    spells the alarm id as `id` while the alarm-log endpoint spells the same
-    integer as `alarm_id`; we key on the alarm-log spelling here and join on
-    the alarms-endpoint id at the call site. netdata also returns the log as
-    a list (older builds) or a {"data": [...]} envelope (newer builds), so
-    we accept either; sorting by `unique_id` (newest first) keeps the first
-    hit per alarm id, which is the current-state transition we want to
-    deep-link to."""
-    if isinstance(log, dict):
-        log = log.get("data") or []
-    out: dict[int, str] = {}
-    for entry in sorted(log, key=lambda e: e.get("unique_id") or 0, reverse=True):
-        # Use dict-default lookup not `or` so an alarm_id of 0 isn't falsy-dropped.
-        aid = entry.get("alarm_id", entry.get("id"))
-        tid = entry.get("transition_id") or entry.get("transition_uuid")
-        if aid is not None and tid and aid not in out:
-            out[aid] = tid
+def latest_transition_by_alarm(log) -> dict[tuple[str, str], str]:
+    """Map (alert name, instance) → most-recent transition_id from the netdata
+    v2 /api/v2/alert_transitions response. v2 transitions carry `alert` (the
+    alarm name) and `instance` (the chart id) instead of the integer alarm_id
+    the retired v1 alarm_log used, so we key on the (name, chart) pair the
+    active-alarms endpoint joins on at the call site. `gi` is a monotonic
+    global id; sorting newest-first keeps the current-state transition we want
+    to deep-link to. The payload is the `{"transitions": [...]}` envelope; a
+    bare list is also accepted for test fixtures."""
+    transitions = log.get("transitions") if isinstance(log, dict) else (log or [])
+    out: dict[tuple[str, str], str] = {}
+    for entry in sorted(transitions or [], key=lambda e: e.get("gi") or e.get("when") or 0, reverse=True):
+        key = (entry.get("alert"), entry.get("instance"))
+        tid = entry.get("transition_id")
+        if key[0] and key[1] and tid and key not in out:
+            out[key] = tid
     return out
 
 
@@ -282,25 +285,17 @@ def _fetch_one(name: str, query_url: str, click_url: str, auth_token: str = "") 
         # alerts list URL.
         log_warn = ""
         try:
-            tid_by_id = latest_transition_by_alarm(client.alarm_log())
+            tid_by_key = latest_transition_by_alarm(client.alert_transitions())
         except Exception as e:  # noqa: BLE001
-            tid_by_id = {}
-            log_warn = f"alarm_log fetch failed: {type(e).__name__}: {e}"
-        # Budget for per-chart fallbacks so a single chatty host doesn't push
-        # the run past systemd's TimeoutStartSec. Alarms whose transition_id
-        # we can't recover within the budget fall back to the alerts list URL,
-        # which is a graceful degradation (the row still renders + clicks
-        # through, it just doesn't deep-link to the specific transition).
-        budget_end = time.monotonic() + FETCH_TIMEOUT
+            tid_by_key = {}
+            log_warn = f"alert_transitions fetch failed: {type(e).__name__}: {e}"
+        # The v2 bulk fetch over ALERT_TRANSITIONS_WINDOW already covers every
+        # active alarm (an active alarm transitioned within the window), so the
+        # (name, chart) join is a single pass. A miss falls back to the alerts
+        # list URL -- the row still renders + clicks through, it just does not
+        # deep-link to the specific transition.
         for a in alarms:
-            tid = tid_by_id.get(a["id"], "")
-            if not tid and a["chart"] and time.monotonic() < budget_end:
-                try:
-                    chart_map = latest_transition_by_alarm(client.alarm_log(chart=a["chart"]))
-                    tid = chart_map.get(a["id"], "")
-                except Exception:  # noqa: BLE001
-                    pass
-            a["transition_id"] = tid
+            a["transition_id"] = tid_by_key.get((a["name"], a["chart"]), "")
             a["href"] = alarm_href(click_url, name, a)
         if alarms and not any(a["transition_id"] for a in alarms):
             log_warn = log_warn or "no transition_id matched any active alarm"
