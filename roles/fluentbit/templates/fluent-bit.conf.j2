@@ -301,6 +301,22 @@
     Exclude           SYSTEMD_UNIT ^netdata\.service$
     Exclude           MESSAGE ^Failed to prepare statement SQL_SELECT_HEALTH_LOG
 
+# netdata's debugfs.plugin mirrors each hwmon `inN_alarm` bit and logs a line
+# whenever it flips (`voltage sensor '...' transitioned from state ... (kernel
+# driver generated)`). The Super-I/O voltage rails (nct6798 in6 on lab) ship
+# uncalibrated chip-default min/max limits the real reading straddles, so the
+# bit flaps every few minutes (~870/day on lab) -- a known false positive, not a
+# real electrical fault. It raises no netdata health alarm (confirmed: 0 active,
+# 0 alert transitions) and sends no notification, so it is pure log noise.
+# Scoped to `voltage sensor` only: temperature/fan sensor transitions (the ones
+# worth seeing) start with a different prefix and still flow.
+[FILTER]
+    Name              grep
+    Match             svc.*
+    Logical_Op        and
+    Exclude           SYSTEMD_UNIT ^netdata\.service$
+    Exclude           MESSAGE ^voltage sensor '[^']+' transitioned from state
+
 # homepage_alerts.service is a ~24s timer; systemd emits Starting/Finished
 # plus the unit's own "Deactivated successfully" on every run (~5k each/day on
 # lab). The panel-generation success/failure is visible in the unit state and
