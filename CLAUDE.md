@@ -172,6 +172,18 @@ Three paths, preferred order:
 2. **linuxserver `PUID`/`PGID`** — s6-overlay aligns the baked-in `abc` user.
 3. **Fake-root uidmap** — last resort: `--user 0:0` + `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1`. Canonical [roles/authelia/](roles/authelia/). When the entrypoint drops to a baked-in non-root uid, allocate a dedicated host user and add a `+N:<uid>:1` override.
 
+### PID 1 / `--init`
+
+Add `--init` (placed right after `--name`) **only when the image runs the application directly as PID 1** — a bare Go/Java/.NET/node binary as `ENTRYPOINT`, which neither reaps orphaned children nor forwards `SIGTERM`. Then podman's `catatonit` does both. Canonical: [roles/adguard/](roles/adguard/) (AdGuardHome binary), [roles/jellyfin/](roles/jellyfin/) (spawns `ffmpeg` children).
+
+**Do NOT add `--init` when the image already ships its own init** — it is pure redundant clutter there:
+
+- **s6-overlay** — `ENTRYPOINT ["/init"]`. Every `linuxserver/*` image (sonarr/radarr/lidarr/bazarr/sabnzbd/tautulli/transmission, …) and `ghcr.io/home-assistant/home-assistant`.
+- **dumb-init / tini** — e.g. `louislam/uptime-kuma` (`ENTRYPOINT ["/usr/bin/dumb-init","--"]`).
+- **entrypoint that `exec`s a process supervisor or webserver master** — e.g. `librespeed/speedtest` ends in `exec apache2-foreground`; apache reaps and forwards signals itself.
+
+Verify before deciding, don't guess: `sudo podman image inspect <img> --format '{{json .Config.Entrypoint}}'` on the host (and read the entrypoint script if it's a shell wrapper). A `/init`, a `dumb-init`/`tini`, or a trailing `exec <supervisor>` means skip `--init`.
+
 ### Prefer system-scope systemd units
 
 Default for new timers/services is **system-scope**. Reach for user-scope (linger) only when fundamentally required — today just rootless podman ([roles/gitlab_runner/](roles/gitlab_runner/)). When hardening, `systemd-analyze security <unit>` lists cheap wins.
