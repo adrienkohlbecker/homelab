@@ -8,11 +8,20 @@
   until: _homepage_http.status == 200
   become: true
 
-- name: _verify | Homepage answers through nginx via Host header
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the homepage vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 homepage.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
+- name: _verify | Homepage answers through nginx
   uri:
-    url: https://localhost/api/healthcheck
-    headers:
-      Host: "homepage.{{ inventory_hostname }}.{{ domain }}"
+    url: https://homepage.{{ inventory_hostname }}.{{ domain }}/api/healthcheck
     validate_certs: false
     status_code: 200
   become: true
@@ -24,9 +33,7 @@
 # before content assertions fire.
 - name: _verify | Homepage_alerts renders HTML through nginx
   uri:
-    url: https://localhost/alerts/
-    headers:
-      Host: "homepage.{{ inventory_hostname }}.{{ domain }}"
+    url: https://homepage.{{ inventory_hostname }}.{{ domain }}/alerts/
     validate_certs: false
     return_content: true
     status_code: 200

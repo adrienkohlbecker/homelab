@@ -20,11 +20,21 @@
 # so a cookie-less GET / has to land on Authelia's 302 redirect chain.
 # Validates the auth_request wiring (without it the request would reach
 # InfluxDB and return the SPA's HTML 200).
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the influxdb vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 influxdb.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 - name: _verify | Influxdb / gate redirects unauthenticated to Authelia
   uri:
-    url: https://localhost/
-    headers:
-      Host: influxdb.{{ inventory_hostname }}.{{ domain }}
+    url: https://influxdb.{{ inventory_hostname }}.{{ domain }}/
     validate_certs: false
     follow_redirects: none
     status_code: 302
@@ -64,9 +74,8 @@
   vars:
     _admin_token: "{{ (_influxdb_admin_auth.stdout | from_json | first).token }}"
   uri:
-    url: https://localhost/health
+    url: https://influxdb.{{ inventory_hostname }}.{{ domain }}/health
     headers:
-      Host: influxdb.{{ inventory_hostname }}.{{ domain }}
       Authorization: Token {{ _admin_token }}
     validate_certs: false
     return_content: true

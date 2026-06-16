@@ -19,11 +19,21 @@
 # would pass the loopback probe above silently. The test authelia_stub admits
 # the auth_request subrequest, so the request reaches profilarr and /ping
 # answers 200.
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the profilarr vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 profilarr.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 - name: _verify | Profilarr answers /ping through the nginx vhost
   uri:
-    url: https://localhost/ping
-    headers:
-      Host: "profilarr.{{ inventory_hostname }}.{{ domain }}"
+    url: https://profilarr.{{ inventory_hostname }}.{{ domain }}/ping
     validate_certs: false
     status_code: 200
     timeout: 10

@@ -74,12 +74,22 @@
 # redirect to the portal. This is the only probe that fails if `auth: required`
 # is dropped from nginx_site_args -- the loopback probes above stay green
 # without it (and mode=version is unauthenticated, so it can't prove the gate
-# either). The Host header still exercises the subdomain -> server_name routing.
+# either). The FQDN URL still exercises the subdomain -> server_name routing.
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the sabnzbd vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 sabnzbd.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 - name: _verify | SABnzbd UI gate redirects unauthenticated requests to Authelia
   uri:
-    url: https://localhost/
-    headers:
-      Host: "sabnzbd.{{ inventory_hostname }}.{{ domain }}"
+    url: https://sabnzbd.{{ inventory_hostname }}.{{ domain }}/
     validate_certs: false
     follow_redirects: none
     status_code: 302

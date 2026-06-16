@@ -19,11 +19,21 @@
 
 # Exercise the nginx-proxied path — catches a typo'd subdomain or
 # proxy_pass regression the loopback probe would miss.
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the plex vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 plex.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 - name: _verify | Plex /identity via nginx vhost
   uri:
-    url: https://localhost/identity
-    headers:
-      Host: "plex.{{ inventory_hostname }}.{{ domain }}"
+    url: https://plex.{{ inventory_hostname }}.{{ domain }}/identity
     validate_certs: false
     status_code: 200
     return_content: true

@@ -44,15 +44,25 @@
       seerr_api_key -- seerr regenerated or rejected the rendered key.
   become: true
 
-# nginx Host-header probe -- exercises the full reverse-proxy chain so
+# nginx reverse-proxy probe -- exercises the full reverse-proxy chain so
 # a typo in nginx_site_args / proxy_pass fails here too. trustProxy is
 # set in settings.json so the upstream X-Forwarded-* headers from nginx
 # don't get rejected.
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the seerr vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 seerr.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 - name: _verify | Seerr is reachable through nginx
   uri:
-    url: https://localhost/api/v1/status
-    headers:
-      Host: seerr.{{ inventory_hostname }}.{{ domain }}
+    url: https://seerr.{{ inventory_hostname }}.{{ domain }}/api/v1/status
     validate_certs: false
     return_content: true
   register: _seerr_nginx
