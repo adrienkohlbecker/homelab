@@ -1,3 +1,44 @@
+# zfs-autobackup pulls each peer's snapshots into its dest_dataset but refuses
+# to create the top-level target itself ("Target path '<ds>' does not exist.
+# Please create this dataset first."), so a source added to host_vars without a
+# hand-created target fails silently every night. Create the parent as a pure
+# container (canmount=off/mountpoint=none, matching the existing receive roots);
+# the received children carry their own readonly=on/mountpoint=none from the
+# onsite pull's --set-properties.
+#
+# Gated on non-existence rather than letting community.general.zfs reconcile
+# properties every run: an existing receive root is already populated and may
+# carry properties set by zfs receive over time, so we create-if-missing and
+# never touch it again. The empty-string dest_dataset is the skip sentinel
+# (e.g. box's self-reference in the fixture).
+- name: dest | List existing datasets
+  command: zfs list -H -o name
+  check_mode: false
+  changed_when: false
+  register: _zfs_autobackup_existing_datasets
+  when: zfs_root
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: dest | Ensure backup receive-target datasets exist
+  when:
+    - zfs_root
+    - item.dest_dataset | default('') | length > 0
+    - item.dest_dataset not in (_zfs_autobackup_existing_datasets.stdout_lines | default([]))
+  community.general.zfs:
+    name: "{{ item.dest_dataset }}"
+    state: present
+    extra_zfs_properties:
+      canmount: "off"
+      mountpoint: none
+  loop: "{{ zfs_autobackup_sources }}"
+  loop_control:
+    label: "{{ item.dest_dataset | default('(none)') }}"
+  become: true
+  tags:
+    - zfs_autobackup
+
 - name: dest | Build SSH target list for backup peers
   set_fact:
     _zfs_autobackup_ssh_targets: >-
