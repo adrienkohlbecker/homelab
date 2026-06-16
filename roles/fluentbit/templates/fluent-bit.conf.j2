@@ -329,6 +329,18 @@
     Exclude           SYSTEMD_UNIT ^tailscaled\.service$
     Exclude           MESSAGE (disco: failed to send ping .* sendto: destination address required|derp-[0-9]+ does not know about peer .* removing route)
 
+# hd-idle (the C 1.05 build on jammy/noble) runs in the foreground under -d so
+# systemd can track the real process (see roles/hd_idle/files/hd-idle-override.conf);
+# -d also prints `probing sdX: reads: N, writes: N` for every disk on every
+# poll (~9k/day on lab). The spin-up/down state changes -- the only signal --
+# are logged without the `probing` prefix, so drop just the per-poll probes.
+[FILTER]
+    Name              grep
+    Match             svc.*
+    Logical_Op        and
+    Exclude           SYSTEMD_UNIT ^hd-idle\.service$
+    Exclude           MESSAGE ^probing sd[a-z]+: reads:
+
 # homepage_alerts (roles/homepage/files/alerts_generate.py) polls
 # /api/v1/alarms?active + /api/v1/alarm_log every 30s on each host to
 # render the homepage dashboard. That's ~5k access-log lines/day per
