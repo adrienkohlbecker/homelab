@@ -104,6 +104,14 @@
           | from_json
           | selectattr('name', 'equalto', influxdb_bucket_args.bucket)
           | first).id }}
+    # Persisted store for this bucket's write-auth token. InfluxDB 2.8+
+    # redacts the token from `auth list` (returned only at `auth create`),
+    # so we keep it here at creation and read it back on later converges.
+    # regex_replace sanitises the bucket name into a filename the same way
+    # the exposed fact key is sanitised below.
+    _influxdb_bucket_token_path: >-
+      /mnt/services/influxdb/secrets/bucket_{{
+        influxdb_bucket_args.bucket | regex_replace('[^A-Za-z0-9_]', '_') }}_token
   block:
     - name: bucket | Query user {{ influxdb_bucket_args.user }}
       command:
@@ -271,22 +279,52 @@
       failed_when: false
       become: true
 
-    # `influx auth list --json` emits permissions as bare strings shaped
-    # `<action>:orgs/<orgid>/buckets/<bucketid>` (or `<action>:/buckets`,
-    # `<action>:/orgs`, etc. for non-scoped perms), NOT as the dict-shaped
-    # {action, resource: {type, id}} structure the InfluxDB HTTP API
-    # returns. selectattr('action', ...) crashes on strings. Regex-match
-    # the bucket-scoped write permission directly, anchored on both the
-    # org id and the bucket id -- earlier shape `^write:.*buckets/<id>$`
-    # would false-positive on a cross-org perm pointing at the same
-    # bucket id (theoretically possible, easy to forestall).
+    # Is this bucket's write-auth token already persisted? The file under
+    # secrets/ -- not influxd -- is the source of truth for the token value,
+    # because `influx auth list` redacts the secret to "" in 2.8+ (returned
+    # only at `auth create`). In steady state the file exists and the three
+    # mutating tasks below all skip; we just read it back.
+    - name: bucket | Stat persisted write-auth token for {{ influxdb_bucket_args.bucket }}
+      stat:
+        path: "{{ _influxdb_bucket_token_path }}"
+      register: _influxdb_bucket_token_stat
+      check_mode: false
+      become: true
+
+    # When recreating (no persisted token to recover) and a write-auth
+    # already exists, delete it first so we don't orphan an unreadable
+    # token. Identify it by its bucket-scoped write permission: permissions
+    # are bare strings shaped `write:orgs/<orgid>/buckets/<bucketid>` (NOT
+    # the dict {action, resource} the HTTP API returns), and we anchor on
+    # both ids so a cross-org perm reusing the bucket id can't false-match.
+    - name: bucket | Delete stale write-auth before recreate for {{ influxdb_bucket_args.bucket }}  # noqa: no-changed-when -- when: gates execution
+      vars:
+        _existing_write_auth: >-
+          {{ (_influxdb_bucket_auth_query.stdout | default('[]') | from_json)
+             | selectattr('permissions', 'defined')
+             | selectattr('permissions', 'contains',
+                 'write:orgs/' ~ _influxdb_org_id ~ '/buckets/' ~ _influxdb_bucket_id)
+             | list }}
+      when:
+        - not _influxdb_bucket_token_stat.stat.exists
+        - _existing_write_auth | length > 0
+      command:
+        argv:
+          - podman
+          - exec
+          - influxdb
+          - influx
+          - auth
+          - delete
+          - --id
+          - "{{ (_existing_write_auth | first).id }}"
+      become: true
+
+    # `--json` so the created authorization (token included) parses cleanly.
+    # This is the ONLY point the token secret is visible, so the persist
+    # task below must capture it from this register.
     - name: bucket | Create write-auth for bucket {{ influxdb_bucket_args.bucket }}  # noqa: no-changed-when -- when: gates execution, like creates: did
-      when: >-
-        (_influxdb_bucket_auth_query.stdout | default('[]') | from_json)
-        | selectattr('permissions', 'defined')
-        | map(attribute='permissions') | flatten
-        | select('search', '^write:orgs/' ~ _influxdb_org_id ~ '/buckets/' ~ _influxdb_bucket_id ~ '$')
-        | list | length == 0
+      when: not _influxdb_bucket_token_stat.stat.exists
       command:
         argv:
           - podman
@@ -295,48 +333,40 @@
           - influx
           - auth
           - create
+          - --json
           - --org-id
           - "{{ _influxdb_org_id }}"
           - --user
           - "{{ influxdb_bucket_args.user }}"
           - --write-bucket
           - "{{ _influxdb_bucket_id }}"
+      register: _influxdb_bucket_auth_create
       become: true
 
-    # Re-query post-create so the token surfacing below sees the
-    # just-created auth too (the `_influxdb_bucket_auth_query` above
-    # was taken before the conditional create). Unconditional rather
-    # than branching on the create's changed status -- one extra exec
-    # per call is cheap, and a conditional set_fact would surface an
-    # `Undefined` token to a caller whose bucket already existed.
-    #
-    # failed_when also asserts at least one auth carries the
-    # bucket-scoped write permission, so the set_fact's `| first.token`
-    # below is guaranteed defined (and a regression in the create or
-    # detection regex fails here loudly rather than producing an
-    # Undefined token silently).
-    - name: "bucket | Re-query auth to capture token for {{ influxdb_bucket_args.user }}"
-      command:
-        argv:
-          - podman
-          - exec
-          - influxdb
-          - influx
-          - auth
-          - list
-          - --user
-          - "{{ influxdb_bucket_args.user }}"
-          - --json
-      register: _influxdb_bucket_auth_post_query
-      changed_when: false
+    # Persist the just-minted token, 0600 owned by influxdb. Gated on the
+    # create having actually run (skipped in check mode / when the file
+    # already exists) so we never template an Undefined `.token`.
+    - name: bucket | Persist write-auth token for {{ influxdb_bucket_args.bucket }}
+      when: _influxdb_bucket_auth_create is not skipped
+      copy:
+        content: "{{ (_influxdb_bucket_auth_create.stdout | from_json).token }}\n"
+        dest: "{{ _influxdb_bucket_token_path }}"
+        owner: influxdb
+        group: influxdb
+        mode: "0600"
+        backup: true
+      become: true
+
+    # Read the token back -- one uniform source whether we just created it
+    # or it already existed. trim drops the trailing newline. Gated so a
+    # check-mode run on a never-provisioned host (no file, create skipped)
+    # doesn't slurp a missing path.
+    - name: bucket | Read persisted write-auth token for {{ influxdb_bucket_args.bucket }}
+      when: _influxdb_bucket_token_stat.stat.exists or (_influxdb_bucket_auth_create is not skipped)
+      slurp:
+        src: "{{ _influxdb_bucket_token_path }}"
+      register: _influxdb_bucket_token_slurp
       check_mode: false
-      failed_when: >-
-        _influxdb_bucket_auth_post_query.rc != 0
-        or ((_influxdb_bucket_auth_post_query.stdout | from_json)
-            | selectattr('permissions', 'defined')
-            | selectattr('permissions', 'contains',
-                'write:orgs/' ~ _influxdb_org_id ~ '/buckets/' ~ _influxdb_bucket_id)
-            | list | length) == 0
       become: true
 
     # Per-bucket key so concurrent bucket.yml invocations against
@@ -345,11 +375,7 @@
     # for fact name" idiom -- bucket names can carry chars that aren't
     # valid in ansible identifiers.
     - name: bucket | Expose write-auth token for bucket {{ influxdb_bucket_args.bucket }}
+      when: _influxdb_bucket_token_slurp is not skipped
       set_fact:
         "influxdb_bucket_{{ influxdb_bucket_args.bucket | regex_replace('[^A-Za-z0-9_]', '_') }}_token": >-
-          {{ (_influxdb_bucket_auth_post_query.stdout
-              | from_json
-              | selectattr('permissions', 'defined')
-              | selectattr('permissions', 'contains',
-                  'write:orgs/' ~ _influxdb_org_id ~ '/buckets/' ~ _influxdb_bucket_id)
-              | first).token }}
+          {{ _influxdb_bucket_token_slurp.content | b64decode | trim }}

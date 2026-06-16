@@ -44,39 +44,21 @@
     or 'auth.' not in (_influxdb_gate.location | default(''))
   become: true
 
-# Mint the bootstrap admin token: DOCKER_INFLUXDB_INIT_MODE=setup makes
-# this fixed by the role's main.yml on first boot. Used by the bypass-
-# on-Authorization probe below to assert the path is reachable and the
-# upstream answers as the admin user.
-- name: _verify | Extract bootstrap admin token
-  command:
-    argv:
-      - podman
-      - exec
-      - influxdb
-      - influx
-      - auth
-      - list
-      - --user
-      - "{{ influxdb_root_user }}"
-      - --json
-  register: _influxdb_admin_auth
-  changed_when: false
-  become: true
-
 # nginx-leg bypass-on-Authorization: a machine client presenting its
 # own Authorization header (Telegraf / HA / Grafana shape) must skip
 # the Authelia subrequest entirely (`if ($http_authorization) return
-# 204` in /internal/authelia) and reach InfluxDB unchanged. /health
+# 204` in /internal/authelia) and reach InfluxDB unchanged. Any
+# non-empty Authorization triggers the bypass and /health needs no
+# auth, so a placeholder token exercises the path without a real secret
+# -- InfluxDB 2.8+ redacts token values from `auth list`, so the
+# operator token can't be read back to probe with anyway. /health
 # returns 200 with status=pass; the same probe also covers the
 # proxy_pass wiring (a typo in nginx_site_args would fail this too).
 - name: _verify | Influxdb /health reachable via nginx with bypass-on-Authorization
-  vars:
-    _admin_token: "{{ (_influxdb_admin_auth.stdout | from_json | first).token }}"
   uri:
     url: https://influxdb.{{ inventory_hostname }}.{{ domain }}/health
     headers:
-      Authorization: Token {{ _admin_token }}
+      Authorization: Token verify_bypass_probe
     validate_certs: false
     return_content: true
   register: _influxdb_nginx
@@ -93,15 +75,14 @@
   changed_when: false
   become: true
 
-# SSO injection wiring: roles/influxdb/tasks/main.yml captures the
-# bootstrap admin's operator token and feeds it into nginx's
-# upstream_authorization map under the `influxdb_authelia_user` key.
+# SSO injection wiring: roles/influxdb/tasks/main.yml feeds the vaulted
+# `influxdb_user_tokens` dict into nginx's upstream_authorization map.
 # nginx renders that into the http-scope map at
 # /etc/nginx/conf.d/upstream_auth_influxdb.conf, which should contain a
 # `"<authelia_user>" "Token <t>";` entry -- catches a regression where the
-# set_fact lookup returns Undefined, the combine() folds it into {}, and the
-# Authorization injection silently no-ops.
-- name: _verify | Bootstrap token wired into nginx upstream_authorization
+# dict is empty/Undefined and the Authorization injection silently no-ops.
+# group_vars/test.yml sets influxdb_user_tokens for this assertion.
+- name: _verify | Operator token wired into nginx upstream_authorization
   command:
     argv:
       - grep
