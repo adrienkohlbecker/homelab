@@ -65,6 +65,13 @@ fi
 # supplementary POSIX ACLs from the DR copy; the base mode bits + ownership still
 # round-trip via --xattrs + -M--fake-super (the SynoCli build *does* have xattrs).
 # Stock DSM rsync has ACLs but is 3.1.2 -- too old to negotiate the protocol.
+# The "*@*:*:*~" exclude drops ansible backup files (backup: true writes
+# <file>.<pid>.<date>@<HH:MM:SS>~) from the DR copy: many render vaulted secrets,
+# so shipping every rotation's previous value offsite is a plaintext-credential
+# spill on a NAS we do not want to host secret history on. Paired with
+# --delete-excluded, this also purges already-shipped backups from bunk. The glob
+# keys on the literal @HH:MM:SS~ suffix so it matches ansible backups but not
+# editor ~ files.
 f_trace rsync \
   --archive \
   --hard-links \
@@ -93,6 +100,7 @@ f_trace rsync \
   --exclude /var/lib/containers \
   --exclude /home/ak/.local/share/containers \
   --exclude /var/crash \
+  --exclude "*@*:*:*~" \
   "${MOUNTPOINT%"/"}/.zfs/snapshot/$LAST_SNAPSHOT/" "ak@$OFFSITE_IP:$DESTPATH"
 
 # The destination is relative on purpose. bunk forces this key through rrsync
