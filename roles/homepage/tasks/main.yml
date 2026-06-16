@@ -93,6 +93,17 @@
   tags:
     - homepage
 
+- name: Pull homepage image
+  containers.podman.podman_image:
+    name: "{{ homepage_image }}"
+  register: homepage_image_pull
+  retries: 3
+  delay: 10
+  until: homepage_image_pull is not failed
+  become: true
+  tags:
+    - homepage
+
 # Homepage hot-reloads YAML config from the bind-mounted dir, so config-file
 # changes don't need a service restart — only the unit template itself does.
 - name: Enable homepage service

@@ -97,6 +97,17 @@
   tags:
     - mosquitto
 
+- name: Pull mosquitto image
+  containers.podman.podman_image:
+    name: "{{ mosquitto_image }}"
+  register: mosquitto_image_pull
+  retries: 3
+  delay: 10
+  until: mosquitto_image_pull is not failed
+  become: true
+  tags:
+    - mosquitto
+
 - name: Enable mosquitto service
   import_role:
     name: systemd_unit

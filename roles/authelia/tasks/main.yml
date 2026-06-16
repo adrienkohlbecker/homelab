@@ -130,6 +130,17 @@
   tags:
     - authelia
 
+- name: Pull authelia image
+  containers.podman.podman_image:
+    name: "{{ authelia_image }}"
+  register: authelia_image_pull
+  retries: 3
+  delay: 10
+  until: authelia_image_pull is not failed
+  become: true
+  tags:
+    - authelia
+
 # Restart triggers cover every config + secret rotation path. The
 # *_rotated flags come from podman_secret; the *_result.changed
 # comes from template / systemd_unit's install task.

@@ -127,6 +127,17 @@
   tags:
     - seerr
 
+- name: Pull seerr image
+  containers.podman.podman_image:
+    name: "{{ seerr_image }}"
+  register: seerr_image_pull
+  retries: 3
+  delay: 10
+  until: seerr_image_pull is not failed
+  become: true
+  tags:
+    - seerr
+
 - name: Enable seerr service
   import_role:
     name: systemd_unit

@@ -133,6 +133,17 @@
   tags:
     - plex
 
+- name: Pull plex image
+  containers.podman.podman_image:
+    name: "{{ plex_image }}"
+  register: plex_image_pull
+  retries: 3
+  delay: 10
+  until: plex_image_pull is not failed
+  become: true
+  tags:
+    - plex
+
 - name: Enable plex service
   import_role:
     name: systemd_unit

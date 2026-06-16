@@ -57,6 +57,17 @@
   tags:
     - kuma
 
+- name: Pull kuma image
+  containers.podman.podman_image:
+    name: "{{ kuma_image }}"
+  register: kuma_image_pull
+  retries: 3
+  delay: 10
+  until: kuma_image_pull is not failed
+  become: true
+  tags:
+    - kuma
+
 - name: Enable kuma service
   import_role:
     name: systemd_unit

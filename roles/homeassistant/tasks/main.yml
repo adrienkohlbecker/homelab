@@ -332,22 +332,27 @@
   tags:
     - homeassistant
 
+# Pull the image before the prestage below so its `podman create` finds it
+# already present rather than doing an unbounded implicit pull mid-task.
+- name: Pull homeassistant image
+  containers.podman.podman_image:
+    name: "{{ homeassistant_image }}"
+  register: homeassistant_image_pull
+  retries: 3
+  delay: 10
+  until: homeassistant_image_pull is not failed
+  become: true
+  tags:
+    - homeassistant
+
 # Pre-stage chown'd layers so the unit's `systemctl start` doesn't blow
 # through TimeoutSec=120 doing the per-file ID-mapped copy on first
 # extraction. The +0:N:1 uidmap-override pattern doesn't compose with
 # idmapped mounts, so podman falls back to a copy regardless of kernel
 # support; we just move the cost out of the deadline. The staging
 # container is removed; cached chown'd layers stay in storage and are
-# reused by the unit's later `podman run`. Image name is read back
-# from the just-installed unit so it stays in sync with the template.
-- name: Detect homeassistant unit image
-  when: not ansible_check_mode
-  extract_podman_image:
-    name: homeassistant
-  register: homeassistant_unit_image
-  become: true
-  tags:
-    - homeassistant
+# reused by the unit's later `podman run`. Both this prestage and the
+# unit template render from homeassistant_image, so they stay in sync.
 
 # Sentinel encodes (image-tag, uid, gid) so a bump in any of the three
 # invalidates the cache and re-runs the prestage. Lives under podman's
@@ -359,7 +364,7 @@
   set_fact:
     homeassistant_prestage_sentinel: >-
       /var/lib/containers/storage/.prestage_homeassistant_{{
-        (homeassistant_unit_image.images[0] ~ '|' ~ homeassistant_user.uid ~ '|' ~ homeassistant_user.group)
+        (homeassistant_image ~ '|' ~ homeassistant_user.uid ~ '|' ~ homeassistant_user.group)
         | hash('sha1')
       }}
   tags:
@@ -374,7 +379,7 @@
       --uidmap=+0:{{ homeassistant_user.uid }}:1 \
       --gidmap=0:0:65536 \
       --gidmap=+0:{{ homeassistant_user.group }}:1 \
-      {{ homeassistant_unit_image.images[0] | quote }} true
+      {{ homeassistant_image | quote }} true
     podman rm homeassistant-prestage
     touch {{ homeassistant_prestage_sentinel | quote }}
   args:

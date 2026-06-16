@@ -153,6 +153,17 @@
   tags:
     - tautulli
 
+- name: Pull tautulli image
+  containers.podman.podman_image:
+    name: "{{ tautulli_image }}"
+  register: tautulli_image_pull
+  retries: 3
+  delay: 10
+  until: tautulli_image_pull is not failed
+  become: true
+  tags:
+    - tautulli
+
 - name: Enable tautulli service
   import_role:
     name: systemd_unit

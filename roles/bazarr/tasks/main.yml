@@ -73,6 +73,17 @@
   tags:
     - bazarr
 
+- name: Pull bazarr image
+  containers.podman.podman_image:
+    name: "{{ bazarr_image }}"
+  register: bazarr_image_pull
+  retries: 3
+  delay: 10
+  until: bazarr_image_pull is not failed
+  become: true
+  tags:
+    - bazarr
+
 - name: Enable bazarr service
   import_role:
     name: systemd_unit

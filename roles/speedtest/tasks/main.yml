@@ -20,6 +20,17 @@
   tags:
     - speedtest
 
+- name: Pull speedtest image
+  containers.podman.podman_image:
+    name: "{{ speedtest_image }}"
+  register: speedtest_image_pull
+  retries: 3
+  delay: 10
+  until: speedtest_image_pull is not failed
+  become: true
+  tags:
+    - speedtest
+
 - name: Enable speedtest service
   import_role:
     name: systemd_unit

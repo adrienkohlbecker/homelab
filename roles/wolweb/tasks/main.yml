@@ -95,6 +95,17 @@
   tags:
     - wolweb
 
+- name: Pull wolweb image
+  containers.podman.podman_image:
+    name: "{{ wolweb_image }}"
+  register: wolweb_image_pull
+  retries: 3
+  delay: 10
+  until: wolweb_image_pull is not failed
+  become: true
+  tags:
+    - wolweb
+
 - name: Enable wolweb service
   import_role:
     name: systemd_unit

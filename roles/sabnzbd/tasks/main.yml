@@ -260,6 +260,17 @@
   tags:
     - sabnzbd
 
+- name: Pull sabnzbd image
+  containers.podman.podman_image:
+    name: "{{ sabnzbd_image }}"
+  register: sabnzbd_image_pull
+  retries: 3
+  delay: 10
+  until: sabnzbd_image_pull is not failed
+  become: true
+  tags:
+    - sabnzbd
+
 - name: Enable sabnzbd service
   import_role:
     name: systemd_unit

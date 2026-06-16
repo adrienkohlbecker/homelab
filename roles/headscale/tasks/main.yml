@@ -182,6 +182,17 @@
   tags:
     - headscale
 
+- name: Pull headscale image
+  containers.podman.podman_image:
+    name: "{{ headscale_image }}"
+  register: headscale_image_pull
+  retries: 3
+  delay: 10
+  until: headscale_image_pull is not failed
+  become: true
+  tags:
+    - headscale
+
 # reload: drives an ACL-only change through the unit's ExecReload (SIGHUP, no
 # restart) -- see the unit template. The systemd_unit helper starts-then-reloads,
 # so it reloads only when the unit was already active and skips the reload on a

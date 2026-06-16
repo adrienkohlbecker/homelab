@@ -126,6 +126,17 @@
   tags:
     - influxdb
 
+- name: Pull influxdb image
+  containers.podman.podman_image:
+    name: "{{ influxdb_image }}"
+  register: influxdb_image_pull
+  retries: 3
+  delay: 10
+  until: influxdb_image_pull is not failed
+  become: true
+  tags:
+    - influxdb
+
 - name: Enable influxdb service
   import_role:
     name: systemd_unit

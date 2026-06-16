@@ -163,6 +163,17 @@
   tags:
     - transmission
 
+- name: Pull transmission image
+  containers.podman.podman_image:
+    name: "{{ transmission_image }}"
+  register: transmission_image_pull
+  retries: 3
+  delay: 10
+  until: transmission_image_pull is not failed
+  become: true
+  tags:
+    - transmission
+
 - name: Enable transmission service
   import_role:
     name: systemd_unit

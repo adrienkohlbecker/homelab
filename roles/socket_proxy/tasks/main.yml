@@ -13,6 +13,17 @@
   tags:
     - socket_proxy
 
+- name: Pull socket_proxy image
+  containers.podman.podman_image:
+    name: "{{ socket_proxy_image }}"
+  register: socket_proxy_image_pull
+  retries: 3
+  delay: 10
+  until: socket_proxy_image_pull is not failed
+  become: true
+  tags:
+    - socket_proxy
+
 - name: Enable socket_proxy service
   import_role:
     name: systemd_unit

@@ -159,6 +159,17 @@
   tags:
     - adguard
 
+- name: Pull adguard image
+  containers.podman.podman_image:
+    name: "{{ adguard_image }}"
+  register: adguard_image_pull
+  retries: 3
+  delay: 10
+  until: adguard_image_pull is not failed
+  become: true
+  tags:
+    - adguard
+
 - name: Enable adguard service
   import_role:
     name: systemd_unit
