@@ -269,26 +269,65 @@
 # pattern could match unrelated services that happen to log a similar
 # line.
 #
-# speedtest container's apache HEAD / healthcheck (~3k/day on lab):
+# speedtest container's apache curl healthcheck (~5k/day on lab):
 # internal podman healthcheck hits `/` every 30s, apache logs the access
-# at stdout=PRIORITY=6.
+# at stdout=PRIORITY=6. The probe uses both HEAD (older) and GET (current).
 [FILTER]
     Name              grep
     Match             svc.*
     Logical_Op        and
     Exclude           SYSTEMD_UNIT ^speedtest\.service$
-    Exclude           MESSAGE "HEAD / HTTP/1\.1" 200 [0-9]+ "-" "curl/
+    Exclude           MESSAGE "(HEAD|GET) / HTTP/1\.1" 200 [0-9]+ "-" "curl/
 
-# profilarr task-system + git-status info chatter (~2k/day on lab): the
-# image has no log-level env, the lines fire every ~60s as the task
-# scheduler sweeps. The three patterns cover Repository Sync,
-# remote-status updates, and "0 incoming changes" no-op runs.
+# profilarr task-system + apscheduler chatter (~5k/day on lab): the image
+# has no log-level env, the lines fire every ~60s as the task scheduler
+# sweeps. Covers the git-status Repository Sync / remote-status / "0 incoming
+# changes" no-op runs, plus the apscheduler DEBUG poll ("Looking for jobs to
+# run", "Next wakeup is due") and its INFO job-run / task_system bookkeeping.
 [FILTER]
     Name              grep
     Match             svc.*
     Logical_Op        and
     Exclude           SYSTEMD_UNIT ^profilarr\.service$
-    Exclude           MESSAGE (Task Repository Sync \(ID: 1\) status changed to:|Updating remote status for branch:|Processing 0 incoming changes)
+    Exclude           MESSAGE (Task Repository Sync \(ID: 1\) status changed to:|Updating remote status for branch:|Processing 0 incoming changes|apscheduler\.scheduler - DEBUG - (Looking for jobs to run|Next wakeup is due)|apscheduler\.executors\.default - INFO - (Running job|Job )|task_system - INFO - (Starting task: Repository Sync|Task Repository Sync completed successfully))
+
+# netdata logs `Failed to prepare statement SQL_SELECT_HEALTH_LOG` on a tight
+# loop (~7k/day on lab) from an internal health-DB issue with no operator
+# action. journalctl -u netdata stays the source of truth.
+[FILTER]
+    Name              grep
+    Match             svc.*
+    Logical_Op        and
+    Exclude           SYSTEMD_UNIT ^netdata\.service$
+    Exclude           MESSAGE ^Failed to prepare statement SQL_SELECT_HEALTH_LOG
+
+# homepage_alerts.service is a ~24s timer; systemd emits Starting/Finished
+# plus the unit's own "Deactivated successfully" on every run (~5k each/day on
+# lab). The panel-generation success/failure is visible in the unit state and
+# the script's own output -- the lifecycle lines carry no signal. Matched on the
+# message text, not a SYSTEMD_UNIT gate: the Starting/Finished lines are logged
+# by pid1 (init.scope), not under the unit, so a unit gate would miss them.
+# This drops only the lifecycle chatter, NOT the script's own alarm_log fetch
+# errors (a real bug tracked separately).
+[FILTER]
+    Name              grep
+    Match             svc.*
+    Exclude           MESSAGE ^(Starting|Finished) Generate homepage alerts panel static files
+    Exclude           MESSAGE ^homepage_alerts\.service: Deactivated successfully
+
+# tailscaled retries disco pings to peers that have no current endpoint -- a
+# mobile peer (phone) that is offline -- logging `disco: failed to send ping
+# ... sendto: destination address required` plus `derp-N does not know about
+# peer ..., removing route` (~6k/day on lab while a phone is away). Normal,
+# recurring, unactionable churn; `tailscale status` is the source of truth for
+# peer reachability. The `netcheck: UDP is blocked` path diagnostic is left to
+# flow.
+[FILTER]
+    Name              grep
+    Match             svc.*
+    Logical_Op        and
+    Exclude           SYSTEMD_UNIT ^tailscaled\.service$
+    Exclude           MESSAGE (disco: failed to send ping .* sendto: destination address required|derp-[0-9]+ does not know about peer .* removing route)
 
 # homepage_alerts (roles/homepage/files/alerts_generate.py) polls
 # /api/v1/alarms?active + /api/v1/alarm_log every 30s on each host to
@@ -296,10 +335,17 @@
 # host with no diagnostic value (the response codes already show up
 # in netdata's own metrics). UA "homepage-alerts/1" pins the match to
 # our own caller.
+#
+# Home Assistant streams telemetry to InfluxDB via POST /api/v2/write
+# (~40k access-log lines/day on lab, the single largest access-log source).
+# Successful telemetry writes carry no operator signal; write failures surface
+# in HA and influxdb's own logs and in the nginx.error tail. Drop the write
+# POSTs regardless of status.
 [FILTER]
     Name              grep
     Match             nginx.access
     Exclude           log "homepage-alerts/1"
+    Exclude           log "POST /api/v2/write\?
 
 # Parse the nginx access line into structured HTTP fields (see
 # parsers_nginx.conf). Runs after the homepage-alerts drop so we never parse
