@@ -145,7 +145,7 @@
 
 # Seed the backup loader the refind fallback menuentry (VMLINUZ-BACKUP.EFI)
 # boots. Copy-if-absent (force: false) so a later primary update never clobbers
-# the last known-good backup; boot-success-gated promotion stays a SOMEDAY item.
+# the known-good backup.
 # No backup: true — /boot/efi is vfat; backup_local's chown fails on FAT.
 - name: Seed ZBM backup loader  # noqa: require-backup
   when:
