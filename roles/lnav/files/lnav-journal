@@ -162,22 +162,16 @@ until [[ -s "$tmpfile" ]] || ! kill -0 "$jctl_pid" 2>/dev/null || (( _wait >= 40
 	(( _wait++ )) || true
 done
 
+# No :filter-out args: noise filtering is owned by the Fluent Bit stage
+# (roles/fluentbit), which strips these patterns before they reach the
+# lnav.jsonl store the primary path reads. This journalctl-fallback path (-u
+# unit / -n line-count queries) reads the raw journal, so it intentionally
+# shows unfiltered lines -- acceptable since those are targeted queries where
+# the noise is in-scope, and journalctl on the host is the source of truth.
 set +e
 /usr/local/bin/lnav \
 	"${lnav_format_args[@]}" \
 	-c ':goto 100%' \
-	-c ':filter-out ^ansible-[A-Za-z0-9._]+ Invoked with' \
-	-c ':filter-out ^pam_unix\(cron:session\)' \
-	-c ':filter-out ^(podman0: port|veth[0-9]+( |@|: ))' \
-	-c ':filter-out ^Printing VRRP as json for process' \
-	-c ':filter-out ^IPv4: martian source 10\.123\.1\.224' \
-	-c ':filter-out ^ll header: 00000000:' \
-	-c ':filter-out name="/etc/gnutls/config"' \
-	-c ':filter-out Failed to get interface "(veth|podman)|Unknown index .* seen, reloading interface list' \
-	-c ':filter-out SYSTEMD_UNIT=speedtest\.service.*"HEAD / HTTP/1\.1" 200 [0-9]+ "-" "curl/' \
-	-c ':filter-out SYSTEMD_UNIT=profilarr\.service.*(Task Repository Sync \(ID: 1\) status changed to:|Updating remote status for branch:|Processing 0 incoming changes)' \
-	-c ':filter-out "homepage-alerts/1"' \
-	-c ':filter-out ^type=SERVICE_(START|STOP) msg=audit\([0-9.]+:[0-9]+\): .* unit=[a-f0-9]{64}' \
 	"${lnav_args[@]}" \
 	"$tmpfile"
 lnav_exit=$?
