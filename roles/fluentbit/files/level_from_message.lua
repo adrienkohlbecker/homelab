@@ -42,14 +42,20 @@ end
 -- requires a trailing colon so the English word "log" anywhere in a
 -- real error doesn't downgrade it, and LOG: ranks after info so a
 -- "LOG: ... error" record still classifies as error.
+-- The 3-letter tokens (inf/wrn/ftl/dbg/trc/pnc) are zerolog's abbreviated
+-- console levels, which Go services like headscale emit right after the
+-- timestamp ("2026-... WRN Listening without TLS ..."). ERR already matched
+-- via "err"; without their own tokens WRN/FTL/PNC would miss every rule and
+-- fall through to the info default. The [^%w] borders keep them from firing
+-- inside longer words -- "info"/"information" never trip the bare "inf".
 local LEVEL_RULES = {
-    { keywords = { "fatal", "panic", "emerg", "crit", "critical" }, text = "fatal" },
+    { keywords = { "fatal", "panic", "emerg", "crit", "critical", "ftl", "pnc" }, text = "fatal" },
     { keywords = { "err", "error" }, text = "error" },
-    { keywords = { "warn", "warning" }, text = "warn" },
-    { keywords = { "info", "notice" }, text = "info" },
+    { keywords = { "warn", "warning", "wrn" }, text = "warn" },
+    { keywords = { "info", "notice", "inf" }, text = "info" },
     { pattern = "[^%w]log:", text = "info" },
-    { keywords = { "debug" }, text = "debug" },
-    { keywords = { "trace" }, text = "trace" },
+    { keywords = { "debug", "dbg" }, text = "debug" },
+    { keywords = { "trace", "trc" }, text = "trace" },
 }
 
 local function match_rule(head, rule)
