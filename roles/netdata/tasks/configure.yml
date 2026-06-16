@@ -42,6 +42,27 @@
   tags:
     - netdata
 
+# The opt-out above (enabled = no) does NOT disconnect an already-claimed
+# agent: a host that still carries claim state in cloud.d/ reconnects ACLK to
+# Netdata Cloud on every start regardless of the flag. Cloud then polls it
+# remotely, and on 2.10.x that alert-transitions polling churns the metadata
+# sqlite under lock contention (bloated meta DB, stalled reload-health, restarts
+# that exceed the stop timeout). Remove any stale claim so the opt-out is real.
+# Idempotent: absent on a never-claimed host, so this only acts if a claim
+# reappears.
+- name: Unclaim from Netdata Cloud
+  file:
+    path: "/var/lib/netdata/cloud.d/{{ item }}"
+    state: absent
+  loop:
+    - claimed_id
+    - private.pem
+    - public.pem
+  register: netdata_cloud_unclaim
+  become: true
+  tags:
+    - netdata
+
 # Drop-in override that blocks `systemctl start/restart netdata` on the HTTP
 # API answering: netdata's Type=notify signals READY=1 before the listener is
 # fully accepting connections, so a bare restart returns "early" and a
@@ -213,6 +234,6 @@
     systemd_unit_args:
       src: netdata
       condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
-      restart: "{{ netdata_conf.changed or netdata_cloud_conf.changed or netdata_health_alarm_notify.changed or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed or netdata_godconf_copy.changed or (netdata_podman_socket_drop.changed | default(false)) }}"
+      restart: "{{ netdata_conf.changed or netdata_cloud_conf.changed or netdata_cloud_unclaim.changed or netdata_health_alarm_notify.changed or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed or netdata_godconf_copy.changed or (netdata_podman_socket_drop.changed | default(false)) }}"
   tags:
     - netdata
