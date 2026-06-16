@@ -16,10 +16,10 @@
 #                     daemons that pick up config via SIGHUP. Mutually
 #                     exclusive with restart in practice.
 #   throttle          default 0 (no limit); forwarded only to the restart
-#                     and reload tasks' `throttle:` -- the pre-pull and
-#                     reset-failed steps are deliberately not throttled, so
-#                     on an HA pair both nodes may pull/clear concurrently;
-#                     only the restart/reload state-change serializes. A
+#                     and reload tasks' `throttle:` -- the reset-failed
+#                     step is deliberately not throttled, so on an HA pair
+#                     both nodes may clear failed state concurrently; only
+#                     the restart/reload state-change serializes. A
 #                     multi-host HA service (adguard on the lab+pug pair) sets
 #                     throttle: 1 so the restart serializes across the batch
 #                     and one node keeps serving.
@@ -30,15 +30,9 @@
 #
 # `systemd_unit_args.user` (default 'root') selects scope: root acts on
 # the system manager; any other value drives the named user's user
-# manager (linger must already be enabled). For system-scope units the
-# pre-pull store is decided by the unit file's own `[Service] User=`
-# directive (which extract_podman_image returns): User=root (or unset)
-# pulls to root's /var/lib/containers/storage; any other value pulls to
-# that user's /var/lib/containers/rootless/<user>/ store — where the
-# unit's ExecStart will actually look at runtime. Without that branch,
-# a system-scope unit with a non-root User= would silently pre-pull
-# into root's store and then bust TimeoutStartSec on a cold rootless
-# pull inside systemctl start.
+# manager (linger must already be enabled). Image pulls are the caller
+# role's responsibility (an explicit containers.podman.podman_image task
+# before this `service` call), not this helper's.
 - name: service | Validate service args
   assert:
     quiet: true
@@ -54,12 +48,7 @@
 # Two set_fact tasks because ansible's templating engine resolves all
 # keys in a single set_fact concurrently — a key can't read a sibling
 # defined in the same task. Primitives (caller-var defaulting) first,
-# derived facts (scope, is_service) second.
-#
-# _is_service: only `.service` units carry ExecStart properties; the
-# extract_podman_image module silently returns [] for anything else
-# after blindly appending `.service` to the name. Bare names (no
-# extension) are treated as services by the role's convention.
+# derived facts (scope) second.
 - name: service | Resolve caller defaults for {{ systemd_unit_args.src }}
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
@@ -70,10 +59,9 @@
     _systemd_unit_name: >-
       {{ systemd_unit_args.dest | default(systemd_unit_args.src | regex_replace('\.j2$', '')) }}
 
-- name: service | Derive scope and unit type for {{ systemd_unit_args.src }}
+- name: service | Derive scope for {{ systemd_unit_args.src }}
   set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
-    _systemd_unit_is_service: "{{ _systemd_unit_name.endswith('.service') or '.' not in _systemd_unit_name }}"
 
 # Linger has to be on for user-scope lifecycle ops: without it the named
 # user's systemd manager isn't running between logins, so `systemctl
@@ -166,64 +154,6 @@
       Unmask with `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_name }}`
       before re-running, or --limit the play to skip this role.
 
-# The detect + pre-pull pair below only earns its cost when the unit is
-# actually about to (re)start: a cold start needs the image present before
-# `systemctl start`, and a caller-requested restart may swap to a new image
-# tag. When the unit is already active and no restart is asked, the running
-# container already has its image and the pull is wasted work -- without
-# the gate, the detect (a D-Bus ExecStart parse) + pull (a registry digest
-# check) run every converge for every service, ~15-25s across a full lab run. The
-# Enable result above carries the unit's pre-start ActiveState (the systemd
-# module returns the full `systemctl show` dict, same source the Start task
-# reads ConditionResult from), so the gate reuses it rather than spending an
-# extra task: ActiveState != 'active' (inactive, or a freshly-installed unit
-# whose status defaults below) or a caller-requested restart means "about to
-# start, so pull".
-#
-# Each .service file is the single source of truth for its podman image;
-# the extract_podman_image module asks systemd over D-Bus for the parsed
-# ExecStart* and pulls the image out of any `podman run` invocation. Pre-
-# pulling here moves a slow network fetch out of `systemctl start`'s
-# TimeoutStartSec window and into a normal ansible task with no fixed
-# deadline.
-- name: service | Detect podman images referenced by the unit
-  when:
-    - _systemd_unit_condition
-    - not ansible_check_mode
-    - _systemd_unit_scope == 'system'
-    - _systemd_unit_is_service
-    - (systemd_unit_args.restart | default(false)) or ((_systemd_unit_enable.status.ActiveState | default('inactive')) != 'active')
-  extract_podman_image:
-    name: "{{ _systemd_unit_name }}"
-  register: systemd_unit_podman_images
-  become: true
-
-# Pull into the right podman store. extract_podman_image returns the
-# unit's User=; treat "" and "root" as system-scope, anything else as
-# that user's rootless store. become_user: root is the default ansible
-# become target so the empty-string / "root" path matches the previous
-# behavior exactly. For a non-root User= the role still needs root to
-# `become` first (system-scope unit lives in /etc/systemd/system), then
-# drops into the user via become_user; the user's linger + podman.sock
-# are the caller's responsibility (see gitlab_runner main.yml for the
-# canonical setup).
-- name: service | Pre-pull podman images referenced by the unit
-  when:
-    - _systemd_unit_condition
-    - not ansible_check_mode
-    - _systemd_unit_scope == 'system'
-    - _systemd_unit_is_service
-    - (systemd_unit_args.restart | default(false)) or ((_systemd_unit_enable.status.ActiveState | default('inactive')) != 'active')
-  containers.podman.podman_image:
-    name: "{{ item }}"
-  loop: "{{ systemd_unit_podman_images.images | default([]) }}"
-  retries: 3
-  delay: 10
-  register: _systemd_unit_pull
-  until: _systemd_unit_pull is not failed
-  become: true
-  become_user: "{{ systemd_unit_podman_images.user if (systemd_unit_podman_images.user | default('')) not in ['', 'root'] else 'root' }}"
-
 # Clear any rate-limit / failed state before starting. A unit that has
 # crashed StartLimitBurst times within StartLimitInterval gets stuck
 # in "Start request repeated too quickly" -- ansible's systemd module
@@ -231,11 +161,15 @@
 # the underlying cause has been fixed. reset-failed is a no-op on
 # healthy units; failed_when=false tolerates the unit not existing
 # yet (e.g. a config-only run that touches an as-yet-uninstalled
-# unit). Same gate as the pre-pull above: a unit that's already active
-# isn't rate-limited and isn't about to be (re)started, so the
-# reset-failed is pure overhead -- skip it (68 services x a become
-# command every converge). ActiveState != 'active' (failed, inactive,
-# activating) or a requested restart means a start is imminent, so clear.
+# unit). Gated on imminent start: a unit that's already active isn't
+# rate-limited and isn't about to be (re)started, so the reset-failed
+# is pure overhead -- skip it (68 services x a become command every
+# converge). The Enable result above carries the unit's pre-start
+# ActiveState (the systemd module returns the full `systemctl show`
+# dict, same source the Start task reads ConditionResult from), so the
+# gate reuses it rather than spending an extra task. ActiveState !=
+# 'active' (failed, inactive, activating) or a requested restart means
+# a start is imminent, so clear.
 - name: service | Reset failed state to clear any rate-limit
   when:
     - _systemd_unit_condition

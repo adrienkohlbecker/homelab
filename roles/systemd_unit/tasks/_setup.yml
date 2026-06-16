@@ -1,4 +1,0 @@
-- name: _setup | Install podman (extract_podman_image parses `podman run --help`)
-  import_role:
-    name: podman
-    tasks_from: install
