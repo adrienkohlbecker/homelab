@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Claude Code PreToolUse hook: blocks `git push` on a `mise run lint` regression.
+# Agent PreToolUse hook: blocks `git push` on a `mise run lint` regression.
 #
 # The PostToolUse counterpart (lint_ansible_on_edit.sh) is non-blocking and runs
 # only the fast changed-ansible variant after each edit so the regression is
 # visible during the dev loop. This hook is the gate: by the time a push happens,
-# the full lint had better be clean. Exit 2 surfaces stderr to Claude and blocks
+# the full lint had better be clean. Exit 2 surfaces stderr to the agent and blocks
 # the tool execution.
 #
-# CLAUDE.md ("Build, Test, and Development Commands") says "Run full
+# AGENTS.md ("Build, Test, and Development Commands") says "Run full
 # `mise run lint` before pushing"; this hook makes that machine-enforced.
 set -euo pipefail
 
@@ -53,7 +53,7 @@ fi
 cd "$root" || exit 0
 
 # Full lint (not the changed-only inner-loop variant): the push gate is the last
-# checkpoint, and CLAUDE.md requires a clean full `mise run lint` before pushing
+# checkpoint, and AGENTS.md requires a clean full `mise run lint` before pushing
 # -- the changed variant skips tofu/shell/yaml and would pass a broken .tf.
 if out=$(mise run lint 2>&1); then
   exit 0

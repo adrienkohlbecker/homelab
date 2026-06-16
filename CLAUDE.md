@@ -51,7 +51,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 - `/triage <service>` — investigate a service end-to-end (resolve host(s), gather state, summarize).
 - `/new_podman_role` — scaffold a new podman service role per *Podman Service Conventions*.
 
-Skills and hook scripts are agent-neutral and live once under `.agents/` (`skills/`, `hooks/`). Codex discovers `.agents/skills/` natively; Claude Code reads it through the `.claude/skills` symlink. Hooks are wired per-agent — `.claude/settings.json` (via `$CLAUDE_PROJECT_DIR`) and `.codex/hooks.json` (via `git rev-parse --show-toplevel`; codex trust-hashes each entry, so re-trust with `/hooks` after editing). New skills go in `.agents/skills/<name>/SKILL.md` and reference `AGENTS.md` (a symlink to CLAUDE.md), not CLAUDE.md, so wording stays agent-neutral.
+Repo-local skills and hook scripts live once under `.agents/` (`skills/`, `hooks/`). Codex discovers `.agents/skills/` natively; Claude Code reads it through the `.claude/skills` symlink. Hooks are wired per-agent — `.claude/settings.json` (via `$CLAUDE_PROJECT_DIR`) and `.codex/hooks.json` (via `git rev-parse --show-toplevel`; codex trust-hashes each entry, so re-trust with `/hooks` after editing). Homelab-specific skills should reference `AGENTS.md` (a symlink to CLAUDE.md), not CLAUDE.md, so wording stays agent-neutral.
 
 ## Coding Style & Naming Conventions
 
@@ -59,9 +59,7 @@ Skills and hook scripts are agent-neutral and live once under `.agents/` (`skill
 
 **Never set `no_log: true`.** Applies run interactively on the operator's workstation, never captured to a file or CI log — hiding the diff only makes failures harder to debug.
 
-**Every bash script starts `set -euo pipefail`** — proper files *and* inline ansible `shell:` blocks (which must also declare `executable: /bin/bash`). Enforced by the custom **`shell-strict-mode`** rule ([lint/ansible_rules/shell_strict_mode.py](lint/ansible_rules/shell_strict_mode.py)); test scaffolding (`_verify*`/`_setup*`) exempt. Handle expected-failure commands with `|| true` and avoid `… | head` pipelines (SIGPIPE) — collapse into `awk`. **No apostrophes inside `shell:`/`command:` block scalars** — even in `#` comments within the block; ansible's pre-exec shlex pass treats `'` as an opening quote and fails task loading. YAML-level comments (outside the scalar) are fine.
-
-**Comments describe current state, not history.** No "this used to…", "was removed", "replaces the old…". That context belongs in the commit message. Explaining why the current code *deliberately* avoids an obvious alternative is fine.
+**Shell strict mode is enforced for Ansible shell blocks.** Inline ansible `shell:` blocks must start with `set -euo pipefail` and declare `executable: /bin/bash`. Enforced by the custom **`shell-strict-mode`** rule ([lint/ansible_rules/shell_strict_mode.py](lint/ansible_rules/shell_strict_mode.py)); test scaffolding (`_verify*`/`_setup*`) exempt. Handle expected-failure commands with `|| true` and avoid `… | head` pipelines (SIGPIPE) — collapse into `awk`. **No apostrophes inside `shell:`/`command:` block scalars** — even in `#` comments within the block; ansible's pre-exec shlex pass treats `'` as an opening quote and fails task loading. YAML-level comments (outside the scalar) are fine.
 
 ## Repo Conventions
 
@@ -210,7 +208,7 @@ GitLab CI ([.gitlab-ci.yml](.gitlab-ci.yml)) on the off-fox orchestrator, drivin
 
 Descriptive imperative subjects; prefix with role when it helps. Body: summary + motivation, max two paragraphs.
 
-**Always `git diff --staged` before `git commit`.** **Never stage a vault-rendering template hunk-by-hunk** — files with rendered secrets must be staged whole-file or not at all.
+Never stage a vault-rendering template hunk-by-hunk — files with rendered secrets must be staged whole-file or not at all.
 
 ## Security & Configuration Tips
 

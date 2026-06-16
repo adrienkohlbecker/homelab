@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Code WorktreeCreate hook: create the worktree under <repo>/.worktrees/
+# Agent WorktreeCreate hook: create the worktree under <repo>/.worktrees/
 # and populate it (notes/packer/artifacts symlinks etc. via mise-tasks/worktree/populate.sh).
 # The new worktree path is the hook's return value, so it is the ONLY thing on
 # stdout -- every diagnostic goes to stderr.
