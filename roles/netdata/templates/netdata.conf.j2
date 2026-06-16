@@ -18,6 +18,13 @@ bind to = 127.0.0.1
 # them through the proxy (the operator reads them on-host).
 allow management from = none
 allow netdata.conf from = none
+# The compiled default `allow connections from = localhost *` carries the
+# literal name `localhost`, so netdata reverse-DNS-validates every accepted
+# connection against it; 127.0.0.1 has no PTR, so it logs `LISTENER: Cannot
+# validate 'localhost' ...` on each scrape (~24k/day on lab). Drop the name
+# token -- `*` is safe because `bind to` above is loopback-only -- so no DNS
+# validation is attempted.
+allow connections from = *
 
 # v2 moved access logging out of [global] into [logs]; `[global] access log` is
 # silently ignored, re-enabling the file. Accesses are logged by nginx.
