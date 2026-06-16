@@ -91,6 +91,17 @@
   tags:
     - lidarr
 
+- name: Pull lidarr image
+  containers.podman.podman_image:
+    name: "{{ lidarr_image }}"
+  register: lidarr_image_pull
+  retries: 3
+  delay: 10
+  until: lidarr_image_pull is not failed
+  become: true
+  tags:
+    - lidarr
+
 - name: Enable lidarr service
   import_role:
     name: systemd_unit

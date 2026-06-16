@@ -98,6 +98,17 @@
   tags:
     - radarr
 
+- name: Pull radarr image
+  containers.podman.podman_image:
+    name: "{{ radarr_image }}"
+  register: radarr_image_pull
+  retries: 3
+  delay: 10
+  until: radarr_image_pull is not failed
+  become: true
+  tags:
+    - radarr
+
 - name: Enable radarr service
   import_role:
     name: systemd_unit

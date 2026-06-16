@@ -90,6 +90,17 @@
   tags:
     - sonarr
 
+- name: Pull sonarr image
+  containers.podman.podman_image:
+    name: "{{ sonarr_image }}"
+  register: sonarr_image_pull
+  retries: 3
+  delay: 10
+  until: sonarr_image_pull is not failed
+  become: true
+  tags:
+    - sonarr
+
 - name: Enable sonarr service
   import_role:
     name: systemd_unit

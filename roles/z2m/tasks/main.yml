@@ -130,6 +130,17 @@
   tags:
     - z2m
 
+- name: Pull z2m image
+  containers.podman.podman_image:
+    name: "{{ z2m_image }}"
+  register: z2m_image_pull
+  retries: 3
+  delay: 10
+  until: z2m_image_pull is not failed
+  become: true
+  tags:
+    - z2m
+
 # z2m_devices.changed only fires on the first converge (the seed copy is
 # force: false; z2m owns devices.yaml at runtime thereafter), so a later
 # operator edit to devices.yaml does NOT bounce the mesh -- runtime content

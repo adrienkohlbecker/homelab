@@ -47,6 +47,17 @@
   tags:
     - profilarr
 
+- name: Pull profilarr image
+  containers.podman.podman_image:
+    name: "{{ profilarr_image }}"
+  register: profilarr_image_pull
+  retries: 3
+  delay: 10
+  until: profilarr_image_pull is not failed
+  become: true
+  tags:
+    - profilarr
+
 - name: Enable profilarr service
   import_role:
     name: systemd_unit

@@ -319,6 +319,17 @@
   tags:
     - jellyfin
 
+- name: Pull jellyfin image
+  containers.podman.podman_image:
+    name: "{{ jellyfin_image }}"
+  register: jellyfin_image_pull
+  retries: 3
+  delay: 10
+  until: jellyfin_image_pull is not failed
+  become: true
+  tags:
+    - jellyfin
+
 - name: Enable jellyfin service
   import_role:
     name: systemd_unit
