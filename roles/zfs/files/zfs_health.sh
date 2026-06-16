@@ -4,6 +4,17 @@ source /usr/local/lib/functions.sh
 
 f_require_root
 
+# zpool status issues blocking I/O; on a SUSPENDED pool (too many devices lost,
+# all I/O wedged) it can hang indefinitely and stall the nightly timer. Bound
+# every call so a wedged pool surfaces as a counted failure plus email the same
+# night instead of a silent hang. 60s is far longer than a healthy status read
+# yet well inside the daily cadence. -k 10 escalates to SIGKILL 10s after the
+# SIGTERM if zpool ignores the term; a process stuck in uninterruptible I/O wait
+# can still outlast it, but the unit's systemd timeout remains the final backstop.
+zpool_status() {
+  timeout -k 10 60 zpool status "$@"
+}
+
 EMAIL_TO="root"
 EMAIL_SUBJECT_PREFIX="[$(hostname -s)] zfs health"
 
@@ -11,8 +22,11 @@ EMAIL_SUBJECT_PREFIX="[$(hostname -s)] zfs health"
 # zfs_scrub timer (monthly, second Sunday), not run here; this role also diverts
 # the distro's /etc/cron.d/zfsutils-linux aside so that timer is the sole
 # scheduler. This threshold is the watchdog -- it alarms if that monthly scrub
-# stops happening (40 days = one monthly cycle plus slack).
-SCRUB_EXPIRE=3456000
+# stops happening (40 days = one monthly cycle plus slack). Overridable via the
+# environment so the _verify harness can force the expiry branch
+# (SCRUB_EXPIRE=1) without faking a scrub date or waiting 40 days; prod always
+# takes the default.
+SCRUB_EXPIRE="${SCRUB_EXPIRE:-3456000}"
 
 # Pool capacity is alarmed by netdata's zfspool collector (per-pool
 # netdata_zfspool_thresholds with escalating warn/crit), not duplicated here.
@@ -23,7 +37,7 @@ SCRUB_EXPIRE=3456000
 TMP_OUTPUT=$(mktemp)
 trap 'rm -f "$TMP_OUTPUT"' EXIT
 
-zpool status | tee "$TMP_OUTPUT"
+zpool_status | tee "$TMP_OUTPUT" || echo >&2 "Warning: zpool status dump for the report did not complete"
 
 ZFS_VOLUMES=$(zpool list -H -o name)
 
@@ -34,8 +48,10 @@ ZFS_VOLUMES=$(zpool list -H -o name)
 # future fault string automatically and stops pool/dataset names that happen to
 # contain words like "cannot" or "fail" from false-positiving.
 echo "Checking pool health condition..."
-health_summary=$(zpool status -x)
-if [ "$health_summary" != "all pools are healthy" ]; then
+if ! health_summary=$(zpool_status -x); then
+  echo >&2 "ERROR :: zpool status -x did not complete (pool wedged or zpool error)"
+  ((f_failed += 1))
+elif [ "$health_summary" != "all pools are healthy" ]; then
   echo >&2 "ERROR :: zpool status -x reports a problem:"
   echo >&2 "$health_summary"
   ((f_failed += 1))
@@ -49,9 +65,14 @@ fi
 # do NOT pass `-e` (errored-vdevs-only): that flag is OpenZFS 2.3+, and on a 2.2
 # host `zpool status -e` aborts with "invalid option", which under pipefail
 # fails the pipe and silently kills the whole check. -p forces exact integers
-# (human-formatted 1.5K/2M would slip past the > 0 test).
+# (human-formatted 1.5K/2M would slip past the > 0 test). Capture into a var
+# first (rather than piping zpool straight into awk) so a timeout/zpool failure
+# is caught here instead of being masked by awk's own exit status under pipefail.
 echo "Checking drive errors..."
-if zpool status -p | awk '$3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $5 ~ /^[0-9]+$/ { if ($3 + $4 + $5 > 0) found = 1 } END { exit !found }'; then
+if ! drive_status=$(zpool_status -p); then
+  echo >&2 "ERROR :: zpool status -p did not complete (pool wedged or zpool error)"
+  ((f_failed += 1))
+elif echo "$drive_status" | awk '$3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $5 ~ /^[0-9]+$/ { if ($3 + $4 + $5 > 0) found = 1 } END { exit !found }'; then
   echo >&2 "ERROR :: Detected drive errors (READ/WRITE/CKSUM)"
   ((f_failed += 1))
 fi
@@ -64,7 +85,7 @@ for volume in $ZFS_VOLUMES; do
   # A suspended/UNAVAIL pool can make `zpool status` exit non-zero, which would
   # abort the whole run via the errexit inherited from functions.sh, silently
   # swallowing the alert exactly when a pool is broken. Count it and keep going.
-  vol_status=$(zpool status "$volume") || {
+  vol_status=$(zpool_status "$volume") || {
     echo >&2 "ERROR :: Cannot query status for $volume"
     ((f_failed += 1))
     continue
@@ -94,7 +115,7 @@ for volume in $ZFS_VOLUMES; do
     }
   fi
 
-  if [ $((CURRENT_DATE - SCRUB_DATE)) -ge $SCRUB_EXPIRE ]; then
+  if [ $((CURRENT_DATE - SCRUB_DATE)) -ge "$SCRUB_EXPIRE" ]; then
     echo >&2 "ERROR :: Scrub expired on $volume"
     ((f_failed += 1))
   fi
