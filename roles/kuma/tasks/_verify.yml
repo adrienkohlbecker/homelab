@@ -16,11 +16,21 @@
 # nginx auth-gate probe -- the UI subdomain is `auth: required`, so a
 # cookieless GET / has to land on Authelia's 302 redirect chain. Validates
 # both the auth_request wiring and the proxy_pass port.
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the kuma vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 kuma.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 - name: _verify | Kuma UI gate redirects unauthenticated to Authelia
   uri:
-    url: https://localhost/
-    headers:
-      Host: kuma.{{ inventory_hostname }}.{{ domain }}
+    url: https://kuma.{{ inventory_hostname }}.{{ domain }}/
     validate_certs: false
     follow_redirects: none
     status_code: 302
@@ -39,9 +49,7 @@
 # is still firing on this path.
 - name: _verify | /api/push/<token> bypasses the Authelia gate
   uri:
-    url: https://localhost/api/push/00000000
-    headers:
-      Host: kuma.{{ inventory_hostname }}.{{ domain }}
+    url: https://kuma.{{ inventory_hostname }}.{{ domain }}/api/push/00000000
     validate_certs: false
     follow_redirects: none
     status_code: [ 200, 404 ]

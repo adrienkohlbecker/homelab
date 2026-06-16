@@ -30,11 +30,21 @@
 # nginx vhost probe -- the control endpoint is public (auth: none), so a plain
 # GET /health through the TLS vhost must return 200. Validates the proxy_pass
 # port + TLS termination that the Tailscale clients depend on.
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the headscale vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 headscale.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 - name: _verify | Headscale /health is reachable through the nginx TLS vhost
   uri:
-    url: https://localhost/health
-    headers:
-      Host: headscale.{{ inventory_hostname }}.{{ domain }}
+    url: https://headscale.{{ inventory_hostname }}.{{ domain }}/health
     validate_certs: false
     status_code: 200
   become: true

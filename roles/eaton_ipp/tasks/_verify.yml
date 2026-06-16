@@ -29,13 +29,21 @@
       delay: 2
       until: _eaton_ipp_http_direct is succeeded
 
-    # Hit the nginx route via Host header so DNS isn't required.
+    # Map the vhost FQDN to loopback so SNI matches the served certificate.
+    # Probing https://localhost with a Host: header leaves SNI=localhost, which
+    # OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+    # (status -1); hitting the FQDN directly keeps SNI correct on every release.
+    - name: _verify | Map the ipp vhost FQDN to loopback for SNI-correct probing
+      lineinfile:
+        path: /etc/hosts
+        line: "127.0.0.1 ipp.{{ inventory_hostname }}.{{ domain }}"
+        state: present
+      become: true
+
     # Snakeoil certs in test → validate_certs: false.
     - name: _verify | IPP reachable through nginx subdomain
       uri:
-        url: https://localhost/
-        headers:
-          Host: "ipp.{{ inventory_hostname }}.{{ domain }}"
+        url: https://ipp.{{ inventory_hostname }}.{{ domain }}/
         validate_certs: false
         status_code: [ 200, 301, 302, 303, 401, 403 ]
       register: _eaton_ipp_http_nginx

@@ -3,11 +3,21 @@
 # parsing requests and the proxy is wired. Retries cover MINIO_VOLUMES init +
 # IAM sub-system load on cold start. ARQ / restic / terraform all reach MinIO
 # via this same SigV4-over-HTTPS path, so it doubles as the readiness gate.
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the minio-api vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 minio-api.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 - name: _verify | MinIO API answers through nginx
   uri:
-    url: https://localhost/minio/health/live
-    headers:
-      Host: minio-api.{{ inventory_hostname }}.{{ domain }}
+    url: https://minio-api.{{ inventory_hostname }}.{{ domain }}/minio/health/live
     validate_certs: false
     status_code: 200
   register: minio_verify_api
@@ -32,11 +42,21 @@
   become: true
 
 # nginx proxy chain for the console subdomain.
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the minio console vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 minio.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 - name: _verify | MinIO console reachable through nginx
   uri:
-    url: https://localhost/
-    headers:
-      Host: minio.{{ inventory_hostname }}.{{ domain }}
+    url: https://minio.{{ inventory_hostname }}.{{ domain }}/
     validate_certs: false
     status_code: 200
   become: true

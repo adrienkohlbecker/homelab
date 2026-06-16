@@ -44,11 +44,21 @@
 # Exercise the nginx-proxied path too. A regression in the nginx_site
 # wiring (typo'd subdomain, broken proxy_pass, CSP rewriting the
 # response away) would pass the loopback probe above silently.
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the homeassistant vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 homeassistant.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 - name: _verify | Homeassistant answers /manifest.json via nginx vhost
   uri:
-    url: https://localhost/manifest.json
-    headers:
-      Host: "homeassistant.{{ inventory_hostname }}.{{ domain }}"
+    url: https://homeassistant.{{ inventory_hostname }}.{{ domain }}/manifest.json
     validate_certs: false
     status_code: 200
   register: _homeassistant_http_nginx

@@ -14,17 +14,27 @@
     - authelia_verify_loopback.status == 200
   become: true
 
-# nginx Host-header probe — exercises the full reverse-proxy chain.
+# nginx reverse-proxy probe — exercises the full reverse-proxy chain.
 # The portal SPA index returns a generic html shell with no
 # Authelia-identifying text (the app boots client-side via React);
 # /api/health is a sibling endpoint on the same Authelia daemon that
 # returns identifiable JSON ({"status":"OK"}), so we probe it
 # through nginx to assert the full proxy chain works end-to-end.
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the authelia vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 auth.{{ authelia_cookie_domain }}"
+    state: present
+  become: true
+
 - name: _verify | Authelia /api/health reachable through nginx
   uri:
-    url: https://localhost/api/health
-    headers:
-      Host: "auth.{{ authelia_cookie_domain }}"
+    url: https://auth.{{ authelia_cookie_domain }}/api/health
     validate_certs: false
     return_content: true
   register: authelia_verify_portal
@@ -38,9 +48,7 @@
 # release that breaks the SPA root) fails loudly.
 - name: _verify | Authelia portal index returns the SPA shell
   uri:
-    url: https://localhost/
-    headers:
-      Host: "auth.{{ authelia_cookie_domain }}"
+    url: https://auth.{{ authelia_cookie_domain }}/
     validate_certs: false
   register: authelia_verify_portal_index
   failed_when: >-
@@ -58,9 +66,8 @@
 # subrequests) -- without them it returns 400 Bad Request.
 - name: _verify | Authelia auth-request endpoint returns 401 for unauthenticated callers
   uri:
-    url: https://localhost/api/authz/auth-request
+    url: https://auth.{{ authelia_cookie_domain }}/api/authz/auth-request
     headers:
-      Host: "auth.{{ authelia_cookie_domain }}"
       X-Original-Method: GET
       X-Original-URL: "https://homepage.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
@@ -75,9 +82,7 @@
 # fields in the discovery JSON.
 - name: _verify | Authelia OIDC discovery endpoint
   uri:
-    url: https://localhost/.well-known/openid-configuration
-    headers:
-      Host: "auth.{{ authelia_cookie_domain }}"
+    url: https://auth.{{ authelia_cookie_domain }}/.well-known/openid-configuration
     validate_certs: false
     return_content: true
   register: authelia_verify_oidc_discovery
@@ -91,9 +96,7 @@
 # private key is exposed for clients to verify id_token signatures.
 - name: _verify | Authelia JWKS endpoint serves the issuer public key
   uri:
-    url: https://localhost/jwks.json
-    headers:
-      Host: "auth.{{ authelia_cookie_domain }}"
+    url: https://auth.{{ authelia_cookie_domain }}/jwks.json
     validate_certs: false
     return_content: true
   register: authelia_verify_jwks

@@ -53,16 +53,26 @@
   become: true
 
 # End-to-end through the nginx vhost -- the production ingress every fleet
-# host's apt/docker/pypi pulls traverse. Host: + validate_certs=false hits
-# local nginx without DNS; a jinja typo in proxy_pass, a missing
+# host's apt/docker/pypi pulls traverse. The /etc/hosts mapping + validate_certs=false
+# hits local nginx without real DNS; a jinja typo in proxy_pass, a missing
 # proxy_set_header, or a dropped site would surface here.
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the nexus vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 nexus.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 - name: _verify | Nexus UI answers through the nginx site
   uri:
-    url: https://localhost/
+    url: https://nexus.{{ inventory_hostname }}.{{ domain }}/
     validate_certs: false
     follow_redirects: none
-    headers:
-      Host: "nexus.{{ inventory_hostname }}.{{ domain }}"
     status_code: [ 200, 302, 307 ]
     timeout: 5
   register: _nexus_nginx
@@ -114,13 +124,11 @@
 # through to `location /`, Nexus 404s it, and the header is absent.
 - name: _verify | Docker-mirror rewrite reaches the repo's registry-v2 base
   uri:
-    url: https://localhost/v2/repository/test_docker_mirror/
+    url: https://nexus.{{ inventory_hostname }}.{{ domain }}/v2/repository/test_docker_mirror/
     validate_certs: false
     url_username: admin
     url_password: "{{ _nexus_admin_password.content | b64decode }}"
     force_basic_auth: true
-    headers:
-      Host: "nexus.{{ inventory_hostname }}.{{ domain }}"
     status_code: [ 200, 401, 403 ]  # docker v2 auth challenge; a 404 would mean the rewrite is missing
     timeout: 5
   register: _nexus_docker_rewrite

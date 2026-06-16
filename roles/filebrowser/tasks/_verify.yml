@@ -7,11 +7,20 @@
       - { name: media, enabled: "{{ zfs_has_media_mount }}" }
       - { name: services, enabled: "{{ zfs_has_services_mount }}" }
 
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the filebrowser vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 filebrowser.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 - name: _verify | Filebrowser root autoindex serves
   uri:
-    url: https://localhost/
-    headers:
-      Host: filebrowser.{{ inventory_hostname }}.{{ domain }}
+    url: https://filebrowser.{{ inventory_hostname }}.{{ domain }}/
     validate_certs: false
     return_content: true
     status_code: 200
@@ -42,9 +51,7 @@
 
 - name: _verify | /.theme.css is reachable as text/css
   uri:
-    url: https://localhost/.theme.css
-    headers:
-      Host: filebrowser.{{ inventory_hostname }}.{{ domain }}
+    url: https://filebrowser.{{ inventory_hostname }}.{{ domain }}/.theme.css
     validate_certs: false
     status_code: 200
   register: _filebrowser_theme
@@ -53,9 +60,7 @@
 - name: _verify | Per-tree autoindex renders when enabled
   when: item.enabled
   uri:
-    url: https://localhost/{{ item.name }}/
-    headers:
-      Host: filebrowser.{{ inventory_hostname }}.{{ domain }}
+    url: https://filebrowser.{{ inventory_hostname }}.{{ domain }}/{{ item.name }}/
     validate_certs: false
     return_content: true
     status_code: 200

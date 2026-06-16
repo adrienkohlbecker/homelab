@@ -34,13 +34,23 @@
 # nginx's error_page 401 =302 redirect to the portal. This is the only
 # probe that fails if `auth: required` is dropped from nginx_site_args
 # (the loopback apikey probes stay green without it). Asserting the 302
-# returnUrl (rd=) echoes bazarr's own URL proves the Host header routed to
+# returnUrl (rd=) echoes bazarr's own URL proves the request routed to
 # bazarr's server_name (not the default vhost) and the request URI survived.
+#
+# Map the vhost FQDN to loopback so SNI matches the served certificate.
+# Probing https://localhost with a Host: header leaves SNI=localhost, which
+# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
+# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+- name: _verify | Map the bazarr vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 bazarr.{{ inventory_hostname }}.{{ domain }}"
+    state: present
+  become: true
+
 - name: _verify | Bazarr UI gate redirects unauthenticated requests to Authelia
   uri:
-    url: https://localhost/
-    headers:
-      Host: "bazarr.{{ inventory_hostname }}.{{ domain }}"
+    url: https://bazarr.{{ inventory_hostname }}.{{ domain }}/
     validate_certs: false
     follow_redirects: none
     status_code: 302
