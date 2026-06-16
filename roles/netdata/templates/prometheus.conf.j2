@@ -15,10 +15,12 @@ jobs:
     autodetection_retry: 60
 {% endif %}
 
-  # kuma runs only on lab (site.yml); try on every host and let
-  # autodetection_retry idle elsewhere. Listed in lab.yml's
-  # netdata_collectors so the presence alert doubles as a kuma liveness
-  # signal -- if kuma dies or /metrics breaks, the collector goes missing.
+{% if 'go.d:collector:prometheus:kuma' in (netdata_collectors | default([])) %}
+
+  # kuma runs only on lab (site.yml). Gated on its presence in this host's
+  # netdata_collectors -- the same source of truth that drives the presence
+  # alert -- so the scrape job exists exactly where the liveness signal does,
+  # instead of idling (and logging connection-refused every 60s) elsewhere.
   # No auth on /metrics once the role has seeded disableAuth (server/auth.js
   # apiAuth next()s the basic-auth gate when disableAuth is set); this is a
   # loopback scrape that bypasses the Authelia-fronted nginx vhost. The seed
@@ -27,21 +29,25 @@ jobs:
   - name: kuma
     url: http://127.0.0.1:{{ service_ports.kuma }}/metrics
     autodetection_retry: 60
+{% endif %}
+{% if 'go.d:collector:prometheus:headscale' in (netdata_collectors | default([])) %}
 
-  # headscale runs only on fox (site.yml); try on every host and let
-  # autodetection_retry idle elsewhere. Listed in fox.yml's netdata_collectors
-  # so the presence alert doubles as a headscale liveness signal -- if the
-  # control server dies or its metrics endpoint breaks, the collector goes
-  # missing. Loopback scrape of the unauthenticated metrics_listen_addr.
+  # headscale runs only on fox (site.yml). Gated on netdata_collectors
+  # membership so the scrape job lives only where headscale does; the presence
+  # alert doubles as a liveness signal -- if the control server or its metrics
+  # endpoint dies, the collector goes missing. Loopback scrape of the
+  # unauthenticated metrics_listen_addr.
   - name: headscale
     url: http://127.0.0.1:{{ service_ports.headscale_metrics }}/metrics
     autodetection_retry: 60
-{% if gitlab_runner_enabled | default(false) %}
+{% endif %}
+{% if 'go.d:collector:prometheus:gitlab_runner' in (netdata_collectors | default([])) %}
 
   # gitlab_runner runs on the host orchestrating the AWS test cells (fox).
   # Loopback scrape of the unauthenticated metrics listener (config.toml
-  # listen_address). Rendered only where the runner is enabled; list it in that
-  # host's netdata_collectors so the presence alert doubles as a liveness signal.
+  # listen_address). Gated on netdata_collectors membership rather than the
+  # prod-wide gitlab_runner_enabled flag (which would render this on every prod
+  # host); the presence alert doubles as a liveness signal where it runs.
   - name: gitlab_runner
     url: http://127.0.0.1:{{ service_ports.gitlab_runner }}/metrics
     autodetection_retry: 60
