@@ -159,6 +159,19 @@
     or 'auth.' not in (z2m_verify_gate.location | default(''))
     or ('rd=https://z2m.' ~ inventory_hostname ~ '.' ~ domain) not in (z2m_verify_gate.location | default(''))
 
+# The WindFront UI loads device images from zigbee2mqtt.io and device docs from
+# raw.githubusercontent.com; assert csp_additional widened img-src/connect-src
+# (emitted even on the 302 via add_header ... always) so a CSP regression here
+# surfaces instead of silently breaking those panels in the browser.
+- name: _verify | Z2M CSP allows zigbee2mqtt.io images and GitHub docs
+  vars:
+    z2m_csp: "{{ z2m_verify_gate.content_security_policy | default('') }}"
+  assert:
+    that:
+      - "'img-src https://www.zigbee2mqtt.io' in z2m_csp"
+      - "'connect-src https://raw.githubusercontent.com' in z2m_csp"
+    fail_msg: "z2m CSP header missing widened img-src/connect-src: {{ z2m_csp }}"
+
 # These two only run on a host with a real Zigbee coordinator: z2m serves the
 # frontend only after the serial adapter connects, so it can't reach `healthy`
 # under qemu. They stay gated and skip in CI; the config/unit/nginx/auth checks
