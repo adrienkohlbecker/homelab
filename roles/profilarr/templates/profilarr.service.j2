@@ -64,7 +64,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
     --stop-timeout 120 \
-    docker.io/santiagosayshey/profilarr:v1.1.3
+    {{ profilarr_image }}
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 

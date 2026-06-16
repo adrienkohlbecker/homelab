@@ -1,5 +1,0 @@
-# Tecnativa's docker-socket-proxy: a minimal HAProxy that filters the Docker
-# API by method/section. Pinned to a release tag; the image is multi-arch
-# (amd64 + arm64). Canonical upstream ref -- registries.conf rewrites it to
-# the Nexus mirror, so don't hard-code a mirror prefix here.
-socket_proxy_image: ghcr.io/tecnativa/docker-socket-proxy:v0.4.2

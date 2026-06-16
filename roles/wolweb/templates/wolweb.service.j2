@@ -65,7 +65,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
     --stop-timeout 120 \
-    ghcr.io/sameerdhoot/wolweb:alpine@sha256:4dacd33d9d1d747efa4018a7fcf07c62e3a4afd348c0ef45ca31fe4ecd51c36a
+    {{ wolweb_image }}
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 

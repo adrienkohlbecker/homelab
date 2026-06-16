@@ -44,7 +44,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
     --stop-timeout 10 \
-    ghcr.io/librespeed/speedtest:5.3.3
+    {{ speedtest_image }}
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 

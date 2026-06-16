@@ -1,7 +1,3 @@
-- name: _verify | Resolve the broker image for peer-container probes
-  set_fact:
-    mosquitto_image: docker.io/eclipse-mosquitto:2.0.21
-
 # Each consumer reaches the broker from its own container over the `mosquitto`
 # network, resolving `mosquitto.dns.podman` via aardvark-dns -- the path z2m and
 # home-assistant use. A throwaway peer container (not `podman exec` into the
