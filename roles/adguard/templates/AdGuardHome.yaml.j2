@@ -118,10 +118,14 @@ dns:
   dns64_prefixes: []
   serve_http3: false
 {#
-  Both DoH upstreams speak HTTP/3; QUIC's faster reconnects shave tail
-  latency after idle periods. Falls back to HTTP/2 if UDP/443 is blocked.
+  HTTP/3 upstreams are off: in practice QUIC 0-RTT resumption to the DoH
+  upstreams fails on this path (dnsproxy logs "Get_0rtt ... use of closed
+  network connection" / "H3_NO_ERROR" -- ~3/hour), so the promised
+  faster-reconnect benefit is the very thing that breaks and each failure
+  falls back to HTTP/2 anyway. Pinning HTTP/2 DoH removes the error churn for
+  no real latency cost.
 #}
-  use_http3_upstreams: true
+  use_http3_upstreams: false
   serve_plain_dns: true
   hostsfile_enabled: false
   pending_requests:
