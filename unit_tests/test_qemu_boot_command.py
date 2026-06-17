@@ -75,16 +75,10 @@ def test_default_x86_64_no_keep_no_direct_boot(
     # Serial console plumbed to stdio so kernel printk lands in the boot log.
     assert cmd[cmd.index("-serial") + 1] == "stdio"
 
-    # hostfwds use ports pre-picked in prepare() (self.ssh_port,
-    # self.wan_tcp_test_port, self.wan_udp_test_port). _setup() bypasses
-    # prepare(), so values here are the dataclass defaults (0 for all).
+    # _setup() bypasses prepare(), so only the always-present SSH hostfwd
+    # appears until prepare() populates the controller-side WAN forwards.
     netdev_idx = cmd.index("-netdev")
-    assert cmd[netdev_idx + 1] == (
-        f"user,id=user.0,"
-        f"hostfwd=tcp:{machine.SSH_HOST}:{m.ssh_port}-:22,"
-        f"hostfwd=tcp:{machine.SSH_HOST}:{m.wan_tcp_test_port}-:32400,"
-        f"hostfwd=udp:{machine.SSH_HOST}:{m.wan_udp_test_port}-:51820"
-    )
+    assert cmd[netdev_idx + 1] == (f"user,id=user.0," f"hostfwd=tcp:{machine.SSH_HOST}:{m.ssh_port}-:22")
 
 
 def test_default_aarch64_no_keep_no_direct_boot(
@@ -277,8 +271,10 @@ def test_passt_command_forwards_mirror_slirp_ports(
     m._net_backend = "passt"
     m._passt_socket = Path(m.workdir.name) / "passt.sock"
     m.ssh_port = 2222
-    m.wan_tcp_test_port = 3000
-    m.wan_udp_test_port = 4000
+    m.wan_forward_ports = {
+        "tcp": {"32400": 3000},
+        "udp": {"51820": 4000},
+    }
     cmd = m._passt_command()
 
     assert cmd[0] == "passt"
