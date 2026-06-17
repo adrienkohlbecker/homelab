@@ -157,8 +157,9 @@
   vars:
     nginx_site_args:
       subdomain: seerr
-      # No auth: -- seerr does its own Plex/Jellyfin SSO + local login, so an
-      # nginx forward-auth gate would double-prompt end users (mirrors jellyfin).
+      # No auth: -- seerr does its own Jellyfin SSO (local login disabled), so
+      # an nginx forward-auth gate would double-prompt end users (mirrors
+      # jellyfin). The *arr webhook ingress authenticates with the API key.
       proxy_pass: http://127.0.0.1:{{ service_ports.seerr }}/
       csp_default_src: plex.tv *.plex.tv
       csp_additional: img-src plex.tv *.plex.tv *.gravatar.com *.tmdb.org {{ nginx_csp_default }}; font-src plex.tv *.plex.tv fonts.gstatic.com {{ nginx_csp_default }}
