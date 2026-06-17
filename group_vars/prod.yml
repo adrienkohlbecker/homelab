@@ -168,12 +168,6 @@ minio_root_password: !vault |
           64373561613531626262646338353539343131653538316333623265396261623638
 
 influxdb_root_user: root
-# Authelia identity that nginx auto-maps to the InfluxDB root token
-# (via the upstream_authorization knob set in roles/influxdb/tasks/
-# main.yml). Decoupled from influxdb_root_user so the Authelia name
-# (`akohlbecker`, matching authelia_users on lab) and the InfluxDB-
-# side root name (`root`) can differ.
-influxdb_authelia_user: akohlbecker
 # PROD RENAME GOTCHA: the role's "Fail if root username rotated
 # post-bootstrap" gate trips when influxdb_root_user changes from
 # `ak` (its pre-rename value) to `root`. The follow-up message
@@ -186,24 +180,25 @@ influxdb_root_password: !vault |
           36333839383936343638336637376465323233343666313136303739313063633562393236636337
           3765343830623236640a613933313230333466653963343735333234393234663034656566373934
           39363766376365343362393563396239626464323533336530306539613061663261
-# All-access InfluxDB operator token (BARE, no `Token ` scheme). One secret,
-# three consumers: the in-container CLI default config
-# (/etc/influxdb2/influx-configs), the first-boot DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
-# seed, and the browser SSO Authorization injection (the influxdb role prepends
-# `Token ` and maps it to influxdb_authelia_user). Rotate via the InfluxDB UI or
-# `influx auth create --all-access`, then update here -- full steps in
-# roles/influxdb/tasks/main.yml.
+# InfluxDB operator token (BARE, no `Token ` scheme). Must be an OPERATOR token,
+# not all-access: bucket.yml's per-tenant `influx user/auth create` needs
+# write:users / write:orgs, which an all-access token lacks. One secret, two
+# consumers: the in-container CLI default config (/etc/influxdb2/influx-configs)
+# and the first-boot DOCKER_INFLUXDB_INIT_ADMIN_TOKEN seed. Rotate by minting a
+# fresh operator token offline (`influxd recovery auth create-operator` -- the UI
+# / `influx auth create` only make all-access tokens), then update here -- full
+# steps in roles/influxdb/tasks/main.yml.
 influxdb_root_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
-          61316165616363626562306137333735396634376266613262376531336363336536363335626662
-          6639346437666637363233636231646565356532303938330a643263303930333138303562333837
-          33313330363332383533636634633834393964656334323263313365376565363339303430623835
-          3137336339366137390a383136353035373837656661303531613935656631313361353961306166
-          36363863316539363339666333343662616137313164383138613264636338363332646439613233
-          33343061353333313661643963373937323030626336613939343062653861646236626434353863
-          62373432653333316138333431626532373662353138306538386239366436353034393263353133
-          66316333323635633466336533343865366239383132636461353938316131313839366463346635
-          3066
+          31653361326437663466323865353834626633333762303139326465633464643338653035306530
+          6537666131386339383962333663353139386233666535630a323830613831626563653234656466
+          39373163613965353866663333323632643738326431323335383632623232343561353835393331
+          3737656161393162330a363837613739636538343666303931313732393631623232336462383737
+          33383562306638393930636232333832393839343134333161316632333737643636383231373834
+          63613264323533303730646266343130613339633936303939623331383936613864336162353835
+          64376531613466666234343738663337643361383335613734373030343166663835393765316264
+          34323337376431633466643864346663363931336562386436623439333036623865336264656137
+          6637
 
 netdata_alerts_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
