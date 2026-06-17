@@ -42,9 +42,9 @@ LFS_START_SERVER = true
 LFS_JWT_SECRET = {{ gitea_lfs_jwt_secret }}
 # Disables external avatar/CDN fetches and the periodic update check.
 OFFLINE_MODE = true
-# DISABLE_REGISTRATION = true (below) means /explore is the only anon
-# landing page that ever shows public-repo lists; redirecting straight
-# to /user/login matches the closed-registration posture.
+# REQUIRE_SIGNIN_VIEW = true (below) gates every view behind a session, so
+# there is no anonymous landing page; this just points the pre-auth redirect
+# at /user/login to match the SSO-only, closed-registration posture.
 LANDING_PAGE = login
 # Router logs are debug-only signal; nginx access logs are upstream.
 DISABLE_ROUTER_LOG = true
@@ -62,14 +62,19 @@ USER = {{ gitea_smtp_user }}
 PASSWD = {{ gitea_smtp_password }}
 
 # Only deviations from upstream gitea defaults: closed registration
-# behind email-confirm + captcha, mail notifications on, time tracking
-# off. Every other [service] key is left at the gitea-shipped default.
+# behind email-confirm + captcha, require sign-in to view anything, mail
+# notifications on, time tracking off. Every other [service] key is left at
+# the gitea-shipped default.
 [service]
 REGISTER_EMAIL_CONFIRM = true
 ENABLE_NOTIFY_MAIL = true
 DISABLE_REGISTRATION = true
 ENABLE_CAPTCHA = true
 DEFAULT_ENABLE_TIMETRACKING = false
+# Require a session for every view -- no anonymous repo browsing, even of
+# the otherwise-public /explore listing. API requests with a token in the
+# Authorization header still authenticate normally.
+REQUIRE_SIGNIN_VIEW = true
 # Hide the local username/password web form -- login is SSO-only via the
 # Authelia OIDC button (admin rights flow through --admin-group=admins).
 # ENABLE_BASIC_AUTHENTICATION stays at its default (true) so git-over-HTTPS
