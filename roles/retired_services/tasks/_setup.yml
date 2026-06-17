@@ -222,6 +222,13 @@
     state: present
   become: true
 
+- name: _setup | Plant the retired mosquitto podman network
+  when: retired_services_setup_podman
+  containers.podman.podman_network:
+    name: mosquitto
+    state: present
+  become: true
+
 - name: _setup | Plant an nginx vhost for a retired service
   when: retired_services_setup_nginx
   import_role:

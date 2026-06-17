@@ -69,10 +69,10 @@ ExecStart=/usr/bin/podman run \
     --stop-timeout 120 \
     {{ homeassistant_image }}
 {# Pin HA's default route once the netns is up. Where netavark installs a #}
-{# default via BOTH the mosquitto bridge and the mac_iot macvlan at equal #}
-{# metric (an unpinned tie -- the shape lab is in), down-rank the macvlan #}
-{# one so off-IoT egress (home-VLAN media like the Marantz, WAN) takes the #}
-{# bridge's NAT path -- sourced as the host's mgmt IP, which sidesteps the #}
+{# default via podman bridge networks and the mac_iot macvlan at equal      #}
+{# metric (an unpinned tie -- the shape lab is in), down-rank the macvlan  #}
+{# one so off-IoT egress (home-VLAN media like the Marantz, WAN) takes a   #}
+{# bridge NAT path -- sourced as the host's mgmt IP, which sidesteps the   #}
 {# iot->* firewall rules. Where the macvlan is the *only* default (single- #}
 {# default hosts, e.g. the box test fixture) the script leaves it as-is so #}
 {# HA is never stranded; the mac_iot connected /24 route is untouched      #}

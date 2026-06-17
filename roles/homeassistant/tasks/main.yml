@@ -12,12 +12,13 @@
 # container slots, lower /29 = mac_iot iface + libvirt VMs); HA gets
 # whatever netavark allocates first.
 
-# Join the mosquitto-owned network so home-assistant can resolve `mosquitto`
-# via aardvark-dns. See mosquitto/tasks/main.yml for the rationale.
-- name: Create mosquitto podman network
+# Shared backend network for HA, mosquitto, z2m, and influxdb. Keeping HA's
+# backend dependencies in one aardvark-dns view avoids multi-network resolver
+# ordering: one network DNS server knows every backend name HA needs.
+- name: Create homeassistant podman network
   when: not ansible_check_mode
   containers.podman.podman_network:
-    name: mosquitto
+    name: homeassistant
     disable_dns: false
     state: present
   become: true
@@ -67,13 +68,13 @@
 
 # Restrict HA's zeroconf/mDNS announcements to the mac_iot adapter.
 # Without this, HA advertises *all* its adapters -- including the
-# internal mosquitto-bridge IP 10.89.0.29 -- to every adapter it can
-# reach. LAN clients pick up the bridge IP from mDNS, try to connect
-# to it from outside, and the packets land on lab's eth0 destined to
-# a podman-only IP, triggering kernel "martian source" logs (~120k/day
-# on lab). The ethN name baked into core.network.j2 is computed from
-# the homeassistant_networks list in vars/main.yml -- single source of
-# truth shared with the unit template's --network= ordering.
+# internal backend-bridge IP -- to every adapter it can reach. LAN clients
+# pick up the bridge IP from mDNS, try to connect to it from outside, and the
+# packets land on lab's eth0 destined to a podman-only IP, triggering kernel
+# "martian source" logs (~120k/day on lab). The ethN name baked into
+# core.network.j2 is computed from the homeassistant_networks list in
+# vars/main.yml -- single source of truth shared with the unit template's
+# --network= ordering.
 #
 # force: false so an operator's UI edit (Settings -> System -> Network)
 # stays authoritative. First apply lands our default; subsequent UI

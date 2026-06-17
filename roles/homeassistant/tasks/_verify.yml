@@ -110,6 +110,42 @@
   failed_when: _homeassistant_ha_egress.rc != 0 or 'dev ' not in _homeassistant_ha_egress.stdout
   become: true
 
+- name: _verify | Homeassistant reaches influxdb over the homeassistant podman network
+  command:
+    argv:
+      - podman
+      - exec
+      - homeassistant
+      - curl
+      - --head
+      - --location
+      - --fail
+      - --silent
+      - --show-error
+      - --connect-timeout
+      - "1"
+      - --max-time
+      - "5"
+      - -o
+      - /dev/null
+      - http://influxdb.dns.podman:8086/health
+  changed_when: false
+  become: true
+
+- name: _verify | Homeassistant reaches mosquitto over the homeassistant podman network
+  command:
+    argv:
+      - podman
+      - exec
+      - homeassistant
+      - python3
+      - -c
+      - >-
+        import socket;
+        socket.create_connection(("mosquitto.dns.podman", 1883), timeout=2).close()
+  changed_when: false
+  become: true
+
 # pin_default_route.sh's down-rank branch only fires when >1 default route
 # exists. The fragility it guards is that netavark gives one network's
 # default a low metric and the other's a high one, but which network lands
@@ -134,7 +170,7 @@
     {% raw %}
     pid="$(podman inspect -f "{{.State.Pid}}" homeassistant)"
     mac_gw="$(podman inspect homeassistant --format "{{.NetworkSettings.Networks.mac_iot.Gateway}}")"
-    br_gw="$(podman inspect homeassistant --format "{{.NetworkSettings.Networks.mosquitto.Gateway}}")"
+    br_gw="$(podman inspect homeassistant --format "{{.NetworkSettings.Networks.homeassistant.Gateway}}")"
     nsenter -t "$pid" -n ip route flush default
     nsenter -t "$pid" -n ip route add default via "$br_gw" metric 100
     nsenter -t "$pid" -n ip route add default via "$mac_gw" metric 50

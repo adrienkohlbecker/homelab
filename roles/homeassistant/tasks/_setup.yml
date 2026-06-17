@@ -63,7 +63,7 @@
 
 # Provision a real mosquitto broker so _verify exercises HA's MQTT
 # integration path end-to-end instead of joining a nameplate-only
-# `mosquitto` network that no broker is listening on. Test fixture
+# `homeassistant` network that no broker is listening on. Test fixture
 # `group_vars/test.yml` already defines `mosquitto_accounts`.
 - name: _setup | Install mosquitto
   import_role:

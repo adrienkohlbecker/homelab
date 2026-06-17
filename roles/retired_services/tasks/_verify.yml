@@ -109,6 +109,7 @@
       - "'redis_password' not in retired_services_podman_ls.results[0].stdout_lines"
       - "'openproject_secret_key' not in retired_services_podman_ls.results[0].stdout_lines"
       - "'redis' not in retired_services_podman_ls.results[1].stdout_lines"
+      - "'mosquitto' not in retired_services_podman_ls.results[1].stdout_lines"
     fail_msg: >-
       teardown left a podman secret/network behind.
       secrets={{ retired_services_podman_ls.results[0].stdout_lines }}
