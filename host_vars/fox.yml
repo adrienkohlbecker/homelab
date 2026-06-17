@@ -222,6 +222,13 @@ netdata_diskspace_blocklist: []
 subid_users:
   - gitlab_runner
 
+# The rpool/podman zvol here is pure CI scratch -- only container images and
+# the cells' ephemeral overlay layers. Every persistent service (headscale,
+# socket_proxy) keeps its state on /mnt/services bind-mounts, not the zvol, so
+# dropping fsync durability on it just trades a ~5s crash-loss window of
+# rebuildable layers for far less storage-layer CPU under a wide fan-out.
+podman_zvol_sync_disabled: true
+
 # Orchestration slots above the role default of 8. Each cell job is an
 # ansible/mitogen + aws-CLI loop driving a remote EC2 cell, measured at ~100 MB
 # avg / ~190 MB peak RSS on fox (3.7 GiB / 2 vCPU). 24 overcommitted the host

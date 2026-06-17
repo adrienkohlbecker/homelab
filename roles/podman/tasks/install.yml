@@ -432,12 +432,17 @@
   tags:
     - podman
 
-# In test envs the chown phase of `--uidmap=+0:N:1` image extraction
-# (e.g. homeassistant's 1.2 GB image) is bottlenecked on per-file
-# lchown -> ext4 journal -> zvol fsync. sync=disabled makes those
-# writes async; safe because qemu_test storage is wiped between runs.
-- name: install | (test) Disable sync on podman zvol for fast chown
-  when: zfs_root and qemu_test
+# Drop the per-file fsync that bottlenecks image extraction: the chown phase
+# of `--uidmap=+0:N:1` (e.g. homeassistant's 1.2 GB image) serializes on
+# lchown -> ext4 journal -> zvol fsync. sync=disabled makes those writes async
+# (ZFS still commits whole txgs atomically, so the pool stays consistent; only
+# the last ~5s of writes are at risk on a crash). Safe in two cases:
+#   - qemu_test: storage is wiped between runs.
+#   - hosts that opt in via podman_zvol_sync_disabled, where the zvol carries
+#     only reconstructible images + overlay layers (service state lives on
+#     /mnt/services bind-mounts) -- see defaults/main.yml.
+- name: install | Disable sync on podman zvol for fast chown
+  when: zfs_root and (qemu_test or podman_zvol_sync_disabled)
   zfs:
     name: rpool/podman
     state: present
