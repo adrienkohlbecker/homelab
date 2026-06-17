@@ -14,25 +14,6 @@
 # dump.rdb). Recovery rides the daily ZFS snapshots. The service system users
 # are deliberately LEFT in place (uid reuse risk outweighs the tidiness), as
 # with the vscode_ha tombstone in roles/homeassistant.
-#
-# In the base play this role runs after podman + nginx are installed, so those
-# tools are present on every real host. Probe for them anyway and gate the
-# podman/nginx removals on presence: a teardown should degrade to a no-op rather
-# than hard-fail when run somewhere they're absent (e.g. an isolated role test
-# on a bare fixture). apt/systemd/file removals need no such guard.
-- name: Probe for podman and nginx
-  stat:
-    path: "{{ item }}"
-  loop:
-    - /usr/bin/podman
-    - /usr/sbin/nginx
-  register: retired_services_tools
-  become: true
-
-- name: Resolve tool presence
-  set_fact:
-    retired_services_have_podman: "{{ retired_services_tools.results[0].stat.exists }}"
-    retired_services_have_nginx: "{{ retired_services_tools.results[1].stat.exists }}"
 
 # ---- openproject (was lab) ----
 - name: Retire openproject service
@@ -44,7 +25,6 @@
       dest: openproject.service
 
 - name: Retire openproject nginx site
-  when: retired_services_have_nginx
   import_role:
     name: nginx
     tasks_from: site
@@ -54,7 +34,6 @@
       state: absent
 
 - name: Remove openproject podman secrets
-  when: retired_services_have_podman
   containers.podman.podman_secret:
     name: "{{ item }}"
     state: absent
@@ -82,7 +61,6 @@
       dest: paperless.service
 
 - name: Retire paperless nginx site
-  when: retired_services_have_nginx
   import_role:
     name: nginx
     tasks_from: site
@@ -92,7 +70,6 @@
       state: absent
 
 - name: Remove paperless podman secrets
-  when: retired_services_have_podman
   containers.podman.podman_secret:
     name: "{{ item }}"
     state: absent
@@ -120,7 +97,6 @@
       dest: redis.service
 
 - name: Remove redis podman secret
-  when: retired_services_have_podman
   containers.podman.podman_secret:
     name: redis_password
     state: absent
@@ -129,7 +105,6 @@
 # Both redis (producer) and paperless (consumer) created this network; both
 # units are gone by now, so the bridge has no remaining references.
 - name: Remove redis podman network
-  when: retired_services_have_podman
   containers.podman.podman_network:
     name: redis
     state: absent
@@ -155,7 +130,6 @@
       dest: compta.service
 
 - name: Retire compta nginx site
-  when: retired_services_have_nginx
   import_role:
     name: nginx
     tasks_from: site
@@ -168,7 +142,6 @@
 # No unit/secret/dir -- just the nginx vhost plus the http-scope rate-limit
 # conf.d drop the role installed.
 - name: Retire csplogger nginx site
-  when: retired_services_have_nginx
   import_role:
     name: nginx
     tasks_from: site
@@ -178,7 +151,6 @@
       state: absent
 
 - name: Retire csplogger rate-limit conf.d drop
-  when: retired_services_have_nginx
   import_role:
     name: nginx
     tasks_from: conf_d
@@ -197,7 +169,6 @@
       dest: hyperdx.service
 
 - name: Retire hyperdx nginx site
-  when: retired_services_have_nginx
   import_role:
     name: nginx
     tasks_from: site
@@ -207,7 +178,6 @@
       state: absent
 
 - name: Retire hyperdx OTLP rate-limit conf.d drop
-  when: retired_services_have_nginx
   import_role:
     name: nginx
     tasks_from: conf_d
@@ -259,7 +229,6 @@
       dest: keepalived_exporter.service
 
 - name: Retire keepalived_exporter nginx site
-  when: retired_services_have_nginx
   import_role:
     name: nginx
     tasks_from: site
@@ -318,7 +287,6 @@
   become: true
 
 - name: Retire prometheus nginx site
-  when: retired_services_have_nginx
   import_role:
     name: nginx
     tasks_from: site
@@ -673,7 +641,6 @@
   become: true
 
 - name: Retire pihole nginx site
-  when: retired_services_have_nginx
   import_role:
     name: nginx
     tasks_from: site
@@ -683,7 +650,6 @@
       state: absent
 
 - name: Remove pihole podman secret
-  when: retired_services_have_podman
   containers.podman.podman_secret:
     name: pihole_password
     state: absent

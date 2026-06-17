@@ -29,18 +29,10 @@
   tags:
     - mutt
 
-- name: Detect nginx for webmail vhost teardown
-  stat:
-    path: /usr/sbin/nginx
-  register: _mutt_nginx
-  tags:
-    - mutt
-
 # state: absent tombstone — removes the roundcube vhost + its sites-enabled
 # symlink and reloads nginx. Gated on nginx being installed so it no-ops on a
 # host that never ran the webmail stack.
 - name: Remove the roundcube nginx vhost
-  when: _mutt_nginx.stat.exists
   import_role:
     name: nginx
     tasks_from: site
@@ -51,15 +43,7 @@
   tags:
     - mutt
 
-- name: Detect podman for webmail network teardown
-  stat:
-    path: /usr/bin/podman
-  register: _mutt_podman
-  tags:
-    - mutt
-
 - name: Remove the webmail podman network
-  when: _mutt_podman.stat.exists
   containers.podman.podman_network:
     name: webmail
     state: absent
