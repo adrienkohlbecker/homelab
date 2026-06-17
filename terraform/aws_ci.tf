@@ -256,12 +256,15 @@ resource "aws_default_route_table" "ci" {
 }
 
 # ─── Security group ──────────────────────────────────────────────────────────
-# Ingress only from the fleet's two operators: fox (the runner host converging
-# cells over SSH) and the home WAN (deliberate operator access for debugging,
-# not a separate emergency profile). Cells authenticate with the baked operator
-# key (aws_key_pair.ci_operator below); this group is the second boundary that
-# replaces qemu's loopback hostfwd. Besides SSH, the same two sources may reach
-# the firewall role's _verify WAN-probe targets from data/wan_probe_ports.yml —
+# Ingress only from the fleet's operators: fox (the runner manager), the
+# fleeting CI coordinator (the ephemeral host that actually converges cells over
+# SSH under scale-to-zero -- reaches cells from its reserved egress IP,
+# hcloud_primary_ip.ci_coordinator), and the home WAN (deliberate operator
+# access for debugging, not a separate emergency profile). Cells authenticate
+# with the baked operator key (aws_key_pair.ci_operator below); this group is
+# the second boundary that replaces qemu's loopback hostfwd. Besides SSH, the
+# same sources may reach the firewall role's _verify WAN-probe targets from
+# data/wan_probe_ports.yml —
 # on EC2 the controller probes the cell's public IP directly, real WAN ingress
 # standing in for qemu's loopback forwards (test/machine.py wan_probe_host).
 
@@ -297,6 +300,7 @@ resource "aws_security_group" "ci_cell" {
       protocol    = ingress.value.protocol
       cidr_blocks = [
         "${hcloud_primary_ip.fox.ip_address}/32",
+        "${hcloud_primary_ip.ci_coordinator.ip_address}/32",
         "${local.home_wan_ip}/32",
       ]
     }
