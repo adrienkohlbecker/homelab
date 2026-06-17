@@ -776,16 +776,19 @@ locals {
   }
 
   # Optional root-volume IOPS/throughput override per machine. Cells otherwise
-  # inherit the AMI snapshot's gp3 defaults (3000 IOPS / 125 MiB/s). box carries
-  # a maxed-out gp3 (16000 IOPS / 1000 MiB/s) to isolate whether the full-site
-  # converge (_site_test:box) is EBS-IOPS bound: the small-file initramfs/dpkg
-  # storm on a 4 GiB box re-reads the module tree cold once page cache is
-  # evicted, and the 3000-IOPS baseline is the suspected ceiling. Maxed so the
-  # volume is never the limiter -- if it helps, tune to a production value; if
-  # not, IO was not the bottleneck. m6a.large (8 GiB) was tested first and ruled
-  # RAM out (no win, slightly slower, worse spot). See notes/ci_aws_test_cells.md.
+  # inherit the AMI snapshot's gp3 defaults (3000 IOPS / 125 MiB/s). box and its
+  # pre-baked sibling box_deps carry a maxed-out gp3 (16000 IOPS / 1000 MiB/s) to
+  # isolate whether the full-site converge (_site_test:box) is EBS-IOPS bound:
+  # the small-file initramfs/dpkg storm on a 4 GiB box re-reads the module tree
+  # cold once page cache is evicted, and the 3000-IOPS baseline is the suspected
+  # ceiling. Maxed so the volume is never the limiter -- if it helps, tune to a
+  # production value; if not, IO was not the bottleneck. Both roots are 40 GiB
+  # (16000 IOPS is within gp3's 500:1 IOPS:GiB cap). m6a.large (8 GiB) was tested
+  # first and ruled RAM out (no win, slightly slower, worse spot).
+  # See notes/ci_aws_test_cells.md.
   ci_machine_root_volume = {
-    box = { iops = 16000, throughput = 1000 }
+    box      = { iops = 16000, throughput = 1000 }
+    box_deps = { iops = 16000, throughput = 1000 }
   }
 }
 
