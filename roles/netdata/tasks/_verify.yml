@@ -487,6 +487,23 @@
       netdata_poll_fetch did not return {alarms, transitions}:
       {{ _netdata_poll_bundle.stdout[:200] }}
 
+# The transition log is filtered server-side to active-alarm rows only (the
+# bandwidth optimisation): every returned transition must name a currently
+# active alarm. With no active alarms the list is empty -- a strong witness
+# that the filter ran rather than passing the full log through.
+- name: _verify | Returned transitions are filtered to active alarms only
+  vars:
+    _bundle: "{{ _netdata_poll_bundle.stdout | from_json }}"
+    _active_names: "{{ (_bundle.alarms.alarms | default({})).values() | map(attribute='name') | list }}"
+  assert:
+    that:
+      - _bundle.transitions.transitions | default([]) | rejectattr('alert', 'in', _active_names) | list | length == 0
+    fail_msg: >-
+      netdata_poll_fetch returned transition rows for inactive alarms
+      ({{ _bundle.transitions.transitions | default([]) | length }} rows,
+      active alarms: {{ _active_names }}); the server-side filter should keep
+      only active-alarm transitions.
+
 # Forced command must win over a client-supplied command: asking for `id`
 # still returns the bundle, never the shell output -- the key can't escape.
 - name: _verify | Client-supplied command is overridden by the forced command
