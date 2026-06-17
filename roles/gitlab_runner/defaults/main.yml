@@ -8,12 +8,19 @@
 # config.toml.j2 rather than surfaced here.
 gitlab_runner_enabled: false
 
-# Concurrent jobs this runner executes. Each is an orchestration loop (aws
-# CLI + ssh/ansible against a remote EC2 cell) inside a CI-image container,
-# so the bound is fox's memory for the idle containers -- the real test
-# capacity is the EC2 spot vCPU quota, governed separately
-# (notes/ci_aws_test_cells.md).
+# Global job ceiling across ALL [[runners]] blocks (process-wide). With the
+# coordinator runner enabled this is the fleet-wide umbrella, raised to cover
+# its per-runner limit; per-runner bounds live in `limit` (below + per block),
+# not here. The real test capacity is the EC2 spot vCPU quota, governed
+# separately (notes/ci_aws_test_cells.md).
 gitlab_runner_concurrent: 8
+
+# Per-runner `limit` on the Docker-on-podman runner: caps jobs run directly on
+# the host, independent of the global `concurrent`. 0 = no per-runner cap (the
+# runner is bounded only by `concurrent` -- the single-runner default). A host
+# also running the coordinator sets this to keep on-fox jobs bounded once
+# `concurrent` is raised for the coordinator fleet.
+gitlab_runner_docker_limit: 0
 
 # Memory ceiling on the rootless runner's user slice (user-<uid>.slice). The
 # Docker-executor job containers run under that slice via the rootless podman
@@ -30,3 +37,39 @@ gitlab_runner_concurrent: 8
 # See notes/ci_aws_test_cells.md "Fox host protection".
 gitlab_runner_memory_high: ""
 gitlab_runner_memory_max: ""
+
+# ── Coordinator runner (docker-autoscaler / fleeting) ────────────────────────
+# Second [[runners]] block: a docker-autoscaler executor that clones an
+# ephemeral Hetzner "coordinator" per pipeline via fleeting-plugin-hetzner,
+# runs the AWS-cell fan-out from there, and scales back to zero. Off by default;
+# a host enabling it sets the two required secrets (gitlab_runner_coordinator_token
+# + gitlab_runner_hcloud_token -- asserted in tasks/main.yml), then flips this
+# true. The Docker-on-podman runner above is independent and stays available for
+# small jobs that run on the host directly. See notes/ci_aws_test_cells.md.
+gitlab_runner_coordinator_enabled: false
+
+# Hetzner placement for the cloned coordinators. nbg1 is fox's own location, so
+# the private `hetzner` network (fox manages the coordinator over it) and the
+# 20 TB-traffic eu-central zone both line up.
+gitlab_runner_location: "nbg1"
+
+# Coordinator server type. CX53 (16 vCPU / 32 GiB / 320 GB NVMe) -- RAM is the
+# binding constraint at a 60-wide cell fan-out (cx43's 16 GiB peaked ~80%); CPU
+# and disk had ample headroom in the Phase 1b/1c benchmarks. See
+# notes/ci_aws_test_cells.md.
+gitlab_runner_server_type: "cx53"
+
+# Label selector the converge resolves to the newest available coordinator
+# snapshot id via the hcloud API (docker-autoscaler's image must be a numeric
+# snapshot id -- snapshots have no name for GetForArchitecture to match). Bumped
+# automatically on every `mise run packer:hetzner-coordinator` rebake, no
+# host_vars edit. See tasks/main.yml "Resolve the newest coordinator snapshot".
+gitlab_runner_image_selector: "role=ci-coordinator"
+
+# One coordinator runs a whole pipeline's cell matrix: capacity_per_instance
+# matches the AWS 60-spot-instances/region quota (the real fan-out ceiling), and
+# max_instances 1 keeps a single coordinator per manager. idle_count 0 +
+# idle_time park it at zero between pipelines with a short warm window.
+gitlab_runner_capacity_per_instance: 60
+gitlab_runner_max_instances: 1
+gitlab_runner_idle_time: "15m"
