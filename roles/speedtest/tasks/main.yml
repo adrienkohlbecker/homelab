@@ -31,6 +31,17 @@
   tags:
     - speedtest
 
+- name: Create speedtest podman network
+  when: not ansible_check_mode
+  containers.podman.podman_network:
+    name: speedtest
+    disable_dns: false
+    state: present
+  register: speedtest_network
+  become: true
+  tags:
+    - speedtest
+
 - name: Enable speedtest service
   import_role:
     name: systemd_unit
@@ -39,7 +50,7 @@
     systemd_unit_args:
       src: speedtest
       condition: "{{ not (ansible_check_mode and (speedtest_user.changed or speedtest_service_result.changed)) }}"
-      restart: "{{ speedtest_service_result.changed }}"
+      restart: "{{ speedtest_service_result.changed or speedtest_network.changed }}"
   tags:
     - speedtest
 

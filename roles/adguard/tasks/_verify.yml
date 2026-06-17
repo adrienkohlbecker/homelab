@@ -31,7 +31,7 @@
   become: true
 
 - name: _verify | Split-horizon override resolves
-  command: /usr/bin/podman exec adguard getent hosts box.{{ domain }}
+  command: /usr/bin/podman exec adguard nslookup box.{{ domain }} 127.0.0.1
   register: adguard_verify_splithorizon
   changed_when: false
   failed_when: external_ips.box not in adguard_verify_splithorizon.stdout

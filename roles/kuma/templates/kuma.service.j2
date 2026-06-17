@@ -43,6 +43,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name kuma \
+    --network kuma \
     --user {{ kuma_user.uid }}:{{ kuma_user.group }} \
     {# No --entrypoint override: the v2 release image runs
        `dumb-init -- node server/server.js` natively, with no chown-doing

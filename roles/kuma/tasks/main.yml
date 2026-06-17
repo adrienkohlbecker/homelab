@@ -46,6 +46,17 @@
   tags:
     - kuma
 
+- name: Create kuma podman network
+  when: not ansible_check_mode
+  containers.podman.podman_network:
+    name: kuma
+    disable_dns: false
+    state: present
+  register: kuma_network
+  become: true
+  tags:
+    - kuma
+
 - name: Install kuma service
   import_role:
     name: systemd_unit
@@ -76,7 +87,7 @@
     systemd_unit_args:
       src: kuma
       condition: "{{ not (ansible_check_mode and (kuma_service_result.changed or kuma_user.changed)) }}"
-      restart: "{{ kuma_service_result.changed }}"
+      restart: "{{ kuma_service_result.changed or kuma_network.changed }}"
   tags:
     - kuma
 

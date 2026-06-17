@@ -44,6 +44,7 @@ ExecStart=/usr/bin/podman run \
     --name socket_proxy \
     --init \
     --security-opt=no-new-privileges \
+    --network socket_proxy \
     --log-driver journald \
     --log-opt tag="socket_proxy" \
     --volume /run/podman/podman.sock:/var/run/docker.sock:ro \
