@@ -16,6 +16,15 @@ locals {
   # re-registered username could recreate the project and mint valid tokens.
   ci_gitlab_project = "akohlbecker/homelab"
   ci_account_id     = data.aws_caller_identity.current.account_id
+  wan_probe_ports   = yamldecode(file("${path.module}/../data/wan_probe_ports.yml"))
+  ci_cell_wan_probe_rules = flatten([
+    for protocol, ports in local.wan_probe_ports : [
+      for port in ports : {
+        protocol = protocol
+        port     = port
+      }
+    ]
+  ])
 }
 
 data "aws_caller_identity" "current" {}
@@ -92,9 +101,9 @@ resource "aws_default_route_table" "ci" {
 # not a separate emergency profile). Cells authenticate with the baked operator
 # key (aws_key_pair.ci_operator below); this group is the second boundary that
 # replaces qemu's loopback hostfwd. Besides SSH, the same two sources may reach
-# the firewall role's two _verify WAN-probe targets — on EC2 the controller
-# probes the cell's public IP directly, real WAN ingress standing in for
-# qemu's slirp hostfwd pair (test/machine.py wan_probe_host).
+# the firewall role's _verify WAN-probe targets from data/wan_probe_ports.yml —
+# on EC2 the controller probes the cell's public IP directly, real WAN ingress
+# standing in for qemu's loopback forwards (test/machine.py wan_probe_host).
 
 resource "aws_security_group" "ci_cell" {
   name = "homelab-ci-cell"
@@ -115,26 +124,22 @@ resource "aws_security_group" "ci_cell" {
     ]
   }
 
-  ingress {
-    description = "firewall _verify WAN probe: DNAT publish target"
-    from_port   = 32400
-    to_port     = 32400
-    protocol    = "tcp"
-    cidr_blocks = [
-      "${hcloud_primary_ip.fox.ip_address}/32",
-      "${local.home_wan_ip}/32",
-    ]
-  }
+  dynamic "ingress" {
+    for_each = {
+      for rule in local.ci_cell_wan_probe_rules :
+      "${rule.protocol}-${rule.port}" => rule
+    }
 
-  ingress {
-    description = "firewall _verify WAN probe: wireguard accept rule"
-    from_port   = 51820
-    to_port     = 51820
-    protocol    = "udp"
-    cidr_blocks = [
-      "${hcloud_primary_ip.fox.ip_address}/32",
-      "${local.home_wan_ip}/32",
-    ]
+    content {
+      description = "firewall _verify WAN probe ${ingress.value.protocol}/${ingress.value.port}"
+      from_port   = ingress.value.port
+      to_port     = ingress.value.port
+      protocol    = ingress.value.protocol
+      cidr_blocks = [
+        "${hcloud_primary_ip.fox.ip_address}/32",
+        "${local.home_wan_ip}/32",
+      ]
+    }
   }
 
   egress {

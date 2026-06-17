@@ -55,16 +55,24 @@ SSH_KEY = "packer/vagrant.key"
 # ssh_host per instance (e.g. an EC2 public IP) and never touch this.
 SSH_HOST = "127.0.0.1"
 
-# Controller-side WAN forwards exposed by qemu-backed tests. Keys are protocol
-# names accepted by qemu/passt; values are guest ports. EC2 cells keep a smaller
-# map below because their public reachability is constrained by AWS security
-# groups rather than per-run loopback forwards.
-DEFAULT_WAN_FORWARDS: dict[str, tuple[int, ...]] = {
-    "tcp": (32400, 51413),
-    "udp": (51820, 51413, 5353, 41641, 41642),
-}
-
 TOPOLOGY_PATH = Path(__file__).parent.parent / "data" / "network_topology.yml"
+WAN_PROBE_PORTS_PATH = Path(__file__).parent.parent / "data" / "wan_probe_ports.yml"
+
+
+def _load_wan_probe_ports() -> dict[str, tuple[int, ...]]:
+    """Load the shared controller-side WAN probe surface.
+
+    QEMU maps these guest ports to random localhost ports. AWS exposes the
+    same guest ports directly via terraform/aws_ci.tf security-group rules.
+    """
+    data = yaml.safe_load(WAN_PROBE_PORTS_PATH.read_text()) or {}
+    return {
+        proto: tuple(int(port) for port in data.get(proto, ()))
+        for proto in ("tcp", "udp")
+    }
+
+
+DEFAULT_WAN_FORWARDS = _load_wan_probe_ports()
 
 # Absolute path to the repo's ansible.cfg. Pinned via ANSIBLE_CONFIG (see
 # ansible_env) so it loads even when ansible would otherwise skip auto-discovery
@@ -2221,14 +2229,14 @@ class Ec2Machine(Machine):
         if not ip:
             raise RuntimeError(f"Instance {self.instance_id} has no public IP")
         self.ssh_host = ip
-        # WAN probe endpoint: the public IP with the real port numbers —
-        # the security group allows 32400/tcp + 51820/udp from fox and the
-        # home WAN, so the controller-side probes ingress on the cell's
-        # WAN iface exactly like real Internet traffic.
+        # WAN probe endpoint: the public IP with the real port numbers.
+        # terraform/aws_ci.tf exposes the shared data/wan_probe_ports.yml
+        # surface from fox and home WAN, so controller-side probes ingress
+        # on the cell's WAN iface exactly like real Internet traffic.
         self.wan_probe_host = ip
         self.wan_forward_ports = {
-            "tcp": {"32400": 32400},
-            "udp": {"51820": 51820},
+            proto: {str(port): port for port in ports}
+            for proto, ports in DEFAULT_WAN_FORWARDS.items()
         }
 
     async def _find_ssh_port(self) -> None:

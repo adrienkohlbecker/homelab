@@ -1,0 +1,12 @@
+# Controller-side WAN probe surface for functional firewall tests.
+# QEMU maps these guest ports to random localhost ports; AWS exposes the
+# same guest ports directly through the CI cell security group.
+tcp:
+  - 32400 # Plex-style published container DNAT target
+  - 51413 # Transmission peer port
+udp:
+  - 51820 # WireGuard
+  - 51413 # Transmission peer port
+  - 5353  # mDNS negative WAN-source probe
+  - 41641 # Tailscale direct underlay, lab
+  - 41642 # Tailscale direct underlay, pug

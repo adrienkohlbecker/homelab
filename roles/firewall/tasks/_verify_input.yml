@@ -81,8 +81,8 @@
   changed_when: false
   become: true
 
-# Transmission BT peer port is WAN-only (iif=$WAN_IFACE). Qemu cells get
-# controller-side forwards for both protocols so we can prove WAN ingress;
+# Transmission BT peer port is WAN-only (iif=$WAN_IFACE). Harness backends
+# that expose controller-side forwards for both protocols prove WAN ingress;
 # the wg0 probes below still catch regressions that drop the iif scope and
 # expose 51413 to tunnel peers.
 - name: _verify_input | INPUT allow — transmission (51413/tcp) reachable on WAN iface from controller  # noqa: command-instead-of-module
@@ -93,14 +93,12 @@
   register: _firewall_input_transmission_wan
   changed_when: false
   failed_when: _firewall_input_transmission_wan.rc != 0 or 'firewall-verify-ok' not in _firewall_input_transmission_wan.stdout
-  when: test_backend == 'qemu'
 
 - name: _verify_input | INPUT allow — transmission (51413/udp) reaches WAN iface from controller  # noqa: risky-shell-pipe
   delegate_to: localhost
   shell: echo . | nc -u -w 1 {{ wan_probe_host }} {{ wan_forward_ports.udp[(service_ports.transmission_bt | string)] }} >/dev/null 2>&1 || true
   args: { executable: /bin/bash }
   changed_when: false
-  when: test_backend == 'qemu'
 
 - name: _verify_input | INPUT — transmission (51413/tcp) rejected on wg0 ingress (iif scope)
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:51413/
@@ -120,20 +118,17 @@
   args: { executable: /bin/bash }
   changed_when: false
   when:
-    - test_backend == 'qemu'
     - tailscale_wan_direct | default(false)
 
-# mDNS requires iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously. Qemu's
-# WAN forward reaches the WAN iface, but the forwarded source is not a
-# HOME_LAN address from nft's perspective, so this is a WAN-source
-# negative. wg0 probes below cover each half of the scope failing from
-# synthetic in-VM sources.
+# mDNS requires iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously. The WAN
+# forward reaches the WAN iface, but the forwarded source is not a HOME_LAN
+# address from nft's perspective, so this is a WAN-source negative. wg0 probes
+# below cover each half of the scope failing from synthetic in-VM sources.
 - name: _verify_input | INPUT — mDNS (5353/udp) rejected from non-home WAN source  # noqa: risky-shell-pipe
   delegate_to: localhost
   shell: echo . | nc -u -w 1 {{ wan_probe_host }} {{ wan_forward_ports.udp['5353'] }} >/dev/null 2>&1 || true
   args: { executable: /bin/bash }
   changed_when: false
-  when: test_backend == 'qemu'
 
 # --- probe_wg group (wireguard-source positives) ---------------------
 # Admin services (mosh/samba/nut) use the concatenated set
