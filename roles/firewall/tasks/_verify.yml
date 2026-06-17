@@ -27,9 +27,11 @@
 #
 #   192.0.2.2                          non-scope source (primary)
 #   site_subnets.home  + .250 offset   physical home LAN source
+#   site_subnets.home  + .249 offset   mac_mgmt LAN source
 #   wireguard_subnet   + .250 offset   wireguard client source
 #   podman_default_network + .250      container source (DNS rule probes)
 #   podman_bridge_pool     + .250      non-default-bridge container source
+#   100.64.99.2                       tailscale0 source (synthetic tailnet)
 #
 # *The veth is named wg0 deliberately so traffic from extns enters
 # the root netns's INPUT/FORWARD chains as if it arrived on the real
@@ -37,9 +39,12 @@
 - name: _verify | Derive probe source IPs from subnet vars
   set_fact:
     _firewall_probe_home: "{{ site_subnets.home | ansible.utils.ipmath(250) }}"
+    _firewall_probe_home_mac: "{{ site_subnets.home | ansible.utils.ipmath(249) }}"
+    _firewall_probe_home_mac_host: "{{ site_subnets.home | ansible.utils.ipmath(1) }}"
     _firewall_probe_wg: "{{ wireguard_subnet | ansible.utils.ipmath(250) }}"
     _firewall_probe_podman: "{{ podman_default_network | ansible.utils.ipmath(250) }}"
     _firewall_probe_podman_pool: "{{ podman_bridge_pool | ansible.utils.ipmath(250) }}"
+    _firewall_probe_tailscale: 100.64.99.2
     # Non-scope source: in-subnet on the netns veth (192.0.2.0/24, see
     # the topology header above) but outside any allowlisted saddr —
     # used by the OOS negative probes (samba, nut, mosh).

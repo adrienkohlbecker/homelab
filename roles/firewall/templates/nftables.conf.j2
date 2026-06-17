@@ -60,9 +60,13 @@ table inet homelab {
     counter forward_podman_isolation {}
     counter forward_nonsyn {}
     counter forward_catchall {}
-    counter input_unscoped_tcp {}
-    counter input_admin_tcp {}
-    counter input_transmission {}
+    counter input_ssh {}
+    counter input_http {}
+    counter input_https {}
+    counter input_admin_samba {}
+    counter input_admin_nut {}
+    counter input_transmission_tcp {}
+    counter input_transmission_udp {}
     counter input_nut_podman {}
     counter input_loopback {}
     counter input_icmp_accept {}
@@ -228,7 +232,8 @@ table inet homelab {
         # both protocols. Without these rules, peers can find us via
         # tracker announces but can't actually connect — visible as
         # external SRC=… DPT=51413 drops in INPUT.
-        iifname $WAN_IFACE meta l4proto { tcp, udp } th dport {{ service_ports.transmission_bt }} counter name "input_transmission" accept comment "transmission BT peers (WAN ingress)"
+        iifname $WAN_IFACE tcp dport {{ service_ports.transmission_bt }} counter name "input_transmission_tcp" accept comment "transmission BT peers (WAN TCP ingress)"
+        iifname $WAN_IFACE udp dport {{ service_ports.transmission_bt }} counter name "input_transmission_udp" accept comment "transmission BT peers (WAN UDP ingress)"
 {% if tailscale_wan_direct | default(false) %}
 
         # Tailscale direct endpoint: a manual UniFi 1:1 forward DNATs
@@ -249,8 +254,11 @@ table inet homelab {
 
         # TCP allows. SSH/HTTP/HTTPS are wide-open (admin + public);
         # Samba and nut are admin services scoped via the set.
-        tcp dport { 22, 80, 443 } counter name "input_unscoped_tcp" accept comment "SSH/HTTP/HTTPS"
-        iifname . ip saddr @lan_admin_pairs tcp dport { 445, {{ service_ports.nut }} } counter name "input_admin_tcp" accept comment "Samba/nut (admin)"
+        tcp dport 22 counter name "input_ssh" accept comment "SSH"
+        tcp dport 80 counter name "input_http" accept comment "HTTP"
+        tcp dport 443 counter name "input_https" accept comment "HTTPS"
+        iifname . ip saddr @lan_admin_pairs tcp dport 445 counter name "input_admin_samba" accept comment "Samba (admin)"
+        iifname . ip saddr @lan_admin_pairs tcp dport {{ service_ports.nut }} counter name "input_admin_nut" accept comment "nut (admin)"
 
 {% if inventory_hostname == authelia_host %}
         # Authelia forward-auth ingress from wireguard peers. Lab's own
@@ -300,9 +308,11 @@ table inet homelab {
         # VRRP packet and demote keepalived's MASTER role, stealing
         # the DNS VIP. Rule is suppressed on hosts that aren't
         # keepalived peers (e.g. bunk).
+{% if inventory_hostname in dns_keepalived_peers %}
 {% set vrrp_peer_ips = dns_keepalived_peers | reject('eq', inventory_hostname) | map('extract', external_ips) | list %}
 {% if vrrp_peer_ips %}
         iifname $WAN_IFACE ip saddr { {{ vrrp_peer_ips | join(', ') }} } ip protocol vrrp counter name "vrrp_accept" accept comment "keepalived (VRRP, named peers only)"
+{% endif %}
 {% endif %}
 
         # LAN broadcast/discovery noise. Every entry here was identified

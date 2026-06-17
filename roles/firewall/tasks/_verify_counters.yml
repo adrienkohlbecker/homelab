@@ -99,17 +99,24 @@
     aardvark_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'aardvark_accept') | first).packets }}"
     wireguard_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'wireguard_accept') | first).packets }}"
     mdns_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'mdns_accept') | first).packets }}"
-    # TCP accept rule counters — listeners were dropped (see header
-    # comment in _verify_rig.yml); each TCP rule carries a named
-    # counter and the rc-vs-listener signal is gone. Positives assert
-    # >= 1; transmission is negative-only here because positive WAN
-    # ingress would need a slirp hostfwd extension.
-    input_unscoped_tcp_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_unscoped_tcp') | first).packets }}"
-    input_admin_tcp_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_admin_tcp') | first).packets }}"
-    input_transmission_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_transmission') | first).packets }}"
+    # TCP accept rule counters — most probes intentionally have no
+    # listener, so the rule-specific counter is the signal that each
+    # firewall branch matched. Keep these split so one open port can't
+    # mask another regressing out of the ruleset.
+    input_ssh_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_ssh') | first).packets }}"
+    input_http_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_http') | first).packets }}"
+    input_https_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_https') | first).packets }}"
+    input_admin_samba_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_admin_samba') | first).packets }}"
+    input_admin_nut_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_admin_nut') | first).packets }}"
+    input_transmission_tcp_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_transmission_tcp') | first).packets }}"
+    input_transmission_udp_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_transmission_udp') | first).packets }}"
     input_nut_podman_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_nut_podman') | first).packets }}"
     input_loopback_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_loopback') | first).packets }}"
     input_icmp_accept_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_icmp_accept') | first).packets }}"
+    input_authelia_wg_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_authelia_wg') | first).packets }}"
+    tailscale_input_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'tailscale_input_accept') | first).packets }}"
+    tailscale_forward_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'tailscale_forward_accept') | first).packets }}"
+    tailscale_underlay_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'tailscale_underlay_accept') | first).packets }}"
   assert:
     that:
       - input_nonsyn_pkts | int >= 1
@@ -126,20 +133,29 @@
       - aardvark_pkts | int >= 2  # two probes: default-bridge + non-default-bridge
       - wireguard_pkts | int >= 1
       - mdns_pkts | int == 0  # both probes negative (iif + saddr scope rejections)
-      - input_unscoped_tcp_pkts | int >= 1   # extns→:80, :443, :22 via bash /dev/tcp
-      - input_admin_tcp_pkts | int >= 1      # samba/nut positives from wg saddr
-      - input_transmission_pkts | int == 0   # negative-only: wg0 ingress must miss WAN iif scope
+      - input_ssh_pkts | int >= 1
+      - input_http_pkts | int >= 1
+      - input_https_pkts | int >= 1
+      - input_admin_samba_pkts | int >= 1
+      - input_admin_nut_pkts | int >= 1
+      - input_transmission_tcp_pkts | int == 0
+      - input_transmission_udp_pkts | int == 0
       - input_nut_podman_pkts | int >= 1     # nut positive from podman_bridge_pool source
       - input_loopback_pkts | int >= 1       # host curl 127.0.0.1:80
       - input_icmp_accept_pkts | int >= 1    # ping probe + first 20 of the flood
+      - input_authelia_wg_pkts | int >= 1
+      - tailscale_input_pkts | int >= 1
+      - tailscale_forward_pkts | int >= 1
+      - tailscale_underlay_pkts | int == 0
     fail_msg: >-
       Counter-based probes didn't fire all expected rules: non-SYN
       (input/forward), podman direct cross-network isolation,
       forward catch-all, icmp overflow, input silenced-noise (udp
       set / NetBIOS), IGMP accept, or input catch-all; OR the VRRP rule's iif scope
-      accepted a wg0-ingress packet (vrrp_pkts > 0); OR a TCP accept
-      rule failed to fire (unscoped 22/80/443, admin samba/nut,
-      podman-pool nut, loopback, icmp accept); OR the transmission
-      iif scope accepted a wg0-ingress packet (input_transmission > 0).
+      accepted a wg0-ingress packet (vrrp_pkts > 0); OR an INPUT
+      accept rule failed to fire (SSH/HTTP/HTTPS, admin samba/nut,
+      Authelia WG, podman-pool nut, Tailscale input/forward, loopback,
+      icmp accept); OR the transmission/Tailscale-underlay WAN scopes
+      accepted an untrusted fixture packet.
       Either a rule is missing, the probe didn't reach the chain, or
       another rule swallowed the packet first.

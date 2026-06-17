@@ -1,9 +1,9 @@
 # INPUT chain probes. Counters are reset up-front so every probe in
 # this file contributes to the assertion block in _verify_counters.yml
 # from a clean baseline; positives fire `>= 1` (any number is fine) and
-# negative-only counters (vrrp_accept, mdns_accept, input_transmission)
-# stay at 0. The reset is up-front (not between the TCP and UDP blocks)
-# so it can't wipe TCP probe hits before assertion time.
+# negative-only counters (vrrp_accept, mdns_accept, transmission, and
+# tailscale-underlay) stay at 0. The reset is up-front (not between the
+# TCP and UDP blocks) so it can't wipe TCP probe hits before assertion time.
 - name: _verify_input | Reset nftables counters before INPUT probes
   command: nft reset counters table inet homelab
   changed_when: false
@@ -12,8 +12,9 @@
 # Unscoped INPUT allow / catch-all reject — baseline coverage.
 - name: _verify_input | INPUT allow — port 80 reachable from extns (unscoped)
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:80/
+  register: _firewall_input_http
   changed_when: false
-  failed_when: false
+  failed_when: _firewall_input_http.rc != 0 or 'firewall-verify-ok' not in _firewall_input_http.stdout
   become: true
 
 - name: _verify_input | INPUT deny — port 18080 (no rule, no listener) hits catch-all
@@ -24,19 +25,29 @@
 
 - name: _verify_input | INPUT allow — port 443 reachable from extns (unscoped)
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:443/
+  register: _firewall_input_https
   changed_when: false
-  failed_when: false
+  failed_when: _firewall_input_https.rc != 0 or 'firewall-verify-ok' not in _firewall_input_https.stdout
   become: true
 
-# Loopback accept (`iif lo accept`). No listener on :80 — the rule
-# fires (counter `input_loopback` increments) before the kernel
-# decides there's nowhere to deliver the SYN. A regression that
-# breaks the iif=lo rule diverts the packet to the catch-all chain;
-# the counter assertion at the end of _verify catches that.
+# Loopback accept (`iif lo accept`). The fixture listener returns a known
+# body so this proves real delivery, while the counter assertion at the end
+# still confirms the packet matched the loopback rule rather than a broader
+# allow.
 - name: _verify_input | INPUT allow — iif lo (loopback 127.0.0.1:80 from host)  # noqa: command-instead-of-module
   command: curl --connect-timeout 3 --max-time 5 -sf http://127.0.0.1:80/
+  register: _firewall_input_loopback
   changed_when: false
-  failed_when: false
+  failed_when: _firewall_input_loopback.rc != 0 or 'firewall-verify-ok' not in _firewall_input_loopback.stdout
+  become: true
+
+- name: _verify_input | INPUT allow — tailscale0 ingress reaches mesh accept
+  command: >
+    ip netns exec extns curl --interface {{ _firewall_probe_tailscale }}
+      --connect-timeout 3 --max-time 5 -sf http://100.64.99.1:80/
+  register: _firewall_input_tailscale
+  changed_when: false
+  failed_when: _firewall_input_tailscale.rc != 0 or 'firewall-verify-ok' not in _firewall_input_tailscale.stdout
   become: true
 
 # SSH (22/tcp) is in the unscoped `tcp dport { 22, 80, 443 } accept`
@@ -81,6 +92,12 @@
   failed_when: false
   become: true
 
+- name: _verify_input | INPUT — transmission (51413/udp) rejected on wg0 ingress (iif scope)  # noqa: risky-shell-pipe
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 192.0.2.1 51413
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
 # --- probe_wg group (wireguard-source positives) ---------------------
 # Admin services (mosh/samba/nut) use the concatenated set
 # lan_admin_pairs to require an (iif, saddr) *intersection* — wg0 only
@@ -106,16 +123,27 @@
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_wg }}
       --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:445/
+  register: _firewall_input_samba_wg
   changed_when: false
-  failed_when: false
+  failed_when: _firewall_input_samba_wg.rc != 0 or 'firewall-verify-ok' not in _firewall_input_samba_wg.stdout
   become: true
 
 - name: _verify_input | INPUT — nut (3493/tcp) reachable from wireguard source
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_wg }}
       --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ service_ports.nut }}/
+  register: _firewall_input_nut_wg
   changed_when: false
-  failed_when: false
+  failed_when: _firewall_input_nut_wg.rc != 0 or 'firewall-verify-ok' not in _firewall_input_nut_wg.stdout
+  become: true
+
+- name: _verify_input | INPUT — Authelia forward-auth reachable from wireguard source
+  command: >
+    ip netns exec extns curl --interface {{ _firewall_probe_wg }}
+      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ service_ports.authelia }}/
+  register: _firewall_input_authelia_wg
+  changed_when: false
+  failed_when: _firewall_input_authelia_wg.rc != 0 or 'firewall-verify-ok' not in _firewall_input_authelia_wg.stdout
   become: true
 
 # mDNS rule requires iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously.
@@ -157,22 +185,42 @@
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_home }}
       --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:445/
+  register: _firewall_input_samba_home_wrong_iif
   changed_when: false
-  failed_when: false
+  failed_when: _firewall_input_samba_home_wrong_iif.rc == 0
   become: true
 
 - name: _verify_input | INPUT — nut (3493/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_home }}
       --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ service_ports.nut }}/
+  register: _firewall_input_nut_home_wrong_iif
   changed_when: false
-  failed_when: false
+  failed_when: _firewall_input_nut_home_wrong_iif.rc == 0
   become: true
 
 - name: _verify_input | INPUT — mDNS (5353/udp) sent from home_LAN saddr via wg0 (iif scope rejects)  # noqa: risky-shell-pipe
   shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_home }} 192.0.2.1 5353
   args: { executable: /bin/bash }
   changed_when: false
+  become: true
+
+- name: _verify_input | INPUT — Samba (445/tcp) reachable from home_LAN source via mac_mgmt
+  command: >
+    ip netns exec extns curl --interface {{ _firewall_probe_home_mac }}
+      --connect-timeout 3 --max-time 5 -sf http://{{ _firewall_probe_home_mac_host }}:445/
+  register: _firewall_input_samba_mac_mgmt
+  changed_when: false
+  failed_when: _firewall_input_samba_mac_mgmt.rc != 0 or 'firewall-verify-ok' not in _firewall_input_samba_mac_mgmt.stdout
+  become: true
+
+- name: _verify_input | INPUT — nut (3493/tcp) reachable from home_LAN source via mac_mgmt
+  command: >
+    ip netns exec extns curl --interface {{ _firewall_probe_home_mac }}
+      --connect-timeout 3 --max-time 5 -sf http://{{ _firewall_probe_home_mac_host }}:{{ service_ports.nut }}/
+  register: _firewall_input_nut_mac_mgmt
+  changed_when: false
+  failed_when: _firewall_input_nut_mac_mgmt.rc != 0 or 'firewall-verify-ok' not in _firewall_input_nut_mac_mgmt.stdout
   become: true
 
 # --- probe_nonscope group (out-of-scope negatives) -------------------
@@ -190,16 +238,18 @@
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_nonscope }}
       --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:445/
+  register: _firewall_input_samba_nonscope
   changed_when: false
-  failed_when: false
+  failed_when: _firewall_input_samba_nonscope.rc == 0
   become: true
 
 - name: _verify_input | INPUT — nut (3493/tcp) rejected from non-scope source
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_nonscope }}
       --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ service_ports.nut }}/
+  register: _firewall_input_nut_nonscope
   changed_when: false
-  failed_when: false
+  failed_when: _firewall_input_nut_nonscope.rc == 0
   become: true
 
 # --- probe_podman group (default-bridge-source positives) ------------
@@ -236,8 +286,9 @@
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_podman_pool }}
       --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:3493/
+  register: _firewall_input_nut_podman_pool
   changed_when: false
-  failed_when: false
+  failed_when: _firewall_input_nut_podman_pool.rc != 0 or 'firewall-verify-ok' not in _firewall_input_nut_podman_pool.stdout
   become: true
 
 - name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from non-default-bridge source  # noqa: risky-shell-pipe
@@ -246,18 +297,35 @@
   changed_when: false
   become: true
 
-# VRRP (proto 112) scoping is asserted statically because slirp
-# doesn't pass arbitrary L4 protocols, so a functional probe across
-# the netns harness isn't feasible. Confirm the rendered rule still
-# carries the iifname + protocol scope — guards against someone
-# unscoping it back to `ip protocol vrrp accept`. JSON output is
-# more stable than text against nft's canonicalization quirks
-# (e.g. `ip protocol 112` ↔ `ip protocol vrrp`).
+# VRRP (proto 112) scoping is asserted structurally because slirp
+# doesn't pass arbitrary L4 protocols, so a functional positive probe
+# across the netns harness isn't feasible. Confirm peers render the
+# WAN/protocol scope and non-peers render no accept rule at all.
+# JSON output is more stable than text against nft's canonicalization
+# quirks (e.g. `ip protocol 112` ↔ `ip protocol vrrp`).
 - name: _verify_input | INPUT — get nft ruleset (JSON, for VRRP scope check)
   command: nft -j list table inet homelab
   register: _firewall_nft_ruleset_vrrp
   changed_when: false
   become: true
+
+- name: _verify_input | INPUT — VRRP rule absent on non-keepalived peers
+  vars:
+    nft_rules: "{{ (_firewall_nft_ruleset_vrrp.stdout | from_json).nftables
+                   | selectattr('rule', 'defined')
+                   | map(attribute='rule')
+                   | list }}"
+    vrrp_rules: "{{ nft_rules
+                    | selectattr('expr', 'defined')
+                    | selectattr('expr', 'contains', {'counter': 'vrrp_accept'})
+                    | list }}"
+  assert:
+    that:
+      - vrrp_rules | length == 0
+    fail_msg: >-
+      Non-keepalived host rendered a VRRP accept rule; only hosts in
+      dns_keepalived_peers should accept peer VRRP.
+  when: inventory_hostname not in dns_keepalived_peers
 
 - name: _verify_input | INPUT — VRRP rule renders with iifname + protocol scope
   vars:
@@ -288,3 +356,71 @@
     fail_msg: >-
       VRRP rule referencing counter `vrrp_accept` is missing
       iifname={{ default_interface }} or protocol=vrrp scope.
+  when: inventory_hostname in dns_keepalived_peers
+
+- name: _verify_input | INPUT — WAN-only rendered rules keep iif/protocol/port scope
+  vars:
+    nft_rules: "{{ (_firewall_nft_ruleset_vrrp.stdout | from_json).nftables
+                   | selectattr('rule', 'defined')
+                   | map(attribute='rule')
+                   | list }}"
+    transmission_tcp_rule: "{{ nft_rules
+                               | selectattr('expr', 'defined')
+                               | selectattr('expr', 'contains', {'counter': 'input_transmission_tcp'})
+                               | first }}"
+    transmission_udp_rule: "{{ nft_rules
+                               | selectattr('expr', 'defined')
+                               | selectattr('expr', 'contains', {'counter': 'input_transmission_udp'})
+                               | first }}"
+    tailscale_underlay_rule: "{{ nft_rules
+                                 | selectattr('expr', 'defined')
+                                 | selectattr('expr', 'contains', {'counter': 'tailscale_underlay_accept'})
+                                 | first }}"
+    transmission_tcp_matches: "{{ transmission_tcp_rule.expr
+                                  | selectattr('match', 'defined')
+                                  | map(attribute='match') | list }}"
+    transmission_udp_matches: "{{ transmission_udp_rule.expr
+                                  | selectattr('match', 'defined')
+                                  | map(attribute='match') | list }}"
+    tailscale_underlay_matches: "{{ tailscale_underlay_rule.expr
+                                    | selectattr('match', 'defined')
+                                    | map(attribute='match') | list }}"
+  assert:
+    that:
+      - (transmission_tcp_matches | selectattr('left.meta', 'defined') | selectattr('left.meta.key', 'eq', 'iifname') | map(attribute='right') | first) == default_interface
+      - (transmission_tcp_matches | selectattr('left.payload', 'defined') | selectattr('left.payload.protocol', 'eq', 'tcp') | selectattr('left.payload.field', 'eq', 'dport') | map(attribute='right') | first | int) == service_ports.transmission_bt
+      - (transmission_udp_matches | selectattr('left.meta', 'defined') | selectattr('left.meta.key', 'eq', 'iifname') | map(attribute='right') | first) == default_interface
+      - (transmission_udp_matches | selectattr('left.payload', 'defined') | selectattr('left.payload.protocol', 'eq', 'udp') | selectattr('left.payload.field', 'eq', 'dport') | map(attribute='right') | first | int) == service_ports.transmission_bt
+      - (tailscale_underlay_matches | selectattr('left.meta', 'defined') | selectattr('left.meta.key', 'eq', 'iifname') | map(attribute='right') | first) == default_interface
+      - (tailscale_underlay_matches | selectattr('left.payload', 'defined') | selectattr('left.payload.protocol', 'eq', 'udp') | selectattr('left.payload.field', 'eq', 'dport') | map(attribute='right') | first | int) == tailscale_port
+    fail_msg: >-
+      WAN-only firewall rules lost their iifname/protocol/port scope
+      (Transmission TCP/UDP or Tailscale direct underlay).
+  when: tailscale_wan_direct | default(false)
+
+- name: _verify_input | INPUT — mDNS rendered rule keeps LAN iif/source/port scope
+  vars:
+    nft_rules: "{{ (_firewall_nft_ruleset_vrrp.stdout | from_json).nftables
+                   | selectattr('rule', 'defined')
+                   | map(attribute='rule')
+                   | list }}"
+    mdns_rule: "{{ nft_rules
+                   | selectattr('expr', 'defined')
+                   | selectattr('expr', 'contains', {'counter': 'mdns_accept'})
+                   | first }}"
+    mdns_matches: "{{ mdns_rule.expr
+                      | selectattr('match', 'defined')
+                      | map(attribute='match') | list }}"
+    mdns_saddr: "{{ mdns_matches
+                    | selectattr('left.payload', 'defined')
+                    | selectattr('left.payload.protocol', 'eq', 'ip')
+                    | selectattr('left.payload.field', 'eq', 'saddr')
+                    | map(attribute='right') | first }}"
+  assert:
+    that:
+      - (mdns_matches | selectattr('left.meta', 'defined') | selectattr('left.meta.key', 'eq', 'iifname') | map(attribute='right') | first) == default_interface
+      - mdns_saddr.prefix.addr == (site_subnets.home | ansible.utils.ipaddr('network'))
+      - (mdns_saddr.prefix.len | int) == (site_subnets.home | ansible.utils.ipaddr('prefix') | int)
+      - (mdns_matches | selectattr('left.payload', 'defined') | selectattr('left.payload.protocol', 'eq', 'udp') | selectattr('left.payload.field', 'eq', 'dport') | map(attribute='right') | first | int) == 5353
+    fail_msg: >-
+      mDNS firewall rule lost its iifname, home-LAN source, or UDP/5353 scope.
