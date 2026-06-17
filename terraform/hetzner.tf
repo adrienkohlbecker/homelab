@@ -230,3 +230,54 @@ resource "hcloud_server_network" "fox" {
   subnet_id = hcloud_network_subnet.hetzner.id
   ip        = local.network.hosts.fox.physical
 }
+
+# ─── CI coordinator (fleeting / scale-to-zero) ───────────────────────────────
+# The ephemeral orchestrator the gitlab-runner docker-autoscaler boots per
+# pipeline (roles/gitlab_runner, notes/ci_aws_test_cells.md). The runner manager
+# stays on fox; fleeting clones one CX53 from the role=ci-coordinator snapshot,
+# runs the pipeline's cells against the AWS EC2 fleet, and scales back to zero.
+# Terraform owns only the two stable anchors fleeting cannot mint itself: the
+# reserved egress IP and the firewall. The server, its private-net attachment,
+# and its SSH key are all fleeting-managed at boot (so no hcloud_server here).
+
+# Reserved egress IPv4. A scale-to-zero coordinator gets a fresh public IP on
+# every boot, which the AWS cell SG (aws_ci.tf) could never statically
+# allowlist. Reserving one and assigning it via the plugin's public-IP pool
+# (public_ip_pool_selector = "pool=ci-coordinator") gives the fleet ONE stable
+# egress that the SG admits once -- same trick as fox's reserved IP. auto_delete
+# = false so a torn-down coordinator never drops the address (which would orphan
+# the SG rule). Carries a ~EUR 0.50/mo standing cost while unattached; the price
+# of a stable AWS-side allowlist under scale-to-zero.
+resource "hcloud_primary_ip" "ci_coordinator" {
+  name        = "ci-coordinator"
+  type        = "ipv4"
+  location    = var.hetzner_location
+  auto_delete = false
+
+  labels = {
+    pool = "ci-coordinator"
+  }
+}
+
+# Egress-only firewall, auto-attached to every coordinator by label selector
+# (fleeting tags its instances pool=ci-coordinator). No `in` rules => all public
+# inbound dropped; no `out` rules => outbound open (the coordinator dials AWS +
+# GitLab). fox manages the coordinator over the private `hetzner` network, which
+# hcloud firewalls do not filter, so SSH needs no public hole -- the one `in`
+# rule below is a deliberate operator debug affordance (key-only, home WAN only),
+# mirroring the cell SG, not a path fleeting depends on.
+resource "hcloud_firewall" "ci_coordinator" {
+  name = "ci-coordinator"
+
+  rule {
+    description = "SSH for operator debugging (home WAN only)"
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "22"
+    source_ips  = ["${local.home_wan_ip}/32"]
+  }
+
+  apply_to {
+    label_selector = "pool=ci-coordinator"
+  }
+}
