@@ -136,6 +136,17 @@ server {
     client_body_buffer_size 128k;
     proxy_pass_request_body off;
     proxy_set_header Content-Length          "";
+    # Strip the client's Authorization header off the auth subrequest so Authelia
+    # decides on the session cookie alone. The header belongs to the UPSTREAM (an
+    # app token forwarded by `location /`) and to the bypass map -- not to
+    # Authelia's auth decision. Forwarded, a non-Basic scheme (InfluxDB's
+    # `Authorization: Token <t>`) makes Authelia fail to parse it and 401 even for
+    # a request carrying a valid session cookie, which error_page then turns into
+    # a portal redirect -> loop. The cookieless-machine-client bypass is unharmed:
+    # $authelia_bypass reads the original $http_authorization in the map and the
+    # `if` returns 204 BEFORE this proxy_pass, so the header is still seen where it
+    # matters and only cleared on the leg to Authelia.
+    proxy_set_header Authorization           "";
     # Clear any client-supplied Connection header off the internal subrequest
     # (matches Authelia's canonical snippet).
     proxy_set_header Connection              "";
