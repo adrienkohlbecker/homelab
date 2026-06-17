@@ -58,7 +58,7 @@
   command: >
     systemd-run --unit firewall_verify_tcp_listener --collect
     /usr/bin/python3 /tmp/firewall_verify_tcp_listener.py
-    80 443 445 {{ service_ports.nut }} {{ service_ports.authelia }}
+    80 443 445 {{ service_ports.nut }} {{ service_ports.authelia }} {{ service_ports.transmission_bt }}
   changed_when: true
   become: true
 
@@ -164,4 +164,5 @@
     - 445
     - "{{ service_ports.nut }}"
     - "{{ service_ports.authelia }}"
+    - "{{ service_ports.transmission_bt }}"
   become: true

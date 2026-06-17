@@ -1,9 +1,9 @@
 # INPUT chain probes. Counters are reset up-front so every probe in
 # this file contributes to the assertion block in _verify_counters.yml
 # from a clean baseline; positives fire `>= 1` (any number is fine) and
-# negative-only counters (vrrp_accept, mdns_accept, transmission, and
-# tailscale-underlay) stay at 0. The reset is up-front (not between the
-# TCP and UDP blocks) so it can't wipe TCP probe hits before assertion time.
+# negative-only counters stay at 0. The reset is up-front (not between
+# the TCP and UDP blocks) so it can't wipe TCP probe hits before assertion
+# time.
 - name: _verify_input | Reset nftables counters before INPUT probes
   command: nft reset counters table inet homelab
   changed_when: false
@@ -64,14 +64,14 @@
   become: true
 
 # Wireguard 51820 is scoped to -i WAN. Two probes — positive via the
-# controller-side WAN endpoint (qemu: slirp UDP hostfwd, ingressing on
-# enp0s2, the WAN iface in the test VM; EC2: the cell's public IP
-# through the security group's 51820/udp allow) and negative from the
-# netns where traffic always ingresses on wg0.
+# controller-side WAN endpoint (qemu: loopback UDP forward, ingressing on
+# enp0s2, the WAN iface in the test VM; EC2: the cell's public IP through
+# the security group's 51820/udp allow) and negative from the netns where
+# traffic always ingresses on wg0.
 - name: _verify_input | INPUT allow — wireguard (51820/udp) reachable on WAN iface from controller  # noqa: risky-shell-pipe
   delegate_to: localhost
   shell: |
-    echo . | nc -u -w 1 {{ wan_probe_host }} {{ wan_udp_test_port }} >/dev/null 2>&1 || true
+    echo . | nc -u -w 1 {{ wan_probe_host }} {{ wan_forward_ports.udp['51820'] }} >/dev/null 2>&1 || true
   args: { executable: /bin/bash }
   changed_when: false
 
@@ -81,11 +81,27 @@
   changed_when: false
   become: true
 
-# Transmission BT peer port is WAN-only (iif=$WAN_IFACE). Positive
-# WAN ingress would need a slirp hostfwd extension to forward another
-# pair of test ports — out of scope here. Probe the iif scope by
-# confirming wg0 ingress is rejected, which catches a regression that
-# drops the iif scope and exposes 51413 to wg peers.
+# Transmission BT peer port is WAN-only (iif=$WAN_IFACE). Qemu cells get
+# controller-side forwards for both protocols so we can prove WAN ingress;
+# the wg0 probes below still catch regressions that drop the iif scope and
+# expose 51413 to tunnel peers.
+- name: _verify_input | INPUT allow — transmission (51413/tcp) reachable on WAN iface from controller  # noqa: command-instead-of-module
+  delegate_to: localhost
+  command: >
+    curl --connect-timeout 3 --max-time 5 -sf
+      http://{{ wan_probe_host }}:{{ wan_forward_ports.tcp[(service_ports.transmission_bt | string)] }}/
+  register: _firewall_input_transmission_wan
+  changed_when: false
+  failed_when: _firewall_input_transmission_wan.rc != 0 or 'firewall-verify-ok' not in _firewall_input_transmission_wan.stdout
+  when: test_backend == 'qemu'
+
+- name: _verify_input | INPUT allow — transmission (51413/udp) reaches WAN iface from controller  # noqa: risky-shell-pipe
+  delegate_to: localhost
+  shell: echo . | nc -u -w 1 {{ wan_probe_host }} {{ wan_forward_ports.udp[(service_ports.transmission_bt | string)] }} >/dev/null 2>&1 || true
+  args: { executable: /bin/bash }
+  changed_when: false
+  when: test_backend == 'qemu'
+
 - name: _verify_input | INPUT — transmission (51413/tcp) rejected on wg0 ingress (iif scope)
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:51413/
   changed_when: false
@@ -98,6 +114,27 @@
   changed_when: false
   become: true
 
+- name: _verify_input | INPUT allow — tailscale underlay reaches WAN iface from controller  # noqa: risky-shell-pipe
+  delegate_to: localhost
+  shell: echo . | nc -u -w 1 {{ wan_probe_host }} {{ wan_forward_ports.udp[(tailscale_port | string)] }} >/dev/null 2>&1 || true
+  args: { executable: /bin/bash }
+  changed_when: false
+  when:
+    - test_backend == 'qemu'
+    - tailscale_wan_direct | default(false)
+
+# mDNS requires iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously. Qemu's
+# WAN forward reaches the WAN iface, but the forwarded source is not a
+# HOME_LAN address from nft's perspective, so this is a WAN-source
+# negative. wg0 probes below cover each half of the scope failing from
+# synthetic in-VM sources.
+- name: _verify_input | INPUT — mDNS (5353/udp) rejected from non-home WAN source  # noqa: risky-shell-pipe
+  delegate_to: localhost
+  shell: echo . | nc -u -w 1 {{ wan_probe_host }} {{ wan_forward_ports.udp['5353'] }} >/dev/null 2>&1 || true
+  args: { executable: /bin/bash }
+  changed_when: false
+  when: test_backend == 'qemu'
+
 # --- probe_wg group (wireguard-source positives) ---------------------
 # Admin services (mosh/samba/nut) use the concatenated set
 # lan_admin_pairs to require an (iif, saddr) *intersection* — wg0 only
@@ -105,9 +142,7 @@
 # rig ingresses everything on wg0, so probe_wg (in $WG_SUBNET) is the
 # positive case for all three services. mDNS rides the same group as a
 # saddr-scope negative (wg saddr fails the iif=WAN + saddr=$HOME_LAN
-# requirement on the saddr half). The $WAN_IFACE+$HOME_LAN positive
-# half can't be probed (slirp doesn't preserve source IP), so half of
-# each rule's contract is asserted via JSON shape only.
+# requirement on the saddr half).
 - name: _verify_input | Bind probe_wg on extns veth (wireguard-source probes)
   command: ip -n extns addr replace {{ _firewall_probe_wg }}/32 dev veth_ext
   changed_when: true
@@ -297,21 +332,20 @@
   changed_when: false
   become: true
 
-# VRRP (proto 112) scoping is asserted structurally because slirp
-# doesn't pass arbitrary L4 protocols, so a functional positive probe
-# across the netns harness isn't feasible. Confirm peers render the
-# WAN/protocol scope and non-peers render no accept rule at all.
+# VRRP and mDNS still need structural checks: the harness can't
+# generate arbitrary L4 protocol 112 through the WAN path, and the qemu
+# WAN forward doesn't preserve a HOME_LAN source address for mDNS.
 # JSON output is more stable than text against nft's canonicalization
 # quirks (e.g. `ip protocol 112` ↔ `ip protocol vrrp`).
-- name: _verify_input | INPUT — get nft ruleset (JSON, for VRRP scope check)
+- name: _verify_input | INPUT — get nft ruleset (JSON, for structural scope checks)
   command: nft -j list table inet homelab
-  register: _firewall_nft_ruleset_vrrp
+  register: _firewall_nft_ruleset_scope
   changed_when: false
   become: true
 
 - name: _verify_input | INPUT — VRRP rule absent on non-keepalived peers
   vars:
-    nft_rules: "{{ (_firewall_nft_ruleset_vrrp.stdout | from_json).nftables
+    nft_rules: "{{ (_firewall_nft_ruleset_scope.stdout | from_json).nftables
                    | selectattr('rule', 'defined')
                    | map(attribute='rule')
                    | list }}"
@@ -338,7 +372,7 @@
     # nft uses for the standalone counter *declaration* at the head
     # of the table, not for references inside rule expressions.
     # `contains` on the exact reference dict finds the matching rule.
-    nft_rules: "{{ (_firewall_nft_ruleset_vrrp.stdout | from_json).nftables
+    nft_rules: "{{ (_firewall_nft_ruleset_scope.stdout | from_json).nftables
                    | selectattr('rule', 'defined')
                    | map(attribute='rule')
                    | list }}"
@@ -358,49 +392,9 @@
       iifname={{ default_interface }} or protocol=vrrp scope.
   when: inventory_hostname in dns_keepalived_peers
 
-- name: _verify_input | INPUT — WAN-only rendered rules keep iif/protocol/port scope
-  vars:
-    nft_rules: "{{ (_firewall_nft_ruleset_vrrp.stdout | from_json).nftables
-                   | selectattr('rule', 'defined')
-                   | map(attribute='rule')
-                   | list }}"
-    transmission_tcp_rule: "{{ nft_rules
-                               | selectattr('expr', 'defined')
-                               | selectattr('expr', 'contains', {'counter': 'input_transmission_tcp'})
-                               | first }}"
-    transmission_udp_rule: "{{ nft_rules
-                               | selectattr('expr', 'defined')
-                               | selectattr('expr', 'contains', {'counter': 'input_transmission_udp'})
-                               | first }}"
-    tailscale_underlay_rule: "{{ nft_rules
-                                 | selectattr('expr', 'defined')
-                                 | selectattr('expr', 'contains', {'counter': 'tailscale_underlay_accept'})
-                                 | first }}"
-    transmission_tcp_matches: "{{ transmission_tcp_rule.expr
-                                  | selectattr('match', 'defined')
-                                  | map(attribute='match') | list }}"
-    transmission_udp_matches: "{{ transmission_udp_rule.expr
-                                  | selectattr('match', 'defined')
-                                  | map(attribute='match') | list }}"
-    tailscale_underlay_matches: "{{ tailscale_underlay_rule.expr
-                                    | selectattr('match', 'defined')
-                                    | map(attribute='match') | list }}"
-  assert:
-    that:
-      - (transmission_tcp_matches | selectattr('left.meta', 'defined') | selectattr('left.meta.key', 'eq', 'iifname') | map(attribute='right') | first) == default_interface
-      - (transmission_tcp_matches | selectattr('left.payload', 'defined') | selectattr('left.payload.protocol', 'eq', 'tcp') | selectattr('left.payload.field', 'eq', 'dport') | map(attribute='right') | first | int) == service_ports.transmission_bt
-      - (transmission_udp_matches | selectattr('left.meta', 'defined') | selectattr('left.meta.key', 'eq', 'iifname') | map(attribute='right') | first) == default_interface
-      - (transmission_udp_matches | selectattr('left.payload', 'defined') | selectattr('left.payload.protocol', 'eq', 'udp') | selectattr('left.payload.field', 'eq', 'dport') | map(attribute='right') | first | int) == service_ports.transmission_bt
-      - (tailscale_underlay_matches | selectattr('left.meta', 'defined') | selectattr('left.meta.key', 'eq', 'iifname') | map(attribute='right') | first) == default_interface
-      - (tailscale_underlay_matches | selectattr('left.payload', 'defined') | selectattr('left.payload.protocol', 'eq', 'udp') | selectattr('left.payload.field', 'eq', 'dport') | map(attribute='right') | first | int) == tailscale_port
-    fail_msg: >-
-      WAN-only firewall rules lost their iifname/protocol/port scope
-      (Transmission TCP/UDP or Tailscale direct underlay).
-  when: tailscale_wan_direct | default(false)
-
 - name: _verify_input | INPUT — mDNS rendered rule keeps LAN iif/source/port scope
   vars:
-    nft_rules: "{{ (_firewall_nft_ruleset_vrrp.stdout | from_json).nftables
+    nft_rules: "{{ (_firewall_nft_ruleset_scope.stdout | from_json).nftables
                    | selectattr('rule', 'defined')
                    | map(attribute='rule')
                    | list }}"

@@ -91,10 +91,11 @@
     # VRRP rule's counter is asserted at 0 — the negative probe sends
     # proto-112 from wg0 (extns ingress) and the iif scope must reject.
     vrrp_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'vrrp_accept') | first).packets }}"
-    # UDP accept rule counters (A6) — each rule has at least one
-    # positive probe except mdns, which the rig can't simulate
-    # positively (slirp doesn't carry the right saddr on WAN ingress);
-    # both mdns probes are negative.
+    # UDP accept rule counters (A6) — qemu-backed WAN forwards exercise
+    # the WAN-scoped Transmission/Tailscale positives. EC2 keeps the older
+    # two-port public surface, so the extra qemu-only WAN counters stay at
+    # 0 there. mDNS remains negative-only: the qemu WAN forward does not
+    # preserve a HOME_LAN source address.
     mosh_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'mosh_accept') | first).packets }}"
     aardvark_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'aardvark_accept') | first).packets }}"
     wireguard_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'wireguard_accept') | first).packets }}"
@@ -132,21 +133,27 @@
       - mosh_pkts | int >= 1
       - aardvark_pkts | int >= 2  # two probes: default-bridge + non-default-bridge
       - wireguard_pkts | int >= 1
-      - mdns_pkts | int == 0  # both probes negative (iif + saddr scope rejections)
+      - mdns_pkts | int == 0
       - input_ssh_pkts | int >= 1
       - input_http_pkts | int >= 1
       - input_https_pkts | int >= 1
       - input_admin_samba_pkts | int >= 1
       - input_admin_nut_pkts | int >= 1
-      - input_transmission_tcp_pkts | int == 0
-      - input_transmission_udp_pkts | int == 0
+      - >-
+        ((test_backend == 'qemu') and (input_transmission_tcp_pkts | int >= 1))
+        or ((test_backend != 'qemu') and (input_transmission_tcp_pkts | int == 0))
+      - >-
+        ((test_backend == 'qemu') and (input_transmission_udp_pkts | int >= 1))
+        or ((test_backend != 'qemu') and (input_transmission_udp_pkts | int == 0))
       - input_nut_podman_pkts | int >= 1     # nut positive from podman_bridge_pool source
       - input_loopback_pkts | int >= 1       # host curl 127.0.0.1:80
       - input_icmp_accept_pkts | int >= 1    # ping probe + first 20 of the flood
       - input_authelia_wg_pkts | int >= 1
       - tailscale_input_pkts | int >= 1
       - tailscale_forward_pkts | int >= 1
-      - tailscale_underlay_pkts | int == 0
+      - >-
+        ((test_backend == 'qemu') and (tailscale_underlay_pkts | int >= 1))
+        or ((test_backend != 'qemu') and (tailscale_underlay_pkts | int == 0))
     fail_msg: >-
       Counter-based probes didn't fire all expected rules: non-SYN
       (input/forward), podman direct cross-network isolation,
@@ -154,8 +161,8 @@
       set / NetBIOS), IGMP accept, or input catch-all; OR the VRRP rule's iif scope
       accepted a wg0-ingress packet (vrrp_pkts > 0); OR an INPUT
       accept rule failed to fire (SSH/HTTP/HTTPS, admin samba/nut,
-      Authelia WG, podman-pool nut, Tailscale input/forward, loopback,
-      icmp accept); OR the transmission/Tailscale-underlay WAN scopes
-      accepted an untrusted fixture packet.
+      Authelia WG, podman-pool nut, Tailscale input/forward/underlay,
+      loopback, icmp accept, or Transmission WAN ingress; OR mDNS
+      accepted a non-home fixture packet.
       Either a rule is missing, the probe didn't reach the chain, or
       another rule swallowed the packet first.

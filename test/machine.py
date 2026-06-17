@@ -55,6 +55,15 @@ SSH_KEY = "packer/vagrant.key"
 # ssh_host per instance (e.g. an EC2 public IP) and never touch this.
 SSH_HOST = "127.0.0.1"
 
+# Controller-side WAN forwards exposed by qemu-backed tests. Keys are protocol
+# names accepted by qemu/passt; values are guest ports. EC2 cells keep a smaller
+# map below because their public reachability is constrained by AWS security
+# groups rather than per-run loopback forwards.
+DEFAULT_WAN_FORWARDS: dict[str, tuple[int, ...]] = {
+    "tcp": (32400, 51413),
+    "udp": (51820, 51413, 5353, 41641, 41642),
+}
+
 TOPOLOGY_PATH = Path(__file__).parent.parent / "data" / "network_topology.yml"
 
 # Absolute path to the repo's ansible.cfg. Pinned via ANSIBLE_CONFIG (see
@@ -413,19 +422,16 @@ class Machine:
     # Controller-side WAN probe endpoint, so `delegate_to: localhost`
     # probes in roles/firewall's _verify can exercise rules keying on the
     # WAN interface (traffic originating inside the VM never ingresses on
-    # the WAN iface). Each backend supplies its own path to the same two
-    # VM ports:
-    #   QEMU: slirp hostfwds — pre-picked free 127.0.0.1 ports mapped to
-    #     VM:32400 (TCP, _verify busybox-httpd publish target) and
-    #     VM:51820 (UDP, wireguard ACCEPT rule scoped -i WAN). Two
-    #     forwards since slirp keeps TCP/UDP in separate namespaces.
-    #   EC2: the cell's public IP with the real port numbers — genuine
-    #     WAN ingress through the security group's matching allows
-    #     (terraform/aws_ci.tf ci_cell).
-    # Ports 0 = unset (before the backend resolved its endpoint).
-    wan_tcp_test_port: int = dataclasses.field(default=0, init=False)
-    wan_udp_test_port: int = dataclasses.field(default=0, init=False)
+    # the WAN iface). Each backend supplies its own path:
+    #   QEMU: slirp/passt forwards — pre-picked free 127.0.0.1 ports
+    #     mapped to guest ports in wan_forward_ports.
+    #   EC2: the cell's public IP with real port numbers for the subset
+    #     allowed by terraform/aws_ci.tf ci_cell.
     wan_probe_host: str = dataclasses.field(default=SSH_HOST, init=False)
+    wan_forward_ports: dict[str, dict[str, int]] = dataclasses.field(
+        default_factory=lambda: {"tcp": {}, "udp": {}},
+        init=False,
+    )
 
     def __post_init__(self) -> None:
         if self.ubuntu_name not in UBUNTU_RELEASES:
@@ -619,14 +625,11 @@ class Machine:
             "-e",
             f"test_backend={self.TEST_BACKEND}",
             # Controller-side WAN probe endpoint for verify probes that
-            # delegate_to: localhost (see the wan_* field comment). Ports
-            # are 0 before the backend resolved its endpoint.
-            "-e",
-            f"wan_tcp_test_port={self.wan_tcp_test_port}",
-            "-e",
-            f"wan_udp_test_port={self.wan_udp_test_port}",
+            # delegate_to: localhost (see the wan_* field comment).
             "-e",
             f"wan_probe_host={self.wan_probe_host}",
+            "-e",
+            json.dumps({"wan_forward_ports": self.wan_forward_ports}, sort_keys=True, separators=(",", ":")),
             "--inventory",
             "test/inventory.ini",
             *self.ansible_args,
@@ -1326,22 +1329,29 @@ class QemuMachine(Machine):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((SSH_HOST, 0))
             self.ssh_port = s.getsockname()[1]
-        # Auxiliary hostfwd ports for controller-side probes that need
-        # to ingress on the VM's WAN iface. Two protocols since slirp
-        # keeps TCP/UDP forwards in separate namespaces. Picked the
-        # same way as ssh_port; emitted into qemu's -netdev
-        # unconditionally so the qemu cmdline doesn't have to know
-        # which role's running.
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind((SSH_HOST, 0))
-            self.wan_tcp_test_port = s.getsockname()[1]
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.bind((SSH_HOST, 0))
-            self.wan_udp_test_port = s.getsockname()[1]
+        # Auxiliary forwards for controller-side probes that need to
+        # ingress on the VM's WAN iface. Picked the same way as
+        # ssh_port; emitted into qemu/passt unconditionally so the
+        # qemu cmdline doesn't have to know which role's running.
+        self.wan_forward_ports = {"tcp": {}, "udp": {}}
+        for proto, guest_ports in DEFAULT_WAN_FORWARDS.items():
+            sock_type = socket.SOCK_STREAM if proto == "tcp" else socket.SOCK_DGRAM
+            for guest_port in guest_ports:
+                key = str(guest_port)
+                if key in self.wan_forward_ports[proto]:
+                    continue
+                with socket.socket(socket.AF_INET, sock_type) as s:
+                    s.bind((SSH_HOST, 0))
+                    self.wan_forward_ports[proto][key] = s.getsockname()[1]
         for guest_port in self._extra_guest_ports:
+            key = str(guest_port)
+            if key in self.wan_forward_ports["tcp"]:
+                self.extra_hostfwd_ports[guest_port] = self.wan_forward_ports["tcp"][key]
+                continue
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.bind((SSH_HOST, 0))
                 self.extra_hostfwd_ports[guest_port] = s.getsockname()[1]
+                self.wan_forward_ports["tcp"][key] = self.extra_hostfwd_ports[guest_port]
 
         # On the passt backend qemu connects to the sidecar over a unix
         # socket. It must NOT live in self.workdir: that's on /mnt/scratch
@@ -1626,11 +1636,11 @@ class QemuMachine(Machine):
         """Return the (`-netdev` value, `-device` value) for the NIC backend.
 
         passt: qemu attaches via a `stream` netdev connected to the sidecar's
-        unix socket (qemu >= 7.2). slirp: the legacy user-mode net with three
+        unix socket (qemu >= 7.2). slirp: the legacy user-mode net with
         hostfwds. The forward *set* is identical under both backends -- SSH
-        for ansible-playbook plus TCP :32400 / UDP :51820 for the iptables
-        `_verify` probes that `delegate_to: localhost` -- passt expresses them
-        in _passt_command, slirp as hostfwd here.
+        for ansible-playbook plus wan_forward_ports for the firewall `_verify`
+        probes that `delegate_to: localhost` -- passt expresses them in
+        _passt_command, slirp as hostfwd here.
         """
         if self._net_backend == "passt":
             assert self._passt_socket is not None
@@ -1641,27 +1651,27 @@ class QemuMachine(Machine):
         # empty for machines absent from the topology (minimal -> slirp's
         # default 10.0.2.0/24). Keyed on inventory_host (box), not machine
         # (box_deps), because the topology indexes inventory names.
-        extra_fwds = "".join(
-            f",hostfwd=tcp:{SSH_HOST}:{host_port}-:{guest_port}"
-            for guest_port, host_port in self.extra_hostfwd_ports.items()
-        )
-        netdev = (
-            f"user,id=user.0,"
-            f"hostfwd=tcp:{SSH_HOST}:{self.ssh_port}-:22,"
-            f"hostfwd=tcp:{SSH_HOST}:{self.wan_tcp_test_port}-:32400,"
-            f"hostfwd=udp:{SSH_HOST}:{self.wan_udp_test_port}-:51820"
-            f"{extra_fwds}"
-            f"{qemu_user_net_args(self.inventory_host)}"
-        )
+        hostfwds = [f"hostfwd=tcp:{SSH_HOST}:{self.ssh_port}-:22"]
+        for proto in ("tcp", "udp"):
+            hostfwds.extend(
+                f"hostfwd={proto}:{SSH_HOST}:{host_port}-:{guest_port}"
+                for guest_port, host_port in self.wan_forward_ports[proto].items()
+            )
+        netdev = f"user,id=user.0," f"{','.join(hostfwds)}" f"{qemu_user_net_args(self.inventory_host)}"
         return netdev, "virtio-net,netdev=user.0"
 
     def _passt_command(self) -> list[str]:
         """passt sidecar argv. NATs the guest's egress and forwards the same
-        three controller-side ports back to the guest as slirp's hostfwd does,
-        but with passt's robust UDP datapath instead of libslirp.
+        controller-side ports back to the guest as slirp's hostfwd does, but
+        with passt's robust UDP datapath instead of libslirp.
         """
         assert self._passt_socket is not None
-        return [
+        tcp_forwards = [
+            f"{self.ssh_port}:22",
+            *(f"{host_port}:{guest_port}" for guest_port, host_port in self.wan_forward_ports["tcp"].items()),
+        ]
+        udp_forwards = [f"{host_port}:{guest_port}" for guest_port, host_port in self.wan_forward_ports["udp"].items()]
+        cmd = [
             "passt",
             # Foreground: a managed child (torn down in stop()) that logs to
             # stderr instead of the syslog socket absent in the container.
@@ -1677,10 +1687,15 @@ class QemuMachine(Machine):
             # binds the whole comma-list -- repeating it (addr/a,addr/b) is an
             # "Invalid port specifier" to passt, so the address appears once.
             "--tcp-ports",
-            f"{SSH_HOST}/{self.ssh_port}:22,{self.wan_tcp_test_port}:32400"
-            + "".join(f",{host_port}:{guest_port}" for guest_port, host_port in self.extra_hostfwd_ports.items()),
-            "--udp-ports",
-            f"{SSH_HOST}/{self.wan_udp_test_port}:51820",
+            f"{SSH_HOST}/{','.join(tcp_forwards)}",
+        ]
+        if udp_forwards:
+            cmd += [
+                "--udp-ports",
+                f"{SSH_HOST}/{','.join(udp_forwards)}",
+            ]
+        return [
+            *cmd,
             *passt_address_args(self.inventory_host),
         ]
 
@@ -2211,8 +2226,10 @@ class Ec2Machine(Machine):
         # home WAN, so the controller-side probes ingress on the cell's
         # WAN iface exactly like real Internet traffic.
         self.wan_probe_host = ip
-        self.wan_tcp_test_port = 32400
-        self.wan_udp_test_port = 51820
+        self.wan_forward_ports = {
+            "tcp": {"32400": 32400},
+            "udp": {"51820": 51820},
+        }
 
     async def _find_ssh_port(self) -> None:
         """Always 22; the host was resolved in ensure_booted()."""
