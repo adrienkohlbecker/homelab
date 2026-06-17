@@ -64,6 +64,13 @@ HA_API_TOKEN = "op://Lab/pfcoggyhvncfnr6rt6p5zbnuja/password"
 # Suppress the HashiCorp checkpoint phone-home (update check) on every
 # packer build/init and tofu plan/apply — latency + privacy on CI workers.
 CHECKPOINT_DISABLE = "1"
+# Auth tokens for ECR pull through cache
+TF_VAR_ci_ecr_docker_hub_username = "op://Lab/lejutolyu62qhyxw42rvyxuwke/username"
+TF_VAR_ci_ecr_docker_hub_access_token = "op://Lab/lejutolyu62qhyxw42rvyxuwke/password"
+TF_VAR_ci_ecr_github_username = "op://Lab/4cjduqj2lem5hrsuqfemk4fcam/username"
+TF_VAR_ci_ecr_github_access_token = "op://Lab/4cjduqj2lem5hrsuqfemk4fcam/password"
+TF_VAR_ci_ecr_gitlab_username = "op://Lab/xaco3prl6eck3qanhatmxksr5a/username"
+TF_VAR_ci_ecr_gitlab_access_token = "op://Lab/xaco3prl6eck3qanhatmxksr5a/password"
 
 [tools]
 # The cell prelude's OIDC smoke (aws sts get-caller-identity) and the packer

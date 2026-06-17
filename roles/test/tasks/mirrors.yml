@@ -54,8 +54,15 @@
   import_role:
     name: apt
 
+- name: mirrors | Decide whether this cell uses ECR registry mirrors
+  set_fact:
+    test_use_ecr_registry_mirrors: >-
+      {{ test_backend == 'aws'
+         and (test_ecr_registry | default('') | length > 0)
+         and (test_ecr_registry_mirrors | default({}) | length > 0) }}
+
 - name: mirrors | Ensure /etc/containers/registries.conf.d exists
-  when: nexus_url | length > 0
+  when: (nexus_url | length > 0) or test_use_ecr_registry_mirrors
   file:
     path: /etc/containers/registries.conf.d
     state: directory
@@ -64,8 +71,10 @@
     group: root
   become: true
 
-- name: mirrors | Configure podman registry mirrors
-  when: nexus_url | length > 0
+- name: mirrors | Configure podman registry mirrors for Nexus
+  when:
+    - nexus_url | length > 0
+    - not test_use_ecr_registry_mirrors
   copy:
     dest: /etc/containers/registries.conf.d/homelab-mirrors.conf
     mode: "0644"
@@ -89,6 +98,51 @@
 
       [[registry.mirror]]
       location = "{{ nexus_url }}/repository/ghcr.io"
+  become: true
+
+- name: mirrors | Configure podman registry mirrors for ECR
+  when: test_use_ecr_registry_mirrors
+  copy:
+    dest: /etc/containers/registries.conf.d/homelab-mirrors.conf
+    mode: "0644"
+    owner: root
+    group: root
+    content: |
+      {% for source, prefix in test_ecr_registry_mirrors | dictsort %}
+      [[registry]]
+      location = "{{ source }}"
+
+      [[registry.mirror]]
+      location = "{{ test_ecr_registry }}/{{ prefix }}"
+      {% endfor %}
+  become: true
+
+- name: mirrors | Ensure root containers auth dir exists
+  when: test_use_ecr_registry_mirrors
+  file:
+    path: /root/.config/containers
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  become: true
+
+- name: mirrors | Write ECR auth for root podman pulls
+  when: test_use_ecr_registry_mirrors
+  copy:
+    dest: /root/.config/containers/auth.json
+    mode: "0600"
+    owner: root
+    group: root
+    content: |
+      {
+        "auths": {
+          "{{ test_ecr_registry }}": {
+            "auth": "{{ ('AWS:' ~ lookup('pipe', 'aws --region ' ~ test_ecr_region ~ ' ecr get-login-password')) | b64encode }}"
+          }
+        }
+      }
+    validate: python3 -m json.tool "%s"
   become: true
 
 - name: mirrors | Configure pip

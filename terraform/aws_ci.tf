@@ -25,9 +25,169 @@ locals {
       }
     ]
   ])
+  ci_ecr_pull_through_cache_rules = {
+    docker-hub = {
+      upstream_registry_url = "registry-1.docker.io"
+      credential_arn        = aws_secretsmanager_secret.ci_ecr_docker_hub.arn
+    }
+    github = {
+      upstream_registry_url = "ghcr.io"
+      credential_arn        = aws_secretsmanager_secret.ci_ecr_github.arn
+    }
+    gitlab = {
+      upstream_registry_url = "registry.gitlab.com"
+      credential_arn        = aws_secretsmanager_secret.ci_ecr_gitlab.arn
+    }
+    quay = {
+      upstream_registry_url = "quay.io"
+      credential_arn        = null
+    }
+  }
 }
 
 data "aws_caller_identity" "current" {}
+
+variable "ci_ecr_docker_hub_username" {
+  type        = string
+  nullable    = false
+  description = "Docker Hub username for ECR pull-through cache credentials. Sourced via TF_VAR_ci_ecr_docker_hub_username from 1Password through `op run`."
+
+  validation {
+    condition     = length(var.ci_ecr_docker_hub_username) > 0
+    error_message = "ci_ecr_docker_hub_username must be non-empty (resolved via TF_VAR_ci_ecr_docker_hub_username from 1Password through `op run`)."
+  }
+}
+
+variable "ci_ecr_docker_hub_access_token" {
+  type        = string
+  nullable    = false
+  sensitive   = true
+  description = "Docker Hub access token for ECR pull-through cache credentials. Sourced via TF_VAR_ci_ecr_docker_hub_access_token from 1Password through `op run`; stored in Terraform state as part of the Secrets Manager secret version."
+
+  validation {
+    condition     = length(var.ci_ecr_docker_hub_access_token) > 0
+    error_message = "ci_ecr_docker_hub_access_token must be non-empty (resolved via TF_VAR_ci_ecr_docker_hub_access_token from 1Password through `op run`)."
+  }
+}
+
+variable "ci_ecr_github_username" {
+  type        = string
+  nullable    = false
+  description = "GitHub username for GHCR ECR pull-through cache credentials. Sourced via TF_VAR_ci_ecr_github_username from 1Password through `op run`."
+
+  validation {
+    condition     = length(var.ci_ecr_github_username) > 0
+    error_message = "ci_ecr_github_username must be non-empty (resolved via TF_VAR_ci_ecr_github_username from 1Password through `op run`)."
+  }
+}
+
+variable "ci_ecr_github_access_token" {
+  type        = string
+  nullable    = false
+  sensitive   = true
+  description = "GitHub PAT for GHCR ECR pull-through cache credentials. Sourced via TF_VAR_ci_ecr_github_access_token from 1Password through `op run`; stored in Terraform state as part of the Secrets Manager secret version."
+
+  validation {
+    condition     = length(var.ci_ecr_github_access_token) > 0
+    error_message = "ci_ecr_github_access_token must be non-empty (resolved via TF_VAR_ci_ecr_github_access_token from 1Password through `op run`)."
+  }
+}
+
+variable "ci_ecr_gitlab_username" {
+  type        = string
+  nullable    = false
+  description = "GitLab username for registry.gitlab.com ECR pull-through cache credentials. Sourced via TF_VAR_ci_ecr_gitlab_username from 1Password through `op run`."
+
+  validation {
+    condition     = length(var.ci_ecr_gitlab_username) > 0
+    error_message = "ci_ecr_gitlab_username must be non-empty (resolved via TF_VAR_ci_ecr_gitlab_username from 1Password through `op run`)."
+  }
+}
+
+variable "ci_ecr_gitlab_access_token" {
+  type        = string
+  nullable    = false
+  sensitive   = true
+  description = "GitLab token for registry.gitlab.com ECR pull-through cache credentials. Sourced via TF_VAR_ci_ecr_gitlab_access_token from 1Password through `op run`; stored in Terraform state as part of the Secrets Manager secret version."
+
+  validation {
+    condition     = length(var.ci_ecr_gitlab_access_token) > 0
+    error_message = "ci_ecr_gitlab_access_token must be non-empty (resolved via TF_VAR_ci_ecr_gitlab_access_token from 1Password through `op run`)."
+  }
+}
+
+# ─── ECR pull-through cache ──────────────────────────────────────────────────
+# AWS cells cannot reach the lab Nexus Docker proxies. These regional ECR rules
+# cache the public registries that roles pull from, so EC2 cells fetch layers
+# from eu-central-1 after the first import. Docker Hub, GHCR, and GitLab require
+# upstream credentials in Secrets Manager. The secret versions are terraform-
+# managed here by explicit operator choice, so the token values are present in
+# the encrypted terraform state.
+
+resource "aws_secretsmanager_secret" "ci_ecr_docker_hub" {
+  name        = "ecr-pullthroughcache/docker-hub"
+  description = "Docker Hub credentials for ECR pull-through cache"
+
+  tags = {
+    role = "ci"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "ci_ecr_docker_hub" {
+  secret_id = aws_secretsmanager_secret.ci_ecr_docker_hub.id
+  secret_string = jsonencode({
+    username    = var.ci_ecr_docker_hub_username
+    accessToken = var.ci_ecr_docker_hub_access_token
+  })
+}
+
+resource "aws_secretsmanager_secret" "ci_ecr_github" {
+  name        = "ecr-pullthroughcache/github"
+  description = "GHCR credentials for ECR pull-through cache"
+
+  tags = {
+    role = "ci"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "ci_ecr_github" {
+  secret_id = aws_secretsmanager_secret.ci_ecr_github.id
+  secret_string = jsonencode({
+    username    = var.ci_ecr_github_username
+    accessToken = var.ci_ecr_github_access_token
+  })
+}
+
+resource "aws_secretsmanager_secret" "ci_ecr_gitlab" {
+  name        = "ecr-pullthroughcache/gitlab"
+  description = "GitLab Container Registry credentials for ECR pull-through cache"
+
+  tags = {
+    role = "ci"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "ci_ecr_gitlab" {
+  secret_id = aws_secretsmanager_secret.ci_ecr_gitlab.id
+  secret_string = jsonencode({
+    username    = var.ci_ecr_gitlab_username
+    accessToken = var.ci_ecr_gitlab_access_token
+  })
+}
+
+resource "aws_ecr_pull_through_cache_rule" "ci" {
+  for_each = local.ci_ecr_pull_through_cache_rules
+
+  ecr_repository_prefix = each.key
+  upstream_registry_url = each.value.upstream_registry_url
+  credential_arn        = each.value.credential_arn
+
+  depends_on = [
+    aws_secretsmanager_secret_version.ci_ecr_docker_hub,
+    aws_secretsmanager_secret_version.ci_ecr_github,
+    aws_secretsmanager_secret_version.ci_ecr_gitlab,
+  ]
+}
 
 # ─── Networking ──────────────────────────────────────────────────────────────
 # Dedicated CI VPC: public IPv4 subnets across 3 AZs, IGW only — no NAT
@@ -392,6 +552,32 @@ resource "aws_iam_role_policy" "ci_cell" {
         Effect   = "Allow"
         Action   = ["ssm:GetParameter", "ssm:GetParameters"]
         Resource = "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/ami/*"
+      },
+      # ECR pull-through cache for container images inside AWS cells. The
+      # first pull through a namespace may create the cache repository and
+      # import upstream layers; later pulls are ordinary ECR reads. Token
+      # retrieval is registry-scoped by AWS and therefore resource "*".
+      {
+        Sid      = "EcrLogin"
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Sid    = "EcrPullThroughCache"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:BatchImportUpstreamImage",
+          "ecr:CreateRepository",
+          "ecr:DescribeRepositories",
+          "ecr:GetDownloadUrlForLayer",
+        ]
+        Resource = [
+          for prefix in keys(local.ci_ecr_pull_through_cache_rules) :
+          "arn:aws:ecr:${local.ci_aws_region}:${local.ci_account_id}:repository/${prefix}/*"
+        ]
       },
       # Per-cell one-time termination schedules.
       {
