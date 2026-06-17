@@ -66,10 +66,7 @@ def _load_wan_probe_ports() -> dict[str, tuple[int, ...]]:
     same guest ports directly via terraform/aws_ci.tf security-group rules.
     """
     data = yaml.safe_load(WAN_PROBE_PORTS_PATH.read_text()) or {}
-    return {
-        proto: tuple(int(port) for port in data.get(proto, ()))
-        for proto in ("tcp", "udp")
-    }
+    return {proto: tuple(int(port) for port in data.get(proto, ())) for proto in ("tcp", "udp")}
 
 
 DEFAULT_WAN_FORWARDS = _load_wan_probe_ports()
@@ -2235,8 +2232,7 @@ class Ec2Machine(Machine):
         # on the cell's WAN iface exactly like real Internet traffic.
         self.wan_probe_host = ip
         self.wan_forward_ports = {
-            proto: {str(port): port for port in ports}
-            for proto, ports in DEFAULT_WAN_FORWARDS.items()
+            proto: {str(port): port for port in ports} for proto, ports in DEFAULT_WAN_FORWARDS.items()
         }
 
     async def _find_ssh_port(self) -> None:
