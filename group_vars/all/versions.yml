@@ -75,7 +75,7 @@ z2m_image:           ghcr.io/koenkk/zigbee2mqtt:2.12.0  # 2026-06-09
 # generic-package registry. URL and sha256 are kept adjacent here so
 # an auditor can verify the pin without recomposing the URL from the
 # version constant.
-eaton_ipp_version: "1.75.183"
+eaton_ipp_version: "1.75.183"  # 2024-10 (IPP 1.75)
 eaton_ipp_release:
   x86_64:
     url: "{{ mirror_gitea_lab }}/api/packages/adrienkohlbecker/generic/eaton_ipp/1.75/ipp-linux_1.75.183-1_amd64.deb"
@@ -85,7 +85,7 @@ eaton_ipp_release:
 # no binaries at all, so both arches always build it from source. That
 # forces the Go toolchain onto every fan2go_enabled host regardless of arch
 # -- documented in roles/fan2go/tasks/main.yml's phase comment.
-fan2go_version: "0.13.0"
+fan2go_version: "0.13.0"  # 2026-02-24
 fan2go_artifacts:
   # No-nvml flavor: smaller, no NVIDIA dependency (lab/pug have no GPUs).
   x86_64:
@@ -102,7 +102,7 @@ fan2go_artifacts:
 # loopback (api: enabled: true required in the per-host fan2go.yaml).
 # No upstream binaries on any arch; pin to the tag's commit SHA so the
 # git fetch is reproducible even if the tag is later moved.
-fan2go_tui_version: "0.2.1"
+fan2go_tui_version: "0.2.1"  # 2024-09-25 (tag = commit 30de59be)
 fan2go_tui_artifacts:
   repo: "https://github.com/markusressel/fan2go-tui.git"
   git_ref: "30de59be623559e82900472323d0300dad2fab00"
@@ -111,7 +111,7 @@ fan2go_tui_artifacts:
 # decoupled from fan2go_version / fan2go_tui_version: bump Go only when
 # upstream's go.mod raises the floor (fan2go @ 0.13.0 is 1.25;
 # fan2go-tui @ 0.2.1 is 1.24) or to pick up Go security fixes.
-fan2go_go_version: "1.26.3"
+fan2go_go_version: "1.26.3"  # 2026-05-07
 fan2go_go_artifacts:
   x86_64:
     url: "https://go.dev/dl/go{{ fan2go_go_version }}.linux-amd64.tar.gz"
@@ -121,7 +121,7 @@ fan2go_go_artifacts:
     sha256: "9d89a3ea57d141c2b22d70083f2c8459ba3890f2d9e818e7e933b75614936565"
 
 # Gitea: single static Go binary installed to /usr/local/bin.
-gitea_version: "1.26.1"
+gitea_version: "1.26.1"  # 2026-04-24
 gitea_release:
   x86_64:
     url: "{{ mirror_gitea_dl }}/gitea/{{ gitea_version }}/gitea-{{ gitea_version }}-linux-amd64"
@@ -136,7 +136,7 @@ gitea_release:
 # the unit's next restart picks up the new binary. ansible_architecture
 # (x86_64 / aarch64) keys map onto upstream's amd64 / arm64 asset names. The
 # sha256s were computed from the published binaries on 2026-06-10.
-gitlab_runner_version: "19.0.1"
+gitlab_runner_version: "19.0.1"  # 2026-06-01
 gitlab_runner_archive:
   x86_64:
     url: "https://gitlab-runner-downloads.s3.amazonaws.com/v19.0.1/binaries/gitlab-runner-linux-amd64"
@@ -164,13 +164,13 @@ gitlab_runner_archive:
 # on a version change to avoid orphaning the old assemblies, and _verify
 # asserts the 4.x names. The 4.0.0.4 release publishes a sha256 asset
 # directly; the value below was verified against it on download.
-jellyfin_sso_plugin_version: "4.0.0.4"
+jellyfin_sso_plugin_version: "4.0.0.4"  # 2026-03-20
 jellyfin_sso_plugin:
   url: https://github.com/9p4/jellyfin-plugin-sso/releases/download/v{{ jellyfin_sso_plugin_version }}/sso-authentication_{{ jellyfin_sso_plugin_version }}.zip
   sha256: c09f16ba31059a434ddd7f811e4f9608d4b4c4514cc80a5bf1ca33bee61e1107
 
 # lnav log viewer: static musl build, per-arch zip.
-lnav_version: "0.14.0"
+lnav_version: "0.14.0"  # 2026-04-12
 lnav_artifacts:
   x86_64:
     url: "https://github.com/tstack/lnav/releases/download/v0.14.0/lnav-0.14.0-linux-musl-x86_64.zip"
@@ -194,7 +194,7 @@ lnav_artifacts:
 # the guest out of iCloud -- only do it during a planned re-install.
 # (The macOS release itself -- Sequoia "15" -- is host-overridable and lives
 # in roles/macos_vm/defaults/main.yml, not here.)
-macos_vm_osx_kvm_commit: 4c378a4b5e0b219783683012bec680325eb40719
+macos_vm_osx_kvm_commit: 4c378a4b5e0b219783683012bec680325eb40719  # 2026-01-26
 macos_vm_opencore_qcow2_url: "{{ mirror_raw_githubusercontent }}/kholia/OSX-KVM/{{ macos_vm_osx_kvm_commit }}/OpenCore/OpenCore.qcow2"
 macos_vm_opencore_qcow2_sha256: "6ed36c0c2a4206ccc695f6b1a734a1cc6f94d288b0517c705d351c63cb92a6f3"
 macos_vm_fetch_macos_url: "{{ mirror_raw_githubusercontent }}/kholia/OSX-KVM/{{ macos_vm_osx_kvm_commit }}/fetch-macOS-v2.py"
@@ -205,7 +205,7 @@ macos_vm_fetch_macos_sha256: "39ac6d26bd265f5d32198062f515ad15ef93afb7a74e702be2
 # (roles/minio/tasks/main.yml) and the .minio.sys/* idempotence sentinels
 # (tasks/data.yml) both depend on this vintage. A bump needs a console +
 # provisioning re-test, not a bare version change.
-minio_version: "20220526054841.0.0"
+minio_version: "20220526054841.0.0"  # 2022-05-26
 minio_release:
   x86_64:
     url: "{{ mirror_minio }}/server/minio/release/linux-amd64/archive/minio_{{ minio_version }}_amd64.deb"
@@ -214,7 +214,7 @@ minio_release:
     url: "{{ mirror_minio }}/server/minio/release/linux-arm64/archive/minio_{{ minio_version }}_arm64.deb"
     sha256: "04c327fa3b4f6a71587226d762564629dd7b35f9b737dd89af52da8531dfc6d5"
 
-minio_mcli_version: "20220610222912.0.0"
+minio_mcli_version: "20220610222912.0.0"  # 2022-06-10
 minio_mcli_release:
   x86_64:
     url: "{{ mirror_minio }}/client/mc/release/linux-amd64/archive/mcli_{{ minio_mcli_version }}_amd64.deb"
@@ -225,7 +225,7 @@ minio_mcli_release:
 
 # rEFInd theme: refind-theme-regular, pinned to an upstream commit.
 # Arch-independent (PNG icons + bitmap fonts), so no ansible_architecture keying.
-refind_theme_version: 26a82c33c67bbcaf1498a3c2e4d314b7cbe6cf50
+refind_theme_version: 26a82c33c67bbcaf1498a3c2e4d314b7cbe6cf50  # 2025-08-12
 refind_theme_artifact:
   url: "{{ mirror_github }}/bobafetthotmail/refind-theme-regular/archive/{{ refind_theme_version }}.tar.gz"
   sha256: 4f4cf0a496d26c6da73299320ae9a3f00dd32be916b6abfd35dfab2d62368f5a
@@ -240,12 +240,12 @@ refind_theme_artifact:
 # GitHub's auto-generated tag tarball, whose checksum can shift if GitHub
 # re-compresses it -- a mismatch then fails the fetch loudly (the point), at
 # which point recompute and re-pin.
-sabnzbd_nzbtomedia_version: "12.1.13"
+sabnzbd_nzbtomedia_version: "12.1.13"  # 2024-04-26
 sabnzbd_nzbtomedia_url: "{{ mirror_github }}/clinton-hall/nzbToMedia/archive/refs/tags/12.1.13.tar.gz"
 sabnzbd_nzbtomedia_sha256: "769e2941d5ba7fcaaa3348294df97d1be3fabe8fe6b0c9710df2059fde28a21d"
 
 # zfs-autobackup: pip-installed; version consumed by the install + _verify.
-zfs_autobackup_version: "3.3"
+zfs_autobackup_version: "3.3"  # 2024-12-17
 
 # ZFSBootMenu tarballs are built by mise-tasks/zbm/build.sh and published to
 # the homelab GitLab project's generic package registry (project 83079143 =
@@ -260,11 +260,11 @@ zfs_autobackup_version: "3.3"
 zfsbootmenu_repository_url: "{{ mirror_gitlab }}/api/v4/projects/83079143/packages/generic/zfsbootmenu"
 zfsbootmenu_release:
   x86_64:
-    version: v3.1.0-linux6.18-ci.27033469422.1-x86_64
+    version: v3.1.0-linux6.18-ci.27033469422.1-x86_64  # ZBM v3.1.0 2026-01-01 (CI build)
     url: "{{ zfsbootmenu_repository_url }}/v3.1.0-linux6.18-ci.27033469422.1-x86_64/zfsbootmenu-v3.1.0-linux6.18-ci.27033469422.1-x86_64.tar.gz"
     sha256_url: "{{ zfsbootmenu_repository_url }}/v3.1.0-linux6.18-ci.27033469422.1-x86_64/zfsbootmenu-v3.1.0-linux6.18-ci.27033469422.1-x86_64.tar.gz.sha256sum"
   aarch64:
-    version: v3.1.0-linux6.18-local.20260605230757-aarch64
+    version: v3.1.0-linux6.18-local.20260605230757-aarch64  # ZBM v3.1.0 2026-01-01 (local build 2026-06-05)
     url: "{{ zfsbootmenu_repository_url }}/v3.1.0-linux6.18-local.20260605230757-aarch64/zfsbootmenu-v3.1.0-linux6.18-local.20260605230757-aarch64.tar.gz"
     sha256_url: "{{ zfsbootmenu_repository_url }}/v3.1.0-linux6.18-local.20260605230757-aarch64/zfsbootmenu-v3.1.0-linux6.18-local.20260605230757-aarch64.tar.gz.sha256sum"
 
@@ -275,4 +275,4 @@ zfsbootmenu_release:
 # release -- netdata ships frequently and the 2.x line is agent/dashboard
 # stable for us. The backport package *name* lists (ntp/podman/zfs) carry no
 # version and stay in their roles' vars/main.yml.
-netdata_version: "2.*"
+netdata_version: "2.*"  # 2.x series; 2.0 GA 2024-11-07
