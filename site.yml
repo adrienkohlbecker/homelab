@@ -49,8 +49,6 @@
     - socket_proxy
     - netdata
     - fluentbit
-    # Tear down decommissioned service state (drop once prod has re-converged).
-    - retired_services
 
 # Services -- host-scoped, built on the platform above. A role belongs here
 # (not in Base machine install) when only a subset of hosts run it.
@@ -145,6 +143,12 @@
   hosts: udm
   roles:
     - udm_dns_failover
+
+- name: Decomission services
+  hosts: box,lab,pug,fox
+  roles:
+    # Tear down decommissioned service state (drop once prod has re-converged).
+    - retired_services
 
 - name: Reboot check
   hosts: box,lab,pug,fox
