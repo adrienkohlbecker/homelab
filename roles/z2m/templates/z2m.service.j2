@@ -41,7 +41,7 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="z2m" \
     --volume /mnt/services/z2m:/app/data \
     --user {{ z2m_user.uid }}:{{ z2m_user.group }} \
-    --network mosquitto \
+    --network homeassistant \
     --security-opt=no-new-privileges \
     --tz={{ system_timezone }} \
     --publish 127.0.0.1:{{ service_ports.z2m }}:{{ service_ports.z2m }}/tcp \

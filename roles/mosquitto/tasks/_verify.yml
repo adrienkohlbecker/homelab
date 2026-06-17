@@ -1,16 +1,17 @@
-# Each consumer reaches the broker from its own container over the `mosquitto`
-# network, resolving `mosquitto.dns.podman` via aardvark-dns -- the path z2m and
-# home-assistant use. A throwaway peer container (not `podman exec` into the
-# broker) is what exercises cross-container name resolution; looping over every
-# account covers the whole pwfile, not just the first line.
+# Each consumer reaches the broker from its own container over the
+# `homeassistant` network, resolving `mosquitto.dns.podman` via aardvark-dns --
+# the path z2m and home-assistant use. A throwaway peer container (not
+# `podman exec` into the broker) is what exercises cross-container name
+# resolution; looping over every account covers the whole pwfile, not just the
+# first line.
 - name: _verify | Each account authenticates over the network via DNS
   shell: |
     set -euo pipefail
-    podman run --rm --network mosquitto {{ mosquitto_image }} \
+    podman run --rm --network homeassistant {{ mosquitto_image }} \
       mosquitto_pub -h mosquitto.dns.podman -p 1883 \
       -u {{ item.key }} -P {{ item.value.password }} \
       -t homelab/verify/{{ item.key }} -m ok -r
-    podman run --rm --network mosquitto {{ mosquitto_image }} \
+    podman run --rm --network homeassistant {{ mosquitto_image }} \
       mosquitto_sub -h mosquitto.dns.podman -p 1883 \
       -u {{ item.key }} -P {{ item.value.password }} \
       -t homelab/verify/{{ item.key }} -C 1 -W 3
@@ -28,7 +29,7 @@
 
 - name: _verify | Anonymous connection is refused
   command: >-
-    podman run --rm --network mosquitto {{ mosquitto_image }}
+    podman run --rm --network homeassistant {{ mosquitto_image }}
     mosquitto_pub -h mosquitto.dns.podman -p 1883
     -t homelab/verify -m nope
   become: true
@@ -38,7 +39,7 @@
 
 - name: _verify | Wrong password is refused
   command: >-
-    podman run --rm --network mosquitto {{ mosquitto_image }}
+    podman run --rm --network homeassistant {{ mosquitto_image }}
     mosquitto_pub -h mosquitto.dns.podman -p 1883
     -u z2m -P definitely-wrong -t homelab/verify -m nope
   become: true
@@ -52,7 +53,7 @@
 - name: _verify | Publish a retained message before restart
   shell: |
     set -euo pipefail
-    podman run --rm --network mosquitto {{ mosquitto_image }} \
+    podman run --rm --network homeassistant {{ mosquitto_image }} \
       mosquitto_pub -h mosquitto.dns.podman -p 1883 \
       -u z2m -P {{ mosquitto_accounts.z2m.password }} \
       -t homelab/persist -m survived -r
@@ -70,7 +71,7 @@
 - name: _verify | Retained message survived the restart
   shell: |
     set -euo pipefail
-    podman run --rm --network mosquitto {{ mosquitto_image }} \
+    podman run --rm --network homeassistant {{ mosquitto_image }} \
       mosquitto_sub -h mosquitto.dns.podman -p 1883 \
       -u z2m -P {{ mosquitto_accounts.z2m.password }} \
       -t homelab/persist -C 1 -W 3
@@ -88,7 +89,7 @@
   shell: |
     set -euo pipefail
     for t in homelab/verify/z2m homelab/verify/homeassistant homelab/persist; do
-      podman run --rm --network mosquitto {{ mosquitto_image }} \
+      podman run --rm --network homeassistant {{ mosquitto_image }} \
         mosquitto_pub -h mosquitto.dns.podman -p 1883 \
         -u z2m -P {{ mosquitto_accounts.z2m.password }} -t "$t" -r -n
     done

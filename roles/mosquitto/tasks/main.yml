@@ -12,15 +12,16 @@
   tags:
     - mosquitto
 
-# Per-service podman network with DNS enabled so consumers (z2m) can
-# reach mosquitto at `mosquitto.dns.podman`. Both producer and consumer
-# create the network independently; containers.podman.podman_network is
-# idempotent so whichever role converges first wins and the other is a no-op.
-- name: Create mosquitto podman network
+# Shared HA-stack podman network with DNS enabled so HA and z2m can reach
+# mosquitto at `mosquitto.dns.podman`, and HA can reach influxdb in the same
+# aardvark-dns view. Each participating role creates it independently;
+# containers.podman.podman_network is idempotent so whichever role converges
+# first wins and the others are no-ops.
+- name: Create homeassistant podman network
   when: not ansible_check_mode
   containers.podman.podman_network:
-    name: mosquitto
-    # Explicit so z2m can resolve `mosquitto.dns.podman` via aardvark-dns.
+    name: homeassistant
+    # Explicit so consumers can resolve `*.dns.podman` via aardvark-dns.
     disable_dns: false
     state: present
   become: true

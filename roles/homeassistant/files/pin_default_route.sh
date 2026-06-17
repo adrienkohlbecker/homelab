@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Down-rank HomeAssistant's mac_iot (macvlan) default route so the
-# mosquitto-bridge default wins where both exist (netavark installs a
-# default per gateway-bearing network at equal metric -- an unpinned tie,
+# Down-rank HomeAssistant's mac_iot (macvlan) default route so a podman
+# bridge default wins where both exist (netavark installs a default per
+# gateway-bearing network at equal metric -- an unpinned tie,
 # the shape lab is in), while leaving it as-is where the macvlan is the
 # only default (single-default hosts) so HA's egress is never stranded.
 # Runs on the host (HA has no CAP_NET_ADMIN) and edits inside the

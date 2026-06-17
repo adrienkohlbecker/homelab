@@ -119,6 +119,16 @@
     - /etc/sysctl.d/30-redis.conf
   become: true
 
+# ---- mosquitto podman network (replaced by homeassistant backend) ----
+# The mosquitto service still exists, but its dedicated bridge does not: the HA
+# stack now shares the `homeassistant` bridge so HA can resolve both
+# mosquitto.dns.podman and influxdb.dns.podman from one aardvark-dns view.
+- name: Remove retired mosquitto podman network
+  containers.podman.podman_network:
+    name: mosquitto
+    state: absent
+  become: true
+
 # ---- compta (was lab) ----
 # Stateless image: no /mnt/services dir, no secrets.
 - name: Retire compta service

@@ -32,8 +32,8 @@ http:
   use_x_forwarded_for: true
   trusted_proxies:
     # nginx (host-native) proxies via 127.0.0.1:8123. The published-port
-    # DNAT lands on HA's mosquitto-bridge IP and SNAT rewrites the source
-    # to that bridge's gateway. HA therefore sees the connection as
+    # DNAT lands on HA's podman-bridge IP and SNAT rewrites the source
+    # to the bridge gateway. HA therefore sees the connection as
     # coming from somewhere inside the netavark default pool, not from
     # 127.0.0.1, so trusted_proxies has to cover that prefix.
     #
@@ -41,8 +41,7 @@ http:
     # container on every other netavark-allocated bridge -- a compromise
     # on any of them lets the attacker spoof X-Forwarded-For and bypass
     # any HA client-IP allowlist or rate-limit. The narrower fix is to
-    # pin mosquitto's subnet to a fixed /24 outside the auto-pool and
-    # trust only that; deferred today because it's a cross-role change
-    # and the threat model (compromised sibling container) is low-prob
-    # in this homelab.
+    # trust only the bridge subnets HA actually joins; deferred today
+    # because the threat model (compromised sibling container) is
+    # low-prob in this homelab.
     - {{ podman_bridge_pool }}

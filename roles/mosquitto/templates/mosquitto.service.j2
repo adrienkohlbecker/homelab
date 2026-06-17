@@ -49,7 +49,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/mosquitto/config:/mosquitto/config \
     --volume /mnt/services/sqlite/mosquitto:/mosquitto/data \
     --user {{ mosquitto_user.uid }}:{{ mosquitto_user.group }} \
-    --network mosquitto \
+    --network homeassistant \
     --health-cmd '["mosquitto_sub","-p","1880","-t","healthcheck","-E","-i","probe","-W","3"]' \
     --health-startup-cmd '["mosquitto_sub","-p","1880","-t","healthcheck","-E","-i","probe","-W","3"]' \
     --health-startup-interval "1s" \

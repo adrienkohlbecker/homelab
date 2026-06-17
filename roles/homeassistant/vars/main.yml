@@ -9,10 +9,12 @@
 # restriction stays pinned to whichever interface ends up holding the
 # mac_iot IP -- no separate runtime probe needed.
 homeassistant_networks:
-  # mosquitto bridge: HA needs aardvark-dns resolution of "mosquitto.dns.podman"
-  # to reach the broker. Discovery/zeroconf is intentionally NOT
-  # enabled on this adapter (see core.network.j2 + main.yml).
-  - name: mosquitto
+  # homeassistant bridge: shared backend for HA, mosquitto, z2m, and influxdb.
+  # HA needs one aardvark-dns view containing both mosquitto.dns.podman and
+  # influxdb.dns.podman; multiple backend bridges make resolver ordering decide
+  # which names work. Discovery/zeroconf is intentionally NOT enabled on this
+  # adapter (see core.network.j2 + main.yml).
+  - name: homeassistant
   # mac_iot: HA's L2 presence on the IoT VLAN (10.123.4.0/24). No IP
   # pin — HA is the only container on this network, netavark allocates
   # deterministically from ip_range .136/29 (upper /29 of lab's IoT

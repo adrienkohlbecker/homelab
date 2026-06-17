@@ -55,6 +55,7 @@ ExecStart=/usr/bin/podman run \
     --env DOCKER_INFLUXDB_INIT_PASSWORD_FILE=/run/secrets/influxdb_root_password \
     --volume /mnt/services/influxdb/data:/var/lib/influxdb2 \
     --volume /mnt/services/influxdb/config:/etc/influxdb2 \
+    --network homeassistant \
     --publish 127.0.0.1:{{ service_ports.influxdb }}:8086/tcp \
     --health-cmd         '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8086/health"]' \
     --health-startup-cmd '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8086/health"]' \

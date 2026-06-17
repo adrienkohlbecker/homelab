@@ -1,7 +1,7 @@
 {# HA's network integration reads .storage/core.network at startup to    #}
 {# decide which adapters to advertise on (mDNS, SSDP, scanners). With no #}
-{# file present HA uses every adapter; that leaks the mosquitto-bridge   #}
-{# IP 10.89.0.29 onto the IoT VLAN via zeroconf announcements. We pin    #}
+{# file present HA uses every adapter; that leaks the backend-bridge IP  #}
+{# onto the IoT VLAN via zeroconf announcements. We pin                  #}
 {# discovery to the mac_iot adapter only. The ethN name is computed      #}
 {# from homeassistant_networks (vars/main.yml) -- podman assigns         #}
 {# interface names in --network= declaration order, so the list's index  #}
