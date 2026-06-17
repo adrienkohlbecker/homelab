@@ -5,6 +5,13 @@
 #     etc_hosts_entries resolves to the configured IPs.
 #   - nexus_url empty (--upstream-mirrors) → check apt points at upstream.
 
+- name: _verify | Decide whether this cell uses ECR registry mirrors
+  set_fact:
+    test_use_ecr_registry_mirrors: >-
+      {{ test_backend == 'aws'
+         and (test_ecr_registry | default('') | length > 0)
+         and (test_ecr_registry_mirrors | default({}) | length > 0) }}
+
 - name: _verify | Stat apt sources files
   stat:
     path: "{{ item }}"
@@ -58,15 +65,15 @@
   register: test_registries
 
 - name: _verify | Read podman registry mirror config
-  when:
-    - nexus_url | length > 0
-    - test_registries.stat.exists
+  when: ((nexus_url | length > 0) or test_use_ecr_registry_mirrors) and test_registries.stat.exists
   slurp:
     src: /etc/containers/registries.conf.d/homelab-mirrors.conf
   register: test_registries_content
 
 - name: _verify | Podman registry mirrors reference Nexus
-  when: nexus_url | length > 0
+  when:
+    - nexus_url | length > 0
+    - not test_use_ecr_registry_mirrors
   assert:
     that:
       - test_registries.stat.exists
@@ -77,6 +84,17 @@
       - (nexus_url ~ '/repository/docker.io') in (test_registries_content.content | b64decode)
       - (nexus_url ~ '/repository/ghcr.io') in (test_registries_content.content | b64decode)
     fail_msg: "registries.conf.d/homelab-mirrors.conf missing or doesn't mirror docker.io+ghcr.io to {{ nexus_url }}"
+
+- name: _verify | Podman registry mirrors reference ECR
+  when: test_use_ecr_registry_mirrors
+  assert:
+    that:
+      - test_registries.stat.exists
+      - (test_ecr_registry ~ '/docker-hub') in (test_registries_content.content | b64decode)
+      - (test_ecr_registry ~ '/github') in (test_registries_content.content | b64decode)
+      - (test_ecr_registry ~ '/gitlab') in (test_registries_content.content | b64decode)
+      - (test_ecr_registry ~ '/quay') in (test_registries_content.content | b64decode)
+    fail_msg: "registries.conf.d/homelab-mirrors.conf missing or doesn't mirror docker.io+ghcr.io+registry.gitlab.com+quay.io to {{ test_ecr_registry }}"
 
 - name: _verify | Stat pip and uv configs
   stat:
@@ -143,7 +161,9 @@
 # /repository/<repo>/v2/, see mirrors.yml). Hit each mirror's API so a
 # parses-but-404s mirror fails here, the way the apt update above does for apt.
 - name: _verify | Podman docker.io mirror serves its v2 API
-  when: nexus_url | length > 0
+  when:
+    - nexus_url | length > 0
+    - not test_use_ecr_registry_mirrors
   uri:
     # nexus_url is a bare host (the registries.conf mirror location, where podman
     # supplies the scheme); add https:// for a direct probe. validate_certs:false

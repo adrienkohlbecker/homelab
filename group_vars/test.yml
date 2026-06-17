@@ -1,5 +1,12 @@
 domain: mhaf.fr
 nexus_url: nexus.lab.fahm.fr
+test_ecr_region: eu-central-1
+test_ecr_registry: 000390721279.dkr.ecr.eu-central-1.amazonaws.com
+test_ecr_registry_mirrors:
+  docker.io: docker-hub
+  ghcr.io: github
+  registry.gitlab.com: gitlab
+  quay.io: quay
 # Static name → IP overrides for the test environment. Two consumers share
 # this map:
 #   1. roles/hostname/templates/hosts.j2 renders them into /etc/hosts on
