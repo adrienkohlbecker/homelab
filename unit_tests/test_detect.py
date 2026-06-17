@@ -894,6 +894,26 @@ class TestRenderChildPipeline:
         assert "_site_test:box" not in doc
         assert "no_cells" not in doc
 
+    def test_cells_run_on_the_coordinator_runner(self) -> None:
+        # The cell fan-out (everything extending .cell, including _site_test) runs
+        # on the ephemeral docker-autoscaler coordinator, not the on-fox docker
+        # runner. The default tag stays fox-docker-aws for the no_cells
+        # placeholder; .cell overrides it to the coordinator.
+        doc = _render_child_doc(["nginx:box"], site_test=True)
+        assert doc["default"]["tags"] == ["fox-docker-aws"]
+        assert doc[".cell"]["tags"] == ["fox-coordinator-aws"]
+        # _site_test extends .cell, so it inherits the coordinator tag.
+        assert doc["_site_test:box"]["extends"] == ".cell"
+        assert "tags" not in doc["_site_test:box"]
+
+    def test_no_cells_placeholder_stays_on_fox(self) -> None:
+        # The placeholder carries no own tag, so it inherits the fox-docker-aws
+        # default -- a no-cell pipeline must never boot a coordinator just to
+        # report there is nothing to test.
+        doc = _render_child_doc([], site_test=False)
+        assert "tags" not in doc["no_cells"]
+        assert doc["default"]["tags"] == ["fox-docker-aws"]
+
     def test_site_test_job_added(self) -> None:
         doc = _render_child_doc(["nginx:box"], site_test=True)
         assert "_site_test:box" in doc
