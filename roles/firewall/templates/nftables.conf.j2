@@ -57,6 +57,7 @@ table inet homelab {
     counter igmp_accept {}
     counter wireguard_accept {}
     counter mosh_accept {}
+    counter forward_podman_isolation {}
     counter forward_nonsyn {}
     counter forward_catchall {}
     counter input_unscoped_tcp {}
@@ -434,6 +435,16 @@ table inet homelab {
             ct status dnat accept comment "Reach containers (LAN + wireguard ingress)"
         iifname "podman*" oifname "podman*" ct status dnat \
             accept comment "container → VIP → container (cross- or same-bridge DNAT)"
+
+        # Direct podman cross-network traffic: deny container-IP lateral
+        # movement between the default bridge and named bridge pool.
+        # Same-network traffic is L2-switched inside one bridge and never
+        # reaches this routed FORWARD hook; published/VIP access is handled
+        # by the ct-status-dnat allow above. Enforce it here instead of
+        # relying on netavark's compat isolation chains, which the harness
+        # proved did not stop cross-bridge traffic under this table.
+        ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } ip daddr { $PODMAN_DEFAULT, $PODMAN_POOL } \
+            counter name "forward_podman_isolation" drop comment "podman direct cross-network isolation"
 
         # Catch-all log+drop. Counter for _verify.yml.
         limit rate 5/minute burst 10 packets log prefix "[nftables] FORWARD:REJECT: "
