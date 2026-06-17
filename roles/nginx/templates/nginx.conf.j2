@@ -141,8 +141,11 @@ http {
     # can chart the TLS-version/cipher distribution per vhost; on a plaintext
     # :80 request they are unset and nginx logs each as `-`, keeping the field
     # count stable so the positional CSV parse in files/web_log.conf still lines up.
-    # Any change to this field list must move in lockstep with files/web_log.conf
-    # (netdata) and roles/fluentbit/files/parsers_nginx.conf (the lnav parser).
+    # Any change to this field list must move in lockstep with all three
+    # downstream consumers: roles/nginx/files/web_log.conf (netdata's positional
+    # CSV collector), roles/fluentbit/files/parsers_nginx.conf (the Fluent Bit
+    # ingest regex) and roles/lnav/files/formats/fluentbit_lnav.json (lnav's
+    # field map + its embedded sample line).
     log_format custom      '$remote_addr - $remote_user [$time_local] $host "$request_safe" $server_name $status $body_bytes_sent $request_length $request_time $upstream_response_time "$http_referer" "$http_user_agent" "$authelia_user" "$authelia_groups" $ssl_protocol $ssl_cipher';
     access_log             /var/log/nginx/access.log custom buffer=512k flush=5s;
     error_log              stderr warn;
