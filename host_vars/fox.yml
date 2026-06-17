@@ -86,8 +86,16 @@ boot_efi_timeout: 0
 # because this is the only RAM-constrained host: lean on cheap compressed swap
 # to keep the working set resident (the local NVMe disk is fast, so this is a
 # small-RAM call, not a slow-disk one). See notes/swap_strategy.md.
+#
+# algorithm=lz4 (the fleet default is zstd): under a full-universe CI fan-out
+# this 2-vCPU host is CPU-bound (CPU PSI ~96%) while it pages hard at
+# swappiness 150, so zstd's per-page compression cost shows up directly in
+# system time. lz4 is ~5-10x cheaper to (de)compress for a lower ratio (~2.5x
+# vs ~4x here) -- the right trade when CPU, not RAM, is the binding constraint
+# during builds; the disk-overflow partition backstops the lost headroom.
 swap_zram:
   size: 4G
+  algorithm: lz4
 swap_swappiness: 150
 
 # Hetzner VPS has a standard 8250 UART at 0x3f8 (Hetzner serial console).
