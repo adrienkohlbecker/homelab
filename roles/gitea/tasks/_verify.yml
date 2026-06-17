@@ -10,19 +10,14 @@
   delay: 2
   until: _gitea_healthz.status == 200
 
-# Asserts the running gitea matches the version pinned in vars/main.yml
-# -- catches "binary updated, unit not restarted" and bad-download cases.
-- name: _verify | Gitea /api/v1/version matches pinned gitea_version
+# Negative assertion that REQUIRE_SIGNIN_VIEW is in force: an anonymous
+# /api/v1/* call returns 403 ("Only signed in user is allowed to call
+# APIs"), while /api/healthz above stays exempt. Guards the SSO-only
+# posture from silently regressing to open anonymous browsing.
+- name: _verify | Gitea blocks anonymous API access (REQUIRE_SIGNIN_VIEW)
   uri:
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/version
-    status_code: 200
-  register: _gitea_version
-  # Substring-match would let pin 1.26.1 be satisfied by 1.26.10. Strip
-  # any `+build` metadata (gitea returns `1.26.1+gitea-dev` for non-
-  # release builds) and equate exactly.
-  failed_when: >-
-    _gitea_version.json.version is not defined
-    or _gitea_version.json.version.split('+')[0] != gitea_version
+    status_code: 403
 
 # Reverse-proxy chain probe -- a typo'd subdomain or broken
 # nginx_site_args would pass the loopback probe above silently.
@@ -122,6 +117,25 @@
   become_user: git
   register: _gitea_token
   changed_when: false
+
+# Asserts the running gitea matches the version pinned in vars/main.yml
+# -- catches "binary updated, unit not restarted" and bad-download cases.
+# REQUIRE_SIGNIN_VIEW gates /api/v1/* for anonymous callers, so this runs
+# after the throwaway token exists and authenticates with it.
+- name: _verify | Gitea /api/v1/version matches pinned gitea_version
+  uri:
+    url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/version
+    url_username: verify
+    url_password: "{{ _gitea_token.stdout | trim }}"
+    force_basic_auth: true
+    status_code: 200
+  register: _gitea_version
+  # Substring-match would let pin 1.26.1 be satisfied by 1.26.10. Strip
+  # any `+build` metadata (gitea returns `1.26.1+gitea-dev` for non-
+  # release builds) and equate exactly.
+  failed_when: >-
+    _gitea_version.json.version is not defined
+    or _gitea_version.json.version.split('+')[0] != gitea_version
 
 # Status 201 on first run, 409 on a --keep re-run. gitea accepts the
 # API token as the Basic-auth password (DISABLE_QUERY_AUTH_TOKEN in
