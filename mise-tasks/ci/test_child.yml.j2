@@ -89,7 +89,7 @@ stages:
     VARIANT: {{ cell.variant }}
     UBUNTU: {{ cell.ubuntu }}
   script:
-    - test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500
+    - test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark
 {% endfor %}
 {% endfor %}
 {% if site_test %}
