@@ -1,0 +1,80 @@
+# Cross-host alert polling reaches this host's netdata over SSH, not nginx:
+# lab's homepage_alerts poller logs in as netdata_poll with a key pinned to a
+# single forced command (netdata_poll_fetch) that returns the two read-only
+# netdata API endpoints as one JSON bundle. The key can do nothing else --
+# `restrict` denies pty/forwarding and `command=` overrides whatever the client
+# sends. netdata itself stays bound to loopback; this key is the only cross-host
+# entry. See roles/homepage and notes/authelia_nginx_gating.md.
+- name: poll_access | Create netdata_poll service user
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: netdata_poll
+      shell: /bin/bash
+      createhome: true
+      home: /var/lib/netdata_poll
+      config_dir: false
+  tags:
+    - netdata
+
+- name: poll_access | Install the netdata_poll forced-command fetcher
+  copy:
+    src: netdata_poll_fetch
+    dest: /usr/local/bin/netdata_poll_fetch
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: python3 -c 'import sys; compile(open(sys.argv[1]).read(), sys.argv[1], "exec")' "%s"
+  become: true
+  tags:
+    - netdata
+
+- name: poll_access | Create netdata_poll user systemd unit dir
+  when: not (ansible_check_mode and netdata_poll_user.changed)
+  file:
+    path: /var/lib/netdata_poll/.config/systemd/user
+    state: directory
+    owner: netdata_poll
+    group: netdata_poll
+    mode: "0755"
+  become: true
+  tags:
+    - netdata
+
+# Same rationale as zfs_autobackup: the podman package globally enables
+# podman.service/.socket for every user, so each forced-command login would
+# start a `systemd --user` manager that errors daily ("no subuid ranges found
+# for user netdata_poll"). netdata_poll never runs containers; mask both units
+# in the user scope so the login never touches podman.
+- name: poll_access | Mask podman user units for netdata_poll
+  when: not (ansible_check_mode and netdata_poll_user.changed)
+  file:
+    path: "/var/lib/netdata_poll/.config/systemd/user/{{ item }}"
+    src: /dev/null
+    state: link
+    owner: netdata_poll
+    group: netdata_poll
+    force: true
+  become: true
+  loop:
+    - podman.service
+    - podman.socket
+  tags:
+    - netdata
+
+- name: poll_access | Authorize the netdata_poll key (forced command only)
+  when: not (ansible_check_mode and netdata_poll_user.changed)
+  ansible.posix.authorized_key:
+    user: netdata_poll
+    key: "{{ netdata_poll_ssh_public_key }}"
+    # restrict denies pty + all forwarding (current and future); command= pins
+    # the key to the bundle fetcher regardless of what the client asks for
+    # (SSH_ORIGINAL_COMMAND is ignored by the script).
+    key_options: 'restrict,command="/usr/local/bin/netdata_poll_fetch"'
+    exclusive: true
+  become: true
+  tags:
+    - netdata

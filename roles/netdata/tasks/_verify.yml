@@ -437,29 +437,11 @@
     line: "127.0.0.1 netdata.{{ inventory_hostname }}.{{ domain }}"
   become: true
 
-# --- nginx Authelia gate + URL-token bypass for cross-host polling ---
-# Browser path through `https://netdata.<host>.<domain>` is gated
-# by Authelia forward-auth; lab's homepage_alerts timer (and any
-# future cross-host poller) appends `?auth_token=<netdata_alerts_token>`
-# to bypass. Functional witnesses:
-#   1. With token  -> 200 from netdata (gate bypassed)
-#   2. No token    -> 302 to auth portal (gate engaged)
-#   3. Wrong token -> 302 (gate not accidentally permissive)
-#   4. Nginx access log shows `auth_token=REDACTED`, not the literal
-#      token (http-scope $request_safe map working).
-# The upstream-strip (`set $args ...`) is a property of the shared
-# nginx helper, not service-specific, so we don't duplicate it here.
-- name: _verify | Netdata reachable through nginx with auth_token bypass
-  uri:
-    url: "https://netdata.{{ inventory_hostname }}.{{ domain }}/api/v1/info?auth_token={{ netdata_alerts_token }}"
-    validate_certs: false
-    status_code: 200
-  register: _netdata_bypass
-  failed_when: >-
-    _netdata_bypass.status != 200
-    or "version" not in (_netdata_bypass.json | default({}))
-  become: true
-
+# --- nginx Authelia gate ---
+# Browser path through `https://netdata.<host>.<domain>` is gated by Authelia
+# forward-auth: an unauthenticated hit must 302 to the auth portal. Cross-host
+# alert polling no longer touches nginx (it pulls over SSH, asserted below), so
+# there is no URL-param bypass to exercise here anymore.
 - name: _verify | Browser hit without auth redirects to Authelia
   uri:
     url: "https://netdata.{{ inventory_hostname }}.{{ domain }}/"
@@ -472,38 +454,94 @@
     or ("auth." not in (_netdata_no_auth.location | default("")))
   become: true
 
-- name: _verify | Browser hit with wrong auth_token redirects to Authelia
-  uri:
-    url: "https://netdata.{{ inventory_hostname }}.{{ domain }}/?auth_token=wrong_value_must_not_match"
-    validate_certs: false
-    follow_redirects: none
-    status_code: 302
-  register: _netdata_wrong_token
-  failed_when: >-
-    _netdata_wrong_token.status != 302
-    or ("auth." not in (_netdata_wrong_token.location | default("")))
-  become: true
-
-# Bounded retry rather than a fixed `pause` + single read: nginx buffers
-# access-log writes, so the redacted line may not have flushed yet. Poll
-# until it appears (fail fast at the retry deadline if it never does),
-# then a separate hard assert catches a literal-token leak immediately.
-- name: _verify | Wait for the redacted auth_token request to reach the access log
-  command: tail -n 200 /var/log/nginx/access.log
-  register: _netdata_nginx_log
+# --- netdata_poll forced-command SSH access ---
+# Cross-host alert polling reaches netdata over SSH, not nginx. Prove the
+# netdata_poll key (1) returns the expected JSON bundle and (2) is pinned to
+# its forced command -- a client-supplied command is ignored, so the key
+# cannot be turned into a shell or an arbitrary fetch. StrictHostKeyChecking=no
+# + /dev/null known_hosts is fine here: this is a loopback self-connect inside
+# the throwaway test VM, where the prod keyscan-managed known_hosts is moot.
+- name: _verify | Stage the netdata_poll test private key
+  copy:
+    content: "{{ netdata_poll_ssh_private_key | trim }}\n"
+    dest: /tmp/netdata_poll_verify_key
+    mode: "0600"
   changed_when: false
-  become: true
-  retries: 10
-  delay: 1
-  until: '"auth_token=REDACTED" in _netdata_nginx_log.stdout'
 
-- name: _verify | Assert the literal auth_token never appears in the access log
+- name: _verify | Forced-command key returns the alert bundle
+  command: >-
+    ssh -i /tmp/netdata_poll_verify_key
+    -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent=none
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+    -o ConnectTimeout=5
+    netdata_poll@127.0.0.1
+  register: _netdata_poll_bundle
+  changed_when: false
+
+- name: _verify | Bundle carries both read-API payloads
   assert:
     that:
-      - netdata_alerts_token not in _netdata_nginx_log.stdout
+      - (_netdata_poll_bundle.stdout | from_json).alarms is defined
+      - (_netdata_poll_bundle.stdout | from_json).transitions is defined
     fail_msg: >-
-      The literal auth_token leaked into the nginx access log -- the
-      $request_safe map should have redacted it to auth_token=REDACTED.
+      netdata_poll_fetch did not return {alarms, transitions}:
+      {{ _netdata_poll_bundle.stdout[:200] }}
+
+# Forced command must win over a client-supplied command: asking for `id`
+# still returns the bundle, never the shell output -- the key can't escape.
+- name: _verify | Client-supplied command is overridden by the forced command
+  command: >-
+    ssh -i /tmp/netdata_poll_verify_key
+    -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent=none
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+    -o ConnectTimeout=5
+    netdata_poll@127.0.0.1 id
+  register: _netdata_poll_forced
+  changed_when: false
+  failed_when: >-
+    _netdata_poll_forced.rc != 0
+    or "uid=" in _netdata_poll_forced.stdout
+    or (_netdata_poll_forced.stdout | from_json).alarms is not defined
+
+# ControlMaster reuse is what makes the homepage poller's 30s cadence cheap
+# (one warm connection per peer, not a fresh handshake each fire). Prove the
+# forced-command key supports multiplexing: an initial call opens a persistent
+# master, and `-O check` confirms a second call would ride it rather than
+# re-handshake.
+- name: _verify | Open a multiplexed master to the netdata_poll key
+  command: >-
+    ssh -i /tmp/netdata_poll_verify_key
+    -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent=none
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+    -o ConnectTimeout=5
+    -o ControlMaster=auto -o ControlPath=/tmp/netdata_poll_verify_cm
+    -o ControlPersist=10
+    netdata_poll@127.0.0.1
+  changed_when: false
+
+- name: _verify | ControlMaster is live for connection reuse
+  command: >-
+    ssh -o ControlPath=/tmp/netdata_poll_verify_cm -O check
+    netdata_poll@127.0.0.1
+  register: _netdata_poll_cm
+  changed_when: false
+  failed_when: "'Master running' not in _netdata_poll_cm.stderr"
+
+- name: _verify | Tear down the multiplexed master
+  command: >-
+    ssh -o ControlPath=/tmp/netdata_poll_verify_cm -O exit
+    netdata_poll@127.0.0.1
+  changed_when: false
+  failed_when: false
+
+- name: _verify | Remove the staged netdata_poll test key
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/netdata_poll_verify_key
+    - /tmp/netdata_poll_verify_cm
+  changed_when: false
 
 # Cover the cross-role coupling: netdata's main.yml imports certbot's
 # tasks_from: netdata to render x509check.conf. A break in the

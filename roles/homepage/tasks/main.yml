@@ -191,6 +191,93 @@
   tags:
     - homepage
 
+# Alert polling reaches every netdata host over SSH, not nginx (a single
+# transport -- the converging host's own netdata included): the poller logs in
+# as netdata_poll with a key pinned to a forced command that returns the
+# read-only API as a JSON bundle (roles/netdata/tasks/poll_access.yml). SSH
+# connections are multiplexed (ControlMaster), so the 30s cadence reuses one
+# warm connection per peer.
+- name: Create alerts sidecar ssh dir
+  when: not (ansible_check_mode and homepage_user.changed)
+  file:
+    dest: /opt/homepage_alerts/.ssh
+    state: directory
+    owner: homepage
+    group: homepage
+    mode: "0700"
+  become: true
+  tags:
+    - homepage
+
+- name: Deploy netdata_poll private key
+  when: not (ansible_check_mode and homepage_user.changed)
+  copy:
+    # trim + single trailing newline: a vaulted/plain block scalar can lose or
+    # double the final newline, and ssh rejects a key without exactly one.
+    content: "{{ netdata_poll_ssh_private_key | trim }}\n"
+    dest: /opt/homepage_alerts/.ssh/id_ed25519
+    owner: homepage
+    group: homepage
+    mode: "0600"
+    backup: true
+  become: true
+  tags:
+    - homepage
+
+# Every netdata host is an SSH peer (the converging host included -- single
+# transport). Addresses come from external_ips (the wg backbone / LAN, same
+# map zfs_autobackup uses).
+- name: Build SSH target list for netdata peers
+  set_fact:
+    _homepage_alerts_ssh_targets: "{{ homepage_netdata_hosts | map('extract', external_ips) | list }}"
+  tags:
+    - homepage
+
+# Three-step check/scan/register, mirroring zfs_autobackup's dest.yml: ssh-keyscan
+# -H hashes each entry with a random salt so a fresh scan never byte-matches an
+# existing line; the ssh-keygen -F pre-check gates scan+register on genuine
+# absence, keeping known_hosts idempotent. Gated `not qemu_test`: the box
+# fixture's homepage role runs without netdata installed, so its lone peer
+# (itself) has no host to reach -- StrictHostKeyChecking then fails the fetch
+# closed and the panel renders the per-host error div (asserted in _verify).
+- name: Check which netdata peers are already in known_hosts
+  when: not qemu_test
+  command: ssh-keygen -F "{{ item }}" -f /opt/homepage_alerts/.ssh/known_hosts
+  loop: "{{ _homepage_alerts_ssh_targets }}"
+  changed_when: false
+  failed_when: false
+  register: _homepage_alerts_known_check
+  become: true
+  tags:
+    - homepage
+
+- name: Scan SSH host keys from new netdata peers
+  when: not qemu_test and item.rc != 0
+  command: ssh-keyscan -H -t ed25519 -T 5 "{{ item.item }}"
+  loop: "{{ _homepage_alerts_known_check.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  changed_when: false
+  failed_when: false
+  register: _homepage_alerts_keyscan
+  tags:
+    - homepage
+
+# Root-owned 0644 known_hosts inside homepage's 0700 .ssh dir: world-readable so
+# the poller (User=homepage) reads it, but only root rewrites it.
+- name: Register SSH host keys for new netdata peers
+  when: not qemu_test and item.stdout | default('') | length > 0
+  known_hosts:
+    path: /opt/homepage_alerts/.ssh/known_hosts
+    name: "{{ item.item.item }}"
+    key: "{{ item.stdout }}"
+  loop: "{{ _homepage_alerts_keyscan.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.item | default(item.item) }}"
+  become: true
+  tags:
+    - homepage
+
 - name: Copy alerts sidecar generator
   copy:
     src: alerts_generate.py
@@ -214,15 +301,14 @@
     name: systemd_timer
     tasks_from: install
   vars:
-    # NETDATA_HOSTS env value: a `<name>=<query-url>[=<click-url>]` triple per
-    # host, comma-joined. Whichever host this is running on is queried via
-    # loopback (skips nginx + TLS), with the public FQDN as the click-through
-    # target; other hosts use the FQDN for both.
+    # NETDATA_HOSTS env value: a `<name>=<query-url>=<click-url>` triple per
+    # host, comma-joined. The query-url is the SSH pull target (same for every
+    # host, the converging host included); the click-url is the public netdata
+    # FQDN a browser navigates to. Addresses come from external_ips.
     systemd_timer_homepage_alerts_netdata_hosts_env: >-
       {%- set ents = [] -%}
       {%- for h in homepage_netdata_hosts -%}
-      {%- set q = 'http://localhost:19999=' if h == inventory_hostname else '' -%}
-      {%- set _ = ents.append(h ~ '=' ~ q ~ 'https://netdata.' ~ h ~ '.' ~ domain) -%}
+      {%- set _ = ents.append(h ~ '=ssh://netdata_poll@' ~ external_ips[h] ~ '=https://netdata.' ~ h ~ '.' ~ domain) -%}
       {%- endfor -%}
       {{ ents | join(',') }}
     systemd_timer_args:
@@ -241,24 +327,32 @@
       run_as: homepage
       monitor: false
       # Bound a wedged run well within the 30s cadence. Each fire fans out to
-      # N netdata hosts in parallel with FETCH_TIMEOUT=5s, so 25s is plenty
-      # even on a chatty agent with the bulk alarm_log fetch.
+      # N netdata hosts in parallel with SSH_TIMEOUT=10s, so 25s is plenty
+      # even on a chatty agent and a cold (un-multiplexed) connection.
       timeout_start_sec: 25s
       environment:
         NETDATA_HOSTS: "{{ systemd_timer_homepage_alerts_netdata_hosts_env }}"
         OUTPUT_DIR: /var/www/homepage_alerts
-        # Forwards the URL-param bypass token to cross-host netdata
-        # queries; loopback queries (the homepage host's own netdata)
-        # skip nginx entirely and are unaffected. Token is the same
-        # vaulted secret consumed by the netdata role's
-        # nginx_site_args.bypass_query_param.
-        NETDATA_ALERTS_TOKEN: "{{ netdata_alerts_token }}"
+        NETDATA_POLL_SSH_KEY: /opt/homepage_alerts/.ssh/id_ed25519
+        NETDATA_POLL_SSH_KNOWN_HOSTS: /opt/homepage_alerts/.ssh/known_hosts
+        # ControlMaster sockets live in the RuntimeDirectory below.
+        NETDATA_POLL_SSH_CONTROL_DIR: /run/homepage_alerts
       additional_service_directives:
         - "PrivateTmp=yes"
         - "ProtectSystem=strict"
         - "ProtectHome=yes"
         - "NoNewPrivileges=yes"
         - "ReadWritePaths=/var/www/homepage_alerts"
+        # /run/homepage_alerts holds the persistent ssh ControlMaster sockets.
+        # RuntimeDirectoryPreserve=yes keeps the dir (and the live sockets)
+        # across the oneshot's stop/start cycle so consecutive 30s fires reuse
+        # the warm master instead of re-handshaking. KillMode=process stops
+        # systemd from reaping the backgrounded ControlPersist master when the
+        # oneshot exits; the master self-reaps after ControlPersist (120s) of
+        # idle, so a stopped timer leaves nothing behind for long.
+        - "RuntimeDirectory=homepage_alerts"
+        - "RuntimeDirectoryPreserve=yes"
+        - "KillMode=process"
   tags:
     - homepage
 

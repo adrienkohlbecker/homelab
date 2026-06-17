@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""Forced-command bundle fetcher for the netdata_poll SSH key.
+
+Pinned as the `command=` in netdata_poll's authorized_keys (roles/netdata/
+tasks/poll_access.yml): the key can do nothing but invoke this script, which
+fetches the two read-only netdata endpoints lab's homepage_alerts poller needs
+and emits them as one JSON bundle on stdout. SSH_ORIGINAL_COMMAND is ignored --
+the key is single-purpose, so whatever the client puts after the key is moot.
+
+Stdlib only (the host has no guaranteed third-party Python); netdata listens on
+loopback, so no auth is needed once the SSH boundary is crossed.
+"""
+
+import json
+import sys
+import urllib.request
+
+BASE = "http://localhost:19999"
+TIMEOUT = 5
+# Keyed by the field name the poller reads off the bundle. The transitions
+# window (604800s = 7d) and last=10000 mirror alerts_generate.py's own v2
+# fetch -- an active alarm always transitioned within that window.
+ENDPOINTS = {
+    "alarms": "/api/v1/alarms?active",
+    "transitions": "/api/v2/alert_transitions?after=-604800&last=10000",
+}
+
+
+def _get(path: str) -> dict:
+    with urllib.request.urlopen(BASE + path, timeout=TIMEOUT) as resp:
+        return json.load(resp)
+
+
+def main() -> None:
+    json.dump({field: _get(path) for field, path in ENDPOINTS.items()}, sys.stdout)
+
+
+if __name__ == "__main__":
+    main()
