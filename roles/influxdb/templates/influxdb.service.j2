@@ -48,11 +48,13 @@ ExecStart=/usr/bin/podman run \
     --env INFLUXD_LOG_LEVEL=warn \
     --secret=influxdb_root_user,type=mount,target=influxdb_root_user \
     --secret=influxdb_root_password,type=mount,target=influxdb_root_password \
+    --secret=influxdb_admin_token,type=mount,target=influxdb_admin_token \
     --env DOCKER_INFLUXDB_INIT_MODE=setup \
     --env DOCKER_INFLUXDB_INIT_ORG={{ influxdb_root_org }} \
     --env DOCKER_INFLUXDB_INIT_BUCKET=default \
     --env DOCKER_INFLUXDB_INIT_USERNAME_FILE=/run/secrets/influxdb_root_user \
     --env DOCKER_INFLUXDB_INIT_PASSWORD_FILE=/run/secrets/influxdb_root_password \
+    --env DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE=/run/secrets/influxdb_admin_token \
     --volume /mnt/services/influxdb/data:/var/lib/influxdb2 \
     --volume /mnt/services/influxdb/config:/etc/influxdb2 \
     --network homeassistant \

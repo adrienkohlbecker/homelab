@@ -75,13 +75,12 @@
   changed_when: false
   become: true
 
-# SSO injection wiring: roles/influxdb/tasks/main.yml feeds the vaulted
-# `influxdb_user_tokens` dict into nginx's upstream_authorization map.
-# nginx renders that into the http-scope map at
-# /etc/nginx/conf.d/upstream_auth_influxdb.conf, which should contain a
-# `"<authelia_user>" "Token <t>";` entry -- catches a regression where the
-# dict is empty/Undefined and the Authorization injection silently no-ops.
-# group_vars/test.yml sets influxdb_user_tokens for this assertion.
+# SSO injection wiring: main.yml builds nginx's upstream_authorization inline as
+# { influxdb_authelia_user: "Token <influxdb_root_token>" }. nginx renders that
+# into the http-scope map at /etc/nginx/conf.d/upstream_auth_influxdb.conf, which
+# should contain a `"<authelia_user>" "Token <t>";` entry -- catches a regression
+# where the map is empty/Undefined and the Authorization injection silently
+# no-ops. group_vars/test.yml provides influxdb_authelia_user + influxdb_root_token.
 - name: _verify | Operator token wired into nginx upstream_authorization
   command:
     argv:

@@ -1,0 +1,9 @@
+# influx CLI configuration -- managed by ansible (roles/influxdb).
+# The active "default" config points the in-container `influx` CLI at the
+# local influxd with the vaulted operator token. influxd does not read this
+# file (the CLI reads it per-exec), so updating it needs no restart.
+[default]
+  url = "http://localhost:8086"
+  token = "{{ influxdb_root_token }}"
+  org = "{{ influxdb_root_org }}"
+  active = true

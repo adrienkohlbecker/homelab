@@ -147,18 +147,15 @@ minio_root_user: minio
 minio_root_password: changeme
 influxdb_root_user: root
 influxdb_root_password: changeme
+# All-access operator token (placeholder). Seeds the box fixture's first-boot
+# DOCKER_INFLUXDB_INIT_ADMIN_TOKEN, the in-container CLI default config, and the
+# SSO injection map (the role prepends `Token `); _verify exercises all three.
+influxdb_root_token: testuser_sso_placeholder_token
 # Authelia identity that gets mapped to the InfluxDB root token by
 # nginx's upstream_authorization injection. Matches authelia_users
 # above (testuser) so the test fixture's rendered nginx config has a
 # concrete map entry to grep for in _verify.
 influxdb_authelia_user: testuser
-# SSO injection map: prod sources this from the vault (an all-access
-# operator token per Authelia user). Values are BARE tokens -- the
-# influxdb role prepends the `Token ` auth scheme. The test only asserts
-# the map *wiring* (_verify greps for the rendered `Token ` entry);
-# nothing functionally logs in via SSO here, so a placeholder is enough.
-influxdb_user_tokens:
-  testuser: testuser_sso_placeholder_token
 filebrowser_basic_auth_user: changeme
 filebrowser_basic_auth_password: changeme
 netdata_alerts_token: changeme_netdata_alerts_token_16chars_min
