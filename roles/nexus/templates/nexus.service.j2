@@ -60,6 +60,7 @@ ExecStart=/usr/bin/podman run \
     --name nexus \
     --init \
     --security-opt=no-new-privileges \
+    --network nexus \
     --log-driver journald \
     --log-opt tag="nexus" \
     --env INSTALL4J_ADD_VM_PARAMS="{{ nexus_jvm_params }} -Djava.util.prefs.userRoot=/user-root" \

@@ -43,6 +43,7 @@ ExecStart=/usr/bin/podman run \
     --name authelia \
     --log-driver journald \
     --log-opt tag="authelia" \
+    --network authelia \
     --security-opt=no-new-privileges \
     --uidmap=0:0:65536 \
     --uidmap=+0:{{ authelia_user.uid }}:1 \

@@ -63,6 +63,17 @@
   tags:
     - homepage
 
+- name: Create homepage podman network
+  when: not ansible_check_mode
+  containers.podman.podman_network:
+    name: homepage
+    disable_dns: false
+    state: present
+  register: homepage_network
+  become: true
+  tags:
+    - homepage
+
 - name: Configure homepage YAML config
   when: not (ansible_check_mode and homepage_user.changed)
   template:
@@ -114,7 +125,7 @@
     systemd_unit_args:
       src: homepage
       condition: "{{ not (ansible_check_mode and (homepage_service_result.changed or homepage_user.changed)) }}"
-      restart: "{{ homepage_service_result.changed }}"
+      restart: "{{ homepage_service_result.changed or homepage_network.changed }}"
   tags:
     - homepage
 

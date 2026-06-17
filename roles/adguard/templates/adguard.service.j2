@@ -44,6 +44,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="adguard" \
     --user {{ adguard_user.uid }}:{{ adguard_user.group }} \
+    --network adguard \
     --env TZ={{ system_timezone }} \
     --volume /mnt/services/adguard/conf:/opt/adguardhome/conf \
     --volume /mnt/services/adguard/work:/opt/adguardhome/work \
@@ -63,8 +64,8 @@ ExecStart=/usr/bin/podman run \
     --publish {{ dns_keepalived_ip }}:53:53/tcp \
     --publish {{ dns_keepalived_ip }}:853:853/tcp \
     --publish 127.0.0.1:{{ service_ports.adguard }}:3000/tcp \
-    --health-cmd         '["getent","hosts","adguard.home"]' \
-    --health-startup-cmd '["getent","hosts","adguard.home"]' \
+    --health-cmd         '["sh","-c","nslookup adguard.home 127.0.0.1 | grep -q 127.0.0.1"]' \
+    --health-startup-cmd '["sh","-c","nslookup adguard.home 127.0.0.1 | grep -q 127.0.0.1"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "30s" \
