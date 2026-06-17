@@ -8,8 +8,10 @@
 # "any cells?" flag cannot gate the trigger). See notes/ci_aws_test_cells.md.
 default:
   interruptible: true
-  # The fox-docker-aws runner already defaults to this image, but the child is
-  # self-contained, so pin it explicitly.
+  # Pin the CI image explicitly (the child is self-contained). The default tag
+  # keeps the trivial no_cells placeholder on the always-on fox runner; the real
+  # cells override to the ephemeral coordinator via .cell, so a no-cell pipeline
+  # never boots a coordinator just to echo "nothing to test".
   image: "$CI_REGISTRY_IMAGE/ci:latest"
   tags:
     - fox-docker-aws
@@ -25,6 +27,16 @@ stages:
 .cell:
   stage: test1
   needs: []
+  # The AWS test-cell fan-out runs on the ephemeral coordinator (gitlab_runner's
+  # docker-autoscaler / fleeting runner), NOT the on-fox docker runner: per
+  # pipeline it clones one Hetzner box, runs the whole matrix (all cells share
+  # the one coordinator at capacity_per_instance=60), and scales to zero. Each
+  # coordinator boots with an empty image store, so the first cell pulls the
+  # current ci:latest (~40s on NVMe) and the rest reuse it -- no warm-up job, no
+  # staleness. Overrides the default fox-docker-aws tag. See
+  # notes/ci_aws_test_cells.md "Phase 2".
+  tags:
+    - fox-coordinator-aws
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: sts.amazonaws.com

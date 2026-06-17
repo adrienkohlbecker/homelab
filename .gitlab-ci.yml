@@ -1,17 +1,23 @@
 # GitLab CI pipeline (notes/ci_aws_test_cells.md).
 #
-# Two runner pools:
+# Three runner pools (all on roles/gitlab_runner's manager on fox):
 #   - gitlab.com hosted runners take the cheap stateless jobs (lint, unit
 #     tests): no qemu, no boxes, and a public project's compute cost factor
 #     makes the minutes effectively free. They can't reach the home network
 #     (so no nexus); they run in the project-registry ci image published by
 #     the ci_image job below.
-#   - fox's Docker-executor runner (roles/gitlab_runner) takes the AWS-cell
-#     jobs: each runs in a CI-image container on fox and drives single-use
-#     EC2 spot instances over the aws CLI + SSH. The runner is tag-only —
-#     cell jobs carry `tags: [fox-docker-aws]`. Aboard: the ami_images /
-#     ami_box_deps / fox_image builders, and the role-test matrix + site
-#     test as the `detect` -> `test_cells` dynamic child pipeline below.
+#   - fox's always-on Docker-executor runner (`fox-docker-aws`) takes the cheap
+#     orchestration jobs that run every push or are rare/manual: `detect`, the
+#     ami_images / ami_box_deps / fox_image builders, and the no-cell
+#     placeholder. Each runs in a CI-image container on fox and drives EC2 /
+#     Hetzner over the aws CLI + SSH.
+#   - fox's docker-autoscaler runner (`fox-coordinator-aws`) takes the AWS
+#     test-cell fan-out: per pipeline it clones one ephemeral Hetzner
+#     coordinator, runs the whole `test_cells` child matrix (+ the _site_test
+#     cell) there at capacity 60, and scales back to zero. Off-fox so a wide
+#     fan-out can't threaten fox's headscale/nginx co-tenants. Cells carry
+#     `tags: [fox-coordinator-aws]` (the child's .cell scaffold); see
+#     notes/ci_aws_test_cells.md "Phase 2".
 #
 # This is the sole CI: the former GitHub Actions setup (.github/workflows/) has
 # been retired.
@@ -71,17 +77,15 @@ default:
 detect:
   extends: .hosted
   stage: prepare
-  # Run on the fox-docker-aws runner (not SaaS) with pull_policy: always, so
-  # detect is the single authoritative image warm-up: it refreshes ci:latest once
-  # per pipeline into the runner's overlay store *before* emitting the child
-  # pipeline (the cells `needs:` this job's artifact — a hard happens-before). The
-  # cells then reuse that warm layer with if-not-present (the runner default), so
-  # the full-universe fan-out pays exactly one image pull, not one per cell, and
-  # never runs a stale :latest. Requires the runner's allowed_pull_policies to
-  # permit `always`. See notes/ci_aws_test_cells.md (Phase 1 / package and image caching).
-  image:
-    name: $CI_REGISTRY_IMAGE/ci:latest
-    pull_policy: always
+  # Runs on the always-on fox-docker-aws runner (not SaaS, not the coordinator):
+  # cheap per-push change detection that emits the child pipeline. Keeping it off
+  # the coordinator means a no-cell pipeline never boots a CX53 just to classify a
+  # docs-only diff. Image caching for the cells now lives on the coordinator
+  # itself -- each boots scale-from-zero with an empty store, so the first cell
+  # pulls the current ci:latest (~40s NVMe) and the rest reuse it (the child's
+  # .cell). detect.py is sourced from the checkout, so detect's own container
+  # needn't be the freshest :latest -- .hosted's image is enough.
+  # See notes/ci_aws_test_cells.md (Phase 2 / package and image caching).
   tags:
     - fox-docker-aws
   rules:
