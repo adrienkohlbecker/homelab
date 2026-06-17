@@ -44,29 +44,6 @@
     or 'auth.' not in (_influxdb_gate.location | default(''))
   become: true
 
-# nginx-leg bypass-on-Authorization: a machine client presenting its
-# own Authorization header (Telegraf / HA / Grafana shape) must skip
-# the Authelia subrequest entirely (`if ($http_authorization) return
-# 204` in /internal/authelia) and reach InfluxDB unchanged. Any
-# non-empty Authorization triggers the bypass and /health needs no
-# auth, so a placeholder token exercises the path without a real secret
-# -- InfluxDB 2.8+ redacts token values from `auth list`, so the
-# operator token can't be read back to probe with anyway. /health
-# returns 200 with status=pass; the same probe also covers the
-# proxy_pass wiring (a typo in nginx_site_args would fail this too).
-- name: _verify | Influxdb /health reachable via nginx with bypass-on-Authorization
-  uri:
-    url: https://influxdb.{{ inventory_hostname }}.{{ domain }}/health
-    headers:
-      Authorization: Token verify_bypass_probe
-    validate_certs: false
-    return_content: true
-  register: _influxdb_nginx
-  failed_when: >-
-    _influxdb_nginx.status != 200
-    or _influxdb_nginx.json.status | default('') != 'pass'
-  become: true
-
 # Service-native CLI liveness -- catches a regression where /health
 # returns 200 but the in-container CLI can't talk to influxd (e.g. a
 # misconfigured /etc/influxdb2/configs after a bind-mount perms change).
@@ -75,21 +52,11 @@
   changed_when: false
   become: true
 
-# SSO injection wiring: main.yml builds nginx's upstream_authorization inline as
-# { influxdb_authelia_user: "Token <influxdb_root_token>" }. nginx renders that
-# into the http-scope map at /etc/nginx/conf.d/upstream_auth_influxdb.conf, which
-# should contain a `"<authelia_user>" "Token <t>";` entry -- catches a regression
-# where the map is empty/Undefined and the Authorization injection silently
-# no-ops. group_vars/test.yml provides influxdb_authelia_user + influxdb_root_token.
-- name: _verify | Operator token wired into nginx upstream_authorization
-  command:
-    argv:
-      - grep
-      - -F
-      - '"{{ influxdb_authelia_user }}" "Token '
-      - /etc/nginx/conf.d/upstream_auth_influxdb.conf
-  changed_when: false
-  become: true
+# The influxdb vhost is browser-only (auth: required, no token injection): no
+# upstream_authorization map is rendered, so there is no conf.d/upstream_auth
+# file to assert on. The gate-redirect probe above already proves the vhost is
+# Authelia-gated; machine clients reach influxd off-vhost over the podman network
+# (covered by roles/homeassistant/_verify).
 
 # Exercise bucket.yml end-to-end with a throwaway tenant. Verifies the
 # org→user→bucket→write-auth path and -- via the write/query roundtrip
