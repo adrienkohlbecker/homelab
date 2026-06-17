@@ -884,7 +884,7 @@ class TestRenderChildPipeline:
     def test_one_job_per_spec(self) -> None:
         doc = _render_child_doc(["nginx:box", "podman:box:noble"], site_test=False)
         assert doc["default"]["tags"] == ["fox-docker-aws"]
-        assert doc["stages"] == ["test"]
+        assert doc["stages"] == ["test1", "test2"]
         assert doc[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "aws"
         assert doc[".cell"]["retry"]["exit_codes"] == [86]
         # nginx:box → defaults ubuntu jammy; podman:box:noble → explicit noble.
