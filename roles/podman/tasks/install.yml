@@ -407,6 +407,16 @@
   tags:
     - podman
 
+# Override the properties this zvol would otherwise inherit from rpool. It
+# carries an ext4 filesystem (its own page cache) backing the overlay store,
+# so the inherited defaults are actively harmful under a wide CI fan-out:
+#   - compression=lz4 (not rpool's zstd): every overlay write is compressed
+#     in-kernel; zstd burns ~10x the CPU of lz4 at a similar ratio on layer
+#     data, and on a 2-vCPU host that dominates system time.
+#   - primarycache=metadata (not all): ext4 already page-caches the data, so
+#     caching zvol data blocks in ARC too is pure double-caching -- it wastes
+#     the (small) ARC and inflates RAM pressure into swap.
+#   - logbias=throughput: bulk write-heavy workload, not latency-sensitive.
 - name: install | Create podman zvol
   when: zfs_root
   zfs:
@@ -414,6 +424,9 @@
     state: present
     extra_zfs_properties:
       volsize: '{{ podman_zvol_size }}'
+      compression: lz4
+      primarycache: metadata
+      logbias: throughput
   register: podman_zfs_zvol
   become: true
   tags:
