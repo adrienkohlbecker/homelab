@@ -149,16 +149,37 @@
   vars:
     _wait_route_host: "{{ nginx_verify_host }}"
 
-- name: _verify | Unauthenticated request redirects to the Authelia portal (302)
+- name: _verify | Unauthenticated navigation redirects to the Authelia portal (302)
   uri:
     url: "https://{{ nginx_verify_host }}/"
     validate_certs: false
     follow_redirects: none
+    # Sec-Fetch-Mode: navigate marks a top-level browser navigation, which must
+    # still redirect to the portal (the @authelia_unauth navigation arm).
+    headers:
+      Sec-Fetch-Mode: navigate
     status_code: 302
   register: nginx_verify_unauth
   failed_when: >-
     nginx_verify_unauth.status != 302
     or 'https://auth.' not in (nginx_verify_unauth.location | default(''))
+
+# An XHR/fetch (Sec-Fetch-Mode != navigate) that fails auth must get a bare 401,
+# NOT a 302 to the cross-origin portal: an SPA cannot follow that redirect and
+# spins in a tight app<->auth redirect loop (the InfluxDB-UI symptom). Asserts
+# the @authelia_unauth fetch arm returns 401 and emits no portal Location.
+- name: _verify | Unauthenticated XHR returns a bare 401, not a portal redirect
+  uri:
+    url: "https://{{ nginx_verify_host }}/api/v2/signin"
+    validate_certs: false
+    follow_redirects: none
+    headers:
+      Sec-Fetch-Mode: cors
+    status_code: 401
+  register: nginx_verify_unauth_xhr
+  failed_when: >-
+    nginx_verify_unauth_xhr.status != 401
+    or nginx_verify_unauth_xhr.location is defined
 
 - name: _verify | Wrong bypass token still redirects to Authelia (302)
   uri:
