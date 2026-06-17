@@ -19,6 +19,12 @@
 # gets their assigned token (overriding any stale Authorization the SPA replayed); an
 # unmapped authed user with no token gets an empty Authorization, so the upstream falls
 # back to its native sign-in (break-glass).
+#
+# Map values are complete Authorization header values (the caller owns the scheme,
+# e.g. `Token <t>` for InfluxDB); nginx injects them verbatim. nginx_site stays a
+# generic header-injector -- no service-specific scheme is baked in here. (Machine
+# clients on the default branch above send their own complete `Authorization: Token
+# <t>`, untouched.)
 map $authelia_user $nginx_upstream_auth_{{ nginx_site_args.subdomain | replace('-', '_') }} {
     default $http_authorization;
 {% for user, header in nginx_site_args.upstream_authorization.items() %}

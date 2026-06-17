@@ -106,29 +106,108 @@
       user: verify_user
       bucket: verify_bucket
 
-# Contract assertion: bucket.yml surfaces the write-auth token via
-# its per-bucket fact. An Undefined fact would mean either the
-# bucket-scoped auth was never created or the regex/selectattr path
-# in bucket.yml's token-extraction stopped matching.
-- name: _verify | Bucket.yml surfaced a write-auth token for verify_bucket
-  assert:
-    that:
-      - influxdb_bucket_verify_bucket_token is defined
-      - influxdb_bucket_verify_bucket_token | length > 0
-    fail_msg: >-
-      bucket.yml did not produce influxdb_bucket_verify_bucket_token.
-      Either the conditional auth-create skipped (re-check its `when:`
-      regex) or the token-extraction selectattr in bucket.yml stopped
-      matching the auth shape.
+# Resolve the throwaway tenant's org + bucket ids -- needed both to
+# assert bucket.yml minted a write-auth (by its permission string) and
+# to mint a fresh throwaway token for the functional roundtrip below.
+- name: _verify | Resolve verify org id
+  command:
+    argv:
+      - podman
+      - exec
+      - influxdb
+      - influx
+      - org
+      - list
+      - --name
+      - "{{ influxdb_root_org }}"
+      - --json
+  register: _influxdb_verify_org
+  changed_when: false
+  become: true
 
-# Functional write + negative-read on the bucket write-auth: the write
+- name: _verify | Resolve verify_bucket id
+  command:
+    argv:
+      - podman
+      - exec
+      - influxdb
+      - influx
+      - bucket
+      - list
+      - --org
+      - "{{ influxdb_root_org }}"
+      - --name
+      - verify_bucket
+      - --json
+  register: _influxdb_verify_bucket
+  changed_when: false
+  become: true
+
+# Contract: bucket.yml minted a bucket-scoped write-auth for verify_user.
+# The token value is redacted by influxd 2.8+ (only the permission string
+# survives), so assert on the permission -- shaped
+# `write:orgs/<orgid>/buckets/<bucketid>` -- not a token. A miss means
+# bucket.yml's conditional auth-create skipped (re-check its `when:`) or
+# the influx-cli --json shape changed.
+- name: _verify | Bucket.yml minted a write-auth for verify_bucket
+  vars:
+    _verify_org_id: "{{ (_influxdb_verify_org.stdout | from_json | first).id }}"
+    _verify_bucket_id: "{{ (_influxdb_verify_bucket.stdout | from_json | first).id }}"
+  command:
+    argv:
+      - podman
+      - exec
+      - influxdb
+      - influx
+      - auth
+      - list
+      - --user
+      - verify_user
+      - --json
+  register: _influxdb_verify_auth_list
+  changed_when: false
+  failed_when: >-
+    ((_influxdb_verify_auth_list.stdout | from_json)
+     | selectattr('permissions', 'defined')
+     | selectattr('permissions', 'contains',
+         'write:orgs/' ~ _verify_org_id ~ '/buckets/' ~ _verify_bucket_id)
+     | list | length) == 0
+  become: true
+
+# Mint a fresh throwaway write-auth to exercise the write path end-to-end.
+# bucket.yml's own token is redacted post-creation, so _verify mints its
+# own here -- the token IS returned at `auth create`, so this is the only
+# path to a usable token value, mirroring the operator's one-time copy.
+- name: _verify | Mint a throwaway write-auth for the functional roundtrip
+  vars:
+    _verify_bucket_id: "{{ (_influxdb_verify_bucket.stdout | from_json | first).id }}"
+  command:
+    argv:
+      - podman
+      - exec
+      - influxdb
+      - influx
+      - auth
+      - create
+      - --json
+      - --org
+      - "{{ influxdb_root_org }}"
+      - --user
+      - verify_user
+      - --write-bucket
+      - "{{ _verify_bucket_id }}"
+  register: _influxdb_verify_auth_create
+  changed_when: false
+  become: true
+
+# Functional write + negative-read on the throwaway write-auth: the write
 # step's 204 proves the token is honored; the read step (which must fail
 # rc != 0) proves write-bucket doesn't accidentally grant read. A previous
 # admin-as-self query step was redundant -- 204 + rc-check span both.
 # argv form keeps the line-protocol point's embedded space in one slot.
 - name: _verify | Exercise bucket-scoped write-auth (positive write + negative read)
   vars:
-    _verify_token: "{{ influxdb_bucket_verify_bucket_token }}"
+    _verify_token: "{{ (_influxdb_verify_auth_create.stdout | from_json).token }}"
   block:
     - name: _verify | Write a sentinel point with the bucket write-auth
       command:
