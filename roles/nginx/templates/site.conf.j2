@@ -67,7 +67,8 @@ server {
 {% if _auth_enabled %}
   # Authelia forward-auth: every browser hit to this site is subrequested
   # against Authelia's /api/authz/auth-request endpoint. 200 -> allow; 401
-  # -> error_page 401 below redirects to the portal with returnUrl. The
+  # -> error_page routes to @authelia_unauth below (navigations redirect to the
+  # portal with returnUrl; XHR/fetch get a bare 401). The
   # /internal/authelia location is marked `internal` so external requests
   # can't bypass the auth by hitting it directly. Authelia upstream URL
   # is host-parameterized so non-lab hosts (pug, bunk) can point at lab's
@@ -165,12 +166,17 @@ server {
     auth_request_set $authelia_name   $upstream_http_remote_name;
     auth_request_set $authelia_email  $upstream_http_remote_email;
     # Authelia returns 401 with the portal-redirect target (returnUrl + method
-    # already baked in) in its `Location` response header; capture it and
-    # rewrite the auth_request 401 into a 302 there. This is Authelia's modern
-    # integration -- nginx no longer hardcodes the portal host, so an Authelia
-    # cookie-domain / multi-domain change needs no edit here.
+    # already baked in) in its `Location` response header; capture it so
+    # @authelia_unauth can rewrite the auth_request 401 into a 302 there. This is
+    # Authelia's modern integration -- nginx no longer hardcodes the portal host,
+    # so an Authelia cookie-domain / multi-domain change needs no edit here.
     auth_request_set $redirection_url $upstream_http_location;
-    error_page 401 =302 $redirection_url;
+    # Route the auth_request's own 401 to @authelia_unauth (below), which
+    # redirects browser navigations to the portal but returns a bare 401 to
+    # XHR/fetch -- an SPA can't follow a cross-origin portal redirect and would
+    # loop. An UPSTREAM 401 is unaffected: proxy_intercept_errors stays at its
+    # default `off`, so it passes straight to the client and never hits error_page.
+    error_page 401 = @authelia_unauth;
 {% endif %}
 {% if nginx_site_args.bypass_query_param is defined %}
     # The $args strip below and the $request_safe log-redaction each assume a
@@ -276,6 +282,25 @@ server {
     {{ nginx_site_args.location_conf | trim | indent(4) }}
 {% endif %}
   }
+{% if _auth_enabled %}
+
+  # Unauthenticated forward-auth handler. error_page in `location /` routes the
+  # auth_request's own 401 here. Redirect to the Authelia portal only for
+  # top-level navigations; return a bare 401 for XHR/fetch
+  # (Sec-Fetch-Mode cors/same-origin/no-cors), which cannot follow a cross-origin
+  # HTML portal and would otherwise loop an SPA polling an authed endpoint
+  # without a session (the InfluxDB-UI redirect loop). $authelia_unauth_redirect
+  # is computed from Sec-Fetch-Mode in nginx.conf.j2 (maps live at http scope);
+  # $redirection_url is the captured portal target. `if` with only `return` is
+  # the documented-safe use; the server-scope security headers (always) still
+  # apply to both responses since this location declares no add_header.
+  location @authelia_unauth {
+    if ($authelia_unauth_redirect) {
+      return 302 $redirection_url;
+    }
+    return 401;
+  }
+{% endif %}
 {% if nginx_site_args.server_conf is defined %}
 
   {{ nginx_site_args.server_conf | trim | indent(2) }}

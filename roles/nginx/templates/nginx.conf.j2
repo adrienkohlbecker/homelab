@@ -133,6 +133,22 @@ http {
         default                     "";
     }
 
+    # Forward-auth unauthenticated-response mode. When the Authelia auth_request
+    # subrequest 401s, the per-vhost @authelia_unauth handler (site.conf.j2)
+    # redirects to the portal only for top-level navigations and returns a bare
+    # 401 otherwise. A 302 to Authelia's cross-origin HTML portal cannot be
+    # followed by an XHR/fetch: an SPA polling an authed endpoint without a valid
+    # session (e.g. InfluxDB's UI after a rejected token) would otherwise spin in
+    # a tight app<->auth.<domain> redirect loop instead of rendering its own
+    # error. Sec-Fetch-Mode: navigate marks a real navigation; cors/same-origin/
+    # no-cors mark a fetch. An empty value (pre-Sec-Fetch browser or a non-browser
+    # client) keeps the legacy redirect so a plain GET still reaches the portal.
+    map $http_sec_fetch_mode $authelia_unauth_redirect {
+        navigate 1;
+        ""       1;
+        default  0;
+    }
+
     # $authelia_user / $authelia_groups carry the Authelia identity into the
     # `custom` access log below. Each is populated per-request by an
     # `auth_request_set` in the auth: required vhosts' `location /`
