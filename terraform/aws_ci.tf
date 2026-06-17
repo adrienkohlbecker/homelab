@@ -583,7 +583,7 @@ resource "aws_key_pair" "ci_operator" {
 locals {
   ci_machine_instance_types = {
     minimal  = "t3a.small" # 2 GiB, mirrors qemu minimal
-    box      = "c6a.large" # 2 vCPU / 4 GiB
+    box      = "m6a.large" # 2 vCPU / 8 GiB -- 4 GiB (c6a.large) starved the full-site converge into page-cache thrash (notes/ci_aws_test_cells.md)
     box_deps = "m6a.large" # box-class Zen3 cores with the 8 GiB floor (>4 needed, see QEMU_MACHINE_SPECS)
     pug      = "c6a.large"
     lab      = "c6a.large"
