@@ -25,6 +25,9 @@ f_require_root
 # the note above) leaves the unit non-blocking and finishes well before the
 # nightly zfs_autosnapshot window. Skipped (already-scrubbing) pools don't
 # consume a slot, so the first pool actually kicked off waits for nothing.
+# The stagger is overridable (ZFS_SCRUB_STAGGER_SEC) so the role's _verify can
+# zero it -- the CI fixture's img-backed pools can't thundering-herd a hard lock.
+stagger_sec="${ZFS_SCRUB_STAGGER_SEC:-120}"
 scrub_started=0
 for pool in $(zpool list -H -o name); do
   # Skip a pool already scrubbing or resilvering: a fresh `zpool scrub` would
@@ -35,7 +38,7 @@ for pool in $(zpool list -H -o name); do
     continue
   fi
   if [ "$scrub_started" -ne 0 ]; then
-    sleep 120
+    sleep "$stagger_sec"
   fi
   scrub_started=1
   echo "Starting scrub on $pool"

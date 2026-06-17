@@ -152,6 +152,8 @@
 
 - name: _verify | The scrub script kicks off without error
   command: /usr/local/bin/zfs_scrub
+  environment:
+    ZFS_SCRUB_STAGGER_SEC: "0"  # skip the prod anti-thundering-herd stagger; img-backed CI pools can't hard-lock
   changed_when: false
   become: true
 
