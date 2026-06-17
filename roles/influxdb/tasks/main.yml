@@ -32,13 +32,6 @@
   loop:
     - { path: /mnt/services/influxdb/data,    mode: "0700" }
     - { path: /mnt/services/influxdb/config,  mode: "0775" }
-    # secrets/ holds per-bucket write-auth tokens persisted by bucket.yml.
-    # InfluxDB 2.8+ redacts token secrets from `influx auth list` (they are
-    # returned only once, at `auth create`), so the token cannot be re-read
-    # from influxd on a later converge -- we persist it here at creation and
-    # read it back. 0700 so only the influxdb uid (and the operator via sudo)
-    # can traverse; the token files inside are 0600.
-    - { path: /mnt/services/influxdb/secrets, mode: "0700" }
   become: true
   tags:
     - influxdb
@@ -192,25 +185,38 @@
 #
 # SSO injection source: the per-Authelia-user Authorization tokens come
 # entirely from vaulted `influxdb_user_tokens` -- a dict of
-# `<authelia-user>: "Token <influx-token>"`. The role deliberately does NOT
-# auto-derive the operator token from `influx auth list`: InfluxDB 2.8+
-# redacts token secrets there (a token value is returned only once, at
-# `auth create`), so a re-read yields an empty string and the injection
-# silently breaks -- nginx forwards `Authorization: Token ` and the browser
-# loops on /signin. An explicit vaulted token is also boring and robust: it
-# rotates only when the operator chooses and survives every influxd upgrade.
-# Authelia and InfluxDB usernames are intentionally decoupled -- the dict
-# KEY is the Authelia identity, the VALUE is whatever InfluxDB token it
-# resolves to (typically an all-access operator token for the operator).
-# An empty/absent dict simply injects nothing, so users fall through to
-# InfluxDB's native sign-in (break-glass).
+# `<authelia-user>: "<bare-influx-token>"`. The values are BARE tokens; the
+# `Token ` auth scheme is prepended below (the scheme is InfluxDB-specific, so
+# the influxdb role owns it -- nginx_site only injects the finished header
+# value verbatim). The role deliberately does NOT auto-derive the operator
+# token from `influx auth list`: InfluxDB 2.8+ redacts token secrets there (a
+# token value is returned only once, at `auth create`), so a re-read yields an
+# empty string and the injection silently breaks -- nginx forwards
+# `Authorization: Token ` and the browser loops on /signin. An explicit vaulted
+# token is also boring and robust: it rotates only when the operator chooses and
+# survives every influxd upgrade. Authelia and InfluxDB usernames are
+# intentionally decoupled -- the dict KEY is the Authelia identity, the VALUE is
+# whatever InfluxDB token it resolves to (typically an all-access operator token
+# for the operator). An empty/absent dict simply injects nothing, so users fall
+# through to InfluxDB's native sign-in (break-glass).
 #
 # Provision / rotate a user's token:
 #   1. podman exec -it influxdb influx auth create --all-access \
 #        --user {{ influxdb_root_user }} --json     # token shown ONCE here
-#   2. Add `<authelia-user>: "Token <token>"` to vaulted
+#   2. Add `<authelia-user>: "<token>"` (BARE, no `Token ` prefix) to vaulted
 #      `influxdb_user_tokens` in group_vars/prod.yml (ansible-vault edit)
 #      and re-apply.
+- name: Prefix vaulted influxdb tokens with the Token auth scheme
+  set_fact:
+    _influxdb_upstream_auth: >-
+      {{ _influxdb_upstream_auth | default({})
+         | combine({item.key: 'Token ' ~ item.value}) }}
+  loop: "{{ influxdb_user_tokens | default({}) | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  tags:
+    - influxdb
+
 - name: Configure nginx
   import_role:
     name: nginx
@@ -220,6 +226,6 @@
       subdomain: influxdb
       proxy_pass: http://127.0.0.1:{{ service_ports.influxdb }}/
       auth: required
-      upstream_authorization: "{{ influxdb_user_tokens | default({}) }}"
+      upstream_authorization: "{{ _influxdb_upstream_auth | default({}) }}"
   tags:
     - influxdb

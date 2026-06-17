@@ -153,11 +153,12 @@ influxdb_root_password: changeme
 # concrete map entry to grep for in _verify.
 influxdb_authelia_user: testuser
 # SSO injection map: prod sources this from the vault (an all-access
-# operator token per Authelia user). The test only asserts the map
-# *wiring* (_verify greps for the entry); nothing functionally logs in
-# via SSO here, so a placeholder value is sufficient.
+# operator token per Authelia user). Values are BARE tokens -- the
+# influxdb role prepends the `Token ` auth scheme. The test only asserts
+# the map *wiring* (_verify greps for the rendered `Token ` entry);
+# nothing functionally logs in via SSO here, so a placeholder is enough.
 influxdb_user_tokens:
-  testuser: "Token testuser_sso_placeholder_token"
+  testuser: testuser_sso_placeholder_token
 filebrowser_basic_auth_user: changeme
 filebrowser_basic_auth_password: changeme
 netdata_alerts_token: changeme_netdata_alerts_token_16chars_min
