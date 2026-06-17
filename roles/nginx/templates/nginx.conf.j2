@@ -132,11 +132,37 @@ http {
         "~[?&]auth_token=([^&]+)"  $1;
         default                     "";
     }
+
+    # $authelia_user / $authelia_groups carry the Authelia identity into the
+    # `custom` access log below. Each is populated per-request by an
+    # `auth_request_set` in the auth: required vhosts' `location /`
+    # (site.conf.j2); these http-scope maps give the names an always-declared
+    # empty default. Without a declaration, a host with no auth vhost rendered
+    # -- the nginx role's own converge (nginx_static_proxies defaults to []) or
+    # install.yml's `nginx -t -c %s` on a fresh host before any site exists --
+    # fails config-test with `unknown "authelia_user" variable`. Both `map` and
+    # `auth_request_set` register the name CHANGEABLE, so the per-vhost
+    # auth_request_set value overrides this default when auth runs; a request
+    # that never reaches an auth_request'd location logs the empty default.
+    map $host $authelia_user   { default ""; }
+    map $host $authelia_groups { default ""; }
+
+    # The Authelia identity + bypass decision sit just before the TLS fields so
+    # SSO failures are legible in the access log: "$authelia_user" /
+    # "$authelia_groups" are the forward-auth identity (captured per-vhost by
+    # auth_request_set, defaulted by the maps above), $authelia_bypass is the
+    # cookieless-Authorization bypass decision (0/1). The identity fields are
+    # location-scoped: on a request that didn't run auth_request (cookieless
+    # machine client, a bypassed path, or a vhost with no auth) they log the
+    # empty default -- itself a useful signal. $authelia_bypass evaluates on
+    # every request but is only load-bearing on upstream_authorization vhosts.
     # $ssl_protocol/$ssl_cipher trail the line so netdata's web_log collector
     # can chart the TLS-version/cipher distribution per vhost; on a plaintext
     # :80 request they are unset and nginx logs each as `-`, keeping the field
     # count stable so the positional CSV parse in files/web_log.conf still lines up.
-    log_format custom      '$remote_addr - $remote_user [$time_local] $host "$request_safe" $server_name $status $body_bytes_sent $request_length $request_time $upstream_response_time "$http_referer" "$http_user_agent" $ssl_protocol $ssl_cipher';
+    # Any change to this field list must move in lockstep with files/web_log.conf
+    # (netdata) and roles/fluentbit/files/parsers_nginx.conf (the lnav parser).
+    log_format custom      '$remote_addr - $remote_user [$time_local] $host "$request_safe" $server_name $status $body_bytes_sent $request_length $request_time $upstream_response_time "$http_referer" "$http_user_agent" "$authelia_user" "$authelia_groups" $authelia_bypass $ssl_protocol $ssl_cipher';
     access_log             /var/log/nginx/access.log custom buffer=512k flush=5s;
     error_log              stderr warn;
 

@@ -85,7 +85,7 @@ do
     -- pinned info level.
     local rec = shape("nginx.access", {
         host = "lab",
-        log = '203.0.113.5 - - [08/Jun/2026:12:00:00 +0200] g.example "GET /ok HTTP/2.0" g.example 200 1 2 0.01 0.01 "-" "curl/8" TLSv1.3 X',
+        log = '203.0.113.5 - - [08/Jun/2026:12:00:00 +0200] g.example "GET /ok HTTP/2.0" g.example 200 1 2 0.01 0.01 "-" "curl/8" "" "" 0 TLSv1.3 X',
         method = "GET",
         path = "/ok",
         status = 200,
