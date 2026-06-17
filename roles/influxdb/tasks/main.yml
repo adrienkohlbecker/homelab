@@ -64,6 +64,23 @@
   tags:
     - influxdb
 
+# Operator (all-access) token. Seeded into the BoltDB on first boot via
+# DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE so the value the CLI default config
+# carries (templated below from the same influxdb_root_token) actually exists
+# in the database. Without it a fresh bootstrap would mint a *random* operator
+# token and the managed config would 401. Honored only on first boot (BoltDB
+# empty); on existing hosts setup is skipped and this is a no-op input.
+- name: Create influxdb_admin_token secret
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: influxdb_admin_token
+      data: "{{ influxdb_root_token }}"
+  tags:
+    - influxdb
+
 - name: Create homeassistant podman network
   when: not ansible_check_mode
   containers.podman.podman_network:
@@ -184,6 +201,69 @@
   tags:
     - influxdb
 
+# Manage the CLI default config so `influx ...` inside the container
+# authenticates with the vaulted operator token. influx setup writes this file
+# on first boot, but on every later boot (BoltDB already populated) setup is
+# skipped -- so a token regenerated in the UI, or any drift, leaves the file
+# pointing at a dead token (401). Templating it here makes influxdb_root_token
+# the single source of truth; influxd does not read it (the CLI reads it
+# per-exec) so no restart is needed.
+- name: Template the influx CLI default config
+  when: not (ansible_check_mode and influxdb_user.changed)
+  template:
+    src: influx-configs.j2
+    dest: /mnt/services/influxdb/config/influx-configs
+    owner: influxdb
+    group: influxdb
+    mode: "0600"
+    backup: true
+  become: true
+  tags:
+    - influxdb
+
+# Prove the managed config token is accepted by the running BoltDB -- an
+# authenticated round-trip the unauth /health and `influx ping` checks cannot
+# cover. failed_when:false + until lets the retry ride cold-start; the assert
+# below turns a persistent 401 into a loud, actionable failure (the usual cause
+# is influxdb_root_token rotated in vault without regenerating it in InfluxDB).
+# Skipped under --check: `command` does not run there, so there is no rc to
+# assert on.
+- name: Check the influx default config authenticates
+  command:
+    argv:
+      - podman
+      - exec
+      - influxdb
+      - influx
+      - org
+      - list
+      - --name
+      - "{{ influxdb_root_org }}"
+  register: _influxdb_auth_check
+  changed_when: false
+  failed_when: false
+  retries: 10
+  delay: 2
+  until: _influxdb_auth_check.rc == 0
+  when: not ansible_check_mode
+  become: true
+  tags:
+    - influxdb
+
+- name: Assert the influx default config authenticates
+  assert:
+    that:
+      - _influxdb_auth_check.rc == 0
+    fail_msg: >-
+      `influx org list` was rejected by the running InfluxDB -- the operator
+      token in influxdb_root_token is not recognized. If you rotated it,
+      regenerate an all-access token in the InfluxDB UI (Load Data -> API
+      Tokens) for {{ influxdb_root_user }}, set influxdb_root_token to the new
+      BARE value in vault (ansible-vault edit group_vars/prod.yml), and re-apply.
+  when: not ansible_check_mode
+  tags:
+    - influxdb
+
 # auth: required puts Authelia in front of the UI; bypass-on-
 # Authorization (enabled implicitly by upstream_authorization) lets
 # machine clients (HomeAssistant, Telegraf, Grafana) keep using their
@@ -194,39 +274,28 @@
 # InfluxDB's own login (no double auth). Unknown Authelia users fall
 # through to InfluxDB's native sign-in (operator break-glass).
 #
-# SSO injection source: the per-Authelia-user Authorization tokens come
-# entirely from vaulted `influxdb_user_tokens` -- a dict of
-# `<authelia-user>: "<bare-influx-token>"`. The values are BARE tokens; the
-# `Token ` auth scheme is prepended below (the scheme is InfluxDB-specific, so
-# the influxdb role owns it -- nginx_site only injects the finished header
-# value verbatim). The role deliberately does NOT auto-derive the operator
-# token from `influx auth list`: InfluxDB 2.8+ redacts token secrets there (a
-# token value is returned only once, at `auth create`), so a re-read yields an
-# empty string and the injection silently breaks -- nginx forwards
-# `Authorization: Token ` and the browser loops on /signin. An explicit vaulted
-# token is also boring and robust: it rotates only when the operator chooses and
-# survives every influxd upgrade. Authelia and InfluxDB usernames are
-# intentionally decoupled -- the dict KEY is the Authelia identity, the VALUE is
-# whatever InfluxDB token it resolves to (typically an all-access operator token
-# for the operator). An empty/absent dict simply injects nothing, so users fall
-# through to InfluxDB's native sign-in (break-glass).
+# SSO injection source: the nginx task below builds upstream_authorization
+# inline as a single-entry map { influxdb_authelia_user: "Token <influxdb_root_token>" }.
+# influxdb_root_token is the vaulted BARE all-access operator token; the
+# InfluxDB-specific `Token ` scheme is prepended there so nginx_site injects the
+# finished header verbatim. The SAME token also backs the CLI default config and
+# the first-boot DOCKER_INFLUXDB_INIT_ADMIN_TOKEN above -- one secret, three
+# consumers. The role deliberately does NOT auto-derive the token from `influx
+# auth list`: InfluxDB 2.8+ redacts token secrets there (returned only once, at
+# `auth create`), so a re-read yields an empty string and both the injection and
+# the CLI config silently break. An explicit vaulted token is boring and robust:
+# it rotates only on operator action and survives every influxd upgrade. Authelia
+# and InfluxDB usernames are intentionally decoupled -- influxdb_authelia_user is
+# the Authelia identity, influxdb_root_user the InfluxDB-side admin name.
 #
-# Provision / rotate a user's token:
-#   1. podman exec -it influxdb influx auth create --all-access \
-#        --user {{ influxdb_root_user }} --json     # token shown ONCE here
-#   2. Add `<authelia-user>: "<token>"` (BARE, no `Token ` prefix) to vaulted
-#      `influxdb_user_tokens` in group_vars/prod.yml (ansible-vault edit)
-#      and re-apply.
-- name: Prefix vaulted influxdb tokens with the Token auth scheme
-  set_fact:
-    _influxdb_upstream_auth: >-
-      {{ _influxdb_upstream_auth | default({})
-         | combine({item.key: 'Token ' ~ item.value}) }}
-  loop: "{{ influxdb_user_tokens | default({}) | dict2items }}"
-  loop_control:
-    label: "{{ item.key }}"
-  tags:
-    - influxdb
+# Rotate the operator token:
+#   1. InfluxDB UI (Load Data -> API Tokens) -> generate an all-access token for
+#      {{ influxdb_root_user }} and copy it ONCE. (Or, while the CLI still
+#      authenticates: podman exec -it influxdb influx auth create --all-access
+#      --user {{ influxdb_root_user }} --json.)
+#   2. ansible-vault edit group_vars/prod.yml -> set influxdb_root_token to the
+#      new BARE value, then re-apply. The config template re-points the CLI and
+#      the authenticated check above confirms the BoltDB accepts it.
 
 - name: Configure nginx
   import_role:
@@ -237,6 +306,9 @@
       subdomain: influxdb
       proxy_pass: http://127.0.0.1:{{ service_ports.influxdb }}/
       auth: required
-      upstream_authorization: "{{ _influxdb_upstream_auth | default({}) }}"
+      # Jinja dict-literal so the key (influxdb_authelia_user) is evaluated; a
+      # templated YAML key ("{{ ... }}":) is NOT resolved and would reach the
+      # nginx injection-safety assert as a literal `{{ }}` string.
+      upstream_authorization: "{{ {influxdb_authelia_user: 'Token ' ~ influxdb_root_token} }}"
   tags:
     - influxdb
