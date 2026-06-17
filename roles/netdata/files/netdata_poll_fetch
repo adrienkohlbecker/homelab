@@ -7,6 +7,14 @@ fetches the two read-only netdata endpoints lab's homepage_alerts poller needs
 and emits them as one JSON bundle on stdout. SSH_ORIGINAL_COMMAND is ignored --
 the key is single-purpose, so whatever the client puts after the key is moot.
 
+The alert_transitions log is filtered server-side to only the rows touching a
+currently-active alarm before it crosses the wire: the poller deep-links active
+alarms only, so the full last=10000 history (MBs on a chatty agent) reduces to
+a handful of rows. The bundle shape is unchanged -- the poller's
+latest_transition_by_alarm still selects the newest row per (alert, instance)
+from this filtered list -- so this is purely a bandwidth optimisation done on
+the host that already holds the data over loopback.
+
 Stdlib only (the host has no guaranteed third-party Python); netdata listens on
 loopback, so no auth is needed once the SSH boundary is crossed.
 """
@@ -31,8 +39,25 @@ def _get(path: str) -> dict:
         return json.load(resp)
 
 
+def _active_alarm_keys(alarms: dict) -> set:
+    """(name, chart) of every currently-active alarm -- the key the v2
+    transitions join on (a transition's alert/instance == an alarm's
+    name/chart). Mirrors the fallback the poller's normalize() uses so the
+    server-side filter and the client-side join agree on the key."""
+    return {(alarm.get("name") or key, alarm.get("chart") or "") for key, alarm in (alarms.get("alarms") or {}).items()}
+
+
 def main() -> None:
-    json.dump({field: _get(path) for field, path in ENDPOINTS.items()}, sys.stdout)
+    alarms = _get(ENDPOINTS["alarms"])
+    transitions = _get(ENDPOINTS["transitions"])
+    active = _active_alarm_keys(alarms)
+    # Keep the v2 envelope (and its facet fields) intact; just drop the
+    # transition rows unrelated to an active alarm. The poller's selection of
+    # the newest row per key stays the single source of truth for "latest".
+    transitions["transitions"] = [
+        t for t in (transitions.get("transitions") or []) if (t.get("alert"), t.get("instance")) in active
+    ]
+    json.dump({"alarms": alarms, "transitions": transitions}, sys.stdout)
 
 
 if __name__ == "__main__":
