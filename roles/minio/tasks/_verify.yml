@@ -61,8 +61,8 @@
     status_code: 200
   become: true
 
-# Data-plane provisioning, exercised through the `default` alias supplied via
-# MC_HOST_default in the environment (client.yml no longer persists an alias).
+# Data-plane provisioning, exercised through the `default` alias persisted by
+# client.yml.
 # Catches the 403-class regressions a stat on the policy dir can't -- a user
 # created without its policy, a bucket that never got made, a policy file that
 # failed to load.
