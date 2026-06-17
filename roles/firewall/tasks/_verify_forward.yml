@@ -45,6 +45,48 @@
   failed_when: firewall_verify_container_to_vip.rc != 0 or 'firewall-verify-ok' not in firewall_verify_container_to_vip.stdout
   become: true
 
+# Direct podman cross-network traffic must not bypass netavark's
+# isolation through this table's later base-chain accept. Use an
+# isolated throwaway bridge as the source and the default-network
+# httpd container's real IP as the destination: no DNAT, just direct
+# container-IP lateral movement. The existing DNAT probe above pins
+# the intentionally allowed VIP/published path separately.
+- name: _verify_forward | FORWARD — isolated podman network cannot reach default-network container IP
+  block:
+    - name: _verify_forward | Create isolated podman probe network
+      containers.podman.podman_network:
+        name: firewall_verify_isolated
+        disable_dns: false
+        opt:
+          isolate: true
+        state: present
+      become: true
+
+    - name: _verify_forward | Read default-network probe container IP
+      command: >
+        podman inspect firewall_verify_httpd
+        --format
+        {% raw %}'{{ .NetworkSettings.Networks.podman.IPAddress }}'{% endraw %}
+      register: _firewall_default_container_ip
+      changed_when: false
+      become: true
+
+    - name: _verify_forward | Probe direct cross-network container-IP path
+      command: >
+        podman run --rm --network firewall_verify_isolated docker.io/library/busybox
+        wget -q -O - -T 3 http://{{ _firewall_default_container_ip.stdout | trim }}:32400/
+      register: _firewall_podman_isolation_probe
+      changed_when: false
+      failed_when: _firewall_podman_isolation_probe.rc == 0
+      become: true
+  always:
+    - name: _verify_forward | Remove isolated podman probe network
+      command: podman network rm firewall_verify_isolated
+      register: _firewall_isolated_network_rm
+      changed_when: _firewall_isolated_network_rm.rc == 0
+      failed_when: false
+      become: true
+
 # Host egress smoke check — nftables has no `output` chain registered
 # (default policy=accept) and no host-source MASQUERADE rule, so this
 # just confirms egress isn't disrupted by the sysctls or by something

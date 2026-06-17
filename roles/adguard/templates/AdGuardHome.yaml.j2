@@ -18,12 +18,11 @@ http:
   and every container on the default podman bridge can reach the API
   unauthenticated -- and it controls upstreams/rewrites, so a compromised
   co-located container could hijack household DNS. Accepted for this home
-  environment, the same trade as the cross-bridge DNAT gap documented in
-  roles/firewall. The obvious hardenings do not work here: binding
+  environment. The obvious hardenings do not work here: binding
   127.0.0.1 breaks the loopback publish (the DNAT targets the container
-  IP, verified on the harness), and netavark does not isolate podman
-  networks under our nftables setup even with isolate=true. Platform
-  isolation fix tracked in notes/SOMEDAY.md.
+  IP, verified on the harness), and the firewall deliberately allows
+  published/VIP DNAT hairpins while blocking direct cross-network
+  container-IP traffic.
 #}
 users: []
 auth_attempts: 5
