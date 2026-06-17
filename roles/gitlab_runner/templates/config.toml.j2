@@ -101,6 +101,10 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
     instance_ready_command = "docker info"
 
     [runners.autoscaler.plugin_config]
+      # Required by the plugin: the name prefix for the cloned servers (they
+      # boot as ci-coordinator-<random>). Matches the pool label / reserved IP /
+      # firewall name so the whole coordinator fleet shares one identifier.
+      name = "ci-coordinator"
       # hcloud API token (manager-side only). Vaulted in host_vars.
       token = "{{ gitlab_runner_hcloud_token }}"
       location = "{{ gitlab_runner_location }}"
