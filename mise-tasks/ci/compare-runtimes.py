@@ -129,7 +129,14 @@ def main() -> int:
         cd = c["duration"] if c else None
         bs = b["status"] if b else None
         cs = c["status"] if c else None
-        delta = (cd - bd) if (bd is not None and cd is not None) else None
+        # Only a delta between two *finished* successes is meaningful: a
+        # running job's `duration` is a partial elapsed-so-far (e.g. 3s into
+        # mise:box), and a failed job stopped early -- both would render a
+        # bogus speedup. Leave delta None otherwise; the status note explains.
+        both_green = bs == "success" and cs == "success"
+        delta = (
+            (cd - bd) if (both_green and bd is not None and cd is not None) else None
+        )
         pct = (delta / bd * 100) if (delta is not None and bd) else None
         rows.append(
             {
