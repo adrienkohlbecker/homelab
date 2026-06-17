@@ -78,6 +78,20 @@ stages:
     expire_in: 30 days
     paths:
       - test/out/
+{% if site_test %}
+
+# _site_test is the critical-path cell (longest run, ~40m). A dedicated leading
+# `site` stage makes GitLab seed it with the lowest build ids so a runner picks
+# it up first instead of queueing it behind the cell matrix; needs:[] (from
+# .cell) keeps it -- and every cell -- starting in parallel, so the leading
+# stage orders job ids and groups the UI without gating anything.
+"_site_test:box":
+  extends: .cell
+  stage: site
+  timeout: 60m
+  script:
+    - test/site_test.py --timeout 2400
+{% endif %}
 {% for group in cell_groups %}
 {% for cell in group.cells %}
 
@@ -92,14 +106,6 @@ stages:
     - test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark
 {% endfor %}
 {% endfor %}
-{% if site_test %}
-
-"_site_test:box":
-  extends: .cell
-  timeout: 60m
-  script:
-    - test/site_test.py --timeout 2400
-{% endif %}
 {% if not cells and not site_test %}
 
 no_cells:

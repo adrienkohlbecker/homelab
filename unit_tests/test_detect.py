@@ -900,6 +900,24 @@ class TestRenderChildPipeline:
         assert doc["_site_test:box"]["timeout"] == "60m"
         assert "no_cells" not in doc
 
+    def test_site_test_seeded_first_in_leading_stage(self) -> None:
+        # _site_test must be picked before the matrix: it lives in a dedicated
+        # `site` stage declared ahead of the cell stages, so GitLab (which seeds
+        # build ids stage-by-stage) gives it the lowest id and a runner claims
+        # it first. needs:[] (from .cell) keeps it parallel, so the leading
+        # stage never gates the cells.
+        doc = _render_child_doc(["nginx:box", "podman:box:noble"], site_test=True)
+        assert doc["stages"] == ["site", "test1", "test2"]
+        assert doc["_site_test:box"]["stage"] == "site"
+        assert doc[".cell"]["needs"] == []
+
+    def test_site_test_only_stage(self) -> None:
+        # site_test with no cells still seeds a single leading `site` stage.
+        doc = _render_child_doc([], site_test=True)
+        assert doc["stages"] == ["site"]
+        assert doc["_site_test:box"]["stage"] == "site"
+        assert "no_cells" not in doc
+
     def test_empty_gets_noop_placeholder(self) -> None:
         doc = _render_child_doc([], site_test=False)
         assert "no_cells" in doc

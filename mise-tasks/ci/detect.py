@@ -561,9 +561,16 @@ def render_child_pipeline(specs: list[str], site_test: bool) -> str:
     template = env.get_template(_CHILD_TEMPLATE.name)
     cells = [_parse_cell_spec(s) for s in specs]
     cell_groups = _split_cells_into_stages(cells)
-    # site_test / no_cells always live in the first stage, so declare it even
-    # when there are no cells to split.
-    stages = [g["stage"] for g in cell_groups] or ["test1"]
+    # _site_test is the critical-path cell (longest, ~40m). GitLab seeds build
+    # ids stage-by-stage and a runner picks the lowest id first, so give it a
+    # dedicated leading `site` stage: it then gets the lowest ids and a runner
+    # claims it immediately instead of queueing behind the matrix. needs:[]
+    # (from .cell) keeps every cell -- site_test included -- starting in
+    # parallel, so the leading stage orders job ids and groups the UI without
+    # gating anything. no_cells falls back to a bare test1 so the empty
+    # pipeline stays valid.
+    cell_stages = [g["stage"] for g in cell_groups]
+    stages = (["site"] if site_test else []) + cell_stages or ["test1"]
     return template.render(
         cells=cells,
         cell_groups=cell_groups,
