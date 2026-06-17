@@ -1,0 +1,9 @@
+---
+# Set sync=disabled on the rpool/podman zvol. Only safe where the zvol holds
+# nothing but reconstructible state -- container images and ephemeral overlay
+# layers, with every service's persistent data on /mnt/services bind-mounts.
+# Under those conditions an unclean shutdown loses at most one txg (~5s) of
+# disposable layer writes (ZFS keeps the pool consistent regardless), in
+# exchange for dropping the per-file fsync that bottlenecks image extraction.
+# Opt-in per host; the qemu_test path forces it on separately.
+podman_zvol_sync_disabled: false
