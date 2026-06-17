@@ -407,26 +407,39 @@
   tags:
     - podman
 
-# Override the properties this zvol would otherwise inherit from rpool. It
-# carries an ext4 filesystem (its own page cache) backing the overlay store,
-# so the inherited defaults are actively harmful under a wide CI fan-out:
-#   - compression=lz4 (not rpool's zstd): every overlay write is compressed
-#     in-kernel; zstd burns ~10x the CPU of lz4 at a similar ratio on layer
-#     data, and on a 2-vCPU host that dominates system time.
-#   - primarycache=metadata (not all): ext4 already page-caches the data, so
-#     caching zvol data blocks in ARC too is pure double-caching -- it wastes
-#     the (small) ARC and inflates RAM pressure into swap.
+# Pin the container-store zvol's properties. It carries an ext4 filesystem (its
+# own page cache) for the overlay driver, so ZFS defaults are wrong for it under
+# a wide CI fan-out:
+#   - compression=lz4 (overrides rpool's inherited zstd): every overlay write is
+#     compressed in-kernel; zstd burns ~10x the CPU of lz4 at a similar ratio on
+#     layer data, and on a 2-vCPU host that dominates system time.
+#   - primarycache=metadata (overrides inherited all): ext4 already page-caches
+#     the data, so caching zvol data blocks in ARC too is pure double-caching --
+#     it wastes the (small) ARC and inflates RAM pressure into swap.
 #   - logbias=throughput: bulk write-heavy workload, not latency-sensitive.
+#   - volblocksize=8K, creation-time ONLY (gated on the zvol being absent): it is
+#     read-only, so setting it on an existing zvol fails every converge. ext4
+#     writes 4K blocks; a 16K record (the OpenZFS >=2.2 default) forces a 4x
+#     read-modify-write, worsened by primarycache=metadata keeping those records
+#     out of ARC. 8K halves the amplification and still compresses. Existing 16K
+#     zvols keep working and adopt 8K only on a deliberate destroy+recreate (see
+#     notes/runbooks/fox_podman_zvol_volblocksize_migration.md).
 - name: install | Create podman zvol
   when: zfs_root
   zfs:
     name: rpool/podman
     state: present
-    extra_zfs_properties:
-      volsize: '{{ podman_zvol_size }}'
-      compression: lz4
-      primarycache: metadata
-      logbias: throughput
+    extra_zfs_properties: >-
+      {{
+        {
+          "volsize": podman_zvol_size,
+          "compression": "lz4",
+          "primarycache": "metadata",
+          "logbias": "throughput"
+        } | combine(
+          {"volblocksize": "8K"} if podman_zvol_current.rc != 0 else {}
+        )
+      }}
   register: podman_zfs_zvol
   become: true
   tags:
