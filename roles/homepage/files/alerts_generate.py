@@ -1,28 +1,33 @@
 """Generate the homepage alerts panel's static HTML snapshot.
 
-Polls each configured host's `/api/v1/alarms?active` netdata endpoint in
-parallel and writes index.html — a dark-themed, iframe-friendly alert list.
+Polls each configured host's netdata alerts over SSH in parallel and writes
+index.html — a dark-themed, iframe-friendly alert list.
 
 Run as a Type=oneshot systemd service fired by homepage_alerts.timer on
 a sub-minute cadence (OnCalendar=*:*:0/30 + AccuracySec=1s on the
 homepage host). nginx serves the file directly from OUTPUT_DIR; no
 proxy_pass, no long-running process.
 
+Single transport: every host — including the converging host's own netdata —
+is reached the same way, an SSH call to the netdata_poll forced-command key
+that returns a `{"alarms", "transitions"}` JSON bundle (one round trip, no
+nginx, no URL token). SSH connections are multiplexed (ControlMaster) so the
+30s cadence reuses one warm connection per peer instead of re-handshaking.
+
 Inputs (env):
 - NETDATA_HOSTS: comma-separated list of `<name>=<query-url>[=<click-url>]`
-  triples. The query-url is fetched server-side, the click-url is the
-  public netdata vhost a browser can navigate to. If only one URL is
-  given, both are set to it.
-  Example: "lab=http://localhost:19999=https://netdata.lab.fahm.fr,pug=https://netdata.pug.fahm.fr"
+  triples. The query-url is the `ssh://netdata_poll@host` to pull from; the
+  click-url is the public netdata vhost a browser can navigate to. If only one
+  URL is given, both are set to it.
+  Example: "lab=ssh://netdata_poll@10.0.0.2=https://netdata.lab.fahm.fr,pug=ssh://netdata_poll@10.0.0.3=https://netdata.pug.fahm.fr"
 - OUTPUT_DIR: directory to write the files into (default
   /var/www/homepage_alerts). Must be writable by the unit's User=.
-- NETDATA_ALERTS_TOKEN: optional. When set, every request to a
-  non-loopback query-url gets `?auth_token=<token>` (or `&auth_token=`
-  if the path already carries a query string) so it bypasses the
-  netdata vhost's Authelia forward-auth gate (see
-  roles/nginx/tasks/site.yml's bypass_query_param). Loopback URLs
-  (localhost / 127.0.0.1 / ::1) skip the token — they bypass nginx
-  entirely.
+- NETDATA_POLL_SSH_KEY: path to the netdata_poll private key.
+- NETDATA_POLL_SSH_KNOWN_HOSTS: path to the known_hosts file pinning the
+  peers' host keys (StrictHostKeyChecking=yes).
+- NETDATA_POLL_SSH_CONTROL_DIR: directory for the ControlMaster sockets
+  (a persisted RuntimeDirectory; default /run/homepage_alerts). All three
+  SSH inputs are required.
 
 Embedded in the homepage dashboard via an iframe widget mounted at
 /alerts/ on the homepage vhost (same origin) so the page can resize
@@ -31,22 +36,26 @@ itself by poking `window.frameElement.style.height`. Stdlib only.
 
 import datetime
 import html
-import http.client
 import json
 import os
 import pathlib
-import ssl
+import subprocess
 import sys
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
-FETCH_TIMEOUT = 5
 MAX_FETCH_WORKERS = 8
-# Lookback window for the v2 alert-transitions fetch. Active alarms transitioned
-# recently (that is why they are active), so a 7-day window comfortably covers
-# their current-state transition; the v2 endpoint returns nothing for after=0.
-ALERT_TRANSITIONS_WINDOW = 7 * 24 * 3600
+# SSH transport bounds. SSH_CONNECT_TIMEOUT caps the TCP connect; SSH_TIMEOUT
+# caps the whole call (connect + the forced command's two loopback fetches on
+# the far side). Both sit well inside the timer's 25s TimeoutStartSec so a
+# wedged peer fails the run rather than hanging it. ControlMaster reuse makes
+# the steady-state call far cheaper than a cold connect.
+SSH_CONNECT_TIMEOUT = 5
+SSH_TIMEOUT = 10
+# Keep the multiplexed master warm well past the 30s poll cadence so the next
+# fire reuses it; it self-reaps this long after polling stops.
+SSH_CONTROL_PERSIST = 120
 
 # Heroicons-mini filled status glyphs swapped in for the text pill below the
 # narrow-viewport breakpoint. Filled style (fill=currentColor) so the inside
@@ -70,10 +79,6 @@ STATUS_ICONS = {
         '0-1.75.875.875 0 0 0 0 1.75Z" clip-rule="evenodd"/></svg>'
     ),
 }
-
-# Trust the host's CA bundle. netdata vhosts use Let's Encrypt via the certbot
-# role, so default verification works; no need for a custom store.
-SSL_CTX = ssl.create_default_context()
 
 
 def parse_hosts(spec: str) -> list[tuple[str, str, str]]:
@@ -104,64 +109,84 @@ def parse_hosts(spec: str) -> list[tuple[str, str, str]]:
     return out
 
 
-class _HostClient:
-    """One netdata host's persistent connection for the duration of a single
-    _fetch_one call. Reuses one TLS handshake across the 2 requests we make
-    per host per run (alarms + alert_transitions).
+class _SshConfig:
+    """Static SSH transport config shared by every per-host fetch in one run:
+    the netdata_poll private key, the pinned known_hosts, and the ControlMaster
+    socket directory. `%C` in the ControlPath hashes (local, remote, port, user)
+    so each peer gets its own socket; ControlMaster=auto reuses a warm one or
+    opens it, and ControlPersist keeps it alive across the 30s poll cadence."""
 
-    Invariant: each request fully drains the response before the next one.
-    http.client.HTTPConnection raises ResponseNotReady on the next
-    getresponse() if a prior response body wasn't consumed -- _get_json's
-    unconditional resp.read() + resp.close() satisfies that today, but a
-    future switch to streaming reads must preserve it or reuse will break
-    silently (the bare except in _fetch_one swallows it as entry['error']).
+    def __init__(self, key: str, known_hosts: str, control_dir: str) -> None:
+        if not (key and known_hosts and control_dir):
+            raise OSError(
+                "NETDATA_POLL_SSH_KEY, NETDATA_POLL_SSH_KNOWN_HOSTS and "
+                "NETDATA_POLL_SSH_CONTROL_DIR are all required"
+            )
+        self.base_opts = [
+            "-i",
+            key,
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "IdentitiesOnly=yes",
+            "-o",
+            "IdentityAgent=none",
+            "-o",
+            "StrictHostKeyChecking=yes",
+            "-o",
+            f"UserKnownHostsFile={known_hosts}",
+            "-o",
+            f"ConnectTimeout={SSH_CONNECT_TIMEOUT}",
+            "-o",
+            "ControlMaster=auto",
+            "-o",
+            f"ControlPath={control_dir.rstrip('/')}/cm-%C",
+            "-o",
+            f"ControlPersist={SSH_CONTROL_PERSIST}",
+        ]
+
+
+class _SshHostClient:
+    """Fetch one host's alert bundle over SSH via the netdata_poll forced-command
+    key. A single `ssh` invocation returns a JSON bundle {"alarms": ...,
+    "transitions": ...}, cached for the alarms() + alert_transitions() calls
+    _fetch_one makes per host. The remote command is fixed by authorized_keys
+    (command=), so the argv carries none — whatever we would append is ignored
+    server-side; the key cannot run anything else.
+
+    StrictHostKeyChecking=yes + the pinned known_hosts is the trust anchor: a
+    peer whose host key isn't pre-registered (roles/homepage keyscan) is refused
+    rather than TOFU-accepted.
     """
 
-    def __init__(self, base_url: str, auth_token: str = "") -> None:
+    def __init__(self, base_url: str, cfg: _SshConfig) -> None:
         u = urllib.parse.urlsplit(base_url)
-        cls = http.client.HTTPSConnection if u.scheme == "https" else http.client.HTTPConnection
-        kwargs: dict = {"timeout": FETCH_TIMEOUT}
-        if u.scheme == "https":
-            kwargs["context"] = SSL_CTX
-        self._conn = cls(u.netloc, **kwargs)
-        # Token threaded into every request as ?auth_token=<value> (or
-        # &auth_token= if the path already carries a query). nginx's
-        # bypass_query_param helper short-circuits Authelia and strips
-        # the param before proxy_pass so netdata itself never sees it.
-        self._auth_token = auth_token
+        self._target = f"{u.username or 'netdata_poll'}@{u.hostname}"
+        self._cfg = cfg
+        self._bundle: dict | None = None
 
     def close(self) -> None:
-        try:
-            self._conn.close()
-        except Exception:  # noqa: BLE001
-            pass
+        pass
 
-    def _get_json(self, path: str) -> dict:
-        if self._auth_token:
-            sep = "&" if "?" in path else "?"
-            path = f"{path}{sep}auth_token={urllib.parse.quote(self._auth_token, safe='')}"
-        self._conn.request("GET", path, headers={"User-Agent": "homepage-alerts/1"})
-        resp = self._conn.getresponse()
-        try:
-            body = resp.read()
-        finally:
-            resp.close()
-        if resp.status != 200:
-            raise OSError(f"HTTP {resp.status} on {path}")
-        return json.loads(body)
+    def _fetch(self) -> dict:
+        if self._bundle is not None:
+            return self._bundle
+        argv = ["ssh", *self._cfg.base_opts, self._target]
+        proc = subprocess.run(argv, capture_output=True, timeout=SSH_TIMEOUT)  # noqa: S603
+        if proc.returncode != 0:
+            # stderr can leak the peer address / host-key detail; _fetch_one
+            # surfaces only the exception class to the rendered HTML, while the
+            # full message lands in the journal.
+            err = proc.stderr.decode("utf-8", "replace").strip()
+            raise OSError(f"ssh {self._target} exited {proc.returncode}: {err}")
+        self._bundle = json.loads(proc.stdout)
+        return self._bundle
 
     def alarms(self) -> dict:
-        return self._get_json("/api/v1/alarms?active")
+        return self._fetch().get("alarms") or {}
 
     def alert_transitions(self) -> dict:
-        # netdata v2 emptied /api/v1/alarm_log (returns HTTP 200 with a zero-byte
-        # body, which is what made the v1 fetch raise JSONDecodeError); the alarm
-        # transition history moved to the faceted /api/v2/alert_transitions. That
-        # endpoint needs a relative `after` window -- after=0 yields no rows --
-        # so look back ALERT_TRANSITIONS_WINDOW. last=10000 covers a chatty
-        # agent's full window.
-        qs = {"after": f"-{ALERT_TRANSITIONS_WINDOW}", "last": "10000"}
-        return self._get_json(f"/api/v2/alert_transitions?{urllib.parse.urlencode(qs)}")
+        return self._fetch().get("transitions") or {}
 
 
 def latest_transition_by_alarm(log) -> dict[tuple[str, str], str]:
@@ -264,36 +289,26 @@ def normalize(payload: dict) -> list[dict]:
     return items
 
 
-_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
-
-
-def _fetch_one(name: str, query_url: str, click_url: str, auth_token: str = "") -> dict:
+def _fetch_one(name: str, query_url: str, click_url: str, cfg: "_SshConfig") -> dict:
     entry = {"name": name, "url": query_url, "click_url": click_url}
-    client: _HostClient | None = None
+    client = None
     try:
-        # Loopback URLs skip nginx entirely (and thus skip the Authelia
-        # gate), so the auth_token is only applied to off-host targets.
-        host = urllib.parse.urlsplit(query_url).hostname or ""
-        token_for_client = auth_token if host.lower() not in _LOOPBACK_HOSTS else ""
-        client = _HostClient(query_url, auth_token=token_for_client)
+        client = _SshHostClient(query_url, cfg)
         alarms = normalize(client.alarms())
-        # alarm_log gives us per-alarm transition_id needed for the v2
-        # deep-link path. Bulk fetch first; for any active alarm not in the
-        # window, fall back to a chart-filtered fetch since per-chart logs
-        # stay short even when the bulk has been GC'd at the tail. All
-        # alarm_log failures are non-fatal — the alarm row falls back to the
-        # alerts list URL.
+        # The bundle carries the v2 alert_transitions alongside the alarms, so
+        # the per-alarm transition_id (needed for the deep-link path) is already
+        # in hand — no second round trip. A transitions miss is non-fatal: the
+        # alarm row falls back to the alerts list URL.
         log_warn = ""
         try:
             tid_by_key = latest_transition_by_alarm(client.alert_transitions())
         except Exception as e:  # noqa: BLE001
             tid_by_key = {}
-            log_warn = f"alert_transitions fetch failed: {type(e).__name__}: {e}"
-        # The v2 bulk fetch over ALERT_TRANSITIONS_WINDOW already covers every
-        # active alarm (an active alarm transitioned within the window), so the
-        # (name, chart) join is a single pass. A miss falls back to the alerts
-        # list URL -- the row still renders + clicks through, it just does not
-        # deep-link to the specific transition.
+            log_warn = f"alert_transitions parse failed: {type(e).__name__}: {e}"
+        # The server-side bundle window already covers every active alarm (an
+        # active alarm transitioned within it), so the (name, chart) join is a
+        # single pass. A miss falls back to the alerts list URL -- the row still
+        # renders + clicks through, it just doesn't deep-link to the transition.
         for a in alarms:
             a["transition_id"] = tid_by_key.get((a["name"], a["chart"]), "")
             a["href"] = alarm_href(click_url, name, a)
@@ -304,11 +319,11 @@ def _fetch_one(name: str, query_url: str, click_url: str, auth_token: str = "") 
             entry["log_warn"] = log_warn
         entry["alarms"] = alarms
     except Exception as e:  # noqa: BLE001
-        # Bare except so one host's transport quirk (TLS, DNS, weird upstream)
-        # never disappears the rest of the dashboard. Log the full detail to
-        # the journal but surface only the exception class to the rendered
-        # HTML — http.client / ssl error messages otherwise leak internal
-        # hostnames / IPs / TLS subject details into the dashboard, which is
+        # Bare except so one host's transport quirk (SSH down, host-key
+        # mismatch, malformed bundle) never disappears the rest of the
+        # dashboard. Log the full detail to the journal but surface only the
+        # exception class to the rendered HTML — ssh error messages otherwise
+        # leak peer addresses / host-key detail into the dashboard, which is
         # reachable to anyone on the homepage vhost.
         print(f"[{name}] fetch failed: {type(e).__name__}: {e}", file=sys.stderr)
         entry["error"] = type(e).__name__
@@ -319,16 +334,16 @@ def _fetch_one(name: str, query_url: str, click_url: str, auth_token: str = "") 
     return entry
 
 
-def collect(hosts: list[tuple[str, str, str]], auth_token: str = "") -> list[dict]:
+def collect(hosts: list[tuple[str, str, str]], cfg: "_SshConfig") -> list[dict]:
     # Parallel fetches so one slow/unreachable host doesn't gate the others —
-    # worst-case render is bounded by FETCH_TIMEOUT, not summed across hosts.
-    # Iterating futures in submit order preserves the configured host order
-    # in the response. Cap at MAX_FETCH_WORKERS so a future operator adding
-    # 30 hosts doesn't spawn 30 threads on a single run.
+    # worst-case render is bounded by SSH_TIMEOUT, not summed across hosts.
+    # Iterating futures in submit order preserves the configured host order in
+    # the response. Cap at MAX_FETCH_WORKERS so a future operator adding 30
+    # hosts doesn't spawn 30 threads on a single run.
     if not hosts:
         return []
     with ThreadPoolExecutor(max_workers=min(len(hosts), MAX_FETCH_WORKERS)) as pool:
-        futures = [pool.submit(_fetch_one, n, q, c, auth_token) for n, q, c in hosts]
+        futures = [pool.submit(_fetch_one, n, q, c, cfg) for n, q, c in hosts]
         return [f.result() for f in futures]
 
 
@@ -517,9 +532,13 @@ def main() -> None:
         print("NETDATA_HOSTS is empty; refusing to run", file=sys.stderr)
         sys.exit(1)
     output_dir = pathlib.Path(os.environ.get("OUTPUT_DIR", "/var/www/homepage_alerts"))
-    auth_token = os.environ.get("NETDATA_ALERTS_TOKEN", "")
+    cfg = _SshConfig(
+        os.environ.get("NETDATA_POLL_SSH_KEY", ""),
+        os.environ.get("NETDATA_POLL_SSH_KNOWN_HOSTS", ""),
+        os.environ.get("NETDATA_POLL_SSH_CONTROL_DIR", "/run/homepage_alerts"),
+    )
 
-    data = collect(hosts, auth_token=auth_token)
+    data = collect(hosts, cfg)
     iso = datetime.datetime.now(tz=datetime.timezone.utc).isoformat(timespec="seconds")
 
     # No top-level try/except — an exception here (disk full, permission

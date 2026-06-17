@@ -1,13 +1,13 @@
-- name: Require netdata_alerts_token to be defined
+- name: Require the netdata_poll SSH public key to be defined
   assert:
     that:
-      - netdata_alerts_token is defined
-      - netdata_alerts_token | length >= 16
+      - netdata_poll_ssh_public_key is defined
+      - netdata_poll_ssh_public_key | length > 0
     fail_msg: >-
-      netdata_alerts_token must be set in group_vars/prod.yml (vaulted
-      with --encrypt-vault-id prod) or group_vars/test.yml. Fronts the
-      URL-param bypass that lab's homepage_alerts poller uses to fetch
-      cross-host netdata over nginx; see notes/authelia_rollout.md.
+      netdata_poll_ssh_public_key must be set (group_vars/prod.yml for the
+      prod keypair, group_vars/test.yml for the test keypair). It is the
+      forced-command key lab's homepage_alerts poller uses to pull this
+      host's netdata alerts over SSH; see roles/netdata/tasks/poll_access.yml.
   tags:
     - netdata
 
@@ -82,6 +82,11 @@
   tags:
     - netdata
 
+- name: Configure netdata_poll SSH access
+  import_tasks: poll_access.yml
+  tags:
+    - netdata
+
 - name: Configure nginx
   import_role:
     name: nginx
@@ -90,30 +95,14 @@
     nginx_site_args:
       subdomain: netdata
       proxy_pass: http://127.0.0.1:{{ service_ports.netdata }}/
-      # Browser path goes through Authelia; lab's homepage_alerts timer
-      # polls cross-host (e.g. https://netdata.pug.fahm.fr/api/v1/alarms)
-      # with no cookie/Basic auth, so it appends ?auth_token=<secret> on
-      # every URL to bypass the auth_request subrequest. The token is
-      # the same vaulted secret across all netdata hosts so a single
-      # poller can hit any of them. Loopback fetches on the host running
-      # homepage_alerts skip nginx entirely and don't need the token.
-      # Tradeoff: one static secret fleet-wide, carried in the URL query
-      # string (so it can land in proxy logs/history) with no rotation
-      # beyond a vault edit + reconverge. The blast radius is bounded to the
-      # read API by the `allow {management,netdata.conf} from = none` ACLs
-      # set in "Configure netdata" above.
-      # See notes/authelia_rollout.md and alerts_generate.py.
+      # Browser access is gated by Authelia forward-auth. Alert polling no
+      # longer goes through nginx at all -- lab's homepage_alerts poller pulls
+      # every host's read API over SSH (the netdata_poll forced-command key,
+      # see poll_access.yml above), the converging host's own netdata included,
+      # so there is a single transport. The forced command reads netdata over
+      # loopback on each host. No URL-param bypass and no large-response proxy
+      # buffer tuning are needed here. See notes/authelia_nginx_gating.md.
       auth: required
-      bypass_query_param:
-        name: auth_token
-        value: "{{ netdata_alerts_token }}"
-      # alarm_log?count=10000 (polled by homepage_alerts every 30s) returns
-      # ~hundreds of KB to a few MB; default 8x4k buffers spill to disk.
-      # Measured 1.7MB on pug -- 16x64k=1MB still spills (~2k warn/day);
-      # 32x128k=4MB gives 2x headroom for future alarm growth.
-      location_conf: |
-        proxy_buffer_size 16k;
-        proxy_buffers 32 128k;
   tags:
     - netdata
 

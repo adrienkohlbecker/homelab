@@ -153,7 +153,18 @@ influxdb_root_password: changeme
 influxdb_root_token: testuser_sso_placeholder_token
 filebrowser_basic_auth_user: changeme
 filebrowser_basic_auth_password: changeme
-netdata_alerts_token: changeme_netdata_alerts_token_16chars_min
+# Throwaway test keypair for the netdata_poll forced-command SSH path (the
+# prod equivalents in group_vars/prod.yml are vaulted). Authorized on the box
+# fixture's netdata and exercised by roles/netdata/tasks/_verify.yml.
+netdata_poll_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG8D3Sh4I0n9t+N2prPLhl+C+85o+JnHGRtsNjboFZtX netdata_poll@test
+netdata_poll_ssh_private_key: |
+  -----BEGIN OPENSSH PRIVATE KEY-----
+  b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+  QyNTUxOQAAACBvA90oeCNJ/bfjdqazy4ZfgvvOaPiZxxkbbDY26BWbVwAAAJgl5/paJef6
+  WgAAAAtzc2gtZWQyNTUxOQAAACBvA90oeCNJ/bfjdqazy4ZfgvvOaPiZxxkbbDY26BWbVw
+  AAAED/4j/EYddGse27mnH4MZdTQETp5uZ6X2iB0dBoaqPr+W8D3Sh4I0n9t+N2prPLhl+C
+  +85o+JnHGRtsNjboFZtXAAAAEW5ldGRhdGFfcG9sbEB0ZXN0AQIDBA==
+  -----END OPENSSH PRIVATE KEY-----
 # Override prod's expanded firebog tick set (~26 lists, many bypassing
 # the nexus cache) with a single small list served through the
 # raw-githubusercontent mirror. Keeps the filter download + rule-count
