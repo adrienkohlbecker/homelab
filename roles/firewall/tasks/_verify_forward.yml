@@ -45,21 +45,33 @@
   failed_when: firewall_verify_container_to_vip.rc != 0 or 'firewall-verify-ok' not in firewall_verify_container_to_vip.stdout
   become: true
 
-# Direct podman cross-network traffic must not bypass netavark's
-# isolation through this table's later base-chain accept. Use an
-# isolated throwaway bridge as the source and the default-network
-# httpd container's real IP as the destination: no DNAT, just direct
-# container-IP lateral movement. The existing DNAT probe above pins
-# the intentionally allowed VIP/published path separately.
-- name: _verify_forward | FORWARD — isolated podman network cannot reach default-network container IP
+# Named-bridge coverage: most real services live on named podman bridges, not
+# podman0. Prove three separate contracts from one throwaway bridge:
+# external egress is allowed, host-published DNAT to a different bridge works,
+# and raw container-IP lateral movement remains blocked.
+- name: _verify_forward | FORWARD — named podman bridge contracts
   block:
-    - name: _verify_forward | Create isolated podman probe network
+    - name: _verify_forward | Create named podman probe network
       containers.podman.podman_network:
-        name: firewall_verify_isolated
+        name: firewall_verify_named
         disable_dns: false
-        opt:
-          isolate: true
         state: present
+      become: true
+
+    - name: _verify_forward | Named bridge egress through netavark MASQUERADE works
+      command: >
+        podman run --rm --network firewall_verify_named docker.io/library/busybox
+        nc -z -w 10 1.1.1.1 80
+      changed_when: false
+      become: true
+
+    - name: _verify_forward | Read named-network gateway IP
+      command: >
+        podman network inspect firewall_verify_named
+        --format
+        {% raw %}'{{ (index .Subnets 0).Gateway }}'{% endraw %}
+      register: _firewall_named_gateway_ip
+      changed_when: false
       become: true
 
     - name: _verify_forward | Read default-network probe container IP
@@ -71,19 +83,28 @@
       changed_when: false
       become: true
 
+    - name: _verify_forward | Cross-bridge DNAT reaches the published container
+      command: >
+        podman run --rm --network firewall_verify_named docker.io/library/busybox
+        wget -q -O - -T 5 http://{{ _firewall_named_gateway_ip.stdout | trim }}:32400/
+      register: _firewall_cross_bridge_dnat
+      changed_when: false
+      failed_when: _firewall_cross_bridge_dnat.rc != 0 or 'firewall-verify-ok' not in _firewall_cross_bridge_dnat.stdout
+      become: true
+
     - name: _verify_forward | Probe direct cross-network container-IP path
       command: >
-        podman run --rm --network firewall_verify_isolated docker.io/library/busybox
+        podman run --rm --network firewall_verify_named docker.io/library/busybox
         wget -q -O - -T 3 http://{{ _firewall_default_container_ip.stdout | trim }}:32400/
       register: _firewall_podman_isolation_probe
       changed_when: false
       failed_when: _firewall_podman_isolation_probe.rc == 0
       become: true
   always:
-    - name: _verify_forward | Remove isolated podman probe network
-      command: podman network rm firewall_verify_isolated
-      register: _firewall_isolated_network_rm
-      changed_when: _firewall_isolated_network_rm.rc == 0
+    - name: _verify_forward | Remove named podman probe network
+      command: podman network rm firewall_verify_named
+      register: _firewall_named_network_rm
+      changed_when: _firewall_named_network_rm.rc == 0
       failed_when: false
       become: true
 
@@ -139,6 +160,31 @@
   command: ip netns exec extns curl --interface {{ _firewall_probe_wg }} --connect-timeout 5 --max-time 10 -sI http://1.1.1.1/
   changed_when: false
   become: true
+
+- name: _verify_forward | FORWARD — tailscale0 subnet-router path is accepted
+  block:
+    - name: _verify_forward | Route one container-IP probe through synthetic tailscale0
+      command: >
+        ip -n extns route replace {{ _firewall_default_container_ip.stdout | trim }}/32
+        via 100.64.99.1
+      changed_when: true
+      become: true
+
+    - name: _verify_forward | Tailscale0 can forward to a podman destination
+      command: >
+        ip netns exec extns curl --interface {{ _firewall_probe_tailscale }}
+        --connect-timeout 3 --max-time 5 -sf
+        http://{{ _firewall_default_container_ip.stdout | trim }}:32400/
+      register: _firewall_tailscale_forward
+      changed_when: false
+      failed_when: _firewall_tailscale_forward.rc != 0 or 'firewall-verify-ok' not in _firewall_tailscale_forward.stdout
+      become: true
+  always:
+    - name: _verify_forward | Remove synthetic tailscale0 container route
+      command: ip -n extns route del {{ _firewall_default_container_ip.stdout | trim }}/32
+      changed_when: false
+      failed_when: false
+      become: true
 
 # ICMP rate-limit ACCEPT path. One ping is well below 10/sec.
 - name: _verify_forward | ICMP — ping from extns is accepted

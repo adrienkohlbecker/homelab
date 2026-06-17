@@ -198,6 +198,12 @@ tailscale_advertise_exit_node: true
 # Exercise the --accept-routes=true path under the harness (harmless on the
 # single-node test tailnet; the throwaway subnet isn't on box's real interfaces).
 tailscale_accept_routes: true
+# roles/firewall fixture: prod lab/pug expose a direct Tailscale underlay UDP
+# port, but box normally does not. Render that firewall branch only when the
+# firewall role is under test so the rule shape stays covered without changing
+# the generic test host's tailnet posture.
+tailscale_wan_direct: "{{ (_role_under_test | default('')) == 'firewall' }}"
+tailscale_port: 41641
 
 # roles/headscale OIDC boot test. Enable headscale's OIDC path under the harness
 # ONLY when headscale is the role under test, pointed at the local mockoidc that

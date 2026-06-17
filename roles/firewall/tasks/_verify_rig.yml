@@ -1,6 +1,6 @@
 # Fixture bringup: probe-only apt deps, busybox httpd test container,
-# extns netns + wg0 veth. Podman itself is installed by _setup.yml
-# (CLAUDE.md reserves _setup.yml for genuine fixture deps).
+# extns netns + wg0/tailscale0 veths. Podman itself is installed by
+# _setup.yml (CLAUDE.md reserves _setup.yml for genuine fixture deps).
 
 - name: _verify_rig | Install probe-only deps
   apt:
@@ -11,6 +11,55 @@
       - iputils-ping
       - hping3       # crafted TCP-ACK probes for `! --syn` rules
     cache_valid_time: 3600
+  become: true
+
+- name: _verify_rig | Stage TCP fixture listener
+  copy:
+    dest: /tmp/firewall_verify_tcp_listener.py
+    mode: "0755"
+    content: |
+      import selectors
+      import socket
+      import sys
+
+      selector = selectors.DefaultSelector()
+      for port in [int(arg) for arg in sys.argv[1:]]:
+          sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+          sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+          sock.bind(("0.0.0.0", port))
+          sock.listen()
+          sock.setblocking(False)
+          selector.register(sock, selectors.EVENT_READ)
+
+      body = b"firewall-verify-ok\n"
+      response = (
+          b"HTTP/1.1 200 OK\r\n"
+          + b"Content-Length: "
+          + str(len(body)).encode()
+          + b"\r\nConnection: close\r\n\r\n"
+          + body
+      )
+
+      while True:
+          for key, _ in selector.select():
+              conn, _ = key.fileobj.accept()
+              with conn:
+                  conn.sendall(response)
+  become: true
+
+- name: _verify_rig | Stop stale TCP fixture listener
+  systemd:
+    name: firewall_verify_tcp_listener.service
+    state: stopped
+  failed_when: false
+  become: true
+
+- name: _verify_rig | Run TCP fixture listener
+  command: >
+    systemd-run --unit firewall_verify_tcp_listener --collect
+    /usr/bin/python3 /tmp/firewall_verify_tcp_listener.py
+    80 443 445 {{ service_ports.nut }} {{ service_ports.authelia }}
+  changed_when: true
   become: true
 
 - name: _verify_rig | Pull tiny test image
@@ -69,10 +118,26 @@
       ip link add wg0 type veth peer name veth_ext
       ip link set veth_ext netns extns
     fi
+    if ! ip link show tailscale0 >/dev/null 2>&1; then
+      ip link add tailscale0 type veth peer name ts_ext
+      ip link set ts_ext netns extns
+    fi
+    if ! ip link show mac_mgmt >/dev/null 2>&1; then
+      ip link add mac_mgmt type veth peer name mgmt_ext
+      ip link set mgmt_ext netns extns
+    fi
     ip addr replace 192.0.2.1/24 dev wg0
     ip link set wg0 up
     ip -n extns addr replace {{ _firewall_probe_nonscope }}/24 dev veth_ext
     ip -n extns link set veth_ext up
+    ip addr replace 100.64.99.1/24 dev tailscale0
+    ip link set tailscale0 up
+    ip -n extns addr replace {{ _firewall_probe_tailscale }}/24 dev ts_ext
+    ip -n extns link set ts_ext up
+    ip addr replace {{ _firewall_probe_home_mac_host }}/24 dev mac_mgmt
+    ip link set mac_mgmt up
+    ip -n extns addr replace {{ _firewall_probe_home_mac }}/24 dev mgmt_ext
+    ip -n extns link set mgmt_ext up
     ip -n extns link set lo up
     ip -n extns route replace default via 192.0.2.1
     ip route replace {{ _firewall_probe_home }}/32 dev wg0
@@ -86,4 +151,17 @@
 
 - name: _verify_rig | Wait for httpd container
   wait_for: { host: 127.0.0.1, port: 32400, timeout: 30 }
+  become: true
+
+- name: _verify_rig | Wait for TCP fixture listener
+  wait_for:
+    host: 127.0.0.1
+    port: "{{ item }}"
+    timeout: 30
+  loop:
+    - 80
+    - 443
+    - 445
+    - "{{ service_ports.nut }}"
+    - "{{ service_ports.authelia }}"
   become: true
