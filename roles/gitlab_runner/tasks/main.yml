@@ -36,6 +36,23 @@
           protected; then vault the glrt- token into
           host_vars/{{ inventory_hostname }}.yml.
 
+    # The coordinator runner needs its own glrt- project runner token (distinct
+    # from the docker runner's) AND an hcloud API token to clone instances + read
+    # the snapshot. Both render straight into config.toml / drive the snapshot
+    # lookup below, so catch an unset value here. Non-empty, not just defined.
+    - name: Assert the coordinator runner secrets are set
+      when: gitlab_runner_coordinator_enabled
+      assert:
+        that:
+          - gitlab_runner_coordinator_token | default('') | length > 0
+          - gitlab_runner_hcloud_token | default('') | length > 0
+        fail_msg: >-
+          gitlab_runner_coordinator_enabled is true but
+          gitlab_runner_coordinator_token and/or gitlab_runner_hcloud_token is
+          unset for {{ inventory_hostname }}. Create a second project runner on
+          gitlab.com for the docker-autoscaler executor, and mint an hcloud API
+          token, then vault both into host_vars/{{ inventory_hostname }}.yml.
+
     - name: Set up gitlab_runner system user, group, and config dir
       import_role:
         name: service_user
@@ -77,6 +94,65 @@
         backup: true
       become: true
       register: gitlab_runner_binary
+
+    # The docker-autoscaler executor's instance plugin: a PATH-named binary
+    # (config.toml plugin = "fleeting-plugin-hetzner"), not an OCI ref.
+    # checksum drives re-download on a version bump and surfaces tampering.
+    - name: Download fleeting-plugin-hetzner binary
+      when:
+        - gitlab_runner_coordinator_enabled
+        - not (ansible_check_mode and gitlab_runner_user.changed)
+      get_url:
+        url: "{{ gitlab_runner_fleeting_hetzner_archive[ansible_architecture].url }}"
+        dest: /usr/local/bin/fleeting-plugin-hetzner
+        checksum: "sha256:{{ gitlab_runner_fleeting_hetzner_archive[ansible_architecture].sha256 }}"
+        owner: root
+        group: root
+        mode: "0755"
+        backup: true
+      become: true
+      register: gitlab_runner_fleeting_binary
+
+    # docker-autoscaler's image must be a numeric snapshot id -- a snapshot has
+    # no name for the plugin's GetForArchitecture to resolve. Look up the newest
+    # available role=ci-coordinator snapshot at converge so a rebake is picked up
+    # with no host_vars edit. check_mode:false so the lookup runs under --check
+    # (the rendered config below needs the id either way). Skipped under qemu
+    # (no hcloud reachability + the coordinator never boots there): the template
+    # falls back to the ubuntu-24.04 placeholder.
+    - name: Resolve the newest coordinator snapshot from the Hetzner API
+      when:
+        - gitlab_runner_coordinator_enabled
+        - not qemu_test
+      check_mode: false
+      uri:
+        url: >-
+          https://api.hetzner.cloud/v1/images?type=snapshot&status=available&label_selector={{
+          gitlab_runner_image_selector | urlencode }}&sort=created:desc&per_page=1
+        headers:
+          Authorization: "Bearer {{ gitlab_runner_hcloud_token }}"
+        return_content: true
+      register: gitlab_runner_image_lookup
+
+    - name: Assert a coordinator snapshot exists and select its id
+      when:
+        - gitlab_runner_coordinator_enabled
+        - not qemu_test
+      vars:
+        _images: "{{ gitlab_runner_image_lookup.json.images }}"
+      block:
+        - name: Assert at least one coordinator snapshot is available
+          assert:
+            that:
+              - _images | length > 0
+            fail_msg: >-
+              No available Hetzner snapshot matches
+              {{ gitlab_runner_image_selector }}. Bake one with `mise run
+              packer:hetzner-coordinator` before enabling the coordinator runner.
+
+        - name: Select the resolved coordinator snapshot id
+          set_fact:
+            gitlab_runner_resolved_image: "{{ _images[0].id }}"
 
     # Linger so rootless podman has a user systemd manager up at all times:
     # crun makes sd-bus calls when creating containers, which fail with
@@ -167,7 +243,8 @@
           start: "{{ not qemu_test }}"
           restart: >-
             {{ gitlab_runner_service_result.changed
-               or gitlab_runner_binary.changed }}
+               or gitlab_runner_binary.changed
+               or (gitlab_runner_fleeting_binary.changed | default(false)) }}
           condition: "{{ not (ansible_check_mode and (gitlab_runner_service_result.changed or gitlab_runner_user.changed)) }}"
 
     # Bound the rootless runner's user slice so a wide CI fan-out can't exhaust
@@ -229,14 +306,15 @@
             scope: system
           become: true
 
-    # Tombstones for the instance-executor install (fleeting autoscaler ->
-    # Hetzner Cloud), which left artifacts on fox that nothing above manages.
-    # Each removal is idempotent (no-op once the artifact is gone), so these
-    # stay as tombstones rather than one-shot cleanups. The timer remove also
-    # clears its netdata systemd_timers metadata -- a leftover
+    # Tombstones for the retired worker-image-refresh design (a timer that
+    # periodically re-baked a Hetzner *worker* image + an /opt script it drove).
+    # The current coordinator runner resolves its snapshot live at converge and
+    # owns the fleeting binary directly, so neither artifact returns. Each
+    # removal is idempotent (no-op once gone), so these stay as tombstones. The
+    # timer remove also clears its netdata systemd_timers metadata -- a leftover
     # /etc/netdata/charts.d/systemd_timers.d/gitlab_runner_image_refresh.conf
-    # would fire systemd_timer_overdue CRITICAL forever against a timer that
-    # no longer exists.
+    # would fire systemd_timer_overdue CRITICAL forever against a timer that no
+    # longer exists.
     - name: Remove the retired gitlab_runner_image_refresh timer
       import_role:
         name: systemd_timer
@@ -245,14 +323,6 @@
         systemd_timer_args:
           name: gitlab_runner_image_refresh
 
-    - name: Remove the retired fleeting-plugin-hetzner binary
-      file:
-        path: /usr/local/bin/fleeting-plugin-hetzner
-        state: absent
-      become: true
-
-    # Held only the worker-image refresh script the timer drove; the Docker
-    # executor ships no service code of its own.
     - name: Remove the retired /opt/gitlab_runner dir
       file:
         path: /opt/gitlab_runner

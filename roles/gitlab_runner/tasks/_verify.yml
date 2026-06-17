@@ -11,6 +11,26 @@
   changed_when: false
   failed_when: gitlab_runner_version not in _gitlab_runner_version.stdout
 
+# Coordinator runner (docker-autoscaler / fleeting). Enabled on box with
+# placeholder secrets, so the host-side artifacts get real coverage even though
+# no coordinator ever boots in the harness. timeout-guards the binary call: a
+# fleeting plugin with no go-plugin handshake env could otherwise block on
+# stdin.
+- name: _verify | Pinned fleeting-plugin-hetzner binary runs on this arch
+  when: gitlab_runner_coordinator_enabled
+  command: timeout 10 /usr/local/bin/fleeting-plugin-hetzner --version
+  register: _gitlab_runner_fleeting_version
+  changed_when: false
+  failed_when: >-
+    gitlab_runner_fleeting_hetzner_version
+    not in _gitlab_runner_fleeting_version.stdout
+
+- name: _verify | Rendered config carries the coordinator autoscaler block
+  when: gitlab_runner_coordinator_enabled
+  command: grep -F 'plugin = "fleeting-plugin-hetzner"' /mnt/services/gitlab_runner/config.toml
+  changed_when: false
+  become: true
+
 - name: _verify | Rootless podman.socket is active under gitlab_runner
   systemd:
     name: podman.socket

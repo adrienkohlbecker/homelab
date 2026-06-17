@@ -237,23 +237,34 @@ subid_users:
 # rebuildable layers for far less storage-layer CPU under a wide fan-out.
 podman_zvol_sync_disabled: true
 
-# Orchestration slots above the role default of 8. Each cell job is an
-# ansible/mitogen + aws-CLI loop driving a remote EC2 cell, measured at ~100 MB
-# avg / ~190 MB peak RSS on fox (3.7 GiB / 2 vCPU). 24 overcommitted the host
-# once the headscale + nginx + tailscaled co-tenancy is accounted for: a wide
-# matrix drove the runner slice past RAM into heavy swap (load ~40, mem-PSI
-# full ~14%, ~2.3 GiB swapped), so the real bound is RAM for the resident job
-# containers, not the 2 vCPU (orchestration is mostly ssh/aws wait). 16 keeps
-# the steady-state demand under RAM; gitlab_runner_memory_{high,max} below is
-# the hard guardrail under that. The real test-capacity ceiling is the EC2 spot
-# vCPU quota, not fox. See notes/ci_aws_test_cells.md.
-gitlab_runner_concurrent: 16
+# Global job ceiling across BOTH runner blocks (config.toml is process-wide) --
+# the fleet umbrella, NOT the per-runner knob. Set to the sum of the two
+# runners' per-runner `limit`s (16 docker + 60 coordinator) so each is bounded
+# by its own limit and neither starves the other: the coordinator fleet can fan
+# out to its full 60 while a small on-fox job still has slots.
+gitlab_runner_concurrent: 76
+
+# Per-runner cap on the Docker-on-podman runner: bounds jobs run directly on fox
+# (restores the old on-fox ceiling now that the global `concurrent` is raised for
+# the coordinator fleet). The 60-wide cell fan-out runs on the cloned
+# coordinator, off fox; this only governs small jobs run here. The user-slice
+# memory cap below is the hard RAM guardrail under it.
+gitlab_runner_docker_limit: 16
 
 # Cap the rootless runner's user slice (all job containers + podman) so a wide
 # matrix can't push the 3.7 GiB host into swap and OOM-threaten the co-tenant
 # headscale control plane + its nginx front. MemoryHigh throttles + reclaims
 # ~2/3 in before the MemoryMax kill ceiling, leaving ~700 MiB headroom for
-# headscale/nginx/tailscaled/OS. Interim measure: Phase 1 moves orchestration
-# off fox entirely. See notes/ci_aws_test_cells.md "Fox host protection".
+# headscale/nginx/tailscaled/OS. Still load-bearing under the coordinator: it
+# bounds any small jobs run on the Docker-on-podman runner directly on fox (the
+# cell fan-out itself now runs on the cloned coordinator, off fox). See
+# notes/ci_aws_test_cells.md "Fox host protection".
 gitlab_runner_memory_high: 2.5G
 gitlab_runner_memory_max: 3G
+
+# Turn on the second runner block: the docker-autoscaler / fleeting coordinator
+# that clones an ephemeral CX53 per pipeline and scales to zero. The required
+# secrets (gitlab_runner_coordinator_token + gitlab_runner_hcloud_token) are
+# vaulted in group_vars/prod.yml; the converge resolves the role=ci-coordinator
+# snapshot id from the hcloud API. See notes/ci_aws_test_cells.md "Phase 2".
+gitlab_runner_coordinator_enabled: true
