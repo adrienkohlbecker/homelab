@@ -769,10 +769,23 @@ resource "aws_key_pair" "ci_operator" {
 locals {
   ci_machine_instance_types = {
     minimal  = "t3a.small" # 2 GiB, mirrors qemu minimal
-    box      = "m6a.large" # 2 vCPU / 8 GiB -- 4 GiB (c6a.large) starved the full-site converge into page-cache thrash (notes/ci_aws_test_cells.md)
+    box      = "c6a.large" # 2 vCPU / 4 GiB
     box_deps = "m6a.large" # box-class Zen3 cores with the 8 GiB floor (>4 needed, see QEMU_MACHINE_SPECS)
     pug      = "c6a.large"
     lab      = "c6a.large"
+  }
+
+  # Optional root-volume IOPS/throughput override per machine. Cells otherwise
+  # inherit the AMI snapshot's gp3 defaults (3000 IOPS / 125 MiB/s). box carries
+  # a maxed-out gp3 (16000 IOPS / 1000 MiB/s) to isolate whether the full-site
+  # converge (_site_test:box) is EBS-IOPS bound: the small-file initramfs/dpkg
+  # storm on a 4 GiB box re-reads the module tree cold once page cache is
+  # evicted, and the 3000-IOPS baseline is the suspected ceiling. Maxed so the
+  # volume is never the limiter -- if it helps, tune to a production value; if
+  # not, IO was not the bottleneck. m6a.large (8 GiB) was tested first and ruled
+  # RAM out (no win, slightly slower, worse spot). See notes/ci_aws_test_cells.md.
+  ci_machine_root_volume = {
+    box = { iops = 16000, throughput = 1000 }
   }
 }
 
@@ -784,6 +797,23 @@ resource "aws_launch_template" "ci_cell" {
   update_default_version = true
 
   instance_type = each.value
+
+  # Override the AMI root volume's gp3 IOPS/throughput for machines listed in
+  # ci_machine_root_volume; others inherit the snapshot defaults (no block
+  # emitted). device_name is the AMI root (/dev/sda1, see packer ami_root_device);
+  # volume_size is omitted so the snapshot size and encryption carry through.
+  dynamic "block_device_mappings" {
+    for_each = lookup(local.ci_machine_root_volume, each.key, null) != null ? [local.ci_machine_root_volume[each.key]] : []
+    content {
+      device_name = "/dev/sda1"
+      ebs {
+        volume_type           = "gp3"
+        iops                  = block_device_mappings.value.iops
+        throughput            = block_device_mappings.value.throughput
+        delete_on_termination = true
+      }
+    }
+  }
 
   # One-time spot, terminate on interruption: a cell is never worth
   # stopping/resuming. The harness classifies interruption post-hoc and
