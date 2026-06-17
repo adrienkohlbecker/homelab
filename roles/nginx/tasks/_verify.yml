@@ -83,8 +83,8 @@
             protocol_version = "HTTP/1.1"
 
             def do_GET(self):
-                # Echo the received request line + Authorization header to the
-                # journal so the token-strip and upstream_authorization
+                # Echo the received request line, Authorization and Authelia
+                # identity headers to the journal so the identity-forwarding
                 # assertions can confirm exactly what reached the upstream.
                 print("upstream-saw " + self.path, flush=True)
                 print("upstream-auth " + self.headers.get("Authorization", "<none>"), flush=True)
@@ -324,11 +324,11 @@
       The duplicated request's second (real) auth_token leaked raw into the
       access log; the two-stage $request_safe redaction must cover both copies.
 
-# An empty upstream_authorization dict must be a no-op -- it must NOT write a
-# conf.d map nor arm the cookieless Authorization-bypass shortcut. Stub
-# is still in gate mode (401), so a cookieless request carrying an Authorization
-# header must fall through to Authelia (302), not short-circuit to the upstream.
-- name: _verify | Configure a vhost with an empty upstream_authorization
+# Bypass-regression guard: an auth: required vhost must gate EVERY cookieless
+# request to Authelia, including one carrying its own Authorization header --
+# there is no Authorization-bypass shortcut. Stub is still in gate mode (401), so
+# the request must redirect to the portal (302), not short-circuit to the upstream.
+- name: _verify | Configure a plain auth-required vhost
   import_role:
     name: nginx
     tasks_from: site
@@ -337,9 +337,8 @@
       subdomain: nginxverifyempty
       proxy_pass: http://127.0.0.1:18080/
       auth: required
-      upstream_authorization: {}
 
-- name: _verify | Empty upstream_authorization writes no conf.d map
+- name: _verify | No upstream-auth conf.d map is ever written
   stat:
     path: /etc/nginx/conf.d/upstream_auth_nginxverifyempty.conf
   register: nginx_verify_empty_map
@@ -351,7 +350,7 @@
   vars:
     _wait_route_host: "nginxverifyempty.{{ inventory_hostname }}.{{ domain }}"
 
-- name: _verify | Empty upstream_authorization does not arm the Authorization bypass
+- name: _verify | A cookieless Authorization-bearing request is still gated (no bypass)
   uri:
     url: "https://nginxverifyempty.{{ inventory_hostname }}.{{ domain }}/"
     headers:
@@ -395,9 +394,9 @@
     or 'Active connections' not in (nginx_verify_stub.content | default(''))
 
 # --- auth-passes phase ---
-# Switch the stub to `authed` (200 + Remote-User) so the upstream_authorization
-# injection and location_conf re-emit paths run with auth SUCCEEDING, which the
-# gate-mode tests above can't reach.
+# Switch the stub to `authed` (200 + Remote-User) so the auth-identity forwarding
+# and location_conf re-emit paths run with auth SUCCEEDING, which the gate-mode
+# tests above can't reach.
 - name: _verify | Switch the Authelia stub to authed mode
   import_role:
     name: test
@@ -415,15 +414,13 @@
   retries: 10
   delay: 1
 
-# upstream_authorization exercises three contracts: the per-user token INJECTION
-# (a browser user with no own Authorization receives the mapped token), Authelia
-# identity forwarding (X-Forwarded-User, a content-phase proxy_set_header), and
-# the cookieless machine-client passthrough (its own Authorization survives). The
-# injection works because the token comes from a content-phase `map`
-# (conf.d/upstream_auth_<sub>.conf) read after auth_request populates
-# $authelia_user -- the bug it replaced used a rewrite-phase if/set that ran
-# before auth and so never matched.
-- name: _verify | Configure a vhost exercising upstream_authorization
+# Auth-identity forwarding: when Authelia admits a request, the vhost captures
+# Remote-* from the auth subrequest and forwards it upstream under BOTH the
+# X-Forwarded-User name (the *arr suite, AuthenticationMethod=External) and the
+# canonical Remote-User name (Authelia's own snippet), so an upstream wired per
+# either convention picks up the SSO identity. Runs with the stub in authed mode
+# so $authelia_user is populated.
+- name: _verify | Configure an auth-required vhost for identity forwarding
   import_role:
     name: nginx
     tasks_from: site
@@ -432,8 +429,6 @@
       subdomain: nginxverifyauth
       proxy_pass: http://127.0.0.1:18080/
       auth: required
-      upstream_authorization:
-        nginxverifyuser: Token injected-abc
 
 - name: _verify | Settle the nginxverifyauth vhost
   import_tasks: _verify_wait_route.yml
@@ -464,37 +459,6 @@
   changed_when: false
   become: true
   until: "'upstream-remoteuser nginxverifyuser' in nginx_verify_remote_journal.stdout"
-  retries: 10
-  delay: 1
-
-# The fix: the browser user (no own Authorization) gets the token the
-# upstream_authorization map assigned to nginxverifyuser. The old rewrite-phase
-# if/set produced `upstream-auth <none>` here; the content-phase map injects it.
-- name: _verify | Upstream received the per-user injected Authorization token
-  command: journalctl -u nginx_verify_upstream --no-pager
-  register: nginx_verify_inj_auth_journal
-  changed_when: false
-  become: true
-  until: "'upstream-auth Token injected-abc' in nginx_verify_inj_auth_journal.stdout"
-  retries: 10
-  delay: 1
-
-- name: _verify | Cookieless machine client's own Authorization passes through unmodified
-  uri:
-    url: "https://nginxverifyauth.{{ inventory_hostname }}.{{ domain }}/"
-    headers:
-      Authorization: Token machine-xyz
-    validate_certs: false
-    status_code: 200
-  register: nginx_verify_pass
-  failed_when: nginx_verify_pass.status != 200
-
-- name: _verify | Upstream received the machine client's own token (not stripped)
-  command: journalctl -u nginx_verify_upstream --no-pager
-  register: nginx_verify_pass_journal
-  changed_when: false
-  become: true
-  until: "'upstream-auth Token machine-xyz' in nginx_verify_pass_journal.stdout"
   retries: 10
   delay: 1
 
@@ -893,7 +857,6 @@
     - /etc/nginx/sites-enabled/nginxverify
     - /etc/nginx/sites-available/nginxverifyauth
     - /etc/nginx/sites-enabled/nginxverifyauth
-    - /etc/nginx/conf.d/upstream_auth_nginxverifyauth.conf
     - /etc/nginx/sites-available/nginxverifyloc
     - /etc/nginx/sites-enabled/nginxverifyloc
     - /etc/nginx/sites-available/nginxverifyserverconf
@@ -1073,10 +1036,9 @@
 
 # site rollback — the sibling of the conf.d test for the site path, which the
 # shared place-validate rollback now drives too. Feed the helper a vhost with a
-# syntactically broken server_conf AND an upstream_authorization map, so the
-# rollback must unwind the paired conf.d/upstream_auth_<sub>.conf alongside the
-# vhost; confirm the config, its sites-enabled symlink and the map are all
-# removed and nginx stays valid; the helper's `fail` is expected, so catch it.
+# syntactically broken server_conf; confirm the config and its sites-enabled
+# symlink are both removed and nginx stays valid; the helper's `fail` is
+# expected, so catch it.
 - name: _verify | Broken site config is validated and rolled back
   block:
     - name: _verify | Configure a deliberately broken site
@@ -1088,8 +1050,6 @@
           subdomain: nginxverifybroken
           proxy_pass: http://127.0.0.1:18080/
           auth: required
-          upstream_authorization:
-            nginxverifyuser: Token broken-rollback
           server_conf: |
             nginx_verify_broken_site_directive on;
 
@@ -1099,7 +1059,7 @@
           The broken site should have failed `nginx -t` and rolled back, but the
           helper reported success.
   rescue:
-    - name: _verify | Broken site, symlink and upstream-auth map were rolled back (absent)
+    - name: _verify | Broken site and symlink were rolled back (absent)
       stat:
         path: "{{ item }}"
       register: nginx_verify_broken_site
@@ -1108,7 +1068,6 @@
       loop:
         - /etc/nginx/sites-available/nginxverifybroken
         - /etc/nginx/sites-enabled/nginxverifybroken
-        - /etc/nginx/conf.d/upstream_auth_nginxverifybroken.conf
 
     - name: _verify | Nginx config is still valid after the site rollback
       command: nginx -t

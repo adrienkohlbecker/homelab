@@ -77,21 +77,6 @@ server {
   # internal-only, so the exact path is immaterial -- don't "fix" it.)
   location /internal/authelia {
     internal;
-{% if _nginx_site_upstream_auth %}
-    # Machine clients (no Authelia session cookie, presenting their own
-    # Authorization header) skip the Authelia round-trip: return 204
-    # straight away, so auth_request admits the parent. The 204 carries no
-    # Remote-User, so $authelia_user is empty in `location /` and the
-    # upstream-auth map's `default $http_authorization` forwards the
-    # client's own token unchanged. The match is computed in the
-    # $authelia_bypass map in nginx.conf.j2 because nginx's `if` can't
-    # compose two conditions. Implies trust in any presented Authorization
-    # header from a cookieless client -- only safe when the upstream itself
-    # rejects bad tokens (InfluxDB does).
-    if ($authelia_bypass) {
-      return 204;
-    }
-{% endif %}
 {% if nginx_site_args.bypass_query_param is defined %}
     # URL-param bypass for clients that can't send Authorization headers
     # (the netdata/homepage cross-host poller). Compare the
@@ -138,14 +123,11 @@ server {
     proxy_set_header Content-Length          "";
     # Strip the client's Authorization header off the auth subrequest so Authelia
     # decides on the session cookie alone. The header belongs to the UPSTREAM (an
-    # app token forwarded by `location /`) and to the bypass map -- not to
-    # Authelia's auth decision. Forwarded, a non-Basic scheme (InfluxDB's
-    # `Authorization: Token <t>`) makes Authelia fail to parse it and 401 even for
-    # a request carrying a valid session cookie, which error_page then turns into
-    # a portal redirect -> loop. The cookieless-machine-client bypass is unharmed:
-    # $authelia_bypass reads the original $http_authorization in the map and the
-    # `if` returns 204 BEFORE this proxy_pass, so the header is still seen where it
-    # matters and only cleared on the leg to Authelia.
+    # app token the SPA replays) -- not to Authelia's auth decision. Forwarded, a
+    # non-Basic scheme (InfluxDB's `Authorization: Token <t>`) makes Authelia fail
+    # to parse it and 401 even for a request carrying a valid session cookie, which
+    # error_page then turns into a portal redirect -> loop. Cleared only on the leg
+    # to Authelia; `location /` still forwards the client's own header upstream.
     proxy_set_header Authorization           "";
     # Clear any client-supplied Connection header off the internal subrequest
     # (matches Authelia's canonical snippet).
@@ -251,20 +233,6 @@ server {
     proxy_set_header Remote-Groups      $authelia_groups;
     proxy_set_header Remote-Name        $authelia_name;
     proxy_set_header Remote-Email       $authelia_email;
-{% endif %}
-{% if _nginx_site_upstream_auth %}
-    # Per-user upstream Authorization. The caller passes a dict
-    # {authelia_user: header_value}; it is rendered into an http-scope `map`
-    # keyed on $authelia_user, in conf.d/upstream_auth_<sub>.conf, dropped by
-    # the helper alongside this vhost (a map can't live in server{}). The map
-    # variable is evaluated HERE in the content phase, after auth_request has
-    # populated $authelia_user -- unlike the old rewrite-phase `if/set`, which
-    # ran before auth and so never matched. The map's `default
-    # $http_authorization` forwards a cookieless machine client's own token
-    # unchanged (its 204 bypass leaves $authelia_user empty); a mapped browser
-    # user gets their assigned token, overriding any stale header the SPA
-    # replayed. See upstream_auth_map.conf.j2 / tasks/site.yml.
-    proxy_set_header Authorization      $nginx_upstream_auth_{{ nginx_site_args.subdomain | replace('-', '_') }};
 {% endif %}
 
     # Proxy timeouts

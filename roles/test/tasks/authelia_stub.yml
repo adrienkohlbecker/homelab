@@ -24,9 +24,8 @@
 #         target to 302 to that routes back to the requested vhost.
 #     authed: returns 200 plus a `Remote-User` header (value from `user`),
 #         like Authelia on a successful auth. Lets a test exercise the
-#         auth-passes paths -- X-Forwarded-User forwarding and per-user
-#         upstream_authorization injection (the $authelia_user-keyed map in
-#         upstream_auth_map.conf.j2).
+#         auth-passes paths -- X-Forwarded-User / Remote-User identity
+#         forwarding to the upstream.
 #   user  optional, default 'nginxverifyuser'. Remote-User value emitted in
 #         authed mode.
 #
@@ -76,7 +75,7 @@
         {% elif _test_authelia_stub_mode == 'authed' %}
             # authed: 200 with a Remote-User header, like Authelia on a
             # successful auth, so the parent's auth_request_set $authelia_user
-            # populates (exercises X-Forwarded-User + upstream_authorization).
+            # populates (exercises X-Forwarded-User / Remote-User forwarding).
             add_header Remote-User "{{ _test_authelia_stub_user }}" always;
             return 200 'test_stub_ok';
         {% else %}

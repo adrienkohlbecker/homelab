@@ -82,39 +82,6 @@ http {
         default                                                     $request_safe_stage1;
     }
 
-    # Distinguish machine clients from Authelia-authed browsers for the
-    # bypass-on-Authorization shortcut in /internal/authelia (sites with
-    # `upstream_authorization` set). Machine clients (Telegraf, HA,
-    # Grafana) hit the vhost with `Authorization: Token <t>` and no
-    # Authelia cookie -- we want them to skip the auth_request round-
-    # trip and forward their token straight through. Browsers that hold
-    # an Authelia session cookie must NEVER bypass, because some SPAs
-    # (InfluxDB v2 is one) inject a stale `Authorization` header from
-    # localStorage onto every XHR, which would otherwise trigger the
-    # bypass too -- the browser's auth_request never runs, the upstream-auth
-    # map never sees a $authelia_user (so it falls to its default), and the
-    # stale token gets forwarded to the upstream and rejected (401).
-    #
-    # Match: empty session cookie AND non-empty Authorization. We can't
-    # express the conjunction with nginx's `if` directive, so the
-    # decision lives in this http-scope map and the location-scope `if`
-    # just tests the resulting 0/1.
-    #
-    # SECURITY: a 1 here admits the request without consulting Authelia, so
-    # for cookieless clients the UPSTREAM becomes the sole authenticator --
-    # any non-empty Authorization value is accepted at this layer. Only pair
-    # `upstream_authorization` with an upstream that validates the credential
-    # itself (InfluxDB does). The empty-cookie requirement is what stops a
-    # logged-in browser's stale localStorage token from bypassing.
-    map "$cookie_authelia_session:$http_authorization" $authelia_bypass {
-        # volatile: recompute per request/subrequest context rather than caching
-        # the first evaluation -- this gates an auth bypass and is read inside
-        # the /internal/authelia subrequest, whose header context differs.
-        volatile;
-        default       0;
-        "~^:.+"       1;
-    }
-
     # Extract the `auth_token` query param value from the parent request
     # URI for use by /internal/authelia bypass logic. Inside an
     # auth_request subrequest $args/$arg_X refer to the subrequest's
@@ -126,8 +93,9 @@ http {
     # $request_safe redaction here and the $args strip in site.conf.j2);
     # change all three in lockstep if you ever need a different name.
     map $request_uri $req_auth_token {
-        # volatile: same reasoning as $authelia_bypass -- the bypass `if` reads
-        # this inside the auth subrequest, so don't serve a cached value.
+        # volatile: the URL-param bypass `if` in /internal/authelia reads this
+        # inside the auth subrequest (a different request context), so don't
+        # serve a cached value.
         volatile;
         "~[?&]auth_token=([^&]+)"  $1;
         default                     "";
@@ -163,22 +131,19 @@ http {
     map $host $authelia_user   { default ""; }
     map $host $authelia_groups { default ""; }
 
-    # The Authelia identity + bypass decision sit just before the TLS fields so
-    # SSO failures are legible in the access log: "$authelia_user" /
-    # "$authelia_groups" are the forward-auth identity (captured per-vhost by
-    # auth_request_set, defaulted by the maps above), $authelia_bypass is the
-    # cookieless-Authorization bypass decision (0/1). The identity fields are
-    # location-scoped: on a request that didn't run auth_request (cookieless
-    # machine client, a bypassed path, or a vhost with no auth) they log the
-    # empty default -- itself a useful signal. $authelia_bypass evaluates on
-    # every request but is only load-bearing on upstream_authorization vhosts.
+    # The Authelia identity sits just before the TLS fields so SSO failures are
+    # legible in the access log: "$authelia_user" / "$authelia_groups" are the
+    # forward-auth identity (captured per-vhost by auth_request_set, defaulted by
+    # the maps above). The identity fields are location-scoped: on a request that
+    # didn't run auth_request (a bypassed path, or a vhost with no auth) they log
+    # the empty default -- itself a useful signal.
     # $ssl_protocol/$ssl_cipher trail the line so netdata's web_log collector
     # can chart the TLS-version/cipher distribution per vhost; on a plaintext
     # :80 request they are unset and nginx logs each as `-`, keeping the field
     # count stable so the positional CSV parse in files/web_log.conf still lines up.
     # Any change to this field list must move in lockstep with files/web_log.conf
     # (netdata) and roles/fluentbit/files/parsers_nginx.conf (the lnav parser).
-    log_format custom      '$remote_addr - $remote_user [$time_local] $host "$request_safe" $server_name $status $body_bytes_sent $request_length $request_time $upstream_response_time "$http_referer" "$http_user_agent" "$authelia_user" "$authelia_groups" $authelia_bypass $ssl_protocol $ssl_cipher';
+    log_format custom      '$remote_addr - $remote_user [$time_local] $host "$request_safe" $server_name $status $body_bytes_sent $request_length $request_time $upstream_response_time "$http_referer" "$http_user_agent" "$authelia_user" "$authelia_groups" $ssl_protocol $ssl_cipher';
     access_log             /var/log/nginx/access.log custom buffer=512k flush=5s;
     error_log              stderr warn;
 
