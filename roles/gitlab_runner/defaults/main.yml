@@ -48,17 +48,6 @@ gitlab_runner_memory_max: ""
 # small jobs that run on the host directly. See notes/ci_aws_test_cells.md.
 gitlab_runner_coordinator_enabled: false
 
-# Hetzner placement for the cloned coordinators. nbg1 is fox's own location, so
-# the private `hetzner` network (fox manages the coordinator over it) and the
-# 20 TB-traffic eu-central zone both line up.
-gitlab_runner_location: "nbg1"
-
-# Coordinator server type. CX53 (16 vCPU / 32 GiB / 320 GB NVMe) -- RAM is the
-# binding constraint at a 60-wide cell fan-out (cx43's 16 GiB peaked ~80%); CPU
-# and disk had ample headroom in the Phase 1b/1c benchmarks. See
-# notes/ci_aws_test_cells.md.
-gitlab_runner_server_type: "cx53"
-
 # Label selector the converge resolves to the newest available coordinator
 # snapshot id via the hcloud API (docker-autoscaler's image must be a numeric
 # snapshot id -- snapshots have no name for GetForArchitecture to match). Bumped
