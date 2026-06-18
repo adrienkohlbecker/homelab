@@ -43,7 +43,15 @@
   tags:
     - mutt
 
+- name: Check whether podman is installed for webmail network cleanup
+  stat:
+    path: /usr/bin/podman
+  register: mutt_podman_binary
+  tags:
+    - mutt
+
 - name: Remove the webmail podman network
+  when: mutt_podman_binary.stat.exists
   containers.podman.podman_network:
     name: webmail
     state: absent
