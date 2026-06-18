@@ -13,10 +13,8 @@
 #         parent. Use when the _verify only cares that the wiring is intact
 #         and not the gate semantics (homepage today).
 #     gate: returns 401 unauthenticated, so the parent's error_page 401
-#         -> 302 redirect mapping fires for negative-path probes (no
-#         token / wrong token in nginx_site_args.bypass_query_param
-#         tests). The bypass `if` short-circuits BEFORE reaching the
-#         stub, so positive-path tests still see 200 from upstream.
+#         -> 302 redirect mapping fires for negative-path probes (the
+#         unauthenticated browser-redirect tests).
 #         Like real Authelia, gate mode also returns a Location header
 #         pointing at the portal with a ?rd=<original-url> returnUrl, so the
 #         parent's modern redirect (auth_request_set $redirection_url

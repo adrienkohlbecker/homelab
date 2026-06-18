@@ -53,52 +53,18 @@ http {
     gzip_types             text/plain text/css text/xml text/javascript application/json application/javascript application/wasm application/rss+xml application/atom+xml application/manifest+json image/svg+xml;
 
     # Logging. $request includes the full request line ("GET /path?q=1
-    # HTTP/1.1"), which would leak any URL-param secret a site uses (see
-    # nginx_site_args.bypass_query_param in roles/nginx/tasks/site.yml).
-    # Redact credential query params from the request line before logging so
-    # they don't land on disk. `auth_token` covers the Token-authed machine
-    # clients; `apikey` covers SABnzbd's admin key (it takes the key only as a
-    # query param). nginx uses the first matching arm, so a request carrying
-    # both only gets its auth_token redacted -- fine, no site mixes them. If
-    # another site picks a different param name, extend this map.
+    # HTTP/1.1"), which would leak a credential a site takes as a URL param.
+    # Redact such params from the request line before logging so they don't
+    # land on disk. `apikey` covers SABnzbd's admin key (it takes the key only
+    # as a query param). If another site picks a query-param secret, extend
+    # this map.
     #
-    # Two stages so a duplicated auth_token (rejected 400 in location / but
-    # still written to the access log before the 400) has its SECOND copy
-    # redacted too: stage 1 redacts the first occurrence, stage 2 redacts the
-    # next auth_token that follows an already-REDACTED one. The single-token
-    # case (the common path) is untouched by stage 2. location / rejects >2.
-    #
-    # The token class is [^& ] (space included) here, vs [^&] in site.conf.j2's
-    # $args strip: this matches against $request -- the full request line, which
-    # ends in " HTTP/1.1" -- so the trailing space must terminate the token too.
-    # $args has no such suffix, hence the difference; keep both as they are.
-    map $request $request_safe_stage1 {
-        "~*^(.*?[?&])auth_token=[^& ]*(.*)$"  "$1auth_token=REDACTED$2";
-        "~*^(.*?[?&])apikey=[^& ]*(.*)$"      "$1apikey=REDACTED$2";
-        default                                $request;
-    }
-    map $request_safe_stage1 $request_safe {
-        "~*^(.*auth_token=REDACTED.*?[?&])auth_token=[^& ]*(.*)$"  "$1auth_token=REDACTED$2";
-        default                                                     $request_safe_stage1;
-    }
-
-    # Extract the `auth_token` query param value from the parent request
-    # URI for use by /internal/authelia bypass logic. Inside an
-    # auth_request subrequest $args/$arg_X refer to the subrequest's
-    # own URI (which is just "/internal/authelia", carrying no query),
-    # NOT the parent's — so $arg_auth_token is always empty there.
-    # $request_uri, by contrast, preserves the parent's full URI
-    # including query string across the subrequest, so we parse it
-    # from there. Param name is locked to `auth_token` (matches the
-    # $request_safe redaction here and the $args strip in site.conf.j2);
-    # change all three in lockstep if you ever need a different name.
-    map $request_uri $req_auth_token {
-        # volatile: the URL-param bypass `if` in /internal/authelia reads this
-        # inside the auth subrequest (a different request context), so don't
-        # serve a cached value.
-        volatile;
-        "~[?&]auth_token=([^&]+)"  $1;
-        default                     "";
+    # The token class is [^& ] (space included): this matches against $request
+    # -- the full request line, which ends in " HTTP/1.1" -- so the trailing
+    # space must terminate the token too.
+    map $request $request_safe {
+        "~*^(.*?[?&])apikey=[^& ]*(.*)$"  "$1apikey=REDACTED$2";
+        default                            $request;
     }
 
     # Forward-auth unauthenticated-response mode. When the Authelia auth_request
