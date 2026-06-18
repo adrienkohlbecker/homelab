@@ -441,9 +441,11 @@ zbm_build:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
     - |
       set -euo pipefail
-      ZBM_VERSION="$(awk -F'"' '/^ZBM_VERSION/{print $2; exit}' mise.toml)"
-      ZBM_KERNEL_VERSION="$(awk -F'"' '/^ZBM_KERNEL_VERSION/{print $2; exit}' mise.toml)"
-      [ -n "$ZBM_VERSION" ] && [ -n "$ZBM_KERNEL_VERSION" ] || { echo "could not read ZBM_VERSION/ZBM_KERNEL_VERSION from mise.toml" >&2; exit 1; }
+      # Resolve through mise, not by parsing mise.toml: these vars are tera
+      # conditionals (`{% if arch() == "arm64" %}…`) whose embedded double-quoted
+      # arch literals defeat a naive awk -F'"' extraction (it grabs `arm64`).
+      eval "$(mise env)"
+      [ -n "${ZBM_VERSION:-}" ] && [ -n "${ZBM_KERNEL_VERSION:-}" ] || { echo "ZBM_VERSION/ZBM_KERNEL_VERSION not set in mise env" >&2; exit 1; }
       ARCH="$(uname -m)"
       export ZBM_BUILD_SUFFIX="-ci.${CI_PIPELINE_ID}.${CI_JOB_ID}"
       export ZBM_BUILDER_CACHE_REF="${CI_REGISTRY_IMAGE}/zbm-builder:v${ZBM_VERSION}-${ARCH}"
