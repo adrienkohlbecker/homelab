@@ -3,9 +3,8 @@
     name: test
     tasks_from: nginx
 
-# netdata uses nginx_site_args.auth=required + bypass_query_param.
-# Gate-mode Authelia stub so _verify can distinguish bypass-token (200)
-# from no-token / wrong-token (302) paths.
+# netdata uses nginx_site_args.auth=required. Gate-mode Authelia stub so
+# _verify sees the unauthenticated browser hit redirect to the portal (302).
 - name: _setup | Install authelia stub in gate mode
   import_role:
     name: test

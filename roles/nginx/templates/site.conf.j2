@@ -11,8 +11,8 @@ server {
   # Cleartext :80 in this same server block (no http->https redirect). The
   # security headers below are emitted here too: HSTS over :80 is a no-op
   # browsers ignore per RFC 6797, the rest are harmless. Only for upstreams
-  # that need plaintext -- asserted incompatible with auth/bypass, whose
-  # secrets would otherwise travel unencrypted.
+  # that need plaintext -- asserted incompatible with auth, whose forward-auth
+  # flow would otherwise travel unencrypted.
   listen              80;
 {% if nginx_ipv6 %}
   listen              [::]:80;
@@ -28,19 +28,10 @@ server {
   # inherits add_header only into levels that define none of their own, so a
   # location_conf adding e.g. Access-Control-Allow-Origin would otherwise
   # strip every security header from the proxied path.
-  #
-  # Referrer-Policy is no-referrer on bypass_query_param sites (the URL carries
-  # the vaulted auth_token; $request_safe redacts only our own access log, so
-  # the token must never leak via a Referer to third-party assets), same-origin
-  # elsewhere.
 {% set security_headers %}
   add_header X-XSS-Protection          "1; mode=block" always;
   add_header X-Content-Type-Options    "nosniff" always;
-{% if nginx_site_args.bypass_query_param is defined %}
-  add_header Referrer-Policy           "no-referrer" always;
-{% else %}
   add_header Referrer-Policy           "same-origin" always;
-{% endif %}
 {% if not (nginx_site_args.csp_passthrough | default(false)) %}
   add_header Content-Security-Policy   "{% if nginx_site_args.csp_additional is defined %}{{ nginx_site_args.csp_additional }}; {% endif %}default-src {% if nginx_site_args.csp_default_src is defined %}{{ nginx_site_args.csp_default_src }} {% endif %}{{ nginx_csp_default }}; frame-ancestors {% if nginx_site_args.csp_frame_ancestors is defined %}{{ nginx_site_args.csp_frame_ancestors }}{% else %}'self'{% endif %};" always;
 {% endif %}
@@ -77,27 +68,6 @@ server {
   # internal-only, so the exact path is immaterial -- don't "fix" it.)
   location /internal/authelia {
     internal;
-{% if nginx_site_args.bypass_query_param is defined %}
-    # URL-param bypass for clients that can't send Authorization headers
-    # (the netdata/homepage cross-host poller). Compare the
-    # extracted token (from the parent's $request_uri via the $req_auth_token
-    # map in nginx.conf.j2) against the vaulted value; on match return 204
-    # (a 2xx -> auth_request lets the parent through) without consulting
-    # Authelia. Why not `if ($arg_auth_token = ...)`: $arg_X inside an
-    # auth_request subrequest refers to the subrequest's own (empty) query,
-    # not the parent's -- so that comparison never matches. The param name
-    # is fixed to `auth_token` (the $req_auth_token/$request_safe maps in
-    # nginx.conf.j2 hardcode it). The token is redacted from OUR access log
-    # via $request_safe, but that redaction does NOT cover error_log: on any
-    # upstream error (e.g. a 502 from a stalled upstream) nginx logs the full
-    # request line -- token and all -- to error_log, which goes to journald. So
-    # the journal IS token-bearing for bypass sites; treat it like the other
-    # secret-logging units. Redaction also can't reach a Referer to a third
-    # party -- the no-referrer Referrer-Policy above covers that.
-    if ($req_auth_token = "{{ nginx_site_args.bypass_query_param.value }}") {
-      return 204;
-    }
-{% endif %}
     proxy_pass {{ authelia_internal_url }};
     # HTTP/1.1 to the auth endpoint (matches `location /`): the default 1.0
     # disables chunked transfer and keepalive on the subrequest fired for every
@@ -149,11 +119,7 @@ server {
     # subrequest as nginx variables, then forward them to the upstream
     # below. Upstreams that trust the proxy (e.g. *arr v4 with
     # AuthenticationMethod=External) read X-Forwarded-User and skip their
-    # own local login. Authelia sends Remote-User on every authenticated
-    # 200; the bypass_query_param shortcut returns 204 with no Remote-*,
-    # so $authelia_user is empty there — incompatible with upstreams
-    # that require X-Forwarded-User. Don't combine the two on the same
-    # site.
+    # own local login. Authelia sends Remote-User on every authenticated 200.
     auth_request_set $authelia_user   $upstream_http_remote_user;
     auth_request_set $authelia_groups $upstream_http_remote_groups;
     auth_request_set $authelia_name   $upstream_http_remote_name;
@@ -170,34 +136,6 @@ server {
     # loop. An UPSTREAM 401 is unaffected: proxy_intercept_errors stays at its
     # default `off`, so it passes straight to the client and never hits error_page.
     error_page 401 = @authelia_unauth;
-{% endif %}
-{% if nginx_site_args.bypass_query_param is defined %}
-    # The $args strip below and the $request_safe log-redaction each assume a
-    # single, well-formed auth_token. Reject the two malformed shapes that would
-    # otherwise smuggle the token past the strip and forward it raw to the
-    # upstream: a duplicated param, and a literal "?" inside the query string (a
-    # second "?" in the URI). $req_auth_token's [?&] extractor matches a
-    # ?-prefixed token and fires the 204 bypass, but the &-anchored strip below
-    # does not catch it. Both shapes are abnormal for the API clients that use
-    # bypass (the netdata/homepage poller), which only ever send one "?auth_token=".
-    if ($request_uri ~ "auth_token=.*[?&]auth_token=") {
-      return 400;
-    }
-    if ($args ~ "[?]") {
-      return 400;
-    }
-    # Strip the bypass token from $args before proxy_pass so the
-    # upstream app never sees it (token must not land in the upstream's own
-    # logs or echo back in error messages). nginx's proxy_pass forwards
-    # $is_args$args when the upstream URL has no own query string, so
-    # rewriting $args here removes the param from the forwarded URL.
-    # Two rewrites cover (1) param-first and (2) param-not-first:
-    if ($args ~ "^auth_token=[^&]*&?(.*)$") {
-      set $args $1;
-    }
-    if ($args ~ "^(.*)&auth_token=[^&]*(.*)$") {
-      set $args "$1$2";
-    }
 {% endif %}
 {% if nginx_site_args.proxy_pass is defined %}
     proxy_pass         {{ nginx_site_args.proxy_pass }};
@@ -294,13 +232,6 @@ server {
 {% endif %}
     server_name {{ nginx_site_args.subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_site_args.subdomain }}.{{ domain}};
 
-{% if nginx_site_args.bypass_query_param is defined %}
-    # Drop the query on the cleartext :80 leg: it can carry the vaulted
-    # auth_token, which must not be reflected in a plaintext redirect Location.
-    # Bypass clients target https directly, so they never hit this redirect.
-    return 308 https://$host$uri;
-{% else %}
     return 308 https://$host$request_uri;
-{% endif %}
 }
 {% endif %}

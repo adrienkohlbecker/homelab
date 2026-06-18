@@ -33,8 +33,8 @@
 #   enable_http               optional bool, default false; if true, also listen on :80
 #                             and skip the http->https redirect server block.
 #                             Serves :80 in cleartext, so do NOT combine with
-#                             `auth`/`bypass_query_param`: an auth flow or a vaulted
-#                             token would travel unencrypted. Asserted below.
+#                             `auth`: the forward-auth flow would travel
+#                             unencrypted. Asserted below.
 #   csp_default_src           optional CSP directive override
 #   csp_frame_ancestors       optional CSP directive override
 #   csp_additional            optional CSP directive prefix
@@ -54,28 +54,6 @@
 #                             /api/authz/auth-request endpoint (defaults to lab's
 #                             local Authelia; pug/bunk need a per-host override if
 #                             they ever enable forward-auth).
-#   bypass_query_param        optional dict { value: <str> }. With
-#                             `auth: required`, the auth_request short-circuits
-#                             with a 204 when the request's
-#                             `?auth_token=<value>` matches the vaulted token,
-#                             letting URL-param-only API clients (apps that
-#                             can't send an Authorization header) bypass
-#                             Authelia; browser hits without the param fall
-#                             through to Authelia normally. The token is
-#                             stripped from `$args` before proxy_pass (the
-#                             upstream never sees it) and redacted from the
-#                             access log by the `$request_safe` map. The param
-#                             name is fixed to `auth_token` -- the
-#                             `$req_auth_token` and `$request_safe` maps in
-#                             nginx.conf.j2 hardcode it. The value must be
-#                             URL-safe ([A-Za-z0-9_-]): it is matched against the
-#                             raw un-decoded query, so a token a client would
-#                             percent-encode never matches. A double quote is
-#                             rejected (it would break the rendered nginx string);
-#                             both are asserted below. Bypass sites also get
-#                             Referrer-Policy: no-referrer so the token can't
-#                             leak to third parties via a Referer header
-#                             (redaction only covers our own access log).
 #   server_conf               optional snippet inserted in the server block.
 #                             A `location` added here is NOT covered by the
 #                             site's forward-auth (auth_request only wraps
@@ -185,22 +163,6 @@
   tags:
     - nginx_site
 
-- name: site | Assert bypass token is URL-safe
-  when:
-    - _nginx_site_state == 'present'
-    - nginx_site_args.bypass_query_param is defined
-  assert:
-    that:
-      - nginx_site_args.bypass_query_param.value is string
-      - nginx_site_args.bypass_query_param.value is match('^[A-Za-z0-9_-]+$')
-    fail_msg: >-
-      nginx_site_args.bypass_query_param.value must be a non-empty URL-safe
-      token ([A-Za-z0-9_-]). It is matched against the raw un-decoded query, so
-      a value needing percent-encoding would silently never match; it is also
-      rendered inside an nginx "..." string.
-  tags:
-    - nginx_site
-
 - name: site | Assert proxy_pass is a well-formed URL
   when:
     - _nginx_site_state == 'present'
@@ -258,18 +220,16 @@
   tags:
     - nginx_site
 
-- name: site | Assert enable_http is not combined with auth or a bypass token
+- name: site | Assert enable_http is not combined with auth
   when:
     - _nginx_site_state == 'present'
     - _nginx_site_enable_http
   assert:
     that:
       - _nginx_site_auth != 'required'
-      - nginx_site_args.bypass_query_param is not defined
     fail_msg: >-
       enable_http serves :80 in cleartext; do not combine it with `auth: required`
-      or `bypass_query_param` (the auth flow / vaulted token would travel
-      unencrypted).
+      (the forward-auth flow would travel unencrypted).
   tags:
     - nginx_site
 
@@ -342,8 +302,8 @@
         dest: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
         owner: root
         group: root
-        # 0640 root:root: the rendered vhost can embed a vaulted bypass token, so
-        # it must not be world-readable.
+        # 0640 root:root: vhost configs are read by nginx as root and carry no
+        # public value, so keep them off world-read as a conservative default.
         mode: "0640"
         backup: true
       register: nginx_static_conf
