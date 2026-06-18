@@ -12,6 +12,7 @@ import ipaddress
 import json
 import os
 import platform
+import re
 import shlex
 import shutil
 import socket
@@ -178,23 +179,109 @@ def resolve_net_backend(qemu_binary: str) -> str:
     return "passt" if available else "slirp"
 
 
-def passt_address_args(machine: str) -> list[str]:
-    """passt -a/-n/-g flags pinning the guest to its topology IP, mirroring
-    `qemu_user_net_args`' slirp dhcpstart/host pinning so roles that key on the
-    host's physical address see the same value under either backend.
+# QEMU 10.1 introduced a first-class `passt` netdev type: qemu spawns and
+# reaps the passt process itself over an internal socketpair, configured
+# entirely through `-netdev passt,...` options (NetdevPasstOptions in
+# qapi/net.json). That lets the harness drop its hand-rolled sidecar -- the
+# separate process, the tmpfs socket dir, and the start/stop lifecycle in
+# _start_passt/_stop_passt. The connector (passt vs slirp) is still chosen by
+# resolve_net_backend; this only decides, once passt is chosen, whether qemu
+# manages it natively (>= 10.1) or we drive the sidecar (7.2 <= v < 10.1).
+_PASST_NATIVE_MIN_VERSION = (10, 1)
 
-    Empty for machines absent from the topology (e.g. `minimal`): passt then
-    assigns from the container's default-route interface, matching slirp's
-    default-net behaviour there. The gateway is the supernet's broadcast-1,
-    exactly the `host=` slirp uses.
+
+@functools.cache
+def _qemu_version(qemu_binary: str) -> tuple[int, int]:
+    """Return qemu's (major, minor) from `<binary> --version`, or (0, 0) if it
+    can't be determined.
+
+    (0, 0) is the safe sentinel: every real gate is a `>=` against a positive
+    floor, so an unparseable version falls back to the older code path. Cached
+    -- the probe forks a subprocess and the answer is constant per process.
+    """
+    try:
+        probe = subprocess.run(
+            [qemu_binary, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return (0, 0)
+    # "QEMU emulator version 10.1.0" -- grab the first dotted numeric token.
+    m = re.search(r"version (\d+)\.(\d+)", probe.stdout + probe.stderr)
+    return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+
+
+def _passt_native_available(qemu_binary: str) -> bool:
+    """True iff qemu can manage passt itself here: the passt connector is
+    usable (_passt_available) AND qemu is new enough to ship the native
+    `passt` netdev (>= 10.1)."""
+    return _passt_available(qemu_binary) and _qemu_version(qemu_binary) >= _PASST_NATIVE_MIN_VERSION
+
+
+def resolve_passt_native(qemu_binary: str) -> bool:
+    """Decide, for a run already on the passt connector, whether to use qemu's
+    native `passt` netdev (qemu-managed) or the legacy sidecar.
+
+    Version-gated: native engages automatically once qemu >= 10.1, so the
+    sidecar machinery simply stops being used after a qemu upgrade -- no flag
+    day. HOMELAB_PASST_NATIVE overrides the gate: `off` pins the sidecar (the
+    rollback if the native path misbehaves), `on` forces native (and errors if
+    qemu is too old, so a misconfigured pin fails loudly), `auto` (default)
+    follows the version probe.
+    """
+    override = os.environ.get("HOMELAB_PASST_NATIVE", "auto").strip().lower()
+    if override == "off":
+        return False
+    available = _passt_native_available(qemu_binary)
+    if override == "on":
+        if not available:
+            raise RuntimeError(
+                "HOMELAB_PASST_NATIVE=on but the native passt netdev is unavailable: "
+                f"it needs the passt connector and qemu >= {_PASST_NATIVE_MIN_VERSION[0]}."
+                f"{_PASST_NATIVE_MIN_VERSION[1]} (found {_qemu_version(qemu_binary)}). "
+                "Unset the override or upgrade qemu."
+            )
+        return True
+    if override != "auto":
+        raise RuntimeError(f"HOMELAB_PASST_NATIVE={override!r} not in auto/on/off")
+    return available
+
+
+def passt_address_fields(machine: str) -> dict[str, str] | None:
+    """The address/netmask/gateway that pin the guest to its topology IP, or
+    None for machines absent from the topology (e.g. `minimal`).
+
+    Mirrors `qemu_user_net_args`' slirp dhcpstart/host pinning so roles that
+    key on the host's physical address see the same value under either backend.
+    The gateway is the supernet's broadcast-1, exactly the `host=` slirp uses.
+    Shared by both passt paths: the sidecar renders these as -a/-n/-g flags
+    (passt_address_args), the native netdev as address=/netmask=/gateway=.
     """
     topo = _load_test_topology()
     host = topo["hosts"].get(machine)
     if not host:
-        return []
+        return None
     net = ipaddress.ip_network(topo["partitions"]["physical"]["cidr"])
-    gateway = str(net.broadcast_address - 1)
-    return ["--address", host["physical"], "--netmask", str(net.prefixlen), "--gateway", gateway]
+    return {
+        "address": host["physical"],
+        "netmask": str(net.prefixlen),
+        "gateway": str(net.broadcast_address - 1),
+    }
+
+
+def passt_address_args(machine: str) -> list[str]:
+    """passt -a/-n/-g sidecar flags for the topology IP pin (or [] off-topology).
+
+    Empty for machines absent from the topology (e.g. `minimal`): passt then
+    assigns from the container's default-route interface, matching slirp's
+    default-net behaviour there.
+    """
+    fields = passt_address_fields(machine)
+    if fields is None:
+        return []
+    return ["--address", fields["address"], "--netmask", fields["netmask"], "--gateway", fields["gateway"]]
 
 
 # git only tracks the executable bit; a fresh checkout (notably CI's
@@ -1143,10 +1230,15 @@ class QemuMachine(Machine):
     # qemu connects to over a unix socket) is launched in boot() and torn
     # down in stop(); these stay None/unset on the slirp path.
     _net_backend: str
+    # On the passt connector, True when qemu manages passt natively (>= 10.1)
+    # and the sidecar machinery below stays unused (socket/socket_dir/proc all
+    # None); False on the legacy sidecar path. Always False on slirp. Decided
+    # once in __init__ via resolve_passt_native.
+    _passt_native: bool
     _passt_socket: Path | None
     # Private dir holding _passt_socket, on the system tmpfs rather than the
     # /mnt/scratch workdir -- see the _passt_socket assignment for why. None on
-    # the slirp path; torn down in _stop_passt.
+    # the slirp path AND the native-passt path; torn down in _stop_passt.
     _passt_socket_dir: tempfile.TemporaryDirectory[str] | None
     _passt_proc: asyncio.subprocess.Process | None
 
@@ -1259,6 +1351,9 @@ class QemuMachine(Machine):
         # Resolve the NIC backend after _preflight (run via super().__init__)
         # has confirmed the qemu binary exists, since the probe execs it.
         self._net_backend = resolve_net_backend(self.arch.qemu_binary)
+        # On the passt connector, let qemu drive passt natively where it can
+        # (>= 10.1); otherwise fall back to the sidecar. False on slirp.
+        self._passt_native = self._net_backend == "passt" and resolve_passt_native(self.arch.qemu_binary)
         self._passt_socket = None
         self._passt_socket_dir = None
         self._passt_proc = None
@@ -1374,8 +1469,9 @@ class QemuMachine(Machine):
         # dir on the system tmpfs instead -- the same constraint packer/
         # qemu_net_wrapper.py meets via tempfile.mkdtemp(). qemu reaches it
         # since both run in this container. Launched in boot() so its lifetime
-        # brackets qemu's; torn down in _stop_passt. None on the slirp path.
-        if self._net_backend == "passt":
+        # brackets qemu's; torn down in _stop_passt. None on the slirp path and
+        # the native path (qemu owns the socketpair there -- no sidecar).
+        if self._net_backend == "passt" and not self._passt_native:
             self._passt_socket_dir = tempfile.TemporaryDirectory(prefix="homelab-passt-", ignore_cleanup_errors=True)
             self._passt_socket = Path(self._passt_socket_dir.name) / "passt.sock"
 
@@ -1648,14 +1744,18 @@ class QemuMachine(Machine):
     def _netdev_args(self) -> tuple[str, str]:
         """Return the (`-netdev` value, `-device` value) for the NIC backend.
 
-        passt: qemu attaches via a `stream` netdev connected to the sidecar's
-        unix socket (qemu >= 7.2). slirp: the legacy user-mode net with
-        hostfwds. The forward *set* is identical under both backends -- SSH
-        for ansible-playbook plus wan_forward_ports for the firewall `_verify`
-        probes that `delegate_to: localhost` -- passt expresses them in
-        _passt_command, slirp as hostfwd here.
+        passt (native, qemu >= 10.1): a `passt` netdev where qemu spawns and
+        manages passt itself -- no sidecar. passt (sidecar, 7.2 <= v < 10.1):
+        qemu attaches via a `stream` netdev connected to the sidecar's unix
+        socket. slirp: the legacy user-mode net with hostfwds. The forward
+        *set* is identical under all three -- SSH for ansible-playbook plus
+        wan_forward_ports for the firewall `_verify` probes that
+        `delegate_to: localhost` -- the passt paths express them in
+        _passt_netdev_params / _passt_command, slirp as hostfwd here.
         """
         if self._net_backend == "passt":
+            if self._passt_native:
+                return self._passt_netdev_params(), "virtio-net,netdev=net0"
             assert self._passt_socket is not None
             netdev = f"stream,id=net0,server=off,addr.type=unix,addr.path={self._passt_socket}"
             return netdev, "virtio-net,netdev=net0"
@@ -1673,17 +1773,65 @@ class QemuMachine(Machine):
         netdev = f"user,id=user.0," f"{','.join(hostfwds)}" f"{qemu_user_net_args(self.inventory_host)}"
         return netdev, "virtio-net,netdev=user.0"
 
-    def _passt_command(self) -> list[str]:
-        """passt sidecar argv. NATs the guest's egress and forwards the same
-        controller-side ports back to the guest as slirp's hostfwd does, but
-        with passt's robust UDP datapath instead of libslirp.
+    def _passt_port_specs(self) -> tuple[str, str | None]:
+        """The 127.0.0.1-bound passt port-forward specs shared by both passt
+        paths: the SSH hop plus every wan_forward_ports entry, as passt
+        `addr/host:guest[,host:guest...]` strings.
+
+        Returns (tcp, udp); udp is None when no UDP forwards are configured.
+        The single `addr/` prefix binds the whole comma-list -- repeating it
+        (addr/a,addr/b) is an "Invalid port specifier" to passt, so the address
+        appears once. Matches slirp's hostfwd set so the harness keeps
+        connecting at SSH_HOST:<port> under any backend.
         """
-        assert self._passt_socket is not None
         tcp_forwards = [
             f"{self.ssh_port}:22",
             *(f"{host_port}:{guest_port}" for guest_port, host_port in self.wan_forward_ports["tcp"].items()),
         ]
         udp_forwards = [f"{host_port}:{guest_port}" for guest_port, host_port in self.wan_forward_ports["udp"].items()]
+        tcp_spec = f"{SSH_HOST}/{','.join(tcp_forwards)}"
+        udp_spec = f"{SSH_HOST}/{','.join(udp_forwards)}" if udp_forwards else None
+        return tcp_spec, udp_spec
+
+    def _passt_netdev_params(self) -> str:
+        """The `-netdev passt,...` value for the native backend (qemu >= 10.1).
+
+        Maps the sidecar's flags onto NetdevPasstOptions (qapi/net.json):
+        --quiet -> quiet=on, --tcp-ports/--udp-ports -> tcp-ports=/udp-ports=,
+        and the topology pin onto address=/netmask=/gateway=. qemu owns the
+        process and the socketpair, so the sidecar-only flags
+        (--foreground/--one-off/--socket) have no analogue here.
+
+        qemu joins a tcp-ports list with commas before handing it to passt
+        (net/passt.c net_passt_decode_args), so the whole
+        `addr/host:guest,host:guest` spec goes in as one value with its inner
+        commas DOUBLED -- qemu's standard escape, so the -netdev option lexer
+        doesn't split the port list into separate options.
+
+        NOTE (spike): the comma-escaping and the exact NetdevPasstOptions key
+        names are validated against qapi/net.json @ v10.1.0 but not yet against
+        a running 10.1 binary (dev/CI is on 9.2.x). Confirm on first upgrade;
+        HOMELAB_PASST_NATIVE=off pins the sidecar if anything here is off.
+        """
+        tcp_spec, udp_spec = self._passt_port_specs()
+        params = ["passt", "id=net0", "quiet=on"]
+        fields = passt_address_fields(self.inventory_host)
+        if fields is not None:
+            params += [f"address={fields['address']}", f"netmask={fields['netmask']}", f"gateway={fields['gateway']}"]
+        params.append(f"tcp-ports={tcp_spec.replace(',', ',,')}")
+        if udp_spec is not None:
+            params.append(f"udp-ports={udp_spec.replace(',', ',,')}")
+        return ",".join(params)
+
+    def _passt_command(self) -> list[str]:
+        """passt sidecar argv (legacy path, 7.2 <= qemu < 10.1). NATs the
+        guest's egress and forwards the same controller-side ports back to the
+        guest as slirp's hostfwd does, but with passt's robust UDP datapath
+        instead of libslirp. On qemu >= 10.1 the native netdev replaces this
+        whole sidecar (see _passt_netdev_params).
+        """
+        assert self._passt_socket is not None
+        tcp_spec, udp_spec = self._passt_port_specs()
         cmd = [
             "passt",
             # Foreground: a managed child (torn down in stop()) that logs to
@@ -1695,18 +1843,11 @@ class QemuMachine(Machine):
             "--one-off",
             "--socket",
             str(self._passt_socket),
-            # 127.0.0.1-bound forwards matching slirp's hostfwd set, so the
-            # harness keeps connecting at SSH_HOST:<port>. The `addr/` prefix
-            # binds the whole comma-list -- repeating it (addr/a,addr/b) is an
-            # "Invalid port specifier" to passt, so the address appears once.
             "--tcp-ports",
-            f"{SSH_HOST}/{','.join(tcp_forwards)}",
+            tcp_spec,
         ]
-        if udp_forwards:
-            cmd += [
-                "--udp-ports",
-                f"{SSH_HOST}/{','.join(udp_forwards)}",
-            ]
+        if udp_spec is not None:
+            cmd += ["--udp-ports", udp_spec]
         return [
             *cmd,
             *passt_address_args(self.inventory_host),
@@ -1715,13 +1856,14 @@ class QemuMachine(Machine):
     async def _start_passt(self) -> None:
         """Launch the passt sidecar and block until its socket is listening.
 
-        No-op on the slirp backend. Runs before qemu (in boot()) so the socket
-        exists when qemu's `stream` netdev connects. The sidecar logs to a
-        per-run .passt.ansi beside the boot log for post-mortem. The socket
-        wait is bounded so a wedged passt fails fast rather than hanging the
-        run to its outer timeout.
+        No-op on the slirp backend and the native-passt path (qemu spawns
+        passt itself there). Runs before qemu (in boot()) so the socket exists
+        when qemu's `stream` netdev connects. The sidecar logs to a per-run
+        .passt.ansi beside the boot log for post-mortem. The socket wait is
+        bounded so a wedged passt fails fast rather than hanging the run to its
+        outer timeout.
         """
-        if self._net_backend != "passt":
+        if self._net_backend != "passt" or self._passt_native:
             return
         assert self._passt_socket is not None
         cmd = self._passt_command()
