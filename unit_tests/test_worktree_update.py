@@ -129,7 +129,7 @@ class Sandbox:
 
     # -- run the script under test --
     def run_update(self, name: str = "feat") -> subprocess.CompletedProcess[str]:
-        env = dict(self.env, usage_name=name)
+        env = dict(self.env, usage_worktree=name)
         return subprocess.run(["bash", str(UPDATE_SH)], cwd=str(self.repo), env=env, text=True, capture_output=True)
 
     # -- invariants --
@@ -230,4 +230,4 @@ def test_errors_when_worktree_missing(sandbox: Sandbox) -> None:
     result = sandbox.run_update(name="ghost")
 
     assert result.returncode != 0
-    assert "not found" in result.stderr
+    assert "no worktree found" in result.stderr
