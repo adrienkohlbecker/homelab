@@ -2373,26 +2373,37 @@ class Ec2Machine(Machine):
             **fleet_kwargs,
         )
 
+        # The fleet response is the only record of what physically launched.
+        # Read the instance ids from it first, then guard everything up to the
+        # armed backstop: any failure in that window — a misparse, an
+        # unexpected count, a backstop error — must terminate the launched
+        # instances, or they bill forever tracked by nothing. This is the
+        # window that leaked 97 orphaned cells when the response was misparsed.
         launched_ids = [
             instance_id
             for fleet_instance in resp.get("Instances", [])
             for instance_id in fleet_instance.get("InstanceIds", [])
         ]
-        if len(launched_ids) != 1:
-            errors = resp.get("Errors", [])
-            error_codes = {e.get("ErrorCode") for e in errors}
-            if errors and error_codes <= EC2_FLEET_CAPACITY_ERROR_CODES:
-                raise SpotInterruptedException(
-                    f"All approved spot pools out of capacity for {self.machine} ({', '.join(sorted(error_codes))})"
-                )
-            raise RuntimeError(f"create-fleet launched {len(launched_ids)} instances instead of 1: {resp!r}")
+        try:
+            if len(launched_ids) != 1:
+                errors = resp.get("Errors", [])
+                error_codes = {e.get("ErrorCode") for e in errors}
+                if errors and error_codes <= EC2_FLEET_CAPACITY_ERROR_CODES:
+                    raise SpotInterruptedException(
+                        f"All approved spot pools out of capacity for {self.machine} ({', '.join(sorted(error_codes))})"
+                    )
+                raise RuntimeError(f"create-fleet launched {len(launched_ids)} instances instead of 1: {resp!r}")
 
-        self.instance_id = launched_ids[0]
-        if not self.instance_id.startswith("i-"):
-            raise RuntimeError(f"create-fleet returned no instance id: {resp!r}")
-        print_line(f"Launched {self.instance_id} (fleet {resp.get('FleetId')}, backstop {self._expires_display})")
+            self.instance_id = launched_ids[0]
+            if not self.instance_id.startswith("i-"):
+                raise RuntimeError(f"create-fleet returned no instance id: {resp!r}")
+            print_line(f"Launched {self.instance_id} (fleet {resp.get('FleetId')}, backstop {self._expires_display})")
 
-        await self._arm_backstop(expires_expr)
+            await self._arm_backstop(expires_expr)
+        except BaseException:
+            # Shielded so a second SIGINT mid-cleanup can't abandon the launch.
+            await asyncio.shield(self._terminate_orphans(launched_ids))
+            raise
 
     async def _arm_backstop(self, expires_expr: str) -> None:
         """Create the one-time Scheduler entry that terminates this cell.
@@ -2431,6 +2442,29 @@ class Ec2Machine(Machine):
             except self._client_error:
                 pass  # best-effort cleanup; re-raise the original schedule failure
             raise
+
+    async def _terminate_orphans(self, instance_ids: list[str]) -> None:
+        """Best-effort terminate instances launched before the backstop existed.
+
+        Reached only from boot()'s failure path: at that point no termination
+        schedule covers these instances and `instance_id` may be unset, so
+        nothing else will ever reap them. Read straight from the fleet response
+        rather than `self.instance_id` so a parse failure upstream can't hide a
+        running instance. Swallow cleanup errors — the original boot() exception
+        is the one worth surfacing.
+        """
+        if not instance_ids:
+            return
+        print_line(f"Terminating orphaned launch: {', '.join(instance_ids)}", error=True)
+        try:
+            await self._call(
+                "ec2",
+                "terminate_instances",
+                log=f"aws ec2 terminate-instances --instance-ids {' '.join(instance_ids)}",
+                InstanceIds=instance_ids,
+            )
+        except self._client_error:
+            pass  # best-effort; failing here must not mask the boot() error
 
     async def ensure_booted(self) -> None:
         """Wait for running state, then read the public IP into ssh_host.
