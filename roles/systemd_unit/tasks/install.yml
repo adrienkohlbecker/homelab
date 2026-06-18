@@ -1,9 +1,16 @@
-# The validate task below uses `failed_when: rc != 0 or stderr != ''` —
+# The validate task below uses `failed_when: rc != 0 or stderr has lines` —
 # intentionally stricter than systemd-analyze's own exit code, so warnings
 # (undefined keys, ordering cycles) also trigger rollback. Ansible's
 # template/copy `validate:` arg would check *before* placing, but it
 # passes the temp path which systemd-analyze can't resolve dependencies
 # against, and on 24.04+ the `:unit` form still doesn't reject warnings.
+#
+# One benign class is filtered before the comparison: "Support for option
+# X has been removed and it is ignored" notices. systemd-analyze loads the
+# transitive dependency closure, so on resolute (systemd 259) it surfaces
+# deprecations in stock Ubuntu units we don't author (e.g. xfs_scrub_all's
+# CPUAccounting=). systemd has *ignored* the option, so there is nothing to
+# fix — and rolling back our unit over a stock unit's deprecation is wrong.
 #
 # Inputs: caller passes a single dict `systemd_unit_args` with keys
 #   src               file under role files/ (copy) or templates/ (.j2 → template)
@@ -213,7 +220,14 @@
           - "{{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}"
       register: systemd_unit_verify
       changed_when: false
-      failed_when: systemd_unit_verify.rc != 0 or systemd_unit_verify.stderr != ''
+      # Drop benign "has been removed and it is ignored" deprecation notices
+      # (raised against transitively-loaded stock units, not our unit), then
+      # drop blank lines; any line that survives is a real warning/error.
+      failed_when: >-
+        systemd_unit_verify.rc != 0
+        or (systemd_unit_verify.stderr_lines
+            | reject('search', 'has been removed and it is ignored')
+            | select | list | length > 0)
       become: true
 
     - name: install | Reload daemon
