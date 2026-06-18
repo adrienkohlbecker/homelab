@@ -61,13 +61,14 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
 # Machine-universe triggers: a change to a test-VM host_vars or fixture
 # file can't be attributed to specific roles but only affects the test
 # cells that run on that machine. Maps pattern -> machine name.
+#
+# Only box and minimal appear: lab/pug run on AWS via no cell (every role that
+# lists them aws_skips them — their prod-faithful geometry is qemu-only), so a
+# lab/pug host_vars change must not force-add their roles' box cells. Those
+# fixtures keep their qemu coverage, which this AWS-only matrix doesn't drive.
 MACHINE_UNIVERSE_PATTERNS: list[tuple[str, str]] = [
     (r"host_vars/box\.yml", "box"),
     (r"host_vars/minimal\.yml", "minimal"),
-    (r"host_vars/lab\.yml", "lab"),
-    (r"host_vars/lab-qemu\.yml", "lab"),
-    (r"host_vars/pug\.yml", "pug"),
-    (r"host_vars/pug-qemu\.yml", "pug"),
     (r"test/minimal/.+", "minimal"),
 ]
 _MACHINE_UNIVERSE_COMPILED = [(re.compile(r"^" + pat + r"$"), machine) for pat, machine in MACHINE_UNIVERSE_PATTERNS]

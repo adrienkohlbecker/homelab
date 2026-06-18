@@ -4,8 +4,8 @@
 # instance attaches blank EBS volumes, packer/scripts/aws_provision.sh
 # resolves their Nitro NVMe device names and hands off to provision.sh, then
 # packer snapshots every volume into one AMI (boot_mode=uefi, ENA). Multi-disk
-# machines (pug ×3, lab ×9) ride the AMI's block device mapping, so neither
-# the harness nor the launch templates carry per-machine disk logic.
+# machines (box ×2) ride the AMI's block device mapping, so neither the harness
+# nor the launch templates carry per-machine disk logic.
 #
 # The `hetzner` source rides the same surrogate mechanism but ships no AMI:
 # it bakes fox's Hetzner Cloud boot image (IMAGE_TARGET=hetzner) onto its one
@@ -93,9 +93,9 @@ locals {
   }
 
   # Mirror of qemu.pkr.hcl's variant_config, reshaped for EBS: sizes are
-  # integer GiB (EBS minimum 1, so lab's 1.5G tank disks round up to 2) and
-  # disk paths are EBS mapping names the build instance resolves via
-  # aws_provision.sh. rpool_disks = how many leading disks form $DISKS
+  # integer GiB (EBS minimum 1) and disk paths are EBS mapping names the build
+  # instance resolves via aws_provision.sh. rpool_disks = how many leading
+  # disks form $DISKS
   # (the rpool); the rest are $EXTRA_DISKS for pools.sh. box_deps is not a
   # variant here: it derives from the promoted box AMI under the amazon-ebs
   # source below, same as the qemu path derives box_deps from box. minimal
@@ -112,24 +112,6 @@ locals {
       layout       = ""
       swap_size    = "4G"
       extra_pools  = "zee"
-      image_target = "qemu"
-      zfs_arc_max  = ""
-    }
-    pug = {
-      rpool_disks  = 1
-      disk_sizes   = [40, 1, 1]
-      layout       = ""
-      swap_size    = "8G"
-      extra_pools  = "apoc"
-      image_target = "qemu"
-      zfs_arc_max  = ""
-    }
-    lab = {
-      rpool_disks  = 3
-      disk_sizes   = [40, 40, 40, 1, 1, 2, 2, 1, 1]
-      layout       = "mirror"
-      swap_size    = "8G"
-      extra_pools  = "dozer tank_mouse"
       image_target = "qemu"
       zfs_arc_max  = ""
     }
@@ -196,9 +178,10 @@ locals {
   upstream_security = "http://security.ubuntu.com/ubuntu"
 }
 
-# Three near-identical sources rather than one parameterized block: packer's
-# build-level source overrides only reliably set attributes, and the per-
-# machine difference here is the launch_block_device_mappings *blocks*.
+# box is the sole cell-AMI surrogate source (hetzner below is a separate target
+# that ships no AMI). It carries its own launch_block_device_mappings block:
+# packer's build-level source overrides only reliably set scalar attributes,
+# not nested blocks, so a per-machine difference there can't be parameterized.
 
 source "amazon-ebssurrogate" "box" {
   region = local.region
@@ -268,140 +251,6 @@ source "amazon-ebssurrogate" "box" {
   snapshot_tags   = merge(local.common_tags, { machine = "box" })
   run_tags        = merge(local.common_tags, { machine = "box", Name = "packer-homelab-ci-box" })
   run_volume_tags = merge(local.common_tags, { machine = "box" })
-}
-
-source "amazon-ebssurrogate" "pug" {
-  region = local.region
-  # Compute-optimized for the bake (the cells themselves ride the cheaper
-  # t3a launch templates): the chroot install is CPU-bound on dpkg/zstd/
-  # initramfs work, and 4 sustained vCPUs roughly halve it vs t3a.medium.
-  # ~30 min on-demand is still pennies; bakes are rare and manual.
-  instance_type = "c6a.xlarge"
-  ssh_username  = "ubuntu"
-  ssh_interface = "public_ip"
-
-  temporary_key_pair_type     = "ed25519"
-  associate_public_ip_address = true
-
-  subnet_filter {
-    filters = { "tag:Name" = "homelab-ci-*" }
-    random  = true
-  }
-  security_group_filter {
-    filters = { "tag:Name" = "homelab-ci-cell" }
-  }
-
-  source_ami_filter {
-    filters = {
-      name                = local.source_ami_names[var.ubuntu_name]
-      root-device-type    = "ebs"
-      virtualization-type = "hvm"
-    }
-    owners      = ["099720109477"]
-    most_recent = true
-  }
-
-  metadata_options {
-    http_endpoint = "enabled"
-    http_tokens   = "required"
-  }
-
-  ami_name                = "homelab-ci-pug-${var.ubuntu_name}-{{timestamp}}"
-  ami_description         = "homelab CI test fixture (pug, ${var.ubuntu_name})"
-  ami_virtualization_type = "hvm"
-  ena_support             = true
-  boot_mode               = "uefi"
-
-  dynamic "launch_block_device_mappings" {
-    for_each = local.variant_config["pug"].disk_sizes
-    content {
-      device_name           = "/dev/xvd${local.device_letters[launch_block_device_mappings.key]}"
-      volume_size           = launch_block_device_mappings.value
-      volume_type           = "gp3"
-      encrypted             = true
-      delete_on_termination = true
-    }
-  }
-
-  ami_root_device {
-    source_device_name    = "/dev/xvdf"
-    device_name           = "/dev/sda1"
-    volume_size           = local.variant_config["pug"].disk_sizes[0]
-    volume_type           = "gp3"
-    delete_on_termination = true
-  }
-
-  tags            = merge(local.common_tags, { machine = "pug", Name = "homelab-ci-pug-${var.ubuntu_name}" })
-  snapshot_tags   = merge(local.common_tags, { machine = "pug" })
-  run_tags        = merge(local.common_tags, { machine = "pug", Name = "packer-homelab-ci-pug" })
-  run_volume_tags = merge(local.common_tags, { machine = "pug" })
-}
-
-source "amazon-ebssurrogate" "lab" {
-  region = local.region
-  # Compute-optimized for the bake (the cells themselves ride the cheaper
-  # t3a launch templates): the chroot install is CPU-bound on dpkg/zstd/
-  # initramfs work, and 4 sustained vCPUs roughly halve it vs t3a.medium.
-  # ~30 min on-demand is still pennies; bakes are rare and manual.
-  instance_type = "c6a.xlarge"
-  ssh_username  = "ubuntu"
-  ssh_interface = "public_ip"
-
-  temporary_key_pair_type     = "ed25519"
-  associate_public_ip_address = true
-
-  subnet_filter {
-    filters = { "tag:Name" = "homelab-ci-*" }
-    random  = true
-  }
-  security_group_filter {
-    filters = { "tag:Name" = "homelab-ci-cell" }
-  }
-
-  source_ami_filter {
-    filters = {
-      name                = local.source_ami_names[var.ubuntu_name]
-      root-device-type    = "ebs"
-      virtualization-type = "hvm"
-    }
-    owners      = ["099720109477"]
-    most_recent = true
-  }
-
-  metadata_options {
-    http_endpoint = "enabled"
-    http_tokens   = "required"
-  }
-
-  ami_name                = "homelab-ci-lab-${var.ubuntu_name}-{{timestamp}}"
-  ami_description         = "homelab CI test fixture (lab, ${var.ubuntu_name})"
-  ami_virtualization_type = "hvm"
-  ena_support             = true
-  boot_mode               = "uefi"
-
-  dynamic "launch_block_device_mappings" {
-    for_each = local.variant_config["lab"].disk_sizes
-    content {
-      device_name           = "/dev/xvd${local.device_letters[launch_block_device_mappings.key]}"
-      volume_size           = launch_block_device_mappings.value
-      volume_type           = "gp3"
-      encrypted             = true
-      delete_on_termination = true
-    }
-  }
-
-  ami_root_device {
-    source_device_name    = "/dev/xvdf"
-    device_name           = "/dev/sda1"
-    volume_size           = local.variant_config["lab"].disk_sizes[0]
-    volume_type           = "gp3"
-    delete_on_termination = true
-  }
-
-  tags            = merge(local.common_tags, { machine = "lab", Name = "homelab-ci-lab-${var.ubuntu_name}" })
-  snapshot_tags   = merge(local.common_tags, { machine = "lab" })
-  run_tags        = merge(local.common_tags, { machine = "lab", Name = "packer-homelab-ci-lab" })
-  run_volume_tags = merge(local.common_tags, { machine = "lab" })
 }
 
 # box_deps derives from the promoted box AMI: boot it, converge
@@ -529,8 +378,6 @@ source "amazon-ebssurrogate" "hetzner" {
 build {
   sources = [
     "source.amazon-ebssurrogate.box",
-    "source.amazon-ebssurrogate.pug",
-    "source.amazon-ebssurrogate.lab",
     "source.amazon-ebssurrogate.hetzner",
   ]
 
@@ -608,8 +455,8 @@ build {
     ]
   }
 
-  # box/pug/lab only: ami.sh parses the AMI id out of this manifest to promote
-  # it. The hetzner source is excluded — its byproduct AMI is never promoted
+  # box only: ami.sh parses the AMI id out of this manifest to promote it. The
+  # hetzner source is excluded — its byproduct AMI is never promoted
   # (the deliverable is the Hetzner snapshot rescue_snapshot makes, and the
   # EXIT trap's name sweep deregisters the AMI), so it needs no manifest.
   # Skipping it also leaves the hetzner build with no post-processor phase,

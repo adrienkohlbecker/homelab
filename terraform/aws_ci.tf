@@ -761,7 +761,7 @@ resource "aws_key_pair" "ci_operator" {
 # ─── Launch templates ────────────────────────────────────────────────────────
 # One per machine. The AMI is deliberately NOT set here: the harness passes
 # --image-id resolve:ssm:/homelab-ci/ami/<machine>/<ubuntu> per launch, so a
-# bake promotion never touches terraform. Disk layout (multi-disk pug/lab)
+# bake promotion never touches terraform. Disk layout (box's second zee disk)
 # lives in the AMI's block device mapping, not here. Instance types settled
 # by the gate-C benchmark (notes/ci_aws_test_cells.md): apt/dpkg-heavy cells
 # are CPU-bound, and c6a.large (dedicated Zen3) runs them ~1.5-1.6x faster
@@ -776,8 +776,6 @@ locals {
     minimal  = "t3a.small" # 2 GiB, mirrors qemu minimal
     box      = "c6a.large" # 2 vCPU / 4 GiB
     box_deps = "m6a.large" # box-class Zen3 cores with the 8 GiB floor (>4 needed, see QEMU_MACHINE_SPECS)
-    pug      = "c6a.large"
-    lab      = "c6a.large"
   }
 }
 
