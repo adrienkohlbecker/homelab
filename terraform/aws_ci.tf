@@ -283,6 +283,7 @@ resource "aws_security_group" "ci_cell" {
     protocol    = "tcp"
     cidr_blocks = [
       "${hcloud_primary_ip.fox.ip_address}/32",
+      "${hcloud_primary_ip.ci_coordinator.ip_address}/32",
       "${local.home_wan_ip}/32",
     ]
   }
