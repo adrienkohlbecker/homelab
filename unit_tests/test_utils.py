@@ -65,16 +65,19 @@ class TestTeeOutput:
 class TestPrintCmdLine:
     def test_without_env(self, capsys: pytest.CaptureFixture) -> None:
         utils.print_cmd_line(["ls", "-la"])
+        utils._drain_stdout()  # stdout is written on a background thread
         captured = capsys.readouterr()
         assert "ls -la" in captured.out
 
     def test_with_env(self, capsys: pytest.CaptureFixture) -> None:
         utils.print_cmd_line(["cmd"], env={"FOO": "bar"})
+        utils._drain_stdout()
         captured = capsys.readouterr()
         assert "env FOO=bar cmd" in captured.out
 
     def test_quoting(self, capsys: pytest.CaptureFixture) -> None:
         utils.print_cmd_line(["echo", "hello world"])
+        utils._drain_stdout()
         captured = capsys.readouterr()
         assert "'hello world'" in captured.out
 

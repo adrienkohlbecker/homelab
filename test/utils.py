@@ -1,11 +1,14 @@
 #!/usr/bin/env -S uv run
 
 import asyncio
+import atexit
 import contextlib
+import queue
 import shlex
 import shutil
 import signal
 import sys
+import threading
 from collections.abc import Iterator
 from pathlib import Path
 from typing import NamedTuple, TextIO
@@ -102,10 +105,68 @@ def colorize(line: str, color: str | None) -> str:
     return template.format(line=line) if template else line
 
 
+# Subprocess output is relayed line-by-line from the asyncio event-loop thread
+# (read_and_write_stream). A direct sys.stdout.write+flush there makes every
+# line a blocking write(2) on the loop thread: if whoever drains our stdout (a
+# CI job-log pipe) stalls, that write blocks the entire event loop -- and a
+# blocked loop runs no timers, so run_test's asyncio.timeout deadline silently
+# stops being enforced and a stall rides the outer CI job timeout instead. Hand
+# the stdout half to a dedicated daemon thread so the loop only ever enqueues;
+# the tee-file write stays inline (local disk, the authoritative transcript) so
+# test/out/*.ansi stays complete even if stdout wedges and the daemon is killed
+# at interpreter exit.
+_STDOUT_QUEUE: "queue.SimpleQueue[str | threading.Event]" = queue.SimpleQueue()
+_STDOUT_WRITER: threading.Thread | None = None
+_STDOUT_WRITER_LOCK = threading.Lock()
+
+
+def _stdout_writer_loop() -> None:
+    while True:
+        item = _STDOUT_QUEUE.get()
+        if isinstance(item, threading.Event):
+            # Drain barrier (see _drain_stdout): everything queued ahead of it
+            # has been written, so release the waiter.
+            item.set()
+            continue
+        try:
+            sys.stdout.write(item)
+            sys.stdout.flush()
+        except (BrokenPipeError, ValueError):
+            # Consumer closed the pipe, or stdout was closed during shutdown:
+            # nothing to write to. Keep draining so producers never block.
+            pass
+
+
+def _ensure_stdout_writer() -> None:
+    global _STDOUT_WRITER
+    if _STDOUT_WRITER is not None:
+        return
+    with _STDOUT_WRITER_LOCK:
+        if _STDOUT_WRITER is None:
+            _STDOUT_WRITER = threading.Thread(target=_stdout_writer_loop, name="harness-stdout-writer", daemon=True)
+            _STDOUT_WRITER.start()
+
+
+@atexit.register
+def _drain_stdout(timeout: float = 2.0) -> None:
+    """Flush queued stdout on a clean exit, bounded so a wedged pipe can't hang.
+
+    The writer is a daemon thread, so the interpreter won't wait on it; push a
+    barrier and wait briefly for the queue ahead of it to drain so a normal run
+    keeps its tail output. A stuck stdout just times out here and the daemon
+    dies with the interpreter.
+    """
+    if _STDOUT_WRITER is None:
+        return
+    barrier = threading.Event()
+    _STDOUT_QUEUE.put(barrier)
+    barrier.wait(timeout)
+
+
 def _emit(text: str) -> None:
-    """Write *text* verbatim to stdout and the active tee target, if any."""
-    sys.stdout.write(text)
-    sys.stdout.flush()
+    """Queue *text* for stdout and mirror it into the active tee target, if any."""
+    _ensure_stdout_writer()
+    _STDOUT_QUEUE.put(text)
     if _OUTPUT_LOG is not None:
         _OUTPUT_LOG.write(text)
         _OUTPUT_LOG.flush()
