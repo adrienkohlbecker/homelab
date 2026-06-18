@@ -92,11 +92,7 @@ awscli = "2.35.2"
 # the binary.
 hcloud = "1.65.0"
 opentofu = "1.11.6"
-# Pinned to 1.14.1 (last release before the 1.14.2 CPU regression, hashicorp/
-# packer#13483): 1.14.2+ spins the builder plugin's SSH-communicator goroutine
-# at ~100% of a core per build, saturating fox's 2 vCPUs when bakes run
-# concurrently. Unfixed through 1.15.4. Revisit when the upstream issue closes.
-packer = "1.14.1"
+packer = "1.15.3"
 python = "3.14"
 uv = "0.9.26"
 shellcheck = "0.11.0"
