@@ -596,6 +596,11 @@ class Machine:
             "ANSIBLE_DISPLAY_OK_HOSTS": "true",
             "ANSIBLE_DISPLAY_SKIPPED_HOSTS": "true",
             "ANSIBLE_GATHERING": "smart",
+            # AWS cells can briefly starve sshd right after apt or service
+            # restarts; keep the per-connection attempt bounded but less brittle
+            # than Ansible's 10s default. The harness-level timeout still caps
+            # the whole test.
+            "ANSIBLE_TIMEOUT": "30",
             "ANSIBLE_FACT_CACHING": "jsonfile",
             "ANSIBLE_FACT_CACHING_CONNECTION": f"{self.workdir.name}/facts",
             "ANSIBLE_FACT_CACHING_TIMEOUT": "7200",
