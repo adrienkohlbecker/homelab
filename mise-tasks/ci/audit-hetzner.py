@@ -36,7 +36,6 @@ it can double as a periodic check.
 """
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -48,28 +47,20 @@ expected: list[str] = []  # legitimate standing infra, reported for context
 errors: list[str] = []
 
 
-def resolve_token() -> None:
-    """Mirror mise-tasks/packer/_hcloud_token.sh: ensure HCLOUD_TOKEN holds a
-    real token in the environment (the hcloud CLI reads it from there). Prefer
-    an already-set HCLOUD_TOKEN (CI / manual export), else take HCLOUD_TOKEN_OP.
-    As a file-based mise task the op:// ref in mise.toml [env] is NOT resolved
-    (only `op run --` wrapped toml tasks are), so when the token is still an
-    op:// reference we re-exec the whole script under `op run --` to
-    materialize it."""
-    token = (os.environ.get("HCLOUD_TOKEN") or os.environ.get("HCLOUD_TOKEN_OP") or "").strip()
-    if token.startswith("op://"):
-        if os.environ.get("_AUDIT_HETZNER_OP_RESOLVED"):
-            sys.exit("HCLOUD_TOKEN_OP did not resolve to a real token under `op run`.")
-        op = shutil.which("op")
-        if not op:
-            sys.exit("HCLOUD_TOKEN is an op:// ref but the 1Password CLI (op) is not installed.")
-        env = {**os.environ, "_AUDIT_HETZNER_OP_RESOLVED": "1"}
-        sys.exit(subprocess.run([op, "run", "--", sys.executable, __file__, *sys.argv[1:]], env=env).returncode)
-    if not token:
-        sys.exit("HCLOUD_TOKEN is unset -- sign into the 1Password CLI or export it manually.")
+def preflight() -> None:
+    """The hcloud CLI authenticates on its own -- from $HCLOUD_TOKEN (CI/CD
+    variable) or the active local context (~/.config/hcloud/cli.toml, e.g.
+    `hcloud context create homelab` seeded from 1Password). Fail early with
+    guidance if the binary is missing or no credential resolves, rather than
+    letting every per-resource query below append an identical auth error."""
     if not shutil.which("hcloud"):
-        sys.exit("hcloud CLI is not installed -- `brew install hcloud` (or your package manager).")
-    os.environ["HCLOUD_TOKEN"] = token
+        sys.exit("hcloud CLI not found -- it is pinned in mise.toml [tools]; run `mise install`.")
+    probe = subprocess.run(["hcloud", "server", "list", "-o", "noheader"], capture_output=True, text=True)
+    if probe.returncode != 0:
+        sys.exit(
+            "hcloud cannot authenticate -- set HCLOUD_TOKEN or configure a "
+            f"context (`hcloud context create`).\n  {probe.stderr.strip()}"
+        )
 
 
 def hcloud_list(resource: str, *flags: str) -> list:
@@ -102,7 +93,7 @@ def gb(image) -> str:
 
 
 def main():
-    resolve_token()
+    preflight()
     print("== Hetzner Cloud project audit (scope: the project HCLOUD_TOKEN belongs to) ==\n")
 
     # ── Servers: only fox (cpx22) is expected; backups are a billable surcharge ──

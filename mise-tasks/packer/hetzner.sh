@@ -6,8 +6,6 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
-# shellcheck source=_hcloud_token.sh
-source "$(dirname "$0")/_hcloud_token.sh"
 # shellcheck source=_hetzner_rescue.sh
 source "$(dirname "$0")/_hetzner_rescue.sh"
 

@@ -90,7 +90,6 @@ PACKER_SOURCE_MAP: list[tuple[str, list[str]]] = [
     (r"mise-tasks/packer/hetzner\.sh", ["hetzner_upload"]),
     (r"mise-tasks/packer/hetzner-bake\.sh", ["hetzner_upload"]),
     (r"mise-tasks/packer/_hetzner_rescue\.sh", ["hetzner_upload"]),
-    (r"mise-tasks/packer/_hcloud_token\.sh", ["hetzner_upload"]),
     (r"mise-tasks/packer/hcloud-prune-snapshots\.sh", ["hetzner_upload"]),
 ]
 _PACKER_SOURCE_MAP_COMPILED = [(re.compile(r"^" + pat + r"$"), srcs) for pat, srcs in PACKER_SOURCE_MAP]
