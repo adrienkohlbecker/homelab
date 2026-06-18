@@ -1,9 +1,11 @@
 # Assertions for the mirrors fixture (invoked by testrole.py test).
 #
-# Two branches:
+# Three branches:
 #   - nexus_url set → check apt/podman/pip/uv all point at Nexus, and that
 #     etc_hosts_entries resolves to the configured IPs.
-#   - nexus_url empty (--upstream-mirrors) → check apt points at upstream.
+#   - nexus_url empty (--upstream-mirrors) on AWS → check the archive uses
+#     the in-region EC2 mirror.
+#   - nexus_url empty on any other backend → check apt points at upstream.
 
 - name: _verify | Decide whether this cell uses ECR registry mirrors
   set_fact:
@@ -41,8 +43,29 @@
         or nexus_url in (test_apt_deb822.content | default('') | b64decode)
     fail_msg: "apt sources don't reference {{ nexus_url }}"
 
-- name: _verify | Apt sources point at upstream when no nexus
-  when: not (nexus_url | length > 0)
+- name: _verify | Apt points at the in-region EC2 mirror on AWS
+  when:
+    - not (nexus_url | length > 0)
+    - test_backend == 'aws'
+  vars:
+    # amd64 cells render the archive host, arm cells the ports host; both
+    # carry the region so the suffix disambiguates a real regional mirror
+    # from the public canonical fallback. security rides the same host.
+    _apt_sources: >-
+      {{ (test_apt_legacy.content | default('') | b64decode)
+         ~ (test_apt_deb822.content | default('') | b64decode) }}
+  assert:
+    that:
+      - >-
+        (test_aws_region ~ '.ec2.archive.ubuntu.com') in _apt_sources
+        or (test_aws_region ~ '.ec2.ports.ubuntu.com') in _apt_sources
+      - "'security.ubuntu.com' not in _apt_sources"
+    fail_msg: "apt should use the in-region EC2 mirror {{ test_aws_region }}.ec2.{archive,ports}.ubuntu.com for archive and security"
+
+- name: _verify | Apt sources point at upstream when no nexus (non-AWS)
+  when:
+    - not (nexus_url | length > 0)
+    - test_backend != 'aws'
   assert:
     that:
       - >-
