@@ -2102,6 +2102,34 @@ _CELL_AUTHORIZED_PUBLIC_KEYS = (
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAIGpIVsLZs1aYR0J1Tppi8AoRMhCFjN6eGQAXG4DbsQ homelab-ci-cell"
 )
 
+EC2_INSTANCE_TYPE_CANDIDATES: dict[str, tuple[str, ...]] = {
+    "minimal": ("t3a.small", "t3.small", "t3a.medium", "t3.medium"),
+    "box": (
+        "c6a.large",
+        "c7i.large",
+        "c6i.large",
+        "m6a.large",
+        "m6i.large",
+        "m7i.large",
+        "c7a.large",
+        "m7a.large",
+    ),
+    "box_deps": (
+        "m6a.large",
+        "m6i.large",
+        "m7i.large",
+        "r6a.large",
+        "r6i.large",
+        "r7i.large",
+        "m7a.large",
+        "r7a.large",
+        "c6a.xlarge",
+        "c6i.xlarge",
+        "c7i.xlarge",
+        "c7a.xlarge",
+    ),
+}
+
 
 class Ec2Machine(Machine):
     """Run the role test against a single-use EC2 spot instance.
@@ -2263,9 +2291,10 @@ class Ec2Machine(Machine):
     async def boot(self) -> None:
         """Launch the spot instance, then arm the termination backstop.
 
-        Tries the primary AZ's subnet first and rotates to the others when
-        EC2 reports InsufficientInstanceCapacity, so one AZ running dry
-        doesn't fail the cell while a sibling AZ has headroom.
+        Tries the primary type/subnet first and rotates to the other CI subnets,
+        then approved fallback types, when EC2 reports
+        InsufficientInstanceCapacity. One dry AZ or spot pool should not fail the
+        cell while sibling capacity exists.
         """
         subnets = await self._pick_subnets()
 
@@ -2285,68 +2314,81 @@ class Ec2Machine(Machine):
             "job_id": os.environ.get("CI_JOB_ID", "local"),
             "expires_at": self._expires_display,
         }
-        # Instance-type override on top of the launch template — the
-        # benchmarking instrument for tuning the per-machine types that
-        # live in terraform (ci_machine_instance_types). In CI the cell
-        # role's IAM condition pins ec2:InstanceType to the approved set,
-        # so this can only deviate under operator credentials.
+        # Instance-type override on top of the launch template — the benchmarking
+        # instrument for tuning the per-machine types that live in terraform.
+        # When set, it deliberately disables the fallback pool so an A/B run
+        # measures exactly the requested type.
         type_override = os.environ.get("HOMELAB_EC2_INSTANCE_TYPE")
+        instance_types = (type_override,) if type_override else EC2_INSTANCE_TYPE_CANDIDATES[self.machine]
         image_id = f"resolve:ssm:/homelab-ci/ami/{self.machine}/{self.ubuntu_name}"
 
         resp = None
-        for index, subnet_id in enumerate(subnets):
-            # Deterministic client token: unique per run (workdir basename is a
-            # fresh mkdtemp suffix), stable across CLI retries, and bound to the
-            # subnet so a retry can never land the request in another AZ under
-            # the same token — each AZ attempt gets its own idempotent token.
-            # EC2 caps tokens at 64 chars.
-            client_token = f"{Path(self.workdir.name).name}-{subnet_id.removeprefix('subnet-')}"[:64]
-            run_kwargs = {
-                "LaunchTemplate": {"LaunchTemplateName": f"homelab-ci-cell-{self.machine}"},
-                "ImageId": image_id,
-                "SubnetId": subnet_id,
-                "ClientToken": client_token,
-                # The CLI defaulted count to 1; the API requires both explicitly.
-                "MinCount": 1,
-                "MaxCount": 1,
-                "TagSpecifications": [
-                    {"ResourceType": "instance", "Tags": [{"Key": k, "Value": v} for k, v in tags.items()]},
-                ],
-            }
-            if type_override:
-                run_kwargs["InstanceType"] = type_override
+        for type_index, instance_type in enumerate(instance_types):
+            for subnet_index, subnet_id in enumerate(subnets):
+                # Deterministic client token: unique per run (workdir basename
+                # is a fresh mkdtemp suffix), stable across API retries, and
+                # bound to both subnet and instance type so a retry can never
+                # land the request in another AZ or spot pool under the same
+                # token. EC2 caps tokens at 64 chars.
+                type_token = instance_type.replace(".", "-")
+                client_token = f"{Path(self.workdir.name).name}-{subnet_id.removeprefix('subnet-')}-{type_token}"[:64]
+                run_kwargs = {
+                    "LaunchTemplate": {"LaunchTemplateName": f"homelab-ci-cell-{self.machine}"},
+                    "ImageId": image_id,
+                    "InstanceType": instance_type,
+                    "SubnetId": subnet_id,
+                    "ClientToken": client_token,
+                    # The CLI defaulted count to 1; the API requires both explicitly.
+                    "MinCount": 1,
+                    "MaxCount": 1,
+                    "TagSpecifications": [
+                        {"ResourceType": "instance", "Tags": [{"Key": k, "Value": v} for k, v in tags.items()]},
+                    ],
+                }
 
-            try:
-                resp = await self._call(
-                    "ec2",
-                    "run_instances",
-                    log=(
-                        f"aws ec2 run-instances --launch-template LaunchTemplateName=homelab-ci-cell-{self.machine}"
-                        f" --image-id {image_id} --subnet-id {subnet_id} --client-token {client_token}"
-                        + (f" --instance-type {type_override}" if type_override else "")
-                    ),
-                    **run_kwargs,
-                )
-            except self._client_error as exc:
-                code = exc.response.get("Error", {}).get("Code")
-                # Any non-capacity error (auth, quota, bad image) recurs in
-                # every AZ, so surface it immediately rather than burning the
-                # fallbacks.
-                if code != "InsufficientInstanceCapacity":
-                    raise
-                # Capacity is per-AZ and transient — rotate to the next subnet.
-                if index + 1 < len(subnets):
-                    print_line(f"{subnet_id} out of capacity ({code}); trying next AZ", error=True)
-                    continue
-                # Every AZ is dry: a wide concurrent launch (the coordinator
-                # fires the whole cell matrix at once) can drain eu-central-1
-                # spot in all AZs simultaneously. That is transient infra
-                # noise, not a role failure, so classify it as a spot
-                # interruption — exit 86, which the GitLab job retries once
-                # after capacity recovers, instead of a generic exit 1 the
-                # retry rule would miss.
-                raise SpotInterruptedException(f"All AZs out of spot capacity for {self.machine} ({code})") from exc
-            break
+                try:
+                    resp = await self._call(
+                        "ec2",
+                        "run_instances",
+                        log=(
+                            f"aws ec2 run-instances --launch-template LaunchTemplateName=homelab-ci-cell-{self.machine}"
+                            f" --image-id {image_id} --subnet-id {subnet_id} --client-token {client_token}"
+                            f" --instance-type {instance_type}"
+                        ),
+                        **run_kwargs,
+                    )
+                except self._client_error as exc:
+                    code = exc.response.get("Error", {}).get("Code")
+                    # Any non-capacity error (auth, quota, bad image) recurs in
+                    # every AZ/type, so surface it immediately rather than
+                    # burning the fallbacks.
+                    if code != "InsufficientInstanceCapacity":
+                        raise
+                    if subnet_index + 1 < len(subnets):
+                        print_line(
+                            f"{instance_type} in {subnet_id} out of capacity ({code}); trying next AZ",
+                            error=True,
+                        )
+                        continue
+                    if type_index + 1 < len(instance_types):
+                        print_line(
+                            f"{instance_type} out of capacity in all CI AZs ({code}); trying {instance_types[type_index + 1]}",
+                            error=True,
+                        )
+                        break
+                    # Every approved pool is dry: a wide concurrent launch (the
+                    # coordinator fires the whole cell matrix at once) can drain
+                    # eu-central-1 spot capacity simultaneously. That is
+                    # transient infra noise, not a role failure, so classify it
+                    # as a spot interruption — exit 86, which the GitLab job
+                    # retries once after capacity recovers, instead of a generic
+                    # exit 1 the retry rule would miss.
+                    raise SpotInterruptedException(
+                        f"All approved spot pools out of capacity for {self.machine} ({code})"
+                    ) from exc
+                break
+            if resp is not None:
+                break
 
         assert resp is not None  # loop either set resp or raised
         self.instance_id = resp["Instances"][0]["InstanceId"]
