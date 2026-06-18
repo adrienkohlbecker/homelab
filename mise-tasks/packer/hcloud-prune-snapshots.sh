@@ -4,14 +4,8 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
-# The caller (packer:hetzner) resolves the token before invoking this script;
-# the hcloud CLI reads it from HCLOUD_TOKEN, which must already be a real token,
-# not an op:// ref.
-[ -n "${HCLOUD_TOKEN:-}" ] || {
-  echo "HCLOUD_TOKEN is unset" >&2
-  exit 1
-}
-
+# hcloud authenticates on its own: $HCLOUD_TOKEN in CI, or the local CLI context
+# (~/.config/hcloud/cli.toml) on the workstation.
 SELECTOR="$usage_selector"
 
 echo "==> Pruning snapshots matching '${SELECTOR}' (keeping newest 2 + running servers)"

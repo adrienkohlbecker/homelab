@@ -38,12 +38,13 @@ TF_VAR_gandi_pat = "op://Lab/s5a2q2hlq5vudnvhydhcbmb3da/password"
 # resource, see terraform/mailgun.tf). Create the 1P item once
 # (item: "Mailgun API", field "password") then update the item-id below.
 TF_VAR_mailgun_api_key = "op://Lab/j6iayri7rcsq27nym5z7u37jgu/password"
-# Hetzner Cloud API token (terraform/hetzner.tf, packer hetzner upload).
-# Named _OP so it doesn't collide with the HCLOUD_TOKEN env var that hcloud
-# tooling actually reads -- otherwise every `mise run` clobbers a previously
-# resolved token with the literal op:// ref. Consumers resolve it themselves:
-# - `mise run tf` runs under `op run --` which maps _OP → HCLOUD_TOKEN.
-# - packer scripts source _hcloud_token.sh (CI token or op run re-exec).
+# Hetzner Cloud API token, for terraform only: the hcloud provider reads
+# HCLOUD_TOKEN from the env and does not load the CLI context. Named _OP so the
+# literal op:// ref never lands in $HCLOUD_TOKEN -- that would break every direct
+# `hcloud` call (CLI, packer bake scripts, ci:audit-hetzner), which instead
+# authenticate via the local CLI context (~/.config/hcloud/cli.toml) or, in CI,
+# the HCLOUD_TOKEN job variable. The `tf` task maps _OP -> HCLOUD_TOKEN under
+# `op run --`.
 HCLOUD_TOKEN_OP = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
 # Expose [vars] entries as env so file-based mise-tasks/ scripts can read
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
@@ -84,6 +85,12 @@ TF_VAR_ci_ecr_gitlab_access_token = "op://Lab/xaco3prl6eck3qanhatmxksr5a/passwor
 # backend went in-process (boto3) — see test/machine.py Ec2Machine and
 # notes/ci_aws_test_cells.md, "Orchestration cost".
 awscli = "2.35.2"
+# Hetzner Cloud CLI -- drives the packer hetzner bake/upload scripts
+# (mise-tasks/packer/*.sh) and the ci:audit-hetzner sweep. Authenticates from
+# $HCLOUD_TOKEN (CI/CD variable) or the local CLI context
+# (~/.config/hcloud/cli.toml). Baked into the CI image so the fox_image job has
+# the binary.
+hcloud = "1.65.0"
 opentofu = "1.11.6"
 packer = "1.15.3"
 python = "3.14"

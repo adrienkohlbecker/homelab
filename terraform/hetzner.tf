@@ -4,9 +4,10 @@
 # *outbound* to it, so nothing at home is exposed.
 #
 # Auth: the hcloud provider reads HCLOUD_TOKEN from the environment (it does
-# NOT auto-load the hcloud CLI's ~/.config/hcloud/cli.toml the way the scaleway
-# provider read its config). The token is wired into mise.toml [env] as an
-# op:// ref, resolved by the `tf` task's `op run --` wrapper.
+# NOT auto-load the hcloud CLI's ~/.config/hcloud/cli.toml the way the CLI and
+# the packer/audit tooling do). The token is wired into mise.toml [env] as the
+# HCLOUD_TOKEN_OP op:// ref, mapped to HCLOUD_TOKEN by the `tf` task's
+# `op run --` wrapper -- terraform is the only consumer still needing it.
 #
 # Created from scratch by `tofu apply` (no import) -- every resource below is
 # terraform-managed end to end. The old hand-made Hetzner instance is being

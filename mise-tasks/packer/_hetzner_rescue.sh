@@ -7,10 +7,10 @@
 #                          the build instance stream its disk straight here,
 #                          so no 20G image ever lands on the runner.
 #
-# Source _hcloud_token.sh first (the hcloud CLI reads HCLOUD_TOKEN from the
-# environment, so it must already be a real token, not an op:// ref). Then:
-# rescue_init -> `trap rescue_cleanup EXIT` -> rescue_create ->
-# [write /dev/sda] -> rescue_snapshot "$UBUNTU".
+# hcloud authenticates on its own: from $HCLOUD_TOKEN in CI (the job variable),
+# or the local CLI context (~/.config/hcloud/cli.toml) on the workstation. The
+# caller just sources this lib and runs: rescue_init -> `trap rescue_cleanup
+# EXIT` -> rescue_create -> [write /dev/sda] -> rescue_snapshot "$UBUNTU".
 #
 # Exposes to the caller: RESCUE_IP, RESCUE_ID, the runner-side ssh_rescue()
 # helper, and KEY (path to the ephemeral private key authorized on the

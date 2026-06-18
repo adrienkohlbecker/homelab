@@ -5,9 +5,6 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
-# shellcheck source=_hcloud_token.sh
-source "$(dirname "$0")/_hcloud_token.sh"
-
 ubuntu="${usage_ubuntu}"
 case "$ubuntu" in
 noble) base_image="ubuntu-24.04" ;;
