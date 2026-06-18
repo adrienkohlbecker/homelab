@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Bake the CI coordinator's Hetzner snapshot: stock Ubuntu + dockerd + the CI image baked in, the boot image the fleeting docker-autoscaler clones per pipeline (notes/ci_aws_test_cells.md). The CI image is pulled through the AWS ECR pull-through cache (Hetzner -> registry.gitlab.com flaps; Hetzner -> ECR Frankfurt is reliable) and retagged to the gitlab ref the runner names, so the coordinator runs it from the local cache (pull_policy=if-not-present) without touching a registry at runtime. Rebake when ci_image, docker, or the base OS changes."
+#MISE description="Bake the CI coordinator's Hetzner snapshot: stock Ubuntu + dockerd + the CI and gitlab-runner-helper images baked in, the boot image the fleeting docker-autoscaler clones per pipeline (notes/ci_aws_test_cells.md). Both images are pulled through the AWS ECR pull-through cache (Hetzner -> registry.gitlab.com flaps; Hetzner -> ECR Frankfurt is reliable) and retagged to the gitlab refs the runner names, so the coordinator runs them from the local cache (pull_policy=if-not-present) without touching a registry at runtime. Rebake when ci_image, the gitlab-runner version, docker, or the base OS changes."
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 #USAGE complete "ubuntu" run="printf 'noble\nresolute\n'"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
@@ -135,8 +135,13 @@ ECR_REGION="eu-central-1"
 ECR_REG="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${ECR_REGION}.amazonaws.com"
 aws ecr get-login-password --region "$ECR_REGION" | ssh_node "install -m 0600 /dev/stdin /root/.ecr_pw"
 
-echo "==> provisioning dockerd + CI image + operator key + resetting cloud-init seed state"
-ssh_node "ECR_REG=$ECR_REG bash -seuo pipefail" <<'PROV'
+# The docker executor names its helper image at x86_64-v<runner version>. Lock
+# the baked tag to the same pin the role installs (group_vars/all/versions.yml)
+# so the helper image always matches the running gitlab-runner binary.
+runner_version="$(python3 -c 'import yaml,sys; print(yaml.safe_load(open(sys.argv[1]))["gitlab_runner_version"])' "$(dirname "$0")/../../group_vars/all/versions.yml")"
+
+echo "==> provisioning dockerd + CI/helper images + operator key + resetting cloud-init seed state"
+ssh_node "ECR_REG=$ECR_REG RUNNER_VER=$runner_version bash -seuo pipefail" <<'PROV'
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 # docker.io from the Ubuntu archive -- no third-party repo to pin or trust, and
@@ -145,35 +150,46 @@ apt-get install -y -qq docker.io
 systemctl enable docker >/dev/null
 docker info >/dev/null
 
-# Pull the CI image through the ECR pull-through cache, then retag it to the
-# gitlab ref the runner config names so the runtime job-start pull resolves it
-# from the local cache (pull_policy=if-not-present) without touching a registry.
-# We log out and delete both the token file and the docker config right after,
-# before the snapshot, so no credential is baked in. The retry rides out ordinary
-# network blips.
-CI_ECR="$ECR_REG/gitlab/akohlbecker/homelab/ci:latest"
-CI_REF="registry.gitlab.com/akohlbecker/homelab/ci:latest"
+# Pull each image the coordinator runs at job time THROUGH the ECR pull-through
+# cache, then retag it to the registry.gitlab.com ref the runner names so the
+# runtime pull resolves from the local cache (pull_policy=if-not-present) without
+# touching a registry. Two images: the project CI job image, and the
+# gitlab-runner-helper the docker executor starts for git/artifacts/cache (same
+# Hetzner -> registry.gitlab.com flap, so bake it too). We log out and delete
+# both the token file and the docker config right after, before the snapshot, so
+# no credential is baked in. The retry rides out ordinary network blips.
 docker login "$ECR_REG" --username AWS --password-stdin </root/.ecr_pw
-for i in $(seq 1 5); do
-  docker pull "$CI_ECR" && break
-  [ "$i" = 5 ] && {
-    echo "CI image pull failed after 5 attempts" >&2
-    exit 1
-  }
-  echo "==> CI image pull attempt $i failed, retrying in 15s" >&2
-  sleep 15
-done
-docker tag "$CI_ECR" "$CI_REF"
-docker rmi "$CI_ECR" >/dev/null
+
+pull_retag() { # ECR_REF GITLAB_REF
+  local ecr="$1" ref="$2" i
+  for i in $(seq 1 5); do
+    docker pull "$ecr" && break
+    [ "$i" = 5 ] && {
+      echo "image pull failed after 5 attempts: $ecr" >&2
+      exit 1
+    }
+    echo "==> pull attempt $i failed for $ecr, retrying in 15s" >&2
+    sleep 15
+  done
+  docker tag "$ecr" "$ref"
+  docker rmi "$ecr" >/dev/null
+}
+
+pull_retag "$ECR_REG/gitlab/akohlbecker/homelab/ci:latest" \
+  "registry.gitlab.com/akohlbecker/homelab/ci:latest"
+pull_retag "$ECR_REG/gitlab/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-v${RUNNER_VER}" \
+  "registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-v${RUNNER_VER}"
+
 docker logout "$ECR_REG" >/dev/null 2>&1 || true
 rm -f /root/.ecr_pw /root/.docker/config.json
 
 # No boot-time registry refresh: the coordinator has no registry it can reach at
 # runtime (Hetzner -> registry.gitlab.com flaps, and pulling through ECR would
-# need a standing AWS credential on this ephemeral box). The snapshot is the CI
-# image's source of truth -- rebake it (mise run packer:hetzner-coordinator) when
-# ci_image changes. pull_policy=if-not-present (config.toml.j2) makes the baked
-# image the correctness path, not just a warm cache.
+# need a standing AWS credential on this ephemeral box). The snapshot is the
+# source of truth for both baked images -- rebake it
+# (mise run packer:hetzner-coordinator) when ci_image or the gitlab-runner
+# version changes. pull_policy=if-not-present (config.toml.j2) makes the baked
+# images the correctness path, not just a warm cache.
 
 # Host-level debug/monitoring tooling for this ephemeral orchestrator. The real
 # work runs inside the ci:latest container; these are for poking the HOST when a
