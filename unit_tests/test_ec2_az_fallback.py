@@ -116,7 +116,7 @@ def test_boot_reraises_non_capacity_error_without_fallback() -> None:
     assert len(attempts) == 1
 
 
-def test_boot_raises_when_every_az_is_out_of_capacity() -> None:
+def test_boot_classifies_all_az_capacity_exhaustion_as_spot() -> None:
     subnets = ["subnet-a", "subnet-b", "subnet-c"]
     attempts: list[dict] = []
 
@@ -127,10 +127,14 @@ def test_boot_raises_when_every_az_is_out_of_capacity() -> None:
         raise _FakeClientError("InsufficientInstanceCapacity")
 
     m = _make_ec2("run-deadbeef", call)
-    with pytest.raises(_FakeClientError) as exc:
+    # A wide concurrent launch can drain every AZ at once; that is transient
+    # infra noise, so boot() re-raises it as a SpotInterruptedException, which
+    # testrole.py maps to exit 86 and the GitLab job retries once. A raw
+    # ClientError would exit 1 and the retry rule (exit_codes: [86]) would miss
+    # it.
+    with pytest.raises(machine.SpotInterruptedException):
         asyncio.run(m.boot())
 
-    assert exc.value.response["Error"]["Code"] == "InsufficientInstanceCapacity"
     # Exhausted all AZs before giving up.
     assert len(attempts) == len(subnets)
     assert m.instance_id is None

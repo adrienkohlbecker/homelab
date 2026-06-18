@@ -30,6 +30,7 @@ from arch import ArchProfile, detect_host_arch, uefi_code_path_for
 from setup_mitogen import ensure_mitogen_symlink
 from utils import (
     CommandResult,
+    SpotInterruptedException,
     build_seed_iso,
     print_cmd_line,
     print_line,
@@ -2310,13 +2311,23 @@ class Ec2Machine(Machine):
                 )
             except self._client_error as exc:
                 code = exc.response.get("Error", {}).get("Code")
+                # Any non-capacity error (auth, quota, bad image) recurs in
+                # every AZ, so surface it immediately rather than burning the
+                # fallbacks.
+                if code != "InsufficientInstanceCapacity":
+                    raise
                 # Capacity is per-AZ and transient — rotate to the next subnet.
-                # Any other error (auth, quota, bad image) recurs in every AZ,
-                # so surface it immediately rather than burning the fallbacks.
-                if code == "InsufficientInstanceCapacity" and index + 1 < len(subnets):
+                if index + 1 < len(subnets):
                     print_line(f"{subnet_id} out of capacity ({code}); trying next AZ", error=True)
                     continue
-                raise
+                # Every AZ is dry: a wide concurrent launch (the coordinator
+                # fires the whole cell matrix at once) can drain eu-central-1
+                # spot in all AZs simultaneously. That is transient infra
+                # noise, not a role failure, so classify it as a spot
+                # interruption — exit 86, which the GitLab job retries once
+                # after capacity recovers, instead of a generic exit 1 the
+                # retry rule would miss.
+                raise SpotInterruptedException(f"All AZs out of spot capacity for {self.machine} ({code})") from exc
             break
 
         assert resp is not None  # loop either set resp or raised
