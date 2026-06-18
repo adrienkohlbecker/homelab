@@ -18,6 +18,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import NamedTuple
 
@@ -258,6 +259,39 @@ def git_fetch_commit(sha: str) -> bool:
     return result.returncode == 0
 
 
+def git_is_shallow() -> bool:
+    return _git("rev-parse", "--is-shallow-repository", check=False).stdout.strip() == "true"
+
+
+def git_deepen_since(branch: str, since: str) -> bool:
+    """Deepen a shallow clone so all of `branch`'s history since `since` (a date
+    git understands) is present locally.
+
+    Fetching the *branch* with --shallow-since pulls the connected tail spanning
+    an old base commit up to HEAD; a bare ``git fetch origin <sha>`` only lands
+    the commit as an isolated shallow graft with no parent chain, so
+    ``merge-base --is-ancestor`` can't connect it. Caller must ensure the repo is
+    already shallow — on a complete clone --shallow-since would *truncate*
+    history.
+    """
+    result = _git("fetch", "--no-tags", "--quiet", f"--shallow-since={since}", "origin", branch, check=False)
+    return result.returncode == 0
+
+
+def _shallow_since_arg(created_at: str) -> str | None:
+    """A date one day before `created_at` (a pipeline ``created_at``), for
+    --shallow-since, or None when it can't be parsed.
+
+    A commit predates the pipeline created from it, so deepening to exactly
+    ``created_at`` can miss the commit; the day of margin guarantees it lands.
+    """
+    try:
+        dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return (dt - timedelta(days=1)).date().isoformat()
+
+
 # ---------------------------------------------------------------------------
 # GitLab API — green-base resolution
 # ---------------------------------------------------------------------------
@@ -320,12 +354,23 @@ def _gl_api_get(
     return None
 
 
-def is_local_ancestor(sha: str, head: str = "HEAD") -> bool:
+def is_local_ancestor(sha: str, head: str = "HEAD", *, since: str | None = None, branch: str | None = None) -> bool:
     """True when sha is an ancestor of head in the local history.
 
-    Fetches the commit on demand when the shallow checkout lacks it.  A commit
-    is its own ancestor, so an identical sha (HEAD already green) resolves True.
+    In a shallow CI checkout sha and head can sit on opposite sides of the
+    shallow boundary; fetching sha alone then lands it as an isolated graft with
+    no parent chain, so merge-base can't connect them and a true ancestor reads
+    as non-ancestor. When `since` (the candidate pipeline's ``created_at``) and
+    `branch` are given and the clone is shallow, deepen that branch back to
+    `since` first — pulling the connected tail spanning sha..head in one fetch.
+
+    A commit is its own ancestor, so an identical sha (HEAD already green)
+    resolves True.
     """
+    if since and branch and git_is_shallow():
+        margin = _shallow_since_arg(since)
+        if margin:
+            git_deepen_since(branch, margin)
     if git_rev_parse(sha) is None:
         git_fetch_commit(sha)
     if git_rev_parse(sha) is None:
@@ -374,7 +419,7 @@ def newest_green_pipeline(
             created = pipe.get("created_at", "")
             if not sha or source not in GREEN_BASE_SOURCES:
                 continue
-            if is_local_ancestor(sha, head_sha):
+            if is_local_ancestor(sha, head_sha, since=created, branch=branch):
                 log_fn(f"  green ancestor: {sha[:12]} ({created}, {source})")
                 return pipe
             log_fn(f"    skip {sha[:12]} ({created}): not an ancestor of HEAD")
