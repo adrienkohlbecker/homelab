@@ -21,6 +21,12 @@
 #                                    over the p2's of disks 1-2. Matches
 #                                    the lab prod host's tank+mouse
 #                                    layout.
+#                     zee         -- 1 disk, flat. The box fixture's
+#                                    second pool: exercises the zfs role's
+#                                    multi-pool trim-timer + mount-cache
+#                                    loops (box would otherwise have only
+#                                    rpool). Geometry-agnostic, so one disk
+#                                    suffices -- not a prod shape.
 #
 # Idempotence: each `zpool create` is gated on a list check so bare-
 # metal copy-paste reruns skip existing pools. The build VM hits the
@@ -116,6 +122,19 @@ create_dozer() {
   zpool create -f -o autotrim=on "${ZPOOL_OPTS[@]}" dozer mirror "${disks[@]}"
 }
 
+create_zee() {
+  pop_disks 1
+  local disk="${POPPED[0]}"
+  if zpool list -H zee >/dev/null 2>&1; then return; fi
+  wipe_disk "$disk"
+  udevadm settle
+  zpool create -f -o autotrim=on "${ZPOOL_OPTS[@]}" zee "$disk"
+  # A canmount=on child gives the zfs role's mount-generator a pool member
+  # to cache (host_vars/box.yml lists zee/data in zfs_mount_cache_datasets);
+  # the pool root is canmount=off + mountpoint=none via ZPOOL_OPTS.
+  zfs create -o canmount=on -o mountpoint=/zee/data zee/data
+}
+
 create_tank_mouse() {
   pop_disks 4
   local disks=("${POPPED[@]}") tm1=${POPPED[0]} tm2=${POPPED[1]} tank3=${POPPED[2]} tank4=${POPPED[3]}
@@ -145,6 +164,7 @@ for POOL in $EXTRA_POOLS; do
   case "$POOL" in
   apoc) create_apoc ;;
   dozer) create_dozer ;;
+  zee) create_zee ;;
   tank_mouse) create_tank_mouse ;;
   *)
     echo >&2 "pools.sh: unknown EXTRA_POOLS entry '$POOL'"

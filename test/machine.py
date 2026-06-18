@@ -239,20 +239,23 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
     "box": QemuMachineSpec(
         ssh_user="vagrant",
         inventory_host="box",
-        # box: single-disk rpool, no extra pools. Minimal ZFS-on-root
-        # fixture used by push CI; producer-role coverage that needs
-        # apoc/dozer/tank/mouse moves to lab/pug nightly.
+        # box: single-disk rpool + a 1G flat `zee` pool (second disk). The
+        # default push-CI fixture; the second pool gives it multi-pool
+        # coverage (zfs trim/mount-cache loops), folding in the functional
+        # coverage the dropped lab/pug AMIs carried. Prod-faithful
+        # mirror/raidz geometry stays on the qemu-only lab/pug fixtures.
         packer_image="box",
-        os_disk_count=1,
+        os_disk_count=2,
     ),
     "box_deps": QemuMachineSpec(
         ssh_user="vagrant",
         inventory_host="box",
-        # box_deps: same disks/inventory as box, but the packer build
-        # pre-bakes podman (with the noble backports applied) and
-        # nginx + snakeoil cert via packer/seed_deps.yml. Roles opt in
-        # via roles/<role>/meta/test.yml's `machine: box_deps`. Reuses
-        # host_vars/box.yml because inventory_host stays box.
+        # box_deps: same disks/inventory as box (incl. the second `zee`
+        # disk), but the packer build pre-bakes podman (with the noble
+        # backports applied) and nginx + snakeoil cert via
+        # packer/seed_deps.yml. Roles opt in via roles/<role>/meta/test.yml's
+        # `machine: box_deps`. Reuses host_vars/box.yml because
+        # inventory_host stays box.
         # 5 GiB: box_deps roles pull large container images and run them
         # during converge (HA alone is 2.4 GB on disk, ~1 GB RSS at
         # startup); the expanded nginx_site assert+validate chain runs
@@ -260,7 +263,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         # longer enough headroom.
         packer_image="box_deps",
         memory_mb=5120,
-        os_disk_count=1,
+        os_disk_count=2,
     ),
     "lab": QemuMachineSpec(
         ssh_user="vagrant",

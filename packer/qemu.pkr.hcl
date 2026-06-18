@@ -173,10 +173,16 @@ locals {
       image_target = "qemu"
       zfs_arc_max  = ""
     }
-    # box: single-disk rpool, no extra pools. Minimal ZFS-on-root fixture
-    # for push CI -- exercises every consumer-side role that doesn't need
-    # apoc/dozer/tank/mouse. Producer-role coverage (data/media/scratch/
-    # minio/services) moves to lab/pug nightly.
+    # box: single-disk rpool + a 1G flat `zee` pool. The default push-CI
+    # ZFS-on-root fixture. The second pool turns box from rpool-only into a
+    # multi-pool host so the zfs role's trim-timer + mount-cache loops (and
+    # consumers that gate on >1 pool) run on the default cell -- folding in
+    # the coverage the lab/pug AMIs used to carry (their prod-faithful
+    # mirror/raidz geometry, never asserted by any role, stays on qemu only).
+    # Prod producer datasets (data/media/scratch/minio/services) still land
+    # flat on rpool here -- zfs_{dozer,tank}_filesystem keep their rpool
+    # default, so zee activates no named consumers.
+    # See notes/ci_box_multidisk_drop_lab_pug_amis.md.
     # Note: box_deps is derived from box via `mise run packer:seed-deps`
     # (which copies box's artifacts, boots them with launch.py --commit,
     # applies packer/seed_deps.yml, and publishes the result). It is NOT
@@ -185,11 +191,11 @@ locals {
     box = {
       machine      = "box"
       disks        = "/dev/vdb"
-      extra_disks  = ""
-      disk_sizes   = ["40G"]
+      extra_disks  = "/dev/vdc"
+      disk_sizes   = ["40G", "1G"]
       layout       = ""
       swap_size    = "4G"
-      extra_pools  = ""
+      extra_pools  = "zee"
       image_target = "qemu"
       zfs_arc_max  = ""
     }
