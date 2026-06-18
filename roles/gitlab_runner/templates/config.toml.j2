@@ -76,10 +76,16 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
   limit = {{ gitlab_runner_max_instances * gitlab_runner_capacity_per_instance }}
 
   [runners.docker]
-    # The job container the autoscaler starts on the coordinator's dockerd.
-    # Pulled per-pipeline over the coordinator's NVMe (one ~40s pull, reused
-    # across the run), keeping the snapshot decoupled from ci_image rebuilds.
+    # The job container the autoscaler starts on the coordinator's dockerd. The
+    # coordinator snapshot bakes this image in -- pulled at bake time through the
+    # AWS ECR pull-through cache (Hetzner -> registry.gitlab.com flaps at the
+    # connection level; Hetzner -> ECR Frankfurt is reliable), then retagged to
+    # this ref. pull_policy if-not-present runs that baked image without
+    # contacting a registry, which the coordinator has none it can reach at
+    # runtime. The snapshot is the CI image's source of truth: rebake it
+    # (mise run packer:hetzner-coordinator) when ci_image changes.
     image = "registry.gitlab.com/akohlbecker/homelab/ci:latest"
+    pull_policy = ["if-not-present"]
     privileged = false
 
   [runners.autoscaler]
