@@ -31,6 +31,18 @@
   changed_when: false
   become: true
 
+- name: _verify | Coordinator reuses the detect-warmed CI image
+  when: gitlab_runner_coordinator_enabled
+  command: grep -F 'pull_policy = "if-not-present"' /mnt/services/gitlab_runner/config.toml
+  changed_when: false
+  become: true
+
+- name: _verify | Coordinator allows detect to force-refresh the image
+  when: gitlab_runner_coordinator_enabled
+  command: grep -F 'allowed_pull_policies = ["always", "if-not-present"]' /mnt/services/gitlab_runner/config.toml
+  changed_when: false
+  become: true
+
 - name: _verify | Rootless podman.socket is active under gitlab_runner
   systemd:
     name: podman.socket

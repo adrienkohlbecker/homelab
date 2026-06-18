@@ -32,11 +32,16 @@ stages:
   # pipeline it clones one Hetzner box, runs the whole matrix (all cells share
   # the one coordinator at capacity_per_instance=60), and scales to zero. Each
   # coordinator boots with an empty image store, so the first cell pulls the
-  # current ci:latest (~40s on NVMe) and the rest reuse it -- no warm-up job, no
-  # staleness. Overrides the default fox-docker-aws tag. See
-  # notes/ci_aws_test_cells.md "Phase 2".
+  # current ci:latest only if detect did not already warm this coordinator. In
+  # the normal path detect pulls with policy=always in the parent pipeline and
+  # cells use if-not-present to reuse that local image without registry re-checks.
+  # Overrides the default fox-docker-aws tag. See notes/ci_aws_test_cells.md
+  # "Phase 2".
   tags:
     - fox-coordinator-aws
+  image:
+    name: "$CI_REGISTRY_IMAGE/ci:latest"
+    pull_policy: if-not-present
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: sts.amazonaws.com

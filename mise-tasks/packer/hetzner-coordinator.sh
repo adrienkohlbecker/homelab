@@ -93,9 +93,9 @@ ssh_node true || {
 # fleeting server_type. fleeting injects its own ephemeral SSH key + user_data
 # via cloud-init at clone time.
 #
-# No container images are baked in: the coordinator pulls its job image +
-# gitlab-runner-helper at runtime from registry.gitlab.com (config.toml.j2,
-# pull_policy "always"). The reserved egress IP
+# No container images are baked in: detect pulls the CI image at runtime, cells
+# reuse it through if-not-present, and gitlab-runner pulls its helper image from
+# registry.gitlab.com. The reserved egress IP
 # (terraform hcloud_primary_ip.ci_coordinator) reaches the registry reliably and
 # the private CI image authenticates with the job's CI_JOB_TOKEN, so the bake
 # stays a thin dockerd image carrying no registry credentials and nothing to

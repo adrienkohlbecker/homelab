@@ -87,17 +87,18 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
   [runners.docker]
     # Default job container the autoscaler starts on the coordinator's dockerd
     # (the cell pipeline names its own image, $CI_REGISTRY_IMAGE/ci:latest, which
-    # resolves to the same ref). Pulled at runtime from registry.gitlab.com: the
-    # coordinator's reserved egress IP (terraform hcloud_primary_ip.ci_coordinator)
-    # reaches the registry reliably, and the private CI image authenticates with
-    # the job's CI_JOB_TOKEN. The docker executor also pulls a gitlab-runner-helper
-    # (git clone, artifacts, cache) -- the runner derives that image's
-    # version-matched tag from its own binary, so it needs no pin here.
+    # resolves to the same ref). The private CI image authenticates with the job's
+    # CI_JOB_TOKEN; the coordinator's reserved egress IP
+    # (terraform hcloud_primary_ip.ci_coordinator) reaches registry.gitlab.com
+    # reliably. The docker executor also pulls a gitlab-runner-helper (git clone,
+    # artifacts, cache) -- the runner derives that image's version-matched tag
+    # from its own binary, so it needs no pin here.
     image = "registry.gitlab.com/akohlbecker/homelab/ci:latest"
-    # Always re-check the registry so a reused coordinator never runs a stale
-    # :latest. With an unchanged digest this is a cheap manifest HEAD -- cached
-    # layers are not re-downloaded -- not a full pull.
-    pull_policy = ["always"]
+    # The detect job opts into pull_policy=always and warms the per-pipeline
+    # coordinator. Cell jobs then request if-not-present so the 60-way fan-out
+    # does not re-check the same tag on every job.
+    pull_policy = "if-not-present"
+    allowed_pull_policies = ["always", "if-not-present"]
     privileged = false
 
   [runners.autoscaler]
