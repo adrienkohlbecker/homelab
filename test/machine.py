@@ -2219,13 +2219,15 @@ class Ec2Machine(Machine):
             print_line(log)
         return await asyncio.to_thread(getattr(client, op), **kwargs)
 
-    async def _pick_subnet(self) -> str:
-        """Pick one of the CI VPC's public subnets, stably per run.
+    async def _pick_subnets(self) -> list[str]:
+        """Order the CI VPC's public subnets, primary pick first then fallbacks.
 
         Discovery is tag-based so terraform can renumber subnets without a
-        harness change. The pick is derived from the per-run workdir name:
-        stable within the run (retried CLI calls reuse it via the client
-        token below) while spreading concurrent cells across AZs.
+        harness change. The primary pick is derived from the per-run workdir
+        name: stable within the run (retried CLI calls reuse it via the client
+        token below) while spreading concurrent cells across AZs. The rest
+        follow in subnet order, so boot() can fall back to another AZ when the
+        primary one is out of capacity.
         """
         resp = await self._call(
             "ec2",
@@ -2236,18 +2238,17 @@ class Ec2Machine(Machine):
         subnets = sorted(s["SubnetId"] for s in resp["Subnets"])
         if not subnets:
             raise RuntimeError("No homelab-ci-* subnets found in eu-central-1 — has terraform/aws_ci.tf been applied?")
-        seed = sum(Path(self.workdir.name).name.encode())
-        return subnets[seed % len(subnets)]
+        seed = sum(Path(self.workdir.name).name.encode()) % len(subnets)
+        return subnets[seed:] + subnets[:seed]
 
     async def boot(self) -> None:
-        """Launch the spot instance, then arm the termination backstop."""
-        subnet_id = await self._pick_subnet()
+        """Launch the spot instance, then arm the termination backstop.
 
-        # Deterministic client token: unique per run (workdir basename is a
-        # fresh mkdtemp suffix), stable across CLI retries, and bound to the
-        # chosen subnet so a retry can never land the request in another AZ
-        # under the same token. EC2 caps tokens at 64 chars.
-        client_token = f"{Path(self.workdir.name).name}-{subnet_id.removeprefix('subnet-')}"[:64]
+        Tries the primary AZ's subnet first and rotates to the others when
+        EC2 reports InsufficientInstanceCapacity, so one AZ running dry
+        doesn't fail the cell while a sibling AZ has headroom.
+        """
+        subnets = await self._pick_subnets()
 
         expires_at = datetime.now(UTC) + timedelta(seconds=self.machine_timeout + self.EXPIRES_GRACE_SECONDS)
         expires_expr = expires_at.strftime("%Y-%m-%dT%H:%M:%S")
@@ -2272,31 +2273,53 @@ class Ec2Machine(Machine):
         # so this can only deviate under operator credentials.
         type_override = os.environ.get("HOMELAB_EC2_INSTANCE_TYPE")
         image_id = f"resolve:ssm:/homelab-ci/ami/{self.machine}/{self.ubuntu_name}"
-        run_kwargs = {
-            "LaunchTemplate": {"LaunchTemplateName": f"homelab-ci-cell-{self.machine}"},
-            "ImageId": image_id,
-            "SubnetId": subnet_id,
-            "ClientToken": client_token,
-            # The CLI defaulted count to 1; the API requires both explicitly.
-            "MinCount": 1,
-            "MaxCount": 1,
-            "TagSpecifications": [
-                {"ResourceType": "instance", "Tags": [{"Key": k, "Value": v} for k, v in tags.items()]},
-            ],
-        }
-        if type_override:
-            run_kwargs["InstanceType"] = type_override
 
-        resp = await self._call(
-            "ec2",
-            "run_instances",
-            log=(
-                f"aws ec2 run-instances --launch-template LaunchTemplateName=homelab-ci-cell-{self.machine}"
-                f" --image-id {image_id} --subnet-id {subnet_id} --client-token {client_token}"
-                + (f" --instance-type {type_override}" if type_override else "")
-            ),
-            **run_kwargs,
-        )
+        resp = None
+        for index, subnet_id in enumerate(subnets):
+            # Deterministic client token: unique per run (workdir basename is a
+            # fresh mkdtemp suffix), stable across CLI retries, and bound to the
+            # subnet so a retry can never land the request in another AZ under
+            # the same token — each AZ attempt gets its own idempotent token.
+            # EC2 caps tokens at 64 chars.
+            client_token = f"{Path(self.workdir.name).name}-{subnet_id.removeprefix('subnet-')}"[:64]
+            run_kwargs = {
+                "LaunchTemplate": {"LaunchTemplateName": f"homelab-ci-cell-{self.machine}"},
+                "ImageId": image_id,
+                "SubnetId": subnet_id,
+                "ClientToken": client_token,
+                # The CLI defaulted count to 1; the API requires both explicitly.
+                "MinCount": 1,
+                "MaxCount": 1,
+                "TagSpecifications": [
+                    {"ResourceType": "instance", "Tags": [{"Key": k, "Value": v} for k, v in tags.items()]},
+                ],
+            }
+            if type_override:
+                run_kwargs["InstanceType"] = type_override
+
+            try:
+                resp = await self._call(
+                    "ec2",
+                    "run_instances",
+                    log=(
+                        f"aws ec2 run-instances --launch-template LaunchTemplateName=homelab-ci-cell-{self.machine}"
+                        f" --image-id {image_id} --subnet-id {subnet_id} --client-token {client_token}"
+                        + (f" --instance-type {type_override}" if type_override else "")
+                    ),
+                    **run_kwargs,
+                )
+            except self._client_error as exc:
+                code = exc.response.get("Error", {}).get("Code")
+                # Capacity is per-AZ and transient — rotate to the next subnet.
+                # Any other error (auth, quota, bad image) recurs in every AZ,
+                # so surface it immediately rather than burning the fallbacks.
+                if code == "InsufficientInstanceCapacity" and index + 1 < len(subnets):
+                    print_line(f"{subnet_id} out of capacity ({code}); trying next AZ", error=True)
+                    continue
+                raise
+            break
+
+        assert resp is not None  # loop either set resp or raised
         self.instance_id = resp["Instances"][0]["InstanceId"]
         if not self.instance_id.startswith("i-"):
             raise RuntimeError(f"run-instances returned no instance id: {resp!r}")
