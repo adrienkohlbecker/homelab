@@ -105,7 +105,16 @@ stages:
     # External watchdog, same rationale as the cell script below: GNU timeout
     # backstops site_test.py's in-process asyncio deadline against a wedged
     # event loop. 2460 = 2400 + the harness's 60s teardown grace.
-    - timeout --kill-after=30s 2460 test/site_test.py --timeout 2400
+    #
+    # Capture, log, then re-exit the harness code (same as the cell script): a
+    # spot-interrupted run exits 86 (the retry: exit_codes signal in .cell), and
+    # echoing the raw code makes the retry-or-not decision auditable from the
+    # job log when a cell does not retry as expected.
+    - |
+      rc=0
+      timeout --kill-after=30s 2460 test/site_test.py --timeout 2400 || rc=$?
+      echo "harness exit code: $rc"
+      exit $rc
 {% endif %}
 {% for group in cell_groups %}
 {% for cell in group.cells %}
@@ -126,7 +135,18 @@ stages:
     # if that unwind itself hangs (the cell still self-terminates via its
     # EventBridge expiry schedule). 1560 = 1500 + the harness's 60s teardown
     # grace (Machine.WRAPPER_GRACE_SECONDS).
-    - timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark
+    #
+    # Capture, log, then re-exit the harness code rather than letting it ride out
+    # as the script's implicit status: a spot-interrupted cell exits 86 (the
+    # retry: exit_codes signal in .cell), and echoing the raw code makes the
+    # retry-or-not decision auditable from the job log -- a cell that classified
+    # a spot interruption yet did not retry shows whether 86 actually reached
+    # the runner.
+    - |
+      rc=0
+      timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark || rc=$?
+      echo "harness exit code: $rc"
+      exit $rc
 {% endfor %}
 {% endfor %}
 {% if not cells and not site_test %}
