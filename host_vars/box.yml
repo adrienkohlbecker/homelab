@@ -20,20 +20,38 @@ ssh_public_keys: |
 # podman. 256/512 MiB is enough for ZFS to not thrash on a test workload.
 zfs_arc_min: 268435456
 zfs_arc_max: 536870912
-# Box does not exercise trim timers or mount-cache generation; lab/pug cover
-# those on the prod-shaped machine fixtures.
-zfs_trim_pools: []
-zfs_mount_cache_datasets: [] # must list one dataset per pool. canmount must be set to "on" on this dataset
-# Box ships single-disk rpool only (no apoc/dozer/tank/mouse), so it inherits
-# the global rpool defaults for dozer/tank-keyed producer-role paths.
+# Box has a second flat pool `zee` (packer pools.sh) alongside rpool, so it
+# exercises the zfs role's multi-pool trim-timer and mount-cache loops -- the
+# functional coverage the lab/pug AMIs used to carry. zee/data is the
+# canmount=on member pools.sh creates for the mount-generator; the
+# rpool/ROOT/<release> entry is templated so it works across the
+# jammy/noble/resolute box AMIs. See notes/ci_box_multidisk_drop_lab_pug_amis.md.
+zfs_trim_pools:
+  - rpool
+  - zee
+zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
+  - rpool/ROOT/{{ ansible_distribution_release }}
+  - zee/data
+# zfs_{dozer,tank}_filesystem keep their global rpool default, so dozer/tank-
+# keyed producer datasets (minio/scratch/data/...) still land flat on rpool;
+# zee activates no named consumers -- it only feeds the generic multi-pool loops.
 
 swap_zvol:
   dataset: rpool/swap
   size: 1G
 
-# Exercises the zram-primary path in CI (zram + the zvol overflow below).
-# 3G is deliberately not the generator's 2G default on this 4G VM, so the
-# _verify size assertion actually proves the config drove the size.
+# box's single-disk image bakes a swap partition (p3, GPT label "swap";
+# provision.sh) that chroot.sh already mkswap'd. Declaring it brings that
+# partition under the swap role + _verify -- folding in pug's raw-partition
+# swapon/fstab coverage. swap/_setup.yml clears the packer-baked fstab entry
+# (gated on swap_partition) so the role re-adds it cleanly.
+swap_partition:
+  device: /dev/disk/by-partlabel/swap
+
+# Exercises the zram-primary path in CI: zram is primary, the zvol and the
+# partition above both sit below it as overflow. 3G is deliberately not the
+# generator's 2G default on this 4G VM, so the _verify size assertion actually
+# proves the config drove the size.
 swap_zram:
   size: 3G
 
