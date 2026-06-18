@@ -49,11 +49,17 @@ HCLOUD_TOKEN_OP = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
 HOMELAB_CI_DIR = '{{vars.homelab_ci_dir}}'
-ZBM_VERSION = "3.0.1"
+# x86_64 (prod hosts + CI) stays pinned to the known-good 3.0.1/linux6.1
+# recovery line while lab kexec failures with newer ZBM kernels are
+# investigated. The aarch64 Mac test box -- the only arm builder, and not a
+# prod target -- tracks 3.1.0/linux6.18: v3.0.1's generate-zbm knows only the
+# x86_64 UEFI stub location, so forcing EFI output on aarch64 fails there;
+# v3.1.0 selects the stub by arch.
+ZBM_VERSION = '{% if arch() == "arm64" or arch() == "aarch64" %}3.1.0{% else %}3.0.1{% endif %}'
 # Kernel minor version baked into the builder image (KERNELS=linux<ver> build
 # arg) and embedded in the tarball name. Single kernel in the image means
 # generate-zbm picks it up automatically; no Kernel.Version needed in config.yaml.
-ZBM_KERNEL_VERSION = "6.1"
+ZBM_KERNEL_VERSION = '{% if arch() == "arm64" or arch() == "aarch64" %}6.18{% else %}6.1{% endif %}'
 # Home Assistant long-lived access token -- consumed by mise-tasks/ha/sync.py
 # to call /api/services/<domain>/reload after pushing the GUI YAML. Minted
 # in HA UI under Profile > Security > Long-Lived Access Tokens. The
