@@ -479,6 +479,34 @@ class TestGitFetchCommit:
         assert detect.git_fetch_commit("abc") is False
 
 
+class TestGitDeepenSince:
+    def test_fetches_branch_with_shallow_since(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen = {}
+
+        def mock_git(*a, **kw):
+            seen["args"] = a
+            return _fake_git_result("")
+
+        monkeypatch.setattr(detect, "_git", mock_git)
+        assert detect.git_deepen_since("master", "2026-06-12") is True
+        assert seen["args"] == ("fetch", "--no-tags", "--quiet", "--shallow-since=2026-06-12", "origin", "master")
+
+    def test_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_git", lambda *a, **kw: _fake_git_result("", returncode=128))
+        assert detect.git_deepen_since("master", "2026-06-12") is False
+
+
+class TestShallowSinceArg:
+    def test_subtracts_a_day_margin(self) -> None:
+        assert detect._shallow_since_arg("2026-06-13T07:43:18.832Z") == "2026-06-12"
+
+    def test_no_fractional_no_zulu(self) -> None:
+        assert detect._shallow_since_arg("2026-06-13T00:00:00+00:00") == "2026-06-12"
+
+    def test_unparseable_returns_none(self) -> None:
+        assert detect._shallow_since_arg("not-a-date") is None
+
+
 # ---------------------------------------------------------------------------
 # GitLab API — green-base resolution
 # ---------------------------------------------------------------------------
@@ -604,6 +632,34 @@ class TestIsLocalAncestor:
         # never reaches merge-base once the commit can't be made local
         assert called["git"] is False
 
+    def test_deepens_branch_when_shallow(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The regression: an old green base sits past the shallow boundary, so the
+        # branch must be deepened to its date before merge-base can connect it.
+        deepened = {}
+
+        def fake_deepen(branch, since):
+            deepened["branch"], deepened["since"] = branch, since
+            return True
+
+        monkeypatch.setattr(detect, "git_is_shallow", lambda: True)
+        monkeypatch.setattr(detect, "git_deepen_since", fake_deepen)
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
+        monkeypatch.setattr(detect, "_git", lambda *a, **kw: _fake_git_result("", returncode=0))
+        assert detect.is_local_ancestor("abc", "HEAD", since="2026-06-13T07:43:18.832Z", branch="master") is True
+        assert deepened == {"branch": "master", "since": "2026-06-12"}
+
+    def test_no_deepen_on_full_clone(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # --shallow-since would truncate a complete clone; never deepen one.
+        monkeypatch.setattr(detect, "git_is_shallow", lambda: False)
+        monkeypatch.setattr(
+            detect,
+            "git_deepen_since",
+            lambda *a, **kw: pytest.fail("must not deepen a full clone"),
+        )
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: "abc")
+        monkeypatch.setattr(detect, "_git", lambda *a, **kw: _fake_git_result("", returncode=0))
+        assert detect.is_local_ancestor("abc", "HEAD", since="2026-06-13T00:00:00Z", branch="master") is True
+
 
 class TestNewestGreenPipeline:
     @staticmethod
@@ -626,7 +682,7 @@ class TestNewestGreenPipeline:
                 {"sha": "newsha", "source": "push", "created_at": "2026-01-02"},
             ],
         )
-        monkeypatch.setattr(detect, "is_local_ancestor", lambda sha, head: True)
+        monkeypatch.setattr(detect, "is_local_ancestor", lambda sha, head, **kw: True)
         assert detect.newest_green_pipeline("master", **self._kw())["sha"] == "newsha"
 
     def test_skips_non_base_sources(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -647,7 +703,7 @@ class TestNewestGreenPipeline:
         )
         seen = []
 
-        def fake_anc(sha, head):
+        def fake_anc(sha, head, **kw):
             seen.append(sha)
             return True
 
@@ -665,7 +721,7 @@ class TestNewestGreenPipeline:
             return []
 
         monkeypatch.setattr(detect, "_gl_api_get", mock_api)
-        monkeypatch.setattr(detect, "is_local_ancestor", lambda sha, head: sha == "oldgreen")
+        monkeypatch.setattr(detect, "is_local_ancestor", lambda sha, head, **kw: sha == "oldgreen")
         logs = []
         result = detect.newest_green_pipeline("master", **self._kw(log_fn=logs.append))
         assert result["sha"] == "oldgreen"
