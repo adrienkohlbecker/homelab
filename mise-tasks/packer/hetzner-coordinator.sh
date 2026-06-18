@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Bake the CI coordinator's Hetzner snapshot: stock Ubuntu + dockerd, the boot image the fleeting docker-autoscaler clones per pipeline (notes/ci_aws_test_cells.md). Decoupled from ci_image: the CI image itself is pulled per-pipeline by the runner (one ~40s pull on local NVMe, reused across the run), so a ci_image rebuild never restakes this snapshot -- only a docker/base-OS bump does."
+#MISE description="Bake the CI coordinator's Hetzner snapshot: stock Ubuntu + dockerd + the CI image baked in, the boot image the fleeting docker-autoscaler clones per pipeline (notes/ci_aws_test_cells.md). The CI image is pulled through the AWS ECR pull-through cache (Hetzner -> registry.gitlab.com flaps; Hetzner -> ECR Frankfurt is reliable) and retagged to the gitlab ref the runner names, so the coordinator runs it from the local cache (pull_policy=if-not-present) without touching a registry at runtime. Rebake when ci_image, docker, or the base OS changes."
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 #USAGE complete "ubuntu" run="printf 'noble\nresolute\n'"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
@@ -112,15 +112,31 @@ ssh_node true || {
   exit 1
 }
 
-# ── Provision: dockerd only; leave cloud-init primed to re-init per clone ────
-# The CI image is NOT baked in -- the runner pulls it per pipeline (one pull on
-# local NVMe, reused across all jobs on the coordinator), keeping this snapshot
-# independent of ci_image rebuilds. fleeting injects its own ephemeral SSH key
-# and instance user_data via cloud-init at clone time, so we bake no key here;
-# we only reset the per-instance identity state so cloud-init re-runs cleanly
-# and growpart expands root onto the larger fleeting server_type.
-echo "==> provisioning dockerd + resetting cloud-init seed state"
-ssh_node 'bash -seuo pipefail' <<'PROV'
+# ── Provision: dockerd + the CI image baked in, primed to re-init per clone ──
+# Bake docker.io and pull the CI image so a freshly cloned coordinator already
+# carries the layers locally. fleeting injects its own ephemeral SSH key +
+# user_data via cloud-init at clone time; we additionally bake the operator key
+# (below) and reset per-instance identity state so cloud-init re-runs cleanly and
+# growpart expands root onto the larger fleeting server_type.
+#
+# The image is pulled THROUGH the AWS ECR pull-through cache
+# (<acct>.dkr.ecr.eu-central-1.amazonaws.com/gitlab/...), not directly from
+# registry.gitlab.com: Hetzner nbg1 -> registry.gitlab.com flaps at the
+# connection level (intermittent i/o timeouts + anonymous-throttle 403s, and an
+# authenticated docker login times out pre-auth all the same), while Hetzner ->
+# ECR eu-central-1 (Frankfurt) is a short reliable hop. AWS holds the GitLab
+# creds (terraform aws_ci.tf ci_ecr_gitlab) and does the registry.gitlab.com
+# fetch itself. We authenticate to ECR with a short-lived token minted from the
+# workstation's AWS creds, piped to the build box and wiped before the snapshot,
+# so no credential is baked in. The image is retagged to the gitlab ref the
+# runner config names (config.toml.j2), so the coordinator runs it from the local
+# cache with pull_policy=if-not-present and never contacts a registry at runtime.
+ECR_REGION="eu-central-1"
+ECR_REG="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${ECR_REGION}.amazonaws.com"
+aws ecr get-login-password --region "$ECR_REGION" | ssh_node "install -m 0600 /dev/stdin /root/.ecr_pw"
+
+echo "==> provisioning dockerd + CI image + operator key + resetting cloud-init seed state"
+ssh_node "ECR_REG=$ECR_REG bash -seuo pipefail" <<'PROV'
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 # docker.io from the Ubuntu archive -- no third-party repo to pin or trust, and
@@ -128,6 +144,56 @@ apt-get update -qq
 apt-get install -y -qq docker.io
 systemctl enable docker >/dev/null
 docker info >/dev/null
+
+# Pull the CI image through the ECR pull-through cache, then retag it to the
+# gitlab ref the runner config names so the runtime job-start pull resolves it
+# from the local cache (pull_policy=if-not-present) without touching a registry.
+# We log out and delete both the token file and the docker config right after,
+# before the snapshot, so no credential is baked in. The retry rides out ordinary
+# network blips.
+CI_ECR="$ECR_REG/gitlab/akohlbecker/homelab/ci:latest"
+CI_REF="registry.gitlab.com/akohlbecker/homelab/ci:latest"
+docker login "$ECR_REG" --username AWS --password-stdin </root/.ecr_pw
+for i in $(seq 1 5); do
+  docker pull "$CI_ECR" && break
+  [ "$i" = 5 ] && {
+    echo "CI image pull failed after 5 attempts" >&2
+    exit 1
+  }
+  echo "==> CI image pull attempt $i failed, retrying in 15s" >&2
+  sleep 15
+done
+docker tag "$CI_ECR" "$CI_REF"
+docker rmi "$CI_ECR" >/dev/null
+docker logout "$ECR_REG" >/dev/null 2>&1 || true
+rm -f /root/.ecr_pw /root/.docker/config.json
+
+# No boot-time registry refresh: the coordinator has no registry it can reach at
+# runtime (Hetzner -> registry.gitlab.com flaps, and pulling through ECR would
+# need a standing AWS credential on this ephemeral box). The snapshot is the CI
+# image's source of truth -- rebake it (mise run packer:hetzner-coordinator) when
+# ci_image changes. pull_policy=if-not-present (config.toml.j2) makes the baked
+# image the correctness path, not just a warm cache.
+
+# Host-level debug/monitoring tooling for this ephemeral orchestrator. The real
+# work runs inside the ci:latest container; these are for poking the HOST when a
+# run misbehaves -- egress, routing, docker, resource pressure during the 60-wide
+# fan-out. qemu-guest-agent adds hcloud console/password recovery + graceful ACPI
+# shutdown (its udev rule auto-starts it once the virtio agent device appears, so
+# no systemctl enable -- same as packer/scripts/chroot.sh). Keep this set in step
+# with the fleet list in roles/user (ansible) and chroot.sh.
+apt-get install -y -qq \
+  qemu-guest-agent curl dnsutils mtr-tiny tcpdump htop jq iotop ncdu sysstat
+
+# Authorize the operator's personal key on root so a cloned coordinator is
+# reachable over its public IP for debugging (the ci-coordinator firewall admits
+# SSH from the home WAN). fleeting injects its OWN ephemeral key via the Hetzner
+# ssh_keys field at clone time; cloud-init's cc_ssh appends that to this file, so
+# both keys coexist. Public key, not a secret -- rotate together with terraform
+# local.operator_ssh_public_key and group_vars/all/main.yml ssh_public_keys.
+install -d -m 0700 /root/.ssh
+printf '%s\n' 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEFQDmZidqILmoI6o9f8KLz+0hJad+Xh4Lm5OLsYDZTa adrien.kohlbecker@gmail.com' >> /root/.ssh/authorized_keys
+chmod 0600 /root/.ssh/authorized_keys
 
 # Shrink the snapshot and, more importantly, re-prime first-boot state so every
 # fleeting clone re-runs cloud-init (key + user_data injection, growpart) with a
