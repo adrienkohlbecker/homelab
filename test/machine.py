@@ -623,6 +623,15 @@ class Machine:
             "UserKnownHostsFile=/dev/null",
             "-o",
             "ConnectTimeout=10",
+            # Surface a dead peer in ~60s. A cell that vanishes mid-task (spot
+            # reclaim, network partition) leaves a half-open TCP the kernel
+            # would otherwise hold for many minutes; without this, a command
+            # reading from it (apt over mitogen, a long scp) hangs until the
+            # harness deadline instead of failing fast.
+            "-o",
+            "ServerAliveInterval=15",
+            "-o",
+            "ServerAliveCountMax=4",
             "-o",
             "LogLevel=ERROR",
             "-o",
@@ -731,6 +740,15 @@ class Machine:
             f"wan_probe_host={self.wan_probe_host}",
             "-e",
             json.dumps({"wan_forward_ports": self.wan_forward_ports}, sort_keys=True, separators=(",", ":")),
+            # Keepalives on the ansible/mitogen SSH transport too, matching
+            # _ssh_options(): a cell that vanishes mid-task fails in ~60s
+            # rather than hanging a mitogen read on a half-open TCP. JSON -e
+            # form because the value has spaces (key=value would word-split).
+            "-e",
+            json.dumps(
+                {"ansible_ssh_common_args": "-o ServerAliveInterval=15 -o ServerAliveCountMax=4"},
+                separators=(",", ":"),
+            ),
             "--inventory",
             "test/inventory.ini",
             *self.ansible_args,
