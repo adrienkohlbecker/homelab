@@ -29,8 +29,16 @@
 
 packer {
   required_plugins {
+    # Pinned to 1.8.0, not floated, on purpose. 1.8.1 (2026-05-25) bumped its
+    # vendored x/crypto to v0.52.0, whose CVE-2026-39830 fix added a "drain"
+    # loop to ssh (*channel).SendRequest. In the SDK keepalive goroutine that
+    # loop busy-spins a whole core per build while box_deps sits idle on
+    # packer's channel during the ansible provisioner (use_proxy=false), which
+    # saturated fox when concurrent bakes ran. 1.8.0 vendors x/crypto v0.43.0
+    # (plain blocking SendRequest, no spin). The CVE is irrelevant here — we
+    # own the build instance. Revisit once upstream fixes the busy-loop.
     amazon = {
-      version = "~> 1"
+      version = "1.8.0"
       source  = "github.com/hashicorp/amazon"
     }
     # box_deps seed converge (the amazon-ebs build below).
