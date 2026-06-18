@@ -2375,11 +2375,11 @@ class Ec2Machine(Machine):
 
         launched_ids = [
             instance_id
-            for fleet_instance in resp.get("fleetInstanceSet", [])
+            for fleet_instance in resp.get("Instances", [])
             for instance_id in fleet_instance.get("InstanceIds", [])
         ]
         if len(launched_ids) != 1:
-            errors = resp.get("errorSet", [])
+            errors = resp.get("Errors", [])
             error_codes = {e.get("ErrorCode") for e in errors}
             if errors and error_codes <= EC2_FLEET_CAPACITY_ERROR_CODES:
                 raise SpotInterruptedException(
@@ -2390,7 +2390,7 @@ class Ec2Machine(Machine):
         self.instance_id = launched_ids[0]
         if not self.instance_id.startswith("i-"):
             raise RuntimeError(f"create-fleet returned no instance id: {resp!r}")
-        print_line(f"Launched {self.instance_id} (fleet {resp.get('fleetId')}, backstop {self._expires_display})")
+        print_line(f"Launched {self.instance_id} (fleet {resp.get('FleetId')}, backstop {self._expires_display})")
 
         await self._arm_backstop(expires_expr)
 
