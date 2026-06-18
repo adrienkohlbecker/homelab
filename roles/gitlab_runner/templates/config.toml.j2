@@ -91,10 +91,19 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
     # connection level; Hetzner -> ECR Frankfurt is reliable), then retagged to
     # this ref. pull_policy if-not-present runs that baked image without
     # contacting a registry, which the coordinator has none it can reach at
-    # runtime. The snapshot is the CI image's source of truth: rebake it
-    # (mise run packer:hetzner-coordinator) when ci_image changes.
+    # runtime. The snapshot is the source of truth for both images below: rebake
+    # it (mise run packer:hetzner-coordinator) when ci_image or the gitlab-runner
+    # version changes.
     image = "registry.gitlab.com/akohlbecker/homelab/ci:latest"
     pull_policy = ["if-not-present"]
+    # The docker executor also starts a gitlab-runner-helper container (git
+    # clone, artifacts, cache); pull_policy above governs it too. Baked into the
+    # snapshot alongside the job image -- the coordinator can reach no registry
+    # at runtime, so if-not-present must hit the local cache. Pin the ref to the
+    # installed runner version (group_vars/all/versions.yml) so the helper always
+    # matches the gitlab-runner binary; x86_64 since every coordinator
+    # server_type is amd64.
+    helper_image = "registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-v{{ gitlab_runner_version }}"
     privileged = false
 
   [runners.autoscaler]
