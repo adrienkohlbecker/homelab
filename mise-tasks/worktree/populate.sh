@@ -17,6 +17,14 @@ if [ ! -e "$wt/packer/artifacts" ] && [ ! -L "$wt/packer/artifacts" ]; then
   ln -s "$repo/packer/artifacts" "$wt/packer/artifacts"
 fi
 
+# test/firmware/ holds the fetched aarch64 edk2 blob (gitignored; see test/arch.py).
+# Share the main checkout's so one `mise run test:firmware` covers every worktree.
+# Guarded on the source existing so we never leave a dangling symlink that arch.py
+# would misread -- a worktree created before the first fetch just fetches its own.
+if [ -d "$repo/test/firmware" ] && [ ! -e "$wt/test/firmware" ] && [ ! -L "$wt/test/firmware" ]; then
+  ln -s "$repo/test/firmware" "$wt/test/firmware"
+fi
+
 if [ ! -e "$wt/terraform/.terraform" ] && [ ! -L "$wt/terraform/.terraform" ]; then
   ln -s "$repo/terraform/.terraform" "$wt/terraform/.terraform"
 fi

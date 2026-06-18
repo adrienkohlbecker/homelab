@@ -14,13 +14,15 @@ import platform
 from pathlib import Path
 
 # Newer edk2 firmware fetched by `mise run test:firmware` into a gitignored
-# path. Homebrew's qemu (through 11.0.1) bundles edk2-stable202408, whose DXE
-# pool allocator hits a heap ASSERT in MdeModulePkg/Core/Dxe/Mem/Pool.c when
-# rEFInd boots the OS across an aarch64 *warm* reboot (`systemctl reboot`) --
-# the cold first boot is fine, so it only bites tests that reboot (hwe_kernel
-# seed, reboot/kdump/console _verify). edk2-stable202511 fixes it. Listed first
-# in the aarch64 candidates so it wins when present and silently falls back to
-# Homebrew when the operator has not run the fetch task yet. macOS-only concern:
+# path (symlinked across worktrees by mise-tasks/worktree/populate.sh, so one
+# fetch in the main checkout covers all). Homebrew's qemu (through 11.0.1)
+# bundles edk2-stable202408, whose DXE pool allocator hits a heap ASSERT in
+# MdeModulePkg/Core/Dxe/Mem/Pool.c when rEFInd boots the OS across an aarch64
+# *warm* reboot (`systemctl reboot`) -- the cold first boot is fine, so it only
+# bites tests that reboot (hwe_kernel seed, reboot/kdump/console _verify).
+# edk2-stable202511 fixes it. Required on aarch64 (set as required_firmware
+# below): uefi_code_path_for raises with fetch guidance when it is absent rather
+# than silently falling back to Homebrew's broken blob. macOS-only concern:
 # aarch64 qemu is the local fixture; CI runs x86 EC2 cells and prod is amd64.
 _AARCH64_PINNED_FIRMWARE = Path(__file__).resolve().parent / "firmware" / "edk2-aarch64-code-202511.fd"
 
@@ -57,6 +59,11 @@ class ArchProfile:
     # minimal variant doesn't need UEFI pflash. aarch64 virt only boots via
     # UEFI -- pflash must be attached even on minimal.
     bios_boot_supported: bool
+    # A firmware blob the harness fetches itself and *requires* over any
+    # system-provided one. When set, uefi_code_path_for returns it (or raises
+    # with fetch guidance if absent) and never consults uefi_code_candidates.
+    # None = use the candidate search. aarch64 pins a newer edk2 (see above).
+    required_firmware: Path | None = None
 
 
 X86_64 = ArchProfile(
@@ -101,17 +108,12 @@ AARCH64 = ArchProfile(
         "-device",
         "usb-tablet",
     ),
-    uefi_code_candidates=(
-        # Pinned newer edk2 that survives the warm-reboot assert (see above):
-        str(_AARCH64_PINNED_FIRMWARE),
-        # Homebrew QEMU on macOS:
-        "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
-        "/usr/local/share/qemu/edk2-aarch64-code.fd",
-        # Debian/Ubuntu (qemu-efi-aarch64 package):
-        "/usr/share/AAVMF/AAVMF_CODE.fd",
-        "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
-    ),
+    # aarch64 requires the fetched edk2 (required_firmware below); the candidate
+    # search is unused because Homebrew's/the distro's bundled blob ASSERTs on
+    # warm reboot (see above).
+    uefi_code_candidates=(),
     bios_boot_supported=False,
+    required_firmware=_AARCH64_PINNED_FIRMWARE,
 )
 
 
@@ -144,9 +146,20 @@ def profile_for_name(name: str) -> ArchProfile:
 def uefi_code_path_for(profile: ArchProfile) -> Path:
     """Locate the EDK2/OVMF CODE blob matching *profile* on this host.
 
-    Searches uefi_code_candidates in order; first existing path wins.
-    Raises RuntimeError with installation guidance if none are present.
+    When the profile pins a required_firmware, return it (or raise with fetch
+    guidance if absent) -- the harness-managed blob is mandatory and we never
+    fall back to a system one. Otherwise search uefi_code_candidates in order;
+    first existing path wins. Raises RuntimeError if nothing is found.
     """
+    if profile.required_firmware is not None:
+        if profile.required_firmware.exists():
+            return profile.required_firmware
+        raise RuntimeError(
+            f"Required {profile.name} UEFI firmware is missing: {profile.required_firmware}\n"
+            "Run `mise run test:firmware` to fetch it. Homebrew's bundled "
+            "edk2-stable202408 ASSERTs in rEFInd across a warm reboot, wedging "
+            "any role that reboots (hwe_kernel seed, reboot/kdump/console _verify)."
+        )
     for c in profile.uefi_code_candidates:
         if Path(c).exists():
             return Path(c)
