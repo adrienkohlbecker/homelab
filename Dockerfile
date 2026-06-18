@@ -123,8 +123,15 @@ RUN install -dm 755 /etc/apt/keyrings && \
 # userns doesn't allow tar to preserve those bits, even for files mise
 # owns). MISE_DATA_DIR holds the tool tree (python, opentofu, packer, uv,
 # shellcheck, ...) so a re-pull of the image doesn't re-download tools.
+#
+# /opt/venv/bin is on PATH so the baked uv venv's console scripts
+# (ansible-lint, ruff, black, yamllint, pytest, ...) resolve directly:
+# MISE_PYTHON_UV_VENV_AUTO=false (set below) stops mise from activating a
+# workspace venv, so nothing else puts the venv on PATH. This only prepends
+# the bin dir — it does NOT export VIRTUAL_ENV, so uv still selects its
+# environment via UV_PROJECT_ENVIRONMENT and the no-shadowing intent holds.
 ENV MISE_DATA_DIR=/opt/mise \
-    PATH="/opt/mise/shims:/usr/local/bin:/usr/bin:/bin"
+    PATH="/opt/venv/bin:/opt/mise/shims:/usr/local/bin:/usr/bin:/bin"
 RUN install -dm 755 /etc/apt/keyrings && \
     curl -fsSL https://mise.jdx.dev/gpg-key.pub \
       | gpg --dearmor -o /etc/apt/keyrings/mise-archive-keyring.gpg && \
