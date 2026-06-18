@@ -630,7 +630,7 @@ class TestNewestGreenPipeline:
             ],
         )
         monkeypatch.setattr(detect, "is_local_ancestor", lambda sha, head: True)
-        assert detect.newest_green_pipeline("master", **self._kw()) == "newsha"
+        assert detect.newest_green_pipeline("master", **self._kw())["sha"] == "newsha"
 
     def test_skips_non_base_sources(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # A web (manual ROLES dispatch) and a parent_pipeline (cell child) are
@@ -655,7 +655,7 @@ class TestNewestGreenPipeline:
             return True
 
         monkeypatch.setattr(detect, "is_local_ancestor", fake_anc)
-        assert detect.newest_green_pipeline("master", **self._kw()) == "pushsha"
+        assert detect.newest_green_pipeline("master", **self._kw())["sha"] == "pushsha"
         # ancestry is only ever checked for the push pipeline
         assert seen == ["pushsha"]
 
@@ -671,7 +671,7 @@ class TestNewestGreenPipeline:
         monkeypatch.setattr(detect, "is_local_ancestor", lambda sha, head: sha == "oldgreen")
         logs = []
         result = detect.newest_green_pipeline("master", **self._kw(log_fn=logs.append))
-        assert result == "oldgreen"
+        assert result["sha"] == "oldgreen"
         assert any("not an ancestor" in m for m in logs)
 
     def test_none_when_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -781,11 +781,112 @@ class TestGitlabGreenBaseEnv:
         self._env(monkeypatch, CI_API_V4_URL="http://api", CI_PROJECT_ID="1")
         logs = []
         assert detect._gitlab_green_base("master", "head", "master", logs.append) is None
-        assert any("green base unavailable" in m for m in logs)
+        assert any("no green pipeline" in m for m in logs)
 
     def test_none_when_no_api_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._env(monkeypatch, CI_PROJECT_ID="1", CI_JOB_TOKEN="jobtok")
         assert detect._gitlab_green_base("master", "head", "master", lambda m: None) is None
+
+
+# ---------------------------------------------------------------------------
+# Cell runtime ordering
+# ---------------------------------------------------------------------------
+
+
+class TestSortSpecsByRuntime:
+    def test_longest_first(self) -> None:
+        runtimes = {"a:box": 100.0, "b:box": 300.0, "c:box": 200.0}
+        assert detect.sort_specs_by_runtime(["a:box", "b:box", "c:box"], runtimes) == [
+            "b:box",
+            "c:box",
+            "a:box",
+        ]
+
+    def test_unmeasured_sort_first(self) -> None:
+        # A spec with no recorded runtime leads, so an unmeasured (possibly long)
+        # cell is never left to start last.
+        runtimes = {"measured:box": 500.0}
+        out = detect.sort_specs_by_runtime(["measured:box", "new:box"], runtimes)
+        assert out == ["new:box", "measured:box"]
+
+    def test_ties_break_by_name(self) -> None:
+        runtimes = {"z:box": 100.0, "a:box": 100.0}
+        assert detect.sort_specs_by_runtime(["z:box", "a:box"], runtimes) == ["a:box", "z:box"]
+
+    def test_empty_runtimes_is_name_order(self) -> None:
+        assert detect.sort_specs_by_runtime(["c:box", "a:box", "b:box"], {}) == [
+            "a:box",
+            "b:box",
+            "c:box",
+        ]
+
+
+class TestGlApiGetAll:
+    def test_paginates_until_short_page(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def mock_api(url, token, **kw):
+            if url.endswith("page=1"):
+                return [{"id": i} for i in range(100)]
+            if url.endswith("page=2"):
+                return [{"id": 100}]
+            return []
+
+        monkeypatch.setattr(detect, "_gl_api_get", mock_api)
+        items = detect._gl_api_get_all("http://api/jobs", "t", "job")
+        assert len(items) == 101
+
+    def test_none_on_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_gl_api_get", lambda url, token, **kw: None)
+        assert detect._gl_api_get_all("http://api/jobs", "t", "job") is None
+
+
+class TestCollectPipelineJobs:
+    def test_recurses_bridges_and_collapses_retries(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def mock_get_all(base_url, token, token_kind, **kw):
+            if base_url.endswith("/pipelines/1/jobs"):
+                return [{"name": "lint", "id": 10, "duration": 5}]
+            if base_url.endswith("/pipelines/1/bridges"):
+                return [{"downstream_pipeline": {"id": 2}}]
+            if base_url.endswith("/pipelines/2/jobs"):
+                # An earlier attempt and its retry; the retry (higher id) wins.
+                return [
+                    {"name": "nginx:box", "id": 20, "duration": 111},
+                    {"name": "nginx:box", "id": 21, "duration": 222},
+                ]
+            if base_url.endswith("/pipelines/2/bridges"):
+                return []
+            return []
+
+        monkeypatch.setattr(detect, "_gl_api_get_all", mock_get_all)
+        jobs = detect._collect_pipeline_jobs("http://api", 1, "t", "job", set())
+        assert jobs["nginx:box"]["id"] == 21
+        assert jobs["nginx:box"]["duration"] == 222
+        assert jobs["lint"]["duration"] == 5
+
+
+class TestGreenCellRuntimes:
+    def test_none_green_returns_empty(self) -> None:
+        assert detect._green_cell_runtimes(None, lambda m: None) == {}
+        assert detect._green_cell_runtimes({"sha": "x"}, lambda m: None) == {}
+
+    def test_builds_name_to_duration_map(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: ("http://api", "t", "job"))
+        monkeypatch.setattr(
+            detect,
+            "_collect_pipeline_jobs",
+            lambda *a, **k: {
+                "nginx:box": {"id": 1, "duration": 200},
+                "manual": {"id": 2, "duration": None},
+            },
+        )
+        logs = []
+        runtimes = detect._green_cell_runtimes({"id": 42}, logs.append)
+        # The duration-less manual job is dropped; the cell job is kept.
+        assert runtimes == {"nginx:box": 200}
+        assert any("green pipeline 42" in m for m in logs)
+
+    def test_no_creds_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: None)
+        assert detect._green_cell_runtimes({"id": 42}, lambda m: None) == {}
 
 
 # ---------------------------------------------------------------------------
@@ -962,7 +1063,7 @@ class TestRenderChildPipeline:
 class TestEmitGitlab:
     def test_writes_child_with_cells(self, tmp_path: Path) -> None:
         child = tmp_path / "child.yml"
-        rc = detect._emit_gitlab(json.dumps(["nginx:box"]), False, str(child), lambda *_: None)
+        rc = detect._emit_gitlab(json.dumps(["nginx:box"]), False, str(child), {}, lambda *_: None)
         assert rc == 0
         loaded = detect.yaml.safe_load(child.read_text())
         assert "nginx:box" in loaded
@@ -970,12 +1071,22 @@ class TestEmitGitlab:
 
     def test_site_test_only(self, tmp_path: Path) -> None:
         child = tmp_path / "child.yml"
-        detect._emit_gitlab(json.dumps([]), True, str(child), lambda *_: None)
+        detect._emit_gitlab(json.dumps([]), True, str(child), {}, lambda *_: None)
         assert "_site_test:box" in detect.yaml.safe_load(child.read_text())
+
+    def test_orders_cells_longest_first(self, tmp_path: Path) -> None:
+        # The emitted cell jobs follow the sorted order: unmeasured first, then
+        # the rest longest-first. The child YAML preserves that job order.
+        child = tmp_path / "child.yml"
+        runtimes = {"a:box": 100.0, "b:box": 300.0}
+        detect._emit_gitlab(json.dumps(["a:box", "b:box", "c:box"]), False, str(child), runtimes, lambda *_: None)
+        text = child.read_text()
+        order = [text.index(f'"{name}":') for name in ("c:box", "b:box", "a:box")]
+        assert order == sorted(order)
 
     def test_empty_writes_valid_noop_pipeline(self, tmp_path: Path) -> None:
         child = tmp_path / "child.yml"
-        detect._emit_gitlab(json.dumps([]), False, str(child), lambda *_: None)
+        detect._emit_gitlab(json.dumps([]), False, str(child), {}, lambda *_: None)
         # Always a valid pipeline with at least one job, so the trigger never
         # fails on an empty child.
         loaded = detect.yaml.safe_load(child.read_text())
@@ -983,6 +1094,12 @@ class TestEmitGitlab:
 
 
 class TestCmdGitlab:
+    @pytest.fixture(autouse=True)
+    def _no_green_api(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Keep these tests offline: a real CI environment exports the GitLab API
+        # vars, which would otherwise drive a live green-pipeline lookup.
+        monkeypatch.setattr(detect, "_gitlab_green_base", lambda *a, **k: None)
+
     def test_all_flag_full_universe(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
         child = tmp_path / "child.yml"
