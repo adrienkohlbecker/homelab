@@ -1,0 +1,53 @@
+# apps.plugin groups processes by name via apps_groups.conf. A process that
+# matches no group inherits its parent's group, so everything running inside a
+# container is folded into that container's `conmon` monitor: a CI bake pegging
+# a CPU core shows up as `app.conmon` at ~100%, not as the tool actually
+# burning it. Define a `packer` group so the bake's CPU (the amazon builder
+# plugin spins a core per build, hashicorp/packer#13483) is attributed to
+# packer instead of misread as conmon.
+#
+# netdata uses /etc/netdata/apps_groups.conf *instead of* the stock file when
+# present (it does not merge), so this re-emits the stock content verbatim plus
+# the homelab block — re-synced from stock every converge, so a netdata upgrade
+# that ships new default groups still propagates.
+- name: Read the stock apps_groups.conf
+  when: not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed))
+  slurp:
+    src: /usr/lib/netdata/conf.d/apps_groups.conf
+  register: netdata_apps_groups_stock
+  become: true
+
+- name: Install apps_groups.conf with homelab process groups
+  when: not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed))
+  copy:
+    dest: /etc/netdata/apps_groups.conf
+    content: |-
+      {{ netdata_apps_groups_stock.content | b64decode | trim }}
+
+      # --- homelab additions (managed by roles/netdata) ---
+      # Pull CI bake processes out of the gitlab_runner build container's conmon
+      # rollup so their CPU is attributed correctly. See the header of
+      # roles/netdata/tasks/apps_groups.yml.
+      # Prefix match catches `packer` and the comm-truncated `packer-plugin-a`
+      # (the builder/provisioner plugin subprocesses) in one rule.
+      packer: packer*
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+    # apps_groups.conf has no upstream validator; assert our group survived the
+    # render (a broken template silently drops it -- netdata ignores unparseable
+    # lines, so the only other signal would be the group quietly never appearing).
+    validate: "grep -q '^packer:' %s"
+  register: netdata_apps_groups
+  become: true
+
+# apps.plugin reads apps_groups.conf only at startup, so a change needs a
+# netdata restart to take effect (the override.conf ExecStartPost gates the
+# restart on the HTTP API answering -- see configure.yml).
+- name: Restart netdata after an apps_groups change
+  when: netdata_apps_groups.changed
+  systemd:
+    name: netdata
+    state: restarted
+  become: true
