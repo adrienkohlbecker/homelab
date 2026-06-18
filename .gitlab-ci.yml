@@ -89,6 +89,9 @@ detect:
   tags:
     - fox-coordinator-aws
   rules:
+    # TEMPORARY: keep the AWS matrix off while the exit_code_probe runs.
+    - if: $RUN_EXIT_PROBE == "true"
+      when: never
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web"
     - if: $CI_PIPELINE_SOURCE == "push"
@@ -118,6 +121,9 @@ test_cells:
     - job: detect
       artifacts: true
   rules:
+    # TEMPORARY: keep the AWS matrix off while the exit_code_probe runs.
+    - if: $RUN_EXIT_PROBE == "true"
+      when: never
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web"
     - if: $CI_PIPELINE_SOURCE == "push"
@@ -126,6 +132,29 @@ test_cells:
       - artifact: test-child.yml
         job: detect
     strategy: depend
+
+# TEMPORARY exit-code propagation probe. A console:box cell that the harness
+# classified as a spot interruption (intended exit 86, the retry signal)
+# surfaced to GitLab as exit 1, so `retry: exit_codes: [86]` never matched and
+# the cell did not auto-retry. This reproduces the exit code in isolation on the
+# same docker-autoscaler executor (fox-coordinator-aws) the cells use: if the
+# job reports exit 86 and auto-retries once, the executor propagates the code
+# and the leak is upstream in the harness; if it reports exit 1 and does not
+# retry, the executor is the culprit. Dispatch with RUN_EXIT_PROBE=true; remove
+# after the question is answered.
+exit_code_probe:
+  stage: test
+  tags:
+    - fox-coordinator-aws
+  rules:
+    - if: $RUN_EXIT_PROBE == "true"
+  retry:
+    max: 1
+    exit_codes:
+      - 86
+  script:
+    - echo "probe exiting 86"
+    - exit 86
 
 lint:
   stage: prepare
