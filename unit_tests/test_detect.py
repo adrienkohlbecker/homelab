@@ -916,30 +916,84 @@ class TestCollectPipelineJobs:
         assert jobs["lint"]["duration"] == 5
 
 
-class TestGreenCellRuntimes:
-    def test_none_green_returns_empty(self) -> None:
-        assert detect._green_cell_runtimes(None, lambda m: None) == {}
-        assert detect._green_cell_runtimes({"sha": "x"}, lambda m: None) == {}
-
-    def test_builds_name_to_duration_map(self, monkeypatch: pytest.MonkeyPatch) -> None:
+class TestCellRuntimes:
+    def test_keeps_only_successful_cell_jobs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: ("http://api", "t", "job"))
+        monkeypatch.setattr(detect, "_recent_pipeline_ids", lambda *a, **k: [42])
         monkeypatch.setattr(
             detect,
             "_collect_pipeline_jobs",
             lambda *a, **k: {
-                "nginx:box": {"id": 1, "duration": 200},
-                "manual": {"id": 2, "duration": None},
+                "nginx:box": {"id": 1, "duration": 200, "status": "success"},
+                "zfs:box": {"id": 2, "duration": 50, "status": "failed"},  # failed -- dropped
+                "running:box": {"id": 3, "duration": None, "status": "running"},  # no duration
             },
         )
         logs = []
-        runtimes = detect._green_cell_runtimes({"id": 42}, logs.append)
-        # The duration-less manual job is dropped; the cell job is kept.
+        runtimes = detect._cell_runtimes("master", logs.append)
         assert runtimes == {"nginx:box": 200}
-        assert any("green pipeline 42" in m for m in logs)
+        assert any("1 recent pipeline(s)" in m for m in logs)
+
+    def test_takes_median_across_pipelines(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # A cell's runtime is the median of its successful samples; an outlier
+        # run doesn't dominate. The union of cell names is covered.
+        monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: ("http://api", "t", "job"))
+        monkeypatch.setattr(detect, "_recent_pipeline_ids", lambda *a, **k: [4, 3, 2])
+        per_pipeline = {
+            4: {"nginx:box": {"id": 40, "duration": 100, "status": "success"}},
+            3: {"nginx:box": {"id": 30, "duration": 300, "status": "success"}},
+            2: {
+                "nginx:box": {"id": 20, "duration": 1000, "status": "success"},  # outlier
+                "zfs:box": {"id": 21, "duration": 400, "status": "success"},
+            },
+        }
+        monkeypatch.setattr(detect, "_collect_pipeline_jobs", lambda pa, pid, t, tk, seen: per_pipeline[pid])
+        runtimes = detect._cell_runtimes("master", lambda m: None)
+        # median([100, 300, 1000]) == 300 -- the outlier doesn't pull it up.
+        assert runtimes == {"nginx:box": 300, "zfs:box": 400}
+
+    def test_failed_in_newest_falls_back_to_older(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # A cell that failed in the newest run but passed in an older one still
+        # gets a sample -- the whole point of harvesting per-job, not per-pipeline.
+        monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: ("http://api", "t", "job"))
+        monkeypatch.setattr(detect, "_recent_pipeline_ids", lambda *a, **k: [3, 2])
+        per_pipeline = {
+            3: {"nginx:box": {"id": 30, "duration": 5, "status": "failed"}},
+            2: {"nginx:box": {"id": 20, "duration": 300, "status": "success"}},
+        }
+        monkeypatch.setattr(detect, "_collect_pipeline_jobs", lambda pa, pid, t, tk, seen: per_pipeline[pid])
+        runtimes = detect._cell_runtimes("master", lambda m: None)
+        assert runtimes == {"nginx:box": 300}
 
     def test_no_creds_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: None)
-        assert detect._green_cell_runtimes({"id": 42}, lambda m: None) == {}
+        assert detect._cell_runtimes("master", lambda m: None) == {}
+
+
+class TestRecentPipelineIds:
+    def test_filters_sources_and_limits(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen = {}
+
+        def mock_get(url, token, **kw):
+            seen["url"] = url
+            return [
+                {"id": 5, "source": "push"},
+                {"id": 4, "source": "web"},  # manual dispatch -- excluded
+                {"id": 3, "source": "schedule"},
+                {"id": 2, "source": "parent_pipeline"},  # cell child -- excluded
+                {"id": 1, "source": "push"},
+            ]
+
+        monkeypatch.setattr(detect, "_gl_api_get", mock_get)
+        ids = detect._recent_pipeline_ids("master", "http://api", "t", "job", 2)
+        # newest-first, only push/schedule, capped at the limit
+        assert ids == [5, 3]
+        # no status filter -- failed-overall pipelines must be sampled too
+        assert "status=success" not in seen["url"]
+
+    def test_empty_on_no_data(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_gl_api_get", lambda url, token, **kw: None)
+        assert detect._recent_pipeline_ids("master", "http://api", "t", "job", 10) == []
 
 
 # ---------------------------------------------------------------------------
