@@ -69,9 +69,7 @@ def collect_jobs(project_enc: str, pipeline_id: int, seen: set[int]) -> dict[str
     for job in glab_paginate(project_enc, f"pipelines/{pipeline_id}/jobs?per_page=100"):
         keep(job)
 
-    for bridge in glab_paginate(
-        project_enc, f"pipelines/{pipeline_id}/bridges?per_page=100"
-    ):
+    for bridge in glab_paginate(project_enc, f"pipelines/{pipeline_id}/bridges?per_page=100"):
         downstream = bridge.get("downstream_pipeline") or {}
         if downstream.get("id"):
             for job in collect_jobs(project_enc, downstream["id"], seen).values():
@@ -91,9 +89,7 @@ def fmt(seconds: float | None) -> str:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("baseline", type=int, help="baseline pipeline id (the 'before')")
     ap.add_argument("candidate", type=int, help="candidate pipeline id (the 'after')")
     ap.add_argument(
@@ -134,9 +130,7 @@ def main() -> int:
         # mise:box), and a failed job stopped early -- both would render a
         # bogus speedup. Leave delta None otherwise; the status note explains.
         both_green = bs == "success" and cs == "success"
-        delta = (
-            (cd - bd) if (both_green and bd is not None and cd is not None) else None
-        )
+        delta = (cd - bd) if (both_green and bd is not None and cd is not None) else None
         pct = (delta / bd * 100) if (delta is not None and bd) else None
         rows.append(
             {
@@ -162,9 +156,7 @@ def main() -> int:
     def color(text: str, code: str) -> str:
         return f"\033[{code}m{text}\033[0m" if use_color else text
 
-    print(
-        f"baseline = pipeline {args.baseline}   candidate = pipeline {args.candidate}   variant = {args.variant}\n"
-    )
+    print(f"baseline = pipeline {args.baseline}   candidate = pipeline {args.candidate}   variant = {args.variant}\n")
     print(f"{'JOB':35} {'BASE':>7} {'CAND':>7} {'Δs':>7} {'Δ%':>7}  NOTE")
     print("-" * 80)
 
@@ -208,9 +200,7 @@ def main() -> int:
     print("-" * 80)
     only_base = sum(1 for r in rows if r["cand_s"] is None)
     only_cand = sum(1 for r in rows if r["base_s"] is None)
-    print(
-        f"matched+success: {comparable}    only-in-baseline: {only_base}    only-in-candidate: {only_cand}"
-    )
+    print(f"matched+success: {comparable}    only-in-baseline: {only_base}    only-in-candidate: {only_cand}")
     if tot_base:
         tot_delta = tot_cand - tot_base
         print(
