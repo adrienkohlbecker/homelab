@@ -18,8 +18,6 @@ resolute) base_image="ubuntu-26.04" ;;
   ;;
 esac
 
-API="https://api.hetzner.cloud/v1"
-AUTH=(-H "Authorization: Bearer ${HCLOUD_TOKEN}")
 # The temp build box is throwaway; size is irrelevant to the snapshot. cpx22's
 # 80G disk is <= every fleeting target (cx53 is 320G), so a server cloned from
 # this snapshot grows root via cloud-init growpart -- a larger base would cap
@@ -27,21 +25,12 @@ AUTH=(-H "Authorization: Bearer ${HCLOUD_TOKEN}")
 TYPE="cpx22"
 SERVER="packer-ci-coordinator"
 
-# Minimal hcloud REST helpers -- deliberately self-contained rather than
-# sourcing _hetzner_rescue.sh, whose lifecycle is rescue-mode + dd-stream
-# specific (and drives the live fox bake): this flow is a normal boot +
-# provision + snapshot. The api()/pyget() shape mirrors that lib on purpose.
-api() { # METHOD PATH [JSON]
-  if [ -n "${3:-}" ]; then
-    curl -fsS -X "$1" "${AUTH[@]}" -H "Content-Type: application/json" -d "$3" "${API}$2"
-  else
-    curl -fsS -X "$1" "${AUTH[@]}" "${API}$2"
-  fi
-}
-pyget() { python3 -c "import json,sys;d=json.load(sys.stdin);print(eval(sys.argv[1]))" "$1"; }
-sid() { api GET "/servers?name=$SERVER" | pyget 'd["servers"][0]["id"] if d["servers"] else ""'; }
-sip() { api GET "/servers?name=$SERVER" | pyget 'd["servers"][0]["public_net"]["ipv4"]["ip"] if d["servers"] else ""'; }
-sstatus() { api GET "/servers?name=$SERVER" | pyget 'd["servers"][0]["status"] if d["servers"] else ""'; }
+# This flow is self-contained rather than sourcing _hetzner_rescue.sh, whose
+# lifecycle is rescue-mode + dd-stream specific (and drives the live fox bake):
+# here it is a normal boot + provision + snapshot. Every hcloud verb below
+# blocks on its server action (create/poweroff/create-image/rebuild/poweron all
+# poll to completion), so the server is in the requested state by the time the
+# call returns -- the only waits left are for sshd, not an hcloud action.
 
 # IdentitiesOnly: offer only the ephemeral key, not a forwarded agent's
 # identities (else sshd hits MaxAuthTries first). NODE_IP/KEY/KNOWN are set
@@ -61,21 +50,17 @@ node_sshd_up() { # IP
   printf '%s' "$out" | grep -qiE 'permission denied|authentication failure|too many authentication'
 }
 
-KEYDIR="" KID="" SNAP_TO_CLEAN=""
+KEYDIR="" SNAP_TO_CLEAN=""
 
 cleanup() {
-  local id
-  id=$(sid || true)
-  [ -n "$id" ] && {
-    echo "==> deleting temp server $id"
-    api DELETE "/servers/$id" >/dev/null 2>&1 || true
-  }
-  [ -n "$KID" ] && api DELETE "/ssh_keys/$KID" >/dev/null 2>&1 || true
+  echo "==> deleting temp server $SERVER"
+  hcloud server delete "$SERVER" >/dev/null 2>&1 || true
+  [ -n "${KEYNAME:-}" ] && hcloud ssh-key delete "$KEYNAME" >/dev/null 2>&1 || true
   # Drop a snapshot only if it failed boot-verification (SNAP_TO_CLEAN set);
   # a verified snapshot is the deliverable and must survive.
   [ -n "$SNAP_TO_CLEAN" ] && {
     echo "==> deleting unverified snapshot $SNAP_TO_CLEAN" >&2
-    api DELETE "/images/$SNAP_TO_CLEAN" >/dev/null 2>&1 || true
+    hcloud image delete "$SNAP_TO_CLEAN" >/dev/null 2>&1 || true
   }
   [ -n "$KEYDIR" ] && rm -rf "$KEYDIR"
 }
@@ -88,20 +73,12 @@ KEYNAME="packer-ci-coordinator-$$"
 KNOWN="$KEYDIR/known_hosts"
 echo "==> registering ephemeral build SSH key"
 ssh-keygen -t ed25519 -f "$KEY" -N "" -q
-KID=$(api POST "/ssh_keys" "$(python3 -c 'import json,sys;print(json.dumps({"name":sys.argv[1],"public_key":open(sys.argv[2]).read().strip()}))' "$KEYNAME" "$KEY.pub")" | pyget 'd["ssh_key"]["id"]')
+hcloud ssh-key create --name "$KEYNAME" --public-key-from-file "$KEY.pub" >/dev/null
 
 # ── Create the build box from the stock cloud image (normal boot) ────────────
 echo "==> creating temp $TYPE server $SERVER from $base_image"
-api POST "/servers" "$(python3 -c 'import json,sys;print(json.dumps({"name":sys.argv[1],"server_type":sys.argv[2],"image":sys.argv[3],"ssh_keys":[int(sys.argv[4])],"start_after_create":True}))' "$SERVER" "$TYPE" "$base_image" "$KID")" >/dev/null
-for _ in $(seq 1 60); do
-  [ "$(sstatus)" = "running" ] && break
-  sleep 2
-done
-[ "$(sstatus)" = "running" ] || {
-  echo "server never reached running (status: $(sstatus))" >&2
-  exit 1
-}
-NODE_IP=$(sip)
+hcloud server create --name "$SERVER" --type "$TYPE" --image "$base_image" --ssh-key "$KEYNAME" >/dev/null
+NODE_IP=$(hcloud server ip "$SERVER")
 echo "==> server up at $NODE_IP -- waiting for sshd (cloud-init authorizes our key)"
 for _ in $(seq 1 60); do
   ssh_node true 2>/dev/null && break
@@ -168,28 +145,16 @@ PROV
 
 # ── Snapshot the powered-off disk ────────────────────────────────────────────
 echo "==> powering off + snapshotting"
-api POST "/servers/$(sid)/actions/poweroff" '{}' >/dev/null || true
-for _ in $(seq 1 30); do
-  [ "$(sstatus)" = "off" ] && break
-  sleep 2
-done
-[ "$(sstatus)" = "off" ] || {
-  echo "server never powered off (status: $(sstatus))" >&2
+hcloud server poweroff "$SERVER" >/dev/null
+imgid=$(hcloud server create-image "$SERVER" --type snapshot \
+  --description "ci-coordinator-${ubuntu}-$(date '+%Y%m%d%H%M%S')" \
+  --label "role=ci-coordinator" --label "ubuntu=${ubuntu}" |
+  awk '/^Image/{print $2; exit}')
+[ -n "$imgid" ] || {
+  echo "could not determine the created snapshot image id" >&2
   exit 1
 }
-imgid=$(api POST "/servers/$(sid)/actions/create_image" "$(python3 -c 'import json,sys;print(json.dumps({"type":"snapshot","description":"ci-coordinator-"+sys.argv[1]+"-"+sys.argv[2],"labels":{"role":"ci-coordinator","ubuntu":sys.argv[1]}}))' "$ubuntu" "$(date '+%Y%m%d%H%M%S')")" | pyget 'd["image"]["id"]')
-echo "==> snapshot image id=$imgid (waiting for available)"
-st=""
-for _ in $(seq 1 120); do
-  st=$(api GET "/images/$imgid" | pyget 'd["image"]["status"]')
-  [ "$st" = "available" ] && break
-  sleep 5
-done
-[ "$st" = "available" ] || {
-  echo "snapshot $imgid never became available (status: $st)" >&2
-  SNAP_TO_CLEAN="$imgid"
-  exit 1
-}
+echo "==> snapshot image id=$imgid (available)"
 
 # ── Prove it boots before tearing the build box down ─────────────────────────
 # Rebuild the same temp box from the snapshot and wait for a live sshd. We may
@@ -200,8 +165,8 @@ done
 # failure we delete it (via SNAP_TO_CLEAN) and fail the run.
 echo "==> verifying boot: rebuilding server from snapshot $imgid"
 SNAP_TO_CLEAN="$imgid"
-api POST "/servers/$(sid)/actions/rebuild" "$(python3 -c 'import json,sys;print(json.dumps({"image":int(sys.argv[1])}))' "$imgid")" >/dev/null
-api POST "/servers/$(sid)/actions/poweron" '{}' >/dev/null 2>&1 || true
+hcloud server rebuild "$SERVER" --image "$imgid" >/dev/null
+hcloud server poweron "$SERVER" >/dev/null 2>&1 || true
 sleep 40
 waited=0
 while [ "$waited" -lt 300 ]; do

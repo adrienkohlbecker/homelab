@@ -22,9 +22,9 @@ got torn down, a detached volume, an unassigned (still-billed) IPv4 primary IP,
 a floating IP, a load balancer, server backups (a +20% surcharge), or snapshots
 piling up past the prune horizon. This sweeps the project for all of those.
 
-It NEVER mutates. For each prunable/orphaned snapshot it prints the exact API
-delete line (and, for the ubuntu-zfs rotation, the one-shot prune task) for the
-operator to review and run by hand.
+It NEVER mutates. For each prunable/orphaned snapshot it prints the exact
+hcloud delete line (and, for the ubuntu-zfs rotation, the one-shot prune task)
+for the operator to review and run by hand.
 
 Scope note: HCLOUD_TOKEN only sees Hetzner *Cloud*, and only the one project it
 belongs to. Hetzner Robot (dedicated servers, Storage Boxes) is a separate
@@ -40,10 +40,6 @@ import os
 import shutil
 import subprocess
 import sys
-import urllib.error
-import urllib.request
-
-API = "https://api.hetzner.cloud/v1"
 
 anomalies: list[str] = []  # human-readable lines, one per unexpected resource
 deletes: list[str] = []  # suggested cleanup commands (never executed here)
@@ -52,12 +48,14 @@ expected: list[str] = []  # legitimate standing infra, reported for context
 errors: list[str] = []
 
 
-def resolve_token() -> str:
-    """Mirror mise-tasks/packer/_hcloud_token.sh: prefer a real HCLOUD_TOKEN
-    (CI / manual export), else take HCLOUD_TOKEN_OP. As a file-based mise task
-    the op:// ref in mise.toml [env] is NOT resolved (only `op run --` wrapped
-    toml tasks are), so when the token is still an op:// reference we re-exec
-    the whole script under `op run --` to materialize it."""
+def resolve_token() -> None:
+    """Mirror mise-tasks/packer/_hcloud_token.sh: ensure HCLOUD_TOKEN holds a
+    real token in the environment (the hcloud CLI reads it from there). Prefer
+    an already-set HCLOUD_TOKEN (CI / manual export), else take HCLOUD_TOKEN_OP.
+    As a file-based mise task the op:// ref in mise.toml [env] is NOT resolved
+    (only `op run --` wrapped toml tasks are), so when the token is still an
+    op:// reference we re-exec the whole script under `op run --` to
+    materialize it."""
     token = (os.environ.get("HCLOUD_TOKEN") or os.environ.get("HCLOUD_TOKEN_OP") or "").strip()
     if token.startswith("op://"):
         if os.environ.get("_AUDIT_HETZNER_OP_RESOLVED"):
@@ -69,23 +67,22 @@ def resolve_token() -> str:
         sys.exit(subprocess.run([op, "run", "--", sys.executable, __file__, *sys.argv[1:]], env=env).returncode)
     if not token:
         sys.exit("HCLOUD_TOKEN is unset -- sign into the 1Password CLI or export it manually.")
-    return token
+    if not shutil.which("hcloud"):
+        sys.exit("hcloud CLI is not installed -- `brew install hcloud` (or your package manager).")
+    os.environ["HCLOUD_TOKEN"] = token
 
 
-def get_all(token: str, path: str, key: str) -> list:
-    """GET every page of a list endpoint, following meta.pagination.next_page."""
-    out: list = []
-    page = 1
-    while True:
-        sep = "&" if "?" in path else "?"
-        url = f"{API}/{path}{sep}per_page=50&page={page}"
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.load(resp)
-        out.extend(data.get(key, []))
-        page = data.get("meta", {}).get("pagination", {}).get("next_page")
-        if not page:
-            return out
+def hcloud_list(resource: str, *flags: str) -> list:
+    """Run `hcloud <resource> list <flags> -o json` and return the parsed
+    array. hcloud follows pagination internally, so the result is the full
+    resource set."""
+    out = subprocess.run(
+        ["hcloud", resource, "list", *flags, "-o", "json"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return json.loads(out.stdout)
 
 
 def safe(label, fn, default=None):
@@ -93,8 +90,9 @@ def safe(label, fn, default=None):
     and the operator sees which queries could not be trusted."""
     try:
         return fn()
-    except (urllib.error.URLError, OSError, ValueError) as e:
-        errors.append(f"{label}: {e}")
+    except (subprocess.CalledProcessError, OSError, ValueError) as e:
+        detail = e.stderr.strip() if isinstance(e, subprocess.CalledProcessError) and e.stderr else e
+        errors.append(f"{label}: {detail}")
         return default if default is not None else []
 
 
@@ -104,11 +102,11 @@ def gb(image) -> str:
 
 
 def main():
-    token = resolve_token()
+    resolve_token()
     print("== Hetzner Cloud project audit (scope: the project HCLOUD_TOKEN belongs to) ==\n")
 
     # ── Servers: only fox (cpx22) is expected; backups are a billable surcharge ──
-    servers = safe("servers", lambda: get_all(token, "servers", "servers"))
+    servers = safe("servers", lambda: hcloud_list("server"))
     for s in servers:
         st, status = s["server_type"]["name"], s["status"]
         if s["name"] == "fox":
@@ -124,17 +122,17 @@ def main():
     in_use.discard(None)
 
     # ── Block storage / standalone networking: none expected, all billable ──
-    for v in safe("volumes", lambda: get_all(token, "volumes", "volumes")):
+    for v in safe("volumes", lambda: hcloud_list("volume")):
         anomalies.append(f"volume {v['name']} ({v['size']}GB, {v.get('status')}) -- billable, none expected")
 
-    for f in safe("floating_ips", lambda: get_all(token, "floating_ips", "floating_ips")):
+    for f in safe("floating_ips", lambda: hcloud_list("floating-ip")):
         anomalies.append(f"floating IP {f['name']} {f.get('ip')} ({f['type']}) -- billable, none expected")
 
-    for lb in safe("load_balancers", lambda: get_all(token, "load_balancers", "load_balancers")):
+    for lb in safe("load_balancers", lambda: hcloud_list("load-balancer")):
         anomalies.append(f"load balancer {lb['name']} ({lb['load_balancer_type']['name']}) -- billable, none expected")
 
     # ── Primary IPs: fox + fox_v6, both assigned. An UNASSIGNED IPv4 still bills ──
-    for p in safe("primary_ips", lambda: get_all(token, "primary_ips", "primary_ips")):
+    for p in safe("primary_ips", lambda: hcloud_list("primary-ip")):
         if p.get("assignee_id"):
             expected.append(f"primary IP {p['name']} {p['ip']} ({p['type']}, assigned)")
         elif p["type"] == "ipv4":
@@ -144,7 +142,7 @@ def main():
 
     # ── Snapshots: keep newest-2 of the ubuntu-zfs family + any in-use image; ──
     # everything else is a billable stray the prune normally clears.
-    snaps = safe("snapshots", lambda: get_all(token, "images?type=snapshot", "images"))
+    snaps = safe("snapshots", lambda: hcloud_list("image", "--type", "snapshot"))
     family = sorted(
         (i for i in snaps if i.get("labels", {}).get("os") == "ubuntu-zfs"),
         key=lambda i: i.get("created", ""),
@@ -157,25 +155,25 @@ def main():
             expected.append(desc)
         else:
             anomalies.append(f"{desc} -- ubuntu-zfs snapshot past the newest-2 prune horizon")
-            deletes.append(f'curl -fsS -X DELETE -H "Authorization: Bearer $HCLOUD_TOKEN" {API}/images/{i["id"]}')
+            deletes.append(f'hcloud image delete {i["id"]}')
     for i in (i for i in snaps if i.get("labels", {}).get("os") != "ubuntu-zfs"):
         anomalies.append(
             f"snapshot {i['id']} ({gb(i)}, {i.get('created', '')[:10]}, {i.get('description', '')!r}) -- not an ubuntu-zfs image, unknown source"
         )
-        deletes.append(f'curl -fsS -X DELETE -H "Authorization: Bearer $HCLOUD_TOKEN" {API}/images/{i["id"]}')
+        deletes.append(f'hcloud image delete {i["id"]}')
 
     # ── Server backups (type=backup images): billable, none expected ──
-    for b in safe("backups", lambda: get_all(token, "images?type=backup", "images")):
+    for b in safe("backups", lambda: hcloud_list("image", "--type", "backup")):
         src = (b.get("created_from") or {}).get("name", "?")
         anomalies.append(f"server backup {b['id']} ({gb(b)}, of {src}) -- backups billable, none expected")
 
     # ── Free scaffolding, reported only for context ──
-    for label, path, key in (
-        ("network", "networks", "networks"),
-        ("firewall", "firewalls", "firewalls"),
-        ("SSH key", "ssh_keys", "ssh_keys"),
+    for label, resource in (
+        ("network", "network"),
+        ("firewall", "firewall"),
+        ("SSH key", "ssh-key"),
     ):
-        for item in safe(label, lambda p=path, k=key: get_all(token, p, k)):
+        for item in safe(label, lambda r=resource: hcloud_list(r)):
             expected.append(f"{label} {item['name']} (free)")
 
     print("── Expected standing infra ──")
