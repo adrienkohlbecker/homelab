@@ -13,6 +13,17 @@ import dataclasses
 import platform
 from pathlib import Path
 
+# Newer edk2 firmware fetched by `mise run test:firmware` into a gitignored
+# path. Homebrew's qemu (through 11.0.1) bundles edk2-stable202408, whose DXE
+# pool allocator hits a heap ASSERT in MdeModulePkg/Core/Dxe/Mem/Pool.c when
+# rEFInd boots the OS across an aarch64 *warm* reboot (`systemctl reboot`) --
+# the cold first boot is fine, so it only bites tests that reboot (hwe_kernel
+# seed, reboot/kdump/console _verify). edk2-stable202511 fixes it. Listed first
+# in the aarch64 candidates so it wins when present and silently falls back to
+# Homebrew when the operator has not run the fetch task yet. macOS-only concern:
+# aarch64 qemu is the local fixture; CI runs x86 EC2 cells and prod is amd64.
+_AARCH64_PINNED_FIRMWARE = Path(__file__).resolve().parent / "firmware" / "edk2-aarch64-code-202511.fd"
+
 
 @dataclasses.dataclass(frozen=True)
 class ArchProfile:
@@ -91,6 +102,8 @@ AARCH64 = ArchProfile(
         "usb-tablet",
     ),
     uefi_code_candidates=(
+        # Pinned newer edk2 that survives the warm-reboot assert (see above):
+        str(_AARCH64_PINNED_FIRMWARE),
         # Homebrew QEMU on macOS:
         "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
         "/usr/local/share/qemu/edk2-aarch64-code.fd",

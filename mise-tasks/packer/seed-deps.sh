@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 #MISE description="Layer packer/seed_deps.yml on top of the box artifact and publish as box_deps"
 #MISE interactive=true
+# The seed reboots into the HWE 6.8 kernel; on the aarch64 fixture that warm
+# reboot needs the newer edk2 firmware (see test/arch.py) or it wedges. This is
+# the macOS-qemu-only path -- CI bakes box_deps via packer:ami, not here -- so
+# the fetch never runs in CI. Idempotent: a no-op once the firmware is present.
+#MISE depends=["test:firmware"]
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="jammy"
 #USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
