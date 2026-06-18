@@ -4,8 +4,8 @@
 The ``gitlab`` subcommand (.gitlab-ci.yml's `detect` job) is the whole story:
 resolve a green base via the GitLab pipelines API, classify the changed files,
 expand role-deps and release cells, and write a generated child pipeline — one
-job per `role:variant[:ubuntu]` cell, emitted longest-first by the green base's
-per-cell runtimes so the slowest jobs start first.
+job per `role:variant[:ubuntu]` cell, emitted longest-first by each cell's
+median recent runtime so the slowest jobs start first.
 """
 
 import json
@@ -20,6 +20,7 @@ import urllib.request
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
+from statistics import median
 from typing import NamedTuple
 
 import jinja2
@@ -512,10 +513,27 @@ def _gitlab_green_base(branch: str, head_sha: str, default_branch: str, log) -> 
 #
 # Cells are emitted longest-first so the slowest jobs get the lowest build ids
 # and a runner claims them before the short ones (GitLab seeds ids in YAML order
-# within a stage). Runtimes come from the green base pipeline's per-cell job
-# `duration` (execution time, matched by job name == cell spec); a cell with no
-# recorded green-base runtime is emitted first, so a new/unmeasured -- possibly
-# long -- cell is never left to start last.
+# within a stage). Runtimes are per-cell job `duration` (execution time, matched
+# by job name == cell spec); a cell with no recorded runtime is emitted first,
+# so a new/unmeasured -- possibly long -- cell is never left to start last.
+#
+# Each cell's runtime is the *median* of its successful job durations across the
+# last RUNTIME_SAMPLE_PIPELINES pipelines on the default branch. Three things
+# make this work where the obvious "read the green base's jobs" does not:
+#
+#   - Sample *successful cell jobs*, not whole-green pipelines. A pipeline with
+#     one flaky cell is 'failed' overall, but its 100+ passing cells are
+#     perfectly good duration samples; filtering to status=success pipelines
+#     discards nearly every run and starves the table to a cell or two.
+#   - Aggregate across many pipelines. A single push tests only the cells in its
+#     own diff (usually a handful), so one pipeline leaves most cells unmeasured
+#     and the order collapses to the alphabetical name tie-break.
+#   - Take the median, not the latest. A single run can be a cold-cache outlier
+#     or a fast partial; the median over recent runs is the stable estimate.
+#
+# Durations are only an ordering estimate, so pipeline status and ancestry are
+# both irrelevant; any recent run that finished the cell is a fine sample.
+RUNTIME_SAMPLE_PIPELINES = 10
 
 
 def _gl_api_get_all(base_url: str, token: str, token_kind: str, *, max_pages: int = 10) -> list | None:
@@ -566,29 +584,57 @@ def _collect_pipeline_jobs(
     return by_name
 
 
-def _green_cell_runtimes(green: dict | None, log) -> dict[str, float]:
-    """Map cell-job name -> green-base `duration` (s); {} when unavailable.
+def _recent_pipeline_ids(branch: str, project_api: str, token: str, token_kind: str, limit: int) -> list[int]:
+    """Up to `limit` recent push/schedule pipeline ids on branch, newest first, any status.
 
-    Returns an empty map -- the caller then emits cells in default order -- when
-    there is no green pipeline or the API/token is unavailable.
+    No status filter: runtime samples come from individual *successful cell
+    jobs* (see _cell_runtimes), so a pipeline that failed overall on a flaky
+    cell still contributes its passing cells. web/manual and parent_pipeline
+    sources are dropped -- they re-run a hand-picked subset, not the matrix.
     """
-    if not green or not green.get("id"):
-        return {}
+    params = urllib.parse.urlencode({"ref": branch, "order_by": "id", "sort": "desc", "per_page": 100})
+    data = _gl_api_get(f"{project_api}/pipelines?{params}", token, token_kind=token_kind)
+    if not data:
+        return []
+    ids = [p["id"] for p in data if p.get("id") and p.get("source") in GREEN_BASE_SOURCES]
+    return ids[:limit]
+
+
+def _cell_runtimes(branch: str, log, *, sample: int = RUNTIME_SAMPLE_PIPELINES) -> dict[str, float]:
+    """Map cell-job name -> median `duration` (s), sampled from recent pipelines; {} when unavailable.
+
+    Collects the durations of *successful* cell jobs across the last `sample`
+    pipelines on `branch` and takes the median per cell name. Sampling
+    successful jobs (not whole-green pipelines) and aggregating across runs is
+    what keeps the table dense: most pipelines carry a flaky cell or two and are
+    'failed' overall, yet their passing cells are valid samples. Returns an
+    empty map -- the caller then emits cells in default order -- when the
+    API/token is unavailable.
+    """
     creds = _gitlab_api_creds()
     if not creds:
         return {}
     project_api, token, token_kind = creds
-    jobs = _collect_pipeline_jobs(project_api, green["id"], token, token_kind, set())
-    runtimes = {name: job["duration"] for name, job in jobs.items() if job.get("duration") is not None}
-    log(f"  runtime ordering: {len(runtimes)} cell duration(s) from green pipeline {green['id']}")
+    ids = _recent_pipeline_ids(branch, project_api, token, token_kind, sample)
+    seen: set[int] = set()
+    samples: dict[str, list[float]] = defaultdict(list)
+    # _collect_pipeline_jobs collapses retries within a pipeline to the latest
+    # attempt, so each pipeline yields at most one success sample per cell.
+    for pid in ids:
+        jobs = _collect_pipeline_jobs(project_api, pid, token, token_kind, seen)
+        for name, job in jobs.items():
+            if job.get("status") == "success" and job.get("duration") is not None:
+                samples[name].append(job["duration"])
+    runtimes = {name: median(durations) for name, durations in samples.items()}
+    log(f"  runtime ordering: {len(runtimes)} cell duration(s) from {len(ids)} recent pipeline(s)")
     return runtimes
 
 
 def sort_specs_by_runtime(specs: list[str], runtimes: dict[str, float]) -> list[str]:
-    """Order cell specs longest-first by their green-base runtime.
+    """Order cell specs longest-first by their median recent runtime.
 
-    A spec with no recorded runtime (a new cell, or no green data at all) sorts
-    first so an unmeasured -- potentially long -- cell starts before the
+    A spec with no recorded runtime (a new cell, or no runtime data at all)
+    sorts first so an unmeasured -- potentially long -- cell starts before the
     measured ones. Ties and the no-runtime group break by spec name, so the
     order is deterministic.
     """
@@ -743,7 +789,7 @@ def _emit_gitlab(matrix: str, site_test: bool, child_path: str, runtimes: dict[s
     at pipeline-creation time, so a runtime "any cells?" flag can't gate it);
     when there is nothing to test the child carries only the `no_cells`
     placeholder, which the template adds. Cells are emitted longest-first by
-    their green-base runtime so the slowest jobs start first.
+    their median recent runtime so the slowest jobs start first.
     """
     specs = json.loads(matrix)
     # This generator only ever feeds the aws (EC2 cell) backend, so apply the
@@ -760,7 +806,7 @@ def _emit_gitlab(matrix: str, site_test: bool, child_path: str, runtimes: dict[s
         log(f"aws_skip: dropped {len(dropped)} cell(s): {' '.join(sorted(dropped))}")
     if specs:
         unmeasured = [s for s in specs if s not in runtimes]
-        log(f"cell order: longest-first by green-base runtime ({len(unmeasured)} unmeasured cell(s) first)")
+        log(f"cell order: longest-first by median recent runtime ({len(unmeasured)} unmeasured cell(s) first)")
     log(f"site_test={'true' if site_test else 'false'}")
     log(f"-> {len(specs)} cell job(s){' + site converge' if site_test else ''}")
     log(f"-> wrote {child_path}")
@@ -891,7 +937,10 @@ def _cmd_gitlab(args: list[str]) -> int:
     head_sha = os.environ.get("CI_COMMIT_SHA", "")
     default_branch = os.environ.get("CI_DEFAULT_BRANCH", "master")
     green = _gitlab_green_base(branch, head_sha, default_branch, log)
-    runtimes = _green_cell_runtimes(green, log)
+    # Diff base needs a fully-green ancestor (above); runtime ordering only needs
+    # duration samples, so it draws from the default branch's recent runs
+    # independently -- a starved green base no longer collapses the order.
+    runtimes = _cell_runtimes(default_branch, log)
 
     if opts.all:
         log("mode: --all (full universe)")
