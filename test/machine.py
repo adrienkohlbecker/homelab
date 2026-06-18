@@ -2129,6 +2129,10 @@ EC2_INSTANCE_TYPE_CANDIDATES: dict[str, tuple[str, ...]] = {
         "c7a.xlarge",
     ),
 }
+EC2_FLEET_CAPACITY_ERROR_CODES = {
+    "InsufficientInstanceCapacity",
+    "InsufficientCapacity",
+}
 
 
 class Ec2Machine(Machine):
@@ -2291,10 +2295,10 @@ class Ec2Machine(Machine):
     async def boot(self) -> None:
         """Launch the spot instance, then arm the termination backstop.
 
-        Tries the primary type/subnet first and rotates to the other CI subnets,
-        then approved fallback types, when EC2 reports
-        InsufficientInstanceCapacity. One dry AZ or spot pool should not fail the
-        cell while sibling capacity exists.
+        Submits an instant EC2 Fleet with the approved instance type and CI
+        subnet overrides. The price-capacity-optimized allocation strategy lets
+        EC2 choose a low-priced pool from the currently healthy Spot capacity
+        rather than following a stale static order.
         """
         subnets = await self._pick_subnets()
 
@@ -2322,79 +2326,71 @@ class Ec2Machine(Machine):
         instance_types = (type_override,) if type_override else EC2_INSTANCE_TYPE_CANDIDATES[self.machine]
         image_id = f"resolve:ssm:/homelab-ci/ami/{self.machine}/{self.ubuntu_name}"
 
-        resp = None
-        for type_index, instance_type in enumerate(instance_types):
-            for subnet_index, subnet_id in enumerate(subnets):
-                # Deterministic client token: unique per run (workdir basename
-                # is a fresh mkdtemp suffix), stable across API retries, and
-                # bound to both subnet and instance type so a retry can never
-                # land the request in another AZ or spot pool under the same
-                # token. EC2 caps tokens at 64 chars.
-                type_token = instance_type.replace(".", "-")
-                client_token = f"{Path(self.workdir.name).name}-{subnet_id.removeprefix('subnet-')}-{type_token}"[:64]
-                run_kwargs = {
-                    "LaunchTemplate": {"LaunchTemplateName": f"homelab-ci-cell-{self.machine}"},
-                    "ImageId": image_id,
-                    "InstanceType": instance_type,
-                    "SubnetId": subnet_id,
-                    "ClientToken": client_token,
-                    # The CLI defaulted count to 1; the API requires both explicitly.
-                    "MinCount": 1,
-                    "MaxCount": 1,
-                    "TagSpecifications": [
-                        {"ResourceType": "instance", "Tags": [{"Key": k, "Value": v} for k, v in tags.items()]},
-                    ],
+        # Deterministic client token: unique per run (workdir basename is a
+        # fresh mkdtemp suffix) and stable across API retries. EC2 caps tokens at
+        # 64 chars.
+        client_token = f"{Path(self.workdir.name).name}-fleet"[:64]
+        overrides = [
+            {"InstanceType": instance_type, "SubnetId": subnet_id, "ImageId": image_id}
+            for instance_type in instance_types
+            for subnet_id in subnets
+        ]
+        fleet_kwargs = {
+            "ClientToken": client_token,
+            "Type": "instant",
+            "LaunchTemplateConfigs": [
+                {
+                    "LaunchTemplateSpecification": {
+                        "LaunchTemplateName": f"homelab-ci-cell-{self.machine}",
+                        "Version": "$Default",
+                    },
+                    "Overrides": overrides,
                 }
+            ],
+            "TargetCapacitySpecification": {
+                "TotalTargetCapacity": 1,
+                "SpotTargetCapacity": 1,
+                "DefaultTargetCapacityType": "spot",
+            },
+            "SpotOptions": {
+                "AllocationStrategy": "price-capacity-optimized",
+                "InstanceInterruptionBehavior": "terminate",
+            },
+            "TagSpecifications": [
+                {"ResourceType": "fleet", "Tags": [{"Key": k, "Value": v} for k, v in tags.items()]},
+                {"ResourceType": "instance", "Tags": [{"Key": k, "Value": v} for k, v in tags.items()]},
+            ],
+        }
 
-                try:
-                    resp = await self._call(
-                        "ec2",
-                        "run_instances",
-                        log=(
-                            f"aws ec2 run-instances --launch-template LaunchTemplateName=homelab-ci-cell-{self.machine}"
-                            f" --image-id {image_id} --subnet-id {subnet_id} --client-token {client_token}"
-                            f" --instance-type {instance_type}"
-                        ),
-                        **run_kwargs,
-                    )
-                except self._client_error as exc:
-                    code = exc.response.get("Error", {}).get("Code")
-                    # Any non-capacity error (auth, quota, bad image) recurs in
-                    # every AZ/type, so surface it immediately rather than
-                    # burning the fallbacks.
-                    if code != "InsufficientInstanceCapacity":
-                        raise
-                    if subnet_index + 1 < len(subnets):
-                        print_line(
-                            f"{instance_type} in {subnet_id} out of capacity ({code}); trying next AZ",
-                            error=True,
-                        )
-                        continue
-                    if type_index + 1 < len(instance_types):
-                        print_line(
-                            f"{instance_type} out of capacity in all CI AZs ({code}); trying {instance_types[type_index + 1]}",
-                            error=True,
-                        )
-                        break
-                    # Every approved pool is dry: a wide concurrent launch (the
-                    # coordinator fires the whole cell matrix at once) can drain
-                    # eu-central-1 spot capacity simultaneously. That is
-                    # transient infra noise, not a role failure, so classify it
-                    # as a spot interruption — exit 86, which the GitLab job
-                    # retries once after capacity recovers, instead of a generic
-                    # exit 1 the retry rule would miss.
-                    raise SpotInterruptedException(
-                        f"All approved spot pools out of capacity for {self.machine} ({code})"
-                    ) from exc
-                break
-            if resp is not None:
-                break
+        resp = await self._call(
+            "ec2",
+            "create_fleet",
+            log=(
+                f"aws ec2 create-fleet --type instant --target-capacity-specification TotalTargetCapacity=1,SpotTargetCapacity=1,"
+                f"DefaultTargetCapacityType=spot --spot-options AllocationStrategy=price-capacity-optimized,"
+                f"InstanceInterruptionBehavior=terminate --client-token {client_token}"
+            ),
+            **fleet_kwargs,
+        )
 
-        assert resp is not None  # loop either set resp or raised
-        self.instance_id = resp["Instances"][0]["InstanceId"]
+        launched_ids = [
+            instance_id
+            for fleet_instance in resp.get("fleetInstanceSet", [])
+            for instance_id in fleet_instance.get("InstanceIds", [])
+        ]
+        if len(launched_ids) != 1:
+            errors = resp.get("errorSet", [])
+            error_codes = {e.get("ErrorCode") for e in errors}
+            if errors and error_codes <= EC2_FLEET_CAPACITY_ERROR_CODES:
+                raise SpotInterruptedException(
+                    f"All approved spot pools out of capacity for {self.machine} ({', '.join(sorted(error_codes))})"
+                )
+            raise RuntimeError(f"create-fleet launched {len(launched_ids)} instances instead of 1: {resp!r}")
+
+        self.instance_id = launched_ids[0]
         if not self.instance_id.startswith("i-"):
-            raise RuntimeError(f"run-instances returned no instance id: {resp!r}")
-        print_line(f"Launched {self.instance_id} (subnet {subnet_id}, backstop {self._expires_display})")
+            raise RuntimeError(f"create-fleet returned no instance id: {resp!r}")
+        print_line(f"Launched {self.instance_id} (fleet {resp.get('fleetId')}, backstop {self._expires_display})")
 
         await self._arm_backstop(expires_expr)
 
@@ -2456,7 +2452,7 @@ class Ec2Machine(Machine):
             try:
                 resp = await self._call("ec2", "describe_instances", InstanceIds=[self.instance_id])
             except self._client_error:
-                # Eventual consistency right after run-instances: the id may
+                # Eventual consistency right after create-fleet: the id may
                 # 404 for a beat. Treat as not-ready and keep polling.
                 await asyncio.sleep(15)
                 continue

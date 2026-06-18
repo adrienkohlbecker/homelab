@@ -413,10 +413,10 @@ resource "aws_iam_role_policy" "ci_cell_scheduler" {
 # ─── Cell role ───────────────────────────────────────────────────────────────
 # Assumed by test-cell jobs (any branch in the project — branch pipelines run
 # role tests too; tag pipelines don't, so they get nothing). Deny-by-default
-# in shape: RunInstances only through the cell launch templates into the CI
-# subnets/SG with the role=ci-cell tag and the approved instance types,
-# terminate/console only for ci-cell instances, PassRole only of the
-# scheduler role to EventBridge Scheduler.
+# in shape: CreateFleet/RunInstances only through the cell launch templates into
+# the CI subnets/SG with the role=ci-cell tag and the approved instance types,
+# terminate/console only for ci-cell instances, PassRole only of the scheduler
+# role to EventBridge Scheduler.
 
 resource "aws_iam_role" "ci_cell" {
   name = "homelab-ci-cell"
@@ -448,6 +448,23 @@ resource "aws_iam_role_policy" "ci_cell" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      # CreateFleet is the top-level launch call, but AWS still evaluates the
+      # underlying RunInstances permissions for resources specified by the
+      # launch template and overrides. Keep this broad only for fleet creation
+      # itself, pinned to the request tag; the launch-template/subnet/AMI/type
+      # guardrails live in the RunInstances statements below.
+      {
+        Sid      = "CreateTaggedFleet"
+        Effect   = "Allow"
+        Action   = "ec2:CreateFleet"
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "aws:RequestTag/role" = "ci-cell"
+            "ec2:Region"          = local.ci_aws_region
+          }
+        }
+      },
       # RunInstances splits across statements because aws:RequestTag only
       # evaluates against resources that receive tags in the request
       # (instance + volume, via the launch template tag_specifications);
@@ -528,7 +545,7 @@ resource "aws_iam_role_policy" "ci_cell" {
         Action   = "ec2:CreateTags"
         Resource = "*"
         Condition = {
-          StringEquals = { "ec2:CreateAction" = "RunInstances" }
+          StringEquals = { "ec2:CreateAction" = ["CreateFleet", "RunInstances"] }
         }
       },
       # Lifecycle of ci-cell instances only.
