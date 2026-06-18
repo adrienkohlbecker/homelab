@@ -414,7 +414,7 @@ resource "aws_iam_role_policy" "ci_cell_scheduler" {
 # Assumed by test-cell jobs (any branch in the project — branch pipelines run
 # role tests too; tag pipelines don't, so they get nothing). Deny-by-default
 # in shape: RunInstances only through the cell launch templates into the CI
-# subnets/SG with the role=ci-cell tag and the templates' instance types,
+# subnets/SG with the role=ci-cell tag and the approved instance types,
 # terminate/console only for ci-cell instances, PassRole only of the
 # scheduler role to EventBridge Scheduler.
 
@@ -452,9 +452,10 @@ resource "aws_iam_role_policy" "ci_cell" {
       # evaluates against resources that receive tags in the request
       # (instance + volume, via the launch template tag_specifications);
       # putting it on subnet/SG/AMI ARNs would deny every launch. The
-      # instance statement also pins the instance type: launch-template
-      # values are caller-overridable at run-instances time, so without it
-      # a leaked token could launch metal sizes through the template.
+      # instance statement also pins the instance type to the reviewed per-cell
+      # fallback pool: launch-template values are caller-overridable at
+      # run-instances time, so without it a leaked token could launch metal
+      # sizes through the template.
       {
         Sid      = "RunTaggedInstance"
         Effect   = "Allow"
@@ -463,7 +464,7 @@ resource "aws_iam_role_policy" "ci_cell" {
         Condition = {
           StringEquals = {
             "aws:RequestTag/role" = "ci-cell"
-            "ec2:InstanceType"    = distinct(values(local.ci_machine_instance_types))
+            "ec2:InstanceType"    = distinct(flatten(values(local.ci_machine_instance_type_candidates)))
           }
           ArnEquals = {
             "ec2:LaunchTemplate" = [for lt in aws_launch_template.ci_cell : lt.arn]
@@ -767,15 +768,55 @@ resource "aws_key_pair" "ci_operator" {
 # are CPU-bound, and c6a.large (dedicated Zen3) runs them ~1.5-1.6x faster
 # than t3a.medium (burstable Zen1) at near-identical per-cell cost — the
 # higher rate is offset by the shorter run. minimal stays burstable: its
-# cells already beat the lab baseline and never sustain CPU. Re-benchmark
-# candidates with HOMELAB_EC2_INSTANCE_TYPE (test/machine.py) before
-# changing these.
+# cells already beat the lab baseline and never sustain CPU.
+#
+# Each list is ordered cheapest/closest first; the harness tries the first entry
+# as the launch-template default, then rotates through the rest when EC2 reports
+# InsufficientInstanceCapacity across the CI subnets. Re-benchmark candidates
+# with HOMELAB_EC2_INSTANCE_TYPE (test/machine.py) before changing these.
 
 locals {
+  ci_machine_instance_type_candidates = {
+    # 2 GiB primary mirrors qemu minimal; medium is a vertical fallback when the
+    # small burstable spot pool is thin.
+    minimal = ["t3a.small", "t3.small", "t3a.medium", "t3.medium"]
+
+    # 2 vCPU / 4 GiB compute pool for regular box cells. Keep c6a first until a
+    # newer family wins the role-test benchmark, but allow adjacent Intel/AMD
+    # compute and 8 GiB general-purpose pools for spot availability.
+    box = [
+      "c6a.large",
+      "c7i.large",
+      "c6i.large",
+      "m6a.large",
+      "m6i.large",
+      "m7i.large",
+      "c7a.large",
+      "m7a.large",
+    ]
+
+    # box-class Zen3 cores with the 8 GiB floor (>4 needed, see
+    # QEMU_MACHINE_SPECS). r*.large adds 16 GiB without doubling vCPU quota;
+    # c*.xlarge is the last vertical step when memory-fit pools are dry.
+    box_deps = [
+      "m6a.large",
+      "m6i.large",
+      "m7i.large",
+      "r6a.large",
+      "r6i.large",
+      "r7i.large",
+      "m7a.large",
+      "r7a.large",
+      "c6a.xlarge",
+      "c6i.xlarge",
+      "c7i.xlarge",
+      "c7a.xlarge",
+    ]
+  }
+
   ci_machine_instance_types = {
-    minimal  = "t3a.small" # 2 GiB, mirrors qemu minimal
-    box      = "c6a.large" # 2 vCPU / 4 GiB
-    box_deps = "m6a.large" # box-class Zen3 cores with the 8 GiB floor (>4 needed, see QEMU_MACHINE_SPECS)
+    for machine, candidates in local.ci_machine_instance_type_candidates :
+    machine => candidates[0]
   }
 }
 

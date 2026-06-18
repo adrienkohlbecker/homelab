@@ -71,7 +71,8 @@ def test_pick_subnets_rotates_full_set() -> None:
     assert ordered == sorted(subnets)[seed:] + sorted(subnets)[:seed]
 
 
-def test_boot_falls_back_to_next_az_on_capacity() -> None:
+def test_boot_falls_back_to_next_az_on_capacity(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(machine.EC2_INSTANCE_TYPE_CANDIDATES, "box", ("c6a.large", "c6i.large"))
     subnets = ["subnet-a", "subnet-b", "subnet-c"]
     attempts: list[dict] = []
 
@@ -92,12 +93,59 @@ def test_boot_falls_back_to_next_az_on_capacity() -> None:
     # Distinct subnets tried, and the client token is bound to each.
     first, second = attempts
     assert first["SubnetId"] != second["SubnetId"]
+    assert first["InstanceType"] == second["InstanceType"] == "c6a.large"
     assert first["ClientToken"] != second["ClientToken"]
     assert first["SubnetId"].removeprefix("subnet-") in first["ClientToken"]
+    assert "c6a-large" in first["ClientToken"]
     assert m._armed == [m._expires_display.removesuffix("Z")]
 
 
-def test_boot_reraises_non_capacity_error_without_fallback() -> None:
+def test_boot_falls_back_to_next_instance_type_after_all_azs_are_dry(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(machine.EC2_INSTANCE_TYPE_CANDIDATES, "box", ("c6a.large", "c6i.large"))
+    subnets = ["subnet-a", "subnet-b"]
+    attempts: list[dict] = []
+
+    async def call(service, op, *, log=None, **kwargs):
+        if op == "describe_subnets":
+            return _describe_response(subnets)
+        assert op == "run_instances"
+        attempts.append(kwargs)
+        if kwargs["InstanceType"] == "c6a.large":
+            raise _FakeClientError("InsufficientInstanceCapacity")
+        return {"Instances": [{"InstanceId": "i-0abc123"}]}
+
+    m = _make_ec2("run-deadbeef", call)
+    asyncio.run(m.boot())
+
+    assert m.instance_id == "i-0abc123"
+    assert [a["InstanceType"] for a in attempts] == ["c6a.large", "c6a.large", "c6i.large"]
+    assert attempts[0]["SubnetId"] != attempts[1]["SubnetId"]
+    assert attempts[2]["SubnetId"] == attempts[0]["SubnetId"]
+    assert "c6i-large" in attempts[2]["ClientToken"]
+
+
+def test_boot_env_override_disables_instance_type_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOMELAB_EC2_INSTANCE_TYPE", "m6i.large")
+    monkeypatch.setitem(machine.EC2_INSTANCE_TYPE_CANDIDATES, "box", ("c6a.large", "c6i.large"))
+    subnets = ["subnet-a", "subnet-b"]
+    attempts: list[dict] = []
+
+    async def call(service, op, *, log=None, **kwargs):
+        if op == "describe_subnets":
+            return _describe_response(subnets)
+        assert op == "run_instances"
+        attempts.append(kwargs)
+        raise _FakeClientError("InsufficientInstanceCapacity")
+
+    m = _make_ec2("run-deadbeef", call)
+    with pytest.raises(machine.SpotInterruptedException):
+        asyncio.run(m.boot())
+
+    assert [a["InstanceType"] for a in attempts] == ["m6i.large", "m6i.large"]
+
+
+def test_boot_reraises_non_capacity_error_without_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(machine.EC2_INSTANCE_TYPE_CANDIDATES, "box", ("c6a.large", "c6i.large"))
     subnets = ["subnet-a", "subnet-b", "subnet-c"]
     attempts: list[dict] = []
 
@@ -116,7 +164,8 @@ def test_boot_reraises_non_capacity_error_without_fallback() -> None:
     assert len(attempts) == 1
 
 
-def test_boot_classifies_all_az_capacity_exhaustion_as_spot() -> None:
+def test_boot_classifies_all_az_capacity_exhaustion_as_spot(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(machine.EC2_INSTANCE_TYPE_CANDIDATES, "box", ("c6a.large", "c6i.large"))
     subnets = ["subnet-a", "subnet-b", "subnet-c"]
     attempts: list[dict] = []
 
@@ -135,6 +184,7 @@ def test_boot_classifies_all_az_capacity_exhaustion_as_spot() -> None:
     with pytest.raises(machine.SpotInterruptedException):
         asyncio.run(m.boot())
 
-    # Exhausted all AZs before giving up.
-    assert len(attempts) == len(subnets)
+    # Exhausted every approved type in every AZ before giving up.
+    assert len(attempts) == len(subnets) * 2
+    assert {a["InstanceType"] for a in attempts} == {"c6a.large", "c6i.large"}
     assert m.instance_id is None
