@@ -126,6 +126,7 @@ def test_ansible_env_default_envelope(
     assert env["ANSIBLE_DISPLAY_OK_HOSTS"] == "true"
     assert env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] == "true"
     assert env["ANSIBLE_GATHERING"] == "smart"
+    assert env["ANSIBLE_TIMEOUT"] == "30"
     assert env["ANSIBLE_FACT_CACHING"] == "jsonfile"
     assert env["ANSIBLE_FACT_CACHING_CONNECTION"] == f"{m.workdir.name}/facts"
     assert env["ANSIBLE_FACT_CACHING_TIMEOUT"] == "7200"
