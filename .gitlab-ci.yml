@@ -245,7 +245,7 @@ ami_images:
       aud: sts.amazonaws.com
   parallel:
     matrix:
-      - MACHINE: [ box, pug, lab ]
+      - MACHINE: [ box ]
         UBUNTU: [ jammy, noble, resolute ]
   # One bake per cell across pipelines, serializing the candidate smoke +
   # SSM promotion so two manual jobs cannot race the same parameter; never

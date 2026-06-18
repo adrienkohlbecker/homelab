@@ -1,10 +1,16 @@
-# zfs_trim_pools is [] on box (no pools to trim) and zfs_mount_cache_datasets
-# is [] (no mount-generator entries). Both loops are completely skipped. The
-# lab fixture has 3 real pools (rpool/dozer/tank) exercising multi-pool trim
-# timer creation and mount-cache generation.
+# box has two pools (rpool + the flat zee pool from packer pools.sh), so it
+# exercises multi-pool trim-timer creation and mount-cache generation on the
+# default cell -- the functional coverage the lab AMI used to carry. lab's
+# prod-faithful mirror/raidz geometry is asserted by no role, so it rides qemu
+# only; aws_skip drops its EC2 cell.
 machines:
   box:
   lab:
+aws_skip:
+  # Both the jammy base cell and the noble release cell (ubuntu: below) -- the
+  # whole lab column rides qemu only.
+  lab: multi-pool trim/mount-cache coverage now runs on box (rpool + zee); lab's mirror/raidz geometry is qemu-only
+  lab:noble: multi-pool trim/mount-cache coverage now runs on box (rpool + zee); lab's mirror/raidz geometry is qemu-only
 # Release-divergent: jammy combines hwe_kernel (noble 6.8 kmod) with the
 # noble-backports zfsutils pin and asserts the HWE userspace is installed;
 # noble+ uses the native zfs stack. The noble cell exercises the non-jammy

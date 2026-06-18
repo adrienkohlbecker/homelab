@@ -155,24 +155,22 @@ class TestClassifyChangedFiles:
         assert result.machine_universe == {"minimal"}
         assert not result.full_universe_paths
 
-    def test_machine_universe_lab(self) -> None:
-        result = detect.classify_changed_files(["host_vars/lab-qemu.yml"])
-        assert result.machine_universe == {"lab"}
-        assert not result.full_universe_paths
-
-    def test_machine_universe_lab_prod(self) -> None:
-        result = detect.classify_changed_files(["host_vars/lab.yml"])
-        assert result.machine_universe == {"lab"}
-        assert not result.full_universe_paths
-
-    def test_machine_universe_pug(self) -> None:
-        result = detect.classify_changed_files(["host_vars/pug-qemu.yml"])
-        assert result.machine_universe == {"pug"}
-        assert not result.full_universe_paths
-
-    def test_machine_universe_pug_prod(self) -> None:
-        result = detect.classify_changed_files(["host_vars/pug.yml"])
-        assert result.machine_universe == {"pug"}
+    # lab/pug run on no AWS cell (every role that lists them aws_skips them), so
+    # their host_vars are not machine-universe triggers: a change must not
+    # force-add their roles' box cells. Their qemu coverage is unaffected (this
+    # matrix only drives the AWS pipeline).
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "host_vars/lab.yml",
+            "host_vars/lab-qemu.yml",
+            "host_vars/pug.yml",
+            "host_vars/pug-qemu.yml",
+        ],
+    )
+    def test_machine_universe_lab_pug_not_triggers(self, path: str) -> None:
+        result = detect.classify_changed_files([path])
+        assert result.machine_universe == set()
         assert not result.full_universe_paths
 
     def test_machine_universe_minimal_fixture(self) -> None:
@@ -181,8 +179,8 @@ class TestClassifyChangedFiles:
         assert not result.full_universe_paths
 
     def test_machine_universe_multiple(self) -> None:
-        result = detect.classify_changed_files(["host_vars/lab-qemu.yml", "host_vars/pug-qemu.yml"])
-        assert result.machine_universe == {"lab", "pug"}
+        result = detect.classify_changed_files(["host_vars/box.yml", "host_vars/minimal.yml"])
+        assert result.machine_universe == {"box", "minimal"}
 
 
 # ---------------------------------------------------------------------------
