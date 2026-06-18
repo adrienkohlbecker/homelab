@@ -102,7 +102,10 @@ stages:
   stage: site
   timeout: 60m
   script:
-    - test/site_test.py --timeout 2400
+    # External watchdog, same rationale as the cell script below: GNU timeout
+    # backstops site_test.py's in-process asyncio deadline against a wedged
+    # event loop. 2460 = 2400 + the harness's 60s teardown grace.
+    - timeout --kill-after=30s 2460 test/site_test.py --timeout 2400
 {% endif %}
 {% for group in cell_groups %}
 {% for cell in group.cells %}
@@ -115,7 +118,15 @@ stages:
     VARIANT: {{ cell.variant }}
     UBUNTU: {{ cell.ubuntu }}
   script:
-    - test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark
+    # External watchdog around the harness. testrole.py enforces --timeout 1500
+    # in-process via asyncio.timeout, but that only fires while the event loop
+    # stays responsive; GNU timeout is loop-independent, so a wedged harness is
+    # killed near the deadline instead of riding the 30m job timeout. SIGTERM
+    # lets testrole.py unwind and tear down its EC2 cell; --kill-after SIGKILLs
+    # if that unwind itself hangs (the cell still self-terminates via its
+    # EventBridge expiry schedule). 1560 = 1500 + the harness's 60s teardown
+    # grace (Machine.WRAPPER_GRACE_SECONDS).
+    - timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark
 {% endfor %}
 {% endfor %}
 {% if not cells and not site_test %}
