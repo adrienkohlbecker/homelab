@@ -37,9 +37,12 @@
   vars:
     reboot_args:
       condition: "{{ hwe_kernel_apt.changed }}"
-      # New kernel may rebuild the initramfs / re-import the pool on
-      # first boot, so allow longer than the 120s default.
-      timeout: 300
+      # The initramfs was already rebuilt by the apt postinst above, so
+      # the first 6.8 boot does no extra work and this fixture reaches
+      # SSH in seconds. Keep the wait short so a stuck reboot (e.g. the
+      # aarch64 edk2 warm-reboot heap assert) fails fast instead of
+      # burning minutes on a host that is never coming back.
+      timeout: 60
   tags:
     - hwe_kernel
 
