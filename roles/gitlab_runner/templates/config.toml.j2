@@ -40,6 +40,12 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
   # for the coordinator fleet) so a wide pipeline can't schedule the whole
   # fan-out onto fox. 0 = no per-runner cap (bounded only by `concurrent`).
   limit = {{ gitlab_runner_docker_limit }}
+  # Concurrent new-job requests to GitLab. The default 1 keeps a single request
+  # in flight, so when it blocks on a long poll the runner trips its long-polling
+  # bottleneck warning (loud once a second runner also polls). 4 is upstream's
+  # 2-4 recommendation -- enough outstanding requests to clear the stall without
+  # hammering GitLab's API.
+  request_concurrency = 4
 
   [runners.docker]
     # gitlab_runner's rootless podman socket (socket-activated; linger keeps
@@ -74,6 +80,9 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
   # fleet-wide ceiling). For an autoscaler runner this is max_instances ×
   # capacity_per_instance -- the most jobs one coordinator fleet can take.
   limit = {{ gitlab_runner_max_instances * gitlab_runner_capacity_per_instance }}
+  # Concurrent new-job requests to GitLab (see the docker runner above). Lets the
+  # coordinator pull the cell matrix in batches instead of one job per poll.
+  request_concurrency = 4
 
   [runners.docker]
     # The job container the autoscaler starts on the coordinator's dockerd. The
