@@ -101,12 +101,17 @@ locals {
   # source below, same as the qemu path derives box_deps from box. minimal
   # needs no bake at all (Canonical AMI alias in terraform/aws_ci.tf).
   variant_config = {
+    # box: 40G rpool + a 1G flat `zee` pool (second disk -> /dev/xvdg ->
+    # $EXTRA_DISKS via aws_provision.sh). The second pool gives the default
+    # cell multi-pool coverage (zfs trim-timer + mount-cache loops), folding
+    # in what the dropped lab/pug AMIs carried. See
+    # notes/ci_box_multidisk_drop_lab_pug_amis.md.
     box = {
       rpool_disks  = 1
-      disk_sizes   = [40]
+      disk_sizes   = [40, 1]
       layout       = ""
       swap_size    = "4G"
-      extra_pools  = ""
+      extra_pools  = "zee"
       image_target = "qemu"
       zfs_arc_max  = ""
     }
