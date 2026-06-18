@@ -168,4 +168,10 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
       # after the last job so a burst of pipelines reuses a coordinator.
       idle_count = 0
       idle_time = "{{ gitlab_runner_idle_time }}"
+      # Reactive scale-to-zero: request the job first, then provision a
+      # coordinator. Preemptive mode would gate job requests on an
+      # already-ready instance, which never exists at idle_count 0. Set
+      # explicitly because the runner's experimental jsonschema validation flags
+      # the unset *bool as a null where it wants a boolean.
+      preemptive_mode = false
 {% endif %}
