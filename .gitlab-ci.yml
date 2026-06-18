@@ -87,7 +87,7 @@ detect:
   # needn't be the freshest :latest -- .hosted's image is enough.
   # See notes/ci_aws_test_cells.md (Phase 2 / package and image caching).
   tags:
-    - fox-docker-aws
+    - fox-coordinator-aws
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web"
