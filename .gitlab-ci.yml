@@ -144,6 +144,9 @@ test_cells:
 # after the question is answered.
 exit_code_probe:
   stage: test
+  # Run regardless of the prepare stage (lint/unit_tests) so a pre-existing
+  # lint failure does not skip the probe.
+  needs: []
   tags:
     - fox-coordinator-aws
   rules:
