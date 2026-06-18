@@ -242,9 +242,18 @@ avahi_device_model: RackMac3,1
 # Overridden in group_vars/test.yml to route fetches through nexus.lab.fahm.fr.
 nexus_url: ""
 
-mirror_apt_ubuntu_archive: 'http://{{ nexus_url ~ "/repository/ubuntu-archive" if nexus_url else "archive.ubuntu.com/ubuntu" }}'
-mirror_apt_ubuntu_security: 'http://{{ nexus_url ~ "/repository/ubuntu-security" if nexus_url else "security.ubuntu.com/ubuntu" }}'
-mirror_apt_ubuntu_ports: 'http://{{ nexus_url ~ "/repository/ubuntu-ports" if nexus_url else "ports.ubuntu.com/ubuntu-ports" }}'
+# AWS test cells run with nexus_url empty (--upstream-mirrors), so without
+# a regional branch they would fetch packages from the public canonical
+# hosts across the internet. The in-region EC2 mirror is reachable only from
+# inside EC2, free of egress charge, and serves at LAN speed; it carries the
+# -security pocket too, so archive, security, and the arm ports suite all
+# ride it (ports via the parallel <region>.ec2.ports.ubuntu.com host). (Stock
+# AMIs leave security on security.ubuntu.com only for faster CDN propagation,
+# which doesn't matter for ephemeral cells.) AWS cells are amd64 today, so the
+# ports branch is latent -- kept for symmetry and a future Graviton cell.
+mirror_apt_ubuntu_archive: 'http://{{ nexus_url ~ "/repository/ubuntu-archive" if nexus_url else (test_aws_region ~ ".ec2.archive.ubuntu.com/ubuntu" if test_backend | default("") == "aws" else "archive.ubuntu.com/ubuntu") }}'
+mirror_apt_ubuntu_security: 'http://{{ nexus_url ~ "/repository/ubuntu-security" if nexus_url else (test_aws_region ~ ".ec2.archive.ubuntu.com/ubuntu" if test_backend | default("") == "aws" else "security.ubuntu.com/ubuntu") }}'
+mirror_apt_ubuntu_ports: 'http://{{ nexus_url ~ "/repository/ubuntu-ports" if nexus_url else (test_aws_region ~ ".ec2.ports.ubuntu.com/ubuntu-ports" if test_backend | default("") == "aws" else "ports.ubuntu.com/ubuntu-ports") }}'
 mirror_apt_azlux: 'https://{{ nexus_url ~ "/repository/azlux-debian" if nexus_url else "packages.azlux.fr/debian" }}'
 mirror_apt_netdata: 'https://{{ nexus_url ~ "/repository/netdata" if nexus_url else "repo.netdata.cloud/repos/stable/ubuntu" }}'
 mirror_apt_fluentbit: 'https://{{ nexus_url ~ "/repository/fluentbit" if nexus_url else "packages.fluentbit.io/ubuntu" }}'
