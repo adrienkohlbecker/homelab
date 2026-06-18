@@ -76,10 +76,10 @@
              + (['iptables'] if ansible_distribution_release in ['jammy', 'noble'] else []) }}"
     policy_rc_d: 101
     cache_valid_time: 3600
-    # Development releases can temporarily publish a podman dependency set that
-    # downgrades a package preinstalled in the cloud image. Keep that escape
-    # hatch off for the stable fleet releases.
-    allow_downgrade: "{{ ansible_distribution_release not in ['jammy', 'noble'] }}"
+    # Cached test images can briefly be ahead of the archive they converge
+    # against. Let apt bring ephemeral fixtures back to the archive candidate;
+    # prod should fail closed on any downgrade.
+    allow_downgrade: "{{ qemu_test | default(false) }}"
   register: podman_apt
   become: true
   tags:
