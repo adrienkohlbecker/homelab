@@ -68,8 +68,22 @@ gitlab_runner_image_selector: "role=ci-coordinator"
 
 # One coordinator runs a whole pipeline's cell matrix: capacity_per_instance
 # matches the AWS 60-spot-instances/region quota (the real fan-out ceiling), and
-# max_instances 1 keeps a single coordinator per manager. idle_count 0 +
-# idle_time park it at zero between pipelines with a short warm window.
+# max_instances 1 keeps a single coordinator per manager.
 gitlab_runner_capacity_per_instance: 60
 gitlab_runner_max_instances: 1
-gitlab_runner_idle_time: "15m"
+
+# idle_count 0 scales to zero between pipelines; idle_time is how long fleeting
+# keeps an idle coordinator before deleting it. Hetzner bills per hour, rounded
+# UP, anchored at server creation -- so a coordinator that ran a 5-min pipeline
+# has already been billed a full hour the moment it booted. Deleting it early
+# (the old 15m) saves nothing and forces the NEXT pipeline to boot a fresh box =
+# a second billed hour. Holding it ~most of the hour instead lets a follow-up
+# pipeline (rebase, retry, iterative push) reuse the already-paid box for free.
+# fleeting exposes only a flat idle_time (measured from the last job, not from
+# creation), so this is an approximation of "kill near the billing boundary if
+# idle": 45m keeps a short pipeline's idle tail inside its first paid hour while
+# tripling the warm-reuse window. A lone medium pipeline (~30m) whose idle tail
+# then crosses into a 2nd hour with no follow-up is the accepted edge -- pennies
+# on a cx53, and a creation-anchored reaper racing fleeting's lifecycle is not
+# worth it. Dial up toward 55m for more reuse, down for less spillover.
+gitlab_runner_idle_time: "45m"
