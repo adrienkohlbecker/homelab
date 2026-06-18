@@ -4,7 +4,8 @@
 The ``gitlab`` subcommand (.gitlab-ci.yml's `detect` job) is the whole story:
 resolve a green base via the GitLab pipelines API, classify the changed files,
 expand role-deps and release cells, and write a generated child pipeline — one
-job per `role:variant[:ubuntu]` cell.
+job per `role:variant[:ubuntu]` cell, emitted longest-first by the green base's
+per-cell runtimes so the slowest jobs start first.
 """
 
 import json
@@ -341,8 +342,12 @@ def newest_green_pipeline(
     token_kind: str,
     log_fn,
     max_pages: int = 5,
-) -> str | None:
-    """Find the newest successful push/schedule pipeline on branch that is an ancestor of head."""
+) -> dict | None:
+    """Find the newest successful push/schedule pipeline on branch that is an ancestor of head.
+
+    Returns the pipeline object (its ``sha`` is the diff base; its ``id`` keys
+    the per-cell runtime lookup), or None when none resolves.
+    """
     log_fn(f"  searching green pipelines on '{branch}'...")
     page = 1
     while page <= max_pages:
@@ -371,7 +376,7 @@ def newest_green_pipeline(
                 continue
             if is_local_ancestor(sha, head_sha):
                 log_fn(f"  green ancestor: {sha[:12]} ({created}, {source})")
-                return sha
+                return pipe
             log_fn(f"    skip {sha[:12]} ({created}): not an ancestor of HEAD")
         page += 1
     log_fn(f"  no green ancestor on '{branch}' (searched {page - 1} page(s))")
@@ -387,11 +392,15 @@ def resolve_green_base_gitlab(
     head_sha: str,
     default_branch: str = "master",
     log_fn,
-) -> str | None:
-    """Resolve the diff base to the newest green pipeline ancestor (branch, then default)."""
+) -> dict | None:
+    """Resolve the newest green pipeline ancestor (branch, then default).
+
+    Returns the pipeline object, whose ``sha`` is the diff base and whose
+    ``id`` keys the per-cell runtime lookup.
+    """
     if not (project_api and token and branch and head_sha):
         return None
-    sha = newest_green_pipeline(
+    pipe = newest_green_pipeline(
         branch,
         head_sha=head_sha,
         project_api=project_api,
@@ -399,9 +408,9 @@ def resolve_green_base_gitlab(
         token_kind=token_kind,
         log_fn=log_fn,
     )
-    if sha is None and branch != default_branch:
+    if pipe is None and branch != default_branch:
         log_fn(f"  none on '{branch}'; falling back to default branch '{default_branch}'")
-        sha = newest_green_pipeline(
+        pipe = newest_green_pipeline(
             default_branch,
             head_sha=head_sha,
             project_api=project_api,
@@ -409,27 +418,40 @@ def resolve_green_base_gitlab(
             token_kind=token_kind,
             log_fn=log_fn,
         )
-    return sha
+    return pipe
 
 
-def _gitlab_green_base(branch: str, head_sha: str, default_branch: str, log) -> str | None:
-    """Gather GitLab CI env and resolve the newest green pipeline ancestor.
+def _gitlab_api_creds() -> tuple[str, str, str] | None:
+    """``(project_api, token, token_kind)`` from CI env, or None when unavailable.
 
-    Prefers an explicit read_api token (GITLAB_API_TOKEN) and falls back to the
-    pipeline's CI_JOB_TOKEN.  Returns None — the caller then drops to the
-    previous-tip base — when no token is present, the API is unreachable, or
-    the token is rejected.
+    Prefers an explicit read_api token (GITLAB_API_TOKEN); falls back to the
+    pipeline's CI_JOB_TOKEN.
     """
     api_url = os.environ.get("CI_API_V4_URL", "")
     project_id = os.environ.get("CI_PROJECT_ID", "")
     pat = os.environ.get("GITLAB_API_TOKEN", "")
     job_token = os.environ.get("CI_JOB_TOKEN", "")
     token, token_kind = (pat, "private") if pat else (job_token, "job")
-    if not (api_url and project_id and token and head_sha and branch):
-        log("  green base unavailable (need CI_API_V4_URL + CI_PROJECT_ID + a token + branch); using previous-tip base")
+    if not (api_url and project_id and token):
         return None
+    return f"{api_url}/projects/{project_id}", token, token_kind
+
+
+def _gitlab_green_base(branch: str, head_sha: str, default_branch: str, log) -> dict | None:
+    """Gather GitLab CI env and resolve the newest green pipeline ancestor.
+
+    Returns the pipeline object (``sha`` = diff base, ``id`` = runtime-lookup
+    key), or None — the caller then drops to the previous-tip base and emits
+    cells in default order — when no token is present, the API is unreachable,
+    or the token is rejected.
+    """
+    creds = _gitlab_api_creds()
+    if not (creds and head_sha and branch):
+        log("  no green pipeline (need CI_API_V4_URL + CI_PROJECT_ID + a token + branch)")
+        return None
+    project_api, token, token_kind = creds
     return resolve_green_base_gitlab(
-        project_api=f"{api_url}/projects/{project_id}",
+        project_api=project_api,
         token=token,
         token_kind=token_kind,
         branch=branch,
@@ -437,6 +459,95 @@ def _gitlab_green_base(branch: str, head_sha: str, default_branch: str, log) -> 
         default_branch=default_branch,
         log_fn=log,
     )
+
+
+# ---------------------------------------------------------------------------
+# GitLab API — cell runtime ordering
+# ---------------------------------------------------------------------------
+#
+# Cells are emitted longest-first so the slowest jobs get the lowest build ids
+# and a runner claims them before the short ones (GitLab seeds ids in YAML order
+# within a stage). Runtimes come from the green base pipeline's per-cell job
+# `duration` (execution time, matched by job name == cell spec); a cell with no
+# recorded green-base runtime is emitted first, so a new/unmeasured -- possibly
+# long -- cell is never left to start last.
+
+
+def _gl_api_get_all(base_url: str, token: str, token_kind: str, *, max_pages: int = 10) -> list | None:
+    """GET every page of a GitLab list endpoint (per_page=100).  None on failure."""
+    items: list = []
+    page = 1
+    while page <= max_pages:
+        sep = "&" if "?" in base_url else "?"
+        data = _gl_api_get(f"{base_url}{sep}per_page=100&page={page}", token, token_kind=token_kind)
+        if data is None:
+            return None
+        if not isinstance(data, list) or not data:
+            break
+        items.extend(data)
+        if len(data) < 100:
+            break
+        page += 1
+    return items
+
+
+def _collect_pipeline_jobs(
+    project_api: str, pipeline_id: int, token: str, token_kind: str, seen: set[int]
+) -> dict[str, dict]:
+    """All jobs of a pipeline and its downstream child pipelines, keyed by name.
+
+    The cells live in a triggered child, so bridges are recursed. Duplicate
+    names (retries, or a name present at two levels) collapse to the highest
+    job id -- the latest attempt.
+    """
+    if pipeline_id in seen:
+        return {}
+    seen.add(pipeline_id)
+
+    by_name: dict[str, dict] = {}
+
+    def keep(job: dict) -> None:
+        existing = by_name.get(job["name"])
+        if existing is None or job["id"] > existing["id"]:
+            by_name[job["name"]] = job
+
+    for job in _gl_api_get_all(f"{project_api}/pipelines/{pipeline_id}/jobs", token, token_kind) or []:
+        keep(job)
+    for bridge in _gl_api_get_all(f"{project_api}/pipelines/{pipeline_id}/bridges", token, token_kind) or []:
+        downstream = bridge.get("downstream_pipeline") or {}
+        if downstream.get("id"):
+            for job in _collect_pipeline_jobs(project_api, downstream["id"], token, token_kind, seen).values():
+                keep(job)
+    return by_name
+
+
+def _green_cell_runtimes(green: dict | None, log) -> dict[str, float]:
+    """Map cell-job name -> green-base `duration` (s); {} when unavailable.
+
+    Returns an empty map -- the caller then emits cells in default order -- when
+    there is no green pipeline or the API/token is unavailable.
+    """
+    if not green or not green.get("id"):
+        return {}
+    creds = _gitlab_api_creds()
+    if not creds:
+        return {}
+    project_api, token, token_kind = creds
+    jobs = _collect_pipeline_jobs(project_api, green["id"], token, token_kind, set())
+    runtimes = {name: job["duration"] for name, job in jobs.items() if job.get("duration") is not None}
+    log(f"  runtime ordering: {len(runtimes)} cell duration(s) from green pipeline {green['id']}")
+    return runtimes
+
+
+def sort_specs_by_runtime(specs: list[str], runtimes: dict[str, float]) -> list[str]:
+    """Order cell specs longest-first by their green-base runtime.
+
+    A spec with no recorded runtime (a new cell, or no green data at all) sorts
+    first so an unmeasured -- potentially long -- cell starts before the
+    measured ones. Ties and the no-runtime group break by spec name, so the
+    order is deterministic.
+    """
+    return sorted(specs, key=lambda s: (s in runtimes, -runtimes.get(s, 0.0), s))
 
 
 # ---------------------------------------------------------------------------
@@ -580,13 +691,14 @@ def render_child_pipeline(specs: list[str], site_test: bool) -> str:
     )
 
 
-def _emit_gitlab(matrix: str, site_test: bool, child_path: str, log) -> int:
+def _emit_gitlab(matrix: str, site_test: bool, child_path: str, runtimes: dict[str, float], log) -> int:
     """Write the generated child-pipeline YAML.
 
     The `test_cells` trigger always runs this child (GitLab evaluates `rules`
     at pipeline-creation time, so a runtime "any cells?" flag can't gate it);
     when there is nothing to test the child carries only the `no_cells`
-    placeholder, which the template adds.
+    placeholder, which the template adds. Cells are emitted longest-first by
+    their green-base runtime so the slowest jobs start first.
     """
     specs = json.loads(matrix)
     # This generator only ever feeds the aws (EC2 cell) backend, so apply the
@@ -594,28 +706,32 @@ def _emit_gitlab(matrix: str, site_test: bool, child_path: str, log) -> int:
     # cell (keepalived VIP / macvlan need forbidden L2) stay in the qemu matrix
     # but are dropped from the cell pipeline. Logged, never silent.
     specs, dropped = drop_aws_skipped(specs)
+    specs = sort_specs_by_runtime(specs, runtimes)
 
     Path(child_path).write_text(render_child_pipeline(specs, site_test))
 
     log(f"matrix={json.dumps(specs)}")
     if dropped:
         log(f"aws_skip: dropped {len(dropped)} cell(s): {' '.join(sorted(dropped))}")
+    if specs:
+        unmeasured = [s for s in specs if s not in runtimes]
+        log(f"cell order: longest-first by green-base runtime ({len(unmeasured)} unmeasured cell(s) first)")
     log(f"site_test={'true' if site_test else 'false'}")
     log(f"-> {len(specs)} cell job(s){' + site converge' if site_test else ''}")
     log(f"-> wrote {child_path}")
     return 0
 
 
-def _gitlab_change_matrix(event: str, log) -> tuple[str, bool]:
+def _gitlab_change_matrix(event: str, green: dict | None, log) -> tuple[str, bool]:
     """GitLab change-detection: resolve a diff base and compute the cell matrix.
 
-    Returns ``(matrix_json, site_test)``. A full-universe trigger (a
-    cross-cutting path changed, or no usable diff base) returns the whole
-    universe with site_test enabled.
+    ``green`` is the pre-resolved newest green pipeline ancestor (or None); its
+    ``sha`` is the preferred diff base. Returns ``(matrix_json, site_test)``. A
+    full-universe trigger (a cross-cutting path changed, or no usable diff base)
+    returns the whole universe with site_test enabled.
     """
     before_sha = os.environ.get("CI_COMMIT_BEFORE_SHA", "")
     branch = os.environ.get("CI_COMMIT_BRANCH", "")
-    head_sha = os.environ.get("CI_COMMIT_SHA", "")
     default_branch = os.environ.get("CI_DEFAULT_BRANCH", "master")
 
     def full_universe(reason):
@@ -634,9 +750,9 @@ def _gitlab_change_matrix(event: str, log) -> tuple[str, bool]:
     if ci_base_ref:
         base_ref = ci_base_ref
         log(f"diff base: {base_ref} (CI_BASE_REF override)")
-    elif green := _gitlab_green_base(branch, head_sha, default_branch, log):
-        base_ref = green
-        log(f"diff base: {green[:12]} (last green pipeline)")
+    elif green and green.get("sha"):
+        base_ref = green["sha"]
+        log(f"diff base: {green['sha'][:12]} (last green pipeline)")
     elif before_sha and before_sha != EMPTY_SHA:
         base_ref = before_sha
         log(f"diff base: {before_sha[:12]} (previous branch tip)")
@@ -722,9 +838,19 @@ def _cmd_gitlab(args: list[str]) -> int:
     def log(msg):
         print(f"[detect] {msg}", file=sys.stderr)
 
+    # The newest green pipeline ancestor serves two roles, so resolve it once:
+    # its commit is the change-detection diff base, and its per-cell job
+    # durations order every mode's emitted cells longest-first. Returns None
+    # (and runtimes {} -> default order) when the GitLab API is unavailable.
+    branch = os.environ.get("CI_COMMIT_BRANCH", "")
+    head_sha = os.environ.get("CI_COMMIT_SHA", "")
+    default_branch = os.environ.get("CI_DEFAULT_BRANCH", "master")
+    green = _gitlab_green_base(branch, head_sha, default_branch, log)
+    runtimes = _green_cell_runtimes(green, log)
+
     if opts.all:
         log("mode: --all (full universe)")
-        return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, log)
+        return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, runtimes, log)
 
     event = os.environ.get("CI_PIPELINE_SOURCE", "")
     roles_input = os.environ.get("ROLES", "")
@@ -735,17 +861,17 @@ def _cmd_gitlab(args: list[str]) -> int:
         log(f"mode: dispatch ROLES='{roles_input}'")
         if roles_input == "ALL":
             log("ROLES=ALL -> full universe")
-            return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, log)
+            return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, runtimes, log)
         cells = _build_dispatch_matrix(roles_input)
-        return _emit_gitlab(json.dumps(cells_to_ci_specs(cells)), False, opts.child_path, log)
+        return _emit_gitlab(json.dumps(cells_to_ci_specs(cells)), False, opts.child_path, runtimes, log)
 
     if event == "schedule":
         log("mode: schedule (nightly full build)")
-        return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, log)
+        return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, runtimes, log)
 
     log(f"mode: change detection (source={event or 'local'})")
-    matrix, site_test = _gitlab_change_matrix(event, log)
-    return _emit_gitlab(matrix, site_test, opts.child_path, log)
+    matrix, site_test = _gitlab_change_matrix(event, green, log)
+    return _emit_gitlab(matrix, site_test, opts.child_path, runtimes, log)
 
 
 _COMMANDS = {
