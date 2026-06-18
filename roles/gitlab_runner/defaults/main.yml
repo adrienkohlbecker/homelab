@@ -73,6 +73,6 @@ gitlab_runner_max_instances: 1
 # idle": 45m keeps a short pipeline's idle tail inside its first paid hour while
 # tripling the warm-reuse window. A lone medium pipeline (~30m) whose idle tail
 # then crosses into a 2nd hour with no follow-up is the accepted edge -- pennies
-# on a cx53, and a creation-anchored reaper racing fleeting's lifecycle is not
+# on a cx43, and a creation-anchored reaper racing fleeting's lifecycle is not
 # worth it. Dial up toward 55m for more reuse, down for less spillover.
 gitlab_runner_idle_time: "45m"

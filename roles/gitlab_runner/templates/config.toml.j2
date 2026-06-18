@@ -129,11 +129,16 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
       # the private `hetzner` network (fox manages the coordinator over it) and the
       # 20 TB-traffic eu-central zone both line up.
       location = "nbg1"
-      # Coordinator server type. CX53 (16 vCPU / 32 GiB / 320 GB NVMe) -- RAM is the
-      # binding constraint at a 60-wide cell fan-out (cx43's 16 GiB peaked ~80%); CPU
-      # and disk had ample headroom in the Phase 1b/1c benchmarks. See
-      # notes/ci_aws_test_cells.md.
-      server_type = [ "cx53", "cpx62" ]
+      # Coordinator server type. cx43 (8 vCPU / 16 GiB / 160 GB NVMe) -- RAM is the
+      # binding constraint at a 60-wide cell fan-out. Phase 1c benchmarked cx43 at the
+      # full 137-cell 60-wide load: RAM peaked 12.5/15.6 GiB (~80%) with mem-PSI full=0
+      # and steal=0, CPU a transient ~98% start-burst settling to ~50% steady, disk
+      # untouched -- adequate, RAM the tightest axis. A live run reconfirmed it (cx53
+      # peaked ~10.5/30 GiB, ~34%). The 32 GiB cx53 was only headroom over that ~80%;
+      # the coordinator has no swap, so ~80% peak with no backstop is the accepted
+      # margin (a heavy full-universe burst is the case to watch). cpx41 is the AMD
+      # 8c/16G capacity fallback. See notes/ci_aws_test_cells.md.
+      server_type = [ "cx43", "cpx41" ]
       # Numeric snapshot id resolved from the role=ci-coordinator label at
       # converge (docker-autoscaler needs an id, not a name). ubuntu-24.04 is a
       # harmless qemu-only fallback -- the coordinator path never boots there.
