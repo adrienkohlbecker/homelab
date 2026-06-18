@@ -259,6 +259,28 @@ resource "hcloud_primary_ip" "ci_coordinator" {
   }
 }
 
+# Reserved IPv6 for the same pool. fleeting's public-IP pool
+# (public_ip_pool_enabled in roles/gitlab_runner) validates BOTH address families
+# of the pool selector at scale-up, so reserving only the IPv4 above fails
+# instance creation with "could not get ipv6 from pool: ip pool is empty"
+# (confirmed empirically: dropping this and forcing public_ipv6_disabled instead
+# reproduced the error). Reserving a v6 alongside the v4 completes the pool, and
+# the coordinator claims it (public_ipv6_disabled = false in the runner config).
+# Reachability to AWS cells still rides IPv4 (the cell SG and the private-net
+# manager link are both v4); the v6 just satisfies the plugin's pool check.
+# auto_delete = false, same rationale as the v4: a torn-down coordinator must not
+# drop it.
+resource "hcloud_primary_ip" "ci_coordinator_v6" {
+  name        = "ci-coordinator_v6"
+  type        = "ipv6"
+  location    = var.hetzner_location
+  auto_delete = false
+
+  labels = {
+    pool = "ci-coordinator"
+  }
+}
+
 # Egress-only firewall, auto-attached to every coordinator by label selector
 # (fleeting tags its instances pool=ci-coordinator). No `in` rules => all public
 # inbound dropped; no `out` rules => outbound open (the coordinator dials AWS +

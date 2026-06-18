@@ -117,6 +117,12 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
       # manager drives it over the private IP (use_external_addr=false below);
       # the reserved public IP stays egress-only.
       private_networks = ["hetzner"]
+      # The coordinator claims a public IPv6 from the reserved-IP pool. fleeting
+      # validates BOTH address families of the pool selector (terraform reserves
+      # hcloud_primary_ip.ci_coordinator_v6 alongside the v4), so the coordinator
+      # has to accept the v6 -- forcing public_ipv6_disabled true reproduces
+      # scale-up failing "could not get ipv6 from pool" even with the v6 reserved.
+      public_ipv6_disabled = false
       # Assign the reserved egress IP (terraform hcloud_primary_ip.ci_coordinator,
       # labelled pool=ci-coordinator) so the AWS cell SG can allowlist one stable
       # /32 despite scale-to-zero.
