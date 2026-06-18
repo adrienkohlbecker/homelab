@@ -82,7 +82,12 @@ rm -f "$manifest" # manifest post-processor refuses to overwrite a non-manifest 
 bake_backstop_arm "$region" "${CI_PIPELINE_ID:-local}" "$machine" "$ubuntu" "$backstop_state" &
 backstop_pid=$!
 
-packer build \
+# Run under `uv run` so the project venv is on PATH: the box_deps build's
+# ansible provisioner shells out to ansible-playbook, which lives in the venv
+# bin. Locally mise's uv_venv_auto sources .venv anyway, but the CI image bakes
+# the venv at /opt/venv with MISE_PYTHON_UV_VENV_AUTO=false (so it does not
+# shadow the baked layer), leaving it off PATH for a bare `packer build`.
+uv run packer build \
   -timestamp-ui \
   -warn-on-undeclared-var \
   "--on-error=${on_error}" \
