@@ -102,6 +102,7 @@ detect:
     - $HOMELAB_DETECT_TAG
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
     - if: $CI_PIPELINE_SOURCE == "web"
     - if: $CI_PIPELINE_SOURCE == "push"
   variables:
@@ -133,6 +134,7 @@ test_cells:
       artifacts: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
     - if: $CI_PIPELINE_SOURCE == "web"
     - if: $CI_PIPELINE_SOURCE == "push"
   trigger:
@@ -144,6 +146,11 @@ test_cells:
 lint:
   stage: prepare
   extends: .hosted
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "push"
   # The default (small) hosted runner is 2 vCPU; lint fans its linters out in
   # parallel, so the 4-vCPU medium tier roughly halves the wall-clock.
   tags:
@@ -173,6 +180,11 @@ lint:
 unit_tests:
   stage: prepare
   extends: .hosted
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "push"
   timeout: 15m
   script:
     - mise install
@@ -193,6 +205,8 @@ unit_tests:
 ci_image:
   stage: prepare
   rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
     - when: manual
       # A skipped manual job must not hold the pipeline in "blocked".
       allow_failure: true
@@ -248,6 +262,8 @@ ci_image:
 ami_images:
   stage: prepare
   rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
       # A skipped manual job must not hold the pipeline in "blocked".
@@ -298,6 +314,8 @@ ami_images:
 ami_box_deps:
   stage: prepare
   rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
       # A skipped manual job must not hold the pipeline in "blocked".
@@ -389,6 +407,8 @@ qemu_image_reaper:
 fox_image:
   stage: prepare
   rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
       # A skipped manual job must not hold the pipeline in "blocked".
@@ -444,6 +464,8 @@ zbm_build:
   stage: prepare
   extends: .hosted
   rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
     - when: manual
       # A skipped manual job must not hold the pipeline in "blocked".
       allow_failure: true
