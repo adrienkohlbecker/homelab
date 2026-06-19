@@ -72,7 +72,7 @@ gitlab_runner_aws_qemu_secret_access_key: ""
 
 # Terraform owns the matching ASG. Keep the config values explicit here so the
 # runner block can be enabled before it replaces the legacy direct-EC2 path.
-gitlab_runner_aws_qemu_asg_name: homelab-ci-qemu-c8i-xlarge
+gitlab_runner_aws_qemu_asg_name: homelab-ci-qemu-host
 gitlab_runner_aws_qemu_capacity_per_instance: 1
 gitlab_runner_aws_qemu_max_instances: 1
 gitlab_runner_aws_qemu_idle_time: "15m"
