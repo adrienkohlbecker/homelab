@@ -72,6 +72,14 @@ stages:
 {% endif %}
   variables:
     HOMELAB_TEST_BACKEND: {{ backend }}
+    # Temporarily pin the legacy slirp guest NIC. passt intermittently fails to
+    # answer the ZFSBootMenu initramfs DHCP, and rd.neednet=1 then blocks the
+    # boot until the ssh-wait deadline (harness exit 124). passt only engages in
+    # CI (macOS + the jammy host already fall back via _passt_available), so this
+    # disables it fleet-wide without removing the passt code. Drop this line to
+    # re-enable once the initramfs-DHCP race is fixed (resolve_net_backend reads
+    # HOMELAB_NET_BACKEND=slirp).
+    HOMELAB_NET_BACKEND: slirp
     # Restrict ansible to the test identity; the prod identity is undecryptable
     # in CI by design (CLAUDE.md: Vault ids).
     ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
