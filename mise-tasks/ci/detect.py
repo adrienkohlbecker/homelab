@@ -705,6 +705,10 @@ def _full_universe_matrix() -> str:
 # its OIDC trust accepts any branch, so feature-branch pushes can test too.
 CELL_ROLE_ARN = "arn:aws:iam::000390721279:role/homelab-ci-cell"
 EMPTY_SHA = "0" * 40
+TARGET_BACKENDS = {
+    "aws": "aws",
+    "lab": "qemu",
+}
 
 # The child pipeline is a Jinja2 template so the static scaffold (`.cell`
 # before_script, artifacts, retry) is reviewable as real YAML; only the
@@ -744,7 +748,7 @@ def _split_cells_into_stages(cells: list[dict]) -> list[dict]:
     return groups
 
 
-def render_child_pipeline(specs: list[str], site_test: bool) -> str:
+def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws") -> str:
     """Render the generated child-pipeline YAML from test_child.yml.j2.
 
     One job per cell spec (``role:variant[:ubuntu]``), each extending the
@@ -761,6 +765,8 @@ def render_child_pipeline(specs: list[str], site_test: bool) -> str:
         undefined=jinja2.StrictUndefined,
     )
     template = env.get_template(_CHILD_TEMPLATE.name)
+    if target not in TARGET_BACKENDS:
+        raise ValueError(f"unsupported CI target: {target!r}")
     cells = [_parse_cell_spec(s) for s in specs]
     cell_groups = _split_cells_into_stages(cells)
     # _site_test is the critical-path cell (longest, ~40m). GitLab seeds build
@@ -778,11 +784,21 @@ def render_child_pipeline(specs: list[str], site_test: bool) -> str:
         cell_groups=cell_groups,
         stages=stages,
         site_test=site_test,
+        target=target,
+        backend=TARGET_BACKENDS[target],
         cell_role_arn=CELL_ROLE_ARN,
     )
 
 
-def _emit_gitlab(matrix: str, site_test: bool, child_path: str, runtimes: dict[str, float], log) -> int:
+def _emit_gitlab(
+    matrix: str,
+    site_test: bool,
+    child_path: str,
+    runtimes: dict[str, float],
+    log,
+    *,
+    target: str = "aws",
+) -> int:
     """Write the generated child-pipeline YAML.
 
     The `test_cells` trigger always runs this child (GitLab evaluates `rules`
@@ -791,16 +807,20 @@ def _emit_gitlab(matrix: str, site_test: bool, child_path: str, runtimes: dict[s
     placeholder, which the template adds. Cells are emitted longest-first by
     their median recent runtime so the slowest jobs start first.
     """
+    if target not in TARGET_BACKENDS:
+        raise ValueError(f"unsupported CI target: {target!r}")
     specs = json.loads(matrix)
-    # This generator only ever feeds the aws (EC2 cell) backend, so apply the
-    # backend-aware aws_skip: here — roles whose path can't run on a vanilla
-    # cell (keepalived VIP / macvlan need forbidden L2) stay in the qemu matrix
-    # but are dropped from the cell pipeline. Logged, never silent.
-    specs, dropped = drop_aws_skipped(specs)
+    # Apply backend-aware aws_skip: only for the EC2-cell target. The lab
+    # fallback is qemu-backed, so it deliberately keeps the same cells a local
+    # qemu run would exercise.
+    dropped: list[str] = []
+    if target == "aws":
+        specs, dropped = drop_aws_skipped(specs)
     specs = sort_specs_by_runtime(specs, runtimes)
 
-    Path(child_path).write_text(render_child_pipeline(specs, site_test))
+    Path(child_path).write_text(render_child_pipeline(specs, site_test, target=target))
 
+    log(f"target={target} backend={TARGET_BACKENDS[target]}")
     log(f"matrix={json.dumps(specs)}")
     if dropped:
         log(f"aws_skip: dropped {len(dropped)} cell(s): {' '.join(sorted(dropped))}")
@@ -924,7 +944,15 @@ def _cmd_gitlab(args: list[str]) -> int:
     p = ArgumentParser(prog="detect.py gitlab")
     p.add_argument("--child-path", default="test-child.yml")
     p.add_argument("--all", action="store_true", help="Force the full universe (debug)")
+    p.add_argument(
+        "--target",
+        default=os.environ.get("HOMELAB_CI_TARGET", "aws"),
+        choices=sorted(TARGET_BACKENDS),
+        help="Render jobs for the target runner/backend (default: HOMELAB_CI_TARGET or aws)",
+    )
     opts = p.parse_args(args)
+    if opts.target not in TARGET_BACKENDS:
+        p.error(f"unsupported --target {opts.target!r}; choose one of: {', '.join(sorted(TARGET_BACKENDS))}")
 
     def log(msg):
         print(f"[detect] {msg}", file=sys.stderr)
@@ -944,7 +972,7 @@ def _cmd_gitlab(args: list[str]) -> int:
 
     if opts.all:
         log("mode: --all (full universe)")
-        return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, runtimes, log)
+        return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, runtimes, log, target=opts.target)
 
     event = os.environ.get("CI_PIPELINE_SOURCE", "")
     roles_input = os.environ.get("ROLES", "")
@@ -955,17 +983,17 @@ def _cmd_gitlab(args: list[str]) -> int:
         log(f"mode: dispatch ROLES='{roles_input}'")
         if roles_input == "ALL":
             log("ROLES=ALL -> full universe")
-            return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, runtimes, log)
+            return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, runtimes, log, target=opts.target)
         cells = _build_dispatch_matrix(roles_input)
-        return _emit_gitlab(json.dumps(cells_to_ci_specs(cells)), False, opts.child_path, runtimes, log)
+        return _emit_gitlab(json.dumps(cells_to_ci_specs(cells)), False, opts.child_path, runtimes, log, target=opts.target)
 
     if event == "schedule":
         log("mode: schedule (nightly full build)")
-        return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, runtimes, log)
+        return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, runtimes, log, target=opts.target)
 
     log(f"mode: change detection (source={event or 'local'})")
     matrix, site_test = _gitlab_change_matrix(event, green, log)
-    return _emit_gitlab(matrix, site_test, opts.child_path, runtimes, log)
+    return _emit_gitlab(matrix, site_test, opts.child_path, runtimes, log, target=opts.target)
 
 
 _COMMANDS = {

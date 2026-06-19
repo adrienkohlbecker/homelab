@@ -134,6 +134,11 @@
     - nexus
     - homepage
 
+- name: Lab CI runner
+  hosts: lab
+  roles:
+    - gitlab_runner
+
 - name: MacOS VM
   hosts: lab
   roles:

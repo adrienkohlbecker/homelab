@@ -8,11 +8,13 @@
 # "any cells?" flag cannot gate the trigger). See notes/ci_aws_test_cells.md.
 default:
   interruptible: true
+{% if target == "aws" %}
   # Pin the CI image explicitly (the child is self-contained). The default tag
   # keeps the trivial no_cells placeholder on the always-on fox runner; the real
   # cells override to the ephemeral coordinator via .cell, so a no-cell pipeline
   # never boots a coordinator just to echo "nothing to test".
   image: "$CI_REGISTRY_IMAGE/ci:latest"
+{% endif %}
   tags:
     - fox-docker-aws
 
@@ -27,6 +29,7 @@ stages:
 .cell:
   stage: test1
   needs: []
+{% if target == "aws" %}
   # The AWS test-cell fan-out runs on the ephemeral coordinator (gitlab_runner's
   # docker-autoscaler / fleeting runner), NOT the on-fox docker runner: per
   # pipeline it clones one Hetzner box, runs the whole matrix (all cells share
@@ -45,28 +48,42 @@ stages:
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: sts.amazonaws.com
+{% else %}
+  # Lab fallback runs directly on lab's protected shell runner. No job image, no
+  # AWS OIDC, and no EC2 launch prelude: test/testrole.py uses the local qemu
+  # harness through HOMELAB_TEST_BACKEND=qemu.
+  tags:
+    - lab-shell-qemu
+{% endif %}
   # Harness --timeout is 25m (1500s); the job timeout leaves headroom for the
   # prelude + cell teardown.
   timeout: 30m
+{% if target == "aws" %}
   # testrole.py exits 86 on a post-hoc spot-interruption classification
   # (notes/ci_aws_test_cells.md); retry the cell once.
   retry:
     max: 1
     exit_codes:
       - 86
+{% endif %}
   variables:
-    HOMELAB_TEST_BACKEND: aws
+    HOMELAB_TEST_BACKEND: {{ backend }}
     # Restrict ansible to the test identity; the prod identity is undecryptable
     # in CI by design (CLAUDE.md: Vault ids).
     ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
   before_script:
+{% if target == "aws" %}
     # Fail before the launch, not at the SSH wait, when prerequisites are
     # missing (the same guard style as ami_box_deps / fox_image).
     - test -n "${CI_CELL_SSH_KEY:-}" || { echo "CI_CELL_SSH_KEY CI/CD variable is not set" >&2; exit 1; }
+{% endif %}
     - test -n "${HOMELAB_VAULT_PASSWORD_TEST:-}" || { echo "HOMELAB_VAULT_PASSWORD_TEST CI/CD variable is not set" >&2; exit 1; }
-    # Same drift self-heal as .hosted, against the image's /opt/mise tree.
+    # Same drift self-heal as .hosted, against the active mise tool tree.
     - mise install
-    - uv sync --locked
+    # Shell runners do not activate mise shims; `mise exec` exposes the tool
+    # tree consistently there while staying harmless inside the CI image.
+    - mise exec -- uv sync --locked
+{% if target == "aws" %}
     # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
     # AssumeRoleWithWebIdentity provider wants a file path.
     - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
@@ -86,9 +103,9 @@ stages:
     - printf '%s\n' "$(tr -d '\r' < "$CI_CELL_SSH_KEY")" > "$cell_key"
     - eval "$(ssh-agent -s)"
     - ssh-add "$cell_key"
-    # Each cell egresses from its own public IP, so the anon api.github.com
-    # rate limit mise install can hit is far less of a risk -- but pass the PAT
-    # through to the guest's `mise install` when one is configured.
+{% endif %}
+    # Pass the PAT through to `mise install` when one is configured, and from
+    # there to the guest's `mise install` for backend-launched cells.
     - if [ -n "${MISE_GITHUB_TOKEN:-}" ]; then export GITHUB_TOKEN="$MISE_GITHUB_TOKEN"; fi
   artifacts:
     when: on_failure
@@ -117,7 +134,7 @@ stages:
     # job log when a cell does not retry as expected.
     - |
       rc=0
-      timeout --kill-after=30s 2460 test/site_test.py --timeout 2400 || rc=$?
+      mise exec -- timeout --kill-after=30s 2460 test/site_test.py --timeout 2400 || rc=$?
       echo "harness exit code: $rc"
       exit $rc
 {% endif %}
@@ -149,7 +166,7 @@ stages:
     # the runner.
     - |
       rc=0
-      timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark || rc=$?
+      mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark || rc=$?
       echo "harness exit code: $rc"
       exit $rc
 {% endfor %}

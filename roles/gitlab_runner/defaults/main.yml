@@ -8,6 +8,15 @@
 # config.toml.j2 rather than surfaced here.
 gitlab_runner_enabled: false
 
+# Primary runner executor. fox uses the Docker executor against rootless podman;
+# lab can use a host-native shell executor for qemu CI fallback work.
+gitlab_runner_executor: docker
+
+# Suffix for the GitLab runner name in config.toml. The matching GitLab project
+# runner tags are server-side, but using the same suffix keeps host config and
+# UI names lined up.
+gitlab_runner_name_suffix: "{{ 'shell-qemu' if gitlab_runner_executor == 'shell' else 'docker-aws' }}"
+
 # Global job ceiling across ALL [[runners]] blocks (process-wide). With the
 # coordinator runner enabled this is the fleet-wide umbrella, raised to cover
 # its per-runner limit; per-runner bounds live in `limit` (below + per block),
@@ -21,6 +30,14 @@ gitlab_runner_concurrent: 8
 # also running the coordinator sets this to keep on-fox jobs bounded once
 # `concurrent` is raised for the coordinator fleet.
 gitlab_runner_docker_limit: 0
+
+# Per-runner `limit` for non-Docker executors. Docker mode uses the historical
+# gitlab_runner_docker_limit above; shell mode sets this explicitly per host.
+gitlab_runner_limit: 0
+
+# Supplementary groups for the gitlab_runner service user. lab's shell runner
+# needs kvm for /dev/kvm and homelab_ci for /mnt/scratch/homelab_ci.
+gitlab_runner_extra_groups: []
 
 # Memory ceiling on the rootless runner's user slice (user-<uid>.slice). The
 # Docker-executor job containers run under that slice via the rootless podman

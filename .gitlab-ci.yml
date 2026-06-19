@@ -1,6 +1,6 @@
 # GitLab CI pipeline (notes/ci_aws_test_cells.md).
 #
-# Three runner pools (all on roles/gitlab_runner's manager on fox):
+# Default AWS path runner pools:
 #   - gitlab.com hosted runners take the cheap stateless jobs (lint, unit
 #     tests): no qemu, no boxes, and a public project's compute cost factor
 #     makes the minutes effectively free. They can't reach the home network
@@ -14,8 +14,11 @@
 #     coordinator, lets `detect` pull the current CI image once, then runs the
 #     whole `test_cells` child matrix (+ the _site_test cell) there at capacity
 #     60 with cached-image reuse. Off-fox so a wide fan-out can't threaten fox's
-#     headscale/nginx co-tenants. `detect` and cells carry
+#     headscale/nginx co-tenants. By default `detect` and cells carry
 #     `tags: [fox-coordinator-aws]`; see notes/ci_aws_test_cells.md "Phase 2".
+#   - lab's shell runner (`lab-shell-qemu`) is the fallback target: a manual
+#     pipeline can render the same matrix with HOMELAB_TEST_BACKEND=qemu, so
+#     GitLab drives the local qemu harness directly on lab.
 #
 # This is the sole CI: the former GitHub Actions setup (.github/workflows/) has
 # been retired.
@@ -24,6 +27,10 @@
 # vault identity's password (masked).
 # The prod identity's password is never available to CI by design (CLAUDE.md:
 # Vault ids).
+#
+# Lab fallback: set HOMELAB_CI_TARGET=lab and HOMELAB_DETECT_TAG=fox-docker-aws
+# on a manual/web pipeline. detect then renders child cells for lab-shell-qemu
+# with HOMELAB_TEST_BACKEND=qemu instead of launching AWS EC2 cells.
 
 # `detect` runs first and generates the role-test child pipeline; everything
 # else (lint, unit tests, the test_cells trigger, manual builders) runs in
@@ -37,6 +44,10 @@ default:
   # project's auto-cancel-redundant-pipelines setting so a rapid follow-up
   # push cancels the in-flight run instead of queueing behind it.
   interruptible: true
+
+variables:
+  HOMELAB_CI_TARGET: aws
+  HOMELAB_DETECT_TAG: fox-coordinator-aws
 
 # Shared scaffolding for hosted-runner jobs: the ci image from this project's
 # registry (Dockerfile; rebuilt manually via the ci_image job below). The
@@ -74,16 +85,17 @@ default:
 # failure degrades to the previous-tip base, never to a hard error.
 detect:
   stage: prepare
-  # Runs on the autoscaled coordinator, not fox: detect is the deliberate
-  # per-pipeline CI-image warm-up. The runner defaults cells to if-not-present,
-  # so detect is the only job that must re-check :latest after the coordinator
-  # scales up.
+  # AWS default: run on the autoscaled coordinator, not fox. detect is the
+  # deliberate per-pipeline CI-image warm-up; cells then use if-not-present, so
+  # detect is the only job that must re-check :latest after the coordinator
+  # scales up. Lab fallback overrides HOMELAB_DETECT_TAG to fox-docker-aws so a
+  # qemu fallback run doesn't boot a coordinator just to render the child YAML.
   image:
     name: $CI_REGISTRY_IMAGE/ci:latest
     pull_policy: always
   # See notes/ci_aws_test_cells.md (Phase 2 / package and image caching).
   tags:
-    - fox-coordinator-aws
+    - $HOMELAB_DETECT_TAG
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web"
@@ -96,8 +108,10 @@ detect:
   timeout: 15m
   script:
     - mise install
-    - uv sync --locked
-    - uv run python mise-tasks/ci/detect.py gitlab
+    # Shell runners do not activate mise shims; `mise exec` exposes the tool
+    # tree consistently there while staying harmless inside the CI image.
+    - mise exec -- uv sync --locked
+    - mise exec -- uv run python mise-tasks/ci/detect.py gitlab --target "$HOMELAB_CI_TARGET"
   artifacts:
     paths:
       - test-child.yml
