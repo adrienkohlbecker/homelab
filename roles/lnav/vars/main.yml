@@ -1,0 +1,8 @@
+# Format definitions this role owns under /etc/lnav/formats/homelab/. The deploy
+# loop installs exactly these; the prune step removes any other *.json so a
+# format dropped from this list (e.g. a retired service parser) is cleared from
+# hosts on the next converge instead of lingering and warning at lnav startup.
+lnav_format_files:
+  - journald_json_log.json
+  - fluentbit_lnav.json
+  - syslog_body_scan.json
