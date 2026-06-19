@@ -1083,9 +1083,9 @@ class TestListTestableRoles:
         assert detect.list_testable_roles() == []
 
 
-def _render_child_doc(specs: list[str], site_test: bool) -> dict:
+def _render_child_doc(specs: list[str], site_test: bool, target: str = "aws") -> dict:
     """Render test_child.yml.j2 and parse it back to a dict for assertions."""
-    return detect.yaml.safe_load(detect.render_child_pipeline(specs, site_test))
+    return detect.yaml.safe_load(detect.render_child_pipeline(specs, site_test, target=target))
 
 
 class TestRenderChildPipeline:
@@ -1166,6 +1166,28 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(["nginx:box"], site_test=False)
         assert 'printf \'%s\\n\' "$(tr -d \'\\r\' < "$CI_CELL_SSH_KEY")" > "$cell_key"' in doc[".cell"]["before_script"]
 
+    def test_lab_target_uses_shell_qemu_runner(self) -> None:
+        doc = _render_child_doc(["nginx:box"], site_test=False, target="lab")
+        assert doc["default"]["tags"] == ["fox-docker-aws"]
+        assert "image" not in doc["default"]
+        assert doc[".cell"]["tags"] == ["lab-shell-qemu"]
+        assert doc[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
+        assert "image" not in doc[".cell"]
+        assert "id_tokens" not in doc[".cell"]
+        assert "retry" not in doc[".cell"]
+
+        joined = "\n".join(doc[".cell"]["before_script"])
+        assert "HOMELAB_VAULT_PASSWORD_TEST" in joined
+        assert "CI_CELL_SSH_KEY" not in joined
+        assert "AWS_ROLE_ARN" not in joined
+        assert "GITLAB_OIDC_TOKEN" not in joined
+
+    def test_lab_no_cells_placeholder_stays_on_fox(self) -> None:
+        doc = _render_child_doc([], site_test=False, target="lab")
+        assert doc["default"]["tags"] == ["fox-docker-aws"]
+        assert "tags" not in doc["no_cells"]
+        assert "image" not in doc["default"]
+
 
 class TestEmitGitlab:
     def test_writes_child_with_cells(self, tmp_path: Path) -> None:
@@ -1198,6 +1220,17 @@ class TestEmitGitlab:
         # fails on an empty child.
         loaded = detect.yaml.safe_load(child.read_text())
         assert "no_cells" in loaded
+
+    def test_lab_target_does_not_apply_aws_skip(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fail_drop_aws_skipped(_specs):
+            raise AssertionError("lab target must not apply aws_skip")
+
+        monkeypatch.setattr(detect, "drop_aws_skipped", fail_drop_aws_skipped)
+        child = tmp_path / "child.yml"
+        detect._emit_gitlab(json.dumps(["keepalived:box"]), False, str(child), {}, lambda *_: None, target="lab")
+        loaded = detect.yaml.safe_load(child.read_text())
+        assert "keepalived:box" in loaded
+        assert loaded[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
 
 
 class TestCmdGitlab:
@@ -1232,6 +1265,15 @@ class TestCmdGitlab:
         child = tmp_path / "child.yml"
         assert detect._cmd_gitlab(["--child-path", str(child)]) == 0
         assert "nginx:box" in detect.yaml.safe_load(child.read_text())
+
+    def test_target_env_selects_lab_pipeline(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("HOMELAB_CI_TARGET", "lab")
+        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
+        child = tmp_path / "child.yml"
+        assert detect._cmd_gitlab(["--all", "--child-path", str(child)]) == 0
+        loaded = detect.yaml.safe_load(child.read_text())
+        assert loaded[".cell"]["tags"] == ["lab-shell-qemu"]
+        assert loaded[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
 
     def test_gitlab_in_commands(self) -> None:
         assert "gitlab" in detect._COMMANDS

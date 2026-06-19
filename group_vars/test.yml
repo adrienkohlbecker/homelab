@@ -10,6 +10,11 @@ test_ecr_registry_mirrors:
   ghcr.io: github
   registry.gitlab.com: gitlab
   quay.io: quay
+
+# Test-only placeholder for lab's GitLab shell runner. Prod supplies the real
+# lab token via the prod vault.
+gitlab_runner_lab_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
+
 # Static name → IP overrides for the test environment. Two consumers share
 # this map:
 #   1. roles/hostname/templates/hosts.j2 renders them into /etc/hosts on

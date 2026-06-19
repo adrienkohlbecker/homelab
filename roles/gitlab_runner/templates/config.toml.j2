@@ -1,15 +1,10 @@
 #jinja2: lstrip_blocks: True
 # Managed by ansible (roles/gitlab_runner) -- do not edit on the host.
 #
-# GitLab Runner config: Docker executor against gitlab_runner's rootless
-# podman socket. Jobs for the AWS test cells (notes/ci_aws_test_cells.md) run
-# inside the project CI image on this host and drive single-use EC2 spot
-# instances from there -- the container is the orchestration sandbox, not the
-# test fixture. Tags / locked / run-untagged / protected all live server-side
-# with the glrt- runner registration, not in this file.
-# Orchestration slots, not compute: each job is an `aws`-CLI/ssh/ansible
-# loop against a remote EC2 cell, so the bound is fox's memory for idle
-# CI-image containers, not CPU. Real capacity is the spot vCPU quota.
+# GitLab Runner config. fox uses the Docker executor against gitlab_runner's
+# rootless podman socket for AWS orchestration jobs; lab can use the shell
+# executor to run qemu cells directly. Tags / locked / run-untagged / protected
+# all live server-side with the glrt- runner registration, not in this file.
 concurrent = {{ gitlab_runner_concurrent }}
 # JSON logs parse cleanly in fluentbit (the repo's only log consumer); the
 # default `runner` format is ANSI-decorated and needs a custom parser.
@@ -29,17 +24,25 @@ shutdown_timeout = 1800
 listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
 
 [[runners]]
-  name = "{{ inventory_hostname }}-docker-aws"
+  name = "{{ inventory_hostname }}-{{ gitlab_runner_name_suffix }}"
   url = "https://gitlab.com"
   # glrt- authentication token from creating the runner in the GitLab project
   # (Settings -> CI/CD -> Runners -> New project runner). Vaulted in host_vars.
   token = "{{ gitlab_runner_token }}"
-  executor = "docker"
+  executor = "{{ gitlab_runner_executor }}"
+{% if gitlab_runner_executor == 'shell' %}
+  shell = "bash"
+{% endif %}
+{% if gitlab_runner_executor == 'docker' %}
   # Per-runner cap on jobs run directly on this host. Bounds the on-fox CI
   # footprint independently of the global `concurrent` (which has to be raised
   # for the coordinator fleet) so a wide pipeline can't schedule the whole
   # fan-out onto fox. 0 = no per-runner cap (bounded only by `concurrent`).
   limit = {{ gitlab_runner_docker_limit }}
+{% else %}
+  # Per-runner cap for host-native qemu jobs on lab.
+  limit = {{ gitlab_runner_limit }}
+{% endif %}
   # Concurrent new-job requests to GitLab. The default 1 keeps a single request
   # in flight, so when it blocks on a long poll the runner trips its long-polling
   # bottleneck warning (loud once a second runner also polls). 4 is upstream's
@@ -47,6 +50,7 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
   # hammering GitLab's API.
   request_concurrency = 4
 
+{% if gitlab_runner_executor == 'docker' %}
   [runners.docker]
     # gitlab_runner's rootless podman socket (socket-activated; linger keeps
     # the user manager alive). Rootless keeps the runner non-root-equivalent
@@ -60,6 +64,7 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
     # Job containers orchestrate remote EC2 cells over ssh/https only -- no
     # devices, no nested containers, no privileges.
     privileged = false
+{% endif %}
 {% if gitlab_runner_coordinator_enabled | default(false) %}
 
 # Coordinator runner: a docker-autoscaler executor that clones an ephemeral

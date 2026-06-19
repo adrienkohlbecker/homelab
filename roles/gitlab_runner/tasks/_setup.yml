@@ -1,7 +1,29 @@
 # Test-harness setup for roles/gitlab_runner. The runner is a host-native
-# binary whose Docker executor needs gitlab_runner's rootless podman stack;
-# this brings up the two prerequisites the role assumes site.yml provides
-# on prod (subid ranges, the podman storage layout).
+# binary whose Docker executor needs gitlab_runner's rootless podman stack, and
+# whose shell executor needs the supplementary groups prod creates earlier in
+# site.yml. Bring up those prerequisites so standalone role tests match the
+# host-scoped plays.
+
+- name: _setup | Ensure shell-runner supplementary groups exist
+  group:
+    name: "{{ item }}"
+    state: present
+    system: true
+  loop:
+    - kvm
+    - homelab_ci
+  become: true
+
+- name: _setup | Create gitlab_runner user for non-Docker transition fixture
+  when: gitlab_runner_executor != 'docker'
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: gitlab_runner
+      extra_groups: "{{ gitlab_runner_extra_groups }}"
+      home: /mnt/services/gitlab_runner
 
 # Subordinate-id range for gitlab_runner's rootless podman. On prod the
 # subid role runs earlier in site.yml with the user listed in host_vars;
@@ -22,3 +44,24 @@
   import_role:
     name: podman
     tasks_from: install
+
+- name: _setup | Seed stale Docker-executor runtime state
+  when: gitlab_runner_executor != 'docker'
+  block:
+    - name: _setup | Enable linger for gitlab_runner
+      import_role:
+        name: linger
+        tasks_from: linger
+      vars:
+        linger_args:
+          name: gitlab_runner
+          uid: "{{ gitlab_runner_user.uid }}"
+
+    - name: _setup | Enable and start rootless podman.socket
+      systemd:
+        name: podman.socket
+        enabled: true
+        state: started
+        scope: user
+      become: true
+      become_user: gitlab_runner

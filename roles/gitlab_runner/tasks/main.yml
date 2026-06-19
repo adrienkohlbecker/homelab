@@ -1,21 +1,20 @@
-# GitLab Runner (host-native binary; Docker executor against the runner
-# user's rootless podman socket). Runs on fox — the orchestration point for
-# the AWS test cells (notes/ci_aws_test_cells.md): jobs run
-# `testrole.py <role> --backend aws` inside the project CI image and drive
-# EC2 from there, so the heavy lifting never happens on fox itself. box is
+# GitLab Runner (host-native binary). fox uses the Docker executor against the
+# runner user's rootless podman socket to orchestrate AWS test cells; lab uses a
+# shell executor to run the same qemu harness locally as a CI fallback. box is
 # the CI fixture. Gated on gitlab_runner_enabled.
 #
 # The Docker executor keeps branch code inside a job container rather than
-# running it directly as the runner user. The runner still holds podman
-# socket access to start those containers, so this is not a
-# hostile-multi-tenant boundary — the runner is locked to this project and
-# every pipeline is operator-authored.
+# running it directly as the runner user. The lab shell executor deliberately
+# does run job payloads as gitlab_runner so it can drive local qemu/KVM; keep
+# that runner protected, project-locked, and only used through the manual lab
+# fallback path. Neither executor is a hostile-multi-tenant boundary: every
+# pipeline is operator-authored.
 #
 # No nginx vhost and no homepage bookmark on purpose: this service exposes no
 # operator-facing HTTP surface. The runner UI is gitlab.com itself; the only
 # local listener is the loopback Prometheus metrics endpoint (for netdata).
 - name: GitLab Runner
-  when: gitlab_runner_enabled | default(false)
+  when: gitlab_runner_enabled | default(false) | bool
   tags:
     - gitlab_runner
   block:
@@ -28,13 +27,16 @@
       assert:
         that:
           - gitlab_runner_token | default('') | length > 0
+          - gitlab_runner_executor in ['docker', 'shell']
+          - not (gitlab_runner_coordinator_enabled | default(false) | bool) or gitlab_runner_executor == 'docker'
         fail_msg: >-
-          gitlab_runner_enabled is true but gitlab_runner_token is unset for
-          {{ inventory_hostname }}. Create a project runner on gitlab.com
-          (Settings -> CI/CD -> Runners -> New project runner) with the
-          fox-docker-aws tag, run-untagged off, locked to the project, and
-          protected; then vault the glrt- token into
-          host_vars/{{ inventory_hostname }}.yml.
+          gitlab_runner_enabled is true but gitlab_runner_token is unset, or
+          gitlab_runner_executor is unsupported/incompatible with the
+          coordinator runner, for {{ inventory_hostname }}.
+          Create a project runner on gitlab.com (Settings -> CI/CD -> Runners ->
+          New project runner) with the {{ inventory_hostname }}-{{ gitlab_runner_name_suffix }}
+          name/tag convention, run-untagged off, locked to the project, and
+          protected; then vault the glrt- token for this host.
 
     # The coordinator runner needs its own glrt- project runner token (distinct
     # from the docker runner's) AND an hcloud API token to clone instances + read
@@ -60,6 +62,7 @@
       vars:
         service_user_args:
           name: gitlab_runner
+          extra_groups: "{{ gitlab_runner_extra_groups }}"
           # Real passwd home (the unit's Environment=HOME matches): the
           # user-scope `systemctl enable podman.socket` below writes
           # ~/.config/systemd/user/, which fails against the /nonexistent
@@ -166,6 +169,7 @@
     # for gitlab_runner (site.yml orders it before this role; host_vars list
     # the user). Without it the first job container fails uid-mapping.
     - name: Turn on linger
+      when: gitlab_runner_executor == 'docker'
       import_role:
         name: linger
         tasks_from: linger
@@ -181,7 +185,9 @@
     # ext4, not ZFS); no per-user storage.conf needed since jobs are plain
     # containers (no uidmapped siblings).
     - name: Enable rootless podman socket
-      when: not (ansible_check_mode and (gitlab_runner_user.changed or gitlab_runner_lingered))
+      when:
+        - gitlab_runner_executor == 'docker'
+        - not (ansible_check_mode and (gitlab_runner_user.changed or (gitlab_runner_lingered | default(false))))
       systemd:
         name: podman.socket
         enabled: true
@@ -190,13 +196,64 @@
       become_user: gitlab_runner
 
     - name: Start rootless podman socket
-      when: not (ansible_check_mode and (gitlab_runner_user.changed or gitlab_runner_lingered))
+      when:
+        - gitlab_runner_executor == 'docker'
+        - not (ansible_check_mode and (gitlab_runner_user.changed or (gitlab_runner_lingered | default(false))))
       systemd:
         name: podman.socket
         state: started
         scope: user
       become: true
       become_user: gitlab_runner
+
+    # Switching the primary runner away from Docker must tear down the
+    # rootless runtime state Docker mode needed. Stop the socket/service while
+    # the lingering user manager is still alive, then remove the enable symlink
+    # as a managerless tombstone and disable linger.
+    - name: Disable Docker-executor runtime state for non-Docker executors
+      when:
+        - gitlab_runner_executor != 'docker'
+        - not (ansible_check_mode and gitlab_runner_user.changed)
+      block:
+        - name: Check whether gitlab_runner linger is enabled
+          stat:
+            path: /var/lib/systemd/linger/gitlab_runner
+          register: gitlab_runner_linger_marker
+          become: true
+
+        - name: Stop and disable rootless podman.socket
+          when: gitlab_runner_linger_marker.stat.exists
+          systemd:
+            name: podman.socket
+            state: stopped
+            enabled: false
+            scope: user
+          become: true
+          become_user: gitlab_runner
+
+        - name: Stop rootless podman.service
+          when: gitlab_runner_linger_marker.stat.exists
+          systemd:
+            name: podman.service
+            state: stopped
+            scope: user
+          become: true
+          become_user: gitlab_runner
+
+        - name: Remove rootless podman.socket enable symlink
+          file:
+            path: /mnt/services/gitlab_runner/.config/systemd/user/sockets.target.wants/podman.socket
+            state: absent
+          become: true
+
+        - name: Turn off linger
+          import_role:
+            name: linger
+            tasks_from: disable
+          vars:
+            linger_args:
+              name: gitlab_runner
+              uid: "{{ gitlab_runner_user.uid }}"
 
     # 0600 + owned by the runner: holds the glrt- runner token. validate
     # parses the rendered TOML (gitlab-runner falls back to defaults on a
@@ -255,7 +312,9 @@
     # unconfigured. uid is service_user-allocated, so check-mode-gate the
     # fresh-user case where it only reports creation.
     - name: Cap the rootless runner user slice memory
-      when: not (ansible_check_mode and gitlab_runner_user.changed)
+      when:
+        - gitlab_runner_executor == 'docker'
+        - not (ansible_check_mode and gitlab_runner_user.changed)
       vars:
         _slice_dropin_dir: /etc/systemd/system/user-{{ gitlab_runner_user.uid }}.slice.d
       block:

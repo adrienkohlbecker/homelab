@@ -37,6 +37,19 @@ swap_zvol:
 swap_zram:
   size: 8G
 
+# Host-native CI fallback runner. It deliberately uses its own token variable so
+# lab cannot accidentally clone fox's project runner token and inherit the wrong
+# server-side tags.
+gitlab_runner_enabled: true
+gitlab_runner_executor: shell
+gitlab_runner_name_suffix: shell-qemu
+gitlab_runner_token: "{{ gitlab_runner_lab_token | default('') }}"
+gitlab_runner_concurrent: 6
+gitlab_runner_limit: 6
+gitlab_runner_extra_groups:
+  - kvm
+  - homelab_ci
+
 # Derived from `sudo sensors-detect` on the host; re-run after hardware changes.
 lm_sensors_modules:
   - drivetemp

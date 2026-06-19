@@ -2,11 +2,11 @@
 # gitlab_runner.service ###############################################
 # GitLab Runner, host-native: a single static Go binary at
 # /usr/local/bin/gitlab-runner running as the gitlab_runner system user.
-# Docker executor against the user's rootless podman socket -- this
-# process runs job payloads in containers it starts over that socket,
-# never directly as itself. The runner process itself is not containerised.
+# Docker mode starts job containers over rootless podman; shell mode runs job
+# payloads directly as this service user. The runner process itself is not
+# containerised.
 [Unit]
-Description=GitLab Runner (Docker executor -> rootless podman)
+Description=GitLab Runner ({{ gitlab_runner_executor }} executor)
 After=network-online.target
 Wants=network-online.target
 # Restart=always + RestartSec=10 can trip systemd's default 5-in-10s burst

@@ -1,11 +1,12 @@
-# The Docker executor needs gitlab_runner's rootless podman stack, so
-# _setup.yml imports podman/install (and subid); box_deps pre-bakes the
-# podman backports + install, saving ~140s per run. The runner itself can't
-# register in the harness (no gitlab.com token), so the role enable-onlys
-# under qemu_test and _verify exercises the host-side artifacts (binary
-# runs, rootless socket serves, config.toml valid, unit smoke-starts).
+# box_deps exercises fox's Docker-executor shape: rootless podman socket,
+# user-slice memory cap, coordinator block, and unit smoke. lab exercises the
+# shell-executor fallback shape from host_vars/lab.yml, including the absence of
+# stale rootless podman/linger state. The runner itself can't register in the
+# harness (no gitlab.com token), so qemu hosts use placeholder tokens and
+# _verify exercises the host-side artifacts.
 machines:
   box_deps:
+  lab: shell-executor fallback path is qemu-only
 
 # Release-divergent: the config.toml validate imports tomllib on >= 24.04 and
 # the tomli backport below it (jammy ships python 3.10, no tomllib); the
@@ -13,3 +14,9 @@ machines:
 # one a noble-based prod host would take.
 ubuntu:
   - noble
+
+skip:
+  lab:noble: noble TOML-validate coverage rides box_deps:noble; lab only covers shell executor wiring
+
+aws_skip:
+  lab: lab shell-runner fallback uses the qemu harness, not AWS EC2 cells

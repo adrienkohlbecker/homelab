@@ -1,15 +1,53 @@
 # Functional host-side checks. The live runner can't register in the harness
 # (no gitlab.com token), so the role enable-onlys under qemu_test and this
 # exercises everything that genuinely runs on the host: the pinned binary
-# executes on this arch, the rootless podman socket the Docker executor dials
-# actually serves, and the unit starts, stays up, and serves its metrics
-# listener. A real job dispatch needs gitlab.com and is proven by the gate-B/C
-# runs on fox, not CI.
+# executes on this arch, Docker mode proves the rootless podman socket, and the
+# unit starts, stays up, and serves its metrics listener. A real job dispatch
+# needs gitlab.com and is proven by the gate-B/C runs on fox/lab, not CI.
 - name: _verify | Pinned gitlab-runner binary runs on this arch
   command: /usr/local/bin/gitlab-runner --version
   register: _gitlab_runner_version
   changed_when: false
   failed_when: gitlab_runner_version not in _gitlab_runner_version.stdout
+
+- name: _verify | Rendered config uses the requested executor
+  command: grep -F 'executor = "{{ gitlab_runner_executor }}"' /mnt/services/gitlab_runner/config.toml
+  changed_when: false
+  become: true
+
+- name: _verify | Resolve gitlab_runner uid
+  command: id -u gitlab_runner
+  register: _gitlab_runner_uid
+  changed_when: false
+  become: true
+
+# In the shell-executor cell, _setup.yml seeds a stale Docker-executor state
+# first: linger enabled and podman.socket active under gitlab_runner. These
+# assertions therefore prove the role cleaned up a real executor transition,
+# not merely that a fresh shell host never created Docker state.
+- name: _verify | Shell executor does not leave gitlab_runner linger enabled
+  when: gitlab_runner_executor != 'docker'
+  stat:
+    path: /var/lib/systemd/linger/gitlab_runner
+  register: _gitlab_runner_shell_linger
+  failed_when: _gitlab_runner_shell_linger.stat.exists
+  become: true
+
+- name: _verify | Shell executor does not leave rootless podman.socket enabled
+  when: gitlab_runner_executor != 'docker'
+  stat:
+    path: /mnt/services/gitlab_runner/.config/systemd/user/sockets.target.wants/podman.socket
+  register: _gitlab_runner_shell_podman_socket
+  failed_when: _gitlab_runner_shell_podman_socket.stat.exists
+  become: true
+
+- name: _verify | Shell executor stopped gitlab_runner user manager  # noqa: command-instead-of-module -- is-active query, not a state change
+  when: gitlab_runner_executor != 'docker'
+  command: systemctl is-active user@{{ _gitlab_runner_uid.stdout }}.service
+  register: _gitlab_runner_shell_user_manager
+  changed_when: false
+  failed_when: _gitlab_runner_shell_user_manager.stdout | trim == 'active'
+  become: true
 
 # Coordinator runner (docker-autoscaler / fleeting). Enabled on box with
 # placeholder secrets, so the host-side artifacts get real coverage even though
@@ -44,6 +82,7 @@
   become: true
 
 - name: _verify | Rootless podman.socket is active under gitlab_runner
+  when: gitlab_runner_executor == 'docker'
   systemd:
     name: podman.socket
     scope: user
@@ -52,17 +91,12 @@
   become: true
   become_user: gitlab_runner
 
-- name: _verify | Resolve gitlab_runner uid for its socket path
-  command: id -u gitlab_runner
-  register: _gitlab_runner_uid
-  changed_when: false
-  become: true
-
 # Functional: drive the exact socket config.toml points the Docker executor
 # at. `podman info` over the URL exercises socket activation, the user
 # manager (linger), and the storage stack end-to-end -- an inert socket file
 # would pass a stat but fail this.
 - name: _verify | Docker-executor socket answers podman info
+  when: gitlab_runner_executor == 'docker'
   command: >-
     podman --url unix:///run/user/{{ _gitlab_runner_uid.stdout }}/podman/podman.sock info
   register: _gitlab_runner_podman_info
@@ -72,6 +106,7 @@
   become_user: gitlab_runner
 
 - name: _verify | Rendered config dials that same socket
+  when: gitlab_runner_executor == 'docker'
   command: grep -F 'unix:///run/user/{{ _gitlab_runner_uid.stdout }}/podman/podman.sock' /mnt/services/gitlab_runner/config.toml
   changed_when: false
   become: true
@@ -140,6 +175,7 @@
 # actually landed on the live slice (box sets both High + Max in host_vars): a
 # stat of the drop-in file would pass even if systemd never parsed the values.
 - name: _verify | Runner user-slice carries a finite memory cap
+  when: gitlab_runner_executor == 'docker'
   systemd:
     name: user-{{ _gitlab_runner_uid.stdout }}.slice
   register: _gitlab_runner_slice_cap
