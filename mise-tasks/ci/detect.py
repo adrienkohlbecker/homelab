@@ -985,7 +985,9 @@ def _cmd_gitlab(args: list[str]) -> int:
             log("ROLES=ALL -> full universe")
             return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, runtimes, log, target=opts.target)
         cells = _build_dispatch_matrix(roles_input)
-        return _emit_gitlab(json.dumps(cells_to_ci_specs(cells)), False, opts.child_path, runtimes, log, target=opts.target)
+        return _emit_gitlab(
+            json.dumps(cells_to_ci_specs(cells)), False, opts.child_path, runtimes, log, target=opts.target
+        )
 
     if event == "schedule":
         log("mode: schedule (nightly full build)")
