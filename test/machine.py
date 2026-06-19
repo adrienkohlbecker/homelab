@@ -617,11 +617,10 @@ class Machine:
         self.ubuntu_name = ubuntu_name
         self.machine_timeout = machine_timeout
         self.upstream_mirrors = upstream_mirrors
-        # Optional workdir parent override. When None, _workdir_parent() falls
-        # through to the imagedir default. Wired by testrole.py from
-        # --workdir-parent / $HOMELAB_WORKDIR_PARENT so CI workflows can keep
-        # the qcow2 tree mounted ro and stage the per-run TempDir somewhere
-        # ephemeral.
+        # Optional workdir parent override. When None it falls through to the
+        # imagedir default below. Wired by testrole.py from --workdir-parent /
+        # $HOMELAB_WORKDIR_PARENT so CI workflows can keep the qcow2 tree
+        # mounted ro and stage the per-run TempDir somewhere ephemeral.
         self.workdir_parent = workdir_parent
         self.ssh_host = SSH_HOST
         self.ssh_key = SSH_KEY
@@ -654,13 +653,16 @@ class Machine:
         # survive into a healthy run -- drop them explicitly.
         for stale in (self.journal_file, self.dmesg_file, self.systemctl_failed_file):
             stale.unlink(missing_ok=True)
-        # The workdir lands alongside the packer qcow2s (see _workdir_parent).
-        # Auto-create the parent so --workdir-parent /some/new/path just
-        # works without callers having to mkdir -p first; tempfile itself
-        # doesn't create the dir argument, only the per-run subdir under it.
-        wd_parent = self._workdir_parent()
-        if wd_parent is not None:
-            Path(wd_parent).mkdir(parents=True, exist_ok=True)
+        # The workdir lands alongside the packer qcow2s: qemu-img backing-file
+        # overlays reach the source qcow2 by absolute path so colocation isn't
+        # strictly required, but keeping it on the same filesystem matches the
+        # operator's mental model and keeps `du` totals predictable. An explicit
+        # workdir_parent (CI flag) overrides so the imagedir can be ro-mounted.
+        # Auto-create the parent so --workdir-parent /some/new/path just works
+        # without callers having to mkdir -p first; tempfile itself doesn't
+        # create the dir argument, only the per-run subdir under it.
+        wd_parent = self.workdir_parent or self.imagedir
+        Path(wd_parent).mkdir(parents=True, exist_ok=True)
         self.workdir = tempfile.TemporaryDirectory(dir=wd_parent)
         # Claim the liveness lock immediately after the workdir exists so a
         # sweep racing us from another container can't reap the dir between
@@ -672,7 +674,6 @@ class Machine:
         fcntl.flock(self._live_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         self._preflight()
 
-        # idfile defaults to "pid", which is what we want here.
         # Resolve the NIC backend after _preflight has confirmed the qemu
         # binary exists, since the probe execs it.
         self._net_backend = resolve_net_backend(self.arch.qemu_binary)
@@ -682,18 +683,6 @@ class Machine:
         self._passt_socket = None
         self._passt_socket_dir = None
         self._passt_proc = None
-
-    def _workdir_parent(self) -> Path | None:
-        """Place the workdir alongside the packer qcow2s.
-
-        qemu-img backing-file overlays reach the source qcow2 by absolute
-        path, so the workdir doesn't strictly need to be colocated, but
-        keeping it on the same filesystem matches the operator's mental
-        model and keeps `du` totals predictable. When the caller supplies
-        an explicit workdir_parent (CI flag) we honour that instead so
-        the imagedir can be ro-mounted.
-        """
-        return self.workdir_parent or self.imagedir
 
     def _preflight(self) -> None:
         """Verify the qemu binary, GNU timeout, and lsof are reachable.
