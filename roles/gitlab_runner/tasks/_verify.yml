@@ -81,6 +81,12 @@
   changed_when: false
   become: true
 
+- name: _verify | Coordinator connector keeps a 15 minute SSH timeout
+  when: gitlab_runner_coordinator_enabled
+  command: grep -F 'timeout = "15m0s"' /mnt/services/gitlab_runner/config.toml
+  changed_when: false
+  become: true
+
 - name: _verify | Pinned fleeting-plugin-aws binary runs on this arch
   when: gitlab_runner_aws_qemu_enabled
   command: timeout 10 /usr/local/bin/fleeting-plugin-aws --version

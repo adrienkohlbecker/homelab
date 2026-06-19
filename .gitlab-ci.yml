@@ -112,6 +112,26 @@ detect:
     GIT_DEPTH: "50"
   timeout: 15m
   script:
+    - |
+      echo "== detect job environment =="
+      printf 'user=%s\n' "$(id)"
+      printf 'pwd=%s\n' "$PWD"
+      printf 'shell=%s\n' "${SHELL:-<unset>}"
+      printf 'home=%s\n' "${HOME:-<unset>}"
+      printf 'path=%s\n' "${PATH:-<unset>}"
+      printf 'runner=%s %s\n' "${CI_RUNNER_DESCRIPTION:-<unset>}" "${CI_RUNNER_EXECUTABLE_ARCH:-<unset>}"
+      printf 'homelab_target=%s detect_tag=%s backend=%s\n' \
+        "${HOMELAB_CI_TARGET:-<unset>}" \
+        "${HOMELAB_DETECT_TAG:-<unset>}" \
+        "${HOMELAB_TEST_BACKEND:-<unset>}"
+      for tool in gitlab-runner mise uv python python3 bash sh; do
+        printf '%s=' "$tool"
+        command -v "$tool" || true
+      done
+      gitlab-runner --version || true
+      mise --version || true
+      uv --version || true
+      python --version || python3 --version || true
     - mise install
     # Shell runners do not activate mise shims; `mise exec` exposes the tool
     # tree consistently there while staying harmless inside the CI image.
