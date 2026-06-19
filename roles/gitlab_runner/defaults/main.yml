@@ -117,5 +117,5 @@ gitlab_runner_aws_qemu_secret_access_key: ""
 gitlab_runner_aws_qemu_asg_name: homelab-ci-qemu-c8i-xlarge
 gitlab_runner_aws_qemu_capacity_per_instance: 1
 gitlab_runner_aws_qemu_max_instances: 1
-gitlab_runner_aws_qemu_idle_time: "2m0s"
+gitlab_runner_aws_qemu_idle_time: "15m"
 gitlab_runner_aws_qemu_username: ubuntu
