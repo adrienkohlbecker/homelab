@@ -83,6 +83,13 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
   shell = "bash"
   limit = {{ gitlab_runner_aws_qemu_max_instances * gitlab_runner_aws_qemu_capacity_per_instance }}
   request_concurrency = 4
+  # The instance-executor host mounts its c8id local-NVMe instance store at
+  # /mnt/scratch (qemu-host AMI boot service homelab_ci_prepare_scratch). Pin the
+  # git checkout, runner cache, and build tree there so all heavy job I/O -- and
+  # the per-job uv .venv built in the checkout -- stays on local NVMe rather than
+  # the small EBS root. The boot service pre-creates these owned by the ssh user.
+  builds_dir = "/mnt/scratch/gitlab-runner/builds"
+  cache_dir = "/mnt/scratch/gitlab-runner/cache"
 
   [runners.autoscaler]
     # PATH-resolved binary /usr/local/bin/fleeting-plugin-aws; installed and

@@ -26,12 +26,23 @@ locals {
   ])
   ci_qemu_host_ami_parameter = "/homelab-ci/ami/qemu-host/noble"
   ci_qemu_host_pool = {
-    name                   = "homelab-ci-qemu-c8i-xlarge"
-    instance_type          = "c8i.xlarge"
-    max_size               = 1
-    root_volume_size       = 120
+    # Name kept at the original c8i value despite the c8id type below:
+    # aws_autoscaling_group.name and aws_launch_template.name are ForceNew, so
+    # renaming would replace both (and churn the gitlab_runner asg_name default
+    # plus the IAM groupName condition) for no functional gain. instance_type is
+    # the source of truth.
+    name          = "homelab-ci-qemu-c8i-xlarge"
+    instance_type = "c8id.xlarge"
+    max_size      = 1
+    # The "d" family carries a local instance-store NVMe disk. A boot service
+    # (packer/aws/files/homelab_ci_prepare_scratch.sh) formats and mounts it at
+    # /mnt/scratch, so all heavy CI I/O -- qcow2 overlays and the gitlab-runner
+    # checkout/cache/build tree -- lands on local NVMe, not the EBS root. The
+    # root therefore only holds the OS and the baked toolchain and stays small,
+    # on the gp3 free baseline (3000 IOPS / 125 MiB/s).
+    root_volume_size       = 40
     root_volume_iops       = 3000
-    root_volume_throughput = 250
+    root_volume_throughput = 125
   }
   ci_ecr_pull_through_cache_rules = {
     docker-hub = {
