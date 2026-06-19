@@ -26,12 +26,12 @@ locals {
   ])
   ci_qemu_host_ami_parameter = "/homelab-ci/ami/qemu-host/noble"
   ci_qemu_host_pool = {
-    # Name kept at the original c8i value despite the c8id type below:
-    # aws_autoscaling_group.name and aws_launch_template.name are ForceNew, so
-    # renaming would replace both (and churn the gitlab_runner asg_name default
-    # plus the IAM groupName condition) for no functional gain. instance_type is
-    # the source of truth.
-    name          = "homelab-ci-qemu-c8i-xlarge"
+    # Instance-type-agnostic name: aws_autoscaling_group.name and
+    # aws_launch_template.name are ForceNew, so encoding the type in the name
+    # would force a replacement (and churn the gitlab_runner asg_name default
+    # plus the IAM groupName condition) on every future instance-type change.
+    # instance_type below is the source of truth.
+    name          = "homelab-ci-qemu-host"
     instance_type = "c8id.xlarge"
     max_size      = 1
     # The "d" family carries a local instance-store NVMe disk. A boot service
