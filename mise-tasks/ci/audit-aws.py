@@ -7,12 +7,13 @@
 """Read-only audit of the homelab CI AWS account (notes/ci_aws_nested_qemu_cells.md).
 
 The account exists solely for the eu-central-1 AWS test-cell pipeline, whose
-only standing footprint is meant to be: the per-machine cell AMIs and their
-backing snapshots, the qemu image bundle bucket, plus free/free-tier scaffolding
-(VPC, SG, launch templates, IAM role, SSM params, key pair, EventBridge
-Scheduler). Test cells are one-time spot instances that self-terminate, so
-*nothing* compute-shaped should ever be running, and no resource of any kind
-should exist outside eu-central-1.
+only standing footprint is meant to be: the nested-qemu host AMI and its
+backing snapshot, the qemu image bundle bucket, plus free/free-tier scaffolding
+(VPC, SG, launch template, IAM role, SSM params, key pair, EventBridge
+Scheduler). The runner hosts are autoscaled spot instances that scale to zero
+and the cells run as qemu guests inside them, so *nothing* compute-shaped
+should ever be running idle, and no resource of any kind should exist outside
+eu-central-1.
 
 This sweeps every region for the billable strays that accumulate when a build
 or teardown leaks something -- running/stopped instances, unattached volumes,

@@ -242,8 +242,8 @@ resource "aws_s3_bucket_policy" "ci_qemu_images" {
 
 # ─── ECR pull-through cache ──────────────────────────────────────────────────
 # AWS cells cannot reach the lab Nexus Docker proxies. These regional ECR rules
-# cache the public registries that roles pull from, so EC2 cells fetch layers
-# from eu-central-1 after the first import. Docker Hub, GHCR, and GitLab require
+# cache the public registries that roles pull from, so the qemu hosts fetch
+# layers from eu-central-1 after the first import. Docker Hub, GHCR, and GitLab require
 # upstream credentials in Secrets Manager. The secret versions are terraform-
 # managed here by explicit operator choice, so the token values are present in
 # the encrypted terraform state.
@@ -315,8 +315,8 @@ resource "aws_ecr_pull_through_cache_rule" "ci" {
 
 # ─── Networking ──────────────────────────────────────────────────────────────
 # Dedicated CI VPC: public IPv4 subnets across 3 AZs, IGW only — no NAT
-# gateway (a ~$32/mo standing trap). Each cell gets an ephemeral public IPv4
-# ($0.005/hr while running). IPv6 — including IPv6-only — was investigated
+# gateway (a ~$32/mo standing trap). Each qemu host gets an ephemeral public
+# IPv4 ($0.005/hr while running). IPv6 — including IPv6-only — was investigated
 # and rejected: github.com and objects.githubusercontent.com have no AAAA
 # and the toolchain pulls from GitHub releases.
 
@@ -786,9 +786,9 @@ resource "aws_iam_role_policy" "ci_bake" {
         ]
       },
       # Per-bake one-time termination schedules (mise-tasks/packer/
-      # _bake_backstop.sh), mirroring the cell role's CellSchedules: a CI
-      # job-timeout SIGKILL bypasses the wrapper's on-error cleanup, so the
-      # schedule is the only thing that reaps an orphaned build instance.
+      # _bake_backstop.sh): a CI job-timeout SIGKILL bypasses the wrapper's
+      # on-error cleanup, so the schedule is the only thing that reaps an
+      # orphaned build instance.
       {
         Sid      = "BakeSchedules"
         Effect   = "Allow"

@@ -2,13 +2,12 @@
 """
 Full site.yml converge on a box fixture.
 
-Boots a box fixture (qemu VM or, with --backend aws, a single-use EC2 cell),
-configures mirrors (apt/podman/pip via Nexus, or upstream on aws), then
-runs the real site.yml with --limit box. Catches role-ordering and
-cross-role interaction bugs that per-role tests miss.
+Boots a box qemu fixture, configures mirrors (apt/podman/pip via Nexus, or
+upstream when test_in_aws), then runs the real site.yml with --limit box.
+Catches role-ordering and cross-role interaction bugs that per-role tests miss.
 
-Exit codes match testrole.py: 0 success, 1 converge failure, 86 spot
-interruption (EC2 backend), 124 timeout, 130 interrupted.
+Exit codes match testrole.py: 0 success, 1 converge failure, 124 timeout,
+130 interrupted.
 """
 
 import argparse
