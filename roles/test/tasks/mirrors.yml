@@ -13,19 +13,21 @@
 
 - name: mirrors | Select the bootstrap resolver for this backend
   set_fact:
-    # qemu fixtures run on the operator LAN, where the UDM blocks outbound
-    # DoT (853) from every zone but lets clients reach the household AdGuard
-    # VIP — so they resolve through it like any real client (dns.fahm.fr
-    # cert, validated over the system CA store; the #name is SNI only and is
-    # not itself resolved). AWS cells have no LAN VIP and open public 853, so
-    # they bootstrap off the public anycast pair. Both ride TCP via DoT,
-    # which is what keeps qemu's SLIRP UDP drops from flaking resolution.
-    # prod_network (not network) because the VIP is the live LAN address,
-    # not the gsub'd test subnet.
+    # LAN fixtures (local + lab qemu) run on the operator LAN, where the UDM
+    # blocks outbound DoT (853) from every zone but lets clients reach the
+    # household AdGuard VIP — so they resolve through it like any real client
+    # (dns.fahm.fr cert, validated over the system CA store; the #name is SNI
+    # only and is not itself resolved). AWS cells have no LAN VIP and open
+    # public 853, so they bootstrap off the public anycast pair. Both ride TCP
+    # via DoT, which is what keeps qemu's SLIRP UDP drops from flaking
+    # resolution. Gated on test_in_aws (not test_backend == 'qemu'): the
+    # aws_qemu cell is a qemu guest but in AWS, where the LAN VIP is
+    # unreachable, so it must take the public branch. prod_network (not network)
+    # because the VIP is the live LAN address, not the gsub'd test subnet.
     test_dot_servers: >-
-      {{ (prod_network.virtual_ips.dns ~ '#dns.fahm.fr')
-         if test_backend == 'qemu'
-         else (bootstrap_dns_resolver | join(' ')) }}
+      {{ (bootstrap_dns_resolver | join(' '))
+         if test_in_aws | default(false) | bool
+         else (prod_network.virtual_ips.dns ~ '#dns.fahm.fr') }}
 
 - name: mirrors | Force DNS-over-TLS so all queries ride TCP
   copy:
@@ -56,8 +58,11 @@
 
 - name: mirrors | Decide whether this cell uses ECR registry mirrors
   set_fact:
+    # test_in_aws, not test_backend: the aws_qemu qemu cell egresses through
+    # AWS and reaches ECR (the controller mints the pull token), so it mirrors
+    # through ECR like the EC2 cells rather than the unreachable LAN Nexus.
     test_use_ecr_registry_mirrors: >-
-      {{ test_backend == 'aws'
+      {{ (test_in_aws | default(false) | bool)
          and (test_ecr_registry | default('') | length > 0)
          and (test_ecr_registry_mirrors | default({}) | length > 0) }}
 

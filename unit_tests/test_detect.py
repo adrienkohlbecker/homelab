@@ -1094,6 +1094,7 @@ class TestRenderChildPipeline:
         assert doc["default"]["tags"] == ["fox-docker-aws"]
         assert doc["stages"] == ["test1", "test2"]
         assert doc[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "aws"
+        assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
         assert doc[".cell"]["retry"]["exit_codes"] == [86]
         # nginx:box → defaults ubuntu jammy; podman:box:noble → explicit noble.
         assert doc["nginx:box"]["variables"] == {"ROLE": "nginx", "VARIANT": "box", "UBUNTU": "jammy"}
@@ -1172,6 +1173,8 @@ class TestRenderChildPipeline:
         assert "image" not in doc["default"]
         assert doc[".cell"]["tags"] == ["lab-shell-qemu"]
         assert doc[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
+        # lab's shell runner is on the operator LAN: qemu guest, not in AWS.
+        assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "false"
         assert "image" not in doc[".cell"]
         assert doc[".cell"]["id_tokens"] == {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}}
         assert "retry" not in doc[".cell"]
@@ -1191,6 +1194,9 @@ class TestRenderChildPipeline:
         assert "image" not in doc["default"]
         assert doc[".cell"]["tags"] == ["aws-shell-qemu"]
         assert doc[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
+        # Qemu backend but an AWS host: the guest egresses through AWS, so it
+        # must take the in-region-mirror / public-DNS path despite backend=qemu.
+        assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
         assert "image" not in doc[".cell"]
         assert doc[".cell"]["id_tokens"] == {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}}
         assert "retry" not in doc[".cell"]

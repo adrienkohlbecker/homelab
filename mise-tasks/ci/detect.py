@@ -714,6 +714,7 @@ TARGETS = {
         "upstream_mirrors": False,
         "retry_spot_interruption": True,
         "apply_aws_skip": True,
+        "in_aws": True,
     },
     "aws_qemu": {
         "backend": "qemu",
@@ -723,6 +724,11 @@ TARGETS = {
         "upstream_mirrors": False,
         "retry_spot_interruption": False,
         "apply_aws_skip": False,
+        # Qemu backend, but the shell runner is an AWS host: the guest egresses
+        # through AWS, so it must use the in-region EC2 mirrors + public DNS and
+        # cannot reach the LAN Nexus. Surfaced to the harness as
+        # HOMELAB_TEST_IN_AWS (Machine.in_aws); orthogonal to the qemu backend.
+        "in_aws": True,
     },
     "lab": {
         "backend": "qemu",
@@ -732,6 +738,9 @@ TARGETS = {
         "upstream_mirrors": False,
         "retry_spot_interruption": False,
         "apply_aws_skip": False,
+        # lab's shell runner is on the operator LAN: the qemu guest reaches the
+        # LAN Nexus + AdGuard VIP, so it is not "in AWS".
+        "in_aws": False,
     },
 }
 TARGET_BACKENDS = {name: config["backend"] for name, config in TARGETS.items()}
@@ -818,6 +827,7 @@ def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws"
         hydrate_qemu=target_config["hydrate_qemu"],
         upstream_mirrors=target_config["upstream_mirrors"],
         retry_spot_interruption=target_config["retry_spot_interruption"],
+        in_aws=target_config["in_aws"],
         cell_role_arn=CELL_ROLE_ARN,
     )
 

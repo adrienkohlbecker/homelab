@@ -3,14 +3,14 @@
 # Three branches:
 #   - nexus_url set → check apt/podman/pip/uv all point at Nexus, and that
 #     etc_hosts_entries resolves to the configured IPs.
-#   - nexus_url empty (--upstream-mirrors) on AWS → check the archive uses
-#     the in-region EC2 mirror.
-#   - nexus_url empty on any other backend → check apt points at upstream.
+#   - nexus_url empty and in AWS (test_in_aws: EC2 cell or aws_qemu) → check
+#     the archive uses the in-region EC2 mirror.
+#   - nexus_url empty and not in AWS → check apt points at upstream.
 
 - name: _verify | Decide whether this cell uses ECR registry mirrors
   set_fact:
     test_use_ecr_registry_mirrors: >-
-      {{ test_backend == 'aws'
+      {{ (test_in_aws | default(false) | bool)
          and (test_ecr_registry | default('') | length > 0)
          and (test_ecr_registry_mirrors | default({}) | length > 0) }}
 
@@ -46,7 +46,7 @@
 - name: _verify | Apt points at the in-region EC2 mirror on AWS
   when:
     - not (nexus_url | length > 0)
-    - test_backend == 'aws'
+    - test_in_aws | default(false) | bool
   vars:
     # amd64 cells render the archive host, arm cells the ports host; both
     # carry the region so the suffix disambiguates a real regional mirror
@@ -65,7 +65,7 @@
 - name: _verify | Apt sources point at upstream when no nexus (non-AWS)
   when:
     - not (nexus_url | length > 0)
-    - test_backend != 'aws'
+    - not (test_in_aws | default(false) | bool)
   assert:
     that:
       - >-
@@ -225,12 +225,12 @@
     test_resolvectl_global_protocols: >-
       {{ test_resolvectl.stdout_lines
          | select('search', 'Protocols:') | list | first | default('') }}
-    # Mirror mirrors.yml's backend split: qemu resolves through the household
-    # AdGuard VIP, AWS cells through the public anycast pair.
+    # Mirror mirrors.yml's split: LAN cells resolve through the household
+    # AdGuard VIP, in-AWS cells (incl. aws_qemu) through the public anycast pair.
     test_expected_resolvers: >-
-      {{ [prod_network.virtual_ips.dns]
-         if test_backend == 'qemu'
-         else bootstrap_dns_resolver }}
+      {{ bootstrap_dns_resolver
+         if test_in_aws | default(false) | bool
+         else [prod_network.virtual_ips.dns] }}
 
 - name: _verify | DNS-over-TLS is enforced at the configured resolver
   assert:

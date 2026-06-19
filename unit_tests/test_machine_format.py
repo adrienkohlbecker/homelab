@@ -3,6 +3,8 @@
 import shlex
 from collections.abc import Callable
 
+import pytest
+
 import machine
 
 
@@ -124,6 +126,38 @@ def test_format_ansible_cmd_default_envelope(
 
     # Default: no upstream-mirrors override
     assert "nexus_url=" not in cmd
+
+    # Backend + cloud-environment discriminators. The base Machine is the qemu
+    # backend and, with HOMELAB_TEST_IN_AWS unset, not in AWS.
+    assert "test_backend=qemu" in cmd
+    assert '{"test_in_aws": false}' in cmd
+
+
+def test_format_ansible_cmd_in_aws_env_sets_flag_and_clears_nexus(
+    machine_factory: Callable[..., machine.Machine],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The aws_qemu cell runs the qemu backend on an AWS host: HOMELAB_TEST_IN_AWS
+    # flips test_in_aws true (so roles pick the regional mirrors / public DNS)
+    # and clears nexus_url even without --upstream-mirrors, because the LAN
+    # Nexus is unreachable from AWS.
+    monkeypatch.setenv("HOMELAB_TEST_IN_AWS", "true")
+    m = machine_factory()
+    cmd = m.format_ansible_cmd("site.yml")
+
+    assert "test_backend=qemu" in cmd
+    assert '{"test_in_aws": true}' in cmd
+    assert "nexus_url=" in cmd
+    assert cmd.index("nexus_url=") < cmd.index("site.yml")
+
+
+def test_ec2_machine_is_always_in_aws(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The EC2 backend is in AWS by definition; the override ignores the env so
+    # the `aws` CI target need not set HOMELAB_TEST_IN_AWS (only aws_qemu does).
+    monkeypatch.delenv("HOMELAB_TEST_IN_AWS", raising=False)
+    # __new__ skips the boto-touching __init__; in_aws reads no instance state.
+    m = machine.Ec2Machine.__new__(machine.Ec2Machine)
+    assert m.in_aws is True
 
 
 def test_ansible_env_default_envelope(
