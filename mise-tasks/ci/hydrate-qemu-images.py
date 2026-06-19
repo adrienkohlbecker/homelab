@@ -40,7 +40,7 @@ MANIFEST_NAME = "manifest.json"
 MARKER_NAME = ".homelab_s3_build_id"
 LOCAL_MANIFEST_NAME = ".homelab_s3_manifest.json"
 SSM_PREFIX = "/homelab-ci/qemu-image"
-VALID_MACHINES = {"box", "box_deps", "lab", "pug"}
+VALID_MACHINES = {"box", "box_deps"}
 
 
 def run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
