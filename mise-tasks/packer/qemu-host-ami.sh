@@ -35,10 +35,12 @@ noble) ;;
 esac
 
 artifact_json=$(
-  uv run python -c 'import json, platform, yaml; data=yaml.safe_load(open("group_vars/all/versions.yml")); arch = "aarch64" if platform.machine() in {"aarch64", "arm64"} else "x86_64"; print(json.dumps(data["gitlab_runner_archive"][arch]))'
+  uv run python -c 'import json, yaml; data=yaml.safe_load(open("group_vars/all/versions.yml")); print(json.dumps(data["gitlab_runner_archive"]["x86_64"]))'
 )
 runner_url=$(python3 -c 'import json, sys; print(json.loads(sys.argv[1])["url"])' "$artifact_json")
 runner_sha256=$(python3 -c 'import json, sys; print(json.loads(sys.argv[1])["sha256"])' "$artifact_json")
+echo "==> qemu-host target architecture: x86_64"
+echo "==> gitlab-runner binary: ${runner_url}"
 
 on_error=cleanup
 if [ -t 0 ] && [ -z "${CI:-}" ]; then
