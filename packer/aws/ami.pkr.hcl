@@ -451,7 +451,7 @@ build {
     only           = ["amazon-ebssurrogate.hetzner"]
     inline_shebang = "/bin/bash -e"
     inline = [
-      "set -euo pipefail",
+      "set -euxo pipefail",
       "rescue_ip='${var.hetzner_rescue_ip}'",
       "[ -n \"$rescue_ip\" ] || { echo 'hetzner_rescue_ip unset — build the hetzner image via mise run packer:hetzner-bake' >&2; exit 1; }",
       "chmod 600 /home/ubuntu/rescue_key",
