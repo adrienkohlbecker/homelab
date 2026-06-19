@@ -582,6 +582,30 @@ resource "aws_iam_role_policy" "ci_cell" {
         Action   = "s3:GetObject"
         Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
       },
+      # roles/test mirrors.yml mints an ECR login token on the cell (the
+      # controller) and the qemu guest then pulls container layers through the
+      # pull-through cache as this same identity. GetAuthorizationToken is only
+      # valid against "*"; the repository-scoped actions cover the lazy
+      # first-pull (CreateRepository + BatchImportUpstreamImage populate the
+      # cache repo) and the subsequent layer fetch.
+      {
+        Sid      = "EcrAuthToken"
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Sid    = "EcrPullThroughCache"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:BatchImportUpstreamImage",
+          "ecr:CreateRepository",
+        ]
+        Resource = "arn:aws:ecr:${local.ci_aws_region}:${local.ci_account_id}:repository/*"
+      },
     ]
   })
 }
