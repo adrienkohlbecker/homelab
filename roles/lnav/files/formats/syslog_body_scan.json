@@ -15,7 +15,7 @@
       "body":  { "kind": "string" }
     },
     "timestamp-field": "timestamp",
-    "timestamp-format": "%b %e %H:%M:%S",
+    "timestamp-format": ["%b %e %H:%M:%S"],
     "ordered-by-time": true,
     "body-field": "body",
     "level-field": "body",
