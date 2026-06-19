@@ -1183,6 +1183,24 @@ class TestRenderChildPipeline:
         assert "GITLAB_OIDC_TOKEN" in joined
         assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"' in joined
 
+    def test_aws_qemu_target_uses_shell_qemu_runner(self) -> None:
+        doc = _render_child_doc(["nginx:box"], site_test=False, target="aws_qemu")
+        assert doc["default"]["tags"] == ["fox-docker-aws"]
+        assert "image" not in doc["default"]
+        assert doc[".cell"]["tags"] == ["aws-shell-qemu"]
+        assert doc[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
+        assert "image" not in doc[".cell"]
+        assert doc[".cell"]["id_tokens"] == {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}}
+        assert "retry" not in doc[".cell"]
+
+        joined = "\n".join(doc[".cell"]["before_script"])
+        assert "HOMELAB_VAULT_PASSWORD_TEST" in joined
+        assert "CI_CELL_SSH_KEY" not in joined
+        assert "ssh-add" not in joined
+        assert detect.CELL_ROLE_ARN in joined
+        assert 'AWS_ROLE_SESSION_NAME="aws_qemu-cell-$CI_JOB_ID"' in joined
+        assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"' in joined
+
     def test_lab_site_test_hydrates_default_box_jammy(self) -> None:
         doc = _render_child_doc([], site_test=True, target="lab")
         assert doc["_site_test:box"]["extends"] == ".cell"
@@ -1228,13 +1246,16 @@ class TestEmitGitlab:
         loaded = detect.yaml.safe_load(child.read_text())
         assert "no_cells" in loaded
 
-    def test_lab_target_does_not_apply_aws_skip(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    @pytest.mark.parametrize("target", ["aws_qemu", "lab"])
+    def test_qemu_target_does_not_apply_aws_skip(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, target: str
+    ) -> None:
         def fail_drop_aws_skipped(_specs):
-            raise AssertionError("lab target must not apply aws_skip")
+            raise AssertionError("qemu targets must not apply aws_skip")
 
         monkeypatch.setattr(detect, "drop_aws_skipped", fail_drop_aws_skipped)
         child = tmp_path / "child.yml"
-        detect._emit_gitlab(json.dumps(["keepalived:box"]), False, str(child), {}, lambda *_: None, target="lab")
+        detect._emit_gitlab(json.dumps(["keepalived:box"]), False, str(child), {}, lambda *_: None, target=target)
         loaded = detect.yaml.safe_load(child.read_text())
         assert "keepalived:box" in loaded
         assert loaded[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
@@ -1280,6 +1301,15 @@ class TestCmdGitlab:
         assert detect._cmd_gitlab(["--all", "--child-path", str(child)]) == 0
         loaded = detect.yaml.safe_load(child.read_text())
         assert loaded[".cell"]["tags"] == ["lab-shell-qemu"]
+        assert loaded[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
+
+    def test_target_env_selects_aws_qemu_pipeline(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("HOMELAB_CI_TARGET", "aws_qemu")
+        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
+        child = tmp_path / "child.yml"
+        assert detect._cmd_gitlab(["--all", "--child-path", str(child)]) == 0
+        loaded = detect.yaml.safe_load(child.read_text())
+        assert loaded[".cell"]["tags"] == ["aws-shell-qemu"]
         assert loaded[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
 
     def test_gitlab_in_commands(self) -> None:

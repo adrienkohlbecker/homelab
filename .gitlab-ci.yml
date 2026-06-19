@@ -16,9 +16,12 @@
 #     60 with cached-image reuse. Off-fox so a wide fan-out can't threaten fox's
 #     headscale/nginx co-tenants. By default `detect` and cells carry
 #     `tags: [fox-coordinator-aws]`; see notes/ci_aws_test_cells.md "Phase 2".
-#   - lab's shell runner (`lab-shell-qemu`) is the fallback target: a manual
-#     pipeline can render the same matrix with HOMELAB_TEST_BACKEND=qemu, so
-#     GitLab drives the local qemu harness directly on lab.
+#   - lab's shell runner (`lab-shell-qemu`) is the fallback qemu target: a
+#     manual pipeline can render the same matrix with HOMELAB_TEST_BACKEND=qemu,
+#     so GitLab drives the local qemu harness directly on lab.
+#   - AWS qemu shell runners (`aws-shell-qemu`) are the redesign target: the
+#     child cells hydrate promoted qemu images from S3 and run the same harness
+#     path as lab, without launching one EC2 instance from inside each job.
 #
 # This is the sole CI: the former GitHub Actions setup (.github/workflows/) has
 # been retired.
@@ -28,9 +31,10 @@
 # The prod identity's password is never available to CI by design (CLAUDE.md:
 # Vault ids).
 #
-# Lab fallback: set HOMELAB_CI_TARGET=lab and HOMELAB_DETECT_TAG=fox-docker-aws
-# on a manual/web pipeline. detect then renders child cells for lab-shell-qemu
-# with HOMELAB_TEST_BACKEND=qemu instead of launching AWS EC2 cells.
+# Qemu targets: set HOMELAB_CI_TARGET=lab for lab-shell-qemu, or
+# HOMELAB_CI_TARGET=aws_qemu for the AWS shell/fleeting pool. Pair either with
+# HOMELAB_DETECT_TAG=fox-docker-aws on a manual/web pipeline so detect renders
+# the child YAML on fox instead of booting the legacy coordinator path.
 
 # `detect` runs first and generates the role-test child pipeline; everything
 # else (lint, unit tests, the test_cells trigger, manual builders) runs in
@@ -66,9 +70,9 @@ variables:
 # GitHub `detect` -> per-bucket `test` workflows collapse to this single pair:
 # `detect` runs the same classification core (mise-tasks/ci/detect.py) and
 # writes a generated child pipeline — one job per `role:variant[:ubuntu]` cell,
-# each launching a single-use EC2 spot instance via the harness's aws backend.
-# There are no QEMU images or per-release runner pools on AWS, so the matrix is
-# a flat list rather than GitHub's jammy/noble/.../lab/pug buckets.
+# each running a role/machine/release cell. The default `aws` target launches a
+# single-use EC2 spot instance via the harness's aws backend; qemu shell targets
+# hydrate promoted images from S3 and run the qemu backend directly.
 #
 # The diff base is the newest fully-green pipeline ancestor, resolved via the
 # GitLab pipelines API (detect.py: resolve_green_base_gitlab) — so a red-push ->

@@ -690,11 +690,11 @@ def _full_universe_matrix() -> str:
 # GitLab dynamic child pipeline
 # ---------------------------------------------------------------------------
 #
-# The `detect` job emits a *generated child pipeline*. There are no QEMU images
-# or per-release runner pools on AWS — every cell launches the same way (an EC2
-# spot instance from the homelab-ci-cell-<machine> launch template + the
-# /homelab-ci/ami/<machine>/<ubuntu> AMI), so the matrix is one job per
-# `role:variant[:ubuntu]` cell.
+# The `detect` job emits a *generated child pipeline*. The default `aws` target
+# launches one EC2 test cell per job through the harness's aws backend. Qemu
+# shell-runner targets (`lab`, `aws_qemu`) render the same matrix but hydrate
+# the promoted qemu image bundle from S3 before calling the qemu backend
+# directly.
 #
 # The parent `detect` job (.gitlab-ci.yml) runs `detect.py gitlab`, which writes
 # the child YAML (one job per cell, all extending a shared `.cell` scaffold);
@@ -705,10 +705,33 @@ def _full_universe_matrix() -> str:
 # its OIDC trust accepts any branch, so feature-branch pushes can test too.
 CELL_ROLE_ARN = "arn:aws:iam::000390721279:role/homelab-ci-cell"
 EMPTY_SHA = "0" * 40
-TARGET_BACKENDS = {
-    "aws": "aws",
-    "lab": "qemu",
+TARGETS = {
+    "aws": {
+        "backend": "aws",
+        "cell_runner_tag": "fox-coordinator-aws",
+        "use_ci_image": True,
+        "hydrate_qemu": False,
+        "retry_spot_interruption": True,
+        "apply_aws_skip": True,
+    },
+    "aws_qemu": {
+        "backend": "qemu",
+        "cell_runner_tag": "aws-shell-qemu",
+        "use_ci_image": False,
+        "hydrate_qemu": True,
+        "retry_spot_interruption": False,
+        "apply_aws_skip": False,
+    },
+    "lab": {
+        "backend": "qemu",
+        "cell_runner_tag": "lab-shell-qemu",
+        "use_ci_image": False,
+        "hydrate_qemu": True,
+        "retry_spot_interruption": False,
+        "apply_aws_skip": False,
+    },
 }
+TARGET_BACKENDS = {name: config["backend"] for name, config in TARGETS.items()}
 
 # The child pipeline is a Jinja2 template so the static scaffold (`.cell`
 # before_script, artifacts, retry) is reviewable as real YAML; only the
@@ -765,8 +788,9 @@ def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws"
         undefined=jinja2.StrictUndefined,
     )
     template = env.get_template(_CHILD_TEMPLATE.name)
-    if target not in TARGET_BACKENDS:
+    if target not in TARGETS:
         raise ValueError(f"unsupported CI target: {target!r}")
+    target_config = TARGETS[target]
     cells = [_parse_cell_spec(s) for s in specs]
     cell_groups = _split_cells_into_stages(cells)
     # _site_test is the critical-path cell (longest, ~40m). GitLab seeds build
@@ -785,7 +809,11 @@ def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws"
         stages=stages,
         site_test=site_test,
         target=target,
-        backend=TARGET_BACKENDS[target],
+        backend=target_config["backend"],
+        cell_runner_tag=target_config["cell_runner_tag"],
+        use_ci_image=target_config["use_ci_image"],
+        hydrate_qemu=target_config["hydrate_qemu"],
+        retry_spot_interruption=target_config["retry_spot_interruption"],
         cell_role_arn=CELL_ROLE_ARN,
     )
 
@@ -807,20 +835,21 @@ def _emit_gitlab(
     placeholder, which the template adds. Cells are emitted longest-first by
     their median recent runtime so the slowest jobs start first.
     """
-    if target not in TARGET_BACKENDS:
+    if target not in TARGETS:
         raise ValueError(f"unsupported CI target: {target!r}")
+    target_config = TARGETS[target]
     specs = json.loads(matrix)
-    # Apply backend-aware aws_skip: only for the EC2-cell target. The lab
-    # fallback is qemu-backed, so it deliberately keeps the same cells a local
-    # qemu run would exercise.
+    # Apply backend-aware aws_skip only for targets that launch AWS EC2 cells.
+    # Qemu targets deliberately keep the same cells a local qemu run would
+    # exercise.
     dropped: list[str] = []
-    if target == "aws":
+    if target_config["apply_aws_skip"]:
         specs, dropped = drop_aws_skipped(specs)
     specs = sort_specs_by_runtime(specs, runtimes)
 
     Path(child_path).write_text(render_child_pipeline(specs, site_test, target=target))
 
-    log(f"target={target} backend={TARGET_BACKENDS[target]}")
+    log(f"target={target} backend={target_config['backend']} runner={target_config['cell_runner_tag']}")
     log(f"matrix={json.dumps(specs)}")
     if dropped:
         log(f"aws_skip: dropped {len(dropped)} cell(s): {' '.join(sorted(dropped))}")
