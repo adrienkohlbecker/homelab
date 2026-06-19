@@ -53,8 +53,8 @@ def _describe_response(subnets: list[str]) -> dict:
 
 def _fleet_response(instance_id: str = "i-0abc123") -> dict:
     return {
-        "fleetId": "fleet-123",
-        "fleetInstanceSet": [
+        "FleetId": "fleet-123",
+        "Instances": [
             {
                 "InstanceIds": [instance_id],
                 "InstanceType": "c6a.large",
@@ -169,9 +169,9 @@ def test_boot_classifies_fleet_capacity_errors_as_spot(monkeypatch: pytest.Monke
             return _describe_response(subnets)
         attempts.append(kwargs)
         return {
-            "fleetId": "fleet-123",
-            "fleetInstanceSet": [],
-            "errorSet": [
+            "FleetId": "fleet-123",
+            "Instances": [],
+            "Errors": [
                 {
                     "ErrorCode": "InsufficientInstanceCapacity",
                     "ErrorMessage": "no spot capacity",
@@ -200,9 +200,9 @@ def test_boot_raises_when_fleet_launches_no_instance_for_non_capacity_error(monk
         if op == "describe_subnets":
             return _describe_response(subnets)
         return {
-            "fleetId": "fleet-123",
-            "fleetInstanceSet": [],
-            "errorSet": [{"ErrorCode": "InvalidAMIID.NotFound", "ErrorMessage": "bad image"}],
+            "FleetId": "fleet-123",
+            "Instances": [],
+            "Errors": [{"ErrorCode": "InvalidAMIID.NotFound", "ErrorMessage": "bad image"}],
         }
 
     m = _make_ec2("run-deadbeef", call)
