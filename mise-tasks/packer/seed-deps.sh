@@ -2,10 +2,11 @@
 #MISE description="Layer packer/seed_deps.yml on top of the box artifact and publish as box_deps"
 #MISE interactive=true
 # The seed reboots into the HWE 6.8 kernel; on the aarch64 fixture that warm
-# reboot needs the newer edk2 firmware (see test/arch.py) or it wedges. This is
-# the macOS-qemu-only path -- CI hydrates box_deps from the published qemu
-# image, not here -- so the fetch never runs in CI. Idempotent: a no-op once
-# the firmware is present.
+# reboot needs the newer edk2 firmware (see test/arch.py) or it wedges, so the
+# build depends on test:firmware to fetch it. The firmware only matters on the
+# macOS aarch64 fixture; on the x86_64 lab CI builder (the qemu_image:box_deps:*
+# jobs, which run this to produce the published box_deps bundle) the fetch still
+# runs but the blob goes unused. Idempotent: a no-op once present.
 #MISE depends=["test:firmware"]
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="jammy"
 #USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
