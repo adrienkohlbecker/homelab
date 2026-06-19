@@ -12,6 +12,29 @@
   tags:
     - lnav
 
+# The orphan planted in _setup must have been pruned by converge, and the
+# managed formats must be exactly what remains -- proving the prune removes
+# retired files without taking out live ones.
+- name: Enumerate format files left on disk after converge
+  find:
+    paths: /etc/lnav/formats/homelab
+    patterns: "*.json"
+  register: lnav_verify_formats
+  become: true
+  tags:
+    - lnav
+
+- name: Assert orphan pruned and exactly the managed formats remain
+  vars:
+    on_disk: "{{ lnav_verify_formats.files | map(attribute='path') | map('basename') | sort }}"
+  assert:
+    that: on_disk == (lnav_format_files | sort)
+    fail_msg: >-
+      lnav formats dir mismatch: on disk {{ on_disk }}, expected {{ lnav_format_files | sort }}
+      (orphan_retired.json should have been pruned)
+  tags:
+    - lnav
+
 - name: Create lnav format verification directory
   file:
     path: /tmp/lnav_verify

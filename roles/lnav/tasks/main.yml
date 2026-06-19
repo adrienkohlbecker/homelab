@@ -93,10 +93,34 @@
     mode: "0644"
     backup: true
     validate: python3 -m json.tool %s
-  loop:
-    - journald_json_log.json
-    - fluentbit_lnav.json
-    - syslog_body_scan.json
+  loop: "{{ lnav_format_files }}"
+  become: true
+  tags:
+    - lnav
+
+# The copy loop above only adds/updates managed formats; it never removes one
+# dropped from lnav_format_files. Without this prune, a retired format (e.g. a
+# parser for a decommissioned service) lingers on disk and warns at lnav
+# startup. The dir is created and owned solely by this role, so anything here
+# not in the managed list is an orphan. Backups (*.json.<pid>.<ts>~) end in ~,
+# so the *.json pattern leaves them for the cleanup role to prune.
+- name: Enumerate installed lnav format files
+  find:
+    paths: /etc/lnav/formats/homelab
+    patterns: "*.json"
+  register: lnav_installed_formats
+  become: true
+  tags:
+    - lnav
+
+- name: Remove orphaned lnav format files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ lnav_installed_formats.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  when: item.path | basename not in lnav_format_files
   become: true
   tags:
     - lnav
