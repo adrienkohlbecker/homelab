@@ -1,9 +1,11 @@
 # AWS-backed CI test cells (notes/ci_aws_test_cells.md): every role test runs
 # against a single-use EC2 spot instance launched from a per-machine launch
-# template, with the AMI resolved through SSM. This file owns everything the
-# harness does NOT: VPC, security group, IAM/OIDC, launch templates, the
-# EventBridge Scheduler execution role, and the budget tripwire. Changing an
-# instance type or spot policy happens here, never in test/.
+# template, with the AMI resolved through SSM. The nested-qemu path also
+# publishes qemu image bundles to S3 and promotes them through SSM. This file
+# owns everything the harness does NOT: VPC, security group, IAM/OIDC, launch
+# templates, the image bucket, the EventBridge Scheduler execution role, and
+# the budget tripwire. Changing an instance type or spot policy happens here,
+# never in test/.
 #
 # First-apply bootstrap (AMI parameter seeding, GitLab cutover):
 # notes/ci_aws_test_cells.md, "Bootstrap".
@@ -14,9 +16,16 @@ locals {
   # is the only identity binding (IAM has no condition key for GitLab's
   # immutable project_id), so this namespace must never be released — a
   # re-registered username could recreate the project and mint valid tokens.
-  ci_gitlab_project = "akohlbecker/homelab"
-  ci_account_id     = data.aws_caller_identity.current.account_id
-  wan_probe_ports   = yamldecode(file("${path.module}/../data/wan_probe_ports.yml"))
+  ci_gitlab_project         = "akohlbecker/homelab"
+  ci_account_id             = data.aws_caller_identity.current.account_id
+  ci_qemu_image_bucket_name = "homelab-ci-images"
+  ci_qemu_image_machines = toset([
+    "box",
+    "box_deps",
+    "lab",
+    "pug",
+  ])
+  wan_probe_ports = yamldecode(file("${path.module}/../data/wan_probe_ports.yml"))
   ci_cell_wan_probe_rules = flatten([
     for protocol, ports in local.wan_probe_ports : [
       for port in ports : {
@@ -114,6 +123,122 @@ variable "ci_ecr_gitlab_access_token" {
     condition     = length(var.ci_ecr_gitlab_access_token) > 0
     error_message = "ci_ecr_gitlab_access_token must be non-empty (resolved via TF_VAR_ci_ecr_gitlab_access_token from 1Password through `op run`)."
   }
+}
+
+# ─── QEMU image bundle bucket ────────────────────────────────────────────────
+# Source of truth for nested-qemu cell images. Builds publish immutable
+# <ubuntu>/<machine>/<build-id>/ prefixes containing manifest.json and the
+# compressed disk bundle; SSM promotion points consumers at the current build.
+
+resource "aws_s3_bucket" "ci_qemu_images" {
+  bucket = local.ci_qemu_image_bucket_name
+
+  tags = {
+    Name    = local.ci_qemu_image_bucket_name
+    role    = "ci"
+    purpose = "qemu-images"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "ci_qemu_images" {
+  bucket = aws_s3_bucket.ci_qemu_images.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "ci_qemu_images" {
+  bucket = aws_s3_bucket.ci_qemu_images.id
+
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "ci_qemu_images" {
+  bucket = aws_s3_bucket.ci_qemu_images.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "ci_qemu_images" {
+  bucket = aws_s3_bucket.ci_qemu_images.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "ci_qemu_images" {
+  bucket = aws_s3_bucket.ci_qemu_images.id
+
+  rule {
+    id     = "abort-incomplete-uploads"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+
+  rule {
+    id     = "prune-old-versions"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      expired_object_delete_marker = true
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 14
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "ci_qemu_images" {
+  bucket = aws_s3_bucket.ci_qemu_images.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.ci_qemu_images.arn,
+          "${aws_s3_bucket.ci_qemu_images.arn}/*",
+        ]
+        Condition = {
+          Bool = { "aws:SecureTransport" = "false" }
+        }
+      },
+      {
+        Sid       = "DenyCrossAccountAccess"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.ci_qemu_images.arn,
+          "${aws_s3_bucket.ci_qemu_images.arn}/*",
+        ]
+        Condition = {
+          StringNotEquals = { "aws:PrincipalAccount" = local.ci_account_id }
+        }
+      },
+    ]
+  })
 }
 
 # ─── ECR pull-through cache ──────────────────────────────────────────────────
@@ -704,6 +829,37 @@ resource "aws_iam_role_policy" "ci_bake" {
           for m in keys(local.ci_machine_instance_types) :
           "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/ami/${m}/*"
           if m != "minimal"
+        ]
+      },
+      {
+        Sid    = "PublishQemuImages"
+        Effect = "Allow"
+        Action = [
+          "s3:GetBucketLocation", "s3:ListBucket",
+          "s3:ListBucketMultipartUploads", "s3:ListBucketVersions",
+        ]
+        Resource = aws_s3_bucket.ci_qemu_images.arn
+      },
+      {
+        Sid    = "WriteQemuImages"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject", "s3:PutObject",
+          "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts",
+          "s3:DeleteObject", "s3:DeleteObjectVersion",
+        ]
+        Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
+      },
+      {
+        Sid    = "PromoteQemuImages"
+        Effect = "Allow"
+        Action = [
+          "ssm:PutParameter", "ssm:GetParameter", "ssm:GetParameters",
+          "ssm:DescribeParameters", "ssm:AddTagsToResource",
+        ]
+        Resource = [
+          for m in local.ci_qemu_image_machines :
+          "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/qemu-image/${m}/*"
         ]
       },
       # Per-bake one-time termination schedules (mise-tasks/packer/

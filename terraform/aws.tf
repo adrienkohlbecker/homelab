@@ -1,11 +1,13 @@
 # The personal AWS account (000390721279). It is almost entirely empty: the
-# only operator-owned resource is the `ak` admin user below. Everything else is
-# AWS-default infra terraform deliberately does NOT adopt --
+# operator-owned resources are the `ak` admin user below and the dedicated CI
+# footprint in aws_ci.tf. Everything else is AWS-default infra terraform
+# deliberately does NOT adopt --
 #   - 3 service-linked roles (license-manager / support / trustedadvisor),
 #     created and owned by AWS;
 #   - default VPCs in every region.
-# There are no EC2 instances, non-default VPCs, S3 buckets, Route53 zones,
-# SES/ACM/SNS resources, IAM groups/customer-policies, or anything tagged.
+# Outside the CI footprint there are no EC2 instances, non-default VPCs, S3
+# buckets, Route53 zones, SES/ACM/SNS resources, IAM groups/customer-policies,
+# or anything tagged.
 #
 # Auth comes from [profile default] in ~/.aws/config (aws-credential-process:
 # long-term IAM key + MFA OTP from 1Password -> a 12h STS session). The MinIO

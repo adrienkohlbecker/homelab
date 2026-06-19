@@ -329,6 +329,44 @@ ami_box_deps:
     - aws --region eu-central-1 sts get-caller-identity
     - mise run packer:ami box_deps --ubuntu "$UBUNTU" --ssh-key "$CI_CELL_SSH_KEY" --promote
 
+# Semantic cleanup for nested-qemu image bundles in S3. Bucket lifecycle handles
+# multipart leftovers and noncurrent versions; this job understands the live SSM
+# pointers and deletes old immutable build prefixes without touching promoted
+# builds. Manual runs are dry-run unless QEMU_IMAGE_REAPER_APPLY=true; schedules
+# apply automatically on protected refs.
+qemu_image_reaper:
+  stage: prepare
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_REF_PROTECTED == "true"
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+      when: manual
+      # A skipped manual job must not hold the pipeline in "blocked".
+      allow_failure: true
+  tags:
+    - fox-docker-aws
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  resource_group: qemu-image-reaper
+  interruptible: false
+  timeout: 15m
+  script:
+    - mise install
+    - uv sync --locked
+    # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
+    # AssumeRoleWithWebIdentity provider wants a file path.
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
+    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
+    - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
+    - export AWS_ROLE_SESSION_NAME="qemu-image-reaper-$CI_JOB_ID"
+    - aws --region eu-central-1 sts get-caller-identity
+    - |
+      reaper_args=""
+      if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "${QEMU_IMAGE_REAPER_APPLY:-}" = "true" ]; then
+        reaper_args="--apply"
+      fi
+      mise run ci:reap-qemu-images $reaper_args
+
 # Bake + publish fox's Hetzner Cloud boot image. The image is built by the
 # same pools.sh/chroot.sh install as the cell AMIs, on an EC2 surrogate
 # volume (packer/aws, IMAGE_TARGET=hetzner — no KVM; the byproduct AMI is
