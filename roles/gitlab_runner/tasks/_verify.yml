@@ -81,6 +81,27 @@
   changed_when: false
   become: true
 
+- name: _verify | Pinned fleeting-plugin-aws binary runs on this arch
+  when: gitlab_runner_aws_qemu_enabled
+  command: timeout 10 /usr/local/bin/fleeting-plugin-aws --version
+  register: _gitlab_runner_fleeting_aws_version
+  changed_when: false
+  failed_when: >-
+    gitlab_runner_fleeting_aws_version
+    not in _gitlab_runner_fleeting_aws_version.stdout
+
+- name: _verify | Rendered config carries the AWS qemu instance runner block
+  when: gitlab_runner_aws_qemu_enabled
+  command: grep -F 'plugin = "fleeting-plugin-aws"' /mnt/services/gitlab_runner/config.toml
+  changed_when: false
+  become: true
+
+- name: _verify | AWS qemu runner points at the Terraform ASG
+  when: gitlab_runner_aws_qemu_enabled
+  command: grep -F 'name = "{{ gitlab_runner_aws_qemu_asg_name }}"' /mnt/services/gitlab_runner/config.toml
+  changed_when: false
+  become: true
+
 - name: _verify | Rootless podman.socket is active under gitlab_runner
   when: gitlab_runner_executor == 'docker'
   systemd:

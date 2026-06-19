@@ -189,3 +189,57 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
       # the unset *bool as a null where it wants a boolean.
       preemptive_mode = false
 {% endif %}
+{% if gitlab_runner_aws_qemu_enabled | default(false) %}
+
+# AWS qemu runner: an instance executor backed by fleeting-plugin-aws and a
+# dedicated Auto Scaling Group. Jobs run as shell payloads on the AWS host, not
+# inside a container, so they can use /dev/kvm for nested qemu. Gate 1 keeps
+# this at one job on one host; raise capacity only after the single-cell
+# kill-switch benchmark is green.
+[[runners]]
+  name = "{{ inventory_hostname }}-aws-shell-qemu"
+  url = "https://gitlab.com"
+  # Third glrt- project runner, distinct from the docker and coordinator
+  # tokens. Server-side tags/run-untagged/locked/protected carry the actual
+  # aws-shell-qemu routing policy.
+  token = "{{ gitlab_runner_aws_qemu_token }}"
+  executor = "instance"
+  shell = "bash"
+  limit = {{ gitlab_runner_aws_qemu_max_instances * gitlab_runner_aws_qemu_capacity_per_instance }}
+  request_concurrency = 4
+
+  [runners.autoscaler]
+    # PATH-resolved binary /usr/local/bin/fleeting-plugin-aws; installed and
+    # pinned by tasks/main.yml.
+    plugin = "fleeting-plugin-aws"
+    capacity_per_instance = {{ gitlab_runner_aws_qemu_capacity_per_instance }}
+    # Reuse hosts while idle so the S3-hydrated qemu image cache is paid once
+    # per host lifetime, not once per job.
+    max_use_count = 0
+    max_instances = {{ gitlab_runner_aws_qemu_max_instances }}
+    delete_instances_on_shutdown = true
+    # Baked into the runner-host AMI. It rejects hosts without KVM or a writable
+    # scratch cache before GitLab assigns a job to them.
+    instance_ready_command = "/usr/local/bin/homelab_ci_ready"
+
+    [runners.autoscaler.plugin_config]
+      # Name of the Terraform-owned Auto Scaling Group.
+      name = "{{ gitlab_runner_aws_qemu_asg_name }}"
+      profile = "{{ gitlab_runner_aws_qemu_profile }}"
+      config_file = "/mnt/services/gitlab_runner/.aws/config"
+      credentials_file = "/mnt/services/gitlab_runner/.aws/credentials"
+      # Terminate protected instances through the ASG desired-capacity path.
+      scale_in_termination = true
+
+    [runners.autoscaler.connector_config]
+      username = "{{ gitlab_runner_aws_qemu_username }}"
+      # fox manages the worker from outside the AWS VPC, so the connector must
+      # SSH to the instance public address. The SG admits fox only.
+      use_external_addr = true
+      timeout = "15m0s"
+
+    [[runners.autoscaler.policy]]
+      idle_count = 0
+      idle_time = "{{ gitlab_runner_aws_qemu_idle_time }}"
+      preemptive_mode = false
+{% endif %}

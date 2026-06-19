@@ -351,6 +351,38 @@ ami_box_deps:
     - mise exec -- aws --region eu-central-1 sts get-caller-identity
     - mise run packer:ami box_deps --ubuntu "$UBUNTU" --ssh-key "$CI_CELL_SSH_KEY" --promote
 
+# Bake + promote the AWS nested-qemu runner-host AMI. This is the instance
+# executor target host, not a guest fixture: it carries gitlab-runner, qemu/KVM
+# tooling, the mise/uv tool tree, and readiness scripts. Terraform's ASG launch
+# template resolves /homelab-ci/ami/qemu-host/noble.
+qemu_host_ami:
+  stage: prepare
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+      when: manual
+      # A skipped manual job must not hold the pipeline in "blocked".
+      allow_failure: true
+  tags:
+    - fox-docker-aws
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  resource_group: ami-qemu-host-noble
+  interruptible: false
+  timeout: 60m
+  script:
+    - mise install
+    - uv sync --locked
+    - mise run packer:init
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
+    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
+    - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
+    - export AWS_ROLE_SESSION_NAME="qemu-host-ami-$CI_JOB_ID"
+    - mise exec -- aws --region eu-central-1 sts get-caller-identity
+    - mise run packer:qemu-host-ami --promote
+
 # Semantic cleanup for nested-qemu image bundles in S3. Bucket lifecycle handles
 # multipart leftovers and noncurrent versions; this job understands the live SSM
 # pointers and deletes old immutable build prefixes without touching promoted

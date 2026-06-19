@@ -1183,6 +1183,7 @@ class TestRenderChildPipeline:
         assert "GITLAB_OIDC_TOKEN" in joined
         assert "mise exec -- aws --region eu-central-1 sts get-caller-identity" in joined
         assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"' in joined
+        assert "--upstream-mirrors" not in "\n".join(doc["nginx:box"]["script"])
 
     def test_aws_qemu_target_uses_shell_qemu_runner(self) -> None:
         doc = _render_child_doc(["nginx:box"], site_test=False, target="aws_qemu")
@@ -1202,6 +1203,7 @@ class TestRenderChildPipeline:
         assert 'AWS_ROLE_SESSION_NAME="aws_qemu-cell-$CI_JOB_ID"' in joined
         assert "mise exec -- aws --region eu-central-1 sts get-caller-identity" in joined
         assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"' in joined
+        assert "--upstream-mirrors" in "\n".join(doc["nginx:box"]["script"])
 
     def test_lab_site_test_hydrates_default_box_jammy(self) -> None:
         doc = _render_child_doc([], site_test=True, target="lab")

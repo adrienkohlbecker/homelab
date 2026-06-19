@@ -148,7 +148,7 @@ stages:
     # job log when a cell does not retry as expected.
     - |
       rc=0
-      mise exec -- timeout --kill-after=30s 2460 test/site_test.py --timeout 2400 || rc=$?
+      mise exec -- timeout --kill-after=30s 2460 test/site_test.py --timeout 2400{% if upstream_mirrors %} --upstream-mirrors{% endif %} || rc=$?
       echo "harness exit code: $rc"
       exit $rc
 {% endif %}
@@ -180,7 +180,7 @@ stages:
     # the runner.
     - |
       rc=0
-      mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark || rc=$?
+      mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark{% if upstream_mirrors %} --upstream-mirrors{% endif %} || rc=$?
       echo "harness exit code: $rc"
       exit $rc
 {% endfor %}

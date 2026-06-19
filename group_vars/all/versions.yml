@@ -161,6 +161,21 @@ gitlab_runner_fleeting_hetzner_archive:
     url: "https://gitlab.com/api/v4/projects/54767125/packages/generic/releases/v1.4.4/fleeting-plugin-hetzner-linux-arm64"
     sha256: "0d45d35984168ef2a7bee6cf497424765d903e418f9aff9015cc79ad1b8c26e1"
 
+# fleeting-plugin-aws: the instance executor's ASG plugin for nested-qemu AWS
+# runner hosts (roles/gitlab_runner aws_qemu runner, notes/
+# ci_aws_nested_qemu_cells.md). Same shape as the Hetzner plugin: a plain
+# PATH-named Go binary, not an OCI ref. Published as a GitLab generic package
+# (project 39457165 = gitlab-org/fleeting/plugins/aws). sha256s from the
+# v1.2.0 release checksum file on 2026-06-19.
+gitlab_runner_fleeting_aws_version: "1.2.0"
+gitlab_runner_fleeting_aws_archive:
+  x86_64:
+    url: "https://gitlab.com/api/v4/projects/39457165/packages/generic/releases/v1.2.0/fleeting-plugin-aws-linux-amd64"
+    sha256: "4529b218a6e1e23691cfcfd42de56a234de2a04ba58956ddc801e0220cb388db"
+  aarch64:
+    url: "https://gitlab.com/api/v4/projects/39457165/packages/generic/releases/v1.2.0/fleeting-plugin-aws-linux-arm64"
+    sha256: "8dddb3a3824ad2b99e7d599220c4ac8da251fdc9f76443fc0563219b51874010"
+
 # Jellyfin SSO/OIDC plugin (9p4/jellyfin-plugin-sso). Provides the in-app
 # OIDC login flow against Authelia (see notes/jellyfin_sso_rollout.md). The
 # plugin is managed .NET (arch-independent) so there is a single url/sha256,
