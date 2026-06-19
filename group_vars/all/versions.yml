@@ -145,22 +145,6 @@ gitlab_runner_archive:
     url: "https://gitlab-runner-downloads.s3.amazonaws.com/v19.0.1/binaries/gitlab-runner-linux-arm64"
     sha256: "fd2d07bf3ee40b495cf0affa46257407dbba9c18e46d6a91001dee938d8b10ac"
 
-# fleeting-plugin-hetzner: the docker-autoscaler executor's instance plugin
-# (roles/gitlab_runner coordinator runner, notes/ci_aws_test_cells.md). A plain
-# Go binary fetched onto fox under /usr/local/bin and named by PATH in
-# config.toml (plugin = "fleeting-plugin-hetzner"), NOT an OCI ref. Published as
-# a GitLab generic package (project 54767125 = hetznercloud/fleeting-plugin-hetzner);
-# amd64/arm64 assets keyed by ansible_architecture. sha256s computed from the
-# v1.4.4 release binaries on 2026-06-16.
-gitlab_runner_fleeting_hetzner_version: "1.4.4"
-gitlab_runner_fleeting_hetzner_archive:
-  x86_64:
-    url: "https://gitlab.com/api/v4/projects/54767125/packages/generic/releases/v1.4.4/fleeting-plugin-hetzner-linux-amd64"
-    sha256: "9741cd21e9a031502f71525200c68b76acfd3a7bd6502c4d32dccfd5c731ab98"
-  aarch64:
-    url: "https://gitlab.com/api/v4/projects/54767125/packages/generic/releases/v1.4.4/fleeting-plugin-hetzner-linux-arm64"
-    sha256: "0d45d35984168ef2a7bee6cf497424765d903e418f9aff9015cc79ad1b8c26e1"
-
 # fleeting-plugin-aws: the instance executor's ASG plugin for nested-qemu AWS
 # runner hosts (roles/gitlab_runner aws_qemu runner, notes/
 # ci_aws_nested_qemu_cells.md). Same shape as the Hetzner plugin: a plain

@@ -17,18 +17,15 @@ gitlab_runner_executor: docker
 # UI names lined up.
 gitlab_runner_name_suffix: "{{ 'shell-qemu' if gitlab_runner_executor == 'shell' else 'docker-aws' }}"
 
-# Global job ceiling across ALL [[runners]] blocks (process-wide). With the
-# coordinator runner enabled this is the fleet-wide umbrella, raised to cover
-# its per-runner limit; per-runner bounds live in `limit` (below + per block),
-# not here. The real test capacity is the EC2 spot vCPU quota, governed
-# separately (notes/ci_aws_test_cells.md).
+# Global job ceiling across ALL [[runners]] blocks (process-wide) -- the docker
+# runner plus the aws_qemu runner. Per-runner bounds live in `limit` (below +
+# per block), not here. The real test capacity is the qemu cell fan-out on the
+# AWS shell-runner ASG, governed separately (notes/ci_aws_nested_qemu_cells.md).
 gitlab_runner_concurrent: 8
 
 # Per-runner `limit` on the Docker-on-podman runner: caps jobs run directly on
 # the host, independent of the global `concurrent`. 0 = no per-runner cap (the
-# runner is bounded only by `concurrent` -- the single-runner default). A host
-# also running the coordinator sets this to keep on-fox jobs bounded once
-# `concurrent` is raised for the coordinator fleet.
+# runner is bounded only by `concurrent` -- the single-runner default).
 gitlab_runner_docker_limit: 0
 
 # Per-runner `limit` for non-Docker executors. Docker mode uses the historical
@@ -55,47 +52,8 @@ gitlab_runner_extra_groups: []
 gitlab_runner_memory_high: ""
 gitlab_runner_memory_max: ""
 
-# ── Coordinator runner (docker-autoscaler / fleeting) ────────────────────────
-# Second [[runners]] block: a docker-autoscaler executor that clones an
-# ephemeral Hetzner "coordinator" per pipeline via fleeting-plugin-hetzner,
-# runs the AWS-cell fan-out from there, and scales back to zero. Off by default;
-# a host enabling it sets the two required secrets (gitlab_runner_coordinator_token
-# + gitlab_runner_hcloud_token -- asserted in tasks/main.yml), then flips this
-# true. The Docker-on-podman runner above is independent and stays available for
-# small jobs that run on the host directly. See notes/ci_aws_test_cells.md.
-gitlab_runner_coordinator_enabled: false
-
-# Label selector the converge resolves to the newest available coordinator
-# snapshot id via the hcloud API (docker-autoscaler's image must be a numeric
-# snapshot id -- snapshots have no name for GetForArchitecture to match). Bumped
-# automatically on every `mise run packer:hetzner-coordinator` rebake, no
-# host_vars edit. See tasks/main.yml "Resolve the newest coordinator snapshot".
-gitlab_runner_image_selector: "role=ci-coordinator"
-
-# One coordinator runs a whole pipeline's cell matrix: capacity_per_instance
-# matches the AWS 60-spot-instances/region quota (the real fan-out ceiling), and
-# max_instances 1 keeps a single coordinator per manager.
-gitlab_runner_capacity_per_instance: 60
-gitlab_runner_max_instances: 1
-
-# idle_count 0 scales to zero between pipelines; idle_time is how long fleeting
-# keeps an idle coordinator before deleting it. Hetzner bills per hour, rounded
-# UP, anchored at server creation -- so a coordinator that ran a 5-min pipeline
-# has already been billed a full hour the moment it booted. Deleting it early
-# (the old 15m) saves nothing and forces the NEXT pipeline to boot a fresh box =
-# a second billed hour. Holding it ~most of the hour instead lets a follow-up
-# pipeline (rebase, retry, iterative push) reuse the already-paid box for free.
-# fleeting exposes only a flat idle_time (measured from the last job, not from
-# creation), so this is an approximation of "kill near the billing boundary if
-# idle": 45m keeps a short pipeline's idle tail inside its first paid hour while
-# tripling the warm-reuse window. A lone medium pipeline (~30m) whose idle tail
-# then crosses into a 2nd hour with no follow-up is the accepted edge -- pennies
-# on a cx43, and a creation-anchored reaper racing fleeting's lifecycle is not
-# worth it. Dial up toward 55m for more reuse, down for less spillover.
-gitlab_runner_idle_time: "45m"
-
 # ── AWS qemu runner (instance / fleeting) ───────────────────────────────────
-# Third [[runners]] block: an instance executor that asks fleeting-plugin-aws to
+# Second [[runners]] block: an instance executor that asks fleeting-plugin-aws to
 # scale a dedicated Auto Scaling Group from zero, then runs shell jobs directly
 # on the AWS host. Those jobs hydrate S3 qemu images and run the same qemu
 # harness as the lab fallback. Gate 1 deliberately starts at one job on one

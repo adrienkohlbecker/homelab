@@ -28,33 +28,15 @@
         that:
           - gitlab_runner_token | default('') | length > 0
           - gitlab_runner_executor in ['docker', 'shell']
-          - not (gitlab_runner_coordinator_enabled | default(false) | bool) or gitlab_runner_executor == 'docker'
           - not (gitlab_runner_aws_qemu_enabled | default(false) | bool) or gitlab_runner_executor == 'docker'
         fail_msg: >-
           gitlab_runner_enabled is true but gitlab_runner_token is unset, or
           gitlab_runner_executor is unsupported/incompatible with the
-          coordinator/AWS qemu runner, for {{ inventory_hostname }}.
+          AWS qemu runner, for {{ inventory_hostname }}.
           Create a project runner on gitlab.com (Settings -> CI/CD -> Runners ->
           New project runner) with the {{ inventory_hostname }}-{{ gitlab_runner_name_suffix }}
           name/tag convention, run-untagged off, locked to the project, and
           protected; then vault the glrt- token for this host.
-
-    # The coordinator runner needs its own glrt- project runner token (distinct
-    # from the docker runner's) AND an hcloud API token to clone instances + read
-    # the snapshot. Both render straight into config.toml / drive the snapshot
-    # lookup below, so catch an unset value here. Non-empty, not just defined.
-    - name: Assert the coordinator runner secrets are set
-      when: gitlab_runner_coordinator_enabled
-      assert:
-        that:
-          - gitlab_runner_coordinator_token | default('') | length > 0
-          - gitlab_runner_hcloud_token | default('') | length > 0
-        fail_msg: >-
-          gitlab_runner_coordinator_enabled is true but
-          gitlab_runner_coordinator_token and/or gitlab_runner_hcloud_token is
-          unset for {{ inventory_hostname }}. Create a second project runner on
-          gitlab.com for the docker-autoscaler executor, and mint an hcloud API
-          token, then vault both into host_vars/{{ inventory_hostname }}.yml.
 
     # The AWS qemu runner is a manager-side instance executor. Its GitLab token
     # stays on fox, and the AWS plugin needs an SDK credential profile because
@@ -118,24 +100,6 @@
       become: true
       register: gitlab_runner_binary
 
-    # The docker-autoscaler executor's instance plugin: a PATH-named binary
-    # (config.toml plugin = "fleeting-plugin-hetzner"), not an OCI ref.
-    # checksum drives re-download on a version bump and surfaces tampering.
-    - name: Download fleeting-plugin-hetzner binary
-      when:
-        - gitlab_runner_coordinator_enabled
-        - not (ansible_check_mode and gitlab_runner_user.changed)
-      get_url:
-        url: "{{ gitlab_runner_fleeting_hetzner_archive[ansible_architecture].url }}"
-        dest: /usr/local/bin/fleeting-plugin-hetzner
-        checksum: "sha256:{{ gitlab_runner_fleeting_hetzner_archive[ansible_architecture].sha256 }}"
-        owner: root
-        group: root
-        mode: "0755"
-        backup: true
-      become: true
-      register: gitlab_runner_fleeting_binary
-
     # The AWS instance executor's ASG plugin, manually installed and referenced
     # by PATH name in config.toml (plugin = "fleeting-plugin-aws").
     - name: Download fleeting-plugin-aws binary
@@ -152,47 +116,6 @@
         backup: true
       become: true
       register: gitlab_runner_fleeting_aws_binary
-
-    # docker-autoscaler's image must be a numeric snapshot id -- a snapshot has
-    # no name for the plugin's GetForArchitecture to resolve. Look up the newest
-    # available role=ci-coordinator snapshot at converge so a rebake is picked up
-    # with no host_vars edit. check_mode:false so the lookup runs under --check
-    # (the rendered config below needs the id either way). Skipped under qemu
-    # (no hcloud reachability + the coordinator never boots there): the template
-    # falls back to the ubuntu-24.04 placeholder.
-    - name: Resolve the newest coordinator snapshot from the Hetzner API
-      when:
-        - gitlab_runner_coordinator_enabled
-        - not qemu_test
-      check_mode: false
-      uri:
-        url: >-
-          https://api.hetzner.cloud/v1/images?type=snapshot&status=available&label_selector={{
-          gitlab_runner_image_selector | urlencode }}&sort=created:desc&per_page=1
-        headers:
-          Authorization: "Bearer {{ gitlab_runner_hcloud_token }}"
-        return_content: true
-      register: gitlab_runner_image_lookup
-
-    - name: Assert a coordinator snapshot exists and select its id
-      when:
-        - gitlab_runner_coordinator_enabled
-        - not qemu_test
-      vars:
-        _images: "{{ gitlab_runner_image_lookup.json.images }}"
-      block:
-        - name: Assert at least one coordinator snapshot is available
-          assert:
-            that:
-              - _images | length > 0
-            fail_msg: >-
-              No available Hetzner snapshot matches
-              {{ gitlab_runner_image_selector }}. Bake one with `mise run
-              packer:hetzner-coordinator` before enabling the coordinator runner.
-
-        - name: Select the resolved coordinator snapshot id
-          set_fact:
-            gitlab_runner_resolved_image: "{{ _images[0].id }}"
 
     - name: Render AWS qemu runner credential profile
       when:
@@ -377,7 +300,6 @@
           restart: >-
             {{ gitlab_runner_service_result.changed
                or gitlab_runner_binary.changed
-               or (gitlab_runner_fleeting_binary.changed | default(false))
                or (gitlab_runner_fleeting_aws_binary.changed | default(false)) }}
           condition: "{{ not (ansible_check_mode and (gitlab_runner_service_result.changed or gitlab_runner_user.changed)) }}"
 
@@ -444,9 +366,8 @@
 
     # Tombstones for the retired worker-image-refresh design (a timer that
     # periodically re-baked a Hetzner *worker* image + an /opt script it drove).
-    # The current coordinator runner resolves its snapshot live at converge and
-    # owns the fleeting binary directly, so neither artifact returns. Each
-    # removal is idempotent (no-op once gone), so these stay as tombstones. The
+    # Neither artifact returns. Each removal is idempotent (no-op once gone), so
+    # these stay as tombstones. The
     # timer remove also clears its netdata systemd_timers metadata -- a leftover
     # /etc/netdata/charts.d/systemd_timers.d/gitlab_runner_image_refresh.conf
     # would fire systemd_timer_overdue CRITICAL forever against a timer that no

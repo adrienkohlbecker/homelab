@@ -1,11 +1,12 @@
-# AWS-backed CI test cells (notes/ci_aws_test_cells.md): every role test runs
-# against a single-use EC2 spot instance launched from a per-machine launch
-# template, with the AMI resolved through SSM. The nested-qemu path also
-# publishes qemu image bundles to S3 and promotes them through SSM. This file
-# owns everything the harness does NOT: VPC, security group, IAM/OIDC, launch
-# templates, the image bucket, the EventBridge Scheduler execution role, and
-# the budget tripwire. Changing an instance type or spot policy happens here,
-# never in test/.
+# AWS-backed CI nested-qemu fleet (notes/ci_aws_nested_qemu_cells.md): role tests run
+# on a pool of spot qemu hosts (an ASG scaled by fleeting-plugin-aws on fox),
+# where each cell hydrates a promoted qemu image bundle from S3 and boots it
+# under nested KVM. The bake path publishes those bundles to S3 and the host
+# AMI through SSM. This file owns the platform the harness does NOT: VPC,
+# security groups, IAM/OIDC, the qemu-host launch template + ASG, the image
+# bucket, the ECR pull-through cache, the EventBridge Scheduler execution role,
+# and the budget tripwire. Changing an instance type or spot policy happens
+# here, never in test/.
 #
 # First-apply bootstrap (AMI parameter seeding, GitLab cutover):
 # notes/ci_aws_test_cells.md, "Bootstrap".
@@ -32,15 +33,6 @@ locals {
     root_volume_iops       = 3000
     root_volume_throughput = 250
   }
-  wan_probe_ports = yamldecode(file("${path.module}/../data/wan_probe_ports.yml"))
-  ci_cell_wan_probe_rules = flatten([
-    for protocol, ports in local.wan_probe_ports : [
-      for port in ports : {
-        protocol = protocol
-        port     = port
-      }
-    ]
-  ])
   ci_ecr_pull_through_cache_rules = {
     docker-hub = {
       upstream_registry_url = "registry-1.docker.io"
@@ -388,71 +380,6 @@ resource "aws_default_route_table" "ci" {
 }
 
 # ─── Security group ──────────────────────────────────────────────────────────
-# Ingress only from the fleet's operators: fox (the runner manager), the
-# fleeting CI coordinator (the ephemeral host that actually converges cells over
-# SSH under scale-to-zero -- reaches cells from its reserved egress IP,
-# hcloud_primary_ip.ci_coordinator), and the home WAN (deliberate operator
-# access for debugging, not a separate emergency profile). Cells authenticate
-# with the baked operator key (aws_key_pair.ci_operator below); this group is
-# the second boundary that replaces qemu's loopback hostfwd. Besides SSH, the
-# same sources may reach the firewall role's _verify WAN-probe targets from
-# data/wan_probe_ports.yml —
-# on EC2 the controller probes the cell's public IP directly, real WAN ingress
-# standing in for qemu's loopback forwards (test/machine.py wan_probe_host).
-
-resource "aws_security_group" "ci_cell" {
-  name = "homelab-ci-cell"
-  # Immutable in AWS (a reword forces SG replacement, cascading into every
-  # launch template) — stale wording is cheaper than the churn; the header
-  # comment above is the living description.
-  description = "CI test cells: SSH from fox + home WAN, open egress"
-  vpc_id      = aws_vpc.ci.id
-
-  ingress {
-    description = "SSH from fox + home WAN"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [
-      "${hcloud_primary_ip.fox.ip_address}/32",
-      "${hcloud_primary_ip.ci_coordinator.ip_address}/32",
-      "${local.home_wan_ip}/32",
-    ]
-  }
-
-  dynamic "ingress" {
-    for_each = {
-      for rule in local.ci_cell_wan_probe_rules :
-      "${rule.protocol}-${rule.port}" => rule
-    }
-
-    content {
-      description = "firewall _verify WAN probe ${ingress.value.protocol}/${ingress.value.port}"
-      from_port   = ingress.value.port
-      to_port     = ingress.value.port
-      protocol    = ingress.value.protocol
-      cidr_blocks = [
-        "${hcloud_primary_ip.fox.ip_address}/32",
-        "${hcloud_primary_ip.ci_coordinator.ip_address}/32",
-        "${local.home_wan_ip}/32",
-      ]
-    }
-  }
-
-  egress {
-    description = "All outbound"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "homelab-ci-cell"
-    role = "ci"
-  }
-}
-
 # Instance-executor qemu hosts. The manager runs on fox outside the VPC, so
 # fleeting must SSH to the worker's public address. Keep ingress to fox only;
 # no standing Elastic IP is allocated, and public IPv4 bills only while an ASG
@@ -485,8 +412,8 @@ resource "aws_security_group" "ci_qemu_host" {
 }
 
 # Adopt the VPC's auto-created default security group and strip its stock
-# allow-all rules: nothing launches with it (cells pin ci_cell via the
-# launch template), so codify that as zero rules.
+# allow-all rules: nothing launches with it (the qemu host pins
+# ci_qemu_host via its launch template), so codify that as zero rules.
 resource "aws_default_security_group" "ci" {
   vpc_id = aws_vpc.ci.id
 
@@ -516,13 +443,13 @@ resource "aws_iam_openid_connect_provider" "gitlab" {
 }
 
 # ─── EventBridge Scheduler execution role ────────────────────────────────────
-# Target role for the one-time termination backstops: immediately after a
-# successful launch the harness (per cell) and the packer bake wrappers (per
-# build instance, mise-tasks/packer/_bake_backstop.sh) create a one-time
-# schedule invoking EC2 TerminateInstances through this role; normal cleanup
-# deletes the schedule before it fires. The backstop matters because a CI
-# job-timeout SIGKILL bypasses the wrapper's own on-error cleanup. Scoped so it
-# can only ever terminate ci-cell (test cell) or ci-ami (bake) instances.
+# Target role for the packer bake one-time termination backstop: immediately
+# after a successful launch the bake wrappers (per build instance,
+# mise-tasks/packer/_bake_backstop.sh) create a one-time schedule invoking EC2
+# TerminateInstances through this role; normal cleanup deletes the schedule
+# before it fires. The backstop matters because a CI job-timeout SIGKILL
+# bypasses the wrapper's own on-error cleanup. Scoped so it can only ever
+# terminate ci-ami (bake) instances. Assumed only by the kept ci_bake role.
 
 resource "aws_iam_role" "ci_cell_scheduler" {
   name = "homelab-ci-cell-scheduler"
@@ -539,8 +466,8 @@ resource "aws_iam_role" "ci_cell_scheduler" {
         # unsupported (docs: "Confused deputy prevention in EventBridge
         # Scheduler") and fails every CreateSchedule with "execution role
         # must allow ... to assume the role". Per-instance scoping isn't lost:
-        # the permission policy below only terminates role=ci-cell / ci-ami
-        # instances regardless of which schedule fires it.
+        # the permission policy below only terminates role=ci-ami instances
+        # regardless of which schedule fires it.
         StringEquals = {
           "aws:SourceAccount" = local.ci_account_id
           "aws:SourceArn"     = "arn:aws:scheduler:${local.ci_aws_region}:${local.ci_account_id}:schedule-group/default"
@@ -564,9 +491,9 @@ resource "aws_iam_role_policy" "ci_cell_scheduler" {
       Resource = "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*"
       Condition = {
         StringEquals = {
-          # Test cells (harness backstop) and bake build instances
-          # (_bake_backstop.sh) — nothing else this role can ever reap.
-          "ec2:ResourceTag/role" = ["ci-cell", "ci-ami"]
+          # Bake build instances (_bake_backstop.sh) — nothing else this role
+          # can ever reap.
+          "ec2:ResourceTag/role" = ["ci-ami"]
         }
       }
     }]
@@ -574,12 +501,13 @@ resource "aws_iam_role_policy" "ci_cell_scheduler" {
 }
 
 # ─── Cell role ───────────────────────────────────────────────────────────────
-# Assumed by test-cell jobs (any branch in the project — branch pipelines run
-# role tests too; tag pipelines don't, so they get nothing). Deny-by-default
-# in shape: CreateFleet/RunInstances only through the cell launch templates into
-# the CI subnets/SG with the role=ci-cell tag and the approved instance types,
-# terminate/console only for ci-cell instances, PassRole only of the scheduler
-# role to EventBridge Scheduler.
+# Assumed by qemu test-cell jobs over GitLab OIDC (any branch in the project —
+# branch pipelines run role tests too; tag pipelines don't, so they get
+# nothing). Read-only by design: qemu cells run the harness locally on the
+# shell runner and assume this role solely to hydrate the promoted qemu base
+# images from S3 (mise run ci:hydrate-qemu-images — an SSM get-parameter plus an
+# s3 cp). It grants nothing that launches instances, writes images, or promotes
+# artifacts; the same minimal read set as the ci_qemu_host instance role.
 
 resource "aws_iam_role" "ci_cell" {
   name = "homelab-ci-cell"
@@ -611,134 +539,6 @@ resource "aws_iam_role_policy" "ci_cell" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # CreateFleet is the top-level launch call, but AWS still evaluates the
-      # underlying RunInstances permissions for resources specified by the
-      # launch template and overrides. Keep this broad only for fleet creation
-      # itself, pinned to the request tag; the launch-template/subnet/AMI/type
-      # guardrails live in the RunInstances statements below.
-      {
-        Sid      = "CreateTaggedFleet"
-        Effect   = "Allow"
-        Action   = "ec2:CreateFleet"
-        Resource = "*"
-        Condition = {
-          StringEquals = {
-            "aws:RequestTag/role" = "ci-cell"
-            "ec2:Region"          = local.ci_aws_region
-          }
-        }
-      },
-      # RunInstances splits across statements because aws:RequestTag only
-      # evaluates against resources that receive tags in the request
-      # (instance + volume, via the launch template tag_specifications);
-      # putting it on subnet/SG/AMI ARNs would deny every launch. The
-      # instance statement also pins the instance type to the reviewed per-cell
-      # fallback pool: launch-template values are caller-overridable at
-      # run-instances time, so without it a leaked token could launch metal
-      # sizes through the template.
-      {
-        Sid      = "RunTaggedInstance"
-        Effect   = "Allow"
-        Action   = "ec2:RunInstances"
-        Resource = "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*"
-        Condition = {
-          StringEquals = {
-            "aws:RequestTag/role" = "ci-cell"
-            "ec2:InstanceType"    = distinct(flatten(values(local.ci_machine_instance_type_candidates)))
-          }
-          ArnEquals = {
-            "ec2:LaunchTemplate" = [for lt in aws_launch_template.ci_cell : lt.arn]
-          }
-        }
-      },
-      # ec2:InstanceType is not in the volume resource's condition context,
-      # so the volume statement carries only the tag + template conditions.
-      {
-        Sid      = "RunTaggedVolume"
-        Effect   = "Allow"
-        Action   = "ec2:RunInstances"
-        Resource = "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:volume/*"
-        Condition = {
-          StringEquals = {
-            "aws:RequestTag/role" = "ci-cell"
-          }
-          ArnEquals = {
-            "ec2:LaunchTemplate" = [for lt in aws_launch_template.ci_cell : lt.arn]
-          }
-        }
-      },
-      # AMIs sit apart from the other supporting resources to pin the owner:
-      # self-baked images plus Canonical's (minimal). Without the condition
-      # the token could launch any public or marketplace AMI. Canonical's
-      # public Ubuntu images surface under the "amazon" owner-alias, so
-      # ec2:Owner reports "amazon" rather than account 099720109477 — match
-      # the alias to allow the minimal machine's Canonical AMI, while the
-      # account id keeps the self-baked box/box_deps images launchable.
-      {
-        Sid      = "RunImage"
-        Effect   = "Allow"
-        Action   = "ec2:RunInstances"
-        Resource = "arn:aws:ec2:${local.ci_aws_region}::image/*"
-        Condition = {
-          StringEquals = {
-            "ec2:Owner" = [local.ci_account_id, "amazon"]
-          }
-        }
-      },
-      {
-        Sid    = "RunSupporting"
-        Effect = "Allow"
-        Action = "ec2:RunInstances"
-        Resource = concat(
-          [for lt in aws_launch_template.ci_cell : lt.arn],
-          [for s in aws_subnet.ci : s.arn],
-          [
-            aws_security_group.ci_cell.arn,
-            aws_key_pair.ci_operator.arn,
-            "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:network-interface/*",
-            "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:spot-instances-request/*",
-          ]
-        )
-      },
-      # Launch-time tagging of the instance/volume (the LT tag_specifications
-      # plus the harness's per-cell tags ride this).
-      {
-        Sid      = "TagOnLaunch"
-        Effect   = "Allow"
-        Action   = "ec2:CreateTags"
-        Resource = "*"
-        Condition = {
-          StringEquals = { "ec2:CreateAction" = ["CreateFleet", "RunInstances"] }
-        }
-      },
-      # Lifecycle of ci-cell instances only.
-      {
-        Sid      = "CellLifecycle"
-        Effect   = "Allow"
-        Action   = ["ec2:TerminateInstances", "ec2:GetConsoleOutput"]
-        Resource = "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*"
-        Condition = {
-          StringEquals = { "ec2:ResourceTag/role" = "ci-cell" }
-        }
-      },
-      # Describe* supports no resource-level scoping in EC2. DescribeSubnets
-      # lets the harness discover the CI subnets by tag to pick one per launch.
-      {
-        Sid      = "Describe"
-        Effect   = "Allow"
-        Action   = ["ec2:DescribeInstances", "ec2:DescribeInstanceStatus", "ec2:DescribeSubnets"]
-        Resource = "*"
-      },
-      # AMI resolution: GetParameters (plural) is what EC2 calls server-side
-      # for resolve:ssm: image IDs in RunInstances. Only our namespace —
-      # minimal's alias parameter (below) already carries the resolved
-      # Canonical AMI id, so cells never read Canonical's public path.
-      {
-        Sid      = "ResolveAmi"
-        Effect   = "Allow"
-        Action   = ["ssm:GetParameter", "ssm:GetParameters"]
-        Resource = "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/ami/*"
-      },
       {
         Sid      = "ResolveQemuImage"
         Effect   = "Allow"
@@ -756,48 +556,6 @@ resource "aws_iam_role_policy" "ci_cell" {
         Effect   = "Allow"
         Action   = "s3:GetObject"
         Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
-      },
-      # ECR pull-through cache for container images inside AWS cells. The
-      # first pull through a namespace may create the cache repository and
-      # import upstream layers; later pulls are ordinary ECR reads. Token
-      # retrieval is registry-scoped by AWS and therefore resource "*".
-      {
-        Sid      = "EcrLogin"
-        Effect   = "Allow"
-        Action   = "ecr:GetAuthorizationToken"
-        Resource = "*"
-      },
-      {
-        Sid    = "EcrPullThroughCache"
-        Effect = "Allow"
-        Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:BatchGetImage",
-          "ecr:BatchImportUpstreamImage",
-          "ecr:CreateRepository",
-          "ecr:DescribeRepositories",
-          "ecr:GetDownloadUrlForLayer",
-        ]
-        Resource = [
-          for prefix in keys(local.ci_ecr_pull_through_cache_rules) :
-          "arn:aws:ecr:${local.ci_aws_region}:${local.ci_account_id}:repository/${prefix}/*"
-        ]
-      },
-      # Per-cell one-time termination schedules.
-      {
-        Sid      = "CellSchedules"
-        Effect   = "Allow"
-        Action   = ["scheduler:CreateSchedule", "scheduler:DeleteSchedule", "scheduler:GetSchedule"]
-        Resource = "arn:aws:scheduler:${local.ci_aws_region}:${local.ci_account_id}:schedule/default/ci-cell-*"
-      },
-      {
-        Sid      = "PassSchedulerRole"
-        Effect   = "Allow"
-        Action   = "iam:PassRole"
-        Resource = aws_iam_role.ci_cell_scheduler.arn
-        Condition = {
-          StringEquals = { "iam:PassedToService" = "scheduler.amazonaws.com" }
-        }
       },
     ]
   })
@@ -982,9 +740,9 @@ resource "aws_iam_role_policy" "ci_bake" {
           StringEquals = { "aws:RequestedRegion" = local.ci_aws_region }
         }
       },
-      # Candidate write + current promotion of the baked machines' AMI
-      # parameters. minimal's aliases are terraform-owned (ci_ami_minimal
-      # below), so the bake role must not be able to clobber them.
+      # Candidate write + current promotion of the nested-qemu host AMI
+      # parameter (the only AMI a bake still promotes — the qemu base images
+      # themselves ride S3, see PromoteQemuImages below).
       {
         Sid    = "PromoteAmi"
         Effect = "Allow"
@@ -992,16 +750,9 @@ resource "aws_iam_role_policy" "ci_bake" {
           "ssm:PutParameter", "ssm:GetParameter", "ssm:GetParameters",
           "ssm:DescribeParameters", "ssm:AddTagsToResource",
         ]
-        Resource = concat(
-          [
-            for m in keys(local.ci_machine_instance_types) :
-            "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/ami/${m}/*"
-            if m != "minimal"
-          ],
-          [
-            "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter${local.ci_qemu_host_ami_parameter}",
-          ]
-        )
+        Resource = [
+          "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter${local.ci_qemu_host_ami_parameter}",
+        ]
       },
       {
         Sid    = "PublishQemuImages"
@@ -1073,29 +824,27 @@ resource "aws_ebs_snapshot_block_public_access" "ci" {
 }
 
 # IMDSv2 as the regional floor for every launch path (console debugging,
-# future templates), not just the cell templates that already require it.
+# future templates), not just the qemu-host template that already requires it.
 resource "aws_ec2_instance_metadata_defaults" "ci" {
   http_tokens                 = "required"
   http_put_response_hop_limit = 1
 }
 
-# Spot launches need the EC2 Spot service-linked role to exist, and the cell
-# role (rightly) cannot create service-linked roles — without this, the first
-# spot launch in a fresh account fails with an opaque AuthFailure. If the
-# account already grew it out of band, `tofu import` it instead of applying.
+# Spot launches need the EC2 Spot service-linked role to exist: the qemu-host
+# ASG runs spot (mixed_instances_policy), and the fleeting manager (rightly)
+# cannot create service-linked roles — without this, the first spot launch in a
+# fresh account fails with an opaque AuthFailure. If the account already grew it
+# out of band, `tofu import` it instead of applying.
 resource "aws_iam_service_linked_role" "spot" {
   aws_service_name = "spot.amazonaws.com"
 }
 
-# ─── Cell SSH key ────────────────────────────────────────────────────────────
+# ─── Operator SSH key ────────────────────────────────────────────────────────
 # The operator's personal public key (group_vars/all/main.yml
-# ssh_public_keys) — NOT the well-known vagrant key the qemu fixtures bake:
-# cells sit on public IPs, so unlike the loopback-hostfwd qemu path the key
-# is a real boundary alongside the security group. The private half lives
-# only in the operator's ssh agent; the harness passes no -i for EC2 cells.
-# Registered as an EC2 keypair so cloud-init on minimal's Canonical AMI
-# (which has no baked key) installs it for the ubuntu user; the baked
-# machines get the same key from packer/aws/ami.pkr.hcl's SSH_KEY_PUB.
+# ssh_public_keys), registered as an EC2 keypair so the nested-qemu host
+# launch template authorizes it on every ASG instance: the fleeting manager on
+# fox SSHes in over the public IP, a real boundary alongside ci_qemu_host's SG.
+# The private half lives only in the operator's ssh agent.
 
 resource "aws_key_pair" "ci_operator" {
   key_name   = "homelab-ci-operator"
@@ -1104,151 +853,11 @@ resource "aws_key_pair" "ci_operator" {
   tags = { role = "ci" }
 }
 
-# ─── Launch templates ────────────────────────────────────────────────────────
-# One per machine. The AMI is deliberately NOT set here: the harness passes
-# --image-id resolve:ssm:/homelab-ci/ami/<machine>/<ubuntu> per launch, so a
-# bake promotion never touches terraform. Disk layout (box's second zee disk)
-# lives in the AMI's block device mapping, not here. Instance types settled
-# by the gate-C benchmark (notes/ci_aws_test_cells.md): apt/dpkg-heavy cells
-# are CPU-bound, and c6a.large (dedicated Zen3) runs them ~1.5-1.6x faster
-# than t3a.medium (burstable Zen1) at near-identical per-cell cost — the
-# higher rate is offset by the shorter run. minimal stays burstable: its
-# cells already beat the lab baseline and never sustain CPU.
-#
-# Each list is ordered cheapest/closest first; the harness tries the first entry
-# as the launch-template default, then rotates through the rest when EC2 reports
-# InsufficientInstanceCapacity across the CI subnets. Re-benchmark candidates
-# with HOMELAB_EC2_INSTANCE_TYPE (test/machine.py) before changing these.
-
-locals {
-  ci_machine_instance_type_candidates = {
-    # 2 GiB primary mirrors qemu minimal; medium is a vertical fallback when the
-    # small burstable spot pool is thin.
-    minimal = ["t3a.small", "t3.small", "t3a.medium", "t3.medium"]
-
-    # 2 vCPU / 4 GiB compute pool for regular box cells. Keep c6a first until a
-    # newer family wins the role-test benchmark, but allow adjacent Intel/AMD
-    # compute and 8 GiB general-purpose pools for spot availability.
-    box = [
-      "c6a.large",
-      "c7i.large",
-      "c6i.large",
-      "m6a.large",
-      "m6i.large",
-      "m7i.large",
-      "c7a.large",
-      "m7a.large",
-    ]
-
-    # box-class Zen3 cores with the 8 GiB floor (>4 needed, see
-    # QEMU_MACHINE_SPECS). r*.large adds 16 GiB without doubling vCPU quota;
-    # c*.xlarge is the last vertical step when memory-fit pools are dry.
-    box_deps = [
-      "m6a.large",
-      "m6i.large",
-      "m7i.large",
-      "r6a.large",
-      "r6i.large",
-      "r7i.large",
-      "m7a.large",
-      "r7a.large",
-      "c6a.xlarge",
-      "c6i.xlarge",
-      "c7i.xlarge",
-      "c7a.xlarge",
-    ]
-  }
-
-  ci_machine_instance_types = {
-    for machine, candidates in local.ci_machine_instance_type_candidates :
-    machine => candidates[0]
-  }
-}
-
-resource "aws_launch_template" "ci_cell" {
-  for_each = local.ci_machine_instance_types
-
-  name                   = "homelab-ci-cell-${each.key}"
-  description            = "homelab CI test cell (${each.key})"
-  update_default_version = true
-
-  instance_type = each.value
-
-  # One-time spot, terminate on interruption: a cell is never worth
-  # stopping/resuming. The harness classifies interruption post-hoc and
-  # exits 86 for the GitLab-level retry.
-  instance_market_options {
-    market_type = "spot"
-    spot_options {
-      spot_instance_type             = "one-time"
-      instance_interruption_behavior = "terminate"
-    }
-  }
-
-  instance_initiated_shutdown_behavior = "terminate"
-
-  metadata_options {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required"
-    http_put_response_hop_limit = 1
-  }
-
-  # No iam_instance_profile: cells are converged over SSH from fox and never
-  # call AWS APIs themselves.
-
-  # Subnet (and thus AZ) is chosen by the harness at launch via a top-level
-  # --subnet-id, so the template must NOT carry a network_interfaces block
-  # (EC2 rejects mixing the two). Public IPv4 comes from the subnet's
-  # map_public_ip_on_launch; the SG rides the top-level field.
-  vpc_security_group_ids = [aws_security_group.ci_cell.id]
-
-  # Ignored by the baked images (no cloud-init — the operator key is baked
-  # by chroot.sh via SSH_KEY_PUB), consumed by minimal's Canonical AMI where
-  # cloud-init installs it for the ubuntu user.
-  key_name = aws_key_pair.ci_operator.key_name
-
-  # minimal's Canonical AMI authorizes a single key via key_name (the
-  # operator's personal key, for local agent-driven runs). The baked AMIs
-  # additionally bake the homelab-ci-cell CI key via packer's
-  # operator_ssh_keys, but minimal has no bake step — so add that second key
-  # through cloud-init here, otherwise CI (whose agent holds only
-  # homelab-ci-cell) cannot SSH into a minimal cell. Baked images ignore
-  # user_data (no cloud-init), so scope it to minimal to avoid a no-op
-  # template churn on the others.
-  user_data = each.key == "minimal" ? base64encode(<<-EOT
-    #cloud-config
-    ssh_authorized_keys:
-      - ${local.operator_ssh_public_key}
-      - ${local.ci_cell_ssh_public_key}
-  EOT
-  ) : null
-
-  tag_specifications {
-    resource_type = "instance"
-    tags = {
-      role    = "ci-cell"
-      machine = each.key
-    }
-  }
-
-  tag_specifications {
-    resource_type = "volume"
-    tags = {
-      role    = "ci-cell"
-      machine = each.key
-    }
-  }
-
-  tags = {
-    Name    = "homelab-ci-cell-${each.key}"
-    role    = "ci"
-    machine = each.key
-  }
-}
-
-# Gate-1 nested-qemu host pool. This is deliberately separate from the direct
-# EC2 cell launch templates above: GitLab Runner/fleeting owns desired
-# capacity, and the host runs shell jobs that launch qemu/KVM locally.
+# ─── Launch template: nested-qemu host pool ──────────────────────────────────
+# GitLab Runner/fleeting owns desired capacity, and the host runs shell jobs
+# that launch qemu/KVM locally. The AMI is resolved through SSM
+# (ci_qemu_host_ami_parameter), so a host bake promotion never touches
+# terraform.
 resource "aws_launch_template" "ci_qemu_host" {
   name                   = local.ci_qemu_host_pool.name
   description            = "homelab CI nested-qemu host"
@@ -1288,8 +897,8 @@ resource "aws_launch_template" "ci_qemu_host" {
   }
 
   # Public IPv4 comes from the subnet default. The manager is outside the VPC,
-  # so no network_interfaces block here: keep the same top-level SG/subnet
-  # pattern as ci_cell and let the ASG choose an AZ.
+  # so no network_interfaces block here: keep the SG/subnet on top-level fields
+  # and let the ASG choose an AZ.
   vpc_security_group_ids = [aws_security_group.ci_qemu_host.id]
   key_name               = aws_key_pair.ci_operator.key_name
 
@@ -1364,33 +973,21 @@ resource "aws_autoscaling_group" "ci_qemu_host" {
   }
 }
 
-# ─── SSM parameters: minimal aliases ─────────────────────────────────────────
-# minimal needs no bake: Canonical publishes per-release AMIs under public SSM
-# parameters; our path just aliases theirs so the harness resolves every
-# machine through the same /homelab-ci/ami/<machine>/<ubuntu> shape. A tofu
-# apply refreshes the alias to Canonical's current AMI. Parameters for the
-# baked machines (box/box_deps) are written by the packer:ami
-# pipeline, not managed here.
+# ─── SSM parameter: nested-qemu host AMI ─────────────────────────────────────
+# The nested-qemu host AMI promotion path needs a real parameter before the ASG
+# launch template can reference it. Terraform owns the parameter shell, seeding
+# it with Canonical's current noble AMI; packer owns the promoted AMI value
+# after the first successful host bake.
 
 data "aws_ssm_parameter" "canonical_ubuntu" {
-  for_each = {
-    # jammy predates Canonical's gp3 layout and only publishes ebs-gp2
-    # (matching its hvm-ssd AMI name pattern in packer/aws/ami.pkr.hcl).
-    jammy    = "/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id"
-    noble    = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
-    resolute = "/aws/service/canonical/ubuntu/server/26.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
-  }
-  name = each.value
+  name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
 }
 
-# The nested-qemu host AMI promotion path needs a real parameter before the ASG
-# launch template can reference it. Terraform owns the parameter shell; packer
-# owns the promoted AMI value after the first successful host bake.
 resource "aws_ssm_parameter" "ci_qemu_host_ami" {
   name      = local.ci_qemu_host_ami_parameter
   type      = "String"
   data_type = "aws:ec2:image"
-  value     = data.aws_ssm_parameter.canonical_ubuntu["noble"].value
+  value     = data.aws_ssm_parameter.canonical_ubuntu.value
 
   tags = {
     role    = "ci-ami"
@@ -1403,29 +1000,12 @@ resource "aws_ssm_parameter" "ci_qemu_host_ami" {
   }
 }
 
-resource "aws_ssm_parameter" "ci_ami_minimal" {
-  for_each = data.aws_ssm_parameter.canonical_ubuntu
-
-  name = "/homelab-ci/ami/minimal/${each.key}"
-  type = "String"
-  # EC2 validates the value is a well-formed, existing AMI at write time,
-  # so a bad alias fails the apply instead of the next cell launch.
-  data_type = "aws:ec2:image"
-  value     = each.value.value
-
-  tags = {
-    role    = "ci-ami"
-    machine = "minimal"
-    ubuntu  = each.key
-  }
-}
-
 # ─── Budget tripwire ─────────────────────────────────────────────────────────
 # Account-wide (the account holds nothing but CI), $10/mo. Alert-only —
 # budgets ride Cost Explorer data that lags hours, and forecast alerts need
 # weeks of billing history before AWS emits them at all — so the hard spend
-# ceilings are the cell role's instance-type pin and the spot quota; this is
-# the operator's tripwire, not containment.
+# ceilings are the qemu-host pool's instance-type/size and the spot quota; this
+# is the operator's tripwire, not containment.
 
 resource "aws_budgets_budget" "ci" {
   name         = "homelab-ci"

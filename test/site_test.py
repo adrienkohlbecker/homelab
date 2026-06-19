@@ -14,14 +14,12 @@ interruption (EC2 backend), 124 timeout, 130 interrupted.
 import argparse
 import asyncio
 import contextlib
-import os
 import shutil
 import sys
 import traceback
 from pathlib import Path
 
 from machine import (
-    BACKEND_CHOICES,
     DEFAULT_UBUNTU,
     Machine,
     UBUNTU_RELEASES,
@@ -31,7 +29,6 @@ from machine import (
 )
 from utils import (
     CommandFailedException,
-    SpotInterruptedException,
     cancel_on_signal,
     print_line,
     tee_output,
@@ -48,13 +45,6 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_UBUNTU,
         choices=sorted(UBUNTU_RELEASES),
         help="Ubuntu release codename (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--backend",
-        default=os.environ.get("HOMELAB_TEST_BACKEND", "qemu"),
-        choices=BACKEND_CHOICES,
-        help="Where the fixture runs: a local qemu VM or a single-use EC2 spot instance "
-        "(notes/ci_aws_test_cells.md). Falls back to $HOMELAB_TEST_BACKEND, then qemu.",
     )
     parser.add_argument(
         "--timeout",
@@ -119,17 +109,6 @@ async def run_site_test(m: Machine, *, timeout: int) -> None:
                             print_line("Site converge failed")
                             with contextlib.suppress(Exception):
                                 await m.collect_failure_artifacts()
-                            # Post-hoc spot classification (EC2 backend only;
-                            # the base returns False). A reclaimed instance is
-                            # infrastructure noise, not a converge failure —
-                            # exit 86 so the GitLab job retries exactly once.
-                            spot_interrupted = False
-                            with contextlib.suppress(Exception):
-                                spot_interrupted = await m.failure_was_spot_interruption()
-                            if spot_interrupted:
-                                raise SpotInterruptedException(
-                                    "Site converge failure classified as a spot interruption"
-                                ) from None
                             raise
 
                         print_line("Site converge passed")
@@ -161,14 +140,9 @@ async def run_site_test(m: Machine, *, timeout: int) -> None:
 def main() -> int:
     args = parse_args()
 
-    # qemu-only: the aws backend stages its workdir under the system tmp and
-    # the imagedir mount may not exist at all on the runner container
-    # (see testrole.py's matching guard).
-    if args.backend == "qemu":
-        sweep_stale_workdirs(imagedir_for_host())
+    sweep_stale_workdirs(imagedir_for_host())
 
     m: Machine = create_machine(
-        args.backend,
         machine="box",
         role="_site_test",
         keep_vm=args.keep,
@@ -181,10 +155,6 @@ def main() -> int:
     with tee_output(m.output_file):
         try:
             asyncio.run(run_site_test(m, timeout=args.timeout))
-        except SpotInterruptedException as exc:
-            print_line(str(exc), error=True)
-            print_line("site_test spot-interrupted", error=True)
-            rc = 86  # reserved for spot interruption; GitLab jobs retry this once
         except CommandFailedException as exc:
             print_line(str(exc), error=True)
             print_line("site_test failed", error=True)

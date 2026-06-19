@@ -1,12 +1,9 @@
 # The functional check (_verify drives zfs_backup_local) runs against
 # rpool/zfs_autobackup_test -- rpool-only, identical on every machine. lab/pug
-# only added prod-shaped source config that _verify never exercises, so they
-# ride qemu only; aws_skip drops their EC2 cells. (Cross-pool replication is
-# not functionally asserted on any machine -- see the design note.)
+# only added prod-shaped source config that _verify never exercises.
+# (Cross-pool replication is not functionally asserted on any machine -- see
+# the design note.)
 machines:
   box:
   lab:
   pug:
-aws_skip:
-  lab: zfs_backup_local _verify is rpool-only (identical on box); lab only added unexercised prod source config -- qemu-only
-  pug: zfs_backup_local _verify is rpool-only (identical on box); pug only added unexercised prod source config -- qemu-only

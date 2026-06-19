@@ -3,8 +3,3 @@
 # every test run. --machine on the CLI still wins over this.
 machines:
   box_deps:
-# A macvlan iface needs a parent NIC in promiscuous mode + MAC spoofing, both
-# of which an EC2 ENI forbids, so mac_mgmt.service can't come up on a cell.
-# Keep full qemu coverage; revisit with per-cell ENI (notes/ci_aws_test_cells.md).
-aws_skip:
-  box_deps: macvlan needs a promiscuous parent + MAC spoofing the VPC forbids

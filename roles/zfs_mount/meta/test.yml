@@ -1,8 +1,6 @@
 # box exercises the root-mount path (zfs_root=true) and, with its second zee
 # pool, the multi-pool mount topology. lab adds prod-faithful mirror/raidz
-# geometry that no role asserts, so it rides qemu only; aws_skip drops its cell.
+# geometry that no role asserts.
 machines:
   box:
   lab:
-aws_skip:
-  lab: multi-pool mount coverage now runs on box (rpool + zee); lab's mirror/raidz geometry is qemu-only

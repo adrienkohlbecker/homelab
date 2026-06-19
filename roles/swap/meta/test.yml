@@ -3,13 +3,9 @@
 # unique coverage); minimal exercises zram-only on ext4 (no zvol, no
 # partition); lab exercises the zvol grow→swapoff→mkswap→swapon resequence (8G
 # baked zvol grown to 16G via host_vars) — the role's only data-destructive
-# path, which box does not reproduce, so it rides qemu only. pug is redundant
-# with box on AWS now.
+# path, which box does not reproduce.
 machines:
   box:
   minimal:
   pug:
   lab:
-aws_skip:
-  pug: raw-partition swapon/fstab coverage now runs on box (swap_partition over its baked p3); pug is qemu-only
-  lab: the destructive zvol grow→mkswap→swapon resequence is qemu-only (box's zvol is fresh, not grown)

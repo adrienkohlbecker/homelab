@@ -212,9 +212,9 @@ Details in [notes/test_environment_design.md](notes/test_environment_design.md).
 
 ## Continuous Integration
 
-GitLab CI ([.gitlab-ci.yml](.gitlab-ci.yml)) on the off-fox orchestrator, driving single-use AWS EC2 test cells (one per role×machine). `detect` ([mise-tasks/ci/detect.py](mise-tasks/ci/detect.py) `gitlab`) classifies the diff and writes a dynamic child pipeline — one `test_cells` job per cell — alongside `lint` and `unit_tests`. Image bakes (`ami_images`, `ami_box_deps`, `fox_image`, `zbm_build`, `ci_image`) are manual jobs. Design + cost model: [notes/ci_aws_test_cells.md](notes/ci_aws_test_cells.md).
+GitLab CI ([.gitlab-ci.yml](.gitlab-ci.yml)) on the off-fox orchestrator runs the role-test matrix as **qemu cells** on one of two infrastructures, selected by the single `HOMELAB_CI_TARGET` pipeline variable: `aws_qemu` (default — nested qemu/KVM on fleeting-autoscaled AWS shell hosts; cells hydrate promoted qemu images from S3) or `lab` (qemu on lab's local shell runner). `detect` ([mise-tasks/ci/detect.py](mise-tasks/ci/detect.py) `gitlab`) classifies the diff and writes a dynamic child pipeline — one `test_cells` job per `role:variant[:ubuntu]` cell — alongside `lint` and `unit_tests`; it always runs on the on-fox `fox-docker-aws` runner. Manual jobs: image bakes (`qemu_host_ami`, `fox_image`, `zbm_build`, `ci_image`) and `qemu_image_reaper`. Design: [notes/ci_aws_nested_qemu_cells.md](notes/ci_aws_nested_qemu_cells.md).
 
-**Escalation:** `minimal:` in `meta/test.yml` `machines:` adds a cell; `ubuntu:` list adds per-release cells; `aws_skip:` drops a cell from the EC2 pipeline only (qemu keeps it). **Local-debug:** `CI_BASE_REF=HEAD~5 uv run python mise-tasks/ci/detect.py gitlab --child-path /tmp/cells.yml` previews the cell matrix (logged to stderr); `mise run ci:role-deps <helper>` lists consumers. CI secrets: [notes/runbooks/ci_secrets.md](notes/runbooks/ci_secrets.md).
+**Escalation:** `minimal:` in `meta/test.yml` `machines:` adds a cell; `ubuntu:` list adds per-release cells. **Local-debug:** `CI_BASE_REF=HEAD~5 uv run python mise-tasks/ci/detect.py gitlab --child-path /tmp/cells.yml` previews the cell matrix (logged to stderr); `mise run ci:role-deps <helper>` lists consumers. CI secrets: [notes/runbooks/ci_secrets.md](notes/runbooks/ci_secrets.md).
 
 ## Commit & Pull Request Guidelines
 

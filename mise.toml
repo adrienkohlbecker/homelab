@@ -80,10 +80,9 @@ TF_VAR_ci_ecr_gitlab_username = "akohlbecker"
 TF_VAR_ci_ecr_gitlab_access_token = "op://Lab/xaco3prl6eck3qanhatmxksr5a/password"
 
 [tools]
-# The cell prelude's OIDC smoke (aws sts get-caller-identity) and the packer
-# bake scripts (mise-tasks/packer/*.sh) use the aws CLI. The test harness's EC2
-# backend went in-process (boto3) — see test/machine.py Ec2Machine and
-# notes/ci_aws_test_cells.md, "Orchestration cost".
+# The cell prelude's OIDC smoke (aws sts get-caller-identity), the qemu image
+# hydrate/reap (mise-tasks/ci/*.py) and the packer bake scripts
+# (mise-tasks/packer/*.sh) use the aws CLI.
 awscli = "2.35.2"
 # Hetzner Cloud CLI -- drives the packer hetzner bake/upload scripts
 # (mise-tasks/packer/*.sh) and the ci:audit-hetzner sweep. Authenticates from

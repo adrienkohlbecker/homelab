@@ -49,44 +49,11 @@
   failed_when: _gitlab_runner_shell_user_manager.stdout | trim == 'active'
   become: true
 
-# Coordinator runner (docker-autoscaler / fleeting). Enabled on box with
+# AWS qemu runner (instance / fleeting-plugin-aws). Enabled on box with
 # placeholder secrets, so the host-side artifacts get real coverage even though
-# no coordinator ever boots in the harness. timeout-guards the binary call: a
+# no instance ever boots in the harness. timeout-guards the binary call: a
 # fleeting plugin with no go-plugin handshake env could otherwise block on
 # stdin.
-- name: _verify | Pinned fleeting-plugin-hetzner binary runs on this arch
-  when: gitlab_runner_coordinator_enabled
-  command: timeout 10 /usr/local/bin/fleeting-plugin-hetzner --version
-  register: _gitlab_runner_fleeting_version
-  changed_when: false
-  failed_when: >-
-    gitlab_runner_fleeting_hetzner_version
-    not in _gitlab_runner_fleeting_version.stdout
-
-- name: _verify | Rendered config carries the coordinator autoscaler block
-  when: gitlab_runner_coordinator_enabled
-  command: grep -F 'plugin = "fleeting-plugin-hetzner"' /mnt/services/gitlab_runner/config.toml
-  changed_when: false
-  become: true
-
-- name: _verify | Coordinator reuses the detect-warmed CI image
-  when: gitlab_runner_coordinator_enabled
-  command: grep -F 'pull_policy = "if-not-present"' /mnt/services/gitlab_runner/config.toml
-  changed_when: false
-  become: true
-
-- name: _verify | Coordinator allows detect to force-refresh the image
-  when: gitlab_runner_coordinator_enabled
-  command: grep -F 'allowed_pull_policies = ["always", "if-not-present"]' /mnt/services/gitlab_runner/config.toml
-  changed_when: false
-  become: true
-
-- name: _verify | Coordinator connector keeps a 15 minute SSH timeout
-  when: gitlab_runner_coordinator_enabled
-  command: grep -F 'timeout = "15m0s"' /mnt/services/gitlab_runner/config.toml
-  changed_when: false
-  become: true
-
 - name: _verify | Pinned fleeting-plugin-aws binary runs on this arch
   when: gitlab_runner_aws_qemu_enabled
   command: timeout 10 /usr/local/bin/fleeting-plugin-aws --version

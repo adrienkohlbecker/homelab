@@ -1,27 +1,23 @@
-# GitLab CI pipeline (notes/ci_aws_test_cells.md).
+# GitLab CI pipeline (notes/ci_aws_nested_qemu_cells.md).
 #
-# Default AWS path runner pools:
+# Runner pools:
 #   - gitlab.com hosted runners take the cheap stateless jobs (lint, unit
 #     tests): no qemu, no boxes, and a public project's compute cost factor
 #     makes the minutes effectively free. They can't reach the home network
 #     (so no nexus); they run in the project-registry ci image published by
 #     the ci_image job below.
-#   - fox's always-on Docker-executor runner (`fox-docker-aws`) takes rare/manual
-#     AWS/Hetzner orchestration jobs and the no-cell placeholder. Each runs in a
-#     CI-image container on fox and drives EC2 / Hetzner over the aws CLI + SSH.
-#   - fox's docker-autoscaler runner (`fox-coordinator-aws`) takes `detect` plus
-#     the AWS test-cell fan-out: per pipeline it clones one ephemeral Hetzner
-#     coordinator, lets `detect` pull the current CI image once, then runs the
-#     whole `test_cells` child matrix (+ the _site_test cell) there at capacity
-#     60 with cached-image reuse. Off-fox so a wide fan-out can't threaten fox's
-#     headscale/nginx co-tenants. By default `detect` and cells carry
-#     `tags: [fox-coordinator-aws]`; see notes/ci_aws_test_cells.md "Phase 2".
-#   - lab's shell runner (`lab-shell-qemu`) is the fallback qemu target: a
-#     manual pipeline can render the same matrix with HOMELAB_TEST_BACKEND=qemu,
-#     so GitLab drives the local qemu harness directly on lab.
-#   - AWS qemu shell runners (`aws-shell-qemu`) are the redesign target: the
-#     child cells hydrate promoted qemu images from S3 and run the same harness
-#     path as lab, without launching one EC2 instance from inside each job.
+#   - fox's always-on Docker-executor runner (`fox-docker-aws`) takes `detect`
+#     plus the rare/manual AWS/Hetzner orchestration jobs (image bakes, the
+#     qemu image reaper). Each runs in a CI-image container on fox and drives
+#     AWS / Hetzner over the aws CLI + SSH.
+#   - the AWS `aws-shell-qemu` fleeting pool (fleeting-plugin-aws + ASG) is the
+#     default test-cell target: the `test_cells` child matrix runs the nested
+#     qemu harness on autoscaled runner hosts, off fox so a wide fan-out can't
+#     threaten fox's headscale/nginx co-tenants. Each host hydrates promoted
+#     qemu images from S3 and runs the same harness path as lab.
+#   - lab's shell runner (`lab-shell-qemu`) is the manual/fallback qemu target:
+#     a manual pipeline with HOMELAB_CI_TARGET=lab renders the same matrix and
+#     drives the local qemu harness directly on lab.
 #
 # This is the sole CI: the former GitHub Actions setup (.github/workflows/) has
 # been retired.
@@ -31,10 +27,9 @@
 # The prod identity's password is never available to CI by design (CLAUDE.md:
 # Vault ids).
 #
-# Qemu targets: set HOMELAB_CI_TARGET=lab for lab-shell-qemu, or
-# HOMELAB_CI_TARGET=aws_qemu for the AWS shell/fleeting pool. Pair either with
-# HOMELAB_DETECT_TAG=fox-docker-aws on a manual/web pipeline so detect renders
-# the child YAML on fox instead of booting the legacy coordinator path.
+# Qemu targets: HOMELAB_CI_TARGET=aws_qemu (default) runs the cells on the AWS
+# `aws-shell-qemu` fleeting pool; set HOMELAB_CI_TARGET=lab on a manual/web
+# pipeline to render the same matrix for the `lab-shell-qemu` runner instead.
 
 # `detect` runs first and generates the role-test child pipeline; everything
 # else (lint, unit tests, the test_cells trigger, manual builders) runs in
@@ -50,8 +45,7 @@ default:
   interruptible: true
 
 variables:
-  HOMELAB_CI_TARGET: aws
-  HOMELAB_DETECT_TAG: fox-coordinator-aws
+  HOMELAB_CI_TARGET: aws_qemu
 
 # Shared scaffolding for hosted-runner jobs: the ci image from this project's
 # registry (Dockerfile; rebuilt manually via the ci_image job below). The
@@ -66,13 +60,13 @@ variables:
 .hosted:
   image: $CI_REGISTRY_IMAGE/ci:latest
 
-# Change detection + dynamic child pipeline (notes/ci_aws_test_cells.md). The
+# Change detection + dynamic child pipeline (notes/ci_aws_nested_qemu_cells.md). The
 # GitHub `detect` -> per-bucket `test` workflows collapse to this single pair:
 # `detect` runs the same classification core (mise-tasks/ci/detect.py) and
 # writes a generated child pipeline — one job per `role:variant[:ubuntu]` cell,
-# each running a role/machine/release cell. The default `aws` target launches a
-# single-use EC2 spot instance via the harness's aws backend; qemu shell targets
-# hydrate promoted images from S3 and run the qemu backend directly.
+# each running a role/machine/release cell on the selected qemu target: the
+# default `aws_qemu` pool and the `lab` runner both hydrate promoted images from
+# S3 (resp. lab's local store) and run the qemu backend directly.
 #
 # The diff base is the newest fully-green pipeline ancestor, resolved via the
 # GitLab pipelines API (detect.py: resolve_green_base_gitlab) — so a red-push ->
@@ -89,17 +83,15 @@ variables:
 # failure degrades to the previous-tip base, never to a hard error.
 detect:
   stage: prepare
-  # AWS default: run on the autoscaled coordinator, not fox. detect is the
-  # deliberate per-pipeline CI-image warm-up; cells then use if-not-present, so
-  # detect is the only job that must re-check :latest after the coordinator
-  # scales up. Lab fallback overrides HOMELAB_DETECT_TAG to fox-docker-aws so a
-  # qemu fallback run doesn't boot a coordinator just to render the child YAML.
+  # Always runs on fox's always-on Docker-executor runner — it just renders the
+  # child YAML, so it stays off the qemu pools regardless of HOMELAB_CI_TARGET.
+  # pull_policy: always keeps the long-lived fox runner from pinning a stale
+  # :latest after a ci_image rebuild; the pull is a no-op when already current.
   image:
     name: $CI_REGISTRY_IMAGE/ci:latest
     pull_policy: always
-  # See notes/ci_aws_test_cells.md (Phase 2 / package and image caching).
   tags:
-    - $HOMELAB_DETECT_TAG
+    - fox-docker-aws
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: never
@@ -110,15 +102,12 @@ detect:
     # any realistic push, with a fetch-on-demand fallback in detect.py for a
     # base (green ancestor or previous tip) outside the shallow checkout.
     GIT_DEPTH: "50"
-    # Point mise/uv at the baked /opt caches. The CI image sets these as ENV,
-    # but on the aws-shell-qemu instance runner detect runs in a non-login shell
-    # with no image ENV, so without these its `mise install` / `uv sync` would
-    # re-download the whole toolchain on a fresh host. Safe on every runner
-    # detect can land on -- both the CI image and the qemu-host AMI bake to /opt
-    # (qemu_host.pkr.hcl); the lab target still renders detect on fox-docker-aws.
+    # Point mise/uv at the baked /opt caches. detect always runs in the CI image
+    # on fox-docker-aws, which sets these as ENV; pinning them here keeps the
+    # job self-describing and harmless if it ever lands elsewhere.
     # UV_PROJECT_ENVIRONMENT is intentionally omitted: in the image its ENV still
-    # reuses /opt/venv, while on the shell runner detect builds a per-job .venv
-    # from the warm cache.
+    # reuses /opt/venv, while on a shell runner detect would build a per-job
+    # .venv from the warm cache.
     MISE_DATA_DIR: /opt/mise
     UV_CACHE_DIR: /opt/uv-cache
     UV_LINK_MODE: copy
@@ -133,10 +122,7 @@ detect:
       printf 'home=%s\n' "${HOME:-<unset>}"
       printf 'path=%s\n' "${PATH:-<unset>}"
       printf 'runner=%s %s\n' "${CI_RUNNER_DESCRIPTION:-<unset>}" "${CI_RUNNER_EXECUTABLE_ARCH:-<unset>}"
-      printf 'homelab_target=%s detect_tag=%s backend=%s\n' \
-        "${HOMELAB_CI_TARGET:-<unset>}" \
-        "${HOMELAB_DETECT_TAG:-<unset>}" \
-        "${HOMELAB_TEST_BACKEND:-<unset>}"
+      printf 'homelab_target=%s\n' "${HOMELAB_CI_TARGET:-<unset>}"
       for tool in gitlab-runner mise uv python python3 bash sh; do
         printf '%s=' "$tool"
         command -v "$tool" || true
@@ -282,108 +268,6 @@ ci_image:
         docker push "$CI_REGISTRY_IMAGE/ci:latest"
       fi
 
-# Bake + promote the EC2 test-cell AMIs (notes/ci_aws_test_cells.md): one
-# parallel job per (machine, release) cell via the amazon-ebssurrogate
-# builder — no KVM anywhere, so this runs on fox's Docker-executor runner
-# (the job is an aws-CLI/packer orchestration loop; the build VM is an EC2
-# instance). Manual and protected-ref only: AWS auth is GitLab OIDC into the
-# bake role (terraform/aws_ci.tf), whose trust policy only accepts master —
-# branch pipelines cannot publish AMIs. The promote step moves the
-# /homelab-ci/ami/<machine>/<ubuntu> SSM parameter the harness resolves;
-# rollback is re-putting the previous value (ssm get-parameter-history).
-#
-ami_images:
-  stage: prepare
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
-      when: manual
-      # A skipped manual job must not hold the pipeline in "blocked".
-      allow_failure: true
-  tags:
-    - fox-docker-aws
-  id_tokens:
-    GITLAB_OIDC_TOKEN:
-      aud: sts.amazonaws.com
-  parallel:
-    matrix:
-      - MACHINE: [ box ]
-        UBUNTU: [ jammy, noble, resolute ]
-  # One bake per cell across pipelines, serializing the candidate smoke +
-  # SSM promotion so two manual jobs cannot race the same parameter; never
-  # auto-cancelled — a killed run can orphan the EC2 build instance.
-  resource_group: ami-$MACHINE-$UBUNTU
-  interruptible: false
-  timeout: 60m
-  script:
-    # Same drift self-heal as .hosted, against the image's /opt/mise tree.
-    - mise install
-    - uv sync --locked
-    - mise run packer:init
-    # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
-    # AssumeRoleWithWebIdentity provider wants a file path.
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
-    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
-    - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
-    - export AWS_ROLE_SESSION_NAME="ami-images-$CI_JOB_ID"
-    # Smoke the OIDC chain before spending 20+ min on a bake.
-    - mise exec -- aws --region eu-central-1 sts get-caller-identity
-    - mise run packer:ami "$MACHINE" --ubuntu "$UBUNTU" --promote
-
-# Derive the box_deps AMIs from the promoted box AMIs: the same packer:ami
-# pipeline as ami_images, but the amazon-ebs source (packer/aws/ami.pkr.hcl)
-# boots the box AMI and converges packer/seed_deps.yml onto it over SSH —
-# the AWS counterpart of `mise run packer:seed-deps`. Manual and
-# protected-ref only, like ami_images (same OIDC bake role). Dispatch it
-# after every box promotion for the release, mirroring the qemu rule
-# (packer:seed-deps after every packer:build box).
-#
-# Required CI/CD variable: CI_CELL_SSH_KEY (file, protected) — the private
-# half of the homelab-ci-cell key whose public half ami.pkr.hcl bakes into
-# the cell AMIs (operator_ssh_keys). Prerequisite: the box AMI for the
-# release was baked with that key aboard, or SSH to the seed instance is
-# refused.
-ami_box_deps:
-  stage: prepare
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
-      when: manual
-      # A skipped manual job must not hold the pipeline in "blocked".
-      allow_failure: true
-  tags:
-    - fox-docker-aws
-  id_tokens:
-    GITLAB_OIDC_TOKEN:
-      aud: sts.amazonaws.com
-  parallel:
-    matrix:
-      - UBUNTU: [ jammy, noble, resolute ]
-  # One seed bake per release across pipelines, serializing the SSM
-  # promotion; never auto-cancelled — a killed run can orphan the on-demand
-  # seed instance.
-  resource_group: ami-box_deps-$UBUNTU
-  interruptible: false
-  timeout: 60m
-  script:
-    # Fail before the launch, not at the SSH wait, when the key is missing.
-    - test -n "${CI_CELL_SSH_KEY:-}" || { echo "CI_CELL_SSH_KEY CI/CD variable is not set" >&2; exit 1; }
-    # Same drift self-heal as .hosted, against the image's /opt/mise tree.
-    - mise install
-    - uv sync --locked
-    - mise run packer:init
-    # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
-    # AssumeRoleWithWebIdentity provider wants a file path.
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
-    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
-    - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
-    - export AWS_ROLE_SESSION_NAME="ami-box-deps-$CI_JOB_ID"
-    # Smoke the OIDC chain before spending 15+ min on a seed converge.
-    - mise exec -- aws --region eu-central-1 sts get-caller-identity
-    - mise run packer:ami box_deps --ubuntu "$UBUNTU" --ssh-key "$CI_CELL_SSH_KEY" --promote
-
 # Bake + promote the AWS nested-qemu runner-host AMI. This is the instance
 # executor target host, not a guest fixture: it carries gitlab-runner, qemu/KVM
 # tooling, the mise/uv tool tree, and readiness scripts. Terraform's ASG launch
@@ -455,14 +339,14 @@ qemu_image_reaper:
       mise run ci:reap-qemu-images $reaper_args
 
 # Bake + publish fox's Hetzner Cloud boot image. The image is built by the
-# same pools.sh/chroot.sh install as the cell AMIs, on an EC2 surrogate
-# volume (packer/aws, IMAGE_TARGET=hetzner — no KVM; the byproduct AMI is
-# deregistered right after the bake), downloaded as a raw.gz, then `mise run
+# pools.sh/chroot.sh install on an EC2 surrogate volume (packer/aws,
+# IMAGE_TARGET=hetzner — no KVM; the byproduct AMI is deregistered right after
+# the bake), downloaded as a raw.gz, then `mise run
 # packer:hetzner` streams it onto a temp Hetzner server in rescue mode and
-# snapshots it (pruning all but the 2 newest). Manual and protected-ref only, like ami_images: AWS auth is the
-# same GitLab OIDC bake role (master-only trust policy), and the published
-# snapshot is project-global — terraform's data.hcloud_image selects by
-# most_recent, so it silently becomes fox's next boot image on rebuild.
+# snapshots it (pruning all but the 2 newest). Manual and protected-ref only:
+# AWS auth is the GitLab OIDC bake role (master-only trust policy), and the
+# published snapshot is project-global — terraform's data.hcloud_image selects
+# by most_recent, so it silently becomes fox's next boot image on rebuild.
 #
 # Required CI/CD variable: HCLOUD_TOKEN (masked + protected) — the homelab
 # Hetzner project's read/write token: the snapshot must land in the project

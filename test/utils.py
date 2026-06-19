@@ -32,19 +32,6 @@ class IdempotenceFailedException(Exception):
     pass
 
 
-class SpotInterruptedException(Exception):
-    """Raised when a cell failure is classified as a spot interruption.
-
-    Post-hoc classification (notes/ci_aws_test_cells.md): on any cell
-    failure the EC2 backend checks whether the instance was reclaimed or
-    vanished outside harness cleanup. testrole.py maps this to exit code
-    86, which the generated GitLab jobs retry exactly once — ordinary role
-    failures, timeouts, and idempotence failures keep their exit codes.
-    """
-
-    pass
-
-
 class CommandResult(NamedTuple):
     """Outcome of a subprocess invocation."""
 

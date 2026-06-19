@@ -1,7 +1,0 @@
-# The role's real target is the lab CI host (hosts: lab/fox): it creates the
-# /mnt/scratch/homelab_ci packer-artifacts dir + its homelab_ci-group ACL.
-# A vanilla cell has neither /mnt/scratch nor the group, so the box cell only
-# exercises the portable surface under qemu (where the box fixture provides
-# them). On a cell the ACL task hits a missing path in check mode.
-aws_skip:
-  box: needs /mnt/scratch + the homelab_ci group a vanilla cell lacks

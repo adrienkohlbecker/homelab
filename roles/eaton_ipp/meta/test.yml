@@ -1,9 +1,0 @@
-# The ipp-linux deb is re-hosted on the operator's LAN Gitea generic registry
-# (mirror_gitea_lab -> gitea.lab.fahm.fr when nexus_url is unset, which it is on
-# a cell). An off-site EC2 cell has no route to that LAN host, so the deb_install
-# download times out no matter the timeout. The role is also amd64-only, so the
-# arm64 qemu box skips it entirely — the cell is the only place the download path
-# runs, but it can't reach the mirror. Revisit if the deb lands on a cell-reachable
-# (public/Tailscale) mirror (notes/ci_aws_test_cells.md, cell-shape group).
-aws_skip:
-  box: ipp-linux deb is on the LAN-only gitea.lab.fahm.fr mirror, unreachable from an off-site cell
