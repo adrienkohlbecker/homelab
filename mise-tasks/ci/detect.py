@@ -720,7 +720,7 @@ TARGETS = {
         "cell_runner_tag": "aws-shell-qemu",
         "use_ci_image": False,
         "hydrate_qemu": True,
-        "upstream_mirrors": True,
+        "upstream_mirrors": False,
         "retry_spot_interruption": False,
         "apply_aws_skip": False,
     },
