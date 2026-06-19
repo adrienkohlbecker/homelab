@@ -14,8 +14,31 @@ variable "gitlab_runner_sha256" {
   description = "Pinned gitlab-runner binary checksum, passed by mise-tasks/packer/qemu-host-ami.sh from group_vars/all/versions.yml."
 }
 
+variable "qemu_host_build_id" {
+  type        = string
+  default     = "local"
+  description = "Pipeline id (or 'local') stamped on the qemu-host AMI/snapshot/volume tags."
+}
+
+variable "qemu_host_manifest_path" {
+  type        = string
+  default     = "packer-qemu-host-manifest.json"
+  description = "Where the manifest post-processor writes the qemu-host AMI artifact list."
+}
+
+locals {
+  qemu_host_region          = "eu-central-1"
+  qemu_host_ubuntu_name     = "noble"
+  qemu_host_source_ami_name = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
+  qemu_host_common_tags = {
+    role     = "ci-ami"
+    ubuntu   = local.qemu_host_ubuntu_name
+    build_id = var.qemu_host_build_id
+  }
+}
+
 source "amazon-ebs" "qemu_host" {
-  region                      = local.region
+  region                      = local.qemu_host_region
   instance_type               = "c6a.xlarge"
   ssh_username                = "ubuntu"
   ssh_interface               = "public_ip"
@@ -32,7 +55,7 @@ source "amazon-ebs" "qemu_host" {
 
   source_ami_filter {
     filters = {
-      name                = local.source_ami_names[var.ubuntu_name]
+      name                = local.qemu_host_source_ami_name
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }
@@ -53,16 +76,15 @@ source "amazon-ebs" "qemu_host" {
     delete_on_termination = true
   }
 
-  ami_name                = "homelab-ci-qemu-host-${var.ubuntu_name}-{{timestamp}}"
-  ami_description         = "homelab CI nested-qemu runner host (${var.ubuntu_name})"
+  ami_name                = "homelab-ci-qemu-host-${local.qemu_host_ubuntu_name}-{{timestamp}}"
+  ami_description         = "homelab CI nested-qemu runner host (${local.qemu_host_ubuntu_name})"
   ami_virtualization_type = "hvm"
   ena_support             = true
-  boot_mode               = "uefi"
 
-  tags            = merge(local.common_tags, { machine = "qemu_host", Name = "homelab-ci-qemu-host-${var.ubuntu_name}" })
-  snapshot_tags   = merge(local.common_tags, { machine = "qemu_host" })
-  run_tags        = merge(local.common_tags, { machine = "qemu_host", Name = "packer-homelab-ci-qemu-host" })
-  run_volume_tags = merge(local.common_tags, { machine = "qemu_host" })
+  tags            = merge(local.qemu_host_common_tags, { machine = "qemu_host", Name = "homelab-ci-qemu-host-${local.qemu_host_ubuntu_name}" })
+  snapshot_tags   = merge(local.qemu_host_common_tags, { machine = "qemu_host" })
+  run_tags        = merge(local.qemu_host_common_tags, { machine = "qemu_host", Name = "packer-homelab-ci-qemu-host" })
+  run_volume_tags = merge(local.qemu_host_common_tags, { machine = "qemu_host" })
 }
 
 build {
@@ -128,6 +150,6 @@ build {
   }
 
   post-processor "manifest" {
-    output = var.manifest_path
+    output = var.qemu_host_manifest_path
   }
 }

@@ -60,8 +60,8 @@ packer build \
   "--on-error=${on_error}" \
   -only="amazon-ebs.qemu_host" \
   -var "ubuntu_name=${ubuntu}" \
-  -var "build_id=${CI_PIPELINE_ID:-local}" \
-  -var "manifest_path=${manifest}" \
+  -var "qemu_host_build_id=${CI_PIPELINE_ID:-local}" \
+  -var "qemu_host_manifest_path=${manifest}" \
   -var "gitlab_runner_url=${runner_url}" \
   -var "gitlab_runner_sha256=${runner_sha256}" \
   packer/aws
