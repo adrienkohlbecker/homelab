@@ -57,6 +57,9 @@
     state: link
     owner: netdata_poll
     group: netdata_poll
+    # lchown the link itself; the file module's default follow: true would
+    # dereference it and chown the shared /dev/null device instead.
+    follow: false
     force: true
   become: true
   loop:

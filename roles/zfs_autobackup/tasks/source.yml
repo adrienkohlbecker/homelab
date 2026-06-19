@@ -56,6 +56,9 @@
     state: link
     owner: zfs_autobackup
     group: zfs_autobackup
+    # lchown the link itself; the file module's default follow: true would
+    # dereference it and chown the shared /dev/null device instead.
+    follow: false
     force: true
   become: true
   loop:
