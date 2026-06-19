@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 """Launch a QEMU machine via the test harness driver, no role/ansible.
 
-Wraps machine.QemuMachine for interactive use: pick a variant, the harness
+Wraps machine.Machine for interactive use: pick a variant, the harness
 does image overlays + (on aarch64 ZFS) reads the packer-shipped
 kernel/initrd next to the qcow2 + qemu launch. After boot it prints the
 SSH command, leaves the VM up, and blocks until Ctrl-C.
@@ -28,7 +28,7 @@ from pathlib import Path
 from machine import (
     DEFAULT_UBUNTU,
     QEMU_MACHINE_SPECS,
-    QemuMachine,
+    Machine,
     UBUNTU_RELEASES,
 )
 from utils import cancel_on_signal, print_cmd_line, print_line, tee_output
@@ -238,7 +238,7 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def _dump_boot_console(m: QemuMachine, lines: int = 200) -> None:
+def _dump_boot_console(m: Machine, lines: int = 200) -> None:
     """Print the tail of the captured serial console (the boot log).
 
     A boot that never reaches SSH is otherwise opaque -- this surfaces where it
@@ -259,7 +259,7 @@ def _dump_boot_console(m: QemuMachine, lines: int = 200) -> None:
     print_line("--- end boot console ---")
 
 
-def _write_hostfwds(m: QemuMachine, path: Path | None) -> None:
+def _write_hostfwds(m: Machine, path: Path | None) -> None:
     if path is None:
         return
     with path.open("w") as fh:
@@ -268,7 +268,7 @@ def _write_hostfwds(m: QemuMachine, path: Path | None) -> None:
 
 
 async def _run_async(
-    m: QemuMachine, *, wait_for_ssh: bool, exit_after_ready: bool, seed: Path | None, write_hostfwds: Path | None
+    m: Machine, *, wait_for_ssh: bool, exit_after_ready: bool, seed: Path | None, write_hostfwds: Path | None
 ) -> None:
     """Default flow: prepare + boot + ensure_ssh + wait, all under asyncio.
 
@@ -341,7 +341,7 @@ async def _run_async(
                 await m.wait()
 
 
-def _run_foreground(m: QemuMachine, write_hostfwds: Path | None = None) -> int:
+def _run_foreground(m: Machine, write_hostfwds: Path | None = None) -> int:
     """Sync qemu spawn -- no asyncio for the long-running wait.
 
     asyncio's subprocess machinery installs its own SIGCHLD/fd plumbing in
@@ -384,7 +384,7 @@ def _run_foreground(m: QemuMachine, write_hostfwds: Path | None = None) -> int:
 def main() -> int:
     args = parse_args()
 
-    m = QemuMachine(
+    m = Machine(
         machine=args.machine,
         role="_launch",
         keep_vm=True,

@@ -32,7 +32,7 @@ class ArchProfile:
     """Everything the test harness needs to know about a host arch.
 
     All fields are pure data; behaviour stays in the call sites that consume
-    them. Frozen so an instance can be safely shared across QemuMachines.
+    them. Frozen so an instance can be safely shared across Machines.
     """
 
     name: str

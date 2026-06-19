@@ -2,7 +2,6 @@
 
 import asyncio
 import contextlib
-import dataclasses
 import errno
 import fcntl
 import functools
@@ -428,50 +427,28 @@ PUBLISH_LOCK_TIMEOUT = 300
 PEAK_KB_SENTINEL_PREFIX = "PEAK_KB="
 
 
-@dataclasses.dataclass
 class Machine:
-    """Base runner that wraps a test target reachable over SSH and Ansible."""
+    """Start disposable QEMU guests for role-level integration tests."""
 
     # Extra seconds added on top of machine_timeout for the GNU `timeout` /
     # `podman --timeout` last-resort wrapper. Has to outlast the inner
     # asyncio.timeout in run_test so testrole.py's own deadline fires first
     # (and we get a clean rc=124 + stop()), with enough headroom for
-    # Machine.stop() to do its graceful->SIGKILL escalation. ClassVar so
-    # @dataclass doesn't promote it to an init field.
+    # Machine.stop() to do its graceful->SIGKILL escalation.
     WRAPPER_GRACE_SECONDS: ClassVar[int] = 60
 
-    ssh_port: int
-    ssh_user: str
-    ansible_args: list[str]
-    inventory_host: str
-    machine: str
-    role: str
-    keep_vm: bool
-    ubuntu_name: str
-    machine_timeout: int
-    upstream_mirrors: bool = False
-    # Optional workdir parent override. When None, _workdir_parent() falls
-    # through to the subclass default (system tmp for the base class, the
-    # imagedir for QemuMachine). Wired by testrole.py from --workdir-parent
-    # / $HOMELAB_WORKDIR_PARENT so CI workflows can keep the qcow2 tree
-    # mounted ro and stage the per-run TempDir somewhere ephemeral.
-    workdir_parent: Path | None = None
     # SSH endpoint host -- loopback (qemu hostfwd). Every SSH/scp/ansible
     # invocation and the banner probe read this, never SSH_HOST.
-    ssh_host: str = SSH_HOST
+    ssh_host: str
     # Private key handed to ssh/scp/ansible via -i: the qemu fixtures bake the
     # well-known vagrant key.
-    ssh_key: str = SSH_KEY
-    # Filename (under the per-run workdir) where qemu writes its pidfile.
-    idfile: str = dataclasses.field(default="pid", init=False)
-
-    proc: asyncio.subprocess.Process | None = dataclasses.field(default=None, init=False)
-    output_file: Path = dataclasses.field(init=False)
-    journal_file: Path = dataclasses.field(init=False)
-    boot_file: Path = dataclasses.field(init=False)
-    dmesg_file: Path = dataclasses.field(init=False)
-    systemctl_failed_file: Path = dataclasses.field(init=False)
-    workdir: tempfile.TemporaryDirectory[str] = dataclasses.field(init=False)
+    ssh_key: str
+    output_file: Path
+    journal_file: Path
+    boot_file: Path
+    dmesg_file: Path
+    systemctl_failed_file: Path
+    workdir: tempfile.TemporaryDirectory[str]
     # fd of <workdir>/.live, held with fcntl.LOCK_EX|LOCK_NB for the lifetime
     # of the Machine. Liveness signal consumed by sweep_stale_workdirs(): the
     # kernel releases the lock on process death (clean or SIGKILL/OOM), so a
@@ -480,7 +457,7 @@ class Machine:
     # that bind-mount the same workdir parent. Replaces the prior ps-based
     # check, which was PID-ns-scoped and so couldn't see sibling Gitea Actions
     # test cells running in separate containers on the same host bind-mount.
-    _live_lock_fd: int = dataclasses.field(default=-1, init=False)
+    _live_lock_fd: int
     # Shared flock on <imagedir>/.publish-lock held across prepare→
     # ensure_booted so packer-build's brief exclusive lock around its
     # install post-processor's atomic-rename (packer/publish.py) can't
@@ -495,20 +472,168 @@ class Machine:
     # between exec and open would silently corrupt the boot). -1 = not
     # held (also the steady state when the lockfile is absent -- a fresh
     # imagedir with no packer history).
-    _publish_lock_fd: int = dataclasses.field(default=-1, init=False)
-    peak_rss_kb: int = dataclasses.field(default=0, init=False)
+    _publish_lock_fd: int
     # Controller-side WAN probe endpoint, so `delegate_to: localhost`
     # probes in roles/firewall's _verify can exercise rules keying on the
     # WAN interface (traffic originating inside the VM never ingresses on
     # the WAN iface). qemu slirp/passt forwards pre-picked free 127.0.0.1
     # ports, mapped to guest ports in wan_forward_ports.
-    wan_probe_host: str = dataclasses.field(default=SSH_HOST, init=False)
-    wan_forward_ports: dict[str, dict[str, int]] = dataclasses.field(
-        default_factory=lambda: {"tcp": {}, "udp": {}},
-        init=False,
-    )
+    wan_probe_host: str
+    wan_forward_ports: dict[str, dict[str, int]]
 
-    def __post_init__(self) -> None:
+    drives: list[str]
+    # VNC display number (0..99) chosen in prepare() when keep_vm is True
+    # and local GUI display is not requested;
+    # consumed by _boot_command for the `-display vnc=` argument. Bound on
+    # 5900+display so qemu won't try to walk the band itself.
+    vnc_display: int
+    # Set only when launch.py passes --kernel/--initrd/--append (ad-hoc custom
+    # kernel without rebuilding the image). _boot_command() emits
+    # -kernel/-initrd/-append and the firmware boot chain is bypassed.
+    # None in normal harness operation on all arches and variants.
+    _direct_boot: tuple[Path, Path, str] | None
+    # Extra guest ports to forward in addition to the standard three (22,
+    # 32400, 51820). Set by extra_hostfwds= in __init__; populated in
+    # prepare() as {guest_port: host_port}.
+    extra_hostfwd_ports: dict[int, int]
+    # Guest NIC backend, resolved once in __init__ (resolve_net_backend):
+    # "passt" inside the noble ci-image (robust UDP datapath), "slirp"
+    # everywhere passt can't run. The passt sidecar (a separate process
+    # qemu connects to over a unix socket) is launched in boot() and torn
+    # down in stop(); these stay None/unset on the slirp path.
+    _net_backend: str
+    # On the passt connector, True when qemu manages passt natively (>= 10.1)
+    # and the sidecar machinery below stays unused (socket/socket_dir/proc all
+    # None); False on the legacy sidecar path. Always False on slirp. Decided
+    # once in __init__ via resolve_passt_native.
+    _passt_native: bool
+    _passt_socket: Path | None
+    # Private dir holding _passt_socket, on the system tmpfs rather than the
+    # /mnt/scratch workdir -- see the _passt_socket assignment for why. None on
+    # the slirp path AND the native-passt path; torn down in _stop_passt.
+    _passt_socket_dir: tempfile.TemporaryDirectory[str] | None
+    _passt_proc: asyncio.subprocess.Process | None
+
+    def __init__(
+        self,
+        machine: str,
+        role: str,
+        keep_vm: bool,
+        ubuntu_name: str,
+        machine_timeout: int,
+        upstream_mirrors: bool = False,
+        *,
+        workdir_parent: Path | None = None,
+        image_dir: Path | None = None,
+        kernel: Path | None = None,
+        initrd: Path | None = None,
+        append: str = "",
+        mem: str | None = None,
+        with_pflash: bool = False,
+        efi_code: Path | None = None,
+        efi_vars: Path | None = None,
+        virtfs: list[tuple[Path, str]] | None = None,
+        foreground: bool = False,
+        display_window: bool = False,
+        qmp_socket: Path | None = None,
+        commit_in_place: bool = False,
+        extra_hostfwds: list[int] | None = None,
+    ):
+        """QEMU-backed machine wrapper used by integration tests.
+
+        image_dir overrides the per-variant `<imagedir>/<ubuntu>/<packer_image>`
+        path that prepare() would otherwise compute. Used by qemu.pkr.hcl's
+        verify-boot post-processor to point the harness at a still-staged
+        `*.new` build output before the build script swaps it over the
+        previous artifact.
+
+        kernel/initrd/append direct-boot a user-supplied kernel against the
+        variant's qcow2, replacing the packer-shipped kernel/initrd on the
+        aarch64 ZFS path (or layering -kernel/-initrd onto x86_64). mem
+        overrides the per-spec `-m` size. with_pflash / efi_code / efi_vars
+        attach UEFI pflash on variants that don't get it from prepare()
+        (auto-detected paths or explicit overrides). virtfs is a list of
+        (host_path, mount_tag) 9p shares. foreground strips the `timeout`
+        wrapper and switches `-serial stdio` -> mon:stdio so HMP is reachable
+        via Ctrl-A,c. display_window swaps the keep-VM display backend from
+        VNC to a local qemu GUI window. qmp_socket binds qemu's QMP server to
+        a unix socket. These last set are launch.py-only knobs; testrole.py /
+        production callers leave them at defaults.
+        """
+        try:
+            spec = QEMU_MACHINE_SPECS[machine]
+        except KeyError:
+            raise AttributeError(f"Unknown machine: {machine}") from None
+
+        # Imagedir layout is platform-gated (see imagedir_for_host); the disk
+        # format alongside it is too: raw on Linux (the host ZFS dataset already
+        # does CoW + zstd), qcow2 on Mac (APFS has no fs-level compression).
+        # Mirrors qemu.pkr.hcl's image_format var.
+        self.imagedir: Path = imagedir_for_host()
+        self._packer_disk_format = "qcow2" if platform.system() == "Darwin" else "raw"
+
+        self._spec = spec
+        if image_dir is not None and spec.packer_image is None:
+            raise ValueError(f"image_dir override requires a variant with packer_image set, got {machine!r}")
+        self._image_dir_override = image_dir.resolve() if image_dir is not None else None
+        # launch.py-only knobs; defaults are no-ops (every gate below the
+        # post-init setup short-circuits when each is None/False/[]).
+        self._direct_boot_override: tuple[Path, Path, str] | None = (
+            (kernel.resolve(), initrd.resolve(), append) if kernel is not None else None
+        )
+        self._mem = mem
+        self._with_pflash = with_pflash
+        self._efi_code = efi_code.resolve() if efi_code is not None else None
+        self._efi_vars = efi_vars.resolve() if efi_vars is not None else None
+        self._virtfs: list[tuple[Path, str]] = list(virtfs or [])
+        self._foreground = foreground
+        self._display_window = display_window
+        # commit_in_place: skip the qcow2-overlay step for the OS disks and
+        # mount the image_dir's packer-ubuntu-N.<format> files as the qemu
+        # drives directly. Writes during the run mutate those files in
+        # place — that's the whole point, since mise-tasks/packer/seed-deps.sh
+        # stages a fresh copy of box's artifacts into a tmpdir, runs
+        # launch.py --commit --seed against it, and then publishes the
+        # mutated tmpdir as box_deps. Refuses unless image_dir is also
+        # set, so a stray `launch.py --commit` against the published
+        # variant directory can't corrupt the source artifacts.
+        if commit_in_place and image_dir is None:
+            raise ValueError("commit_in_place=True requires image_dir to be set explicitly")
+        self._commit_in_place = commit_in_place
+        self._qmp_socket = qmp_socket
+        self._extra_guest_ports: list[int] = list(extra_hostfwds or [])
+        self.extra_hostfwd_ports: dict[int, int] = {}
+        # Captured once at construction so prepare()/_boot_command() don't
+        # have to re-run platform.machine() on every access.
+        self.arch: ArchProfile = detect_host_arch()
+
+        self.ssh_port = 0
+        self.ssh_user = spec.ssh_user
+        self.ansible_args = _qemu_ansible_args(spec)
+        self.inventory_host = spec.inventory_host
+        self.machine = machine
+        self.role = role
+        self.keep_vm = keep_vm
+        self.ubuntu_name = ubuntu_name
+        self.machine_timeout = machine_timeout
+        self.upstream_mirrors = upstream_mirrors
+        # Optional workdir parent override. When None, _workdir_parent() falls
+        # through to the imagedir default. Wired by testrole.py from
+        # --workdir-parent / $HOMELAB_WORKDIR_PARENT so CI workflows can keep
+        # the qcow2 tree mounted ro and stage the per-run TempDir somewhere
+        # ephemeral.
+        self.workdir_parent = workdir_parent
+        self.ssh_host = SSH_HOST
+        self.ssh_key = SSH_KEY
+        # Filename (under the per-run workdir) where qemu writes its pidfile.
+        self.idfile = "pid"
+        self.proc: asyncio.subprocess.Process | None = None
+        self._live_lock_fd = -1
+        self._publish_lock_fd = -1
+        self.peak_rss_kb = 0
+        self.wan_probe_host = SSH_HOST
+        self.wan_forward_ports = {"tcp": {}, "udp": {}}
+
         if self.ubuntu_name not in UBUNTU_RELEASES:
             raise ValueError(f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}")
         # Refresh the .ansible-mitogen-strategy symlink before we run any
@@ -529,8 +654,7 @@ class Machine:
         # survive into a healthy run -- drop them explicitly.
         for stale in (self.journal_file, self.dmesg_file, self.systemctl_failed_file):
             stale.unlink(missing_ok=True)
-        # System tmp by default; subclasses that need the workdir on a
-        # specific filesystem (qemu's qcow2 cache) override _workdir_parent().
+        # The workdir lands alongside the packer qcow2s (see _workdir_parent).
         # Auto-create the parent so --workdir-parent /some/new/path just
         # works without callers having to mkdir -p first; tempfile itself
         # doesn't create the dir argument, only the per-run subdir under it.
@@ -548,26 +672,48 @@ class Machine:
         fcntl.flock(self._live_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         self._preflight()
 
-    def _workdir_parent(self) -> Path | None:
-        """Return the parent directory for the per-run TemporaryDirectory.
+        # idfile defaults to "pid", which is what we want here.
+        # Resolve the NIC backend after _preflight has confirmed the qemu
+        # binary exists, since the probe execs it.
+        self._net_backend = resolve_net_backend(self.arch.qemu_binary)
+        # On the passt connector, let qemu drive passt natively where it can
+        # (>= 10.1); otherwise fall back to the sidecar. False on slirp.
+        self._passt_native = self._net_backend == "passt" and resolve_passt_native(self.arch.qemu_binary)
+        self._passt_socket = None
+        self._passt_socket_dir = None
+        self._passt_proc = None
 
-        Default None puts the workdir under the system tmp. QemuMachine
-        overrides to put it on the same filesystem as the packer qcow2s
-        so qemu-img overlays don't cross device boundaries. An explicit
-        workdir_parent at construction time overrides both — that's the
-        CI knob.
+    def _workdir_parent(self) -> Path | None:
+        """Place the workdir alongside the packer qcow2s.
+
+        qemu-img backing-file overlays reach the source qcow2 by absolute
+        path, so the workdir doesn't strictly need to be colocated, but
+        keeping it on the same filesystem matches the operator's mental
+        model and keeps `du` totals predictable. When the caller supplies
+        an explicit workdir_parent (CI flag) we honour that instead so
+        the imagedir can be ro-mounted.
         """
-        return self.workdir_parent
+        return self.workdir_parent or self.imagedir
 
     def _preflight(self) -> None:
-        """Validate external dependencies; subclasses override with tool checks.
+        """Verify the qemu binary, GNU timeout, and lsof are reachable.
 
-        Called once at the end of __post_init__, after self.workdir exists,
-        so the failure surface (binary checks, image cache lookups, etc.) is
-        bounded to "things the harness will need before the next subprocess
-        spawn". Failures raise RuntimeError with installation guidance.
+        Called once at the end of __init__, after self.workdir exists, so the
+        failure surface (binary checks, image cache lookups, etc.) is bounded
+        to "things the harness will need before the next subprocess spawn".
+        Failures raise RuntimeError with installation guidance.
         """
-        return
+        self._require_binary(
+            self.arch.qemu_binary,
+            "Install via `brew install qemu` (macOS) "
+            f"or `apt install qemu-system-{self.arch.name}` (Debian/Ubuntu).",
+        )
+        # The boot wrapper uses GNU timeout; macOS doesn't ship one out of
+        # the box, but `brew install coreutils` puts a `timeout` shim on PATH.
+        self._require_binary(
+            "timeout",
+            "Install via `brew install coreutils` (macOS) or via the coreutils " "package on Linux.",
+        )
 
     @staticmethod
     def _require_binary(name: str, hint: str) -> None:
@@ -768,55 +914,10 @@ class Machine:
 
         return await run_command(self.format_ansible_cmd(*cmd), check=check, env=self.ansible_env())
 
-    async def prepare(self) -> None:
-        """Stage a temporary workdir with inventory snippets and the static playbooks."""
-
-        Path("group_vars").copy_into(self.workdir.name)
-        Path("host_vars").copy_into(self.workdir.name)
-        Path("roles").copy_into(self.workdir.name)
-        # Role-local filter plugins (e.g. roles/wireguard/filter_plugins/)
-        # are already staged via the roles/ copy above. A top-level
-        # filter_plugins/ directory, if present, is also staged so playbook-
-        # scoped filters resolve.
-        if Path("filter_plugins").exists():
-            Path("filter_plugins").copy_into(self.workdir.name)
-        # group_vars/{prod,test}.yml derive `network.*` via
-        # `lookup('file', playbook_dir ~ '/data/network_topology.yml')`;
-        # the file has to be present alongside the staged playbooks for
-        # the lookup to resolve.
-        Path("data").copy_into(self.workdir.name)
-        # wireguard/ is gitignored (vaulted keys, never committed) so it's
-        # absent on a CI checkout. Skip silently when missing -- roles that
-        # actually need its contents will fail later with a clearer error.
-        if Path("wireguard").exists():
-            Path("wireguard").copy_into(self.workdir.name)
-
-        # mise.toml + uv lock + pyproject are repo-root files a role may
-        # reference via `{{ playbook_dir }}/<file>` during converge. Stage
-        # them so the harness's workdir mirrors what ansible sees on a
-        # production controller run.
-        for repo_root_file in ("mise.toml", "pyproject.toml", "uv.lock"):
-            src = Path(repo_root_file)
-            if src.exists():
-                src.copy_into(self.workdir.name)
-
-        # Copy the static role-agnostic playbooks (site / _setup /
-        # _verify / _mirrors) into the workdir so ansible loads
-        # group_vars/host_vars from this directory and the playbooks
-        # reference `{{ _role_under_test }}` injected via -e in
-        # format_ansible_cmd. testrole.py decides which hook playbook to
-        # invoke by checking roles/<role>/tasks/<hook>.yml at the source.
-        for playbook in Path("test/playbooks").glob("*.yml"):
-            playbook.copy_into(self.workdir.name)
-
-    def _boot_command(self) -> list[str]:
-        raise NotImplementedError
-
-    async def _find_ssh_port(self) -> None:
-        raise NotImplementedError
-
     async def boot(self) -> None:
-        """Start the VM/container under a timeout wrapper."""
+        """Bring up the passt sidecar (if any), then launch qemu under a timeout wrapper."""
+
+        await self._start_passt()
 
         cmd = self._boot_command()
         print_cmd_line(cmd)
@@ -1012,12 +1113,6 @@ class Machine:
         ):
             path.unlink(missing_ok=True)
 
-    def print_ssh_instructions(self) -> None:
-        ssh_cmd = shlex.join(self.format_ssh_cmd())
-        print_line("Keeping VM around, ssh using:")
-        print_line(f"> {ssh_cmd}")
-        print_line("Then Ctrl+C to stop the machine")
-
     async def wait(self) -> None:
         if self.proc:
             await self.proc.wait()
@@ -1032,38 +1127,63 @@ class Machine:
         await self.stop()
 
     async def stop(self) -> None:
-        """Drain the boot subprocess and free temp resources.
+        """Kill qemu via its pidfile, then drain the timeout wrapper and free temp resources.
 
-        Subclasses perform hypervisor-specific cleanup (qemu kill, podman rm)
-        before delegating here, so the inner child is already dead by the
-        time we get here. The wrapper (`timeout` for qemu, `podman run`
-        client for podman) should notice and exit on its own immediately --
-        we just wait for it. SIGKILL after 5s in case something pathological
-        keeps it alive (zombie subprocess, hung pipe).
+        Signaling self.proc (the `timeout` wrapper) normally forwards SIGINT
+        to qemu, but if the wrapper is SIGKILL'd or testrole.py dies before
+        stop() runs, qemu reparents to init with no recovery path -- SIGKILL
+        can't be caught and forwarded. Kill qemu directly via its pidfile so
+        cleanup works regardless of the wrapper's fate.
+
+        With qemu and the passt sidecar dead, the wrapper (`timeout`) should
+        notice and exit on its own immediately -- we just wait for it. SIGKILL
+        after 5s in case something pathological keeps it alive (zombie
+        subprocess, hung pipe).
         """
+        pid_path = Path(f"{self.workdir.name}/{self.idfile}")
+        pid: int | None = None
+        if pid_path.exists():
+            with contextlib.suppress(ValueError):
+                pid = int(pid_path.read_text().strip())
+
+        if pid is not None:
+            # Snapshot kernel-tracked peak RSS before we kill qemu. VmHWM is
+            # monotonic so a single read is exact; doing it here also covers
+            # the --keep case where the user's interactive session can have
+            # added to the high-water mark after the test body finished.
+            self.peak_rss_kb = _read_vm_hwm(pid)
+
         try:
-            if self.proc and self.proc.returncode is None:
-                try:
-                    async with asyncio.timeout(5):
-                        await self.proc.wait()
-                except TimeoutError:
-                    with contextlib.suppress(ProcessLookupError):
-                        self.proc.kill()
-                    await self.proc.wait()
+            if pid is not None:
+                # Shield against nested cancellation; without it a second
+                # SIGINT mid-cleanup would leave qemu running. terminate_pid
+                # SIGTERMs, polls for up to grace_seconds, then SIGKILLs.
+                await asyncio.shield(terminate_pid(pid, grace_seconds=5))
         finally:
-            # Defensive release: boot() drops the publish-lock on its happy
-            # path, but if it raised between acquire and release we'd leak
-            # the fd into the process beyond. Re-call is idempotent (no-op
-            # when fd<0).
-            self._release_publish_lock()
-            # Release the liveness lock before rmtree -- the kernel would
-            # release it on close()/exit anyway, but doing it explicitly
-            # keeps the ordering obvious.
-            if self._live_lock_fd >= 0:
-                with contextlib.suppress(OSError):
-                    os.close(self._live_lock_fd)
-                self._live_lock_fd = -1
-            self.workdir.cleanup()
+            await self._stop_passt()
+            try:
+                if self.proc and self.proc.returncode is None:
+                    try:
+                        async with asyncio.timeout(5):
+                            await self.proc.wait()
+                    except TimeoutError:
+                        with contextlib.suppress(ProcessLookupError):
+                            self.proc.kill()
+                        await self.proc.wait()
+            finally:
+                # Defensive release: boot() drops the publish-lock on its happy
+                # path, but if it raised between acquire and release we'd leak
+                # the fd into the process beyond. Re-call is idempotent (no-op
+                # when fd<0).
+                self._release_publish_lock()
+                # Release the liveness lock before rmtree -- the kernel would
+                # release it on close()/exit anyway, but doing it explicitly
+                # keeps the ordering obvious.
+                if self._live_lock_fd >= 0:
+                    with contextlib.suppress(OSError):
+                        os.close(self._live_lock_fd)
+                    self._live_lock_fd = -1
+                self.workdir.cleanup()
 
     def _release_publish_lock(self) -> None:
         """Drop the shared publish-lock fd if held; no-op otherwise.
@@ -1077,307 +1197,11 @@ class Machine:
                 os.close(self._publish_lock_fd)
             self._publish_lock_fd = -1
 
-
-def imagedir_for_host() -> Path:
-    """Return the platform's packer-image cache root.
-
-    /mnt/scratch/homelab_ci on Linux dev hosts; <repo>/packer/artifacts on Mac
-    (matches mise.toml's homelab_ci_dir; /mnt/scratch/homelab_ci doesn't exist on Mac).
-    Linux raises if the mountpoint is missing -- the dev host workflow
-    expects the qemu volume to be mounted before any test runs.
-    """
-    system = platform.system()
-    if system == "Darwin":
-        d = Path("packer/artifacts").resolve()
-        d.mkdir(parents=True, exist_ok=True)
-        return d
-    if system == "Linux":
-        d = Path("/mnt/scratch/homelab_ci")
-        if not d.is_dir():
-            raise RuntimeError(
-                f"Imagedir {str(d)!r} does not exist. "
-                f"Mount the qemu image volume (e.g. `sudo mount /mnt/scratch/homelab_ci`)."
-            )
-        return d
-    raise RuntimeError(f"Unknown operating system: {system}")
-
-
-def sweep_stale_workdirs(imagedir: Path) -> None:
-    """Reap orphaned tmp* (harness) and .build-* (packer) dirs from prior runs.
-
-    Cleanup normally rides Machine.__aexit__'s finally chain (machine.py:579)
-    for tmp* and the trailing rmdir in mise-tasks/packer/build.sh for .build-*.
-    Both bypass on SIGKILL / OOM / power-loss, leaving orphan dirs. Each is a
-    full repo copy plus a qcow2 overlay -- ansible-lint also walks into them
-    until .ansible-lint excludes the path, so leaks are doubly expensive.
-
-    Liveness check is split by dir kind:
-
-    * tmp* (harness workdirs) -- each live Machine holds an exclusive flock on
-      <workdir>/.live. Sweep tries LOCK_EX|LOCK_NB on that file: contended =
-      live (skip), uncontended = orphan (reap). flock is inode-scoped, so it
-      works across PID namespaces -- critical because Gitea Actions test cells
-      run in separate containers that bind-mount a shared workdir parent
-      (/scratch), and the prior ps-based check couldn't see
-      sibling cells' qemu/ansible. The mtime grace still guards the tiny
-      window between mkdtemp and Machine.__post_init__'s flock acquisition.
-
-    * .build-* (packer) -- packer doesn't (yet) hold a liveness lock, so these
-      keep the ps-args check. Safe because packer-build runs alone under the
-      `concurrency: lab-qemu-artifacts` workflow lock, so a single ps scan
-      sees the only candidate process.
-    """
-    if not imagedir.is_dir():
-        return
-
-    grace_seconds = 60
-    now = time.time()
-    candidates = [
-        d for d in imagedir.iterdir() if d.is_dir() and (d.name.startswith("tmp") or d.name.startswith(".build-"))
-    ]
-    if not candidates:
-        return
-
-    ps_args: str | None = None
-
-    for d in candidates:
-        try:
-            age = now - d.stat().st_mtime
-        except OSError:
-            continue
-        if age < grace_seconds:
-            continue
-
-        if d.name.startswith("tmp"):
-            if not _workdir_is_orphan(d):
-                continue
-        else:
-            # .build-* path: fall back to ps scan, lazily computed.
-            if ps_args is None:
-                try:
-                    ps_args = subprocess.run(["ps", "-Ao", "args="], check=True, capture_output=True, text=True).stdout
-                except (subprocess.CalledProcessError, FileNotFoundError):
-                    # Don't reap when we can't verify staleness.
-                    return
-            if d.name in ps_args:
-                continue
-
-        print_line(f"Reaping orphaned workdir {d}")
-        try:
-            shutil.rmtree(d)
-        except OSError as exc:
-            print_line(f"  (reap failed: {exc.strerror} — read-only mount?)")
-
-
-def _workdir_is_orphan(workdir: Path) -> bool:
-    """True iff the harness liveness lock on <workdir>/.live is unheld.
-
-    Missing .live file means the workdir predates this mechanism (or was
-    created by a non-harness tool) -- treat as orphan, the mtime grace in
-    the caller is the only safety net. An open()/flock() failure other than
-    "contended" also means orphan: the file is gone or unreadable, nothing
-    live could be holding it.
-    """
-    live = workdir / ".live"
-    try:
-        fd = os.open(live, os.O_RDONLY)
-    except FileNotFoundError:
-        return True
-    except OSError:
-        return True
-    try:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return False
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        return True
-    finally:
-        os.close(fd)
-
-
-def _read_vm_hwm(pid: int) -> int:
-    """Return the kernel-tracked peak RSS in kB for *pid*, or 0 if unreadable.
-
-    VmHWM ("high-water mark") in /proc/<pid>/status is monotonic and maintained
-    by the kernel, so a single read at process exit gives the exact peak —
-    no sampling loop required.
-    """
-    try:
-        for line in Path(f"/proc/{pid}/status").read_text().splitlines():
-            if line.startswith("VmHWM:"):
-                return int(line.split()[1])
-    except (FileNotFoundError, ProcessLookupError, ValueError):
-        pass
-    return 0
-
-
-class QemuMachine(Machine):
-    """Start disposable QEMU guests for role-level integration tests."""
-
-    drives: list[str]
-    # VNC display number (0..99) chosen in prepare() when keep_vm is True
-    # and local GUI display is not requested;
-    # consumed by _boot_command for the `-display vnc=` argument. Bound on
-    # 5900+display so qemu won't try to walk the band itself.
-    vnc_display: int
-    # Set only when launch.py passes --kernel/--initrd/--append (ad-hoc custom
-    # kernel without rebuilding the image). _boot_command() emits
-    # -kernel/-initrd/-append and the firmware boot chain is bypassed.
-    # None in normal harness operation on all arches and variants.
-    _direct_boot: tuple[Path, Path, str] | None
-    # Extra guest ports to forward in addition to the standard three (22,
-    # 32400, 51820). Set by extra_hostfwds= in __init__; populated in
-    # prepare() as {guest_port: host_port}.
-    extra_hostfwd_ports: dict[int, int]
-    # Guest NIC backend, resolved once in __init__ (resolve_net_backend):
-    # "passt" inside the noble ci-image (robust UDP datapath), "slirp"
-    # everywhere passt can't run. The passt sidecar (a separate process
-    # qemu connects to over a unix socket) is launched in boot() and torn
-    # down in stop(); these stay None/unset on the slirp path.
-    _net_backend: str
-    # On the passt connector, True when qemu manages passt natively (>= 10.1)
-    # and the sidecar machinery below stays unused (socket/socket_dir/proc all
-    # None); False on the legacy sidecar path. Always False on slirp. Decided
-    # once in __init__ via resolve_passt_native.
-    _passt_native: bool
-    _passt_socket: Path | None
-    # Private dir holding _passt_socket, on the system tmpfs rather than the
-    # /mnt/scratch workdir -- see the _passt_socket assignment for why. None on
-    # the slirp path AND the native-passt path; torn down in _stop_passt.
-    _passt_socket_dir: tempfile.TemporaryDirectory[str] | None
-    _passt_proc: asyncio.subprocess.Process | None
-
-    def __init__(
-        self,
-        machine: str,
-        role: str,
-        keep_vm: bool,
-        ubuntu_name: str,
-        machine_timeout: int,
-        upstream_mirrors: bool = False,
-        *,
-        workdir_parent: Path | None = None,
-        image_dir: Path | None = None,
-        kernel: Path | None = None,
-        initrd: Path | None = None,
-        append: str = "",
-        mem: str | None = None,
-        with_pflash: bool = False,
-        efi_code: Path | None = None,
-        efi_vars: Path | None = None,
-        virtfs: list[tuple[Path, str]] | None = None,
-        foreground: bool = False,
-        display_window: bool = False,
-        qmp_socket: Path | None = None,
-        commit_in_place: bool = False,
-        extra_hostfwds: list[int] | None = None,
-    ):
-        """QEMU-backed machine wrapper used by integration tests.
-
-        image_dir overrides the per-variant `<imagedir>/<ubuntu>/<packer_image>`
-        path that prepare() would otherwise compute. Used by qemu.pkr.hcl's
-        verify-boot post-processor to point the harness at a still-staged
-        `*.new` build output before the build script swaps it over the
-        previous artifact.
-
-        kernel/initrd/append direct-boot a user-supplied kernel against the
-        variant's qcow2, replacing the packer-shipped kernel/initrd on the
-        aarch64 ZFS path (or layering -kernel/-initrd onto x86_64). mem
-        overrides the per-spec `-m` size. with_pflash / efi_code / efi_vars
-        attach UEFI pflash on variants that don't get it from prepare()
-        (auto-detected paths or explicit overrides). virtfs is a list of
-        (host_path, mount_tag) 9p shares. foreground strips the `timeout`
-        wrapper and switches `-serial stdio` -> mon:stdio so HMP is reachable
-        via Ctrl-A,c. display_window swaps the keep-VM display backend from
-        VNC to a local qemu GUI window. qmp_socket binds qemu's QMP server to
-        a unix socket. These last set are launch.py-only knobs; testrole.py /
-        production callers leave them at defaults.
-        """
-        try:
-            spec = QEMU_MACHINE_SPECS[machine]
-        except KeyError:
-            raise AttributeError(f"Unknown machine: {machine}") from None
-
-        # Imagedir layout is platform-gated (see imagedir_for_host); the disk
-        # format alongside it is too: raw on Linux (the host ZFS dataset already
-        # does CoW + zstd), qcow2 on Mac (APFS has no fs-level compression).
-        # Mirrors qemu.pkr.hcl's image_format var.
-        self.imagedir: Path = imagedir_for_host()
-        self._packer_disk_format = "qcow2" if platform.system() == "Darwin" else "raw"
-
-        self._spec = spec
-        if image_dir is not None and spec.packer_image is None:
-            raise ValueError(f"image_dir override requires a variant with packer_image set, got {machine!r}")
-        self._image_dir_override = image_dir.resolve() if image_dir is not None else None
-        # launch.py-only knobs; defaults are no-ops (every gate below the
-        # super().__init__ call short-circuits when each is None/False/[]).
-        self._direct_boot_override: tuple[Path, Path, str] | None = (
-            (kernel.resolve(), initrd.resolve(), append) if kernel is not None else None
-        )
-        self._mem = mem
-        self._with_pflash = with_pflash
-        self._efi_code = efi_code.resolve() if efi_code is not None else None
-        self._efi_vars = efi_vars.resolve() if efi_vars is not None else None
-        self._virtfs: list[tuple[Path, str]] = list(virtfs or [])
-        self._foreground = foreground
-        self._display_window = display_window
-        # commit_in_place: skip the qcow2-overlay step for the OS disks and
-        # mount the image_dir's packer-ubuntu-N.<format> files as the qemu
-        # drives directly. Writes during the run mutate those files in
-        # place — that's the whole point, since mise-tasks/packer/seed-deps.sh
-        # stages a fresh copy of box's artifacts into a tmpdir, runs
-        # launch.py --commit --seed against it, and then publishes the
-        # mutated tmpdir as box_deps. Refuses unless image_dir is also
-        # set, so a stray `launch.py --commit` against the published
-        # variant directory can't corrupt the source artifacts.
-        if commit_in_place and image_dir is None:
-            raise ValueError("commit_in_place=True requires image_dir to be set explicitly")
-        self._commit_in_place = commit_in_place
-        self._qmp_socket = qmp_socket
-        self._extra_guest_ports: list[int] = list(extra_hostfwds or [])
-        self.extra_hostfwd_ports: dict[int, int] = {}
-        # Captured once at construction so prepare()/_boot_command() don't
-        # have to re-run platform.machine() on every access.
-        self.arch: ArchProfile = detect_host_arch()
-        super().__init__(
-            ssh_port=0,
-            ssh_user=spec.ssh_user,
-            ansible_args=_qemu_ansible_args(spec),
-            inventory_host=spec.inventory_host,
-            machine=machine,
-            role=role,
-            keep_vm=keep_vm,
-            ubuntu_name=ubuntu_name,
-            machine_timeout=machine_timeout,
-            upstream_mirrors=upstream_mirrors,
-            workdir_parent=workdir_parent,
-        )
-        # idfile defaults to "pid" on the base, which is what we want here.
-        # Resolve the NIC backend after _preflight (run via super().__init__)
-        # has confirmed the qemu binary exists, since the probe execs it.
-        self._net_backend = resolve_net_backend(self.arch.qemu_binary)
-        # On the passt connector, let qemu drive passt natively where it can
-        # (>= 10.1); otherwise fall back to the sidecar. False on slirp.
-        self._passt_native = self._net_backend == "passt" and resolve_passt_native(self.arch.qemu_binary)
-        self._passt_socket = None
-        self._passt_socket_dir = None
-        self._passt_proc = None
-
-    def _workdir_parent(self) -> Path | None:
-        """Place the workdir alongside the packer qcow2s.
-
-        qemu-img backing-file overlays reach the source qcow2 by absolute
-        path, so the workdir doesn't strictly need to be colocated, but
-        keeping it on the same filesystem matches the operator's mental
-        model and keeps `du` totals predictable. When the caller supplies
-        an explicit workdir_parent (CI flag) we honour that instead so
-        the imagedir can be ro-mounted.
-        """
-        return self.workdir_parent or self.imagedir
-
     def print_ssh_instructions(self) -> None:
-        super().print_ssh_instructions()
+        ssh_cmd = shlex.join(self.format_ssh_cmd())
+        print_line("Keeping VM around, ssh using:")
+        print_line(f"> {ssh_cmd}")
+        print_line("Then Ctrl+C to stop the machine")
         if self._display_window:
             print_line("Display: QEMU window")
         else:
@@ -1403,24 +1227,47 @@ class QemuMachine(Machine):
                 continue
         raise RuntimeError("No free VNC display in 0..99 on 127.0.0.1")
 
-    def _preflight(self) -> None:
-        """Verify the qemu binary, GNU timeout, and lsof are reachable."""
-        self._require_binary(
-            self.arch.qemu_binary,
-            "Install via `brew install qemu` (macOS) "
-            f"or `apt install qemu-system-{self.arch.name}` (Debian/Ubuntu).",
-        )
-        # The boot wrapper uses GNU timeout; macOS doesn't ship one out of
-        # the box, but `brew install coreutils` puts a `timeout` shim on PATH.
-        self._require_binary(
-            "timeout",
-            "Install via `brew install coreutils` (macOS) or via the coreutils " "package on Linux.",
-        )
-
     async def prepare(self) -> None:
-        """Create overlay images and seed data required for the selected QEMU template."""
+        """Stage the workdir, then create overlay images and seed data for the selected template."""
 
-        await super().prepare()
+        # Stage a temporary workdir with inventory snippets and the static playbooks.
+        Path("group_vars").copy_into(self.workdir.name)
+        Path("host_vars").copy_into(self.workdir.name)
+        Path("roles").copy_into(self.workdir.name)
+        # Role-local filter plugins (e.g. roles/wireguard/filter_plugins/)
+        # are already staged via the roles/ copy above. A top-level
+        # filter_plugins/ directory, if present, is also staged so playbook-
+        # scoped filters resolve.
+        if Path("filter_plugins").exists():
+            Path("filter_plugins").copy_into(self.workdir.name)
+        # group_vars/{prod,test}.yml derive `network.*` via
+        # `lookup('file', playbook_dir ~ '/data/network_topology.yml')`;
+        # the file has to be present alongside the staged playbooks for
+        # the lookup to resolve.
+        Path("data").copy_into(self.workdir.name)
+        # wireguard/ is gitignored (vaulted keys, never committed) so it's
+        # absent on a CI checkout. Skip silently when missing -- roles that
+        # actually need its contents will fail later with a clearer error.
+        if Path("wireguard").exists():
+            Path("wireguard").copy_into(self.workdir.name)
+
+        # mise.toml + uv lock + pyproject are repo-root files a role may
+        # reference via `{{ playbook_dir }}/<file>` during converge. Stage
+        # them so the harness's workdir mirrors what ansible sees on a
+        # production controller run.
+        for repo_root_file in ("mise.toml", "pyproject.toml", "uv.lock"):
+            src = Path(repo_root_file)
+            if src.exists():
+                src.copy_into(self.workdir.name)
+
+        # Copy the static role-agnostic playbooks (site / _setup /
+        # _verify / _mirrors) into the workdir so ansible loads
+        # group_vars/host_vars from this directory and the playbooks
+        # reference `{{ _role_under_test }}` injected via -e in
+        # format_ansible_cmd. testrole.py decides which hook playbook to
+        # invoke by checking roles/<role>/tasks/<hook>.yml at the source.
+        for playbook in Path("test/playbooks").glob("*.yml"):
+            playbook.copy_into(self.workdir.name)
 
         # Acquire the publish-lock before any read of the imagedir starts.
         # _create_overlay's qemu-img embeds the backing file's absolute path
@@ -1891,11 +1738,6 @@ class QemuMachine(Machine):
                 raise TimeoutError(f"passt socket {self._passt_socket} not created within 10s")
             await sleep_tick()
 
-    async def boot(self) -> None:
-        """Bring up the passt sidecar (if any), then launch qemu."""
-        await self._start_passt()
-        await super().boot()
-
     def _boot_command(self) -> list[str]:
         """Assemble the qemu command line for the prepared disks.
 
@@ -2011,38 +1853,6 @@ class QemuMachine(Machine):
             ]
         return cmd
 
-    async def stop(self) -> None:
-        """Kill qemu via its pidfile, then drain the timeout wrapper.
-
-        Signaling self.proc (the `timeout` wrapper) normally forwards SIGINT
-        to qemu, but if the wrapper is SIGKILL'd or testrole.py dies before
-        stop() runs, qemu reparents to init with no recovery path -- SIGKILL
-        can't be caught and forwarded. Kill qemu directly via its pidfile so
-        cleanup works regardless of the wrapper's fate.
-        """
-        pid_path = Path(f"{self.workdir.name}/{self.idfile}")
-        pid: int | None = None
-        if pid_path.exists():
-            with contextlib.suppress(ValueError):
-                pid = int(pid_path.read_text().strip())
-
-        if pid is not None:
-            # Snapshot kernel-tracked peak RSS before we kill qemu. VmHWM is
-            # monotonic so a single read is exact; doing it here also covers
-            # the --keep case where the user's interactive session can have
-            # added to the high-water mark after the test body finished.
-            self.peak_rss_kb = _read_vm_hwm(pid)
-
-        try:
-            if pid is not None:
-                # Shield against nested cancellation; without it a second
-                # SIGINT mid-cleanup would leave qemu running. terminate_pid
-                # SIGTERMs, polls for up to grace_seconds, then SIGKILLs.
-                await asyncio.shield(terminate_pid(pid, grace_seconds=5))
-        finally:
-            await self._stop_passt()
-            await super().stop()
-
     async def _stop_passt(self) -> None:
         """Tear down the passt sidecar and remove its socket dir.
 
@@ -2075,23 +1885,135 @@ class QemuMachine(Machine):
         return
 
 
-def create_machine(
-    *,
-    machine: str,
-    role: str,
-    keep_vm: bool,
-    ubuntu_name: str,
-    machine_timeout: int,
-    upstream_mirrors: bool = False,
-    workdir_parent: Path | None = None,
-) -> Machine:
-    """Build the qemu machine for a role test, shared by testrole.py and testall.py."""
-    return QemuMachine(
-        machine=machine,
-        role=role,
-        keep_vm=keep_vm,
-        ubuntu_name=ubuntu_name,
-        machine_timeout=machine_timeout,
-        upstream_mirrors=upstream_mirrors,
-        workdir_parent=workdir_parent,
-    )
+def imagedir_for_host() -> Path:
+    """Return the platform's packer-image cache root.
+
+    /mnt/scratch/homelab_ci on Linux dev hosts; <repo>/packer/artifacts on Mac
+    (matches mise.toml's homelab_ci_dir; /mnt/scratch/homelab_ci doesn't exist on Mac).
+    Linux raises if the mountpoint is missing -- the dev host workflow
+    expects the qemu volume to be mounted before any test runs.
+    """
+    system = platform.system()
+    if system == "Darwin":
+        d = Path("packer/artifacts").resolve()
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+    if system == "Linux":
+        d = Path("/mnt/scratch/homelab_ci")
+        if not d.is_dir():
+            raise RuntimeError(
+                f"Imagedir {str(d)!r} does not exist. "
+                f"Mount the qemu image volume (e.g. `sudo mount /mnt/scratch/homelab_ci`)."
+            )
+        return d
+    raise RuntimeError(f"Unknown operating system: {system}")
+
+
+def sweep_stale_workdirs(imagedir: Path) -> None:
+    """Reap orphaned tmp* (harness) and .build-* (packer) dirs from prior runs.
+
+    Cleanup normally rides Machine.__aexit__'s finally chain for tmp* and the
+    trailing rmdir in mise-tasks/packer/build.sh for .build-*.
+    Both bypass on SIGKILL / OOM / power-loss, leaving orphan dirs. Each is a
+    full repo copy plus a qcow2 overlay -- ansible-lint also walks into them
+    until .ansible-lint excludes the path, so leaks are doubly expensive.
+
+    Liveness check is split by dir kind:
+
+    * tmp* (harness workdirs) -- each live Machine holds an exclusive flock on
+      <workdir>/.live. Sweep tries LOCK_EX|LOCK_NB on that file: contended =
+      live (skip), uncontended = orphan (reap). flock is inode-scoped, so it
+      works across PID namespaces -- critical because Gitea Actions test cells
+      run in separate containers that bind-mount a shared workdir parent
+      (/scratch), and the prior ps-based check couldn't see
+      sibling cells' qemu/ansible. The mtime grace still guards the tiny
+      window between mkdtemp and Machine.__init__'s flock acquisition.
+
+    * .build-* (packer) -- packer doesn't (yet) hold a liveness lock, so these
+      keep the ps-args check. Safe because packer-build runs alone under the
+      `concurrency: lab-qemu-artifacts` workflow lock, so a single ps scan
+      sees the only candidate process.
+    """
+    if not imagedir.is_dir():
+        return
+
+    grace_seconds = 60
+    now = time.time()
+    candidates = [
+        d for d in imagedir.iterdir() if d.is_dir() and (d.name.startswith("tmp") or d.name.startswith(".build-"))
+    ]
+    if not candidates:
+        return
+
+    ps_args: str | None = None
+
+    for d in candidates:
+        try:
+            age = now - d.stat().st_mtime
+        except OSError:
+            continue
+        if age < grace_seconds:
+            continue
+
+        if d.name.startswith("tmp"):
+            if not _workdir_is_orphan(d):
+                continue
+        else:
+            # .build-* path: fall back to ps scan, lazily computed.
+            if ps_args is None:
+                try:
+                    ps_args = subprocess.run(["ps", "-Ao", "args="], check=True, capture_output=True, text=True).stdout
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    # Don't reap when we can't verify staleness.
+                    return
+            if d.name in ps_args:
+                continue
+
+        print_line(f"Reaping orphaned workdir {d}")
+        try:
+            shutil.rmtree(d)
+        except OSError as exc:
+            print_line(f"  (reap failed: {exc.strerror} — read-only mount?)")
+
+
+def _workdir_is_orphan(workdir: Path) -> bool:
+    """True iff the harness liveness lock on <workdir>/.live is unheld.
+
+    Missing .live file means the workdir predates this mechanism (or was
+    created by a non-harness tool) -- treat as orphan, the mtime grace in
+    the caller is the only safety net. An open()/flock() failure other than
+    "contended" also means orphan: the file is gone or unreadable, nothing
+    live could be holding it.
+    """
+    live = workdir / ".live"
+    try:
+        fd = os.open(live, os.O_RDONLY)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return True
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return True
+    finally:
+        os.close(fd)
+
+
+def _read_vm_hwm(pid: int) -> int:
+    """Return the kernel-tracked peak RSS in kB for *pid*, or 0 if unreadable.
+
+    VmHWM ("high-water mark") in /proc/<pid>/status is monotonic and maintained
+    by the kernel, so a single read at process exit gives the exact peak —
+    no sampling loop required.
+    """
+    try:
+        for line in Path(f"/proc/{pid}/status").read_text().splitlines():
+            if line.startswith("VmHWM:"):
+                return int(line.split()[1])
+    except (FileNotFoundError, ProcessLookupError, ValueError):
+        pass
+    return 0

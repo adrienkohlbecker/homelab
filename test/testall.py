@@ -556,7 +556,7 @@ def main() -> int:
 
     # Reap orphaned workdirs from prior SIGKILL'd / OOM'd / power-cut runs
     # before fanning out, so workers don't trip on stale state and so disk
-    # usage doesn't accumulate. Must run before the first QemuMachine is
+    # usage doesn't accumulate. Must run before the first Machine is
     # constructed (and thus before any worker subprocess is spawned).
     sweep_stale_workdirs(imagedir_for_host())
 
