@@ -27,6 +27,7 @@
     group: homelab_ci
     mode: "02775"
   become: true
+  register: homelab_ci_dir
   tags:
     - homelab_ci
 
@@ -39,5 +40,8 @@
     default: true
     state: present
   become: true
+  # In check mode the dir-create above only reports creation, so the path is
+  # absent and the acl module errors "Path not found"; skip until it truly exists.
+  when: not (ansible_check_mode and homelab_ci_dir.changed)
   tags:
     - homelab_ci

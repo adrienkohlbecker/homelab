@@ -12,11 +12,13 @@
     path: /mnt/scratch/homelab_ci
   register: homelab_ci_verify_dir
   become: true
+  # stat no longer emits the sgid boolean -- assert the setgid + 775 perms via
+  # the mode string the role declares (02775 -> stat reports '2775').
   failed_when: >-
     not homelab_ci_verify_dir.stat.exists
     or not homelab_ci_verify_dir.stat.isdir
     or homelab_ci_verify_dir.stat.gr_name != 'homelab_ci'
-    or not homelab_ci_verify_dir.stat.sgid
+    or homelab_ci_verify_dir.stat.mode != '2775'
 
 - name: _verify | CI artifacts dir has default homelab_ci:rw ACL
   command:
