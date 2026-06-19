@@ -33,7 +33,7 @@ from botocore.exceptions import ClientError
 
 DEFAULT_BUCKET = "homelab-ci-images"
 DEFAULT_REGION = "eu-central-1"
-DEFAULT_MACHINES = ("box", "box_deps", "lab", "pug")
+DEFAULT_MACHINES = ("box", "box_deps")
 DEFAULT_UBUNTUS = ("jammy", "noble", "resolute")
 SSM_PREFIX = "/homelab-ci/qemu-image"
 DELETE_BATCH_SIZE = 1000
