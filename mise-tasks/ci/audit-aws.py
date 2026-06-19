@@ -8,18 +8,19 @@
 
 The account exists solely for the eu-central-1 AWS test-cell pipeline, whose
 only standing footprint is meant to be: the per-machine cell AMIs and their
-backing snapshots, plus free/free-tier scaffolding (VPC, SG, launch templates,
-IAM role, SSM params, key pair, EventBridge Scheduler). Test cells are one-time
-spot instances that self-terminate, so *nothing* compute-shaped should ever be
-running, and no resource of any kind should exist outside eu-central-1.
+backing snapshots, the qemu image bundle bucket, plus free/free-tier scaffolding
+(VPC, SG, launch templates, IAM role, SSM params, key pair, EventBridge
+Scheduler). Test cells are one-time spot instances that self-terminate, so
+*nothing* compute-shaped should ever be running, and no resource of any kind
+should exist outside eu-central-1.
 
 This sweeps every region for the billable strays that accumulate when a build
 or teardown leaks something -- running/stopped instances, unattached volumes,
 Elastic IPs, NAT gateways, VPC interface endpoints, load balancers, RDS -- and
 cross-references owned snapshots against owned AMIs to surface *orphaned*
 snapshots (a snapshot not backing any live AMI, the classic
-deregister/interrupted-packer leftover). Account-global S3 is checked too
-(terraform state lives in MinIO, so any bucket here is unexpected).
+deregister/interrupted-packer leftover). Account-global S3 is checked too; the
+qemu image bundle bucket is expected, while any other bucket is drift.
 
 It NEVER mutates. For each orphaned snapshot it prints the exact
 `aws ec2 delete-snapshot` line for the operator to review and run by hand.
@@ -38,6 +39,7 @@ from botocore.exceptions import ClientError
 # regions throttles, and a throttled describe that silently returns empty would
 # read as "no resources" -- exactly the false-clean an audit must avoid.
 CFG = Config(retries={"max_attempts": 10, "mode": "adaptive"})
+EXPECTED_GLOBAL_S3_BUCKETS = {"homelab-ci-images"}
 
 anomalies: list[str] = []  # human-readable lines, one per unexpected resource
 deletes: list[str] = []  # suggested cleanup commands (never executed here)
@@ -153,9 +155,13 @@ def main():
     for region in regions:
         sweep_region(region)
 
-    # Account-global: S3 (state is in MinIO, so any bucket is unexpected).
+    # Account-global: S3 (terraform state is in MinIO; only CI image bundles
+    # live in AWS S3).
     for b in safe("s3", lambda: client("s3", "eu-central-1").list_buckets().get("Buckets", [])):
-        anomalies.append(f"[global] S3 bucket {b['Name']}")
+        if b["Name"] in EXPECTED_GLOBAL_S3_BUCKETS:
+            expected.append(f"[global] S3 bucket {b['Name']}")
+        else:
+            anomalies.append(f"[global] S3 bucket {b['Name']}")
 
     print("\n── Expected CI infra ──")
     print("\n".join(f"  {line}" for line in expected) or "  (none)")
