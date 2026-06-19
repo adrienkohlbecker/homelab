@@ -279,7 +279,7 @@ ami_images:
     - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
     - export AWS_ROLE_SESSION_NAME="ami-images-$CI_JOB_ID"
     # Smoke the OIDC chain before spending 20+ min on a bake.
-    - aws --region eu-central-1 sts get-caller-identity
+    - mise exec -- aws --region eu-central-1 sts get-caller-identity
     - mise run packer:ami "$MACHINE" --ubuntu "$UBUNTU" --promote
 
 # Derive the box_deps AMIs from the promoted box AMIs: the same packer:ami
@@ -330,7 +330,7 @@ ami_box_deps:
     - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
     - export AWS_ROLE_SESSION_NAME="ami-box-deps-$CI_JOB_ID"
     # Smoke the OIDC chain before spending 15+ min on a seed converge.
-    - aws --region eu-central-1 sts get-caller-identity
+    - mise exec -- aws --region eu-central-1 sts get-caller-identity
     - mise run packer:ami box_deps --ubuntu "$UBUNTU" --ssh-key "$CI_CELL_SSH_KEY" --promote
 
 # Semantic cleanup for nested-qemu image bundles in S3. Bucket lifecycle handles
@@ -363,7 +363,7 @@ qemu_image_reaper:
     - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
     - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
     - export AWS_ROLE_SESSION_NAME="qemu-image-reaper-$CI_JOB_ID"
-    - aws --region eu-central-1 sts get-caller-identity
+    - mise exec -- aws --region eu-central-1 sts get-caller-identity
     - |
       reaper_args=""
       if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "${QEMU_IMAGE_REAPER_APPLY:-}" = "true" ]; then
@@ -419,7 +419,7 @@ fox_image:
     - export AWS_ROLE_SESSION_NAME="fox-image-$CI_JOB_ID"
     - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
     # Smoke the OIDC chain before spending 20+ min on a bake.
-    - aws --region eu-central-1 sts get-caller-identity
+    - mise exec -- aws --region eu-central-1 sts get-caller-identity
     # fox runs a jammy root in prod; the bake stays jammy-only. hetzner-bake
     # does the whole job: stand up the Hetzner rescue server, bake on EC2
     # while streaming the disk straight onto it, then snapshot.

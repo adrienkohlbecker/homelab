@@ -95,7 +95,7 @@ stages:
     - export AWS_ROLE_ARN={{ cell_role_arn }}
     - export AWS_ROLE_SESSION_NAME="cell-$CI_JOB_ID"
     # Smoke the OIDC chain before launching an instance.
-    - aws --region eu-central-1 sts get-caller-identity
+    - mise exec -- aws --region eu-central-1 sts get-caller-identity
     # The Ec2Machine SSHes as the operator identity over the agent (no key file
     # in the repo); load the dedicated cell key into a fresh agent. GitLab
     # file-type variables arrive without the trailing newline OpenSSH requires
@@ -115,7 +115,7 @@ stages:
     - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
     - export AWS_ROLE_ARN={{ cell_role_arn }}
     - export AWS_ROLE_SESSION_NAME="{{ target }}-cell-$CI_JOB_ID"
-    - aws --region eu-central-1 sts get-caller-identity
+    - mise exec -- aws --region eu-central-1 sts get-caller-identity
     - mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"
 {% endif %}
     # Pass the PAT through to `mise install` when one is configured, and from

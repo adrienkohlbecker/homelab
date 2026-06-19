@@ -1181,6 +1181,7 @@ class TestRenderChildPipeline:
         assert "CI_CELL_SSH_KEY" not in joined
         assert detect.CELL_ROLE_ARN in joined
         assert "GITLAB_OIDC_TOKEN" in joined
+        assert "mise exec -- aws --region eu-central-1 sts get-caller-identity" in joined
         assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"' in joined
 
     def test_aws_qemu_target_uses_shell_qemu_runner(self) -> None:
@@ -1199,6 +1200,7 @@ class TestRenderChildPipeline:
         assert "ssh-add" not in joined
         assert detect.CELL_ROLE_ARN in joined
         assert 'AWS_ROLE_SESSION_NAME="aws_qemu-cell-$CI_JOB_ID"' in joined
+        assert "mise exec -- aws --region eu-central-1 sts get-caller-identity" in joined
         assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"' in joined
 
     def test_lab_site_test_hydrates_default_box_jammy(self) -> None:
