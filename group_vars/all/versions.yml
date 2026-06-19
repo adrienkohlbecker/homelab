@@ -78,8 +78,8 @@ z2m_image:           ghcr.io/koenkk/zigbee2mqtt:2.12.0  # 2026-06-09
 eaton_ipp_version: "1.75.183"  # 2024-10 (IPP 1.75)
 eaton_ipp_release:
   x86_64:
-    url: "{{ mirror_gitea_lab }}/api/packages/adrienkohlbecker/generic/eaton_ipp/1.75/ipp-linux_1.75.183-1_amd64.deb"
-    sha256: 16eb1df27bff587203ed7e3b44c7bff1eb6220acac7bbc269b2cff47978346ac
+    url: "{{ mirror_gitlab }}/api/v4/projects/83079143/packages/generic/ipp/linux_1.75.183-1_amd64/ipp-linux_1.75.183-1_amd64.deb"
+    sha256: 4bfdc4333ea812fa47df15cc65456f7c43619dc840a2e2f963731c79add3d67c
 
 # fan2go fan controller. Upstream ships only linux-amd64; fan2go-tui ships
 # no binaries at all, so both arches always build it from source. That
