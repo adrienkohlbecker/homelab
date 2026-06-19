@@ -31,8 +31,11 @@ locals {
     # would force a replacement (and churn the gitlab_runner asg_name default
     # plus the IAM groupName condition) on every future instance-type change.
     # instance_type below is the source of truth.
-    name          = "homelab-ci-qemu-host"
-    instance_type = "c8id.xlarge"
+    name = "homelab-ci-qemu-host"
+    # 32 vCPU / 64 GiB / 1.9 TB NVMe. Sized for the per-host job concurrency set
+    # in host_vars/fox.yml (gitlab_runner_aws_qemu_capacity_per_instance); a
+    # future resize touches only this LT-version field, not the ASG name.
+    instance_type = "c8id.8xlarge"
     max_size      = 1
     # The "d" family carries a local instance-store NVMe disk. A boot service
     # (packer/aws/files/homelab_ci_prepare_scratch.sh) formats and mounts it at
@@ -398,8 +401,11 @@ resource "aws_default_route_table" "ci" {
 # standing Elastic IP is allocated, and public IPv4 bills only while an instance
 # exists.
 resource "aws_security_group" "ci_qemu_host" {
-  name        = "homelab-ci-qemu-host"
-  description = "CI qemu hosts + local bakes: SSH from fox and home WAN, open egress"
+  name = "homelab-ci-qemu-host"
+  # Description is immutable in AWS (ForceNew); the two ingress rules below carry
+  # the real intent (fox for fleeting, home WAN for local bakes), so it stays as
+  # first created rather than churning a replacement to re-word it.
+  description = "CI qemu hosts: SSH from fox, open egress"
   vpc_id      = aws_vpc.ci.id
 
   ingress {

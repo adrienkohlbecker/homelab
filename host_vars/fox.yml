@@ -239,10 +239,10 @@ podman_zvol_sync_disabled: true
 
 # Global job ceiling across BOTH runner blocks (config.toml is process-wide) --
 # the fleet umbrella, NOT the per-runner knob. Set to the sum of the two
-# runners' per-runner `limit`s (16 docker + 1 aws_qemu, the latter
-# max_instances*capacity = 1*1) so each is bounded by its own limit and neither
+# runners' per-runner `limit`s (16 docker + 12 aws_qemu, the latter
+# max_instances*capacity = 1*12) so each is bounded by its own limit and neither
 # starves the other.
-gitlab_runner_concurrent: 17
+gitlab_runner_concurrent: 28
 
 # Per-runner cap on the Docker-on-podman runner: bounds jobs run directly on
 # fox. The wide cell fan-out runs on the AWS qemu shell hosts (the ASG), off
@@ -262,6 +262,16 @@ gitlab_runner_memory_high: 2.5G
 gitlab_runner_memory_max: 3G
 
 gitlab_runner_aws_qemu_enabled: true
+
+# Per-host job concurrency on the c8id.8xlarge qemu host (32 vCPU / 64 GiB,
+# dedicated to CI). 12 oversubscribes vCPU ~1.5x (12 box guests x 4 vCPU = 48 on
+# 32 physical) and packs guests into ~60 of 64 GiB on an all-box_deps burst --
+# anchored to lab, which runs 6 cells on 12 vCPU / 32 GiB *next to* prod
+# services, so a dedicated host at this density is the more conservative bet.
+# Memory is the tightest constraint; lower this first if qemu boot flakes appear.
+# max_instances stays at the default 1 (one host); raising it is the later
+# horizontal-burst step, bounded by floor(256 spot-vCPU quota / 32).
+gitlab_runner_aws_qemu_capacity_per_instance: 12
 gitlab_runner_aws_qemu_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
           30663764616365393564643165346265623231623666393737343536323938396163653933343438
