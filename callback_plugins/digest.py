@@ -5,10 +5,13 @@ Measured on a real converge transcript, the systemd module's `status` (the full
 `systemctl show` dump, ~250 keys per restart) alone is ~half of all output
 lines - both at the top level and nested where the `systemd_unit` helper
 persists it via `set_fact`. Everything else operators rely on at `-v` - command
-`stdout`/`stderr`, file diffs, changed attributes - is left untouched. Large
-`ansible_facts` blobs (an explicit `setup:`/`service_facts`, not the implicit
-gather, which does not dump at `-v`) are collapsed too. Keeps CI job logs under
-GitLab's size cap.
+`stdout`/`stderr`, file diffs, changed attributes - is left untouched. The
+callback also: collapses `stat` dicts to their meaningful fields (wherever they
+appear - the stat task, a `set_fact`, loop items); drops the `diff` re-printed
+inside a persisted file result (already shown when the original task ran); and
+folds large `ansible_facts` blobs (an explicit `setup:`/`service_facts`, not the
+implicit gather, which does not dump at `-v`) to a key list. Keeps CI job logs
+under GitLab's size cap.
 
 Wired via `stdout_callback = digest` + `callback_plugins = callback_plugins` in
 ansible.cfg. The `extends_documentation_fragment` block is load-bearing: without
@@ -39,31 +42,85 @@ _STATUS_KEEP = ("Id", "ActiveState", "SubState", "Result", "ExecMainPID")
 # unrelated `status` key (e.g. a module returning its own small status dict).
 _SYSTEMD_MARKER = "ActiveState"
 
+# `stat` result fields worth keeping (the human-meaningful ones, matching what
+# roles actually reference); drops the ~15 permission-bit booleans mode already
+# encodes, the a/c-time stamps, and dev/inode/nlink/uid/gid/block noise. Every
+# stat dict carries `exists`, which doubles as the marker.
+_STAT_KEEP = (
+    "exists",
+    "path",
+    "isdir",
+    "isreg",
+    "islnk",
+    "lnk_source",
+    "lnk_target",
+    "mode",
+    "executable",
+    "pw_name",
+    "gr_name",
+    "size",
+    "mtime",
+    "checksum",
+    "mimetype",
+)
+
 # ansible_facts dicts larger than this are gather/custom-fact dumps, not
 # set_fact results - collapse those to a one-line key list, show small ones in
 # full so set_fact output stays readable.
 _FACTS_DIGEST_THRESHOLD = 25
 
 
-def _digest_status(obj):
-    """Return a copy of *obj* with every systemd `status` dict collapsed.
+def _is_diff(value):
+    """True if *value* is an ansible task diff (dict, or list of them)."""
+    if isinstance(value, dict):
+        return any(k in value for k in ("before", "after", "prepared"))
+    if isinstance(value, list):
+        return bool(value) and all(_is_diff(item) for item in value)
+    return False
 
-    The dict surfaces both at the top level (the systemd task itself) and
-    nested - the `systemd_unit` helper persists the registered result via
-    `set_fact`, so it reappears under `ansible_facts.<unit>_started_result`
-    and inside loop `results`. Recurse so it is caught wherever it lands.
+
+def _digest(obj, in_facts=False):
+    """Return a copy of *obj* with the two `-v` log hogs collapsed.
+
+    - systemd `status` dicts -> their summary fields, wherever they appear:
+      at the top level (the systemd task) and nested where the `systemd_unit`
+      helper persists the registered result via `set_fact`, so it reappears
+      under `ansible_facts.<unit>_started_result` and inside loop `results`.
+    - the `diff` carried by a file-module result that was registered and
+      persisted via `set_fact` (so it lands under `ansible_facts`): that
+      before/after was already printed when the original task ran, so drop the
+      duplicate. Scoped to the `ansible_facts` subtree - a task's own top-level
+      diff is rendered by the callback's diff path, not this result dict.
+    - `stat` dicts -> their human-meaningful fields, wherever they appear: the
+      stat task itself, persisted via `set_fact`, and per-item in loops.
     """
     if isinstance(obj, dict):
         out = {}
         for key, value in obj.items():
+            if in_facts and key == "diff" and _is_diff(value):
+                continue
             if key == "status" and isinstance(value, dict) and _SYSTEMD_MARKER in value:
                 out[key] = {k: value[k] for k in _STATUS_KEEP if k in value}
+            elif key == "stat" and isinstance(value, dict) and "exists" in value:
+                out[key] = {k: value[k] for k in _STAT_KEEP if k in value}
             else:
-                out[key] = _digest_status(value)
+                out[key] = _digest(value, in_facts or key == "ansible_facts")
         return out
     if isinstance(obj, list):
-        return [_digest_status(item) for item in obj]
+        return [_digest(item, in_facts) for item in obj]
     return obj
+
+
+def _collapse_large_facts(result):
+    """Replace a large top-level `ansible_facts` dict with a one-line key list.
+
+    Mutates and returns *result* - only ever called on the fresh copy `_digest`
+    produces, so the registered result is untouched.
+    """
+    facts = result.get("ansible_facts") if isinstance(result, dict) else None
+    if isinstance(facts, dict) and len(facts) > _FACTS_DIGEST_THRESHOLD:
+        result["ansible_facts"] = f"<{len(facts)} facts hidden: {', '.join(sorted(facts))}>"
+    return result
 
 
 class CallbackModule(DefaultCallback):
@@ -72,10 +129,4 @@ class CallbackModule(DefaultCallback):
     CALLBACK_NAME = "digest"
 
     def _dump_results(self, result, *args, **kwargs):
-        # _digest_status rebuilds the structure, so the registered result is
-        # never mutated and later mutation here is safe.
-        result = _digest_status(result)
-        facts = result.get("ansible_facts")
-        if isinstance(facts, dict) and len(facts) > _FACTS_DIGEST_THRESHOLD:
-            result["ansible_facts"] = f"<{len(facts)} facts hidden: {', '.join(sorted(facts))}>"
-        return super()._dump_results(result, *args, **kwargs)
+        return super()._dump_results(_collapse_large_facts(_digest(result)), *args, **kwargs)
