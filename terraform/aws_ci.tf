@@ -1383,6 +1383,26 @@ data "aws_ssm_parameter" "canonical_ubuntu" {
   name = each.value
 }
 
+# The nested-qemu host AMI promotion path needs a real parameter before the ASG
+# launch template can reference it. Terraform owns the parameter shell; packer
+# owns the promoted AMI value after the first successful host bake.
+resource "aws_ssm_parameter" "ci_qemu_host_ami" {
+  name      = local.ci_qemu_host_ami_parameter
+  type      = "String"
+  data_type = "aws:ec2:image"
+  value     = data.aws_ssm_parameter.canonical_ubuntu["noble"].value
+
+  tags = {
+    role    = "ci-ami"
+    machine = "qemu_host"
+    ubuntu  = "noble"
+  }
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
 resource "aws_ssm_parameter" "ci_ami_minimal" {
   for_each = data.aws_ssm_parameter.canonical_ubuntu
 
