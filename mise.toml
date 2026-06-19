@@ -102,7 +102,10 @@ stylua = "2.5.2"
 "aqua:Kampfkarren/selene" = "0.31.0"
 tflint = "0.62.0"
 node = "24"
-markdownlint-cli2 = "0.22.1"
+# npm backend: depend on node so a cold `mise install` (the lab-shell-qemu CI
+# fallback builds the tree from scratch) finishes node before npm runs, instead
+# of racing it and failing with "npm: No such file or directory".
+markdownlint-cli2 = { version = "0.22.1", depends = ["node"] }
 taplo = "0.10.0"
 glab = "1.102.0"
 
