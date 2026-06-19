@@ -66,7 +66,8 @@
 # would satisfy the ownership check alone). The world-readable assertion proves
 # --env UMASK=027 took effect -- the DB holds every synced *arr instance's API
 # key, so a silently-ignored UMASK (mode 0644) must fail here, not slip past the
-# owner check.
+# owner check. (stat no longer emits the roth boolean, so derive other-read from
+# the mode's last octal digit: read bit set iff digit >= 4.)
 - name: _verify | Profilarr SQLite DB is profilarr-owned, owner-private, non-empty
   stat:
     path: /mnt/services/sqlite/profilarr/profilarr.db
@@ -75,6 +76,6 @@
     not _profilarr_db_owner.stat.exists
     or _profilarr_db_owner.stat.islnk
     or _profilarr_db_owner.stat.pw_name != 'profilarr'
-    or _profilarr_db_owner.stat.roth
+    or (_profilarr_db_owner.stat.mode[-1] | int) >= 4
     or _profilarr_db_owner.stat.size == 0
   become: true
