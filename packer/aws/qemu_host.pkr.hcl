@@ -113,7 +113,7 @@ build {
   provisioner "shell" {
     inline_shebang = "/bin/bash -e"
     inline = [
-      "set -euo pipefail",
+      "set -euxo pipefail",
       "[ -n '${var.gitlab_runner_url}' ] || { echo 'gitlab_runner_url is required' >&2; exit 1; }",
       "[ -n '${var.gitlab_runner_sha256}' ] || { echo 'gitlab_runner_sha256 is required' >&2; exit 1; }",
       "sudo install -dm 755 /etc/apt/keyrings",
@@ -130,9 +130,9 @@ build {
       "sudo usermod -aG kvm ubuntu",
       "sudo install -dm 0755 -o ubuntu -g ubuntu /mnt/scratch/homelab_ci",
       "sudo install -dm 0755 /opt/mise /opt/uv-cache /opt/venv /etc/mise /tmp/homelab-ci-build",
-      "sudo cp /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/",
+      "sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/",
       "cd /tmp/homelab-ci-build",
-      "sudo env MISE_DATA_DIR=/opt/mise PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin mise trust",
+      "sudo env MISE_DATA_DIR=/opt/mise PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin mise trust /tmp/homelab-ci-build/mise.toml",
       "sudo env MISE_DATA_DIR=/opt/mise PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin mise install",
       "sudo env MISE_DATA_DIR=/opt/mise UV_CACHE_DIR=/opt/uv-cache UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/opt/venv MISE_PYTHON_UV_VENV_AUTO=false PATH=/opt/venv/bin:/opt/mise/shims:/usr/local/bin:/usr/bin:/bin UV_COMPILE_BYTECODE=1 mise exec -- uv sync --frozen --link-mode hardlink",
       "sudo awk '/^\\[tools\\]/{p=1; print; next} /^\\[/{p=0} p' /tmp/homelab-ci-build/mise.toml | sudo tee /etc/mise/config.toml >/dev/null",
