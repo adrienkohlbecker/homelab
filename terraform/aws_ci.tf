@@ -701,6 +701,24 @@ resource "aws_iam_role_policy" "ci_cell" {
         Action   = ["ssm:GetParameter", "ssm:GetParameters"]
         Resource = "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/ami/*"
       },
+      {
+        Sid      = "ResolveQemuImage"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter", "ssm:GetParameters"]
+        Resource = "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/qemu-image/*"
+      },
+      {
+        Sid      = "LocateQemuImages"
+        Effect   = "Allow"
+        Action   = "s3:GetBucketLocation"
+        Resource = aws_s3_bucket.ci_qemu_images.arn
+      },
+      {
+        Sid      = "ReadQemuImages"
+        Effect   = "Allow"
+        Action   = "s3:GetObject"
+        Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
+      },
       # ECR pull-through cache for container images inside AWS cells. The
       # first pull through a namespace may create the cache repository and
       # import upstream layers; later pulls are ordinary ECR reads. Token

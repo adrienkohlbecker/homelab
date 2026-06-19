@@ -50,10 +50,14 @@ stages:
       aud: sts.amazonaws.com
 {% else %}
   # Lab fallback runs directly on lab's protected shell runner. No job image, no
-  # AWS OIDC, and no EC2 launch prelude: test/testrole.py uses the local qemu
-  # harness through HOMELAB_TEST_BACKEND=qemu.
+  # EC2 launch prelude: test/testrole.py uses the local qemu harness through
+  # HOMELAB_TEST_BACKEND=qemu. It still requests GitLab OIDC so the job can
+  # hydrate the promoted qemu base images from S3 before booting.
   tags:
     - lab-shell-qemu
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
 {% endif %}
   # Harness --timeout is 25m (1500s); the job timeout leaves headroom for the
   # prelude + cell teardown.
@@ -103,6 +107,15 @@ stages:
     - printf '%s\n' "$(tr -d '\r' < "$CI_CELL_SSH_KEY")" > "$cell_key"
     - eval "$(ssh-agent -s)"
     - ssh-add "$cell_key"
+{% else %}
+    # GitLab OIDC works on the shell runner too. The same branch-safe cell role
+    # has read-only access to the promoted qemu bundles used by lab fallback.
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
+    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
+    - export AWS_ROLE_ARN={{ cell_role_arn }}
+    - export AWS_ROLE_SESSION_NAME="lab-cell-$CI_JOB_ID"
+    - aws --region eu-central-1 sts get-caller-identity
+    - mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"
 {% endif %}
     # Pass the PAT through to `mise install` when one is configured, and from
     # there to the guest's `mise install` for backend-launched cells.

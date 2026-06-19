@@ -1173,14 +1173,21 @@ class TestRenderChildPipeline:
         assert doc[".cell"]["tags"] == ["lab-shell-qemu"]
         assert doc[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
         assert "image" not in doc[".cell"]
-        assert "id_tokens" not in doc[".cell"]
+        assert doc[".cell"]["id_tokens"] == {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}}
         assert "retry" not in doc[".cell"]
 
         joined = "\n".join(doc[".cell"]["before_script"])
         assert "HOMELAB_VAULT_PASSWORD_TEST" in joined
         assert "CI_CELL_SSH_KEY" not in joined
-        assert "AWS_ROLE_ARN" not in joined
-        assert "GITLAB_OIDC_TOKEN" not in joined
+        assert detect.CELL_ROLE_ARN in joined
+        assert "GITLAB_OIDC_TOKEN" in joined
+        assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"' in joined
+
+    def test_lab_site_test_hydrates_default_box_jammy(self) -> None:
+        doc = _render_child_doc([], site_test=True, target="lab")
+        assert doc["_site_test:box"]["extends"] == ".cell"
+        joined = "\n".join(doc[".cell"]["before_script"])
+        assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"' in joined
 
     def test_lab_no_cells_placeholder_stays_on_fox(self) -> None:
         doc = _render_child_doc([], site_test=False, target="lab")
