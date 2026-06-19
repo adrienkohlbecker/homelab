@@ -72,6 +72,12 @@ stages:
 {% endif %}
   variables:
     HOMELAB_TEST_BACKEND: {{ backend }}
+    # Cloud-environment flag, orthogonal to the backend: true when the guest
+    # egresses through AWS (the aws + aws_qemu targets), so the harness
+    # (Machine.in_aws) makes roles pick the in-region EC2 mirrors + public DNS
+    # over the LAN Nexus / AdGuard VIP. The EC2 backend forces this on
+    # regardless; it is load-bearing for the aws_qemu qemu cells.
+    HOMELAB_TEST_IN_AWS: "{{ "true" if in_aws else "false" }}"
     # Temporarily pin the legacy slirp guest NIC. passt intermittently fails to
     # answer the ZFSBootMenu initramfs DHCP, and rd.neednet=1 then blocks the
     # boot until the ssh-wait deadline (harness exit 124). passt only engages in

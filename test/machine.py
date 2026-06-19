@@ -448,10 +448,13 @@ class Machine:
 
     # Which backend converged this cell, exposed to roles as the `test_backend`
     # extra-var. NOT derivable from `qemu_test`: an EC2 box cell loads
-    # host_vars/box.yml, so `qemu_test` is true there too. Roles gate the few
-    # probes that assume qemu/prod shape (packer's NVRAM rEFInd entry, netdata's
-    # keepalived VRRP chart) on `test_backend != 'aws'`. ClassVar so @dataclass
-    # doesn't promote it to an init field; Ec2Machine overrides to "aws".
+    # host_vars/box.yml, so `qemu_test` is true there too. This is the guest
+    # *shape* discriminator: roles gate the few probes that assume the qemu/prod
+    # shape (packer's NVRAM rEFInd entry, netdata's keepalived VRRP chart) on
+    # `test_backend != 'aws'`. For "is the guest in AWS?" use `in_aws` instead --
+    # the aws_qemu CI target runs the qemu backend on an AWS host, so the two
+    # axes are orthogonal. ClassVar so @dataclass doesn't promote it to an init
+    # field; Ec2Machine overrides to "aws".
     TEST_BACKEND: ClassVar[str] = "qemu"
 
     ssh_port: int
@@ -706,6 +709,20 @@ class Machine:
             "ANSIBLE_FACT_CACHING_TIMEOUT": "7200",
         }
 
+    @property
+    def in_aws(self) -> bool:
+        """Whether this cell's guest egresses through AWS.
+
+        Orthogonal to TEST_BACKEND (the guest *shape*): the aws_qemu CI target
+        runs the qemu backend on an AWS shell runner, so a qemu guest can still
+        be in AWS. Cloud-environment choices key on this -- the in-region EC2
+        apt/ECR mirrors are reachable while the LAN Nexus and AdGuard VIP are
+        not -- whereas backend-shape probes stay on TEST_BACKEND. Driven by
+        HOMELAB_TEST_IN_AWS on the qemu backend (set by the aws_qemu cell, unset
+        for local/lab qemu); Ec2Machine overrides it to always-true.
+        """
+        return os.environ.get("HOMELAB_TEST_IN_AWS", "").strip().lower() in ("1", "true", "yes")
+
     def format_ansible_cmd(self, *cmd: str) -> list[str]:
         """Build an ansible-playbook command pinned to this machine's SSH details.
 
@@ -734,6 +751,12 @@ class Machine:
             # (see TEST_BACKEND); qemu by default, "aws" on EC2 cells.
             "-e",
             f"test_backend={self.TEST_BACKEND}",
+            # Cloud-environment discriminator, orthogonal to test_backend (see
+            # in_aws): true whenever the guest egresses through AWS, so roles
+            # pick the in-region EC2 mirrors + public DNS over the LAN Nexus /
+            # AdGuard VIP. JSON form so it lands as a real bool for `| bool`.
+            "-e",
+            json.dumps({"test_in_aws": self.in_aws}),
             # Controller-side WAN probe endpoint for verify probes that
             # delegate_to: localhost (see the wan_* field comment).
             "-e",
@@ -755,8 +778,10 @@ class Machine:
         ]
         # --upstream-mirrors clears nexus_url so all mirror_* Jinja in
         # group_vars/all.yml resolves to upstream URLs even though
-        # group_vars/test.yml sets nexus_url.
-        if self.upstream_mirrors:
+        # group_vars/test.yml sets nexus_url. An AWS guest can't reach the LAN
+        # Nexus at all, so in_aws clears it too -- the EC2 backend already
+        # forces upstream_mirrors, this also covers the aws_qemu cell.
+        if self.upstream_mirrors or self.in_aws:
             parts += ["-e", "nexus_url="]
         if cmd:
             parts += cmd
@@ -2166,6 +2191,11 @@ class Ec2Machine(Machine):
     # when the harness died without cleanup, and a --keep debugging session
     # gets that much time before the instance disappears underneath it.
     EXPIRES_GRACE_SECONDS: ClassVar[int] = 1800
+
+    @property
+    def in_aws(self) -> bool:
+        """EC2 cells always egress through AWS, regardless of HOMELAB_TEST_IN_AWS."""
+        return True
 
     def __init__(
         self,
