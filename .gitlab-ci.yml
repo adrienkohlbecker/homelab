@@ -116,6 +116,7 @@ detect:
       echo "== detect job environment =="
       printf 'user=%s\n' "$(id)"
       printf 'pwd=%s\n' "$PWD"
+      printf 'ci_project_dir=%s\n' "${CI_PROJECT_DIR:-<unset>}"
       printf 'shell=%s\n' "${SHELL:-<unset>}"
       printf 'home=%s\n' "${HOME:-<unset>}"
       printf 'path=%s\n' "${PATH:-<unset>}"
@@ -310,7 +311,7 @@ ami_images:
     - mise run packer:init
     # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
     # AssumeRoleWithWebIdentity provider wants a file path.
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
     - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
     - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
     - export AWS_ROLE_SESSION_NAME="ami-images-$CI_JOB_ID"
@@ -363,7 +364,7 @@ ami_box_deps:
     - mise run packer:init
     # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
     # AssumeRoleWithWebIdentity provider wants a file path.
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
     - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
     - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
     - export AWS_ROLE_SESSION_NAME="ami-box-deps-$CI_JOB_ID"
@@ -396,7 +397,7 @@ qemu_host_ami:
     - mise install
     - uv sync --locked
     - mise run packer:init
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
     - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
     - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
     - export AWS_ROLE_SESSION_NAME="qemu-host-ami-$CI_JOB_ID"
@@ -429,7 +430,7 @@ qemu_image_reaper:
     - uv sync --locked
     # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
     # AssumeRoleWithWebIdentity provider wants a file path.
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
     - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
     - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
     - export AWS_ROLE_SESSION_NAME="qemu-image-reaper-$CI_JOB_ID"
@@ -486,7 +487,7 @@ fox_image:
     - mise run packer:init
     # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
     # AssumeRoleWithWebIdentity provider wants a file path.
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
     - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
     - export AWS_ROLE_SESSION_NAME="fox-image-$CI_JOB_ID"
     - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"

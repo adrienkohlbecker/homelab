@@ -90,7 +90,7 @@ stages:
 {% if use_ci_image %}
     # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
     # AssumeRoleWithWebIdentity provider wants a file path.
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
     - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
     - export AWS_ROLE_ARN={{ cell_role_arn }}
     - export AWS_ROLE_SESSION_NAME="cell-$CI_JOB_ID"
@@ -111,7 +111,7 @@ stages:
 {% if hydrate_qemu %}
     # GitLab OIDC works on the shell runner too. The same branch-safe cell role
     # has read-only access to the promoted qemu bundles used by qemu cells.
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
     - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
     - export AWS_ROLE_ARN={{ cell_role_arn }}
     - export AWS_ROLE_SESSION_NAME="{{ target }}-cell-$CI_JOB_ID"
