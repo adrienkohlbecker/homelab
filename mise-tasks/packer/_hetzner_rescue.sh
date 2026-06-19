@@ -26,6 +26,16 @@
 TYPE="cpx22"
 SERVER="packer-hetzner-upload"
 
+# A killed run (CI job-timeout SIGKILL) skips the caller's `trap rescue_cleanup
+# EXIT`, stranding the cpx22 -- and the AWS EventBridge bake backstop
+# (_bake_backstop.sh) can only reach EC2, never Hetzner. The server name is
+# static, so at most one orphan exists; reap it before re-creating, but only
+# when it is older than any real bake, so a legitimately concurrent run (a young
+# server) still fails the create on the name collision rather than being
+# clobbered mid-stream. ci:audit-hetzner is the catch-all if no further bake
+# ever runs to trigger this reap.
+RESCUE_ORPHAN_MAX_AGE_HOURS=2
+
 # Canonical rescue-side receive pipeline, shared by both publish paths. The
 # EC2 stream provisioner (packer/aws/ami.pkr.hcl) hardcodes the same string --
 # keep them in sync. mbuffer absorbs network jitter so the dd write never
@@ -73,9 +83,38 @@ rescue_cleanup() {
   rm -rf "$KEYDIR"
 }
 
+# Delete a rescue server stranded by a prior killed run before claiming its
+# (static) name. Age-gated so a concurrent bake's young server is left for the
+# create below to collide on. Best-effort: a reap failure must not abort the
+# bake -- the create will then fail loudly on the collision, surfacing it.
+rescue_reap_orphan() {
+  local decision
+  decision=$(hcloud server list -o json | python3 -c '
+import datetime, json, sys
+name, max_age_h = sys.argv[1], float(sys.argv[2])
+match = next((s for s in json.load(sys.stdin) if s["name"] == name), None)
+if match is None:
+    print("absent")
+else:
+    created = datetime.datetime.fromisoformat(match["created"].replace("Z", "+00:00"))
+    age_h = (datetime.datetime.now(datetime.timezone.utc) - created).total_seconds() / 3600
+    print(f"reap {age_h:.1f}" if age_h >= max_age_h else f"young {age_h:.1f}")
+' "$SERVER" "$RESCUE_ORPHAN_MAX_AGE_HOURS" 2>/dev/null) || return 0
+  case "$decision" in
+  reap*)
+    echo "==> reaping stranded $SERVER (${decision#reap }h old, prior killed run) before re-creating"
+    hcloud server delete "$SERVER" >/dev/null 2>&1 || true
+    ;;
+  young*)
+    echo "==> $SERVER exists and is ${decision#young }h old (< ${RESCUE_ORPHAN_MAX_AGE_HOURS}h); leaving it -- the create below fails loudly if it is a real collision" >&2
+    ;;
+  esac
+}
+
 # Create the temp server, boot it into the rescue system, and block until
 # its rescue sshd answers. Sets RESCUE_ID + RESCUE_IP.
 rescue_create() {
+  rescue_reap_orphan
   echo "==> creating temp $TYPE server $SERVER"
   hcloud server create --name "$SERVER" --type "$TYPE" --image ubuntu-22.04 --ssh-key "$KEYNAME" >/dev/null
   RESCUE_ID=$(hcloud server describe "$SERVER" -o format='{{.ID}}')
