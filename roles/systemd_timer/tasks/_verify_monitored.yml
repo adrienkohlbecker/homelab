@@ -83,15 +83,19 @@
 # registry, then check the data API for the expected age + overdue.
 - name: _verify | Wait for both fixture charts to register
   uri:
-    url: http://localhost:19999/api/v1/charts
-    return_content: true
+    # Per-chart endpoint (404 until the chart appears) keeps the response a few
+    # hundred bytes. /api/v1/charts returns netdata's whole registry — every
+    # per-unit systemdunits chart — and a retried task dumps its full body into
+    # the job log, which blew past GitLab's 4 MB trace cap.
+    url: "http://localhost:19999/api/v1/chart?chart={{ item }}"
+    status_code: 200
   register: _systemd_timer_charts
   retries: 30
   delay: 2
-  until: >-
-    _systemd_timer_charts.status == 200
-    and 'systemd_timers._verify_timer_recent' in (_systemd_timer_charts.content | from_json).charts.keys()
-    and 'systemd_timers._verify_timer_overdue' in (_systemd_timer_charts.content | from_json).charts.keys()
+  until: _systemd_timer_charts.status == 200
+  loop:
+    - systemd_timers._verify_timer_recent
+    - systemd_timers._verify_timer_overdue
 
 - name: _verify | Recent fixture reports overdue=0
   uri:
