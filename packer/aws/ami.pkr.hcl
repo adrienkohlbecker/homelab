@@ -145,15 +145,15 @@ source "amazon-ebssurrogate" "hetzner" {
   temporary_key_pair_type     = "ed25519"
   associate_public_ip_address = true
 
-  # Build inside the CI VPC: subnets by tag (any AZ), the ci-cell security
-  # group for SSH ingress — bakes run from fox or the operator workstation,
-  # both already in its allow list. No temporary world-open SG.
+  # Build inside the CI VPC: subnets by tag (any AZ), the qemu-host security
+  # group for SSH ingress — bakes run from fox, already in its allow list.
+  # No temporary world-open SG.
   subnet_filter {
     filters = { "tag:Name" = "homelab-ci-*" }
     random  = true
   }
   security_group_filter {
-    filters = { "tag:Name" = "homelab-ci-cell" }
+    filters = { "tag:Name" = "homelab-ci-qemu-host" }
   }
 
   source_ami_filter {

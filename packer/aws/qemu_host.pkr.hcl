@@ -1,6 +1,6 @@
-# Runner-host AMI for the nested-qemu GitLab instance executor. Unlike the
-# direct EC2 cell AMIs in ami.pkr.hcl, this is a stock Ubuntu host that runs
-# GitLab shell jobs and launches qemu/KVM guests from S3-hydrated image bundles.
+# Runner-host AMI for the nested-qemu GitLab instance executor: a stock Ubuntu
+# host that runs GitLab shell jobs and launches qemu/KVM guests from S3-hydrated
+# image bundles. (ami.pkr.hcl builds fox's boot image on the same VPC.)
 
 variable "gitlab_runner_url" {
   type        = string
@@ -50,7 +50,7 @@ source "amazon-ebs" "qemu_host" {
     random  = true
   }
   security_group_filter {
-    filters = { "tag:Name" = "homelab-ci-cell" }
+    filters = { "tag:Name" = "homelab-ci-qemu-host" }
   }
 
   source_ami_filter {
