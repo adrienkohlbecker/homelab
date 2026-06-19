@@ -48,9 +48,8 @@ UBUNTU_RELEASES: dict[str, str] = {
 }
 DEFAULT_UBUNTU = "jammy"
 SSH_KEY = "packer/vagrant.key"
-# Loopback endpoint for the QEMU backend: hostfwd binds, VNC displays, and
-# the default Machine.ssh_host all live here. Non-QEMU backends override
-# ssh_host per instance (e.g. an EC2 public IP) and never touch this.
+# Loopback endpoint: qemu hostfwd binds, VNC displays, and Machine.ssh_host
+# all live here.
 SSH_HOST = "127.0.0.1"
 
 TOPOLOGY_PATH = Path(__file__).parent.parent / "data" / "network_topology.yml"
@@ -60,8 +59,7 @@ WAN_PROBE_PORTS_PATH = Path(__file__).parent.parent / "data" / "wan_probe_ports.
 def _load_wan_probe_ports() -> dict[str, tuple[int, ...]]:
     """Load the shared controller-side WAN probe surface.
 
-    QEMU maps these guest ports to random localhost ports. AWS exposes the
-    same guest ports directly via terraform/aws_ci.tf security-group rules.
+    QEMU maps these guest ports to random localhost ports.
     """
     data = yaml.safe_load(WAN_PROBE_PORTS_PATH.read_text()) or {}
     return {proto: tuple(int(port) for port in data.get(proto, ())) for proto in ("tcp", "udp")}
@@ -458,16 +456,12 @@ class Machine:
     # / $HOMELAB_WORKDIR_PARENT so CI workflows can keep the qcow2 tree
     # mounted ro and stage the per-run TempDir somewhere ephemeral.
     workdir_parent: Path | None = None
-    # SSH endpoint host. Loopback for the QEMU backend (hostfwd), a public
-    # IP for backends whose guest is directly reachable (EC2). Every SSH/scp/
-    # ansible invocation and the banner probe read this, never SSH_HOST.
+    # SSH endpoint host -- loopback (qemu hostfwd). Every SSH/scp/ansible
+    # invocation and the banner probe read this, never SSH_HOST.
     ssh_host: str = SSH_HOST
-    # Private key handed to ssh/scp/ansible via -i. The QEMU fixtures bake
-    # the well-known vagrant key; EC2 cells bake the operator's public key
-    # instead (terraform/aws_ci.tf + packer/aws/ami.pkr.hcl), whose private
-    # half only ever lives in the operator's ssh agent — None means "no -i,
-    # let the agent supply the identity".
-    ssh_key: str | None = SSH_KEY
+    # Private key handed to ssh/scp/ansible via -i: the qemu fixtures bake the
+    # well-known vagrant key.
+    ssh_key: str = SSH_KEY
     # Filename (under the per-run workdir) where qemu writes its pidfile.
     idfile: str = dataclasses.field(default="pid", init=False)
 
@@ -506,11 +500,8 @@ class Machine:
     # Controller-side WAN probe endpoint, so `delegate_to: localhost`
     # probes in roles/firewall's _verify can exercise rules keying on the
     # WAN interface (traffic originating inside the VM never ingresses on
-    # the WAN iface). Each backend supplies its own path:
-    #   QEMU: slirp/passt forwards — pre-picked free 127.0.0.1 ports
-    #     mapped to guest ports in wan_forward_ports.
-    #   EC2: the cell's public IP with real port numbers for the subset
-    #     allowed by terraform/aws_ci.tf ci_cell.
+    # the WAN iface). qemu slirp/passt forwards pre-picked free 127.0.0.1
+    # ports, mapped to guest ports in wan_forward_ports.
     wan_probe_host: str = dataclasses.field(default=SSH_HOST, init=False)
     wan_forward_ports: dict[str, dict[str, int]] = dataclasses.field(
         default_factory=lambda: {"tcp": {}, "udp": {}},
@@ -640,7 +631,8 @@ class Machine:
         # agent-less).
         base = [
             "ssh",
-            *(["-i", self.ssh_key] if self.ssh_key else []),
+            "-i",
+            self.ssh_key,
             "-p",
             str(self.ssh_port),
             *self._ssh_options(),
@@ -660,7 +652,8 @@ class Machine:
         """
         return [
             "scp",
-            *(["-i", self.ssh_key] if self.ssh_key else []),
+            "-i",
+            self.ssh_key,
             "-P",
             str(self.ssh_port),
             *self._ssh_options(),
@@ -719,7 +712,8 @@ class Machine:
             f"ansible_ssh_host={self.ssh_host}",
             "-e",
             f"ansible_ssh_user={self.ssh_user}",
-            *(["-e", f"ansible_ssh_private_key_file={self.ssh_key}"] if self.ssh_key else []),
+            "-e",
+            f"ansible_ssh_private_key_file={self.ssh_key}",
             # Static playbooks declare `hosts: all`; --limit pins the play to
             # the inventory host we actually provisioned.
             "--limit",
