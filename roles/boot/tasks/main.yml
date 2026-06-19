@@ -114,7 +114,7 @@
   when:
     - boot_initramfs_modules.changed
     - not ansible_check_mode
-  command: update-initramfs -v -u -k all
+  command: update-initramfs -u -k all
   changed_when: true
   become: true
   tags:
