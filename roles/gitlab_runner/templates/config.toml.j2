@@ -176,6 +176,7 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
       # reaches the coordinator over the private network, so no public SSH hole.
       username = "root"
       use_external_addr = false
+      timeout = "15m0s"
 
     [[runners.autoscaler.policy]]
       # Scale to zero between pipelines; keep one warm instance for idle_time
