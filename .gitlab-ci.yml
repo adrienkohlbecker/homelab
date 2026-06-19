@@ -300,6 +300,119 @@ qemu_host_ami:
     - mise exec -- aws --region eu-central-1 sts get-caller-identity
     - mise run packer:qemu-host-ami --promote
 
+# Build + promote the box / box_deps nested-qemu guest images the test cells
+# boot, one manual job per (image, release). Unlike qemu_host_ami (an EC2 AMI
+# bake on fox) these are qemu fixtures that only build under nested KVM, so they
+# run on lab's shell runner: packer:build box boots a qemu VM and installs the
+# platform; box_deps additionally layers seed_deps.yml (podman/nginx/backports)
+# via packer:seed-deps; upload-s3 --promote publishes each bundle to
+# s3://homelab-ci-images and moves the /homelab-ci/qemu-image/<machine>/<ubuntu>
+# SSM pointer the aws_qemu cells hydrate. Without these the S3 bundles only
+# refresh from a manual local build, so promoted images drift behind role code.
+#
+# Manual + protected-ref: the bake role trusts master only, and a promote is
+# fleet-global the instant it lands -- mitigated because the build verify-boots
+# (packer) and converges seed_deps (launch.py) before promoting, S3 versioning
+# retains the prior bundle, and upload-s3 prints the SSM rollback line. The
+# shared resource_group serializes every variant/release: lab builds one qemu
+# image at a time and never races the HOMELAB_CI_DIR publish or the SSM pointers.
+.qemu_image:
+  stage: prepare
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+      when: manual
+      # A skipped manual job must not hold the pipeline in "blocked".
+      allow_failure: true
+  # lab's shell runner is the KVM builder (the same host the lab qemu target
+  # tests on). The build writes HOMELAB_CI_DIR, which doubles as lab's local
+  # image store, so a run also refreshes the lab target's images in passing.
+  tags:
+    - lab-shell-qemu
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  resource_group: qemu_images
+  # Never auto-cancel mid-build -- a killed run can leave a half-published bundle.
+  interruptible: false
+  # box ~15m; box_deps adds the seed converge + reboot. Bounded well above a
+  # normal run so a wedged qemu boot fails the job rather than riding a default.
+  timeout: 90m
+  before_script:
+    - mise install
+    - mise exec -- uv sync --locked
+    - mise run packer:init
+    # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
+    # AssumeRoleWithWebIdentity provider wants a file path. The bake role (master
+    # trust) grants the S3 write + SSM promote upload-s3 needs.
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
+    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
+    - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
+    - export AWS_ROLE_SESSION_NAME="qemu-image-$CI_JOB_ID"
+    - mise exec -- aws --region eu-central-1 sts get-caller-identity
+
+# box: the bare OS + zfs + networking platform every cell needs.
+.qemu_image_box:
+  extends: .qemu_image
+  script:
+    - mise run packer:build box --ubuntu "$UBUNTU"
+    - mise run packer:upload-s3 box --ubuntu "$UBUNTU" --promote
+
+# box_deps: box with podman/nginx/backports pre-baked. Layers seed_deps.yml onto
+# the box bake from the same pipeline -- each box_deps:<rel> `needs:` its matching
+# box:<rel> job and seeds off the artifact box just published to HOMELAB_CI_DIR
+# (both jobs land on the one lab-shell-qemu host, where that dir persists). So a
+# box_deps run must be preceded by its box job; seed-deps errors loudly with the
+# build-box-first hint if the artifact is absent.
+.qemu_image_box_deps:
+  extends: .qemu_image
+  script:
+    - mise run packer:seed-deps --ubuntu "$UBUNTU"
+    - mise run packer:upload-s3 box_deps --ubuntu "$UBUNTU" --promote
+
+"qemu_image:box:jammy":
+  extends: .qemu_image_box
+  variables:
+    UBUNTU: jammy
+
+"qemu_image:box:noble":
+  extends: .qemu_image_box
+  variables:
+    UBUNTU: noble
+
+"qemu_image:box:resolute":
+  extends: .qemu_image_box
+  variables:
+    UBUNTU: resolute
+
+# needs the box bake from this pipeline (artifacts ride lab's HOMELAB_CI_DIR, not
+# GitLab artifacts -- so artifacts: false). The edge orders box_deps after box;
+# the shared resource_group keeps them from overlapping either way.
+"qemu_image:box_deps:jammy":
+  extends: .qemu_image_box_deps
+  needs:
+    - job: "qemu_image:box:jammy"
+      artifacts: false
+  variables:
+    UBUNTU: jammy
+
+"qemu_image:box_deps:noble":
+  extends: .qemu_image_box_deps
+  needs:
+    - job: "qemu_image:box:noble"
+      artifacts: false
+  variables:
+    UBUNTU: noble
+
+"qemu_image:box_deps:resolute":
+  extends: .qemu_image_box_deps
+  needs:
+    - job: "qemu_image:box:resolute"
+      artifacts: false
+  variables:
+    UBUNTU: resolute
+
 # Semantic cleanup for nested-qemu image bundles in S3. Bucket lifecycle handles
 # multipart leftovers and noncurrent versions; this job understands the live SSM
 # pointers and deletes old immutable build prefixes without touching promoted
