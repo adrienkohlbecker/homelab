@@ -35,7 +35,7 @@ echo "  then: ssh -p \$(awk '{print \$1}' $zbm_ports_file) -o StrictHostKeyCheck
   --machine box \
   --kernel "$tmp"/vmlin*-bootmenu \
   --initrd "$tmp/initramfs-bootmenu.img" \
-  --append "$base_cmdline loglevel=7 zbm.show" \
+  --append "$base_cmdline ip=dhcp rd.neednet=1 rd.net.timeout.carrier=30 loglevel=7 zbm.show" \
   --mem 2048 \
   --with-pflash \
   --virtfs /tmp/zbm-extract:share \
