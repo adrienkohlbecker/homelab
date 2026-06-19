@@ -715,6 +715,7 @@ TARGETS = {
         "retry_spot_interruption": True,
         "apply_aws_skip": True,
         "in_aws": True,
+        "baked_toolchain": False,
     },
     "aws_qemu": {
         "backend": "qemu",
@@ -729,6 +730,12 @@ TARGETS = {
         # cannot reach the LAN Nexus. Surfaced to the harness as
         # HOMELAB_TEST_IN_AWS (Machine.in_aws); orthogonal to the qemu backend.
         "in_aws": True,
+        # Only this target's shell host is the packer-baked qemu-host AMI, which
+        # ships the mise tool tree + uv cache at /opt (qemu_host.pkr.hcl). The
+        # cell job points mise/uv at them so a fresh host skips the toolchain
+        # re-download. lab's shell runner uses its own mise; the aws docker path
+        # has the toolchain in the CI image.
+        "baked_toolchain": True,
     },
     "lab": {
         "backend": "qemu",
@@ -741,6 +748,7 @@ TARGETS = {
         # lab's shell runner is on the operator LAN: the qemu guest reaches the
         # LAN Nexus + AdGuard VIP, so it is not "in AWS".
         "in_aws": False,
+        "baked_toolchain": False,
     },
 }
 TARGET_BACKENDS = {name: config["backend"] for name, config in TARGETS.items()}
@@ -828,6 +836,7 @@ def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws"
         upstream_mirrors=target_config["upstream_mirrors"],
         retry_spot_interruption=target_config["retry_spot_interruption"],
         in_aws=target_config["in_aws"],
+        baked_toolchain=target_config["baked_toolchain"],
         cell_role_arn=CELL_ROLE_ARN,
     )
 

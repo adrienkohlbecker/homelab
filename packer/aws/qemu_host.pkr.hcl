@@ -138,7 +138,6 @@ build {
       "sudo env MISE_DATA_DIR=/opt/mise UV_CACHE_DIR=/opt/uv-cache UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/opt/venv MISE_PYTHON_UV_VENV_AUTO=false PATH=/opt/venv/bin:/opt/mise/shims:/usr/local/bin:/usr/bin:/bin UV_COMPILE_BYTECODE=1 mise exec -- uv sync --frozen --link-mode hardlink",
       "sudo awk '/^\\[tools\\]/{p=1; print; next} /^\\[/{p=0} p' /tmp/homelab-ci-build/mise.toml | sudo tee /etc/mise/config.toml >/dev/null",
       "sudo chown -R ubuntu:ubuntu /opt/mise /opt/uv-cache /opt/venv",
-      "sudo tee /etc/profile.d/homelab-ci-mise.sh >/dev/null <<'EOF'\nexport MISE_DATA_DIR=/opt/mise\nexport UV_CACHE_DIR=/opt/uv-cache\nexport UV_LINK_MODE=copy\nexport UV_PROJECT_ENVIRONMENT=/opt/venv\nexport MISE_PYTHON_UV_VENV_AUTO=false\nexport PATH=/opt/venv/bin:/opt/mise/shims:/usr/local/bin:/usr/bin:/bin:$PATH\nEOF",
       "sudo tee /usr/local/bin/homelab_ci_prepare_scratch >/dev/null <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\ninstall -dm 0755 -o ubuntu -g ubuntu /mnt/scratch/homelab_ci\nchown ubuntu:ubuntu /mnt/scratch/homelab_ci\nEOF",
       "sudo chmod 0755 /usr/local/bin/homelab_ci_prepare_scratch",
       "sudo tee /usr/local/bin/homelab_ci_ready >/dev/null <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\n[ -c /dev/kvm ]\n[ -r /dev/kvm ]\n[ -w /dev/kvm ]\n[ -w /mnt/scratch/homelab_ci ]\nenv -i PATH=/usr/bin:/bin gitlab-runner --version >/dev/null\ncommand -v qemu-system-x86_64 >/dev/null\ncommand -v qemu-img >/dev/null\ncommand -v passt >/dev/null\ncommand -v mise >/dev/null\nEOF",
