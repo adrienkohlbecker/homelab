@@ -1,7 +1,8 @@
 domain: mhaf.fr
 nexus_url: nexus.lab.fahm.fr
-# AWS region the EC2 test cells run in (matches Ec2Machine.REGION in
-# test/machine.py). Single source for the in-region apt mirror and ECR.
+# AWS region the qemu CI cells egress through (the aws_qemu target). Single
+# source for the in-region EC2 apt mirror and ECR; only consulted when
+# test_in_aws is true.
 test_aws_region: eu-central-1
 test_ecr_region: "{{ test_aws_region }}"
 test_ecr_registry: "000390721279.dkr.ecr.{{ test_aws_region }}.amazonaws.com"

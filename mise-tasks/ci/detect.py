@@ -32,7 +32,7 @@ from matrix import (  # noqa: E402
     build_test_matrix,
     cells_to_ci_specs,
     ci_spec_to_cell,
-    drop_aws_skipped,
+    drop_on_demand_cells,
     list_testable_roles,
     machines_for,
     release_ubuntu_for,
@@ -64,10 +64,11 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
 # file can't be attributed to specific roles but only affects the test
 # cells that run on that machine. Maps pattern -> machine name.
 #
-# Only box and minimal appear: lab/pug run on AWS via no cell (every role that
-# lists them aws_skips them — their prod-faithful geometry is qemu-only), so a
-# lab/pug host_vars change must not force-add their roles' box cells. Those
-# fixtures keep their qemu coverage, which this AWS-only matrix doesn't drive.
+# Only box and minimal appear: a change to host_vars/lab.yml or host_vars/pug.yml
+# is intentionally not a machine-universe trigger -- those are the heavyweight
+# prod-faithful fixtures, so a single host_vars edit there must not fan out to
+# every role that tests on them. Those roles still get a cell when their own code
+# changes.
 MACHINE_UNIVERSE_PATTERNS: list[tuple[str, str]] = [
     (r"host_vars/box\.yml", "box"),
     (r"host_vars/minimal\.yml", "minimal"),
@@ -690,68 +691,48 @@ def _full_universe_matrix() -> str:
 # GitLab dynamic child pipeline
 # ---------------------------------------------------------------------------
 #
-# The `detect` job emits a *generated child pipeline*. The default `aws` target
-# launches one EC2 test cell per job through the harness's aws backend. Qemu
-# shell-runner targets (`lab`, `aws_qemu`) render the same matrix but hydrate
-# the promoted qemu image bundle from S3 before calling the qemu backend
-# directly.
+# The `detect` job emits a *generated child pipeline*: one qemu test cell per
+# job. Both targets (`aws_qemu`, `lab`) run on a qemu shell runner — they render
+# the same matrix and hydrate the promoted qemu image bundle from S3 before
+# calling the qemu harness directly. They differ only in which shell runner
+# claims the cells, whether the guest egresses through AWS, and whether the host
+# ships a packer-baked toolchain.
 #
 # The parent `detect` job (.gitlab-ci.yml) runs `detect.py gitlab`, which writes
 # the child YAML (one job per cell, all extending a shared `.cell` scaffold);
 # the `test_cells` trigger always includes it, so an empty matrix is carried as
 # a single no-op placeholder job rather than a runtime-gated trigger.
 
-# IAM role the harness assumes to launch/terminate cells (terraform/aws_ci.tf);
-# its OIDC trust accepts any branch, so feature-branch pushes can test too.
+# IAM role the qemu cells assume (via GitLab OIDC) to read the promoted qemu
+# image bundles from S3 (terraform/aws_ci.tf); its OIDC trust accepts any
+# branch, so feature-branch pushes can test too.
 CELL_ROLE_ARN = "arn:aws:iam::000390721279:role/homelab-ci-cell"
 EMPTY_SHA = "0" * 40
+
+# Both targets run the qemu backend; they differ only in the fields below.
+#   cell_runner_tag — which shell runner claims the cells.
+#   in_aws          — true when the guest egresses through AWS, so roles pick
+#                     the in-region EC2 mirrors + public DNS over the LAN Nexus
+#                     / AdGuard VIP (surfaced as HOMELAB_TEST_IN_AWS).
+#   baked_toolchain — true when the shell host is the packer-baked qemu-host AMI
+#                     (qemu_host.pkr.hcl), which ships the mise tool tree + uv
+#                     cache at /opt; the cell points mise/uv at them so a fresh
+#                     host skips the toolchain re-download.
 TARGETS = {
-    "aws": {
-        "backend": "aws",
-        "cell_runner_tag": "fox-coordinator-aws",
-        "use_ci_image": True,
-        "hydrate_qemu": False,
-        "upstream_mirrors": False,
-        "retry_spot_interruption": True,
-        "apply_aws_skip": True,
-        "in_aws": True,
-        "baked_toolchain": False,
-    },
     "aws_qemu": {
-        "backend": "qemu",
         "cell_runner_tag": "aws-shell-qemu",
-        "use_ci_image": False,
-        "hydrate_qemu": True,
-        "upstream_mirrors": False,
-        "retry_spot_interruption": False,
-        "apply_aws_skip": False,
-        # Qemu backend, but the shell runner is an AWS host: the guest egresses
-        # through AWS, so it must use the in-region EC2 mirrors + public DNS and
-        # cannot reach the LAN Nexus. Surfaced to the harness as
-        # HOMELAB_TEST_IN_AWS (Machine.in_aws); orthogonal to the qemu backend.
         "in_aws": True,
-        # Only this target's shell host is the packer-baked qemu-host AMI, which
-        # ships the mise tool tree + uv cache at /opt (qemu_host.pkr.hcl). The
-        # cell job points mise/uv at them so a fresh host skips the toolchain
-        # re-download. lab's shell runner uses its own mise; the aws docker path
-        # has the toolchain in the CI image.
         "baked_toolchain": True,
     },
     "lab": {
-        "backend": "qemu",
-        "cell_runner_tag": "lab-shell-qemu",
-        "use_ci_image": False,
-        "hydrate_qemu": True,
-        "upstream_mirrors": False,
-        "retry_spot_interruption": False,
-        "apply_aws_skip": False,
         # lab's shell runner is on the operator LAN: the qemu guest reaches the
-        # LAN Nexus + AdGuard VIP, so it is not "in AWS".
+        # LAN Nexus + AdGuard VIP, so it is not "in AWS"; its mise is its own.
+        "cell_runner_tag": "lab-shell-qemu",
         "in_aws": False,
         "baked_toolchain": False,
     },
 }
-TARGET_BACKENDS = {name: config["backend"] for name, config in TARGETS.items()}
+TARGET_NAMES = sorted(TARGETS)
 
 # The child pipeline is a Jinja2 template so the static scaffold (`.cell`
 # before_script, artifacts, retry) is reviewable as real YAML; only the
@@ -791,7 +772,7 @@ def _split_cells_into_stages(cells: list[dict]) -> list[dict]:
     return groups
 
 
-def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws") -> str:
+def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws_qemu") -> str:
     """Render the generated child-pipeline YAML from test_child.yml.j2.
 
     One job per cell spec (``role:variant[:ubuntu]``), each extending the
@@ -829,12 +810,7 @@ def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws"
         stages=stages,
         site_test=site_test,
         target=target,
-        backend=target_config["backend"],
         cell_runner_tag=target_config["cell_runner_tag"],
-        use_ci_image=target_config["use_ci_image"],
-        hydrate_qemu=target_config["hydrate_qemu"],
-        upstream_mirrors=target_config["upstream_mirrors"],
-        retry_spot_interruption=target_config["retry_spot_interruption"],
         in_aws=target_config["in_aws"],
         baked_toolchain=target_config["baked_toolchain"],
         cell_role_arn=CELL_ROLE_ARN,
@@ -848,7 +824,7 @@ def _emit_gitlab(
     runtimes: dict[str, float],
     log,
     *,
-    target: str = "aws",
+    target: str = "aws_qemu",
 ) -> int:
     """Write the generated child-pipeline YAML.
 
@@ -862,20 +838,17 @@ def _emit_gitlab(
         raise ValueError(f"unsupported CI target: {target!r}")
     target_config = TARGETS[target]
     specs = json.loads(matrix)
-    # Apply backend-aware aws_skip only for targets that launch AWS EC2 cells.
-    # Qemu targets deliberately keep the same cells a local qemu run would
-    # exercise.
-    dropped: list[str] = []
-    if target_config["apply_aws_skip"]:
-        specs, dropped = drop_aws_skipped(specs)
+    # lab/pug fixtures only run on demand -- neither qemu CI target can hydrate
+    # their images -- so they never enter a generated pipeline.
+    specs, on_demand = drop_on_demand_cells(specs)
     specs = sort_specs_by_runtime(specs, runtimes)
 
     Path(child_path).write_text(render_child_pipeline(specs, site_test, target=target))
 
-    log(f"target={target} backend={target_config['backend']} runner={target_config['cell_runner_tag']}")
+    log(f"target={target} runner={target_config['cell_runner_tag']}")
     log(f"matrix={json.dumps(specs)}")
-    if dropped:
-        log(f"aws_skip: dropped {len(dropped)} cell(s): {' '.join(sorted(dropped))}")
+    if on_demand:
+        log(f"dropped {len(on_demand)} on-demand lab/pug cell(s): {' '.join(sorted(on_demand))}")
     if specs:
         unmeasured = [s for s in specs if s not in runtimes]
         log(f"cell order: longest-first by median recent runtime ({len(unmeasured)} unmeasured cell(s) first)")
@@ -998,13 +971,13 @@ def _cmd_gitlab(args: list[str]) -> int:
     p.add_argument("--all", action="store_true", help="Force the full universe (debug)")
     p.add_argument(
         "--target",
-        default=os.environ.get("HOMELAB_CI_TARGET", "aws"),
-        choices=sorted(TARGET_BACKENDS),
-        help="Render jobs for the target runner/backend (default: HOMELAB_CI_TARGET or aws)",
+        default=os.environ.get("HOMELAB_CI_TARGET", "aws_qemu"),
+        choices=TARGET_NAMES,
+        help="Render jobs for the target qemu shell runner (default: HOMELAB_CI_TARGET or aws_qemu)",
     )
     opts = p.parse_args(args)
-    if opts.target not in TARGET_BACKENDS:
-        p.error(f"unsupported --target {opts.target!r}; choose one of: {', '.join(sorted(TARGET_BACKENDS))}")
+    if opts.target not in TARGETS:
+        p.error(f"unsupported --target {opts.target!r}; choose one of: {', '.join(TARGET_NAMES)}")
 
     def log(msg):
         print(f"[detect] {msg}", file=sys.stderr)

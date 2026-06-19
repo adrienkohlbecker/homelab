@@ -4,7 +4,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["boto3"]
 # ///
-"""Read-only audit of the homelab CI AWS account (notes/ci_aws_test_cells.md).
+"""Read-only audit of the homelab CI AWS account (notes/ci_aws_nested_qemu_cells.md).
 
 The account exists solely for the eu-central-1 AWS test-cell pipeline, whose
 only standing footprint is meant to be: the per-machine cell AMIs and their

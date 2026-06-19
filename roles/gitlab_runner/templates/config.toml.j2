@@ -35,9 +35,9 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
 {% endif %}
 {% if gitlab_runner_executor == 'docker' %}
   # Per-runner cap on jobs run directly on this host. Bounds the on-fox CI
-  # footprint independently of the global `concurrent` (which has to be raised
-  # for the coordinator fleet) so a wide pipeline can't schedule the whole
-  # fan-out onto fox. 0 = no per-runner cap (bounded only by `concurrent`).
+  # footprint independently of the global `concurrent` so a wide pipeline can't
+  # schedule the whole fan-out onto fox. 0 = no per-runner cap (bounded only by
+  # `concurrent`).
   limit = {{ gitlab_runner_docker_limit }}
 {% else %}
   # Per-runner cap for host-native qemu jobs on lab.
@@ -65,130 +65,6 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
     # devices, no nested containers, no privileges.
     privileged = false
 {% endif %}
-{% if gitlab_runner_coordinator_enabled | default(false) %}
-
-# Coordinator runner: a docker-autoscaler executor that clones an ephemeral
-# Hetzner CX53 per pipeline via fleeting-plugin-hetzner, runs the AWS-cell
-# fan-out from inside the CI image ON the coordinator, and scales back to zero
-# when idle (notes/ci_aws_test_cells.md). Independent of the docker runner
-# above -- that one stays for small jobs run directly on the host. The hcloud
-# token lives only here on the manager; it never reaches the coordinator where
-# job code runs.
-[[runners]]
-  name = "{{ inventory_hostname }}-coordinator-aws"
-  url = "https://gitlab.com"
-  # Second glrt- project runner, distinct from the docker runner's token above.
-  # Vaulted in host_vars; tags/run-untagged/locked live server-side.
-  token = "{{ gitlab_runner_coordinator_token }}"
-  executor = "docker-autoscaler"
-  # Per-runner concurrency cap (NOT the global `concurrent` above, which is the
-  # fleet-wide ceiling). For an autoscaler runner this is max_instances ×
-  # capacity_per_instance -- the most jobs one coordinator fleet can take.
-  limit = {{ gitlab_runner_max_instances * gitlab_runner_capacity_per_instance }}
-  # Concurrent new-job requests to GitLab (see the docker runner above). Lets the
-  # coordinator pull the cell matrix in batches instead of one job per poll.
-  request_concurrency = 4
-
-  [runners.docker]
-    # Default job container the autoscaler starts on the coordinator's dockerd
-    # (the cell pipeline names its own image, $CI_REGISTRY_IMAGE/ci:latest, which
-    # resolves to the same ref). The private CI image authenticates with the job's
-    # CI_JOB_TOKEN; the coordinator's reserved egress IP
-    # (terraform hcloud_primary_ip.ci_coordinator) reaches registry.gitlab.com
-    # reliably. The docker executor also pulls a gitlab-runner-helper (git clone,
-    # artifacts, cache) -- the runner derives that image's version-matched tag
-    # from its own binary, so it needs no pin here.
-    image = "registry.gitlab.com/akohlbecker/homelab/ci:latest"
-    # The detect job opts into pull_policy=always and warms the per-pipeline
-    # coordinator. Cell jobs then request if-not-present so the 60-way fan-out
-    # does not re-check the same tag on every job.
-    pull_policy = "if-not-present"
-    allowed_pull_policies = ["always", "if-not-present"]
-    privileged = false
-
-  [runners.autoscaler]
-    # PATH-resolved binary /usr/local/bin/fleeting-plugin-hetzner (NOT an OCI
-    # ref); installed + pinned by tasks/main.yml.
-    plugin = "fleeting-plugin-hetzner"
-    # One coordinator fans out the whole pipeline: capacity matches the AWS
-    # 60-spot/region quota (the real ceiling). max_use_count 0 reuses the
-    # instance across jobs; max_instances 1 holds a single coordinator.
-    capacity_per_instance = {{ gitlab_runner_capacity_per_instance }}
-    max_use_count = 0
-    max_instances = {{ gitlab_runner_max_instances }}
-    # Tear the coordinator down on `gitlab-runner` stop so a manager restart
-    # never strands a billable CX53.
-    delete_instances_on_shutdown = true
-    # Hold scheduling onto a freshly cloned coordinator until its dockerd is
-    # actually serving -- the snapshot enables docker, but cloud-init + service
-    # start lag SSH-up by a few seconds.
-    instance_ready_command = "docker info"
-
-    [runners.autoscaler.plugin_config]
-      # Required by the plugin: the name prefix for the cloned servers (they
-      # boot as ci-coordinator-<random>). Matches the pool label / reserved IP /
-      # firewall name so the whole coordinator fleet shares one identifier.
-      name = "ci-coordinator"
-      # hcloud API token (manager-side only). Vaulted in host_vars.
-      token = "{{ gitlab_runner_hcloud_token }}"
-      # Hetzner placement for the cloned coordinators. nbg1 is fox's own location, so
-      # the private `hetzner` network (fox manages the coordinator over it) and the
-      # 20 TB-traffic eu-central zone both line up.
-      location = "nbg1"
-      # Coordinator server type. cx43 (8 vCPU / 16 GiB / 160 GB NVMe) -- RAM is the
-      # binding constraint at a 60-wide cell fan-out. Phase 1c benchmarked cx43 at the
-      # full 137-cell 60-wide load: RAM peaked 12.5/15.6 GiB (~80%) with mem-PSI full=0
-      # and steal=0, CPU a transient ~98% start-burst settling to ~50% steady, disk
-      # untouched -- adequate, RAM the tightest axis. A live run reconfirmed it (cx53
-      # peaked ~10.5/30 GiB, ~34%). The 32 GiB cx53 was only headroom over that ~80%;
-      # the coordinator has no swap, so ~80% peak with no backstop is the accepted
-      # margin (a heavy full-universe burst is the case to watch). cpx41 is the AMD
-      # 8c/16G capacity fallback. See notes/ci_aws_test_cells.md.
-      server_type = [ "cx43", "cpx41" ]
-      # Numeric snapshot id resolved from the role=ci-coordinator label at
-      # converge (docker-autoscaler needs an id, not a name). ubuntu-24.04 is a
-      # harmless qemu-only fallback -- the coordinator path never boots there.
-      image = "{{ gitlab_runner_resolved_image | default('ubuntu-24.04') }}"
-      # Attach each coordinator to fox's private `hetzner` network so the
-      # manager drives it over the private IP (use_external_addr=false below);
-      # the reserved public IP stays egress-only.
-      private_networks = ["hetzner"]
-      # The coordinator claims a public IPv6 from the reserved-IP pool. fleeting
-      # validates BOTH address families of the pool selector (terraform reserves
-      # hcloud_primary_ip.ci_coordinator_v6 alongside the v4), so the coordinator
-      # has to accept the v6 -- forcing public_ipv6_disabled true reproduces
-      # scale-up failing "could not get ipv6 from pool" even with the v6 reserved.
-      public_ipv6_disabled = false
-      # Assign the reserved egress IP (terraform hcloud_primary_ip.ci_coordinator,
-      # labelled pool=ci-coordinator) so the AWS cell SG can allowlist one stable
-      # /32 despite scale-to-zero.
-      public_ip_pool_enabled = true
-      public_ip_pool_selector = "pool=ci-coordinator"
-
-      [runners.autoscaler.plugin_config.labels]
-        # Drives both the firewall auto-attach (terraform apply_to
-        # label_selector) and the public-IP-pool selection above.
-        pool = "ci-coordinator"
-        manager = "{{ inventory_hostname }}"
-
-    [runners.autoscaler.connector_config]
-      # cloud-init injects fleeting's ephemeral key into root; the manager
-      # reaches the coordinator over the private network, so no public SSH hole.
-      username = "root"
-      use_external_addr = false
-
-    [[runners.autoscaler.policy]]
-      # Scale to zero between pipelines; keep one warm instance for idle_time
-      # after the last job so a burst of pipelines reuses a coordinator.
-      idle_count = 0
-      idle_time = "{{ gitlab_runner_idle_time }}"
-      # Reactive scale-to-zero: request the job first, then provision a
-      # coordinator. Preemptive mode would gate job requests on an
-      # already-ready instance, which never exists at idle_count 0. Set
-      # explicitly because the runner's experimental jsonschema validation flags
-      # the unset *bool as a null where it wants a boolean.
-      preemptive_mode = false
-{% endif %}
 {% if gitlab_runner_aws_qemu_enabled | default(false) %}
 
 # AWS qemu runner: an instance executor backed by fleeting-plugin-aws and a
@@ -199,9 +75,9 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
 [[runners]]
   name = "{{ inventory_hostname }}-aws-shell-qemu"
   url = "https://gitlab.com"
-  # Third glrt- project runner, distinct from the docker and coordinator
-  # tokens. Server-side tags/run-untagged/locked/protected carry the actual
-  # aws-shell-qemu routing policy.
+  # Second glrt- project runner, distinct from the docker token. Server-side
+  # tags/run-untagged/locked/protected carry the actual aws-shell-qemu routing
+  # policy.
   token = "{{ gitlab_runner_aws_qemu_token }}"
   executor = "instance"
   shell = "bash"

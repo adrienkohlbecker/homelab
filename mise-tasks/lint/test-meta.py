@@ -64,14 +64,10 @@ def main() -> int:
                         )
 
         # skip: quarantines a known-failing cell so it can't gate a green
-        # run. A mapping of cell-spec -> reason; the reason is mandatory so
-        # a skip can't rot into a silent permanent exclusion. cell-spec is
+        # run. A mapping of cell-spec -> reason; the reason is mandatory so a
+        # skip can't rot into a silent permanent exclusion. cell-spec is
         # `machine` (the jammy cell) or `machine:codename` (a release cell).
-        # skip: quarantines a cell on every backend; aws_skip: drops it only
-        # from the aws (EC2 cell) matrix (the qemu matrix keeps it). Both share
-        # the cell-spec -> mandatory-reason shape so a quarantine can't rot into
-        # a silent permanent exclusion.
-        for key in ("skip", "aws_skip"):
+        for key in ("skip",):
             mapping = data.get(key)
             if mapping is None:
                 continue

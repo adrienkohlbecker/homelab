@@ -6,8 +6,3 @@
 # instead runs 30-keepalived.sh directly to prove the recovery path is sound.
 machines:
   box:
-# The VIP claim + keepalived VRRP need gratuitous ARP / a secondary IP an EC2
-# VPC forbids, so a cell can't exercise that surface. Keep full qemu coverage;
-# revisit when per-cell ENI / secondary-IP lands (notes/ci_aws_test_cells.md).
-aws_skip:
-  box: keepalived VIP needs L2 (gratuitous ARP / secondary IP) the VPC forbids

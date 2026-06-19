@@ -11,11 +11,3 @@ ubuntu:
 # the fluentbit consumer of the same _setup pattern.
 machines:
   box_deps:
-# The keepalived_vrrp _verify chart never registers on a cell. Its fixture is a
-# loopback VIP (198.51.100.10/32 on lo), NOT a real keepalived VIP, so the cause
-# is likely cell-side (charts.d collector / timing) rather than the L2 limit
-# that grounds udm_dns_failover — a candidate to re-enable after a cell-side
-# debug, ahead of the ENI work. Skipped on aws meanwhile; full qemu coverage.
-aws_skip:
-  box_deps: keepalived_vrrp _verify chart fails to register on a cell (cause TBD)
-  box_deps:resolute: keepalived_vrrp _verify chart fails to register on a cell (cause TBD)

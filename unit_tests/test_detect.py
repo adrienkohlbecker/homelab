@@ -155,10 +155,10 @@ class TestClassifyChangedFiles:
         assert result.machine_universe == {"minimal"}
         assert not result.full_universe_paths
 
-    # lab/pug run on no AWS cell (every role that lists them aws_skips them), so
-    # their host_vars are not machine-universe triggers: a change must not
-    # force-add their roles' box cells. Their qemu coverage is unaffected (this
-    # matrix only drives the AWS pipeline).
+    # host_vars/lab.yml and host_vars/pug.yml are intentionally not
+    # machine-universe triggers: a change must not fan out to every role that
+    # tests on those heavyweight fixtures. Those roles still get a cell when
+    # their own code changes.
     @pytest.mark.parametrize(
         "path",
         [
@@ -1083,21 +1083,42 @@ class TestListTestableRoles:
         assert detect.list_testable_roles() == []
 
 
-def _render_child_doc(specs: list[str], site_test: bool, target: str = "aws") -> dict:
+def _render_child_doc(specs: list[str], site_test: bool, target: str = "aws_qemu") -> dict:
     """Render test_child.yml.j2 and parse it back to a dict for assertions."""
     return detect.yaml.safe_load(detect.render_child_pipeline(specs, site_test, target=target))
+
+
+class TestTargets:
+    def test_only_two_qemu_targets(self) -> None:
+        assert sorted(detect.TARGETS) == ["aws_qemu", "lab"]
+        assert detect.TARGET_NAMES == ["aws_qemu", "lab"]
+        assert "aws" not in detect.TARGETS
+
+    def test_target_fields(self) -> None:
+        assert detect.TARGETS["aws_qemu"] == {
+            "cell_runner_tag": "aws-shell-qemu",
+            "in_aws": True,
+            "baked_toolchain": True,
+        }
+        assert detect.TARGETS["lab"] == {
+            "cell_runner_tag": "lab-shell-qemu",
+            "in_aws": False,
+            "baked_toolchain": False,
+        }
 
 
 class TestRenderChildPipeline:
     def test_one_job_per_spec(self) -> None:
         doc = _render_child_doc(["nginx:box", "podman:box:noble"], site_test=False)
         assert doc["default"]["tags"] == ["fox-docker-aws"]
+        assert "image" not in doc["default"]
         assert doc["stages"] == ["test1", "test2"]
-        assert doc[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "aws"
+        # All cells run the qemu backend; the harness defaults to it, so there is
+        # no HOMELAB_TEST_BACKEND variable.
+        assert "HOMELAB_TEST_BACKEND" not in doc[".cell"]["variables"]
         assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
-        # The docker path carries its toolchain in the CI image, not /opt.
-        assert "MISE_DATA_DIR" not in doc[".cell"]["variables"]
-        assert doc[".cell"]["retry"]["exit_codes"] == [86]
+        # No spot retry on the qemu targets.
+        assert "retry" not in doc[".cell"]
         # nginx:box → defaults ubuntu jammy; podman:box:noble → explicit noble.
         assert doc["nginx:box"]["variables"] == {"ROLE": "nginx", "VARIANT": "box", "UBUNTU": "jammy"}
         assert doc["podman:box:noble"]["variables"] == {"ROLE": "podman", "VARIANT": "box", "UBUNTU": "noble"}
@@ -1105,22 +1126,23 @@ class TestRenderChildPipeline:
         assert "_site_test:box" not in doc
         assert "no_cells" not in doc
 
-    def test_cells_run_on_the_coordinator_runner(self) -> None:
+    def test_cells_run_on_the_shell_qemu_runner(self) -> None:
         # The cell fan-out (everything extending .cell, including _site_test) runs
-        # on the ephemeral docker-autoscaler coordinator, not the on-fox docker
-        # runner. The default tag stays fox-docker-aws for the no_cells
-        # placeholder; .cell overrides it to the coordinator.
+        # on the qemu shell runner, not the on-fox docker runner. The default tag
+        # stays fox-docker-aws for the no_cells placeholder; .cell overrides it to
+        # the shell runner.
         doc = _render_child_doc(["nginx:box"], site_test=True)
         assert doc["default"]["tags"] == ["fox-docker-aws"]
-        assert doc[".cell"]["tags"] == ["fox-coordinator-aws"]
-        # _site_test extends .cell, so it inherits the coordinator tag.
+        assert doc[".cell"]["tags"] == ["aws-shell-qemu"]
+        assert "image" not in doc[".cell"]
+        # _site_test extends .cell, so it inherits the shell-runner tag.
         assert doc["_site_test:box"]["extends"] == ".cell"
         assert "tags" not in doc["_site_test:box"]
 
     def test_no_cells_placeholder_stays_on_fox(self) -> None:
         # The placeholder carries no own tag, so it inherits the fox-docker-aws
-        # default -- a no-cell pipeline must never boot a coordinator just to
-        # report there is nothing to test.
+        # default -- a no-cell pipeline stays on the always-on on-fox runner and
+        # never reaches a qemu cell runner just to report there is nothing to test.
         doc = _render_child_doc([], site_test=False)
         assert "tags" not in doc["no_cells"]
         assert doc["default"]["tags"] == ["fox-docker-aws"]
@@ -1161,20 +1183,17 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(["nginx:box"], site_test=False)
         joined = "\n".join(doc[".cell"]["before_script"])
         assert detect.CELL_ROLE_ARN in joined
-        assert "ssh-add" in joined
-
-    def test_before_script_printf_normalises_key(self) -> None:
-        # The CR-strip + trailing-newline normalisation must survive the YAML
-        # round-trip exactly (the literal \n is for printf, not a YAML newline).
-        doc = _render_child_doc(["nginx:box"], site_test=False)
-        assert 'printf \'%s\\n\' "$(tr -d \'\\r\' < "$CI_CELL_SSH_KEY")" > "$cell_key"' in doc[".cell"]["before_script"]
+        # Qemu cells assume the role via OIDC only; no ssh-add of a cell key.
+        assert "ssh-add" not in joined
+        assert "CI_CELL_SSH_KEY" not in joined
 
     def test_lab_target_uses_shell_qemu_runner(self) -> None:
         doc = _render_child_doc(["nginx:box"], site_test=False, target="lab")
         assert doc["default"]["tags"] == ["fox-docker-aws"]
         assert "image" not in doc["default"]
         assert doc[".cell"]["tags"] == ["lab-shell-qemu"]
-        assert doc[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
+        # The harness defaults to the qemu backend, so no HOMELAB_TEST_BACKEND.
+        assert "HOMELAB_TEST_BACKEND" not in doc[".cell"]["variables"]
         # lab's shell runner is on the operator LAN: qemu guest, not in AWS.
         assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "false"
         # lab's shell runner is not the baked AMI -- no /opt/mise to point at.
@@ -1197,9 +1216,9 @@ class TestRenderChildPipeline:
         assert doc["default"]["tags"] == ["fox-docker-aws"]
         assert "image" not in doc["default"]
         assert doc[".cell"]["tags"] == ["aws-shell-qemu"]
-        assert doc[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
+        assert "HOMELAB_TEST_BACKEND" not in doc[".cell"]["variables"]
         # Qemu backend but an AWS host: the guest egresses through AWS, so it
-        # must take the in-region-mirror / public-DNS path despite backend=qemu.
+        # must take the in-region-mirror / public-DNS path.
         assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
         # This target's shell host is the baked qemu-host AMI, so the cell points
         # mise/uv at the /opt caches to skip the toolchain re-download.
@@ -1271,18 +1290,27 @@ class TestEmitGitlab:
         assert "no_cells" in loaded
 
     @pytest.mark.parametrize("target", ["aws_qemu", "lab"])
-    def test_qemu_target_does_not_apply_aws_skip(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, target: str
-    ) -> None:
-        def fail_drop_aws_skipped(_specs):
-            raise AssertionError("qemu targets must not apply aws_skip")
-
-        monkeypatch.setattr(detect, "drop_aws_skipped", fail_drop_aws_skipped)
+    def test_qemu_target_keeps_all_cells(self, tmp_path: Path, target: str) -> None:
+        # Both targets run the qemu backend and keep the same cells a local qemu
+        # run would exercise -- no backend-specific cell filtering.
         child = tmp_path / "child.yml"
         detect._emit_gitlab(json.dumps(["keepalived:box"]), False, str(child), {}, lambda *_: None, target=target)
         loaded = detect.yaml.safe_load(child.read_text())
         assert "keepalived:box" in loaded
-        assert loaded[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
+        assert "HOMELAB_TEST_BACKEND" not in loaded[".cell"]["variables"]
+
+    @pytest.mark.parametrize("target", ["aws_qemu", "lab"])
+    def test_lab_pug_cells_dropped(self, tmp_path: Path, target: str) -> None:
+        # lab/pug fixtures only run on demand -- neither qemu CI target can
+        # hydrate their images, so they never reach a generated pipeline.
+        child = tmp_path / "child.yml"
+        detect._emit_gitlab(
+            json.dumps(["zfs:box", "zfs:lab", "zfs:pug"]), False, str(child), {}, lambda *_: None, target=target
+        )
+        loaded = detect.yaml.safe_load(child.read_text())
+        assert "zfs:box" in loaded
+        assert "zfs:lab" not in loaded
+        assert "zfs:pug" not in loaded
 
 
 class TestCmdGitlab:
@@ -1325,7 +1353,7 @@ class TestCmdGitlab:
         assert detect._cmd_gitlab(["--all", "--child-path", str(child)]) == 0
         loaded = detect.yaml.safe_load(child.read_text())
         assert loaded[".cell"]["tags"] == ["lab-shell-qemu"]
-        assert loaded[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
+        assert loaded[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "false"
 
     def test_target_env_selects_aws_qemu_pipeline(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("HOMELAB_CI_TARGET", "aws_qemu")
@@ -1334,7 +1362,17 @@ class TestCmdGitlab:
         assert detect._cmd_gitlab(["--all", "--child-path", str(child)]) == 0
         loaded = detect.yaml.safe_load(child.read_text())
         assert loaded[".cell"]["tags"] == ["aws-shell-qemu"]
-        assert loaded[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
+        assert loaded[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
+
+    def test_default_target_is_aws_qemu(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        # With no HOMELAB_CI_TARGET, the default target is aws_qemu.
+        monkeypatch.delenv("HOMELAB_CI_TARGET", raising=False)
+        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
+        child = tmp_path / "child.yml"
+        assert detect._cmd_gitlab(["--all", "--child-path", str(child)]) == 0
+        loaded = detect.yaml.safe_load(child.read_text())
+        assert loaded[".cell"]["tags"] == ["aws-shell-qemu"]
+        assert loaded[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
 
     def test_gitlab_in_commands(self) -> None:
         assert "gitlab" in detect._COMMANDS

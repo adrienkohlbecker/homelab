@@ -16,7 +16,6 @@ import time
 from pathlib import Path
 
 from machine import (
-    BACKEND_CHOICES,
     DEFAULT_UBUNTU,
     MACHINE_CHOICES,
     PEAK_KB_SENTINEL_PREFIX,
@@ -30,7 +29,6 @@ from machine import (
 from utils import (
     CommandFailedException,
     IdempotenceFailedException,
-    SpotInterruptedException,
     cancel_on_signal,
     print_line,
     tee_output,
@@ -105,13 +103,6 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         help="Machine profile to run against (default: from roles/<role>/meta/test.yml `machine:` key, else 'box')",
     )
     parser.add_argument(
-        "--backend",
-        default=os.environ.get("HOMELAB_TEST_BACKEND", "qemu"),
-        choices=BACKEND_CHOICES,
-        help="Where the test fixture runs: a local qemu VM or a single-use EC2 spot instance "
-        "(notes/ci_aws_test_cells.md). Falls back to $HOMELAB_TEST_BACKEND, then qemu.",
-    )
-    parser.add_argument(
         "--checkmode",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -169,12 +160,6 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("role", help="Role name to test")
 
     args, pass_args = parser.parse_known_args()
-
-    # argparse validates choices only for CLI-provided values, not defaults,
-    # so a typo'd $HOMELAB_TEST_BACKEND would otherwise surface as a late
-    # ValueError deep in the machine factory.
-    if args.backend not in BACKEND_CHOICES:
-        sys.exit(f"HOMELAB_TEST_BACKEND={args.backend!r} not in {BACKEND_CHOICES}")
 
     # argparse can leave one or more literal "--" tokens at the head of the
     # remainder depending on positional/optional interleaving; strip them all
@@ -321,15 +306,6 @@ async def run_test(
                         # separate files for CI artifact upload.
                         with contextlib.suppress(Exception):
                             await m.collect_failure_artifacts()
-                        # Post-hoc spot classification (EC2 backend only;
-                        # the base returns False). A reclaimed instance is
-                        # infrastructure noise, not a role failure — exit 86
-                        # so the GitLab job retries exactly once.
-                        spot_interrupted = False
-                        with contextlib.suppress(Exception):
-                            spot_interrupted = await m.failure_was_spot_interruption()
-                        if spot_interrupted:
-                            raise SpotInterruptedException("Cell failure classified as a spot interruption") from None
                         raise
                     except IdempotenceFailedException:
                         print_line("Idempotence check failed")
@@ -397,21 +373,13 @@ def main() -> int:
     # before constructing this run's QemuMachine. testall.py also sweeps once
     # before fanning out; the .live-file flock check inside
     # sweep_stale_workdirs keeps parallel workers from racing on each other's
-    # freshly-minted workdirs.
-    #
-    # Scope is imagedir-only, and it only matters for local parallel runs:
-    # under CI each cell is its own single-use EC2 instance, so no two cells
-    # share an imagedir to race on.
-    #
-    # qemu-only: the aws backend stages its workdir under the system tmp and
-    # the imagedir mount may not exist at all on the runner container.
-    if parsed_args.backend == "qemu":
-        sweep_stale_workdirs(imagedir_for_host())
+    # freshly-minted workdirs. Scope is imagedir-only, and it only matters for
+    # local parallel runs sharing an imagedir.
+    sweep_stale_workdirs(imagedir_for_host())
 
     # Machine.wrapper_timeout layers WRAPPER_GRACE_SECONDS on top of this so
     # the inner `timeout` wrapper outlasts the Python deadline.
     m: Machine = create_machine(
-        parsed_args.backend,
         machine=parsed_args.machine,
         role=parsed_args.role,
         keep_vm=parsed_args.keep,
@@ -441,10 +409,6 @@ def main() -> int:
             print_line(str(exc), error=True)
             print_line(f"{parsed_args.role}.{parsed_args.machine} not idempotent", error=True)
             rc = 125
-        except SpotInterruptedException as exc:
-            print_line(str(exc), error=True)
-            print_line(f"{parsed_args.role}.{parsed_args.machine} spot-interrupted", error=True)
-            rc = 86  # reserved for spot interruption; GitLab jobs retry this once
         except TimeoutError:
             print_line(
                 f"{parsed_args.role}.{parsed_args.machine} timed out after {parsed_args.timeout}s",

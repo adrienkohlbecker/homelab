@@ -206,17 +206,6 @@ gitlab_runner_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
 gitlab_runner_memory_high: 512M
 gitlab_runner_memory_max: 1G
 
-# Exercise the coordinator (docker-autoscaler / fleeting) host-side path: the
-# fleeting binary download + run, the second [[runners]] block render + TOML
-# validate, and the unit smoke-start with both runners. No coordinator ever
-# boots here -- the snapshot lookup is qemu_test-gated off (the template uses
-# its ubuntu-24.04 fallback), so these tokens are never used for a real hcloud
-# or gitlab.com call. Non-functional placeholders, same safety property as
-# gitlab_runner_token above.
-gitlab_runner_coordinator_enabled: true
-gitlab_runner_coordinator_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
-gitlab_runner_hcloud_token: TEST_PLACEHOLDER_DO_NOT_USE
-
 # Exercise the AWS qemu instance-executor block: AWS fleeting plugin download,
 # manager-side AWS profile render, config.toml render, and _verify smoke. The
 # qemu harness never boots an ASG, and these placeholder credentials are never

@@ -5,16 +5,9 @@
 # scaffold; an optional site-converge job; and a no-op placeholder so the
 # artifact is always a valid pipeline even when the downstream trigger is gated
 # off (GitLab evaluates `rules` at pipeline-creation time, so a runtime
-# "any cells?" flag cannot gate the trigger). See notes/ci_aws_test_cells.md.
+# "any cells?" flag cannot gate the trigger). See notes/ci_aws_nested_qemu_cells.md.
 default:
   interruptible: true
-{% if use_ci_image %}
-  # Pin the CI image explicitly (the child is self-contained). The default tag
-  # keeps the trivial no_cells placeholder on the always-on fox runner; the real
-  # cells override to the ephemeral coordinator via .cell, so a no-cell pipeline
-  # never boots a coordinator just to echo "nothing to test".
-  image: "$CI_REGISTRY_IMAGE/ci:latest"
-{% endif %}
   tags:
     - fox-docker-aws
 
@@ -29,54 +22,21 @@ stages:
 .cell:
   stage: test1
   needs: []
-{% if use_ci_image %}
-  # The AWS test-cell fan-out runs on the ephemeral coordinator (gitlab_runner's
-  # docker-autoscaler / fleeting runner), NOT the on-fox docker runner: per
-  # pipeline it clones one Hetzner box, runs the whole matrix (all cells share
-  # the one coordinator at capacity_per_instance=60), and scales to zero. Each
-  # coordinator boots with an empty image store, so the first cell pulls the
-  # current ci:latest only if detect did not already warm this coordinator. In
-  # the normal path detect pulls with policy=always in the parent pipeline and
-  # cells use if-not-present to reuse that local image without registry re-checks.
-  # Overrides the default fox-docker-aws tag. See notes/ci_aws_test_cells.md
-  # "Phase 2".
-  tags:
-    - {{ cell_runner_tag }}
-  image:
-    name: "$CI_REGISTRY_IMAGE/ci:latest"
-    pull_policy: if-not-present
-  id_tokens:
-    GITLAB_OIDC_TOKEN:
-      aud: sts.amazonaws.com
-{% else %}
-  # Qemu shell targets run directly on protected shell runners. No job image, no
-  # EC2 launch prelude: test/testrole.py uses the local qemu harness through
-  # HOMELAB_TEST_BACKEND=qemu. GitLab OIDC hydrates the promoted qemu base
-  # images from S3 before booting.
+  # Qemu cells run directly on a protected shell runner. No job image, no EC2
+  # launch prelude: test/testrole.py uses the local qemu harness. GitLab OIDC
+  # hydrates the promoted qemu base images from S3 before booting.
   tags:
     - {{ cell_runner_tag }}
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: sts.amazonaws.com
-{% endif %}
   # Harness --timeout is 25m (1500s); the job timeout leaves headroom for the
   # prelude + cell teardown.
   timeout: 30m
-{% if retry_spot_interruption %}
-  # testrole.py exits 86 on a post-hoc spot-interruption classification
-  # (notes/ci_aws_test_cells.md); retry the cell once.
-  retry:
-    max: 1
-    exit_codes:
-      - 86
-{% endif %}
   variables:
-    HOMELAB_TEST_BACKEND: {{ backend }}
-    # Cloud-environment flag, orthogonal to the backend: true when the guest
-    # egresses through AWS (the aws + aws_qemu targets), so the harness
-    # (Machine.in_aws) makes roles pick the in-region EC2 mirrors + public DNS
-    # over the LAN Nexus / AdGuard VIP. The EC2 backend forces this on
-    # regardless; it is load-bearing for the aws_qemu qemu cells.
+    # Cloud-environment flag: true when the guest egresses through AWS (the
+    # aws_qemu target), so the harness (Machine.in_aws) makes roles pick the
+    # in-region EC2 mirrors + public DNS over the LAN Nexus / AdGuard VIP.
     HOMELAB_TEST_IN_AWS: "{{ "true" if in_aws else "false" }}"
     # Temporarily pin the legacy slirp guest NIC. passt intermittently fails to
     # answer the ZFSBootMenu initramfs DHCP, and rd.neednet=1 then blocks the
@@ -104,39 +64,12 @@ stages:
     UV_LINK_MODE: copy
 {% endif %}
   before_script:
-{% if use_ci_image %}
-    # Fail before the launch, not at the SSH wait, when prerequisites are
-    # missing (the same guard style as ami_box_deps / fox_image).
-    - test -n "${CI_CELL_SSH_KEY:-}" || { echo "CI_CELL_SSH_KEY CI/CD variable is not set" >&2; exit 1; }
-{% endif %}
     - test -n "${HOMELAB_VAULT_PASSWORD_TEST:-}" || { echo "HOMELAB_VAULT_PASSWORD_TEST CI/CD variable is not set" >&2; exit 1; }
     # Same drift self-heal as .hosted, against the active mise tool tree.
     - mise install
     # Shell runners do not activate mise shims; `mise exec` exposes the tool
     # tree consistently there while staying harmless inside the CI image.
     - mise exec -- uv sync --locked
-{% if use_ci_image %}
-    # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
-    # AssumeRoleWithWebIdentity provider wants a file path.
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
-    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
-    - export AWS_ROLE_ARN={{ cell_role_arn }}
-    - export AWS_ROLE_SESSION_NAME="cell-$CI_JOB_ID"
-    # Smoke the OIDC chain before launching an instance.
-    - mise exec -- aws --region eu-central-1 sts get-caller-identity
-    # The Ec2Machine SSHes as the operator identity over the agent (no key file
-    # in the repo); load the dedicated cell key into a fresh agent. GitLab
-    # file-type variables arrive without the trailing newline OpenSSH requires
-    # (and sometimes with CRLF), so ssh-add rejects the raw variable with
-    # "error in libcrypto"; normalise into a private 600 copy -- strip CR,
-    # guarantee a trailing newline -- before loading it.
-    - cell_key="$(mktemp)"
-    - chmod 600 "$cell_key"
-    - printf '%s\n' "$(tr -d '\r' < "$CI_CELL_SSH_KEY")" > "$cell_key"
-    - eval "$(ssh-agent -s)"
-    - ssh-add "$cell_key"
-{% endif %}
-{% if hydrate_qemu %}
     # GitLab OIDC works on the shell runner too. The same branch-safe cell role
     # has read-only access to the promoted qemu bundles used by qemu cells.
     - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
@@ -145,9 +78,7 @@ stages:
     - export AWS_ROLE_SESSION_NAME="{{ target }}-cell-$CI_JOB_ID"
     - mise exec -- aws --region eu-central-1 sts get-caller-identity
     - mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"
-{% endif %}
-    # Pass the PAT through to `mise install` when one is configured, and from
-    # there to the guest's `mise install` for backend-launched cells.
+    # Pass the PAT through to `mise install` when one is configured.
     - if [ -n "${MISE_GITHUB_TOKEN:-}" ]; then export GITHUB_TOKEN="$MISE_GITHUB_TOKEN"; fi
   artifacts:
     when: on_failure
@@ -170,10 +101,8 @@ stages:
     # backstops site_test.py's in-process asyncio deadline against a wedged
     # event loop. 2460 = 2400 + the harness's 60s teardown grace.
     #
-    # Capture, log, then re-exit the harness code (same as the cell script): a
-    # spot-interrupted run exits 86 (the retry: exit_codes signal in .cell), and
-    # echoing the raw code makes the retry-or-not decision auditable from the
-    # job log when a cell does not retry as expected.
+    # Capture, log, then re-exit the harness code (same as the cell script) so
+    # the exit code is auditable from the job log.
     - |
       rc=0
       mise exec -- timeout --kill-after=30s 2460 test/site_test.py --timeout 2400 || rc=$?
@@ -195,20 +124,16 @@ stages:
     # in-process via asyncio.timeout, but that only fires while the event loop
     # stays responsive; GNU timeout is loop-independent, so a wedged harness is
     # killed near the deadline instead of riding the 30m job timeout. SIGTERM
-    # lets testrole.py unwind and tear down its EC2 cell; --kill-after SIGKILLs
-    # if that unwind itself hangs (the cell still self-terminates via its
-    # EventBridge expiry schedule). 1560 = 1500 + the harness's 60s teardown
+    # lets testrole.py unwind and tear down its qemu VM; --kill-after SIGKILLs
+    # if that unwind itself hangs. 1560 = 1500 + the harness's 60s teardown
     # grace (Machine.WRAPPER_GRACE_SECONDS).
     #
     # Capture, log, then re-exit the harness code rather than letting it ride out
-    # as the script's implicit status: a spot-interrupted cell exits 86 (the
-    # retry: exit_codes signal in .cell), and echoing the raw code makes the
-    # retry-or-not decision auditable from the job log -- a cell that classified
-    # a spot interruption yet did not retry shows whether 86 actually reached
-    # the runner.
+    # as the script's implicit status, so the exit code is auditable from the
+    # job log.
     - |
       rc=0
-      mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark{% if upstream_mirrors %} --upstream-mirrors{% endif %} || rc=$?
+      mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark || rc=$?
       echo "harness exit code: $rc"
       exit $rc
 {% endfor %}

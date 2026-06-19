@@ -47,7 +47,7 @@ deregister_byproduct_amis() {
 
 # --on-error=ask keeps the failed build instance up for SSH debugging when a
 # human is at the terminal; CI gets cleanup so a failure can't leave a
-# billing instance behind (same policy as packer:ami).
+# billing instance behind (same policy as packer:build).
 on_error=cleanup
 if [ -t 0 ] && [ -z "${CI:-}" ]; then
   on_error=ask

@@ -4,13 +4,3 @@
 machines:
   box:
   minimal:
-# The _verify rollback path deliberately writes a broken netplan to sever SSH
-# and waits for the 90s rollback timer to restore it. On a cell that sever
-# surfaces as an unrecoverable mitogen.core.TimeoutError (not the clean
-# unreachable the rescue catches), and the harness terminates the instance for
-# diagnostics before the timer can fire — so recovery is never observed. Keep
-# full qemu coverage; the rollback semantics need a real reboot/sever the
-# mitogen-over-AWS connection can't survive.
-aws_skip:
-  box: rollback _verify severs SSH; cell sees unrecoverable mitogen timeout
-  minimal: rollback _verify severs SSH; cell sees unrecoverable mitogen timeout
