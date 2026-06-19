@@ -89,6 +89,20 @@ stages:
     # Restrict ansible to the test identity; the prod identity is undecryptable
     # in CI by design (CLAUDE.md: Vault ids).
     ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
+{% if baked_toolchain %}
+    # The qemu-host AMI bakes the mise tool tree and uv cache at these paths
+    # (packer/aws/qemu_host.pkr.hcl). The instance executor runs the job in a
+    # non-login shell, so without these the before_script's `mise install` /
+    # `uv sync --locked` ignore the baked caches and re-download the whole
+    # toolchain on every fresh host (~20s of the cold-start tail). Set here
+    # rather than in the runner config so tuning them is a repo change with no
+    # fox converge. The baked /opt/venv is intentionally not reused: each job
+    # keeps its own .venv built from the warm cache, so cells running
+    # concurrently on one host (capacity_per_instance > 1) never share a venv.
+    MISE_DATA_DIR: /opt/mise
+    UV_CACHE_DIR: /opt/uv-cache
+    UV_LINK_MODE: copy
+{% endif %}
   before_script:
 {% if use_ci_image %}
     # Fail before the launch, not at the SSH wait, when prerequisites are

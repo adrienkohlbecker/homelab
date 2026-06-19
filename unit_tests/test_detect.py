@@ -1095,6 +1095,8 @@ class TestRenderChildPipeline:
         assert doc["stages"] == ["test1", "test2"]
         assert doc[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "aws"
         assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
+        # The docker path carries its toolchain in the CI image, not /opt.
+        assert "MISE_DATA_DIR" not in doc[".cell"]["variables"]
         assert doc[".cell"]["retry"]["exit_codes"] == [86]
         # nginx:box → defaults ubuntu jammy; podman:box:noble → explicit noble.
         assert doc["nginx:box"]["variables"] == {"ROLE": "nginx", "VARIANT": "box", "UBUNTU": "jammy"}
@@ -1175,6 +1177,8 @@ class TestRenderChildPipeline:
         assert doc[".cell"]["variables"]["HOMELAB_TEST_BACKEND"] == "qemu"
         # lab's shell runner is on the operator LAN: qemu guest, not in AWS.
         assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "false"
+        # lab's shell runner is not the baked AMI -- no /opt/mise to point at.
+        assert "MISE_DATA_DIR" not in doc[".cell"]["variables"]
         assert "image" not in doc[".cell"]
         assert doc[".cell"]["id_tokens"] == {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}}
         assert "retry" not in doc[".cell"]
@@ -1197,6 +1201,11 @@ class TestRenderChildPipeline:
         # Qemu backend but an AWS host: the guest egresses through AWS, so it
         # must take the in-region-mirror / public-DNS path despite backend=qemu.
         assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
+        # This target's shell host is the baked qemu-host AMI, so the cell points
+        # mise/uv at the /opt caches to skip the toolchain re-download.
+        assert doc[".cell"]["variables"]["MISE_DATA_DIR"] == "/opt/mise"
+        assert doc[".cell"]["variables"]["UV_CACHE_DIR"] == "/opt/uv-cache"
+        assert doc[".cell"]["variables"]["UV_LINK_MODE"] == "copy"
         assert "image" not in doc[".cell"]
         assert doc[".cell"]["id_tokens"] == {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}}
         assert "retry" not in doc[".cell"]

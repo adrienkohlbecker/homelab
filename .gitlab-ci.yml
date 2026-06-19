@@ -110,6 +110,18 @@ detect:
     # any realistic push, with a fetch-on-demand fallback in detect.py for a
     # base (green ancestor or previous tip) outside the shallow checkout.
     GIT_DEPTH: "50"
+    # Point mise/uv at the baked /opt caches. The CI image sets these as ENV,
+    # but on the aws-shell-qemu instance runner detect runs in a non-login shell
+    # with no image ENV, so without these its `mise install` / `uv sync` would
+    # re-download the whole toolchain on a fresh host. Safe on every runner
+    # detect can land on -- both the CI image and the qemu-host AMI bake to /opt
+    # (qemu_host.pkr.hcl); the lab target still renders detect on fox-docker-aws.
+    # UV_PROJECT_ENVIRONMENT is intentionally omitted: in the image its ENV still
+    # reuses /opt/venv, while on the shell runner detect builds a per-job .venv
+    # from the warm cache.
+    MISE_DATA_DIR: /opt/mise
+    UV_CACHE_DIR: /opt/uv-cache
+    UV_LINK_MODE: copy
   timeout: 15m
   script:
     - |
