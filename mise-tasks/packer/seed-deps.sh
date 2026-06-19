@@ -39,6 +39,12 @@ fi
 # uses clonefile(2) when both ends are on the same APFS volume
 # (10.13+).
 tmp=$(mktemp -d "${base}/.seed-XXXXXX")
+# mktemp -d always creates 0700 for security, defeating the umask 002
+# above; publish.py's atomic rename then carries that mode onto box_deps,
+# leaving it un-traversable by the kvm-group CI runner that opens the
+# backing image. Restore the group-collaborative mode the umask intends
+# (setgid is inherited from the setgid parent ${base}).
+chmod 2775 "${tmp}"
 # rm the tmpdir on any exit path. On success publish.py has already
 # renamed it over ${dst}, so `rm -rf` is a no-op. On failure mid-run
 # we don't want a partially-seeded directory left behind to be picked
