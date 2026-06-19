@@ -22,9 +22,16 @@ locals {
   ci_qemu_image_machines = toset([
     "box",
     "box_deps",
-    "lab",
-    "pug",
   ])
+  ci_qemu_host_ami_parameter = "/homelab-ci/ami/qemu-host/noble"
+  ci_qemu_host_pool = {
+    name                   = "homelab-ci-qemu-c8i-xlarge"
+    instance_type          = "c8i.xlarge"
+    max_size               = 1
+    root_volume_size       = 120
+    root_volume_iops       = 3000
+    root_volume_throughput = 250
+  }
   wan_probe_ports = yamldecode(file("${path.module}/../data/wan_probe_ports.yml"))
   ci_cell_wan_probe_rules = flatten([
     for protocol, ports in local.wan_probe_ports : [
@@ -446,6 +453,37 @@ resource "aws_security_group" "ci_cell" {
   }
 }
 
+# Instance-executor qemu hosts. The manager runs on fox outside the VPC, so
+# fleeting must SSH to the worker's public address. Keep ingress to fox only;
+# no standing Elastic IP is allocated, and public IPv4 bills only while an ASG
+# instance exists.
+resource "aws_security_group" "ci_qemu_host" {
+  name        = "homelab-ci-qemu-host"
+  description = "CI qemu hosts: SSH from fox, open egress"
+  vpc_id      = aws_vpc.ci.id
+
+  ingress {
+    description = "SSH from fox"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["${hcloud_primary_ip.fox.ip_address}/32"]
+  }
+
+  egress {
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "homelab-ci-qemu-host"
+    role = "ci"
+  }
+}
+
 # Adopt the VPC's auto-created default security group and strip its stock
 # allow-all rules: nothing launches with it (cells pin ci_cell via the
 # launch template), so codify that as zero rules.
@@ -765,6 +803,117 @@ resource "aws_iam_role_policy" "ci_cell" {
   })
 }
 
+# ─── Nested-qemu runner hosts ────────────────────────────────────────────────
+# The instance-executor worker identity is deliberately harmless when exposed
+# to shell jobs through IMDS: it can read promoted qemu image pointers/bundles
+# and nothing that scales ASGs, writes images, or promotes artifacts.
+
+resource "aws_iam_role" "ci_qemu_host" {
+  name = "homelab-ci-qemu-host"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = { role = "ci" }
+}
+
+resource "aws_iam_instance_profile" "ci_qemu_host" {
+  name = "homelab-ci-qemu-host"
+  role = aws_iam_role.ci_qemu_host.name
+
+  tags = { role = "ci" }
+}
+
+resource "aws_iam_role_policy" "ci_qemu_host" {
+  name = "ci-qemu-host-readonly"
+  role = aws_iam_role.ci_qemu_host.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ResolveQemuImage"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter", "ssm:GetParameters"]
+        Resource = "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/qemu-image/*"
+      },
+      {
+        Sid      = "LocateQemuImages"
+        Effect   = "Allow"
+        Action   = "s3:GetBucketLocation"
+        Resource = aws_s3_bucket.ci_qemu_images.arn
+      },
+      {
+        Sid      = "ReadQemuImages"
+        Effect   = "Allow"
+        Action   = "s3:GetObject"
+        Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
+      },
+    ]
+  })
+}
+
+# Manager-side AWS identity for fleeting-plugin-aws on fox. Terraform owns the
+# least-privilege policy and user; the access key itself is minted separately
+# and vaulted into gitlab_runner_aws_qemu_* so the secret does not have to move
+# through Terraform outputs.
+resource "aws_iam_user" "ci_fleeting_manager" {
+  name = "homelab-ci-fleeting"
+  path = "/"
+
+  tags = { role = "ci" }
+}
+
+resource "aws_iam_user_policy" "ci_fleeting_manager" {
+  name = "ci-fleeting-manager"
+  user = aws_iam_user.ci_fleeting_manager.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ScaleQemuHostAsg"
+        Effect = "Allow"
+        Action = [
+          "autoscaling:SetDesiredCapacity",
+          "autoscaling:SetInstanceProtection",
+          "autoscaling:TerminateInstanceInAutoScalingGroup",
+        ]
+        Resource = aws_autoscaling_group.ci_qemu_host.arn
+      },
+      {
+        Sid    = "DescribeQemuHostFleet"
+        Effect = "Allow"
+        Action = [
+          "autoscaling:DescribeAutoScalingGroups",
+          "autoscaling:DescribeScalingActivities",
+          "ec2:DescribeInstances",
+          "ec2:DescribeInstanceStatus",
+          "ec2:DescribeSpotInstanceRequests",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid      = "ConnectToQemuHost"
+        Effect   = "Allow"
+        Action   = "ec2-instance-connect:SendSSHPublicKey"
+        Resource = "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*"
+        Condition = {
+          StringEquals = {
+            "ec2:ResourceTag/aws:autoscaling:groupName" = local.ci_qemu_host_pool.name
+          }
+        }
+      },
+    ]
+  })
+}
+
 # ─── Bake role ───────────────────────────────────────────────────────────────
 # Assumed only by protected-ref jobs (master): packer ebssurrogate bakes,
 # AMI registration, and SSM promotion. Branch jobs cannot publish AMIs.
@@ -843,11 +992,16 @@ resource "aws_iam_role_policy" "ci_bake" {
           "ssm:PutParameter", "ssm:GetParameter", "ssm:GetParameters",
           "ssm:DescribeParameters", "ssm:AddTagsToResource",
         ]
-        Resource = [
-          for m in keys(local.ci_machine_instance_types) :
-          "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/ami/${m}/*"
-          if m != "minimal"
-        ]
+        Resource = concat(
+          [
+            for m in keys(local.ci_machine_instance_types) :
+            "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/ami/${m}/*"
+            if m != "minimal"
+          ],
+          [
+            "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter${local.ci_qemu_host_ami_parameter}",
+          ]
+        )
       },
       {
         Sid    = "PublishQemuImages"
@@ -1089,6 +1243,124 @@ resource "aws_launch_template" "ci_cell" {
     Name    = "homelab-ci-cell-${each.key}"
     role    = "ci"
     machine = each.key
+  }
+}
+
+# Gate-1 nested-qemu host pool. This is deliberately separate from the direct
+# EC2 cell launch templates above: GitLab Runner/fleeting owns desired
+# capacity, and the host runs shell jobs that launch qemu/KVM locally.
+resource "aws_launch_template" "ci_qemu_host" {
+  name                   = local.ci_qemu_host_pool.name
+  description            = "homelab CI nested-qemu host"
+  update_default_version = true
+
+  image_id      = "resolve:ssm:${local.ci_qemu_host_ami_parameter}"
+  instance_type = local.ci_qemu_host_pool.instance_type
+
+  instance_initiated_shutdown_behavior = "terminate"
+
+  iam_instance_profile {
+    arn = aws_iam_instance_profile.ci_qemu_host.arn
+  }
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+    instance_metadata_tags      = "enabled"
+  }
+
+  cpu_options {
+    nested_virtualization = "enabled"
+  }
+
+  block_device_mappings {
+    device_name = "/dev/sda1"
+
+    ebs {
+      volume_size           = local.ci_qemu_host_pool.root_volume_size
+      volume_type           = "gp3"
+      iops                  = local.ci_qemu_host_pool.root_volume_iops
+      throughput            = local.ci_qemu_host_pool.root_volume_throughput
+      encrypted             = true
+      delete_on_termination = true
+    }
+  }
+
+  # Public IPv4 comes from the subnet default. The manager is outside the VPC,
+  # so no network_interfaces block here: keep the same top-level SG/subnet
+  # pattern as ci_cell and let the ASG choose an AZ.
+  vpc_security_group_ids = [aws_security_group.ci_qemu_host.id]
+  key_name               = aws_key_pair.ci_operator.key_name
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      role = "ci-qemu-host"
+      pool = local.ci_qemu_host_pool.name
+    }
+  }
+
+  tag_specifications {
+    resource_type = "volume"
+    tags = {
+      role = "ci-qemu-host"
+      pool = local.ci_qemu_host_pool.name
+    }
+  }
+
+  tags = {
+    Name = local.ci_qemu_host_pool.name
+    role = "ci"
+    pool = local.ci_qemu_host_pool.name
+  }
+}
+
+resource "aws_autoscaling_group" "ci_qemu_host" {
+  name                  = local.ci_qemu_host_pool.name
+  min_size              = 0
+  max_size              = local.ci_qemu_host_pool.max_size
+  desired_capacity      = 0
+  protect_from_scale_in = true
+  health_check_type     = "EC2"
+  suspended_processes   = ["AZRebalance"]
+  vpc_zone_identifier   = [for subnet in aws_subnet.ci : subnet.id]
+
+  mixed_instances_policy {
+    instances_distribution {
+      on_demand_base_capacity                  = 0
+      on_demand_percentage_above_base_capacity = 0
+      spot_allocation_strategy                 = "price-capacity-optimized"
+    }
+
+    launch_template {
+      launch_template_specification {
+        launch_template_id = aws_launch_template.ci_qemu_host.id
+        version            = "$Latest"
+      }
+    }
+  }
+
+  tag {
+    key                 = "Name"
+    value               = local.ci_qemu_host_pool.name
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "role"
+    value               = "ci-qemu-host"
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "pool"
+    value               = local.ci_qemu_host_pool.name
+    propagate_at_launch = true
+  }
+
+  lifecycle {
+    ignore_changes = [desired_capacity]
   }
 }
 

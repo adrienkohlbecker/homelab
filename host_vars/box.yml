@@ -217,6 +217,15 @@ gitlab_runner_coordinator_enabled: true
 gitlab_runner_coordinator_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
 gitlab_runner_hcloud_token: TEST_PLACEHOLDER_DO_NOT_USE
 
+# Exercise the AWS qemu instance-executor block: AWS fleeting plugin download,
+# manager-side AWS profile render, config.toml render, and _verify smoke. The
+# qemu harness never boots an ASG, and these placeholder credentials are never
+# accepted by AWS.
+gitlab_runner_aws_qemu_enabled: true
+gitlab_runner_aws_qemu_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
+gitlab_runner_aws_qemu_access_key_id: TEST_PLACEHOLDER_DO_NOT_USE
+gitlab_runner_aws_qemu_secret_access_key: TEST_PLACEHOLDER_DO_NOT_USE
+
 # roles/tailscale test config. The control-plane pointers (login_server,
 # headscale_host, headscale_user) are environment constants in group_vars/test.yml;
 # the pre-auth key is minted on-the-fly by main.yml at registration. Only the

@@ -93,3 +93,29 @@ gitlab_runner_max_instances: 1
 # on a cx43, and a creation-anchored reaper racing fleeting's lifecycle is not
 # worth it. Dial up toward 55m for more reuse, down for less spillover.
 gitlab_runner_idle_time: "45m"
+
+# ── AWS qemu runner (instance / fleeting) ───────────────────────────────────
+# Third [[runners]] block: an instance executor that asks fleeting-plugin-aws to
+# scale a dedicated Auto Scaling Group from zero, then runs shell jobs directly
+# on the AWS host. Those jobs hydrate S3 qemu images and run the same qemu
+# harness as the lab fallback. Gate 1 deliberately starts at one job on one
+# host; increase capacity only after the nested-qemu kill-switch benchmark
+# passes.
+gitlab_runner_aws_qemu_enabled: false
+gitlab_runner_aws_qemu_token: ""
+
+# AWS SDK profile rendered under /mnt/services/gitlab_runner/.aws when the
+# runner is enabled. fox is not an EC2 instance, so the plugin needs a
+# manager-side AWS identity rather than an instance profile.
+gitlab_runner_aws_qemu_profile: homelab-ci-fleeting
+gitlab_runner_aws_qemu_region: eu-central-1
+gitlab_runner_aws_qemu_access_key_id: ""
+gitlab_runner_aws_qemu_secret_access_key: ""
+
+# Terraform owns the matching ASG. Keep the config values explicit here so the
+# runner block can be enabled before it replaces the legacy direct-EC2 path.
+gitlab_runner_aws_qemu_asg_name: homelab-ci-qemu-c8i-xlarge
+gitlab_runner_aws_qemu_capacity_per_instance: 1
+gitlab_runner_aws_qemu_max_instances: 1
+gitlab_runner_aws_qemu_idle_time: "2m0s"
+gitlab_runner_aws_qemu_username: ubuntu

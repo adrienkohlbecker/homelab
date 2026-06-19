@@ -1,9 +1,9 @@
 # box_deps exercises fox's Docker-executor shape: rootless podman socket,
-# user-slice memory cap, coordinator block, and unit smoke. lab exercises the
-# shell-executor fallback shape from host_vars/lab.yml, including the absence of
-# stale rootless podman/linger state. The runner itself can't register in the
-# harness (no gitlab.com token), so qemu hosts use placeholder tokens and
-# _verify exercises the host-side artifacts.
+# user-slice memory cap, coordinator block, AWS qemu instance block, and unit
+# smoke. lab exercises the shell-executor fallback shape from host_vars/lab.yml,
+# including the absence of stale rootless podman/linger state. The runner itself
+# can't register in the harness (no gitlab.com token), so qemu hosts use
+# placeholder tokens and _verify exercises the host-side artifacts.
 machines:
   box_deps:
   lab: shell-executor fallback path is qemu-only
