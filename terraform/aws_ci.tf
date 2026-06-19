@@ -510,7 +510,7 @@ resource "aws_iam_role_policy" "ci_cell" {
       # public Ubuntu images surface under the "amazon" owner-alias, so
       # ec2:Owner reports "amazon" rather than account 099720109477 — match
       # the alias to allow the minimal machine's Canonical AMI, while the
-      # account id keeps the self-baked box/pug/lab images launchable.
+      # account id keeps the self-baked box/box_deps images launchable.
       {
         Sid      = "RunImage"
         Effect   = "Allow"
@@ -923,7 +923,7 @@ resource "aws_launch_template" "ci_cell" {
 # parameters; our path just aliases theirs so the harness resolves every
 # machine through the same /homelab-ci/ami/<machine>/<ubuntu> shape. A tofu
 # apply refreshes the alias to Canonical's current AMI. Parameters for the
-# baked machines (box/box_deps/pug/lab) are written by the packer:ami
+# baked machines (box/box_deps) are written by the packer:ami
 # pipeline, not managed here.
 
 data "aws_ssm_parameter" "canonical_ubuntu" {
