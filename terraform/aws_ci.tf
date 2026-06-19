@@ -391,13 +391,15 @@ resource "aws_default_route_table" "ci" {
 }
 
 # ─── Security group ──────────────────────────────────────────────────────────
-# Instance-executor qemu hosts. The manager runs on fox outside the VPC, so
-# fleeting must SSH to the worker's public address. Keep ingress to fox only;
-# no standing Elastic IP is allocated, and public IPv4 bills only while an ASG
-# instance exists.
+# Instance-executor qemu hosts, and the local AMI bakes that reuse this SG. The
+# manager runs on fox outside the VPC, so fleeting must SSH to the worker's
+# public address; `mise run packer:qemu-host-ami` runs packer on the operator's
+# workstation, which filters this same SG, so the home WAN needs SSH in too. No
+# standing Elastic IP is allocated, and public IPv4 bills only while an instance
+# exists.
 resource "aws_security_group" "ci_qemu_host" {
   name        = "homelab-ci-qemu-host"
-  description = "CI qemu hosts: SSH from fox, open egress"
+  description = "CI qemu hosts + local bakes: SSH from fox and home WAN, open egress"
   vpc_id      = aws_vpc.ci.id
 
   ingress {
@@ -406,6 +408,18 @@ resource "aws_security_group" "ci_qemu_host" {
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["${hcloud_primary_ip.fox.ip_address}/32"]
+  }
+
+  # Local `packer:qemu-host-ami` / `fox_image` bakes SSH from the operator's
+  # workstation, which egresses via the home WAN (residential, so it can drift
+  # -- update TF_VAR_home_wan_ip and re-apply, same value the fox wg0 ingress
+  # already tracks).
+  ingress {
+    description = "SSH from operator workstation (local bakes)"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["${local.home_wan_ip}/32"]
   }
 
   egress {
