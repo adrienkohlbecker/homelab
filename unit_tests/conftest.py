@@ -8,49 +8,46 @@ import pytest
 
 import machine
 
+# Constructor parameters of machine.Machine.__init__. Override keys matching
+# these are routed to the constructor; any other override key is applied to
+# the constructed instance via setattr (so tests can inject synthetic field
+# values like ssh_port/ansible_args that __init__ doesn't accept directly).
+_CONSTRUCTOR_PARAMS = frozenset(
+    {
+        "machine",
+        "role",
+        "keep_vm",
+        "ubuntu_name",
+        "machine_timeout",
+        "upstream_mirrors",
+        "workdir_parent",
+        "image_dir",
+        "kernel",
+        "initrd",
+        "append",
+        "mem",
+        "with_pflash",
+        "efi_code",
+        "efi_vars",
+        "virtfs",
+        "foreground",
+        "display_window",
+        "qmp_socket",
+        "commit_in_place",
+        "extra_hostfwds",
+    }
+)
+
 
 @pytest.fixture
 def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., machine.Machine]]:
-    """Build base Machine instances against a sandboxed OUT_DIR.
+    """Build Machine instances with imagedir + arch under our control.
 
     Each instance's TemporaryDirectory is cleaned up at fixture teardown so
-    the dataclass's destructor warning doesn't fire.
+    the destructor warning doesn't fire.
     """
-    out_dir = tmp_path / "out"
-    monkeypatch.setattr(machine, "OUT_DIR", out_dir)
-
-    instances: list[machine.Machine] = []
-
-    def make(**overrides: Any) -> machine.Machine:
-        defaults: dict[str, Any] = dict(
-            ssh_port=2222,
-            ssh_user="vagrant",
-            ansible_args=["-e", '{"flag":true}'],
-            inventory_host="box",
-            machine="box",
-            role="testrole",
-            keep_vm=False,
-            ubuntu_name="jammy",
-            machine_timeout=300,
-        )
-        defaults.update(overrides)
-        m = machine.Machine(**defaults)
-        instances.append(m)
-        return m
-
-    yield make
-
-    for m in instances:
-        m.workdir.cleanup()
-
-
-@pytest.fixture
-def qemu_machine_factory(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> Iterator[Callable[..., machine.QemuMachine]]:
-    """Build QemuMachine instances with imagedir + arch under our control."""
-    # Pin host-platform discovery to Darwin so QemuMachine resolves
-    # imagedir to tmp_path/packer/artifacts (writable, host-agnostic).
+    # Pin host-platform discovery to Darwin so Machine resolves imagedir to
+    # tmp_path/packer/artifacts (writable, host-agnostic).
     monkeypatch.setattr(machine.platform, "system", lambda: "Darwin")
     # These tests only build command lines -- they never spawn qemu -- so the
     # emulator binary needn't actually be installed. The x86 CI image ships
@@ -62,22 +59,32 @@ def qemu_machine_factory(
     monkeypatch.setattr(machine.shutil, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(machine, "OUT_DIR", tmp_path / "out")
     monkeypatch.chdir(tmp_path)
-    instances: list[machine.QemuMachine] = []
+    instances: list[machine.Machine] = []
 
-    def make(*, host_arch: str = "x86_64", **overrides: Any) -> machine.QemuMachine:
-        # detect_host_arch() runs once inside QemuMachine.__init__ and the
+    def make(*, host_arch: str = "x86_64", **overrides: Any) -> machine.Machine:
+        # detect_host_arch() runs once inside Machine.__init__ and the
         # ArchProfile gets cached on the instance, so the patch must be in
         # place before make() constructs the machine below.
         monkeypatch.setattr(machine.platform, "machine", lambda: host_arch)
-        defaults: dict[str, Any] = dict(
-            machine="minimal",
+        kwargs: dict[str, Any] = dict(
+            machine="box",
             role="testrole",
             keep_vm=False,
             ubuntu_name="jammy",
             machine_timeout=300,
         )
-        defaults.update(overrides)
-        m = machine.QemuMachine(**defaults)
+        # Constructor params go to __init__; anything else is a synthetic
+        # field value injected post-construction via setattr (e.g. ssh_port,
+        # ansible_args, inventory_host) that __init__ derives from the spec.
+        post_init: dict[str, Any] = {}
+        for key, value in overrides.items():
+            if key in _CONSTRUCTOR_PARAMS:
+                kwargs[key] = value
+            else:
+                post_init[key] = value
+        m = machine.Machine(**kwargs)
+        for key, value in post_init.items():
+            setattr(m, key, value)
         instances.append(m)
         return m
 

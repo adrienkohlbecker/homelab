@@ -8,6 +8,7 @@ UBUNTU_RELEASES, QemuMachineSpec.
 import fcntl
 import os
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -261,22 +262,11 @@ class TestConstants:
 
 
 # ---------------------------------------------------------------------------
-# Machine.__post_init__ ubuntu validation
+# Machine.__init__ ubuntu validation
 # ---------------------------------------------------------------------------
 
 
 class TestMachineUbuntuValidation:
-    def test_unknown_ubuntu_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(machine, "OUT_DIR", tmp_path / "out")
+    def test_unknown_ubuntu_raises(self, machine_factory: Callable[..., machine.Machine]) -> None:
         with pytest.raises(ValueError, match="Unknown Ubuntu release"):
-            machine.Machine(
-                ssh_port=2222,
-                ssh_user="vagrant",
-                ansible_args=[],
-                inventory_host="box",
-                machine="box",
-                role="test",
-                keep_vm=False,
-                ubuntu_name="bogus",
-                machine_timeout=300,
-            )
+            machine_factory(machine="box", role="test", ubuntu_name="bogus")

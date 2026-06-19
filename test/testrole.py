@@ -21,7 +21,6 @@ from machine import (
     PEAK_KB_SENTINEL_PREFIX,
     Machine,
     UBUNTU_RELEASES,
-    create_machine,
     imagedir_for_host,
     resolve_default_machine,
     sweep_stale_workdirs,
@@ -370,7 +369,7 @@ def main() -> int:
         return 1
 
     # Reap orphaned workdirs from prior SIGKILL'd / OOM'd / power-cut runs
-    # before constructing this run's QemuMachine. testall.py also sweeps once
+    # before constructing this run's Machine. testall.py also sweeps once
     # before fanning out; the .live-file flock check inside
     # sweep_stale_workdirs keeps parallel workers from racing on each other's
     # freshly-minted workdirs. Scope is imagedir-only, and it only matters for
@@ -379,7 +378,7 @@ def main() -> int:
 
     # Machine.wrapper_timeout layers WRAPPER_GRACE_SECONDS on top of this so
     # the inner `timeout` wrapper outlasts the Python deadline.
-    m: Machine = create_machine(
+    m = Machine(
         machine=parsed_args.machine,
         role=parsed_args.role,
         keep_vm=parsed_args.keep,

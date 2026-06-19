@@ -1,4 +1,4 @@
-"""Tests for QemuMachine._boot_command across the arch/keep_vm/direct-boot matrix.
+"""Tests for Machine._boot_command across the arch/keep_vm/direct-boot matrix.
 
 prepare() does the IO-heavy work of populating drives / _direct_boot /
 _extra_disk_devices, which aren't safe to run in a unit test (qemu-img,
@@ -23,7 +23,7 @@ def test_wan_probe_ports_manifest_loads_shared_surface() -> None:
     }
 
 
-def _setup(m: machine.QemuMachine, drives: list[str] | None = None) -> None:
+def _setup(m: machine.Machine, drives: list[str] | None = None) -> None:
     """Bypass prepare(): give the instance the attributes _boot_command reads."""
     m.drives = list(drives or [])
     m._direct_boot = None
@@ -34,9 +34,9 @@ def _setup(m: machine.QemuMachine, drives: list[str] | None = None) -> None:
 
 
 def test_default_x86_64_no_keep_no_direct_boot(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = qemu_machine_factory(host_arch="x86_64", keep_vm=False, machine_timeout=600)
+    m = machine_factory(host_arch="x86_64", machine="minimal", keep_vm=False, machine_timeout=600)
     _setup(m, drives=["file=disk1.qcow2,if=virtio", "file=disk2.qcow2,if=virtio"])
     cmd = m._boot_command()
 
@@ -59,8 +59,8 @@ def test_default_x86_64_no_keep_no_direct_boot(
     machine_idx = cmd.index("-machine")
     assert cmd[machine_idx + 1] == "type=q35,accel=hvf,usb=on"
 
-    # Sizing flows from QemuMachineSpec; the factory's default machine is
-    # "minimal" which is sized down to 2048M / 2 vcpus.
+    # Sizing flows from QemuMachineSpec; "minimal" is sized down to
+    # 2048M / 2 vcpus.
     assert cmd[cmd.index("-smp") + 1] == "2,sockets=1,cores=2"
     assert cmd[cmd.index("-m") + 1] == "2048M"
     assert cmd[cmd.index("-cpu") + 1] == "host"
@@ -89,9 +89,9 @@ def test_default_x86_64_no_keep_no_direct_boot(
 
 
 def test_default_aarch64_no_keep_no_direct_boot(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = qemu_machine_factory(host_arch="aarch64")
+    m = machine_factory(host_arch="aarch64")
     _setup(m)
     cmd = m._boot_command()
 
@@ -100,9 +100,9 @@ def test_default_aarch64_no_keep_no_direct_boot(
 
 
 def test_keep_vm_zero_timeout_x86_64_uses_minimal_keep_devices(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = qemu_machine_factory(host_arch="x86_64", keep_vm=True, machine_timeout=600)
+    m = machine_factory(host_arch="x86_64", keep_vm=True, machine_timeout=600)
     _setup(m)
     cmd = m._boot_command()
 
@@ -125,9 +125,9 @@ def test_keep_vm_zero_timeout_x86_64_uses_minimal_keep_devices(
 
 
 def test_keep_vm_display_window_uses_local_qemu_backend(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = qemu_machine_factory(host_arch="x86_64", keep_vm=True, display_window=True)
+    m = machine_factory(host_arch="x86_64", keep_vm=True, display_window=True)
     _setup(m)
     cmd = m._boot_command()
 
@@ -137,9 +137,9 @@ def test_keep_vm_display_window_uses_local_qemu_backend(
 
 
 def test_keep_vm_aarch64_adds_full_input_stack(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = qemu_machine_factory(host_arch="aarch64", keep_vm=True)
+    m = machine_factory(host_arch="aarch64", keep_vm=True)
     _setup(m)
     cmd = m._boot_command()
 
@@ -150,9 +150,9 @@ def test_keep_vm_aarch64_adds_full_input_stack(
 
 
 def test_direct_boot_aarch64_appends_console_when_missing(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = qemu_machine_factory(host_arch="aarch64", keep_vm=False)
+    m = machine_factory(host_arch="aarch64", keep_vm=False)
     _setup(m)
     m._direct_boot = (
         Path("/cache/kernel"),
@@ -174,9 +174,9 @@ def test_direct_boot_aarch64_appends_console_when_missing(
 
 
 def test_direct_boot_aarch64_does_not_duplicate_existing_ttyAMA(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = qemu_machine_factory(host_arch="aarch64", keep_vm=False)
+    m = machine_factory(host_arch="aarch64", keep_vm=False)
     _setup(m)
     m._direct_boot = (
         Path("/cache/kernel"),
@@ -189,9 +189,9 @@ def test_direct_boot_aarch64_does_not_duplicate_existing_ttyAMA(
 
 
 def test_direct_boot_x86_64_appends_ttyS(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = qemu_machine_factory(host_arch="x86_64", keep_vm=False)
+    m = machine_factory(host_arch="x86_64", keep_vm=False)
     _setup(m)
     m._direct_boot = (
         Path("/cache/kernel"),
@@ -204,9 +204,9 @@ def test_direct_boot_x86_64_appends_ttyS(
 
 
 def test_direct_boot_keep_vm_inserts_tty0_first(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = qemu_machine_factory(host_arch="aarch64", keep_vm=True)
+    m = machine_factory(host_arch="aarch64", keep_vm=True)
     _setup(m)
     m._direct_boot = (
         Path("/cache/kernel"),
@@ -222,10 +222,10 @@ def test_direct_boot_keep_vm_inserts_tty0_first(
 
 
 def test_memory_and_vcpus_flow_from_spec(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
     """Mutating the spec's memory_mb/vcpus fields must reach the qemu cmdline."""
-    m = qemu_machine_factory(host_arch="x86_64")
+    m = machine_factory(host_arch="x86_64")
     _setup(m)
     m._spec = m._spec._replace(memory_mb=12345, vcpus=2)
     cmd = m._boot_command()
@@ -236,23 +236,23 @@ def test_memory_and_vcpus_flow_from_spec(
 
 @pytest.mark.parametrize("host_arch", ["x86_64", "aarch64"])
 def test_pidfile_uses_idfile_under_workdir(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
     host_arch: str,
 ) -> None:
-    m = qemu_machine_factory(host_arch=host_arch)
+    m = machine_factory(host_arch=host_arch)
     _setup(m)
     cmd = m._boot_command()
     assert cmd[cmd.index("-pidfile") + 1] == f"{m.workdir.name}/{m.idfile}"
 
 
 def test_passt_backend_uses_stream_netdev(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
     """On the passt backend qemu attaches via a stream netdev to the sidecar
     socket, with no slirp user-net or hostfwds in the cmdline."""
     # The Darwin fixture resolves slirp; force passt + the socket prepare()
     # would set (which _setup bypasses) to exercise the passt branch.
-    m = qemu_machine_factory(host_arch="x86_64", machine="box")
+    m = machine_factory(host_arch="x86_64", machine="box")
     _setup(m, drives=["file=disk1.raw,if=virtio"])
     m._net_backend = "passt"
     m._passt_socket = Path(m.workdir.name) / "passt.sock"
@@ -269,11 +269,11 @@ def test_passt_backend_uses_stream_netdev(
 
 
 def test_passt_command_forwards_mirror_slirp_ports(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
     """passt's --tcp-ports/--udp-ports forward the same three controller-side
     ports slirp hostfwds, 127.0.0.1-bound, and pin the topology address."""
-    m = qemu_machine_factory(host_arch="x86_64", machine="box")
+    m = machine_factory(host_arch="x86_64", machine="box")
     _setup(m)
     m._net_backend = "passt"
     m._passt_socket = Path(m.workdir.name) / "passt.sock"
@@ -296,11 +296,11 @@ def test_passt_command_forwards_mirror_slirp_ports(
 
 
 def test_passt_command_skips_address_pin_off_topology(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
     """minimal isn't in the topology, so passt assigns from the container's
     default-route interface -- no --address pin (mirrors slirp's default net)."""
-    m = qemu_machine_factory(host_arch="x86_64", machine="minimal")
+    m = machine_factory(host_arch="x86_64", machine="minimal")
     _setup(m)
     m._net_backend = "passt"
     m._passt_socket = Path(m.workdir.name) / "passt.sock"
@@ -310,11 +310,11 @@ def test_passt_command_skips_address_pin_off_topology(
 
 
 def test_passt_native_backend_uses_passt_netdev(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
     """On qemu >= 10.1 the netdev is a native `passt` type (qemu spawns passt
     itself) -- no stream netdev, no sidecar socket, no slirp user-net."""
-    m = qemu_machine_factory(host_arch="x86_64", machine="box")
+    m = machine_factory(host_arch="x86_64", machine="box")
     _setup(m, drives=["file=disk1.raw,if=virtio"])
     m._net_backend = "passt"
     m._passt_native = True
@@ -331,13 +331,13 @@ def test_passt_native_backend_uses_passt_netdev(
 
 
 def test_passt_netdev_params_mirror_sidecar_ports(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
     """The native netdev encodes the same forward set as the sidecar's
     --tcp-ports/--udp-ports: a single 127.0.0.1/ prefix with inner commas
     DOUBLED so qemu's -netdev lexer keeps the list as one value, plus the
     topology address pin as address=/netmask=/gateway=."""
-    m = qemu_machine_factory(host_arch="x86_64", machine="box")
+    m = machine_factory(host_arch="x86_64", machine="box")
     _setup(m)
     m._net_backend = "passt"
     m._passt_native = True
@@ -367,11 +367,11 @@ def test_passt_netdev_params_mirror_sidecar_ports(
 
 
 def test_passt_netdev_params_skip_address_off_topology(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
 ) -> None:
     """minimal isn't in the topology, so the native netdev omits the address
     pin (mirrors the sidecar's empty passt_address_args)."""
-    m = qemu_machine_factory(host_arch="x86_64", machine="minimal")
+    m = machine_factory(host_arch="x86_64", machine="minimal")
     _setup(m)
     m._net_backend = "passt"
     m._passt_native = True

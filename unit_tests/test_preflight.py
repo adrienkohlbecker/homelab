@@ -2,7 +2,7 @@
 
 Each Machine subclass now validates its required binaries via shutil.which
 at the end of __post_init__. Failures raise RuntimeError with installation
-guidance. QemuMachine on Linux additionally rejects a missing /mnt/scratch/homelab_ci
+guidance. Machine on Linux additionally rejects a missing /mnt/scratch/homelab_ci
 so the caller gets a clearer message than tempfile's FileNotFoundError.
 """
 
@@ -26,25 +26,25 @@ def _which_excluding(missing: set[str]) -> Callable[[str], str | None]:
 
 
 def test_qemu_preflight_raises_when_qemu_binary_missing(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(machine.shutil, "which", _which_excluding({"qemu-system-x86_64"}))
     with pytest.raises(RuntimeError, match="qemu-system-x86_64"):
-        qemu_machine_factory(host_arch="x86_64")
+        machine_factory(host_arch="x86_64")
 
 
 def test_qemu_preflight_raises_when_timeout_missing(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
+    machine_factory: Callable[..., machine.Machine],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(machine.shutil, "which", _which_excluding({"timeout"}))
     with pytest.raises(RuntimeError, match="'timeout' not found"):
-        qemu_machine_factory()
+        machine_factory()
 
 
 def test_qemu_imagedir_missing_on_linux_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """QemuMachine on Linux fails fast when /mnt/scratch/homelab_ci isn't mounted.
+    """Machine on Linux fails fast when /mnt/scratch/homelab_ci isn't mounted.
 
     The Mac branch mkdirs packer/artifacts on the fly; the Linux branch
     hardcodes /mnt/scratch/homelab_ci and assumes the volume is mounted. Surface a
@@ -55,7 +55,7 @@ def test_qemu_imagedir_missing_on_linux_raises(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setattr(machine.platform, "machine", lambda: "x86_64")
     monkeypatch.setattr(machine.Path, "is_dir", lambda self: False)
     with pytest.raises(RuntimeError, match="does not exist"):
-        machine.QemuMachine(
+        machine.Machine(
             machine="minimal",
             role="testrole",
             keep_vm=False,

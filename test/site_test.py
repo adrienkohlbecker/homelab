@@ -22,7 +22,6 @@ from machine import (
     DEFAULT_UBUNTU,
     Machine,
     UBUNTU_RELEASES,
-    create_machine,
     imagedir_for_host,
     sweep_stale_workdirs,
 )
@@ -141,7 +140,7 @@ def main() -> int:
 
     sweep_stale_workdirs(imagedir_for_host())
 
-    m: Machine = create_machine(
+    m = Machine(
         machine="box",
         role="_site_test",
         keep_vm=args.keep,
