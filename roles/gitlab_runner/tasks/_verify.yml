@@ -75,6 +75,18 @@
   changed_when: false
   become: true
 
+- name: _verify | AWS qemu runner build tree lives on the NVMe scratch
+  when: gitlab_runner_aws_qemu_enabled
+  command: grep -F 'builds_dir = "/mnt/scratch/gitlab-runner/builds"' /mnt/services/gitlab_runner/config.toml
+  changed_when: false
+  become: true
+
+- name: _verify | AWS qemu runner cache lives on the NVMe scratch
+  when: gitlab_runner_aws_qemu_enabled
+  command: grep -F 'cache_dir = "/mnt/scratch/gitlab-runner/cache"' /mnt/services/gitlab_runner/config.toml
+  changed_when: false
+  become: true
+
 - name: _verify | Rootless podman.socket is active under gitlab_runner
   when: gitlab_runner_executor == 'docker'
   systemd:

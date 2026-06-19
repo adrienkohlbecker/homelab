@@ -110,6 +110,11 @@ build {
     destination = "/tmp/homelab_ci_hydrate_images"
   }
 
+  provisioner "file" {
+    source      = "${path.cwd}/packer/aws/files/homelab_ci_prepare_scratch.sh"
+    destination = "/tmp/homelab_ci_prepare_scratch"
+  }
+
   provisioner "shell" {
     inline_shebang = "/bin/bash -e"
     inline = [
@@ -129,7 +134,6 @@ build {
       "sudo ln -sf /usr/local/bin/gitlab-runner /usr/bin/gitlab-runner",
       "sudo install -m 0755 -o root -g root /tmp/homelab_ci_hydrate_images /usr/local/bin/homelab_ci_hydrate_images",
       "sudo usermod -aG kvm ubuntu",
-      "sudo install -dm 0755 -o ubuntu -g ubuntu /mnt/scratch/homelab_ci",
       "sudo install -dm 0755 /opt/mise /opt/uv-cache /opt/venv /etc/mise /tmp/homelab-ci-build",
       "sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/",
       "cd /tmp/homelab-ci-build",
@@ -138,14 +142,13 @@ build {
       "sudo env MISE_DATA_DIR=/opt/mise UV_CACHE_DIR=/opt/uv-cache UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/opt/venv MISE_PYTHON_UV_VENV_AUTO=false PATH=/opt/venv/bin:/opt/mise/shims:/usr/local/bin:/usr/bin:/bin UV_COMPILE_BYTECODE=1 mise exec -- uv sync --frozen --link-mode hardlink",
       "sudo awk '/^\\[tools\\]/{p=1; print; next} /^\\[/{p=0} p' /tmp/homelab-ci-build/mise.toml | sudo tee /etc/mise/config.toml >/dev/null",
       "sudo chown -R ubuntu:ubuntu /opt/mise /opt/uv-cache /opt/venv",
-      "sudo tee /usr/local/bin/homelab_ci_prepare_scratch >/dev/null <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\ninstall -dm 0755 -o ubuntu -g ubuntu /mnt/scratch/homelab_ci\nchown ubuntu:ubuntu /mnt/scratch/homelab_ci\nEOF",
-      "sudo chmod 0755 /usr/local/bin/homelab_ci_prepare_scratch",
-      "sudo tee /usr/local/bin/homelab_ci_ready >/dev/null <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\n[ -c /dev/kvm ]\n[ -r /dev/kvm ]\n[ -w /dev/kvm ]\n[ -w /mnt/scratch/homelab_ci ]\nenv -i PATH=/usr/bin:/bin gitlab-runner --version >/dev/null\ncommand -v qemu-system-x86_64 >/dev/null\ncommand -v qemu-img >/dev/null\ncommand -v passt >/dev/null\ncommand -v mise >/dev/null\nEOF",
+      "sudo install -m 0755 -o root -g root /tmp/homelab_ci_prepare_scratch /usr/local/bin/homelab_ci_prepare_scratch",
+      "sudo tee /usr/local/bin/homelab_ci_ready >/dev/null <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\n[ -c /dev/kvm ]\n[ -r /dev/kvm ]\n[ -w /dev/kvm ]\n[ -w /mnt/scratch/gitlab-runner/builds ]\n[ -w /mnt/scratch/homelab_ci ]\nenv -i PATH=/usr/bin:/bin gitlab-runner --version >/dev/null\ncommand -v qemu-system-x86_64 >/dev/null\ncommand -v qemu-img >/dev/null\ncommand -v passt >/dev/null\ncommand -v mise >/dev/null\nEOF",
       "sudo chmod 0755 /usr/local/bin/homelab_ci_ready",
-      "sudo tee /etc/systemd/system/homelab-ci-scratch.service >/dev/null <<'EOF'\n[Unit]\nDescription=Prepare homelab CI qemu scratch cache\nBefore=multi-user.target\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/homelab_ci_prepare_scratch\nRemainAfterExit=yes\n\n[Install]\nWantedBy=multi-user.target\nEOF",
+      "sudo tee /etc/systemd/system/homelab-ci-scratch.service >/dev/null <<'EOF'\n[Unit]\nDescription=Format and mount local NVMe scratch for homelab CI qemu host\nBefore=multi-user.target\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/homelab_ci_prepare_scratch\nRemainAfterExit=yes\n\n[Install]\nWantedBy=multi-user.target\nEOF",
       "sudo systemctl enable homelab-ci-scratch.service",
       "sudo apt-get clean",
-      "sudo rm -rf /var/lib/apt/lists/* /tmp/gitlab-runner /tmp/homelab-ci-build",
+      "sudo rm -rf /var/lib/apt/lists/* /tmp/gitlab-runner /tmp/homelab_ci_prepare_scratch /tmp/homelab-ci-build",
     ]
   }
 
