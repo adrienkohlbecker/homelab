@@ -10,4 +10,4 @@ EFI:
   Enabled: true
 Kernel:
   CommandLine: >-
-    ro loglevel=0 nomodeset ip=dhcp rd.neednet=1 rd.net.timeout.carrier=30
+    ro loglevel=0 nomodeset
