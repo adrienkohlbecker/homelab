@@ -1275,38 +1275,51 @@ class Machine:
 
         self._direct_boot = None
 
-        # Pre-pick a free TCP port on 127.0.0.1 and pin qemu's hostfwd to it.
-        # Avoids an lsof-poll heuristic, which would have to filter VNC ports
-        # and re-tangle if any future qemu service published TCP. Tiny
-        # race window between close() and qemu's bind, but qemu launches
-        # near-immediately and the kernel rarely reissues a freshly-released
-        # port within microseconds.
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind((SSH_HOST, 0))
-            self.ssh_port = s.getsockname()[1]
-        # Auxiliary forwards for controller-side probes that need to
-        # ingress on the VM's WAN iface. Picked the same way as
-        # ssh_port; emitted into qemu/passt unconditionally so the
-        # qemu cmdline doesn't have to know which role's running.
+        # Reserve every hostfwd port up front by binding an ephemeral socket on
+        # 127.0.0.1 and reading back the assigned port. Avoids an lsof-poll
+        # heuristic, which would have to filter VNC ports and re-tangle if any
+        # future qemu service published TCP. Every reservation socket stays
+        # open until all ports are picked: closing one before the next bind
+        # lets the kernel re-hand-out the just-released port, and two forwards
+        # sharing a host port make qemu refuse to launch outright ("Could not
+        # set up host forwarding rule"). Uniqueness only has to hold within a
+        # protocol -- qemu keys hostfwd on proto+hostport -- so the TCP and UDP
+        # reservations are independent. Tiny race between closing the sockets
+        # and qemu's bind, but qemu launches near-immediately and the kernel
+        # rarely reissues a freshly-released port within microseconds.
         self.wan_forward_ports = {"tcp": {}, "udp": {}}
-        for proto, guest_ports in DEFAULT_WAN_FORWARDS.items():
-            sock_type = socket.SOCK_STREAM if proto == "tcp" else socket.SOCK_DGRAM
-            for guest_port in guest_ports:
+        reserved: list[socket.socket] = []
+
+        def _reserve(sock_type: int) -> int:
+            s = socket.socket(socket.AF_INET, sock_type)
+            s.bind((SSH_HOST, 0))
+            reserved.append(s)
+            return s.getsockname()[1]
+
+        try:
+            # SSH endpoint -- loopback hostfwd, pinned the same way as the rest.
+            self.ssh_port = _reserve(socket.SOCK_STREAM)
+            # Auxiliary forwards for controller-side probes that need to
+            # ingress on the VM's WAN iface; emitted into qemu/passt
+            # unconditionally so the qemu cmdline doesn't have to know which
+            # role's running.
+            for proto, guest_ports in DEFAULT_WAN_FORWARDS.items():
+                sock_type = socket.SOCK_STREAM if proto == "tcp" else socket.SOCK_DGRAM
+                for guest_port in guest_ports:
+                    key = str(guest_port)
+                    if key in self.wan_forward_ports[proto]:
+                        continue
+                    self.wan_forward_ports[proto][key] = _reserve(sock_type)
+            for guest_port in self._extra_guest_ports:
                 key = str(guest_port)
-                if key in self.wan_forward_ports[proto]:
+                if key in self.wan_forward_ports["tcp"]:
+                    self.extra_hostfwd_ports[guest_port] = self.wan_forward_ports["tcp"][key]
                     continue
-                with socket.socket(socket.AF_INET, sock_type) as s:
-                    s.bind((SSH_HOST, 0))
-                    self.wan_forward_ports[proto][key] = s.getsockname()[1]
-        for guest_port in self._extra_guest_ports:
-            key = str(guest_port)
-            if key in self.wan_forward_ports["tcp"]:
-                self.extra_hostfwd_ports[guest_port] = self.wan_forward_ports["tcp"][key]
-                continue
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind((SSH_HOST, 0))
-                self.extra_hostfwd_ports[guest_port] = s.getsockname()[1]
+                self.extra_hostfwd_ports[guest_port] = _reserve(socket.SOCK_STREAM)
                 self.wan_forward_ports["tcp"][key] = self.extra_hostfwd_ports[guest_port]
+        finally:
+            for s in reserved:
+                s.close()
 
         # On the passt backend qemu connects to the sidecar over a unix
         # socket. It must NOT live in self.workdir: that's on /mnt/scratch
