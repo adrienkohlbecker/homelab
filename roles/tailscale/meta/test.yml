@@ -3,3 +3,9 @@
 # pre-baked podman + nginx (skips ~140s/run). Same rationale as roles/headscale.
 machines:
   box_deps:
+
+# tailscale templates its apt key + suite on the release (pkgs.tailscale.com/
+# .../<release>.asc); the noble cell covers fox's release while the default
+# jammy cell keeps covering lab/pug until they migrate.
+ubuntu:
+  - noble

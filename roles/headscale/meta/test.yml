@@ -3,3 +3,9 @@
 # backports + podman + nginx install on every test run.
 machines:
   box_deps:
+
+# headscale runs only on fox, which is moving to noble; _verify already branches
+# on release (netavark iptables vs nftables, OpenSSL 3.x SNI), so the noble cell
+# exercises the firewall + TLS path fox actually takes in prod.
+ubuntu:
+  - noble
