@@ -329,8 +329,13 @@ qemu_host_ami:
 # fleet-global the instant it lands -- mitigated because the build verify-boots
 # (packer) and converges seed_deps (launch.py) before promoting, S3 versioning
 # retains the prior bundle, and upload-s3 prints the SSM rollback line. The
-# shared resource_group serializes every variant/release: lab builds one qemu
-# image at a time and never races the HOMELAB_CI_DIR publish or the SSM pointers.
+# resource_group is per (machine, release) -- `qemu_image_<machine>_<UBUNTU>`,
+# set in each machine template below -- so distinct builds run concurrently:
+# every release writes a disjoint HOMELAB_CI_DIR path (${HOMELAB_CI_DIR}/<rel>)
+# and moves a disjoint /homelab-ci/qemu-image/<machine>/<rel> SSM pointer, so
+# there is nothing to race. box_deps:<rel> still lands after box:<rel> via its
+# needs edge; the per-(machine,release) group only blocks a re-dispatch of the
+# *same* cell from overlapping its own in-flight publish.
 .qemu_image:
   stage: prepare
   rules:
@@ -348,7 +353,6 @@ qemu_host_ami:
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: sts.amazonaws.com
-  resource_group: qemu_images
   # Never auto-cancel mid-build -- a killed run can leave a half-published bundle.
   interruptible: false
   # box ~15m; box_deps adds the seed converge + reboot. Bounded well above a
@@ -370,6 +374,7 @@ qemu_host_ami:
 # box: the bare OS + zfs + networking platform every cell needs.
 .qemu_image_box:
   extends: .qemu_image
+  resource_group: qemu_image_box_$UBUNTU
   script:
     - mise run packer:build box --ubuntu "$UBUNTU"
     - mise run packer:upload-s3 box --ubuntu "$UBUNTU" --promote
@@ -382,6 +387,7 @@ qemu_host_ami:
 # build-box-first hint if the artifact is absent.
 .qemu_image_box_deps:
   extends: .qemu_image
+  resource_group: qemu_image_box_deps_$UBUNTU
   script:
     - mise run packer:seed-deps --ubuntu "$UBUNTU"
     - mise run packer:upload-s3 box_deps --ubuntu "$UBUNTU" --promote
@@ -402,8 +408,10 @@ qemu_host_ami:
     UBUNTU: resolute
 
 # needs the box bake from this pipeline (artifacts ride lab's HOMELAB_CI_DIR, not
-# GitLab artifacts -- so artifacts: false). The edge orders box_deps after box;
-# the shared resource_group keeps them from overlapping either way.
+# GitLab artifacts -- so artifacts: false). The edge is what orders box_deps after
+# box: they now sit in distinct per-(machine,release) resource groups, so the
+# needs edge -- not a shared group -- is the sole guarantee box has published
+# before seed-deps reads it.
 "qemu_image:box_deps:jammy":
   extends: .qemu_image_box_deps
   needs:
