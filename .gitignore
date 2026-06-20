@@ -16,7 +16,7 @@ test/out/
 test/out_*.log
 # Newer edk2 aarch64 firmware fetched by `mise run test:firmware` (warm-reboot
 # fix); pinned + checksum-verified, so re-fetchable rather than committed.
-test/firmware/
+test/firmware
 /.ansible-mitogen-strategy
 /packer/artifacts
 /zbm-build
