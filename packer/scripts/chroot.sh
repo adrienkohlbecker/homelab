@@ -11,7 +11,7 @@ set -euxo pipefail
 #   PARTITIONS_SWAP is only set for single-disk (LAYOUT=""); mirror
 #   variants swap on the rpool/swap zvol provision.sh creates.
 # - Optional: REFIND_TIMEOUT (default 3) — rEFInd menu countdown in
-#   seconds; aws_provision.sh sets -1 (boot default immediately).
+#   seconds before the default entry boots.
 # All list-shaped vars are space-delimited strings (bash arrays don't
 # survive `export`); use them unquoted to word-split.
 

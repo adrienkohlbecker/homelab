@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# Temp Hetzner rescue-server lifecycle, shared by the two image-publish
-# paths:
-#   - packer:hetzner       (mechanic 2) streams a pre-built raw image off
-#                          the runner's filesystem onto /dev/sda.
-#   - packer:hetzner-bake  (mechanic 1+2) bakes on an EC2 surrogate and has
-#                          the build instance stream its disk straight here,
-#                          so no 20G image ever lands on the runner.
+# Temp Hetzner rescue-server lifecycle for the image-publish path
+# packer:hetzner: it streams a pre-built raw image (from packer:build hetzner,
+# qemu/KVM) off the runner's filesystem onto the rescue server's /dev/sda, then
+# snapshots it.
 #
 # hcloud authenticates on its own: from $HCLOUD_TOKEN in CI (the job variable),
 # or the local CLI context (~/.config/hcloud/cli.toml) on the workstation. The
@@ -13,9 +10,8 @@
 # EXIT` -> rescue_create -> [write /dev/sda] -> rescue_snapshot "$UBUNTU".
 #
 # Exposes to the caller: RESCUE_IP, RESCUE_ID, the runner-side ssh_rescue()
-# helper, and KEY (path to the ephemeral private key authorized on the
-# rescue server -- packer:hetzner-bake hands KEY to the build instance so it
-# can ssh here for the direct stream).
+# helper, and KEY (path to the ephemeral private key authorized on the rescue
+# server, which ssh_rescue uses to stream onto /dev/sda).
 #
 # Every hcloud verb here blocks on its server action (create/enable-rescue/
 # reset/poweroff/create-image/rebuild/poweron all poll to completion), so the
@@ -27,19 +23,16 @@ TYPE="cpx22"
 SERVER="packer-hetzner-upload"
 
 # A killed run (CI job-timeout SIGKILL) skips the caller's `trap rescue_cleanup
-# EXIT`, stranding the cpx22 -- and the AWS EventBridge bake backstop
-# (_bake_backstop.sh) can only reach EC2, never Hetzner. The server name is
-# static, so at most one orphan exists; reap it before re-creating, but only
-# when it is older than any real bake, so a legitimately concurrent run (a young
-# server) still fails the create on the name collision rather than being
-# clobbered mid-stream. ci:audit-hetzner is the catch-all if no further bake
-# ever runs to trigger this reap.
+# EXIT`, stranding the cpx22. The server name is static, so at most one orphan
+# exists; reap it before re-creating, but only when it is older than any real
+# run, so a legitimately concurrent run (a young server) still fails the create
+# on the name collision rather than being clobbered mid-stream. ci:audit-hetzner
+# is the catch-all if no further run ever triggers this reap.
 RESCUE_ORPHAN_MAX_AGE_HOURS=2
 
-# Canonical rescue-side receive pipeline, shared by both publish paths. The
-# EC2 stream provisioner (packer/aws/ami.pkr.hcl) hardcodes the same string --
-# keep them in sync. mbuffer absorbs network jitter so the dd write never
-# stalls the TCP stream; zstd matches the rpool's own on-disk compression and
+# Canonical rescue-side receive pipeline. mbuffer absorbs network jitter so the
+# dd write never stalls the TCP stream; zstd matches the rpool's own on-disk
+# compression and
 # beats gzip on both speed and ratio. conv=sparse skips zero blocks on write.
 # 512M buffer stays well inside the cpx22 rescue's RAM-backed root (~3.7 GB).
 # rescue_create installs zstd + mbuffer before this runs.

@@ -91,7 +91,6 @@ PACKER_PATH_PATTERNS: list[str] = [
 PACKER_SOURCE_MAP: list[tuple[str, list[str]]] = [
     (r"packer/ubuntu_images\.json", ["qemu"]),
     (r"mise-tasks/packer/hetzner\.sh", ["hetzner_upload"]),
-    (r"mise-tasks/packer/hetzner-bake\.sh", ["hetzner_upload"]),
     (r"mise-tasks/packer/_hetzner_rescue\.sh", ["hetzner_upload"]),
     (r"mise-tasks/packer/hcloud-prune-snapshots\.sh", ["hetzner_upload"]),
 ]

@@ -67,8 +67,7 @@ wipe_disk() {
 
 # Map (disk, partition number) to the kernel partition device. Same
 # table as provision.sh's partdev: vd*/sd*/hd* concatenate the digit,
-# nvme/mmcblk/loop/md need a 'p' separator (the AWS ebssurrogate build
-# instance exposes EBS volumes as /dev/nvme*n1), by-id symlinks use
+# nvme/mmcblk/loop/md need a 'p' separator, by-id symlinks use
 # '-partN'.
 partdev() {
   local disk="$1" n="$2"

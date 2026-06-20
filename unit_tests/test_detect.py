@@ -194,7 +194,6 @@ class TestPackerSourcesFor:
         [
             ("packer/ubuntu_images.json", {"qemu"}),
             ("mise-tasks/packer/hetzner.sh", {"hetzner_upload"}),
-            ("mise-tasks/packer/hetzner-bake.sh", {"hetzner_upload"}),
             ("mise-tasks/packer/_hetzner_rescue.sh", {"hetzner_upload"}),
             ("mise-tasks/packer/hcloud-prune-snapshots.sh", {"hetzner_upload"}),
             ("packer/qemu.pkr.hcl", {"qemu"}),
