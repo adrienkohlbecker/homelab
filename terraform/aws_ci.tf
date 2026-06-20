@@ -32,11 +32,16 @@ locals {
     # plus the IAM groupName condition) on every future instance-type change.
     # instance_type below is the source of truth.
     name = "homelab-ci-qemu-host"
-    # 32 vCPU / 64 GiB / 1.9 TB NVMe. Sized for the per-host job concurrency set
-    # in host_vars/fox.yml (gitlab_runner_aws_qemu_capacity_per_instance); a
-    # future resize touches only this LT-version field, not the ASG name.
-    instance_type = "c8id.8xlarge"
-    max_size      = 1
+    # 16 vCPU / 32 GiB / 950 GB NVMe -- half a c8id.8xlarge, at 13 cells each
+    # (~2.46 GiB/cell, same density as one 8xlarge at 26). The runner scales out
+    # to as many of these as the queued burst needs, so a full universe runs in a
+    # single wave instead of serial waves on one big host. max_size is the
+    # 256-vCPU spot-quota ceiling, floor(256 / 16) = 16 hosts; it must match
+    # gitlab_runner_aws_qemu_max_instances in host_vars/fox.yml. Per-host
+    # concurrency is gitlab_runner_aws_qemu_capacity_per_instance there; a future
+    # resize touches only this LT-version field, not the ASG name.
+    instance_type = "c8id.4xlarge"
+    max_size      = 16
     # The "d" family carries a local instance-store NVMe disk. A boot service
     # (packer/aws/files/homelab_ci_prepare_scratch.sh) formats and mounts it at
     # /mnt/scratch, so all heavy CI I/O -- qcow2 overlays and the gitlab-runner
@@ -46,6 +51,20 @@ locals {
     root_volume_size       = 40
     root_volume_iops       = 3000
     root_volume_throughput = 125
+  }
+  # Dedicated single-host pool for the _site_test cell -- the full-site converge
+  # is the pipeline's critical path (~25m) and was spending ~70% of its run
+  # contending for CPU against the role-cell burst on the shared pool. A 4 vCPU
+  # c8id.xlarge gives the box guest (4 vCPU) its own host, and decouples the cost:
+  # the role-cell pool drains as soon as the cells finish instead of lingering for
+  # site_test's long tail. Reuses aws_launch_template.ci_qemu_host (same AMI / SG /
+  # instance profile / key); only the ASG differs, overriding instance_type. Kept
+  # tagged role=ci-qemu-host so the worker boot service, homelab_ci_ready, and the
+  # fleet describes treat it identically to the role-cell hosts.
+  ci_qemu_site_pool = {
+    name          = "homelab-ci-qemu-site"
+    instance_type = "c8id.xlarge"
+    max_size      = 1
   }
   ci_ecr_pull_through_cache_rules = {
     docker-hub = {
@@ -698,7 +717,10 @@ resource "aws_iam_user_policy" "ci_fleeting_manager" {
           "autoscaling:SetInstanceProtection",
           "autoscaling:TerminateInstanceInAutoScalingGroup",
         ]
-        Resource = aws_autoscaling_group.ci_qemu_host.arn
+        Resource = [
+          aws_autoscaling_group.ci_qemu_host.arn,
+          aws_autoscaling_group.ci_qemu_site.arn,
+        ]
       },
       {
         Sid    = "DescribeQemuHostFleet"
@@ -719,7 +741,10 @@ resource "aws_iam_user_policy" "ci_fleeting_manager" {
         Resource = "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*"
         Condition = {
           StringEquals = {
-            "ec2:ResourceTag/aws:autoscaling:groupName" = local.ci_qemu_host_pool.name
+            "ec2:ResourceTag/aws:autoscaling:groupName" = [
+              local.ci_qemu_host_pool.name,
+              local.ci_qemu_site_pool.name,
+            ]
           }
         }
       },
@@ -1020,6 +1045,66 @@ resource "aws_autoscaling_group" "ci_qemu_host" {
   tag {
     key                 = "pool"
     value               = local.ci_qemu_host_pool.name
+    propagate_at_launch = true
+  }
+
+  lifecycle {
+    ignore_changes = [desired_capacity]
+  }
+}
+
+# Dedicated _site_test pool (see local.ci_qemu_site_pool). Reuses the role-cell
+# launch template -- same AMI, SG, instance profile, key, NVMe boot service --
+# and only overrides the instance type to the 4 vCPU c8id.xlarge. max_size = 1:
+# the site runner block pins capacity_per_instance = max_instances = 1, so this
+# ASG never holds more than the single site_test host.
+resource "aws_autoscaling_group" "ci_qemu_site" {
+  name                  = local.ci_qemu_site_pool.name
+  min_size              = 0
+  max_size              = local.ci_qemu_site_pool.max_size
+  desired_capacity      = 0
+  protect_from_scale_in = true
+  health_check_type     = "EC2"
+  suspended_processes   = ["AZRebalance"]
+  vpc_zone_identifier   = [for subnet in aws_subnet.ci : subnet.id]
+
+  mixed_instances_policy {
+    instances_distribution {
+      on_demand_base_capacity                  = 0
+      on_demand_percentage_above_base_capacity = 0
+      spot_allocation_strategy                 = "price-capacity-optimized"
+    }
+
+    launch_template {
+      launch_template_specification {
+        launch_template_id = aws_launch_template.ci_qemu_host.id
+        version            = "$Latest"
+      }
+
+      # Only divergence from the role-cell pool: a smaller host for the lone
+      # site_test guest. The launch template's own instance_type is the
+      # role-cell default; this override wins for this ASG.
+      override {
+        instance_type = local.ci_qemu_site_pool.instance_type
+      }
+    }
+  }
+
+  tag {
+    key                 = "Name"
+    value               = local.ci_qemu_site_pool.name
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "role"
+    value               = "ci-qemu-host"
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "pool"
+    value               = local.ci_qemu_site_pool.name
     propagate_at_launch = true
   }
 

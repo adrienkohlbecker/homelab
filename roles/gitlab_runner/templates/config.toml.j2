@@ -126,3 +126,51 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
       idle_time = "{{ gitlab_runner_aws_qemu_idle_time }}"
       preemptive_mode = false
 {% endif %}
+{% if gitlab_runner_aws_qemu_site_enabled | default(false) %}
+
+# Dedicated _site_test runner: a second instance-executor pool (ASG
+# homelab-ci-qemu-site, one 4-vCPU c8id.xlarge) that runs only the full-site
+# converge cell, off the shared role-cell pool. The site converge is the
+# pipeline critical path and was losing ~70% of its runtime to CPU contention
+# against the cell burst; one host, one job (capacity = max_instances = 1) gives
+# its box guest dedicated vCPUs and lets the role-cell pool drain without waiting
+# on it. Shares the AWS plugin + rendered .aws profile with the block above
+# (hence the assert that the role-cell runner is enabled); differs only in token,
+# ASG, and the one-host sizing. The aws-shell-qemu-site server-side tag routes
+# _site_test here.
+[[runners]]
+  name = "{{ inventory_hostname }}-aws-shell-qemu-site"
+  url = "https://gitlab.com"
+  token = "{{ gitlab_runner_aws_qemu_site_token }}"
+  executor = "instance"
+  shell = "bash"
+  limit = 1
+  request_concurrency = 1
+  builds_dir = "/mnt/scratch/gitlab-runner/builds"
+  cache_dir = "/mnt/scratch/gitlab-runner/cache"
+
+  [runners.autoscaler]
+    plugin = "fleeting-plugin-aws"
+    capacity_per_instance = 1
+    max_use_count = 0
+    max_instances = 1
+    delete_instances_on_shutdown = true
+    instance_ready_command = "/usr/local/bin/homelab_ci_ready"
+
+    [runners.autoscaler.plugin_config]
+      name = "{{ gitlab_runner_aws_qemu_site_asg_name }}"
+      profile = "{{ gitlab_runner_aws_qemu_profile }}"
+      config_file = "/mnt/services/gitlab_runner/.aws/config"
+      credentials_file = "/mnt/services/gitlab_runner/.aws/credentials"
+      scale_in_termination = true
+
+    [runners.autoscaler.connector_config]
+      username = "{{ gitlab_runner_aws_qemu_username }}"
+      use_external_addr = true
+      timeout = "15m0s"
+
+    [[runners.autoscaler.policy]]
+      idle_count = 0
+      idle_time = "{{ gitlab_runner_aws_qemu_site_idle_time }}"
+      preemptive_mode = false
+{% endif %}

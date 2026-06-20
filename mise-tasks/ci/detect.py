@@ -746,6 +746,13 @@ EMPTY_SHA = "0" * 40
 
 # Both targets run the qemu backend; they differ only in the fields below.
 #   cell_runner_tag — which shell runner claims the cells.
+#   site_runner_tag — which runner claims the _site_test critical-path cell. On
+#                     aws_qemu this becomes "aws-shell-qemu-site" (a dedicated
+#                     single-host 4-vCPU pool) once that runner + ASG are live;
+#                     until then it equals cell_runner_tag so site_test rides the
+#                     role-cell pool and merging this can never strand the job on
+#                     an unregistered runner. lab has one shell runner, so it
+#                     always equals cell_runner_tag there.
 #   in_aws          — true when the guest egresses through AWS, so roles pick
 #                     the in-region EC2 mirrors + public DNS over the LAN Nexus
 #                     / AdGuard VIP (surfaced as HOMELAB_TEST_IN_AWS).
@@ -756,6 +763,10 @@ EMPTY_SHA = "0" * 40
 TARGETS = {
     "aws_qemu": {
         "cell_runner_tag": "aws-shell-qemu",
+        # Dedicated single-host 4-vCPU pool (gitlab_runner_aws_qemu_site on fox,
+        # terraform ASG homelab-ci-qemu-site) so the critical-path converge runs
+        # uncontended off the role-cell pool.
+        "site_runner_tag": "aws-shell-qemu-site",
         "in_aws": True,
         "baked_toolchain": True,
     },
@@ -763,6 +774,7 @@ TARGETS = {
         # lab's shell runner is on the operator LAN: the qemu guest reaches the
         # LAN Nexus + AdGuard VIP, so it is not "in AWS"; its mise is its own.
         "cell_runner_tag": "lab-shell-qemu",
+        "site_runner_tag": "lab-shell-qemu",
         "in_aws": False,
         "baked_toolchain": False,
     },
@@ -846,6 +858,7 @@ def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws_
         site_test=site_test,
         target=target,
         cell_runner_tag=target_config["cell_runner_tag"],
+        site_runner_tag=target_config["site_runner_tag"],
         in_aws=target_config["in_aws"],
         baked_toolchain=target_config["baked_toolchain"],
         cell_role_arn=CELL_ROLE_ARN,

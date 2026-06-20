@@ -77,3 +77,14 @@ gitlab_runner_aws_qemu_capacity_per_instance: 1
 gitlab_runner_aws_qemu_max_instances: 1
 gitlab_runner_aws_qemu_idle_time: "15m"
 gitlab_runner_aws_qemu_username: ubuntu
+
+# Dedicated single-host pool for the _site_test critical-path cell, off the
+# shared role-cell pool. Reuses the role-cell runner's AWS plugin + .aws profile
+# (so it requires gitlab_runner_aws_qemu_enabled), needs only its own GitLab
+# project-runner token tagged aws-shell-qemu-site, and pins one host / one job.
+# Terraform owns the matching ASG (homelab-ci-qemu-site, 4-vCPU c8id.xlarge).
+# Short idle_time: it runs a single job per pipeline, so warm reuse buys nothing.
+gitlab_runner_aws_qemu_site_enabled: false
+gitlab_runner_aws_qemu_site_token: ""
+gitlab_runner_aws_qemu_site_asg_name: homelab-ci-qemu-site
+gitlab_runner_aws_qemu_site_idle_time: "5m"

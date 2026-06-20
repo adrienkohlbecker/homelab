@@ -57,6 +57,23 @@
           homelab-ci-fleeting manager user, and vault the token/key values
           before enabling the runner in prod.
 
+    # The dedicated _site_test pool reuses the role-cell pool's AWS plugin and
+    # rendered .aws credential profile (both gated on the main aws_qemu flag), so
+    # it can only run when the role-cell runner is also enabled; it just needs its
+    # own GitLab project-runner token (tagged aws-shell-qemu-site).
+    - name: Assert the AWS qemu site runner inputs are set
+      when: gitlab_runner_aws_qemu_site_enabled | default(false)
+      assert:
+        that:
+          - gitlab_runner_aws_qemu_enabled | bool
+          - gitlab_runner_aws_qemu_site_token | default('') | length > 0
+        fail_msg: >-
+          gitlab_runner_aws_qemu_site_enabled is true but either the role-cell
+          aws_qemu runner is disabled (the site pool reuses its AWS credentials)
+          or gitlab_runner_aws_qemu_site_token is unset for
+          {{ inventory_hostname }}. Create a protected project runner tagged
+          aws-shell-qemu-site and vault its token before enabling the site pool.
+
     - name: Set up gitlab_runner system user, group, and config dir
       import_role:
         name: service_user
