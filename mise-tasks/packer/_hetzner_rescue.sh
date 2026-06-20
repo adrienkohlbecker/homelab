@@ -44,26 +44,24 @@ RESCUE_RECV='mbuffer -q -m 512M | zstd -dc | dd of=/dev/sda bs=64M conv=sparse s
 # one. Uses the RESCUE_IP/KEY/KNOWN globals rescue_init + rescue_create set.
 ssh_rescue() { ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN" -o ConnectTimeout=5 "root@$RESCUE_IP" "$@"; }
 
-# True when host:22 has a live sshd, whether or not our `true` command runs.
-# Three "up" signatures, all proving the OS booted far enough to start sshd:
-#   - rc 0: our ephemeral key was authorized and the command ran.
-#   - a "permission denied"/auth-failure message: sshd answered but rejected us.
-#   - "please login as the user": the key authenticated, but on the verify
-#     rebuild Hetzner re-injects it into root, where cloud-init's disable_root
-#     forced-command (disable_root_opts) runs instead of our command -- it
-#     prints that message, sleeps, and exits 142. The image bakes no login user
-#     (prod's terraform user_data creates `ak`), so root is always the landing
-#     spot here. This is a fully-booted server, not a failure.
-# A refused or timed-out connection matches none of these -- it has not (yet)
-# booted. Cross-platform: leans on ssh's own ConnectTimeout, no nc/timeout
-# binary needed (hetzner.sh can run on macOS, which ships neither).
+# True when host:22 has a live sshd. Probe with PreferredAuthentications=none:
+# sshd rejects us instantly with "permission denied" without running anything,
+# which proves the OS booted far enough to start sshd. Crucially this never
+# triggers cloud-init's disable_root forced-command (on the verify rebuild
+# Hetzner re-injects our key onto root, where disable_root_opts would print
+# "Please login as the user ...", sleep 10s, then exit 142). Authenticating to
+# hit that would make every probe pay the 10s sleep, stretching a non-booting
+# bake's bounded poll from ~5min to ~15min of wall time; rejecting up front
+# keeps each probe sub-second. rc 0 (sshd somehow lets us in) also counts as up.
+# A refused or timed-out connection matches neither -- it has not (yet) booted.
+# Cross-platform: leans on ssh's own ConnectTimeout, no nc/timeout binary needed
+# (hetzner.sh can run on macOS, which ships neither).
 rescue_sshd_up() { # IP
   local out
-  out=$(ssh -i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
-    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-    -o ConnectTimeout=10 -o PreferredAuthentications=publickey \
-    "root@$1" true 2>&1) && return 0
-  printf '%s' "$out" | grep -qiE 'permission denied|authentication failure|too many authentication|please login as the user'
+  out=$(ssh -o BatchMode=yes -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 \
+    -o PreferredAuthentications=none "root@$1" true 2>&1) && return 0
+  printf '%s' "$out" | grep -qiE 'permission denied|authentication failure|too many authentication'
 }
 
 rescue_init() {
@@ -150,14 +148,12 @@ rescue_create() {
 
 # Prove the freshly-created snapshot actually boots before we tear the temp
 # server down: rebuild that same server from the snapshot (this wipes /dev/sda,
-# whose contents we have already captured) and wait for a working sshd. On the
-# rebuild Hetzner re-injects our ephemeral key (the server was created with it),
-# but cloud-init lands it on root behind the disable_root forced-command, so we
-# never get a real shell -- a live sshd (see rescue_sshd_up) still proves the
-# kernel booted, the rpool imported, root mounted, and sshd started, which is
-# exactly the failure surface a non-bootable bake would hit. A bad snapshot
-# left in place would otherwise become terraform's newest-matching pick, so on
-# failure we delete it and fail the run.
+# whose contents we have already captured) and wait for a working sshd. We
+# never authenticate (see rescue_sshd_up) -- a live sshd alone proves the kernel
+# booted, the rpool imported, root mounted, and sshd started, which is exactly
+# the failure surface a non-bootable bake would hit. A bad snapshot left in
+# place would otherwise become terraform's newest-matching pick, so on failure
+# we delete it and fail the run.
 rescue_verify_boot() { # IMGID
   local imgid="$1" waited=0
   echo "==> verifying boot: rebuilding server $RESCUE_ID from snapshot $imgid"
