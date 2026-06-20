@@ -6,9 +6,11 @@
 # ///
 """Prune old nested-qemu image bundles from S3.
 
-The live image for each machine/release pair is selected by the SSM parameter:
+Works against AWS S3 (default) or an S3-compatible MinIO endpoint via
+--endpoint-url. The live image for each machine/release pair is read from the
+promoted.json pointer object:
 
-    /homelab-ci/qemu-image/<machine>/<ubuntu>
+    s3://homelab-ci-images/<ubuntu>/<machine>/promoted.json -> {"build_id": ...}
 
 The bucket layout is:
 
@@ -16,13 +18,19 @@ The bucket layout is:
 
 This task keeps the promoted build, the newest extra builds, and anything
 younger than the grace period. It prints the deletion plan by default and only
-mutates S3 when called with --apply.
+mutates the bucket when called with --apply.
+
+On AWS S3 the bucket lifecycle handles noncurrent versions, so a stale prefix
+is swept by deleting every object version. The MinIO mirror has no object
+versioning, so on --endpoint-url the sweep deletes current objects by key.
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
+import os
 import sys
 from dataclasses import dataclass, field
 from typing import Iterable
@@ -35,7 +43,7 @@ DEFAULT_BUCKET = "homelab-ci-images"
 DEFAULT_REGION = "eu-central-1"
 DEFAULT_MACHINES = ("box", "box_deps")
 DEFAULT_UBUNTUS = ("jammy", "noble", "resolute")
-SSM_PREFIX = "/homelab-ci/qemu-image"
+POINTER_NAME = "promoted.json"
 DELETE_BATCH_SIZE = 1000
 
 CFG = Config(retries={"max_attempts": 10, "mode": "adaptive"})
@@ -68,6 +76,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bucket", default=DEFAULT_BUCKET)
     parser.add_argument("--region", default=DEFAULT_REGION)
+    parser.add_argument("--endpoint-url", default=os.environ.get("HOMELAB_CI_S3_ENDPOINT") or None)
     parser.add_argument("--machines", type=parse_csv, default=DEFAULT_MACHINES)
     parser.add_argument("--ubuntus", type=parse_csv, default=DEFAULT_UBUNTUS)
     parser.add_argument("--keep-newest", type=int, default=3)
@@ -81,20 +90,23 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def client(service: str, region: str):
-    return boto3.client(service, region_name=region, config=CFG)
+def s3_client(region: str, endpoint_url: str | None):
+    return boto3.client("s3", region_name=region, endpoint_url=endpoint_url, config=CFG)
 
 
-def promoted_build(ssm, machine: str, ubuntu: str) -> str | None:
-    name = f"{SSM_PREFIX}/{machine}/{ubuntu}"
+def promoted_build(s3, bucket: str, machine: str, ubuntu: str) -> str | None:
+    key = f"{ubuntu}/{machine}/{POINTER_NAME}"
     try:
-        value = ssm.get_parameter(Name=name)["Parameter"]["Value"].strip()
+        body = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
     except ClientError as e:
         code = e.response["Error"].get("Code", "Error")
-        if code == "ParameterNotFound":
+        status = e.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        if code in ("NoSuchKey", "404") or status == 404:
             return None
         raise
-    return value or None
+    pointer = json.loads(body)
+    build_id = pointer.get("build_id")
+    return build_id or None
 
 
 def list_build_ids(s3, bucket: str, machine: str, ubuntu: str) -> list[str]:
@@ -160,6 +172,7 @@ def mark_keep_reasons(builds: list[Build], promoted: str | None, keep_newest: in
 
 
 def iter_versions(s3, bucket: str, prefix: str) -> Iterable[dict[str, str]]:
+    """Yield every object version + delete marker under a prefix (S3 only)."""
     paginator = s3.get_paginator("list_object_versions")
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         for key in ("Versions", "DeleteMarkers"):
@@ -167,11 +180,19 @@ def iter_versions(s3, bucket: str, prefix: str) -> Iterable[dict[str, str]]:
                 yield {"Key": item["Key"], "VersionId": item["VersionId"]}
 
 
-def delete_versions(s3, bucket: str, prefix: str) -> int:
+def iter_objects(s3, bucket: str, prefix: str) -> Iterable[dict[str, str]]:
+    """Yield current object keys under a prefix (no versioning; MinIO)."""
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            yield {"Key": obj["Key"]}
+
+
+def delete_in_batches(s3, bucket: str, items: Iterable[dict[str, str]]) -> int:
     deleted = 0
     batch: list[dict[str, str]] = []
-    for version in iter_versions(s3, bucket, prefix):
-        batch.append(version)
+    for item in items:
+        batch.append(item)
         if len(batch) == DELETE_BATCH_SIZE:
             s3.delete_objects(Bucket=bucket, Delete={"Objects": batch, "Quiet": True})
             deleted += len(batch)
@@ -180,6 +201,11 @@ def delete_versions(s3, bucket: str, prefix: str) -> int:
         s3.delete_objects(Bucket=bucket, Delete={"Objects": batch, "Quiet": True})
         deleted += len(batch)
     return deleted
+
+
+def delete_prefix(s3, bucket: str, prefix: str, versioned: bool) -> int:
+    items = iter_versions(s3, bucket, prefix) if versioned else iter_objects(s3, bucket, prefix)
+    return delete_in_batches(s3, bucket, items)
 
 
 def human_size(size: int) -> str:
@@ -194,8 +220,8 @@ def human_size(size: int) -> str:
 
 def main() -> int:
     args = parse_args()
-    s3 = client("s3", args.region)
-    ssm = client("ssm", args.region)
+    s3 = s3_client(args.region, args.endpoint_url)
+    versioned = args.endpoint_url is None
 
     print(
         f"== QEMU image reaper: s3://{args.bucket}/ "
@@ -208,7 +234,7 @@ def main() -> int:
     kept: list[Build] = []
     for ubuntu in args.ubuntus:
         for machine in args.machines:
-            promoted = promoted_build(ssm, machine, ubuntu)
+            promoted = promoted_build(s3, args.bucket, machine, ubuntu)
             builds = [
                 build_stats(s3, args.bucket, machine, ubuntu, build_id)
                 for build_id in list_build_ids(s3, args.bucket, machine, ubuntu)
@@ -237,11 +263,13 @@ def main() -> int:
     if not args.apply:
         return 0
 
-    deleted_versions = 0
+    deleted = 0
+    noun = "versions/delete markers" if versioned else "objects"
     for build in stale:
-        print(f"==> deleting all versions under s3://{args.bucket}/{build.prefix}")
-        deleted_versions += delete_versions(s3, args.bucket, build.prefix)
-    print(f"Deleted {deleted_versions} object versions/delete markers")
+        scope = "all versions" if versioned else "all objects"
+        print(f"==> deleting {scope} under s3://{args.bucket}/{build.prefix}")
+        deleted += delete_prefix(s3, args.bucket, build.prefix, versioned)
+    print(f"Deleted {deleted} object {noun}")
     return 0
 
 
