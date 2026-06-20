@@ -32,8 +32,12 @@ zfs_trim_pools:
   - rpool
 zfs_pool_properties:
   - { pool: rpool, name: autotrim, value: "on" }
+# The rpool/ROOT/<release> entry is templated so it tracks the host's own
+# Ubuntu release -- jammy hosts mount rpool/ROOT/jammy, a noble host mounts
+# rpool/ROOT/noble -- without a per-host override during the jammy->noble
+# migration. Matches the box fixture's templated entry.
 zfs_mount_cache_datasets:
-  - rpool/ROOT/jammy
+  - rpool/ROOT/{{ ansible_distribution_release }}
 
 macvlan_blocks: []
 etc_hosts_entries:

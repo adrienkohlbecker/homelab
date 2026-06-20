@@ -22,7 +22,7 @@ zfs_pool_properties:
   - { pool: dozer, name: autotrim, value: "on" }
   - { pool: tank, name: autotrim, value: "on" }
 zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
-  - rpool/ROOT/jammy
+  - rpool/ROOT/{{ ansible_distribution_release }}
   - dozer/minio
   - tank/data
 zfs_dozer_filesystem: dozer
