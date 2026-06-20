@@ -271,7 +271,27 @@ fi
 # (8250 COM1 at io 0x3f8 vs pl011 at mmio 0x9000000), so the value is
 # arch-specific. $CONSOLE_CMDLINE is used both here and in the rEFInd menuentries
 # directly — no readback from ZFS needed.
-zfs set org.zfsbootmenu:commandline="$CONSOLE_CMDLINE" "rpool/ROOT"
+#
+# QEMU_TEST_IMAGE is set (=1) ONLY by the box/lab/pug sources in qemu.pkr.hcl;
+# it is unset for the hetzner image and for any bare-metal copy-paste run of
+# this script, so neither picks up the test-only tuning below (default empty).
+#
+# mitigations=off: these are throwaway nested-KVM CI cells whose entire life is
+# one converge + verify. Speculative-execution mitigations buy nothing on a
+# disposable guest and cost a real syscall-heavy tax (apt, mitogen, fact-gather),
+# worse under nested virt. We also drop the arg as a /etc/zfsbootmenu fragment so
+# the boot role's converge-time cmdline reassembly (which rebuilds the property
+# from /etc/zfsbootmenu/*) keeps it across an in-test reboot. The fragment only
+# exists in the test image; prod is stock Ubuntu via ansible and has no such
+# file, so mitigations=off can never reach a prod host.
+if [ "${QEMU_TEST_IMAGE:-}" = "1" ]; then
+  COMMANDLINE="$CONSOLE_CMDLINE mitigations=off"
+  mkdir -p /etc/zfsbootmenu
+  echo "mitigations=off" >/etc/zfsbootmenu/mitigations
+else
+  COMMANDLINE="$CONSOLE_CMDLINE"
+fi
+zfs set org.zfsbootmenu:commandline="$COMMANDLINE" "rpool/ROOT"
 
 # Create efi & swap
 
@@ -723,6 +743,43 @@ EOF
   echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >"/etc/sudoers.d/$USERNAME"
   chown root:root "/etc/sudoers.d/$USERNAME"
   chmod 400 "/etc/sudoers.d/$USERNAME"
+fi
+
+# Mask ambient background units in the *test image only* (QEMU_TEST_IMAGE=1,
+# set by the box/lab/pug sources). On a throwaway CI cell these steal the dpkg
+# lock and burn CPU during converge, inflating the ~28s setup phase for no
+# benefit on a guest that lives for one test.
+#
+# Masked here, re-established by the owning role from this clean base — the same
+# spirit as the mirror prelude: the image suppresses interference, the role that
+# owns a unit unmasks + exercises it (so its _verify still proves it drives the
+# unit from a masked start):
+#   - apt-daily.timer / apt-daily-upgrade.timer: roles/unattended_upgrades
+#     unmasks + enables + starts apt-daily-upgrade.timer and its _verify asserts
+#     it active. apt-daily.timer (the download half) is not exercised by any
+#     role; unattended_upgrades unmasks it too so the upgrade pipeline it feeds
+#     works end to end.
+#   - unattended-upgrades.service: not in the debootstrap base (the role apt-
+#     installs it), so the present-gate below skips it here; listed for the day
+#     a derived image bakes it in, in which case the role re-installs it fresh
+#     (an apt install lands the unit unmasked).
+#   - multipathd.service / .socket: roles/boot masks these itself on zfs_root
+#     hosts (boot_disable_lvm_services) and its _verify asserts them masked, so a
+#     pre-mask here is aligned, not in conflict.
+# snapd is deliberately NOT masked: the debootstrap base never ships it, and the
+# cleanup role purges it on the cloud-image (minimal) variant with a _verify that
+# asserts no snapd unit files remain — a mask symlink would trip that assertion.
+#
+# Each unit is masked only if systemd already knows a real unit file for it
+# (list-unit-files lists it as anything other than not-found); masking an absent
+# unit would leave a dangling /dev/null symlink.
+if [ "${QEMU_TEST_IMAGE:-}" = "1" ]; then
+  for unit in apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service \
+    multipathd.service multipathd.socket; do
+    if systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q .; then
+      systemctl mask "$unit"
+    fi
+  done
 fi
 
 # Reset apt sources to upstream so the shipped image isn't pinned to a
