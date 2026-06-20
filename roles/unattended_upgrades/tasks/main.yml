@@ -40,10 +40,26 @@
   tags:
     - unattended_upgrades
 
+# The qemu test image masks the apt-daily pair to keep them off the dpkg lock
+# during converge (packer/scripts/chroot.sh). This role owns the unattended
+# upgrade pipeline, so it unmasks both from that clean base: apt-daily.timer is
+# the download half that feeds apt-daily-upgrade.timer's install run. masked:
+# false is a no-op on prod (stock Ubuntu ships these unmasked), so the role
+# proves it drives the units to the desired state regardless of the start point.
+- name: Ensure the apt-daily download timer is unmasked
+  when: not (ansible_check_mode and unattended_upgrades_apt.changed)
+  systemd:
+    name: apt-daily.timer
+    masked: false
+  become: true
+  tags:
+    - unattended_upgrades
+
 - name: Ensure apt-daily-upgrade timer is active
   when: not (ansible_check_mode and unattended_upgrades_apt.changed)
   systemd:
     name: apt-daily-upgrade.timer
+    masked: false
     state: started
     enabled: true
   become: true
