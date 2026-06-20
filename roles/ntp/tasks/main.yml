@@ -31,17 +31,49 @@
   tags:
     - ntp
 
-# Mask systemd-timesyncd rather than trusting chrony's packaging to
-# displace it. On the jammy→noble flip apt *removes* timesyncd, but that
-# runs under policy_rc_d 101 (the backports upgrade above), so invoke-rc.d
-# never stops the already-running unit — it lingers active until reboot,
-# fighting chrony for the clock. Masking stops it now and pins it off;
-# idempotent where it's already masked (the steady state on noble).
-- name: Mask systemd-timesyncd (chrony owns the clock)
-  systemd:
-    name: systemd-timesyncd
-    state: stopped
-    masked: true
+# Keep systemd-timesyncd from fighting chrony for the clock. Stopping and
+# masking are independent and both required: a unit can be masked yet still
+# running (masking never stops an already-started instance — the jammy box's
+# steady state), or active with its unit file already gone (the backports flip
+# *removes* timesyncd under policy_rc_d 101, so it lingers active until reboot).
+# noble may never have installed it at all. So query each state and act only
+# where needed, which keeps the converge idempotent. The systemd module can't
+# act on a removed-but-lingering unit ("Could not find the requested service"),
+# so drive systemctl directly; gating on a file path is unreliable (a bare
+# /etc/systemd/system/<unit> can pre-exist unmasked). check_mode: false lets
+# the queries populate stdout under the harness's check-mode pass.
+- name: Query systemd-timesyncd active state # noqa: command-instead-of-module -- is-active query, not a state change
+  command: systemctl is-active systemd-timesyncd
+  register: ntp_timesyncd_active
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - ntp
+
+- name: Query systemd-timesyncd enablement state # noqa: command-instead-of-module -- is-enabled query, not a state change
+  command: systemctl is-enabled systemd-timesyncd
+  register: ntp_timesyncd_enabled
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - ntp
+
+- name: Stop systemd-timesyncd (chrony owns the clock) # noqa: command-instead-of-module -- module fails on a removed-but-lingering unit
+  command: systemctl stop systemd-timesyncd
+  when: ntp_timesyncd_active.stdout == "active"
+  changed_when: true
+  become: true
+  tags:
+    - ntp
+
+- name: Mask systemd-timesyncd (pin it off across reboots) # noqa: command-instead-of-module -- module fails on a removed-but-lingering unit
+  command: systemctl mask systemd-timesyncd
+  when: ntp_timesyncd_enabled.stdout != "masked"
+  changed_when: true
   become: true
   tags:
     - ntp
