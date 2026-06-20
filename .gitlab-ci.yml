@@ -48,6 +48,12 @@ default:
 
 variables:
   HOMELAB_CI_TARGET: aws_qemu
+  # Skip the qemu role-test matrix (detect + test_cells) for this pipeline,
+  # leaving lint/unit_tests and the manual image builders. Lets an image-only
+  # push (an AMI / fox / zbm bake) skip the expensive cell fan-out:
+  #   git push -o ci.variable=SKIP_TEST_CELLS=true
+  # A push option overrides this default. Empty = run the matrix as usual.
+  SKIP_TEST_CELLS: ""
 
 # Shared scaffolding for hosted-runner jobs: the ci image from this project's
 # registry (Dockerfile; rebuilt manually via the ci_image job below). The
@@ -97,6 +103,10 @@ detect:
     - $DETECT_RUNNER_TAG
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    # Image-only push opts out of the qemu matrix; detect only exists to feed
+    # test_cells, so skip it too (and don't boot a fleeting host for nothing).
+    - if: $SKIP_TEST_CELLS == "true"
       when: never
     # lab target: the manual fallback runs detect on lab's own shell runner,
     # whose mise/uv are the host's own -- so no baked /opt caches here.
@@ -168,6 +178,8 @@ test_cells:
       artifacts: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $SKIP_TEST_CELLS == "true"
       when: never
     - if: $CI_PIPELINE_SOURCE == "web"
     - if: $CI_PIPELINE_SOURCE == "push"
