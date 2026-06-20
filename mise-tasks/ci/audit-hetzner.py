@@ -179,7 +179,7 @@ def main():
         print("\n".join(f"  {line}" for line in anomalies))
         print("\n── Suggested cleanup (review, then run by hand -- NOT executed) ──")
         print("  ubuntu-zfs snapshot rotation, in one shot:")
-        print("    mise run packer:hcloud-prune-snapshots -- 'os=ubuntu-zfs,ubuntu=jammy'")
+        print("    mise run packer:hcloud-prune-snapshots -- 'os=ubuntu-zfs,ubuntu=noble'")
         for cmd in deletes:
             print(f"  {cmd}")
     else:
