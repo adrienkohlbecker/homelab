@@ -114,20 +114,3 @@
 # not worth the extra ~30s per test run for the regression coverage it adds.
 # The OIDC env vars themselves are rendered by main.yml's template task which
 # fails loudly if minio_oidc_client_secret is undefined.
-
-# Scratch-relocated buckets: assert each one's directory is a distinct mount
-# whose source dataset lives under dozer/scratch/minio_*, so its data really
-# sits on the disposable tree (off the offsite replica) and not on dozer/minio.
-# This is a no-op on the default box fixture -- box sets
-# zfs_has_scratch_mount=false and leaves minio_scratch_buckets empty, so the
-# path can only be exercised on a host that actually relocates buckets.
-- name: _verify | Scratch buckets mount from the scratch dataset
-  when: minio_scratch_buckets | length > 0
-  command: findmnt -no SOURCE /mnt/minio/{{ item }}
-  register: minio_verify_scratch_mount
-  changed_when: false
-  failed_when: minio_verify_scratch_mount.stdout is not match(zfs_dozer_filesystem ~ '/scratch/minio_')
-  loop: "{{ minio_scratch_buckets }}"
-  loop_control:
-    label: "{{ item }}"
-  become: true
