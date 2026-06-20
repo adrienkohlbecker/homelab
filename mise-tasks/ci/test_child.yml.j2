@@ -23,15 +23,17 @@ stages:
   stage: test1
   needs: []
   # Qemu cells run directly on a protected shell runner. No job image, no EC2
-  # launch prelude: test/testrole.py uses the local qemu harness. The promoted
-  # qemu base images are hydrated before booting -- the aws_qemu target reads
-  # them from AWS S3 via GitLab OIDC; the lab target reads them from the on-LAN
-  # MinIO mirror with static creds.
+  # launch prelude: test/testrole.py uses the local qemu harness. The aws_qemu
+  # target hydrates the promoted qemu base images from AWS S3 via GitLab OIDC
+  # before booting; the lab target boots images already on local disk (its bake
+  # writes them into /mnt/scratch/homelab_ci), so it skips hydration.
   tags:
     - {{ cell_runner_tag }}
+{% if image_oidc %}
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: sts.amazonaws.com
+{% endif %}
   # Harness --timeout is 25m (1500s); the job timeout leaves headroom for the
   # prelude + cell teardown.
   timeout: 30m
@@ -89,21 +91,14 @@ stages:
     # die with "[Errno 17] File exists". mkdir -p is idempotent under the race.
     - mkdir -p ~/.aws/cli/cache
     - mise exec -- aws --region eu-central-1 sts get-caller-identity
-{% else %}
-    # The lab target hydrates from the on-LAN MinIO mirror (an S3-compatible
-    # store) with static creds -- no OIDC, no AWS role assumption. The hydrate
-    # script reads HOMELAB_CI_S3_ENDPOINT and the ambient AWS_* creds.
-    - test -n "${HOMELAB_CI_MINIO_ACCESS_KEY:-}" || { echo "HOMELAB_CI_MINIO_ACCESS_KEY CI/CD variable is not set" >&2; exit 1; }
-    - test -n "${HOMELAB_CI_MINIO_SECRET_KEY:-}" || { echo "HOMELAB_CI_MINIO_SECRET_KEY CI/CD variable is not set" >&2; exit 1; }
-    - export AWS_ACCESS_KEY_ID="$HOMELAB_CI_MINIO_ACCESS_KEY"
-    - export AWS_SECRET_ACCESS_KEY="$HOMELAB_CI_MINIO_SECRET_KEY"
-    - export AWS_DEFAULT_REGION=eu-central-1
-    - export HOMELAB_CI_S3_ENDPOINT="{{ image_endpoint }}"
-{% endif %}
     # box/box_deps boot a promoted S3 image bundle; minimal has none -- the
     # harness downloads its Ubuntu cloud image at runtime
     # (Machine._ensure_minimal_cloudimg), so there is nothing to hydrate for it.
     - if [ "${VARIANT:-box}" != "minimal" ]; then mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"; fi
+{% else %}
+    # The lab target boots images straight from /mnt/scratch/homelab_ci (the lab
+    # bake writes them there); nothing to authenticate or hydrate here.
+{% endif %}
     # Pass the PAT through to `mise install` when one is configured.
     - if [ -n "${MISE_GITHUB_TOKEN:-}" ]; then export GITHUB_TOKEN="$MISE_GITHUB_TOKEN"; fi
   artifacts:
