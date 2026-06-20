@@ -175,6 +175,13 @@ minio_buckets:
   - arq-game
   - terraform
   - test
+  - homelab-ci-images
+# CI qemu-image mirror: large, disposable bundles that must not ride the
+# offsite backup. Its data lives on a scratch-backed child dataset
+# (autobackup:bak=false) mounted at /mnt/minio/homelab-ci-images, not on the
+# replicated dozer/minio dataset.
+minio_scratch_buckets:
+  - homelab-ci-images
 netdata_contexts:
   aer:             pci.rootport_aer_correctable
   conntrack:       netfilter.conntrack_sockets
