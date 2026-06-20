@@ -304,18 +304,26 @@ def _shallow_since_arg(created_at: str) -> str | None:
 # commit" rather than only the fix's own diff (all that CI_COMMIT_BEFORE_SHA
 # alone covers).
 #
-# A green base is a `push` or `schedule` pipeline: the `web` source is the
-# manual ROLES dispatch (a partial matrix — never a base), and `parent_pipeline`
-# is the generated cell child (same sha as its push parent, redundant). One
-# pipeline per push covers lint + unit tests + the whole cell matrix, so a
-# `success` status is already a strong green — there is no nightly gate that can
-# pass with the matrix suppressed, so no per-pipeline-kind filter or
-# matrix-actually-ran check is needed.
+# A green base must be a pipeline that actually *ran the cell matrix* and passed
+# it — `success` status alone is not enough. Two ways a `success` pipeline can
+# carry zero cells:
+#   - a `schedule` pipeline runs only the qemu-image reaper (every code job is
+#     `when: never` for schedule in .gitlab-ci.yml), so it is green without
+#     touching a single role;
+#   - a docs-only `push` renders the lone `no_cells` placeholder into its child
+#     (detect found nothing role-relevant since the prior base).
+# Anchoring the diff at such a commit would skip retesting role code that was
+# never exercised there — exactly the red-push the schedule's green status masks.
+# So a candidate is accepted only when its triggered child pipeline holds at
+# least one real cell job (see _pipeline_ran_cells). The `web` source (manual
+# ROLES dispatch — a partial matrix) and `parent_pipeline` (the cell child
+# itself, same sha as its push parent) are dropped up front by GREEN_BASE_SOURCES.
 #
 # Ancestry is checked locally with git (merge-base --is-ancestor), fetching the
 # candidate on demand when it sits outside the shallow checkout — the same
 # fetch-on-demand fallback the base resolver already uses, so it needs no
-# second API surface (e.g. a server-side compare).
+# second API surface (e.g. a server-side compare). The cheap cells-ran API check
+# runs first, so a reaper-only schedule is rejected before any git deepen.
 
 GREEN_BASE_SOURCES = ("push", "schedule")
 
@@ -380,6 +388,28 @@ def is_local_ancestor(sha: str, head: str = "HEAD", *, since: str | None = None,
     return _git("merge-base", "--is-ancestor", sha, head, check=False).returncode == 0
 
 
+def _pipeline_ran_cells(project_api: str, pipeline_id: int, token: str, token_kind: str) -> bool:
+    """True when the pipeline's triggered child holds at least one real cell job.
+
+    The cell matrix lives in the child pipeline behind the `test_cells` bridge;
+    detect writes a lone `no_cells` placeholder when nothing is role-relevant, and
+    a schedule pipeline (reaper only) triggers no child at all. Either way the
+    pipeline can be `success` without a cell having executed, so it is not a valid
+    green base — anchoring the diff there would skip retesting role code that was
+    never run at that commit. Any child job other than `no_cells` is a cell; the
+    parent's `success` status (with `strategy: depend`) already implies it passed.
+    """
+    for bridge in _gl_api_get_all(f"{project_api}/pipelines/{pipeline_id}/bridges", token, token_kind) or []:
+        child = bridge.get("downstream_pipeline") or {}
+        child_id = child.get("id")
+        if not child_id:
+            continue
+        for job in _gl_api_get_all(f"{project_api}/pipelines/{child_id}/jobs", token, token_kind) or []:
+            if job.get("name") != "no_cells":
+                return True
+    return False
+
+
 def newest_green_pipeline(
     branch: str,
     *,
@@ -390,7 +420,8 @@ def newest_green_pipeline(
     log_fn,
     max_pages: int = 5,
 ) -> dict | None:
-    """Find the newest successful push/schedule pipeline on branch that is an ancestor of head.
+    """Find the newest successful push/schedule pipeline on branch that ran the
+    cell matrix and is an ancestor of head.
 
     Returns the pipeline object (its ``sha`` is the diff base; its ``id`` keys
     the per-cell runtime lookup), or None when none resolves.
@@ -420,6 +451,11 @@ def newest_green_pipeline(
             source = pipe.get("source", "")
             created = pipe.get("created_at", "")
             if not sha or source not in GREEN_BASE_SOURCES:
+                continue
+            # Cheap API check before the (possibly git-deepening) ancestry test:
+            # reject reaper-only schedules and no_cells docs pushes outright.
+            if not _pipeline_ran_cells(project_api, pipe["id"], token, token_kind):
+                log_fn(f"    skip {sha[:12]} ({created}, {source}): no cells executed")
                 continue
             if is_local_ancestor(sha, head_sha, since=created, branch=branch):
                 log_fn(f"  green ancestor: {sha[:12]} ({created}, {source})")
