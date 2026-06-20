@@ -47,7 +47,11 @@
 # at login (see MINIO_IDENTITY_OPENID_CLAIM_NAME=groups in minio.cfg.j2),
 # named to match Authelia's group so the claim->policy lookup just works.
 - name: data | Provision IAM policies
-  include_tasks: policy.yml
+  include_tasks:
+    file: policy.yml
+    apply:
+      tags:
+        - minio
   loop:
     - { name: useronly, src: useronly.json }
     - { name: admins, src: admins.json }
