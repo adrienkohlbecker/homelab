@@ -6,15 +6,17 @@
 #     makes the minutes effectively free. They can't reach the home network
 #     (so no nexus); they run in the project-registry ci image published by
 #     the ci_image job below.
-#   - fox's always-on Docker-executor runner (`fox-docker-aws`) takes `detect`
-#     plus the rare/manual AWS/Hetzner orchestration jobs (image bakes, the
-#     qemu image reaper). Each runs in a CI-image container on fox and drives
-#     AWS / Hetzner over the aws CLI + SSH.
+#   - fox's always-on Docker-executor runner (`fox-docker-aws`) takes the
+#     rare/manual AWS/Hetzner orchestration jobs (image bakes, the qemu image
+#     reaper). Each runs in a CI-image container on fox and drives AWS / Hetzner
+#     over the aws CLI + SSH.
 #   - the AWS `aws-shell-qemu` fleeting pool (fleeting-plugin-aws + ASG) is the
-#     default test-cell target: the `test_cells` child matrix runs the nested
-#     qemu harness on autoscaled runner hosts, off fox so a wide fan-out can't
-#     threaten fox's headscale/nginx co-tenants. Each host hydrates promoted
-#     qemu images from S3 and runs the same harness path as lab.
+#     default test-cell target and also runs `detect`: the `test_cells` child
+#     matrix runs the nested qemu harness on autoscaled runner hosts, off fox so
+#     a wide fan-out can't threaten fox's headscale/nginx co-tenants. detect
+#     renders the child pipeline on the first host it boots, leaving it warm for
+#     the cells. Each host hydrates promoted qemu images from S3 and runs the
+#     same harness path as lab.
 #   - lab's shell runner (`lab-shell-qemu`) is the manual/fallback qemu target:
 #     a manual pipeline with HOMELAB_CI_TARGET=lab renders the same matrix and
 #     drives the local qemu harness directly on lab.
@@ -83,33 +85,46 @@ variables:
 # failure degrades to the previous-tip base, never to a hard error.
 detect:
   stage: prepare
-  # Always runs on fox's always-on Docker-executor runner — it just renders the
-  # child YAML, so it stays off the qemu pools regardless of HOMELAB_CI_TARGET.
-  # pull_policy: always keeps the long-lived fox runner from pinning a stale
-  # :latest after a ci_image rebuild; the pull is a no-op when already current.
-  image:
-    name: $CI_REGISTRY_IMAGE/ci:latest
-    pull_policy: always
+  # Runs on the qemu shell pool selected by HOMELAB_CI_TARGET: aws-shell-qemu
+  # (the AWS fleeting pool) by default, lab-shell-qemu for a manual lab-target
+  # pipeline. It only renders the child YAML -- no qemu, no AWS creds -- but
+  # running it on the cell pool boots the first fleeting host here, and the
+  # runner's idle_time keeps it warm for the cell matrix that dispatches right
+  # after, so detect's render overlaps the cold boot the cells would pay anyway.
+  # The tag follows the target via $DETECT_RUNNER_TAG (set per-branch in rules:),
+  # so the lab fallback still lands detect on lab's own runner.
   tags:
-    - fox-docker-aws
+    - $DETECT_RUNNER_TAG
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: never
+    # lab target: the manual fallback runs detect on lab's own shell runner,
+    # whose mise/uv are the host's own -- so no baked /opt caches here.
+    - if: $CI_PIPELINE_SOURCE == "web" && $HOMELAB_CI_TARGET == "lab"
+      variables:
+        DETECT_RUNNER_TAG: lab-shell-qemu
     - if: $CI_PIPELINE_SOURCE == "web"
+      variables:
+        DETECT_RUNNER_TAG: aws-shell-qemu
+        MISE_DATA_DIR: /opt/mise
+        UV_CACHE_DIR: /opt/uv-cache
     - if: $CI_PIPELINE_SOURCE == "push"
+      variables:
+        DETECT_RUNNER_TAG: aws-shell-qemu
+        MISE_DATA_DIR: /opt/mise
+        UV_CACHE_DIR: /opt/uv-cache
   variables:
     # detect diffs HEAD against the resolved green base; 50 is deep enough for
     # any realistic push, with a fetch-on-demand fallback in detect.py for a
     # base (green ancestor or previous tip) outside the shallow checkout.
     GIT_DEPTH: "50"
-    # Point mise/uv at the baked /opt caches. detect always runs in the CI image
-    # on fox-docker-aws, which sets these as ENV; pinning them here keeps the
-    # job self-describing and harmless if it ever lands elsewhere.
-    # UV_PROJECT_ENVIRONMENT is intentionally omitted: in the image its ENV still
-    # reuses /opt/venv, while on a shell runner detect would build a per-job
-    # .venv from the warm cache.
-    MISE_DATA_DIR: /opt/mise
-    UV_CACHE_DIR: /opt/uv-cache
+    # Safety-net default; rules: set the per-target tag above.
+    DETECT_RUNNER_TAG: aws-shell-qemu
+    # The qemu-host AMI bakes the mise tool tree + uv cache at /opt (matching the
+    # cell before_script); the aws-target rules point mise/uv there. UV_LINK_MODE
+    # copy is needed for that cross-fs cache and harmless on lab.
+    # UV_PROJECT_ENVIRONMENT is intentionally omitted so detect builds a per-job
+    # .venv from the warm cache on the shell runner.
     UV_LINK_MODE: copy
   timeout: 15m
   script:
