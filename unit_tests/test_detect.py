@@ -679,9 +679,10 @@ class TestNewestGreenPipeline:
             detect,
             "_gl_api_get",
             lambda url, token, **kw: [
-                {"sha": "newsha", "source": "push", "created_at": "2026-01-02"},
+                {"id": 1, "sha": "newsha", "source": "push", "created_at": "2026-01-02"},
             ],
         )
+        monkeypatch.setattr(detect, "_pipeline_ran_cells", lambda *a, **kw: True)
         monkeypatch.setattr(detect, "is_local_ancestor", lambda sha, head, **kw: True)
         assert detect.newest_green_pipeline("master", **self._kw())["sha"] == "newsha"
 
@@ -693,14 +694,15 @@ class TestNewestGreenPipeline:
             "_gl_api_get",
             lambda url, token, **kw: (
                 [
-                    {"sha": "websha", "source": "web", "created_at": "2026-01-03"},
-                    {"sha": "childsha", "source": "parent_pipeline", "created_at": "2026-01-03"},
-                    {"sha": "pushsha", "source": "push", "created_at": "2026-01-01"},
+                    {"id": 3, "sha": "websha", "source": "web", "created_at": "2026-01-03"},
+                    {"id": 2, "sha": "childsha", "source": "parent_pipeline", "created_at": "2026-01-03"},
+                    {"id": 1, "sha": "pushsha", "source": "push", "created_at": "2026-01-01"},
                 ]
                 if "&page=1" in url
                 else []
             ),
         )
+        monkeypatch.setattr(detect, "_pipeline_ran_cells", lambda *a, **kw: True)
         seen = []
 
         def fake_anc(sha, head, **kw):
@@ -712,15 +714,47 @@ class TestNewestGreenPipeline:
         # ancestry is only ever checked for the push pipeline
         assert seen == ["pushsha"]
 
+    def test_skips_pipeline_without_cells(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # A newer ancestor push that ran no cells (docs-only -> no_cells child) is
+        # skipped without ever consulting ancestry; the older push that ran the
+        # matrix is the real base.
+        monkeypatch.setattr(
+            detect,
+            "_gl_api_get",
+            lambda url, token, **kw: (
+                [
+                    {"id": 2, "sha": "nocells", "source": "push", "created_at": "2026-01-05"},
+                    {"id": 1, "sha": "ranmatrix", "source": "push", "created_at": "2026-01-01"},
+                ]
+                if "&page=1" in url
+                else []
+            ),
+        )
+        monkeypatch.setattr(detect, "_pipeline_ran_cells", lambda pa, pid, t, tk: pid == 1)
+        seen = []
+
+        def fake_anc(sha, head, **kw):
+            seen.append(sha)
+            return True
+
+        monkeypatch.setattr(detect, "is_local_ancestor", fake_anc)
+        logs = []
+        result = detect.newest_green_pipeline("master", **self._kw(log_fn=logs.append))
+        assert result["sha"] == "ranmatrix"
+        # the cell-less candidate never reaches the ancestry test
+        assert seen == ["ranmatrix"]
+        assert any("no cells executed" in m for m in logs)
+
     def test_skips_non_ancestor_then_paginates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def mock_api(url, token, **kw):
             if "&page=1" in url:
-                return [{"sha": "divsha", "source": "push", "created_at": "2026-01-05"}]
+                return [{"id": 2, "sha": "divsha", "source": "push", "created_at": "2026-01-05"}]
             if "&page=2" in url:
-                return [{"sha": "oldgreen", "source": "schedule", "created_at": "2026-01-01"}]
+                return [{"id": 1, "sha": "oldgreen", "source": "push", "created_at": "2026-01-01"}]
             return []
 
         monkeypatch.setattr(detect, "_gl_api_get", mock_api)
+        monkeypatch.setattr(detect, "_pipeline_ran_cells", lambda *a, **kw: True)
         monkeypatch.setattr(detect, "is_local_ancestor", lambda sha, head, **kw: sha == "oldgreen")
         logs = []
         result = detect.newest_green_pipeline("master", **self._kw(log_fn=logs.append))
@@ -914,6 +948,36 @@ class TestCollectPipelineJobs:
         assert jobs["nginx:box"]["id"] == 21
         assert jobs["nginx:box"]["duration"] == 222
         assert jobs["lint"]["duration"] == 5
+
+
+class TestPipelineRanCells:
+    def test_true_when_child_has_a_cell(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def mock_get_all(base_url, token, token_kind, **kw):
+            if base_url.endswith("/pipelines/1/bridges"):
+                return [{"downstream_pipeline": {"id": 2}}]
+            if base_url.endswith("/pipelines/2/jobs"):
+                return [{"name": "no_cells"}, {"name": "nginx:box"}]
+            return []
+
+        monkeypatch.setattr(detect, "_gl_api_get_all", mock_get_all)
+        assert detect._pipeline_ran_cells("http://api", 1, "t", "job") is True
+
+    def test_false_when_child_only_no_cells(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # docs-only push: detect renders the lone placeholder, no cell ran.
+        def mock_get_all(base_url, token, token_kind, **kw):
+            if base_url.endswith("/pipelines/1/bridges"):
+                return [{"downstream_pipeline": {"id": 2}}]
+            if base_url.endswith("/pipelines/2/jobs"):
+                return [{"name": "no_cells"}]
+            return []
+
+        monkeypatch.setattr(detect, "_gl_api_get_all", mock_get_all)
+        assert detect._pipeline_ran_cells("http://api", 1, "t", "job") is False
+
+    def test_false_when_no_child(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # schedule pipeline: only the reaper ran, no test_cells bridge at all.
+        monkeypatch.setattr(detect, "_gl_api_get_all", lambda base_url, token, token_kind, **kw: [])
+        assert detect._pipeline_ran_cells("http://api", 1, "t", "job") is False
 
 
 class TestCellRuntimes:
