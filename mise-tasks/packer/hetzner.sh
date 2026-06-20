@@ -23,6 +23,19 @@ rescue_init
 trap rescue_cleanup EXIT
 rescue_create
 
+# The rescue server was created from a stock ubuntu-22.04 image, so /dev/sda
+# already carries that image's GPT (backup header at the true ~76G disk end)
+# and its filesystems. We stream a smaller (20G) raw image onto the front with
+# conv=sparse, which never touches the tail -- leaving a stale backup GPT and
+# stale partitions past 20G that disagree with the streamed image's own primary
+# GPT and can block the firmware from booting the snapshot. Discard the whole
+# device first so only the streamed image's structures survive; the in-rescue
+# install path (provision.sh) wipes equivalently before partitioning. Fall back
+# to wipefs if the device rejects discard -- the post-stream sgdisk -e below
+# rewrites the backup header regardless, so a discard failure is non-fatal.
+echo "==> wiping /dev/sda before streaming (clears the rescue image's stale GPT + tail)"
+ssh_rescue 'blkdiscard -f /dev/sda || wipefs -a /dev/sda'
+
 # Stream the image onto /dev/sda via the shared rescue receive pipeline
 # (mbuffer | zstd -dc | dd). Compress with zstd here (parallel via -T0; -1
 # since the payload is already-zstd'd rpool blocks + zeros, so speed beats
@@ -41,5 +54,13 @@ if command -v mbuffer >/dev/null; then
 else
   sender | ssh_rescue "$RESCUE_RECV"
 fi
+
+# The streamed image's GPT backup header sits at the 20G mark (the image's own
+# end), not the true ~76G disk end the firmware expects. Relocate it so the GPT
+# is consistent with the real disk and the firmware boots the snapshot cleanly.
+# hetzner_growpart.service relocates it too, but only after a successful boot --
+# fixing it here keeps a misplaced backup header from blocking that boot.
+echo "==> relocating the GPT backup header to the disk end"
+ssh_rescue 'sgdisk -e /dev/sda'
 
 rescue_snapshot "$UBUNTU"
