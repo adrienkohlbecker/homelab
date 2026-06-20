@@ -419,6 +419,11 @@ IDFILE_TIMEOUT = 60
 # cell past its own --timeout; surface it as a clear TimeoutError with
 # a debugging hint instead.
 PUBLISH_LOCK_TIMEOUT = 300
+# Bounded exclusive-acquire window on the per-image cloud-image download lock.
+# The holder keeps it across the curl, so a waiter must outlast a full download
+# of a few-hundred-MB image off a slow mirror; bounded so a wedged downloader
+# surfaces rather than hanging every concurrent minimal cell.
+CLOUDIMG_LOCK_TIMEOUT = 600
 
 # Sentinel printed by testrole.py at end-of-run so testall.py can capture
 # the per-machine peak RSS via stdout. Kept simple on purpose: a single
@@ -1496,17 +1501,46 @@ class Machine:
         if target.exists():
             return target
 
-        base = (
-            "https://cloud-images.ubuntu.com"
-            if self.upstream_mirrors or self.in_aws
-            else "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images"
-        )
-        url = f"{base}/minimal/releases/{self.ubuntu_name}/release/{name}"
-        tmp = target.with_suffix(target.suffix + ".tmp")
-        print_line(f"Downloading {url}")
-        await run_command(["curl", "-fL", "--retry", "3", "-o", str(tmp), url])
-        tmp.rename(target)
-        return target
+        # On the AWS pool capacity_per_instance > 1 runs many minimal cells on
+        # one host, all sharing this cache dir. Serialize the fetch on a per-image
+        # exclusive flock so the first cell downloads and the rest reuse it,
+        # instead of racing on a shared temp path. await asyncio.sleep (not
+        # time.sleep) keeps the event loop responsive while waiting on a peer.
+        lockfile = cache / f"{name}.lock"
+        fd = os.open(str(lockfile), os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            end = time.monotonic() + CLOUDIMG_LOCK_TIMEOUT
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError as e:
+                    if e.errno not in (errno.EWOULDBLOCK, errno.EAGAIN):
+                        raise
+                    if time.monotonic() >= end:
+                        raise TimeoutError(
+                            f"cloud-image lock held >{CLOUDIMG_LOCK_TIMEOUT:.0f}s; "
+                            f"concurrent cell wedged? check `lsof {lockfile}`"
+                        )
+                    await asyncio.sleep(0.5)
+            # Re-check under the lock: a peer may have finished while we waited.
+            if target.exists():
+                return target
+            base = (
+                "https://cloud-images.ubuntu.com"
+                if self.upstream_mirrors or self.in_aws
+                else "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images"
+            )
+            url = f"{base}/minimal/releases/{self.ubuntu_name}/release/{name}"
+            # Unique temp name + atomic os.replace so a stray peer temp can never
+            # be renamed out from under us (the shared-temp bug this lock fixes).
+            tmp = cache / f"{name}.{os.getpid()}.tmp"
+            print_line(f"Downloading {url}")
+            await run_command(["curl", "-fL", "--retry", "3", "-o", str(tmp), url])
+            os.replace(tmp, target)
+            return target
+        finally:
+            os.close(fd)
 
     async def _copy_efivars_from(self, image_dir: str) -> None:
         """Copy EFI vars for UEFI boots from *image_dir* into the workdir."""
