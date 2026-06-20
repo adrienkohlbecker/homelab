@@ -38,6 +38,19 @@ stages:
     # aws_qemu target), so the harness (Machine.in_aws) makes roles pick the
     # in-region EC2 mirrors + public DNS over the LAN Nexus / AdGuard VIP.
     HOMELAB_TEST_IN_AWS: "{{ "true" if in_aws else "false" }}"
+    # Pin the legacy slirp guest NIC. passt intermittently fails to answer the
+    # guest's first-boot DHCP, so the guest never gets a NIC and the cell stalls
+    # to the ssh-wait deadline (harness exit 124). The race is not limited to the
+    # ZFSBootMenu initramfs (rd.neednet=1, absent from the box test images):
+    # under the synchronized cell-launch burst the qemu hosts now run, passt
+    # drops the plain systemd-networkd first-boot DHCP too -- a full-matrix
+    # re-enable went ~84/138 cells red on the ssh-wait timeout. passt only
+    # engages in CI (macOS
+    # + the jammy host fall back via _passt_available), so this disables it
+    # fleet-wide without removing the passt code. Drop this line to re-enable
+    # once passt's DHCP-under-burst race is fixed (resolve_net_backend reads
+    # HOMELAB_NET_BACKEND=slirp).
+    HOMELAB_NET_BACKEND: slirp
     # Restrict ansible to the test identity; the prod identity is undecryptable
     # in CI by design (CLAUDE.md: Vault ids).
     ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
