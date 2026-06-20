@@ -172,9 +172,60 @@ rescue_verify_boot() { # IMGID
   done
 
   echo "snapshot $imgid did not boot to a working sshd at $RESCUE_IP" >&2
+  # Pull what we can off the disk for a post-mortem before tearing the server
+  # down (rescue_cleanup EXIT-deletes it). Best-effort -- never masks the failure.
+  rescue_collect_diagnostics
   echo "    deleting the bad snapshot so terraform never selects it" >&2
   hcloud image delete "$imgid" >/dev/null 2>&1 || true
   exit 1
+}
+
+# Post-mortem on a snapshot that failed boot-verify: reboot the temp server into
+# the rescue system and dump what /dev/sda yields. The structural read (GPT
+# integrity -- did the wipe + sgdisk -e in hetzner.sh hold? -- and the ESP's
+# bootloader tree) is ZFS-free, so it always lands; it separates a corrupt disk
+# from a structurally-sound one that failed at firmware/network instead. The
+# rpool's last-boot journal + cloud-init log (which would tell booted-but-no-
+# network from never-booted) needs the zfs kernel module the rescue does not
+# ship -- attempted, skipped cleanly via the modprobe guard when absent rather
+# than triggering the rescue's compile-on-demand zfs (slow + interactive). All
+# best-effort: the caller has already condemned the snapshot and will delete the
+# server regardless, so nothing here may fail the run.
+rescue_collect_diagnostics() {
+  echo "==> collecting boot-verify diagnostics (rebooting $SERVER into rescue)" >&2
+  hcloud server enable-rescue "$SERVER" --type linux64 --ssh-key "$KEYNAME" >/dev/null 2>&1 || true
+  hcloud server reset "$SERVER" >/dev/null 2>&1 || true
+  sleep 40
+  local up=
+  for _ in $(seq 1 40); do
+    ssh_rescue true 2>/dev/null && {
+      up=1
+      break
+    }
+    sleep 4
+  done
+  [ -n "$up" ] || {
+    echo "    rescue did not come back up -- no diagnostics collected" >&2
+    return 0
+  }
+
+  echo "    --- /dev/sda partition table + GPT integrity ---" >&2
+  ssh_rescue 'lsblk -o NAME,SIZE,FSTYPE,PARTLABEL /dev/sda; echo; sgdisk -p /dev/sda; echo; sgdisk -v /dev/sda' >&2 2>&1 || true
+
+  echo "    --- ESP (/dev/sda2) bootloader tree ---" >&2
+  # shellcheck disable=SC2016  # $m expands on the rescue host, not locally
+  ssh_rescue 'm=$(mktemp -d); mount -o ro /dev/sda2 "$m" && { find "$m/EFI" -maxdepth 2 | sort; echo; cat "$m/EFI/refind/refind.conf" 2>/dev/null; umount "$m"; }' >&2 2>&1 || echo "    could not read the ESP" >&2
+
+  echo "    --- rpool last-boot journal + cloud-init (needs zfs; skipped if absent) ---" >&2
+  # shellcheck disable=SC2016  # $ds and the command subs expand on the rescue host, not locally
+  ssh_rescue '
+    modprobe zfs 2>/dev/null || { echo "(no zfs module in this rescue; rpool journal unavailable)"; exit 0; }
+    zpool import -fN -o readonly=on -R /mnt rpool || { echo "(rpool import failed)"; exit 0; }
+    ds=$(zfs list -H -o name | grep -m1 "/ROOT/" || true)
+    [ -n "$ds" ] && zfs mount -o ro "$ds" 2>/dev/null || true
+    echo "--- journalctl -b -1 (last 200) ---"; journalctl -D /mnt/var/log/journal -b -1 --no-pager 2>/dev/null | tail -n 200 || echo "(no journal)"
+    echo "--- cloud-init-output.log (last 100) ---"; tail -n 100 /mnt/var/log/cloud-init-output.log 2>/dev/null || echo "(none)"
+  ' >&2 2>&1 || true
 }
 
 # Power off (so the image captures quiesced disks), snapshot /dev/sda, rebuild
