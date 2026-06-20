@@ -1,7 +1,0 @@
-# Optional: subset of minio_buckets whose data must NOT ride the offsite
-# backup. Each listed bucket gets a child ZFS dataset on the disposable
-# `scratch` tree (autobackup:bak=false) mounted at /mnt/minio/<bucket>, rather
-# than living under the offsite-replicated dozer/minio dataset. Used for large,
-# reconstructible CI qemu-image bundles. Every entry must also be in
-# minio_buckets (asserted in tasks/main.yml).
-minio_scratch_buckets: []

@@ -34,22 +34,6 @@
   tags:
     - minio
 
-# A scratch-relocated bucket only takes effect if MinIO actually creates it
-# (data.yml loops minio_buckets, not minio_scratch_buckets). A stray entry
-# would mount an empty dataset at a path MinIO never touches.
-- name: Assert each scratch bucket is a real minio bucket
-  assert:
-    that: item in minio_buckets
-    fail_msg: >-
-      minio_scratch_buckets entry '{{ item }}' is not in minio_buckets. Add it
-      to minio_buckets or drop it from minio_scratch_buckets.
-    quiet: true
-  loop: "{{ minio_scratch_buckets }}"
-  loop_control:
-    label: "{{ item }}"
-  tags:
-    - minio
-
 - name: Install minio server
   import_role:
     name: deb_install
@@ -87,25 +71,6 @@
       group: minio-user
       extra_properties:
         'autobackup:bak': 'true'
-  tags:
-    - minio
-
-# Relocate selected buckets onto the disposable scratch tree before data.yml
-# runs `mcli mb` -- the dataset must be mounted at /mnt/minio/<bucket> first so
-# the bucket directory MinIO creates lands on scratch (off the offsite replica),
-# not on dozer/minio. Loop via include_tasks for fresh per-iteration scope: the
-# zfs dataset helper's inline import_role vars would otherwise leak across
-# iterations at play-vars scope.
-- name: Provision scratch datasets for selected buckets
-  include_tasks:
-    file: scratch_bucket.yml
-    apply:
-      tags:
-        - minio
-  loop: "{{ minio_scratch_buckets }}"
-  loop_control:
-    loop_var: minio_scratch_bucket
-    label: "{{ minio_scratch_bucket }}"
   tags:
     - minio
 
