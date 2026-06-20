@@ -46,9 +46,7 @@ export HOSTNAME=ubuntu
 export USERNAME=vagrant
 
 # Directory holding the sibling scripts (chroot.sh, pools.sh). The qemu
-# build VM's packer file-provisioner lands them in /home/vagrant; the AWS
-# ebssurrogate build VM logs in as ubuntu and its wrapper exports the
-# right home (packer/scripts/aws_provision.sh).
+# build VM's packer file-provisioner lands them in /home/vagrant.
 SCRIPTS_DIR="${SCRIPTS_DIR:-/home/vagrant}"
 
 # Map (disk, partition number) to the kernel/udev partition device.

@@ -1,6 +1,22 @@
 # Runner-host AMI for the nested-qemu GitLab instance executor: a stock Ubuntu
 # host that runs GitLab shell jobs and launches qemu/KVM guests from S3-hydrated
-# image bundles. (ami.pkr.hcl builds fox's boot image on the same VPC.)
+# image bundles.
+
+packer {
+  required_plugins {
+    # Pinned to 1.8.0, not floated, on purpose. 1.8.1 (2026-05-25) bumped its
+    # vendored x/crypto to v0.52.0, whose CVE-2026-39830 fix added a "drain"
+    # loop to ssh (*channel).SendRequest. In the SDK keepalive goroutine that
+    # loop busy-spins a whole core per build, which saturated fox when
+    # concurrent bakes ran. 1.8.0 vendors x/crypto v0.43.0 (plain blocking
+    # SendRequest, no spin). The CVE is irrelevant here — we own the build
+    # instance. Revisit once upstream fixes the busy-loop.
+    amazon = {
+      version = "1.8.0"
+      source  = "github.com/hashicorp/amazon"
+    }
+  }
+}
 
 variable "gitlab_runner_url" {
   type        = string

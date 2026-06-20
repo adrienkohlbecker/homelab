@@ -474,21 +474,21 @@ qemu_image_reaper:
       fi
       mise run ci:reap-qemu-images $reaper_args
 
-# Bake + publish fox's Hetzner Cloud boot image. The image is built by the
-# pools.sh/chroot.sh install on an EC2 surrogate volume (packer/aws,
-# IMAGE_TARGET=hetzner — no KVM; the byproduct AMI is deregistered right after
-# the bake), downloaded as a raw.gz, then `mise run
-# packer:hetzner` streams it onto a temp Hetzner server in rescue mode and
-# snapshots it (pruning all but the 2 newest). Manual and protected-ref only:
-# AWS auth is the GitLab OIDC bake role (master-only trust policy), and the
-# published snapshot is project-global — terraform's data.hcloud_image selects
-# by most_recent, so it silently becomes fox's next boot image on rebuild.
+# Bake + publish fox's Hetzner Cloud boot image (mechanic 2, qemu/KVM, no AWS).
+# `packer:build hetzner` builds the ZFS-root rpool disk in qemu on lab's shell
+# runner -- the same KVM host the lab qemu cells test on -- writing the raw image
+# into HOMELAB_CI_DIR; `packer:hetzner` then streams that image onto a throwaway
+# Hetzner server in rescue mode and snapshots it (pruning all but the 2 newest).
+# Both steps land on the one lab-shell-qemu host, so the build dir the upload
+# reads persists between them. Manual and protected-ref only; the published
+# snapshot is project-global -- terraform's data.hcloud_image selects by
+# most_recent, so it silently becomes fox's next boot image on rebuild.
 #
 # Required CI/CD variable: HCLOUD_TOKEN (masked + protected) — the homelab
 # Hetzner project's read/write token: the snapshot must land in the project
 # fox lives in (the only Hetzner project since the homelab-ci teardown).
-# Exposure is scoped to this protected-ref manual job, the same blast
-# radius the GitHub repo secret had before the migration.
+# Exposure is scoped to this protected-ref manual job. No AWS auth: the build is
+# local qemu and the publish authenticates to Hetzner with HCLOUD_TOKEN alone.
 fox_image:
   stage: prepare
   rules:
@@ -498,37 +498,30 @@ fox_image:
       when: manual
       # A skipped manual job must not hold the pipeline in "blocked".
       allow_failure: true
+  # lab's shell runner is the KVM builder (the same host the lab qemu cells test
+  # on). The qemu build writes HOMELAB_CI_DIR, which packer:hetzner then reads to
+  # stream onto the rescue server -- both steps must land on this one host.
   tags:
-    - fox-docker-aws
-  id_tokens:
-    GITLAB_OIDC_TOKEN:
-      aud: sts.amazonaws.com
+    - lab-shell-qemu
   # One image pipeline at a time: two runs would race the snapshot family
-  # (create_image + prune-to-2-newest); never auto-cancelled — a killed run
-  # can orphan the EC2 build instance or the temp Hetzner upload server.
+  # (create_image + prune-to-2-newest) and the shared HOMELAB_CI_DIR build dir;
+  # never auto-cancelled — a killed run can orphan the temp Hetzner server.
   resource_group: fox_image
   interruptible: false
   timeout: 90m
   script:
-    # Fail before the 20+ min bake, not after it, when the variable is
-    # missing (op is not in the ci image, so there is no fallback).
+    # Fail before the build, not after it, when the token is missing.
     - test -n "${HCLOUD_TOKEN:-}" || { echo "HCLOUD_TOKEN CI/CD variable is not set" >&2; exit 1; }
-    # Same drift self-heal as .hosted, against the image's /opt/mise tree.
+    # Same drift self-heal as the qemu image jobs, against the image's /opt/mise.
     - mise install
-    - uv sync --locked
+    - mise exec -- uv sync --locked
     - mise run packer:init
-    # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
-    # AssumeRoleWithWebIdentity provider wants a file path.
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
-    - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
-    - export AWS_ROLE_SESSION_NAME="fox-image-$CI_JOB_ID"
-    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
-    # Smoke the OIDC chain before spending 20+ min on a bake.
-    - mise exec -- aws --region eu-central-1 sts get-caller-identity
-    # fox runs a jammy root in prod; the bake stays jammy-only. hetzner-bake
-    # does the whole job: stand up the Hetzner rescue server, bake on EC2
-    # while streaming the disk straight onto it, then snapshot.
-    - mise run packer:hetzner-bake --ubuntu jammy
+    # fox runs a jammy root in prod; the bake stays jammy-only. Build the rpool
+    # disk in qemu, then stream it onto a Hetzner rescue server and snapshot. The
+    # build pulls through lab's Nexus (reachable here); the shipped image points
+    # at upstream Ubuntu mirrors regardless, so no --upstream is needed.
+    - mise run packer:build hetzner --ubuntu jammy
+    - mise run packer:hetzner --ubuntu jammy
 
 # Manual rebuild of the custom ZFSBootMenu recovery image (zbm/,
 # mise-tasks/zbm/). Heavy (clones ZBM, xbps-installs a Void toolchain, runs

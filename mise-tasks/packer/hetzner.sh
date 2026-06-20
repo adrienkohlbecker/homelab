@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Upload a pre-built ZFS-root disk image to a Hetzner Cloud snapshot (mechanic 2). Build the image first with `mise run packer:build hetzner` (qemu/KVM). For the EC2 surrogate, use `mise run packer:hetzner-bake`, which bakes and publishes in one step."
+#MISE description="Upload a pre-built ZFS-root disk image to a Hetzner Cloud snapshot. Build the image first with `mise run packer:build hetzner` (qemu/KVM); this streams that raw image onto a throwaway Hetzner rescue server and snapshots it."
 #USAGE arg "[image]" help="Path to the rpool disk image, raw or raw.gz (default: the packer:build hetzner artifact for --ubuntu)"
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu codename -- snapshot label + default image path" default="jammy"
 #USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
