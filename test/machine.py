@@ -1477,7 +1477,9 @@ class Machine:
         """Download (once) the Ubuntu minimal cloud image used by the `minimal` variant.
 
         Pulls through the lab Nexus raw proxy by default; `--upstream-mirrors`
-        bypasses to cloud-images.ubuntu.com directly.
+        bypasses to cloud-images.ubuntu.com directly, as does in_aws -- an AWS
+        cell can't reach the LAN Nexus, so it fetches upstream like the converge
+        mirrors do (see format_ansible_cmd).
         """
         # Ubuntu publishes minimal-cloudimg arm64 only from noble onwards;
         # jammy is amd64-only. Fail loud rather than 404'ing on the curl.
@@ -1496,7 +1498,7 @@ class Machine:
 
         base = (
             "https://cloud-images.ubuntu.com"
-            if self.upstream_mirrors
+            if self.upstream_mirrors or self.in_aws
             else "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images"
         )
         url = f"{base}/minimal/releases/{self.ubuntu_name}/release/{name}"
