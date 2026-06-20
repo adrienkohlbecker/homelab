@@ -97,7 +97,11 @@
 # zfs dataset helper's inline import_role vars would otherwise leak across
 # iterations at play-vars scope.
 - name: Provision scratch datasets for selected buckets
-  include_tasks: scratch_bucket.yml
+  include_tasks:
+    file: scratch_bucket.yml
+    apply:
+      tags:
+        - minio
   loop: "{{ minio_scratch_buckets }}"
   loop_control:
     loop_var: minio_scratch_bucket
