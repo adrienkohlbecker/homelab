@@ -5,17 +5,22 @@
 # USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="jammy"
 # USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
 # USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
-# USAGE flag "--region <region>" help="AWS region for S3 and SSM" default="eu-central-1"
-# USAGE flag "--build-id <build_id>" help="Exact build id to hydrate; default resolves /homelab-ci/qemu-image/<machine>/<ubuntu>"
+# USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
+# USAGE flag "--endpoint-url <url>" help="S3-compatible endpoint (MinIO mirror); default $HOMELAB_CI_S3_ENDPOINT"
+# USAGE flag "--build-id <build_id>" help="Exact build id to hydrate; default resolves the promoted.json pointer"
 # USAGE flag "--dest-root <path>" help="Harness image root; default is $HOMELAB_CI_DIR or /mnt/scratch/homelab_ci"
 # USAGE flag "--force" help="Re-download even when the local marker already matches"
 """Hydrate the local qemu harness image cache from S3.
 
 The lab shell-runner path uses the same qemu harness as local development, but
-its images can be populated from the S3 bundles promoted through SSM:
+its images can be populated from the S3 bundles selected by a pointer object:
 
-    /homelab-ci/qemu-image/<machine>/<ubuntu> -> <build-id>
+    s3://homelab-ci-images/<ubuntu>/<machine>/promoted.json -> {"build_id": ...}
     s3://homelab-ci-images/<ubuntu>/<machine>/<build-id>/{manifest.json,disks.tar.zst}
+
+The same layout works against a MinIO mirror: pass --endpoint-url (or set
+$HOMELAB_CI_S3_ENDPOINT) and ambient AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY
+pointing at the mirror's static keys.
 
 An exclusive flock per machine/release keeps concurrent cells from downloading
 or replacing the same image directory at the same time.
@@ -37,9 +42,9 @@ from typing import Any
 
 BUNDLE_NAME = "disks.tar.zst"
 MANIFEST_NAME = "manifest.json"
+POINTER_NAME = "promoted.json"
 MARKER_NAME = ".homelab_s3_build_id"
 LOCAL_MANIFEST_NAME = ".homelab_s3_manifest.json"
-SSM_PREFIX = "/homelab-ci/qemu-image"
 VALID_MACHINES = {"box", "box_deps"}
 
 
@@ -57,6 +62,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ubuntu", default=os.environ.get("usage_ubuntu", "jammy"))
     parser.add_argument("--bucket", default=os.environ.get("usage_bucket", "homelab-ci-images"))
     parser.add_argument("--region", default=os.environ.get("usage_region", "eu-central-1"))
+    parser.add_argument(
+        "--endpoint-url",
+        default=os.environ.get("usage_endpoint_url") or os.environ.get("HOMELAB_CI_S3_ENDPOINT") or None,
+    )
     parser.add_argument("--build-id", default=os.environ.get("usage_build_id"))
     parser.add_argument("--dest-root", default=os.environ.get("usage_dest_root"))
     parser.add_argument(
@@ -67,16 +76,19 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def aws_base(region: str) -> list[str]:
-    return [
+def aws_base(args: argparse.Namespace) -> list[str]:
+    base = [
         "aws",
         "--region",
-        region,
+        args.region,
         "--cli-connect-timeout",
         "10",
         "--cli-read-timeout",
         "300",
     ]
+    if args.endpoint_url:
+        base += ["--endpoint-url", args.endpoint_url]
+    return base
 
 
 def find_tar() -> str:
@@ -104,23 +116,22 @@ def dest_root(args: argparse.Namespace) -> Path:
 def resolve_build_id(args: argparse.Namespace) -> str:
     if args.build_id:
         return args.build_id
-    param = f"{SSM_PREFIX}/{args.machine}/{args.ubuntu}"
-    value = output(
-        [
-            *aws_base(args.region),
-            "ssm",
-            "get-parameter",
-            "--name",
-            param,
-            "--query",
-            "Parameter.Value",
-            "--output",
-            "text",
-        ]
-    )
-    if not value:
-        sys.exit(f"empty SSM parameter: {param}")
-    return value
+    key = f"{args.ubuntu}/{args.machine}/{POINTER_NAME}"
+    uri = f"s3://{args.bucket}/{key}"
+    body = output([*aws_base(args), "s3", "cp", uri, "-"])
+    if not body:
+        sys.exit(f"missing or empty promoted pointer: {uri}")
+    try:
+        pointer = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid pointer JSON at {uri}: {exc}") from exc
+    for field_name, expected in (("machine", args.machine), ("ubuntu", args.ubuntu)):
+        if pointer.get(field_name) != expected:
+            sys.exit(f"pointer {field_name} mismatch at {uri}: expected {expected!r}, got {pointer.get(field_name)!r}")
+    build_id = pointer.get("build_id")
+    if not isinstance(build_id, str) or not build_id:
+        sys.exit(f"pointer build_id must be a non-empty string at {uri}")
+    return build_id
 
 
 def download_s3(args: argparse.Namespace, key: str, dest: Path) -> None:
@@ -128,7 +139,7 @@ def download_s3(args: argparse.Namespace, key: str, dest: Path) -> None:
     print(f"==> downloading {uri}")
     run(
         [
-            *aws_base(args.region),
+            *aws_base(args),
             "s3",
             "cp",
             uri,
