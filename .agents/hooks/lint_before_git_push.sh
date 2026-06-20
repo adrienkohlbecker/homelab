@@ -15,6 +15,36 @@ input=$(cat)
 cmd=$(jq -r '.tool_input.command // empty' <<<"$input")
 cwd=$(jq -r '.cwd // empty' <<<"$input")
 
+# Drop heredoc bodies before scanning. A commit fed via `git commit -F - <<EOF
+# ... EOF` can legitimately contain a line that reads like a `git push ...`
+# command (e.g. a message documenting this very flag) -- that is data, not an
+# invocation, and must not trip the gate. Track heredoc openers (`<<WORD`,
+# `<<'WORD'`, `<<-WORD`) and drop everything through the terminator line. The
+# opener guard `[^<[:alnum:]]` before `<<` skips `<<<` herestrings and `a<<b`
+# arithmetic shifts; a bare `cmd<<EOF` with no space is not recognised (we only
+# emit `<<'EOF'`-with-space ourselves).
+strip_heredocs() {
+  local line probe out="" delim="" dash="" in_hd=0
+  local opener_re='(^|[^<[:alnum:]])<<(-?)[[:space:]]*['\''"]?([A-Za-z_][A-Za-z0-9_]*)'
+  while IFS= read -r line; do
+    if [ "$in_hd" = 1 ]; then
+      probe=$line
+      # `<<-` lets the terminator be indented with leading tabs.
+      [ -n "$dash" ] && probe=${probe#"${probe%%[!$'\t']*}"}
+      [ "$probe" = "$delim" ] && in_hd=0
+      continue
+    fi
+    out+=$line$'\n'
+    if [[ $line =~ $opener_re ]]; then
+      dash=${BASH_REMATCH[2]}
+      delim=${BASH_REMATCH[3]}
+      in_hd=1
+    fi
+  done <<<"$1"
+  printf '%s' "$out"
+}
+cmd=$(strip_heredocs "$cmd")
+
 # Only act on `git push` invocations -- not `git push --help`, `git status`,
 # or anything else routed through Bash. Check individual shell segments so a
 # chained command such as `git status && git push` still gets gated.
