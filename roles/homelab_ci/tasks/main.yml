@@ -15,11 +15,15 @@
   tags:
     - homelab_ci
 
-# The operator (ak, in the homelab_ci group) runs packer:build locally to
-# publish qemu test-fixture artifacts here. The setgid group + default ACL
-# propagate homelab_ci:rw to all new files and subdirectories -- including
-# packer-plugin-qemu's port reservation files (hardcoded 0600 by the plugin)
-# -- so any group member can open them regardless of who created them.
+# Both the operator (ak) running packer:build locally and the CI runner
+# (gitlab_runner) publish qemu test-fixture artifacts here, so a tree one
+# identity built must be fully manageable by the other. The setgid group
+# + default ACL propagate homelab_ci:rwx to all new files and subdirectories --
+# including packer-plugin-qemu's port reservation files (hardcoded 0600 by the
+# plugin) -- so any group member can open them regardless of who created them.
+# The x is load-bearing: publish.py's atomic swap parks the previous tree and
+# shutil.rmtree's it, which needs execute (directory traversal) on every
+# subdirectory; without it a member can read but not delete another's tree.
 - name: Create /mnt/scratch/homelab_ci packer artifacts dir
   file:
     path: /mnt/scratch/homelab_ci
@@ -31,12 +35,12 @@
   tags:
     - homelab_ci
 
-- name: Set default homelab_ci:rw ACL on homelab_ci
+- name: Set default homelab_ci:rwx ACL on homelab_ci
   ansible.posix.acl:
     path: /mnt/scratch/homelab_ci
     entity: homelab_ci
     etype: group
-    permissions: rw
+    permissions: rwx
     default: true
     state: present
   become: true
