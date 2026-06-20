@@ -178,6 +178,10 @@
 
 - name: Configure minio client
   import_tasks: client.yml
+  tags:
+    - minio
 
 - name: Configure minio data
   import_tasks: data.yml
+  tags:
+    - minio
