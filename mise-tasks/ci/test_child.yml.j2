@@ -107,6 +107,11 @@ stages:
 "_site_test:box":
   extends: .cell
   stage: site
+  # Route the critical-path converge to its own runner (a dedicated single-host
+  # 4-vCPU pool on aws_qemu) so it runs uncontended and the role-cell pool can
+  # drain without waiting on it. Equals the cell tag until that pool is live.
+  tags:
+    - {{ site_runner_tag }}
   timeout: 60m
   script:
     # External watchdog, same rationale as the cell script below: GNU timeout

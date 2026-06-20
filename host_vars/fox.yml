@@ -239,10 +239,12 @@ podman_zvol_sync_disabled: true
 
 # Global job ceiling across BOTH runner blocks (config.toml is process-wide) --
 # the fleet umbrella, NOT the per-runner knob. Set to the sum of the two
-# runners' per-runner `limit`s (16 docker + 26 aws_qemu, the latter
-# max_instances*capacity = 1*26) so each is bounded by its own limit and neither
-# starves the other.
-gitlab_runner_concurrent: 42
+# runners' per-runner `limit`s (16 docker + 208 role-cell aws_qemu + 1 site,
+# role-cell = max_instances*capacity = 16*13, site = 1*1) so each is bounded by
+# its own limit and neither starves the other. The remote aws_qemu slots are
+# SSH'd to ASG hosts, not run on fox; fox only holds their connections and log
+# streams.
+gitlab_runner_concurrent: 225
 
 # Per-runner cap on the Docker-on-podman runner: bounds jobs run directly on
 # fox. The wide cell fan-out runs on the AWS qemu shell hosts (the ASG), off
@@ -263,20 +265,26 @@ gitlab_runner_memory_max: 3G
 
 gitlab_runner_aws_qemu_enabled: true
 
-# Per-host job concurrency on the c8id.8xlarge qemu host (32 vCPU / 64 GiB,
-# dedicated to CI). Memory -- not CPU -- is the ceiling: a heavy burst (15 of N
-# box_deps at 5 GiB) holds ~0% steal with CPU idle never below ~12%, so vCPU
-# oversubscription (26 x 4 = 104 on 32, ~3.25x) is a non-issue; peak guest RSS
-# during synchronized converge is the hard wall.
+# Per-host job concurrency on each c8id.4xlarge qemu host (16 vCPU / 32 GiB,
+# dedicated to CI). The burst fans out across up to max_instances (below) such
+# hosts at 13 cells each -- the horizontal-burst form of the proven
+# one-8xlarge-at-26 shape: same ~2.46 GiB/cell density per host, but many small
+# hosts instead of one big one, for spot-placement spread, a smaller per-host
+# blast radius, and a single-wave full universe (~8 hosts for ~100 cells).
+# Memory -- not CPU -- is the ceiling: vCPU oversubscription (13 x 4 = 52 on 16,
+# ~3.25x, identical to the 8xlarge ratio) is a non-issue; peak guest RSS during
+# synchronized converge is the hard wall.
 #
-# Measured on this exact host class (2026-06-20):
+# Density set from the full-host (c8id.8xlarge, 64 GiB) measurements, 2026-06-20:
 #   24 cells -> ~48 GiB RSS peak, ~9 GiB free, 0 OOM. Safe even with no swap.
-#   28 cells -> ~51 GiB RSS peak, swap drawn to ~10.4 of 16 GiB, ~5.4 GiB RAM
-#               free, 0 OOM -- held, but the cushion ran ~65% full.
+#   26 cells -> ~55.5 GiB RSS peak (88%), ~7.5 GiB free, ~4.6 GiB of 16 GiB swap,
+#               0 OOM, 0% steal, CPU idle floor 10%.
+#   28 cells -> ~51 GiB RSS peak, swap to ~10.4 of 16 GiB, ~5.4 GiB free, 0 OOM
+#               -- held, but the cushion ran ~65% full.
 #   30 cells -> RSS past 51 GiB, global OOM ~6 min in (no swap), kernel culled 2
 #               qemu guests (flaked cells).
-# 26 backs off one notch from the proven-but-warm 28 so the swap cushion stays
-# insurance rather than working memory: the qemu-host AMI boot service
+# 13 per 32 GiB host is exactly that 26-per-64-GiB density, so the same swap-as-
+# insurance margin carries over: the qemu-host AMI boot service
 # (homelab_ci_prepare_scratch) puts a 16 GiB swapfile on the idle NVMe scratch
 # with vm.swappiness=1, so a transient converge overshoot pages out cold pages
 # instead of OOM-killing a guest. If swap routinely fills, lower this rather than
@@ -284,9 +292,20 @@ gitlab_runner_aws_qemu_enabled: true
 # (pages_sharing 0, full_scans 0) because converge keeps pages volatile/
 # unmergeable.
 # Lower this first if qemu boot flakes or OOM kills reappear.
-# max_instances stays at the default 1 (one host); raising it is the later
-# horizontal-burst step, bounded by floor(256 spot-vCPU quota / 32).
-gitlab_runner_aws_qemu_capacity_per_instance: 26
+gitlab_runner_aws_qemu_capacity_per_instance: 13
+# Host ceiling = the 256-vCPU All-Standard-Spot quota (L-34B43A08, eu-central-1)
+# divided by the 16 vCPU of a c8id.4xlarge: floor(256 / 16) = 16. The runner only
+# launches as many as the queued burst needs (ceil(queued / 13)), so a ~100-cell
+# universe lands on ~8 hosts in one wave; this is just the cap. terraform's
+# aws_autoscaling_group max_size must match (ci_qemu_host_pool.max_size in
+# terraform/aws_ci.tf). Raise the spot quota before lifting this further.
+gitlab_runner_aws_qemu_max_instances: 16
+# A full-universe run is a one-shot burst: all cells land in ~1 wave, so warm host
+# reuse buys almost nothing within a pipeline, while every idle minute is billed
+# across every host the burst launched. Hold the drain just long enough to absorb
+# a straggler claiming a freed slot, not for cross-push reuse. This is the main
+# AWS cost lever against the free lab baseline. The site pool overrides it below.
+gitlab_runner_aws_qemu_idle_time: "2m"
 gitlab_runner_aws_qemu_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
           30663764616365393564643165346265623231623666393737343536323938396163653933343438
@@ -312,3 +331,14 @@ gitlab_runner_aws_qemu_secret_access_key: !vault |
           6637393637626530350a333365363965353665313162613063633335613361653961616638353766
           63383134383261376562656636663530613961306133356436373138363533333565636530663465
           3938666634326536393731623530626531613761636231666135
+
+# Dedicated _site_test pool (terraform ASG homelab-ci-qemu-site, 4-vCPU
+# c8id.xlarge): runs only the full-site converge cell, off the role-cell pool, so
+# it runs uncontended and the role-cell pool drains without waiting on it. The
+# project-runner token (tagged aws-shell-qemu-site) is vaulted in
+# group_vars/prod.yml (gitlab_runner_aws_qemu_site_token); the role-cell runner's
+# AWS plugin + .aws profile are reused. detect.py routes _site_test here via the
+# aws_qemu site_runner_tag.
+gitlab_runner_aws_qemu_site_enabled: true
+# One job per pipeline, so warm reuse buys nothing here either -- same 2m drain.
+gitlab_runner_aws_qemu_site_idle_time: "2m"
