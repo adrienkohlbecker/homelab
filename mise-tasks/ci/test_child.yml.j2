@@ -23,8 +23,10 @@ stages:
   stage: test1
   needs: []
   # Qemu cells run directly on a protected shell runner. No job image, no EC2
-  # launch prelude: test/testrole.py uses the local qemu harness. GitLab OIDC
-  # hydrates the promoted qemu base images from S3 before booting.
+  # launch prelude: test/testrole.py uses the local qemu harness. The promoted
+  # qemu base images are hydrated before booting -- the aws_qemu target reads
+  # them from AWS S3 via GitLab OIDC; the lab target reads them from the on-LAN
+  # MinIO mirror with static creds.
   tags:
     - {{ cell_runner_tag }}
   id_tokens:
@@ -75,6 +77,7 @@ stages:
     # Shell runners do not activate mise shims; `mise exec` exposes the tool
     # tree consistently there while staying harmless inside the CI image.
     - mise exec -- uv sync --locked
+{% if image_oidc %}
     # GitLab OIDC works on the shell runner too. The same branch-safe cell role
     # has read-only access to the promoted qemu bundles used by qemu cells.
     - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
@@ -86,6 +89,17 @@ stages:
     # die with "[Errno 17] File exists". mkdir -p is idempotent under the race.
     - mkdir -p ~/.aws/cli/cache
     - mise exec -- aws --region eu-central-1 sts get-caller-identity
+{% else %}
+    # The lab target hydrates from the on-LAN MinIO mirror (an S3-compatible
+    # store) with static creds -- no OIDC, no AWS role assumption. The hydrate
+    # script reads HOMELAB_CI_S3_ENDPOINT and the ambient AWS_* creds.
+    - test -n "${HOMELAB_CI_MINIO_ACCESS_KEY:-}" || { echo "HOMELAB_CI_MINIO_ACCESS_KEY CI/CD variable is not set" >&2; exit 1; }
+    - test -n "${HOMELAB_CI_MINIO_SECRET_KEY:-}" || { echo "HOMELAB_CI_MINIO_SECRET_KEY CI/CD variable is not set" >&2; exit 1; }
+    - export AWS_ACCESS_KEY_ID="$HOMELAB_CI_MINIO_ACCESS_KEY"
+    - export AWS_SECRET_ACCESS_KEY="$HOMELAB_CI_MINIO_SECRET_KEY"
+    - export AWS_DEFAULT_REGION=eu-central-1
+    - export HOMELAB_CI_S3_ENDPOINT="{{ image_endpoint }}"
+{% endif %}
     # box/box_deps boot a promoted S3 image bundle; minimal has none -- the
     # harness downloads its Ubuntu cloud image at runtime
     # (Machine._ensure_minimal_cloudimg), so there is nothing to hydrate for it.

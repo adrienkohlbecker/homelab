@@ -333,18 +333,18 @@ qemu_host_ami:
 # run on lab's shell runner: packer:build box boots a qemu VM and installs the
 # platform; box_deps additionally layers seed_deps.yml (podman/nginx/backports)
 # via packer:seed-deps; upload-s3 --promote publishes each bundle to
-# s3://homelab-ci-images and moves the /homelab-ci/qemu-image/<machine>/<ubuntu>
-# SSM pointer the aws_qemu cells hydrate. Without these the S3 bundles only
-# refresh from a manual local build, so promoted images drift behind role code.
+# s3://homelab-ci-images and writes the promoted.json pointer object the aws_qemu
+# cells hydrate. Without these the S3 bundles only refresh from a manual local
+# build, so promoted images drift behind role code.
 #
 # Manual + protected-ref: the bake role trusts master only, and a promote is
 # fleet-global the instant it lands -- mitigated because the build verify-boots
 # (packer) and converges seed_deps (launch.py) before promoting, S3 versioning
-# retains the prior bundle, and upload-s3 prints the SSM rollback line. The
+# retains the prior bundle, and upload-s3 prints the rollback line. The
 # resource_group is per (machine, release) -- `qemu_image_<machine>_<UBUNTU>`,
 # set in each machine template below -- so distinct builds run concurrently:
 # every release writes a disjoint HOMELAB_CI_DIR path (${HOMELAB_CI_DIR}/<rel>)
-# and moves a disjoint /homelab-ci/qemu-image/<machine>/<rel> SSM pointer, so
+# and writes a disjoint promoted.json object key per (machine, release), so
 # there is nothing to race. box_deps:<rel> still lands after box:<rel> via its
 # needs edge; the per-(machine,release) group only blocks a re-dispatch of the
 # *same* cell from overlapping its own in-flight publish.
@@ -376,12 +376,22 @@ qemu_host_ami:
     - mise run packer:init
     # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
     # AssumeRoleWithWebIdentity provider wants a file path. The bake role (master
-    # trust) grants the S3 write + SSM promote upload-s3 needs.
+    # trust) grants the S3 write + promoted.json publish upload-s3 needs.
     - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
     - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
     - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
     - export AWS_ROLE_SESSION_NAME="qemu-image-$CI_JOB_ID"
     - mise exec -- aws --region eu-central-1 sts get-caller-identity
+    # The build runs on lab and dual-publishes: S3 (for the aws_qemu cells) AND
+    # lab's local MinIO mirror (for the lab cells). upload-s3 picks up these env
+    # vars and pushes the mirror first, then S3, rolling the mirror back if the S3
+    # write fails -- so the two stores never disagree on the promoted build.
+    - test -n "${HOMELAB_CI_MINIO_ACCESS_KEY:-}" || { echo "HOMELAB_CI_MINIO_ACCESS_KEY CI/CD variable is not set" >&2; exit 1; }
+    - test -n "${HOMELAB_CI_MINIO_SECRET_KEY:-}" || { echo "HOMELAB_CI_MINIO_SECRET_KEY CI/CD variable is not set" >&2; exit 1; }
+    - export HOMELAB_CI_MIRROR_ENDPOINT=https://minio-api.lab.fahm.fr
+    - export HOMELAB_CI_MIRROR_BUCKET=homelab-ci-images
+    - export HOMELAB_CI_MIRROR_ACCESS_KEY="$HOMELAB_CI_MINIO_ACCESS_KEY"
+    - export HOMELAB_CI_MIRROR_SECRET_KEY="$HOMELAB_CI_MINIO_SECRET_KEY"
 
 # box: the bare OS + zfs + networking platform every cell needs.
 .qemu_image_box:
@@ -449,8 +459,8 @@ qemu_host_ami:
     UBUNTU: resolute
 
 # Semantic cleanup for nested-qemu image bundles in S3. Bucket lifecycle handles
-# multipart leftovers and noncurrent versions; this job understands the live SSM
-# pointers and deletes old immutable build prefixes without touching promoted
+# multipart leftovers and noncurrent versions; this job reads the promoted.json
+# pointer object and deletes old immutable build prefixes without touching promoted
 # builds. Manual runs are dry-run unless QEMU_IMAGE_REAPER_APPLY=true; schedules
 # apply automatically on protected refs.
 qemu_image_reaper:
@@ -479,6 +489,43 @@ qemu_image_reaper:
     - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
     - export AWS_ROLE_SESSION_NAME="qemu-image-reaper-$CI_JOB_ID"
     - mise exec -- aws --region eu-central-1 sts get-caller-identity
+    - |
+      reaper_args=""
+      if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "${QEMU_IMAGE_REAPER_APPLY:-}" = "true" ]; then
+        reaper_args="--apply"
+      fi
+      mise run ci:reap-qemu-images $reaper_args
+
+# Same semantic cleanup as qemu_image_reaper, but for the lab MinIO mirror (the
+# AWS S3 bucket is reaped by qemu_image_reaper on the fox runner). Runs on lab so
+# it can reach minio-api.lab.fahm.fr with static MinIO creds (no OIDC); reap-qemu-
+# images targets the mirror via HOMELAB_CI_S3_ENDPOINT and reads the same
+# promoted.json pointer both stores carry.
+qemu_image_reaper_minio:
+  stage: prepare
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_REF_PROTECTED == "true"
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+      when: manual
+      # A skipped manual job must not hold the pipeline in "blocked".
+      allow_failure: true
+  tags:
+    - lab-shell-qemu
+  resource_group: qemu-image-reaper-minio
+  interruptible: false
+  timeout: 15m
+  before_script:
+    - mise install
+    - mise exec -- uv sync --locked
+    - test -n "${HOMELAB_CI_MINIO_ACCESS_KEY:-}" || { echo "HOMELAB_CI_MINIO_ACCESS_KEY CI/CD variable is not set" >&2; exit 1; }
+    - test -n "${HOMELAB_CI_MINIO_SECRET_KEY:-}" || { echo "HOMELAB_CI_MINIO_SECRET_KEY CI/CD variable is not set" >&2; exit 1; }
+    # MinIO uses static creds, not OIDC; reap-qemu-images reads ambient AWS creds
+    # and targets the mirror via HOMELAB_CI_S3_ENDPOINT.
+    - export AWS_ACCESS_KEY_ID="$HOMELAB_CI_MINIO_ACCESS_KEY"
+    - export AWS_SECRET_ACCESS_KEY="$HOMELAB_CI_MINIO_SECRET_KEY"
+    - export AWS_DEFAULT_REGION=eu-central-1
+    - export HOMELAB_CI_S3_ENDPOINT=https://minio-api.lab.fahm.fr
+  script:
     - |
       reaper_args=""
       if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "${QEMU_IMAGE_REAPER_APPLY:-}" = "true" ]; then

@@ -1160,13 +1160,19 @@ class TestTargets:
     def test_target_fields(self) -> None:
         assert detect.TARGETS["aws_qemu"] == {
             "cell_runner_tag": "aws-shell-qemu",
+            "site_runner_tag": "aws-shell-qemu-site",
             "in_aws": True,
             "baked_toolchain": True,
+            "image_oidc": True,
+            "image_endpoint": "",
         }
         assert detect.TARGETS["lab"] == {
             "cell_runner_tag": "lab-shell-qemu",
+            "site_runner_tag": "lab-shell-qemu",
             "in_aws": False,
             "baked_toolchain": False,
+            "image_oidc": False,
+            "image_endpoint": "https://minio-api.lab.fahm.fr",
         }
 
 
@@ -1198,9 +1204,11 @@ class TestRenderChildPipeline:
         assert doc["default"]["tags"] == ["fox-docker-aws"]
         assert doc[".cell"]["tags"] == ["aws-shell-qemu"]
         assert "image" not in doc[".cell"]
-        # _site_test extends .cell, so it inherits the shell-runner tag.
+        # _site_test extends .cell but overrides the tag onto the dedicated
+        # single-host site pool (site_runner_tag) so the critical-path converge
+        # runs uncontended off the role-cell pool.
         assert doc["_site_test:box"]["extends"] == ".cell"
-        assert "tags" not in doc["_site_test:box"]
+        assert doc["_site_test:box"]["tags"] == ["aws-shell-qemu-site"]
 
     def test_no_cells_placeholder_stays_on_fox(self) -> None:
         # The placeholder carries no own tag, so it inherits the fox-docker-aws
@@ -1262,15 +1270,25 @@ class TestRenderChildPipeline:
         # lab's shell runner is not the baked AMI -- no /opt/mise to point at.
         assert "MISE_DATA_DIR" not in doc[".cell"]["variables"]
         assert "image" not in doc[".cell"]
+        # id_tokens stays on .cell (harmless when unused); lab takes the MinIO
+        # path, so it never assumes the AWS cell role.
         assert doc[".cell"]["id_tokens"] == {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}}
         assert "retry" not in doc[".cell"]
 
         joined = "\n".join(doc[".cell"]["before_script"])
         assert "HOMELAB_VAULT_PASSWORD_TEST" in joined
         assert "CI_CELL_SSH_KEY" not in joined
-        assert detect.CELL_ROLE_ARN in joined
-        assert "GITLAB_OIDC_TOKEN" in joined
-        assert "mise exec -- aws --region eu-central-1 sts get-caller-identity" in joined
+        # lab hydrates from the on-LAN MinIO mirror with static creds: no OIDC
+        # role assumption, no sts call, an explicit S3 endpoint.
+        assert detect.CELL_ROLE_ARN not in joined
+        assert "sts get-caller-identity" not in joined
+        assert "AWS_ROLE_ARN" not in joined
+        assert "AWS_WEB_IDENTITY_TOKEN_FILE" not in joined
+        assert "HOMELAB_CI_MINIO_ACCESS_KEY" in joined
+        assert "HOMELAB_CI_MINIO_SECRET_KEY" in joined
+        assert 'export AWS_ACCESS_KEY_ID="$HOMELAB_CI_MINIO_ACCESS_KEY"' in joined
+        assert 'export AWS_SECRET_ACCESS_KEY="$HOMELAB_CI_MINIO_SECRET_KEY"' in joined
+        assert 'export HOMELAB_CI_S3_ENDPOINT="https://minio-api.lab.fahm.fr"' in joined
         assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"' in joined
         assert "--upstream-mirrors" not in "\n".join(doc["nginx:box"]["script"])
 
@@ -1299,6 +1317,9 @@ class TestRenderChildPipeline:
         assert detect.CELL_ROLE_ARN in joined
         assert 'AWS_ROLE_SESSION_NAME="aws_qemu-cell-$CI_JOB_ID"' in joined
         assert "mise exec -- aws --region eu-central-1 sts get-caller-identity" in joined
+        # aws_qemu reads from AWS S3 via OIDC -- never the lab MinIO mirror.
+        assert "HOMELAB_CI_MINIO_ACCESS_KEY" not in joined
+        assert "HOMELAB_CI_S3_ENDPOINT" not in joined
         assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"' in joined
         assert "--upstream-mirrors" not in "\n".join(doc["nginx:box"]["script"])
 

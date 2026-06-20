@@ -728,10 +728,12 @@ def _full_universe_matrix() -> str:
 #
 # The `detect` job emits a *generated child pipeline*: one qemu test cell per
 # job. Both targets (`aws_qemu`, `lab`) run on a qemu shell runner — they render
-# the same matrix and hydrate the promoted qemu image bundle from S3 before
-# calling the qemu harness directly. They differ only in which shell runner
-# claims the cells, whether the guest egresses through AWS, and whether the host
-# ships a packer-baked toolchain.
+# the same matrix and hydrate the promoted qemu image bundle before calling the
+# qemu harness directly. aws_qemu reads the bundles from AWS S3 (assuming the
+# cell role via GitLab OIDC); lab reads them from the on-LAN MinIO mirror with
+# static creds. They differ only in which shell runner claims the cells, whether
+# the guest egresses through AWS, whether the host ships a packer-baked
+# toolchain, and how the cell authenticates to the image store.
 #
 # The parent `detect` job (.gitlab-ci.yml) runs `detect.py gitlab`, which writes
 # the child YAML (one job per cell, all extending a shared `.cell` scaffold);
@@ -760,6 +762,13 @@ EMPTY_SHA = "0" * 40
 #                     (qemu_host.pkr.hcl), which ships the mise tool tree + uv
 #                     cache at /opt; the cell points mise/uv at them so a fresh
 #                     host skips the toolchain re-download.
+#   image_oidc      — true when the cell assumes the AWS bake/cell role via
+#                     GitLab OIDC to read the promoted qemu image bundles from
+#                     AWS S3. False means it authenticates to an S3-compatible
+#                     store with static creds instead (no OIDC).
+#   image_endpoint  — the S3-compatible endpoint URL for image hydration
+#                     (surfaced to ci:hydrate-qemu-images as
+#                     HOMELAB_CI_S3_ENDPOINT). Empty selects AWS S3.
 TARGETS = {
     "aws_qemu": {
         "cell_runner_tag": "aws-shell-qemu",
@@ -769,6 +778,8 @@ TARGETS = {
         "site_runner_tag": "aws-shell-qemu-site",
         "in_aws": True,
         "baked_toolchain": True,
+        "image_oidc": True,
+        "image_endpoint": "",
     },
     "lab": {
         # lab's shell runner is on the operator LAN: the qemu guest reaches the
@@ -777,6 +788,9 @@ TARGETS = {
         "site_runner_tag": "lab-shell-qemu",
         "in_aws": False,
         "baked_toolchain": False,
+        # Hydrate from the on-LAN MinIO mirror with static creds, not AWS S3.
+        "image_oidc": False,
+        "image_endpoint": "https://minio-api.lab.fahm.fr",
     },
 }
 TARGET_NAMES = sorted(TARGETS)
@@ -861,6 +875,8 @@ def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws_
         site_runner_tag=target_config["site_runner_tag"],
         in_aws=target_config["in_aws"],
         baked_toolchain=target_config["baked_toolchain"],
+        image_oidc=target_config["image_oidc"],
+        image_endpoint=target_config["image_endpoint"],
         cell_role_arn=CELL_ROLE_ARN,
     )
 
