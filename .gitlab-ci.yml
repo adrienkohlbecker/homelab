@@ -516,12 +516,12 @@ fox_image:
     - mise install
     - mise exec -- uv sync --locked
     - mise run packer:init
-    # fox runs a jammy root in prod; the bake stays jammy-only. Build the rpool
+    # fox runs a noble root in prod; the bake stays noble-only. Build the rpool
     # disk in qemu, then stream it onto a Hetzner rescue server and snapshot. The
     # build pulls through lab's Nexus (reachable here); the shipped image points
     # at upstream Ubuntu mirrors regardless, so no --upstream is needed.
-    - mise run packer:build hetzner --ubuntu jammy
-    - mise run packer:hetzner --ubuntu jammy
+    - mise run packer:build hetzner --ubuntu noble
+    - mise run packer:hetzner
 
 # Manual rebuild of the custom ZFSBootMenu recovery image (zbm/,
 # mise-tasks/zbm/). Heavy (clones ZBM, xbps-installs a Void toolchain, runs
