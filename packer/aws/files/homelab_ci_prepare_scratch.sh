@@ -36,6 +36,18 @@ if ! mountpoint -q "$mountpoint"; then
   fi
 fi
 
+# gitlab-runner (instance executor, ssh user ubuntu) checkout + cache + builds.
+# Created before the swap cushion below: homelab_ci_ready gates on these being
+# writable, and fleeting reaps a host whose instance-ready command keeps failing,
+# so nothing slow may sit between the mount and these dirs.
+install -dm 0755 -o ubuntu -g ubuntu \
+  "$mountpoint/gitlab-runner" \
+  "$mountpoint/gitlab-runner/builds" \
+  "$mountpoint/gitlab-runner/cache"
+# qemu scratch, created last of the readiness dirs so homelab_ci_ready's writable
+# check on it implies the whole tree is staged.
+install -dm 0755 -o ubuntu -g ubuntu "$mountpoint/homelab_ci"
+
 # Swap cushion on the instance-store NVMe. During a synchronized qemu converge
 # many guests hit peak RSS at once and can momentarily overshoot the 64 GiB host
 # RAM; without swap that overshoot is an OOM-kill that culls a guest and flakes
@@ -52,11 +64,13 @@ swap_gib=16
 swapfile="$mountpoint/swapfile"
 if mountpoint -q "$mountpoint" &&
   ! swapon --show=NAME --noheadings 2>/dev/null | grep -qx "$swapfile"; then
-  # dd (not fallocate): a swapfile with unwritten extents is rejected by swapon
-  # on some kernels, and a silently-missing cushion would be worse than the cost
-  # of zero-filling 16 GiB once per host lifetime.
+  # fallocate, not a dd zero-fill: swapon accepts the preallocated file on this
+  # ext4/noble host, and it is instant. A multi-GiB zero-fill would instead hold
+  # the oneshot in activating for ~40s while it floods page cache -- and since
+  # the readiness dirs above are already staged, that delay would needlessly keep
+  # the unit (and any later swap-dependent ordering) busy in the boot path.
   if rm -f "$swapfile" &&
-    dd if=/dev/zero of="$swapfile" bs=1M count="$((swap_gib * 1024))" status=none &&
+    fallocate -l "${swap_gib}G" "$swapfile" &&
     chmod 0600 "$swapfile" &&
     mkswap "$swapfile" >/dev/null &&
     swapon "$swapfile"; then
@@ -67,12 +81,3 @@ if mountpoint -q "$mountpoint" &&
     rm -f "$swapfile" || true
   fi
 fi
-
-# gitlab-runner (instance executor, ssh user ubuntu) checkout + cache + builds.
-install -dm 0755 -o ubuntu -g ubuntu \
-  "$mountpoint/gitlab-runner" \
-  "$mountpoint/gitlab-runner/builds" \
-  "$mountpoint/gitlab-runner/cache"
-# qemu scratch, created last so homelab_ci_ready's writable check on it implies
-# the whole tree is staged.
-install -dm 0755 -o ubuntu -g ubuntu "$mountpoint/homelab_ci"
