@@ -1,8 +1,9 @@
 # AWS-backed CI nested-qemu fleet (notes/ci_aws_nested_qemu_cells.md): role tests run
 # on a pool of spot qemu hosts (an ASG scaled by fleeting-plugin-aws on fox),
 # where each cell hydrates a promoted qemu image bundle from S3 and boots it
-# under nested KVM. The bake path publishes those bundles to S3 and the host
-# AMI through SSM. This file owns the platform the harness does NOT: VPC,
+# under nested KVM. The bake path publishes those bundles to S3 (consumers
+# follow a promoted.json pointer object in the bucket) and the host AMI through
+# SSM. This file owns the platform the harness does NOT: VPC,
 # security groups, IAM/OIDC, the qemu-host launch template + ASG, the image
 # bucket, the ECR pull-through cache, the EventBridge Scheduler execution role,
 # and the budget tripwire. Changing an instance type or spot policy happens
@@ -17,13 +18,9 @@ locals {
   # is the only identity binding (IAM has no condition key for GitLab's
   # immutable project_id), so this namespace must never be released — a
   # re-registered username could recreate the project and mint valid tokens.
-  ci_gitlab_project         = "akohlbecker/homelab"
-  ci_account_id             = data.aws_caller_identity.current.account_id
-  ci_qemu_image_bucket_name = "homelab-ci-images"
-  ci_qemu_image_machines = toset([
-    "box",
-    "box_deps",
-  ])
+  ci_gitlab_project          = "akohlbecker/homelab"
+  ci_account_id              = data.aws_caller_identity.current.account_id
+  ci_qemu_image_bucket_name  = "homelab-ci-images"
   ci_qemu_host_ami_parameter = "/homelab-ci/ami/qemu-host/noble"
   ci_qemu_host_pool = {
     # Instance-type-agnostic name: aws_autoscaling_group.name and
@@ -160,7 +157,8 @@ variable "ci_ecr_gitlab_access_token" {
 # ─── QEMU image bundle bucket ────────────────────────────────────────────────
 # Source of truth for nested-qemu cell images. Builds publish immutable
 # <ubuntu>/<machine>/<build-id>/ prefixes containing manifest.json and the
-# compressed disk bundle; SSM promotion points consumers at the current build.
+# compressed disk bundle; a <ubuntu>/<machine>/promoted.json pointer object in
+# the bucket points consumers at the current build.
 
 resource "aws_s3_bucket" "ci_qemu_images" {
   bucket = local.ci_qemu_image_bucket_name
@@ -555,9 +553,10 @@ resource "aws_iam_role_policy" "ci_cell_scheduler" {
 # branch pipelines run role tests too; tag pipelines don't, so they get
 # nothing). Read-only by design: qemu cells run the harness locally on the
 # shell runner and assume this role solely to hydrate the promoted qemu base
-# images from S3 (mise run ci:hydrate-qemu-images — an SSM get-parameter plus an
-# s3 cp). It grants nothing that launches instances, writes images, or promotes
-# artifacts; the same minimal read set as the ci_qemu_host instance role.
+# images from S3 (mise run ci:hydrate-qemu-images — two s3 GetObject calls, the
+# promoted.json pointer plus the bundle). It grants nothing that launches
+# instances, writes images, or promotes artifacts; the same minimal read set as
+# the ci_qemu_host instance role.
 
 resource "aws_iam_role" "ci_cell" {
   name = "homelab-ci-cell"
@@ -590,17 +589,13 @@ resource "aws_iam_role_policy" "ci_cell" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid      = "ResolveQemuImage"
-        Effect   = "Allow"
-        Action   = ["ssm:GetParameter", "ssm:GetParameters"]
-        Resource = "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/qemu-image/*"
-      },
-      {
         Sid      = "LocateQemuImages"
         Effect   = "Allow"
         Action   = "s3:GetBucketLocation"
         Resource = aws_s3_bucket.ci_qemu_images.arn
       },
+      # GetObject covers both the promoted.json pointer object and the bundle it
+      # points at.
       {
         Sid      = "ReadQemuImages"
         Effect   = "Allow"
@@ -637,8 +632,9 @@ resource "aws_iam_role_policy" "ci_cell" {
 
 # ─── Nested-qemu runner hosts ────────────────────────────────────────────────
 # The instance-executor worker identity is deliberately harmless when exposed
-# to shell jobs through IMDS: it can read promoted qemu image pointers/bundles
-# and nothing that scales ASGs, writes images, or promotes artifacts.
+# to shell jobs through IMDS: it can read the promoted.json pointer object and
+# the qemu image bundles from S3, and nothing that scales ASGs, writes images,
+# or promotes artifacts.
 
 resource "aws_iam_role" "ci_qemu_host" {
   name = "homelab-ci-qemu-host"
@@ -670,17 +666,13 @@ resource "aws_iam_role_policy" "ci_qemu_host" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid      = "ResolveQemuImage"
-        Effect   = "Allow"
-        Action   = ["ssm:GetParameter", "ssm:GetParameters"]
-        Resource = "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/qemu-image/*"
-      },
-      {
         Sid      = "LocateQemuImages"
         Effect   = "Allow"
         Action   = "s3:GetBucketLocation"
         Resource = aws_s3_bucket.ci_qemu_images.arn
       },
+      # GetObject covers both the promoted.json pointer object and the bundle it
+      # points at.
       {
         Sid      = "ReadQemuImages"
         Effect   = "Allow"
@@ -754,7 +746,8 @@ resource "aws_iam_user_policy" "ci_fleeting_manager" {
 
 # ─── Bake role ───────────────────────────────────────────────────────────────
 # Assumed only by protected-ref jobs (master): packer ebssurrogate bakes,
-# AMI registration, and SSM promotion. Branch jobs cannot publish AMIs.
+# AMI registration, host-AMI SSM promotion, and writing the qemu image bundle
+# plus its promoted.json pointer object to S3. Branch jobs cannot publish AMIs.
 # Broader than the cell role by necessity (packer creates temp keypairs,
 # volumes, snapshots, and registers images) but pinned to the CI region.
 
@@ -821,8 +814,9 @@ resource "aws_iam_role_policy" "ci_bake" {
         }
       },
       # Candidate write + current promotion of the nested-qemu host AMI
-      # parameter (the only AMI a bake still promotes — the qemu base images
-      # themselves ride S3, see PromoteQemuImages below).
+      # parameter — the last SSM-based pointer a bake promotes. The qemu base
+      # images themselves ride S3: the bundle and its promoted.json pointer
+      # object are both plain s3:PutObject (WriteQemuImages below).
       {
         Sid    = "PromoteAmi"
         Effect = "Allow"
@@ -843,6 +837,9 @@ resource "aws_iam_role_policy" "ci_bake" {
         ]
         Resource = aws_s3_bucket.ci_qemu_images.arn
       },
+      # Writes the immutable build bundle and, on promotion, the
+      # <ubuntu>/<machine>/promoted.json pointer object — both plain PutObject,
+      # so promotion needs no separate grant.
       {
         Sid    = "WriteQemuImages"
         Effect = "Allow"
@@ -852,18 +849,6 @@ resource "aws_iam_role_policy" "ci_bake" {
           "s3:DeleteObject", "s3:DeleteObjectVersion",
         ]
         Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
-      },
-      {
-        Sid    = "PromoteQemuImages"
-        Effect = "Allow"
-        Action = [
-          "ssm:PutParameter", "ssm:GetParameter", "ssm:GetParameters",
-          "ssm:DescribeParameters", "ssm:AddTagsToResource",
-        ]
-        Resource = [
-          for m in local.ci_qemu_image_machines :
-          "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/qemu-image/${m}/*"
-        ]
       },
       # Per-bake one-time termination schedules (mise-tasks/packer/
       # _bake_backstop.sh): a CI job-timeout SIGKILL bypasses the wrapper's
