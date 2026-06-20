@@ -209,9 +209,12 @@
   become: true
 
 - name: artifacts | Migrate legacy libvirt OVMF vars file
+  # In check mode the workdir is only notionally created, so a copy into it
+  # fails its destination-directory check; skip until a real run makes the dir.
   when:
     - not macos_vm_ovmf_vars.stat.exists
     - macos_vm_legacy_ovmf_vars.stat.exists
+    - not (ansible_check_mode and macos_vm_workdir_result.changed)
   copy:
     src: "/var/lib/libvirt/qemu/nvram/{{ macos_vm_name }}_VARS.fd"
     dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
@@ -227,6 +230,7 @@
   when:
     - not macos_vm_ovmf_vars.stat.exists
     - not macos_vm_legacy_ovmf_vars.stat.exists
+    - not (ansible_check_mode and macos_vm_workdir_result.changed)
   copy:
     src: /usr/share/OVMF/OVMF_VARS.fd
     dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
