@@ -143,7 +143,7 @@ resource "hcloud_network_subnet" "hetzner" {
 # snapshot does NOT auto-recreate the running fox (recreate wipes the disk +
 # headscale state); it only takes effect on a deliberate taint/replace.
 data "hcloud_image" "fox" {
-  with_selector     = "os=ubuntu-zfs,ubuntu=jammy"
+  with_selector     = "os=ubuntu-zfs,ubuntu=noble"
   with_architecture = "x86"
   with_status       = ["available"]
   most_recent       = true
