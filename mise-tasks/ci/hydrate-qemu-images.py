@@ -6,21 +6,19 @@
 # USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
 # USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
 # USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
-# USAGE flag "--endpoint-url <url>" help="S3-compatible endpoint (MinIO mirror); default $HOMELAB_CI_S3_ENDPOINT"
 # USAGE flag "--build-id <build_id>" help="Exact build id to hydrate; default resolves the promoted.json pointer"
 # USAGE flag "--dest-root <path>" help="Harness image root; default is $HOMELAB_CI_DIR or /mnt/scratch/homelab_ci"
 # USAGE flag "--force" help="Re-download even when the local marker already matches"
 """Hydrate the local qemu harness image cache from S3.
 
-The lab shell-runner path uses the same qemu harness as local development, but
-its images can be populated from the S3 bundles selected by a pointer object:
+The aws_qemu cells populate their qemu harness images from the S3 bundles
+selected by a pointer object:
 
     s3://homelab-ci-images/<ubuntu>/<machine>/promoted.json -> {"build_id": ...}
     s3://homelab-ci-images/<ubuntu>/<machine>/<build-id>/{manifest.json,disks.tar.zst}
 
-The same layout works against a MinIO mirror: pass --endpoint-url (or set
-$HOMELAB_CI_S3_ENDPOINT) and ambient AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY
-pointing at the mirror's static keys.
+The lab target does not call this: lab bakes write the artifacts into lab's
+local /mnt/scratch/homelab_ci and its cells boot them in place.
 
 An exclusive flock per machine/release keeps concurrent cells from downloading
 or replacing the same image directory at the same time.
@@ -62,10 +60,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ubuntu", default=os.environ.get("usage_ubuntu", "jammy"))
     parser.add_argument("--bucket", default=os.environ.get("usage_bucket", "homelab-ci-images"))
     parser.add_argument("--region", default=os.environ.get("usage_region", "eu-central-1"))
-    parser.add_argument(
-        "--endpoint-url",
-        default=os.environ.get("usage_endpoint_url") or os.environ.get("HOMELAB_CI_S3_ENDPOINT") or None,
-    )
     parser.add_argument("--build-id", default=os.environ.get("usage_build_id"))
     parser.add_argument("--dest-root", default=os.environ.get("usage_dest_root"))
     parser.add_argument(
@@ -77,7 +71,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def aws_base(args: argparse.Namespace) -> list[str]:
-    base = [
+    return [
         "aws",
         "--region",
         args.region,
@@ -86,9 +80,6 @@ def aws_base(args: argparse.Namespace) -> list[str]:
         "--cli-read-timeout",
         "300",
     ]
-    if args.endpoint_url:
-        base += ["--endpoint-url", args.endpoint_url]
-    return base
 
 
 def find_tar() -> str:

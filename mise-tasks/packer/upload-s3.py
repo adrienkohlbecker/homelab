@@ -8,16 +8,12 @@
 # USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
 # USAGE flag "--build-id <build_id>" help="Immutable S3 build id; default is timestamp + current git SHA"
 # USAGE flag "--artifact-dir <path>" help="Artifact dir to bundle; default is $HOMELAB_CI_DIR/<ubuntu>/<machine>"
-# USAGE flag "--mirror-endpoint <url>" help="S3-compatible mirror endpoint (MinIO); enables mirror publish"
-# USAGE flag "--mirror-bucket <bucket>" help="Bucket on the mirror endpoint; defaults to --bucket"
 # USAGE flag "--promote" help="After upload, write the promoted.json pointer to this build id"
 # USAGE flag "--dry-run" help="Build and print the manifest plan without creating the tarball, uploading, or promoting"
 """Upload qemu packer artifacts to the nested-CI S3 bundle layout.
 
 The nested-qemu runner design uses S3 as the source of truth for qemu fixture
-images. S3 is the primary store; an optional MinIO mirror is published when
-``--mirror-endpoint`` is set so the same bundles are reachable from an
-S3-compatible endpoint:
+images for the aws_qemu target:
 
     s3://homelab-ci-images/<ubuntu>/<machine>/<build-id>/manifest.json
     s3://homelab-ci-images/<ubuntu>/<machine>/<build-id>/disks.tar.zst
@@ -32,7 +28,10 @@ The live build for each machine/release pair is selected by a pointer object
 
     s3://<bucket>/<ubuntu>/<machine>/promoted.json -> {"build_id": ...}
 
-so the same code promotes against AWS S3 and a MinIO mirror identically.
+The lab target does not read S3: lab bakes write the artifacts into lab's local
+/mnt/scratch/homelab_ci and its cells boot them in place, so only the aws_qemu
+cells hydrate from these objects. The lab bake still uploads here so S3 stays
+the canonical promoted store.
 """
 
 from __future__ import annotations
@@ -46,7 +45,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -56,21 +54,6 @@ MANIFEST_NAME = "manifest.json"
 POINTER_NAME = "promoted.json"
 S3_CHECKSUM_ALGORITHM = "SHA256"
 VALID_MACHINES = {"box", "box_deps", "lab", "pug"}
-
-
-@dataclass(frozen=True)
-class Target:
-    """A publish destination for the bundle/manifest/pointer objects.
-
-    ``endpoint_url`` None selects plain AWS S3 with ambient/OIDC credentials.
-    ``creds_env`` None means inherit the process environment as-is; otherwise it
-    is a static (access-key, secret-key) pair used for an S3-compatible mirror.
-    """
-
-    name: str
-    endpoint_url: str | None
-    bucket: str
-    creds_env: tuple[str, str] | None
 
 
 def run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -105,14 +88,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--build-id", default=os.environ.get("usage_build_id") or default_build_id())
     parser.add_argument("--artifact-dir", default=os.environ.get("usage_artifact_dir"))
     parser.add_argument(
-        "--mirror-endpoint",
-        default=os.environ.get("usage_mirror_endpoint") or os.environ.get("HOMELAB_CI_MIRROR_ENDPOINT"),
-    )
-    parser.add_argument(
-        "--mirror-bucket",
-        default=os.environ.get("usage_mirror_bucket") or os.environ.get("HOMELAB_CI_MIRROR_BUCKET"),
-    )
-    parser.add_argument(
         "--promote",
         action="store_true",
         default=os.environ.get("usage_promote") == "true",
@@ -123,32 +98,6 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("usage_dry_run") == "true",
     )
     return parser.parse_args()
-
-
-def build_targets(args: argparse.Namespace) -> tuple[Target, Target | None]:
-    """Resolve the primary (S3) and optional mirror (MinIO) publish targets.
-
-    The primary always uses ambient/OIDC credentials. The mirror is configured
-    only when ``--mirror-endpoint`` is set, and then requires static MinIO keys
-    in HOMELAB_CI_MIRROR_ACCESS_KEY / HOMELAB_CI_MIRROR_SECRET_KEY.
-    """
-    primary = Target(name="s3", endpoint_url=None, bucket=args.bucket, creds_env=None)
-    if not args.mirror_endpoint:
-        return primary, None
-    access = os.environ.get("HOMELAB_CI_MIRROR_ACCESS_KEY")
-    secret = os.environ.get("HOMELAB_CI_MIRROR_SECRET_KEY")
-    if not access or not secret:
-        sys.exit(
-            "--mirror-endpoint is set but HOMELAB_CI_MIRROR_ACCESS_KEY / "
-            "HOMELAB_CI_MIRROR_SECRET_KEY are not both present in the environment"
-        )
-    mirror = Target(
-        name="mirror",
-        endpoint_url=args.mirror_endpoint,
-        bucket=args.mirror_bucket or args.bucket,
-        creds_env=(access, secret),
-    )
-    return primary, mirror
 
 
 def require_tool(name: str) -> str:
@@ -271,102 +220,73 @@ def create_bundle(tar: str, root: Path, members: list[str], bundle: Path) -> Non
     run([tar, "--sparse", "--zstd", "-cf", str(bundle), "-C", str(root), *members])
 
 
-def aws_env(target: Target) -> dict[str, str] | None:
-    """Return the subprocess env for a target, or None to inherit unchanged.
-
-    For a mirror with static keys, set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY
-    and strip the OIDC/profile selectors so the CLI uses the MinIO keys instead
-    of assuming the build job's web-identity role.
-    """
-    if target.creds_env is None:
-        return None
-    env = dict(os.environ)
-    env["AWS_ACCESS_KEY_ID"], env["AWS_SECRET_ACCESS_KEY"] = target.creds_env
-    for key in ("AWS_ROLE_ARN", "AWS_WEB_IDENTITY_TOKEN_FILE", "AWS_PROFILE"):
-        env.pop(key, None)
-    return env
+def aws_argv(region: str, *args: str) -> list[str]:
+    return ["aws", "--region", region, *args]
 
 
-def aws_argv(target: Target, region: str, *args: str) -> list[str]:
-    argv = ["aws", "--region", region]
-    if target.endpoint_url:
-        argv += ["--endpoint-url", target.endpoint_url]
-    argv += list(args)
-    return argv
-
-
-def aws_run(target: Target, region: str, *args: str, **kwargs: Any) -> subprocess.CompletedProcess[str]:
-    return run(aws_argv(target, region, *args), env=aws_env(target), **kwargs)
-
-
-def object_exists(target: Target, key: str, region: str) -> bool:
+def object_exists(bucket: str, key: str, region: str) -> bool:
     result = subprocess.run(
-        aws_argv(target, region, "s3api", "head-object", "--bucket", target.bucket, "--key", key),
+        aws_argv(region, "s3api", "head-object", "--bucket", bucket, "--key", key),
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         text=True,
-        env=aws_env(target),
     )
     return result.returncode == 0
 
 
-def assert_new_object(target: Target, key: str, region: str) -> None:
-    if object_exists(target, key, region):
-        sys.exit(f"refusing to overwrite existing object on {target.name}: s3://{target.bucket}/{key}")
+def assert_new_object(bucket: str, key: str, region: str) -> None:
+    if object_exists(bucket, key, region):
+        sys.exit(f"refusing to overwrite existing object: s3://{bucket}/{key}")
 
 
-def upload_file(target: Target, path: Path, key: str, region: str, content_type: str | None = None) -> None:
+def upload_file(bucket: str, path: Path, key: str, region: str, content_type: str | None = None) -> None:
     args = [
         "s3",
         "cp",
         str(path),
-        f"s3://{target.bucket}/{key}",
+        f"s3://{bucket}/{key}",
         "--only-show-errors",
         "--checksum-algorithm",
         S3_CHECKSUM_ALGORITHM,
     ]
     if content_type:
         args += ["--content-type", content_type]
-    print(f"==> uploading s3://{target.bucket}/{key} ({target.name})")
-    aws_run(target, region, *args)
+    print(f"==> uploading s3://{bucket}/{key}")
+    run(aws_argv(region, *args))
 
 
-def remove_object(target: Target, key: str, region: str) -> None:
-    aws_run(target, region, "s3", "rm", f"s3://{target.bucket}/{key}", "--only-show-errors")
-
-
-def read_pointer(target: Target, key: str, region: str) -> str | None:
+def read_pointer(bucket: str, key: str, region: str) -> str | None:
     """Return the raw current pointer body, or None when absent/empty."""
     result = subprocess.run(
-        aws_argv(target, region, "s3", "cp", f"s3://{target.bucket}/{key}", "-"),
+        aws_argv(region, "s3", "cp", f"s3://{bucket}/{key}", "-"),
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True,
-        env=aws_env(target),
     )
     if result.returncode != 0:
         return None
     return result.stdout or None
 
 
-def write_pointer(target: Target, key: str, body: str, region: str) -> None:
-    print(f"==> writing pointer s3://{target.bucket}/{key} ({target.name})")
+def write_pointer(bucket: str, key: str, body: str, region: str) -> None:
+    print(f"==> writing pointer s3://{bucket}/{key}")
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
         fh.write(body)
         tmp_path = fh.name
     try:
-        aws_run(
-            target,
-            region,
-            "s3",
-            "cp",
-            tmp_path,
-            f"s3://{target.bucket}/{key}",
-            "--only-show-errors",
-            "--content-type",
-            "application/json",
+        run(
+            aws_argv(
+                region,
+                "s3",
+                "cp",
+                tmp_path,
+                f"s3://{bucket}/{key}",
+                "--only-show-errors",
+                "--content-type",
+                "application/json",
+            )
         )
     finally:
         os.unlink(tmp_path)
@@ -385,7 +305,6 @@ def pointer_body(args: argparse.Namespace) -> str:
 
 def main() -> int:
     args = parse_args()
-    primary, mirror = build_targets(args)
     root = artifact_dir(args)
     disks, support_files = collect_artifact_files(root)
     s3_prefix = f"{args.ubuntu}/{args.machine}/{args.build_id}"
@@ -395,16 +314,10 @@ def main() -> int:
 
     print(f"artifact: {root}")
     print(f"target:   s3://{args.bucket}/{s3_prefix}/")
-    if mirror:
-        print(f"mirror:   s3://{mirror.bucket}/{s3_prefix}/ via {mirror.endpoint_url}")
     manifest = build_manifest(args=args, root=root, disks=disks, support_files=support_files, s3_prefix=s3_prefix)
 
     if args.dry_run:
         print(json.dumps(manifest, indent=2, sort_keys=True))
-        if mirror:
-            print(f"DRY RUN: would mirror to s3://{mirror.bucket}/{s3_prefix}/ via {mirror.endpoint_url}")
-        else:
-            print("DRY RUN: no mirror configured (set --mirror-endpoint to enable)")
         if args.promote:
             print(f"DRY RUN: would write pointer {pointer_key} -> {args.build_id}")
         return 0
@@ -412,13 +325,9 @@ def main() -> int:
     require_tool("aws")
     tar = find_tar()
 
-    # Immutability: refuse to overwrite an existing build on either target,
-    # mirror first so a half-configured mirror fails before any S3 mutation.
-    if mirror:
-        assert_new_object(mirror, bundle_key, args.region)
-        assert_new_object(mirror, manifest_key, args.region)
-    assert_new_object(primary, bundle_key, args.region)
-    assert_new_object(primary, manifest_key, args.region)
+    # Immutability: never overwrite a published build.
+    assert_new_object(args.bucket, bundle_key, args.region)
+    assert_new_object(args.bucket, manifest_key, args.region)
 
     with tempfile.TemporaryDirectory(prefix="packer-s3-", dir=os.environ.get("TMPDIR")) as tmp:
         tmpdir = Path(tmp)
@@ -427,48 +336,14 @@ def main() -> int:
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         create_bundle(tar, root, manifest["tar_members"], bundle)
 
-        # MinIO first; if S3 then fails, roll the mirror back so a build never
-        # exists on the mirror without its S3 counterpart.
-        if mirror:
-            upload_file(mirror, bundle, bundle_key, args.region, "application/zstd")
-            upload_file(mirror, manifest_path, manifest_key, args.region, "application/json")
-        try:
-            upload_file(primary, bundle, bundle_key, args.region, "application/zstd")
-            upload_file(primary, manifest_path, manifest_key, args.region, "application/json")
-        except Exception:
-            if mirror:
-                print("==> S3 upload failed; rolling back mirror objects", file=sys.stderr)
-                for key in (bundle_key, manifest_key):
-                    try:
-                        remove_object(mirror, key, args.region)
-                    except subprocess.CalledProcessError:
-                        # Best-effort cleanup: a leftover mirror object is
-                        # caught by the next run's assert_new_object.
-                        pass
-            raise
+        upload_file(args.bucket, bundle, bundle_key, args.region, "application/zstd")
+        upload_file(args.bucket, manifest_path, manifest_key, args.region, "application/json")
 
     if args.promote:
-        body = pointer_body(args)
-        prev_primary = read_pointer(primary, pointer_key, args.region)
-        prev_mirror = read_pointer(mirror, pointer_key, args.region) if mirror else None
-        if mirror:
-            write_pointer(mirror, pointer_key, body, args.region)
-        try:
-            write_pointer(primary, pointer_key, body, args.region)
-        except Exception:
-            if mirror:
-                print("==> S3 pointer write failed; restoring mirror pointer", file=sys.stderr)
-                if prev_mirror is not None:
-                    write_pointer(mirror, pointer_key, prev_mirror, args.region)
-                else:
-                    try:
-                        remove_object(mirror, pointer_key, args.region)
-                    except subprocess.CalledProcessError:
-                        # Best-effort: no prior pointer existed to restore.
-                        pass
-            raise
-        if prev_primary is not None:
-            print(f"==> previous S3 pointer: {prev_primary.strip()}")
+        prev = read_pointer(args.bucket, pointer_key, args.region)
+        write_pointer(args.bucket, pointer_key, pointer_body(args), args.region)
+        if prev is not None:
+            print(f"==> previous pointer: {prev.strip()}")
     else:
         print("==> upload complete; promotion pending (re-run with --promote)")
     return 0
