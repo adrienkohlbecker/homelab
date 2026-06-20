@@ -34,8 +34,15 @@
 # in check mode -- so `apt: pkg=python3-debian` would otherwise fail
 # with "no package matching" the first time the role runs in --check.
 # `command:` with `check_mode: false` forces a real fetch.
+#
+# apt_skip_refresh (default false) suppresses every apt-get update this
+# role runs. seed_deps.yml sets it when re-importing the role at the end
+# of the box_deps bake to re-render the source files at upstream: external
+# egress is gone by then, so the rewrite must be network-free.
 - name: Pre-warm apt cache (real fetch even in --check)  # noqa: command-instead-of-module
-  when: ansible_distribution_release != "jammy"
+  when:
+    - ansible_distribution_release != "jammy"
+    - not (apt_skip_refresh | default(false))
   command: apt-get update
   changed_when: false
   check_mode: false
@@ -124,7 +131,9 @@
 # time, matching what _verify.yml asserts. The apt module's update_cache
 # silently tolerates partial-suite failures.
 - name: Force apt update (--error-on=any)  # noqa: command-instead-of-module
-  when: apt_mirror_legacy.changed or apt_mirror_legacy_removed.changed or apt_mirror_deb822.changed or apt_mirror_deb822_security.changed
+  when:
+    - apt_mirror_legacy.changed or apt_mirror_legacy_removed.changed or apt_mirror_deb822.changed or apt_mirror_deb822_security.changed
+    - not (apt_skip_refresh | default(false))
   command: apt-get update --error-on=any
   register: _apt_force_update
   retries: 5

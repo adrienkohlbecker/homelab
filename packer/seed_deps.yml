@@ -44,3 +44,38 @@
       import_role:
         name: test
         tasks_from: nginx
+
+    # Everything above wrote its apt sources through the lab Nexus: test
+    # hosts set nexus_url, and the bake needs Nexus because external egress
+    # dies after the in-guest reboot. That bakes lab-only URLs
+    # (nexus.lab.fahm.fr -> 10.123.0.2) into the shipped fixture, which the
+    # AWS nested-qemu cells can't route to -- so a cell's first strict
+    # `apt-get update --error-on=any` fails before any converge can rewrite
+    # them. Reset every apt source back to plain upstream here so box_deps
+    # matches the portable `box` baseline; the first converge re-points them
+    # at Nexus-or-regional as the running backend dictates. nexus_url='' +
+    # test_in_aws=false force ubuntu_mirror's upstream archive.ubuntu.com
+    # branch, and apt_skip_refresh keeps the rewrite network-free (no egress
+    # left). roles/apt handles the per-release shape (jammy legacy
+    # sources.list vs noble deb822); the noble-on-jammy backports sources
+    # are owned by the backports helper, so re-render that file too.
+    - name: Reset baked apt sources to upstream (portable box_deps fixture)
+      vars:
+        nexus_url: ""
+        test_in_aws: false
+      block:
+        - name: Re-render apt sources at upstream (network-free)
+          import_role:
+            name: apt
+          vars:
+            apt_skip_refresh: true
+
+        - name: Re-render noble backports sources at upstream (jammy)
+          when: ansible_distribution_release == "jammy"
+          template:
+            src: "{{ playbook_dir }}/../roles/backports/templates/backports_noble.sources.j2"
+            dest: /etc/apt/sources.list.d/backports_noble.sources
+            owner: root
+            group: root
+            mode: "0644"
+            backup: true
