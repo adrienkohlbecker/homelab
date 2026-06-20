@@ -632,6 +632,12 @@ class Machine:
         # Filename (under the per-run workdir) where qemu writes its pidfile.
         self.idfile = "pid"
         self.proc: asyncio.subprocess.Process | None = None
+        # Backgrounded `ssh -M -N` master, opened in ensure_ssh() once the
+        # banner is up and torn down in stop(). Keeps a single ControlMaster
+        # socket hot so every ansible-playbook phase (mirrors/_setup/check/
+        # apply/idempotence/_verify) reuses it instead of paying a fresh
+        # handshake + agent round-trip + mitogen bootstrap each.
+        self._ssh_master_proc: asyncio.subprocess.Process | None = None
         self._live_lock_fd = -1
         self._publish_lock_fd = -1
         self.peak_rss_kb = 0
@@ -733,9 +739,34 @@ class Machine:
             return 0
         return self.machine_timeout + self.WRAPPER_GRACE_SECONDS
 
+    @property
+    def ssh_control_path(self) -> str:
+        """Stable ControlMaster socket path shared by every connection to this cell.
+
+        One socket per cell, reused by the harness's own ssh/scp AND by every
+        ansible-playbook phase, so phases 2..N skip the SSH handshake + agent
+        round-trip + mitogen interpreter bootstrap. Keyed on the cell's unique
+        ssh_port so two concurrent cells never collide on one socket. Lives in
+        /tmp (writable, short) rather than the per-cell workdir: workdir lands
+        on /mnt/scratch on Linux CI hosts, and a unix socket path must stay
+        under ~104 chars -- a port-keyed /tmp path is short and per-cell unique.
+        """
+        return f"/tmp/homelab-cm-{self.ssh_port}"
+
     def _ssh_options(self) -> list[str]:
         """Return the shared `-o flag=value` pairs for ssh and scp."""
         return [
+            "-o",
+            f"ControlPath={self.ssh_control_path}",
+            # auto: reuse the master if it's up (the harness pre-opens it in
+            # ensure_ssh), create one otherwise. ControlPersist keeps it warm
+            # between the harness's intermittent ssh calls and the ansible
+            # phases. Matches ansible.cfg's [ssh_connection] ssh_args so both
+            # sides land on the same socket.
+            "-o",
+            "ControlMaster=auto",
+            "-o",
+            "ControlPersist=600s",
             "-o",
             "StrictHostKeyChecking=no",
             "-o",
@@ -814,6 +845,19 @@ class Machine:
         """
         return {
             "ANSIBLE_CONFIG": str(ANSIBLE_CONFIG_PATH),
+            # Override [ssh_connection] ssh_args wholesale so ansible pins its
+            # ControlPath to the cell-stable socket (ssh_control_path) instead
+            # of its default per-invocation path. Without an explicit
+            # ControlPath, each of the ~6 ansible-playbook processes opens its
+            # own master; sharing one keeps the socket hot across phases. The
+            # rest of the flags mirror ansible.cfg verbatim (ControlMaster,
+            # ControlPersist, UserKnownHostsFile, ForwardAgent) so this doesn't
+            # regress any of them -- the harness pre-opens the master in
+            # ensure_ssh() and shares it via the same path.
+            "ANSIBLE_SSH_ARGS": (
+                f"-o ControlMaster=auto -o ControlPersist=600s -o ControlPath={self.ssh_control_path} "
+                "-o UserKnownHostsFile=/dev/null -o ForwardAgent=yes"
+            ),
             "ANSIBLE_DISPLAY_OK_HOSTS": "true",
             "ANSIBLE_DISPLAY_SKIPPED_HOSTS": "true",
             "ANSIBLE_GATHERING": "smart",
@@ -972,6 +1016,49 @@ class Machine:
             if time.monotonic() > deadline:
                 raise TimeoutError("SSH daemon did not become ready in time")
             await sleep_tick()
+
+        await self._open_ssh_master()
+
+    async def _open_ssh_master(self) -> None:
+        """Background a persistent `ssh -M -N` master on the cell-stable ControlPath.
+
+        Opened the moment the banner is ready so the socket is hot before the
+        mirrors phase, sparing every later ansible/harness connection a fresh
+        handshake + agent round-trip + mitogen bootstrap. `-N` (no command) +
+        `-M` (master) just establishes the multiplexing socket and parks; it
+        carries ForwardAgent so the master seeds an agent channel for roles
+        that ssh out to git@github.com (see format_ssh_cmd's block comment).
+        Best-effort: if it can't come up, ControlMaster=auto on the individual
+        connections still creates a master on first use -- we don't gate the
+        run on it. Torn down in stop() via `ssh -O exit`.
+        """
+        cmd = [
+            "ssh",
+            "-M",
+            "-N",
+            "-f",
+            "-i",
+            self.ssh_key,
+            "-p",
+            str(self.ssh_port),
+            *self._ssh_options(),
+            "-o",
+            "ForwardAgent=yes",
+            f"{self.ssh_user}@{self.ssh_host}",
+        ]
+        print_cmd_line(cmd)
+        # -f backgrounds ssh itself once the master socket is up, so the
+        # subprocess exits promptly and we don't hold a Process handle. The
+        # parked master lives on past it, reaped by `ssh -O exit` in stop().
+        self._ssh_master_proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        with contextlib.suppress(TimeoutError):
+            async with asyncio.timeout(15):
+                await self._ssh_master_proc.wait()
 
     async def ensure_cloud_init(self) -> None:
         """Block until cloud-init's config/final stages finish before converge.
@@ -1154,6 +1241,7 @@ class Machine:
                 # SIGTERMs, polls for up to grace_seconds, then SIGKILLs.
                 await asyncio.shield(terminate_pid(pid, grace_seconds=5))
         finally:
+            await self._close_ssh_master()
             await self._stop_passt()
             try:
                 if self.proc and self.proc.returncode is None:
@@ -1917,6 +2005,38 @@ class Machine:
         if self._passt_socket_dir is not None:
             self._passt_socket_dir.cleanup()
             self._passt_socket_dir = None
+
+    async def _close_ssh_master(self) -> None:
+        """Tear down the persistent ssh ControlMaster so no socket leaks across runs.
+
+        `ssh -O exit` signals the parked master to close cleanly and unlink its
+        socket; without it the master would linger ControlPersist=600s past the
+        cell, and a same-port future cell could reuse a stale socket pointing at
+        a dead guest. Best-effort -- the master may already be gone (ssh -f's
+        wrapper exited, ControlPersist expired). No-op when never opened.
+        """
+        if self._ssh_master_proc is None:
+            return
+        self._ssh_master_proc = None
+        cmd = [
+            "ssh",
+            "-O",
+            "exit",
+            "-o",
+            f"ControlPath={self.ssh_control_path}",
+            "-p",
+            str(self.ssh_port),
+            f"{self.ssh_user}@{self.ssh_host}",
+        ]
+        with contextlib.suppress(OSError, TimeoutError):
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            async with asyncio.timeout(5):
+                await proc.wait()
 
     async def _find_ssh_port(self) -> None:
         """Port was pre-picked in prepare(); nothing to discover at boot."""
