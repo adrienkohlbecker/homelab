@@ -73,8 +73,8 @@ variables:
 # `detect` runs the same classification core (mise-tasks/ci/detect.py) and
 # writes a generated child pipeline — one job per `role:variant[:ubuntu]` cell,
 # each running a role/machine/release cell on the selected qemu target: the
-# default `aws_qemu` pool and the `lab` runner both hydrate promoted images from
-# S3 (resp. lab's local store) and run the qemu backend directly.
+# default `aws_qemu` pool hydrates promoted images from S3, the `lab` runner
+# boots them from its local store, and both run the qemu backend directly.
 #
 # The diff base is the newest fully-green pipeline ancestor, resolved via the
 # GitLab pipelines API (detect.py: resolve_green_base_gitlab) — so a red-push ->
@@ -359,7 +359,9 @@ qemu_host_ami:
       allow_failure: true
   # lab's shell runner is the KVM builder (the same host the lab qemu target
   # tests on). The build writes HOMELAB_CI_DIR, which doubles as lab's local
-  # image store, so a run also refreshes the lab target's images in passing.
+  # image store: the lab cells boot those artifacts in place (no hydration), so
+  # a bake here is what refreshes the lab target's images. It also uploads to S3
+  # so the aws_qemu cells can hydrate the same promoted build.
   tags:
     - lab-shell-qemu
   id_tokens:
@@ -382,16 +384,6 @@ qemu_host_ami:
     - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
     - export AWS_ROLE_SESSION_NAME="qemu-image-$CI_JOB_ID"
     - mise exec -- aws --region eu-central-1 sts get-caller-identity
-    # The build runs on lab and dual-publishes: S3 (for the aws_qemu cells) AND
-    # lab's local MinIO mirror (for the lab cells). upload-s3 picks up these env
-    # vars and pushes the mirror first, then S3, rolling the mirror back if the S3
-    # write fails -- so the two stores never disagree on the promoted build.
-    - test -n "${HOMELAB_CI_MINIO_ACCESS_KEY:-}" || { echo "HOMELAB_CI_MINIO_ACCESS_KEY CI/CD variable is not set" >&2; exit 1; }
-    - test -n "${HOMELAB_CI_MINIO_SECRET_KEY:-}" || { echo "HOMELAB_CI_MINIO_SECRET_KEY CI/CD variable is not set" >&2; exit 1; }
-    - export HOMELAB_CI_MIRROR_ENDPOINT=https://minio-api.lab.fahm.fr
-    - export HOMELAB_CI_MIRROR_BUCKET=homelab-ci-images
-    - export HOMELAB_CI_MIRROR_ACCESS_KEY="$HOMELAB_CI_MINIO_ACCESS_KEY"
-    - export HOMELAB_CI_MIRROR_SECRET_KEY="$HOMELAB_CI_MINIO_SECRET_KEY"
 
 # box: the bare OS + zfs + networking platform every cell needs.
 .qemu_image_box:
@@ -489,43 +481,6 @@ qemu_image_reaper:
     - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
     - export AWS_ROLE_SESSION_NAME="qemu-image-reaper-$CI_JOB_ID"
     - mise exec -- aws --region eu-central-1 sts get-caller-identity
-    - |
-      reaper_args=""
-      if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "${QEMU_IMAGE_REAPER_APPLY:-}" = "true" ]; then
-        reaper_args="--apply"
-      fi
-      mise run ci:reap-qemu-images $reaper_args
-
-# Same semantic cleanup as qemu_image_reaper, but for the lab MinIO mirror (the
-# AWS S3 bucket is reaped by qemu_image_reaper on the fox runner). Runs on lab so
-# it can reach minio-api.lab.fahm.fr with static MinIO creds (no OIDC); reap-qemu-
-# images targets the mirror via HOMELAB_CI_S3_ENDPOINT and reads the same
-# promoted.json pointer both stores carry.
-qemu_image_reaper_minio:
-  stage: prepare
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_REF_PROTECTED == "true"
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
-      when: manual
-      # A skipped manual job must not hold the pipeline in "blocked".
-      allow_failure: true
-  tags:
-    - lab-shell-qemu
-  resource_group: qemu-image-reaper-minio
-  interruptible: false
-  timeout: 15m
-  before_script:
-    - mise install
-    - mise exec -- uv sync --locked
-    - test -n "${HOMELAB_CI_MINIO_ACCESS_KEY:-}" || { echo "HOMELAB_CI_MINIO_ACCESS_KEY CI/CD variable is not set" >&2; exit 1; }
-    - test -n "${HOMELAB_CI_MINIO_SECRET_KEY:-}" || { echo "HOMELAB_CI_MINIO_SECRET_KEY CI/CD variable is not set" >&2; exit 1; }
-    # MinIO uses static creds, not OIDC; reap-qemu-images reads ambient AWS creds
-    # and targets the mirror via HOMELAB_CI_S3_ENDPOINT.
-    - export AWS_ACCESS_KEY_ID="$HOMELAB_CI_MINIO_ACCESS_KEY"
-    - export AWS_SECRET_ACCESS_KEY="$HOMELAB_CI_MINIO_SECRET_KEY"
-    - export AWS_DEFAULT_REGION=eu-central-1
-    - export HOMELAB_CI_S3_ENDPOINT=https://minio-api.lab.fahm.fr
-  script:
     - |
       reaper_args=""
       if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "${QEMU_IMAGE_REAPER_APPLY:-}" = "true" ]; then
