@@ -71,11 +71,6 @@
             apt_skip_refresh: true
 
         - name: Re-render noble backports sources at upstream (jammy)
-          when: ansible_distribution_release == "jammy"
-          template:
-            src: "{{ playbook_dir }}/../roles/backports/templates/backports_noble.sources.j2"
-            dest: /etc/apt/sources.list.d/backports_noble.sources
-            owner: root
-            group: root
-            mode: "0644"
-            backup: true
+          import_role:
+            name: backports
+            tasks_from: reset_sources

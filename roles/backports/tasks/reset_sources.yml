@@ -1,0 +1,18 @@
+# Re-render the noble backports sources at the current ubuntu_mirror
+# without touching the pin file or running apt. seed_deps.yml imports this
+# at the end of the box_deps bake (with nexus_url='') to reset the baked
+# Nexus URL back to upstream, so the shipped fixture is portable to the
+# AWS cells. Kept as its own entry point -- not folded into pin.yml --
+# because that path also writes the pin and runs apt-get update/upgrade,
+# none of which the reset wants. Runs in the backports role context so the
+# template resolves via roles_path rather than the (temp-dir) playbook.
+# A no-op on non-jammy: the file only exists where backports pinned noble.
+- name: reset_sources | Re-render noble backports sources at the current mirror
+  when: ansible_distribution_major_version == "22"
+  template:
+    src: backports_noble.sources.j2
+    dest: /etc/apt/sources.list.d/backports_noble.sources
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
