@@ -77,7 +77,10 @@ stages:
     - export AWS_ROLE_ARN={{ cell_role_arn }}
     - export AWS_ROLE_SESSION_NAME="{{ target }}-cell-$CI_JOB_ID"
     - mise exec -- aws --region eu-central-1 sts get-caller-identity
-    - mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"
+    # box/box_deps boot a promoted S3 image bundle; minimal has none -- the
+    # harness downloads its Ubuntu cloud image at runtime
+    # (Machine._ensure_minimal_cloudimg), so there is nothing to hydrate for it.
+    - if [ "${VARIANT:-box}" != "minimal" ]; then mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"; fi
     # Pass the PAT through to `mise install` when one is configured.
     - if [ -n "${MISE_GITHUB_TOKEN:-}" ]; then export GITHUB_TOKEN="$MISE_GITHUB_TOKEN"; fi
   artifacts:
