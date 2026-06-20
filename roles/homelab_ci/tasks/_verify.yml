@@ -20,7 +20,7 @@
     or homelab_ci_verify_dir.stat.gr_name != 'homelab_ci'
     or homelab_ci_verify_dir.stat.mode != '2775'
 
-- name: _verify | CI artifacts dir has default homelab_ci:rw ACL
+- name: _verify | CI artifacts dir has default homelab_ci:rwx ACL
   command:
     argv:
       - getfacl
@@ -28,5 +28,7 @@
       - /mnt/scratch/homelab_ci
   register: homelab_ci_verify_acl
   changed_when: false
-  failed_when: "'default:group:homelab_ci:rw' not in homelab_ci_verify_acl.stdout"
+  # rwx, not rw: the x is what lets a group member traverse and rmtree another
+  # member's published tree during publish.py's atomic swap.
+  failed_when: "'default:group:homelab_ci:rwx' not in homelab_ci_verify_acl.stdout"
   become: true
