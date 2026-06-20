@@ -763,12 +763,11 @@ EMPTY_SHA = "0" * 40
 #                     cache at /opt; the cell points mise/uv at them so a fresh
 #                     host skips the toolchain re-download.
 #   image_oidc      — true when the cell assumes the AWS bake/cell role via
-#                     GitLab OIDC to read the promoted qemu image bundles from
-#                     AWS S3. False means it authenticates to an S3-compatible
-#                     store with static creds instead (no OIDC).
-#   image_endpoint  — the S3-compatible endpoint URL for image hydration
-#                     (surfaced to ci:hydrate-qemu-images as
-#                     HOMELAB_CI_S3_ENDPOINT). Empty selects AWS S3.
+#                     GitLab OIDC to hydrate the promoted qemu image bundles
+#                     from AWS S3. False means the cell boots images already on
+#                     local disk and skips hydration entirely: the lab bake
+#                     writes them into lab's /mnt/scratch/homelab_ci and the
+#                     co-located cells read them in place (no object store).
 TARGETS = {
     "aws_qemu": {
         "cell_runner_tag": "aws-shell-qemu",
@@ -779,7 +778,6 @@ TARGETS = {
         "in_aws": True,
         "baked_toolchain": True,
         "image_oidc": True,
-        "image_endpoint": "",
     },
     "lab": {
         # lab's shell runner is on the operator LAN: the qemu guest reaches the
@@ -788,9 +786,9 @@ TARGETS = {
         "site_runner_tag": "lab-shell-qemu",
         "in_aws": False,
         "baked_toolchain": False,
-        # Hydrate from the on-LAN MinIO mirror with static creds, not AWS S3.
+        # Boot images straight from lab's local /mnt/scratch/homelab_ci (the lab
+        # bake wrote them there); no S3/OIDC, no hydration.
         "image_oidc": False,
-        "image_endpoint": "https://minio-api.lab.fahm.fr",
     },
 }
 TARGET_NAMES = sorted(TARGETS)
@@ -876,7 +874,6 @@ def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws_
         in_aws=target_config["in_aws"],
         baked_toolchain=target_config["baked_toolchain"],
         image_oidc=target_config["image_oidc"],
-        image_endpoint=target_config["image_endpoint"],
         cell_role_arn=CELL_ROLE_ARN,
     )
 

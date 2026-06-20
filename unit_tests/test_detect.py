@@ -1164,7 +1164,6 @@ class TestTargets:
             "in_aws": True,
             "baked_toolchain": True,
             "image_oidc": True,
-            "image_endpoint": "",
         }
         assert detect.TARGETS["lab"] == {
             "cell_runner_tag": "lab-shell-qemu",
@@ -1172,7 +1171,6 @@ class TestTargets:
             "in_aws": False,
             "baked_toolchain": False,
             "image_oidc": False,
-            "image_endpoint": "https://minio-api.lab.fahm.fr",
         }
 
 
@@ -1270,26 +1268,22 @@ class TestRenderChildPipeline:
         # lab's shell runner is not the baked AMI -- no /opt/mise to point at.
         assert "MISE_DATA_DIR" not in doc[".cell"]["variables"]
         assert "image" not in doc[".cell"]
-        # id_tokens stays on .cell (harmless when unused); lab takes the MinIO
-        # path, so it never assumes the AWS cell role.
-        assert doc[".cell"]["id_tokens"] == {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}}
+        # lab boots images from local disk: no OIDC, so id_tokens is dropped.
+        assert "id_tokens" not in doc[".cell"]
         assert "retry" not in doc[".cell"]
 
         joined = "\n".join(doc[".cell"]["before_script"])
         assert "HOMELAB_VAULT_PASSWORD_TEST" in joined
         assert "CI_CELL_SSH_KEY" not in joined
-        # lab hydrates from the on-LAN MinIO mirror with static creds: no OIDC
-        # role assumption, no sts call, an explicit S3 endpoint.
+        # lab boots images straight from /mnt/scratch/homelab_ci: no OIDC role
+        # assumption, no sts call, no object store, and no hydration at all.
         assert detect.CELL_ROLE_ARN not in joined
         assert "sts get-caller-identity" not in joined
         assert "AWS_ROLE_ARN" not in joined
         assert "AWS_WEB_IDENTITY_TOKEN_FILE" not in joined
-        assert "HOMELAB_CI_MINIO_ACCESS_KEY" in joined
-        assert "HOMELAB_CI_MINIO_SECRET_KEY" in joined
-        assert 'export AWS_ACCESS_KEY_ID="$HOMELAB_CI_MINIO_ACCESS_KEY"' in joined
-        assert 'export AWS_SECRET_ACCESS_KEY="$HOMELAB_CI_MINIO_SECRET_KEY"' in joined
-        assert 'export HOMELAB_CI_S3_ENDPOINT="https://minio-api.lab.fahm.fr"' in joined
-        assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"' in joined
+        assert "HOMELAB_CI_MINIO_ACCESS_KEY" not in joined
+        assert "HOMELAB_CI_S3_ENDPOINT" not in joined
+        assert "ci:hydrate-qemu-images" not in joined
         assert "--upstream-mirrors" not in "\n".join(doc["nginx:box"]["script"])
 
     def test_aws_qemu_target_uses_shell_qemu_runner(self) -> None:
@@ -1328,11 +1322,13 @@ class TestRenderChildPipeline:
         assert "--upstream-mirrors" not in "\n".join(doc["_site_test:box"]["script"])
         assert "--upstream-mirrors" not in "\n".join(doc["nginx:box"]["script"])
 
-    def test_lab_site_test_hydrates_default_box_jammy(self) -> None:
+    def test_lab_site_test_skips_hydration(self) -> None:
+        # lab boots images already on local disk, so even the site_test cell
+        # never hydrates from an object store.
         doc = _render_child_doc([], site_test=True, target="lab")
         assert doc["_site_test:box"]["extends"] == ".cell"
         joined = "\n".join(doc[".cell"]["before_script"])
-        assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"' in joined
+        assert "ci:hydrate-qemu-images" not in joined
 
     def test_lab_no_cells_placeholder_stays_on_fox(self) -> None:
         doc = _render_child_doc([], site_test=False, target="lab")
