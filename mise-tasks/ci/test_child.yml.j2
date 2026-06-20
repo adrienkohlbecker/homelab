@@ -76,6 +76,10 @@ stages:
     - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
     - export AWS_ROLE_ARN={{ cell_role_arn }}
     - export AWS_ROLE_SESSION_NAME="{{ target }}-cell-$CI_JOB_ID"
+    # Cells share /home/ubuntu (capacity_per_instance > 1); pre-create the awscli
+    # credential cache dir so concurrent `aws` runs don't race to mkdir it and
+    # die with "[Errno 17] File exists". mkdir -p is idempotent under the race.
+    - mkdir -p ~/.aws/cli/cache
     - mise exec -- aws --region eu-central-1 sts get-caller-identity
     # box/box_deps boot a promoted S3 image bundle; minimal has none -- the
     # harness downloads its Ubuntu cloud image at runtime
