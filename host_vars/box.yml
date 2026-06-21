@@ -246,3 +246,17 @@ headscale_oidc_enabled: "{{ (_role_under_test | default('')) == 'headscale' }}"
 headscale_oidc_issuer: http://10.166.0.10:8090/oidc
 headscale_oidc_client_id: headscale
 headscale_oidc_client_secret: test-oidc-client-secret
+
+# rpool/podman zvol size. Per-role box tests converge one service, so the
+# group_vars/test.yml default (15GB) is plenty. But _site_test converges the
+# whole site onto box -- every service box's plays match, pulling their images
+# AND a storage-chown-by-maps duplicate for each fake-root service (HA,
+# jellyfin, authelia, homepage, nexus, seerr, speedtest) into this one ext4.
+# 15GB fills mid-converge at HA's chown copy; the full converge needs ~24GB, so
+# match prod's 50GB under _site_test (box's rpool is baked at 96G specifically
+# to hold it -- see packer/qemu.pkr.hcl). Keyed on _role_under_test (a single
+# expression so it survives the harness's separate ansible invocations); the
+# other test machines keep 15GB -- lab/pug qemu rpools are only ~40G.
+podman_zvol_size: >-
+  {{ (((_role_under_test | default('')) == '_site_test')
+      | ternary('50GB', '15GB')) | human_to_bytes | string }}
