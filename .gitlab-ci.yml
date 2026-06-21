@@ -48,11 +48,15 @@ default:
 
 variables:
   HOMELAB_CI_TARGET: aws_qemu
-  # Skip the qemu role-test matrix (detect + test_cells) for this pipeline,
-  # leaving lint/unit_tests and the manual image builders. Lets an image-only
-  # push (an AMI / fox / zbm bake) skip the expensive cell fan-out:
+  # Render the qemu role-test matrix as manual instead of auto-running it. detect
+  # and the child pipeline still build (so the cells are there to click), but
+  # every cell is an optional manual job -- none runs unless the operator starts
+  # it. Lets an image-only push (an AMI / fox / zbm bake) skip the expensive
+  # fan-out while keeping a one-click spot-check available:
   #   git push -o ci.variable=SKIP_TEST_CELLS=true
-  # A push option overrides this default. Empty = run the matrix as usual.
+  # A skip pipeline never becomes a green base (detect.py ignores allow_failure
+  # cells), so it can't suppress a later diff. A push option overrides this
+  # default. Empty = run the matrix as usual.
   SKIP_TEST_CELLS: ""
 
 # DETECT_RUNNER_TAG must be a *pipeline-global* variable, not a job
@@ -122,10 +126,10 @@ detect:
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: never
-    # Image-only push opts out of the qemu matrix; detect only exists to feed
-    # test_cells, so skip it too (and don't boot a fleeting host for nothing).
-    - if: $SKIP_TEST_CELLS == "true"
-      when: never
+    # SKIP_TEST_CELLS no longer skips detect: it still renders the child so the
+    # cells exist as manual jobs (detect.py reads SKIP_TEST_CELLS and emits them
+    # as optional manual). Booting a fleeting host to render is the price of
+    # keeping the click-to-run matrix available.
     # lab target (any source -- web, push -o ci.variable, api): detect runs on
     # lab's own shell runner, whose mise/uv are the host's own -- so no baked
     # /opt caches here. Must precede the source rules so it wins for push+lab.
@@ -192,8 +196,10 @@ test_cells:
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: never
-    - if: $SKIP_TEST_CELLS == "true"
-      when: never
+    # SKIP_TEST_CELLS no longer gates the trigger: the child is always built and
+    # run so the cells are present. Under SKIP_TEST_CELLS they render as optional
+    # manual jobs (detect.py), so triggering the child costs nothing -- the child
+    # completes immediately with its cells waiting to be click-started.
     - if: $CI_PIPELINE_SOURCE == "web"
     - if: $CI_PIPELINE_SOURCE == "push"
   trigger:

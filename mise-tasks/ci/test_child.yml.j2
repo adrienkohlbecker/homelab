@@ -22,6 +22,16 @@ stages:
 .cell:
   stage: test1
   needs: []
+{% if manual_cells %}
+  # SKIP_TEST_CELLS=true: the child pipeline is still built and triggered, but
+  # every cell (each extends .cell, incl. _site_test) is an optional manual job
+  # -- none auto-runs and none gates the parent (allow_failure), so the operator
+  # click-starts only the cells they want. allow_failure also keeps these out of
+  # green-base detection (detect.py _pipeline_ran_cells ignores allow_failure
+  # cells), so a skip pipeline never anchors a future diff as if it had tested.
+  when: manual
+  allow_failure: true
+{% endif %}
   # Qemu cells run directly on a protected shell runner. No job image, no EC2
   # launch prelude: test/testrole.py uses the local qemu harness. The aws_qemu
   # target hydrates the promoted qemu base images from AWS S3 via GitLab OIDC

@@ -978,6 +978,20 @@ class TestPipelineRanCells:
         monkeypatch.setattr(detect, "_gl_api_get_all", lambda base_url, token, token_kind, **kw: [])
         assert detect._pipeline_ran_cells("http://api", 1, "t", "job") is False
 
+    def test_false_when_cells_are_allow_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # SKIP_TEST_CELLS pipeline: the child holds the cells, but they are
+        # optional manual jobs (allow_failure: true) that may never have run, so
+        # the pipeline is not a valid green base even though a cell job is present.
+        def mock_get_all(base_url, token, token_kind, **kw):
+            if base_url.endswith("/pipelines/1/bridges"):
+                return [{"downstream_pipeline": {"id": 2}}]
+            if base_url.endswith("/pipelines/2/jobs"):
+                return [{"name": "no_cells"}, {"name": "nginx:box", "allow_failure": True}]
+            return []
+
+        monkeypatch.setattr(detect, "_gl_api_get_all", mock_get_all)
+        assert detect._pipeline_ran_cells("http://api", 1, "t", "job") is False
+
 
 class TestCellRuntimes:
     def test_keeps_only_successful_cell_jobs(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1146,9 +1160,13 @@ class TestListTestableRoles:
         assert detect.list_testable_roles() == []
 
 
-def _render_child_doc(specs: list[str], site_test: bool, target: str = "aws_qemu") -> dict:
+def _render_child_doc(
+    specs: list[str], site_test: bool, target: str = "aws_qemu", *, manual_cells: bool = False
+) -> dict:
     """Render test_child.yml.j2 and parse it back to a dict for assertions."""
-    return detect.yaml.safe_load(detect.render_child_pipeline(specs, site_test, target=target))
+    return detect.yaml.safe_load(
+        detect.render_child_pipeline(specs, site_test, target=target, manual_cells=manual_cells)
+    )
 
 
 class TestTargets:
@@ -1207,6 +1225,25 @@ class TestRenderChildPipeline:
         # runs uncontended off the role-cell pool.
         assert doc["_site_test:box"]["extends"] == ".cell"
         assert doc["_site_test:box"]["tags"] == ["aws-shell-qemu-site"]
+
+    def test_cells_auto_run_by_default(self) -> None:
+        # Without SKIP_TEST_CELLS the cells carry no when:/allow_failure: -- they
+        # run automatically as soon as the child pipeline starts.
+        doc = _render_child_doc(["nginx:box"], site_test=True, manual_cells=False)
+        assert "when" not in doc[".cell"]
+        assert "allow_failure" not in doc[".cell"]
+
+    def test_manual_cells_renders_optional_manual(self) -> None:
+        # SKIP_TEST_CELLS=true: .cell (inherited by every cell, incl. _site_test)
+        # becomes an optional manual job so none auto-runs and none gates the
+        # parent. allow_failure also keeps a skip pipeline out of green-base
+        # detection (see TestPipelineRanCells).
+        doc = _render_child_doc(["nginx:box"], site_test=True, manual_cells=True)
+        assert doc[".cell"]["when"] == "manual"
+        assert doc[".cell"]["allow_failure"] is True
+        # Cells inherit it via extends: .cell -- they don't set their own.
+        assert "when" not in doc["nginx:box"]
+        assert "when" not in doc["_site_test:box"]
 
     def test_no_cells_placeholder_stays_on_fox(self) -> None:
         # The placeholder carries no own tag, so it inherits the fox-docker-aws

@@ -304,17 +304,19 @@ def _shallow_since_arg(created_at: str) -> str | None:
 # alone covers).
 #
 # A green base must be a pipeline that actually *ran the cell matrix* and passed
-# it — `success` status alone is not enough. Two ways a `success` pipeline can
-# carry zero cells:
+# it — `success` status alone is not enough. Three ways a `success` pipeline can
+# carry zero executed cells:
 #   - a `schedule` pipeline runs only the qemu-image reaper (every code job is
 #     `when: never` for schedule in .gitlab-ci.yml), so it is green without
 #     touching a single role;
 #   - a docs-only `push` renders the lone `no_cells` placeholder into its child
-#     (detect found nothing role-relevant since the prior base).
+#     (detect found nothing role-relevant since the prior base);
+#   - a `SKIP_TEST_CELLS=true` push still builds the child, but every cell is an
+#     optional manual job (allow_failure: true) that may never have run.
 # Anchoring the diff at such a commit would skip retesting role code that was
 # never exercised there — exactly the red-push the schedule's green status masks.
 # So a candidate is accepted only when its triggered child pipeline holds at
-# least one real cell job (see _pipeline_ran_cells). The `web` source (manual
+# least one real gating cell job (see _pipeline_ran_cells). The `web` source (manual
 # ROLES dispatch — a partial matrix) and `parent_pipeline` (the cell child
 # itself, same sha as its push parent) are dropped up front by GREEN_BASE_SOURCES.
 #
@@ -404,7 +406,12 @@ def _pipeline_ran_cells(project_api: str, pipeline_id: int, token: str, token_ki
         if not child_id:
             continue
         for job in _gl_api_get_all(f"{project_api}/pipelines/{child_id}/jobs", token, token_kind) or []:
-            if job.get("name") != "no_cells":
+            # A SKIP_TEST_CELLS pipeline renders its cells as optional manual jobs
+            # (allow_failure: true) that may never have run -- so they don't make
+            # this a valid base regardless of whether the operator click-started
+            # any. Only a real gating cell (allow_failure: false, which the
+            # parent's success implies passed) counts as the matrix having run.
+            if job.get("name") != "no_cells" and not job.get("allow_failure"):
                 return True
     return False
 
@@ -831,7 +838,9 @@ def _split_cells_into_stages(cells: list[dict]) -> list[dict]:
     return groups
 
 
-def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws_qemu") -> str:
+def render_child_pipeline(
+    specs: list[str], site_test: bool, target: str = "aws_qemu", *, manual_cells: bool = False
+) -> str:
     """Render the generated child-pipeline YAML from test_child.yml.j2.
 
     One job per cell spec (``role:variant[:ubuntu]``), each extending the
@@ -839,6 +848,11 @@ def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws_
     placeholder so the artifact is always a valid pipeline even when the
     downstream trigger is gated off. Cells are split evenly across two display
     stages (test1 / test2) but run as a single DAG (``needs: []``).
+
+    ``manual_cells`` (SKIP_TEST_CELLS=true) renders every cell as an optional
+    manual job (``when: manual`` + ``allow_failure: true``): the child pipeline
+    is still built and triggered, but no cell auto-runs and none blocks the
+    parent -- the operator click-starts only the cells they want.
     """
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(_CHILD_TEMPLATE.parent)),
@@ -875,6 +889,7 @@ def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws_
         baked_toolchain=target_config["baked_toolchain"],
         image_oidc=target_config["image_oidc"],
         cell_role_arn=CELL_ROLE_ARN,
+        manual_cells=manual_cells,
     )
 
 
@@ -904,9 +919,16 @@ def _emit_gitlab(
     specs, on_demand = drop_on_demand_cells(specs)
     specs = sort_specs_by_runtime(specs, runtimes)
 
-    Path(child_path).write_text(render_child_pipeline(specs, site_test, target=target))
+    # SKIP_TEST_CELLS still builds + triggers the child, but renders the cells as
+    # optional manual jobs so none auto-runs (the operator click-starts the few
+    # they want). A GitLab pipeline variable, so it is present in detect's env.
+    manual_cells = os.environ.get("SKIP_TEST_CELLS") == "true"
+
+    Path(child_path).write_text(render_child_pipeline(specs, site_test, target=target, manual_cells=manual_cells))
 
     log(f"target={target} runner={target_config['cell_runner_tag']}")
+    if manual_cells:
+        log("SKIP_TEST_CELLS=true -> cells rendered as optional manual jobs (none auto-runs)")
     log(f"matrix={json.dumps(specs)}")
     if on_demand:
         log(f"dropped {len(on_demand)} on-demand lab/pug cell(s): {' '.join(sorted(on_demand))}")
