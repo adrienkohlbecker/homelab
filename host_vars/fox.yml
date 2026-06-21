@@ -1,4 +1,4 @@
-# fox: off-home Hetzner Cloud cpx22 VPS (x86_64, Ubuntu 22.04/jammy) running
+# fox: off-home Hetzner Cloud cpx22 VPS (x86_64, Ubuntu 24.04/noble) running
 # the Headscale control plane + embedded DERP for the Tailscale mesh. It is
 # the ONLY internet-facing host; the home hosts dial outbound to it.
 #
