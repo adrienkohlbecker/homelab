@@ -192,14 +192,15 @@ locals {
     # for a derivation that just adds podman+nginx on top.
     # The rpool is 96G (not 40G like lab/pug, whose prod-faithful geometry
     # spreads state across many pools): box is the only fixture the _site_test
-    # cell converges the *whole* fleet onto, pulling every service image plus a
-    # uidmap pre-stage for each fake-root service (homeassistant, jellyfin,
-    # authelia, homepage, nexus, seerr, speedtest) -- each makes
-    # storage-chown-by-maps write a second, ID-shifted copy of that image's
-    # layers. The real fleet's container storage is ~31G on lab alone (measured),
-    # and the cram adds box/fox/pug images + the OS on top: 40G failed at the
-    # mariadb layer, 64G got all the way to HA's pre-stage (the last heavy role)
-    # before ENOSPC. 96G leaves headroom above the full cram.
+    # cell converges the *whole* fleet onto, and that converge sizes the
+    # rpool/podman zvol up to 50G (host_vars/box.yml, keyed on _role_under_test)
+    # so /var/lib/containers can hold every service image plus a
+    # storage-chown-by-maps duplicate for each fake-root service (homeassistant,
+    # jellyfin, authelia, ...). A 50G zvol's refreservation + the 4G swap zvol +
+    # the OS dataset does not fit a 64G pool, so the pool has to be large enough
+    # to host the enlarged zvol with headroom -- 96G leaves ~30G slack. (The
+    # ENOSPC this fixes is the zvol filling, not the pool; the pool size is the
+    # enabler that lets the zvol grow.)
     box = {
       machine         = "box"
       disks           = "/dev/vdb"
