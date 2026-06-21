@@ -134,15 +134,6 @@ def detect_host_arch() -> ArchProfile:
     return profile
 
 
-def profile_for_name(name: str) -> ArchProfile:
-    """Look up an ArchProfile by its canonical .name field ("x86_64"/"aarch64")."""
-    if name == X86_64.name:
-        return X86_64
-    if name == AARCH64.name:
-        return AARCH64
-    raise RuntimeError(f"Unknown arch profile: {name}")
-
-
 def uefi_code_path_for(profile: ArchProfile) -> Path:
     """Locate the EDK2/OVMF CODE blob matching *profile* on this host.
 
