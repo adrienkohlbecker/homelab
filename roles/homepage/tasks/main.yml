@@ -194,9 +194,7 @@
 # Alert polling reaches every netdata host over SSH, not nginx (a single
 # transport -- the converging host's own netdata included): the poller logs in
 # as netdata_poll with a key pinned to a forced command that returns the
-# read-only API as a JSON bundle (roles/netdata/tasks/poll_access.yml). SSH
-# connections are multiplexed (ControlMaster), so the 30s cadence reuses one
-# warm connection per peer.
+# read-only API as a JSON bundle (roles/netdata/tasks/poll_access.yml).
 - name: Create alerts sidecar ssh dir
   when: not (ansible_check_mode and homepage_user.changed)
   file:
@@ -328,24 +326,12 @@
         OUTPUT_DIR: /var/www/homepage_alerts
         NETDATA_POLL_SSH_KEY: /opt/homepage_alerts/.ssh/id_ed25519
         NETDATA_POLL_SSH_KNOWN_HOSTS: /opt/homepage_alerts/.ssh/known_hosts
-        # ControlMaster sockets live in the RuntimeDirectory below.
-        NETDATA_POLL_SSH_CONTROL_DIR: /run/homepage_alerts
       additional_service_directives:
         - "PrivateTmp=yes"
         - "ProtectSystem=strict"
         - "ProtectHome=yes"
         - "NoNewPrivileges=yes"
         - "ReadWritePaths=/var/www/homepage_alerts"
-        # /run/homepage_alerts holds the persistent ssh ControlMaster sockets.
-        # RuntimeDirectoryPreserve=yes keeps the dir (and the live sockets)
-        # across the oneshot's stop/start cycle so consecutive 30s fires reuse
-        # the warm master instead of re-handshaking. KillMode=process stops
-        # systemd from reaping the backgrounded ControlPersist master when the
-        # oneshot exits; the master self-reaps after ControlPersist (120s) of
-        # idle, so a stopped timer leaves nothing behind for long.
-        - "RuntimeDirectory=homepage_alerts"
-        - "RuntimeDirectoryPreserve=yes"
-        - "KillMode=process"
   tags:
     - homepage
 
