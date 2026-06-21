@@ -16,15 +16,13 @@ import time
 from pathlib import Path
 
 from machine import (
-    DEFAULT_UBUNTU,
     MACHINE_CHOICES,
     PEAK_KB_SENTINEL_PREFIX,
     Machine,
-    UBUNTU_RELEASES,
     imagedir_for_host,
-    resolve_default_machine,
     sweep_stale_workdirs,
 )
+from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES, default_machine_for
 from utils import (
     CommandFailedException,
     IdempotenceFailedException,
@@ -99,7 +97,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         "--machine",
         default=None,
         choices=MACHINE_CHOICES,
-        help="Machine profile to run against (default: from roles/<role>/meta/test.yml `machine:` key, else 'box')",
+        help="Machine profile to run against (default: first roles/<role>/meta/test.yml `machines:` key, else 'box')",
     )
     parser.add_argument(
         "--checkmode",
@@ -166,13 +164,13 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     while pass_args and pass_args[0] == "--":
         pass_args = pass_args[1:]
 
-    # --machine defaults to box, unless roles/<role>/meta/test.yml exists
-    # and declares a `machine:` field. The meta file is the role's opt-in
-    # to a non-default test variant (e.g. machine: box_deps for roles that
-    # benefit from the pre-seeded podman+nginx fixture). An explicit
-    # --machine on the CLI wins over the meta file.
+    # --machine defaults to the role's primary machines: entry. An explicit
+    # CLI value still wins, and argparse's choices validate that path before
+    # this branch runs.
     if args.machine is None:
-        args.machine = resolve_default_machine(args.role)
+        args.machine = default_machine_for(args.role)
+        if args.machine not in MACHINE_CHOICES:
+            parser.error(f"roles/{args.role}/meta/test.yml: machine {args.machine!r} not in {sorted(MACHINE_CHOICES)}")
 
     return args, pass_args
 

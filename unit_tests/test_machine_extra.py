@@ -1,9 +1,4 @@
-"""Unit tests for machine.py functions not covered by existing test_*.py files.
-
-Covers: resolve_default_machine, qemu_user_net_args, passt_address_args,
-_qemu_ansible_args, _workdir_is_orphan, sweep_stale_workdirs, _read_vm_hwm,
-UBUNTU_RELEASES, QemuMachineSpec.
-"""
+"""Unit tests for machine.py functions not covered by existing test_*.py files."""
 
 import fcntl
 import os
@@ -14,47 +9,7 @@ from pathlib import Path
 import pytest
 
 import machine
-
-
-# ---------------------------------------------------------------------------
-# resolve_default_machine
-# ---------------------------------------------------------------------------
-
-
-class TestResolveDefaultMachine:
-    def test_returns_box_when_no_meta(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        assert machine.resolve_default_machine("nonexistent_role") == "box"
-
-    def test_reads_machine_from_meta(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        meta = tmp_path / "roles" / "myrole" / "meta" / "test.yml"
-        meta.parent.mkdir(parents=True)
-        meta.write_text("machine: box_deps\n")
-        assert machine.resolve_default_machine("myrole") == "box_deps"
-
-    def test_defaults_to_box_when_no_machine_key(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        meta = tmp_path / "roles" / "myrole" / "meta" / "test.yml"
-        meta.parent.mkdir(parents=True)
-        meta.write_text("ubuntu: [noble]\n")
-        assert machine.resolve_default_machine("myrole") == "box"
-
-    def test_exits_on_unknown_machine(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        meta = tmp_path / "roles" / "myrole" / "meta" / "test.yml"
-        meta.parent.mkdir(parents=True)
-        meta.write_text("machine: bogus\n")
-        with pytest.raises(SystemExit, match="bogus"):
-            machine.resolve_default_machine("myrole")
-
-    def test_exits_on_parse_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        meta = tmp_path / "roles" / "myrole" / "meta" / "test.yml"
-        meta.parent.mkdir(parents=True)
-        meta.write_text(": : :\n  - [\n")
-        with pytest.raises(SystemExit, match="parse error"):
-            machine.resolve_default_machine("myrole")
+import matrix
 
 
 # ---------------------------------------------------------------------------
@@ -233,15 +188,15 @@ class TestReadVmHwm:
 
 class TestConstants:
     def test_ubuntu_releases_has_jammy(self) -> None:
-        assert "jammy" in machine.UBUNTU_RELEASES
-        assert machine.UBUNTU_RELEASES["jammy"] == "22.04"
+        assert "jammy" in matrix.UBUNTU_RELEASES
+        assert matrix.UBUNTU_RELEASES["jammy"] == "22.04"
 
     def test_ubuntu_releases_has_noble(self) -> None:
-        assert "noble" in machine.UBUNTU_RELEASES
-        assert machine.UBUNTU_RELEASES["noble"] == "24.04"
+        assert "noble" in matrix.UBUNTU_RELEASES
+        assert matrix.UBUNTU_RELEASES["noble"] == "24.04"
 
     def test_default_ubuntu_is_jammy(self) -> None:
-        assert machine.DEFAULT_UBUNTU == "jammy"
+        assert matrix.DEFAULT_UBUNTU == "jammy"
 
     def test_machine_choices_tuple(self) -> None:
         assert isinstance(machine.MACHINE_CHOICES, tuple)
