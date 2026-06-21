@@ -348,3 +348,34 @@
     that:
       - _keepalived_unit_after.status.ActiveState == 'inactive'
       - _keepalived_unit_after.status.UnitFileState in ['disabled', 'masked']
+
+# Branch F: the vrrp martian-logging udev rule. The box sentinel runs without
+# use_vmac so no vmac iface exists here; create a vrrp-named macvlan (dotted, to
+# mirror the real "vrrp.1" and exercise the /proc path) and assert udev drives
+# log_martians to 0 on creation. block/always so the throwaway iface is always
+# torn down even if the assertion fails.
+- name: _verify | Exercise the vrrp martian udev rule end-to-end
+  become: true
+  block:
+    - name: _verify | Create a vrrp-named macvlan to trigger the udev rule
+      command: ip link add vrrp.99 link {{ ansible_default_ipv4.interface }} type macvlan mode private
+      changed_when: false
+
+    - name: _verify | Settle udev so the rule's RUN completes
+      command: udevadm settle
+      changed_when: false
+
+    - name: _verify | Read log_martians on the vrrp iface
+      command: cat /proc/sys/net/ipv4/conf/vrrp.99/log_martians
+      register: _keepalived_vrrp_martians
+      changed_when: false
+
+    - name: _verify | Assert martian logging disabled on the vrrp iface
+      assert:
+        that:
+          - _keepalived_vrrp_martians.stdout == '0'
+  always:
+    - name: _verify | Remove the throwaway vrrp iface
+      command: ip link del vrrp.99
+      changed_when: false
+      failed_when: false
