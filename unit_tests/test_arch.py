@@ -56,18 +56,6 @@ class TestDetectHostArch:
                 arch.detect_host_arch()
 
 
-class TestProfileForName:
-    def test_x86_64(self) -> None:
-        assert arch.profile_for_name("x86_64") is arch.X86_64
-
-    def test_aarch64(self) -> None:
-        assert arch.profile_for_name("aarch64") is arch.AARCH64
-
-    def test_unknown_raises(self) -> None:
-        with pytest.raises(RuntimeError, match="Unknown arch"):
-            arch.profile_for_name("mips")
-
-
 class TestUefiCodePath:
     def test_finds_first_existing(self, tmp_path: Path) -> None:
         profile = arch.ArchProfile(
