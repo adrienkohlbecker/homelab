@@ -3,47 +3,17 @@
 # [USAGE] arg "<mode>" help="pull | push | sync (default)" default="sync"
 # [USAGE] flag "--dry-run" help="preview a push (diff + syntax validation) without writing to the host, moving the synced tag, or reloading HA"
 """
-Bidirectional sync for /mnt/services/homeassistant/ user-editable files:
-automations.yaml, scripts.yaml, scenes.yaml, sensors.yaml, templates.yaml,
-input_numbers.yaml, timers.yaml, custom_templates/macros.jinja,
-blueprints/automation/*.yaml.
+Bidirectional sync for Home Assistant GUI YAML.
 
-The in-place clone at roles/homeassistant/files/ha_gui_config/ (a gitignored
-clone of the private homelab_ha_config repo, not a submodule) is the source of
-truth; the ha:sync push path is what deploys these files to the host (the
-role only creates dirs + include-target stubs). A movable tag
-`last_synced_to_host` records the commit whose tree matches the live host
-state; sync direction is detected by comparing host file shas against blobs
-at that tag.
+The gitignored ha_gui_config clone is the source of truth for these files.
+`last_synced_to_host` records the clone commit whose tree matches lab, so push
+can refuse when the host has changed since the last pull.
 
-- pull: scp host -> clone, commit if changed, advance tag.
-        Refuses on a dirty working tree (would clobber local edits).
-- push: auto-commit any working-tree edits first, then refuse if host
-        has diverged from the tag (host edited since last pull). For
-        every changed file, parse-validate it (YAML via PyYAML with HA
-        tag stubs; .jinja via jinja2.Environment().parse) and abort
-        with the full failure list on any error -- so a broken file
-        never lands on lab. Then scp clone -> host, advance tag,
-        and run the appropriate reload(s). Per-file SYNC_SPEC maps
-        each file to a reload service (`automation.reload`,
-        `template.reload`, ...); files marked `None` need a
-        homeassistant.restart instead, and if any changed file is in
-        that bucket the script restarts HA once and skips per-domain
-        reloads.
-
-`push --dry-run` does the read-only half only: it skips the
-fetch/pull/auto-commit, compares the host against the *working tree*
-(so uncommitted edits show up), prints the per-file diff, runs the
-syntax validation, and reports what it *would* upload + which reload it
-*would* trigger -- then stops. Nothing is written to the host, no git
-ref moves, HA is not reloaded. Use it to preview a push before
-committing.
-
-HA reload/restart needs HA_API_TOKEN in the environment -- long-lived
-bearer token minted in HA UI -> Profile -> Security. The mise.toml
-[env] block resolves it from 1Password (op://). Without the token the
-push still lands the files on disk and prints a warning; reload or
-restart manually.
+pull: copy host files into the clean clone, commit changes, advance the tag.
+push: commit local clone edits, validate changed files, upload to lab, advance
+the tag, then reload domains or restart HA for files without a hot reload.
+push --dry-run: compare the host to the working tree, validate and print what
+would change, but do not write to the host or move git refs.
 """
 
 from __future__ import annotations
@@ -58,10 +28,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-# Re-exec under `op run --` so op:// references in mise's [env] (notably
-# HA_API_TOKEN) get resolved to real secret values. Without this the
-# script sees the literal "op://Lab/<item>/password" string and HA's API
-# rejects it as a bad bearer.
+# Resolve mise's op:// HA_API_TOKEN before calling the HA API.
 if os.environ.get("HA_API_TOKEN", "").startswith("op://") and not os.environ.get("_HA_SYNC_OP_RESOLVED"):
     _op = shutil.which("op")
     if _op:
@@ -87,15 +54,11 @@ SYNC_SPEC = [
     ("templates.yaml", "0600", "template.reload"),
     ("input_numbers.yaml", "0600", "input_number.reload"),
     ("timers.yaml", "0600", "timer.reload"),
-    # YAML sensors -- the `statistics` platform doesn't support a hot
-    # reload; restart is the safe default for this whole file.
+    # `statistics` sensors have no hot reload, so restart for the whole file.
     ("sensors.yaml", "0600", None),
-    # Custom Jinja templates used by macros across automations/scripts.
-    # HA 2024.10+ exposes homeassistant.reload_custom_templates; older
-    # builds 404 and the warning tells the operator to restart.
+    # HA returns a clear API warning if this reload service is unavailable.
     ("custom_templates/*", "0600", "homeassistant.reload_custom_templates"),
-    # Blueprint sources -- changing the blueprint means re-instantiating
-    # every consuming automation, which automation.reload does.
+    # Reload automations so blueprint consumers re-read changed sources.
     ("blueprints/automation/*", "0644", "automation.reload"),
 ]
 
@@ -200,13 +163,12 @@ def assert_clean_working_tree() -> None:
         sys.exit(f"refusing: clone working tree has uncommitted changes:\n{r.stdout}\ncommit or stash first.")
 
 
-def commit_local_edits(subject_prefix: str) -> bool:
-    """Stage + commit any working-tree changes, push to origin. Returns True if anything was committed."""
+def commit_and_push(message: str) -> bool:
+    """Stage, commit, and push clone changes. Returns True if anything changed."""
     if not sh(["git", "status", "--porcelain"], cwd=CLONE).stdout.strip():
         return False
-    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     sh(["git", "add", "-A"], cwd=CLONE)
-    sh(["git", "commit", "-m", f"{subject_prefix}: local edits ({ts})"], cwd=CLONE)
+    sh(["git", "commit", "-m", message], cwd=CLONE)
     sh(["git", "push", "origin", "main"], cwd=CLONE)
     return True
 
@@ -222,17 +184,8 @@ def advance_synced_tag() -> None:
     sh(["git", "push", "origin", "--force", f"refs/tags/{SYNCED_TAG}"], cwd=CLONE)
 
 
-def fetch_from_host() -> None:
-    """sudo-cat each host file into the clone working tree."""
-    for rel, _, _ in enumerate_files():
-        target = CLONE / rel
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("wb") as out:
-            subprocess.run(["ssh", HOST, f"sudo cat {HOST_DIR}/{rel}"], stdout=out, check=True)
-
-
 def upload_to_host(entries: list[tuple[str, str]]) -> None:
-    """scp via /tmp + sudo install so owner/mode/backup all happen atomically. entries: [(relpath, mode), ...]."""
+    """Upload via /tmp, then sudo install with owner, mode, and backup."""
     pid = os.getpid()
     for rel, mode in entries:
         safe = rel.replace("/", "_")
@@ -290,40 +243,15 @@ def show_push_diff(changed: list[tuple[str, str, str | None]]) -> None:
             check=False,
         )
         host_bytes = r.stdout
-        with tempfile.NamedTemporaryFile(suffix=f"_{Path(rel).name}", delete=False) as tf:
-            tf.write(host_bytes)
-            host_tmp = tf.name
-        try:
+        with tempfile.NamedTemporaryFile(suffix=f"_{Path(rel).name}") as host_tmp:
+            host_tmp.write(host_bytes)
+            host_tmp.flush()
             _print_diff_header(f"push: {rel} ({'new on host' if not host_bytes else 'modified on host'})")
             # --no-index exits 1 when files differ; ignore.
             subprocess.run(
-                ["git", "diff", "--color=always", "--no-index", "--", host_tmp, str(CLONE / rel)],
+                ["git", "diff", "--color=always", "--no-index", "--", host_tmp.name, str(CLONE / rel)],
                 check=False,
             )
-        finally:
-            os.unlink(host_tmp)
-
-
-def show_pull_diff() -> None:
-    """Print colored diff (HEAD -> working tree) -- what the pull is about to commit."""
-    _print_diff_header("pull: host-side changes about to be committed")
-    subprocess.run(["git", "diff", "--color=always", "HEAD"], cwd=CLONE, check=False)
-
-
-def trigger_post_push(reload_services: list[str | None]) -> None:
-    """Decide between per-domain reloads and a full restart based on what changed.
-
-    If any changed file's spec has reload=None, restart covers the union;
-    otherwise call each unique reload service.
-    """
-    if not reload_services:
-        return
-    if None in reload_services:
-        print("at least one changed file requires a restart -- restarting homeassistant")
-        _ha_post("homeassistant.restart")
-        return
-    for svc in sorted({s for s in reload_services if s}):
-        _ha_post(svc)
 
 
 def do_pull() -> None:
@@ -331,7 +259,11 @@ def do_pull() -> None:
     assert_clean_working_tree()
     sh(["git", "fetch", "--tags", "--force"], cwd=CLONE)
     sh(["git", "pull", "--ff-only", "--quiet"], cwd=CLONE)
-    fetch_from_host()
+    for rel, _, _ in enumerate_files():
+        target = CLONE / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("wb") as out:
+            subprocess.run(["ssh", HOST, f"sudo cat {HOST_DIR}/{rel}"], stdout=out, check=True)
     if not sh(["git", "status", "--porcelain"], cwd=CLONE).stdout.strip():
         if (
             not has_tag(SYNCED_TAG)
@@ -343,11 +275,9 @@ def do_pull() -> None:
         else:
             print("pull: in sync, no-op")
         return
-    show_pull_diff()
-    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    sh(["git", "add", "-A"], cwd=CLONE)
-    sh(["git", "commit", "-m", f"pull: capture GUI edits from lab ({ts})"], cwd=CLONE)
-    sh(["git", "push", "origin", "main"], cwd=CLONE)
+    _print_diff_header("pull: host-side changes about to be committed")
+    subprocess.run(["git", "diff", "--color=always", "HEAD"], cwd=CLONE, check=False)
+    commit_and_push(f"pull: capture GUI edits from lab ({time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())})")
     advance_synced_tag()
     print(
         f"pull: committed GUI edits + pushed (tag now at {sh(['git', 'rev-parse', '--short', 'HEAD'], cwd=CLONE).stdout.strip()})"
@@ -361,7 +291,7 @@ def do_push(dry_run: bool = False) -> None:
         sh(["git", "pull", "--ff-only", "--quiet"], cwd=CLONE)
         # Auto-commit any working-tree edits so `ha:sync push` works straight
         # from a direct file edit in the clone without a manual git commit.
-        if commit_local_edits("push"):
+        if commit_and_push(f"push: local edits ({time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())})"):
             print("push: committed local edits")
     if not has_tag(SYNCED_TAG):
         sys.exit(f"refusing: no {SYNCED_TAG} tag. Run `mise run ha:pull` once to establish the baseline.")
@@ -376,7 +306,7 @@ def do_push(dry_run: bool = False) -> None:
     changed: list[tuple[str, str, str | None]] = []
     for rel, mode, reload in enumerate_files():
         # dry-run compares the working tree (uncommitted edits included); a real
-        # push has already folded those into HEAD via commit_local_edits.
+        # push has already folded those into HEAD via commit_and_push.
         head_blob = worktree_sha(rel) if dry_run else blob_sha_at("HEAD", rel)
         tag_blob = blob_sha_at(SYNCED_TAG, rel)
         host_blob = host_sha(rel)
@@ -408,7 +338,13 @@ def do_push(dry_run: bool = False) -> None:
     upload_to_host([(rel, mode) for rel, mode, _ in changed])
     advance_synced_tag()
     print(f"push: uploaded {[rel for rel, _, _ in changed]}")
-    trigger_post_push([reload for _, _, reload in changed])
+    reloads = [reload for _, _, reload in changed]
+    if None in reloads:
+        print("at least one changed file requires a restart -- restarting homeassistant")
+        _ha_post("homeassistant.restart")
+    else:
+        for svc in sorted(svc for svc in set(reloads) if svc):
+            _ha_post(svc)
 
 
 def main() -> None:
