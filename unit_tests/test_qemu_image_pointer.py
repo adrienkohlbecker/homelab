@@ -3,7 +3,7 @@
 The pointer object replaces the old SSM parameter as the live-build selector.
 These cover the producer-side format (upload-s3.py ``pointer_body``) and the
 consumer-side validation (hydrate-qemu-images.py ``resolve_build_id``), since
-both must agree on the same JSON shape for AWS S3 and the MinIO mirror.
+both must agree on the same JSON shape for S3.
 
 The task scripts have hyphenated filenames, so they are loaded via
 importlib.util.spec_from_file_location rather than a plain import. Loading is
@@ -65,25 +65,14 @@ class TestPointerBody:
 class TestResolveBuildId:
     def _resolve(self, monkeypatch: pytest.MonkeyPatch, body: str, **arg_overrides: object) -> str:
         monkeypatch.setattr(hydrate, "output", lambda argv, **kw: body)
-        args = _args(build_id=None, **arg_overrides)
-        # parse_args adds bucket/region/endpoint_url; resolve_build_id reads them.
-        args.bucket = "homelab-ci-images"
-        args.region = "eu-central-1"
-        args.endpoint_url = None
+        base = {"machine": "box", "ubuntu": "jammy"}
+        base.update(arg_overrides)
+        args = argparse.Namespace(**base)
         return hydrate.resolve_build_id(args)
 
     def test_reads_build_id_from_pointer(self, monkeypatch: pytest.MonkeyPatch) -> None:
         body = upload.pointer_body(_args(build_id="ci-7-gabc", machine="box", ubuntu="jammy"))
         assert self._resolve(monkeypatch, body) == "ci-7-gabc"
-
-    def test_build_id_override_short_circuits(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # output() must never be called when --build-id is supplied.
-        def boom(*a: object, **k: object) -> str:
-            raise AssertionError("output() should not run when build-id is given")
-
-        monkeypatch.setattr(hydrate, "output", boom)
-        args = _args(build_id="explicit-id", bucket="b", region="r", endpoint_url=None)
-        assert hydrate.resolve_build_id(args) == "explicit-id"
 
     def test_machine_mismatch_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         body = upload.pointer_body(_args(machine="box_deps"))

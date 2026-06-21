@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 # MISE description="Download the promoted qemu image bundle from S3 into the local harness cache"
-# USAGE arg "<machine>" help="Packer source/artifact name: box, box_deps, lab, or pug"
-# USAGE complete "machine" run="printf 'box\nbox_deps\nlab\npug\n'"
+# USAGE arg "<machine>" help="Promoted qemu image bundle: box or box_deps"
+# USAGE complete "machine" run="printf 'box\nbox_deps\n'"
 # USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="jammy"
 # USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
-# USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
-# USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
-# USAGE flag "--build-id <build_id>" help="Exact build id to hydrate; default resolves the promoted.json pointer"
-# USAGE flag "--dest-root <path>" help="Harness image root; default is $HOMELAB_CI_DIR or /mnt/scratch/homelab_ci"
 # USAGE flag "--force" help="Re-download even when the local marker already matches"
 """Hydrate the local qemu harness image cache from S3.
 
@@ -43,6 +39,8 @@ MANIFEST_NAME = "manifest.json"
 POINTER_NAME = "promoted.json"
 MARKER_NAME = ".homelab_s3_build_id"
 LOCAL_MANIFEST_NAME = ".homelab_s3_manifest.json"
+S3_BUCKET = "homelab-ci-images"
+AWS_REGION = "eu-central-1"
 VALID_MACHINES = {"box", "box_deps"}
 
 
@@ -58,10 +56,6 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("machine", choices=sorted(VALID_MACHINES))
     parser.add_argument("--ubuntu", default=os.environ.get("usage_ubuntu", "jammy"))
-    parser.add_argument("--bucket", default=os.environ.get("usage_bucket", "homelab-ci-images"))
-    parser.add_argument("--region", default=os.environ.get("usage_region", "eu-central-1"))
-    parser.add_argument("--build-id", default=os.environ.get("usage_build_id"))
-    parser.add_argument("--dest-root", default=os.environ.get("usage_dest_root"))
     parser.add_argument(
         "--force",
         action="store_true",
@@ -70,11 +64,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def aws_base(args: argparse.Namespace) -> list[str]:
+def aws_base() -> list[str]:
     return [
         "aws",
         "--region",
-        args.region,
+        AWS_REGION,
         "--cli-connect-timeout",
         "10",
         "--cli-read-timeout",
@@ -99,17 +93,15 @@ def find_tar() -> str:
     sys.exit("required tar support missing: need GNU tar/bsdtar with --zstd and --sparse")
 
 
-def dest_root(args: argparse.Namespace) -> Path:
-    root = args.dest_root or os.environ.get("HOMELAB_CI_DIR") or "/mnt/scratch/homelab_ci"
+def dest_root() -> Path:
+    root = os.environ.get("HOMELAB_CI_DIR") or "/mnt/scratch/homelab_ci"
     return Path(root).expanduser().resolve()
 
 
 def resolve_build_id(args: argparse.Namespace) -> str:
-    if args.build_id:
-        return args.build_id
     key = f"{args.ubuntu}/{args.machine}/{POINTER_NAME}"
-    uri = f"s3://{args.bucket}/{key}"
-    body = output([*aws_base(args), "s3", "cp", uri, "-"])
+    uri = f"s3://{S3_BUCKET}/{key}"
+    body = output([*aws_base(), "s3", "cp", uri, "-"])
     if not body:
         sys.exit(f"missing or empty promoted pointer: {uri}")
     try:
@@ -125,12 +117,12 @@ def resolve_build_id(args: argparse.Namespace) -> str:
     return build_id
 
 
-def download_s3(args: argparse.Namespace, key: str, dest: Path) -> None:
-    uri = f"s3://{args.bucket}/{key}"
+def download_s3(key: str, dest: Path) -> None:
+    uri = f"s3://{S3_BUCKET}/{key}"
     print(f"==> downloading {uri}")
     run(
         [
-            *aws_base(args),
+            *aws_base(),
             "s3",
             "cp",
             uri,
@@ -219,7 +211,7 @@ def main() -> int:
         sys.exit("required tool not found on PATH: aws")
     tar = find_tar()
 
-    root = dest_root(args)
+    root = dest_root()
     lock_dir = root / ".hydrate-locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
     lock_path = lock_dir / f"{args.ubuntu}.{args.machine}.lock"
@@ -235,7 +227,7 @@ def main() -> int:
             return 0
 
         prefix = f"{args.ubuntu}/{args.machine}/{build_id}"
-        print(f"==> hydrating {target} from s3://{args.bucket}/{prefix}/")
+        print(f"==> hydrating {target} from s3://{S3_BUCKET}/{prefix}/")
         with tempfile.TemporaryDirectory(prefix=f".hydrate-{args.ubuntu}-{args.machine}-", dir=root) as tmp:
             tmpdir = Path(tmp)
             manifest_path = tmpdir / MANIFEST_NAME
@@ -243,12 +235,12 @@ def main() -> int:
             staged = tmpdir / "image"
             staged.mkdir()
 
-            download_s3(args, f"{prefix}/{MANIFEST_NAME}", manifest_path)
+            download_s3(f"{prefix}/{MANIFEST_NAME}", manifest_path)
             manifest = read_manifest(manifest_path, args, build_id)
             bundle_name = manifest.get("bundle_name", BUNDLE_NAME)
             if not isinstance(bundle_name, str) or not bundle_name:
                 sys.exit("manifest bundle_name must be a non-empty string")
-            download_s3(args, f"{prefix}/{bundle_name}", bundle_path)
+            download_s3(f"{prefix}/{bundle_name}", bundle_path)
 
             print(f"==> extracting {bundle_name}")
             validate_archive_members(tar, bundle_path, manifest["tar_members"])
