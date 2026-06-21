@@ -18,6 +18,7 @@ would change, but do not write to the host or move git refs.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import os
 import shutil
@@ -42,11 +43,22 @@ HOST_DIR = "/mnt/services/homeassistant"
 HA_URL = "https://homeassistant.lab.fahm.fr"
 SYNCED_TAG = "last_synced_to_host"
 
-# Each entry: (clone_glob, mode, reload_service-or-None).
-# `None` reload means the file needs a homeassistant.restart -- there is
-# no per-platform reload (e.g. sensors of platform=statistics). Multiple
-# changed files aggregate: if any needs restart, restart covers the
-# others too; else per-domain reload calls.
+
+@dataclass(frozen=True)
+class SyncFile:
+    rel: str
+    mode: str
+    reload_service: str | None
+
+
+@dataclass(frozen=True)
+class PendingChange:
+    file: SyncFile
+    host_bytes: bytes | None
+
+
+# `None` reload means a changed file needs homeassistant.restart; one restart
+# covers every changed file, otherwise the touched domains reload individually.
 SYNC_SPEC = [
     ("automations.yaml", "0600", "automation.reload"),
     ("scripts.yaml", "0600", "script.reload"),
@@ -63,14 +75,33 @@ SYNC_SPEC = [
 ]
 
 
-def enumerate_files() -> list[tuple[str, str, str | None]]:
-    """Walk the clone, return [(relpath, mode, reload_service), ...] for files matching a SYNC_SPEC."""
-    out: list[tuple[str, str, str | None]] = []
-    for glob, mode, reload in SYNC_SPEC:
-        for p in sorted(CLONE.glob(glob)):
-            if p.is_file():
-                out.append((p.relative_to(CLONE).as_posix(), mode, reload))
-    return out
+def enumerate_files() -> list[SyncFile]:
+    return [
+        SyncFile(path.relative_to(CLONE).as_posix(), mode, reload_service)
+        for glob, mode, reload_service in SYNC_SPEC
+        for path in sorted(CLONE.glob(glob))
+        if path.is_file()
+    ]
+
+
+def sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def host_file(rel: str) -> bytes | None:
+    r = subprocess.run(
+        ["ssh", HOST, f"sudo cat {HOST_DIR}/{rel} 2>/dev/null"],
+        capture_output=True,
+        check=False,
+    )
+    return r.stdout if r.returncode == 0 else None
+
+
+def reload_plan(changes: list[PendingChange]) -> tuple[list[str], bool]:
+    reloads = {change.file.reload_service for change in changes}
+    if None in reloads:
+        return ["homeassistant.restart"], True
+    return sorted(reload for reload in reloads if reload), False
 
 
 def validate_syntax(relpaths: list[str]) -> None:
@@ -111,19 +142,6 @@ def sh(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subproces
     return subprocess.run(cmd, cwd=cwd, check=check, capture_output=True, text=True)
 
 
-def host_sha(filename: str) -> str | None:
-    """sha256 of file on lab; None if the file doesn't exist on host yet."""
-    r = subprocess.run(
-        ["ssh", HOST, f"sudo sha256sum {HOST_DIR}/{filename} 2>/dev/null"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if r.returncode != 0 or not r.stdout.strip():
-        return None
-    return r.stdout.split()[0]
-
-
 def blob_sha_at(ref: str, filename: str) -> str | None:
     """sha256 of file's blob at git ref; None if the file doesn't exist at that ref."""
     r = subprocess.run(
@@ -134,7 +152,7 @@ def blob_sha_at(ref: str, filename: str) -> str | None:
     )
     if r.returncode != 0:
         return None
-    return hashlib.sha256(r.stdout).hexdigest()
+    return sha256(r.stdout)
 
 
 def worktree_sha(filename: str) -> str | None:
@@ -144,7 +162,7 @@ def worktree_sha(filename: str) -> str | None:
     is the working tree (uncommitted edits included) rather than the HEAD blob.
     """
     try:
-        return hashlib.sha256((CLONE / filename).read_bytes()).hexdigest()
+        return sha256((CLONE / filename).read_bytes())
     except OSError:
         return None
 
@@ -184,20 +202,20 @@ def advance_synced_tag() -> None:
     sh(["git", "push", "origin", "--force", f"refs/tags/{SYNCED_TAG}"], cwd=CLONE)
 
 
-def upload_to_host(entries: list[tuple[str, str]]) -> None:
+def upload_to_host(files: list[SyncFile]) -> None:
     """Upload via /tmp, then sudo install with owner, mode, and backup."""
     pid = os.getpid()
-    for rel, mode in entries:
-        safe = rel.replace("/", "_")
+    for file in files:
+        safe = file.rel.replace("/", "_")
         tmp_remote = f"/tmp/.ha_sync_{pid}_{safe}"
-        sh(["scp", "-q", str(CLONE / rel), f"{HOST}:{tmp_remote}"])
+        sh(["scp", "-q", str(CLONE / file.rel), f"{HOST}:{tmp_remote}"])
         # Make sure the parent dir exists on the host before installing.
-        host_parent = f"{HOST_DIR}/{rel.rsplit('/', 1)[0]}" if "/" in rel else HOST_DIR
+        host_parent = f"{HOST_DIR}/{file.rel.rsplit('/', 1)[0]}" if "/" in file.rel else HOST_DIR
         sh(
             [
                 "ssh",
                 HOST,
-                f"sudo install -d -o homeassistant -g homeassistant -m 0755 {host_parent} && sudo install -o homeassistant -g homeassistant -m {mode} -b {tmp_remote} {HOST_DIR}/{rel} && sudo rm -f {tmp_remote}",
+                f"sudo install -d -o homeassistant -g homeassistant -m 0755 {host_parent} && sudo install -o homeassistant -g homeassistant -m {file.mode} -b {tmp_remote} {HOST_DIR}/{file.rel} && sudo rm -f {tmp_remote}",
             ]
         )
 
@@ -232,24 +250,19 @@ def _print_diff_header(label: str) -> None:
     print(f"\n\033[1;34m=== {label} ===\033[0m", flush=True)
 
 
-def show_push_diff(changed: list[tuple[str, str, str | None]]) -> None:
+def show_push_diff(changed: list[PendingChange]) -> None:
     """For each file about to be pushed, print a colored diff host->HEAD."""
     import tempfile
 
-    for rel, _, _ in changed:
-        r = subprocess.run(
-            ["ssh", HOST, f"sudo cat {HOST_DIR}/{rel} 2>/dev/null || true"],
-            capture_output=True,
-            check=False,
-        )
-        host_bytes = r.stdout
-        with tempfile.NamedTemporaryFile(suffix=f"_{Path(rel).name}") as host_tmp:
-            host_tmp.write(host_bytes)
+    for change in changed:
+        with tempfile.NamedTemporaryFile(suffix=f"_{Path(change.file.rel).name}") as host_tmp:
+            host_tmp.write(change.host_bytes or b"")
             host_tmp.flush()
-            _print_diff_header(f"push: {rel} ({'new on host' if not host_bytes else 'modified on host'})")
+            status = "new on host" if change.host_bytes is None else "modified on host"
+            _print_diff_header(f"push: {change.file.rel} ({status})")
             # --no-index exits 1 when files differ; ignore.
             subprocess.run(
-                ["git", "diff", "--color=always", "--no-index", "--", host_tmp.name, str(CLONE / rel)],
+                ["git", "diff", "--color=always", "--no-index", "--", host_tmp.name, str(CLONE / change.file.rel)],
                 check=False,
             )
 
@@ -259,11 +272,11 @@ def do_pull() -> None:
     assert_clean_working_tree()
     sh(["git", "fetch", "--tags", "--force"], cwd=CLONE)
     sh(["git", "pull", "--ff-only", "--quiet"], cwd=CLONE)
-    for rel, _, _ in enumerate_files():
-        target = CLONE / rel
+    for file in enumerate_files():
+        target = CLONE / file.rel
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("wb") as out:
-            subprocess.run(["ssh", HOST, f"sudo cat {HOST_DIR}/{rel}"], stdout=out, check=True)
+            subprocess.run(["ssh", HOST, f"sudo cat {HOST_DIR}/{file.rel}"], stdout=out, check=True)
     if not sh(["git", "status", "--porcelain"], cwd=CLONE).stdout.strip():
         if (
             not has_tag(SYNCED_TAG)
@@ -303,18 +316,19 @@ def do_push(dry_run: bool = False) -> None:
     #              (would clobber on push without a pull first)
     # changed    = host content differs from HEAD (missing-on-host counts)
     diverged: list[str] = []
-    changed: list[tuple[str, str, str | None]] = []
-    for rel, mode, reload in enumerate_files():
+    changed: list[PendingChange] = []
+    for file in enumerate_files():
         # dry-run compares the working tree (uncommitted edits included); a real
         # push has already folded those into HEAD via commit_and_push.
-        head_blob = worktree_sha(rel) if dry_run else blob_sha_at("HEAD", rel)
-        tag_blob = blob_sha_at(SYNCED_TAG, rel)
-        host_blob = host_sha(rel)
+        head_blob = worktree_sha(file.rel) if dry_run else blob_sha_at("HEAD", file.rel)
+        tag_blob = blob_sha_at(SYNCED_TAG, file.rel)
+        host_bytes = host_file(file.rel)
+        host_blob = sha256(host_bytes) if host_bytes is not None else None
         if tag_blob is not None and host_blob is not None and host_blob != tag_blob:
-            diverged.append(rel)
+            diverged.append(file.rel)
             continue
         if host_blob != head_blob:
-            changed.append((rel, mode, reload))
+            changed.append(PendingChange(file, host_bytes))
     if diverged:
         msg = [f"refusing: host diverged from {SYNCED_TAG} (GUI/host edited since last sync):"]
         msg += [f"  {f}" for f in diverged]
@@ -324,27 +338,25 @@ def do_push(dry_run: bool = False) -> None:
         print("push: HEAD matches host, nothing to do")
         return
     show_push_diff(changed)
-    validate_syntax([rel for rel, _, _ in changed])
+    validate_syntax([change.file.rel for change in changed])
     if dry_run:
-        reloads = {reload for _, _, reload in changed}
-        if None in reloads:
+        services, restart_required = reload_plan(changed)
+        if restart_required:
             reload_desc = "homeassistant.restart (a changed file has no hot reload)"
         else:
-            reload_desc = ", ".join(sorted(s for s in reloads if s)) or "none"
-        print(f"\n\033[1;33mdry-run\033[0m: would upload {[rel for rel, _, _ in changed]}")
+            reload_desc = ", ".join(services) or "none"
+        print(f"\n\033[1;33mdry-run\033[0m: would upload {[change.file.rel for change in changed]}")
         print(f"\033[1;33mdry-run\033[0m: would advance {SYNCED_TAG} and trigger: {reload_desc}")
         print("\033[1;33mdry-run\033[0m: nothing written to host, no git refs moved, HA not reloaded.")
         return
-    upload_to_host([(rel, mode) for rel, mode, _ in changed])
+    upload_to_host([change.file for change in changed])
     advance_synced_tag()
-    print(f"push: uploaded {[rel for rel, _, _ in changed]}")
-    reloads = [reload for _, _, reload in changed]
-    if None in reloads:
+    print(f"push: uploaded {[change.file.rel for change in changed]}")
+    services, restart_required = reload_plan(changed)
+    if restart_required:
         print("at least one changed file requires a restart -- restarting homeassistant")
-        _ha_post("homeassistant.restart")
-    else:
-        for svc in sorted(svc for svc in set(reloads) if svc):
-            _ha_post(svc)
+    for service in services:
+        _ha_post(service)
 
 
 def main() -> None:
