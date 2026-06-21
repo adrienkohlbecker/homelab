@@ -208,14 +208,6 @@
 #    CMD line still flows.
 #  - kernel: ephemeral podman bridge churn (~140/day): podman healthchecks
 #    spawn transient containers that add/remove veth pairs.
-#  - kernel: rp_filter martians on the keepalived VRRP interface (dev vrrp*,
-#    ~108k/day on pug, the host's single largest journal source). VRRP traffic
-#    plus broadcast / gratuitous-ARP arrives on the macvlan-backed vrrp iface
-#    whose subnet doesn't cover the source, so the per-iface rp_filter check
-#    logs every packet. Scoped to `on dev vrrp` so a martian on a real data
-#    iface (an actual signal) still surfaces. Loosening rp_filter site-wide is
-#    the root fix (CLAUDE.md "Someday"). The "ll header: 00000000:" hex dump is
-#    the kernel's follow-up line.
 #  - audit/apparmor: ubuntu_pro_esm_cache's apt method probing
 #    /etc/gnutls/config (which doesn't exist) -- known harmless DENY,
 #    apt method handles ENOENT gracefully.
@@ -225,6 +217,9 @@
 #    lands in /run/nut/upsmon.pid, so systemd warns "Supervising process
 #    N which is not our child" at every start. Cosmetic; upstream fix
 #    is nut 2.8.x's Type=notify support (not worth backporting).
+#  - systemd "marked world-inaccessible" warning for the netplan-generated
+#    netplan-ovs-cleanup.service (~285/day): a 0600 unit under /run that
+#    systemd reads on every daemon-reload. Stock netplan, no effect, no knob.
 [FILTER]
     Name              grep
     Match             svc.*
@@ -232,12 +227,11 @@
     Exclude           MESSAGE ^pam_unix\(cron:session\)
     Exclude           MESSAGE ^podman0: port
     Exclude           MESSAGE ^veth[0-9]+( |@|: )
-    Exclude           MESSAGE ^IPv4: martian source .* on dev vrrp
-    Exclude           MESSAGE ^ll header: 00000000:
     Exclude           MESSAGE name="/etc/gnutls/config"
     Exclude           MESSAGE Failed to get interface "(veth|podman)
     Exclude           MESSAGE Unknown index .* seen, reloading interface list
     Exclude           MESSAGE which is not our child
+    Exclude           MESSAGE ^Configuration file /run/systemd/system/netplan-ovs-cleanup\.service is marked world-inaccessible
 
 # podman emits a `container health_status` event to the journal every time a
 # container's healthcheck runs (~30s) and embeds the container's entire image
@@ -291,15 +285,20 @@
     Exclude           SYSTEMD_UNIT ^profilarr\.service$
     Exclude           MESSAGE (Task Repository Sync \(ID: 1\) status changed to:|Updating remote status for branch:|Processing 0 incoming changes|apscheduler\.scheduler - DEBUG - (Looking for jobs to run|Next wakeup is due)|apscheduler\.executors\.default - INFO - (Running job|Job )|task_system - INFO - (Starting task: Repository Sync|Task Repository Sync completed successfully))
 
-# netdata logs `Failed to prepare statement SQL_SELECT_HEALTH_LOG` on a tight
-# loop (~7k/day on lab) from an internal health-DB issue with no operator
-# action. journalctl -u netdata stays the source of truth.
+# netdata internal-churn lines with no operator action, dropped together (all
+# netdata.service-scoped, so unrelated services logging a similar line still
+# flow). journalctl -u netdata stays the source of truth:
+#  - health-DB `Failed to prepare statement SQL_SELECT_HEALTH_LOG` tight loop
+#    (~7k/day on lab) and the metadata-DB `Failed to execute 'DROP TABLE ...'
+#    (database table is locked)` retries (~2.5k/day on lab).
+#  - the LISTENER ACL check that can't reverse-resolve 'localhost' (not in DNS),
+#    ~8.6k/day/host -- the single largest netdata noise source.
 [FILTER]
     Name              grep
     Match             svc.*
     Logical_Op        and
     Exclude           SYSTEMD_UNIT ^netdata\.service$
-    Exclude           MESSAGE ^Failed to prepare statement SQL_SELECT_HEALTH_LOG
+    Exclude           MESSAGE (^Failed to prepare statement SQL_SELECT_HEALTH_LOG|^Failed to execute 'DROP TABLE|^LISTENER: Cannot validate 'localhost')
 
 # netdata's debugfs.plugin mirrors each hwmon `inN_alarm` bit and logs a line
 # whenever it flips (`voltage sensor '...' transitioned from state ... (kernel
@@ -337,8 +336,8 @@
 # the script's own output -- the lifecycle lines carry no signal. Matched on the
 # message text, not a SYSTEMD_UNIT gate: the Starting/Finished lines are logged
 # by pid1 (init.scope), not under the unit, so a unit gate would miss them.
-# This drops only the lifecycle chatter, NOT the script's own alarm_log fetch
-# errors (a real bug tracked separately).
+# This drops only the lifecycle chatter, NOT the script's own fetch errors
+# (a genuine signal -- a poll failing against a peer).
 [FILTER]
     Name              grep
     Match             svc.*
