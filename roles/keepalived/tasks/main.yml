@@ -87,6 +87,59 @@
   tags:
     - keepalived
 
+# Disable martian-source logging on keepalived's vmac (vrrp.<VRID>) interface.
+# The interface only exists once keepalived starts, so this rides a udev rule
+# that fires on interface creation rather than a boot-time sysctl. Rationale in
+# the rule file.
+- name: Install vrrp martian-logging udev rule
+  copy:
+    src: 99-vrrp-martians.rules
+    dest: /etc/udev/rules.d/99-vrrp-martians.rules
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: keepalived_martians_rule
+  become: true
+  tags:
+    - keepalived
+
+- name: Reload udev rules
+  when: keepalived_martians_rule.changed
+  command: udevadm control --reload
+  changed_when: false
+  become: true
+  tags:
+    - keepalived
+
+# The udev rule only fires when keepalived (re)creates the vmac iface; apply the
+# same setting once to any vrrp interface already up so an existing flood stops
+# at converge instead of waiting for the next keepalived restart or reboot.
+# No-op (nullglob) on hosts without a vmac iface.
+- name: Silence martian logging on any running vrrp interface
+  # The echoed status token is "applied=1", not "changed=1": the harness
+  # idempotence check greps every output line for `\bchanged=\d+`, so a literal
+  # changed=N in this script's echoed cmd would read as a false non-idempotent
+  # task.
+  shell: |
+    set -euo pipefail
+    shopt -s nullglob
+    applied=0
+    for f in /proc/sys/net/ipv4/conf/vrrp*/log_martians; do
+      if [ "$(cat "$f")" != 0 ]; then
+        echo 0 > "$f"
+        applied=1
+      fi
+    done
+    echo "applied=${applied}"
+  args:
+    executable: /bin/bash
+  register: keepalived_vrrp_martians
+  changed_when: '"applied=1" in keepalived_vrrp_martians.stdout'
+  become: true
+  tags:
+    - keepalived
+
 - name: Create configuration directory
   file:
     dest: /etc/keepalived/conf.d

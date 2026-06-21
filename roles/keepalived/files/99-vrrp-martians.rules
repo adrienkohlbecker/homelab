@@ -1,0 +1,14 @@
+# keepalived's use_vmac creates a vrrp.<VRID> macvlan that shares the parent
+# interface's L2 segment, so it ingresses LAN broadcast/multicast and VRRP-peer
+# traffic whose source addresses do not route back through it. The kernel logs
+# each such packet as a "martian source" -- tens of thousands of lines/day on a
+# busy segment (e.g. pug's vrrp.1). The asymmetry is legitimate and already
+# tolerated by loose reverse-path filtering (see roles/firewall); silence the
+# duplicate log noise by disabling martian logging on the vmac iface the moment
+# udev creates it.
+#
+# This must be a udev rule, not a sysctl.d value: the vrrp interface does not
+# exist at boot (keepalived creates it at start), so systemd-sysctl has nothing
+# to apply. %k is the kernel iface name; writing /proc directly avoids the
+# sysctl-CLI dot/slash mangling of names like "vrrp.1".
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="vrrp*", RUN+="/bin/sh -c 'echo 0 > /proc/sys/net/ipv4/conf/%k/log_martians'"
