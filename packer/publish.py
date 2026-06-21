@@ -3,7 +3,7 @@
 
 Usage: publish.py <lockfile> <src_dir> <dst_dir>
 
-Pure-Python wrapper invoked from qemu.pkr.hcl's `install` post-processor.
+Pure-Python wrapper invoked by packer/scripts/postprocess.sh.
 Holds an exclusive fcntl.flock on <lockfile> for the duration of a
 three-step atomic rename of <src_dir> over <dst_dir>. The test harness
 takes a shared flock on the same path across prepare→ensure_booted in
