@@ -11,8 +11,8 @@ proxy_pass, no long-running process.
 Single transport: every host — including the converging host's own netdata —
 is reached the same way, an SSH call to the netdata_poll forced-command key
 that returns a `{"alarms", "transitions"}` JSON bundle (one round trip, no
-nginx, no URL token). SSH connections are multiplexed (ControlMaster) so the
-30s cadence reuses one warm connection per peer instead of re-handshaking.
+nginx, no URL token). Each fire opens a fresh connection per peer; on a LAN the
+handshake is cheap next to the forced command's two loopback fetches.
 
 Inputs (env):
 - NETDATA_HOSTS: comma-separated list of `<name>=<query-url>[=<click-url>]`
@@ -24,10 +24,7 @@ Inputs (env):
   /var/www/homepage_alerts). Must be writable by the unit's User=.
 - NETDATA_POLL_SSH_KEY: path to the netdata_poll private key.
 - NETDATA_POLL_SSH_KNOWN_HOSTS: path to the known_hosts file pinning the
-  peers' host keys (StrictHostKeyChecking=yes).
-- NETDATA_POLL_SSH_CONTROL_DIR: directory for the ControlMaster sockets
-  (a persisted RuntimeDirectory; default /run/homepage_alerts). All three
-  SSH inputs are required.
+  peers' host keys (StrictHostKeyChecking=yes). Both SSH inputs are required.
 
 Embedded in the homepage dashboard via an iframe widget mounted at
 /alerts/ on the homepage vhost (same origin) so the page can resize
@@ -49,13 +46,9 @@ MAX_FETCH_WORKERS = 8
 # SSH transport bounds. SSH_CONNECT_TIMEOUT caps the TCP connect; SSH_TIMEOUT
 # caps the whole call (connect + the forced command's two loopback fetches on
 # the far side). Both sit well inside the timer's 25s TimeoutStartSec so a
-# wedged peer fails the run rather than hanging it. ControlMaster reuse makes
-# the steady-state call far cheaper than a cold connect.
+# wedged peer fails the run rather than hanging it.
 SSH_CONNECT_TIMEOUT = 5
 SSH_TIMEOUT = 10
-# Keep the multiplexed master warm well past the 30s poll cadence so the next
-# fire reuses it; it self-reaps this long after polling stops.
-SSH_CONTROL_PERSIST = 120
 
 # Heroicons-mini filled status glyphs swapped in for the text pill below the
 # narrow-viewport breakpoint. Filled style (fill=currentColor) so the inside
@@ -111,17 +104,11 @@ def parse_hosts(spec: str) -> list[tuple[str, str, str]]:
 
 class _SshConfig:
     """Static SSH transport config shared by every per-host fetch in one run:
-    the netdata_poll private key, the pinned known_hosts, and the ControlMaster
-    socket directory. `%C` in the ControlPath hashes (local, remote, port, user)
-    so each peer gets its own socket; ControlMaster=auto reuses a warm one or
-    opens it, and ControlPersist keeps it alive across the 30s poll cadence."""
+    the netdata_poll private key and the pinned known_hosts."""
 
-    def __init__(self, key: str, known_hosts: str, control_dir: str) -> None:
-        if not (key and known_hosts and control_dir):
-            raise OSError(
-                "NETDATA_POLL_SSH_KEY, NETDATA_POLL_SSH_KNOWN_HOSTS and "
-                "NETDATA_POLL_SSH_CONTROL_DIR are all required"
-            )
+    def __init__(self, key: str, known_hosts: str) -> None:
+        if not (key and known_hosts):
+            raise OSError("NETDATA_POLL_SSH_KEY and NETDATA_POLL_SSH_KNOWN_HOSTS are both required")
         self.base_opts = [
             "-i",
             key,
@@ -137,12 +124,6 @@ class _SshConfig:
             f"UserKnownHostsFile={known_hosts}",
             "-o",
             f"ConnectTimeout={SSH_CONNECT_TIMEOUT}",
-            "-o",
-            "ControlMaster=auto",
-            "-o",
-            f"ControlPath={control_dir.rstrip('/')}/cm-%C",
-            "-o",
-            f"ControlPersist={SSH_CONTROL_PERSIST}",
         ]
 
 
@@ -535,7 +516,6 @@ def main() -> None:
     cfg = _SshConfig(
         os.environ.get("NETDATA_POLL_SSH_KEY", ""),
         os.environ.get("NETDATA_POLL_SSH_KNOWN_HOSTS", ""),
-        os.environ.get("NETDATA_POLL_SSH_CONTROL_DIR", "/run/homepage_alerts"),
     )
 
     data = collect(hosts, cfg)
