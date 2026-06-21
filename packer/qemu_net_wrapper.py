@@ -1,41 +1,15 @@
 #!/usr/bin/env python3
-"""qemu_binary shim that backs packer's build-VM NIC with passt when available.
+"""Packer qemu_binary shim that swaps libslirp for passt when available.
 
-packer's qemu plugin generates `-netdev user,id=<id>,hostfwd=tcp::<port>-:22`
-plus a paired `-device <model>,netdev=<id>` for the build VM. libslirp's
-single-threaded userspace stack drops UDP under host contention (several
-variants build in parallel, nested in the runner's slirp4netns), which flakes
-the build VM's DNS -- the same failure the test harness fixed by switching the
-guest NIC to passt (test/machine.py).
+Packer emits a `-netdev user,...hostfwd=...` NIC for the build VM. In lab CI,
+that nested slirp path can drop DNS traffic under parallel build load, so this
+shim starts a passt sidecar and rewrites the netdev to qemu's stream socket
+transport. Hosts without passt support, explicit PACKER_NET_BACKEND=slirp, and
+probe invocations such as `qemu_binary -version` exec qemu unchanged.
 
-This shim does the same for packer. When passt and qemu's `-netdev stream`
-transport are both present (the noble ci-image, qemu 8.2 + passt), it starts a
-passt sidecar and rewrites the `-netdev user,...` argument to point at passt's
-unix socket, preserving the SSH host-forward so packer's communicator still
-reaches the guest at 127.0.0.1:<port>. The sidecar also advertises a routable
-resolver to the guest (--dns, see _PASST_DNS) because passt -- unlike libslirp's
-built-in forwarder -- won't relay the ci-container's loopback resolver to the
-guest. On a host without passt (a dev-Mac `mise run packer:build`, or any qemu < 7.2), it
-execs qemu unchanged, so the slirp path stays byte-for-byte identical.
-
-Wired in via `qemu_binary` in packer/qemu.pkr.hcl. The arch's real emulator is
-resolved from PATH here (arch is 1:1 with the host, same assumption the HCL
-arch_table makes), so one shim serves both x86_64 and aarch64.
-
-Set PACKER_NET_BACKEND={auto,slirp,passt} to override the probe (mirrors the
-harness's HOMELAB_NET_BACKEND): `slirp` forces passthrough, `passt` fails loudly
-if passt is unusable, `auto` (default) follows the capability probe.
-
-Diagnostics: the shim narrates every decision (probe result, override,
-slirp-vs-passt choice, the passt command + socket, the netdev rewrite) so a
-build that takes the wrong NIC path is debuggable. packer routes a
-qemu_binary's stderr through Go's logger, which it discards unless PACKER_LOG
-is set -- so the shim ALSO drops a qemu_net_wrapper.log into the per-source
-build dir (the same dir holding packer-ubuntu*, derived from the `-drive
-file=` arg). That file rides the shared /mnt/scratch/homelab_ci volume in CI and is
-tailed by mise-tasks/packer/build.sh after each build, so the decision trail
-reaches the job log without PACKER_LOG. Override the path (or disable with
-"off"/"0") via QEMU_NET_WRAPPER_LOG.
+Decision logs go to stderr and, when a build disk path is visible, to
+qemu_net_wrapper.log beside the build artifacts. QEMU_NET_WRAPPER_LOG can point
+elsewhere, or "off"/"0" can disable file logging.
 """
 
 import datetime
@@ -135,8 +109,9 @@ def _real_qemu() -> str:
 
 def _passt_usable(real_qemu: str) -> bool:
     """True when passt is on PATH and this qemu advertises `-netdev stream`."""
-    if platform.system() != "Linux":
-        _log(f"passt unusable: host is {platform.system()}, not Linux")
+    host_os = platform.system()
+    if host_os != "Linux":
+        _log(f"passt unusable: host is {host_os}, not Linux")
         return False
     if shutil.which("passt") is None:
         _log("passt unusable: no `passt` on PATH")
@@ -200,7 +175,7 @@ def _passt_port_args(fwds: list[tuple[str, str, str]]) -> list[str]:
     return out
 
 
-def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> subprocess.Popen:
+def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> None:
     """Launch the passt sidecar and block until its socket is listening."""
     cmd = [
         "passt",
@@ -250,7 +225,7 @@ def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> subprocess.Pope
             sys.exit(f"qemu-net-wrapper: passt exited early (rc={proc.returncode}) before binding {sock}")
         if os.path.exists(sock):
             _log(f"passt sidecar (pid={proc.pid}) bound {sock}")
-            return proc
+            return
         time.sleep(0.05)
     proc.kill()
     sys.exit(f"qemu-net-wrapper: passt did not bind {sock} within 10s")

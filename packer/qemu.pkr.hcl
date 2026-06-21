@@ -27,24 +27,24 @@ variable "ubuntu_name" {
 
 variable "build_directory" {
   type        = string
-  description = "Staging directory packer writes into. Each source writes <build_directory>/<source-name>. mise-tasks/packer/build.sh sets this to a fresh tmpdir under HOMELAB_CI_DIR so the previous good artifacts under output_directory stay intact while the new ones build."
+  description = "Staging root for per-source build artifacts."
 }
 
 variable "output_directory" {
   type        = string
-  description = "Parent directory of final per-source artifact dirs. The install post-processor renames <build_directory>/<source-name> -> <output_directory>/<source-name> after verify + compress pass."
+  description = "Parent directory for published per-source artifact dirs."
 }
 
 variable "publish" {
   type        = bool
   default     = true
-  description = "When false, skip the install post-processor (no publish to output_directory). The build, verify-boot, and compress steps still run. Used by feature-branch CI to validate packer changes without overwriting master's published artifacts."
+  description = "When false, build and verify without publishing artifacts."
 }
 
 variable "upstream_mirrors" {
   type        = bool
   default     = false
-  description = "When true, pull apt packages and the cloud image straight from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
+  description = "When true, build from upstream Ubuntu mirrors instead of Nexus."
 }
 
 locals {
@@ -185,11 +185,9 @@ locals {
     # flat on rpool here -- zfs_{dozer,tank}_filesystem keep their rpool
     # default, so zee activates no named consumers.
     # See notes/ci_box_multidisk_drop_lab_pug_amis.md.
-    # Note: box_deps is derived from box via `mise run packer:seed-deps`
-    # (which copies box's artifacts, boots them with launch.py --commit,
-    # applies packer/seed_deps.yml, and publishes the result). It is NOT
-    # a packer source — there's no point re-running provision.sh + chroot
-    # for a derivation that just adds podman+nginx on top.
+    # box_deps is derived from box by `mise run packer:seed-deps`, which boots
+    # box with launch.py --commit, applies packer/seed_deps.yml, and publishes
+    # the result. It is not a packer source.
     # The rpool is 96G (not 40G like lab/pug, whose prod-faithful geometry
     # spreads state across many pools): box is the only fixture the _site_test
     # cell converges the *whole* fleet onto, and that converge sizes the

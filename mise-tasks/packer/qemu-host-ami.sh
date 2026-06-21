@@ -7,20 +7,84 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
-# shellcheck source=_bake_backstop.sh
-source "$(dirname "$0")/_bake_backstop.sh"
-
 case "${1:-}" in
 -h | --help)
   cat <<'EOF'
 Usage: mise run packer:qemu-host-ami -- [--ubuntu noble] [--promote]
-
-Bake the AWS nested-qemu runner-host AMI. Without --promote, prints the
-candidate AMI and the SSM promotion command.
 EOF
   exit 0
   ;;
 esac
+
+BAKE_SCHEDULER_ROLE_ARN="arn:aws:iam::000390721279:role/homelab-ci-cell-scheduler"
+BAKE_BACKSTOP_TTL_HOURS=3
+
+# CI job timeouts can skip packer's cleanup. Arm a self-deleting terminate
+# schedule for the build instance, then disarm it on normal exit.
+bake_backstop_arm() {
+  local region="$1" build_id="$2" machine="$3" ubuntu="$4" state_file="$5"
+  [ -n "${CI:-}" ] || return 0
+
+  local iid="" waited=0
+  while [ "$waited" -lt 180 ]; do
+    iid=$(aws --region "$region" ec2 describe-instances \
+      --filters "Name=tag:build_id,Values=${build_id}" \
+      "Name=tag:machine,Values=${machine}" \
+      "Name=tag:ubuntu,Values=${ubuntu}" \
+      "Name=instance-state-name,Values=pending,running" \
+      --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null | awk '{print $1; exit}')
+    [ -n "$iid" ] && [ "$iid" != "None" ] && break
+    iid=""
+    sleep 5
+    waited=$((waited + 5))
+  done
+  if [ -z "$iid" ]; then
+    echo "bake-backstop: no build instance found for ${machine}/${ubuntu} in ${build_id}; not armed" >&2
+    return 0
+  fi
+
+  local expires schedule_name target
+  expires=$(date -u -d "+${BAKE_BACKSTOP_TTL_HOURS} hours" +%Y-%m-%dT%H:%M:%S 2>/dev/null ||
+    date -u -v "+${BAKE_BACKSTOP_TTL_HOURS}H" +%Y-%m-%dT%H:%M:%S)
+  schedule_name="ci-bake-${iid}"
+  printf '%s\n' "$schedule_name" >"$state_file"
+
+  aws --region "$region" ec2 create-tags --resources "$iid" \
+    --tags "Key=expires_at,Value=${expires}Z" >/dev/null 2>&1 || true
+
+  target=$(python3 -c 'import json, sys
+print(json.dumps({
+    "Arn": "arn:aws:scheduler:::aws-sdk:ec2:terminateInstances",
+    "RoleArn": sys.argv[1],
+    "Input": json.dumps({"InstanceIds": [sys.argv[2]]}),
+}))' "$BAKE_SCHEDULER_ROLE_ARN" "$iid")
+
+  if aws --region "$region" scheduler create-schedule \
+    --name "$schedule_name" \
+    --schedule-expression "at(${expires})" \
+    --schedule-expression-timezone UTC \
+    --flexible-time-window Mode=OFF \
+    --action-after-completion DELETE \
+    --target "$target" >/dev/null 2>&1; then
+    echo "bake-backstop: armed ${schedule_name} (terminates ${iid} at ${expires}Z)" >&2
+  else
+    echo "bake-backstop: could not create ${schedule_name} (IAM not applied?); not armed" >&2
+    : >"$state_file"
+  fi
+}
+
+bake_backstop_disarm() {
+  local region="$1" state_file="$2" pid="${3:-}"
+  if [ -n "$pid" ]; then
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  fi
+  [ -f "$state_file" ] || return 0
+  local schedule_name
+  schedule_name=$(awk 'NR==1{print}' "$state_file")
+  [ -n "$schedule_name" ] || return 0
+  aws --region "$region" scheduler delete-schedule --name "$schedule_name" >/dev/null 2>&1 || true
+}
 
 region=eu-central-1
 machine=qemu_host
@@ -34,11 +98,15 @@ noble) ;;
   ;;
 esac
 
-artifact_json=$(
-  uv run python -c 'import json, yaml; data=yaml.safe_load(open("group_vars/all/versions.yml")); print(json.dumps(data["gitlab_runner_archive"]["x86_64"]))'
+read -r runner_url runner_sha256 < <(
+  uv run python - <<'PY'
+import yaml
+
+with open("group_vars/all/versions.yml") as fh:
+    artifact = yaml.safe_load(fh)["gitlab_runner_archive"]["x86_64"]
+print(artifact["url"], artifact["sha256"])
+PY
 )
-runner_url=$(python3 -c 'import json, sys; print(json.loads(sys.argv[1])["url"])' "$artifact_json")
-runner_sha256=$(python3 -c 'import json, sys; print(json.loads(sys.argv[1])["sha256"])' "$artifact_json")
 echo "==> qemu-host target architecture: x86_64"
 echo "==> gitlab-runner binary: ${runner_url}"
 
