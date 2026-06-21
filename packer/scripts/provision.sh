@@ -30,10 +30,9 @@ set -euxo pipefail
 # DISKS, EXTRA_DISKS, LAYOUT, SWAP_SIZE, EXTRA_POOLS, SOURCE_NAME,
 # UBUNTU_NAME, UBUNTU_MIRROR come from packer's shell-provisioner env block (see
 # qemu.pkr.hcl's variant_config map). Bare-metal callers export them
-# by hand before running. EXTRA_DISKS/EXTRA_POOLS are consumed by
-# pools.sh; the others by this script and chroot.sh. The
-# ZBM_*/REFIND_*/UBUNTU_MIRROR_* vars used downstream are documented
-# at the top of chroot.sh.
+# by hand before running. This script consumes the disk/pool vars and passes the
+# exported install vars through to chroot.sh. The ZBM_*/REFIND_*/UBUNTU_MIRROR_*
+# vars used downstream are documented at the top of chroot.sh.
 
 export DISKS_COUNT
 DISKS_COUNT=$(wc -w <<<"$DISKS")
@@ -45,8 +44,8 @@ DISKS_COUNT=$(wc -w <<<"$DISKS")
 export HOSTNAME=ubuntu
 export USERNAME=vagrant
 
-# Directory holding the sibling scripts (chroot.sh, pools.sh). The qemu
-# build VM's packer file-provisioner lands them in /home/vagrant.
+# Directory holding chroot.sh. The qemu build VM's packer file-provisioner
+# lands it in /home/vagrant.
 SCRIPTS_DIR="${SCRIPTS_DIR:-/home/vagrant}"
 
 # Map (disk, partition number) to the kernel/udev partition device.
@@ -79,6 +78,118 @@ zpool_export_retry() {
     sleep 5
     zpool export "$pool"
   fi
+}
+
+wipe_disk() {
+  zpool labelclear -f "$1" || true
+  wipefs -a "$1"
+  blkdiscard -f "$1" || true
+  sgdisk --zap-all "$1"
+}
+
+EXTRA_ZPOOL_OPTS=(
+  -o ashift=12
+  -o compatibility=openzfs-2.1-linux
+  -O casesensitivity=insensitive
+  -O normalization=formD
+  -O utf8only=on
+  -O acltype=posix
+  -O atime=on
+  -O canmount=off
+  -O compression=zstd
+  -O devices=off
+  -O dnodesize=auto
+  -O overlay=off
+  -O relatime=on
+  -O setuid=off
+  -O xattr=sa
+  -m none
+)
+
+pop_extra_disks() {
+  local n=$1 pool=$2 i
+  POPPED_EXTRA_DISKS=()
+  for ((i = 0; i < n; i++)); do
+    if [ "${#EXTRA_DISK_QUEUE[@]}" -eq 0 ]; then
+      echo >&2 "provision.sh: ran out of EXTRA_DISKS while allocating $n for $pool"
+      exit 1
+    fi
+    POPPED_EXTRA_DISKS+=("${EXTRA_DISK_QUEUE[0]}")
+    EXTRA_DISK_QUEUE=("${EXTRA_DISK_QUEUE[@]:1}")
+  done
+}
+
+create_extra_apoc() {
+  pop_extra_disks 2 apoc
+  local extra_pool_disks=("${POPPED_EXTRA_DISKS[@]}")
+  if zpool list -H apoc >/dev/null 2>&1; then return; fi
+  for d in "${extra_pool_disks[@]}"; do wipe_disk "$d"; done
+  udevadm settle
+  zpool create -f -o autotrim=off "${EXTRA_ZPOOL_OPTS[@]}" apoc mirror "${extra_pool_disks[@]}"
+}
+
+create_extra_dozer() {
+  pop_extra_disks 2 dozer
+  local extra_pool_disks=("${POPPED_EXTRA_DISKS[@]}")
+  if zpool list -H dozer >/dev/null 2>&1; then return; fi
+  for d in "${extra_pool_disks[@]}"; do wipe_disk "$d"; done
+  udevadm settle
+  zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" dozer mirror "${extra_pool_disks[@]}"
+}
+
+create_extra_zee() {
+  pop_extra_disks 1 zee
+  local disk="${POPPED_EXTRA_DISKS[0]}"
+  if zpool list -H zee >/dev/null 2>&1; then return; fi
+  wipe_disk "$disk"
+  udevadm settle
+  zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" zee "$disk"
+  zfs create -o canmount=on -o mountpoint=/zee/data zee/data
+}
+
+create_extra_tank_mouse() {
+  pop_extra_disks 4 tank_mouse
+  local extra_pool_disks=("${POPPED_EXTRA_DISKS[@]}")
+  local tm1=${POPPED_EXTRA_DISKS[0]} tm2=${POPPED_EXTRA_DISKS[1]} tank3=${POPPED_EXTRA_DISKS[2]} tank4=${POPPED_EXTRA_DISKS[3]}
+  for d in "${extra_pool_disks[@]}"; do wipe_disk "$d"; done
+  for tm in "$tm1" "$tm2"; do
+    sgdisk -n1:0:+1014M -t1:BF01 "$tm"
+    sgdisk -n2:0:-8M -t2:BF01 "$tm"
+    sgdisk -n3:0:0 -t3:BF07 "$tm"
+    sgdisk -p "$tm"
+  done
+  udevadm settle
+  if ! zpool list -H tank >/dev/null 2>&1; then
+    zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" \
+      tank raidz2 "$(partdev "$tm1" 1)" "$(partdev "$tm2" 1)" "$tank3" "$tank4"
+  fi
+  if ! zpool list -H mouse >/dev/null 2>&1; then
+    zpool create -f -o autotrim=off "${EXTRA_ZPOOL_OPTS[@]}" \
+      mouse mirror "$(partdev "$tm1" 2)" "$(partdev "$tm2" 2)"
+  fi
+}
+
+create_extra_pools() {
+  if [ -z "${EXTRA_POOLS:-}" ]; then
+    return 0
+  fi
+
+  read -r -a EXTRA_DISK_QUEUE <<<"${EXTRA_DISKS:-}"
+  for pool in $EXTRA_POOLS; do
+    case "$pool" in
+    apoc) create_extra_apoc ;;
+    dozer) create_extra_dozer ;;
+    zee) create_extra_zee ;;
+    tank_mouse) create_extra_tank_mouse ;;
+    *)
+      echo >&2 "provision.sh: unknown EXTRA_POOLS entry '$pool'"
+      exit 1
+      ;;
+    esac
+  done
+
+  mkdir -p /mnt/etc/zfs
+  cp /etc/zfs/zpool.cache /mnt/etc/zfs/zpool.cache
 }
 
 # Per-disk partition paths, computed once and exported as space-delimited
@@ -180,10 +291,7 @@ for disk in $DISKS; do
   #  - wipefs -a: misc filesystem signatures (ext, mdadm, LUKS headers)
   #  - blkdiscard -f: SSD/sparse hint, frees blocks before partitioning
   #  - sgdisk --zap-all: GPT + protective MBR
-  zpool labelclear -f "$disk" || true
-  wipefs -a "$disk"
-  blkdiscard -f "$disk" || true
-  sgdisk --zap-all "$disk"
+  wipe_disk "$disk"
 
   sgdisk -a1 -n1:24K:+1000K -t1:EF02 -c1:bios "$disk" # MBR booting (EF02 = BIOS boot partition)
   sgdisk -n2:1M:+1G -t2:EF00 -c2:efi "$disk"          # EFI (EF00 = EFI system partition)
@@ -335,12 +443,9 @@ unshare --mount --propagation private arch-chroot /mnt bash <"$SCRIPTS_DIR/chroo
 
 rm /mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
 
-# Create the non-rpool ZFS pools requested by the variant (apoc/dozer/
-# tank/mouse). Runs while /mnt is still rpool's root so pools.sh can
-# copy /etc/zfs/zpool.cache into the shipped install -- without that,
-# zfs-import-cache.service on first boot has nothing to import and the
-# pools are present on disk but unmounted.
-bash "$SCRIPTS_DIR/pools.sh"
+# Create any non-rpool pools while /mnt is still rpool's root so the current
+# zpool.cache can be copied into the shipped install.
+create_extra_pools
 
 # Only the rpool root dataset itself remains mounted in the host namespace.
 zfs unmount "rpool/ROOT/$UBUNTU_NAME"

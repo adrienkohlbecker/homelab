@@ -5,7 +5,7 @@
 # Only non-default values are worth listing (autotrim=on on the SSD-backed
 # pools); pools left at the autotrim=off default stay unmanaged per the no-churn
 # convention. Reflect the live host, not the bootstrap scripts: lab's tank was
-# set autotrim=on on the host even though pools.sh creates it off. autoexpand=on
+# set autotrim=on on the host even though provision.sh creates it off. autoexpand=on
 # belongs here for a Hetzner ZFS-root rpool that grows into its disk on first
 # boot (see chroot.sh).
 zfs_pool_properties: []

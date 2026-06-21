@@ -125,7 +125,7 @@ locals {
   #   partitioned disks. The qemu source declares disk_additional_size
   #   covering rpool + extras; this string is just the rpool slice.
   # - extra_disks: space-delimited list of the remaining attached
-  #   disks (not in $DISKS). pools.sh consumes these in order for
+  #   disks (not in $DISKS). provision.sh consumes these in order for
   #   the non-rpool pools named in extra_pools.
   # - disk_sizes: array of all attached disk sizes, rpool first.
   #   disk_additional_size cardinality must equal len(disks) +
@@ -138,7 +138,7 @@ locals {
   #   to the per-host size; see notes/swap_strategy.md). Consumed by
   #   provision.sh as $SWAP_SIZE.
   # - extra_pools: space-delimited list of non-rpool pool layouts
-  #   pools.sh creates after the rpool arch-chroot completes.
+  #   provision.sh creates after the rpool arch-chroot completes.
   #   Layouts: apoc (mirror, 2 disks), dozer (mirror, 2 disks),
   #   tank_mouse (4 disks; tank raidz2 + mouse mirror over shared
   #   partitions, matches lab prod). Empty => rpool-only image.

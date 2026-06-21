@@ -1,4 +1,4 @@
-# box has two pools (rpool + the flat zee pool from packer pools.sh), so it
+# box has two pools (rpool + the flat zee pool from packer provision.sh), so it
 # exercises multi-pool trim-timer creation and mount-cache generation -- the
 # functional coverage the lab AMI used to carry. lab's prod-faithful
 # mirror/raidz geometry is asserted by no role.
