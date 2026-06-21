@@ -60,11 +60,13 @@ variables:
 # expansion ignores a job's rules:variables override -- a matched override is
 # silently dropped and the job-level default wins (observed: a web+lab pipeline
 # still landed detect on aws-shell-qemu). Setting it here at workflow scope makes
-# `tags: [$DETECT_RUNNER_TAG]` resolve correctly. The catch-all `when: always`
-# keeps pipeline creation unchanged for every source (push/web/schedule/api).
+# `tags: [$DETECT_RUNNER_TAG]` resolve correctly. Key only on HOMELAB_CI_TARGET,
+# not the pipeline source: the lab target arrives via web UI, `push -o
+# ci.variable`, or API alike, so source-gating would miss the push-option case.
+# The catch-all `when: always` keeps pipeline creation unchanged for every source.
 workflow:
   rules:
-    - if: $CI_PIPELINE_SOURCE == "web" && $HOMELAB_CI_TARGET == "lab"
+    - if: $HOMELAB_CI_TARGET == "lab"
       variables:
         DETECT_RUNNER_TAG: lab-shell-qemu
     - when: always
@@ -124,9 +126,10 @@ detect:
     # test_cells, so skip it too (and don't boot a fleeting host for nothing).
     - if: $SKIP_TEST_CELLS == "true"
       when: never
-    # lab target: the manual fallback runs detect on lab's own shell runner,
-    # whose mise/uv are the host's own -- so no baked /opt caches here.
-    - if: $CI_PIPELINE_SOURCE == "web" && $HOMELAB_CI_TARGET == "lab"
+    # lab target (any source -- web, push -o ci.variable, api): detect runs on
+    # lab's own shell runner, whose mise/uv are the host's own -- so no baked
+    # /opt caches here. Must precede the source rules so it wins for push+lab.
+    - if: $HOMELAB_CI_TARGET == "lab"
     - if: $CI_PIPELINE_SOURCE == "web"
       variables:
         MISE_DATA_DIR: /opt/mise
