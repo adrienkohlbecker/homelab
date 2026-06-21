@@ -14,19 +14,18 @@ export ANSIBLE_DEPRECATION_WARNINGS=False
 
 base="${LINT_BASE:-origin/master}"
 
-if git rev-parse --verify --quiet "$base" >/dev/null; then
-  merge_base=$(git merge-base "$base" HEAD)
-  committed=$(git diff --name-only --diff-filter=ACMR "$merge_base"...HEAD -- '*.yml' '*.yaml')
-else
-  echo "lint:ansible-changed: '$base' not found; scoping to uncommitted changes only" >&2
-  committed=""
-fi
-uncommitted=$(git diff --name-only --diff-filter=ACMR HEAD -- '*.yml' '*.yaml')
-untracked=$(git ls-files --others --exclude-standard -- '*.yml' '*.yaml')
-
-files=$(printf '%s\n%s\n%s\n' "$committed" "$uncommitted" "$untracked" |
-  sort -u | sed '/^$/d' |
-  while IFS= read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done)
+files=$(
+  {
+    if git rev-parse --verify --quiet "$base" >/dev/null; then
+      git diff --name-only --diff-filter=ACMR "$(git merge-base "$base" HEAD)"...HEAD -- '*.yml' '*.yaml'
+    else
+      echo "lint:ansible-changed: '$base' not found; scoping to uncommitted changes only" >&2
+    fi
+    git diff --name-only --diff-filter=ACMR HEAD -- '*.yml' '*.yaml'
+    git ls-files --others --exclude-standard -- '*.yml' '*.yaml'
+  } | sort -u | sed '/^$/d' |
+    while IFS= read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done
+)
 
 if [ -z "$files" ]; then
   echo "lint:ansible-changed: no changed YAML files."

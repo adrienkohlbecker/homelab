@@ -7,13 +7,7 @@ set -euo pipefail
 # system Lua. Lua isn't a fleet/mise tool (mise only offers source-compiled
 # builds), so locate whatever the developer has; skip cleanly where absent
 # (e.g. the CI container) rather than failing a check we can't run there.
-lua=""
-for cand in lua5.4 lua5.3 lua luajit; do
-  if command -v "$cand" >/dev/null 2>&1; then
-    lua="$cand"
-    break
-  fi
-done
+lua="$(command -v lua5.4 || command -v lua5.3 || command -v lua || command -v luajit || true)"
 
 if [[ -z "$lua" ]]; then
   echo "SKIP: no lua interpreter on PATH (brew install lua / apt install lua5.4 to run)"
