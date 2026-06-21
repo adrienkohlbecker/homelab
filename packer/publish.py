@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Atomic-publish a packer source artifact under an exclusive flock.
 
-Usage: publish.py <src_dir> <dst_dir>
+Usage: publish.py <output_dir> <src_dir> <dst_dir>
 
 Pure-Python wrapper invoked by packer/scripts/postprocess.sh.
-Holds an exclusive fcntl.flock on <dst_dir>/../.publish-lock for the
+Holds an exclusive fcntl.flock on <output_dir>/.publish-lock for the
 duration of a three-step atomic rename of <src_dir> over <dst_dir>.
 The test harness takes a shared flock on the same path across
 prepare→ensure_booted in test/machine.py, so multiple test cells run in
@@ -53,10 +53,10 @@ def acquire_exclusive(fd: int, lockfile: str, deadline_sec: float) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 3:
-        sys.exit(f"usage: {sys.argv[0]} <src_dir> <dst_dir>")
-    src, dst = sys.argv[1:3]
-    lockfile = os.path.join(os.path.dirname(dst), ".publish-lock")
+    if len(sys.argv) != 4:
+        sys.exit(f"usage: {sys.argv[0]} <output_dir> <src_dir> <dst_dir>")
+    output_dir, src, dst = sys.argv[1:4]
+    lockfile = os.path.join(output_dir, ".publish-lock")
 
     fd = os.open(lockfile, os.O_RDWR | os.O_CREAT, 0o644)
     try:
