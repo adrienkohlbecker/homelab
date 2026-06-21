@@ -23,7 +23,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NamedTuple
 
 from tabulate import tabulate
 
@@ -35,7 +34,7 @@ from machine import (
     imagedir_for_host,
     sweep_stale_workdirs,
 )
-from matrix import build_test_matrix, list_testable_roles
+from matrix import TestCell, build_test_matrix, list_testable_roles
 from utils import cancel_on_signal, colorize, terminate_subprocess
 
 LOG_FILE = Path("test/out.tsv")
@@ -61,21 +60,11 @@ TESTROLE_OWNED_FLAGS = frozenset(
 )
 
 
-class MachineRole(NamedTuple):
-    """A (machine, ubuntu, role) triple to run."""
-
-    machine: str
-    ubuntu_name: str
-    role: str
-
-
 @dataclass(frozen=True)
 class JobResult:
     """Holds the outcome of a single role test."""
 
-    machine: str
-    ubuntu_name: str
-    role: str
+    cell: TestCell
     runtime: float
     exitval: int
     started_at: str
@@ -170,7 +159,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def setup_output_dir(machine_roles: list[MachineRole]) -> None:
+def setup_output_dir(cells: list[TestCell]) -> None:
     """Create the output directory and clear stale .ansi logs for the current plan.
 
     Only wipes files for triples about to be rerun -- prior failure logs for
@@ -180,31 +169,25 @@ def setup_output_dir(machine_roles: list[MachineRole]) -> None:
     """
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     # Mirrors the prefix Machine.__post_init__ builds in test/machine.py.
-    for mr in machine_roles:
-        prefix = f"{mr.machine}.{mr.ubuntu_name}.{mr.role}"
+    for cell in cells:
+        prefix = f"{cell.machine}.{cell.ubuntu}.{cell.role}"
         for suffix in ("output", "journal", "boot"):
             (OUT_DIR / f"{prefix}.{suffix}.ansi").unlink(missing_ok=True)
 
 
-def get_failed_roles() -> list[MachineRole]:
+def get_failed_roles() -> list[TestCell]:
     """Parse the previous job log for failed roles."""
     if not LOG_FILE.exists():
         return []
 
-    failed_roles: list[MachineRole] = []
+    failed: list[TestCell] = []
 
     with LOG_FILE.open(encoding="utf-8", newline="") as log_file:
         for row in csv.DictReader(log_file, delimiter="\t"):
             if row["Exitval"] != "0":
-                failed_roles.append(
-                    MachineRole(
-                        machine=row["Machine"],
-                        ubuntu_name=row["Ubuntu"],
-                        role=row["Role"],
-                    )
-                )
+                failed.append(TestCell(machine=row["Machine"], ubuntu=row["Ubuntu"], role=row["Role"]))
 
-    return failed_roles
+    return failed
 
 
 def _rotate_joblog() -> None:
@@ -216,19 +199,17 @@ def _rotate_joblog() -> None:
         LOG_FILE.rename(LOG_FILE_PREV)
 
 
-def _read_prior_results() -> dict[MachineRole, JobResult]:
+def _read_prior_results() -> dict[TestCell, JobResult]:
     """Load the prior joblog into a triple-keyed map for merge-on-write."""
     if not LOG_FILE.exists():
         return {}
 
-    prior: dict[MachineRole, JobResult] = {}
+    prior: dict[TestCell, JobResult] = {}
     with LOG_FILE.open(encoding="utf-8", newline="") as handle:
         for row in csv.DictReader(handle, delimiter="\t"):
-            triple = MachineRole(machine=row["Machine"], ubuntu_name=row["Ubuntu"], role=row["Role"])
-            prior[triple] = JobResult(
-                machine=triple.machine,
-                ubuntu_name=triple.ubuntu_name,
-                role=triple.role,
+            cell = TestCell(machine=row["Machine"], ubuntu=row["Ubuntu"], role=row["Role"])
+            prior[cell] = JobResult(
+                cell=cell,
                 runtime=float(row["Runtime"]),
                 exitval=int(row["Exitval"]),
                 started_at=row["Started"],
@@ -237,31 +218,29 @@ def _read_prior_results() -> dict[MachineRole, JobResult]:
     return prior
 
 
-def _merge_with_prior(new_results: list[JobResult], prior: dict[MachineRole, JobResult]) -> list[JobResult]:
+def _merge_with_prior(new_results: list[JobResult], prior: dict[TestCell, JobResult]) -> list[JobResult]:
     """Combine the current run's results with prior entries for triples not rerun.
 
     Prior insertion order is preserved for kept entries (and for reruns, which
     update in place); triples that didn't exist in the prior log are appended.
     """
-    merged: dict[MachineRole, JobResult] = dict(prior)
+    merged: dict[TestCell, JobResult] = dict(prior)
     for r in new_results:
-        merged[MachineRole(r.machine, r.ubuntu_name, r.role)] = r
+        merged[r.cell] = r
     return list(merged.values())
 
 
-async def _emit_liveness(seq: int, machine: str, ubuntu_name: str, role: str, start_time: float) -> None:
+async def _emit_liveness(seq: int, cell: TestCell, start_time: float) -> None:
     """Print a periodic 'still running' message until cancelled."""
     while True:
         await asyncio.sleep(LIVENESS_TICK_SECONDS)
         elapsed_min = (time.time() - start_time) / 60.0
-        print(f"[{seq}] {machine}:{ubuntu_name}:{role} still running, {elapsed_min:.0f}m elapsed")
+        print(f"[{seq}] {cell.machine}:{cell.ubuntu}:{cell.role} still running, {elapsed_min:.0f}m elapsed")
 
 
 async def _run_role(
     seq: int,
-    machine: str,
-    ubuntu_name: str,
-    role: str,
+    cell: TestCell,
     role_args: Sequence[str],
     semaphore: asyncio.Semaphore,
     checkmode: bool,
@@ -271,15 +250,15 @@ async def _run_role(
     cmd = [
         "test/testrole.py",
         "--machine",
-        machine,
+        cell.machine,
         "--ubuntu",
-        ubuntu_name,
+        cell.ubuntu,
         "--checkmode" if checkmode else "--no-checkmode",
         "--idempotence" if idempotence else "--no-idempotence",
         # Let testrole drop its own logs on a clean pass so we don't leak
         # noise files into test/out/ for green roles.
         "--no-keep-logs",
-        role,
+        cell.role,
         *role_args,
     ]
     # testrole.py tees its full transcript via utils.tee_output and owns the
@@ -289,7 +268,7 @@ async def _run_role(
     async with semaphore:
         start_time = time.time()
         started_at = datetime.fromtimestamp(start_time, tz=UTC).isoformat(timespec="seconds")
-        print(f"[{seq}] {machine}:{ubuntu_name}:{role} starting")
+        print(f"[{seq}] {cell.machine}:{cell.ubuntu}:{cell.role} starting")
 
         # stdout=PIPE so we can scan for testrole's PEAK_KB sentinel; testrole
         # already tees its full transcript into a per-run ANSI log via
@@ -302,7 +281,7 @@ async def _run_role(
             stderr=asyncio.subprocess.DEVNULL,
         )
         assert proc.stdout is not None
-        liveness = asyncio.create_task(_emit_liveness(seq, machine, ubuntu_name, role, start_time))
+        liveness = asyncio.create_task(_emit_liveness(seq, cell, start_time))
         peak_reader = asyncio.create_task(_capture_peak_kb(proc.stdout))
 
         try:
@@ -335,12 +314,10 @@ async def _run_role(
             exitval = 128 - exitval
         status = "ok" if exitval == 0 else colorize("fail", "red")
         # Per-run log cleanup is testrole's responsibility now (--no-keep-logs above).
-        print(f"[{seq}] {machine}:{ubuntu_name}:{role} {status} ({runtime:.1f}s)")
+        print(f"[{seq}] {cell.machine}:{cell.ubuntu}:{cell.role} {status} ({runtime:.1f}s)")
 
     return JobResult(
-        machine=machine,
-        ubuntu_name=ubuntu_name,
-        role=role,
+        cell=cell,
         runtime=runtime,
         exitval=exitval,
         started_at=started_at,
@@ -369,7 +346,7 @@ async def _capture_peak_kb(stream: asyncio.StreamReader) -> int:
 
 
 async def run_all(
-    machine_roles: list[MachineRole],
+    cells: list[TestCell],
     role_args: Sequence[str],
     jobs: int,
     checkmode: bool,
@@ -392,12 +369,8 @@ async def run_all(
         with cancel_on_signal(task):
             async with asyncio.TaskGroup() as tg:
                 tasks = [
-                    tg.create_task(
-                        _run_role(
-                            seq, mr.machine, mr.ubuntu_name, mr.role, role_args, semaphore, checkmode, idempotence
-                        )
-                    )
-                    for seq, mr in enumerate(machine_roles, start=1)
+                    tg.create_task(_run_role(seq, cell, role_args, semaphore, checkmode, idempotence))
+                    for seq, cell in enumerate(cells, start=1)
                 ]
     except asyncio.CancelledError:
         # When the parent task is cancelled, TaskGroup cascades cancellation
@@ -410,22 +383,20 @@ async def run_all(
     # it ran to completion, was cancelled mid-run, or never got the chance
     # to start (cancel hit before / during TaskGroup setup).
     results: list[JobResult] = []
-    for mr, t in zip(machine_roles, tasks, strict=False):
+    for cell, t in zip(cells, tasks, strict=False):
         if t.done() and not t.cancelled() and t.exception() is None:
             results.append(t.result())
         else:
-            results.append(_cancelled_result(mr))
-    for mr in machine_roles[len(tasks) :]:
-        results.append(_cancelled_result(mr))
+            results.append(_cancelled_result(cell))
+    for cell in cells[len(tasks) :]:
+        results.append(_cancelled_result(cell))
     return results, cancelled
 
 
-def _cancelled_result(mr: MachineRole) -> JobResult:
+def _cancelled_result(cell: TestCell) -> JobResult:
     """Synthetic JobResult for a job interrupted before it could record its own."""
     return JobResult(
-        machine=mr.machine,
-        ubuntu_name=mr.ubuntu_name,
-        role=mr.role,
+        cell=cell,
         runtime=0.0,
         # 130 = 128 + SIGINT, matching what testrole.py emits when it gets
         # cancelled itself, and what main() returns from this script.
@@ -437,8 +408,8 @@ def _cancelled_result(mr: MachineRole) -> JobResult:
 def _print_failure_table(failures: list[JobResult]) -> None:
     """Render a table of failed runs with exit codes and runtime."""
     rows = [
-        [r.machine, r.ubuntu_name, r.role, r.exitval, f"{r.runtime:.1f}s"]
-        for r in sorted(failures, key=lambda r: (r.machine, r.ubuntu_name, r.role))
+        [r.cell.machine, r.cell.ubuntu, r.cell.role, r.exitval, f"{r.runtime:.1f}s"]
+        for r in sorted(failures, key=lambda r: (r.cell.machine, r.cell.ubuntu, r.cell.role))
     ]
     print("\nFailure summary:", file=sys.stderr)
     print(
@@ -455,9 +426,9 @@ def _write_joblog(results: list[JobResult]) -> None:
         for result in results:
             writer.writerow(
                 {
-                    "Role": result.role,
-                    "Ubuntu": result.ubuntu_name,
-                    "Machine": result.machine,
+                    "Role": result.cell.role,
+                    "Ubuntu": result.cell.ubuntu,
+                    "Machine": result.cell.machine,
                     "Runtime": f"{result.runtime:.3f}",
                     "Exitval": result.exitval,
                     "PeakKB": result.peak_kb,
@@ -490,8 +461,8 @@ def main() -> int:
                 "the machine and ubuntu of each rerun come from the prior joblog",
                 file=sys.stderr,
             )
-        machine_roles = get_failed_roles()
-        if not machine_roles:
+        cells = get_failed_roles()
+        if not cells:
             print(f"No failed roles recorded in {LOG_FILE}", file=sys.stderr)
             return 0
     else:
@@ -502,8 +473,7 @@ def main() -> int:
 
         # Build the meta-driven matrix (same fanout logic as CI), then
         # filter by --machines / --ubuntu when the user wants a subset.
-        all_cells = build_test_matrix(roles)
-        machine_roles = [MachineRole(c.machine, c.ubuntu, c.role) for c in all_cells]
+        cells = build_test_matrix(roles)
 
         if args.machines is not None:
             machines = [m.strip() for m in args.machines.split(",") if m.strip()]
@@ -518,7 +488,7 @@ def main() -> int:
                     )
                     return 1
             machine_set = set(machines)
-            machine_roles = [mr for mr in machine_roles if mr.machine in machine_set]
+            cells = [cell for cell in cells if cell.machine in machine_set]
 
         if args.ubuntu is not None:
             ubuntus = [u.strip() for u in args.ubuntu.split(",") if u.strip()]
@@ -533,25 +503,25 @@ def main() -> int:
                     )
                     return 1
             ubuntu_set = set(ubuntus)
-            machine_roles = [mr for mr in machine_roles if mr.ubuntu_name in ubuntu_set]
+            cells = [cell for cell in cells if cell.ubuntu in ubuntu_set]
 
     if args.only_role:
         wanted = {r.strip() for r in args.only_role.split(",") if r.strip()}
-        machine_roles = [mr for mr in machine_roles if mr.role in wanted]
-        if not machine_roles:
+        cells = [cell for cell in cells if cell.role in wanted]
+        if not cells:
             print("No roles match --only-role", file=sys.stderr)
             return 0
 
     if args.except_role:
         unwanted = {r.strip() for r in args.except_role.split(",") if r.strip()}
-        machine_roles = [mr for mr in machine_roles if mr.role not in unwanted]
-        if not machine_roles:
+        cells = [cell for cell in cells if cell.role not in unwanted]
+        if not cells:
             print("All roles excluded by --except-role", file=sys.stderr)
             return 0
 
     if args.list:
-        for mr in machine_roles:
-            print(f"{mr.machine}\t{mr.ubuntu_name}\t{mr.role}")
+        for cell in cells:
+            print(f"{cell.machine}\t{cell.ubuntu}\t{cell.role}")
         return 0
 
     # Reap orphaned workdirs from prior SIGKILL'd / OOM'd / power-cut runs
@@ -560,7 +530,7 @@ def main() -> int:
     # constructed (and thus before any worker subprocess is spawned).
     sweep_stale_workdirs(imagedir_for_host())
 
-    setup_output_dir(machine_roles)
+    setup_output_dir(cells)
     # Only partial reruns merge with the prior log; an unfiltered run replaces
     # out.tsv outright so stale triples (deleted roles, old machine/ubuntu
     # scopes) don't linger forever.
@@ -568,9 +538,7 @@ def main() -> int:
     prior_results = _read_prior_results() if is_partial_rerun else {}
 
     test_start = time.time()
-    results, cancelled = asyncio.run(
-        run_all(machine_roles, args.role_args, args.jobs, args.checkmode, args.idempotence)
-    )
+    results, cancelled = asyncio.run(run_all(cells, args.role_args, args.jobs, args.checkmode, args.idempotence))
     wall_clock = time.time() - test_start
 
     if results:
@@ -583,7 +551,7 @@ def main() -> int:
         # else actually ran (whether it passed or failed).
         completed = sum(1 for r in results if r.started_at)
         msg = (
-            f"\nInterrupted, shutting down ({completed}/{len(machine_roles)} completed); "
+            f"\nInterrupted, shutting down ({completed}/{len(cells)} completed); "
             f"joblog written to {LOG_FILE} -- rerun with --retry-failed to retry the rest"
         )
         print(msg, file=sys.stderr)
@@ -598,8 +566,8 @@ def main() -> int:
         longest = max(results, key=lambda r: r.runtime)
         print(
             f"\n{len(results)} role(s) passed in {wall_clock:.0f}s wall clock "
-            f"(parallelism={args.jobs}, longest: {longest.role} on "
-            f"{longest.machine}:{longest.ubuntu_name} at {longest.runtime:.0f}s)",
+            f"(parallelism={args.jobs}, longest: {longest.cell.role} on "
+            f"{longest.cell.machine}:{longest.cell.ubuntu} at {longest.runtime:.0f}s)",
             file=sys.stderr,
         )
 
