@@ -206,6 +206,8 @@ The harness lives in `test/` (Python, asyncio).
 
 SSH to `lab`/`pug`/`bunk` for diagnostics, including service logs, is pre-authorized. **Needs explicit ack:** anything mutating (`systemctl restart`, `apt`, config edits, `/mnt/services/*/secrets/`) or anything exfiltrating secret material (`podman secret inspect`, vault files, secret files/env). **Bridge to ack:** run `mise run ansible --limit <host> --tags <role> --check` first so the operator sees the diff.
 
+**Triaging logs:** pipe journal output through `lognorm` (installed at `/usr/local/bin/lognorm` by [roles/user](roles/user/files/lognorm)) — it masks volatile tokens (hashes, IPs, pids, numbers) and aggregates identical lines by frequency, collapsing a day of logs into a handful of patterns so the dominant noise sources and the rare real errors both surface at a glance. Reach for it before reading raw `journalctl` whenever the volume is non-trivial: `journalctl --since "1 day ago" -p warning | lognorm`, `journalctl -u <svc> -b 0 | lognorm --top 20`.
+
 ### Test environment design
 
 Details in [notes/test_environment_design.md](notes/test_environment_design.md). **Packer images exist only for qemu test fixtures** — prod hosts are configured by ansible from stock Ubuntu. Variants: `minimal` (cloud ext4), `box` (single-disk rpool, default CI fixture), `box_deps` (box + pre-baked podman/nginx, opt-in via `machines: {box_deps:}` in `meta/test.yml`, saves ~140s/test), `pug`/`lab` (on-demand/nightly). `box_deps` rebuild: `mise run packer:seed-deps --ubuntu <codename>` after every `packer:build box`.

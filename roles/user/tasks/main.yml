@@ -139,6 +139,23 @@
   tags:
     - user
 
+# Operator log-triage helper: `journalctl ... | lognorm` masks volatile tokens
+# (hashes, IPs, pids, numbers) and aggregates by frequency, collapsing a day of
+# logs into a handful of patterns so the noise sources and the rare real errors
+# both surface at a glance. Validate by byte-compiling the rendered copy.
+- name: Install lognorm log-triage helper
+  copy:
+    src: lognorm
+    dest: /usr/local/bin/lognorm
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: python3 -m py_compile %s
+  become: true
+  tags:
+    - user
+
 - name: Sudo without password
   when: ansible_user_id != "root"
   copy:

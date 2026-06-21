@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""Aggregate journal/log noise by masking volatile tokens.
+
+Reads log lines on stdin (e.g. `journalctl -p warning | lognorm`), strips the
+syslog timestamp/host prefix, replaces high-entropy tokens (hashes, UUIDs, IPs,
+hex, timestamps, pids, bare numbers) with stable placeholders, then prints each
+distinct normalized line once with its occurrence count, most frequent first.
+
+This collapses thousands of near-identical lines into a handful of patterns so a
+day of logs fits in a glance -- the dominant noise sources and the rare real
+errors both surface immediately.
+
+Usage:
+    journalctl --since "1 day ago" -p warning | lognorm
+    journalctl -u netdata -b 0 | lognorm --top 20
+"""
+import argparse
+import collections
+import re
+import sys
+
+# "Jun 21 14:23:45 fox " -- syslog timestamp + hostname.
+PREFIX = re.compile(r"^\w{3}\s+\d+\s[\d:]+\s+\S+\s+")
+
+# Ordered: UUID before HASH (a UUID's groups are short hex runs), both before
+# the bare-number catch-all.
+SUBS = [
+    (re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"), "<UUID>"),
+    (re.compile(r"\b[0-9a-f]{12,64}\b"), "<HASH>"),
+    (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), "<IP>"),
+    (re.compile(r"\b(?:[0-9a-fA-F]{1,4}:){2,7}[0-9a-fA-F]{1,4}\b"), "<IP6>"),
+    (re.compile(r"0x[0-9a-fA-F]+"), "<HEX>"),
+    (re.compile(r"\b\d{4}-\d{2}-\d{2}[T ][\d:.]+Z?\b"), "<TS>"),
+    (re.compile(r"/proc/\d+"), "/proc/<PID>"),
+    (re.compile(r"\bpid[= ]\d+", re.IGNORECASE), "pid=<PID>"),
+    (re.compile(r"\[\d+\]"), "[<N>]"),
+    (re.compile(r"\b\d+\b"), "<N>"),
+]
+
+
+def normalize(line):
+    line = PREFIX.sub("", line.rstrip("\n"))
+    for pattern, replacement in SUBS:
+        line = pattern.sub(replacement, line)
+    return line
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--top", type=int, default=None, metavar="N", help="show only the N most frequent patterns")
+    args = parser.parse_args()
+
+    counts = collections.Counter(normalize(line) for line in sys.stdin)
+    for message, count in counts.most_common(args.top):
+        print(f"{count:6d}  {message}")
+
+
+if __name__ == "__main__":
+    main()
