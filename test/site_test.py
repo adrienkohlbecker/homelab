@@ -19,12 +19,11 @@ import traceback
 from pathlib import Path
 
 from machine import (
-    DEFAULT_UBUNTU,
     Machine,
-    UBUNTU_RELEASES,
     imagedir_for_host,
     sweep_stale_workdirs,
 )
+from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
 from utils import (
     CommandFailedException,
     cancel_on_signal,

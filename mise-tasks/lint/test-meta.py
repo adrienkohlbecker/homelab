@@ -18,10 +18,11 @@ from pathlib import Path
 
 import yaml
 
-# Import MACHINE_CHOICES + UBUNTU_RELEASES from the test harness so the
-# source of truth stays single. test/ isn't a package, so prepend it to sys.path.
+# Import metadata constants from the test harness so the source of truth stays
+# single. test/ isn't a package, so prepend it to sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
-from machine import DEFAULT_UBUNTU, MACHINE_CHOICES, UBUNTU_RELEASES  # noqa: E402
+from machine import MACHINE_CHOICES  # noqa: E402
+from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES  # noqa: E402
 
 
 def main() -> int:

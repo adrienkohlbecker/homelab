@@ -26,11 +26,10 @@ import sys
 from pathlib import Path
 
 from machine import (
-    DEFAULT_UBUNTU,
     QEMU_MACHINE_SPECS,
     Machine,
-    UBUNTU_RELEASES,
 )
+from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
 from utils import cancel_on_signal, print_cmd_line, print_line, tee_output
 
 

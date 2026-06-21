@@ -22,8 +22,6 @@ from typing import NamedTuple
 
 import yaml
 
-# Canonical copies live in test/machine.py alongside the QEMU specs; keep in
-# sync (lint:test-meta validates meta/test.yml against both).
 UBUNTU_RELEASES: dict[str, str] = {
     "jammy": "22.04",
     "noble": "24.04",
