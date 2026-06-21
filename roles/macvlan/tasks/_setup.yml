@@ -1,4 +1,4 @@
-# Test-fixture role-deps for the macvlan harness run. testrole.py imports
+# Test-fixture role dependencies for the macvlan harness run. testrole.py imports
 # only the role under test, so the podman_network path in install.yml needs
 # podman pre-staged (prod gets it from site.yml's play order). Kept even
 # though meta/test.yml routes to box_deps: box_deps just pre-bakes podman
