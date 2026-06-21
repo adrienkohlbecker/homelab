@@ -60,6 +60,12 @@
     content: |
       [Definition]
       logtarget = SYSTEMD-JOURNAL
+
+      # Pin allowipv6 to its auto-detected value. Left unset, fail2ban-server
+      # logs `'allowipv6' not defined in 'Definition'. Using default one:
+      # 'auto'` on every start -- `auto` is the behaviour we want (the host is
+      # dual-stack), so set it explicitly to silence the warning.
+      allowipv6 = auto
     owner: root
     group: root
     mode: "0640"
