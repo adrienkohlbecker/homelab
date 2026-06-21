@@ -133,8 +133,11 @@
   block:
     - name: _verify | Converge a probe source with a wrong key_id
       block:
+        # include_role (dynamic), not import_role: a static import templates its
+        # vars: at parse time regardless of this block's when:, so a consumer
+        # that omits apt_source_tombstone_args hits an undefined-var error.
         - name: _verify | Import apt_source with a bogus key_id (expected to fail)
-          import_role:
+          include_role:
             name: apt_source
             tasks_from: configure
           vars:
@@ -173,8 +176,11 @@
 - name: _verify | Tombstone path ({{ apt_source_tombstone_args.name | default('disabled') }})
   when: apt_source_tombstone_args is defined
   block:
+    # include_role (dynamic), not import_role: a static import templates its
+    # vars: at parse time regardless of this block's when:, so a consumer that
+    # omits apt_source_tombstone_args hits an undefined-var error.
     - name: _verify | Remove the source via state absent
-      import_role:
+      include_role:
         name: apt_source
         tasks_from: configure
       vars:
