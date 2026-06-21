@@ -39,18 +39,13 @@ fi
 
 read -r -a _disks <<<"${EXTRA_DISKS:-}"
 
-# pop_disks N: take N disks off the front of _disks and put them in
-# the global POPPED array. Side-effects via a global because a
-# subshell (e.g. `result=$(pop_disks N)`) loses the _disks mutation
-# when the subshell exits -- which makes the next pool grab the same
-# disks and trip on "device busy" since the previous pool is still
-# holding them.
+# POPPED stays global so each pool consumes disks from the shared queue.
 pop_disks() {
-  local n=$1 i
+  local n=$1 pool=$2 i
   POPPED=()
   for ((i = 0; i < n; i++)); do
     if [ "${#_disks[@]}" -eq 0 ]; then
-      echo >&2 "pools.sh: ran out of EXTRA_DISKS while allocating $n for $POOL"
+      echo >&2 "pools.sh: ran out of EXTRA_DISKS while allocating $n for $pool"
       exit 1
     fi
     POPPED+=("${_disks[0]}")
@@ -104,7 +99,7 @@ ZPOOL_OPTS=(
 )
 
 create_apoc() {
-  pop_disks 2
+  pop_disks 2 apoc
   local disks=("${POPPED[@]}")
   if zpool list -H apoc >/dev/null 2>&1; then return; fi
   for d in "${disks[@]}"; do wipe_disk "$d"; done
@@ -113,7 +108,7 @@ create_apoc() {
 }
 
 create_dozer() {
-  pop_disks 2
+  pop_disks 2 dozer
   local disks=("${POPPED[@]}")
   if zpool list -H dozer >/dev/null 2>&1; then return; fi
   for d in "${disks[@]}"; do wipe_disk "$d"; done
@@ -122,7 +117,7 @@ create_dozer() {
 }
 
 create_zee() {
-  pop_disks 1
+  pop_disks 1 zee
   local disk="${POPPED[0]}"
   if zpool list -H zee >/dev/null 2>&1; then return; fi
   wipe_disk "$disk"
@@ -135,7 +130,7 @@ create_zee() {
 }
 
 create_tank_mouse() {
-  pop_disks 4
+  pop_disks 4 tank_mouse
   local disks=("${POPPED[@]}") tm1=${POPPED[0]} tm2=${POPPED[1]} tank3=${POPPED[2]} tank4=${POPPED[3]}
   for d in "${disks[@]}"; do wipe_disk "$d"; done
   # Partition the shared (tank+mouse) disks: p1 = tank slice (1014M),

@@ -116,8 +116,6 @@ for d in $DISKS; do
 done
 export PARTITIONS_EFI PARTITIONS_SWAP PARTITIONS_RPOOL
 
-# Ensure APT doesn't asks questions
-
 export DEBIAN_FRONTEND=noninteractive
 
 # Retry transient apt failures (Nexus restart, packet loss) on the
@@ -151,8 +149,6 @@ apt_update() {
   return 1
 }
 
-# Install helpers
-
 # Block until cloud-init has finished applying user-data before touching apt.
 # preserve_sources_list:false + apt.primary in user-data.pkrtpl rewrite
 # sources.list to the Nexus mirror, but that runs in cloud-init's config stage
@@ -174,11 +170,7 @@ find /var/lib/apt/lists -type f -delete
 apt_update
 apt-get install --yes arch-install-scripts debootstrap gdisk zfsutils-linux
 
-# Generate /etc/hostid
-
 zgenhostid -f
-
-# Create partitions
 
 for disk in $DISKS; do
   # Defensive wipe -- a no-op against packer's fresh qcow2s, but

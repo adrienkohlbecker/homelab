@@ -100,13 +100,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def require_tool(name: str) -> str:
-    path = shutil.which(name)
-    if not path:
-        sys.exit(f"required tool not found on PATH: {name}")
-    return path
-
-
 def find_tar() -> str:
     for candidate in ("tar", "gtar"):
         path = shutil.which(candidate)
@@ -224,7 +217,7 @@ def aws_argv(region: str, *args: str) -> list[str]:
     return ["aws", "--region", region, *args]
 
 
-def object_exists(bucket: str, key: str, region: str) -> bool:
+def assert_new_object(bucket: str, key: str, region: str) -> None:
     result = subprocess.run(
         aws_argv(region, "s3api", "head-object", "--bucket", bucket, "--key", key),
         check=False,
@@ -232,11 +225,7 @@ def object_exists(bucket: str, key: str, region: str) -> bool:
         stderr=subprocess.DEVNULL,
         text=True,
     )
-    return result.returncode == 0
-
-
-def assert_new_object(bucket: str, key: str, region: str) -> None:
-    if object_exists(bucket, key, region):
+    if result.returncode == 0:
         sys.exit(f"refusing to overwrite existing object: s3://{bucket}/{key}")
 
 
@@ -272,24 +261,20 @@ def read_pointer(bucket: str, key: str, region: str) -> str | None:
 
 def write_pointer(bucket: str, key: str, body: str, region: str) -> None:
     print(f"==> writing pointer s3://{bucket}/{key}")
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
-        fh.write(body)
-        tmp_path = fh.name
-    try:
-        run(
-            aws_argv(
-                region,
-                "s3",
-                "cp",
-                tmp_path,
-                f"s3://{bucket}/{key}",
-                "--only-show-errors",
-                "--content-type",
-                "application/json",
-            )
+    run(
+        aws_argv(
+            region,
+            "s3",
+            "cp",
+            "-",
+            f"s3://{bucket}/{key}",
+            "--only-show-errors",
+            "--content-type",
+            "application/json",
         )
-    finally:
-        os.unlink(tmp_path)
+        + ["--checksum-algorithm", S3_CHECKSUM_ALGORITHM],
+        input=body,
+    )
 
 
 def pointer_body(args: argparse.Namespace) -> str:
@@ -322,7 +307,8 @@ def main() -> int:
             print(f"DRY RUN: would write pointer {pointer_key} -> {args.build_id}")
         return 0
 
-    require_tool("aws")
+    if not shutil.which("aws"):
+        sys.exit("required tool not found on PATH: aws")
     tar = find_tar()
 
     # Immutability: never overwrite a published build.
