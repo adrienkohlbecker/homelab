@@ -37,6 +37,22 @@ def test_find_user_netdev_none_on_a_version_probe() -> None:
     assert wrapper._find_user_netdev(["-version"]) is None
 
 
+def test_real_qemu_strips_wrapper_binary_arg(monkeypatch) -> None:
+    monkeypatch.setattr(wrapper.shutil, "which", lambda binary: f"/usr/bin/{binary}")
+
+    real_qemu, args = wrapper._real_qemu(
+        [
+            "-qemu-net-wrapper-binary",
+            "qemu-system-test",
+            "-m",
+            "4096",
+        ]
+    )
+
+    assert real_qemu == "/usr/bin/qemu-system-test"
+    assert args == ["-m", "4096"]
+
+
 def test_parse_netdev_user_extracts_id_and_forward() -> None:
     netid, fwds = wrapper._parse_netdev_user("user,id=user.0,hostfwd=tcp::2222-:22")
     assert netid == "user.0"

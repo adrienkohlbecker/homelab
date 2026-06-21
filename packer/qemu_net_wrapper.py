@@ -27,6 +27,7 @@ import time
 # file behind _LOG_FH, so _start_passt can drop passt's own debug log beside it.
 _LOG_FH = None
 _LOG_PATH = None
+_WRAPPER_QEMU_BINARY_ARG = "-qemu-net-wrapper-binary"
 
 # The nameserver passt advertises to the guest over DHCP (-D). This is the lab
 # DNS keepalived VIP (data/network_topology.yml -> virtual_ips.dns): a
@@ -98,13 +99,29 @@ def _build_dir_from_args(args: list[str]) -> str | None:
     return None
 
 
-def _real_qemu() -> str:
-    arch = platform.machine()
-    arch = "aarch64" if arch == "arm64" else arch
-    binary = shutil.which(f"qemu-system-{arch}")
+def _real_qemu(args: list[str]) -> tuple[str, list[str]]:
+    configured = None
+    stripped = []
+    i = 0
+    while i < len(args):
+        if args[i] == _WRAPPER_QEMU_BINARY_ARG:
+            try:
+                configured = args[i + 1]
+            except IndexError:
+                sys.exit(f"qemu-net-wrapper: {_WRAPPER_QEMU_BINARY_ARG} needs a value")
+            i += 2
+            continue
+        stripped.append(args[i])
+        i += 1
+
+    if configured is None:
+        arch = platform.machine()
+        arch = "aarch64" if arch == "arm64" else arch
+        configured = f"qemu-system-{arch}"
+    binary = shutil.which(configured)
     if binary is None:
-        sys.exit(f"qemu-net-wrapper: qemu-system-{arch} not found on PATH")
-    return binary
+        sys.exit(f"qemu-net-wrapper: {configured} not found on PATH")
+    return binary, stripped
 
 
 def _passt_usable(real_qemu: str) -> bool:
@@ -232,9 +249,8 @@ def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> None:
 
 
 def main() -> None:
-    args = sys.argv[1:]
+    real_qemu, args = _real_qemu(sys.argv[1:])
     _open_log(args)
-    real_qemu = _real_qemu()
 
     override = os.environ.get("PACKER_NET_BACKEND", "auto").strip().lower()
     if override not in ("auto", "slirp", "passt"):
