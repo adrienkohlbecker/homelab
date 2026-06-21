@@ -55,6 +55,22 @@ variables:
   # A push option overrides this default. Empty = run the matrix as usual.
   SKIP_TEST_CELLS: ""
 
+# DETECT_RUNNER_TAG must be a *pipeline-global* variable, not a job
+# rules:variables: the detect job consumes it in `tags:`, and GitLab's tag
+# expansion ignores a job's rules:variables override -- a matched override is
+# silently dropped and the job-level default wins (observed: a web+lab pipeline
+# still landed detect on aws-shell-qemu). Setting it here at workflow scope makes
+# `tags: [$DETECT_RUNNER_TAG]` resolve correctly. The catch-all `when: always`
+# keeps pipeline creation unchanged for every source (push/web/schedule/api).
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web" && $HOMELAB_CI_TARGET == "lab"
+      variables:
+        DETECT_RUNNER_TAG: lab-shell-qemu
+    - when: always
+      variables:
+        DETECT_RUNNER_TAG: aws-shell-qemu
+
 # Shared scaffolding for hosted-runner jobs: the ci image from this project's
 # registry (Dockerfile; rebuilt manually via the ci_image job below). The
 # image bakes the mise tool tree at /opt/mise and a warm uv wheel cache at
@@ -97,8 +113,8 @@ detect:
   # running it on the cell pool boots the first fleeting host here, and the
   # runner's idle_time keeps it warm for the cell matrix that dispatches right
   # after, so detect's render overlaps the cold boot the cells would pay anyway.
-  # The tag follows the target via $DETECT_RUNNER_TAG (set per-branch in rules:),
-  # so the lab fallback still lands detect on lab's own runner.
+  # The tag follows the target via $DETECT_RUNNER_TAG, set at workflow scope
+  # (see the comment there: tags: cannot read a job's rules:variables).
   tags:
     - $DETECT_RUNNER_TAG
   rules:
@@ -111,16 +127,12 @@ detect:
     # lab target: the manual fallback runs detect on lab's own shell runner,
     # whose mise/uv are the host's own -- so no baked /opt caches here.
     - if: $CI_PIPELINE_SOURCE == "web" && $HOMELAB_CI_TARGET == "lab"
-      variables:
-        DETECT_RUNNER_TAG: lab-shell-qemu
     - if: $CI_PIPELINE_SOURCE == "web"
       variables:
-        DETECT_RUNNER_TAG: aws-shell-qemu
         MISE_DATA_DIR: /opt/mise
         UV_CACHE_DIR: /opt/uv-cache
     - if: $CI_PIPELINE_SOURCE == "push"
       variables:
-        DETECT_RUNNER_TAG: aws-shell-qemu
         MISE_DATA_DIR: /opt/mise
         UV_CACHE_DIR: /opt/uv-cache
   variables:
@@ -128,8 +140,6 @@ detect:
     # any realistic push, with a fetch-on-demand fallback in detect.py for a
     # base (green ancestor or previous tip) outside the shallow checkout.
     GIT_DEPTH: "50"
-    # Safety-net default; rules: set the per-target tag above.
-    DETECT_RUNNER_TAG: aws-shell-qemu
     # The qemu-host AMI bakes the mise tool tree + uv cache at /opt (matching the
     # cell before_script); the aws-target rules point mise/uv there. UV_LINK_MODE
     # copy is needed for that cross-fs cache and harmless on lab.
