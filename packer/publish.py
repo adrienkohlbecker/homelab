@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Atomic-publish a packer source artifact under an exclusive flock.
 
-Usage: publish.py <output_dir> <src_dir> <dst_dir>
+Usage: publish.py <lockfile> <src_dir> <dst_dir>
 
 Pure-Python wrapper invoked by packer/scripts/postprocess.sh.
-Holds an exclusive fcntl.flock on <output_dir>/.publish-lock for the
-duration of a three-step atomic rename of <src_dir> over <dst_dir>.
-The test harness takes a shared flock on the same path across
-prepare→ensure_booted in test/machine.py, so multiple test cells run in
-parallel and only block during the brief swap.
+Holds an exclusive fcntl.flock on <lockfile> for the duration of a
+three-step atomic rename of <src_dir> over <dst_dir>. The test harness
+takes a shared flock on the same path across prepare→ensure_booted in
+test/machine.py, so multiple test cells run in parallel and only block
+during the brief swap.
 
 Pure-Python instead of bash + flock(1) because util-linux's flock(1)
 isn't on macOS by default, and `mise run packer:build` is a supported
@@ -54,9 +54,8 @@ def acquire_exclusive(fd: int, lockfile: str, deadline_sec: float) -> None:
 
 def main() -> None:
     if len(sys.argv) != 4:
-        sys.exit(f"usage: {sys.argv[0]} <output_dir> <src_dir> <dst_dir>")
-    output_dir, src, dst = sys.argv[1:4]
-    lockfile = os.path.join(output_dir, ".publish-lock")
+        sys.exit(f"usage: {sys.argv[0]} <lockfile> <src_dir> <dst_dir>")
+    lockfile, src, dst = sys.argv[1:4]
 
     fd = os.open(lockfile, os.O_RDWR | os.O_CREAT, 0o644)
     try:
