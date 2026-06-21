@@ -21,63 +21,34 @@ FENCE_RE = re.compile(r"^(`{3,}|~{3,})[^\n]*\n.*?\n\1", re.MULTILINE | re.DOTALL
 INLINE_CODE_RE = re.compile(r"`+.+?`+", re.DOTALL)
 
 
-def _strip_code(text):
-    text = FENCE_RE.sub("", text)
-    text = INLINE_CODE_RE.sub("", text)
-    return text
-
-
 def iter_links(text):
-    text = _strip_code(text)
+    text = INLINE_CODE_RE.sub("", FENCE_RE.sub("", text))
     for m in INLINE_RE.finditer(text):
         yield m.group(1)
     for m in REF_RE.finditer(text):
         yield m.group(1)
 
 
-def check_file(path, notes_dir=None):
-    errors = []
-    text = path.read_text(encoding="utf-8", errors="replace")
-    for raw in iter_links(text):
-        url = raw.strip().strip("<>")
-        url_path = url.split("#")[0].strip()
-        if not url_path or any(url_path.startswith(p) for p in SKIP_PREFIXES):
-            continue
-        target = (path.parent / url_path).resolve()
-        # notes/ is a private repo cloned in-place + gitignored: absent in CI and
-        # any checkout that didn't populate it. Treat links into it as an external
-        # boundary -- verify only when the clone is present, so the public repo's
-        # link check never depends on the private one.
-        if notes_dir is not None:
-            try:
-                target.relative_to(notes_dir)
-                continue
-            except ValueError:
-                pass
-        if not target.exists():
-            errors.append(url_path)
-    return errors
-
-
 def main():
     root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
-    # When the notes/ clone is absent (CI etc.), links into it are skipped rather
-    # than flagged -- see check_file. None means "present, verify normally".
-    notes_dir = None if (root / "notes").exists() else (root / "notes").resolve()
-    files_output = subprocess.check_output(["git", "ls-files"], cwd=root, text=True)
-    files = []
-    for rel in files_output.splitlines():
-        if not rel.endswith(".md"):
-            continue
-        p = root / rel
-        if not p.is_symlink():
-            files.append(p)
+    # The private notes/ clone is absent in CI; skip links into it only then.
+    missing_notes_dir = None if (root / "notes").exists() else (root / "notes").resolve()
 
     total = 0
-    for f in sorted(files):
-        for link in check_file(f, notes_dir):
-            print(f"{f.relative_to(root)}: broken link: {link}", file=sys.stderr)
-            total += 1
+    for rel in sorted(subprocess.check_output(["git", "ls-files"], cwd=root, text=True).splitlines()):
+        path = root / rel
+        if not rel.endswith(".md") or path.is_symlink():
+            continue
+        for raw in iter_links(path.read_text(encoding="utf-8", errors="replace")):
+            url_path = raw.strip().strip("<>").split("#")[0].strip()
+            if not url_path or any(url_path.startswith(p) for p in SKIP_PREFIXES):
+                continue
+            target = (path.parent / url_path).resolve()
+            if missing_notes_dir is not None and target.is_relative_to(missing_notes_dir):
+                continue
+            if not target.exists():
+                print(f"{path.relative_to(root)}: broken link: {url_path}", file=sys.stderr)
+                total += 1
 
     if total:
         print(f"{total} broken link(s)", file=sys.stderr)
