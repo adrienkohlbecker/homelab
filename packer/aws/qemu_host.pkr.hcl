@@ -49,18 +49,15 @@ variable "qemu_host_manifest_path" {
 }
 
 locals {
-  qemu_host_region          = "eu-central-1"
-  qemu_host_ubuntu_name     = var.ubuntu_name
-  qemu_host_source_ami_name = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
   qemu_host_common_tags = {
     role     = "ci-ami"
-    ubuntu   = local.qemu_host_ubuntu_name
+    ubuntu   = var.ubuntu_name
     build_id = var.qemu_host_build_id
   }
 }
 
 source "amazon-ebs" "qemu_host" {
-  region                      = local.qemu_host_region
+  region                      = "eu-central-1"
   instance_type               = "c6a.xlarge"
   ssh_username                = "ubuntu"
   ssh_interface               = "public_ip"
@@ -77,7 +74,7 @@ source "amazon-ebs" "qemu_host" {
 
   source_ami_filter {
     filters = {
-      name                = local.qemu_host_source_ami_name
+      name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }
@@ -98,12 +95,12 @@ source "amazon-ebs" "qemu_host" {
     delete_on_termination = true
   }
 
-  ami_name                = "homelab-ci-qemu-host-${local.qemu_host_ubuntu_name}-{{timestamp}}"
-  ami_description         = "homelab CI nested-qemu runner host (${local.qemu_host_ubuntu_name})"
+  ami_name                = "homelab-ci-qemu-host-${var.ubuntu_name}-{{timestamp}}"
+  ami_description         = "homelab CI nested-qemu runner host (${var.ubuntu_name})"
   ami_virtualization_type = "hvm"
   ena_support             = true
 
-  tags            = merge(local.qemu_host_common_tags, { machine = "qemu_host", Name = "homelab-ci-qemu-host-${local.qemu_host_ubuntu_name}" })
+  tags            = merge(local.qemu_host_common_tags, { machine = "qemu_host", Name = "homelab-ci-qemu-host-${var.ubuntu_name}" })
   snapshot_tags   = merge(local.qemu_host_common_tags, { machine = "qemu_host" })
   run_tags        = merge(local.qemu_host_common_tags, { machine = "qemu_host", Name = "packer-homelab-ci-qemu-host" })
   run_volume_tags = merge(local.qemu_host_common_tags, { machine = "qemu_host" })
