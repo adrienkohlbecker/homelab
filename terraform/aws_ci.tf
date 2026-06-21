@@ -51,16 +51,19 @@ locals {
   }
   # Dedicated single-host pool for the _site_test cell -- the full-site converge
   # is the pipeline's critical path (~25m) and was spending ~70% of its run
-  # contending for CPU against the role-cell burst on the shared pool. A 4 vCPU
-  # c8id.xlarge gives the box guest (4 vCPU) its own host, and decouples the cost:
-  # the role-cell pool drains as soon as the cells finish instead of lingering for
-  # site_test's long tail. Reuses aws_launch_template.ci_qemu_host (same AMI / SG /
-  # instance profile / key); only the ASG differs, overriding instance_type. Kept
-  # tagged role=ci-qemu-host so the worker boot service, homelab_ci_ready, and the
+  # contending for CPU against the role-cell burst on the shared pool. An 8 vCPU
+  # c8id.2xlarge (16 GiB) hosts the widened box guest (6 vCPU / 8 GiB — see
+  # machine.py's _site_test override) with 2 host cores of headroom for qemu's
+  # iothreads + nested-virt servicing + the instance OS, which a 1:1 4-on-4
+  # c8id.xlarge starved. Decouples the cost too: the role-cell pool drains as
+  # soon as the cells finish instead of lingering for site_test's long tail.
+  # Reuses aws_launch_template.ci_qemu_host (same AMI / SG / instance profile /
+  # key); only the ASG differs, overriding instance_type. Kept tagged
+  # role=ci-qemu-host so the worker boot service, homelab_ci_ready, and the
   # fleet describes treat it identically to the role-cell hosts.
   ci_qemu_site_pool = {
     name          = "homelab-ci-qemu-site"
-    instance_type = "c8id.xlarge"
+    instance_type = "c8id.2xlarge"
     max_size      = 1
   }
   ci_ecr_pull_through_cache_rules = {
