@@ -29,6 +29,27 @@
   tags:
     - netdata
 
+# charts.d.plugin auto-probes every bundled collector (libreswan, opensips,
+# hdparm, ...) on each start; on a host running none of those services each
+# check() fails and logs a warning on a loop, and the absent file itself logs
+# `charts.d.conf not found`. This authoritative copy disables the blanket
+# auto-enable and force-enables only the fleet's own collectors (see the file).
+# Plain copy, not the config helper: charts.d.conf is host-independent and has
+# no go.d-style stock stub worth seeding from.
+- name: Configure charts.d collectors
+  copy:
+    src: charts.d.conf
+    dest: /etc/netdata/charts.d.conf
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+    validate: bash -n %s
+  register: netdata_charts_d_conf
+  become: true
+  tags:
+    - netdata
+
 - name: Copy the cloud config
   copy:
     src: cloud.conf
@@ -234,6 +255,6 @@
     systemd_unit_args:
       src: netdata
       condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
-      restart: "{{ netdata_conf.changed or netdata_cloud_conf.changed or netdata_cloud_unclaim.changed or netdata_health_alarm_notify.changed or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed or netdata_godconf_copy.changed or (netdata_podman_socket_drop.changed | default(false)) }}"
+      restart: "{{ netdata_conf.changed or netdata_charts_d_conf.changed or netdata_cloud_conf.changed or netdata_cloud_unclaim.changed or netdata_health_alarm_notify.changed or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed or netdata_godconf_copy.changed or (netdata_podman_socket_drop.changed | default(false)) }}"
   tags:
     - netdata
