@@ -626,3 +626,30 @@
         client_header_timeout 10s;
   tags:
     - jellyfin
+
+# Functional HW-transcode gate. This is the only place the real VAAPI/QSV
+# path can be exercised: box can't (phantom render node + no codec
+# silicon) and _verify runs only against qemu, never prod. A regression to
+# silent software fallback (e.g. the crun 0.17 device-cgroup bug that
+# denied libdrm's access(F_OK) probe) passes every stat check, so assert
+# the real path here -- a short synthetic encode through the same
+# libvpl->iHD->i915 chain jellyfin uses, with no dependency on library
+# contents. Read-only (encodes to null) so changed_when: false; a nonzero
+# rc fails the converge. Skipped on qemu/non-accelerated hosts via the
+# gate, and in check mode by command's own default.
+- name: Confirm hardware transcoding works
+  when:
+    - has_transcoding_acceleration
+    - not (qemu_test | default(false))
+  command: >-
+    podman exec jellyfin /usr/lib/jellyfin-ffmpeg/ffmpeg
+    -nostdin -hide_banner -loglevel error
+    -init_hw_device vaapi=va:/dev/dri/renderD128 -init_hw_device qsv=qs@va
+    -filter_hw_device qs
+    -f lavfi -i testsrc=size=640x480:rate=30
+    -frames:v 30 -vf format=nv12,hwupload=extra_hw_frames=16,format=qsv
+    -c:v h264_qsv -f null -
+  changed_when: false
+  become: true
+  tags:
+    - jellyfin
