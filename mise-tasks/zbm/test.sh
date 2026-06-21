@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Boot the most recent ZBM build against the box variant's packer qcow2"
 #MISE interactive=true
-# Iterate on zbm/config.yaml + zbm/dracut.conf.d/* without re-running packer
+# Iterate on zbm/recovery-overlay.patch + zbm/dracut.conf.d/* without re-running packer
 # end-to-end: edit, `mise run zbm:build`, then `mise run zbm:test`. Picks the
 # newest zfsbootmenu-v*-<arch>.tar.gz under zbm-build/<arch>/, extracts it
 # into a temp dir, and direct-boots the kernel + initrd via test/launch.py
@@ -20,9 +20,8 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 tar -xzf "$tarball" -C "$tmp" --no-same-owner
-# Read the base cmdline baked into the EFI bundle (written by zbm:build from
-# config.yaml Kernel.CommandLine). Append test-only flags on top so the test
-# VM starts with the exact same base parameters as a real boot.
+# Read the base cmdline baked into the EFI bundle and append test-only flags
+# so the test VM starts with the same base parameters as a real boot.
 base_cmdline=$(cat "$tmp/cmdline")
 mkdir -p /tmp/zbm-extract
 
