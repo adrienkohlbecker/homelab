@@ -66,24 +66,22 @@ locals {
     instance_type = "c8id.2xlarge"
     max_size      = 1
   }
-  ci_ecr_pull_through_cache_rules = {
-    docker-hub = {
-      upstream_registry_url = "registry-1.docker.io"
-      credential_arn        = aws_secretsmanager_secret.ci_ecr_docker_hub.arn
-    }
-    github = {
-      upstream_registry_url = "ghcr.io"
-      credential_arn        = aws_secretsmanager_secret.ci_ecr_github.arn
-    }
-    gitlab = {
-      upstream_registry_url = "registry.gitlab.com"
-      credential_arn        = aws_secretsmanager_secret.ci_ecr_gitlab.arn
-    }
-    quay = {
-      upstream_registry_url = "quay.io"
-      credential_arn        = null
-    }
-  }
+  ci_qemu_image_read_statements = [
+    {
+      Sid      = "LocateQemuImages"
+      Effect   = "Allow"
+      Action   = "s3:GetBucketLocation"
+      Resource = aws_s3_bucket.ci_qemu_images.arn
+    },
+    # GetObject covers both the promoted.json pointer object and the bundle it
+    # points at.
+    {
+      Sid      = "ReadQemuImages"
+      Effect   = "Allow"
+      Action   = "s3:GetObject"
+      Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
+    },
+  ]
 }
 
 data "aws_caller_identity" "current" {}
@@ -334,7 +332,24 @@ resource "aws_secretsmanager_secret_version" "ci_ecr_gitlab" {
 }
 
 resource "aws_ecr_pull_through_cache_rule" "ci" {
-  for_each = local.ci_ecr_pull_through_cache_rules
+  for_each = {
+    docker-hub = {
+      upstream_registry_url = "registry-1.docker.io"
+      credential_arn        = aws_secretsmanager_secret.ci_ecr_docker_hub.arn
+    }
+    github = {
+      upstream_registry_url = "ghcr.io"
+      credential_arn        = aws_secretsmanager_secret.ci_ecr_github.arn
+    }
+    gitlab = {
+      upstream_registry_url = "registry.gitlab.com"
+      credential_arn        = aws_secretsmanager_secret.ci_ecr_gitlab.arn
+    }
+    quay = {
+      upstream_registry_url = "quay.io"
+      credential_arn        = null
+    }
+  }
 
   ecr_repository_prefix = each.key
   upstream_registry_url = each.value.upstream_registry_url
@@ -590,21 +605,7 @@ resource "aws_iam_role_policy" "ci_cell" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Sid      = "LocateQemuImages"
-        Effect   = "Allow"
-        Action   = "s3:GetBucketLocation"
-        Resource = aws_s3_bucket.ci_qemu_images.arn
-      },
-      # GetObject covers both the promoted.json pointer object and the bundle it
-      # points at.
-      {
-        Sid      = "ReadQemuImages"
-        Effect   = "Allow"
-        Action   = "s3:GetObject"
-        Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
-      },
+    Statement = concat(local.ci_qemu_image_read_statements, [
       # roles/test mirrors.yml mints an ECR login token on the cell (the
       # controller) and the qemu guest then pulls container layers through the
       # pull-through cache as this same identity. GetAuthorizationToken is only
@@ -629,7 +630,7 @@ resource "aws_iam_role_policy" "ci_cell" {
         ]
         Resource = "arn:aws:ecr:${local.ci_aws_region}:${local.ci_account_id}:repository/*"
       },
-    ]
+    ])
   })
 }
 
@@ -666,23 +667,8 @@ resource "aws_iam_role_policy" "ci_qemu_host" {
   role = aws_iam_role.ci_qemu_host.id
 
   policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid      = "LocateQemuImages"
-        Effect   = "Allow"
-        Action   = "s3:GetBucketLocation"
-        Resource = aws_s3_bucket.ci_qemu_images.arn
-      },
-      # GetObject covers both the promoted.json pointer object and the bundle it
-      # points at.
-      {
-        Sid      = "ReadQemuImages"
-        Effect   = "Allow"
-        Action   = "s3:GetObject"
-        Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
-      },
-    ]
+    Version   = "2012-10-17"
+    Statement = local.ci_qemu_image_read_statements
   })
 }
 
@@ -970,19 +956,16 @@ resource "aws_launch_template" "ci_qemu_host" {
   vpc_security_group_ids = [aws_security_group.ci_qemu_host.id]
   key_name               = aws_key_pair.ci_operator.key_name
 
-  tag_specifications {
-    resource_type = "instance"
-    tags = {
-      role = "ci-qemu-host"
-      pool = local.ci_qemu_host_pool.name
-    }
-  }
+  dynamic "tag_specifications" {
+    for_each = toset(["instance", "volume"])
+    iterator = tag_spec
 
-  tag_specifications {
-    resource_type = "volume"
-    tags = {
-      role = "ci-qemu-host"
-      pool = local.ci_qemu_host_pool.name
+    content {
+      resource_type = tag_spec.value
+      tags = {
+        role = "ci-qemu-host"
+        pool = local.ci_qemu_host_pool.name
+      }
     }
   }
 
@@ -1018,22 +1001,19 @@ resource "aws_autoscaling_group" "ci_qemu_host" {
     }
   }
 
-  tag {
-    key                 = "Name"
-    value               = local.ci_qemu_host_pool.name
-    propagate_at_launch = true
-  }
+  dynamic "tag" {
+    for_each = {
+      Name = local.ci_qemu_host_pool.name
+      role = "ci-qemu-host"
+      pool = local.ci_qemu_host_pool.name
+    }
+    iterator = asg_tag
 
-  tag {
-    key                 = "role"
-    value               = "ci-qemu-host"
-    propagate_at_launch = true
-  }
-
-  tag {
-    key                 = "pool"
-    value               = local.ci_qemu_host_pool.name
-    propagate_at_launch = true
+    content {
+      key                 = asg_tag.key
+      value               = asg_tag.value
+      propagate_at_launch = true
+    }
   }
 
   lifecycle {
@@ -1043,7 +1023,7 @@ resource "aws_autoscaling_group" "ci_qemu_host" {
 
 # Dedicated _site_test pool (see local.ci_qemu_site_pool). Reuses the role-cell
 # launch template -- same AMI, SG, instance profile, key, NVMe boot service --
-# and only overrides the instance type to the 4 vCPU c8id.xlarge. max_size = 1:
+# and only overrides the instance type to c8id.2xlarge. max_size = 1:
 # the site runner block pins capacity_per_instance = max_instances = 1, so this
 # ASG never holds more than the single site_test host.
 resource "aws_autoscaling_group" "ci_qemu_site" {
@@ -1078,22 +1058,19 @@ resource "aws_autoscaling_group" "ci_qemu_site" {
     }
   }
 
-  tag {
-    key                 = "Name"
-    value               = local.ci_qemu_site_pool.name
-    propagate_at_launch = true
-  }
+  dynamic "tag" {
+    for_each = {
+      Name = local.ci_qemu_site_pool.name
+      role = "ci-qemu-host"
+      pool = local.ci_qemu_site_pool.name
+    }
+    iterator = asg_tag
 
-  tag {
-    key                 = "role"
-    value               = "ci-qemu-host"
-    propagate_at_launch = true
-  }
-
-  tag {
-    key                 = "pool"
-    value               = local.ci_qemu_site_pool.name
-    propagate_at_launch = true
+    content {
+      key                 = asg_tag.key
+      value               = asg_tag.value
+      propagate_at_launch = true
+    }
   }
 
   lifecycle {
