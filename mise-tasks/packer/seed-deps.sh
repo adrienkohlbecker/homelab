@@ -80,7 +80,6 @@ test/launch.py \
 # backing-file open(2) qemu does at device init.
 echo "==> Publishing ${tmp} -> ${dst}"
 python3 packer/publish.py \
-  "${base}/.publish-lock" \
   "${tmp}" \
   "${dst}"
 
