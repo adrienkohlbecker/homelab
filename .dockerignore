@@ -13,7 +13,7 @@
 !packer
 packer/*
 !packer/qemu.pkr.hcl
-!packer/aws/ami.pkr.hcl
+!packer/aws/qemu_host.pkr.hcl
 !runner
 runner/*
 !runner/entrypoint.sh
