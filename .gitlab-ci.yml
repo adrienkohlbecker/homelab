@@ -54,6 +54,8 @@ variables:
   # it. Lets an image-only push (an AMI / fox / zbm bake) skip the expensive
   # fan-out while keeping a one-click spot-check available:
   #   git push -o ci.variable=SKIP_TEST_CELLS=true
+  # The all-manual child resolves to "skipped"; the test_cells trigger carries
+  # allow_failure under SKIP so that skipped child does not redden the parent.
   # A skip pipeline never becomes a green base (detect.py ignores allow_failure
   # cells), so it can't suppress a later diff. A push option overrides this
   # default. Empty = run the matrix as usual.
@@ -199,7 +201,15 @@ test_cells:
     # SKIP_TEST_CELLS no longer gates the trigger: the child is always built and
     # run so the cells are present. Under SKIP_TEST_CELLS they render as optional
     # manual jobs (detect.py), so triggering the child costs nothing -- the child
-    # completes immediately with its cells waiting to be click-started.
+    # completes immediately with its cells waiting to be click-started. Those
+    # all-manual cells leave the child in a "skipped" state, which `strategy:
+    # depend` would mirror onto this parent as a failure -- so under SKIP allow
+    # this trigger to fail, keeping the skip pipeline green. (Source gating is
+    # unchanged: still web/push only, just split to attach allow_failure.)
+    - if: $CI_PIPELINE_SOURCE == "web" && $SKIP_TEST_CELLS == "true"
+      allow_failure: true
+    - if: $CI_PIPELINE_SOURCE == "push" && $SKIP_TEST_CELLS == "true"
+      allow_failure: true
     - if: $CI_PIPELINE_SOURCE == "web"
     - if: $CI_PIPELINE_SOURCE == "push"
   trigger:
