@@ -7,22 +7,16 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
-case "${1:-}" in
--h | --help)
-  cat <<'EOF'
-Usage: mise run packer:qemu-host-ami -- [--ubuntu noble] [--promote]
-EOF
-  exit 0
-  ;;
-esac
-
 BAKE_SCHEDULER_ROLE_ARN="arn:aws:iam::000390721279:role/homelab-ci-cell-scheduler"
 BAKE_BACKSTOP_TTL_HOURS=3
+region=eu-central-1
+machine=qemu_host
+ubuntu="${usage_ubuntu:-noble}"
+build_id="${CI_PIPELINE_ID:-local}"
 
 # CI job timeouts can skip packer's cleanup. Arm a self-deleting terminate
 # schedule for the build instance, then disarm it on normal exit.
 bake_backstop_arm() {
-  local region="$1" build_id="$2" machine="$3" ubuntu="$4" state_file="$5"
   [ -n "${CI:-}" ] || return 0
 
   local iid="" waited=0
@@ -47,7 +41,7 @@ bake_backstop_arm() {
   expires=$(date -u -d "+${BAKE_BACKSTOP_TTL_HOURS} hours" +%Y-%m-%dT%H:%M:%S 2>/dev/null ||
     date -u -v "+${BAKE_BACKSTOP_TTL_HOURS}H" +%Y-%m-%dT%H:%M:%S)
   schedule_name="ci-bake-${iid}"
-  printf '%s\n' "$schedule_name" >"$state_file"
+  printf '%s\n' "$schedule_name" >"$backstop_state"
 
   aws --region "$region" ec2 create-tags --resources "$iid" \
     --tags "Key=expires_at,Value=${expires}Z" >/dev/null 2>&1 || true
@@ -69,26 +63,21 @@ print(json.dumps({
     echo "bake-backstop: armed ${schedule_name} (terminates ${iid} at ${expires}Z)" >&2
   else
     echo "bake-backstop: could not create ${schedule_name} (IAM not applied?); not armed" >&2
-    : >"$state_file"
+    : >"$backstop_state"
   fi
 }
 
 bake_backstop_disarm() {
-  local region="$1" state_file="$2" pid="${3:-}"
-  if [ -n "$pid" ]; then
-    kill "$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
+  if [ -n "$backstop_pid" ]; then
+    kill "$backstop_pid" 2>/dev/null || true
+    wait "$backstop_pid" 2>/dev/null || true
   fi
-  [ -f "$state_file" ] || return 0
+  [ -f "$backstop_state" ] || return 0
   local schedule_name
-  schedule_name=$(awk 'NR==1{print}' "$state_file")
+  schedule_name=$(awk 'NR==1{print}' "$backstop_state")
   [ -n "$schedule_name" ] || return 0
   aws --region "$region" scheduler delete-schedule --name "$schedule_name" >/dev/null 2>&1 || true
 }
-
-region=eu-central-1
-machine=qemu_host
-ubuntu="${usage_ubuntu:-noble}"
 
 case "$ubuntu" in
 noble) ;;
@@ -118,10 +107,10 @@ fi
 manifest=$(mktemp)
 backstop_state=$(mktemp)
 backstop_pid=""
-trap 'bake_backstop_disarm "$region" "$backstop_state" "$backstop_pid"; rm -rf "$manifest" "$backstop_state"' EXIT
+trap 'bake_backstop_disarm; rm -f "$manifest" "$backstop_state"' EXIT
 rm -f "$manifest"
 
-bake_backstop_arm "$region" "${CI_PIPELINE_ID:-local}" "$machine" "$ubuntu" "$backstop_state" &
+bake_backstop_arm &
 backstop_pid=$!
 
 packer build \
@@ -130,7 +119,7 @@ packer build \
   "--on-error=${on_error}" \
   -only="amazon-ebs.qemu_host" \
   -var "ubuntu_name=${ubuntu}" \
-  -var "qemu_host_build_id=${CI_PIPELINE_ID:-local}" \
+  -var "qemu_host_build_id=${build_id}" \
   -var "qemu_host_manifest_path=${manifest}" \
   -var "gitlab_runner_url=${runner_url}" \
   -var "gitlab_runner_sha256=${runner_sha256}" \
