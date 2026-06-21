@@ -143,9 +143,9 @@ locals {
   #   partitions, matches lab prod). Empty => rpool-only image.
   # - image_target: qemu images are harness-verified; hetzner images grow on
   #   first cloud boot and are verified by mise-tasks/packer/hetzner.sh.
-  # - qemu_test_image: set only for qemu test fixtures; gates test-only
+  # - qemu_test_image: true only for qemu test fixtures; gates test-only
   #   kernel tuning and ambient-unit masking in chroot.sh.
-  # - zfs_arc_max: optional ARC cap for small-RAM cloud images.
+  # - zfs_arc_max: optional ARC cap for small-RAM cloud images; 0 disables it.
   # Add an entry whenever a new source "qemu.ubuntu" block joins the
   # build.
   variant_config = {
@@ -158,8 +158,8 @@ locals {
       swap_size       = "8G"
       extra_pools     = "apoc"
       image_target    = "qemu"
-      qemu_test_image = "1"
-      zfs_arc_max     = ""
+      qemu_test_image = true
+      zfs_arc_max     = 0
     }
     # lab: mdadm-EFI + 3-disk mirror rpool + dozer mirror + tank raidz2 +
     # mouse mirror. Matches the lab prod host. swap_size bakes an 8G rpool
@@ -173,8 +173,8 @@ locals {
       swap_size       = "8G"
       extra_pools     = "dozer tank_mouse"
       image_target    = "qemu"
-      qemu_test_image = "1"
-      zfs_arc_max     = ""
+      qemu_test_image = true
+      zfs_arc_max     = 0
     }
     # box: single-disk rpool + a 1G flat `zee` pool. The default push-CI
     # ZFS-on-root fixture. The second pool turns box from rpool-only into a
@@ -208,8 +208,8 @@ locals {
       swap_size       = "4G"
       extra_pools     = "zee"
       image_target    = "qemu"
-      qemu_test_image = "1"
-      zfs_arc_max     = ""
+      qemu_test_image = true
+      zfs_arc_max     = 0
     }
     # hetzner: ZFS-root image for Hetzner Cloud. Small rpool disk — state is MB;
     # chroot.sh's hetzner_growpart.service grows it into cpx22's ~76G on first
@@ -222,8 +222,8 @@ locals {
       swap_size       = "4G"
       extra_pools     = ""
       image_target    = "hetzner"
-      qemu_test_image = ""
-      zfs_arc_max     = "536870912"
+      qemu_test_image = false
+      zfs_arc_max     = 536870912
     }
   }
 
@@ -387,12 +387,12 @@ build {
       "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.arch_cfg.upstream_security
       "SSH_KEY_PUB"                     = join("\n", local.vagrant_ssh_keys)
       "IMAGE_TARGET"                    = local.variant_config[source.name].image_target
-      "ZFS_ARC_MAX"                     = local.variant_config[source.name].zfs_arc_max
+      "ZFS_ARC_MAX"                     = local.variant_config[source.name].zfs_arc_max == 0 ? "" : tostring(local.variant_config[source.name].zfs_arc_max)
       # "1" only for the qemu test fixtures (box/lab/pug); "" for hetzner. Gates
       # the test-only kernel tuning + ambient-unit masking in chroot.sh. A
       # bare-metal copy-paste run of chroot.sh leaves it unset, so prod never
       # picks up either.
-      "QEMU_TEST_IMAGE" = local.variant_config[source.name].qemu_test_image
+      "QEMU_TEST_IMAGE" = local.variant_config[source.name].qemu_test_image ? "1" : ""
     }
   }
 

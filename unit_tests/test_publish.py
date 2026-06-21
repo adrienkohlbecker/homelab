@@ -48,34 +48,36 @@ class TestMainAtomicPublish:
         src = tmp_path / "src"
         src.mkdir()
         (src / "image.qcow2").write_text("new")
-        output_dir = tmp_path / "out"
-        output_dir.mkdir()
-        dst = output_dir / "dst"
+        artifact_dir = tmp_path / "artifacts"
+        artifact_dir.mkdir()
+        dst = artifact_dir / "dst"
+        lockfile = tmp_path / ".publish-lock"
 
-        monkeypatch.setattr("sys.argv", ["publish.py", str(output_dir), str(src), str(dst)])
+        monkeypatch.setattr("sys.argv", ["publish.py", str(lockfile), str(src), str(dst)])
         pub.main()
 
         assert dst.exists()
         assert (dst / "image.qcow2").read_text() == "new"
         assert not src.exists()
-        assert (output_dir / ".publish-lock").exists()
+        assert lockfile.exists()
 
     def test_replaces_existing_artifact(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         src = tmp_path / "src"
         src.mkdir()
         (src / "image.qcow2").write_text("v2")
-        output_dir = tmp_path / "out"
-        output_dir.mkdir()
-        dst = output_dir / "dst"
+        artifact_dir = tmp_path / "artifacts"
+        artifact_dir.mkdir()
+        dst = artifact_dir / "dst"
         dst.mkdir()
         (dst / "image.qcow2").write_text("v1")
+        lockfile = tmp_path / ".publish-lock"
 
-        monkeypatch.setattr("sys.argv", ["publish.py", str(output_dir), str(src), str(dst)])
+        monkeypatch.setattr("sys.argv", ["publish.py", str(lockfile), str(src), str(dst)])
         pub.main()
 
         assert (dst / "image.qcow2").read_text() == "v2"
         assert not src.exists()
-        assert not any(p.name.startswith("dst.outgoing") for p in output_dir.iterdir())
+        assert not any(p.name.startswith("dst.outgoing") for p in artifact_dir.iterdir())
 
     def test_usage_on_bad_args(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.argv", ["publish.py"])
