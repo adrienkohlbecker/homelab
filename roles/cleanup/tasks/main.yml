@@ -90,13 +90,12 @@
   tags:
     - cleanup
 
+# cloud-init is conditional: fox keeps it (cleanup_purge_cloud_init=false) because
+# Hetzner relies on it for first-boot bootstrap + networking; everywhere else it
+# is purged. snapd/fwupd/os-prober are unwanted on every host.
 - name: Uninstall unneeded packages
   apt:
-    name:
-      - cloud-init
-      - snapd
-      - fwupd
-      - os-prober
+    name: "{{ ['snapd', 'fwupd', 'os-prober'] + (['cloud-init'] if cleanup_purge_cloud_init else []) }}"
     state: absent
     autoremove: true
     purge: true

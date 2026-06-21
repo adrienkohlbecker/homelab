@@ -1,0 +1,7 @@
+# Purge cloud-init as an unwanted baseline package. True everywhere by default:
+# the debootstrap'd ZFS boxes never have it (no-op) and the minimal cloud-image
+# fixture should shed it. fox overrides this to false in host_vars -- on Hetzner
+# cloud-init owns first-boot bootstrap (terraform user_data injects the ak user
+# + SSH key, locks root) and networking, so purging it would break rebuilds and
+# the private-NIC bring-up ansible reaches fox through.
+cleanup_purge_cloud_init: true

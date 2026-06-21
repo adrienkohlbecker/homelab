@@ -59,6 +59,12 @@ netplan:
         use-dns: false
       optional: true
 
+# Keep cloud-init installed: on Hetzner it owns first-boot bootstrap (terraform
+# user_data injects the ak user + SSH key, locks root) and network bring-up,
+# including the enp7s0 private NIC ansible reaches fox through (10.123.55.2). The
+# cleanup role purges cloud-init everywhere else; fox opts out.
+cleanup_purge_cloud_init: false
+
 zfs_arc_min: 0
 zfs_arc_max: 536870912
 # rpool carries autoexpand=on (chroot.sh sets it so the 20G image grows into
