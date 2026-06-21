@@ -71,6 +71,12 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/media:/media:ro \
 {% if has_transcoding_acceleration %}
     --device /dev/dri/renderD128:/dev/dri/renderD128:rw \
+{# --device only emits a `c 226:128 rw` cgroup rule (no mknod bit). crun 0.17    #}
+{# generates a device BPF filter that denies the zero-access access(F_OK) probe  #}
+{# libdrm runs to validate the render node unless a rule carrying `m` covers it, #}
+{# so VAAPI/QSV init fails with "Cannot open a VA display" despite open() being  #}
+{# allowed. An explicit DRM-major rule with the mknod bit lets the probe pass.   #}
+    --device-cgroup-rule='c 226:* rwm' \
     --group-add={{ getent_group.render[1] | int }} \
 {% endif %}
     --env "TZ={{ system_timezone }}" \
