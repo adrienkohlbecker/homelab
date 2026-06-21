@@ -16,7 +16,7 @@ set -euo pipefail
 # Parent directory for published source artifacts.
 : "${OUTPUT_DIRECTORY:?}"
 
-packer_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 build_dir="$BUILD_DIRECTORY/$SOURCE_NAME"
 
 # packer-ubuntu is the residual cloud-image OS disk. provision.sh installs onto
@@ -35,7 +35,7 @@ for disk in "${disks[@]}"; do
 done
 
 if [ "$IMAGE_TARGET" = "qemu" ]; then
-  "$packer_dir/../test/launch.py" \
+  "$script_dir/../../test/launch.py" \
     --machine "$SOURCE_NAME" \
     --ubuntu "$UBUNTU_NAME" \
     --timeout 300 \
@@ -56,4 +56,4 @@ if [ "$PUBLISH" != "true" ]; then
   exit 0
 fi
 
-python3 "$packer_dir/publish.py" "$OUTPUT_DIRECTORY/.publish-lock" "$build_dir" "$OUTPUT_DIRECTORY/$SOURCE_NAME"
+"$script_dir/../publish.py" "$OUTPUT_DIRECTORY/.publish-lock" "$build_dir" "$OUTPUT_DIRECTORY/$SOURCE_NAME"
