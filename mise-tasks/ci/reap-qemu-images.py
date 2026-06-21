@@ -15,11 +15,10 @@ The bucket layout is:
 
     s3://homelab-ci-images/<ubuntu>/<machine>/<build-id>/
 
-This task keeps the promoted build, the newest extra builds, and anything
-younger than the grace period. It prints the deletion plan by default and only
-mutates the bucket when called with --apply. The bucket lifecycle handles
-noncurrent versions, so a stale prefix is swept by deleting every object
-version.
+This task keeps the promoted build, the newest 3 extra builds, and anything
+younger than 7 days. It prints the deletion plan by default and only mutates the
+bucket when called with --apply. The bucket lifecycle handles noncurrent
+versions, so a stale prefix is swept by deleting every object version.
 """
 
 from __future__ import annotations
@@ -35,10 +34,12 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-DEFAULT_BUCKET = "homelab-ci-images"
-DEFAULT_REGION = "eu-central-1"
-DEFAULT_MACHINES = ("box", "box_deps")
-DEFAULT_UBUNTUS = ("jammy", "noble", "resolute")
+S3_BUCKET = "homelab-ci-images"
+AWS_REGION = "eu-central-1"
+MACHINES = ("box", "box_deps")
+UBUNTUS = ("jammy", "noble", "resolute")
+KEEP_NEWEST = 3
+KEEP_DAYS = 7
 POINTER_NAME = "promoted.json"
 DELETE_BATCH_SIZE = 1000
 
@@ -61,38 +62,16 @@ class Build:
         return bool(self.keep_reasons)
 
 
-def parse_csv(value: str) -> tuple[str, ...]:
-    items = tuple(item.strip() for item in value.split(",") if item.strip())
-    if not items:
-        raise argparse.ArgumentTypeError("must contain at least one value")
-    return items
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--bucket", default=DEFAULT_BUCKET)
-    parser.add_argument("--region", default=DEFAULT_REGION)
-    parser.add_argument("--machines", type=parse_csv, default=DEFAULT_MACHINES)
-    parser.add_argument("--ubuntus", type=parse_csv, default=DEFAULT_UBUNTUS)
-    parser.add_argument("--keep-newest", type=int, default=3)
-    parser.add_argument("--keep-days", type=int, default=7)
     parser.add_argument("--apply", action="store_true")
-    args = parser.parse_args()
-    if args.keep_newest < 0:
-        parser.error("--keep-newest must be >= 0")
-    if args.keep_days < 0:
-        parser.error("--keep-days must be >= 0")
-    return args
+    return parser.parse_args()
 
 
-def s3_client(region: str):
-    return boto3.client("s3", region_name=region, config=CFG)
-
-
-def promoted_build(s3, bucket: str, machine: str, ubuntu: str) -> str | None:
+def promoted_build(s3, machine: str, ubuntu: str) -> str | None:
     key = f"{ubuntu}/{machine}/{POINTER_NAME}"
     try:
-        body = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
+        body = s3.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read()
     except ClientError as e:
         code = e.response["Error"].get("Code", "Error")
         status = e.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
@@ -104,11 +83,11 @@ def promoted_build(s3, bucket: str, machine: str, ubuntu: str) -> str | None:
     return build_id or None
 
 
-def list_build_ids(s3, bucket: str, machine: str, ubuntu: str) -> list[str]:
+def list_build_ids(s3, machine: str, ubuntu: str) -> list[str]:
     root = f"{ubuntu}/{machine}/"
     build_ids: list[str] = []
     paginator = s3.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket, Prefix=root, Delimiter="/"):
+    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=root, Delimiter="/"):
         for common in page.get("CommonPrefixes", []):
             prefix = common["Prefix"]
             build_id = prefix.removeprefix(root).strip("/")
@@ -117,13 +96,13 @@ def list_build_ids(s3, bucket: str, machine: str, ubuntu: str) -> list[str]:
     return sorted(build_ids)
 
 
-def build_stats(s3, bucket: str, machine: str, ubuntu: str, build_id: str) -> Build:
+def build_stats(s3, machine: str, ubuntu: str, build_id: str) -> Build:
     prefix = f"{ubuntu}/{machine}/{build_id}/"
     last_modified: dt.datetime | None = None
     size_bytes = 0
     object_count = 0
     paginator = s3.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
         for obj in page.get("Contents", []):
             object_count += 1
             size_bytes += int(obj["Size"])
@@ -166,32 +145,28 @@ def mark_keep_reasons(builds: list[Build], promoted: str | None, keep_newest: in
             build.keep_reasons.append(f"younger-than-{keep_days}d")
 
 
-def iter_versions(s3, bucket: str, prefix: str) -> Iterable[dict[str, str]]:
+def iter_versions(s3, prefix: str) -> Iterable[dict[str, str]]:
     """Yield every object version + delete marker under a prefix."""
     paginator = s3.get_paginator("list_object_versions")
-    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
         for key in ("Versions", "DeleteMarkers"):
             for item in page.get(key, []):
                 yield {"Key": item["Key"], "VersionId": item["VersionId"]}
 
 
-def delete_in_batches(s3, bucket: str, items: Iterable[dict[str, str]]) -> int:
+def delete_in_batches(s3, items: Iterable[dict[str, str]]) -> int:
     deleted = 0
     batch: list[dict[str, str]] = []
     for item in items:
         batch.append(item)
         if len(batch) == DELETE_BATCH_SIZE:
-            s3.delete_objects(Bucket=bucket, Delete={"Objects": batch, "Quiet": True})
+            s3.delete_objects(Bucket=S3_BUCKET, Delete={"Objects": batch, "Quiet": True})
             deleted += len(batch)
             batch = []
     if batch:
-        s3.delete_objects(Bucket=bucket, Delete={"Objects": batch, "Quiet": True})
+        s3.delete_objects(Bucket=S3_BUCKET, Delete={"Objects": batch, "Quiet": True})
         deleted += len(batch)
     return deleted
-
-
-def delete_prefix(s3, bucket: str, prefix: str) -> int:
-    return delete_in_batches(s3, bucket, iter_versions(s3, bucket, prefix))
 
 
 def human_size(size: int) -> str:
@@ -206,26 +181,23 @@ def human_size(size: int) -> str:
 
 def main() -> int:
     args = parse_args()
-    s3 = s3_client(args.region)
+    s3 = boto3.client("s3", region_name=AWS_REGION, config=CFG)
 
     print(
-        f"== QEMU image reaper: s3://{args.bucket}/ "
-        f"(keep promoted + newest {args.keep_newest} + younger than {args.keep_days}d)"
+        f"== QEMU image reaper: s3://{S3_BUCKET}/ "
+        f"(keep promoted + newest {KEEP_NEWEST} + younger than {KEEP_DAYS}d)"
     )
     if not args.apply:
         print("DRY RUN: pass --apply to delete stale build prefixes")
 
     stale: list[Build] = []
     kept: list[Build] = []
-    for ubuntu in args.ubuntus:
-        for machine in args.machines:
-            promoted = promoted_build(s3, args.bucket, machine, ubuntu)
-            builds = [
-                build_stats(s3, args.bucket, machine, ubuntu, build_id)
-                for build_id in list_build_ids(s3, args.bucket, machine, ubuntu)
-            ]
+    for ubuntu in UBUNTUS:
+        for machine in MACHINES:
+            promoted = promoted_build(s3, machine, ubuntu)
+            builds = [build_stats(s3, machine, ubuntu, build_id) for build_id in list_build_ids(s3, machine, ubuntu)]
             builds.sort(key=lambda build: build.last_modified, reverse=True)
-            mark_keep_reasons(builds, promoted, args.keep_newest, args.keep_days)
+            mark_keep_reasons(builds, promoted, KEEP_NEWEST, KEEP_DAYS)
             if promoted and all(build.build_id != promoted for build in builds):
                 print(f"WARN: {ubuntu}/{machine} promotes missing build {promoted}", file=sys.stderr)
             if not builds:
@@ -250,8 +222,8 @@ def main() -> int:
 
     deleted = 0
     for build in stale:
-        print(f"==> deleting all versions under s3://{args.bucket}/{build.prefix}")
-        deleted += delete_prefix(s3, args.bucket, build.prefix)
+        print(f"==> deleting all versions under s3://{S3_BUCKET}/{build.prefix}")
+        deleted += delete_in_batches(s3, iter_versions(s3, build.prefix))
     print(f"Deleted {deleted} object versions/delete markers")
     return 0
 
