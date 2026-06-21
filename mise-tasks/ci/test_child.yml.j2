@@ -153,7 +153,7 @@ stages:
   stage: {{ group.stage }}
   variables:
     ROLE: {{ cell.role }}
-    VARIANT: {{ cell.variant }}
+    VARIANT: {{ cell.machine }}
     UBUNTU: {{ cell.ubuntu }}
   script:
     # External watchdog around the harness. testrole.py enforces --timeout 1500

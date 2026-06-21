@@ -66,8 +66,7 @@ class TestClassifyChangedFiles:
             ]
         )
         assert result.direct_roles == ["nginx", "podman"]
-        assert not result.packer_sources_affected
-        assert not result.ci_image_changed
+        assert not result.packer_changed
         assert result.full_universe_paths == []
 
     def test_full_universe_trigger(self) -> None:
@@ -76,24 +75,7 @@ class TestClassifyChangedFiles:
 
     def test_packer_changed(self) -> None:
         result = detect.classify_changed_files(["packer/qemu.pkr.hcl"])
-        assert result.packer_sources_affected
-
-    def test_ci_image_on_master(self) -> None:
-        result = detect.classify_changed_files(["Dockerfile"], is_master_push=True)
-        assert result.ci_image_changed is True
-
-    def test_ci_image_off_master(self) -> None:
-        result = detect.classify_changed_files(["Dockerfile"], is_master_push=False)
-        assert result.ci_image_changed is False
-
-    def test_zbm_changed(self) -> None:
-        for path in ("zbm/config.yaml", "zbm/dracut.conf.d/recovery.conf", "mise-tasks/zbm/build.sh"):
-            assert detect.classify_changed_files([path]).zbm_changed is True, path
-
-    def test_zbm_unchanged(self) -> None:
-        assert detect.classify_changed_files(["roles/nginx/tasks/main.yml"]).zbm_changed is False
-        # mise.toml carries ZBM_VERSION — a version bump must trigger the zbm build.
-        assert detect.classify_changed_files(["mise.toml"]).zbm_changed is True
+        assert result.packer_changed
 
     def test_mixed_paths(self) -> None:
         paths = [
@@ -102,15 +84,14 @@ class TestClassifyChangedFiles:
             "group_vars/all/main.yml",
             "Dockerfile",
         ]
-        result = detect.classify_changed_files(paths, is_master_push=True)
+        result = detect.classify_changed_files(paths)
         assert result.direct_roles == ["nginx"]
-        assert result.packer_sources_affected
-        assert result.ci_image_changed is True
+        assert result.packer_changed
         assert result.full_universe_paths == ["group_vars/all/main.yml"]
 
     def test_empty_paths(self) -> None:
         result = detect.classify_changed_files([])
-        assert result == detect.ChangeClassification([], [], set(), False, set(), False)
+        assert result == detect.ChangeClassification([], [], False, set())
 
     def test_blank_lines_ignored(self) -> None:
         result = detect.classify_changed_files(["", "roles/nginx/tasks/main.yml", ""])
@@ -142,7 +123,7 @@ class TestClassifyChangedFiles:
                 "roles/zfs/tasks/main.yml",
             ]
         )
-        assert result.packer_sources_affected
+        assert result.packer_changed
         assert result.direct_roles == ["zfs"]
 
     def test_machine_universe_box(self) -> None:
@@ -181,30 +162,6 @@ class TestClassifyChangedFiles:
     def test_machine_universe_multiple(self) -> None:
         result = detect.classify_changed_files(["host_vars/box.yml", "host_vars/minimal.yml"])
         assert result.machine_universe == {"box", "minimal"}
-
-
-# ---------------------------------------------------------------------------
-# _packer_sources_for
-# ---------------------------------------------------------------------------
-
-
-class TestPackerSourcesFor:
-    @pytest.mark.parametrize(
-        "path, expected",
-        [
-            ("packer/ubuntu_images.json", {"qemu"}),
-            ("mise-tasks/packer/hetzner.sh", {"hetzner_upload"}),
-            ("mise-tasks/packer/_hetzner_rescue.sh", {"hetzner_upload"}),
-            ("mise-tasks/packer/hcloud-prune-snapshots.sh", {"hetzner_upload"}),
-            ("packer/qemu.pkr.hcl", {"qemu"}),
-            ("packer/scripts/chroot.sh", {"qemu"}),
-            ("mise-tasks/packer/build", {"qemu"}),
-            ("roles/nginx/tasks/main.yml", set()),
-            ("README.md", set()),
-        ],
-    )
-    def test_mapping(self, path: str, expected: set[str]) -> None:
-        assert detect._packer_sources_for(path) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -401,31 +358,7 @@ class TestPathClassificationRegexes:
     def test_packer_reject(self, path: str) -> None:
         assert not detect.PACKER_PATHS_RE.match(path), f"should not match: {path}"
 
-    @pytest.mark.parametrize(
-        "path",
-        [
-            "Dockerfile",
-            "mise.toml",
-            "pyproject.toml",
-            "uv.lock",
-            "packer/qemu.pkr.hcl",
-        ],
-    )
-    def test_ci_image_match(self, path: str) -> None:
-        assert detect.CI_IMAGE_INPUTS_RE.match(path), f"should match: {path}"
 
-    @pytest.mark.parametrize(
-        "path",
-        [
-            "packer/scripts/chroot.sh",
-            "ansible.cfg",
-        ],
-    )
-    def test_ci_image_reject(self, path: str) -> None:
-        assert not detect.CI_IMAGE_INPUTS_RE.match(path), f"should not match: {path}"
-
-
-# ---------------------------------------------------------------------------
 # Git helpers
 # ---------------------------------------------------------------------------
 
@@ -823,7 +756,7 @@ class TestResolveGreenBaseGitlab:
         assert detect.resolve_green_base_gitlab(branch="m", **self._kw(head_sha="")) is None
 
 
-class TestGitlabGreenBaseEnv:
+class TestGitlabApiCreds:
     def _env(self, monkeypatch, **kv):
         for k in ("CI_API_V4_URL", "CI_PROJECT_ID", "GITLAB_API_TOKEN", "CI_JOB_TOKEN"):
             monkeypatch.delenv(k, raising=False)
@@ -838,40 +771,19 @@ class TestGitlabGreenBaseEnv:
             GITLAB_API_TOKEN="pat",
             CI_JOB_TOKEN="jobtok",
         )
-        seen = {}
-
-        def mock_resolve(**kw):
-            seen.update(kw)
-            return "green"
-
-        monkeypatch.setattr(detect, "resolve_green_base_gitlab", mock_resolve)
-        assert detect._gitlab_green_base("master", "head", "master", lambda m: None) == "green"
-        assert seen["token"] == "pat"
-        assert seen["token_kind"] == "private"
-        assert seen["project_api"] == "http://api/projects/1"
+        assert detect._gitlab_api_creds() == ("http://api/projects/1", "pat", "private")
 
     def test_falls_back_to_job_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._env(monkeypatch, CI_API_V4_URL="http://api", CI_PROJECT_ID="1", CI_JOB_TOKEN="jobtok")
-        seen = {}
-
-        def mock_resolve(**kw):
-            seen.update(kw)
-            return "green"
-
-        monkeypatch.setattr(detect, "resolve_green_base_gitlab", mock_resolve)
-        assert detect._gitlab_green_base("master", "head", "master", lambda m: None) == "green"
-        assert seen["token"] == "jobtok"
-        assert seen["token_kind"] == "job"
+        assert detect._gitlab_api_creds() == ("http://api/projects/1", "jobtok", "job")
 
     def test_none_when_no_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._env(monkeypatch, CI_API_V4_URL="http://api", CI_PROJECT_ID="1")
-        logs = []
-        assert detect._gitlab_green_base("master", "head", "master", logs.append) is None
-        assert any("no green pipeline" in m for m in logs)
+        assert detect._gitlab_api_creds() is None
 
     def test_none_when_no_api_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._env(monkeypatch, CI_PROJECT_ID="1", CI_JOB_TOKEN="jobtok")
-        assert detect._gitlab_green_base("master", "head", "master", lambda m: None) is None
+        assert detect._gitlab_api_creds() is None
 
 
 # ---------------------------------------------------------------------------
@@ -1172,7 +1084,6 @@ def _render_child_doc(
 class TestTargets:
     def test_only_two_qemu_targets(self) -> None:
         assert sorted(detect.TARGETS) == ["aws_qemu", "lab"]
-        assert detect.TARGET_NAMES == ["aws_qemu", "lab"]
         assert "aws" not in detect.TARGETS
 
     def test_target_fields(self) -> None:
@@ -1435,7 +1346,7 @@ class TestCmdGitlab:
     def _no_green_api(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Keep these tests offline: a real CI environment exports the GitLab API
         # vars, which would otherwise drive a live green-pipeline lookup.
-        monkeypatch.setattr(detect, "_gitlab_green_base", lambda *a, **k: None)
+        monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: None)
 
     def test_all_flag_full_universe(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
@@ -1491,9 +1402,6 @@ class TestCmdGitlab:
         assert loaded[".cell"]["tags"] == ["aws-shell-qemu"]
         assert loaded[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
 
-    def test_gitlab_in_commands(self) -> None:
-        assert "gitlab" in detect._COMMANDS
-
 
 class TestMainEntrypoint:
     def test_no_args_returns_2(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1503,6 +1411,3 @@ class TestMainEntrypoint:
     def test_unknown_command_returns_2(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.argv", ["detect.py", "bogus"])
         assert detect.main() == 2
-
-    def test_gitlab_is_only_command(self) -> None:
-        assert set(detect._COMMANDS) == {"gitlab"}

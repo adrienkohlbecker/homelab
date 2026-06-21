@@ -82,42 +82,8 @@ PACKER_PATH_PATTERNS: list[str] = [
     r"mise-tasks/packer/",
 ]
 
-# Maps changed-file patterns to the packer sources they affect.
-# "qemu" = all QEMU-based sources (box/lab/pug/hetzner — they share
-# qemu.pkr.hcl, chroot.sh, provision.sh). "hetzner_upload" = hetzner's
-# upload/prune step only (not the shared build). Any packer/ or
-# mise-tasks/packer/ file not explicitly listed falls through to "qemu"
-# (safe default).
-PACKER_SOURCE_MAP: list[tuple[str, list[str]]] = [
-    (r"packer/ubuntu_images\.json", ["qemu"]),
-    (r"mise-tasks/packer/hetzner\.sh", ["hetzner_upload"]),
-    (r"mise-tasks/packer/_hetzner_rescue\.sh", ["hetzner_upload"]),
-    (r"mise-tasks/packer/hcloud-prune-snapshots\.sh", ["hetzner_upload"]),
-]
-_PACKER_SOURCE_MAP_COMPILED = [(re.compile(r"^" + pat + r"$"), srcs) for pat, srcs in PACKER_SOURCE_MAP]
-
-CI_IMAGE_INPUT_PATTERNS: list[str] = [
-    r"Dockerfile",
-    r"mise\.toml",
-    r"pyproject\.toml",
-    r"uv\.lock",
-    r"packer/qemu\.pkr\.hcl",
-]
-
-# The custom ZFSBootMenu recovery image is built out-of-band — not a role, not
-# a packer source, and built by the manual zbm_build GitLab CI job rather than
-# anything this matrix dispatches. zbm_changed flags changes under these paths
-# for a future auto-validation hookup; nothing consumes it yet.
-ZBM_PATH_PATTERNS: list[str] = [
-    r"zbm/",
-    r"mise-tasks/zbm/",
-    r"mise\.toml",
-]
-
 FULL_UNIVERSE_RE = re.compile(r"^(" + "|".join(FULL_UNIVERSE_PATTERNS) + r")$")
 PACKER_PATHS_RE = re.compile(r"^(" + "|".join(PACKER_PATH_PATTERNS) + r")")
-CI_IMAGE_INPUTS_RE = re.compile(r"^(" + "|".join(CI_IMAGE_INPUT_PATTERNS) + r")$")
-ZBM_PATHS_RE = re.compile(r"^(" + "|".join(ZBM_PATH_PATTERNS) + r")")
 ROLE_PATH_RE = re.compile(r"^roles/([^/]+)/")
 
 
@@ -129,56 +95,28 @@ ROLE_PATH_RE = re.compile(r"^roles/([^/]+)/")
 class ChangeClassification(NamedTuple):
     direct_roles: list[str]
     full_universe_paths: list[str]
-    packer_sources_affected: set[str]
-    ci_image_changed: bool
+    packer_changed: bool
     machine_universe: set[str]
-    zbm_changed: bool
 
 
-def _packer_sources_for(path: str) -> set[str]:
-    """Map a changed file to the packer sources it affects."""
-    for pat, srcs in _PACKER_SOURCE_MAP_COMPILED:
-        if pat.match(path):
-            return set(srcs)
-    if PACKER_PATHS_RE.match(path):
-        return {"qemu"}
-    return set()
-
-
-def _machine_universe_for(path: str) -> str | None:
-    """Return the machine name if path is a machine-universe trigger."""
-    for pat, machine in _MACHINE_UNIVERSE_COMPILED:
-        if pat.match(path):
-            return machine
-    return None
-
-
-def classify_changed_files(
-    paths: list[str],
-    *,
-    is_master_push: bool = False,
-) -> ChangeClassification:
+def classify_changed_files(paths: list[str]) -> ChangeClassification:
     """Classify changed file paths into CI-relevant categories."""
     roles: set[str] = set()
     full_universe: list[str] = []
-    packer_sources: set[str] = set()
-    ci_image_changed = False
+    packer_changed = False
     machine_universe: set[str] = set()
-    zbm_changed = False
 
     for path in paths:
         if not path:
             continue
         if FULL_UNIVERSE_RE.match(path):
             full_universe.append(path)
-        packer_sources |= _packer_sources_for(path)
-        if is_master_push and CI_IMAGE_INPUTS_RE.match(path):
-            ci_image_changed = True
-        mu = _machine_universe_for(path)
-        if mu:
-            machine_universe.add(mu)
-        if ZBM_PATHS_RE.match(path):
-            zbm_changed = True
+        if PACKER_PATHS_RE.match(path):
+            packer_changed = True
+        for pat, machine in _MACHINE_UNIVERSE_COMPILED:
+            if pat.match(path):
+                machine_universe.add(machine)
+                break
         m = ROLE_PATH_RE.match(path)
         if m:
             roles.add(m.group(1))
@@ -186,10 +124,8 @@ def classify_changed_files(
     return ChangeClassification(
         direct_roles=sorted(roles),
         full_universe_paths=full_universe,
-        packer_sources_affected=packer_sources,
-        ci_image_changed=ci_image_changed,
+        packer_changed=packer_changed,
         machine_universe=machine_universe,
-        zbm_changed=zbm_changed,
     )
 
 
@@ -526,30 +462,6 @@ def _gitlab_api_creds() -> tuple[str, str, str] | None:
     return f"{api_url}/projects/{project_id}", token, token_kind
 
 
-def _gitlab_green_base(branch: str, head_sha: str, default_branch: str, log) -> dict | None:
-    """Gather GitLab CI env and resolve the newest green pipeline ancestor.
-
-    Returns the pipeline object (``sha`` = diff base, ``id`` = runtime-lookup
-    key), or None — the caller then drops to the previous-tip base and emits
-    cells in default order — when no token is present, the API is unreachable,
-    or the token is rejected.
-    """
-    creds = _gitlab_api_creds()
-    if not (creds and head_sha and branch):
-        log("  no green pipeline (need CI_API_V4_URL + CI_PROJECT_ID + a token + branch)")
-        return None
-    project_api, token, token_kind = creds
-    return resolve_green_base_gitlab(
-        project_api=project_api,
-        token=token,
-        token_kind=token_kind,
-        branch=branch,
-        head_sha=head_sha,
-        default_branch=default_branch,
-        log_fn=log,
-    )
-
-
 # ---------------------------------------------------------------------------
 # GitLab API — cell runtime ordering
 # ---------------------------------------------------------------------------
@@ -798,7 +710,6 @@ TARGETS = {
         "image_oidc": False,
     },
 }
-TARGET_NAMES = sorted(TARGETS)
 
 # The child pipeline is a Jinja2 template so the static scaffold (`.cell`
 # before_script, artifacts, retry) is reviewable as real YAML; only the
@@ -810,32 +721,6 @@ _CHILD_TEMPLATE = Path(__file__).parent / "test_child.yml.j2"
 # the cells evenly across two display stages (test1 / test2); the cell jobs
 # carry `needs: []` (DAG form) so test2 doesn't wait on test1 — the split is
 # purely a display grouping, every cell still starts in parallel.
-
-
-def _parse_cell_spec(spec: str) -> dict:
-    """Split a ``role:variant[:ubuntu]`` cell spec into template fields."""
-    parts = spec.split(":")
-    return {
-        "spec": spec,
-        "role": parts[0],
-        "variant": parts[1] if len(parts) >= 2 else "box",
-        "ubuntu": parts[2] if len(parts) >= 3 else "jammy",
-    }
-
-
-def _split_cells_into_stages(cells: list[dict]) -> list[dict]:
-    """Split cells evenly across two display stages (test1 / test2).
-
-    The first half lands in test1, the remainder in test2; test2 is omitted
-    when there are not enough cells to fill a second stage (0 or 1 cell).
-    """
-    if not cells:
-        return []
-    mid = (len(cells) + 1) // 2
-    groups = [{"stage": "test1", "cells": cells[:mid]}]
-    if cells[mid:]:
-        groups.append({"stage": "test2", "cells": cells[mid:]})
-    return groups
 
 
 def render_child_pipeline(
@@ -865,8 +750,14 @@ def render_child_pipeline(
     if target not in TARGETS:
         raise ValueError(f"unsupported CI target: {target!r}")
     target_config = TARGETS[target]
-    cells = [_parse_cell_spec(s) for s in specs]
-    cell_groups = _split_cells_into_stages(cells)
+    cells = [ci_spec_to_cell(s)._asdict() | {"spec": s} for s in specs]
+    if cells:
+        mid = (len(cells) + 1) // 2
+        cell_groups = [{"stage": "test1", "cells": cells[:mid]}]
+        if cells[mid:]:
+            cell_groups.append({"stage": "test2", "cells": cells[mid:]})
+    else:
+        cell_groups = []
     # _site_test is the critical-path cell (longest, ~40m). GitLab seeds build
     # ids stage-by-stage and a runner picks the lowest id first, so give it a
     # dedicated leading `site` stage: it then gets the lowest ids and a runner
@@ -941,7 +832,7 @@ def _emit_gitlab(
     return 0
 
 
-def _gitlab_change_matrix(event: str, green: dict | None, log) -> tuple[str, bool]:
+def _gitlab_change_matrix(green: dict | None, log) -> tuple[str, bool]:
     """GitLab change-detection: resolve a diff base and compute the cell matrix.
 
     ``green`` is the pre-resolved newest green pipeline ancestor (or None); its
@@ -950,8 +841,6 @@ def _gitlab_change_matrix(event: str, green: dict | None, log) -> tuple[str, boo
     returns the whole universe with site_test enabled.
     """
     before_sha = os.environ.get("CI_COMMIT_BEFORE_SHA", "")
-    branch = os.environ.get("CI_COMMIT_BRANCH", "")
-    default_branch = os.environ.get("CI_DEFAULT_BRANCH", "master")
 
     def full_universe(reason):
         log(f"{reason} -> testing the FULL universe")
@@ -989,8 +878,7 @@ def _gitlab_change_matrix(event: str, green: dict | None, log) -> tuple[str, boo
     head_short = git_rev_parse_short("HEAD")
     log(f"comparing {base[:12]}..{head_short}: {len(changed)} file(s) changed")
 
-    is_master_push = event == "push" and branch == default_branch
-    classification = classify_changed_files(changed, is_master_push=is_master_push)
+    classification = classify_changed_files(changed)
 
     if classification.full_universe_paths:
         log("full-universe paths changed:")
@@ -1001,7 +889,7 @@ def _gitlab_change_matrix(event: str, green: dict | None, log) -> tuple[str, boo
     universe = set(list_testable_roles())
     roles: set[str] = set()
 
-    if classification.packer_sources_affected & {"qemu", "hetzner_upload"}:
+    if classification.packer_changed:
         roles.add("packer")
 
     if classification.machine_universe:
@@ -1055,12 +943,10 @@ def _cmd_gitlab(args: list[str]) -> int:
     p.add_argument(
         "--target",
         default=os.environ.get("HOMELAB_CI_TARGET", "aws_qemu"),
-        choices=TARGET_NAMES,
+        choices=sorted(TARGETS),
         help="Render jobs for the target qemu shell runner (default: HOMELAB_CI_TARGET or aws_qemu)",
     )
     opts = p.parse_args(args)
-    if opts.target not in TARGETS:
-        p.error(f"unsupported --target {opts.target!r}; choose one of: {', '.join(TARGET_NAMES)}")
 
     def log(msg):
         print(f"[detect] {msg}", file=sys.stderr)
@@ -1072,7 +958,21 @@ def _cmd_gitlab(args: list[str]) -> int:
     branch = os.environ.get("CI_COMMIT_BRANCH", "")
     head_sha = os.environ.get("CI_COMMIT_SHA", "")
     default_branch = os.environ.get("CI_DEFAULT_BRANCH", "master")
-    green = _gitlab_green_base(branch, head_sha, default_branch, log)
+    creds = _gitlab_api_creds()
+    if creds and branch and head_sha:
+        project_api, token, token_kind = creds
+        green = resolve_green_base_gitlab(
+            project_api=project_api,
+            token=token,
+            token_kind=token_kind,
+            branch=branch,
+            head_sha=head_sha,
+            default_branch=default_branch,
+            log_fn=log,
+        )
+    else:
+        log("  no green pipeline (need CI_API_V4_URL + CI_PROJECT_ID + a token + branch)")
+        green = None
     # Diff base needs a fully-green ancestor (above); runtime ordering only needs
     # duration samples, so it draws from the default branch's recent runs
     # independently -- a starved green base no longer collapses the order.
@@ -1102,21 +1002,15 @@ def _cmd_gitlab(args: list[str]) -> int:
         return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, runtimes, log, target=opts.target)
 
     log(f"mode: change detection (source={event or 'local'})")
-    matrix, site_test = _gitlab_change_matrix(event, green, log)
+    matrix, site_test = _gitlab_change_matrix(green, log)
     return _emit_gitlab(matrix, site_test, opts.child_path, runtimes, log, target=opts.target)
 
 
-_COMMANDS = {
-    "gitlab": _cmd_gitlab,
-}
-
-
 def main() -> int:
-    if len(sys.argv) < 2 or sys.argv[1] not in _COMMANDS:
-        cmds = "|".join(_COMMANDS)
-        print(f"usage: detect.py <{cmds}> [args...]", file=sys.stderr)
+    if len(sys.argv) < 2 or sys.argv[1] != "gitlab":
+        print("usage: detect.py <gitlab> [args...]", file=sys.stderr)
         return 2
-    return _COMMANDS[sys.argv[1]](sys.argv[2:])
+    return _cmd_gitlab(sys.argv[2:])
 
 
 if __name__ == "__main__":

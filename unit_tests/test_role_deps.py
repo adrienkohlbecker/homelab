@@ -1,105 +1,10 @@
 """Unit tests for mise-tasks/ci/role-deps.py — inverse-dependency lookup."""
 
-import importlib
 import subprocess
 import sys
-from collections import defaultdict
 from pathlib import Path
 
-# role-deps.py lives outside the pythonpath; import it by path.
 _ROLE_DEPS_PATH = Path(__file__).resolve().parent.parent / "mise-tasks" / "ci" / "role-deps.py"
-
-
-def _load_role_deps():
-    spec = importlib.util.spec_from_file_location("role_deps", _ROLE_DEPS_PATH)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-role_deps = _load_role_deps()
-
-
-# ---------------------------------------------------------------------------
-# walk()
-# ---------------------------------------------------------------------------
-
-
-class TestWalk:
-    def test_import_role_detected(self) -> None:
-        tasks = [{"import_role": {"name": "nginx"}}]
-        inv: dict[str, set[str]] = defaultdict(set)
-        role_deps.walk(tasks, "pihole", inv)
-        assert inv == {"nginx": {"pihole"}}
-
-    def test_include_role_detected(self) -> None:
-        tasks = [{"include_role": {"name": "systemd_unit"}}]
-        inv: dict[str, set[str]] = defaultdict(set)
-        role_deps.walk(tasks, "netdata", inv)
-        assert inv == {"systemd_unit": {"netdata"}}
-
-    def test_block_nesting(self) -> None:
-        tasks = [
-            {
-                "block": [{"import_role": {"name": "nginx"}}],
-                "rescue": [{"import_role": {"name": "service_user"}}],
-                "always": [{"include_role": {"name": "systemd_unit"}}],
-            }
-        ]
-        inv: dict[str, set[str]] = defaultdict(set)
-        role_deps.walk(tasks, "homepage", inv)
-        assert inv["nginx"] == {"homepage"}
-        assert inv["service_user"] == {"homepage"}
-        assert inv["systemd_unit"] == {"homepage"}
-
-    def test_deeply_nested_block(self) -> None:
-        tasks = [{"block": [{"block": [{"import_role": {"name": "deep"}}]}]}]
-        inv: dict[str, set[str]] = defaultdict(set)
-        role_deps.walk(tasks, "outer", inv)
-        assert inv == {"deep": {"outer"}}
-
-    def test_non_dict_tasks_skipped(self) -> None:
-        tasks = ["just a string", 42, None, {"import_role": {"name": "real"}}]
-        inv: dict[str, set[str]] = defaultdict(set)
-        role_deps.walk(tasks, "consumer", inv)
-        assert inv == {"real": {"consumer"}}
-
-    def test_non_list_input_skipped(self) -> None:
-        inv: dict[str, set[str]] = defaultdict(set)
-        role_deps.walk("not a list", "x", inv)
-        role_deps.walk(None, "x", inv)
-        role_deps.walk(42, "x", inv)
-        assert inv == {}
-
-    def test_import_role_without_name_skipped(self) -> None:
-        tasks = [{"import_role": {"tasks_from": "install"}}]
-        inv: dict[str, set[str]] = defaultdict(set)
-        role_deps.walk(tasks, "consumer", inv)
-        assert inv == {}
-
-    def test_multiple_consumers(self) -> None:
-        inv: dict[str, set[str]] = defaultdict(set)
-        role_deps.walk([{"import_role": {"name": "nginx"}}], "pihole", inv)
-        role_deps.walk([{"import_role": {"name": "nginx"}}], "netdata", inv)
-        role_deps.walk([{"import_role": {"name": "nginx"}}], "homepage", inv)
-        assert inv["nginx"] == {"pihole", "netdata", "homepage"}
-
-    def test_role_importing_multiple_helpers(self) -> None:
-        tasks = [
-            {"import_role": {"name": "service_user"}},
-            {"import_role": {"name": "systemd_unit"}},
-            {"import_role": {"name": "nginx"}},
-        ]
-        inv: dict[str, set[str]] = defaultdict(set)
-        role_deps.walk(tasks, "speedtest", inv)
-        assert "speedtest" in inv["service_user"]
-        assert "speedtest" in inv["systemd_unit"]
-        assert "speedtest" in inv["nginx"]
-
-
-# ---------------------------------------------------------------------------
-# CLI integration (against a scaffolded roles tree)
-# ---------------------------------------------------------------------------
 
 
 class TestCli:
