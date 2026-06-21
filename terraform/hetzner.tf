@@ -8,22 +8,11 @@
 # the packer/audit tooling do). The token is wired into mise.toml [env] as the
 # HCLOUD_TOKEN_OP op:// ref, mapped to HCLOUD_TOKEN by the `tf` task's
 # `op run --` wrapper -- terraform is the only consumer still needing it.
-#
-# Created from scratch by `tofu apply` (no import) -- every resource below is
-# terraform-managed end to end. The old hand-made Hetzner instance is being
-# deleted out of band first so there's no name clash on `fox`.
 provider "hcloud" {}
 
-variable "hetzner_location" {
-  description = "Hetzner location for the fox VPS."
-  type        = string
-  default     = "nbg1"
-}
-
-variable "hetzner_network_zone" {
-  description = "Hetzner network zone the private subnet lives in (eu-central covers nbg1/fsn1/hel1)."
-  type        = string
-  default     = "eu-central"
+locals {
+  hetzner_location     = "nbg1"
+  hetzner_network_zone = "eu-central"
 }
 
 # The operator's laptop SSH key, registered in the project so the instance's
@@ -39,7 +28,7 @@ resource "hcloud_ssh_key" "laptop" {
 resource "hcloud_primary_ip" "fox" {
   name        = "fox"
   type        = "ipv4"
-  location    = var.hetzner_location
+  location    = local.hetzner_location
   auto_delete = false
 }
 
@@ -53,7 +42,7 @@ resource "hcloud_primary_ip" "fox" {
 resource "hcloud_primary_ip" "fox_v6" {
   name        = "fox_v6"
   type        = "ipv6"
-  location    = var.hetzner_location
+  location    = local.hetzner_location
   auto_delete = false
 }
 
@@ -66,10 +55,11 @@ resource "hcloud_primary_ip" "fox_v6" {
 # WireGuard underlay), so clients using fox as an exit node / subnet router reach
 # its tailscaled DIRECTLY instead of hairpinning through fox's own embedded DERP.
 # 51820/udp (wg0 backbone) and 22/tcp (SSH) are scoped to the
-# home WAN IP only (local.home_wan_ip): fox's only wg0 initiators are lab+pug
+# home WAN IP only (var.home_wan_ip): fox's only wg0 initiators are lab+pug
 # (keepalive_from: [lab, pug]), both behind the home WAN, and fox is
 # administered from home -- so neither needs internet exposure. If the home WAN
-# IP changes, unblock via the Hetzner Cloud console and update the local.
+# IP changes, unblock via the Hetzner Cloud console and update the 1Password
+# item feeding var.home_wan_ip.
 resource "hcloud_firewall" "fox" {
   name = "fox"
 
@@ -102,7 +92,7 @@ resource "hcloud_firewall" "fox" {
     direction   = "in"
     protocol    = "tcp"
     port        = "22"
-    source_ips  = ["${local.home_wan_ip}/32"]
+    source_ips  = ["${var.home_wan_ip}/32"]
   }
 
   rule {
@@ -110,7 +100,7 @@ resource "hcloud_firewall" "fox" {
     direction   = "in"
     protocol    = "udp"
     port        = "51820"
-    source_ips  = ["${local.home_wan_ip}/32"]
+    source_ips  = ["${var.home_wan_ip}/32"]
   }
 }
 
@@ -128,7 +118,7 @@ resource "hcloud_network" "hetzner" {
 resource "hcloud_network_subnet" "hetzner" {
   type         = "cloud"
   network_id   = hcloud_network.hetzner.id
-  network_zone = var.hetzner_network_zone
+  network_zone = local.hetzner_network_zone
   ip_range     = local.network.sites.hetzner.cidr
 }
 
@@ -153,7 +143,7 @@ resource "hcloud_server" "fox" {
   name        = "fox"
   server_type = "cpx22"
   image       = data.hcloud_image.fox.id
-  location    = var.hetzner_location
+  location    = local.hetzner_location
   ssh_keys    = [hcloud_ssh_key.laptop.name]
 
   firewall_ids = [hcloud_firewall.fox.id]

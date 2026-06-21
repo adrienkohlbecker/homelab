@@ -1,9 +1,8 @@
 # DNS records for fahm.fr.
 #
-# Records (A/CNAME/TXT/MX) live in a single typed variable; one
-# cloudflare_dns_record resource iterates it. SRV records sit in their
-# own map + resource because they carry a nested data {} block rather
-# than a flat content string.
+# Records (A/CNAME/TXT/MX) live in a single map; one cloudflare_dns_record
+# resource iterates it. SRV records sit in their own map + resource because
+# they carry a nested data {} block rather than a flat content string.
 #
 # Map entries are keyed by an opaque slug (e.g. a_box, mx_fahm_fr_in1)
 # and carry type/name/content explicitly in the value, so the resource
@@ -22,27 +21,11 @@
 # Aggregate reports flow to dmarc-reports.cloudflare.net (fahm.fr)
 # and mailgun+ondmarc (noreply.fahm.fr).
 
-variable "fahm_fr_records" {
-  description = "DNS records (A/CNAME/TXT/MX) for fahm.fr. SRV records live in local.fahm_fr_srv_records."
-  type = map(object({
-    type     = string
-    name     = string
-    content  = string
-    priority = optional(number)
-    proxied  = optional(bool, false)
-    comment  = optional(string)
-    tags     = optional(list(string), [])
-  }))
-
-  validation {
-    condition     = alltrue([for r in var.fahm_fr_records : contains(["A", "CNAME", "TXT", "MX"], r.type)])
-    error_message = "type must be one of A, CNAME, TXT, MX (SRV records belong in fahm_fr_srv_records)."
-  }
-
-  default = {
+locals {
+  fahm_fr_static_records = {
     # A — host records (box/bunk/lab/pug) derive from
     # data/network_topology.yml in `local.fahm_fr_host_records` below.
-    # This default holds only the static records that reference neither the
+    # This map holds only the static records that reference neither the
     # topology nor a variable (the Fastmail relay).
     a_mail = { type = "A", name = "mail.fahm.fr", content = "103.168.172.65", comment = "fastmail" }
 
@@ -74,9 +57,6 @@ variable "fahm_fr_records" {
     mx_noreply_mxa  = { type = "MX", name = "noreply.fahm.fr", content = "mxa.eu.mailgun.org", priority = 10, comment = "mailgun" }
     mx_noreply_mxb  = { type = "MX", name = "noreply.fahm.fr", content = "mxb.eu.mailgun.org", priority = 10, comment = "mailgun" }
   }
-}
-
-locals {
   # Host A records — derived from data/network_topology.yml. lab/pug/bunk resolve
   # to their Tailscale CGNAT IPs (100.64.0.x) so that tailnet clients reach them
   # peer-to-peer without needing "Use Tailscale subnets" / --accept-routes. The
@@ -105,25 +85,18 @@ locals {
   # (now the Tailscale CGNAT IP, in fahm_fr_host_records) so the *.fox.fahm.fr
   # CNAME chasing fox.fahm.fr can't drag the control plane onto that
   # unreachable address. Dual-stack: the AAAA lets IPv6-only clients reach the
-  # relay without NAT64 (nginx [::]:443 on fox, DERP STUN on [::]:3478). This
-  # local bypasses the var.fahm_fr_records A/CNAME/TXT/MX validation, so the AAAA
-  # needs no schema change there.
+  # relay without NAT64 (nginx [::]:443 on fox, DERP STUN on [::]:3478).
   fahm_fr_headscale_records = {
     a_headscale    = { type = "A", name = "headscale.fahm.fr", content = hcloud_primary_ip.fox.ip_address }
     aaaa_headscale = { type = "AAAA", name = "headscale.fahm.fr", content = hcloud_primary_ip.fox_v6.ip_address }
   }
 
-  fahm_fr_records = merge(var.fahm_fr_records, local.fahm_fr_host_records, local.fahm_fr_headscale_records)
+  fahm_fr_records = merge(local.fahm_fr_static_records, local.fahm_fr_host_records, local.fahm_fr_headscale_records)
 }
 
 resource "cloudflare_dns_record" "fahm_fr" {
   for_each = local.fahm_fr_records
 
-  # `try()` lets each.value be either a fully-typed var entry
-  # (with optional defaults filled in) or a minimal local entry
-  # (just type/name/content). Necessary because the variable's
-  # typed-object schema doesn't apply to records merged in from
-  # local.fahm_fr_host_records.
   zone_id  = local.zones["fahm.fr"]
   type     = each.value.type
   name     = each.value.name
@@ -136,9 +109,9 @@ resource "cloudflare_dns_record" "fahm_fr" {
 }
 
 # ---- SRV records (Fastmail service discovery) ----
-# Separate from var.fahm_fr_records because SRV carries a nested
-# data {} block rather than a flat content string. All SRV records in
-# this zone are Fastmail; comment is hardcoded resource-wide.
+# Separate from the flat record map because SRV carries a nested data {}
+# block. All SRV records in this zone are Fastmail; comment is hardcoded
+# resource-wide.
 
 locals {
   fahm_fr_srv_records = {

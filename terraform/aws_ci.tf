@@ -445,7 +445,7 @@ resource "aws_security_group" "ci_qemu_host" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["${local.home_wan_ip}/32"]
+    cidr_blocks = ["${var.home_wan_ip}/32"]
   }
 
   egress {

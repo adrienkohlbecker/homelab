@@ -110,7 +110,8 @@ variable "state_passphrase" {
 
 
 # Resolved from TF_VAR_home_wan_ip in mise.toml [env] (1Password via op
-# run). The residential WAN IP, kept out of this public repo.
+# run). The residential WAN IP scopes fox and CI SSH ingress and is kept
+# out of this public repo.
 variable "home_wan_ip" {
   type      = string
   sensitive = true
@@ -126,14 +127,6 @@ variable "home_wan_ip" {
 # resolve-by-name API call per plan.
 locals {
   cloudflare_account_id = "43f1339d1841088669b616cecc6562de"
-
-  # Home WAN IP (the Freebox public v4), scoping fox's and the CI cells' SSH
-  # firewall rules to the home network (hetzner.tf, aws_ci.tf). Sourced from
-  # var.home_wan_ip (TF_VAR via 1Password). Residential, so it can change --
-  # update the 1Password item if it does (and unblock fox SSH via the Hetzner
-  # Cloud console in the meantime). It is also vaulted as `home_endpoint` for
-  # wireguard (group_vars), the one place the two stores must stay in sync.
-  home_wan_ip = var.home_wan_ip
 
   # The operator's laptop SSH public key, mirroring the `laptop` entry in
   # group_vars/all/main.yml ssh_public_keys -- kept as a literal because
