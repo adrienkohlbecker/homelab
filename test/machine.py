@@ -570,6 +570,20 @@ class Machine:
         except KeyError:
             raise AttributeError(f"Unknown machine: {machine}") from None
 
+        # _site_test converges the whole fleet onto one box guest, so by the end
+        # dozens of services are running concurrently — far past the 4 vCPU /
+        # 4 GiB the per-role box default is sized for. Unlike a per-role cell it
+        # gets a dedicated AWS host with no co-tenants (terraform
+        # ci_qemu_site_pool — c8id.2xlarge, 8 vCPU / 16 GiB), so widen the guest
+        # to actually use it: 6 vCPU leaves the host 2 cores for qemu's
+        # iothreads + nested-virt servicing + the instance OS, and 12 GiB keeps
+        # the running services off the zvol-backed swap (whose I/O is doubly
+        # expensive under nesting) while leaving the host 4 GiB. Scoped to
+        # _site_test alone — bumping the shared box spec would oversubscribe the
+        # role-cell pool (6 guests × 6 vCPU > the 32-vCPU host).
+        if role == "_site_test":
+            spec = spec._replace(vcpus=6, memory_mb=12288)
+
         # Imagedir layout is platform-gated (see imagedir_for_host); the disk
         # format alongside it is too: raw on Linux (the host ZFS dataset already
         # does CoW + zstd), qcow2 on Mac (APFS has no fs-level compression).
