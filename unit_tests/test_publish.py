@@ -49,14 +49,14 @@ class TestMainAtomicPublish:
         src.mkdir()
         (src / "image.qcow2").write_text("new")
         dst = tmp_path / "dst"
-        lockfile = tmp_path / "lock"
 
-        monkeypatch.setattr("sys.argv", ["publish.py", str(lockfile), str(src), str(dst)])
+        monkeypatch.setattr("sys.argv", ["publish.py", str(src), str(dst)])
         pub.main()
 
         assert dst.exists()
         assert (dst / "image.qcow2").read_text() == "new"
         assert not src.exists()
+        assert (tmp_path / ".publish-lock").exists()
 
     def test_replaces_existing_artifact(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         src = tmp_path / "src"
@@ -65,9 +65,8 @@ class TestMainAtomicPublish:
         dst = tmp_path / "dst"
         dst.mkdir()
         (dst / "image.qcow2").write_text("v1")
-        lockfile = tmp_path / "lock"
 
-        monkeypatch.setattr("sys.argv", ["publish.py", str(lockfile), str(src), str(dst)])
+        monkeypatch.setattr("sys.argv", ["publish.py", str(src), str(dst)])
         pub.main()
 
         assert (dst / "image.qcow2").read_text() == "v2"

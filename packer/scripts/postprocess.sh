@@ -56,4 +56,4 @@ if [ "$PUBLISH" != "true" ]; then
   exit 0
 fi
 
-"$script_dir/../publish.py" "$OUTPUT_DIRECTORY/.publish-lock" "$build_dir" "$OUTPUT_DIRECTORY/$SOURCE_NAME"
+"$script_dir/../publish.py" "$build_dir" "$OUTPUT_DIRECTORY/$SOURCE_NAME"
