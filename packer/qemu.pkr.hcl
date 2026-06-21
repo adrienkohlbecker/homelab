@@ -387,12 +387,12 @@ build {
       "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.arch_cfg.upstream_security
       "SSH_KEY_PUB"                     = join("\n", local.vagrant_ssh_keys)
       "IMAGE_TARGET"                    = local.variant_config[source.name].image_target
-      "ZFS_ARC_MAX"                     = local.variant_config[source.name].zfs_arc_max == 0 ? "" : tostring(local.variant_config[source.name].zfs_arc_max)
-      # "1" only for the qemu test fixtures (box/lab/pug); "" for hetzner. Gates
-      # the test-only kernel tuning + ambient-unit masking in chroot.sh. A
-      # bare-metal copy-paste run of chroot.sh leaves it unset, so prod never
+      "ZFS_ARC_MAX"                     = tostring(local.variant_config[source.name].zfs_arc_max)
+      # true only for the qemu test fixtures (box/lab/pug); false for hetzner.
+      # Gates the test-only kernel tuning + ambient-unit masking in chroot.sh.
+      # A bare-metal copy-paste run of chroot.sh leaves it unset, so prod never
       # picks up either.
-      "QEMU_TEST_IMAGE" = local.variant_config[source.name].qemu_test_image ? "1" : ""
+      "QEMU_TEST_IMAGE" = tostring(local.variant_config[source.name].qemu_test_image)
     }
   }
 

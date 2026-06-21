@@ -252,7 +252,7 @@ systemctl enable zfs-import.target
 # of ~50% of RAM would starve headscale). Written to modprobe.d so it applies
 # both at boot and inside the initramfs (initramfs-tools bundles modprobe.d),
 # which matters because zfs loads from the initramfs on a root-on-ZFS host.
-if [ -n "${ZFS_ARC_MAX:-}" ]; then
+if [ "${ZFS_ARC_MAX:-0}" != "0" ]; then
   echo "options zfs zfs_arc_max=${ZFS_ARC_MAX}" >/etc/modprobe.d/zfs.conf
 fi
 
@@ -272,9 +272,9 @@ fi
 # arch-specific. $CONSOLE_CMDLINE is used both here and in the rEFInd menuentries
 # directly — no readback from ZFS needed.
 #
-# QEMU_TEST_IMAGE is set (=1) ONLY by the box/lab/pug sources in qemu.pkr.hcl;
-# it is unset for the hetzner image and for any bare-metal copy-paste run of
-# this script, so neither picks up the test-only tuning below (default empty).
+# QEMU_TEST_IMAGE is true only for the box/lab/pug sources in qemu.pkr.hcl;
+# it is false for the hetzner image and unset for any bare-metal copy-paste run
+# of this script, so neither picks up the test-only tuning below.
 #
 # mitigations=off: these are throwaway nested-KVM CI cells whose entire life is
 # one converge + verify. Speculative-execution mitigations buy nothing on a
@@ -284,7 +284,7 @@ fi
 # from /etc/zfsbootmenu/*) keeps it across an in-test reboot. The fragment only
 # exists in the test image; prod is stock Ubuntu via ansible and has no such
 # file, so mitigations=off can never reach a prod host.
-if [ "${QEMU_TEST_IMAGE:-}" = "1" ]; then
+if [ "${QEMU_TEST_IMAGE:-false}" = "true" ]; then
   COMMANDLINE="$CONSOLE_CMDLINE mitigations=off"
   mkdir -p /etc/zfsbootmenu
   echo "mitigations=off" >/etc/zfsbootmenu/mitigations
@@ -745,7 +745,7 @@ EOF
   chmod 400 "/etc/sudoers.d/$USERNAME"
 fi
 
-# Mask ambient background units in the *test image only* (QEMU_TEST_IMAGE=1,
+# Mask ambient background units in the *test image only* (QEMU_TEST_IMAGE=true,
 # set by the box/lab/pug sources). On a throwaway CI cell these steal the dpkg
 # lock and burn CPU during converge, inflating the ~28s setup phase for no
 # benefit on a guest that lives for one test.
@@ -773,7 +773,7 @@ fi
 # Each unit is masked only if systemd already knows a real unit file for it
 # (list-unit-files lists it as anything other than not-found); masking an absent
 # unit would leave a dangling /dev/null symlink.
-if [ "${QEMU_TEST_IMAGE:-}" = "1" ]; then
+if [ "${QEMU_TEST_IMAGE:-false}" = "true" ]; then
   for unit in apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service \
     multipathd.service multipathd.socket; do
     if systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q .; then
