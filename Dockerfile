@@ -227,7 +227,7 @@ RUN mkdir -p /etc/mise && \
 # tree is found by `packer build` later.
 ENV PACKER_PLUGIN_PATH=/opt/packer/plugins
 COPY packer/qemu.pkr.hcl ./packer/
-COPY packer/aws/ami.pkr.hcl ./packer/aws/
+COPY packer/aws/qemu_host.pkr.hcl ./packer/aws/
 RUN mise run packer:init && rm -rf ./packer
 
 WORKDIR /

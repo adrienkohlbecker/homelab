@@ -18,6 +18,12 @@ packer {
   }
 }
 
+variable "ubuntu_name" {
+  type        = string
+  default     = "noble"
+  description = "Ubuntu release name."
+}
+
 variable "gitlab_runner_url" {
   type        = string
   default     = ""
@@ -44,7 +50,7 @@ variable "qemu_host_manifest_path" {
 
 locals {
   qemu_host_region          = "eu-central-1"
-  qemu_host_ubuntu_name     = "noble"
+  qemu_host_ubuntu_name     = var.ubuntu_name
   qemu_host_source_ami_name = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
   qemu_host_common_tags = {
     role     = "ci-ami"
