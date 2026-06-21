@@ -1,0 +1,68 @@
+diff --git a/dracut/module-setup.sh b/dracut/module-setup.sh
+index 290819b..1c5efb6 100644
+--- a/dracut/module-setup.sh
++++ b/dracut/module-setup.sh
+@@ -94,6 +94,15 @@ install() {
+ 
+   _ret=0
+ 
++  # The builder rootfs includes runit-void power commands. Dracut's
++  # base/shutdown modules install those before 90zfsbootmenu; remove them from
++  # the initramfs staging tree so ZBM's pool-exporting wrappers win.
++  rm -f \
++    "${initdir}/usr/bin/firmware-setup" \
++    "${initdir}/usr/bin/poweroff" \
++    "${initdir}/usr/bin/reboot" \
++    "${initdir}/usr/bin/shutdown"
++
+   # Install core ZFSBootMenu functionality
+   install_zbm_core || _ret=$?
+ 
+diff --git a/etc/zfsbootmenu/release.yaml b/etc/zfsbootmenu/release.yaml
+index a87c566..e38d37a 100644
+--- a/etc/zfsbootmenu/release.yaml
++++ b/etc/zfsbootmenu/release.yaml
+@@ -10,4 +10,4 @@ EFI:
+   Enabled: true
+   SplashImage: /etc/zfsbootmenu/splash.bmp
+ Kernel:
+-  CommandLine: quiet loglevel=0 nomodeset
++  CommandLine: ro loglevel=0 nomodeset
+diff --git a/releng/make-binary.sh b/releng/make-binary.sh
+index 392c9be..a3e61a5 100755
+--- a/releng/make-binary.sh
++++ b/releng/make-binary.sh
+@@ -34,10 +34,7 @@ if ! podman inspect "${buildtag}" >/dev/null 2>&1; then
+ fi
+ 
+ arch="$( uname -m )"
+-case "${arch}" in
+-  x86_64) BUILD_EFI="true" ;;
+-  *) BUILD_EFI="false" ;;
+-esac
++BUILD_EFI="true"
+ 
+ buildtmp="$( mktemp -d )" || error "cannot create build directory"
+ 
+@@ -104,12 +101,19 @@ for style in release recovery; do
+         efifile="${zbmtriplet}-vmlinuz.EFI"
+       fi
+ 
+-      if ! cp "${outdir}/vmlinuz.EFI" "${assets}/${efifile}"; then
++      efi_images=()
++      while IFS= read -r efi_image; do
++        efi_images+=( "${efi_image}" )
++      done < <(find "${outdir}" -maxdepth 1 -type f -name 'vmlin*.EFI' | sort)
++      if [ "${#efi_images[@]}" -ne 1 ]; then
++        error "expected exactly one UEFI bundle in ${outdir}, found ${#efi_images[@]}"
++      fi
++      if ! cp "${efi_images[0]}" "${assets}/${efifile}"; then
+         error "failed to copy UEFI bundle"
+       fi
+ 
+       # Remove it so it won't be included in component tarballs
+-      rm -f "${outdir}/vmlinuz.EFI"
++      rm -f "${efi_images[0]}"
+     fi
+ 
+     have_components=

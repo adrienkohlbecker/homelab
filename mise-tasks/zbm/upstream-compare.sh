@@ -84,7 +84,8 @@ fi
 
 overlay_source_roots=(
   "${repo_root}/mise-tasks/zbm/build.sh"
-  "${repo_root}/zbm/config.yaml"
+  "${repo_root}/mise-tasks/zbm/lib.sh"
+  "${repo_root}/zbm/recovery-overlay.patch"
   "${repo_root}/zbm/dracut.conf.d/recovery.conf"
   "${repo_root}/zbm/dracut.conf.d/user_hooks.conf"
   "${repo_root}/zbm/dropbear"
@@ -221,22 +222,8 @@ else
   echo "EFI byte comparison: differs; comparing initramfs payload listings"
 fi
 
-lsinitrd_to() {
-  local image="$1"
-  local output="$2"
-  local mount_root mount_image
-
-  mount_root="$(dirname "$image")"
-  mount_image="/work/${image#"${mount_root}/"}"
-  docker run --rm \
-    --entrypoint /usr/bin/lsinitrd \
-    -v "${mount_root}:/work:ro" \
-    "$builder_tag" \
-    "$mount_image" >"$output"
-}
-
-lsinitrd_to "$local_initramfs" "${report_dir}/local.lsinitrd"
-lsinitrd_to "$official_initramfs" "${report_dir}/official.lsinitrd"
+zbm_lsinitrd "$builder_tag" "$local_initramfs" >"${report_dir}/local.lsinitrd"
+zbm_lsinitrd "$builder_tag" "$official_initramfs" >"${report_dir}/official.lsinitrd"
 
 extract_paths() {
   awk 'NF >= 9 && $1 ~ /^[-l]/ {
@@ -293,7 +280,7 @@ if [ "$cross_arch_compare" -eq 1 ]; then
   mkdir -p "$local_upstream_extract"
   tar -xzf "$local_upstream_tar" -C "$local_upstream_extract"
   local_upstream_initramfs="$(find_one "$local_upstream_extract" 'initramfs*.img')"
-  lsinitrd_to "$local_upstream_initramfs" "${report_dir}/local-upstream.lsinitrd"
+  zbm_lsinitrd "$builder_tag" "$local_upstream_initramfs" >"${report_dir}/local-upstream.lsinitrd"
   extract_modules "${report_dir}/local-upstream.lsinitrd" >"${report_dir}/local-upstream.modules"
   extract_binaries "${report_dir}/local-upstream.lsinitrd" >"${report_dir}/local-upstream.binaries"
   comm -23 "${report_dir}/local-upstream.modules" "${report_dir}/local.modules" >"${report_dir}/missing.local-upstream.modules"
@@ -301,31 +288,8 @@ if [ "$cross_arch_compare" -eq 1 ]; then
   local_upstream_missing_module_count="$(wc -l <"${report_dir}/missing.local-upstream.modules" | tr -d '[:space:]')"
 fi
 
-assert_core() {
-  local listing="$1"
-  local label="$2"
-
-  for required in \
-    "usr/bin/reboot" \
-    "usr/bin/poweroff -> reboot" \
-    "usr/bin/shutdown -> reboot" \
-    "usr/bin/firmware-setup -> reboot"; do
-    if ! grep -qF "$required" "$listing"; then
-      echo "${label}: missing required ZFSBootMenu recovery command /${required%% *}" >&2
-      return 1
-    fi
-  done
-
-  for required in zfs spl; do
-    if ! grep -Eq "/${required}[.]ko([.]|$)" "$listing"; then
-      echo "${label}: missing required ZFS kernel module ${required}.ko" >&2
-      return 1
-    fi
-  done
-}
-
-assert_core "${report_dir}/local.lsinitrd" "local"
-assert_core "${report_dir}/official.lsinitrd" "official"
+zbm_assert_core_listing "${report_dir}/local.lsinitrd" "local"
+zbm_assert_core_listing "${report_dir}/official.lsinitrd" "official"
 
 module_diff=0
 binary_diff=0
