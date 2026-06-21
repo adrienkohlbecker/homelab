@@ -9,6 +9,16 @@ podman_backport_packages:
   # podman itself — jammy 3.4 vs noble 4.9, a major version bump that
   # changes the network stack, storage paths, and rootless mapping.
   - podman
+  # crun — the default OCI runtime. Jammy ships 0.17, whose cgroup-v2
+  # eBPF device filter mishandles the zero-access access(dev_name, F_OK)
+  # probe libdrm runs to validate a render node: it returns EPERM even
+  # though open(O_RDWR) is allowed, so VAAPI/QSV init fails with "Cannot
+  # open a VA display" and HW transcode silently falls back to software
+  # (jellyfin on lab). Fixed upstream in crun 0.19 ("handle eBPF
+  # access(dev_name, F_OK) call correctly"); noble's 1.14.1 carries it.
+  # Backports clean — depends only on libc6 (already pinned) plus
+  # libcap2/libseccomp2/libyajl2, all satisfied by jammy's versions.
+  - crun
   # buildah ships its own binary podman shells out to for image builds.
   # Jammy 1.23 isn't ABI-compatible with noble podman's image format.
   - buildah
