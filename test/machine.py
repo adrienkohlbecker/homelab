@@ -843,7 +843,7 @@ class Machine:
         target a freshly-spawned host (different IP, different cgroup,
         different filesystem).
         """
-        return {
+        env = {
             "ANSIBLE_CONFIG": str(ANSIBLE_CONFIG_PATH),
             # Override [ssh_connection] ssh_args wholesale so ansible pins its
             # ControlPath to the cell-stable socket (ssh_control_path) instead
@@ -870,6 +870,22 @@ class Machine:
             "ANSIBLE_FACT_CACHING_CONNECTION": f"{self.workdir.name}/facts",
             "ANSIBLE_FACT_CACHING_TIMEOUT": "7200",
         }
+
+        # The full-site converge runs ~4400 tasks; at the per-role default
+        # (-v plus ok/skipped hosts shown) its transcript is ~90k lines and
+        # blows past GitLab's 4 MB job-log cap, which truncates the tail --
+        # exactly where the failing task lands. A converge smoke test only
+        # needs the changed tasks (their diffs still print, [diff] always=True)
+        # and full failure dumps (ansible prints a failed task's result
+        # regardless of verbosity), so drop the ok/skipped firehose and the
+        # -v result bodies for non-failing tasks here. Per-role tests keep the
+        # verbose detail for single-role debugging.
+        if self.role == "_site_test":
+            env["ANSIBLE_DISPLAY_OK_HOSTS"] = "false"
+            env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] = "false"
+            env["ANSIBLE_VERBOSITY"] = "0"
+
+        return env
 
     @property
     def in_aws(self) -> bool:
