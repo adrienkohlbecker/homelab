@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Upload a pre-built ZFS-root disk image to a Hetzner Cloud snapshot. Build the image first with `mise run packer:build hetzner` (qemu/KVM); this streams that raw image onto a throwaway Hetzner rescue server and snapshots it."
-#USAGE arg "[image]" help="Path to the rpool disk image, raw or raw.gz (default: the packer:build hetzner artifact for --ubuntu)"
+#USAGE arg "[image]" help="Path to the raw rpool disk image (default: the packer:build hetzner artifact for --ubuntu)"
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu codename -- snapshot label + default image path" default="noble"
 #USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
@@ -36,23 +36,14 @@ rescue_create
 echo "==> wiping /dev/sda before streaming (clears the rescue image's stale GPT + tail)"
 ssh_rescue 'blkdiscard -f /dev/sda || wipefs -a /dev/sda'
 
-# Stream the image onto /dev/sda via the shared rescue receive pipeline
-# (mbuffer | zstd -dc | dd). Compress with zstd here (parallel via -T0; -1
-# since the payload is already-zstd'd rpool blocks + zeros, so speed beats
-# ratio); a .zst input passes through, a legacy .gz is transcoded. mbuffer on
-# the send side, when present, smooths the handoff into ssh.
+# Stream the raw image onto /dev/sda via the shared rescue receive pipeline.
+# Compress with zstd here; the rpool blocks are already compressed, so speed
+# beats ratio. mbuffer on the send side, when present, smooths the ssh handoff.
 echo "==> streaming $IMG ($(du -h "$IMG" | cut -f1)) onto /dev/sda (this takes a few minutes)"
-sender() {
-  case "$IMG" in
-  *.zst) cat "$IMG" ;;
-  *.gz) gzip -dc "$IMG" | zstd -1 -T0 ;;
-  *) zstd -1 -T0 -c "$IMG" ;;
-  esac
-}
 if command -v mbuffer >/dev/null; then
-  sender | mbuffer -m 512M | ssh_rescue "$RESCUE_RECV"
+  zstd -1 -T0 -c "$IMG" | mbuffer -m 512M | ssh_rescue "$RESCUE_RECV"
 else
-  sender | ssh_rescue "$RESCUE_RECV"
+  zstd -1 -T0 -c "$IMG" | ssh_rescue "$RESCUE_RECV"
 fi
 
 # The streamed image's GPT backup header sits at the 20G mark (the image's own

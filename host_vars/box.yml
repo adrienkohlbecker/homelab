@@ -20,10 +20,10 @@ ssh_public_keys: |
 # podman. 256/512 MiB is enough for ZFS to not thrash on a test workload.
 zfs_arc_min: 268435456
 zfs_arc_max: 536870912
-# Box has a second flat pool `zee` (packer pools.sh) alongside rpool, so it
+# Box has a second flat pool `zee` (packer provision.sh) alongside rpool, so it
 # exercises the zfs role's multi-pool trim-timer and mount-cache loops -- the
 # functional coverage the lab/pug AMIs used to carry. zee/data is the
-# canmount=on member pools.sh creates for the mount-generator; the
+# canmount=on member provision.sh creates for the mount-generator; the
 # rpool/ROOT/<release> entry is templated so it works across the
 # jammy/noble/resolute box AMIs. See notes/ci_box_multidisk_drop_lab_pug_amis.md.
 zfs_trim_pools:
@@ -56,7 +56,7 @@ swap_zram:
   size: 3G
 
 # Consumer-side bind-mounts are gated off for test fixtures: the
-# producer datasets exist (and pools.sh seeded the pools) but the
+# producer datasets exist (and provision.sh seeded the pools) but the
 # datasets carry no real homelab data, so consumers that bind-mount
 # /mnt/<x>:/<x>:ro into containers (samba, the service units, etc.)
 # would map an empty path. Flip any of these to true only when the
