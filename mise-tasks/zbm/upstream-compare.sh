@@ -2,10 +2,13 @@
 #MISE description="Diff the locally built ZFSBootMenu artifact against the official upstream release"
 set -euo pipefail
 
+# shellcheck source=mise-tasks/zbm/lib.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
 version="${ZBM_VERSION:-3.0.1}"
 kernel="${ZBM_KERNEL_VERSION:-6.1}"
 style="${ZBM_UPSTREAM_STYLE:-recovery}"
-default_local_arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
+default_local_arch="$(zbm_host_arch)"
 local_arch="${ZBM_LOCAL_ARCH:-$default_local_arch}"
 official_arch="${ZBM_OFFICIAL_ARCH:-x86_64}"
 local_upstream_arch="${ZBM_LOCAL_UPSTREAM_ARCH:-$(uname -m | sed -e s/amd64/x86_64/)}"
@@ -37,13 +40,7 @@ for required in curl docker git sha256sum tar; do
   fi
 done
 
-repo_root="${MISE_CONFIG_ROOT:-}"
-if [ -z "$repo_root" ]; then
-  repo_root="$(git rev-parse --show-toplevel)"
-elif [ "${repo_root#/}" = "$repo_root" ] && [ ! -d "${repo_root}/zbm" ]; then
-  repo_root="$(git rev-parse --show-toplevel)"
-fi
-repo_root="$(cd "$repo_root" && pwd -P)"
+repo_root="$(zbm_repo_root)"
 
 local_out_dir="${ZBM_LOCAL_OUT_DIR:-${repo_root}/zbm-build/${local_arch}}"
 src_dir="${repo_root}/zbm-build/src"
@@ -145,69 +142,7 @@ trap preserve_on_error ERR INT TERM
 mkdir -p "$workdir"
 workdir="$(realpath "$workdir")"
 wrapper_dir="${workdir}/bin"
-mkdir -p "$wrapper_dir"
-if command -v grealpath >/dev/null 2>&1; then
-  ln -s "$(command -v grealpath)" "${wrapper_dir}/realpath"
-else
-  cat >"${wrapper_dir}/realpath" <<'WRAPPER'
-#!/usr/bin/env bash
-set -euo pipefail
-
-paths=()
-for arg in "$@"; do
-  case "$arg" in
-    -e)
-      ;;
-    -q)
-      ;;
-    --)
-      shift
-      paths+=( "$@" )
-      break
-      ;;
-    -*)
-      echo "realpath wrapper: unsupported option ${arg}" >&2
-      exit 1
-      ;;
-    *)
-      paths+=( "$arg" )
-      ;;
-  esac
-done
-
-for path in "${paths[@]}"; do
-  [ -e "$path" ] || exit 1
-  python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$path"
-done
-WRAPPER
-  chmod +x "${wrapper_dir}/realpath"
-fi
-# Upstream make-binary.sh hardcodes `podman`, so the wrapper file must carry
-# that name — but it execs docker, the one CLI these scripts use everywhere.
-docker_bin="$(command -v docker)"
-{
-  printf '#!/usr/bin/env bash\n'
-  printf 'set -euo pipefail\n'
-  printf 'docker_bin=%q\n' "$docker_bin"
-  cat <<'WRAPPER'
-args=()
-while [ "$#" -gt 0 ]; do
-  if [ "$1" = "-v" ] && [ "$#" -ge 2 ]; then
-    volume="$2"
-    case "$volume" in
-      .:*) volume="${PWD}${volume#.}" ;;
-    esac
-    args+=( "-v" "$volume" )
-    shift 2
-    continue
-  fi
-  args+=( "$1" )
-  shift
-done
-exec "$docker_bin" "${args[@]}"
-WRAPPER
-} >"${wrapper_dir}/podman"
-chmod +x "${wrapper_dir}/podman"
+zbm_install_make_binary_wrappers "$wrapper_dir"
 export PATH="${wrapper_dir}:${PATH}"
 official_dir="${workdir}/official"
 extract_dir="${workdir}/extract"
@@ -414,10 +349,6 @@ missing_module_count="$(wc -l <"${report_dir}/missing.modules" | tr -d '[:space:
 missing_binary_count="$(wc -l <"${report_dir}/missing.binaries" | tr -d '[:space:]')"
 added_module_count="$(wc -l <"${report_dir}/added.modules" | tr -d '[:space:]')"
 added_binary_count="$(wc -l <"${report_dir}/added.binaries" | tr -d '[:space:]')"
-cross_arch_compare=0
-if [ "$local_arch" != "$official_arch" ]; then
-  cross_arch_compare=1
-fi
 
 if [ "$cross_arch_compare" -eq 1 ]; then
   echo "Cross-architecture module reports are informational only; kernel configs differ beyond architecture-specific paths"

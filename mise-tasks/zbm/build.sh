@@ -2,20 +2,17 @@
 #MISE description="Build a ZFSBootMenu recovery tarball through upstream make-binary.sh"
 set -euo pipefail
 
-arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
+# shellcheck source=mise-tasks/zbm/lib.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+arch="$(zbm_host_arch)"
 upstream_arch="$(uname -m | sed -e s/amd64/x86_64/)"
 zbm_base_version="$ZBM_VERSION"
 if [ -z "${ZBM_BUILD_SUFFIX:-}" ] && [ -z "${CI:-}" ]; then
   ZBM_BUILD_SUFFIX="-local.$(date "+%Y%m%d%H%M%S")"
 fi
 zbm_artifact_version="${zbm_base_version}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX:-}"
-repo_root="${MISE_CONFIG_ROOT:-}"
-if [ -z "$repo_root" ]; then
-  repo_root="$(git rev-parse --show-toplevel)"
-elif [ "${repo_root#/}" = "$repo_root" ] && [ ! -d "${repo_root}/zbm" ]; then
-  repo_root="$(git rev-parse --show-toplevel)"
-fi
-repo_root="$(cd "$repo_root" && pwd -P)"
+repo_root="$(zbm_repo_root)"
 src_dir="${repo_root}/zbm-build/src"
 out_dir="${repo_root}/zbm-build/${arch}"
 builder_tag="localhost/zbm-builder:v${zbm_base_version}-${arch}"
@@ -46,75 +43,10 @@ if ! docker run --rm --entrypoint /usr/bin/bash "$builder_tag" -lc 'command -v d
 fi
 
 workdir="$(mktemp -d "${repo_root}/zbm-build/make-binary.${arch}.XXXXXX")"
-cleanup() {
-  rm -rf "$workdir"
-}
-trap cleanup EXIT INT TERM
+trap 'rm -rf "$workdir"' EXIT INT TERM
 
 wrapper_dir="${workdir}/bin"
-mkdir -p "$wrapper_dir"
-if command -v grealpath >/dev/null 2>&1; then
-  ln -s "$(command -v grealpath)" "${wrapper_dir}/realpath"
-else
-  cat >"${wrapper_dir}/realpath" <<'WRAPPER'
-#!/usr/bin/env bash
-set -euo pipefail
-
-paths=()
-for arg in "$@"; do
-  case "$arg" in
-    -e)
-      ;;
-    -q)
-      ;;
-    --)
-      shift
-      paths+=( "$@" )
-      break
-      ;;
-    -*)
-      echo "realpath wrapper: unsupported option ${arg}" >&2
-      exit 1
-      ;;
-    *)
-      paths+=( "$arg" )
-      ;;
-  esac
-done
-
-for path in "${paths[@]}"; do
-  [ -e "$path" ] || exit 1
-  python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$path"
-done
-WRAPPER
-  chmod +x "${wrapper_dir}/realpath"
-fi
-# Upstream make-binary.sh hardcodes `podman`, so the wrapper file must carry
-# that name — but it execs docker, the one CLI these scripts use everywhere.
-docker_bin="$(command -v docker)"
-{
-  printf '#!/usr/bin/env bash\n'
-  printf 'set -euo pipefail\n'
-  printf 'docker_bin=%q\n' "$docker_bin"
-  cat <<'WRAPPER'
-args=()
-while [ "$#" -gt 0 ]; do
-  if [ "$1" = "-v" ] && [ "$#" -ge 2 ]; then
-    volume="$2"
-    case "$volume" in
-      .:*) volume="${PWD}${volume#.}" ;;
-    esac
-    args+=( "-v" "$volume" )
-    shift 2
-    continue
-  fi
-  args+=( "$1" )
-  shift
-done
-exec "$docker_bin" "${args[@]}"
-WRAPPER
-} >"${wrapper_dir}/podman"
-chmod +x "${wrapper_dir}/podman"
+zbm_install_make_binary_wrappers "$wrapper_dir"
 export PATH="${wrapper_dir}:${PATH}"
 
 work_src="${workdir}/src"

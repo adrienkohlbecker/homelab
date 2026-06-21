@@ -27,7 +27,10 @@
 # subpath that matches the host arch.
 set -euo pipefail
 
-arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
+# shellcheck source=mise-tasks/zbm/lib.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+arch="$(zbm_host_arch)"
 case "$arch" in
 x86_64) xbps_repo=https://repo-de.voidlinux.org/current ;;
 aarch64) xbps_repo=https://repo-de.voidlinux.org/current/aarch64 ;;
@@ -37,13 +40,7 @@ aarch64) xbps_repo=https://repo-de.voidlinux.org/current/aarch64 ;;
   ;;
 esac
 
-repo_root="${MISE_CONFIG_ROOT:-}"
-if [ -z "$repo_root" ]; then
-  repo_root="$(git rev-parse --show-toplevel)"
-elif [ "${repo_root#/}" = "$repo_root" ] && [ ! -d "${repo_root}/zbm" ]; then
-  repo_root="$(git rev-parse --show-toplevel)"
-fi
-repo_root="$(cd "$repo_root" && pwd -P)"
+repo_root="$(zbm_repo_root)"
 
 src_dir="${repo_root}/zbm-build/src"
 mkdir -p "$(dirname "$src_dir")"
