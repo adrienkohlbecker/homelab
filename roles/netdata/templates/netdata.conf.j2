@@ -18,13 +18,18 @@ bind to = 127.0.0.1
 # them through the proxy (the operator reads them on-host).
 allow management from = none
 allow netdata.conf from = none
-# The compiled default `allow connections from = localhost *` carries the
-# literal name `localhost`, so netdata reverse-DNS-validates every accepted
-# connection against it; 127.0.0.1 has no PTR, so it logs `LISTENER: Cannot
-# validate 'localhost' ...` on each scrape (~24k/day on lab). Drop the name
-# token -- `*` is safe because `bind to` above is loopback-only -- so no DNS
-# validation is attempted.
+# The compiled defaults for the connection/dashboard/badges ACLs all carry the
+# literal name `localhost` (`allow connections from = localhost *`, likewise
+# `allow dashboard from` and `allow badges from`), so netdata reverse-DNS-
+# validates against it on every request the ACL gates; 127.0.0.1 has no PTR, so
+# it logs `LISTENER: Cannot validate 'localhost' ...` on each scrape (~24k/day
+# on lab). Overriding only `connections` leaves the per-endpoint dashboard/api
+# scrape path (gated by `allow dashboard from`) still emitting it, so drop the
+# name token from all three -- `*` is safe because `bind to` above is loopback-
+# only -- and no DNS validation is attempted anywhere.
 allow connections from = *
+allow dashboard from = *
+allow badges from = *
 
 # v2 moved access logging out of [global] into [logs]; `[global] access log` is
 # silently ignored, re-enabling the file. Accesses are logged by nginx.
