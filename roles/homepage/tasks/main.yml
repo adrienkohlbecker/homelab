@@ -233,30 +233,21 @@
   tags:
     - homepage
 
-# Three-step check/scan/register, mirroring zfs_autobackup's dest.yml: ssh-keyscan
-# -H hashes each entry with a random salt so a fresh scan never byte-matches an
-# existing line; the ssh-keygen -F pre-check gates scan+register on genuine
-# absence, keeping known_hosts idempotent. Gated `not qemu_test`: the box
-# fixture's homepage role runs without netdata installed, so its lone peer
-# (itself) has no host to reach -- StrictHostKeyChecking then fails the fetch
-# closed and the panel renders the per-host error div (asserted in _verify).
-- name: Check which netdata peers are already in known_hosts
+# Pin each netdata peer's SSH host key so the poller can reach it under
+# StrictHostKeyChecking=yes. Scan every target on each converge and feed the
+# result to the known_hosts module, which is idempotent on (host, key) and
+# REPLACES a rotated key in place -- a peer rebuild (new host key, same IP, e.g.
+# a fox rebake) is adopted automatically instead of leaving a stale entry that
+# fails the poll forever. No -H hashing: plaintext is what lets the module match
+# and replace a changed key, and salted lines would re-churn `changed` every run
+# (the random salt never byte-matches). Gated `not qemu_test`: the box fixture's
+# homepage role runs without netdata installed, so its lone peer (itself) has no
+# host to reach -- StrictHostKeyChecking then fails the fetch closed and the
+# panel renders the per-host error div (asserted in _verify).
+- name: Scan SSH host keys from netdata peers
   when: not qemu_test
-  command: ssh-keygen -F "{{ item }}" -f /opt/homepage_alerts/.ssh/known_hosts
+  command: ssh-keyscan -t ed25519 -T 5 "{{ item }}"
   loop: "{{ _homepage_alerts_ssh_targets }}"
-  changed_when: false
-  failed_when: false
-  register: _homepage_alerts_known_check
-  become: true
-  tags:
-    - homepage
-
-- name: Scan SSH host keys from new netdata peers
-  when: not qemu_test and item.rc != 0
-  command: ssh-keyscan -H -t ed25519 -T 5 "{{ item.item }}"
-  loop: "{{ _homepage_alerts_known_check.results | default([]) }}"
-  loop_control:
-    label: "{{ item.item }}"
   changed_when: false
   failed_when: false
   register: _homepage_alerts_keyscan
@@ -264,16 +255,18 @@
     - homepage
 
 # Root-owned 0644 known_hosts inside homepage's 0700 .ssh dir: world-readable so
-# the poller (User=homepage) reads it, but only root rewrites it.
-- name: Register SSH host keys for new netdata peers
+# the poller (User=homepage) reads it, but only root rewrites it. Entries are
+# cleartext internal IPs -- acceptable for a host-local file that never leaves
+# the fleet.
+- name: Register SSH host keys for netdata peers
   when: not qemu_test and item.stdout | default('') | length > 0
   known_hosts:
     path: /opt/homepage_alerts/.ssh/known_hosts
-    name: "{{ item.item.item }}"
+    name: "{{ item.item }}"
     key: "{{ item.stdout }}"
   loop: "{{ _homepage_alerts_keyscan.results | default([]) }}"
   loop_control:
-    label: "{{ item.item.item | default(item.item) }}"
+    label: "{{ item.item }}"
   become: true
   tags:
     - homepage
