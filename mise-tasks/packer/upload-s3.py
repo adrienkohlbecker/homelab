@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # MISE description="Bundle a published packer qemu artifact and upload it to the S3 image bucket"
-# USAGE arg "<machine>" help="Packer source/artifact name: box, box_deps, lab, or pug"
-# USAGE complete "machine" run="printf 'box\nbox_deps\nlab\npug\n'"
+# USAGE arg "<machine>" help="Packer source/artifact name: box or box_deps"
+# USAGE complete "machine" run="printf 'box\nbox_deps\n'"
 # USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="jammy"
 # USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
 # USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
@@ -53,7 +53,7 @@ BUNDLE_NAME = "disks.tar.zst"
 MANIFEST_NAME = "manifest.json"
 POINTER_NAME = "promoted.json"
 S3_CHECKSUM_ALGORITHM = "SHA256"
-VALID_MACHINES = {"box", "box_deps", "lab", "pug"}
+VALID_MACHINES = {"box", "box_deps"}
 
 
 def run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -148,14 +148,6 @@ def disk_entry(path: Path) -> dict[str, Any]:
     }
 
 
-def file_entry(path: Path) -> dict[str, Any]:
-    return {
-        "name": path.name,
-        "size_bytes": path.stat().st_size,
-        "sha256": sha256(path),
-    }
-
-
 def artifact_dir(args: argparse.Namespace) -> Path:
     if args.artifact_dir:
         return Path(args.artifact_dir).expanduser().resolve()
@@ -165,7 +157,7 @@ def artifact_dir(args: argparse.Namespace) -> Path:
     return (Path(base) / args.ubuntu / args.machine).resolve()
 
 
-def collect_artifact_files(root: Path) -> tuple[list[Path], list[Path]]:
+def collect_artifact_files(root: Path) -> tuple[list[Path], Path]:
     if not root.is_dir():
         sys.exit(f"artifact directory does not exist: {root}")
     disks = sorted(root.glob("packer-ubuntu-*.raw")) + sorted(root.glob("packer-ubuntu-*.qcow2"))
@@ -174,7 +166,7 @@ def collect_artifact_files(root: Path) -> tuple[list[Path], list[Path]]:
     efivars = root / "efivars.fd"
     if not efivars.is_file():
         sys.exit(f"missing efivars.fd in {root}; qemu harness expects it beside the disks")
-    return disks, [efivars]
+    return disks, efivars
 
 
 def build_manifest(
@@ -182,7 +174,7 @@ def build_manifest(
     args: argparse.Namespace,
     root: Path,
     disks: list[Path],
-    support_files: list[Path],
+    efivars: Path,
     s3_prefix: str,
 ) -> dict[str, Any]:
     full_sha = git_output(["rev-parse", "HEAD"])
@@ -203,8 +195,8 @@ def build_manifest(
         "s3_prefix": s3_prefix,
         "pointer_key": f"{args.ubuntu}/{args.machine}/{POINTER_NAME}",
         "disks": [disk_entry(path) for path in disks],
-        "support_files": [file_entry(path) for path in support_files],
-        "tar_members": [path.name for path in [*disks, *support_files]],
+        "support_files": [{"name": efivars.name, "size_bytes": efivars.stat().st_size, "sha256": sha256(efivars)}],
+        "tar_members": [path.name for path in [*disks, efivars]],
     }
 
 
@@ -291,7 +283,7 @@ def pointer_body(args: argparse.Namespace) -> str:
 def main() -> int:
     args = parse_args()
     root = artifact_dir(args)
-    disks, support_files = collect_artifact_files(root)
+    disks, efivars = collect_artifact_files(root)
     s3_prefix = f"{args.ubuntu}/{args.machine}/{args.build_id}"
     bundle_key = f"{s3_prefix}/{BUNDLE_NAME}"
     manifest_key = f"{s3_prefix}/{MANIFEST_NAME}"
@@ -299,7 +291,7 @@ def main() -> int:
 
     print(f"artifact: {root}")
     print(f"target:   s3://{args.bucket}/{s3_prefix}/")
-    manifest = build_manifest(args=args, root=root, disks=disks, support_files=support_files, s3_prefix=s3_prefix)
+    manifest = build_manifest(args=args, root=root, disks=disks, efivars=efivars, s3_prefix=s3_prefix)
 
     if args.dry_run:
         print(json.dumps(manifest, indent=2, sort_keys=True))
