@@ -40,28 +40,25 @@ def main() -> int:
         if "machine" in data:
             errors.append(f"{meta}: uses legacy 'machine:' key -- migrate to 'machines:'")
 
-        machines = data.get("machines")
-        if machines is not None:
+        if (machines := data.get("machines")) is not None:
             if not isinstance(machines, dict):
                 errors.append(f"{meta}: machines must be a mapping, got {type(machines).__name__}")
             else:
-                for name in machines:
-                    if name not in MACHINE_CHOICES:
-                        errors.append(f"{meta}: machines key {name!r} not in {sorted(MACHINE_CHOICES)}")
+                for name in sorted(set(machines) - set(MACHINE_CHOICES)):
+                    errors.append(f"{meta}: machines key {name!r} not in {sorted(MACHINE_CHOICES)}")
 
-        ubuntu = data.get("ubuntu")
-        if ubuntu is not None:
+        if (ubuntu := data.get("ubuntu")) is not None:
             if not isinstance(ubuntu, list):
                 errors.append(f"{meta}: ubuntu must be a list, got {type(ubuntu).__name__}")
             else:
                 for codename in ubuntu:
-                    if codename not in UBUNTU_RELEASES:
-                        errors.append(f"{meta}: ubuntu={codename!r} not in {sorted(UBUNTU_RELEASES)}")
-                    elif codename == DEFAULT_UBUNTU:
+                    if codename == DEFAULT_UBUNTU:
                         errors.append(
                             f"{meta}: ubuntu lists {DEFAULT_UBUNTU!r}, the default release"
                             " -- omit it (only list extra releases)"
                         )
+                    elif codename not in UBUNTU_RELEASES:
+                        errors.append(f"{meta}: ubuntu={codename!r} not in {sorted(UBUNTU_RELEASES)}")
 
         # skip: quarantines a known-failing cell so it can't gate a green
         # run. A mapping of cell-spec -> reason; the reason is mandatory so a
@@ -73,13 +70,18 @@ def main() -> int:
                 errors.append(f"{meta}: skip must be a mapping of cell-spec -> reason, got {type(skip).__name__}")
             else:
                 for spec, reason in skip.items():
-                    parts = str(spec).split(":")
-                    if parts[0] not in MACHINE_CHOICES:
-                        errors.append(f"{meta}: skip {spec!r}: machine {parts[0]!r} not in {sorted(MACHINE_CHOICES)}")
-                    if len(parts) > 1 and parts[1] not in UBUNTU_RELEASES:
-                        errors.append(f"{meta}: skip {spec!r}: ubuntu {parts[1]!r} not in {sorted(UBUNTU_RELEASES)}")
-                    if len(parts) > 2:
-                        errors.append(f"{meta}: skip {spec!r}: too many ':' (want machine or machine:codename)")
+                    match str(spec).split(":"):
+                        case [machine]:
+                            codename = DEFAULT_UBUNTU
+                        case [machine, codename]:
+                            pass
+                        case _:
+                            errors.append(f"{meta}: skip {spec!r}: too many ':' (want machine or machine:codename)")
+                            continue
+                    if machine not in MACHINE_CHOICES:
+                        errors.append(f"{meta}: skip {spec!r}: machine {machine!r} not in {sorted(MACHINE_CHOICES)}")
+                    if codename not in UBUNTU_RELEASES:
+                        errors.append(f"{meta}: skip {spec!r}: ubuntu {codename!r} not in {sorted(UBUNTU_RELEASES)}")
                     if not reason or not str(reason).strip():
                         errors.append(f"{meta}: skip {spec!r}: needs a non-empty reason")
 

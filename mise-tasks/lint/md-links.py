@@ -35,9 +35,9 @@ def main():
     missing_notes_dir = None if (root / "notes").exists() else (root / "notes").resolve()
 
     total = 0
-    for rel in sorted(subprocess.check_output(["git", "ls-files"], cwd=root, text=True).splitlines()):
+    for rel in sorted(subprocess.check_output(["git", "ls-files", "*.md"], cwd=root, text=True).splitlines()):
         path = root / rel
-        if not rel.endswith(".md") or path.is_symlink():
+        if path.is_symlink():
             continue
         for raw in iter_links(path.read_text(encoding="utf-8", errors="replace")):
             url_path = raw.strip().strip("<>").split("#")[0].strip()
