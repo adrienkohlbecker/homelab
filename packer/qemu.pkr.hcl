@@ -119,7 +119,6 @@ locals {
   arch_cfg = local.arch_table[local.arch]
 
   # Per-source config consumed downstream:
-  # - machine: the test machine spec verify-boot drives.
   # - disks: space-delimited list of whole-disk paths the build VM
   #   exposes to provision.sh as $DISKS. These become the rpool
   #   partitioned disks. The qemu source declares disk_additional_size
@@ -142,38 +141,36 @@ locals {
   #   Layouts: apoc (mirror, 2 disks), dozer (mirror, 2 disks),
   #   tank_mouse (4 disks; tank raidz2 + mouse mirror over shared
   #   partitions, matches lab prod). Empty => rpool-only image.
+  # - image_target: qemu images are harness-verified; hetzner images grow on
+  #   first cloud boot and are verified by mise-tasks/packer/hetzner.sh.
   #
   # Add an entry whenever a new source "qemu.ubuntu" block joins the
   # build.
   variant_config = {
     # pug: single-disk rpool + apoc mirror. Matches the pug prod host.
     pug = {
-      machine         = "pug"
-      disks           = "/dev/vdb"
-      extra_disks     = "/dev/vdc /dev/vdd"
-      disk_sizes      = ["40G", "1G", "1G"]
-      layout          = ""
-      swap_size       = "8G"
-      extra_pools     = "apoc"
-      image_target    = "qemu"
-      zfs_arc_max     = ""
-      qemu_test_image = true
+      disks        = "/dev/vdb"
+      extra_disks  = "/dev/vdc /dev/vdd"
+      disk_sizes   = ["40G", "1G", "1G"]
+      layout       = ""
+      swap_size    = "8G"
+      extra_pools  = "apoc"
+      image_target = "qemu"
+      zfs_arc_max  = ""
     }
     # lab: mdadm-EFI + 3-disk mirror rpool + dozer mirror + tank raidz2 +
     # mouse mirror. Matches the lab prod host. swap_size bakes an 8G rpool
     # zvol; the swap role grows it to 16G from host_vars (zram is the
     # primary device -- see notes/swap_strategy.md).
     lab = {
-      machine         = "lab"
-      disks           = "/dev/vdb /dev/vdc /dev/vdd"
-      extra_disks     = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
-      disk_sizes      = ["40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
-      layout          = "mirror"
-      swap_size       = "8G"
-      extra_pools     = "dozer tank_mouse"
-      image_target    = "qemu"
-      zfs_arc_max     = ""
-      qemu_test_image = true
+      disks        = "/dev/vdb /dev/vdc /dev/vdd"
+      extra_disks  = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
+      disk_sizes   = ["40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
+      layout       = "mirror"
+      swap_size    = "8G"
+      extra_pools  = "dozer tank_mouse"
+      image_target = "qemu"
+      zfs_arc_max  = ""
     }
     # box: single-disk rpool + a 1G flat `zee` pool. The default push-CI
     # ZFS-on-root fixture. The second pool turns box from rpool-only into a
@@ -200,32 +197,27 @@ locals {
     # ENOSPC this fixes is the zvol filling, not the pool; the pool size is the
     # enabler that lets the zvol grow.)
     box = {
-      machine         = "box"
-      disks           = "/dev/vdb"
-      extra_disks     = "/dev/vdc"
-      disk_sizes      = ["96G", "1G"]
-      layout          = ""
-      swap_size       = "4G"
-      extra_pools     = "zee"
-      image_target    = "qemu"
-      zfs_arc_max     = ""
-      qemu_test_image = true
+      disks        = "/dev/vdb"
+      extra_disks  = "/dev/vdc"
+      disk_sizes   = ["96G", "1G"]
+      layout       = ""
+      swap_size    = "4G"
+      extra_pools  = "zee"
+      image_target = "qemu"
+      zfs_arc_max  = ""
     }
     # hetzner: ZFS-root image for Hetzner Cloud. Small rpool disk — state is MB;
     # chroot.sh's hetzner_growpart.service grows it into cpx22's ~76G on first
-    # boot. `machine` is unused here (verify-boot is excepted below), kept only
-    # for variant_config shape parity.
+    # boot.
     hetzner = {
-      machine         = "hetzner"
-      disks           = "/dev/vdb"
-      extra_disks     = ""
-      disk_sizes      = ["20G"]
-      layout          = ""
-      swap_size       = "4G"
-      extra_pools     = ""
-      image_target    = "hetzner"
-      zfs_arc_max     = "536870912"
-      qemu_test_image = false
+      disks        = "/dev/vdb"
+      extra_disks  = ""
+      disk_sizes   = ["20G"]
+      layout       = ""
+      swap_size    = "4G"
+      extra_pools  = ""
+      image_target = "hetzner"
+      zfs_arc_max  = "536870912"
     }
   }
 
@@ -393,7 +385,7 @@ build {
       # the test-only kernel tuning + ambient-unit masking in chroot.sh. A
       # bare-metal copy-paste run of chroot.sh leaves it unset, so prod never
       # picks up either.
-      "QEMU_TEST_IMAGE" = local.variant_config[source.name].qemu_test_image ? "1" : ""
+      "QEMU_TEST_IMAGE" = local.variant_config[source.name].image_target == "qemu" ? "1" : ""
     }
   }
 
@@ -404,16 +396,13 @@ build {
       name   = "finalize"
       script = "${path.root}/scripts/postprocess.sh"
       environment_vars = [
-        "BUILD_DIR=${var.build_directory}/${source.name}",
+        "BUILD_DIRECTORY=${var.build_directory}",
+        "SOURCE_NAME=${source.name}",
         "IMAGE_FORMAT=${local.arch_cfg.image_format}",
-        "QEMU_TEST_IMAGE=${local.variant_config[source.name].qemu_test_image}",
-        "MACHINE=${local.variant_config[source.name].machine}",
+        "IMAGE_TARGET=${local.variant_config[source.name].image_target}",
         "UBUNTU_NAME=${var.ubuntu_name}",
-        "LAUNCH_PY=${path.root}/../test/launch.py",
         "PUBLISH=${var.publish}",
-        "PUBLISH_PY=${path.root}/publish.py",
-        "PUBLISH_LOCK=${var.output_directory}/.publish-lock",
-        "OUTPUT_DIR=${var.output_directory}/${source.name}",
+        "OUTPUT_DIRECTORY=${var.output_directory}",
       ]
     }
   }
