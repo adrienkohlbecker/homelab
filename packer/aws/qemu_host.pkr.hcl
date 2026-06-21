@@ -138,40 +138,11 @@ build {
   }
 
   provisioner "shell" {
-    inline_shebang = "/bin/bash -e"
-    inline = [
-      "set -euxo pipefail",
-      "[ -n '${var.gitlab_runner_url}' ] || { echo 'gitlab_runner_url is required' >&2; exit 1; }",
-      "[ -n '${var.gitlab_runner_sha256}' ] || { echo 'gitlab_runner_sha256 is required' >&2; exit 1; }",
-      "sudo install -dm 755 /etc/apt/keyrings",
-      "sudo apt-get update -qq",
-      "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates curl git jq xz-utils unzip gpg gpg-agent apt-transport-https qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd passt xorriso cloud-image-utils python3-yaml build-essential zstd tar mdadm ec2-instance-connect",
-      "curl -fsSL https://mise.jdx.dev/gpg-key.pub | gpg --dearmor | sudo tee /etc/apt/keyrings/mise-archive-keyring.gpg >/dev/null",
-      "echo 'deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.jdx.dev/deb stable main' | sudo tee /etc/apt/sources.list.d/mise.list >/dev/null",
-      "sudo apt-get update -qq",
-      "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends mise",
-      "curl -fsSL -o /tmp/gitlab-runner '${var.gitlab_runner_url}'",
-      "echo '${var.gitlab_runner_sha256}  /tmp/gitlab-runner' | sha256sum -c -",
-      "sudo install -m 0755 -o root -g root /tmp/gitlab-runner /usr/local/bin/gitlab-runner",
-      "sudo ln -sf /usr/local/bin/gitlab-runner /usr/bin/gitlab-runner",
-      "sudo install -m 0755 -o root -g root /tmp/homelab_ci_hydrate_images /usr/local/bin/homelab_ci_hydrate_images",
-      "sudo usermod -aG kvm ubuntu",
-      "sudo install -dm 0755 /opt/mise /opt/uv-cache /opt/venv /etc/mise /tmp/homelab-ci-build",
-      "sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/",
-      "cd /tmp/homelab-ci-build",
-      "sudo env MISE_DATA_DIR=/opt/mise PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin mise trust /tmp/homelab-ci-build/mise.toml",
-      "sudo env MISE_DATA_DIR=/opt/mise PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin mise install",
-      "sudo env MISE_DATA_DIR=/opt/mise UV_CACHE_DIR=/opt/uv-cache UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/opt/venv MISE_PYTHON_UV_VENV_AUTO=false PATH=/opt/venv/bin:/opt/mise/shims:/usr/local/bin:/usr/bin:/bin UV_COMPILE_BYTECODE=1 mise exec -- uv sync --frozen --link-mode hardlink",
-      "sudo awk '/^\\[tools\\]/{p=1; print; next} /^\\[/{p=0} p' /tmp/homelab-ci-build/mise.toml | sudo tee /etc/mise/config.toml >/dev/null",
-      "sudo chown -R ubuntu:ubuntu /opt/mise /opt/uv-cache /opt/venv",
-      "sudo install -m 0755 -o root -g root /tmp/homelab_ci_prepare_scratch /usr/local/bin/homelab_ci_prepare_scratch",
-      "sudo tee /usr/local/bin/homelab_ci_ready >/dev/null <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\n[ -c /dev/kvm ]\n[ -r /dev/kvm ]\n[ -w /dev/kvm ]\n[ -w /mnt/scratch/gitlab-runner/builds ]\n[ -w /mnt/scratch/homelab_ci ]\nenv -i PATH=/usr/bin:/bin gitlab-runner --version >/dev/null\ncommand -v qemu-system-x86_64 >/dev/null\ncommand -v qemu-img >/dev/null\ncommand -v passt >/dev/null\ncommand -v mise >/dev/null\nEOF",
-      "sudo chmod 0755 /usr/local/bin/homelab_ci_ready",
-      "sudo tee /etc/systemd/system/homelab-ci-scratch.service >/dev/null <<'EOF'\n[Unit]\nDescription=Format and mount local NVMe scratch for homelab CI qemu host\nBefore=multi-user.target\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/homelab_ci_prepare_scratch\nRemainAfterExit=yes\n\n[Install]\nWantedBy=multi-user.target\nEOF",
-      "sudo systemctl enable homelab-ci-scratch.service",
-      "sudo apt-get clean",
-      "sudo rm -rf /var/lib/apt/lists/* /tmp/gitlab-runner /tmp/homelab_ci_prepare_scratch /tmp/homelab-ci-build",
-    ]
+    script = "${path.root}/files/provision_qemu_host.sh"
+    env = {
+      "GITLAB_RUNNER_URL"    = var.gitlab_runner_url
+      "GITLAB_RUNNER_SHA256" = var.gitlab_runner_sha256
+    }
   }
 
   post-processor "manifest" {

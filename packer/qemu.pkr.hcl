@@ -397,112 +397,23 @@ build {
     }
   }
 
-  # Sequential chain: drop the cloud-image disk, smoke-test the boot,
-  # compress (Mac only).
+  # Final image steps live in a script so the shell is linted and the HCL stays
+  # declarative.
   post-processors {
-    # packer-ubuntu is the residual cloud-image OS disk — provision.sh
-    # debootstraps onto packer-ubuntu-1..N and never writes to vda, so
-    # nothing downstream consumes it.
     post-processor "shell-local" {
-      name           = "drop-cloudimg-disk"
-      inline_shebang = "/bin/bash"
-      inline = [<<-EOT
-        set -euxo pipefail
-        rm -f ${var.build_directory}/${source.name}/packer-ubuntu
-      EOT
-      ]
-    }
-
-    # Tag each shipped disk with its on-disk format so `file`/Quick Look/
-    # qemu-img-without-`-f` all identify it correctly. Runs after
-    # drop-cloudimg-disk so packer-ubuntu (no number) is gone and the
-    # glob only matches the OS disks. test/machine.py reads images at
-    # <imagedir>/.../packer-ubuntu-N.<format>; keep this rename in sync
-    # with the format suffix it appends.
-    post-processor "shell-local" {
-      name           = "extension"
-      inline_shebang = "/bin/bash"
-      inline = [<<-EOT
-        set -euxo pipefail
-        for disk in ${var.build_directory}/${source.name}/packer-ubuntu-*; do
-          mv "$${disk}" "$${disk}.${local.arch_cfg.image_format}"
-        done
-      EOT
-      ]
-    }
-
-    # Boot the freshly-built image and wait for systemd-fully-booted.
-    # Runs before compress so a failed verify short-circuits without
-    # burning CPU on a dead image. test/launch.py with --exit-after-ready
-    # boots the variant, waits for SSH, runs `systemctl is-system-running
-    # --wait`, and exits 0 only on state "running".
-    post-processor "shell-local" {
-      name = "verify-boot"
-      # Skip the hetzner image: it's cloud-init-only (no vagrant user) and has no
-      # entry in the harness's QEMU_MACHINE_SPECS, so launch.py can't boot+SSH-
-      # verify it. It's validated by deploying the snapshot to a throwaway cpx22
-      # (mise-tasks/packer/hetzner.sh).
-      except         = ["qemu.hetzner"]
-      inline_shebang = "/bin/bash"
-      inline = [<<-EOT
-        set -euxo pipefail
-        test/launch.py --machine ${local.variant_config[source.name].machine} --ubuntu ${var.ubuntu_name} --timeout 300 --exit-after-ready --image-dir ${var.build_directory}/${source.name}
-      EOT
-      ]
-    }
-
-    # Compress shipped disks in-place. qemu's disk_compression flag only
-    # covers the primary VMName disk (deleted above); additional disks
-    # need this loop. No-op on Linux: artifacts land on a zstd-compressed
-    # ZFS dataset so qcow2-level compression is pure CPU waste.
-    post-processor "shell-local" {
-      name           = "compress"
-      inline_shebang = "/bin/bash"
-      # OS gate via HCL-resolved image_format (raw on Linux, qcow2 on
-      # Mac). HCL2's only template-string escape is for ${...} interpolation,
-      # so an inline "$$(uname -s)" would reach bash as literal $$(uname -s)
-      # and expand $$ to the shell PID, breaking the comparison.
-      inline = [<<-EOT
-        set -euxo pipefail
-        if [ "${local.arch_cfg.image_format}" = "raw" ]; then exit 0; fi
-        for disk in ${var.build_directory}/${source.name}/packer-ubuntu-*.qcow2; do
-          echo "==> compressing $(basename "$${disk}")"
-          qemu-img convert -W -c -O qcow2 -o compression_type=zstd "$${disk}" "$${disk}.tmp"
-          mv "$${disk}.tmp" "$${disk}"
-        done
-      EOT
-      ]
-    }
-
-    # Install: atomic-rename the per-source output out of the staging
-    # tmpdir into its final home. publish.py wraps the rm + mv in an
-    # exclusive fcntl.flock on <output_directory>/.publish-lock so a
-    # test cell that's mid-launch (creating a qcow2 overlay over a
-    # backing file in <output_directory>/<source>/) can't read the
-    # directory while it's torn between the rm and the mv. The harness
-    # takes a shared flock on the same lockfile in test/machine.py's
-    # _acquire_publish_lock_shared, held across prepare→boot; shared +
-    # exclusive compose so multiple test cells parallel-run and only
-    # block packer's brief publish. See notes/concurrency_rework.md.
-    #
-    # publish.py is pure-Python (no util-linux flock(1)) so the same
-    # post-processor works on Linux (lab) and macOS (dev) -- macOS
-    # doesn't ship flock(1) and `mise run packer:build` is supported
-    # there too.
-    post-processor "shell-local" {
-      name           = "install"
-      inline_shebang = "/bin/bash"
-      inline = [<<-EOT
-        set -euxo pipefail
-        if [ "${var.publish}" != "true" ]; then
-          echo "==> Skipping publish (publish=false)"
-          exit 0
-        fi
-        python3 ${path.root}/publish.py \
-          "${var.output_directory}/.publish-lock" \
-          "${var.build_directory}/${source.name}" \
-          "${var.output_directory}/${source.name}"
-      EOT
+      name   = "finalize"
+      script = "${path.root}/scripts/postprocess.sh"
+      environment_vars = [
+        "BUILD_DIR=${var.build_directory}/${source.name}",
+        "IMAGE_FORMAT=${local.arch_cfg.image_format}",
+        "QEMU_TEST_IMAGE=${local.variant_config[source.name].qemu_test_image}",
+        "MACHINE=${local.variant_config[source.name].machine}",
+        "UBUNTU_NAME=${var.ubuntu_name}",
+        "LAUNCH_PY=${path.root}/../test/launch.py",
+        "PUBLISH=${var.publish}",
+        "PUBLISH_PY=${path.root}/publish.py",
+        "PUBLISH_LOCK=${var.output_directory}/.publish-lock",
+        "OUTPUT_DIR=${var.output_directory}/${source.name}",
       ]
     }
   }
