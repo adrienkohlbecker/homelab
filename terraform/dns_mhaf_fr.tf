@@ -1,30 +1,14 @@
 # DNS records for mhaf.fr.
-# See dns_fahm_fr.tf for the variable shape and the DMARC staging plan
-# (same posture applies here -- currently p=none, observation only).
+# See dns_fahm_fr.tf for the DMARC staging plan; mhaf.fr currently stays
+# at p=none, observation only.
 #
 # echo.mhaf.fr is proxied so CF intercepts and applies the `echo` Access
 # policies (see access.tf). The CNAME target is arbitrary -- CF gates the
 # request before it reaches the origin; for this test fixture the origin
 # doesn't need to respond.
 
-variable "mhaf_fr_records" {
-  description = "DNS records (A/CNAME/TXT/MX) for mhaf.fr."
-  type = map(object({
-    type     = string
-    name     = string
-    content  = string
-    priority = optional(number)
-    proxied  = optional(bool, false)
-    comment  = optional(string)
-    tags     = optional(list(string), [])
-  }))
-
-  validation {
-    condition     = alltrue([for r in var.mhaf_fr_records : contains(["A", "CNAME", "TXT", "MX"], r.type)])
-    error_message = "type must be one of A, CNAME, TXT, MX."
-  }
-
-  default = {
+locals {
+  mhaf_fr_static_records = {
     # A — host records derive from data/network_topology.yml via
     # `local.mhaf_fr_host_records` below (using `local.test_network`
     # for the 10.123 → 10.234 gsub).
@@ -57,16 +41,12 @@ locals {
     a_box          = { type = "A", name = "box.mhaf.fr", content = local.test_network.hosts.box.physical }
     a_wildcard_lab = { type = "A", name = "*.lab.mhaf.fr", content = local.test_network.hosts.lab.physical }
   }
-  mhaf_fr_records = merge(var.mhaf_fr_records, local.mhaf_fr_host_records)
+  mhaf_fr_records = merge(local.mhaf_fr_static_records, local.mhaf_fr_host_records)
 }
 
 resource "cloudflare_dns_record" "mhaf_fr" {
   for_each = local.mhaf_fr_records
 
-  # See dns_fahm_fr.tf for the rationale on `try()` here — the
-  # merge between var.mhaf_fr_records (typed) and
-  # local.mhaf_fr_host_records (untyped) leaves merged entries
-  # without the optional default fill-ins.
   zone_id  = local.zones["mhaf.fr"]
   type     = each.value.type
   name     = each.value.name

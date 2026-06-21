@@ -8,16 +8,15 @@ locals {
   email_routes = {
     ak = [cloudflare_email_routing_address.adrien_gmail.email]
     # spouse prefix sourced from 1P (var.spouse_initials) so the initials
-    # aren't in this public repo; the value is unchanged so routing is intact.
+    # aren't in this public repo.
     (var.spouse_initials) = [cloudflare_email_routing_address.spouse_email.email]
-    # couple alias prefix, also sourced from 1P (var.couple_alias); value unchanged.
-    (var.couple_alias) = [cloudflare_email_routing_address.adrien_gmail.email, cloudflare_email_routing_address.spouse_email.email]
+    (var.couple_alias)    = [cloudflare_email_routing_address.adrien_gmail.email, cloudflare_email_routing_address.spouse_email.email]
   }
 }
 
 # Spouse's email-route prefix (local-part). Resolved from TF_VAR_spouse_initials
 # in mise.toml [env] (1Password via op run) -- keeps the initials out of this
-# public repo. Value unchanged, so the route map is identical at apply time.
+# public repo.
 variable "spouse_initials" {
   type      = string
   sensitive = true
@@ -29,7 +28,7 @@ variable "spouse_initials" {
 }
 
 # Couple email-route prefix (the adrien+spouse combined alias). Resolved from
-# TF_VAR_couple_alias in mise.toml [env] (1Password) -- value unchanged.
+# TF_VAR_couple_alias in mise.toml [env] (1Password).
 variable "couple_alias" {
   type      = string
   sensitive = true
