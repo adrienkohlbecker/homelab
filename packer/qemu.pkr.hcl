@@ -190,17 +190,21 @@ locals {
     # applies packer/seed_deps.yml, and publishes the result). It is NOT
     # a packer source — there's no point re-running provision.sh + chroot
     # for a derivation that just adds podman+nginx on top.
-    # The rpool is 64G (not 40G like lab/pug, whose prod-faithful geometry
+    # The rpool is 96G (not 40G like lab/pug, whose prod-faithful geometry
     # spreads state across many pools): box is the only fixture the _site_test
-    # cell converges the *whole* fleet onto, pulling every service image plus
-    # homeassistant's uidmap pre-stage -- which makes storage-chown-by-maps
-    # write a second, ID-shifted copy of HA's ~2.4G of layers. 40G (minus the
-    # 4G swap zvol) filled mid-converge and failed HA with ENOSPC.
+    # cell converges the *whole* fleet onto, pulling every service image plus a
+    # uidmap pre-stage for each fake-root service (homeassistant, jellyfin,
+    # authelia, homepage, nexus, seerr, speedtest) -- each makes
+    # storage-chown-by-maps write a second, ID-shifted copy of that image's
+    # layers. The real fleet's container storage is ~31G on lab alone (measured),
+    # and the cram adds box/fox/pug images + the OS on top: 40G failed at the
+    # mariadb layer, 64G got all the way to HA's pre-stage (the last heavy role)
+    # before ENOSPC. 96G leaves headroom above the full cram.
     box = {
       machine         = "box"
       disks           = "/dev/vdb"
       extra_disks     = "/dev/vdc"
-      disk_sizes      = ["64G", "1G"]
+      disk_sizes      = ["96G", "1G"]
       layout          = ""
       swap_size       = "4G"
       extra_pools     = "zee"
