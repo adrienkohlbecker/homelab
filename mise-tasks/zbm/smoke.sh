@@ -18,7 +18,10 @@
 # would feed the unused VGA keyboard instead).
 set -euo pipefail
 
-arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
+# shellcheck source=mise-tasks/zbm/lib.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+arch="$(zbm_host_arch)"
 repo_root="${MISE_CONFIG_ROOT}"
 cd "$repo_root"
 
@@ -41,10 +44,10 @@ if [ -n "$version" ]; then
   (cd "$out_dir" && sha256sum -c "zfsbootmenu-${version}.tar.gz.sha256sum")
   tarball="${out_dir}/zfsbootmenu-${version}.tar.gz"
 else
-  # ls -t lists newest-first; take the first line without a `| head` pipe,
-  # whose early reader would SIGPIPE ls and trip pipefail.
-  tarball=$(ls -t "$out_dir"/zfsbootmenu-v*-"${arch}".tar.gz)
-  tarball=${tarball%%$'\n'*}
+  if ! tarball="$(zbm_latest_tarball "$out_dir" "$arch")"; then
+    echo "no ${arch} tarball — run 'mise run zbm:build' first" >&2
+    exit 1
+  fi
 fi
 echo "Smoke-testing ${tarball}"
 

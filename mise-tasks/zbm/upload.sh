@@ -19,14 +19,15 @@
 #                produce. No deploy token to mint or store.
 set -euo pipefail
 
-arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
+# shellcheck source=mise-tasks/zbm/lib.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+arch="$(zbm_host_arch)"
 out_dir="${MISE_CONFIG_ROOT}/zbm-build/${arch}"
-# shellcheck disable=SC2012
-tarball="$(ls -t "${out_dir}"/zfsbootmenu-v*.tar.gz 2>/dev/null | head -1)"
-[ -n "$tarball" ] || {
+if ! tarball="$(zbm_latest_tarball "$out_dir" "$arch")"; then
   echo "no tarball in ${out_dir} — run 'mise run zbm:build' first" >&2
   exit 1
-}
+fi
 tarball="$(basename "$tarball")"
 sha256sum_file="${tarball}.sha256sum"
 
