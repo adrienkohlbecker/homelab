@@ -28,11 +28,11 @@
 set -euxo pipefail
 
 # DISKS, EXTRA_DISKS, LAYOUT, SWAP_SIZE, EXTRA_POOLS, SOURCE_NAME,
-# UBUNTU_NAME, UBUNTU_MIRROR come from packer's shell-provisioner env block (see
-# qemu.pkr.hcl's variant_config map). Bare-metal callers export them
-# by hand before running. This script consumes the disk/pool vars and passes the
-# exported install vars through to chroot.sh. The ZBM_*/REFIND_*/UBUNTU_MIRROR_*
-# vars used downstream are documented at the top of chroot.sh.
+# IMAGE_TARGET, QEMU_TEST_IMAGE, UBUNTU_NAME, and UBUNTU_MIRROR come from
+# packer's shell-provisioner env block. Bare-metal callers export them by hand.
+# This script consumes the disk/pool vars and passes the exported install vars
+# through to chroot.sh. The ZBM_*/REFIND_*/UBUNTU_MIRROR_* vars used downstream
+# are documented at the top of chroot.sh.
 
 export DISKS_COUNT
 DISKS_COUNT=$(wc -w <<<"$DISKS")
