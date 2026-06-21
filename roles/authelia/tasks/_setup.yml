@@ -1,4 +1,4 @@
-# Test-fixture role-deps for the authelia harness run. site.yml on
+# Test-fixture role dependencies for the authelia harness run. site.yml on
 # prod runs apt/podman/nginx in earlier plays, but testrole.py
 # imports only the role under test -- so the harness's _setup.yml
 # pre-stages podman + nginx + /mnt/services first -- the standard

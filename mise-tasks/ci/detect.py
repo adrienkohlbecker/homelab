@@ -3,7 +3,7 @@
 
 The ``gitlab`` subcommand (.gitlab-ci.yml's `detect` job) is the whole story:
 resolve a green base via the GitLab pipelines API, classify the changed files,
-expand role-deps and release cells, and write a generated child pipeline — one
+expand dependent roles and release cells, and write a generated child pipeline — one
 job per `role:variant[:ubuntu]` cell, emitted longest-first by each cell's
 median recent runtime so the slowest jobs start first.
 """
