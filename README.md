@@ -93,7 +93,7 @@ ansible-vault encrypt_string
 
 ## Test harness in one paragraph
 
-`test/testrole.py <role>` boots a QEMU VM (`box` by default; `--machine {minimal,box,lab,pug}`), runs the role's `_setup.yml`, applies the role in check-mode, then for real, then a second time to assert idempotence, then runs the role's `_verify.yml` if present. `test/testall.py` fans this out across N workers and writes a TSV joblog. Output goes to `test/out/<machine>.<role>.ansi`. Variants vary only in disk topology — bootloader (ZBM via rEFInd), filesystem (ZFS-on-root for prod-shaped variants), and arch (x86_64 + Linux/KVM, aarch64 + Mac/HVF) are deliberately fixed. See CLAUDE.md → "Test Environment Design" for why.
+`test/testrole.py <role>` boots a QEMU VM (`box` by default; `--machine {minimal,box,lab,pug}`), runs the role's `_setup.yml`, applies the role in check-mode, then for real, then a second time to assert idempotence, then runs the role's `_verify.yml` if present. `test/testall.py` fans this out across N workers and writes a TSV joblog. Failed-run artifacts go to `test/out/<machine>.<ubuntu>.<role>.*.ansi`. Variants vary only in disk topology — bootloader (ZBM via rEFInd), filesystem (ZFS-on-root for prod-shaped variants), and arch (x86_64 + Linux/KVM, aarch64 + Mac/HVF) are deliberately fixed. See CLAUDE.md → "Test Environment Design" for why.
 
 ## Secrets
 
