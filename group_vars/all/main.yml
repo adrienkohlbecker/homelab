@@ -266,7 +266,6 @@ nexus_url: ""
 mirror_apt_ubuntu_archive: 'http://{{ nexus_url ~ "/repository/ubuntu-archive" if nexus_url else (test_aws_region ~ ".ec2.archive.ubuntu.com/ubuntu" if test_in_aws | default(false) | bool else "archive.ubuntu.com/ubuntu") }}'
 mirror_apt_ubuntu_security: 'http://{{ nexus_url ~ "/repository/ubuntu-security" if nexus_url else (test_aws_region ~ ".ec2.archive.ubuntu.com/ubuntu" if test_in_aws | default(false) | bool else "security.ubuntu.com/ubuntu") }}'
 mirror_apt_ubuntu_ports: 'http://{{ nexus_url ~ "/repository/ubuntu-ports" if nexus_url else (test_aws_region ~ ".ec2.ports.ubuntu.com/ubuntu-ports" if test_in_aws | default(false) | bool else "ports.ubuntu.com/ubuntu-ports") }}'
-mirror_apt_azlux: 'https://{{ nexus_url ~ "/repository/azlux-debian" if nexus_url else "packages.azlux.fr/debian" }}'
 mirror_apt_netdata: 'https://{{ nexus_url ~ "/repository/netdata" if nexus_url else "repo.netdata.cloud/repos/stable/ubuntu" }}'
 mirror_apt_fluentbit: 'https://{{ nexus_url ~ "/repository/fluentbit" if nexus_url else "packages.fluentbit.io/ubuntu" }}'
 mirror_apt_docker: 'https://{{ nexus_url ~ "/repository/docker-ce" if nexus_url else "download.docker.com/linux/ubuntu" }}'
@@ -280,8 +279,6 @@ mirror_gitlab: 'https://{{ nexus_url ~ "/repository/gitlab" if nexus_url else "g
 mirror_raw_githubusercontent: 'https://{{ nexus_url ~ "/repository/raw-githubusercontent" if nexus_url else "raw.githubusercontent.com" }}'
 mirror_minio: 'https://{{ nexus_url ~ "/repository/minio" if nexus_url else "dl.min.io" }}'
 mirror_gitea_dl: 'https://{{ nexus_url ~ "/repository/gitea-dl" if nexus_url else "dl.gitea.com" }}'
-mirror_gitea_com: 'https://{{ nexus_url ~ "/repository/gitea-com" if nexus_url else "gitea.com" }}'
-mirror_gitea_lab: 'https://{{ nexus_url ~ "/repository/gitea-lab" if nexus_url else "gitea.lab.fahm.fr" }}'
 mirror_pypi: 'https://{{ nexus_url ~ "/repository/pypi" if nexus_url else "pypi.org" }}'
 
 ubuntu_mirror: '{{ (ansible_architecture == "aarch64") | ternary(mirror_apt_ubuntu_ports ~ "/", mirror_apt_ubuntu_archive ~ "/") }}'
