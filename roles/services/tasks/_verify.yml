@@ -134,9 +134,9 @@
     argv:
       - systemctl
       - is-active
-      - "zfs_mount{{ item.mountpoint | regex_replace('^/$', '/root') | replace('/', '_') }}.service"
+      - "{{ item.mountpoint | zfs_mount_unit }}"
   changed_when: false
   loop: "{{ services_datasets }}"
   loop_control:
-    label: "zfs_mount{{ item.mountpoint | regex_replace('^/$', '/root') | replace('/', '_') }}.service"
+    label: "{{ item.mountpoint | zfs_mount_unit }}"
   become: true

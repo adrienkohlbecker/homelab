@@ -53,4 +53,4 @@
 # systemd_unit recording its result under one name in both install and remove.
 - name: disable | Record linger result for {{ linger_args.name }}
   set_fact:
-    "{{ linger_args.name | regex_replace('[^A-Za-z0-9_]', '_') }}_lingered": "{{ _linger_disable_result is changed }}"
+    "{{ linger_args.name | ansible_var_key }}_lingered": "{{ _linger_disable_result is changed }}"

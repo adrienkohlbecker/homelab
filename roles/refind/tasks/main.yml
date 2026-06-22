@@ -277,7 +277,7 @@
 
 - name: Set ZBM cmdline fact for refind entries
   set_fact:
-    refind_zbm_cmdline: "{{ refind_zbm_cmdline_content.content | b64decode | trim }}"
+    refind_zbm_cmdline: "{{ refind_zbm_cmdline_content | slurp_text | trim }}"
   tags:
     - refind
 

@@ -31,7 +31,7 @@
 
 - name: _verify | Seerr persisted the configured apiKey
   vars:
-    _seerr_persisted: "{{ _seerr_settings_content.content | b64decode | from_json }}"
+    _seerr_persisted: "{{ _seerr_settings_content | slurp_text | from_json }}"
   assert:
     that:
       # Guard `main` first: a partial parse (or a regression that drops the
@@ -132,11 +132,11 @@
 
 - name: _verify | The template reproduces the on-disk settings.json byte-for-byte
   vars:
-    seerr_settings_json: "{{ _seerr_shape_b64.content | b64decode | from_json }}"
+    seerr_settings_json: "{{ _seerr_shape_b64 | slurp_text | from_json }}"
     _rendered: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
   assert:
     that:
-      - (_seerr_shape_b64.content | b64decode) == _rendered
+      - (_seerr_shape_b64 | slurp_text) == _rendered
     fail_msg: >-
       settings.json.j2 no longer reproduces the on-disk file -- seerr persisted a
       shape (key set or order) the template does not emit, so a converge would
@@ -186,7 +186,7 @@
 
 - name: _verify | Render the template against the synthetic post-bootstrap state
   vars:
-    seerr_settings_json: "{{ (_seerr_shape_b64.content | b64decode | from_json) | combine(_seerr_pop_overrides, recursive=True) }}"
+    seerr_settings_json: "{{ (_seerr_shape_b64 | slurp_text | from_json) | combine(_seerr_pop_overrides, recursive=True) }}"
   set_fact:
     _seerr_pop_render1: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
 
@@ -258,7 +258,7 @@
 
 - name: _verify | The rescue rewrote a valid canonical file with our apiKey
   vars:
-    _rescued: "{{ _seerr_rescued.content | b64decode | from_json }}"
+    _rescued: "{{ _seerr_rescued | slurp_text | from_json }}"
   assert:
     that:
       - _rescued.main is defined

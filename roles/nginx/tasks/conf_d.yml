@@ -105,7 +105,7 @@
     # e.g. csp_ratelimit.conf -> csp_ratelimit_conf_result.
     - name: conf_d | Record install result for {{ nginx_conf_d_args.name }}
       set_fact:
-        "{{ _nginx_conf_d_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ nginx_conf_d }}"
+        "{{ _nginx_conf_d_name | ansible_var_key }}_result": "{{ nginx_conf_d }}"
 
     # site.yml's per-site reload only fires when the per-site template
     # changes, so without an explicit reload here a conf.d drop change
@@ -170,7 +170,7 @@
 
     - name: conf_d | Record removal result for {{ nginx_conf_d_args.name }}
       set_fact:
-        "{{ _nginx_conf_d_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ nginx_conf_d_absent }}"
+        "{{ _nginx_conf_d_name | ansible_var_key }}_result": "{{ nginx_conf_d_absent }}"
 
     - name: conf_d | Reload nginx after removing {{ nginx_conf_d_args.name }}
       when:

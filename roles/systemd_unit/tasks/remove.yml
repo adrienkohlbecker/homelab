@@ -164,4 +164,4 @@
 # `<name>_<type>_result` regardless of which operation just ran.
 - name: remove | Record removal result for {{ systemd_unit_args.dest | default(systemd_unit_args.src | default('?')) }}
   set_fact:
-    "{{ _systemd_unit_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ systemd_unit_file }}"
+    "{{ _systemd_unit_name | ansible_var_key }}_result": "{{ systemd_unit_file }}"

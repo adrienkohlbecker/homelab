@@ -70,7 +70,7 @@
 - name: Fail if the nexus encryption material would change in place
   when: >-
     nexus_encryption_existing.content is defined
-    and (nexus_encryption_existing.content | b64decode | from_json)
+    and (nexus_encryption_existing | slurp_text | from_json)
         != (lookup('template', 'encryption.json.j2') | from_json)
   fail:
     msg: >-
