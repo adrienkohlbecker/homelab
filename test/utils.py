@@ -3,6 +3,7 @@
 import asyncio
 import atexit
 import contextlib
+import os
 import queue
 import shlex
 import shutil
@@ -100,7 +101,7 @@ def colorize(line: str, color: str | None) -> str:
 # the tee-file write stays inline (local disk, the authoritative transcript) so
 # test/out/*.ansi stays complete even if stdout wedges and the daemon is killed
 # at interpreter exit.
-_STDOUT_QUEUE: "queue.SimpleQueue[str | threading.Event]" = queue.SimpleQueue()
+_STDOUT_QUEUE: queue.SimpleQueue[str | threading.Event] = queue.SimpleQueue()
 _STDOUT_WRITER: threading.Thread | None = None
 _STDOUT_WRITER_LOCK = threading.Lock()
 
@@ -223,8 +224,6 @@ async def terminate_pid(
     a Popen handle. Uses kill(pid, 0) to detect exit; tolerant of the
     process having already gone.
     """
-    import os  # local: utils.py is otherwise os-free
-
     with contextlib.suppress(ProcessLookupError):
         os.kill(pid, initial_signal)
 
@@ -310,8 +309,6 @@ async def run_command(
     """
     if not quiet:
         print_cmd_line(cmd, env=env)
-
-    import os  # local: keep utils mostly os-free, this is the only consumer
 
     subprocess_env: dict[str, str] | None = None
     if env is not None:

@@ -15,6 +15,7 @@ Human-readable (for local inspection):
   python3 test/matrix.py foo bar    # specific roles
 """
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -212,8 +213,6 @@ def _build_dispatch_matrix(dispatch_input: str) -> list[TestCell]:
 
 
 def main() -> int:
-    import argparse
-
     parser = argparse.ArgumentParser(
         description="Generate the test matrix from roles/*/meta/test.yml",
     )

@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import time
+import traceback
 from pathlib import Path
 
 from machine import (
@@ -349,8 +350,6 @@ def main() -> int:
         # profile_tasks tags every TASK header with elapsed time and prints a
         # TASKS RECAP at end of each play; env var picks it up for every
         # ansible-playbook subprocess without editing ansible.cfg.
-        import os
-
         os.environ["ANSIBLE_CALLBACKS_ENABLED"] = "profile_tasks"
 
     role_main = Path(f"roles/{parsed_args.role}/tasks/main.yml")
@@ -418,8 +417,6 @@ def main() -> int:
             # bypasses tee_output and never lands in the per-run log.
             # Route it through print_line so the log captures the same
             # diagnostic the user sees on the terminal.
-            import traceback
-
             print_line(traceback.format_exc().rstrip(), error=True)
             print_line(f"{parsed_args.role}.{parsed_args.machine} crashed", error=True)
             rc = 1

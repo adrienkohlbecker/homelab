@@ -991,9 +991,7 @@ class Machine:
         self._release_publish_lock()
 
     async def ensure_ssh(self) -> None:
-        """Resolve SSH port then wait for the daemon banner to appear."""
-
-        await self._find_ssh_port()
+        """Wait for the daemon banner on the port reserved in prepare()."""
 
         deadline = time.monotonic() + SSH_WAIT_TIMEOUT
         while not await self._ssh_banner_ready():
@@ -1139,33 +1137,21 @@ class Machine:
         when needed.
         """
 
-        await self._collect_remote_to_file(
-            "Systemd journal",
-            self.journal_file,
-            "env",
-            "SYSTEMD_COLORS=true",
-            "journalctl",
-            "--no-pager",
-            "--priority",
-            "info",
+        captures = (
+            (
+                "Systemd journal",
+                self.journal_file,
+                ("env", "SYSTEMD_COLORS=true", "journalctl", "--no-pager", "--priority", "info"),
+            ),
+            ("Kernel ring buffer", self.dmesg_file, ("sudo", "dmesg", "--color=always", "--ctime")),
+            (
+                "Failed units",
+                self.systemctl_failed_file,
+                ("env", "SYSTEMD_COLORS=true", "systemctl", "--failed", "--no-pager"),
+            ),
         )
-        await self._collect_remote_to_file(
-            "Kernel ring buffer",
-            self.dmesg_file,
-            "sudo",
-            "dmesg",
-            "--color=always",
-            "--ctime",
-        )
-        await self._collect_remote_to_file(
-            "Failed units",
-            self.systemctl_failed_file,
-            "env",
-            "SYSTEMD_COLORS=true",
-            "systemctl",
-            "--failed",
-            "--no-pager",
-        )
+        for label, dest, remote_cmd in captures:
+            await self._collect_remote_to_file(label, dest, *remote_cmd)
 
     def cleanup_logs(self) -> None:
         """Remove all per-run log artifacts."""
@@ -1296,26 +1282,19 @@ class Machine:
     async def prepare(self) -> None:
         """Stage the workdir, then create overlay images and seed data for the selected template."""
 
-        # Stage a temporary workdir with inventory snippets and the static playbooks.
-        Path("group_vars").copy_into(self.workdir.name)
-        Path("host_vars").copy_into(self.workdir.name)
-        Path("roles").copy_into(self.workdir.name)
-        # Role-local filter plugins (e.g. roles/wireguard/filter_plugins/)
-        # are already staged via the roles/ copy above. A top-level
-        # filter_plugins/ directory, if present, is also staged so playbook-
-        # scoped filters resolve.
-        if Path("filter_plugins").exists():
-            Path("filter_plugins").copy_into(self.workdir.name)
-        # group_vars/{prod,test}.yml derive `network.*` via
-        # `lookup('file', playbook_dir ~ '/data/network_topology.yml')`;
-        # the file has to be present alongside the staged playbooks for
-        # the lookup to resolve.
-        Path("data").copy_into(self.workdir.name)
-        # wireguard/ is gitignored (vaulted keys, never committed) so it's
-        # absent on a CI checkout. Skip silently when missing -- roles that
-        # actually need its contents will fail later with a clearer error.
-        if Path("wireguard").exists():
-            Path("wireguard").copy_into(self.workdir.name)
+        # Stage the inventory snippets, roles, and data files that playbooks
+        # read relative to their workdir.
+        for required_tree in ("group_vars", "host_vars", "roles", "data"):
+            Path(required_tree).copy_into(self.workdir.name)
+
+        # Role-local filter plugins are copied with roles/. A top-level
+        # filter_plugins/, if present, also needs to sit beside the playbooks.
+        # wireguard/ is gitignored (vaulted keys, never committed), so it is
+        # optional; roles that need it fail later with the real missing input.
+        for optional_tree in ("filter_plugins", "wireguard"):
+            src = Path(optional_tree)
+            if src.exists():
+                src.copy_into(self.workdir.name)
 
         # mise.toml + uv lock + pyproject are repo-root files a role may
         # reference via `{{ playbook_dir }}/<file>` during converge. Stage
@@ -2019,10 +1998,6 @@ class Machine:
             async with asyncio.timeout(5):
                 await proc.wait()
 
-    async def _find_ssh_port(self) -> None:
-        """Port was pre-picked in prepare(); nothing to discover at boot."""
-        return
-
 
 def imagedir_for_host() -> Path:
     """Return the platform's packer-image cache root.
@@ -2077,15 +2052,11 @@ def sweep_stale_workdirs(imagedir: Path) -> None:
 
     grace_seconds = 60
     now = time.time()
-    candidates = [
-        d for d in imagedir.iterdir() if d.is_dir() and (d.name.startswith("tmp") or d.name.startswith(".build-"))
-    ]
-    if not candidates:
-        return
-
     ps_args: str | None = None
 
-    for d in candidates:
+    for d in imagedir.iterdir():
+        if not d.is_dir() or not (d.name.startswith("tmp") or d.name.startswith(".build-")):
+            continue
         try:
             age = now - d.stat().st_mtime
         except OSError:
