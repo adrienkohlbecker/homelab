@@ -1608,7 +1608,8 @@ class Machine:
                 vars_path = packer_vars
             else:
                 vars_path = Path(f"{self.workdir.name}/uefi-vars.fd")
-                await run_command(["truncate", "-s", str(code_path.stat().st_size), str(vars_path)])
+                with vars_path.open("wb") as handle:
+                    handle.truncate(code_path.stat().st_size)
         return [
             f"file={code_path},if=pflash,unit=0,format=raw,readonly=on",
             f"file={vars_path},if=pflash,unit=1,format=raw",
