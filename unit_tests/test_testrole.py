@@ -1,4 +1,4 @@
-"""Unit tests for test/testrole.py — idempotence regex, argparse type, constants."""
+"""Unit tests for test/testrole.py — idempotence regex, argparse, constants."""
 
 import argparse
 
@@ -103,6 +103,25 @@ class TestPositiveInt:
     def test_non_numeric_raises(self) -> None:
         with pytest.raises(ValueError):
             testrole._positive_int("abc")
+
+
+# ---------------------------------------------------------------------------
+# parse_args — removed harness toggles
+# ---------------------------------------------------------------------------
+
+
+class TestParseArgs:
+    def test_removed_flow_flags_are_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("sys.argv", ["testrole.py", "nginx", "--no-idempotence"])
+        with pytest.raises(SystemExit) as exc:
+            testrole.parse_args()
+        assert exc.value.code == 2
+
+    def test_ansible_args_still_forward(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("sys.argv", ["testrole.py", "nginx", "--tags", "homepage"])
+        args, pass_args = testrole.parse_args()
+        assert args.role == "nginx"
+        assert pass_args == ["--tags", "homepage"]
 
 
 # ---------------------------------------------------------------------------
