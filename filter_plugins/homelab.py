@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
+import yaml
 from ansible.errors import AnsibleError
 
 
 _ANSIBLE_VAR_KEY_RE = re.compile(r"[^A-Za-z0-9_]")
+_MISSING = object()
 
 
 def ansible_var_key(value: Any) -> str:
@@ -47,6 +51,38 @@ def slurp_text(result: Mapping[str, Any], default: str | None = None, trim: bool
     except Exception as exc:
         raise AnsibleError(f"slurp_text could not decode slurp content: {exc}") from exc
     return text.strip() if trim else text
+
+
+def slurp_json(result: Mapping[str, Any], default: Any = _MISSING) -> Any:
+    """Decode and parse JSON content from an Ansible slurp result."""
+    if "content" not in result and default is not _MISSING:
+        return default
+    try:
+        return json.loads(slurp_text(result))
+    except Exception as exc:
+        raise AnsibleError(f"slurp_json could not parse slurp content: {exc}") from exc
+
+
+def slurp_yaml(result: Mapping[str, Any], default: Any = _MISSING) -> Any:
+    """Decode and parse YAML content from an Ansible slurp result."""
+    if "content" not in result and default is not _MISSING:
+        return default
+    try:
+        return yaml.safe_load(slurp_text(result))
+    except Exception as exc:
+        raise AnsibleError(f"slurp_yaml could not parse slurp content: {exc}") from exc
+
+
+def slurp_lines(result: Mapping[str, Any], default: Any = _MISSING) -> list[str]:
+    """Decode an Ansible slurp result into text lines."""
+    if "content" not in result and default is not _MISSING:
+        return default
+    return slurp_text(result, trim=False).splitlines()
+
+
+def rstrip_newlines(value: Any) -> str:
+    """Remove only trailing newline characters from rendered text."""
+    return str(value).rstrip("\n")
 
 
 def json_argv(argv: Sequence[Any]) -> str:
@@ -123,6 +159,71 @@ def podman_idmap_args(
     ]
 
 
+def authelia_redirects_to(
+    result: Mapping[str, Any],
+    subdomain: str,
+    inventory_hostname: str,
+    domain: str,
+    require_rd: bool = True,
+) -> bool:
+    """Return whether a URI result is an Authelia redirect for a service."""
+    location = str(result.get("location", ""))
+    if result.get("status") != 302:
+        return False
+
+    auth_url = f"https://auth.{inventory_hostname}.{domain}"
+    if not location.startswith(auth_url):
+        return False
+
+    if not require_rd:
+        return True
+
+    service_url = f"https://{subdomain}.{inventory_hostname}.{domain}"
+    query = parse_qs(urlsplit(location).query, keep_blank_values=True)
+    return service_url in query.get("rd", []) or f"rd={service_url}" in location
+
+
+def host_vlan_block(
+    network: Mapping[str, Any],
+    inventory_hostname: str,
+    vlan: str,
+    site: str = "home",
+    prefix: int = 28,
+    offset: int = 8,
+) -> str:
+    """Return the per-host VLAN block derived from topology host slot."""
+    cidr = _get_path(network, f"sites.{site}.vlans.{vlan}.cidr")
+    slot = _get_path(network, f"hosts.{inventory_hostname}.slot")
+    if cidr is None or slot is None:
+        raise AnsibleError(f"host_vlan_block requires topology cidr and host slot for {inventory_hostname}/{vlan}")
+
+    parent = ipaddress.ip_network(str(cidr), strict=False)
+    prefix = int(prefix)
+    if prefix < parent.prefixlen:
+        raise AnsibleError(f"host_vlan_block prefix /{prefix} is wider than parent {parent}")
+
+    index = int(offset) + int(slot)
+    subnet_size = 1 << (parent.max_prefixlen - prefix)
+    subnet_address = ipaddress.ip_address(int(parent.network_address) + index * subnet_size)
+    subnet = ipaddress.ip_network(f"{subnet_address}/{prefix}", strict=False)
+    if not subnet.subnet_of(parent):
+        raise AnsibleError(f"host_vlan_block derived {subnet} outside parent {parent}")
+    return str(subnet)
+
+
+def zfs_source_value(stdout: str) -> dict[str, str]:
+    """Parse `zfs get -H -p -o source,value` output."""
+    fields = str(stdout).splitlines()[0].split("\t")
+    if len(fields) != 2:
+        raise AnsibleError(f"zfs_source_value expected two tab-separated fields, got {stdout!r}")
+    return {"source": fields[0].strip(), "value": fields[1].strip()}
+
+
+def any_successful_stdout(results: Iterable[Mapping[str, Any]]) -> bool:
+    """Return whether any loop result succeeded and produced stdout."""
+    return any(result.get("rc") == 0 and bool(result.get("stdout")) for result in results)
+
+
 def _get_path(item: Any, path: str) -> Any:
     current = item
     for part in path.split("."):
@@ -194,6 +295,9 @@ class FilterModule:
     def filters(self):
         return {
             "ansible_var_key": ansible_var_key,
+            "any_successful_stdout": any_successful_stdout,
+            "authelia_redirects_to": authelia_redirects_to,
+            "host_vlan_block": host_vlan_block,
             "json_argv": json_argv,
             "matching_by_attr": matching_by_attr,
             "nft_counters_by_name": nft_counters_by_name,
@@ -204,6 +308,11 @@ class FilterModule:
             "podman_health_curl": podman_health_curl,
             "podman_health_wget": podman_health_wget,
             "podman_idmap_args": podman_idmap_args,
+            "rstrip_newlines": rstrip_newlines,
+            "slurp_json": slurp_json,
+            "slurp_lines": slurp_lines,
             "slurp_text": slurp_text,
+            "slurp_yaml": slurp_yaml,
+            "zfs_source_value": zfs_source_value,
             "zfs_mount_unit": zfs_mount_unit,
         }
