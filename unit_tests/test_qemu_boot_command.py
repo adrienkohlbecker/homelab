@@ -9,9 +9,8 @@ and asserts on the shape of the assembled command line.
 from collections.abc import Callable
 from pathlib import Path
 
-import pytest
-
 import machine
+import pytest
 
 
 def test_wan_probe_ports_manifest_loads_shared_surface() -> None:

@@ -6,11 +6,9 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-import pytest
-
 import machine
 import matrix
-
+import pytest
 
 # ---------------------------------------------------------------------------
 # qemu_user_net_args

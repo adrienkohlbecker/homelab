@@ -10,6 +10,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -42,7 +43,8 @@ ENTRY_WITH_OPTIONS = [
         "options": "root=zfs:rpool/ROOT/noble initrd=\\EFI\\Linux\\initrd console=tty0",
         "multi_disk": True,
     },
-] + LOADERS
+    *LOADERS,
+]
 
 
 # --- Synthetic command output --------------------------------------------
@@ -75,7 +77,7 @@ def _hd(uuid, loader, options=""):
 class _FakePath:
     """Stand-in for pathlib.Path reads of /sys/class/block/<part>/partition."""
 
-    partn = {}
+    partn: ClassVar[dict[str, str]] = {}
 
     def __init__(self, p):
         self.p = str(p)
@@ -230,7 +232,7 @@ class TestMultiDisk:
         # The disk-1 entry is neither removed nor recreated under a shifted index.
         assert not any("rEFInd (disk 1)" in a for a in out["actions"]), out["actions"]
         assert not any("create 'rEFInd (disk 0)'" in a or "create 'rEFInd (disk 2)'" in a for a in out["actions"])
-        assert not any(a.startswith("remove") or a.startswith("create") for a in out["actions"]), out["actions"]
+        assert not any(a.startswith(("remove", "create")) for a in out["actions"]), out["actions"]
 
 
 # --- EFI-stub options -----------------------------------------------------

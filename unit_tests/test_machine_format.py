@@ -3,9 +3,8 @@
 import shlex
 from collections.abc import Callable
 
-import pytest
-
 import machine
+import pytest
 
 
 def test_format_ssh_cmd_no_remote_returns_bare_prefix(

@@ -3,9 +3,8 @@
 from pathlib import Path
 from unittest import mock
 
-import pytest
-
 import arch
+import pytest
 
 
 class TestProfiles:
@@ -51,9 +50,11 @@ class TestDetectHostArch:
             assert arch.detect_host_arch() is arch.AARCH64
 
     def test_unknown_raises(self) -> None:
-        with mock.patch.object(arch.platform, "machine", return_value="riscv64"):
-            with pytest.raises(RuntimeError, match="Unsupported"):
-                arch.detect_host_arch()
+        with (
+            mock.patch.object(arch.platform, "machine", return_value="riscv64"),
+            pytest.raises(RuntimeError, match="Unsupported"),
+        ):
+            arch.detect_host_arch()
 
 
 class TestUefiCodePath:

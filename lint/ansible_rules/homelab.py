@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from ansiblelint.rules import AnsibleLintRule
 from ansiblelint.utils import get_cmd_args
@@ -74,7 +74,7 @@ class RequireBackup(AnsibleLintRule):
 
     id = "require-backup"
     severity = "MEDIUM"
-    tags = ["idiom"]
+    tags: ClassVar[list[str]] = ["idiom"]
     version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
@@ -101,7 +101,7 @@ class ShellStrictMode(AnsibleLintRule):
 
     id = "shell-strict-mode"
     severity = "MEDIUM"
-    tags = ["command-shell", "idiom"]
+    tags: ClassVar[list[str]] = ["command-shell", "idiom"]
     version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
@@ -129,7 +129,7 @@ class NoHandlers(AnsibleLintRule):
 
     id = "no-handlers"
     severity = "HIGH"
-    tags = ["idiom"]
+    tags: ClassVar[list[str]] = ["idiom"]
     version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
@@ -153,7 +153,7 @@ class NoNoLog(AnsibleLintRule):
 
     id = "no-no-log"
     severity = "MEDIUM"
-    tags = ["idiom"]
+    tags: ClassVar[list[str]] = ["idiom"]
     version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
@@ -171,7 +171,7 @@ class NoInventoryHostnameWhen(AnsibleLintRule):
 
     id = "no-inventory-hostname-when"
     severity = "MEDIUM"
-    tags = ["idiom"]
+    tags: ClassVar[list[str]] = ["idiom"]
     version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
@@ -189,7 +189,7 @@ class PreferImport(AnsibleLintRule):
 
     id = "prefer-import"
     severity = "LOW"
-    tags = ["idiom"]
+    tags: ClassVar[list[str]] = ["idiom"]
     version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
@@ -219,7 +219,7 @@ class RequireValidate(AnsibleLintRule):
 
     id = "require-validate"
     severity = "LOW"
-    tags = ["idiom"]
+    tags: ClassVar[list[str]] = ["idiom"]
     version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:

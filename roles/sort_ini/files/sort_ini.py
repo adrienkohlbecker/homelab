@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import contextlib
 import os
 import stat
 import sys
@@ -69,10 +70,9 @@ def sort_ini(fname):
             f.write(sorted_output)
         os.replace(tmp, fname)
     except BaseException:
-        try:
+        # Best-effort cleanup of a temp file that was never installed.
+        with contextlib.suppress(OSError):
             os.unlink(tmp)
-        except OSError:
-            pass
         raise
 
 

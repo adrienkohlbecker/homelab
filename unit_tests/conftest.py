@@ -4,9 +4,8 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 import machine
+import pytest
 
 _CONSTRUCTOR_PARAMS = frozenset(
     {

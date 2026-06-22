@@ -5,9 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 import matrix
+import pytest
 
 
 @pytest.fixture
@@ -369,4 +368,4 @@ class TestOnDemandMachines:
         assert dropped == []
 
     def test_on_demand_machines_are_lab_and_pug(self) -> None:
-        assert matrix.ON_DEMAND_MACHINES == frozenset({"lab", "pug"})
+        assert frozenset({"lab", "pug"}) == matrix.ON_DEMAND_MACHINES

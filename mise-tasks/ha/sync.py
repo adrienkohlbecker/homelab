@@ -18,7 +18,6 @@ would change, but do not write to the host or move git refs.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import os
 import shutil
@@ -27,6 +26,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 
 # Resolve mise's op:// HA_API_TOKEN before calling the HA API.

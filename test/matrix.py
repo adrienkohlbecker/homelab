@@ -138,9 +138,7 @@ def build_role_cells(role: str) -> list[TestCell]:
     skip = skip_for(role)
     cells = [TestCell(m, DEFAULT_UBUNTU, role) for m in machines if (m, DEFAULT_UBUNTU) not in skip]
     for codename in release_ubuntu_for(role):
-        for m in machines:
-            if (m, codename) not in skip:
-                cells.append(TestCell(m, codename, role))
+        cells.extend(TestCell(m, codename, role) for m in machines if (m, codename) not in skip)
     return cells
 
 

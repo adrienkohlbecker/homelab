@@ -67,56 +67,69 @@ def sweep_region(region):
     ec2 = client("ec2", region)
 
     # ── Compute-shaped strays (should be none -- cells are one-time spot) ──
-    for resv in safe(
-        f"{region} instances",
-        lambda: ec2.describe_instances().get("Reservations", []),
-    ):
-        for i in resv.get("Instances", []):
-            if i["State"]["Name"] != "terminated":
-                anomalies.append(
-                    f"[{region}] EC2 instance {i['InstanceId']} " f"({i['InstanceType']}, {i['State']['Name']})"
-                )
+    anomalies.extend(
+        f"[{region}] EC2 instance {i['InstanceId']} ({i['InstanceType']}, {i['State']['Name']})"
+        for resv in safe(
+            f"{region} instances",
+            lambda: ec2.describe_instances().get("Reservations", []),
+        )
+        for i in resv.get("Instances", [])
+        if i["State"]["Name"] != "terminated"
+    )
 
-    for v in safe(f"{region} volumes", lambda: ec2.describe_volumes().get("Volumes", [])):
-        anomalies.append(f"[{region}] EBS volume {v['VolumeId']} ({v['Size']}GB, {v['State']})")
+    anomalies.extend(
+        f"[{region}] EBS volume {v['VolumeId']} ({v['Size']}GB, {v['State']})"
+        for v in safe(f"{region} volumes", lambda: ec2.describe_volumes().get("Volumes", []))
+    )
 
     for a in safe(f"{region} addresses", lambda: ec2.describe_addresses().get("Addresses", [])):
         assoc = a.get("InstanceId") or a.get("AssociationId") or "UNASSOCIATED"
         anomalies.append(f"[{region}] Elastic IP {a['PublicIp']} ({assoc})")
 
-    for n in safe(
-        f"{region} nat",
-        lambda: ec2.describe_nat_gateways().get("NatGateways", []),
-    ):
-        if n["State"] != "deleted":
-            anomalies.append(f"[{region}] NAT gateway {n['NatGatewayId']} ({n['State']})")
+    anomalies.extend(
+        f"[{region}] NAT gateway {n['NatGatewayId']} ({n['State']})"
+        for n in safe(
+            f"{region} nat",
+            lambda: ec2.describe_nat_gateways().get("NatGateways", []),
+        )
+        if n["State"] != "deleted"
+    )
 
-    for e in safe(
+    endpoints = safe(
         f"{region} vpc-endpoints",
         lambda: ec2.describe_vpc_endpoints().get("VpcEndpoints", []),
-    ):
-        # Only interface endpoints bill (hourly + data); gateway endpoints (S3
-        # /DynamoDB) are free, so they are not flagged.
-        if e["VpcEndpointType"] == "Interface":
-            anomalies.append(f"[{region}] VPC interface endpoint {e['VpcEndpointId']} ({e['ServiceName']})")
+    )
+    # Only interface endpoints bill (hourly + data); gateway endpoints (S3
+    # /DynamoDB) are free, so they are not flagged.
+    anomalies.extend(
+        f"[{region}] VPC interface endpoint {e['VpcEndpointId']} ({e['ServiceName']})"
+        for e in endpoints
+        if e["VpcEndpointType"] == "Interface"
+    )
 
-    for lb in safe(
-        f"{region} elbv2",
-        lambda: client("elbv2", region).describe_load_balancers().get("LoadBalancers", []),
-    ):
-        anomalies.append(f"[{region}] load balancer {lb['LoadBalancerName']} ({lb['Type']})")
+    anomalies.extend(
+        f"[{region}] load balancer {lb['LoadBalancerName']} ({lb['Type']})"
+        for lb in safe(
+            f"{region} elbv2",
+            lambda: client("elbv2", region).describe_load_balancers().get("LoadBalancers", []),
+        )
+    )
 
-    for lb in safe(
-        f"{region} elb-classic",
-        lambda: client("elb", region).describe_load_balancers().get("LoadBalancerDescriptions", []),
-    ):
-        anomalies.append(f"[{region}] classic ELB {lb['LoadBalancerName']}")
+    anomalies.extend(
+        f"[{region}] classic ELB {lb['LoadBalancerName']}"
+        for lb in safe(
+            f"{region} elb-classic",
+            lambda: client("elb", region).describe_load_balancers().get("LoadBalancerDescriptions", []),
+        )
+    )
 
-    for db in safe(
-        f"{region} rds",
-        lambda: client("rds", region).describe_db_instances().get("DBInstances", []),
-    ):
-        anomalies.append(f"[{region}] RDS instance {db['DBInstanceIdentifier']} ({db['DBInstanceClass']})")
+    anomalies.extend(
+        f"[{region}] RDS instance {db['DBInstanceIdentifier']} ({db['DBInstanceClass']})"
+        for db in safe(
+            f"{region} rds",
+            lambda: client("rds", region).describe_db_instances().get("DBInstances", []),
+        )
+    )
 
     # ── AMIs + snapshots: distinguish legitimate cell images from orphans ──
     images = safe(

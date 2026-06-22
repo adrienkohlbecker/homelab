@@ -290,7 +290,7 @@ class TestFormatValue:
         monkeypatch.setattr(ag.time, "time", lambda: fixed_now)
         alarm = {"units": "timestamp", "value": str(fixed_now - 120)}
         result = ag._format_value(alarm)
-        assert "2m ago" == result
+        assert result == "2m ago"
 
     def test_no_units(self) -> None:
         alarm = {"value_string": "42"}

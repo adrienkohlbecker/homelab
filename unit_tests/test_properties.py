@@ -5,9 +5,8 @@ Covers wrapper_timeout (Machine) and the cached ArchProfile on Machine.
 
 from collections.abc import Callable
 
-import pytest
-
 import machine
+import pytest
 
 
 def test_wrapper_timeout_adds_grace_when_not_keeping(
@@ -29,7 +28,7 @@ def test_wrapper_timeout_is_zero_when_keeping(
 
 
 @pytest.mark.parametrize(
-    "platform_machine,expected",
+    ("platform_machine", "expected"),
     [
         ("x86_64", "x86_64"),
         ("amd64", "x86_64"),

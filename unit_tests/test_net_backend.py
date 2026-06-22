@@ -6,9 +6,8 @@ decides whether a given environment (CI noble image vs jammy host vs macOS)
 ends up on passt or slirp.
 """
 
-import pytest
-
 import machine
+import pytest
 
 
 def test_override_slirp_pins_legacy_path(monkeypatch: pytest.MonkeyPatch) -> None:

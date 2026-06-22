@@ -113,14 +113,20 @@ def main():
     in_use.discard(None)
 
     # ── Block storage / standalone networking: none expected, all billable ──
-    for v in safe("volumes", lambda: hcloud_list("volume")):
-        anomalies.append(f"volume {v['name']} ({v['size']}GB, {v.get('status')}) -- billable, none expected")
+    anomalies.extend(
+        f"volume {v['name']} ({v['size']}GB, {v.get('status')}) -- billable, none expected"
+        for v in safe("volumes", lambda: hcloud_list("volume"))
+    )
 
-    for f in safe("floating_ips", lambda: hcloud_list("floating-ip")):
-        anomalies.append(f"floating IP {f['name']} {f.get('ip')} ({f['type']}) -- billable, none expected")
+    anomalies.extend(
+        f"floating IP {f['name']} {f.get('ip')} ({f['type']}) -- billable, none expected"
+        for f in safe("floating_ips", lambda: hcloud_list("floating-ip"))
+    )
 
-    for lb in safe("load_balancers", lambda: hcloud_list("load-balancer")):
-        anomalies.append(f"load balancer {lb['name']} ({lb['load_balancer_type']['name']}) -- billable, none expected")
+    anomalies.extend(
+        f"load balancer {lb['name']} ({lb['load_balancer_type']['name']}) -- billable, none expected"
+        for lb in safe("load_balancers", lambda: hcloud_list("load-balancer"))
+    )
 
     # ── Primary IPs: fox + fox_v6, both assigned. An UNASSIGNED IPv4 still bills ──
     for p in safe("primary_ips", lambda: hcloud_list("primary-ip")):
@@ -164,8 +170,7 @@ def main():
         ("firewall", "firewall"),
         ("SSH key", "ssh-key"),
     ):
-        for item in safe(label, lambda r=resource: hcloud_list(r)):
-            expected.append(f"{label} {item['name']} (free)")
+        expected.extend(f"{label} {item['name']} (free)" for item in safe(label, lambda r=resource: hcloud_list(r)))
 
     print("── Expected standing infra ──")
     print("\n".join(f"  {line}" for line in expected) or "  (none)")

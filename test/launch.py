@@ -25,8 +25,8 @@ import sys
 from pathlib import Path
 
 from machine import (
-    LaunchOptions,
     QEMU_MACHINE_SPECS,
+    LaunchOptions,
     Machine,
 )
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES

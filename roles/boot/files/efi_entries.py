@@ -169,18 +169,18 @@ def expand_entries(desired, esp_disks, total_slots):
     expanded = []
     for entry in desired:
         if entry.get("multi_disk") and multi:
-            for disk in esp_disks:
-                expanded.append(
-                    {
-                        "label": f"{entry['label']} (disk {disk['index']})",
-                        "loader": entry["loader"],
-                        "options": entry.get("options", ""),
-                        "disk": disk["disk"],
-                        "part": disk["part"],
-                        "gpt_uuid": disk["gpt_uuid"],
-                        "match_disk": True,
-                    }
-                )
+            expanded.extend(
+                {
+                    "label": f"{entry['label']} (disk {disk['index']})",
+                    "loader": entry["loader"],
+                    "options": entry.get("options", ""),
+                    "disk": disk["disk"],
+                    "part": disk["part"],
+                    "gpt_uuid": disk["gpt_uuid"],
+                    "match_disk": True,
+                }
+                for disk in esp_disks
+            )
         else:
             expanded.append(
                 {
@@ -274,9 +274,8 @@ def main():
                 continue
             if not loader_eq(ce["file"], de["loader"]):
                 continue
-            if de["match_disk"] and ce["gpt_uuid"] and de["gpt_uuid"]:
-                if ce["gpt_uuid"] != de["gpt_uuid"]:
-                    continue
+            if de["match_disk"] and ce["gpt_uuid"] and de["gpt_uuid"] and ce["gpt_uuid"] != de["gpt_uuid"]:
+                continue
             if de["options"] and _norm_options(ce["options"]) != _norm_options(de["options"]):
                 continue
             matched.add(ci)
@@ -308,8 +307,7 @@ def main():
 
     # --- Entries to create ---
     to_create = [de for di, de in enumerate(expanded) if di not in matched_de]
-    for de in to_create:
-        actions.append(f"create '{de['label']}' -> {de['loader']} " f"on {de['disk']} part {de['part']}")
+    actions.extend(f"create '{de['label']}' -> {de['loader']} on {de['disk']} part {de['part']}" for de in to_create)
 
     # --- Apply (create first, then remove — a failed create can't orphan the boot chain) ---
     if not check:

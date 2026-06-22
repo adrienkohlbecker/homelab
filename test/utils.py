@@ -320,7 +320,8 @@ async def run_command(
         stderr=asyncio.subprocess.PIPE,
         env=subprocess_env,
     )
-    assert process.stdout is not None and process.stderr is not None
+    assert process.stdout is not None
+    assert process.stderr is not None
 
     stdout: list[str] = []
     stderr: list[str] = []

@@ -12,7 +12,6 @@ from typing import Any
 import yaml
 from ansible.errors import AnsibleError
 
-
 _ANSIBLE_VAR_KEY_RE = re.compile(r"[^A-Za-z0-9_]")
 _MISSING = object()
 

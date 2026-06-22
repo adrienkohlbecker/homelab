@@ -30,6 +30,8 @@ exclude = [".claude"]
 
 [tool.ruff.lint]
 extend-select = ["B", "I", "PERF", "PIE", "PT", "RET", "RUF", "SIM", "UP"]
+# mise usage flags are exposed as lowercase `usage_*` environment variables.
+ignore = ["SIM112"]
 
 [tool.pytest.ini_options]
 testpaths = ["unit_tests"]
