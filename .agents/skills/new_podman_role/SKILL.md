@@ -1,115 +1,74 @@
 ---
 name: new_podman_role
-description: Scaffold a new podman-based service role following the homelab repo conventions. Use when adding a new self-hosted service that runs as a container — sets up service_user, podman_secret, systemd_unit helper invocations, healthcheck per the four-tier preference, nginx subdomain + homepage bookmark, and a `_verify.yml` exercising the live service.
+description: Scaffold a podman-backed homelab service role with the repo's helper roles, healthcheck, nginx site, homepage bookmark, and qemu verification.
 ---
 
-# New podman service role
+# New Podman Service Role
 
-Walk the user through scaffolding a new role under `roles/<svc>/` that follows every convention documented in `AGENTS.md → Repo Conventions` and `AGENTS.md → Podman Service Conventions`. Each step references the section that authoritatively documents the rule.
+Scaffold one container-backed service role. `AGENTS.md` is the source of truth;
+mirror nearby roles before inventing structure.
 
-## Inputs to collect from the user
+## Required Facts
 
-Before scaffolding any file:
+Collect or infer these before writing files:
 
-1. **Service name** (`<svc>`). Underscores, not hyphens (per *Coding Style & Naming Conventions*).
-2. **Image reference** (full registry path + tag, e.g. `linuxserver/foo:1.2.3`). Note whether it's a `linuxserver/*` image — affects healthcheck and secret options.
-3. **Loopback port** to publish on. Pick one not already in `group_vars/all/main.yml` `service_ports:` (per *Service Ports*).
-4. **Subdomain** for nginx + homepage bookmark (default: `<svc>.{{ inventory_hostname }}.{{ domain }}`).
-5. **Site bind-mounts needed** — any of `services`, `scratch`, `media`, `data`, `brumath`, `eckwersheim`, `minio`. Each is gated on `zfs_has_<name>_mount` (per *ZFS Site Mountpoints*).
-6. **Secrets** the service needs. For each, pick a tier (per *Podman Service Conventions → Secrets*):
-   - Tier 1: app-native `*_FILE` (preferred).
-   - Tier 2: linuxserver `FILE__<VARNAME>` prefix (for linuxserver images only).
-   - Tier 3: `type=env,target=VAR` (last resort).
-7. **Healthcheck strategy** (per *Podman Service Conventions → Healthchecks*):
-   - Tier 1: service-native CLI (`mosquitto_sub`, `dig +short @127.0.0.1`, etc.).
-   - Tier 2: `curl` / `wget` in the image — grep the image's Dockerfile first.
-   - Tier 3: python `urllib.request` (JSON-array argv form — see notes for the gotcha).
+- Service name: underscores, not hyphens.
+- Canonical image reference and tag. If pinned, put the version/URL/hash in
+  `group_vars/all/versions.yml`, not role vars.
+- Published loopback port. Check both `service_ports:` and existing
+  `127.0.0.1:` literals before allocating.
+- Nginx subdomain and homepage label/icon.
+- Required site bind mounts: `services`, `scratch`, `media`, `data`,
+  `brumath`, `eckwersheim`, or `minio`.
+- Secrets and injection mode.
+- Healthcheck command, verified against the image.
 
-## Files to scaffold
+Ask only for facts that are real domain choices or cannot be proven from the
+repo. Do not invent secret boundaries.
 
-For service `<svc>`, create:
+## Files
 
-- `roles/<svc>/tasks/main.yml` — orchestrates `service_user` → secret creation → unit install. Uses `import_role` calls into the helpers (per *Helper Roles*). Pattern:
-  ```yaml
-  - import_role:
-      name: service_user
-      tasks_from: user
-    vars:
-      service_user_args:
-        name: <svc>
-    tags:
-      - <svc>
+- `roles/<svc>/tasks/main.yml`: assert required inputs, create the service user,
+  create podman secrets, install config with `backup: true`, register the nginx
+  site, install the unit, then start/restart it through `systemd_unit`. Do not
+  use handlers.
+- `roles/<svc>/templates/<svc>.service.j2`: system-scope podman unit with the
+  canonical image name, explicit user mapping, published loopback port,
+  bind-mount gates, secrets, and `--health-cmd` plus `--health-startup-cmd`.
+- `roles/<svc>/tasks/_verify.yml`: functional qemu checks. Probe the published
+  port, the nginx vhost, health, and ownership of writable bind mounts.
+- Cross-role wiring: `service_ports`, `site.yml`, and
+  `roles/homepage/templates/bookmarks.yaml.j2`.
 
-  - import_role:
-      name: podman_secret
-      tasks_from: secret
-    vars:
-      podman_secret_args:
-        name: <svc>_<purpose>
-        data: "{{ vault_<svc>_<purpose> }}"
-    tags:
-      - <svc>
+Required service inputs belong in `host_vars` or `group_vars` plus an `assert`.
+Optional host-overridable values may live in `defaults/main.yml`.
 
-  - import_role:
-      name: systemd_unit
-      tasks_from: install
-    vars:
-      systemd_unit_args:
-        src: <svc>.service.j2
-        condition: "{{ not (ansible_check_mode and <svc>_user.changed) }}"
-    tags:
-      - <svc>
+## Podman Choices
 
-  - import_role:
-      name: systemd_unit
-      tasks_from: service
-    vars:
-      systemd_unit_args:
-        src: <svc>
-        condition: "{{ not (ansible_check_mode and (<svc>_service_result.changed or <svc>_user.changed)) }}"
-        restart: "{{ <svc>_service_result.changed or <svc>_<purpose>_rotated }}"
-    tags:
-      - <svc>
-  ```
-  Add `when: not (ansible_check_mode and <svc>_user.changed)` gate on tasks that depend on the freshly-created user/dir (per *Role Conventions*).
-- `roles/<svc>/templates/<svc>.service.j2` — the systemd unit. Required pieces:
-  - Container user (per *User Namespacing*, three-tier pick — simplest that works):
-    - Default: `--user {{ <svc>_user.uid }}:{{ <svc>_user.group }}`. Works for any app that doesn't insist on `id -u == 0` inside.
-    - linuxserver images: set `PUID` / `PGID` env vars instead.
-    - Last resort: fake-root uidmap (`--user 0:0` + `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1` and gidmap) when the image actually needs in-container root. Add `+N:<uid>:1` for any image-side privilege drop you've observed.
-  - `--health-cmd` per the tier you picked. Use JSON-array form for python/distroless.
-  - `--publish 127.0.0.1:{{ service_ports.<svc> }}:<container_port>/tcp`.
-  - Site bind-mounts gated on `zfs_has_<name>_mount` if any.
-  - Secret injection per chosen tier.
-- `roles/<svc>/tasks/_verify.yml` — functional checks (per *Role Conventions → _verify.yml*). At minimum:
-  - Probe the published port (`uri:` to `http://localhost:{{ service_ports.<svc> }}/`).
-  - Hit the nginx vhost via `Host` header: `uri:` to `https://localhost/`, `headers: { Host: <subdomain>.<host>.<domain> }`, `validate_certs: false`.
-  - Ownership assertions on bind-mount dirs (per *User Namespacing*) — `stat:` + `failed_when: result.stat.pw_name != '<svc>'`.
-  - Stat-only checks ("unit active", "file present") drift toward tautology — exercise the real behavior wherever feasible.
+- User: default to `--user {{ <svc>_user.uid }}:{{ <svc>_user.group }}`.
+  Use linuxserver `PUID`/`PGID` for linuxserver images; use fake-root uidmaps
+  only when the image truly requires in-container root.
+- Secrets: prefer app-native `*_FILE`, then linuxserver `FILE__<VAR>`, then
+  `type=env,target=VAR`.
+- Healthcheck: prefer service-native CLI, then existing `curl`/`wget`, then
+  Python `urllib.request` in JSON-array argv form.
+- `--init`: add only when the image runs the app directly as PID 1. Skip images
+  that already use s6, tini, dumb-init, or an entrypoint that `exec`s a
+  supervisor.
+- Networking: co-located containers should use `<name>.dns.podman`, not host
+  ports or hard-coded IPs.
 
-## Cross-role registration
+## Verification
 
-After the role itself is scaffolded:
+Run the narrow role test first:
 
-1. Add the port to `group_vars/all/main.yml`'s `service_ports:` dict.
-2. Add an nginx subdomain — usually a `nginx_site_args:` in the role's `main.yml` proxying to `http://localhost:{{ service_ports.<svc> }}/`.
-3. Add a bookmark in `roles/homepage/templates/bookmarks.yaml.j2` (per *Homepage Bookmarks*):
-   ```yaml
-   - <Display name>:
-       abbr: XX
-       icon: sh-<svc>.png
-       href: https://<subdomain>.{{ inventory_hostname }}.{{ domain }}/
-   ```
-   Pick the right section (Media / Infra / Personal). Drop the `icon:` line if there's no selfh.st icon (the `abbr:` becomes the fallback).
-4. Wire the role into `site.yml` for the target host group.
+```sh
+test/testrole.py <svc>
+```
 
-## Test
+Use `--machine lab` or `--machine pug` only when the role needs a producer-side
+layout that the default `box` fixture cannot model.
 
-Run `test/testrole.py <svc>` (boots `box` by default). Confirms converge + idempotence + `_verify.yml`. For producer roles needing real multi-pool layout, `--machine lab` or `--machine pug`.
-
-## Things this skill will NOT do
-
-- Choose ports / subdomains / secret names for the user. Ask.
-- Skip the `_verify.yml`. Every new role gets one.
-- Use `defaults/main.yml` (per *Hard Rules*). Inputs come from `host_vars`/`group_vars`.
-- Use Ansible handlers for restarts (per *Hard Rules*). Use the `systemd_unit` helper's inline OR chain.
+Before finishing, run the relevant lint target and inspect the diff for
+unnecessary role vars, pass-through inputs, missing backups, missing
+healthchecks, and stat-only verification.
