@@ -88,13 +88,7 @@ noble) ;;
 esac
 
 read -r runner_url runner_sha256 < <(
-  uv run python - <<'PY'
-import yaml
-
-with open("group_vars/all/versions.yml") as fh:
-    artifact = yaml.safe_load(fh)["gitlab_runner_archive"]["x86_64"]
-print(artifact["url"], artifact["sha256"])
-PY
+  yq -r '.gitlab_runner_archive.x86_64 | [.url, .sha256] | @tsv' group_vars/all/versions.yml
 )
 echo "==> qemu-host target architecture: x86_64"
 echo "==> gitlab-runner binary: ${runner_url}"
