@@ -696,11 +696,6 @@ class Machine:
             raise RuntimeError(f"Required binary {name!r} not found on PATH. {hint}")
 
     @property
-    def ubuntu_version(self) -> str:
-        """Numeric version (e.g. "22.04") for the configured release."""
-        return UBUNTU_RELEASES[self.ubuntu_name]
-
-    @property
     def wrapper_timeout(self) -> int:
         """Last-resort timeout passed to coreutils `timeout` / podman --timeout.
 
@@ -1586,7 +1581,7 @@ class Machine:
                 "Use --ubuntu noble (or later) on arm64 hosts, "
                 "or run --machine minimal on x86_64."
             )
-        name = f"ubuntu-{self.ubuntu_version}-minimal-cloudimg-{self.arch.cloud_image_suffix}.img"
+        name = f"ubuntu-{UBUNTU_RELEASES[self.ubuntu_name]}-minimal-cloudimg-{self.arch.cloud_image_suffix}.img"
         cache = self.imagedir / "cloud-images"
         cache.mkdir(parents=True, exist_ok=True)
         target = cache / name
