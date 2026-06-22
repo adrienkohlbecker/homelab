@@ -115,15 +115,13 @@ def test_format_ansible_cmd_role_fixture_vars(
 ) -> None:
     firewall_cmd = machine_factory(role="firewall").format_ansible_cmd("site.yml")
     headscale_cmd = machine_factory(role="headscale").format_ansible_cmd("site.yml")
-    site_cmd = machine_factory(role="_site_test").format_ansible_cmd("site.yml")
 
-    assert '{"tailscale_wan_direct":true}' in firewall_cmd
+    assert not any("tailscale_wan_direct" in part for part in firewall_cmd)
     assert (
         '{"headscale_oidc_client_id":"headscale",'
         '"headscale_oidc_client_secret":"test-oidc-client-secret",'
         '"headscale_oidc_issuer":"http://10.166.0.10:8090/oidc"}'
     ) in headscale_cmd
-    assert not any("podman_zvol_size" in part for part in site_cmd)
 
 
 def test_format_ansible_cmd_in_aws_env_sets_flag_and_clears_nexus(

@@ -794,8 +794,6 @@ class Machine:
             *self.ansible_args,
         ]
         fixture_vars: dict[str, object] = {}
-        if self.role == "firewall":
-            fixture_vars["tailscale_wan_direct"] = True
         if self.role == "headscale":
             fixture_vars["headscale_oidc_issuer"] = "http://10.166.0.10:8090/oidc"
             fixture_vars["headscale_oidc_client_id"] = "headscale"
