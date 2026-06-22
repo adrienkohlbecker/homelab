@@ -1,97 +1,86 @@
 """Unit tests for custom ansible-lint rules."""
 
-import importlib
+import runpy
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
-_LINT_DIR = Path(__file__).resolve().parent.parent / "lint" / "ansible_rules"
+import pytest
 
-
-def _load_homelab_rules():
-    spec = importlib.util.spec_from_file_location("homelab_rules", _LINT_DIR / "homelab.py")
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+_ROOT = Path(__file__).resolve().parent.parent
+_RULES = runpy.run_path(str(_ROOT / "lint" / "ansible_rules" / "homelab.py"))
+RequireBackup = _RULES["RequireBackup"]
+ShellStrictMode = _RULES["ShellStrictMode"]
 
 
-_rules = _load_homelab_rules()
-SET_E_RE, SET_U_RE, PIPEFAIL_RE = _rules._SET_E_RE, _rules._SET_U_RE, _rules._PIPEFAIL_RE
-FILE_WRITE_MODULES = _rules._FILE_WRITE_MODULES
+def _task(module: str, **action):
+    return {"__ansible_action_type__": "task", "action": {"__ansible_module__": module, **action}}
 
 
-class TestShellStrictModeRegex:
-    def test_combined_set(self) -> None:
-        cmd = "set -euo pipefail\necho hello"
-        assert SET_E_RE.search(cmd)
-        assert SET_U_RE.search(cmd)
-        assert PIPEFAIL_RE.search(cmd)
-
-    def test_split_set_statements(self) -> None:
-        cmd = "set -e\nset -u\nset -o pipefail\necho hello"
-        assert SET_E_RE.search(cmd)
-        assert SET_U_RE.search(cmd)
-        assert PIPEFAIL_RE.search(cmd)
-
-    def test_missing_e(self) -> None:
-        cmd = "set -uo pipefail\necho hello"
-        assert not SET_E_RE.search(cmd)
-        assert SET_U_RE.search(cmd)
-
-    def test_missing_u(self) -> None:
-        cmd = "set -eo pipefail\necho hello"
-        assert SET_E_RE.search(cmd)
-        assert not SET_U_RE.search(cmd)
-
-    def test_missing_pipefail(self) -> None:
-        cmd = "set -eu\necho hello"
-        assert SET_E_RE.search(cmd)
-        assert SET_U_RE.search(cmd)
-        assert not PIPEFAIL_RE.search(cmd)
-
-    def test_no_set_at_all(self) -> None:
-        cmd = "echo hello"
-        assert not SET_E_RE.search(cmd)
-        assert not SET_U_RE.search(cmd)
-        assert not PIPEFAIL_RE.search(cmd)
-
-    def test_unset_does_not_match(self) -> None:
-        cmd = "unset -e FOO"
-        assert not SET_E_RE.search(cmd)
-
-    def test_reset_does_not_match(self) -> None:
-        cmd = "reset-property -e something"
-        assert not SET_E_RE.search(cmd)
-
-    def test_semicolon_separated(self) -> None:
-        cmd = "set -euo pipefail; echo hello"
-        assert SET_E_RE.search(cmd)
-        assert SET_U_RE.search(cmd)
-        assert PIPEFAIL_RE.search(cmd)
+def _lintable(path: str):
+    return SimpleNamespace(path=Path(path))
 
 
-# ---------------------------------------------------------------------------
-# require_backup — module classification
-# ---------------------------------------------------------------------------
+class TestShellStrictMode:
+    @pytest.mark.parametrize(
+        ("cmd", "missing"),
+        [
+            ("set -euo pipefail\necho hello", []),
+            ("set -e\nset -u\nset -o pipefail\necho hello", []),
+            ("set -uo pipefail\necho hello", ["set -e"]),
+            ("set -eo pipefail\necho hello", ["set -u"]),
+            ("set -eu\necho hello", ["set -o pipefail"]),
+            ("echo hello", ["set -e", "set -u", "set -o pipefail"]),
+            ("unset -e FOO", ["set -e", "set -u", "set -o pipefail"]),
+            ("reset-property -e something", ["set -e", "set -u", "set -o pipefail"]),
+            ("set -euo pipefail; echo hello", []),
+        ],
+    )
+    def test_strict_mode_requirements(self, cmd: str, missing: list[str]) -> None:
+        result = ShellStrictMode().matchtask(_task("shell", _raw_params=cmd, executable="/bin/bash"))
+        expected = False if not missing else f"shell task missing {', '.join(missing)}"
+        assert result == expected
+
+    def test_requires_bash(self) -> None:
+        result = ShellStrictMode().matchtask(
+            _task("shell", _raw_params="set -euo pipefail\necho hello", executable="/bin/sh")
+        )
+        assert result == "shell task missing executable: /bin/bash"
+
+    def test_test_hooks_are_exempt(self) -> None:
+        result = ShellStrictMode().matchtask(
+            _task("shell", _raw_params="echo hello"), _lintable("roles/x/tasks/_verify.yml")
+        )
+        assert result is False
 
 
-class TestRequireBackupModuleSet:
-    def test_expected_modules(self) -> None:
-        assert FILE_WRITE_MODULES == {
-            "copy",
-            "template",
-            "replace",
-            "lineinfile",
-            "blockinfile",
-            "assemble",
-            "ini_file",
-        }
+class TestRequireBackup:
+    @pytest.mark.parametrize(
+        "module",
+        ["copy", "template", "replace", "lineinfile", "blockinfile", "assemble", "ini_file"],
+    )
+    def test_requires_backup(self, module: str) -> None:
+        assert RequireBackup().matchtask(_task(module)) == f"{module} task is missing `backup: true`"
 
+    def test_accepts_fqcn_and_templated_backup(self) -> None:
+        assert RequireBackup().matchtask(_task("community.general.ini_file", backup="{{ keep_backup }}")) is False
 
-# ---------------------------------------------------------------------------
-# test-meta.py validation (against real repo)
-# ---------------------------------------------------------------------------
+    def test_flags_backup_false(self) -> None:
+        assert (
+            RequireBackup().matchtask(_task("copy", backup=False))
+            == "copy task sets `backup: false`; config writes must keep backups"
+        )
+
+    def test_ignores_non_file_write_modules(self) -> None:
+        assert RequireBackup().matchtask(_task("file")) is False
+
+    @pytest.mark.parametrize(
+        "path",
+        ["roles/x/tasks/_setup.yml", "roles/test/tasks/main.yml", "roles/packer/tasks/main.yml"],
+    )
+    def test_test_files_are_exempt(self, path: str) -> None:
+        assert RequireBackup().matchtask(_task("copy"), _lintable(path)) is False
 
 
 class TestTestMetaValidation:
@@ -100,11 +89,11 @@ class TestTestMetaValidation:
         result = subprocess.run(
             [
                 sys.executable,
-                str(Path(__file__).resolve().parent.parent / "mise-tasks" / "lint" / "test-meta.py"),
+                str(_ROOT / "mise-tasks" / "lint" / "test-meta.py"),
             ],
             capture_output=True,
             text=True,
-            cwd=str(Path(__file__).resolve().parent.parent),
+            cwd=str(_ROOT),
             timeout=30,
         )
         assert result.returncode == 0, f"test-meta.py failed:\n{result.stderr}"

@@ -42,7 +42,6 @@ class RequireBackup(AnsibleLintRule):
     """File-writing tasks must set `backup: true`."""
 
     id = "require-backup"
-    description = "File-writing tasks must keep backups; test hooks and fixture roles are exempt."
     severity = "MEDIUM"
     tags = ["idiom"]
     version_changed = "1.0.0"
@@ -75,7 +74,6 @@ class ShellStrictMode(AnsibleLintRule):
     """Shell tasks must start with `set -euo pipefail` under /bin/bash."""
 
     id = "shell-strict-mode"
-    description = "Production shell tasks must use strict bash; test hooks are exempt."
     severity = "MEDIUM"
     tags = ["command-shell", "idiom"]
     version_changed = "1.0.0"
