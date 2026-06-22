@@ -71,8 +71,8 @@ stages:
 {% if baked_toolchain %}
     # The qemu-host AMI bakes the mise tool tree and uv cache at these paths
     # (packer/aws/qemu_host.pkr.hcl). The instance executor runs the job in a
-    # non-login shell, so without these the before_script's `mise install` /
-    # `uv sync --locked` ignore the baked caches and re-download the whole
+    # non-login shell, so without these the before_script's `ci:bootstrap`
+    # ignores the baked caches and re-downloads the whole
     # toolchain on every fresh host (~20s of the cold-start tail). Set here
     # rather than in the runner config so tuning them is a repo change with no
     # fox converge. The baked /opt/venv is intentionally not reused: each job
@@ -85,22 +85,11 @@ stages:
   before_script:
     - test -n "${HOMELAB_VAULT_PASSWORD_TEST:-}" || { echo "HOMELAB_VAULT_PASSWORD_TEST CI/CD variable is not set" >&2; exit 1; }
     # Same drift self-heal as .hosted, against the active mise tool tree.
-    - mise install
-    # Shell runners do not activate mise shims; `mise exec` exposes the tool
-    # tree consistently there while staying harmless inside the CI image.
-    - mise exec -- uv sync --locked
+    - mise run ci:bootstrap
 {% if image_oidc %}
     # GitLab OIDC works on the shell runner too. The same branch-safe cell role
     # has read-only access to the promoted qemu bundles used by qemu cells.
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
-    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
-    - export AWS_ROLE_ARN={{ cell_role_arn }}
-    - export AWS_ROLE_SESSION_NAME="{{ target }}-cell-$CI_JOB_ID"
-    # Cells share /home/ubuntu (capacity_per_instance > 1); pre-create the awscli
-    # credential cache dir so concurrent `aws` runs don't race to mkdir it and
-    # die with "[Errno 17] File exists". mkdir -p is idempotent under the race.
-    - mkdir -p ~/.aws/cli/cache
-    - mise exec -- aws --region eu-central-1 sts get-caller-identity
+    - source mise-tasks/ci/aws-oidc.sh {{ cell_role_arn }} "{{ target }}-cell-$CI_JOB_ID" --cache-dir
     # box/box_deps boot a promoted S3 image bundle; minimal has none -- the
     # harness downloads its Ubuntu cloud image at runtime
     # (Machine._ensure_minimal_cloudimg), so there is nothing to hydrate for it.
@@ -109,8 +98,6 @@ stages:
     # The lab target boots images straight from /mnt/scratch/homelab_ci (the lab
     # bake writes them there); nothing to authenticate or hydrate here.
 {% endif %}
-    # Pass the PAT through to `mise install` when one is configured.
-    - if [ -n "${MISE_GITHUB_TOKEN:-}" ]; then export GITHUB_TOKEN="$MISE_GITHUB_TOKEN"; fi
   artifacts:
     when: on_failure
     expire_in: 30 days
