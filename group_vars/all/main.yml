@@ -24,7 +24,6 @@ zfs_has_data_mount: "{{ not (qemu_test | bool) }}"
 zfs_has_brumath_mount: "{{ not (qemu_test | bool) }}"
 zfs_has_eckwersheim_mount: "{{ not (qemu_test | bool) }}"
 zfs_has_minio_mount: "{{ not (qemu_test | bool) }}"
-zfs_has_bpool: false
 zfs_root: true
 grub_bootloader: false
 zfs_dozer_filesystem: rpool

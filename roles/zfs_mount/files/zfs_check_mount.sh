@@ -13,11 +13,9 @@ fi
 
 # One query returns every property against a single consistent view of
 # the dataset, rather than forking zfs once per property. The expected
-# canmount differs by dataset class: regular datasets are canmount=on
-# (they auto-mount at boot), while boot environments (rpool/ROOT/<release>
-# at / and bpool/BOOT/<release> at /boot) stay noauto so sibling BEs never
-# race to mount -- the bootloader (ZFSBootMenu) mounts the chosen BE
-# explicitly. The caller passes the expected value (default on).
+# canmount differs by dataset class: regular datasets are canmount=on,
+# while boot environments stay noauto so sibling BEs never race to mount.
+# The caller passes the expected value (default on).
 output=$(zfs get -pH -o property,value type,mounted,mountpoint,readonly,canmount -- "$DATASET") || {
   echo >&2 "Error: failed to query properties on $DATASET"
   exit 1

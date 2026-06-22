@@ -15,9 +15,9 @@ fi
 MOUNTPOINT=$(zfs get mountpoint -H -o value "$DATASET")
 DESTPATH=${DATASET//\//_}
 
-# Boot environments (rpool/ROOT/* and bpool/BOOT/*) keep canmount=noauto so
-# sibling BEs never race to mount at boot; all other datasets are canmount=on.
-if [[ "$DATASET" == rpool/ROOT/* ]] || [[ "$DATASET" == bpool/BOOT/* ]]; then
+# Boot environments keep canmount=noauto so sibling BEs never race to mount at
+# boot; all other datasets are canmount=on.
+if [[ "$DATASET" == rpool/ROOT/* ]]; then
   expected_canmount=noauto
 else
   expected_canmount=on
