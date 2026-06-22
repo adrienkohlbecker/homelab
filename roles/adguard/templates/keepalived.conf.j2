@@ -61,7 +61,7 @@ vrrp_instance dns {
   # instance rides a vmac child of eth0; if eth0 drops, the vmac follows.
 
   virtual_ipaddress {
-    {{ dns_keepalived_ip }}/32
+    {{ network.virtual_ips.dns }}/32
   }
 
   # Periodic gratuitous ARP so any LAN cache that picks up a wrong MAC

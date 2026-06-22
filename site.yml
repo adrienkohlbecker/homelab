@@ -273,7 +273,7 @@
           become: true
 
         - name: Verify peer claimed the VIP
-          command: dig +short +timeout=5 +tries=3 @{{ dns_keepalived_ip }} adguard.home
+          command: dig +short +timeout=5 +tries=3 @{{ network.virtual_ips.dns }} adguard.home
           register: _reboot_vip_check
           until: _reboot_vip_check.rc == 0 and _reboot_vip_check.stdout | default('') | length > 0
           retries: 6
@@ -285,7 +285,7 @@
           when: (_reboot_vip_check.rc | default(1) != 0) or (_reboot_vip_check.stdout | default('') | length == 0)
           fail:
             msg: >-
-              DNS VIP {{ dns_keepalived_ip }} is not answering after
+              DNS VIP {{ network.virtual_ips.dns }} is not answering after
               keepalived stop — peer may not have claimed it. Keepalived will
               be restarted by the rescue block. Investigate the peer manually.
       rescue:

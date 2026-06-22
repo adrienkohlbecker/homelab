@@ -408,8 +408,8 @@
   assert:
     that:
       - (mdns_matches | selectattr('left.meta', 'defined') | selectattr('left.meta.key', 'eq', 'iifname') | map(attribute='right') | first) == default_interface
-      - mdns_saddr.prefix.addr == (site_subnets.home | ansible.utils.ipaddr('network'))
-      - (mdns_saddr.prefix.len | int) == (site_subnets.home | ansible.utils.ipaddr('prefix') | int)
+      - mdns_saddr.prefix.addr == (network.sites.home.cidr | ansible.utils.ipaddr('network'))
+      - (mdns_saddr.prefix.len | int) == (network.sites.home.cidr | ansible.utils.ipaddr('prefix') | int)
       - (mdns_matches | selectattr('left.payload', 'defined') | selectattr('left.payload.protocol', 'eq', 'udp') | selectattr('left.payload.field', 'eq', 'dport') | map(attribute='right') | first | int) == 5353
     fail_msg: >-
       mDNS firewall rule lost its iifname, home-LAN source, or UDP/5353 scope.

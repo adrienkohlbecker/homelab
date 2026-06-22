@@ -6,8 +6,8 @@
 # empty string. `nft list ruleset` still emits the expanded form, so
 # external scrapers (and _verify.yml's VRRP assertion) are unaffected.
 define WAN_IFACE = "{{ default_interface }}"
-define HOME_LAN = {{ site_subnets.home }}
-define WG_SUBNET = {{ wireguard_subnet }}
+define HOME_LAN = {{ network.sites.home.cidr }}
+define WG_SUBNET = {{ network.partitions.wireguard.cidr }}
 define PODMAN_DEFAULT = {{ podman_default_network }}
 define PODMAN_POOL = {{ podman_bridge_pool }}
 

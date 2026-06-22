@@ -19,7 +19,7 @@
 - name: Validate required variables
   assert:
     that:
-      - dns_keepalived_ip is defined
+      - network.virtual_ips.dns is defined
       - dns_keepalived_vrid is defined
       - dns_keepalived_priority is defined
       - (dns_keepalived_priority | default(0) | int) > 0
@@ -40,8 +40,9 @@
       # on it at runtime).
       - udm_dns_failover_interface is regex("^[a-zA-Z0-9._-]+$")
     fail_msg: >-
-      udm_dns_failover requires dns_keepalived_{ip,vrid,priority,peers},
-      an external_ips entry, and udm_dns_failover_heartbeat_url.
+      udm_dns_failover requires network.virtual_ips.dns plus
+      dns_keepalived_{vrid,priority,peers}, an external_ips entry, and
+      udm_dns_failover_heartbeat_url.
   tags:
     - udm_dns_failover
 

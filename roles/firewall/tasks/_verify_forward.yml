@@ -150,8 +150,8 @@
   changed_when: false
   become: true
 
-# Wireguard-source-egress MASQUERADE — exercises -s wireguard_subnet
-# -j MASQUERADE. extns alias {{ _firewall_probe_wg }} sits in wireguard_subnet;
+# Wireguard-source-egress MASQUERADE — exercises the WG subnet
+# -j MASQUERADE. extns alias {{ _firewall_probe_wg }} sits in that subnet;
 # egress hits FORWARD wg0→WAN ACCEPT, then the matching POSTROUTING
 # rule MASQUERADEs to the host's egress IP. slirp NATs again on the
 # qemu side, reply round-trips back via wg0. IP literal (1.1.1.1)
