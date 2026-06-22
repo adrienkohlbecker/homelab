@@ -4,15 +4,6 @@
 # and on-demand `testrole.py --machine pug` go through here.
 qemu_test: true
 
-zfs_has_services_mount: false
-zfs_has_scratch_mount: false
-zfs_has_ci_scratch_mount: false
-zfs_has_media_mount: false
-zfs_has_data_mount: false
-zfs_has_brumath_mount: false
-zfs_has_eckwersheim_mount: false
-zfs_has_minio_mount: false
-
 # Same block formula as host_vars/pug.yml; only `parent` differs (the
 # QEMU NIC isn't named eth0). See host_vars/lab-qemu.yml for the
 # rationale around qemu's user-net being pinned to the topology

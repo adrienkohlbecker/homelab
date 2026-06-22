@@ -55,21 +55,6 @@ swap_partition:
 swap_zram:
   size: 3G
 
-# Consumer-side bind-mounts are gated off for test fixtures: the
-# producer datasets exist (and provision.sh seeded the pools) but the
-# datasets carry no real homelab data, so consumers that bind-mount
-# /mnt/<x>:/<x>:ro into containers (samba, the service units, etc.)
-# would map an empty path. Flip any of these to true only when the
-# consumer role's _verify writes matching fixture content.
-zfs_has_services_mount: false
-zfs_has_scratch_mount: false
-zfs_has_ci_scratch_mount: false
-zfs_has_media_mount: false
-zfs_has_data_mount: false
-zfs_has_brumath_mount: false
-zfs_has_eckwersheim_mount: false
-zfs_has_minio_mount: false
-
 # Two blocks on the same en* parent: exercises the multi-block iteration
 # in main.yml's loop, distinct MAC seeds across sibling blocks, and two
 # podman macvlan networks coexisting on one parent NIC. Prod-shape uses
@@ -154,7 +139,7 @@ homepage_netdata_hosts:
 # Test shares so samba's smb.conf.j2 renders actual [share] blocks and the
 # smbd_zfs_mounts_override.conf.j2 template exercises its loop. Paths don't
 # need to exist for smbd to start (it just can't serve files). The override
-# template gates on zfs_has_*_mount (all false on box), so it renders an
+# template gates on the qemu-defaulted zfs_has_*_mount flags, so it renders an
 # empty [Unit] section regardless of paths used here.
 samba_shares:
   - name: smbtest
