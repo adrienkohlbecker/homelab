@@ -36,21 +36,14 @@ release_lock() {
   fi
 }
 
-check_peers() {
+update_lock() {
   for ip in "${PEER_IPS[@]}"; do
     if dig +short +timeout=3 +tries=2 "@${ip}" adguard.home A | grep -Fxq 127.0.0.1; then
+      release_lock
       return 0
     fi
   done
-  return 1
-}
-
-update_lock() {
-  if check_peers; then
-    release_lock
-  else
-    take_lock
-  fi
+  take_lock
 }
 
 cleanup() {
@@ -73,10 +66,7 @@ while true; do
 
   while IFS= read -r -t 30 line <&3; do
     case "$line" in
-      *BACKUP*)
-        update_lock
-        ;;
-      *MASTER*|*FAULT*|*STOP*)
+      *BACKUP*|*MASTER*|*FAULT*|*STOP*)
         update_lock
         ;;
     esac
