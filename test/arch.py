@@ -1,10 +1,7 @@
 """Per-architecture data driving the QEMU test harness.
 
-Replaces the scattered `if self.host_arch == "x86_64": ... else ...` checks
-in machine.py with a single frozen dataclass per supported host arch and a
-detect_host_arch() factory. Adding a new arch is a matter of adding one
-profile constant and an entry in the platform.machine() lookup; no other
-call site has to grow another conditional.
+Each supported host arch has a frozen profile consumed by machine.py. Adding
+an arch means adding one profile constant plus a platform.machine() mapping.
 """
 
 from __future__ import annotations
