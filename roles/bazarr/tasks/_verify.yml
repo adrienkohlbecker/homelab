@@ -55,4 +55,4 @@
     follow_redirects: none
     status_code: 302
   register: _bazarr_nginx_gate
-  failed_when: not (_bazarr_nginx_gate | authelia_redirects_to('bazarr', inventory_hostname, domain))
+  failed_when: _bazarr_nginx_gate is not authelia_redirects_to('bazarr', inventory_hostname, domain)

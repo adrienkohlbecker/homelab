@@ -39,7 +39,7 @@
     follow_redirects: none
     status_code: 302
   register: _influxdb_gate
-  failed_when: not (_influxdb_gate | authelia_redirects_to('influxdb', inventory_hostname, domain, require_rd=false))
+  failed_when: _influxdb_gate is not authelia_redirects_to('influxdb', inventory_hostname, domain, require_rd=false)
   become: true
 
 # Service-native CLI liveness -- catches a regression where /health

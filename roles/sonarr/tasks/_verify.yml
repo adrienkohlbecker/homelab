@@ -57,7 +57,7 @@
     follow_redirects: none
     status_code: 302
   register: _sonarr_nginx_gate
-  failed_when: not (_sonarr_nginx_gate | authelia_redirects_to('sonarr', inventory_hostname, domain))
+  failed_when: _sonarr_nginx_gate is not authelia_redirects_to('sonarr', inventory_hostname, domain)
 
 # Media-network join probe. Intra-stack peers (bazarr, seerr, sabnzbd) reach
 # sonarr at sonarr.dns.podman:8989 with X-Api-Key, bypassing nginx entirely.

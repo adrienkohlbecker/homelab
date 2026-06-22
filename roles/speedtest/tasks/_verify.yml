@@ -46,5 +46,5 @@
   retries: 10
   delay: 1
   until: speedtest_verify_nginx_gate.status == 302
-  failed_when: not (speedtest_verify_nginx_gate | authelia_redirects_to('speedtest', inventory_hostname, domain, require_rd=false))
+  failed_when: speedtest_verify_nginx_gate is not authelia_redirects_to('speedtest', inventory_hostname, domain, require_rd=false)
   become: true

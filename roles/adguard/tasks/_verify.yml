@@ -137,7 +137,7 @@
     follow_redirects: none
     status_code: 302
   register: adguard_verify_admin_gate
-  failed_when: not (adguard_verify_admin_gate | authelia_redirects_to('adguard', inventory_hostname, domain))
+  failed_when: adguard_verify_admin_gate is not authelia_redirects_to('adguard', inventory_hostname, domain)
   become: true
 
 - name: _verify | Reboot guard service is active

@@ -206,7 +206,7 @@
           failed_when: false
 
         - name: Refuse to reboot — no peer is serving DNS
-          when: not (_reboot_dns_probe.results | any_successful_stdout)
+          when: _reboot_dns_probe.results is not any_successful_stdout
           fail:
             msg: >-
               No DNS peer is answering — refusing to reboot to preserve
@@ -231,7 +231,7 @@
         - name: Wait for peer to finish rebooting
           when:
             - _reboot_is_lowest_priority | bool
-            - not (_reboot_dns_reprobe.results | any_successful_stdout)
+            - _reboot_dns_reprobe.results is not any_successful_stdout
           command: dig +short +timeout=3 +tries=2 @{{ item }} adguard.home
           loop: "{{ _reboot_dns_ips }}"
           register: _reboot_dns_wait
@@ -244,8 +244,8 @@
         - name: Refuse to reboot — peer did not recover
           when:
             - _reboot_is_lowest_priority | bool
-            - not (_reboot_dns_reprobe.results | any_successful_stdout)
-            - not ((_reboot_dns_wait.results | default([])) | any_successful_stdout)
+            - _reboot_dns_reprobe.results is not any_successful_stdout
+            - (_reboot_dns_wait.results | default([])) is not any_successful_stdout
           fail:
             msg: >-
               No DNS peer recovered after 5 min — refusing to reboot.

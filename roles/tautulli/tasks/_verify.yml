@@ -53,7 +53,7 @@
     follow_redirects: none
     status_code: 302
   register: _tautulli_nginx_gate
-  failed_when: not (_tautulli_nginx_gate | authelia_redirects_to('tautulli', inventory_hostname, domain))
+  failed_when: _tautulli_nginx_gate is not authelia_redirects_to('tautulli', inventory_hostname, domain)
 
 # Media-network join probe. Intra-stack peers (seerr) reach tautulli at
 # tautulli.dns.podman:8181 with the api_key, bypassing nginx. A dropped
