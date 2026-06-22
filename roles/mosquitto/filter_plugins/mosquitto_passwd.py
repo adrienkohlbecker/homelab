@@ -36,8 +36,8 @@ def mosquitto_passwd(passwd, salt=None):
     # length, unlike alphabet char-substitution which mishandles the salt's
     # padding (see eclipse-mosquitto#2847).
     _, _, rounds, ab64_salt, ab64_checksum = hashed.split("$")
-    b64_salt = base64.b64encode(ab64_decode(ab64_salt.encode("ascii"))).decode("ascii")
-    b64_checksum = base64.b64encode(ab64_decode(ab64_checksum.encode("ascii"))).decode("ascii")
+    b64_salt = base64.b64encode(ab64_decode(ab64_salt)).decode()
+    b64_checksum = base64.b64encode(ab64_decode(ab64_checksum)).decode()
 
     return f"$7${rounds}${b64_salt}${b64_checksum}"
 

@@ -5,12 +5,11 @@ The caller passes a sorted pair name; both peers render the same
 """
 
 import base64
-import hashlib
 import hmac
 
 
 def wireguard_psk(pair, seed):
-    return base64.b64encode(hmac.digest(seed.encode(), pair.encode(), hashlib.sha256)).decode()
+    return base64.b64encode(hmac.digest(seed.encode(), pair.encode(), "sha256")).decode()
 
 
 class FilterModule:
