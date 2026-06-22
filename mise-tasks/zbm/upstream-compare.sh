@@ -17,35 +17,22 @@ for required in curl docker git sha256sum tar; do
 done
 
 repo_root="$(zbm_repo_root)"
-host_arch="$(zbm_host_arch)"
+local_arch="$(zbm_host_arch)"
 
 src_dir="${repo_root}/zbm-build/src"
 official_asset_base="zfsbootmenu-recovery-${official_arch}-v${version}-linux${kernel}"
 asset_url_base="https://github.com/zbm-dev/zfsbootmenu/releases/download/v${version}"
+builder_tag="localhost/zbm-builder:v${version}-${local_arch}"
+report_dir="${repo_root}/zbm-build/upstream-compare/reports/local-recovery-${local_arch}-vs-official-${official_arch}-v${version}-linux${kernel}"
 
-if [ -n "${ZBM_LOCAL_TARBALL:-}" ]; then
-  local_tar="$ZBM_LOCAL_TARBALL"
-elif ! local_tar="$(zbm_latest_tarball "${repo_root}/zbm-build/${host_arch}" "$host_arch")"; then
-  echo "no ${host_arch} ZBM tarball found; run 'mise run zbm:build' first" >&2
+if ! local_tar="$(zbm_latest_tarball "${repo_root}/zbm-build/${local_arch}" "$local_arch")"; then
+  echo "no ${local_arch} ZBM tarball found; run 'mise run zbm:build' first" >&2
   exit 1
 fi
-
 if [ ! -s "$local_tar" ]; then
   echo "local ZBM tarball is missing or empty: ${local_tar}" >&2
   exit 1
 fi
-local_name="$(basename "$local_tar")"
-case "$local_name" in
-zfsbootmenu-v*-linux*-*.tar.gz) ;;
-*)
-  echo "local tarball name must match zfsbootmenu-v*-linux*-<arch>.tar.gz: ${local_name}" >&2
-  exit 1
-  ;;
-esac
-local_arch="${local_name%.tar.gz}"
-local_arch="${local_arch##*-}"
-builder_tag="${ZBM_COMPARE_BUILDER_IMAGE:-localhost/zbm-builder:v${version}-${local_arch}}"
-report_dir="${ZBM_UPSTREAM_REPORT_DIR:-${repo_root}/zbm-build/upstream-compare/reports/local-recovery-${local_arch}-vs-official-${official_arch}-v${version}-linux${kernel}}"
 
 overlay_source_roots=(
   "${repo_root}/mise-tasks/zbm/build.sh"
@@ -56,18 +43,17 @@ overlay_source_roots=(
   "${repo_root}/zbm/dropbear"
   "${repo_root}/zbm/hooks"
 )
-mapfile -t overlay_sources < <(find "${overlay_source_roots[@]}" -type f -print)
-for source in "${overlay_sources[@]}"; do
+while IFS= read -r source; do
   if [ "$source" -nt "$local_tar" ]; then
     echo "local ZBM tarball is older than ${source}" >&2
     echo "run 'mise run zbm:build' before comparing current overlay output" >&2
     exit 1
   fi
-done
+done < <(find "${overlay_source_roots[@]}" -type f -print)
 
 if ! docker image inspect "$builder_tag" >/dev/null 2>&1; then
   echo "comparison builder image not found: ${builder_tag}" >&2
-  echo "run 'mise run zbm:builder-image' first, or set ZBM_COMPARE_BUILDER_IMAGE" >&2
+  echo "run 'mise run zbm:builder-image' first" >&2
   exit 1
 fi
 if [ "$local_arch" != "$official_arch" ] && [ ! -d "$src_dir/.git" ]; then
@@ -75,37 +61,23 @@ if [ "$local_arch" != "$official_arch" ] && [ ! -d "$src_dir/.git" ]; then
   exit 1
 fi
 
-workdir="${ZBM_UPSTREAM_COMPARE_DIR:-}"
-cleanup_workdir=0
-if [ -z "$workdir" ]; then
-  workdir="$(mktemp -d)"
-  cleanup_workdir=1
-fi
+workdir="$(mktemp -d)"
 
 remove_path() {
   chmod -R u+rwX "$@" 2>/dev/null || true
   rm -rf "$@"
 }
 
-cleanup() {
-  if [ "$cleanup_workdir" -eq 1 ]; then
-    remove_path "$workdir"
-  fi
-}
-
 preserve_on_error() {
   local status=$?
-  if [ "$cleanup_workdir" -eq 1 ]; then
-    cleanup_workdir=0
-    echo "Preserving failed comparison workdir: ${workdir}" >&2
-  fi
+  trap - EXIT
+  echo "Preserving failed comparison workdir: ${workdir}" >&2
   exit "$status"
 }
 
-trap cleanup EXIT
+trap 'remove_path "$workdir"' EXIT
 trap preserve_on_error ERR INT TERM
 
-mkdir -p "$workdir"
 workdir="$(realpath "$workdir")"
 wrapper_dir="${workdir}/bin"
 zbm_install_make_binary_wrappers "$wrapper_dir"
