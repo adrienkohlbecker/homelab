@@ -49,6 +49,7 @@ etc_hosts_entries:
 fail2ban_enabled: false
 has_transcoding_acceleration: false
 minio_enabled: false
+dns_reboot_guard_enabled: false
 ssh_public_keys_additional: ""
 
 # Auto-discovered /dev/disk/by-id stems for every rotational drive on

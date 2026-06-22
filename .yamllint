@@ -8,3 +8,6 @@ rules:
     max-spaces-before: 0
     min-spaces-after: 1
     max-spaces-after: -1
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true

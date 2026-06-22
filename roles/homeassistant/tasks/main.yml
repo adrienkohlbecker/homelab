@@ -261,8 +261,8 @@
   # "Destination /var/cache/homeassistant does not exist".
   when: not (ansible_check_mode and homeassistant_hacs_dir.changed)
   get_url:
-    url: "{{ mirror_github }}/hacs/integration/releases/download/2.0.5/hacs.zip"
-    checksum: sha256:97be6b824a4f38e683728cc6dd72367f6b8bad0a43428b1b3b987a3087adf413
+    url: "{{ homeassistant_hacs_archive.url }}"
+    checksum: "sha256:{{ homeassistant_hacs_archive.sha256 }}"
     dest: /var/cache/homeassistant/hacs.zip
     mode: "0644"
     owner: root

@@ -143,6 +143,8 @@ depends = [
   "lint:shfmt",
   "lint:lua",
   "lint:test-meta",
+  "lint:podman-service-templates",
+  "lint:shell-strict",
   "lint:topology",
   "lint:markdown",
   "lint:md-links",
@@ -206,6 +208,14 @@ run = [
   "lint/git_ls_existing.sh '*.lua' | xargs -0 stylua --config-path lint/stylua.toml --check",
   "lint/git_ls_existing.sh '*.lua' | xargs -0 selene --config lint/selene.toml",
 ]
+
+[tasks."lint:podman-service-templates"]
+description = "Validate Podman systemd unit healthcheck conventions"
+run = "uv run python mise-tasks/lint/podman-service-templates.py"
+
+[tasks."lint:shell-strict"]
+description = "Validate checked-in shell scripts use strict mode"
+run = "uv run python mise-tasks/lint/shell-strict.py"
 
 [tasks."lint:topology"]
 description = "Validate data/network_topology.yml against its JSON Schema"

@@ -160,6 +160,13 @@ gitlab_runner_fleeting_aws_archive:
     url: "https://gitlab.com/api/v4/projects/39457165/packages/generic/releases/v1.2.0/fleeting-plugin-aws-linux-arm64"
     sha256: "8dddb3a3824ad2b99e7d599220c4ac8da251fdc9f76443fc0563219b51874010"
 
+# HACS: Home Assistant custom-components manager. The archive is
+# arch-independent; the role unpacks it into the HA config dataset.
+homeassistant_hacs_version: "2.0.5"
+homeassistant_hacs_archive:
+  url: "{{ mirror_github }}/hacs/integration/releases/download/{{ homeassistant_hacs_version }}/hacs.zip"
+  sha256: "97be6b824a4f38e683728cc6dd72367f6b8bad0a43428b1b3b987a3087adf413"
+
 # Jellyfin SSO/OIDC plugin (9p4/jellyfin-plugin-sso). Provides the in-app
 # OIDC login flow against Authelia (see notes/jellyfin_sso_rollout.md). The
 # plugin is managed .NET (arch-independent) so there is a single url/sha256,

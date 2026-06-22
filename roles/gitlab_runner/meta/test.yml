@@ -6,7 +6,8 @@
 # placeholder tokens and _verify exercises the host-side artifacts.
 machines:
   box_deps:
-  lab: shell-executor fallback path is qemu-only
+  # Shell-executor fallback path; qemu-only, selected by host_vars/lab.yml.
+  lab:
 
 # Release-divergent: the config.toml validate imports tomllib on >= 24.04 and
 # the tomli backport below it (jammy ships python 3.10, no tomllib); the

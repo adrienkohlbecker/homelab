@@ -25,10 +25,10 @@ loop_var_prefix: "^(__|{role}_)"
 var_naming_pattern: "^[a-z_][a-z0-9_]*$"
 
 use_default_rules: true
-# shell-strict-mode enforces `set -euo pipefail` + executable:/bin/bash on
-# production shell tasks (test scaffolding is exempt — see the rule's docstring).
-# require-backup enforces `backup: true` on file-writing tasks (copy/template/
-# replace/lineinfile/...); genuine exceptions carry `# noqa: require-backup`.
+# Custom rules encode repo-specific conventions from AGENTS.md/CLAUDE.md:
+# shell-strict-mode, require-backup, no-handlers, no-no-log, and no
+# inventory_hostname branching are enforced; prefer-import and require-validate
+# are warning-only so they surface drift without blocking unrelated changes.
 rulesdir:
   - ./lint/ansible_rules/
 
@@ -63,6 +63,8 @@ enable_list:
 # Rules that surface as warnings, never failures.
 warn_list:
   - experimental
+  - prefer-import
+  - require-validate
 
 # Don't fetch requirements.yml / refresh schemas at lint time.
 offline: true
