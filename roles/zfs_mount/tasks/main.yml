@@ -15,18 +15,3 @@
       canmount: noauto
   tags:
     - zfs_mount
-
-# No host currently sets zfs_has_bpool=true. Kept for future hardware
-# with a separate boot pool (e.g. legacy GRUB-on-ZFS layouts).
-- name: Add zfs mount service for boot pool
-  when: zfs_root and zfs_has_bpool
-  import_role:
-    name: zfs_mount
-    tasks_from: unit
-  vars:
-    zfs_mount_args:
-      dataset: "bpool/BOOT/{{ ansible_distribution_release }}"
-      mountpoint: /boot
-      canmount: noauto
-  tags:
-    - zfs_mount
