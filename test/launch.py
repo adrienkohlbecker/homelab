@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 from machine import (
+    LaunchOptions,
     QEMU_MACHINE_SPECS,
     Machine,
 )
@@ -382,20 +383,22 @@ def main() -> int:
         keep_vm=True,
         ubuntu_name=args.ubuntu,
         machine_timeout=args.timeout,
-        image_dir=args.image_dir,
-        kernel=args.kernel,
-        initrd=args.initrd,
-        append=args.append,
-        mem=args.mem,
-        with_pflash=args.with_pflash,
-        efi_code=args.efi_code,
-        efi_vars=args.efi_vars,
-        virtfs=args.virtfs,
-        foreground=args.foreground,
-        display_window=args.display_window,
-        qmp_socket=args.qmp,
-        commit_in_place=args.commit,
-        extra_hostfwds=args.extra_hostfwds,
+        launch=LaunchOptions(
+            image_dir=args.image_dir,
+            kernel=args.kernel,
+            initrd=args.initrd,
+            append=args.append,
+            mem=args.mem,
+            with_pflash=args.with_pflash,
+            efi_code=args.efi_code,
+            efi_vars=args.efi_vars,
+            virtfs=tuple(args.virtfs),
+            foreground=args.foreground,
+            display_window=args.display_window,
+            qmp_socket=args.qmp,
+            commit_in_place=args.commit,
+            extra_hostfwds=tuple(args.extra_hostfwds),
+        ),
     )
 
     if args.foreground:

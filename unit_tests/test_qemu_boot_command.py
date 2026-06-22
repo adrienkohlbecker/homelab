@@ -125,7 +125,7 @@ def test_keep_vm_zero_timeout_x86_64_uses_minimal_keep_devices(
 def test_keep_vm_display_window_uses_local_qemu_backend(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = machine_factory(host_arch="x86_64", keep_vm=True, display_window=True)
+    m = machine_factory(host_arch="x86_64", keep_vm=True, launch=machine.LaunchOptions(display_window=True))
     _setup(m)
     cmd = m._boot_command()
 

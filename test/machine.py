@@ -16,6 +16,7 @@ import socket
 import subprocess
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, NamedTuple, Self
 
@@ -355,6 +356,26 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
 MACHINE_CHOICES: tuple[str, ...] = tuple(QEMU_MACHINE_SPECS)
 
 
+@dataclass(frozen=True)
+class LaunchOptions:
+    """Ad-hoc qemu boot options used by launch.py, not by role tests."""
+
+    image_dir: Path | None = None
+    kernel: Path | None = None
+    initrd: Path | None = None
+    append: str = ""
+    mem: str | None = None
+    with_pflash: bool = False
+    efi_code: Path | None = None
+    efi_vars: Path | None = None
+    virtfs: tuple[tuple[Path, str], ...] = ()
+    foreground: bool = False
+    display_window: bool = False
+    qmp_socket: Path | None = None
+    commit_in_place: bool = False
+    extra_hostfwds: tuple[int, ...] = ()
+
+
 def _qemu_ansible_args(spec: QemuMachineSpec) -> list[str]:
     """Return any -e overlay needed on top of inventory-loaded host_vars.
 
@@ -452,7 +473,7 @@ class Machine:
     # None in normal harness operation on all arches and variants.
     _direct_boot: tuple[Path, Path, str] | None
     # Extra guest ports to forward in addition to the standard three (22,
-    # 32400, 51820). Set by extra_hostfwds= in __init__; populated in
+    # 32400, 51820). Set by LaunchOptions.extra_hostfwds; populated in
     # prepare() as {guest_port: host_port}.
     extra_hostfwd_ports: dict[int, int]
     # Guest NIC backend, resolved once in __init__ (resolve_net_backend):
@@ -483,42 +504,14 @@ class Machine:
         upstream_mirrors: bool = False,
         *,
         workdir_parent: Path | None = None,
-        image_dir: Path | None = None,
-        kernel: Path | None = None,
-        initrd: Path | None = None,
-        append: str = "",
-        mem: str | None = None,
-        with_pflash: bool = False,
-        efi_code: Path | None = None,
-        efi_vars: Path | None = None,
-        virtfs: list[tuple[Path, str]] | None = None,
-        foreground: bool = False,
-        display_window: bool = False,
-        qmp_socket: Path | None = None,
-        commit_in_place: bool = False,
-        extra_hostfwds: list[int] | None = None,
+        launch: LaunchOptions | None = None,
     ):
         """QEMU-backed machine wrapper used by integration tests.
 
-        image_dir overrides the per-variant `<imagedir>/<ubuntu>/<packer_image>`
-        path that prepare() would otherwise compute. Used by qemu.pkr.hcl's
-        verify-boot post-processor to point the harness at a still-staged
-        `*.new` build output before the build script swaps it over the
-        previous artifact.
-
-        kernel/initrd/append direct-boot a user-supplied kernel against the
-        variant's qcow2, replacing the packer-shipped kernel/initrd on the
-        aarch64 ZFS path (or layering -kernel/-initrd onto x86_64). mem
-        overrides the per-spec `-m` size. with_pflash / efi_code / efi_vars
-        attach UEFI pflash on variants that don't get it from prepare()
-        (auto-detected paths or explicit overrides). virtfs is a list of
-        (host_path, mount_tag) 9p shares. foreground strips the `timeout`
-        wrapper and switches `-serial stdio` -> mon:stdio so HMP is reachable
-        via Ctrl-A,c. display_window swaps the keep-VM display backend from
-        VNC to a local qemu GUI window. qmp_socket binds qemu's QMP server to
-        a unix socket. These last set are launch.py-only knobs; testrole.py /
-        production callers leave them at defaults.
+        launch carries launch.py-only qemu overrides. Role tests and the site
+        converge use the default image/firmware/network path.
         """
+        launch = launch or LaunchOptions()
         try:
             spec = QEMU_MACHINE_SPECS[machine]
         except KeyError:
@@ -546,21 +539,25 @@ class Machine:
         self._packer_disk_format = "qcow2" if platform.system() == "Darwin" else "raw"
 
         self._spec = spec
-        if image_dir is not None and spec.packer_image is None:
+        if launch.image_dir is not None and spec.packer_image is None:
             raise ValueError(f"image_dir override requires a variant with packer_image set, got {machine!r}")
-        self._image_dir_override = image_dir.resolve() if image_dir is not None else None
+        if (launch.kernel is None) != (launch.initrd is None):
+            raise ValueError("launch kernel and initrd must be provided together")
+        self._image_dir_override = launch.image_dir.resolve() if launch.image_dir is not None else None
         # launch.py-only knobs; defaults are no-ops (every gate below the
         # post-init setup short-circuits when each is None/False/[]).
-        self._direct_boot_override: tuple[Path, Path, str] | None = (
-            (kernel.resolve(), initrd.resolve(), append) if kernel is not None else None
-        )
-        self._mem = mem
-        self._with_pflash = with_pflash
-        self._efi_code = efi_code.resolve() if efi_code is not None else None
-        self._efi_vars = efi_vars.resolve() if efi_vars is not None else None
-        self._virtfs: list[tuple[Path, str]] = list(virtfs or [])
-        self._foreground = foreground
-        self._display_window = display_window
+        if launch.kernel is not None:
+            assert launch.initrd is not None
+            self._direct_boot_override = (launch.kernel.resolve(), launch.initrd.resolve(), launch.append)
+        else:
+            self._direct_boot_override = None
+        self._mem = launch.mem
+        self._with_pflash = launch.with_pflash
+        self._efi_code = launch.efi_code.resolve() if launch.efi_code is not None else None
+        self._efi_vars = launch.efi_vars.resolve() if launch.efi_vars is not None else None
+        self._virtfs = list(launch.virtfs)
+        self._foreground = launch.foreground
+        self._display_window = launch.display_window
         # commit_in_place: skip the qcow2-overlay step for the OS disks and
         # mount the image_dir's packer-ubuntu-N.<format> files as the qemu
         # drives directly. Writes during the run mutate those files in
@@ -570,11 +567,11 @@ class Machine:
         # mutated tmpdir as box_deps. Refuses unless image_dir is also
         # set, so a stray `launch.py --commit` against the published
         # variant directory can't corrupt the source artifacts.
-        if commit_in_place and image_dir is None:
+        if launch.commit_in_place and launch.image_dir is None:
             raise ValueError("commit_in_place=True requires image_dir to be set explicitly")
-        self._commit_in_place = commit_in_place
-        self._qmp_socket = qmp_socket
-        self._extra_guest_ports: list[int] = list(extra_hostfwds or [])
+        self._commit_in_place = launch.commit_in_place
+        self._qmp_socket = launch.qmp_socket
+        self._extra_guest_ports: list[int] = list(launch.extra_hostfwds)
         self.extra_hostfwd_ports: dict[int, int] = {}
         # Captured once at construction so prepare()/_boot_command() don't
         # have to re-run platform.machine() on every access.
