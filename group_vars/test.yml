@@ -4,7 +4,6 @@ nexus_url: nexus.lab.fahm.fr
 # source for the in-region EC2 apt mirror and ECR; only consulted when
 # test_in_aws is true.
 test_aws_region: eu-central-1
-test_ecr_region: "{{ test_aws_region }}"
 test_ecr_registry: "000390721279.dkr.ecr.{{ test_aws_region }}.amazonaws.com"
 test_ecr_registry_mirrors:
   docker.io: docker-hub
@@ -134,17 +133,12 @@ wireguard_keys:
   laptop:
     public_key: McpkKBvRc7Z5Akc0PZHqnN1mSnjKVXiQ1rpoPbFt3UQ=
     private_key: changeme
-  phone:
-    public_key: changeme
-    private_key: changeme
   fox:
     public_key: WPG8NRx4VlUIoRdCTpRWBkQlwXOdkw7ejfBFlGyNaFI=
     private_key: changeme
   bunk:
     public_key: changeme
-    private_key: changeme
 
-bunk_endpoint: changeme
 certbot_production_certificates: false
 
 podman_zvol_size: '{{ "15GB" | human_to_bytes | string }}'
