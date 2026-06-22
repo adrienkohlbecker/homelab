@@ -121,7 +121,27 @@
   tags:
     - nut_server
 
+# nut-driver is static (WantedBy=nut-server.service), so it can't be
+# `disabled` -- nut-server drags it in on boot regardless. Under qemu_test
+# there is no UPS for snmp-ups to reach (external_ips.eaton answers nothing),
+# so the driver only times out and fails; mask it so nut-server's Wants is
+# skipped instead of starting a doomed driver. masked tracks qemu_test both
+# ways -- prod unmasks before the ordering drop-in and enable below run -- so
+# it stays idempotent across a re-converge. Masking first matters: the
+# ordering drop-in and enable are gated to prod, and a masked unit rejects
+# both the drop-in write (systemd_unit's "refuse to overwrite masked unit"
+# guard) and the start.
+- name: Mask nut-driver when there is no UPS to talk to
+  when: not (ansible_check_mode and nut_server_apt.changed)
+  systemd:
+    name: '{{ "nut-driver.service" if ansible_distribution_release in ["jammy"] else "nut-driver@eaton.service" }}'
+    masked: "{{ qemu_test | bool }}"
+  become: true
+  tags:
+    - nut_server
+
 - name: Order nut-driver after network-online
+  when: not qemu_test
   import_role:
     name: systemd_unit
     tasks_from: dropin
@@ -134,6 +154,7 @@
     - nut_server
 
 - name: Enable nut-driver service
+  when: not qemu_test
   import_role:
     name: systemd_unit
     tasks_from: service
@@ -145,7 +166,6 @@
       src: '{{ "nut-driver" if ansible_distribution_release in ["jammy"] else "nut-driver@eaton" }}'
       condition: "{{ not (ansible_check_mode and nut_server_apt.changed) }}"
       restart: "{{ nut_server_nut_conf.changed or nut_server_ups_conf.changed }}"
-      start: "{{ not qemu_test }}"
   tags:
     - nut_server
 
