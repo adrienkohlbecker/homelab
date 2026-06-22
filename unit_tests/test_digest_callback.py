@@ -1,34 +1,10 @@
 """Unit tests for callback_plugins/digest.py."""
 
-import importlib.util
 import copy
-from pathlib import Path
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent / "callback_plugins" / "digest.py"
-
-
-def _load():
-    spec = importlib.util.spec_from_file_location("digest_callback", _MODULE_PATH)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+import callback_plugins.digest as digest
 
 
-digest = _load()
-
-
-FULL_STATUS = {
-    "Id": "nginx.service",
-    "ActiveState": "active",
-    "SubState": "running",
-    "Result": "success",
-    "ExecMainPID": "1234",
-    "WatchdogUSec": "0",
-    "MemoryCurrent": "12345678",
-    "ControlGroup": "/system.slice/nginx.service",
-    "ActiveEnterTimestamp": "Thu 2026-06-18 21:23:35 UTC",
-    "ActiveEnterTimestampMonotonic": "41655907",
-}
 SUMMARY_STATUS = {
     "Id": "nginx.service",
     "ActiveState": "active",
@@ -36,31 +12,14 @@ SUMMARY_STATUS = {
     "Result": "success",
     "ExecMainPID": "1234",
 }
-
-FULL_STAT = {
-    "exists": True,
-    "path": "/etc/nginx/nginx.conf",
-    "mode": "0644",
-    "isreg": True,
-    "isdir": False,
-    "islnk": False,
-    "size": 8419,
-    "checksum": "abc",
-    "pw_name": "root",
-    "gr_name": "root",
-    "mtime": 1781858272.9,
-    "atime": 1781858272.9,
-    "ctime": 1781858272.9,
-    "uid": 0,
-    "gid": 0,
-    "dev": 64,
-    "inode": 12,
-    "nlink": 1,
-    "rusr": True,
-    "wusr": True,
-    "xusr": False,
-    "rgrp": True,
+FULL_STATUS = SUMMARY_STATUS | {
+    "WatchdogUSec": "0",
+    "MemoryCurrent": "12345678",
+    "ControlGroup": "/system.slice/nginx.service",
+    "ActiveEnterTimestamp": "Thu 2026-06-18 21:23:35 UTC",
+    "ActiveEnterTimestampMonotonic": "41655907",
 }
+
 SUMMARY_STAT = {
     "exists": True,
     "path": "/etc/nginx/nginx.conf",
@@ -73,6 +32,19 @@ SUMMARY_STAT = {
     "pw_name": "root",
     "gr_name": "root",
     "mtime": 1781858272.9,
+}
+FULL_STAT = SUMMARY_STAT | {
+    "atime": 1781858272.9,
+    "ctime": 1781858272.9,
+    "uid": 0,
+    "gid": 0,
+    "dev": 64,
+    "inode": 12,
+    "nlink": 1,
+    "rusr": True,
+    "wusr": True,
+    "xusr": False,
+    "rgrp": True,
 }
 
 

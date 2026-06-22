@@ -30,4 +30,4 @@ exclude = [".claude"]
 
 [tool.pytest.ini_options]
 testpaths = ["unit_tests"]
-pythonpath = ["test"]
+pythonpath = [".", "test"]
