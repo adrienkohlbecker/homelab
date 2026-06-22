@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Show a WireGuard client config on demand: terminal QR (phone) or --conf to stdout (laptop). Never written to disk."
 #USAGE arg "<device>" help="client peer name (a non-server wireguard_peers entry, e.g. laptop or phone)"
-#USAGE complete "device" run="grep '^\\s*- name:' group_vars/all/main.yml | awk '{print $3}'"
+#USAGE complete "device" run="yq -r '.wireguard_peers[] | select(.is_server != true) | .name' group_vars/all/main.yml"
 #USAGE flag "--conf" help="emit the raw config to stdout instead of a QR (macOS: pipe to pbcopy, then Add Empty Tunnel -> paste)"
 set -euo pipefail
 
