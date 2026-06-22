@@ -112,7 +112,7 @@ cp "${kernel_images[0]}" "$out_dir/"
 cp "${component_dir}/initramfs-bootmenu.img" "$out_dir/initramfs-bootmenu.img"
 cp "$upstream_efi" "$out_dir/zfsbootmenu.EFI"
 
-yq -er '.CommandLine' "${work_src}/etc/zfsbootmenu/recovery.yaml" >"$out_dir/cmdline"
+yq -er '.Kernel.CommandLine' "${work_src}/etc/zfsbootmenu/recovery.yaml" >"$out_dir/cmdline"
 
 initramfs_listing="${workdir}/initramfs.lsinitrd"
 zbm_lsinitrd "$builder_tag" "$out_dir/initramfs-bootmenu.img" >"$initramfs_listing"
