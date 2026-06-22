@@ -797,7 +797,9 @@ class Machine:
         if self.role == "firewall":
             fixture_vars["tailscale_wan_direct"] = True
         if self.role == "headscale":
-            fixture_vars["headscale_oidc_enabled"] = True
+            fixture_vars["headscale_oidc_issuer"] = "http://10.166.0.10:8090/oidc"
+            fixture_vars["headscale_oidc_client_id"] = "headscale"
+            fixture_vars["headscale_oidc_client_secret"] = "test-oidc-client-secret"
         if self.role == "_site_test":
             # Full-site converge pulls every service image into one guest; match
             # prod's 50 GiB podman zvol while keeping per-role cells at 15 GiB.

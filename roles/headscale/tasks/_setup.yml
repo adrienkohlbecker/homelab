@@ -31,10 +31,9 @@
 
 # --- OIDC boot-test fixture -------------------------------------------------
 # Prod points headscale's OIDC at Authelia, which the box VM can't reach. Stand
-# up headscale's built-in `mockoidc` as a local issuer the box CAN reach so the
-# OIDC path gets exercised in-test; host_vars/box.yml then enables
-# OIDC (+PKCE) against it -- keyed on _role_under_test so only the headscale test
-# turns it on (the tailscale role's headscale-on-box stays OIDC-free). With
+# up headscale's built-in `mockoidc` as a local issuer the box CAN reach. The
+# harness passes that issuer/client/secret only for the headscale role, so the
+# tailscale role's headscale-on-box stays OIDC-free. With
 # only_start_if_oidc_is_available:true, headscale reaching `active` proves it
 # completed boot-time OIDC discovery and accepted the oidc+pkce config block --
 # that's what _verify asserts.
@@ -83,6 +82,5 @@
   retries: 15
   delay: 1
   until: headscale_setup_mockoidc.status == 200
-# OIDC is enabled for the converge via host_vars/box.yml (headscale_oidc_*),
-# keyed on _role_under_test so it persists across the harness's separate
-# converge/idempotence/_verify ansible invocations -- a set_fact here would not.
+# OIDC is enabled for the converge via harness extra-vars (headscale_oidc_*), so
+# it persists across the separate converge/idempotence/_verify invocations.

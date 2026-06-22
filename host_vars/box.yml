@@ -214,14 +214,3 @@ tailscale_accept_routes: true
 # generic test host's tailnet posture. The port stays here because the firewall
 # template consumes it independently of the tailscale role's defaults.
 tailscale_port: 41641
-
-# roles/headscale OIDC boot test. The harness passes headscale_oidc_enabled=true
-# only for headscale role tests, pointed at the local mockoidc that
-# roles/headscale/tasks/_setup.yml stands up (static 10.166.0.10:8090 on the
-# headscale podman net). The tailscale role's headscale-on-box stays OIDC-free
-# because it doesn't run mockoidc. only_start_if_oidc_is_available makes
-# headscale's boot the OIDC-discovery assertion (see _verify). The secret is a
-# throwaway matching mockoidc's MOCKOIDC_CLIENT_SECRET -- no blast radius.
-headscale_oidc_issuer: http://10.166.0.10:8090/oidc
-headscale_oidc_client_id: headscale
-headscale_oidc_client_secret: test-oidc-client-secret

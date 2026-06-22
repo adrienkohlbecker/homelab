@@ -146,11 +146,10 @@ dns:
   extra_records: []
 {% endif %}
 
-{% if headscale_oidc_enabled %}
+{% if _headscale_oidc_configured %}
 # User-device enrollment via Authelia OIDC. Headless hosts (lab/pug/bunk) use
-# pre-auth keys instead and never hit this. Disabled under the test harness
-# (headscale validates the issuer at boot via OIDC discovery, which the box VM
-# can't reach).
+# pre-auth keys instead and never hit this. The test harness points this at a
+# local mock issuer only for the headscale role's OIDC boot test.
 oidc:
   issuer: "{{ headscale_oidc_issuer }}"
   client_id: "{{ headscale_oidc_client_id }}"

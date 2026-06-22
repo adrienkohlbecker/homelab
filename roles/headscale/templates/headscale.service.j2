@@ -14,8 +14,8 @@ Wants=network-online.target
 # burst. A genuinely-broken server still surfaces (Restart=always loops, and
 # fox's netdata headscale collector goes missing -- see host_vars/fox.yml).
 StartLimitIntervalSec=600
-StartLimitBurst={{ 15 if headscale_oidc_enabled else 3 }}
-{% if headscale_oidc_enabled %}
+StartLimitBurst={{ 15 if _headscale_oidc_configured else 3 }}
+{% if _headscale_oidc_configured %}
 {% if not qemu_test %}
 # OIDC discovery hits the Authelia issuer at startup, and on fox that issuer
 # (auth.fahm.fr) resolves to lab's wg /32 -- reachable only over the wg0
@@ -84,7 +84,7 @@ ExecStart=/usr/bin/podman run \
        network's ULA; netavark DNATs host v4 and v6 to it, source preserved. #}
     --publish 0.0.0.0:{{ service_ports.headscale_stun }}:3478/udp \
     --publish '[::]:{{ service_ports.headscale_stun }}:3478/udp' \
-{% if headscale_oidc_enabled %}
+{% if _headscale_oidc_configured %}
     --secret=headscale_oidc_secret,type=mount,target=oidc_client_secret \
 {% endif %}
     {# Liveness via the service-native CLI: `headscale users list` round-trips

@@ -1,22 +1,33 @@
+- name: Resolve whether headscale OIDC is configured
+  set_fact:
+    _headscale_oidc_configured: >-
+      {{
+        (headscale_oidc_issuer | default('') | length > 0)
+        or (headscale_oidc_client_id | default('') | length > 0)
+        or (headscale_oidc_client_secret | default('') | length > 0)
+      }}
+  tags:
+    - headscale
+
 # Required inputs live in host_vars/group_vars and the role asserts them (per
-# CLAUDE.md) -- the OIDC trio is only consulted when enrollment is enabled, so
-# gate the assert on the same flag. A missing/typo'd issuer would otherwise fail
-# opaquely at headscale's boot-time OIDC discovery on the one public host rather
-# than loudly here at parse time. Mirrors roles/tailscale's input assert.
-- name: Assert required headscale OIDC inputs are set when OIDC is enabled
+# AGENTS.md). A missing/typo'd issuer would otherwise fail opaquely at
+# headscale's boot-time OIDC discovery on the one public host rather than loudly
+# here at parse time. Mirrors roles/tailscale's input assert.
+- name: Assert required headscale OIDC inputs are set when OIDC is configured
   assert:
     that:
       - headscale_oidc_issuer | default('') | length > 0
       - headscale_oidc_client_id | default('') | length > 0
       - headscale_oidc_client_secret | default('') | length > 0
     fail_msg: >-
-      headscale_oidc_enabled is true but one of headscale_oidc_issuer,
+      One or more headscale_oidc_* inputs are set, but one of
+      headscale_oidc_issuer,
       headscale_oidc_client_id, headscale_oidc_client_secret is unset or empty
       (set them in host_vars + vaulted group_vars/prod.yml; see
       notes/headscale_mesh_redesign.md §E). A mistyped vault key that renders to
       an empty string passes `is defined` but boots an OIDC-broken control plane
       that still reaches `active`, so check for non-empty, not just defined.
-  when: headscale_oidc_enabled
+  when: _headscale_oidc_configured
   tags:
     - headscale
 
@@ -90,7 +101,7 @@
 # in-container, and the file isn't at its in-container path when validate runs).
 # A malformed policy fails soft anyway: the unit's SIGHUP ExecReload keeps the
 # previously-loaded policy, and _verify exercises exactly that with a planted
-# malformed file. Per CLAUDE.md: omit validate rather than invent a fake one.
+# malformed file. Per AGENTS.md: omit validate rather than invent a fake one.
 - name: Render headscale ACL policy
   when: not (ansible_check_mode and headscale_user.changed)
   template:
@@ -106,7 +117,7 @@
     - headscale
 
 - name: Create headscale OIDC client secret
-  when: headscale_oidc_enabled
+  when: _headscale_oidc_configured
   import_role:
     name: podman_secret
     tasks_from: secret

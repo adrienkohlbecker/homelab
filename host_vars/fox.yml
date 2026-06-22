@@ -144,16 +144,13 @@ headscale_server_url: "https://headscale.{{ domain }}"
 certbot_extra_sans:
   - headscale.{{ domain }}
 
-# Headscale OIDC (user-device enrollment via Authelia), ENABLED. Headless hosts
-# (lab/pug) still enroll via pre-auth keys regardless; this is for the Apple-app
-# enrollment flow. The operator prerequisites (notes/headscale_mesh_redesign.md
-# §E) are in place: the prod authelia_oidc_clients[headscale] row + the vaulted
-# headscale_oidc_client_secret. headscale validates this issuer via OIDC
+# Headscale OIDC (user-device enrollment via Authelia). Headless hosts (lab/pug)
+# still enroll via pre-auth keys regardless; this is for the Apple-app enrollment
+# flow. The operator prerequisites (notes/headscale_mesh_redesign.md §E) are in
+# place: the prod authelia_oidc_clients[headscale] row + the vaulted
+# headscale_oidc_client_secret. Headscale validates this issuer via OIDC
 # discovery at startup, so it needs auth.fahm.fr reachable over wg0 when it boots
-# -- the headscale unit orders After=wg-quick@wg0 for exactly that. To disable,
-# flip this to false: the config's oidc block and the podman_secret task both
-# gate on it, so fox then converges without the secret present.
-headscale_oidc_enabled: true
+# -- the headscale unit orders After=wg-quick@wg0 for exactly that.
 headscale_oidc_issuer: "https://auth.{{ domain }}"
 
 # fox is the only internet-facing host, so it runs fail2ban (the home hosts
