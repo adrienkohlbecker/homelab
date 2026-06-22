@@ -3,9 +3,7 @@
 prepare() does the IO-heavy work of populating drives / _direct_boot /
 _extra_disk_devices, which aren't safe to run in a unit test (qemu-img,
 file IO against packer artifacts). Each test sets those attrs manually
-and asserts on the shape of the assembled command line. Locks in the
-invariants that the upcoming ArchProfile / memory_mb / -name refactors
-will touch.
+and asserts on the shape of the assembled command line.
 """
 
 from collections.abc import Callable
@@ -77,7 +75,7 @@ def test_default_x86_64_no_keep_no_direct_boot(
     assert "-append" not in cmd
 
     # Pidfile under the workdir.
-    assert cmd[cmd.index("-pidfile") + 1] == f"{m.workdir.name}/pid"
+    assert cmd[cmd.index("-pidfile") + 1] == str(m.pid_file)
 
     # Serial console plumbed to stdio so kernel printk lands in the boot log.
     assert cmd[cmd.index("-serial") + 1] == "stdio"
@@ -235,14 +233,14 @@ def test_memory_and_vcpus_flow_from_spec(
 
 
 @pytest.mark.parametrize("host_arch", ["x86_64", "aarch64"])
-def test_pidfile_uses_idfile_under_workdir(
+def test_pidfile_lives_under_workdir(
     machine_factory: Callable[..., machine.Machine],
     host_arch: str,
 ) -> None:
     m = machine_factory(host_arch=host_arch)
     _setup(m)
     cmd = m._boot_command()
-    assert cmd[cmd.index("-pidfile") + 1] == f"{m.workdir.name}/{m.idfile}"
+    assert cmd[cmd.index("-pidfile") + 1] == str(m.pid_file)
 
 
 def test_passt_backend_uses_stream_netdev(
@@ -255,7 +253,7 @@ def test_passt_backend_uses_stream_netdev(
     m = machine_factory(host_arch="x86_64", machine="box")
     _setup(m, drives=["file=disk1.raw,if=virtio"])
     m._net_backend = "passt"
-    m._passt_socket = Path(m.workdir.name) / "passt.sock"
+    m._passt_socket = m.workdir_path / "passt.sock"
     cmd = m._boot_command()
 
     netdev = cmd[cmd.index("-netdev") + 1]
@@ -276,7 +274,7 @@ def test_passt_command_forwards_mirror_slirp_ports(
     m = machine_factory(host_arch="x86_64", machine="box")
     _setup(m)
     m._net_backend = "passt"
-    m._passt_socket = Path(m.workdir.name) / "passt.sock"
+    m._passt_socket = m.workdir_path / "passt.sock"
     m.ssh_port = 2222
     m.wan_forward_ports = {
         "tcp": {"32400": 3000},
@@ -303,7 +301,7 @@ def test_passt_command_skips_address_pin_off_topology(
     m = machine_factory(host_arch="x86_64", machine="minimal")
     _setup(m)
     m._net_backend = "passt"
-    m._passt_socket = Path(m.workdir.name) / "passt.sock"
+    m._passt_socket = m.workdir_path / "passt.sock"
     cmd = m._passt_command()
     assert "--address" not in cmd
     assert "--gateway" not in cmd
@@ -358,7 +356,7 @@ def test_passt_netdev_params_mirror_sidecar_ports(
     assert "gateway=10.234." in params
 
     # Parity check: the de-escaped tcp/udp specs equal the sidecar's flag args.
-    m._passt_socket = Path(m.workdir.name) / "passt.sock"
+    m._passt_socket = m.workdir_path / "passt.sock"
     sidecar = m._passt_command()
     tcp_spec = sidecar[sidecar.index("--tcp-ports") + 1]
     udp_spec = sidecar[sidecar.index("--udp-ports") + 1]

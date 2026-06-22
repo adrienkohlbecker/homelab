@@ -319,7 +319,7 @@ async def _run_async(
                 # packer/seed_deps.yml location has no group_vars
                 # sibling, so `ubuntu_mirror` (and friends from
                 # group_vars/all.yml) would otherwise be undefined.
-                staged_seed = Path(m.workdir.name) / seed.name
+                staged_seed = m.workdir_path / seed.name
                 shutil.copy(seed, staged_seed)
                 print_line(f"Seeding image via {seed}")
                 await m.ansible_command(str(staged_seed))
