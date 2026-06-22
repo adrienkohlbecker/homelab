@@ -49,6 +49,16 @@ _PHASE_TIMINGS: list[tuple[str, float]] = []
 # hosts); off-LAN dev work can pass --upstream-mirrors as the escape
 # hatch.
 _SKIP_MIRRORS_PRELUDE_ROLES = frozenset({"apt", "packer"})
+_REMOVED_FLOW_FLAGS = frozenset(
+    {
+        "--checkmode",
+        "--no-checkmode",
+        "--idempotence",
+        "--no-idempotence",
+        "--keep-logs",
+        "--no-keep-logs",
+    }
+)
 
 
 @contextlib.asynccontextmanager
@@ -101,12 +111,6 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         help="Machine profile to run against (default: first roles/<role>/meta/test.yml `machines:` key, else 'box')",
     )
     parser.add_argument(
-        "--checkmode",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Run ansible in check mode before the test (default: on; --no-checkmode disables)",
-    )
-    parser.add_argument(
         "--keep",
         action="store_true",
         help="Keep the machine running after the test",
@@ -123,18 +127,6 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         default=DEFAULT_UBUNTU,
         choices=sorted(UBUNTU_RELEASES),
         help="Ubuntu codename of the target image",
-    )
-    parser.add_argument(
-        "--idempotence",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Re-run the role and fail if any task reports changed (default: on)",
-    )
-    parser.add_argument(
-        "--keep-logs",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Keep output/boot/journal logs after a successful run (default: on; --no-keep-logs deletes them, used by testall.py)",
     )
     parser.add_argument(
         "--upstream-mirrors",
@@ -164,6 +156,13 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     # before forwarding to ansible.
     while pass_args and pass_args[0] == "--":
         pass_args = pass_args[1:]
+
+    removed_flags = sorted(arg for arg in pass_args if arg.partition("=")[0] in _REMOVED_FLOW_FLAGS)
+    if removed_flags:
+        parser.error(
+            "these flow-control flags were removed; testrole always runs check mode, "
+            f"apply, idempotence, and drops clean-pass logs: {removed_flags}"
+        )
 
     # --machine defaults to the role's primary machines: entry. An explicit
     # CLI value still wins, and argparse's choices validate that path before
@@ -207,8 +206,6 @@ async def run_test(
     m: Machine,
     pass_args: list[str],
     *,
-    checkmode: bool,
-    idempotence: bool,
     timeout: int,
 ) -> None:
     """Provision a machine, run the role under test, and stream output."""
@@ -276,15 +273,13 @@ async def run_test(
                                 await m.ansible_command(str(m.workdir_path / "_setup.yml"))
 
                         site_yml = str(m.workdir_path / "site.yml")
-                        if checkmode:
-                            async with _phase("checkmode --check"):
-                                await m.ansible_command(site_yml, "--check", *pass_args)
+                        async with _phase("checkmode --check"):
+                            await m.ansible_command(site_yml, "--check", *pass_args)
 
                         async with _phase("main apply"):
                             await m.ansible_command(site_yml, *pass_args)
 
-                        if idempotence:
-                            await _verify_idempotence(site_yml, m, pass_args)
+                        await _verify_idempotence(site_yml, m, pass_args)
 
                         # Post-role assertions, if the role declares any.
                         if Path(f"roles/{m.role}/tasks/_verify.yml").exists():
@@ -387,8 +382,6 @@ def main() -> int:
                 run_test(
                     m,
                     pass_args,
-                    checkmode=parsed_args.checkmode,
-                    idempotence=parsed_args.idempotence,
                     timeout=parsed_args.timeout,
                 )
             )
@@ -431,10 +424,9 @@ def main() -> int:
                 print_line(f"{PEAK_KB_SENTINEL_PREFIX}{m.peak_rss_kb}")
             _print_phase_summary()
 
-    # Drop per-run logs only on a clean pass when the caller (typically
-    # testall.py) opted out of keeping them. We wait until tee_output has
-    # released the file before unlinking to keep the lifecycle obvious.
-    if rc == 0 and not parsed_args.keep_logs:
+    # Clean passes keep the joblog summary and drop noisy per-run artifacts;
+    # failures keep everything for post-mortem inspection.
+    if rc == 0:
         m.cleanup_logs()
 
     return rc

@@ -4,10 +4,9 @@ Test runner for Ansible roles using native asyncio parallelism.
 
 This script discovers roles, builds test commands, and executes them concurrently
 without relying on GNU parallel. Each child testrole.py tees its own transcript
-to `test/out/<machine>.<ubuntu>.<role>.output.ansi` and, when invoked with
---no-keep-logs (as testall does), drops its output/boot/journal logs on a
-clean pass; failed runs leave them in place under that predictable path. A
-concise job log is written to `test/out.tsv`. Partial reruns (--retry-failed,
+to `test/out/<machine>.<ubuntu>.<role>.output.ansi`, drops per-run artifacts on
+a clean pass, and keeps them for failures under predictable paths. A concise
+job log is written to `test/out.tsv`. Partial reruns (--retry-failed,
 --only-role, --except-role) merge with the prior log so untouched triples
 survive; an unfiltered run replaces the log outright.
 """
@@ -41,10 +40,9 @@ LOG_FILE = Path("test/out.tsv")
 JOBLOG_FIELDS = ["Role", "Ubuntu", "Machine", "Runtime", "Exitval", "PeakKB", "Started"]
 LIVENESS_TICK_SECONDS = 300.0  # 5 minutes
 
-# Flags testall.py controls per child invocation. If a user passes any of
-# them through role_args, testrole.py's argparse last-wins would silently
-# flip the meaning -- reject up front so the conflict is obvious.
-TESTROLE_OWNED_FLAGS = frozenset(
+# Flags that describe harness control flow rather than Ansible behavior.
+# Keep them out of role_args so they do not leak through to ansible-playbook.
+TESTROLE_UNFORWARDED_FLAGS = frozenset(
     {
         "--machine",
         "--ubuntu",
@@ -110,20 +108,6 @@ def parse_args() -> argparse.Namespace:
         metavar="X",
         help="Comma-separated Ubuntu codename filter; only run cells matching these releases "
         "(default: all releases from meta/test.yml)",
-    )
-
-    parser.add_argument(
-        "--checkmode",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Run ansible in check mode before each test (default: on; --no-checkmode disables)",
-    )
-
-    parser.add_argument(
-        "--idempotence",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Re-run each role and fail if any task reports changed (default: on)",
     )
 
     parser.add_argument(
@@ -208,8 +192,6 @@ async def _run_role(
     cell: TestCell,
     role_args: Sequence[str],
     semaphore: asyncio.Semaphore,
-    checkmode: bool,
-    idempotence: bool,
 ) -> JobResult:
     """Execute a single role test while respecting the concurrency limit."""
     cmd = [
@@ -218,11 +200,6 @@ async def _run_role(
         cell.machine,
         "--ubuntu",
         cell.ubuntu,
-        "--checkmode" if checkmode else "--no-checkmode",
-        "--idempotence" if idempotence else "--no-idempotence",
-        # Let testrole drop its own logs on a clean pass so we don't leak
-        # noise files into test/out/ for green roles.
-        "--no-keep-logs",
         cell.role,
         *role_args,
     ]
@@ -278,7 +255,7 @@ async def _run_role(
         if exitval < 0:
             exitval = 128 - exitval
         status = "ok" if exitval == 0 else colorize("fail", "red")
-        # Per-run log cleanup is testrole's responsibility now (--no-keep-logs above).
+        # Per-run log cleanup is testrole's responsibility.
         print(f"[{seq}] {cell.machine}:{cell.ubuntu}:{cell.role} {status} ({runtime:.1f}s)")
 
     return JobResult(
@@ -314,8 +291,6 @@ async def run_all(
     cells: list[TestCell],
     role_args: Sequence[str],
     jobs: int,
-    checkmode: bool,
-    idempotence: bool,
 ) -> tuple[list[JobResult], bool]:
     """Run every role/machine combination concurrently.
 
@@ -334,7 +309,7 @@ async def run_all(
         with cancel_on_signal(task):
             async with asyncio.TaskGroup() as tg:
                 tasks = [
-                    tg.create_task(_run_role(seq, cell, role_args, semaphore, checkmode, idempotence))
+                    tg.create_task(_run_role(seq, cell, role_args, semaphore))
                     for seq, cell in enumerate(cells, start=1)
                 ]
     except asyncio.CancelledError:
@@ -410,11 +385,10 @@ def main() -> int:
         print("Error: --jobs must be at least 1", file=sys.stderr)
         return 1
 
-    conflicts = [a for a in args.role_args if a in TESTROLE_OWNED_FLAGS]
+    conflicts = [a for a in args.role_args if a.partition("=")[0] in TESTROLE_UNFORWARDED_FLAGS]
     if conflicts:
         print(
-            f"Error: testall.py controls these flags itself; pass them to testall instead "
-            f"of forwarding via role_args: {conflicts}",
+            f"Error: these testrole control flags cannot be forwarded through role_args: {conflicts}",
             file=sys.stderr,
         )
         return 1
@@ -506,7 +480,7 @@ def main() -> int:
         prior_results = _read_joblog()
 
     test_start = time.time()
-    results, cancelled = asyncio.run(run_all(cells, args.role_args, args.jobs, args.checkmode, args.idempotence))
+    results, cancelled = asyncio.run(run_all(cells, args.role_args, args.jobs))
     wall_clock = time.time() - test_start
 
     if results:
