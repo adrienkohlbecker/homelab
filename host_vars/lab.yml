@@ -68,20 +68,18 @@ lm_sensors_ignore:
       - temp5
       - temp7
 
-# `block` derives from data/network_topology.yml: each entry is the
-# host's slot-indexed /28 within the VLAN's CIDR (see the schema doc
-# in the topology file — `per-host /28 block = vlan_cidr | ipsubnet(28,
-# 8 + slot)`). host_ip defaults to block + 0, i.e. the first IP of the
-# /28. lab is slot 0 → both blocks resolve to .128/28.
+# Each entry names a VLAN; the macvlan role derives this host's slot-indexed
+# /28 from data/network_topology.yml. host_ip defaults to that block's first IP.
+# lab is slot 0, so both blocks resolve to .128/28.
 macvlan_blocks:
   - name: mac_mgmt
     parent: eth0
     # No podman_network: nothing on lab attaches containers via the
     # mgmt-VLAN macvlan today.
-    block: "{{ network.sites.home.vlans.management.cidr | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}"
+    vlan: management
   - name: mac_iot
     parent: iot              # netplan-named eth0.4 subif (see vlans.iot below)
-    block: "{{ network.sites.home.vlans.iot.cidr | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}"
+    vlan: iot
     # The podman network (also named mac_iot) takes the upper /29
     # (.136/29 = 8 container slots); homeassistant attaches via
     # --network=mac_iot.

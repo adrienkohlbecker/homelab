@@ -11,7 +11,7 @@ qemu_test: true
 macvlan_blocks:
   - name: mac_mgmt
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-    block: "{{ network.sites.home.vlans.management.cidr | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}"
+    vlan: management
 
 # Override prod pug's swap_partition (by-uuid, points at the physical disk's
 # partition UUID). The packer pug image bakes a single-disk swap partition

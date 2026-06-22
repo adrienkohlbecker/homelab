@@ -77,16 +77,14 @@
   failed_when: _homeassistant_zigbee_link.stdout | trim != '/config/db/zigbee.db'
   become: true
 
-# HA's mac_iot IP isn't pinned (vars/main.yml) — assert it
-# falls inside the network's ip_range (the upper /29 of mac_iot's
-# block; same derivation roles/macvlan/tasks/install.yml applies).
-# Pulling the expected range from `macvlan_blocks` directly (not
-# from the topology) keeps the check correct for both prod hosts
-# (block in 10.123.x) and qemu test fixtures (block in qemu_subnet's
-# 10.0.2.x, since netavark requires ip_range ⊂ parent's subnet).
+# HA's mac_iot IP isn't pinned (vars/main.yml) — assert it falls inside the
+# network's ip_range (the upper /29 of mac_iot's role-derived block).
 - name: _verify | Homeassistant mac_iot IP is in this host's IoT /29
   vars:
-    _mac_iot_block: "{{ (macvlan_blocks | selectattr('name', 'eq', 'mac_iot') | list | first).block }}"
+    _mac_iot_vlan: "{{ (macvlan_blocks | selectattr('name', 'eq', 'mac_iot') | list | first).vlan }}"
+    _mac_iot_block: >-
+      {{ network.sites[network.hosts[inventory_hostname].site].vlans[_mac_iot_vlan].cidr
+         | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}
     _expected_range: "{{ _mac_iot_block | ansible.utils.ipsubnet(_mac_iot_block | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
   command: >
     podman inspect homeassistant

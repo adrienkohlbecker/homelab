@@ -4,7 +4,7 @@ host_vars.macvlan_blocks via roles/macvlan/tasks/install.yml.
 macvlan_args is the loop var from main.yml.
 
 Defaults:
-  host_ip:     macvlan_args.block | ipmath(0) — slot 0 of the block. This
+  host_ip:     macvlan_block | ipmath(0) — slot 0 of the block. This
                is the block's network address, which is a usable host slot
                here precisely because the iface is /32 + an explicit route
                to the whole block (nothing treats the /28 as a subnet).
@@ -19,7 +19,7 @@ would otherwise report. A reconverge then recreates the iface (the
 systemd_unit helper starts any non-active unit), or `systemctl restart
 <name>` does it by hand.
 #}
-{% set _host_ip = macvlan_args.host_ip | default(macvlan_args.block | ansible.utils.ipmath(0)) %}
+{% set _host_ip = macvlan_args.host_ip | default(macvlan_block | ansible.utils.ipmath(0)) %}
 {% set _mac = macvlan_args.mac_address | default('82:48:10' | random_mac(seed=(inventory_hostname ~ '_' ~ macvlan_args.name))) %}
 [Unit]
 Description={{ macvlan_args.name }} interface setup
@@ -60,7 +60,7 @@ ExecStart=/bin/ip link set {{ macvlan_args.name }} up
 # `src` pins the preferred source for host-originated traffic into the block
 # to this iface's IP (same cross-iface-identity concern as the ARP knobs),
 # instead of the kernel's default source selection.
-ExecStart=/bin/ip route add {{ macvlan_args.block }} dev {{ macvlan_args.name }} proto static src {{ _host_ip }}
+ExecStart=/bin/ip route add {{ macvlan_block }} dev {{ macvlan_args.name }} proto static src {{ _host_ip }}
 ExecStop=-/bin/ip link delete {{ macvlan_args.name }}
 
 [Install]
