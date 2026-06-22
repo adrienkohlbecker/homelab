@@ -128,16 +128,13 @@
       fragment: {{ _boot_verify_cmdline.stdout }}
 
 - name: _verify | Commandline carries serial args (when configured)
-  when: not grub_bootloader and (boot_serial_console | default('') | trim | length > 0 or qemu_test)
-  vars:
-    _expected: >-
-      {% if qemu_test %}earlycon={% else %}{{ boot_serial_console }}{% endif %}
+  when: not grub_bootloader and (_console_serial | trim | length > 0)
   assert:
     that:
-      - "_expected | trim in _boot_verify_cmdline.stdout"
+      - "_console_serial | trim in _boot_verify_cmdline.stdout"
     fail_msg: >-
       Expected serial args not found in org.zfsbootmenu:commandline.
-      Expected: {{ _expected | trim }}
+      Expected: {{ _console_serial | trim }}
       Got: {{ _boot_verify_cmdline.stdout }}
 
 - name: _verify | Commandline carries initramfs debug when enabled
