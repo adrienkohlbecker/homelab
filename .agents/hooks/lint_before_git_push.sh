@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # Agent PreToolUse hook: blocks `git push` on a `mise run lint` regression.
 #
-# The PostToolUse counterpart (lint_ansible_on_edit.sh) is non-blocking and runs
-# only the fast changed-ansible variant after each edit so the regression is
-# visible during the dev loop. This hook is the gate: by the time a push happens,
-# the full lint had better be clean. Exit 2 surfaces stderr to the agent and blocks
-# the tool execution.
+# The PostToolUse counterpart is non-blocking and runs focused validation during
+# the edit loop. This hook is the gate: by the time a push happens, the full
+# lint had better be clean. Exit 2 surfaces stderr to the agent and blocks the
+# tool execution.
 #
 # AGENTS.md ("Build, Test, and Development Commands") says "Run full
 # `mise run lint` before pushing"; this hook makes that machine-enforced.

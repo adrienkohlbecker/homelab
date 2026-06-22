@@ -17,11 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)\"/.agents/hooks/lint_ansible_on_edit.sh"
-          },
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)\"/.agents/hooks/tf_validate_on_edit.sh"
+            "command": "\"$(git rev-parse --show-toplevel)\"/.agents/hooks/validate_on_edit.sh"
           }
         ]
       }
