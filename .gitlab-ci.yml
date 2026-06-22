@@ -118,7 +118,7 @@ workflow:
     - if: $CI_COMMIT_REF_PROTECTED == "true"
 
 # Change detection + dynamic child pipeline (notes/ci_aws_nested_qemu_cells.md).
-# `detect` runs the classification core (mise-tasks/ci/detect.py) and writes one
+# `detect` runs the classification core (ci:detect-gitlab) and writes one
 # generated child job per `role:variant[:ubuntu]` cell. The default `aws_qemu`
 # pool hydrates promoted images from S3; the `lab` target boots them from its
 # local store. Both run the qemu backend directly.
@@ -180,26 +180,8 @@ detect:
     UV_LINK_MODE: copy
   timeout: 15m
   script:
-    - |
-      echo "== detect job environment =="
-      printf 'user=%s\n' "$(id)"
-      printf 'pwd=%s\n' "$PWD"
-      printf 'ci_project_dir=%s\n' "${CI_PROJECT_DIR:-<unset>}"
-      printf 'shell=%s\n' "${SHELL:-<unset>}"
-      printf 'home=%s\n' "${HOME:-<unset>}"
-      printf 'path=%s\n' "${PATH:-<unset>}"
-      printf 'runner=%s %s\n' "${CI_RUNNER_DESCRIPTION:-<unset>}" "${CI_RUNNER_EXECUTABLE_ARCH:-<unset>}"
-      printf 'homelab_target=%s\n' "${HOMELAB_CI_TARGET:-<unset>}"
-      for tool in gitlab-runner mise uv python python3 bash sh; do
-        printf '%s=' "$tool"
-        command -v "$tool" || true
-      done
-      gitlab-runner --version || true
-      mise --version || true
-      uv --version || true
-      python --version || python3 --version || true
     - mise run ci:bootstrap
-    - mise exec -- uv run python mise-tasks/ci/detect.py gitlab --target "$HOMELAB_CI_TARGET"
+    - mise run ci:detect-gitlab --target "$HOMELAB_CI_TARGET"
   artifacts:
     paths:
       - test-child.yml
