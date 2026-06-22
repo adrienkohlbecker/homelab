@@ -142,7 +142,6 @@ hosts:
 # wg mirror of mgmt's static_fixed) and the home-VLAN macvlan blocks
 # under the +64 mirror (10.123.66.128–.255), so no collision.
 wireguard:
-  listen_port: 51820   # uniform across all server peers
   roaming:
     laptop:       10.123.66.64
     phone:        10.123.66.65
