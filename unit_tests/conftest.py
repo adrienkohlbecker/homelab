@@ -8,10 +8,6 @@ import pytest
 
 import machine
 
-# Constructor parameters of machine.Machine.__init__. Override keys matching
-# these are routed to the constructor; any other override key is applied to
-# the constructed instance via setattr (so tests can inject synthetic field
-# values like ssh_port/ansible_args that __init__ doesn't accept directly).
 _CONSTRUCTOR_PARAMS = frozenset(
     {
         "machine",
@@ -21,20 +17,7 @@ _CONSTRUCTOR_PARAMS = frozenset(
         "machine_timeout",
         "upstream_mirrors",
         "workdir_parent",
-        "image_dir",
-        "kernel",
-        "initrd",
-        "append",
-        "mem",
-        "with_pflash",
-        "efi_code",
-        "efi_vars",
-        "virtfs",
-        "foreground",
-        "display_window",
-        "qmp_socket",
-        "commit_in_place",
-        "extra_hostfwds",
+        "launch",
     }
 )
 
@@ -74,8 +57,7 @@ def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
             machine_timeout=300,
         )
         # Constructor params go to __init__; anything else is a synthetic
-        # field value injected post-construction via setattr (e.g. ssh_port,
-        # ansible_args, inventory_host) that __init__ derives from the spec.
+        # field value injected post-construction via setattr.
         post_init: dict[str, Any] = {}
         for key, value in overrides.items():
             if key in _CONSTRUCTOR_PARAMS:
