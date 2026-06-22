@@ -1423,7 +1423,7 @@ class Machine:
                 drive_format = "qcow2"
 
             self.drives = [self._virtio_drive(path, drive_format) for path in os_disk_paths]
-            await self._copy_efivars_from(image_dir)
+            shutil.copyfile(Path(image_dir) / "efivars.fd", Path(self.workdir.name) / "efivars.fd")
             self.drives += await self._uefi_drives()
 
         # launch.py --kernel/--initrd/--append: bypass the firmware boot
@@ -1577,13 +1577,6 @@ class Machine:
         finally:
             os.close(fd)
 
-    async def _copy_efivars_from(self, image_dir: str) -> None:
-        """Copy EFI vars for UEFI boots from *image_dir* into the workdir."""
-
-        await run_command(
-            ["cp", f"{image_dir}/efivars.fd", f"{self.workdir.name}/efivars.fd"],
-        )
-
     def _virtio_drive(self, path: str, format: str = "qcow2") -> str:
         """Return a virtio drive string with sensible cache/discard flags."""
 
@@ -1598,10 +1591,8 @@ class Machine:
         EDK2/OVMF builds. The VARS blob is one of:
 
         - --efi-vars override, if supplied;
-        - else {workdir}/efivars.fd, if it's been copied in via
-          _copy_efivars_from (ZFS variants -- the packer image ships a
-          primed efivars template so the bootloader entries survive across
-          runs);
+        - else {workdir}/efivars.fd, copied from the packer image for ZFS
+          variants so bootloader entries survive across runs;
         - else a fresh empty file sized to the code blob -- right for
           ad-hoc launches like minimal or launch.py --with-pflash where
           there's no prior state. qemu pflash requires CODE and VARS to be
