@@ -31,7 +31,7 @@ ExecStart=/usr/bin/podman run \
     --network speedtest \
     --security-opt=no-new-privileges \
     --user 0:0 \
-    {{ 0 | podman_idmap_args(speedtest_user.uid, speedtest_user.group) | join(" \\\n    ") }} \
+    {{ speedtest_user | podman_idmap_args | join(" \\\n    ") }} \
     --env MODE=standalone \
     --env WEBPORT={{ service_ports.speedtest }} \
     --env DISABLE_IPINFO=true \

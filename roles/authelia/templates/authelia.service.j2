@@ -45,7 +45,7 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="authelia" \
     --network authelia \
     --security-opt=no-new-privileges \
-    {{ 0 | podman_idmap_args(authelia_user.uid, authelia_user.group) | join(" \\\n    ") }} \
+    {{ authelia_user | podman_idmap_args | join(" \\\n    ") }} \
     --volume /mnt/services/authelia/configuration.yml:/config/configuration.yml \
     --volume /mnt/services/authelia/users.yml:/config/users.yml \
     --volume /mnt/services/sqlite/authelia:/db \
