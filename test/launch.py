@@ -32,15 +32,12 @@ from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
 from utils import cancel_on_signal, print_cmd_line, print_line, tee_output
 
 
-def _parse_virtfs(specs: list[str]) -> list[tuple[Path, str]]:
-    """Parse PATH:TAG pairs from --virtfs flags."""
-    out: list[tuple[Path, str]] = []
-    for spec in specs:
-        path, sep, tag = spec.rpartition(":")
-        if not sep or not path or not tag:
-            raise argparse.ArgumentTypeError(f"--virtfs expects PATH:TAG, got {spec!r}")
-        out.append((Path(path).resolve(), tag))
-    return out
+def _virtfs_arg(spec: str) -> tuple[Path, str]:
+    """Parse one PATH:TAG --virtfs value."""
+    path, sep, tag = spec.rpartition(":")
+    if not sep or not path or not tag:
+        raise argparse.ArgumentTypeError(f"--virtfs expects PATH:TAG, got {spec!r}")
+    return Path(path).resolve(), tag
 
 
 def parse_args() -> argparse.Namespace:
@@ -124,6 +121,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--virtfs",
         action="append",
+        type=_virtfs_arg,
         default=[],
         metavar="PATH:TAG",
         help="Mount PATH on the host as a 9p share with mount_tag=TAG inside "
@@ -229,10 +227,6 @@ def parse_args() -> argparse.Namespace:
         parser.error(
             "--commit requires --image-dir to be set explicitly (refusing to mutate the published artifact directory)"
         )
-    try:
-        args.virtfs = _parse_virtfs(args.virtfs)
-    except argparse.ArgumentTypeError as exc:
-        parser.error(str(exc))
     return args
 
 
