@@ -1257,8 +1257,10 @@ class TestRenderChildPipeline:
         assert "CI_CELL_SSH_KEY" not in joined
         assert "ssh-add" not in joined
         assert detect.CELL_ROLE_ARN in joined
-        assert 'AWS_ROLE_SESSION_NAME="aws_qemu-cell-$CI_JOB_ID"' in joined
-        assert "mise exec -- aws --region eu-central-1 sts get-caller-identity" in joined
+        expected_oidc = (
+            f'source mise-tasks/ci/aws-oidc.sh {detect.CELL_ROLE_ARN} "aws_qemu-cell-$CI_JOB_ID" --cache-dir'
+        )
+        assert expected_oidc in joined
         # aws_qemu reads from AWS S3 via OIDC -- never the lab MinIO mirror.
         assert "HOMELAB_CI_MINIO_ACCESS_KEY" not in joined
         assert "HOMELAB_CI_S3_ENDPOINT" not in joined
@@ -1404,9 +1406,25 @@ class TestCmdGitlab:
 
 
 class TestMainEntrypoint:
-    def test_no_args_returns_2(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("sys.argv", ["detect.py"])
-        assert detect.main() == 2
+    @pytest.fixture(autouse=True)
+    def _no_green_api(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: None)
+
+    def test_direct_task_args_render_child(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        child = tmp_path / "child.yml"
+        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
+        monkeypatch.setattr("sys.argv", ["detect.py", "--all", "--child-path", str(child)])
+
+        assert detect.main() == 0
+        assert "nginx:box" in detect.yaml.safe_load(child.read_text())
+
+    def test_legacy_gitlab_subcommand_still_works(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        child = tmp_path / "child.yml"
+        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
+        monkeypatch.setattr("sys.argv", ["detect.py", "gitlab", "--all", "--child-path", str(child)])
+
+        assert detect.main() == 0
+        assert "nginx:box" in detect.yaml.safe_load(child.read_text())
 
     def test_unknown_command_returns_2(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.argv", ["detect.py", "bogus"])

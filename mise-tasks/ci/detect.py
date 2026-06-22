@@ -657,8 +657,8 @@ def _full_universe_matrix() -> str:
 # the guest egresses through AWS, whether the host ships a packer-baked
 # toolchain, and how the cell authenticates to the image store.
 #
-# The parent `detect` job (.gitlab-ci.yml) runs `detect.py gitlab`, which writes
-# the child YAML (one job per cell, all extending a shared `.cell` scaffold);
+# The parent `detect` job (.gitlab-ci.yml) runs the `ci:detect` mise task, which
+# writes the child YAML (one job per cell, all extending a shared `.cell` scaffold);
 # the `test_cells` trigger always includes it, so an empty matrix is carried as
 # a single no-op placeholder job rather than a runtime-gated trigger.
 
@@ -1013,7 +1013,10 @@ def main() -> int:
     args = sys.argv[1:]
     if args[:1] == ["gitlab"]:
         args = args[1:]
-    return _cmd_gitlab(args)
+    try:
+        return _cmd_gitlab(args)
+    except SystemExit as exc:
+        return int(exc.code or 0)
 
 
 if __name__ == "__main__":
