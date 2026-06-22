@@ -136,9 +136,8 @@
     "wireguard": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["listen_port", "roaming"],
+      "required": ["roaming"],
       "properties": {
-        "listen_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
         "roaming": {
           "type": "object",
           "description": "Roaming clients keyed by device name → wg IP.",
