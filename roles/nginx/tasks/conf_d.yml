@@ -89,6 +89,7 @@
         group: root
         mode: "{{ _nginx_conf_d_mode }}"
         backup: true
+        validate: "{{ nginx_conf_d_args.validate | default(omit) }}"
       become: true
       register: nginx_conf_d
 

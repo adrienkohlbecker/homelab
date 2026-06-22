@@ -33,6 +33,7 @@
     owner: root
     group: root
     force: false
+    validate: grep -qE '^driver[[:space:]]*=[[:space:]]*"overlay"' %s
   become: true
   tags:
     - podman

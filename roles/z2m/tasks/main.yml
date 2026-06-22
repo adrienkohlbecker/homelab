@@ -67,6 +67,7 @@
     owner: z2m
     group: z2m
     mode: "0644"
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' %s
     force: false
     backup: true
   register: z2m_devices

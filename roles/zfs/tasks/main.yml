@@ -124,6 +124,7 @@
     owner: root
     group: root
     backup: true
+    validate: grep -qE '^options[[:space:]]+zfs[[:space:]]+' %s
   register: zfs_module_conf
   become: true
   tags:

@@ -119,6 +119,7 @@
     group: root
     mode: "0755"
     backup: true
+    validate: bash -n %s
   become: true
   register: refind_efi_stub_hook
   tags:
@@ -299,6 +300,7 @@
     owner: root
     group: root
     mode: "0644"
+    validate: grep -qE '^menuentry[[:space:]]+' %s
   become: true
   register: refind_conf
   tags:
@@ -322,6 +324,7 @@
     owner: root
     group: root
     mode: "0644"
+    validate: grep -qE '^menuentry[[:space:]]+' %s
   become: true
   tags:
     - refind
@@ -333,6 +336,7 @@
     owner: root
     group: root
     mode: "0644"
+    validate: grep -qE '^banner[[:space:]]+' %s
   become: true
   tags:
     - refind

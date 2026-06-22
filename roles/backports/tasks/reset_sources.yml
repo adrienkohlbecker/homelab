@@ -16,3 +16,5 @@
     group: root
     mode: "0644"
     backup: true
+    validate: >-
+      python3 -c 'import sys; blocks=[b for b in open(sys.argv[1]).read().split("\n\n") if b.strip() and not b.lstrip().startswith("#")]; required={"Types","URIs","Suites","Components","Signed-By"}; sys.exit(1 if not blocks or any(not required <= {l.split(":",1)[0] for l in b.splitlines() if ":" in l} for b in blocks) else 0)' %s

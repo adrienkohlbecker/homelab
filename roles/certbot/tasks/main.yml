@@ -51,6 +51,8 @@
     owner: root
     group: root
     backup: true
+    validate: >-
+      python3 -c 'import sys; lines=[l for l in open(sys.argv[1]) if l.strip() and not l.lstrip().startswith("#")]; sys.exit(1 if not lines or any("=" not in l for l in lines) else 0)' %s
   become: true
   when: not (ansible_check_mode and certbot_apt.changed)
   tags:
@@ -64,6 +66,7 @@
     owner: root
     group: root
     backup: true
+    validate: grep -qE '^dns_cloudflare_api_token[[:space:]]*=' %s
   register: certbot_cf_creds
   become: true
   when: not (ansible_check_mode and certbot_apt.changed)

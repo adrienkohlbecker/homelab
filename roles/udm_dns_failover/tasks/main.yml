@@ -119,6 +119,7 @@
     group: root
     mode: "0640"
     backup: true
+    validate: grep -q '^include /etc/keepalived/conf.d/\*.conf$' %s
   register: udm_dns_failover_base_conf
   become: true
   tags:
@@ -132,6 +133,7 @@
     group: root
     mode: "0640"
     backup: true
+    validate: grep -qE '^vrrp_instance[[:space:]]+dns[[:space:]]*\{' %s
   register: udm_dns_failover_vrrp_conf
   become: true
   tags:
@@ -271,6 +273,8 @@
     group: root
     mode: "0644"
     backup: true
+    validate: >-
+      sh -c 'd=$(mktemp -d); trap "rm -rf $d" EXIT; cp "%s" "$d/on-boot.service"; systemd-analyze verify "$d/on-boot.service"'
   register: udm_dns_failover_onboot_unit
   become: true
   tags:
@@ -299,6 +303,8 @@
     group: root
     mode: "0640"
     backup: true
+    validate: >-
+      sh -c 'd=$(mktemp -d); trap "rm -rf $d" EXIT; cp "%s" "$d/udm_keepalived_heartbeat.service"; systemd-analyze verify "$d/udm_keepalived_heartbeat.service"'
   register: udm_dns_failover_heartbeat_service
   become: true
   tags:
@@ -312,6 +318,8 @@
     group: root
     mode: "0644"
     backup: true
+    validate: >-
+      sh -c 'd=$(mktemp -d); trap "rm -rf $d" EXIT; cp "%s" "$d/udm_keepalived_heartbeat.timer"; systemd-analyze verify "$d/udm_keepalived_heartbeat.timer"'
   register: udm_dns_failover_heartbeat_timer
   become: true
   tags:
@@ -356,6 +364,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: grep -q '^ExecStartPre=/usr/sbin/keepalived -t -f /etc/keepalived/keepalived.conf$' %s
   register: udm_dns_failover_dropin
   become: true
   tags:
@@ -441,6 +450,7 @@
         owner: root
         group: root
         mode: "0640"
+        validate: grep -qE '^vrrp_instance[[:space:]]+dns[[:space:]]*\{' %s
       become: true
     - name: Remove the VRRP fragment backup
       when: '"backup_file" in udm_dns_failover_vrrp_conf'
@@ -463,6 +473,7 @@
         owner: root
         group: root
         mode: "0640"
+        validate: grep -q '^include /etc/keepalived/conf.d/\*.conf$' %s
       become: true
     - name: Remove the base config backup
       when: '"backup_file" in udm_dns_failover_base_conf'

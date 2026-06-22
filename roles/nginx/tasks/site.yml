@@ -306,6 +306,7 @@
         # public value, so keep them off world-read as a conservative default.
         mode: "0640"
         backup: true
+        validate: grep -qE '^server[[:space:]]*\{' %s
       register: nginx_static_conf
 
     - name: site | Enable nginx site

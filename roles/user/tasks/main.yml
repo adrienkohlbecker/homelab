@@ -123,6 +123,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: tic -c %s
   become: true
   register: user_ghostty_terminfo
   tags:

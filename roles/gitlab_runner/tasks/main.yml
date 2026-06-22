@@ -158,6 +158,7 @@
             content: |
               [profile {{ gitlab_runner_aws_qemu_profile }}]
               region = {{ gitlab_runner_aws_qemu_region }}
+            validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' %s
           become: true
 
         - name: Render gitlab_runner AWS credentials
@@ -359,6 +360,7 @@
             group: root
             mode: "0644"
             backup: true
+            validate: grep -qE '^MemoryMax=' %s
           become: true
           register: gitlab_runner_slice_cap
 

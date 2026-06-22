@@ -96,6 +96,7 @@
     owner: transmission
     group: media
     mode: "0664"
+    validate: python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "%s"
   register: _transmission_conf_probe
   become: true
   # noqa: require-backup — probe never writes; backup on the real write task below

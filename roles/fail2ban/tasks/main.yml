@@ -70,6 +70,7 @@
     group: root
     mode: "0640"
     backup: true
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' %s
   register: fail2ban_daemon
   become: true
   tags:
@@ -122,6 +123,7 @@
     group: root
     mode: "0640"
     backup: true
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' %s
   register: fail2ban_default
   become: true
   tags:
@@ -145,6 +147,7 @@
     group: root
     mode: "0640"
     backup: true
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' %s
   register: fail2ban_sshd_jail
   become: true
   tags:
@@ -168,6 +171,7 @@
     group: root
     mode: "0640"
     backup: true
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' %s
   register: fail2ban_mail_action
   become: true
   tags:

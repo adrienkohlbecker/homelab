@@ -19,6 +19,7 @@
     owner: root
     group: root
     backup: true
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' %s
   when: not (ansible_check_mode and avahi_apt.changed)
   become: true
   register: avahi_daemon_conf

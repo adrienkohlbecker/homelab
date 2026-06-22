@@ -82,6 +82,7 @@
     group: minio-user
     mode: "0600"
     backup: true
+    validate: 'sh -c ''. "%s" && test -n "${MINIO_VOLUMES:-}"'''
   register: minio_cfg
   become: true
   tags:

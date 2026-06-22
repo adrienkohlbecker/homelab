@@ -58,6 +58,7 @@
     group: netdata
     mode: "0660"
     backup: true
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, delimiters=("=",)).read(sys.argv[1])' %s
   register: netdata_cloud_conf
   become: true
   tags:
