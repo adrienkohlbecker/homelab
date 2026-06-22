@@ -17,9 +17,7 @@
 
 - name: _verify | Assert each iface carries its host_ip/32
   vars:
-    _macvlan_block: >-
-      {{ network.sites[network.hosts[inventory_hostname].site].vlans[item.vlan].cidr
-         | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}
+    _macvlan_block: "{{ network | host_vlan_block(inventory_hostname, item.vlan, site=network.hosts[inventory_hostname].site) }}"
   command: ip -4 -o addr show dev {{ item.name }}
   loop: "{{ macvlan_blocks }}"
   loop_control:
@@ -44,9 +42,7 @@
 
 - name: _verify | Assert the block route points at each iface
   vars:
-    _macvlan_block: >-
-      {{ network.sites[network.hosts[inventory_hostname].site].vlans[item.vlan].cidr
-         | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}
+    _macvlan_block: "{{ network | host_vlan_block(inventory_hostname, item.vlan, site=network.hosts[inventory_hostname].site) }}"
   command: ip route show {{ _macvlan_block }} dev {{ item.name }}
   loop: "{{ macvlan_blocks }}"
   loop_control:
