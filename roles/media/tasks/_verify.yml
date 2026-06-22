@@ -43,8 +43,8 @@
   register: media_verify_mountpoint
   changed_when: false
   failed_when: >-
-    (media_verify_mountpoint.stdout.split('\t') | first | trim) != 'local'
-    or (media_verify_mountpoint.stdout.split('\t') | last | trim) != '/mnt/media'
+    (media_verify_mountpoint.stdout | zfs_source_value).source != 'local'
+    or (media_verify_mountpoint.stdout | zfs_source_value).value != '/mnt/media'
   become: true
 
 - name: _verify | Dataset mounted at /mnt/media
@@ -76,8 +76,8 @@
   register: media_verify_prop
   changed_when: false
   failed_when: >-
-    (media_verify_prop.stdout.split('\t') | first | trim) != 'local'
-    or (media_verify_prop.stdout.split('\t') | last | trim) != item.value
+    (media_verify_prop.stdout | zfs_source_value).source != 'local'
+    or (media_verify_prop.stdout | zfs_source_value).value != item.value
   loop: "{{ media_dataset_properties | dict2items }}"
   loop_control:
     label: "{{ item.key }}={{ item.value }}"

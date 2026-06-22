@@ -43,8 +43,8 @@
   register: data_verify_mountpoint
   changed_when: false
   failed_when: >-
-    (data_verify_mountpoint.stdout.split('\t') | first | trim) != 'local'
-    or (data_verify_mountpoint.stdout.split('\t') | last | trim) != item.mountpoint
+    (data_verify_mountpoint.stdout | zfs_source_value).source != 'local'
+    or (data_verify_mountpoint.stdout | zfs_source_value).value != item.mountpoint
   loop: '{{ data_datasets }}'
   loop_control:
     label: '{{ data_pool }}/{{ item.name }} mountpoint={{ item.mountpoint }}'
@@ -82,8 +82,8 @@
   register: data_verify_prop
   changed_when: false
   failed_when: >-
-    (data_verify_prop.stdout.split('\t') | first | trim) != 'local'
-    or (data_verify_prop.stdout.split('\t') | last | trim) != item.1.value
+    (data_verify_prop.stdout | zfs_source_value).source != 'local'
+    or (data_verify_prop.stdout | zfs_source_value).value != item.1.value
   loop: '{{ data_datasets | product(data_extra_properties | dict2items) | list }}'
   loop_control:
     label: '{{ data_pool }}/{{ item.0.name }} {{ item.1.key }}={{ item.1.value }}'
