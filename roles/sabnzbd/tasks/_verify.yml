@@ -94,7 +94,7 @@
     follow_redirects: none
     status_code: 302
   register: _sabnzbd_nginx_gate
-  failed_when: not (_sabnzbd_nginx_gate | authelia_redirects_to('sabnzbd', inventory_hostname, domain, require_rd=false))
+  failed_when: _sabnzbd_nginx_gate is not authelia_redirects_to('sabnzbd', inventory_hostname, domain, require_rd=false)
 
 # The history-DB symlink + matching --volume is the role's whole reason for
 # its non-obvious structure: it lands history1.db (and its -wal/-shm

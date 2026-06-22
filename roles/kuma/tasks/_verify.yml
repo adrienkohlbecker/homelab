@@ -35,7 +35,7 @@
     follow_redirects: none
     status_code: 302
   register: _kuma_nginx_gate
-  failed_when: not (_kuma_nginx_gate | authelia_redirects_to('kuma', inventory_hostname, domain, require_rd=false))
+  failed_when: _kuma_nginx_gate is not authelia_redirects_to('kuma', inventory_hostname, domain, require_rd=false)
   become: true
 
 # /api/push/ bypass -- exercises the sibling location carved out for

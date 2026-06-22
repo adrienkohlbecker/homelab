@@ -7,6 +7,7 @@ import pytest
 from ansible.errors import AnsibleError
 
 from filter_plugins import homelab
+from test_plugins import homelab as homelab_tests
 
 
 def test_ansible_var_key_sanitizes_and_guards_start() -> None:
@@ -128,13 +129,13 @@ def test_authelia_redirects_to_checks_status_auth_host_and_rd() -> None:
         "status": 302,
         "location": "https://auth.box.example.test/?rd=https://bazarr.box.example.test",
     }
-    assert homelab.authelia_redirects_to(result, "bazarr", "box", "example.test")
-    assert not homelab.authelia_redirects_to(result, "radarr", "box", "example.test")
+    assert homelab_tests.authelia_redirects_to(result, "bazarr", "box", "example.test")
+    assert not homelab_tests.authelia_redirects_to(result, "radarr", "box", "example.test")
 
 
 def test_authelia_redirects_to_can_skip_rd_check() -> None:
     result = {"status": 302, "location": "https://auth.box.example.test/"}
-    assert homelab.authelia_redirects_to(result, "kuma", "box", "example.test", require_rd=False)
+    assert homelab_tests.authelia_redirects_to(result, "kuma", "box", "example.test", require_rd=False)
 
 
 def test_host_vlan_block_derives_slot_indexed_subnet() -> None:
@@ -157,8 +158,8 @@ def test_zfs_source_value_rejects_empty_stdout() -> None:
 
 
 def test_any_successful_stdout_finds_successful_nonempty_result() -> None:
-    assert homelab.any_successful_stdout([{"rc": 1, "stdout": ""}, {"rc": 0, "stdout": "10.0.0.1"}])
-    assert not homelab.any_successful_stdout([{"rc": 0, "stdout": ""}, {"rc": 1, "stdout": "ignored"}])
+    assert homelab_tests.any_successful_stdout([{"rc": 1, "stdout": ""}, {"rc": 0, "stdout": "10.0.0.1"}])
+    assert not homelab_tests.any_successful_stdout([{"rc": 0, "stdout": ""}, {"rc": 1, "stdout": "ignored"}])
 
 
 def test_one_by_attr_supports_simple_and_nested_paths() -> None:
@@ -190,8 +191,8 @@ def test_nft_helpers_extract_counters_and_rules_by_counter_reference() -> None:
 def test_exposes_filters() -> None:
     filters = homelab.FilterModule().filters()
     assert filters["ansible_var_key"] is homelab.ansible_var_key
-    assert filters["any_successful_stdout"] is homelab.any_successful_stdout
-    assert filters["authelia_redirects_to"] is homelab.authelia_redirects_to
+    assert "any_successful_stdout" not in filters
+    assert "authelia_redirects_to" not in filters
     assert filters["host_vlan_block"] is homelab.host_vlan_block
     assert filters["json_argv"] is homelab.json_argv
     assert filters["only_by_attr"] is homelab.one_by_attr
@@ -202,3 +203,9 @@ def test_exposes_filters() -> None:
     assert filters["slurp_yaml"] is homelab.slurp_yaml
     assert filters["zfs_source_value"] is homelab.zfs_source_value
     assert filters["zfs_mount_unit"] is homelab.zfs_mount_unit
+
+
+def test_exposes_tests() -> None:
+    tests = homelab_tests.TestModule().tests()
+    assert tests["any_successful_stdout"] is homelab_tests.any_successful_stdout
+    assert tests["authelia_redirects_to"] is homelab_tests.authelia_redirects_to

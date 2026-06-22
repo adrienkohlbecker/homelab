@@ -55,7 +55,7 @@
     follow_redirects: none
     status_code: 302
   register: _lidarr_nginx_gate
-  failed_when: not (_lidarr_nginx_gate | authelia_redirects_to('lidarr', inventory_hostname, domain))
+  failed_when: _lidarr_nginx_gate is not authelia_redirects_to('lidarr', inventory_hostname, domain)
 
 # The sqlite_dataset symlink + matching --volume is the role's whole reason
 # for its non-obvious structure: it lands the DBs (and their -wal/-shm

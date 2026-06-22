@@ -8,7 +8,6 @@ import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
 
 import yaml
 from ansible.errors import AnsibleError
@@ -159,30 +158,6 @@ def podman_idmap_args(
     ]
 
 
-def authelia_redirects_to(
-    result: Mapping[str, Any],
-    subdomain: str,
-    inventory_hostname: str,
-    domain: str,
-    require_rd: bool = True,
-) -> bool:
-    """Return whether a URI result is an Authelia redirect for a service."""
-    location = str(result.get("location", ""))
-    if result.get("status") != 302:
-        return False
-
-    auth_url = f"https://auth.{inventory_hostname}.{domain}"
-    if not location.startswith(auth_url):
-        return False
-
-    if not require_rd:
-        return True
-
-    service_url = f"https://{subdomain}.{inventory_hostname}.{domain}"
-    query = parse_qs(urlsplit(location).query, keep_blank_values=True)
-    return service_url in query.get("rd", []) or f"rd={service_url}" in location
-
-
 def host_vlan_block(
     network: Mapping[str, Any],
     inventory_hostname: str,
@@ -220,11 +195,6 @@ def zfs_source_value(stdout: str) -> dict[str, str]:
     if len(fields) != 2:
         raise AnsibleError(f"zfs_source_value expected two tab-separated fields, got {stdout!r}")
     return {"source": fields[0].strip(), "value": fields[1].strip()}
-
-
-def any_successful_stdout(results: Iterable[Mapping[str, Any]]) -> bool:
-    """Return whether any loop result succeeded and produced stdout."""
-    return any(result.get("rc") == 0 and bool(result.get("stdout")) for result in results)
 
 
 def _get_path(item: Any, path: str) -> Any:
@@ -298,8 +268,6 @@ class FilterModule:
     def filters(self):
         return {
             "ansible_var_key": ansible_var_key,
-            "any_successful_stdout": any_successful_stdout,
-            "authelia_redirects_to": authelia_redirects_to,
             "host_vlan_block": host_vlan_block,
             "json_argv": json_argv,
             "matching_by_attr": matching_by_attr,
