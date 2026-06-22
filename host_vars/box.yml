@@ -209,8 +209,8 @@ tailscale_advertise_exit_node: true
 # Exercise the --accept-routes=true path under the harness (harmless on the
 # single-node test tailnet; the throwaway subnet isn't on box's real interfaces).
 tailscale_accept_routes: true
-# roles/firewall fixture: the harness passes tailscale_wan_direct=true only for
-# firewall role tests, so the rule shape stays covered without changing the
-# generic test host's tailnet posture. The port stays here because the firewall
-# template consumes it independently of the tailscale role's defaults.
+# The qemu WAN probe surface forwards this UDP port for every VM, so box can
+# model the home-router tailscale DNAT directly instead of receiving a
+# role-specific harness override.
 tailscale_port: 41641
+tailscale_wan_direct: true
