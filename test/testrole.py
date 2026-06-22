@@ -202,12 +202,6 @@ async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -
         )
 
 
-async def _run_checkmode(site_yml: str, m: Machine, pass_args: list[str]) -> None:
-    """Dry-run the role on a fresh system before mutating anything."""
-    async with _phase("checkmode --check"):
-        await m.ansible_command(site_yml, "--check", *pass_args)
-
-
 async def run_test(
     m: Machine,
     pass_args: list[str],
@@ -282,7 +276,8 @@ async def run_test(
 
                         site_yml = f"{m.workdir.name}/site.yml"
                         if checkmode:
-                            await _run_checkmode(site_yml, m, pass_args)
+                            async with _phase("checkmode --check"):
+                                await m.ansible_command(site_yml, "--check", *pass_args)
 
                         async with _phase("main apply"):
                             await m.ansible_command(site_yml, *pass_args)
