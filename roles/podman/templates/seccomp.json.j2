@@ -9,7 +9,7 @@
     io_uring_setup/enter/register: kernel 5.1+, QEMU aio=io_uring inside
       CI job containers needs the syscall family unblocked.
 -#}
-{%- set _profile = podman_seccomp_stock.content | b64decode | from_json -%}
+{%- set _profile = podman_seccomp_stock | slurp_json -%}
 {%- set _additions = ['fchmodat2', 'io_uring_setup', 'io_uring_enter', 'io_uring_register'] -%}
 {%- for _block in _profile.syscalls -%}
 {%-   if _block.action == 'SCMP_ACT_ALLOW' and 'fchmodat' in _block.names -%}

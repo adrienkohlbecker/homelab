@@ -133,7 +133,7 @@
 - name: _verify | The template reproduces the on-disk settings.json byte-for-byte
   vars:
     seerr_settings_json: "{{ _seerr_shape_b64 | slurp_text | from_json }}"
-    _rendered: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
+    _rendered: "{{ lookup('template', 'settings.json.j2') | rstrip_newlines }}"
   assert:
     that:
       - (_seerr_shape_b64 | slurp_text(trim=false)) == _rendered
@@ -188,13 +188,13 @@
   vars:
     seerr_settings_json: "{{ (_seerr_shape_b64 | slurp_text | from_json) | combine(_seerr_pop_overrides, recursive=True) }}"
   set_fact:
-    _seerr_pop_render1: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
+    _seerr_pop_render1: "{{ lookup('template', 'settings.json.j2') | rstrip_newlines }}"
 
 - name: _verify | Re-render feeding the populated render back in
   vars:
     seerr_settings_json: "{{ _seerr_pop_render1 | from_json }}"
   set_fact:
-    _seerr_pop_render2: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
+    _seerr_pop_render2: "{{ lookup('template', 'settings.json.j2') | rstrip_newlines }}"
 
 - name: _verify | The populated render is a stable fixed point preserving daemon-owned fields
   vars:

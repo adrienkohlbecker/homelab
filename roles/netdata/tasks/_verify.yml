@@ -572,7 +572,7 @@
 
 - name: _verify | X509check renders structurally-valid YAML pointing at the host cert
   vars:
-    _x509check: "{{ _netdata_x509check.content | b64decode | from_yaml }}"
+    _x509check: "{{ _netdata_x509check | slurp_yaml }}"
     _expected_source: "file:///etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem"
   assert:
     that:

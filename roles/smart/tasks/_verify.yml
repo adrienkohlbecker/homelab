@@ -80,10 +80,10 @@
 
 - name: _verify | Assert smartctl collector config is valid
   vars:
-    _parsed: "{{ _smart_smartctl_conf.content | b64decode | from_yaml }}"
+    _parsed: "{{ _smart_smartctl_conf | slurp_yaml }}"
   assert:
     that:
       - _parsed.jobs | length > 0
       - _parsed.jobs[0].name == 'smartctl'
       - _parsed.jobs[0].poll_devices_every == 300
-    fail_msg: "deployed /etc/netdata/go.d/smartctl.conf:\n{{ _smart_smartctl_conf.content | b64decode }}"
+    fail_msg: "deployed /etc/netdata/go.d/smartctl.conf:\n{{ _smart_smartctl_conf | slurp_text(trim=false) }}"

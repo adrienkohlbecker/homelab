@@ -58,11 +58,11 @@
     - lidarr
 
 - name: Configure lidarr
-  # Render via copy:content + regex_replace because lidarr rewrites
+  # Render via copy:content + rstrip_newlines because lidarr rewrites
   # config.xml on shutdown without a trailing newline; a plain template:
   # leaves us drifting forever.
   copy:
-    content: "{{ lookup('template', 'config.xml.j2') | regex_replace('\\n+$', '') }}"
+    content: "{{ lookup('template', 'config.xml.j2') | rstrip_newlines }}"
     dest: /mnt/services/lidarr/config.xml
     owner: lidarr
     group: media

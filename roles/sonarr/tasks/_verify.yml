@@ -182,7 +182,7 @@
 
 - name: _verify | Render the config.xml our template would write
   set_fact:
-    _sonarr_conf_expected: "{{ lookup('template', 'config.xml.j2') | regex_replace('\\n+$', '') }}"
+    _sonarr_conf_expected: "{{ lookup('template', 'config.xml.j2') | rstrip_newlines }}"
 
 - name: _verify | Read config.xml back after the writeback
   slurp:
@@ -193,7 +193,7 @@
 - name: _verify | Templated config.xml survives sonarr's writeback without drift
   assert:
     that:
-      - (_sonarr_conf_ondisk.content | b64decode) == _sonarr_conf_expected
+      - (_sonarr_conf_ondisk | slurp_text(trim=false)) == _sonarr_conf_expected
     fail_msg: >-
       sonarr rewrote config.xml into a form config.xml.j2 no longer matches --
       its element order/casing drifted from sonarr's writeback, so deploying
