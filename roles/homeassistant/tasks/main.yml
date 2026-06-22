@@ -366,10 +366,7 @@
   shell: |
     set -euo pipefail
     podman create --replace --name homeassistant-prestage \
-      --uidmap=0:0:65536 \
-      --uidmap=+0:{{ homeassistant_user.uid }}:1 \
-      --gidmap=0:0:65536 \
-      --gidmap=+0:{{ homeassistant_user.group }}:1 \
+      {{ (0 | podman_idmap_args(homeassistant_user.uid, homeassistant_user.group)) | join(" \\\n      ") }} \
       {{ homeassistant_image | quote }} true
     podman rm homeassistant-prestage
     touch {{ homeassistant_prestage_sentinel | quote }}

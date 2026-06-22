@@ -69,8 +69,8 @@ ExecStart=/usr/bin/podman run \
     {# extra/healthcheck is kuma's own image-shipped liveness script (node),
        chosen over a hand-rolled tier-2 curl probe; UPTIME_KUMA_DB_TYPE above
        prevents the setup-page false-positive it would otherwise return. #}
-    --health-cmd '["extra/healthcheck"]' \
-    --health-startup-cmd '["extra/healthcheck"]' \
+    --health-cmd {{ ["extra/healthcheck"] | podman_health_argv }} \
+    --health-startup-cmd {{ ["extra/healthcheck"] | podman_health_argv }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \

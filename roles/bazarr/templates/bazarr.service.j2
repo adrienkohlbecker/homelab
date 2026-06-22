@@ -62,8 +62,8 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/media:/media \
     --network media \
     --publish 127.0.0.1:{{ service_ports.bazarr }}:{{ service_ports.bazarr }}/tcp \
-    --health-cmd         '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:{{ service_ports.bazarr }}/api/"]' \
-    --health-startup-cmd '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:{{ service_ports.bazarr }}/api/"]' \
+    --health-cmd         {{ ('http://localhost:' ~ service_ports.bazarr ~ '/api/') | podman_health_curl(head=true) }} \
+    --health-startup-cmd {{ ('http://localhost:' ~ service_ports.bazarr ~ '/api/') | podman_health_curl(head=true) }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \

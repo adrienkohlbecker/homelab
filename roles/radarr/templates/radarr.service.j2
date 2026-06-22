@@ -65,8 +65,8 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/scratch/radarr:/scratch/radarr \
     --network media \
     --publish 127.0.0.1:{{ service_ports.radarr }}:7878/tcp \
-    --health-cmd         '["curl","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:7878/ping"]' \
-    --health-startup-cmd '["curl","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:7878/ping"]' \
+    --health-cmd         {{ "http://localhost:7878/ping" | podman_health_curl }} \
+    --health-startup-cmd {{ "http://localhost:7878/ping" | podman_health_curl }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
