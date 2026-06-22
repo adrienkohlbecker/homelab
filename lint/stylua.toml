@@ -1,6 +1,3 @@
-# Formatter for the fluent-bit Lua filters (roles/fluentbit/files/*.lua).
-# Spaces (not stylua's default tabs) at width 4 -- matches the hand-written
-# Lua convention in these files and keeps diffs minimal. Run via
-# `mise run fmt:lua`; checked by `mise run lint:lua`.
+# Fluent Bit Lua filters use the repo's 4-space style.
 indent_type = "Spaces"
 indent_width = 4

@@ -1,14 +1,8 @@
 ---
-# selene std for the fluent-bit Lua filter environment (extends lua51).
-# Declares the filter entry-point functions as globals so selene doesn't
-# flag them as unused (fluent-bit invokes them by name from C via the `call`
-# config key) and so the dofile()-based unit tests can reference them.
-# Referenced by lint/selene.toml as `std = "lua51+fluentbit"`.
+# Fluent Bit calls these Lua filters by name through its `call` config key.
 base: lua51
 name: fluentbit
 globals:
-  # Classic 3-arg signature: (tag, timestamp, record). All `any` -- selene
-  # only needs to know the names exist and are callable.
   set_priority:
     args:
       - type: any

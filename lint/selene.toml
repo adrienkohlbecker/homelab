@@ -1,15 +1,5 @@
-# selene config for the fluent-bit Lua filters (roles/fluentbit/files/*.lua).
-# Invoked via `mise run lint:lua` with `--config lint/selene.toml`.
-#
-# std: lua51 + a small fluent-bit std (lint/fluentbit.yml) that declares the
-# filter entry-point globals (set_priority, shape_lnav, strip_ansi).
-# fluent-bit calls these by name from C, so from selene's single-file view
-# they'd otherwise read as "defined but never used", and the unit test that
-# dofile()s the script would read them as undefined.
+# Lua 5.1 plus Fluent Bit's `call` entry points.
 std = "lua51+fluentbit"
 
-# NB: fluent-bit embeds LuaJIT (reports _VERSION "Lua 5.1" but supports the
-# \xHH hex-escape extension), so selene's strict-lua51 bad_string_escape lint
-# false-flags \x in string literals. No current filter uses \x (decimal \27
-# escapes instead); if one ever does, allow `bad_string_escape` under [lints]
-# rather than rewriting valid runtime code.
+# Fluent Bit embeds LuaJIT; if filters need \xHH escapes, allow Selene's
+# strict-Lua-5.1 `bad_string_escape` lint instead of rewriting runtime code.
