@@ -55,7 +55,10 @@
 [INPUT]
     Name              systemd
     Tag               svc.*
-    Path              /var/log/journal
+    # No Path: libsystemd opens the default journal, which follows journald's
+    # Storage= -- /run/log/journal when volatile (the box/minimal test
+    # fixtures), /var/log/journal when persistent (prod). Pinning either path
+    # makes fluent-bit fail to initialise on hosts using the other.
     DB                /var/lib/fluent-bit/journal.db
     Read_From_Tail    on
     Strip_Underscores on
