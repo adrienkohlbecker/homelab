@@ -82,6 +82,36 @@ locals {
       Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
     },
   ]
+  ci_ecr_registries = {
+    docker-hub = {
+      upstream_registry_url = "registry-1.docker.io"
+      secret_name           = "ecr-pullthroughcache/docker-hub"
+      secret_description    = "Docker Hub credentials for ECR pull-through cache"
+      username              = var.ci_ecr_docker_hub_username
+      access_token          = var.ci_ecr_docker_hub_access_token
+    }
+    github = {
+      upstream_registry_url = "ghcr.io"
+      secret_name           = "ecr-pullthroughcache/github"
+      secret_description    = "GHCR credentials for ECR pull-through cache"
+      username              = var.ci_ecr_github_username
+      access_token          = var.ci_ecr_github_access_token
+    }
+    gitlab = {
+      upstream_registry_url = "registry.gitlab.com"
+      secret_name           = "ecr-pullthroughcache/gitlab"
+      secret_description    = "GitLab Container Registry credentials for ECR pull-through cache"
+      username              = var.ci_ecr_gitlab_username
+      access_token          = var.ci_ecr_gitlab_access_token
+    }
+    quay = {
+      upstream_registry_url = "quay.io"
+    }
+  }
+  ci_ecr_credentials = {
+    for name, registry in local.ci_ecr_registries : name => registry
+    if try(registry.secret_name, null) != null
+  }
 }
 
 data "aws_caller_identity" "current" {}
@@ -272,6 +302,36 @@ resource "aws_s3_bucket_policy" "ci_qemu_images" {
   })
 }
 
+moved {
+  from = aws_secretsmanager_secret.ci_ecr_docker_hub
+  to   = aws_secretsmanager_secret.ci_ecr["docker-hub"]
+}
+
+moved {
+  from = aws_secretsmanager_secret.ci_ecr_github
+  to   = aws_secretsmanager_secret.ci_ecr["github"]
+}
+
+moved {
+  from = aws_secretsmanager_secret.ci_ecr_gitlab
+  to   = aws_secretsmanager_secret.ci_ecr["gitlab"]
+}
+
+moved {
+  from = aws_secretsmanager_secret_version.ci_ecr_docker_hub
+  to   = aws_secretsmanager_secret_version.ci_ecr["docker-hub"]
+}
+
+moved {
+  from = aws_secretsmanager_secret_version.ci_ecr_github
+  to   = aws_secretsmanager_secret_version.ci_ecr["github"]
+}
+
+moved {
+  from = aws_secretsmanager_secret_version.ci_ecr_gitlab
+  to   = aws_secretsmanager_secret_version.ci_ecr["gitlab"]
+}
+
 # ─── ECR pull-through cache ──────────────────────────────────────────────────
 # AWS cells cannot reach the lab Nexus Docker proxies. These regional ECR rules
 # cache the public registries that roles pull from, so the qemu hosts fetch
@@ -280,86 +340,35 @@ resource "aws_s3_bucket_policy" "ci_qemu_images" {
 # managed here by explicit operator choice, so the token values are present in
 # the encrypted terraform state.
 
-resource "aws_secretsmanager_secret" "ci_ecr_docker_hub" {
-  name        = "ecr-pullthroughcache/docker-hub"
-  description = "Docker Hub credentials for ECR pull-through cache"
+resource "aws_secretsmanager_secret" "ci_ecr" {
+  for_each = local.ci_ecr_credentials
+
+  name        = each.value.secret_name
+  description = each.value.secret_description
 
   tags = {
     role = "ci"
   }
 }
 
-resource "aws_secretsmanager_secret_version" "ci_ecr_docker_hub" {
-  secret_id = aws_secretsmanager_secret.ci_ecr_docker_hub.id
+resource "aws_secretsmanager_secret_version" "ci_ecr" {
+  for_each = local.ci_ecr_credentials
+
+  secret_id = aws_secretsmanager_secret.ci_ecr[each.key].id
   secret_string = jsonencode({
-    username    = var.ci_ecr_docker_hub_username
-    accessToken = var.ci_ecr_docker_hub_access_token
-  })
-}
-
-resource "aws_secretsmanager_secret" "ci_ecr_github" {
-  name        = "ecr-pullthroughcache/github"
-  description = "GHCR credentials for ECR pull-through cache"
-
-  tags = {
-    role = "ci"
-  }
-}
-
-resource "aws_secretsmanager_secret_version" "ci_ecr_github" {
-  secret_id = aws_secretsmanager_secret.ci_ecr_github.id
-  secret_string = jsonencode({
-    username    = var.ci_ecr_github_username
-    accessToken = var.ci_ecr_github_access_token
-  })
-}
-
-resource "aws_secretsmanager_secret" "ci_ecr_gitlab" {
-  name        = "ecr-pullthroughcache/gitlab"
-  description = "GitLab Container Registry credentials for ECR pull-through cache"
-
-  tags = {
-    role = "ci"
-  }
-}
-
-resource "aws_secretsmanager_secret_version" "ci_ecr_gitlab" {
-  secret_id = aws_secretsmanager_secret.ci_ecr_gitlab.id
-  secret_string = jsonencode({
-    username    = var.ci_ecr_gitlab_username
-    accessToken = var.ci_ecr_gitlab_access_token
+    username    = each.value.username
+    accessToken = each.value.access_token
   })
 }
 
 resource "aws_ecr_pull_through_cache_rule" "ci" {
-  for_each = {
-    docker-hub = {
-      upstream_registry_url = "registry-1.docker.io"
-      credential_arn        = aws_secretsmanager_secret.ci_ecr_docker_hub.arn
-    }
-    github = {
-      upstream_registry_url = "ghcr.io"
-      credential_arn        = aws_secretsmanager_secret.ci_ecr_github.arn
-    }
-    gitlab = {
-      upstream_registry_url = "registry.gitlab.com"
-      credential_arn        = aws_secretsmanager_secret.ci_ecr_gitlab.arn
-    }
-    quay = {
-      upstream_registry_url = "quay.io"
-      credential_arn        = null
-    }
-  }
+  for_each = local.ci_ecr_registries
 
   ecr_repository_prefix = each.key
   upstream_registry_url = each.value.upstream_registry_url
-  credential_arn        = each.value.credential_arn
+  credential_arn        = try(aws_secretsmanager_secret.ci_ecr[each.key].arn, null)
 
-  depends_on = [
-    aws_secretsmanager_secret_version.ci_ecr_docker_hub,
-    aws_secretsmanager_secret_version.ci_ecr_github,
-    aws_secretsmanager_secret_version.ci_ecr_gitlab,
-  ]
+  depends_on = [aws_secretsmanager_secret_version.ci_ecr]
 }
 
 # ─── Networking ──────────────────────────────────────────────────────────────
