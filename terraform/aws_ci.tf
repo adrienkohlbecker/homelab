@@ -52,7 +52,7 @@ locals {
   # Dedicated single-host pool for the _site_test cell -- the full-site converge
   # is the pipeline's critical path (~25m) and was spending ~70% of its run
   # contending for CPU against the role-cell burst on the shared pool. An 8 vCPU
-  # c8id.2xlarge (16 GiB) hosts the widened box guest (6 vCPU / 8 GiB — see
+  # c8id.2xlarge (16 GiB) hosts the widened box guest (6 vCPU / 12 GiB — see
   # machine.py's _site_test override) with 2 host cores of headroom for qemu's
   # iothreads + nested-virt servicing + the instance OS, which a 1:1 4-on-4
   # c8id.xlarge starved. Decouples the cost too: the role-cell pool drains as
