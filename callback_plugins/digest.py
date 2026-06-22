@@ -40,45 +40,39 @@ _STAT_KEEP = (
 _FACTS_DIGEST_THRESHOLD = 25
 
 
-def _digest_result(result):
-    """Return a copy of an Ansible result with verbose payloads shortened."""
-
-    def is_diff(value):
-        if isinstance(value, dict):
-            return bool({"before", "after", "prepared"} & value.keys())
-        if isinstance(value, list):
-            return bool(value) and all(is_diff(item) for item in value)
-        return False
-
-    def digest(obj, in_facts=False):
-        if isinstance(obj, dict):
-            out = {}
-            for key, value in obj.items():
-                if in_facts and key == "diff" and is_diff(value):
-                    continue
-                if key == "status" and isinstance(value, dict) and "ActiveState" in value:
-                    value = {k: value[k] for k in _STATUS_KEEP if k in value}
-                elif key == "stat" and isinstance(value, dict) and "exists" in value:
-                    value = {k: value[k] for k in _STAT_KEEP if k in value}
-                else:
-                    value = digest(value, in_facts or key == "ansible_facts")
-                out[key] = value
-            return out
-        if isinstance(obj, list):
-            return [digest(item, in_facts) for item in obj]
-        return obj
-
-    result = digest(result)
-    facts = result.get("ansible_facts") if isinstance(result, dict) else None
-    if isinstance(facts, dict) and len(facts) > _FACTS_DIGEST_THRESHOLD:
-        result["ansible_facts"] = f"<{len(facts)} facts hidden: {', '.join(sorted(facts))}>"
-    return result
-
-
 class CallbackModule(DefaultCallback):
     CALLBACK_VERSION = 2.0
     CALLBACK_TYPE = "stdout"
     CALLBACK_NAME = "digest"
 
     def _dump_results(self, result, *args, **kwargs):
-        return super()._dump_results(_digest_result(result), *args, **kwargs)
+        def is_diff(value):
+            if isinstance(value, dict):
+                return bool({"before", "after", "prepared"} & value.keys())
+            if isinstance(value, list):
+                return bool(value) and all(is_diff(item) for item in value)
+            return False
+
+        def digest(obj, in_facts=False):
+            if isinstance(obj, dict):
+                out = {}
+                for key, value in obj.items():
+                    if in_facts and key == "diff" and is_diff(value):
+                        continue
+                    if key == "status" and isinstance(value, dict) and "ActiveState" in value:
+                        value = {k: value[k] for k in _STATUS_KEEP if k in value}
+                    elif key == "stat" and isinstance(value, dict) and "exists" in value:
+                        value = {k: value[k] for k in _STAT_KEEP if k in value}
+                    else:
+                        value = digest(value, in_facts or key == "ansible_facts")
+                    out[key] = value
+                return out
+            if isinstance(obj, list):
+                return [digest(item, in_facts) for item in obj]
+            return obj
+
+        result = digest(result)
+        facts = result.get("ansible_facts") if isinstance(result, dict) else None
+        if isinstance(facts, dict) and len(facts) > _FACTS_DIGEST_THRESHOLD:
+            result["ansible_facts"] = f"<{len(facts)} facts hidden: {', '.join(sorted(facts))}>"
+        return super()._dump_results(result, *args, **kwargs)
