@@ -38,7 +38,6 @@ from matrix import TestCell, build_test_matrix, list_testable_roles
 from utils import cancel_on_signal, colorize, terminate_subprocess
 
 LOG_FILE = Path("test/out.tsv")
-LOG_FILE_PREV = Path("test/out.tsv.prev")
 JOBLOG_FIELDS = ["Role", "Ubuntu", "Machine", "Runtime", "Exitval", "PeakKB", "Started"]
 LIVENESS_TICK_SECONDS = 300.0  # 5 minutes
 
@@ -518,10 +517,6 @@ def main() -> int:
             final = list(merged.values())
         else:
             final = results
-        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        if LOG_FILE.exists():
-            LOG_FILE_PREV.unlink(missing_ok=True)
-            LOG_FILE.rename(LOG_FILE_PREV)
         _write_joblog(final)
 
     if cancelled:
