@@ -12,11 +12,12 @@ import yaml
 # Import metadata constants from the test harness so the source of truth stays
 # single. test/ isn't a package, so prepend it to sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
-from machine import MACHINE_CHOICES  # noqa: E402
-from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES  # noqa: E402
+from machine import MACHINE_CHOICES
+from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
 
 MACHINE_NAMES = sorted(MACHINE_CHOICES)
 UBUNTU_NAMES = sorted(UBUNTU_RELEASES)
+TOP_LEVEL_KEYS = {"machines", "skip", "ubuntu"}
 
 
 def main() -> int:
@@ -34,6 +35,8 @@ def main() -> int:
 
         if "machine" in data:
             errors.append(f"{meta}: uses legacy 'machine:' key -- migrate to 'machines:'")
+        for key in sorted(set(data) - TOP_LEVEL_KEYS):
+            errors.append(f"{meta}: unknown top-level key {key!r}; expected one of {sorted(TOP_LEVEL_KEYS)}")
 
         if (machines := data.get("machines")) is not None:
             if not isinstance(machines, dict):
@@ -41,6 +44,12 @@ def main() -> int:
             else:
                 for name in sorted(set(machines) - set(MACHINE_NAMES)):
                     errors.append(f"{meta}: machines key {name!r} not in {MACHINE_NAMES}")
+                for name, machine_config in machines.items():
+                    if machine_config is not None and not isinstance(machine_config, dict):
+                        errors.append(
+                            f"{meta}: machines.{name} must be empty or a mapping, "
+                            f"got {type(machine_config).__name__}"
+                        )
 
         if (ubuntu := data.get("ubuntu")) is not None:
             if not isinstance(ubuntu, list):

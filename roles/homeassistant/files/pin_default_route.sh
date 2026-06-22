@@ -8,7 +8,7 @@
 # container netns via nsenter. Invoked from homeassistant.service.j2
 # ExecStartPost with the mac_iot gateway as $1. Best-effort: never fails
 # the unit -- a route hiccup must not block HA from starting.
-set -uo pipefail
+set -euo pipefail
 
 gw="${1:-}"
 [[ -n "$gw" ]] || exit 0
@@ -18,7 +18,7 @@ pid="$(/usr/bin/podman inspect -f '{{.State.Pid}}' homeassistant 2>/dev/null)" |
 
 # Only touch the macvlan default when a second default exists to fall back
 # on -- otherwise removing it would cut HA's only route off-subnet.
-defaults="$(nsenter -t "$pid" -n ip -4 route show default 2>/dev/null | wc -l)"
+defaults="$(nsenter -t "$pid" -n ip -4 route show default 2>/dev/null | wc -l || true)"
 [[ "${defaults:-0}" -gt 1 ]] || exit 0
 
 # Re-add at a high metric (lower priority) rather than dropping outright,

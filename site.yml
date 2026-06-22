@@ -180,7 +180,7 @@
       when:
         - not ansible_check_mode
         - reboot_required.stat.exists
-        - inventory_hostname in dns_keepalived_peers
+        - dns_reboot_guard_enabled | default(false)
       vars:
         _reboot_dns_peers: "{{ dns_keepalived_peers | reject('eq', inventory_hostname) | list }}"
         _reboot_dns_ips: "{{ _reboot_dns_peers | map('extract', external_ips) | list }}"
@@ -264,7 +264,7 @@
       when:
         - not ansible_check_mode
         - reboot_required.stat.exists
-        - inventory_hostname in dns_keepalived_peers
+        - dns_reboot_guard_enabled | default(false)
       block:
         - name: Stop keepalived to release the VIP
           systemd:
