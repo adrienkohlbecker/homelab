@@ -4,6 +4,10 @@ zbm_host_arch() {
   uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/
 }
 
+zbm_upstream_arch() {
+  uname -m | sed -e s/amd64/x86_64/
+}
+
 zbm_repo_root() {
   local repo_root="${MISE_CONFIG_ROOT:-}"
 
@@ -58,8 +62,8 @@ done
 
 for path in "${paths[@]}"; do
   [ -e "$path" ] || exit 1
-  python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$path"
 done
+python3 -c 'import os, sys; [print(os.path.realpath(path)) for path in sys.argv[1:]]' "${paths[@]}"
 WRAPPER
     chmod +x "${wrapper_dir}/realpath"
   fi

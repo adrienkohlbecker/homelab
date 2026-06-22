@@ -23,7 +23,8 @@ set -euo pipefail
 . "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 arch="$(zbm_host_arch)"
-out_dir="${MISE_CONFIG_ROOT}/zbm-build/${arch}"
+repo_root="$(zbm_repo_root)"
+out_dir="${repo_root}/zbm-build/${arch}"
 if ! tarball="$(zbm_latest_tarball "$out_dir" "$arch")"; then
   echo "no tarball in ${out_dir} — run 'mise run zbm:build' first" >&2
   exit 1
