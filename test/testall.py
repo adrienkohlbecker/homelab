@@ -175,15 +175,6 @@ def setup_output_dir(cells: list[TestCell]) -> None:
             (OUT_DIR / f"{prefix}.{suffix}.ansi").unlink(missing_ok=True)
 
 
-def _rotate_joblog() -> None:
-    """Rotate the job log, preserving the previous run for inspection."""
-    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    if LOG_FILE.exists():
-        if LOG_FILE_PREV.exists():
-            LOG_FILE_PREV.unlink()
-        LOG_FILE.rename(LOG_FILE_PREV)
-
-
 def _read_joblog() -> list[JobResult]:
     """Load the current joblog, returning an empty list when it does not exist."""
     if not LOG_FILE.exists():
@@ -527,7 +518,10 @@ def main() -> int:
             final = list(merged.values())
         else:
             final = results
-        _rotate_joblog()
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        if LOG_FILE.exists():
+            LOG_FILE_PREV.unlink(missing_ok=True)
+            LOG_FILE.rename(LOG_FILE_PREV)
         _write_joblog(final)
 
     if cancelled:

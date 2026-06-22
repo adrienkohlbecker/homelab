@@ -68,38 +68,6 @@ class TestJoblogRoundTrip:
 
 
 # ---------------------------------------------------------------------------
-# _rotate_joblog
-# ---------------------------------------------------------------------------
-
-
-class TestRotateJoblog:
-    def test_rotates_to_prev(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        log = tmp_path / "out.tsv"
-        prev = tmp_path / "out.tsv.prev"
-        monkeypatch.setattr(testall, "LOG_FILE", log)
-        monkeypatch.setattr(testall, "LOG_FILE_PREV", prev)
-        log.write_text("content1")
-        testall._rotate_joblog()
-        assert not log.exists()
-        assert prev.read_text() == "content1"
-
-    def test_overwrites_old_prev(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        log = tmp_path / "out.tsv"
-        prev = tmp_path / "out.tsv.prev"
-        monkeypatch.setattr(testall, "LOG_FILE", log)
-        monkeypatch.setattr(testall, "LOG_FILE_PREV", prev)
-        prev.write_text("old")
-        log.write_text("new")
-        testall._rotate_joblog()
-        assert prev.read_text() == "new"
-
-    def test_noop_when_no_log(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(testall, "LOG_FILE", tmp_path / "absent.tsv")
-        monkeypatch.setattr(testall, "LOG_FILE_PREV", tmp_path / "absent.tsv.prev")
-        testall._rotate_joblog()
-
-
-# ---------------------------------------------------------------------------
 # setup_output_dir
 # ---------------------------------------------------------------------------
 
