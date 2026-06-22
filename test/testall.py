@@ -175,21 +175,6 @@ def setup_output_dir(cells: list[TestCell]) -> None:
             (OUT_DIR / f"{prefix}.{suffix}.ansi").unlink(missing_ok=True)
 
 
-def get_failed_roles() -> list[TestCell]:
-    """Parse the previous job log for failed roles."""
-    if not LOG_FILE.exists():
-        return []
-
-    failed: list[TestCell] = []
-
-    with LOG_FILE.open(encoding="utf-8", newline="") as log_file:
-        for row in csv.DictReader(log_file, delimiter="\t"):
-            if row["Exitval"] != "0":
-                failed.append(TestCell(machine=row["Machine"], ubuntu=row["Ubuntu"], role=row["Role"]))
-
-    return failed
-
-
 def _rotate_joblog() -> None:
     """Rotate the job log, preserving the previous run for inspection."""
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -199,35 +184,25 @@ def _rotate_joblog() -> None:
         LOG_FILE.rename(LOG_FILE_PREV)
 
 
-def _read_prior_results() -> dict[TestCell, JobResult]:
-    """Load the prior joblog into a triple-keyed map for merge-on-write."""
+def _read_joblog() -> list[JobResult]:
+    """Load the current joblog, returning an empty list when it does not exist."""
     if not LOG_FILE.exists():
-        return {}
+        return []
 
-    prior: dict[TestCell, JobResult] = {}
+    results: list[JobResult] = []
     with LOG_FILE.open(encoding="utf-8", newline="") as handle:
         for row in csv.DictReader(handle, delimiter="\t"):
             cell = TestCell(machine=row["Machine"], ubuntu=row["Ubuntu"], role=row["Role"])
-            prior[cell] = JobResult(
-                cell=cell,
-                runtime=float(row["Runtime"]),
-                exitval=int(row["Exitval"]),
-                started_at=row["Started"],
-                peak_kb=int(row["PeakKB"]),
+            results.append(
+                JobResult(
+                    cell=cell,
+                    runtime=float(row["Runtime"]),
+                    exitval=int(row["Exitval"]),
+                    started_at=row["Started"],
+                    peak_kb=int(row["PeakKB"]),
+                )
             )
-    return prior
-
-
-def _merge_with_prior(new_results: list[JobResult], prior: dict[TestCell, JobResult]) -> list[JobResult]:
-    """Combine the current run's results with prior entries for triples not rerun.
-
-    Prior insertion order is preserved for kept entries (and for reruns, which
-    update in place); triples that didn't exist in the prior log are appended.
-    """
-    merged: dict[TestCell, JobResult] = dict(prior)
-    for r in new_results:
-        merged[r.cell] = r
-    return list(merged.values())
+    return results
 
 
 async def _emit_liveness(seq: int, cell: TestCell, start_time: float) -> None:
@@ -454,6 +429,7 @@ def main() -> int:
         )
         return 1
 
+    prior_results: list[JobResult] = []
     if args.retry_failed:
         if args.machines is not None or args.ubuntu is not None:
             print(
@@ -461,7 +437,8 @@ def main() -> int:
                 "the machine and ubuntu of each rerun come from the prior joblog",
                 file=sys.stderr,
             )
-        cells = get_failed_roles()
+        prior_results = _read_joblog()
+        cells = [result.cell for result in prior_results if result.exitval != 0]
         if not cells:
             print(f"No failed roles recorded in {LOG_FILE}", file=sys.stderr)
             return 0
@@ -535,14 +512,21 @@ def main() -> int:
     # out.tsv outright so stale triples (deleted roles, old machine/ubuntu
     # scopes) don't linger forever.
     is_partial_rerun = bool(args.retry_failed or args.only_role or args.except_role)
-    prior_results = _read_prior_results() if is_partial_rerun else {}
+    if is_partial_rerun and not prior_results:
+        prior_results = _read_joblog()
 
     test_start = time.time()
     results, cancelled = asyncio.run(run_all(cells, args.role_args, args.jobs, args.checkmode, args.idempotence))
     wall_clock = time.time() - test_start
 
     if results:
-        final = _merge_with_prior(results, prior_results) if is_partial_rerun else results
+        if is_partial_rerun:
+            merged = {result.cell: result for result in prior_results}
+            for result in results:
+                merged[result.cell] = result
+            final = list(merged.values())
+        else:
+            final = results
         _rotate_joblog()
         _write_joblog(final)
 
