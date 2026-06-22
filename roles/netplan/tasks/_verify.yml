@@ -17,10 +17,18 @@
   register: netplan_verify_networkd
   failed_when: netplan_verify_networkd.status.ActiveState != "active"
 
+- name: _verify | Probe for networkd-dispatcher.service
+  stat:
+    path: /usr/lib/systemd/system/networkd-dispatcher.service
+  register: netplan_verify_dispatcher_unit
+
 - name: _verify | Networkd-dispatcher is masked (can't start to spew veth noise)
   # UnitFileState=masked means the unit is symlinked to /dev/null, which
   # is what blocks networkd's D-Bus signals from triggering it. A plain
-  # disabled/static would still let it start.
+  # disabled/static would still let it start. Skipped where the package is
+  # absent (the minimal cloud image): no unit means no veth noise to mask,
+  # which is the goal — mirrors the converge's presence gate.
+  when: netplan_verify_dispatcher_unit.stat.exists
   systemd:
     name: networkd-dispatcher.service
   register: netplan_verify_dispatcher

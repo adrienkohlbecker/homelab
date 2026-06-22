@@ -31,6 +31,18 @@
         cache_valid_time: 3600
       become: true
 
+    # Absent on the stripped minimal cloud image; present on every full
+    # Ubuntu install (it ships with systemd-networkd). The systemd module
+    # below errors ("Could not find the requested service") on a missing
+    # unit, and does so even under --check, so gate the mask on the unit
+    # actually existing rather than on a host/arch list. Canonical merged-usr
+    # path (/lib -> /usr/lib on all our 22.04+ targets).
+    - name: Probe for networkd-dispatcher.service
+      stat:
+        path: /usr/lib/systemd/system/networkd-dispatcher.service
+      register: netplan_networkd_dispatcher
+      become: true
+
     - name: Mask networkd-dispatcher (unused, only emits podman-veth-churn noise)
       # systemd-networkd emits a D-Bus PropertiesChanged for every link state
       # change, including podman's ephemeral veth/bridge interfaces. networkd-
@@ -41,6 +53,7 @@
       # in any of its */.d dirs, so the daemon does no useful work on these
       # hosts — masking removes the noise at the source with nothing lost.
       # Unmask is the prerequisite if a future role ever drops a dispatcher hook.
+      when: netplan_networkd_dispatcher.stat.exists
       systemd:
         name: networkd-dispatcher.service
         state: stopped
