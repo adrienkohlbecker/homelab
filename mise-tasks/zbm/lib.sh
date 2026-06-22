@@ -11,7 +11,7 @@ zbm_upstream_arch() {
 zbm_repo_root() {
   local repo_root="${MISE_CONFIG_ROOT:-}"
 
-  if [ -z "$repo_root" ] || { [ "${repo_root#/}" = "$repo_root" ] && [ ! -d "${repo_root}/zbm" ]; }; then
+  if [ -z "$repo_root" ] || [ ! -d "${repo_root}/zbm" ]; then
     repo_root="$(git rev-parse --show-toplevel)"
   fi
   (cd "$repo_root" && pwd -P)
@@ -96,15 +96,14 @@ WRAPPER
 }
 
 zbm_lsinitrd() {
-  local builder_tag=$1 image=$2 mount_root mount_image
+  local builder_tag=$1 image=$2 mount_root
 
   mount_root="$(dirname "$image")"
-  mount_image="${image#"${mount_root}/"}"
   docker run --rm \
     --entrypoint /usr/bin/lsinitrd \
     -v "${mount_root}:/work:ro" \
     "$builder_tag" \
-    "/work/${mount_image}"
+    "/work/$(basename "$image")"
 }
 
 zbm_assert_core_listing() {

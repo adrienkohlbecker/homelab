@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Diff the locally built ZFSBootMenu artifact against the official upstream release"
+#MISE description="Compare the local ZFSBootMenu recovery initramfs with upstream"
 set -euo pipefail
 
 # shellcheck source=mise-tasks/zbm/lib.sh
@@ -7,26 +7,7 @@ set -euo pipefail
 
 version="${ZBM_VERSION:-3.0.1}"
 kernel="${ZBM_KERNEL_VERSION:-6.1}"
-style="${ZBM_UPSTREAM_STYLE:-recovery}"
-local_arch="${ZBM_LOCAL_ARCH:-$(zbm_host_arch)}"
-official_arch="${ZBM_OFFICIAL_ARCH:-x86_64}"
-local_upstream_arch="${ZBM_LOCAL_UPSTREAM_ARCH:-$(zbm_upstream_arch)}"
-
-case "$style" in
-release | recovery) ;;
-*)
-  echo "unsupported ZBM_UPSTREAM_STYLE=${style}; expected release or recovery" >&2
-  exit 1
-  ;;
-esac
-
-case "$official_arch" in
-x86_64) ;;
-*)
-  echo "upstream v${version} release artifacts are only published for x86_64; requested official arch is ${official_arch}" >&2
-  exit 1
-  ;;
-esac
+official_arch=x86_64
 
 for required in curl docker git sha256sum tar; do
   if ! command -v "$required" >/dev/null 2>&1; then
@@ -36,46 +17,35 @@ for required in curl docker git sha256sum tar; do
 done
 
 repo_root="$(zbm_repo_root)"
+host_arch="$(zbm_host_arch)"
 
-local_out_dir="${ZBM_LOCAL_OUT_DIR:-${repo_root}/zbm-build/${local_arch}}"
 src_dir="${repo_root}/zbm-build/src"
-builder_tag="${ZBM_COMPARE_BUILDER_IMAGE:-localhost/zbm-builder:v${version}-${local_arch}}"
-official_asset_base="zfsbootmenu-${style}-${official_arch}-v${version}-linux${kernel}"
-local_upstream_asset_base="zfsbootmenu-${style}-${local_upstream_arch}-v${version}-linux${kernel}"
+official_asset_base="zfsbootmenu-recovery-${official_arch}-v${version}-linux${kernel}"
 asset_url_base="https://github.com/zbm-dev/zfsbootmenu/releases/download/v${version}"
-report_dir="${ZBM_UPSTREAM_REPORT_DIR:-${repo_root}/zbm-build/upstream-compare/reports/local-${style}-${local_arch}-vs-official-${official_arch}-v${version}-linux${kernel}}"
 
 if [ -n "${ZBM_LOCAL_TARBALL:-}" ]; then
   local_tar="$ZBM_LOCAL_TARBALL"
-else
-  shopt -s nullglob
-  if [ -n "${ZBM_BUILD_SUFFIX:-}" ]; then
-    local_candidates=("${local_out_dir}/zfsbootmenu-v${version}-linux${kernel}${ZBM_BUILD_SUFFIX}-${local_arch}.tar.gz")
-  else
-    local_candidates=("${local_out_dir}/zfsbootmenu-v${version}-linux${kernel}"*"${local_arch}.tar.gz")
-  fi
-  shopt -u nullglob
-
-  case "${#local_candidates[@]}" in
-  0)
-    echo "no local ZBM tarball found under ${local_out_dir}; run 'mise run zbm:build' first" >&2
-    exit 1
-    ;;
-  1)
-    local_tar="${local_candidates[0]}"
-    ;;
-  *)
-    mapfile -t local_candidates < <(printf '%s\n' "${local_candidates[@]}" | sort)
-    local_tar="${local_candidates[$((${#local_candidates[@]} - 1))]}"
-    echo "Multiple local tarballs found; using ${local_tar}" >&2
-    ;;
-  esac
+elif ! local_tar="$(zbm_latest_tarball "${repo_root}/zbm-build/${host_arch}" "$host_arch")"; then
+  echo "no ${host_arch} ZBM tarball found; run 'mise run zbm:build' first" >&2
+  exit 1
 fi
 
 if [ ! -s "$local_tar" ]; then
   echo "local ZBM tarball is missing or empty: ${local_tar}" >&2
   exit 1
 fi
+local_name="$(basename "$local_tar")"
+case "$local_name" in
+zfsbootmenu-v*-linux*-*.tar.gz) ;;
+*)
+  echo "local tarball name must match zfsbootmenu-v*-linux*-<arch>.tar.gz: ${local_name}" >&2
+  exit 1
+  ;;
+esac
+local_arch="${local_name%.tar.gz}"
+local_arch="${local_arch##*-}"
+builder_tag="${ZBM_COMPARE_BUILDER_IMAGE:-localhost/zbm-builder:v${version}-${local_arch}}"
+report_dir="${ZBM_UPSTREAM_REPORT_DIR:-${repo_root}/zbm-build/upstream-compare/reports/local-recovery-${local_arch}-vs-official-${official_arch}-v${version}-linux${kernel}}"
 
 overlay_source_roots=(
   "${repo_root}/mise-tasks/zbm/build.sh"
@@ -150,7 +120,6 @@ done
 mkdir -p "$official_dir" "$extract_dir" "$report_dir"
 
 official_tar="${official_dir}/${official_asset_base}.tar.gz"
-official_efi="${official_dir}/${official_asset_base}.EFI"
 
 echo "Working directory: ${workdir}"
 echo "Report directory: ${report_dir}"
@@ -160,26 +129,25 @@ echo "Official architecture: ${official_arch}"
 echo "Comparison builder image: ${builder_tag}"
 echo "Downloading official upstream artifacts"
 curl -fsSL "${asset_url_base}/${official_asset_base}.tar.gz" -o "$official_tar"
-curl -fsSL "${asset_url_base}/${official_asset_base}.EFI" -o "$official_efi"
 curl -fsSL "${asset_url_base}/sha256.txt" -o "${official_dir}/sha256.txt"
 
 (
   cd "$official_dir"
-  awk -v tar="${official_asset_base}.tar.gz" -v efi="${official_asset_base}.EFI" '
+  awk -v tar="${official_asset_base}.tar.gz" '
     $1 == "SHA256" && $3 == "=" {
       name = $2
       sub(/^\(/, "", name)
       sub(/\)$/, "", name)
-      if (name == tar || name == efi) {
+      if (name == tar) {
         print $4 "  " name
       }
       next
     }
-    $NF == tar || $NF == "./" tar || $NF == efi || $NF == "./" efi { print }
+    $NF == tar || $NF == "./" tar { print }
   ' sha256.txt >sha256.selected
   selected_count="$(wc -l <sha256.selected | tr -d '[:space:]')"
-  if [ "$selected_count" -ne 2 ]; then
-    echo "expected 2 checksum entries for ${official_asset_base}, found ${selected_count}" >&2
+  if [ "$selected_count" -ne 1 ]; then
+    echo "expected 1 checksum entry for ${official_asset_base}, found ${selected_count}" >&2
     sed -n '1,40p' sha256.txt >&2
     exit 1
   fi
@@ -205,17 +173,6 @@ find_one() {
 
 local_initramfs="$(find_one "${extract_dir}/local" 'initramfs*.img')"
 official_initramfs="$(find_one "${extract_dir}/official" 'initramfs*.img')"
-local_efi="$(find_one "${extract_dir}/local" 'zfsbootmenu.EFI')"
-
-echo "Local EFI:"
-sha256sum "$local_efi"
-echo "Official EFI:"
-sha256sum "$official_efi"
-if cmp -s "$local_efi" "$official_efi"; then
-  echo "EFI byte comparison: identical"
-else
-  echo "EFI byte comparison: differs; comparing initramfs payload listings"
-fi
 
 zbm_lsinitrd "$builder_tag" "$local_initramfs" >"${report_dir}/local.lsinitrd"
 zbm_lsinitrd "$builder_tag" "$official_initramfs" >"${report_dir}/official.lsinitrd"
@@ -253,6 +210,7 @@ local_upstream_missing_module_count=0
 if [ "$local_arch" != "$official_arch" ]; then
   local_upstream_src="${workdir}/local-upstream-src"
   local_upstream_extract="${extract_dir}/local-upstream"
+  local_upstream_asset_base="zfsbootmenu-recovery-$(zbm_upstream_arch)-v${version}-linux${kernel}"
   local_upstream_asset_dir="${local_upstream_src}/releng/assets/${version}"
   local_upstream_tar="${local_upstream_asset_dir}/${local_upstream_asset_base}.tar.gz"
 

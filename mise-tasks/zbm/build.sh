@@ -10,7 +10,6 @@ upstream_arch="$(zbm_upstream_arch)"
 if [ -z "${ZBM_BUILD_SUFFIX:-}" ] && [ -z "${CI:-}" ]; then
   ZBM_BUILD_SUFFIX="-local.$(date "+%Y%m%d%H%M%S")"
 fi
-zbm_artifact_version="${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX:-}"
 repo_root="$(zbm_repo_root)"
 src_dir="${repo_root}/zbm-build/src"
 out_dir="${repo_root}/zbm-build/${arch}"
@@ -80,7 +79,6 @@ mkdir -p "${workdir}/tmp"
 )
 
 asset_base="zfsbootmenu-recovery-${upstream_arch}-v${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}"
-component_dir_name="zfsbootmenu-recovery-${upstream_arch}-v${ZBM_VERSION}"
 asset_dir="${work_src}/releng/assets/${ZBM_VERSION}"
 upstream_tar="${asset_dir}/${asset_base}.tar.gz"
 upstream_efi="${asset_dir}/${asset_base}.EFI"
@@ -98,9 +96,9 @@ fi
 
 mkdir -p "$extract_dir"
 tar -xzf "$upstream_tar" -C "$extract_dir"
-component_dir="${extract_dir}/${component_dir_name}"
+component_dir="${extract_dir}/zfsbootmenu-recovery-${upstream_arch}-v${ZBM_VERSION}"
 if [ ! -d "$component_dir" ]; then
-  echo "upstream tarball missing expected component directory: $component_dir_name" >&2
+  echo "upstream tarball missing expected component directory: ${component_dir##*/}" >&2
   exit 1
 fi
 
@@ -142,6 +140,6 @@ if [ "$arch" = "aarch64" ] && ! grep -Eq "/efivarfs[.]ko([.]|$)" "$initramfs_lis
   exit 1
 fi
 
-tarball="zfsbootmenu-v${zbm_artifact_version}-${arch}.tar.gz"
+tarball="zfsbootmenu-v${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX:-}-${arch}.tar.gz"
 (cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=ustar -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub cmdline | gzip -n >"$tarball")
 (cd "$out_dir" && sha256sum "$tarball" | tee "${tarball}.sha256sum")
