@@ -62,21 +62,20 @@ swap_zram:
 # them onto en* because the QEMU NIC isn't trunked. Lab/pug exercise the
 # distinct-parent path via host_vars/{lab,pug}-qemu.yml.
 #
-# Block addresses come from data/network_topology.yml — same formula as
-# host_vars/lab.yml. Works under qemu because test/machine.py pins
-# slirp's user-net to the test-view supernet (10.234.0.0/18) via
-# `qemu_user_net_args`, so the parent en* iface lands on a subnet that
+# Macvlan blocks derive from data/network_topology.yml inside the role. Works
+# under qemu because test/machine.py pins slirp's user-net to the test-view
+# supernet (10.234.0.0/18), so the parent en* iface lands on a subnet that
 # contains every per-host /28 the topology emits.
 macvlan_blocks:
   - name: mac_mgmt
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-    block: "{{ network.sites.home.vlans.management.cidr | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}"
+    vlan: management
     # No podman_network: covers the iface-only path (lab's mac_mgmt shape);
     # mac_iot below still exercises the podman macvlan path.
     podman_network: false
   - name: mac_iot
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-    block: "{{ network.sites.home.vlans.iot.cidr | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}"
+    vlan: iot
     podman_network: true
 
 # Override prod-style MAC-matching netplan: the QEMU VM ships a single

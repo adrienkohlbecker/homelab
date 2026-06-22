@@ -12,12 +12,10 @@
       - macvlan_args.name | length <= 15
       # parent allows a `.` for VLAN subifs (e.g. eth0.4 / iot).
       - macvlan_args.parent is string and macvlan_args.parent is match('^[a-z][a-z0-9_.]*$')
-      - macvlan_args.block is string
-      - macvlan_args.block | ansible.utils.ipaddr != false
-      - macvlan_args.block == (macvlan_args.block | ansible.utils.ipaddr('net'))
-      # The podman pool is the upper /29 (ipsubnet(prefix+1, 1)); a /29-or-
-      # smaller block leaves no room for that split.
-      - macvlan_args.block | ansible.utils.ipaddr('prefix') | int <= 28
+      - macvlan_args.vlan is string and macvlan_args.vlan is match('^[a-z][a-z0-9_]*$')
+      - network.hosts[inventory_hostname].site is defined
+      - network.hosts[inventory_hostname].slot is defined
+      - network.sites[network.hosts[inventory_hostname].site].vlans[macvlan_args.vlan].cidr is defined
       # host_ip / mac_address feed `ip addr add` / `ip link set address`
       # inside the oneshot, so a malformed value fails at unit-runtime, not
       # converge — validate the format here when supplied.
@@ -26,8 +24,31 @@
     fail_msg: >-
       macvlan_args invalid for '{{ macvlan_args.name | default('<no name>') }}':
       name must be a kernel-legal iface name (^[a-z][a-z0-9_]*$, <=15 chars),
-      parent an iface name, block a CIDR with prefix <=28, and host_ip/mac_address
-      (if set) a valid IP / MAC.
+      parent an iface name, vlan a topology VLAN for this host's site, and
+      host_ip/mac_address (if set) a valid IP / MAC.
+  tags:
+    - macvlan
+
+- name: install | Derive topology block for {{ macvlan_args.name }}
+  set_fact:
+    macvlan_block: >-
+      {{ network.sites[network.hosts[inventory_hostname].site].vlans[macvlan_args.vlan].cidr
+         | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}
+  tags:
+    - macvlan
+
+- name: install | Validate topology block for {{ macvlan_args.name }}
+  assert:
+    that:
+      - macvlan_block is string
+      - macvlan_block | ansible.utils.ipaddr != false
+      - macvlan_block == (macvlan_block | ansible.utils.ipaddr('net'))
+      # The podman pool is the upper /29 (ipsubnet(prefix+1, 1)); a /29-or-
+      # smaller block leaves no room for that split.
+      - macvlan_block | ansible.utils.ipaddr('prefix') | int <= 28
+    fail_msg: >-
+      macvlan_args invalid for '{{ macvlan_args.name }}': derived block
+      '{{ macvlan_block }}' must be a CIDR with prefix <=28.
   tags:
     - macvlan
 
@@ -45,13 +66,13 @@
       # *inside* that derived subnet, so the block must sit within the
       # parent's network — catches a block/parent mismatch at converge.
       - >-
-        (macvlan_args.block | ansible.utils.ipaddr('network'))
+        (macvlan_block | ansible.utils.ipaddr('network'))
         | ansible.utils.ipaddr(ansible_facts[macvlan_args.parent].ipv4.network ~ '/' ~ ansible_facts[macvlan_args.parent].ipv4.prefix)
         != false
     fail_msg: >-
       macvlan_args.podman_network is set for '{{ macvlan_args.name }}' but parent
       '{{ macvlan_args.parent }}' has no gathered IPv4 fact to derive the network
-      from, or block '{{ macvlan_args.block }}' is not within the parent's subnet.
+      from, or block '{{ macvlan_block }}' is not within the parent's subnet.
   tags:
     - macvlan
 
@@ -136,7 +157,7 @@
     driver: macvlan
     subnet: "{{ ansible_facts[macvlan_args.parent].ipv4.network }}/{{ ansible_facts[macvlan_args.parent].ipv4.prefix }}"
     gateway: "{{ ansible_facts[macvlan_args.parent].ipv4.network | ansible.utils.ipmath(1) }}"
-    ip_range: "{{ macvlan_args.block | ansible.utils.ipsubnet(macvlan_args.block | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
+    ip_range: "{{ macvlan_block | ansible.utils.ipsubnet(macvlan_block | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
     opt:
       parent: "{{ macvlan_args.parent }}"
       # Must match the host child iface's `mode bridge` (macvlan_iface.service.j2)

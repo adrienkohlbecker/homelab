@@ -16,6 +16,10 @@
   failed_when: "'UP' not in macvlan_verify_link.stdout"
 
 - name: _verify | Assert each iface carries its host_ip/32
+  vars:
+    _macvlan_block: >-
+      {{ network.sites[network.hosts[inventory_hostname].site].vlans[item.vlan].cidr
+         | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}
   command: ip -4 -o addr show dev {{ item.name }}
   loop: "{{ macvlan_blocks }}"
   loop_control:
@@ -24,7 +28,7 @@
   become: true
   changed_when: false
   failed_when: >-
-    ((item.host_ip | default(item.block | ansible.utils.ipmath(0))) ~ '/32')
+    ((item.host_ip | default(_macvlan_block | ansible.utils.ipmath(0))) ~ '/32')
     not in macvlan_verify_addr.stdout
 
 - name: _verify | Assert each iface carries its seeded MAC
@@ -39,7 +43,11 @@
     (item.mac_address | default('82:48:10' | random_mac(seed=(inventory_hostname ~ '_' ~ item.name))))
 
 - name: _verify | Assert the block route points at each iface
-  command: ip route show {{ item.block }} dev {{ item.name }}
+  vars:
+    _macvlan_block: >-
+      {{ network.sites[network.hosts[inventory_hostname].site].vlans[item.vlan].cidr
+         | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}
+  command: ip route show {{ _macvlan_block }} dev {{ item.name }}
   loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.name }}"

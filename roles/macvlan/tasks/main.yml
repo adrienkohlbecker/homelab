@@ -12,14 +12,14 @@
 #               `mac_iot` for VLAN-tagged subifs).
 #   parent      required; parent iface (e.g. `eth0` for mgmt VLAN,
 #               `iot` for a VLAN-tagged subif).
-#   block       required; this host's allocation block (CIDR) within
-#               the parent VLAN's routed subnet. The iface gets a
-#               /32 IP within the block, plus a route to the whole
-#               block via the iface.
+#   vlan        required; VLAN key under this host's topology site. The
+#               role derives the host's slot-indexed /28 block from
+#               data/network_topology.yml. The iface gets a /32 IP
+#               within the block, plus a route to the whole block via
+#               the iface.
 #   host_ip     optional; IP for the iface. Defaults to
-#               `block | ansible.utils.ipmath(0)` — slot 0 of the
-#               block, i.e. its network address, usable as a host
-#               slot only because the iface is /32 + an explicit
+#               the derived block's first IP, usable as a host slot
+#               only because the iface is /32 + an explicit
 #               route to the whole block (nothing treats it as a subnet).
 #   mac_address optional; MAC for the iface. Defaults to a stable
 #               random MAC seeded by `inventory_hostname_<name>` so
@@ -36,7 +36,8 @@
 #               derive from the parent's gathered primary IPv4 (subnet =
 #               that address's network, gateway = its .1), so the parent
 #               must carry the VLAN's address, the VLAN must route via .1,
-#               and `block` must sit within the parent network (asserted).
+#               and the derived block must sit within the parent network
+#               (asserted).
 #
 # Hosts that don't trunk any macvlan-bearing VLANs leave macvlan_blocks empty;
 # the role no-ops cleanly.
