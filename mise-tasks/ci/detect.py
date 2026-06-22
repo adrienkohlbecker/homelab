@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
+# [MISE] description="Render the GitLab role-test child pipeline"
+# [USAGE] flag "--target <target>" help="Qemu target to render: aws_qemu or lab"
+# [USAGE] flag "--child-path <child_path>" help="Generated child pipeline path" default="test-child.yml"
+# [USAGE] flag "--all" help="Force the full test universe"
 """CI change-detection pipeline (GitLab).
 
-The ``gitlab`` subcommand (.gitlab-ci.yml's `detect` job) is the whole story:
-resolve a green base via the GitLab pipelines API, classify the changed files,
-expand dependent roles and release cells, and write a generated child pipeline — one
-job per `role:variant[:ubuntu]` cell, emitted longest-first by each cell's
+Resolve a green base via the GitLab pipelines API, classify the changed files,
+expand dependent roles and release cells, and write a generated child pipeline:
+one job per `role:variant[:ubuntu]` cell, emitted longest-first by each cell's
 median recent runtime so the slowest jobs start first.
 """
 
@@ -937,7 +940,7 @@ def _cmd_gitlab(args: list[str]) -> int:
     """Emit the GitLab dynamic child pipeline (.gitlab-ci.yml's `detect` job)."""
     from argparse import ArgumentParser
 
-    p = ArgumentParser(prog="detect.py gitlab")
+    p = ArgumentParser(prog="ci:detect")
     p.add_argument("--child-path", default="test-child.yml")
     p.add_argument("--all", action="store_true", help="Force the full universe (debug)")
     p.add_argument(
@@ -1007,10 +1010,10 @@ def _cmd_gitlab(args: list[str]) -> int:
 
 
 def main() -> int:
-    if len(sys.argv) < 2 or sys.argv[1] != "gitlab":
-        print("usage: detect.py <gitlab> [args...]", file=sys.stderr)
-        return 2
-    return _cmd_gitlab(sys.argv[2:])
+    args = sys.argv[1:]
+    if args[:1] == ["gitlab"]:
+        args = args[1:]
+    return _cmd_gitlab(args)
 
 
 if __name__ == "__main__":
