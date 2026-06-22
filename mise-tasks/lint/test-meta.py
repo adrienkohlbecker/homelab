@@ -1,15 +1,6 @@
 #!/usr/bin/env python3
 # [MISE] description="Validate roles/*/meta/test.yml against the harness's MACHINE_CHOICES"
-"""
-Catch typos and unknown machine names in role test metadata before they
-become a confusing CI failure. Single pass over `roles/*/meta/test.yml`,
-parses each as YAML, asserts `machines:` keys are in MACHINE_CHOICES
-and `ubuntu:` (if present) is a list of known UBUNTU_RELEASES codenames
-(excluding jammy, which is the default cell -- listing it is redundant).
-
-Run from the repo root via `mise run lint:test-meta` (or bundled into
-`mise run lint`). Exits non-zero with a per-file diagnostic on failure.
-"""
+"""Validate role test metadata before CI renders the qemu matrix."""
 
 from __future__ import annotations
 
@@ -23,6 +14,9 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
 from machine import MACHINE_CHOICES  # noqa: E402
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES  # noqa: E402
+
+MACHINE_NAMES = sorted(MACHINE_CHOICES)
+UBUNTU_NAMES = sorted(UBUNTU_RELEASES)
 
 
 def main() -> int:
@@ -45,8 +39,8 @@ def main() -> int:
             if not isinstance(machines, dict):
                 errors.append(f"{meta}: machines must be a mapping, got {type(machines).__name__}")
             else:
-                for name in sorted(set(machines) - set(MACHINE_CHOICES)):
-                    errors.append(f"{meta}: machines key {name!r} not in {sorted(MACHINE_CHOICES)}")
+                for name in sorted(set(machines) - set(MACHINE_NAMES)):
+                    errors.append(f"{meta}: machines key {name!r} not in {MACHINE_NAMES}")
 
         if (ubuntu := data.get("ubuntu")) is not None:
             if not isinstance(ubuntu, list):
@@ -59,30 +53,25 @@ def main() -> int:
                             " -- omit it (only list extra releases)"
                         )
                     elif codename not in UBUNTU_RELEASES:
-                        errors.append(f"{meta}: ubuntu={codename!r} not in {sorted(UBUNTU_RELEASES)}")
+                        errors.append(f"{meta}: ubuntu={codename!r} not in {UBUNTU_NAMES}")
 
-        # skip: quarantines a known-failing cell so it can't gate a green
-        # run. A mapping of cell-spec -> reason; the reason is mandatory so a
-        # skip can't rot into a silent permanent exclusion. cell-spec is
-        # `machine` (the jammy cell) or `machine:codename` (a release cell).
+        # skip maps machine[:ubuntu] to the reason a known-failing cell is quarantined.
         skip = data.get("skip")
         if skip is not None:
             if not isinstance(skip, dict):
                 errors.append(f"{meta}: skip must be a mapping of cell-spec -> reason, got {type(skip).__name__}")
             else:
                 for spec, reason in skip.items():
-                    match str(spec).split(":"):
-                        case [machine]:
-                            codename = DEFAULT_UBUNTU
-                        case [machine, codename]:
-                            pass
-                        case _:
-                            errors.append(f"{meta}: skip {spec!r}: too many ':' (want machine or machine:codename)")
-                            continue
-                    if machine not in MACHINE_CHOICES:
-                        errors.append(f"{meta}: skip {spec!r}: machine {machine!r} not in {sorted(MACHINE_CHOICES)}")
+                    parts = str(spec).split(":")
+                    if len(parts) > 2:
+                        errors.append(f"{meta}: skip {spec!r}: too many ':' (want machine or machine:codename)")
+                        continue
+                    machine = parts[0]
+                    codename = parts[1] if len(parts) == 2 else DEFAULT_UBUNTU
+                    if machine not in MACHINE_NAMES:
+                        errors.append(f"{meta}: skip {spec!r}: machine {machine!r} not in {MACHINE_NAMES}")
                     if codename not in UBUNTU_RELEASES:
-                        errors.append(f"{meta}: skip {spec!r}: ubuntu {codename!r} not in {sorted(UBUNTU_RELEASES)}")
+                        errors.append(f"{meta}: skip {spec!r}: ubuntu {codename!r} not in {UBUNTU_NAMES}")
                     if not reason or not str(reason).strip():
                         errors.append(f"{meta}: skip {spec!r}: needs a non-empty reason")
 
