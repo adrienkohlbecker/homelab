@@ -62,7 +62,7 @@ vrrp_instance dns {
   # roles/adguard/templates/keepalived.conf.j2.)
 
   virtual_ipaddress {
-    {{ dns_keepalived_ip }}/32
+    {{ network.virtual_ips.dns }}/32
   }
 
   # Periodic gratuitous ARP so any LAN cache holding a stale MAC for the VIP

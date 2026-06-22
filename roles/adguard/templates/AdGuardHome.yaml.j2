@@ -318,7 +318,7 @@ filtering:
       answer: {{ external_ips.lab }}
       enabled: true
     - domain: dns.{{ domain }}
-      answer: {{ dns_keepalived_ip }}
+      answer: {{ network.virtual_ips.dns }}
       enabled: true
   safe_fs_patterns: []
   safebrowsing_cache_size: 1048576

@@ -21,13 +21,13 @@
 - name: Assert ignoreip inputs are defined
   assert:
     that:
-      - site_subnets.home is defined
-      - site_subnets.home | length > 0
-      - wireguard_subnet is defined
-      - wireguard_subnet | length > 0
+      - network.sites.home.cidr is defined
+      - network.sites.home.cidr | length > 0
+      - network.partitions.wireguard.cidr is defined
+      - network.partitions.wireguard.cidr | length > 0
     fail_msg: >-
-      site_subnets.home and wireguard_subnet must be defined and non-empty;
-      they compose ignoreip in /etc/fail2ban/jail.local.
+      network.sites.home.cidr and network.partitions.wireguard.cidr must be
+      defined and non-empty; they compose ignoreip in /etc/fail2ban/jail.local.
   tags:
     - fail2ban
 
@@ -90,7 +90,7 @@
       [DEFAULT]
       banaction = nftables-multiport
       banaction_allports = nftables-allports
-      ignoreip = 127.0.0.1/8 ::1 {{ site_subnets.home }} {{ wireguard_subnet }}
+      ignoreip = 127.0.0.1/8 ::1 {{ network.sites.home.cidr }} {{ network.partitions.wireguard.cidr }}
 
       # systemd-journal entries carry IPs, not hostnames; rDNS resolve
       # is wasted and risks banning the wrong IP on asymmetric DNS.

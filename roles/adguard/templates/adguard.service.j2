@@ -60,9 +60,9 @@ ExecStart=/usr/bin/podman run \
 {# The VIP publish works on the BACKUP node (address not locally held)
    thanks to roles/keepalived's ip_nonlocal_bind sysctl; the address is
    validated by the role's input assert. #}
-    --publish {{ dns_keepalived_ip }}:53:53/udp \
-    --publish {{ dns_keepalived_ip }}:53:53/tcp \
-    --publish {{ dns_keepalived_ip }}:853:853/tcp \
+    --publish {{ network.virtual_ips.dns }}:53:53/udp \
+    --publish {{ network.virtual_ips.dns }}:53:53/tcp \
+    --publish {{ network.virtual_ips.dns }}:853:853/tcp \
     --publish 127.0.0.1:{{ service_ports.adguard }}:3000/tcp \
     --health-cmd         '["sh","-c","nslookup adguard.home 127.0.0.1 | grep -q 127.0.0.1"]' \
     --health-startup-cmd '["sh","-c","nslookup adguard.home 127.0.0.1 | grep -q 127.0.0.1"]' \

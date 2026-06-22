@@ -32,8 +32,8 @@
 # explicitly bypasses ignoreip — manual bans skip BanManager's filter,
 # so a "ban an ignored IP" test would always land in f2b-table). This
 # proves the daemon parsed the rendered jail and loaded each expected
-# entry — catches empty-interpolation regressions of site_subnets.home
-# or wireguard_subnet that would silently shrink the whitelist.
+# entry — catches empty-interpolation regressions that would silently
+# shrink the whitelist.
 - name: _verify | Fail2ban-client knows the configured ignoreip
   command: fail2ban-client get sshd ignoreip
   register: _fail2ban_ignoreip
@@ -48,11 +48,11 @@
     that:
       - "'127.0.0.0/8' in _fail2ban_ignoreip.stdout"
       - "'::1' in _fail2ban_ignoreip.stdout"
-      - site_subnets.home in _fail2ban_ignoreip.stdout
-      - wireguard_subnet in _fail2ban_ignoreip.stdout
+      - network.sites.home.cidr in _fail2ban_ignoreip.stdout
+      - network.partitions.wireguard.cidr in _fail2ban_ignoreip.stdout
     fail_msg: >-
       sshd jail ignoreip missing expected entries; check empty
-      interpolation of site_subnets.home or wireguard_subnet.
+      interpolation of network topology CIDRs.
       Got: {{ _fail2ban_ignoreip.stdout }}
 
 # Function check for backend=systemd: the daemon's status output

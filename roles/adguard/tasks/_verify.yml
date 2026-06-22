@@ -72,12 +72,12 @@
 # This is also the only probe on the VIP socket itself -- the others all
 # target the host address.
 - name: _verify | DoT on the VIP answers with the rewrite
-  command: dig +short +tls +timeout=3 +tries=2 @{{ dns_keepalived_ip }} dns.{{ domain }} A
+  command: dig +short +tls +timeout=3 +tries=2 @{{ network.virtual_ips.dns }} dns.{{ domain }} A
   register: adguard_verify_dot
   changed_when: false
   retries: 30
   delay: 2
-  until: dns_keepalived_ip in adguard_verify_dot.stdout_lines
+  until: network.virtual_ips.dns in adguard_verify_dot.stdout_lines
 
 # The user_rules undelegated-suffix guard answers NXDOMAIN locally
 # instead of leaking the query upstream.

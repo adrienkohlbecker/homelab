@@ -5,10 +5,10 @@
       # unset (filters carry a default) -- ansible 2.20 rejects a
       # non-boolean conditional result, and `is defined` doesn't
       # short-circuit a sibling `that:` item.
-      - dns_keepalived_ip is defined
+      - network.virtual_ips.dns is defined
       # The service unit publishes :53 on this address; a malformed value
       # must fail here, not render a unit that silently skips the VIP.
-      - (dns_keepalived_ip | default('') | ansible.utils.ipaddr('address')) is string
+      - (network.virtual_ips.dns | default('') | ansible.utils.ipaddr('address')) is string
       - dns_keepalived_vrid is defined
       - dns_keepalived_priority is defined
       - (dns_keepalived_priority | default(0) | int) > 0
@@ -21,9 +21,9 @@
       - (adguard_adlists | default([]) | select('search', '\s') | list | length) == 0
       - (adguard_whitelists | default([]) | select('search', '\s') | list | length) == 0
     fail_msg: >-
-      adguard requires the DNS VIP inputs dns_keepalived_{ip,vrid,priority,peers}
-      (priority 1-255, set per-host in host_vars; ip must be a valid
-      address -- the service unit publishes :53 on it), an external_ips
+      adguard requires the DNS VIP from network.virtual_ips.dns plus
+      dns_keepalived_{vrid,priority,peers} (priority 1-255, set per-host
+      in host_vars), an external_ips
       entry for this host, and the adguard_adlists / adguard_whitelists
       lists with no whitespace in any URL.
   tags:

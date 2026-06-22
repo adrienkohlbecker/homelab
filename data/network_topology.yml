@@ -2,13 +2,10 @@
 # Canonical IP topology for 10.123.0.0/16 (`fahm.fr` lab estate).
 #
 # **Status: live.** Wired into `group_vars/all/network.yml`, which
-# loads this file via `lookup('file', ...) | from_yaml` and derives
-# the consumer-facing vars (`site_subnets`, `external_ips`,
-# `wireguard_subnet`, `dns_keepalived_ip`, plus the `address:`
-# fields of every entry in `wireguard_peers`). Edits here flow into
-# the prod inventory automatically; design rationale in
-# `notes/network_review.md`. Test hosts use a separate 10.234.0.0/16
-# inventory (see `group_vars/test.yml`).
+# loads this file via `lookup('file', ...) | from_yaml` as `network`.
+# Edits here flow into the prod inventory automatically; design
+# rationale in `notes/network_review.md`. Test hosts use a separate
+# 10.234.0.0/16 inventory view (see `group_vars/test.yml`).
 #
 # ────────────────────────────────────────────────────────────────
 # Schema (no overlap between siblings at the same level)

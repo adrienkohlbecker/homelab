@@ -7,21 +7,11 @@
 #
 # `network` is the local view: equals `prod_network` for prod hosts,
 # and is the gsub'd 10.234.x version for test hosts (overridden in
-# group_vars/test.yml). All derivations below consume `network`, so
-# they automatically take the right shape per group.
+# group_vars/test.yml).
 
 prod_network: "{{ lookup('file', playbook_dir ~ '/data/network_topology.yml') | from_yaml }}"
 
 network: "{{ prod_network }}"
-
-site_subnets:
-  home:     "{{ network.sites.home.cidr }}"
-  brumath:  "{{ network.sites.brumath.cidr }}"
-  bonniers: "{{ network.sites.bonniers.cidr }}"
-
-wireguard_subnet: "{{ network.partitions.wireguard.cidr }}"
-
-dns_keepalived_ip: "{{ network.virtual_ips.dns }}"
 
 # Named-IP registry consumed by nginx vhosts, fail2ban allowlists,
 # samba binds, tautulli proxy auth, etc. Combines host primaries,
@@ -42,4 +32,4 @@ external_ips:
   printer: "{{ network.static_leases.printer.ip }}"
   siglent: "{{ network.static_leases.siglent.ip }}"
   tubeszb: "{{ network.static_leases.tubeszb.ip }}"
-  dns:     "{{ dns_keepalived_ip }}"
+  dns:     "{{ network.virtual_ips.dns }}"
