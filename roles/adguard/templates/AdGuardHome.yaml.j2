@@ -291,24 +291,14 @@ filtering:
     - domain: pi.hole
       answer: 127.0.0.1
       enabled: true
-    - domain: pug.{{ domain }}
-      answer: {{ external_ips.pug }}
+{% for host in ['pug', 'lab', 'box'] %}
+    - domain: {{ host }}.{{ domain }}
+      answer: {{ external_ips[host] }}
       enabled: true
-    - domain: '*.pug.{{ domain }}'
-      answer: {{ external_ips.pug }}
+    - domain: '*.{{ host }}.{{ domain }}'
+      answer: {{ external_ips[host] }}
       enabled: true
-    - domain: lab.{{ domain }}
-      answer: {{ external_ips.lab }}
-      enabled: true
-    - domain: '*.lab.{{ domain }}'
-      answer: {{ external_ips.lab }}
-      enabled: true
-    - domain: box.{{ domain }}
-      answer: {{ external_ips.box }}
-      enabled: true
-    - domain: '*.box.{{ domain }}'
-      answer: {{ external_ips.box }}
-      enabled: true
+{% endfor %}
 {#
   No fox rewrite: fox is off-home (Hetzner), so the estate reaches it over the
   tailnet, not a LAN/wg path. fox.fahm.fr therefore resolves to its Tailscale IP
