@@ -10,7 +10,7 @@ import base64
 
 import pytest
 from ansible.errors import AnsibleError
-from roles.mosquitto.filter_plugins.mosquitto_passwd import mosquitto_passwd
+from filter_plugins.mosquitto_passwd import mosquitto_passwd
 
 
 KNOWN_HASH = (
