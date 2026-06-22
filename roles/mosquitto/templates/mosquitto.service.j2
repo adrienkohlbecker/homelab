@@ -50,8 +50,8 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/sqlite/mosquitto:/mosquitto/data \
     --user {{ mosquitto_user.uid }}:{{ mosquitto_user.group }} \
     --network homeassistant \
-    --health-cmd '["mosquitto_sub","-p","1880","-t","healthcheck","-E","-i","probe","-W","3"]' \
-    --health-startup-cmd '["mosquitto_sub","-p","1880","-t","healthcheck","-E","-i","probe","-W","3"]' \
+    --health-cmd {{ ["mosquitto_sub", "-p", "1880", "-t", "healthcheck", "-E", "-i", "probe", "-W", "3"] | podman_health_argv }} \
+    --health-startup-cmd {{ ["mosquitto_sub", "-p", "1880", "-t", "healthcheck", "-E", "-i", "probe", "-W", "3"] | podman_health_argv }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \

@@ -101,8 +101,8 @@ ExecStart=/usr/bin/podman run \
     --device /dev/dri/renderD128:/dev/dri/renderD128 \
     --group-add={{ getent_group.render[1] | int }} \
 {% endif %}
-    --health-cmd         '["curl","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:32400/identity"]' \
-    --health-startup-cmd '["curl","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:32400/identity"]' \
+    --health-cmd         {{ "http://localhost:32400/identity" | podman_health_curl }} \
+    --health-startup-cmd {{ "http://localhost:32400/identity" | podman_health_curl }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "300s" \

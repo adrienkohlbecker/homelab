@@ -51,16 +51,15 @@ ExecStart=/usr/bin/podman run \
     --network homepage \
     --init \
     --user 0:0 \
-    --uidmap=0:0:65536 \
-    --uidmap=+0:{{ homepage_user.uid }}:1 \
-    --gidmap=0:0:65536 \
-    --gidmap=+0:{{ homepage_user.group }}:1 \
+{% for arg in 0 | podman_idmap_args(homepage_user.uid, homepage_user.group) %}
+    {{ arg }} \
+{% endfor %}
     --volume /mnt/services/homepage:/app/config:ro \
     --tz={{ system_timezone }} \
     --env HOMEPAGE_ALLOWED_HOSTS=homepage.{{ inventory_hostname }}.{{ domain }},localhost:{{ service_ports.homepage }},localhost:3000 \
     --publish 127.0.0.1:{{ service_ports.homepage }}:3000/tcp \
-    --health-cmd '["wget","--quiet","--spider","-T","5","http://localhost:3000/api/healthcheck"]' \
-    --health-startup-cmd '["wget","--quiet","--spider","-T","5","http://localhost:3000/api/healthcheck"]' \
+    --health-cmd {{ ["wget", "--quiet", "--spider", "-T", "5", "http://localhost:3000/api/healthcheck"] | podman_health_argv }} \
+    --health-startup-cmd {{ ["wget", "--quiet", "--spider", "-T", "5", "http://localhost:3000/api/healthcheck"] | podman_health_argv }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "30s" \

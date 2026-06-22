@@ -45,29 +45,29 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="authelia" \
     --network authelia \
     --security-opt=no-new-privileges \
-    --uidmap=0:0:65536 \
-    --uidmap=+0:{{ authelia_user.uid }}:1 \
-    --gidmap=0:0:65536 \
-    --gidmap=+0:{{ authelia_user.group }}:1 \
+{% for arg in 0 | podman_idmap_args(authelia_user.uid, authelia_user.group) %}
+    {{ arg }} \
+{% endfor %}
     --volume /mnt/services/authelia/configuration.yml:/config/configuration.yml \
     --volume /mnt/services/authelia/users.yml:/config/users.yml \
     --volume /mnt/services/sqlite/authelia:/db \
     --env PUID=0 \
     --env PGID=0 \
     --env X_AUTHELIA_CONFIG=/config/configuration.yml \
-    --secret=authelia_jwt_secret,type=mount,target=jwt_secret \
-    --env AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE=/run/secrets/jwt_secret \
-    --secret=authelia_session_secret,type=mount,target=session_secret \
-    --env AUTHELIA_SESSION_SECRET_FILE=/run/secrets/session_secret \
-    --secret=authelia_storage_encryption_key,type=mount,target=storage_encryption_key \
-    --env AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE=/run/secrets/storage_encryption_key \
-    --secret=authelia_smtp_password,type=mount,target=smtp_password \
-    --env AUTHELIA_NOTIFIER_SMTP_PASSWORD_FILE=/run/secrets/smtp_password \
-    --secret=authelia_oidc_hmac_secret,type=mount,target=oidc_hmac_secret \
-    --env AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE=/run/secrets/oidc_hmac_secret \
+{% for secret, target, env in [
+  ("authelia_jwt_secret", "jwt_secret", "AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE"),
+  ("authelia_session_secret", "session_secret", "AUTHELIA_SESSION_SECRET_FILE"),
+  ("authelia_storage_encryption_key", "storage_encryption_key", "AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE"),
+  ("authelia_smtp_password", "smtp_password", "AUTHELIA_NOTIFIER_SMTP_PASSWORD_FILE"),
+  ("authelia_oidc_hmac_secret", "oidc_hmac_secret", "AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE"),
+] %}
+{% for arg in secret | podman_secret_file_args(target, env) %}
+    {{ arg }} \
+{% endfor %}
+{% endfor %}
     --publish 0.0.0.0:{{ service_ports.authelia }}:9091/tcp \
-    --health-cmd "wget --quiet --tries=1 --spider --timeout=5 http://localhost:9091/api/health || exit 1" \
-    --health-startup-cmd "wget --quiet --tries=1 --spider --timeout=5 http://localhost:9091/api/health || exit 1" \
+    --health-cmd         {{ ["wget", "--quiet", "--tries=1", "--spider", "--timeout=5", "http://localhost:9091/api/health"] | podman_health_argv }} \
+    --health-startup-cmd {{ ["wget", "--quiet", "--tries=1", "--spider", "--timeout=5", "http://localhost:9091/api/health"] | podman_health_argv }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "30s" \
