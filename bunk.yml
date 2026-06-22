@@ -2,49 +2,36 @@
   hosts: bunk
   strategy: linear
   tasks:
-    # --- Offsite backup rsync wrapper (rrsync) -----------------------------
-    # Each source host (lab/pug/fox) pushes its bak-tagged datasets here nightly
-    # via roles/zfs_autobackup's offsite step. Their root keys (in the
-    # authorized_keys task below) carry a forced command= that runs this wrapper,
-    # confining each source write-only to /volume1/Backup/<host> -- a compromised
-    # source can neither read another host's backups nor escape its own dir, and
-    # bunk's own Synology snapshots cover an in-dir --delete. DSM ships no perl,
-    # so this is the Python rrsync (rsync >= 3.2.4); ~ak/bin lives on the data
-    # volume so it survives a DSM OS update (unlike /usr/local). Runs as ak.
-    - name: Create ak's bin directory
-      file:
-        path: "{{ ansible_user_dir }}/bin"
-        state: directory
-        mode: "0755"
+    - name: Configure offsite backup rsync
       tags:
         - offsite_rrsync
+      block:
+        # Source hosts push bak-tagged datasets through forced-command rrsync
+        # keys, confined write-only to /volume1/Backup/<host>.
+        - name: Create ak's bin directory
+          file:
+            path: "{{ ansible_user_dir }}/bin"
+            state: directory
+            mode: "0755"
 
-    # py_compile (run on bunk) parses the script, catching a truncated copy.
-    - name: Install the rrsync wrapper
-      copy:
-        src: "{{ playbook_dir }}/roles/zfs_autobackup/files/rrsync"
-        dest: "{{ ansible_user_dir }}/bin/rrsync"
-        mode: "0755"
-        backup: true
-        validate: /usr/bin/python3 -m py_compile %s
-      tags:
-        - offsite_rrsync
+        - name: Install the rrsync wrapper
+          copy:
+            src: "{{ playbook_dir }}/roles/zfs_autobackup/files/rrsync"
+            dest: "{{ ansible_user_dir }}/bin/rrsync"
+            mode: "0755"
+            backup: true
+            validate: /usr/bin/python3 -m py_compile %s
 
-    # rrsync refuses to run if its restricted root is missing, so the per-source
-    # roots must pre-exist (lab/pug already do; fox is new). ak creates and owns
-    # them; 0755 tightens the live dirs (currently 0777) without locking anyone
-    # relevant out -- the data was already world-readable.
-    - name: Create the per-source offsite backup roots
-      file:
-        path: "/volume1/Backup/{{ item }}"
-        state: directory
-        mode: "0755"
-      loop:
-        - lab
-        - pug
-        - fox
-      tags:
-        - offsite_rrsync
+        # rrsync refuses to run if its restricted root is missing.
+        - name: Create the per-source offsite backup roots
+          file:
+            path: "/volume1/Backup/{{ item }}"
+            state: directory
+            mode: "0755"
+          loop:
+            - lab
+            - pug
+            - fox
 
     # bunk is DSM, so roles/user (which manages this fleet-wide) doesn't run
     # here. Mirror its authorized_keys task: the fleet login key (ssh_public_keys)
@@ -60,134 +47,85 @@
       tags:
         - authorized_keys
 
-    - name: Copy wireguard configuration
-      template:
-        src: "{{ playbook_dir }}/roles/wireguard/templates/wg.conf.j2"
-        dest: /etc/wireguard/wg0.conf
-        owner: root
-        group: root
-        mode: "0600"
-        backup: true
-      vars:
-        own_peer_name: "{{ inventory_hostname }}"
-      become: true
-      register: wg_conf
+    - name: Configure wireguard
       tags:
         - wireguard
+      block:
+        - name: Copy wireguard configuration
+          template:
+            src: "{{ playbook_dir }}/roles/wireguard/templates/wg.conf.j2"
+            dest: /etc/wireguard/wg0.conf
+            owner: root
+            group: root
+            mode: "0600"
+            backup: true
+          vars:
+            own_peer_name: "{{ inventory_hostname }}"
+          become: true
+          register: wg_conf
 
-    - name: Restart wireguard
-      when: wg_conf.changed
-      systemd:
-        name: pkg-wg-quick@wg0
-        state: restarted
-      become: true
-      tags:
-        - wireguard
+        - name: Restart wireguard
+          when: wg_conf.changed
+          systemd:
+            name: pkg-wg-quick@wg0
+            state: restarted
+          become: true
 
-    # --- Tailscale mesh enrollment (Bonniers subnet router + exit node) -------
-    # bunk is DSM, so roles/tailscale's apt + systemd install half doesn't apply
-    # and the Ubuntu box harness can't exercise this path. The Tailscale package
-    # is installed out-of-band via Package Center (operator runbook). What's left
-    # -- the register -> advertise -> approve orchestration -- is identical to
-    # lab/pug, so it's imported from roles/tailscale/tasks/register.yml rather than
-    # duplicated here; only the DSM permission grant below is bunk-specific. The
-    # shared module reads tailscale_bin + tailscale_authkey_file (set in
-    # host_vars/bunk.yml: the DSM binary path + /tmp, since DSM has no guaranteed
-    # /run tmpfs) and the control-plane constants from group_vars/prod.yml.
-    - name: Assert the DSM Tailscale package is installed
-      stat:
-        path: "{{ tailscale_bin }}"
-      register: bunk_ts_bin
-      failed_when: not bunk_ts_bin.stat.exists
+    - name: Configure Tailscale
       tags:
         - tailscale
+      block:
+        # DSM package install is out-of-band; this play owns the bunk-specific
+        # permission/port setup, then reuses the shared headscale registration.
+        - name: Assert the DSM Tailscale package is installed
+          stat:
+            path: "{{ tailscale_bin }}"
+          register: bunk_ts_bin
+          failed_when: not bunk_ts_bin.stat.exists
 
-    # Synology confines packages: tailscaled needs DSM to grant routing +
-    # outbound-connection permissions before it can act as a subnet router / exit
-    # node. `tailscale configure synology` writes conf/resource.own (the marker
-    # gated on here); the grant only takes effect after a package-service restart.
-    # Both are run-once via creates: and re-fire after a package reinstall/update
-    # (which wipes resource.own and resets the perms) -- exactly when they should.
-    - name: Grant the Synology routing permissions for Tailscale (once)
-      command: "{{ tailscale_bin }} configure synology"
-      args:
-        creates: /var/packages/Tailscale/conf/resource.own
-      register: bunk_ts_configure
-      become: true
-      tags:
-        - tailscale
+        - name: Grant the Synology routing permissions for Tailscale (once)
+          command: "{{ tailscale_bin }} configure synology"
+          args:
+            creates: /var/packages/Tailscale/conf/resource.own
+          register: bunk_ts_configure
+          become: true
 
-    # The DSM package hardcodes tailscaled's WireGuard underlay port in its
-    # launcher (PORT="41641" -> --port=$PORT) -- there is no /etc/default/tailscaled
-    # for the lineinfile in roles/tailscale to hit, so patch the launcher directly.
-    # Pinning a distinct port (host_vars: 41643) gives bunk a stable public endpoint
-    # at Bonniers so roaming clients reach its subnet router / exit node directly
-    # instead of relaying through fox's DERP. Re-fires after a package upgrade
-    # re-vendors the script (back to 41641), exactly when it should. The restart
-    # below rebinds the daemon to the new port BEFORE register.yml runs.
-    - name: Pin tailscaled underlay port in the DSM package launcher
-      lineinfile:
-        path: /var/packages/Tailscale/scripts/start-stop-status
-        regexp: '^PORT='
-        line: 'PORT="{{ tailscale_port }}"'
-        backup: true
-      register: bunk_ts_port
-      become: true
-      tags:
-        - tailscale
+        # DSM hardcodes tailscaled's underlay port in its package launcher.
+        - name: Pin tailscaled underlay port in the DSM package launcher
+          lineinfile:
+            path: /var/packages/Tailscale/scripts/start-stop-status
+            regexp: '^PORT='
+            line: 'PORT="{{ tailscale_port }}"'
+            backup: true
+          register: bunk_ts_port
+          become: true
 
-    # synosystemctl isn't on the non-login PATH (unlike the wireguard unit, this
-    # is a DSM *package* controller service, managed via synosystemctl per the
-    # `tailscale configure` hint), so use its absolute path. Restart when the
-    # permission grant OR the underlay port changed -- both need a package bounce
-    # to take effect (the port rebind must land before register.yml's `tailscale
-    # up`). Gated so steady-state converges don't bounce the package (dropping the
-    # tunnel) needlessly.
-    - name: Restart the Tailscale package to apply permissions or port change
-      command: /usr/syno/bin/synosystemctl restart pkgctl-Tailscale.service
-      when: bunk_ts_configure is changed or bunk_ts_port is changed
-      changed_when: true
-      become: true
-      tags:
-        - tailscale
+        - name: Restart the Tailscale package to apply permissions or port change
+          command: /usr/syno/bin/synosystemctl restart pkgctl-Tailscale.service
+          when: bunk_ts_configure is changed or bunk_ts_port is changed
+          changed_when: true
+          become: true
 
-    # The DSM perms are in place; hand off to the shared register -> advertise ->
-    # approve sequence (same code lab/pug run). import_role (not import_tasks) so
-    # roles/tailscale/defaults/main.yml loads -- the module reads tailscale_bin,
-    # tailscale_authkey_file, tailscale_accept_dns/_routes from there.
-    - name: Register bunk against the headscale control plane
-      import_role:
-        name: tailscale
-        tasks_from: register
-      tags:
-        - tailscale
+        - name: Register bunk against the headscale control plane
+          import_role:
+            name: tailscale
+            tasks_from: register
 
-    # --- Ghostty terminfo --------------------------------------------------
-    # bunk is DSM with no tic/ncurses-bin, so it can't compile xterm-ghostty
-    # itself; Ghostty's ssh-terminfo auto-install bails ("Failed to install
-    # terminfo") and the session falls back to TERM=xterm-256color. Ship the
-    # entry *precompiled* (the only option without a remote tic) into the user's
-    # ~/.terminfo. The session only actually uses it once the operator's Ghostty
-    # ssh-cache is primed client-side -- `ghostty +ssh-cache --add=ak@<ssh -G
-    # hostname>` -- which isn't an ansible-on-bunk action. The source lives at
-    # roles/user/files/xterm-ghostty.terminfo (compiled there by the user role on
-    # Ubuntu hosts); regenerate the binary alongside it:
-    #   tic -x -o <dir> roles/user/files/xterm-ghostty.terminfo
-    #   cp <dir>/*/xterm-ghostty roles/user/files/xterm-ghostty.compiled
-    - name: Create the per-user terminfo directory
-      file:
-        path: "{{ ansible_user_dir }}/.terminfo/x"
-        state: directory
-        mode: "0755"
+    - name: Configure Ghostty terminfo
       tags:
         - terminfo
+      block:
+        # bunk lacks tic/infocmp, so ship the precompiled entry built beside the
+        # source terminfo in roles/user/files/.
+        - name: Create the per-user terminfo directory
+          file:
+            path: "{{ ansible_user_dir }}/.terminfo/x"
+            state: directory
+            mode: "0755"
 
-    # No validate: a compiled terminfo has no parser, and bunk lacks infocmp.
-    - name: Install the xterm-ghostty terminfo entry
-      copy:
-        src: "{{ playbook_dir }}/roles/user/files/xterm-ghostty.compiled"
-        dest: "{{ ansible_user_dir }}/.terminfo/x/xterm-ghostty"
-        mode: "0644"
-        backup: true
-      tags:
-        - terminfo
+        - name: Install the xterm-ghostty terminfo entry
+          copy:
+            src: "{{ playbook_dir }}/roles/user/files/xterm-ghostty.compiled"
+            dest: "{{ ansible_user_dir }}/.terminfo/x/xterm-ghostty"
+            mode: "0644"
+            backup: true
