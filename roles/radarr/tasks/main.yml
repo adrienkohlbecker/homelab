@@ -59,7 +59,7 @@
     - radarr
 
 - name: Configure radarr
-  # Render via copy:content + regex_replace because radarr rewrites
+  # Render via copy:content + rstrip_newlines because radarr rewrites
   # config.xml on shutdown without a trailing newline; a plain template:
   # leaves us drifting forever.
   #
@@ -69,7 +69,7 @@
   # podman-network API path (radarr.dns.podman, bypassing nginx/Authelia) must
   # stay X-Api-Key-gated, so auth can't be relaxed for local addresses.
   copy:
-    content: "{{ lookup('template', 'config.xml.j2') | regex_replace('\\n+$', '') }}"
+    content: "{{ lookup('template', 'config.xml.j2') | rstrip_newlines }}"
     dest: /mnt/services/radarr/config.xml
     owner: radarr
     group: media

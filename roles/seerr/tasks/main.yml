@@ -95,7 +95,7 @@
   copy:
     # JSON.stringify(_, null, 1) writes no trailing newline; the template
     # file does. Strip ours so the bytes match what seerr persists.
-    content: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
+    content: "{{ lookup('template', 'settings.json.j2') | rstrip_newlines }}"
     dest: /mnt/services/seerr/settings.json
     owner: seerr
     group: seerr

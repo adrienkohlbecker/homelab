@@ -134,7 +134,7 @@
 
 - name: _verify | Render the config.xml our template would write
   set_fact:
-    _lidarr_conf_expected: "{{ lookup('template', 'config.xml.j2') | regex_replace('\\n+$', '') }}"
+    _lidarr_conf_expected: "{{ lookup('template', 'config.xml.j2') | rstrip_newlines }}"
 
 - name: _verify | Read config.xml back after the writeback
   slurp:
@@ -145,7 +145,7 @@
 - name: _verify | Templated config.xml survives lidarr's writeback without drift
   assert:
     that:
-      - (_lidarr_conf_ondisk.content | b64decode) == _lidarr_conf_expected
+      - (_lidarr_conf_ondisk | slurp_text(trim=false)) == _lidarr_conf_expected
     fail_msg: >-
       lidarr rewrote config.xml into a form config.xml.j2 no longer matches --
       its element order/casing drifted from lidarr's writeback, so deploying

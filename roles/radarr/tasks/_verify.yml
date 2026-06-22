@@ -170,7 +170,7 @@
 
 - name: _verify | Render the config.xml our template would write
   set_fact:
-    _radarr_conf_expected: "{{ lookup('template', 'config.xml.j2') | regex_replace('\\n+$', '') }}"
+    _radarr_conf_expected: "{{ lookup('template', 'config.xml.j2') | rstrip_newlines }}"
 
 - name: _verify | Read config.xml back after the writeback
   slurp:
@@ -181,7 +181,7 @@
 - name: _verify | Templated config.xml survives radarr's writeback without drift
   assert:
     that:
-      - (_radarr_conf_ondisk.content | b64decode) == _radarr_conf_expected
+      - (_radarr_conf_ondisk | slurp_text(trim=false)) == _radarr_conf_expected
     fail_msg: >-
       radarr rewrote config.xml into a form config.xml.j2 no longer matches --
       its element order/casing drifted from radarr's writeback, so deploying

@@ -100,14 +100,14 @@
 
 - name: _verify | Assert it is valid YAML and rendered the relabel map
   vars:
-    _parsed: "{{ _lm_sensors_godconf.content | b64decode | from_yaml }}"
+    _parsed: "{{ _lm_sensors_godconf | slurp_yaml }}"
   assert:
     that:
       - _parsed.jobs | length > 0
       - _parsed.jobs[0].name == 'sensors'
       - _parsed.jobs[0].relabel[0].chip == 'lm-sensors-test-0'
       - _parsed.jobs[0].relabel[0].sensors[0].label == 'Verify Probe'
-    fail_msg: "deployed /etc/netdata/go.d/sensors.conf:\n{{ _lm_sensors_godconf.content | b64decode }}"
+    fail_msg: "deployed /etc/netdata/go.d/sensors.conf:\n{{ _lm_sensors_godconf | slurp_text(trim=false) }}"
 
 # Exercise the empty-list removal arm (usage scenario 2): re-running with no
 # modules must drop the modules-load.d file and live-unload the dropped

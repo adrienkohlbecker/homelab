@@ -151,6 +151,11 @@ def test_zfs_source_value_parses_tab_separated_source_and_value() -> None:
     assert homelab.zfs_source_value("local\t/mnt/media\n") == {"source": "local", "value": "/mnt/media"}
 
 
+def test_zfs_source_value_rejects_empty_stdout() -> None:
+    with pytest.raises(AnsibleError):
+        homelab.zfs_source_value("")
+
+
 def test_any_successful_stdout_finds_successful_nonempty_result() -> None:
     assert homelab.any_successful_stdout([{"rc": 1, "stdout": ""}, {"rc": 0, "stdout": "10.0.0.1"}])
     assert not homelab.any_successful_stdout([{"rc": 0, "stdout": ""}, {"rc": 1, "stdout": "ignored"}])
