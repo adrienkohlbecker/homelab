@@ -80,8 +80,6 @@ locals {
     "raw-githubusercontent" = "https://raw.githubusercontent.com/"
     "minio"                 = "https://dl.min.io/"
     "gitea-dl"              = "https://dl.gitea.com/"
-    "ubuntu-releases"       = "https://releases.ubuntu.com/"
-    "ubuntu-cdimage"        = "https://cdimage.ubuntu.com/"
     "ubuntu-cloud-images"   = "https://cloud-images.ubuntu.com/"
   }
 
