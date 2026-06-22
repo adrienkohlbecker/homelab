@@ -10,8 +10,8 @@ import base64
 
 import pytest
 from ansible.errors import AnsibleError
-from filter_plugins.mosquitto_passwd import mosquitto_passwd
 
+from filter_plugins.mosquitto_passwd import mosquitto_passwd
 
 KNOWN_HASH = (
     "$7$210000$jLvPKdnO+JZ1xfXB$"
@@ -23,7 +23,8 @@ def test_locks_known_hash_and_mosquitto_v7_format():
     result = mosquitto_passwd("hunter2", salt="pepper")
     parts = result.split("$")
     assert result == KNOWN_HASH
-    assert parts[0] == "" and parts[1] == "7"
+    assert parts[0] == ""
+    assert parts[1] == "7"
     assert parts[2] == "210000"
     assert len(parts) == 5
     assert len(base64.b64decode(parts[3])) == 12

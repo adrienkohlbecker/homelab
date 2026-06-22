@@ -5,9 +5,7 @@ import signal
 from pathlib import Path
 
 import pytest
-
 import utils
-
 
 # ---------------------------------------------------------------------------
 # colorize
@@ -202,5 +200,5 @@ class TestCommandResult:
         assert r.stderr == []
 
     def test_tuple_unpacking(self) -> None:
-        exitcode, stdout, stderr = utils.CommandResult(1, ["a"], ["b"])
+        exitcode, _stdout, _stderr = utils.CommandResult(1, ["a"], ["b"])
         assert exitcode == 1

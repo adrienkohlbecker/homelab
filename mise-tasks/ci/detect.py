@@ -30,7 +30,7 @@ import jinja2
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
-from matrix import (  # noqa: E402
+from matrix import (
     _build_dispatch_matrix,
     build_test_matrix,
     cells_to_ci_specs,

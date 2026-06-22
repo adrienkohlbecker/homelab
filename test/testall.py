@@ -23,8 +23,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from tabulate import tabulate
-
 from machine import (
     MACHINE_CHOICES,
     OUT_DIR,
@@ -34,6 +32,7 @@ from machine import (
     sweep_stale_workdirs,
 )
 from matrix import TestCell, build_test_matrix, list_testable_roles
+from tabulate import tabulate
 from utils import cancel_on_signal, colorize, terminate_subprocess
 
 LOG_FILE = Path("test/out.tsv")
@@ -328,8 +327,7 @@ async def run_all(
             results.append(t.result())
         else:
             results.append(_cancelled_result(cell))
-    for cell in cells[len(tasks) :]:
-        results.append(_cancelled_result(cell))
+    results.extend(_cancelled_result(cell) for cell in cells[len(tasks) :])
     return results, cancelled
 
 

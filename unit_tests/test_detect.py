@@ -11,6 +11,7 @@ import subprocess
 import urllib.error
 from collections import defaultdict
 from pathlib import Path
+
 import pytest
 
 _MODULE_PATH = Path(__file__).resolve().parent.parent / "mise-tasks" / "ci" / "detect.py"
@@ -39,11 +40,13 @@ detect = _load()
 class TestRolePathRe:
     def test_extracts_role_name(self) -> None:
         m = detect.ROLE_PATH_RE.match("roles/nginx/tasks/main.yml")
-        assert m and m.group(1) == "nginx"
+        assert m is not None
+        assert m.group(1) == "nginx"
 
     def test_nested_path(self) -> None:
         m = detect.ROLE_PATH_RE.match("roles/podman/templates/foo.j2")
-        assert m and m.group(1) == "podman"
+        assert m is not None
+        assert m.group(1) == "podman"
 
     def test_non_role_excluded(self) -> None:
         assert not detect.ROLE_PATH_RE.match("test/machine.py")
@@ -743,7 +746,7 @@ class TestResolveGreenBaseGitlab:
 
         def mock(branch, **kw):
             calls["n"] += 1
-            return None
+            return
 
         monkeypatch.setattr(detect, "newest_green_pipeline", mock)
         assert detect.resolve_green_base_gitlab(branch="master", default_branch="master", **self._kw()) is None

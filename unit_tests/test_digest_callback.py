@@ -4,7 +4,6 @@ import copy
 
 import callback_plugins.digest as digest
 
-
 SUMMARY_STATUS = {
     "Id": "nginx.service",
     "ActiveState": "active",
@@ -56,7 +55,8 @@ def test_status_collapsed_top_level():
     result = {"changed": True, "name": "nginx", "status": dict(FULL_STATUS)}
     out = display_result(result)
     assert out["status"] == SUMMARY_STATUS
-    assert out["changed"] is True and out["name"] == "nginx"
+    assert out["changed"] is True
+    assert out["name"] == "nginx"
 
 
 def test_status_collapsed_nested_under_facts():
@@ -126,7 +126,8 @@ def test_diff_dropped_when_persisted_under_facts():
     persisted = out["ansible_facts"]["conf_result"]
     assert "diff" not in persisted
     assert "diff" not in out["ansible_facts"]["loop_result"]
-    assert persisted["changed"] is True and persisted["dest"] == "/etc/x"
+    assert persisted["changed"] is True
+    assert persisted["dest"] == "/etc/x"
 
 
 def test_default_callback_drops_top_level_diff_from_result_dump():
@@ -159,7 +160,8 @@ def test_large_facts_collapsed_to_key_list():
     assert isinstance(out["ansible_facts"], str)
     assert f"{len(facts)} facts hidden" in out["ansible_facts"]
     # keys listed, sorted
-    assert "k00" in out["ansible_facts"] and "k25" in out["ansible_facts"]
+    assert "k00" in out["ansible_facts"]
+    assert "k25" in out["ansible_facts"]
 
 
 def test_small_facts_kept_in_full():

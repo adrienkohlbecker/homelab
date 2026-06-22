@@ -76,7 +76,7 @@ def _open_log(args: list[str]) -> None:
             return
         path = os.path.join(build_dir, "qemu_net_wrapper.log")
     try:
-        _LOG_FH = open(path, "a", encoding="utf-8")
+        _LOG_FH = open(path, "a", encoding="utf-8")  # noqa: SIM115 - global handle stays open for child logs.
         _LOG_PATH = path
     except OSError as exc:
         # A missing/unwritable sink must never sink the build -- stderr still

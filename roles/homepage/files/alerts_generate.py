@@ -153,7 +153,7 @@ class _SshHostClient:
         if self._bundle is not None:
             return self._bundle
         argv = ["ssh", *self._cfg.base_opts, self._target]
-        proc = subprocess.run(argv, capture_output=True, timeout=SSH_TIMEOUT)  # noqa: S603
+        proc = subprocess.run(argv, capture_output=True, timeout=SSH_TIMEOUT)
         if proc.returncode != 0:
             # stderr can leak the peer address / host-key detail; _fetch_one
             # surfaces only the exception class to the rendered HTML, while the
@@ -270,7 +270,7 @@ def normalize(payload: dict) -> list[dict]:
     return items
 
 
-def _fetch_one(name: str, query_url: str, click_url: str, cfg: "_SshConfig") -> dict:
+def _fetch_one(name: str, query_url: str, click_url: str, cfg: _SshConfig) -> dict:
     entry = {"name": name, "url": query_url, "click_url": click_url}
     client = None
     try:
@@ -283,7 +283,7 @@ def _fetch_one(name: str, query_url: str, click_url: str, cfg: "_SshConfig") -> 
         log_warn = ""
         try:
             tid_by_key = latest_transition_by_alarm(client.alert_transitions())
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             tid_by_key = {}
             log_warn = f"alert_transitions parse failed: {type(e).__name__}: {e}"
         # The server-side bundle window already covers every active alarm (an
@@ -299,7 +299,7 @@ def _fetch_one(name: str, query_url: str, click_url: str, cfg: "_SshConfig") -> 
             print(f"[{name}] {log_warn}", file=sys.stderr)
             entry["log_warn"] = log_warn
         entry["alarms"] = alarms
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         # Bare except so one host's transport quirk (SSH down, host-key
         # mismatch, malformed bundle) never disappears the rest of the
         # dashboard. Log the full detail to the journal but surface only the
@@ -315,7 +315,7 @@ def _fetch_one(name: str, query_url: str, click_url: str, cfg: "_SshConfig") -> 
     return entry
 
 
-def collect(hosts: list[tuple[str, str, str]], cfg: "_SshConfig") -> list[dict]:
+def collect(hosts: list[tuple[str, str, str]], cfg: _SshConfig) -> list[dict]:
     # Parallel fetches so one slow/unreachable host doesn't gate the others —
     # worst-case render is bounded by SSH_TIMEOUT, not summed across hosts.
     # Iterating futures in submit order preserves the configured host order in
@@ -519,7 +519,7 @@ def main() -> None:
     )
 
     data = collect(hosts, cfg)
-    iso = datetime.datetime.now(tz=datetime.timezone.utc).isoformat(timespec="seconds")
+    iso = datetime.datetime.now(tz=datetime.UTC).isoformat(timespec="seconds")
 
     # No top-level try/except — an exception here (disk full, permission
     # denied, etc.) propagates to Python's default print-traceback-and-exit-1.

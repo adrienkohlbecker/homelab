@@ -254,17 +254,20 @@ def read_pointer(bucket: str, key: str, region: str) -> str | None:
 def write_pointer(bucket: str, key: str, body: str, region: str) -> None:
     print(f"==> writing pointer s3://{bucket}/{key}")
     run(
-        aws_argv(
-            region,
-            "s3",
-            "cp",
-            "-",
-            f"s3://{bucket}/{key}",
-            "--only-show-errors",
-            "--content-type",
-            "application/json",
-        )
-        + ["--checksum-algorithm", S3_CHECKSUM_ALGORITHM],
+        [
+            *aws_argv(
+                region,
+                "s3",
+                "cp",
+                "-",
+                f"s3://{bucket}/{key}",
+                "--only-show-errors",
+                "--content-type",
+                "application/json",
+            ),
+            "--checksum-algorithm",
+            S3_CHECKSUM_ALGORITHM,
+        ],
         input=body,
     )
 

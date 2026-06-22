@@ -35,15 +35,19 @@ def main() -> int:
 
         if "machine" in data:
             errors.append(f"{meta}: uses legacy 'machine:' key -- migrate to 'machines:'")
-        for key in sorted(set(data) - TOP_LEVEL_KEYS):
-            errors.append(f"{meta}: unknown top-level key {key!r}; expected one of {sorted(TOP_LEVEL_KEYS)}")
+        errors.extend(
+            f"{meta}: unknown top-level key {key!r}; expected one of {sorted(TOP_LEVEL_KEYS)}"
+            for key in sorted(set(data) - TOP_LEVEL_KEYS)
+        )
 
         if (machines := data.get("machines")) is not None:
             if not isinstance(machines, dict):
                 errors.append(f"{meta}: machines must be a mapping, got {type(machines).__name__}")
             else:
-                for name in sorted(set(machines) - set(MACHINE_NAMES)):
-                    errors.append(f"{meta}: machines key {name!r} not in {MACHINE_NAMES}")
+                errors.extend(
+                    f"{meta}: machines key {name!r} not in {MACHINE_NAMES}"
+                    for name in sorted(set(machines) - set(MACHINE_NAMES))
+                )
                 for name, machine_config in machines.items():
                     if machine_config is not None and not isinstance(machine_config, dict):
                         errors.append(

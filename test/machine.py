@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import ClassVar, NamedTuple, Self
 
 import yaml
-
 from arch import ArchProfile, detect_host_arch, uefi_code_path_for
 from matrix import UBUNTU_RELEASES
 from setup_mitogen import ensure_mitogen_symlink
@@ -101,7 +100,7 @@ def qemu_user_net_args(machine: str) -> str:
     supernet = topo["partitions"]["physical"]["cidr"]
     net = ipaddress.ip_network(supernet)
     # Router + DNS at the top of the supernet, well above every host
-    # slot (.0.2–.0.9) and every per-VLAN macvlan block (.X.128–.255),
+    # slot (.0.2-.0.9) and every per-VLAN macvlan block (.X.128-.255),
     # so the qemu router never collides with a topology-claimed address.
     host_ip = str(net.broadcast_address - 1)
     dns_ip = str(net.broadcast_address - 2)
@@ -211,7 +210,7 @@ class QemuMachineSpec(NamedTuple):
     # (packer_image=None), where the cloud-image branch returns early.
     os_disk_count: int = 0
     # Guest RAM in MiB and vcpu count, plumbed into qemu's -m / -smp.
-    # 4 vCPUs keeps 6 concurrent VMs at 24 logical cores (1.2× oversub
+    # 4 vCPUs keeps 6 concurrent VMs at 24 logical cores (1.2x oversub
     # on the i5-13500's 20 threads) — converge is I/O-bound so this
     # doesn't bottleneck. -smp emits a single-socket layout
     # (sockets=1,cores=vcpus), the conventional shape for a guest on a
@@ -448,7 +447,7 @@ class Machine:
         # the running services off the zvol-backed swap (whose I/O is doubly
         # expensive under nesting) while leaving the host 4 GiB. Scoped to
         # _site_test alone — bumping the shared box spec would oversubscribe the
-        # role-cell pool (6 guests × 6 vCPU > the 32-vCPU host).
+        # role-cell pool (6 guests x 6 vCPU > the 32-vCPU host).
         if role == "_site_test":
             spec = spec._replace(vcpus=6, memory_mb=12288)
 
@@ -1421,7 +1420,7 @@ class Machine:
                     raise TimeoutError(
                         f"publish-lock held >{PUBLISH_LOCK_TIMEOUT:.0f}s; "
                         f"concurrent packer-build wedged? check `lsof {lockfile}`"
-                    )
+                    ) from e
                 time.sleep(0.5)
 
     async def _ensure_minimal_cloudimg(self) -> Path:
@@ -1467,7 +1466,7 @@ class Machine:
                         raise TimeoutError(
                             f"cloud-image lock held >{CLOUDIMG_LOCK_TIMEOUT:.0f}s; "
                             f"concurrent cell wedged? check `lsof {lockfile}`"
-                        )
+                        ) from e
                     await asyncio.sleep(0.5)
             # Re-check under the lock: a peer may have finished while we waited.
             if target.exists():

@@ -11,7 +11,8 @@ from pathlib import Path
 
 _WRAPPER = Path(__file__).parents[1] / "packer" / "qemu_net_wrapper.py"
 _spec = importlib.util.spec_from_file_location("qemu_net_wrapper", _WRAPPER)
-assert _spec and _spec.loader
+assert _spec is not None
+assert _spec.loader is not None
 wrapper = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(wrapper)
 

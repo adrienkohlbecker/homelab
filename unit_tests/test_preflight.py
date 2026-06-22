@@ -9,9 +9,8 @@ so the caller gets a clearer message than tempfile's FileNotFoundError.
 from collections.abc import Callable
 from pathlib import Path
 
-import pytest
-
 import machine
+import pytest
 
 
 def _which_excluding(missing: set[str]) -> Callable[[str], str | None]:

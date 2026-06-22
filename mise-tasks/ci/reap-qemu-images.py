@@ -27,8 +27,8 @@ import argparse
 import datetime as dt
 import json
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
 
 import boto3
 from botocore.config import Config

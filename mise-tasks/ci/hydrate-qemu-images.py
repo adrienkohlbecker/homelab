@@ -23,6 +23,7 @@ or replacing the same image directory at the same time.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fcntl
 import json
 import os
@@ -30,8 +31,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 BUNDLE_NAME = "disks.tar.zst"
@@ -199,10 +199,9 @@ def replace_target(staged: Path, target: Path) -> None:
         target.rename(old)
     staged.rename(target)
     if old is not None:
-        try:
+        # Best-effort cleanup of the old cache path after the replacement is live.
+        with contextlib.suppress(OSError):
             remove_path(old)
-        except OSError:
-            pass
 
 
 def main() -> int:

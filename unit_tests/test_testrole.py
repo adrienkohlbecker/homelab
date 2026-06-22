@@ -3,9 +3,7 @@
 import argparse
 
 import pytest
-
 import testrole
-
 
 # ---------------------------------------------------------------------------
 # _count_changed_tasks — ANSI-aware PLAY RECAP parser
@@ -101,7 +99,7 @@ class TestPositiveInt:
             testrole._positive_int("-5")
 
     def test_non_numeric_raises(self) -> None:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="invalid literal"):
             testrole._positive_int("abc")
 
 
