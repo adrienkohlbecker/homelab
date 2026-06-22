@@ -29,8 +29,6 @@ class CommandFailedException(Exception):
 class IdempotenceFailedException(Exception):
     """Raised when re-running an ansible play reports changed tasks."""
 
-    pass
-
 
 class CommandResult(NamedTuple):
     """Outcome of a subprocess invocation."""

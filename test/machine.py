@@ -420,9 +420,7 @@ class Machine:
     # kernel releases the lock on process death (clean or SIGKILL/OOM), so a
     # crashed run's workdir becomes reapable without a polling daemon. Survives
     # PID namespaces -- the lock is on the inode, shared across containers
-    # that bind-mount the same workdir parent. Replaces the prior ps-based
-    # check, which was PID-ns-scoped and so couldn't see sibling Gitea Actions
-    # test cells running in separate containers on the same host bind-mount.
+    # that bind-mount the same workdir parent.
     _live_lock_fd: int
     # Shared flock on <imagedir>/.publish-lock held across prepare→
     # ensure_booted so packer-build's brief exclusive lock around its
@@ -1410,11 +1408,8 @@ class Machine:
             self._passt_socket = Path(self._passt_socket_dir.name) / "passt.sock"
 
         if self.keep_vm and not self._display_window:
-            # Pick a VNC display 0..99 the same way -- qemu's vnc= syntax
-            # interprets the number as a display (port = 5900+display), so
-            # we walk that band and grab the first free port. Replaces
-            # `vnc=:0,to=99` so we know the chosen display up front and can
-            # print it for the user.
+            # qemu's vnc= syntax interprets the number as a display
+            # (port = 5900+display); pick it up front so we can print it.
             self.vnc_display = self._pick_vnc_display()
 
         if self.machine == "minimal":
@@ -2069,9 +2064,8 @@ def sweep_stale_workdirs(imagedir: Path) -> None:
       live (skip), uncontended = orphan (reap). flock is inode-scoped, so it
       works across PID namespaces -- critical because Gitea Actions test cells
       run in separate containers that bind-mount a shared workdir parent
-      (/scratch), and the prior ps-based check couldn't see
-      sibling cells' qemu/ansible. The mtime grace still guards the tiny
-      window between mkdtemp and Machine.__init__'s flock acquisition.
+      (/scratch). The mtime grace still guards the tiny window between
+      mkdtemp and Machine.__init__'s flock acquisition.
 
     * .build-* (packer) -- packer doesn't (yet) hold a liveness lock, so these
       keep the ps-args check. Safe because packer-build runs alone under the

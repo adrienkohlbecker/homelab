@@ -4,10 +4,9 @@
 Wraps machine.Machine for interactive use: pick a variant, the harness
 does image overlays + (on aarch64 ZFS) reads the packer-shipped
 kernel/initrd next to the qcow2 + qemu launch. After boot it prints the
-SSH command, leaves the VM up, and blocks until Ctrl-C.
-
-Replaces the ad-hoc test.sh for ZBM iteration. Pass --kernel/--initrd/
---append to direct-boot a custom kernel against the variant's qcow2:
+SSH command, leaves the VM up, and blocks until Ctrl-C. Pass
+--kernel/--initrd/--append to direct-boot a custom kernel against the
+variant's qcow2:
 
   test/launch.py --machine box \\
       --kernel zbm-build/aarch64/.../vmlinux-bootmenu \\
