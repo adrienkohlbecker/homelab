@@ -4,15 +4,6 @@
 # and on-demand `testrole.py --machine lab` go through here.
 qemu_test: true
 
-zfs_has_services_mount: false
-zfs_has_scratch_mount: false
-zfs_has_ci_scratch_mount: false
-zfs_has_media_mount: false
-zfs_has_data_mount: false
-zfs_has_brumath_mount: false
-zfs_has_eckwersheim_mount: false
-zfs_has_minio_mount: false
-
 # Same block formula as host_vars/lab.yml; only `parent` differs (the
 # QEMU NIC isn't named eth0 and isn't VLAN-trunked, so all macvlan
 # children sit on the single en* user-net iface). The harness pins
