@@ -134,8 +134,6 @@ bunk_endpoint: !vault |
   3438
 certbot_production_certificates: true
 
-podman_zvol_size: '{{ "50GB" | human_to_bytes | string }}'
-
 postfix_smtp_user: postfix@{{ email_domain }}
 postfix_smtp_password: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
