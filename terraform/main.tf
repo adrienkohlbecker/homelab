@@ -16,10 +16,6 @@ terraform {
       source  = "datadrivers/nexus"
       version = "~> 2"
     }
-    github = {
-      source  = "integrations/github"
-      version = "~> 6"
-    }
     mailgun = {
       source  = "wgebis/mailgun"
       version = "~> 0.9"
@@ -27,14 +23,6 @@ terraform {
     hcloud = {
       source  = "hetznercloud/hcloud"
       version = "~> 1.63"
-    }
-    # Retained transiently to destroy the old Scaleway `fox` resources on the
-    # migration apply (a provider can't be dropped while resources it manages
-    # still live in state). Remove this + terraform/scaleway.tf once the apply
-    # has destroyed them and `tofu state list | grep scaleway` is empty.
-    scaleway = {
-      source  = "scaleway/scaleway"
-      version = "~> 2"
     }
     google = {
       source  = "hashicorp/google"

@@ -334,17 +334,10 @@ resource "nexus_security_user" "push" {
 
 # Operator's local/manual docker push identity (you `podman login` as this from
 # your workstation and lab hosts), carrying the push-all role so it can push to
-# every repository without a per-repo edit here. Adopted from the user
-# created by hand in the UI, not provisioned here, so its password is left
-# unmanaged: `password` is omitted, the Nexus API never returns it, and the
-# provider can't see it -- a plain apply leaves the credential untouched and
-# only reconciles role membership. The import block adopts the existing user in
-# place on the next apply (no recreate); delete it once the import has run.
-import {
-  to = nexus_security_user.lab_local_user
-  id = "lab_local_user"
-}
-
+# every repository without a per-repo edit here. Its password is left unmanaged:
+# `password` is omitted, the Nexus API never returns it, and the provider can't
+# see it. A plain apply leaves the credential untouched and only reconciles role
+# membership.
 resource "nexus_security_user" "lab_local_user" {
   userid    = "lab_local_user"
   firstname = "Lab"
