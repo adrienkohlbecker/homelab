@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from arch import detect_host_arch
 from machine import (
     MACHINE_CHOICES,
     OUT_DIR,
@@ -375,6 +376,39 @@ def _write_joblog(results: list[JobResult]) -> None:
             )
 
 
+def _retarget_minimal_jammy_on_arm(cells: list[TestCell]) -> list[TestCell]:
+    """Substitute noble for jammy on `minimal` cells when the host is aarch64.
+
+    Ubuntu publishes no minimal-cloudimg for jammy/arm64, so a minimal:jammy
+    cell on the macOS aarch64 fixture can only crash at bringup
+    (machine.py's _ensure_minimal_cloudimg raises). Retarget those cells to
+    noble -- the nearest release that does ship an arm64 minimal image -- and
+    drop any cell the rewrite would duplicate. No-op on x86_64.
+    """
+    if detect_host_arch().name != "aarch64":
+        return cells
+
+    seen: set[TestCell] = set()
+    retargeted: list[TestCell] = []
+    substituted = 0
+    for cell in cells:
+        if cell.machine == "minimal" and cell.ubuntu == "jammy":
+            cell = cell._replace(ubuntu="noble")
+            substituted += 1
+        if cell in seen:
+            continue
+        seen.add(cell)
+        retargeted.append(cell)
+
+    if substituted:
+        print(
+            f"arm64 host: retargeted {substituted} minimal:jammy cell(s) to noble "
+            "(Ubuntu ships no jammy/arm64 minimal-cloudimg)",
+            file=sys.stderr,
+        )
+    return retargeted
+
+
 def main() -> int:
     """Entry point for running tests."""
     args = parse_args()
@@ -443,6 +477,8 @@ def main() -> int:
                     return 1
             ubuntu_set = set(ubuntus)
             cells = [cell for cell in cells if cell.ubuntu in ubuntu_set]
+
+    cells = _retarget_minimal_jammy_on_arm(cells)
 
     if args.only_role:
         wanted = {r.strip() for r in args.only_role.split(",") if r.strip()}
