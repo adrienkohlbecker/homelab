@@ -1,16 +1,8 @@
-"""Unit tests for callback_plugins/digest.py.
-
-Exercises the pure transformation functions (_is_diff, _digest,
-_collapse_large_facts) that drive the digest stdout callback, plus a smoke
-test on the CallbackModule plugin metadata. No ansible run is needed - the
-functions operate on plain result dicts.
-"""
+"""Unit tests for callback_plugins/digest.py."""
 
 import importlib.util
 import copy
 from pathlib import Path
-
-import pytest
 
 _MODULE_PATH = Path(__file__).resolve().parent.parent / "callback_plugins" / "digest.py"
 
@@ -25,8 +17,6 @@ def _load():
 digest = _load()
 
 
-# A representative full systemd `status` dict (trimmed but with the noise keys
-# the callback is meant to drop).
 FULL_STATUS = {
     "Id": "nginx.service",
     "ActiveState": "active",
@@ -47,7 +37,6 @@ SUMMARY_STATUS = {
     "ExecMainPID": "1234",
 }
 
-# A representative full `stat` dict (file exists).
 FULL_STAT = {
     "exists": True,
     "path": "/etc/nginx/nginx.conf",
@@ -87,38 +76,9 @@ SUMMARY_STAT = {
 }
 
 
-# ---------------------------------------------------------------------------
-# _is_diff
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "value,expected",
-    [
-        ({"before": "a\n", "after": "b\n"}, True),
-        ({"prepared": "x"}, True),
-        ({"after": "only"}, True),
-        ([{"before": "a", "after": "b"}], True),
-        ([{"before": "a"}, {"after": "b"}], True),
-        ([], False),  # empty list is not a diff
-        ([{"before": "a"}, {"nope": 1}], False),  # one non-diff item disqualifies
-        ({"unrelated": 1}, False),
-        ("a string named diff", False),
-        (42, False),
-    ],
-)
-def test_is_diff(value, expected):
-    assert digest._is_diff(value) is expected
-
-
-# ---------------------------------------------------------------------------
-# _digest - systemd status
-# ---------------------------------------------------------------------------
-
-
 def test_status_collapsed_top_level():
     result = {"changed": True, "name": "nginx", "status": dict(FULL_STATUS)}
-    out = digest._digest(result)
+    out = digest._digest_result(result)
     assert out["status"] == SUMMARY_STATUS
     assert out["changed"] is True and out["name"] == "nginx"
 
@@ -126,41 +86,36 @@ def test_status_collapsed_top_level():
 def test_status_collapsed_nested_under_facts():
     # The systemd_unit helper persists the registered result via set_fact.
     result = {"ansible_facts": {"nginx_started_result": {"changed": False, "status": dict(FULL_STATUS)}}}
-    out = digest._digest(result)
+    out = digest._digest_result(result)
     assert out["ansible_facts"]["nginx_started_result"]["status"] == SUMMARY_STATUS
 
 
 def test_status_collapsed_in_loop_results():
     result = {"results": [{"status": dict(FULL_STATUS)}, {"status": dict(FULL_STATUS)}]}
-    out = digest._digest(result)
+    out = digest._digest_result(result)
     assert all(r["status"] == SUMMARY_STATUS for r in out["results"])
 
 
 def test_non_systemd_status_untouched():
     # uri module returns an int status; a dict without the ActiveState marker
     # must be left alone.
-    assert digest._digest({"status": 200})["status"] == 200
+    assert digest._digest_result({"status": 200})["status"] == 200
     other = {"status": {"phase": "Running", "ready": True}}
-    assert digest._digest(other)["status"] == {"phase": "Running", "ready": True}
+    assert digest._digest_result(other)["status"] == {"phase": "Running", "ready": True}
 
 
 def test_status_missing_some_keep_keys():
     result = {"status": {"ActiveState": "failed", "Result": "exit-code"}}
-    assert digest._digest(result)["status"] == {"ActiveState": "failed", "Result": "exit-code"}
-
-
-# ---------------------------------------------------------------------------
-# _digest - stat
-# ---------------------------------------------------------------------------
+    assert digest._digest_result(result)["status"] == {"ActiveState": "failed", "Result": "exit-code"}
 
 
 def test_stat_collapsed_top_level():
-    out = digest._digest({"changed": False, "stat": dict(FULL_STAT)})
+    out = digest._digest_result({"changed": False, "stat": dict(FULL_STAT)})
     assert out["stat"] == SUMMARY_STAT
 
 
 def test_stat_absent_kept_minimal():
-    out = digest._digest({"stat": {"exists": False}})
+    out = digest._digest_result({"stat": {"exists": False}})
     assert out["stat"] == {"exists": False}
 
 
@@ -169,7 +124,7 @@ def test_stat_collapsed_nested_and_in_loop():
         "ansible_facts": {"cert": {"stat": dict(FULL_STAT)}},
         "results": [{"item": "/a", "stat": dict(FULL_STAT)}, {"item": "/b", "stat": {"exists": False}}],
     }
-    out = digest._digest(result)
+    out = digest._digest_result(result)
     assert out["ansible_facts"]["cert"]["stat"] == SUMMARY_STAT
     assert out["results"][0]["stat"] == SUMMARY_STAT
     assert out["results"][1]["stat"] == {"exists": False}
@@ -177,12 +132,7 @@ def test_stat_collapsed_nested_and_in_loop():
 
 def test_non_stat_dict_without_exists_untouched():
     other = {"stat": {"foo": 1, "bar": 2}}
-    assert digest._digest(other)["stat"] == {"foo": 1, "bar": 2}
-
-
-# ---------------------------------------------------------------------------
-# _digest - duplicated diff under ansible_facts
-# ---------------------------------------------------------------------------
+    assert digest._digest_result(other)["stat"] == {"foo": 1, "bar": 2}
 
 
 def test_diff_dropped_when_persisted_under_facts():
@@ -192,12 +142,14 @@ def test_diff_dropped_when_persisted_under_facts():
                 "changed": True,
                 "dest": "/etc/x",
                 "diff": {"before": "a\n", "after": "b\n", "before_header": "/etc/x"},
-            }
+            },
+            "loop_result": {"diff": [{"before": "a\n"}, {"after": "b\n"}]},
         }
     }
-    out = digest._digest(result)
+    out = digest._digest_result(result)
     persisted = out["ansible_facts"]["conf_result"]
     assert "diff" not in persisted
+    assert "diff" not in out["ansible_facts"]["loop_result"]
     assert persisted["changed"] is True and persisted["dest"] == "/etc/x"
 
 
@@ -206,44 +158,35 @@ def test_diff_kept_at_top_level():
     # not under ansible_facts; the callback renders it via its diff path, so
     # the digest must NOT strip it.
     result = {"changed": True, "diff": {"before": "a\n", "after": "b\n"}}
-    out = digest._digest(result)
+    out = digest._digest_result(result)
     assert out["diff"] == {"before": "a\n", "after": "b\n"}
 
 
 def test_non_diff_fact_named_diff_kept():
     # A fact literally named `diff` that isn't a diff structure stays.
-    result = {"ansible_facts": {"diff": "just a string"}}
-    out = digest._digest(result)
+    result = {"ansible_facts": {"diff": "just a string", "empty_diff": {"diff": []}}}
+    out = digest._digest_result(result)
     assert out["ansible_facts"]["diff"] == "just a string"
-
-
-# ---------------------------------------------------------------------------
-# _digest - structural guarantees
-# ---------------------------------------------------------------------------
+    assert out["ansible_facts"]["empty_diff"]["diff"] == []
 
 
 def test_digest_does_not_mutate_input():
     result = {"status": dict(FULL_STATUS), "ansible_facts": {"r": {"stat": dict(FULL_STAT)}}}
     snapshot = copy.deepcopy(result)
-    digest._digest(result)
+    digest._digest_result(result)
     assert result == snapshot
 
 
 def test_scalars_and_unknown_passthrough():
-    assert digest._digest("x") == "x"
-    assert digest._digest(7) == 7
-    assert digest._digest(None) is None
-    assert digest._digest({"msg": "ok", "rc": 0}) == {"msg": "ok", "rc": 0}
-
-
-# ---------------------------------------------------------------------------
-# _collapse_large_facts
-# ---------------------------------------------------------------------------
+    assert digest._digest_result("x") == "x"
+    assert digest._digest_result(7) == 7
+    assert digest._digest_result(None) is None
+    assert digest._digest_result({"msg": "ok", "rc": 0}) == {"msg": "ok", "rc": 0}
 
 
 def test_large_facts_collapsed_to_key_list():
     facts = {f"k{i:02d}": i for i in range(digest._FACTS_DIGEST_THRESHOLD + 1)}
-    out = digest._collapse_large_facts({"ansible_facts": dict(facts)})
+    out = digest._digest_result({"ansible_facts": dict(facts)})
     assert isinstance(out["ansible_facts"], str)
     assert f"{len(facts)} facts hidden" in out["ansible_facts"]
     # keys listed, sorted
@@ -252,18 +195,12 @@ def test_large_facts_collapsed_to_key_list():
 
 def test_small_facts_kept_in_full():
     facts = {"apt_source_present": True, "apt_source_arch": "arm64"}
-    out = digest._collapse_large_facts({"ansible_facts": dict(facts)})
+    out = digest._digest_result({"ansible_facts": dict(facts)})
     assert out["ansible_facts"] == facts
 
 
-def test_collapse_ignores_non_dict_result():
-    assert digest._collapse_large_facts("x") == "x"
-    assert digest._collapse_large_facts({"ansible_facts": "already a string"})["ansible_facts"] == "already a string"
-
-
-# ---------------------------------------------------------------------------
-# CallbackModule plugin metadata
-# ---------------------------------------------------------------------------
+def test_string_facts_kept():
+    assert digest._digest_result({"ansible_facts": "already a string"})["ansible_facts"] == "already a string"
 
 
 def test_callback_module_metadata():
