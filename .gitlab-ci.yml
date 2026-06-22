@@ -111,6 +111,12 @@ workflow:
       when: manual
       allow_failure: true
 
+.protected_on_success_job:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+
 # Change detection + dynamic child pipeline (notes/ci_aws_nested_qemu_cells.md).
 # `detect` runs the classification core (mise-tasks/ci/detect.py) and writes one
 # generated child job per `role:variant[:ubuntu]` cell. The default `aws_qemu`
@@ -418,6 +424,7 @@ qemu_host_ami:
 # build-box-first hint if the artifact is absent.
 .qemu_image_box_deps:
   extends: .qemu_image
+  rules: !reference [ .protected_on_success_job, rules ]
   resource_group: qemu_image_box_deps_$UBUNTU
   script:
     - mise run packer:seed-deps --ubuntu "$UBUNTU"
