@@ -31,9 +31,7 @@
 
 - name: install | Derive topology block for {{ macvlan_args.name }}
   set_fact:
-    macvlan_block: >-
-      {{ network.sites[network.hosts[inventory_hostname].site].vlans[macvlan_args.vlan].cidr
-         | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}
+    macvlan_block: "{{ network | host_vlan_block(inventory_hostname, macvlan_args.vlan, site=network.hosts[inventory_hostname].site) }}"
   tags:
     - macvlan
 

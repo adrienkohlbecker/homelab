@@ -82,9 +82,7 @@
 - name: _verify | Homeassistant mac_iot IP is in this host's IoT /29
   vars:
     _mac_iot_vlan: "{{ (macvlan_blocks | one_by_attr('name', 'mac_iot')).vlan }}"
-    _mac_iot_block: >-
-      {{ network.sites[network.hosts[inventory_hostname].site].vlans[_mac_iot_vlan].cidr
-         | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}
+    _mac_iot_block: "{{ network | host_vlan_block(inventory_hostname, _mac_iot_vlan, site=network.hosts[inventory_hostname].site) }}"
     _expected_range: "{{ _mac_iot_block | ansible.utils.ipsubnet(_mac_iot_block | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
   command: >
     podman inspect homeassistant
