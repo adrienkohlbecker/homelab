@@ -92,13 +92,11 @@ workflow:
 .hosted:
   image: $CI_REGISTRY_IMAGE/ci:latest
 
-# Change detection + dynamic child pipeline (notes/ci_aws_nested_qemu_cells.md). The
-# GitHub `detect` -> per-bucket `test` workflows collapse to this single pair:
-# `detect` runs the same classification core (mise-tasks/ci/detect.py) and
-# writes a generated child pipeline — one job per `role:variant[:ubuntu]` cell,
-# each running a role/machine/release cell on the selected qemu target: the
-# default `aws_qemu` pool hydrates promoted images from S3, the `lab` runner
-# boots them from its local store, and both run the qemu backend directly.
+# Change detection + dynamic child pipeline (notes/ci_aws_nested_qemu_cells.md).
+# `detect` runs the classification core (mise-tasks/ci/detect.py) and writes one
+# generated child job per `role:variant[:ubuntu]` cell. The default `aws_qemu`
+# pool hydrates promoted images from S3; the `lab` target boots them from its
+# local store. Both run the qemu backend directly.
 #
 # The diff base is the newest fully-green pipeline ancestor, resolved via the
 # GitLab pipelines API (detect.py: resolve_green_base_gitlab) — so a red-push ->
@@ -268,11 +266,11 @@ unit_tests:
 
 # Rebuild of the CI container image (the repo Dockerfile), pushed to this
 # project's registry as $CI_REGISTRY_IMAGE/ci:<sha> (+ :latest from master).
-# Manual-only, mirroring the GitHub ci-image workflow's policy: jobs pin the
-# currently published :latest, refreshed deliberately when the toolchain
-# changes — not rebuilt under every pipeline. Builds docker-in-docker on a
-# hosted runner, so apt resolves upstream (USE_NEXUS_MIRRORS=0) — the nexus
-# mirror redirect is only reachable from the lab network.
+# Manual-only: jobs pin the currently published :latest, refreshed deliberately
+# when the toolchain changes rather than rebuilt under every pipeline. Builds
+# docker-in-docker on a hosted runner, so apt resolves upstream
+# (USE_NEXUS_MIRRORS=0) — the nexus mirror redirect is only reachable from the
+# lab network.
 #
 # Optional CI/CD variable: MISE_GITHUB_TOKEN (a no-scope PAT) raises mise's
 # GitHub API rate limit during the in-image `mise install`; without it the
@@ -306,11 +304,7 @@ ci_image:
     # the same. First-ever build has nothing to pull — that's fine.
     - docker pull "$CI_REGISTRY_IMAGE/ci:latest" || true
     - |
-      secret_args=""
-      if [ -n "${MISE_GITHUB_TOKEN:-}" ]; then
-        secret_args="--secret id=mise_github_token,env=MISE_GITHUB_TOKEN"
-      fi
-      docker build $secret_args \
+      docker build ${MISE_GITHUB_TOKEN:+--secret id=mise_github_token,env=MISE_GITHUB_TOKEN} \
         --build-arg USE_NEXUS_MIRRORS=0 \
         --build-arg BUILDKIT_INLINE_CACHE=1 \
         --cache-from "$CI_REGISTRY_IMAGE/ci:latest" \
@@ -511,11 +505,11 @@ qemu_image_reaper:
     - export AWS_ROLE_SESSION_NAME="qemu-image-reaper-$CI_JOB_ID"
     - mise exec -- aws --region eu-central-1 sts get-caller-identity
     - |
-      reaper_args=""
       if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "${QEMU_IMAGE_REAPER_APPLY:-}" = "true" ]; then
-        reaper_args="--apply"
+        mise run ci:reap-qemu-images --apply
+      else
+        mise run ci:reap-qemu-images
       fi
-      mise run ci:reap-qemu-images $reaper_args
 
 # Bake + publish fox's Hetzner Cloud boot image (mechanic 2, qemu/KVM, no AWS).
 # `packer:build hetzner` builds the ZFS-root rpool disk in qemu on lab's shell
