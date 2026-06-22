@@ -77,11 +77,15 @@ class TestSetupOutputDir:
         out = tmp_path / "out"
         monkeypatch.setattr(testall, "OUT_DIR", out)
         out.mkdir()
-        stale = out / "box.jammy.nginx.output.ansi"
-        stale.write_text("old")
+        stale_files = [
+            out / f"box.jammy.nginx.{suffix}.ansi"
+            for suffix in ("output", "journal", "boot", "dmesg", "systemctl-failed")
+        ]
+        for stale in stale_files:
+            stale.write_text("old")
         other = out / "lab.noble.podman.output.ansi"
         other.write_text("keep")
         plan = [testall.TestCell("box", "jammy", "nginx")]
         testall.setup_output_dir(plan)
-        assert not stale.exists()
+        assert all(not stale.exists() for stale in stale_files)
         assert other.exists()

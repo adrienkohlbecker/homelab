@@ -154,7 +154,7 @@ def setup_output_dir(cells: list[TestCell]) -> None:
     # Mirrors the prefix Machine.__post_init__ builds in test/machine.py.
     for cell in cells:
         prefix = f"{cell.machine}.{cell.ubuntu}.{cell.role}"
-        for suffix in ("output", "journal", "boot"):
+        for suffix in ("output", "journal", "boot", "dmesg", "systemctl-failed"):
             (OUT_DIR / f"{prefix}.{suffix}.ansi").unlink(missing_ok=True)
 
 
