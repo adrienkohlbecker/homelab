@@ -88,8 +88,5 @@
   retries: 10
   delay: 1
   until: _wolweb_auth_gate.status == 302
-  failed_when: >-
-    _wolweb_auth_gate.status != 302
-    or 'auth.' not in (_wolweb_auth_gate.location | default(''))
-    or ('rd=https://wolweb.' ~ inventory_hostname ~ '.' ~ domain) not in (_wolweb_auth_gate.location | default(''))
+  failed_when: not (_wolweb_auth_gate | authelia_redirects_to('wolweb', inventory_hostname, domain))
   become: true

@@ -37,10 +37,7 @@
     follow_redirects: none
     status_code: 302
   register: _transmission_nginx_gate
-  failed_when: >-
-    _transmission_nginx_gate.status != 302
-    or 'auth.' not in (_transmission_nginx_gate.location | default(''))
-    or ('rd=https://transmission.' ~ inventory_hostname ~ '.' ~ domain) not in (_transmission_nginx_gate.location | default(''))
+  failed_when: not (_transmission_nginx_gate | authelia_redirects_to('transmission', inventory_hostname, domain))
 
 # The --network media join + transmission.dns.podman FQDN is how the *arr stack
 # reaches transmission's RPC, bypassing nginx -- the loopback/nginx probes above
