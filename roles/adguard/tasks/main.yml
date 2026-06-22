@@ -16,6 +16,8 @@
       - dns_keepalived_peers is defined
       - dns_keepalived_peers | length > 0
       - inventory_hostname in external_ips
+      - network.static_leases.adrien_phone.ip is defined
+      - (network.static_leases.adrien_phone.ip | default('') | ansible.utils.ipaddr('address')) is string
       - adguard_adlists is defined
       - adguard_whitelists is defined
       - (adguard_adlists | default([]) | select('search', '\s') | list | length) == 0
@@ -23,9 +25,9 @@
     fail_msg: >-
       adguard requires the DNS VIP from network.virtual_ips.dns plus
       dns_keepalived_{vrid,priority,peers} (priority 1-255, set per-host
-      in host_vars), an external_ips
-      entry for this host, and the adguard_adlists / adguard_whitelists
-      lists with no whitespace in any URL.
+      in host_vars), an external_ips entry for this host, the Adrien phone
+      static lease, and the adguard_adlists / adguard_whitelists lists with
+      no whitespace in any URL.
   tags:
     - adguard
 

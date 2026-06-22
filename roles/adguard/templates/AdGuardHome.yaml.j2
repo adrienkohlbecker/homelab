@@ -1,3 +1,4 @@
+{% set adguard_podman_gateway = podman_default_network | ansible.utils.ipaddr('1') | ansible.utils.ipaddr('address') %}
 http:
   pprof:
     port: 6060
@@ -82,7 +83,7 @@ dns:
   trusted_proxies:
     - 127.0.0.0/8
     - ::1/128
-    - {{ podman_default_network | ansible.utils.ipaddr('1') | ansible.utils.ipaddr('address') }}/32
+    - {{ adguard_podman_gateway }}/32
   cache_enabled: true
   cache_size: 4194304
   cache_ttl_min: 0
@@ -225,18 +226,10 @@ whitelist_filters: []
    a plain scalar, while entries starting with ! or | must be
    single-quoted, matching how yaml.v3 writes them back. #}
 user_rules:
-  - '! Answered NXDOMAIN locally (the RFC 6762 expectation for .local): these'
-  - '! names can never resolve publicly, so internal hostnames and typos must'
-  - '! not leak to the DoH upstreams. dnsrewrite answers count as rewrites in'
-  - '! statistics, not blocks. Parity with the retired dnscrypt-proxy'
-  - '! block_unqualified / block_undelegated toggles.'
-  - '! Single-label names. Never matches adguard.home or pi.hole (they carry a'
-  - '! dot) nor IPv6 literals (the colon exclusion): AdGuard checks HTTPS-record'
-  - '! ipv6hints as hostnames, and a dot-only guard would swallow every HTTPS'
-  - '! answer carrying one, silently blocking type-65 for half the internet.'
+  - '! Keep internal typos local: NXDOMAIN for single-label names and'
+  - '! undelegated LAN suffixes instead of leaking them upstream.'
+  - '! The regex excludes colons so HTTPS-record ipv6hints survive filtering.'
   - /^[^.:]+$/$dnsrewrite=NXDOMAIN
-  - '! Undelegated LAN suffixes. `home` and `hole` stay unblocked -- the'
-  - '! adguard.home and pi.hole rewrites live under them.'
   - '||lan^$dnsrewrite=NXDOMAIN'
   - '||local^$dnsrewrite=NXDOMAIN'
   - '||internal^$dnsrewrite=NXDOMAIN'
@@ -469,7 +462,7 @@ clients:
           - youtube
       name: Adrien phone
       ids:
-        - 10.123.5.10
+        - {{ network.static_leases.adrien_phone.ip }}
       tags: []
       upstreams: []
       uid: 01970612-0000-7000-8000-000000000002
@@ -484,8 +477,8 @@ clients:
       ignore_statistics: false
 {#
   The bridge gateway is this host's own traffic: netavark's hairpin DNAT
-  masquerades host-local and container queries to a published port into
-  10.88.0.1, so the host plus every container resolving through aardvark
+  masquerades host-local and container queries to a published port into the
+  bridge gateway, so the host plus every container resolving through aardvark
   collapse into one client. Label it honestly instead of showing
   host.containers.internal.
 #}
@@ -504,7 +497,7 @@ clients:
         ids: []
       name: {{ inventory_hostname }} (host + containers)
       ids:
-        - 10.88.0.1
+        - {{ adguard_podman_gateway }}
       tags: []
       upstreams: []
       uid: 01970612-0000-7000-8000-000000000001
