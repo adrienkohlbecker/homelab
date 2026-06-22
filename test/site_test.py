@@ -46,7 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--timeout",
         type=int,
-        default=2400,
+        default=3000,
         metavar="SECONDS",
         help="Overall timeout for boot + converge (default: %(default)s)",
     )
