@@ -80,7 +80,7 @@ workflow:
 # registry (Dockerfile; rebuilt manually via the ci_image job below). The
 # image bakes the mise tool tree at /opt/mise and a warm uv wheel cache at
 # /opt/uv-cache, so jobs only rebuild .venv against the checkout's lockfile.
-# `mise install` stays in each script as the drift self-heal: a no-op while
+# `ci:bootstrap` stays in each script as the drift self-heal: a no-op while
 # the image is current, and when mise.toml has moved past the published image
 # it installs just the delta (slower job, loud in the log — the cue to rerun
 # ci_image). mise auto-trusts the checkout's mise.toml under CI=true; the
@@ -198,10 +198,7 @@ detect:
       mise --version || true
       uv --version || true
       python --version || python3 --version || true
-    - mise install
-    # Shell runners do not activate mise shims; `mise exec` exposes the tool
-    # tree consistently there while staying harmless inside the CI image.
-    - mise exec -- uv sync --locked
+    - mise run ci:bootstrap
     - mise exec -- uv run python mise-tasks/ci/detect.py gitlab --target "$HOMELAB_CI_TARGET"
   artifacts:
     paths:
@@ -250,7 +247,7 @@ lint:
   # parallel, so the 4-vCPU medium tier roughly halves the wall-clock.
   tags:
     - saas-linux-medium-amd64
-  # ~5 min on a current image; a stale one adds the delta `mise install`.
+  # ~5 min on a current image; a stale one adds the bootstrap delta.
   # Bound well under the project-level 1h default so a wedged run fails fast.
   timeout: 30m
   variables:
@@ -264,8 +261,7 @@ lint:
     # check so syntax-check runs with the repo config (inventory, vault ids).
     ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
   script:
-    - mise install
-    - uv sync --locked
+    - mise run ci:bootstrap
     - mise run lint
 
 # Hermetic pytest suite (testpaths=unit_tests). Installs the full tool tree
@@ -279,8 +275,7 @@ unit_tests:
     - .push_or_web
   timeout: 15m
   script:
-    - mise install
-    - uv sync --locked
+    - mise run ci:bootstrap
     - mise run test
 
 # Rebuild of the CI container image (the repo Dockerfile), pushed to this
@@ -346,14 +341,9 @@ qemu_host_ami:
   interruptible: false
   timeout: 60m
   script:
-    - mise install
-    - uv sync --locked
+    - mise run ci:bootstrap
     - mise run packer:init
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
-    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
-    - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
-    - export AWS_ROLE_SESSION_NAME="qemu-host-ami-$CI_JOB_ID"
-    - mise exec -- aws --region eu-central-1 sts get-caller-identity
+    - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-$CI_JOB_ID"
     - mise run packer:qemu-host-ami --promote
 
 # Build + promote the box / box_deps nested-qemu guest images the test cells
@@ -396,17 +386,9 @@ qemu_host_ami:
   # normal run so a wedged qemu boot fails the job rather than riding a default.
   timeout: 90m
   before_script:
-    - mise install
-    - mise exec -- uv sync --locked
-    - mise run packer:init
-    # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
-    # AssumeRoleWithWebIdentity provider wants a file path. The bake role (master
-    # trust) grants the S3 write + promoted.json publish upload-s3 needs.
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
-    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
-    - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
-    - export AWS_ROLE_SESSION_NAME="qemu-image-$CI_JOB_ID"
-    - mise exec -- aws --region eu-central-1 sts get-caller-identity
+    - mise run ci:bootstrap
+    # The bake role grants the S3 write + promoted.json publish rights.
+    - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-$CI_JOB_ID"
 
 # box: the bare OS + zfs + networking platform every cell needs.
 .qemu_image_box:
@@ -477,15 +459,8 @@ qemu_image_reaper:
   interruptible: false
   timeout: 15m
   script:
-    - mise install
-    - uv sync --locked
-    # GitLab's id_tokens deliver the OIDC JWT in an env var; the AWS CLI's
-    # AssumeRoleWithWebIdentity provider wants a file path.
-    - export AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
-    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
-    - export AWS_ROLE_ARN=arn:aws:iam::000390721279:role/homelab-ci-bake
-    - export AWS_ROLE_SESSION_NAME="qemu-image-reaper-$CI_JOB_ID"
-    - mise exec -- aws --region eu-central-1 sts get-caller-identity
+    - mise run ci:bootstrap
+    - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-reaper-$CI_JOB_ID"
     - |
       if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "${QEMU_IMAGE_REAPER_APPLY:-}" = "true" ]; then
         mise run ci:reap-qemu-images --apply
@@ -526,8 +501,7 @@ fox_image:
     # Fail before the build, not after it, when the token is missing.
     - test -n "${HCLOUD_TOKEN:-}" || { echo "HCLOUD_TOKEN CI/CD variable is not set" >&2; exit 1; }
     # Same drift self-heal as the qemu image jobs, against the image's /opt/mise.
-    - mise install
-    - mise exec -- uv sync --locked
+    - mise run ci:bootstrap
     - mise run packer:init
     # fox runs a noble root in prod; the bake stays noble-only. Build the rpool
     # disk in qemu, then stream it onto a Hetzner rescue server and snapshot. The
@@ -586,8 +560,7 @@ zbm_build:
       - zbm-build/**/*.tar.gz
       - zbm-build/**/*.sha256sum
   script:
-    - mise install
-    - uv sync --locked
+    - mise run ci:bootstrap
     # Bounded wait for dind to finish generating its TLS certs and serve.
     - timeout 60 bash -c 'until docker info >/dev/null 2>&1; do sleep 1; done'
     # The default docker driver can't export cache to a registry; a
