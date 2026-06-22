@@ -48,12 +48,10 @@ if [ -d "$src_dir/.git" ] &&
   [ "$(git -C "$src_dir" describe --tags --exact-match 2>/dev/null)" = "v${ZBM_VERSION}" ]; then
   echo "ZBM source at $src_dir already at v${ZBM_VERSION}, skipping clone"
 else
-  # Prune any temp left by a previously-crashed clone, then clone into a fresh
-  # PID-suffixed temp and move it into place only after the clone fully succeeds,
-  # so a half-finished clone never becomes src (a crash mid-clone leaves only the
-  # temp, pruned on the next run).
+  # Move the source tree into place only after the clone succeeds, so a failed
+  # clone never becomes the cached source.
   rm -rf "${src_dir}".tmp.*
-  tmp_dir="${src_dir}.tmp.$$"
+  tmp_dir="$(mktemp -d "${src_dir}.tmp.XXXXXX")"
   trap 'rm -rf "$tmp_dir"' EXIT INT TERM
   git clone --depth 1 --single-branch --branch "v${ZBM_VERSION}" https://github.com/zbm-dev/zfsbootmenu.git "$tmp_dir"
   rm -rf "$src_dir"
@@ -104,22 +102,10 @@ docker buildx build \
   -f "$src_dir/releng/docker/Dockerfile" \
   "$src_dir/releng/docker"
 
-# Work around a rootless-BuildKit unpack quirk: the build drops perl's
-# /usr/share/perl5/core_perl/Pod/Usage.pm during xbps extraction (perl ships the
-# file, but it lands missing from the built image while perl's other modules are
-# fine), so generate-zbm dies at "use Pod::Usage" with "Can't locate Pod/Usage.pm".
-# perl-Pod-Usage is only a virtual provide of perl, so it can't be pulled as a
-# package -- but re-extracting perl via a plain container run (which unpacks
-# it correctly) restores the file. The quirk only ever reproduced under a rootless buildkitd
-# (the retired GitHub lab-runner path); the CI dind builder and Mac
-# podman-machine builds unpack perl intact, making this a cheap
-# once-per-image-build no-op kept as insurance.
-#
-# Runs AFTER the cache push above, never gated: the commit strips BuildKit's
-# inline-cache metadata, so the pushed ref must be the unmodified buildx output,
-# and the local image always needs the fix before build.sh runs generate-zbm.
-# No -q on the commit: output is discarded anyway, and the docker CLI has no
-# such flag.
+# Work around rootless BuildKit occasionally omitting perl's Pod::Usage.pm.
+# Re-extracting perl inside the built image restores it before build.sh runs
+# generate-zbm. Run this after cache export because docker commit strips
+# BuildKit cache metadata from the local image.
 ctr="zbm_perlfix_$$"
 docker rm -f "$ctr" >/dev/null 2>&1 || true
 trap 'docker rm -f "$ctr" >/dev/null 2>&1 || true' EXIT

@@ -8,14 +8,9 @@ set -euo pipefail
 version="${ZBM_VERSION:-3.0.1}"
 kernel="${ZBM_KERNEL_VERSION:-6.1}"
 style="${ZBM_UPSTREAM_STYLE:-recovery}"
-default_local_arch="$(zbm_host_arch)"
-local_arch="${ZBM_LOCAL_ARCH:-$default_local_arch}"
+local_arch="${ZBM_LOCAL_ARCH:-$(zbm_host_arch)}"
 official_arch="${ZBM_OFFICIAL_ARCH:-x86_64}"
-local_upstream_arch="${ZBM_LOCAL_UPSTREAM_ARCH:-$(uname -m | sed -e s/amd64/x86_64/)}"
-cross_arch_compare=0
-if [ "$local_arch" != "$official_arch" ]; then
-  cross_arch_compare=1
-fi
+local_upstream_arch="${ZBM_LOCAL_UPSTREAM_ARCH:-$(zbm_upstream_arch)}"
 
 case "$style" in
 release | recovery) ;;
@@ -105,7 +100,7 @@ if ! docker image inspect "$builder_tag" >/dev/null 2>&1; then
   echo "run 'mise run zbm:builder-image' first, or set ZBM_COMPARE_BUILDER_IMAGE" >&2
   exit 1
 fi
-if [ "$cross_arch_compare" -eq 1 ] && [ ! -d "$src_dir/.git" ]; then
+if [ "$local_arch" != "$official_arch" ] && [ ! -d "$src_dir/.git" ]; then
   echo "ZBM source not found at $src_dir; run 'mise run zbm:builder-image' first" >&2
   exit 1
 fi
@@ -255,7 +250,7 @@ extract_binaries "${report_dir}/local.lsinitrd" >"${report_dir}/local.binaries"
 extract_binaries "${report_dir}/official.lsinitrd" >"${report_dir}/official.binaries"
 
 local_upstream_missing_module_count=0
-if [ "$cross_arch_compare" -eq 1 ]; then
+if [ "$local_arch" != "$official_arch" ]; then
   local_upstream_src="${workdir}/local-upstream-src"
   local_upstream_extract="${extract_dir}/local-upstream"
   local_upstream_asset_dir="${local_upstream_src}/releng/assets/${version}"
@@ -314,7 +309,7 @@ missing_binary_count="$(wc -l <"${report_dir}/missing.binaries" | tr -d '[:space
 added_module_count="$(wc -l <"${report_dir}/added.modules" | tr -d '[:space:]')"
 added_binary_count="$(wc -l <"${report_dir}/added.binaries" | tr -d '[:space:]')"
 
-if [ "$cross_arch_compare" -eq 1 ]; then
+if [ "$local_arch" != "$official_arch" ]; then
   echo "Cross-architecture module reports are informational only; kernel configs differ beyond architecture-specific paths"
   echo "Official ${official_arch} modules absent from local ${local_arch}: ${missing_module_count}"
   echo "Local ${local_arch} modules absent from official ${official_arch}: ${added_module_count}"
@@ -342,7 +337,7 @@ else
   print_diff_excerpt "Missing binary" "${report_dir}/missing.binaries" >&2
 fi
 
-if { [ "$cross_arch_compare" -eq 0 ] && [ "$missing_module_count" -ne 0 ]; } || [ "$local_upstream_missing_module_count" -ne 0 ] || [ "$missing_binary_count" -ne 0 ]; then
+if { [ "$local_arch" = "$official_arch" ] && [ "$missing_module_count" -ne 0 ]; } || [ "$local_upstream_missing_module_count" -ne 0 ] || [ "$missing_binary_count" -ne 0 ]; then
   echo "Reports kept at ${report_dir}" >&2
   exit 1
 fi
@@ -352,7 +347,7 @@ if [ "$module_diff" -ne 0 ] || [ "$binary_diff" -ne 0 ]; then
   echo "Full binary diff: ${report_dir}/binaries.diff"
 fi
 
-if [ "$cross_arch_compare" -eq 1 ]; then
+if [ "$local_arch" != "$official_arch" ]; then
   echo "Local ${local_arch} build passes official ${official_asset_base} core and binary checks; module reports are informational"
 else
   echo "Local ${local_arch} build preserves official ${official_asset_base} initramfs listings"

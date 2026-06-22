@@ -22,7 +22,7 @@ set -euo pipefail
 . "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 arch="$(zbm_host_arch)"
-repo_root="${MISE_CONFIG_ROOT}"
+repo_root="$(zbm_repo_root)"
 cd "$repo_root"
 
 registry_url="https://gitlab.com/api/v4/projects/83079143/packages/generic/zfsbootmenu"

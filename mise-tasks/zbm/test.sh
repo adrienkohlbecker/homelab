@@ -13,7 +13,8 @@ set -euo pipefail
 . "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 arch="$(zbm_host_arch)"
-if ! tarball="$(zbm_latest_tarball "${MISE_CONFIG_ROOT}/zbm-build/${arch}" "$arch")"; then
+repo_root="$(zbm_repo_root)"
+if ! tarball="$(zbm_latest_tarball "${repo_root}/zbm-build/${arch}" "$arch")"; then
   echo "no ${arch} tarball — run 'mise run zbm:build' first" >&2
   exit 1
 fi
@@ -32,7 +33,7 @@ zbm_ports_file="/tmp/zbm-dropbear-port"
 echo "Dropbear SSH port → $zbm_ports_file (written before qemu starts)"
 echo "  then: ssh -p \$(awk '{print \$1}' $zbm_ports_file) -o StrictHostKeyChecking=no root@127.0.0.1"
 
-"${MISE_CONFIG_ROOT}/test/launch.py" \
+"${repo_root}/test/launch.py" \
   --machine box \
   --kernel "$tmp"/vmlin*-bootmenu \
   --initrd "$tmp/initramfs-bootmenu.img" \

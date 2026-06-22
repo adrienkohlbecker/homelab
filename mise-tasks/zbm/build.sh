@@ -6,16 +6,15 @@ set -euo pipefail
 . "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 arch="$(zbm_host_arch)"
-upstream_arch="$(uname -m | sed -e s/amd64/x86_64/)"
-zbm_base_version="$ZBM_VERSION"
+upstream_arch="$(zbm_upstream_arch)"
 if [ -z "${ZBM_BUILD_SUFFIX:-}" ] && [ -z "${CI:-}" ]; then
   ZBM_BUILD_SUFFIX="-local.$(date "+%Y%m%d%H%M%S")"
 fi
-zbm_artifact_version="${zbm_base_version}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX:-}"
+zbm_artifact_version="${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX:-}"
 repo_root="$(zbm_repo_root)"
 src_dir="${repo_root}/zbm-build/src"
 out_dir="${repo_root}/zbm-build/${arch}"
-builder_tag="localhost/zbm-builder:v${zbm_base_version}-${arch}"
+builder_tag="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
 
 mkdir -p "$out_dir"
 rm -f \
@@ -51,8 +50,8 @@ export PATH="${wrapper_dir}:${PATH}"
 
 work_src="${workdir}/src"
 git clone --no-hardlinks "$src_dir" "$work_src" >/dev/null
-git -c advice.detachedHead=false -C "$work_src" checkout -q "v${zbm_base_version}"
-git -C "$work_src" reset --hard "v${zbm_base_version}" >/dev/null
+git -c advice.detachedHead=false -C "$work_src" checkout -q "v${ZBM_VERSION}"
+git -C "$work_src" reset --hard "v${ZBM_VERSION}" >/dev/null
 git -C "$work_src" clean -fdx >/dev/null
 
 git -C "$work_src" apply "$repo_root/zbm/recovery-overlay.patch"
@@ -77,12 +76,12 @@ ssh-keygen -E sha256 -lf "$out_dir/ssh_host_ed25519_key.pub"
 mkdir -p "${workdir}/tmp"
 (
   cd "$work_src"
-  TMPDIR="${workdir}/tmp" ./releng/make-binary.sh "$zbm_base_version" "$builder_tag"
+  TMPDIR="${workdir}/tmp" ./releng/make-binary.sh "$ZBM_VERSION" "$builder_tag"
 )
 
-asset_base="zfsbootmenu-recovery-${upstream_arch}-v${zbm_base_version}-linux${ZBM_KERNEL_VERSION}"
-component_dir_name="zfsbootmenu-recovery-${upstream_arch}-v${zbm_base_version}"
-asset_dir="${work_src}/releng/assets/${zbm_base_version}"
+asset_base="zfsbootmenu-recovery-${upstream_arch}-v${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}"
+component_dir_name="zfsbootmenu-recovery-${upstream_arch}-v${ZBM_VERSION}"
+asset_dir="${work_src}/releng/assets/${ZBM_VERSION}"
 upstream_tar="${asset_dir}/${asset_base}.tar.gz"
 upstream_efi="${asset_dir}/${asset_base}.EFI"
 extract_dir="${workdir}/extract"
