@@ -340,14 +340,7 @@
 
 - name: _verify_input | INPUT — VRRP rule absent on non-keepalived peers
   vars:
-    nft_rules: "{{ (_firewall_nft_ruleset_scope.stdout | from_json).nftables
-                   | selectattr('rule', 'defined')
-                   | map(attribute='rule')
-                   | list }}"
-    vrrp_rules: "{{ nft_rules
-                    | selectattr('expr', 'defined')
-                    | selectattr('expr', 'contains', {'counter': 'vrrp_accept'})
-                    | list }}"
+    vrrp_rules: "{{ _firewall_nft_ruleset_scope.stdout | nft_rules_by_counter('vrrp_accept') }}"
   assert:
     that:
       - vrrp_rules | length == 0
@@ -367,14 +360,7 @@
     # nft uses for the standalone counter *declaration* at the head
     # of the table, not for references inside rule expressions.
     # `contains` on the exact reference dict finds the matching rule.
-    nft_rules: "{{ (_firewall_nft_ruleset_scope.stdout | from_json).nftables
-                   | selectattr('rule', 'defined')
-                   | map(attribute='rule')
-                   | list }}"
-    vrrp_rule: "{{ nft_rules
-                   | selectattr('expr', 'defined')
-                   | selectattr('expr', 'contains', {'counter': 'vrrp_accept'})
-                   | first }}"
+    vrrp_rule: "{{ _firewall_nft_ruleset_scope.stdout | nft_rule_by_counter('vrrp_accept') }}"
     vrrp_matches: "{{ vrrp_rule.expr
                       | selectattr('match', 'defined')
                       | map(attribute='match') | list }}"
@@ -389,14 +375,7 @@
 
 - name: _verify_input | INPUT — mDNS rendered rule keeps LAN iif/source/port scope
   vars:
-    nft_rules: "{{ (_firewall_nft_ruleset_scope.stdout | from_json).nftables
-                   | selectattr('rule', 'defined')
-                   | map(attribute='rule')
-                   | list }}"
-    mdns_rule: "{{ nft_rules
-                   | selectattr('expr', 'defined')
-                   | selectattr('expr', 'contains', {'counter': 'mdns_accept'})
-                   | first }}"
+    mdns_rule: "{{ _firewall_nft_ruleset_scope.stdout | nft_rule_by_counter('mdns_accept') }}"
     mdns_matches: "{{ mdns_rule.expr
                       | selectattr('match', 'defined')
                       | map(attribute='match') | list }}"

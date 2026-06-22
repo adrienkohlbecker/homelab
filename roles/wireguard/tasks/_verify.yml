@@ -60,7 +60,7 @@
 
 - name: _verify | Assert interface carries own_peer.address
   vars:
-    own_peer: "{{ wireguard_peers | selectattr('name', 'eq', inventory_hostname) | first }}"
+    own_peer: "{{ wireguard_peers | one_by_attr('name', inventory_hostname) }}"
   command: ip -4 -o addr show dev {{ iface | default('wg0') }}
   register: wireguard_ip_addr
   become: true

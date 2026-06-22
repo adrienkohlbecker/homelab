@@ -32,8 +32,8 @@
   set_fact:
     _tailscale_node: >-
       {{ (_tailscale_nodes.stdout | from_json)
-         | selectattr('given_name', 'equalto', ansible_hostname | lower)
-         | list | first | default({}) }}
+         | matching_by_attr('given_name', ansible_hostname | lower)
+         | first | default({}) }}
     _tailscale_desired_routes: >-
       {{ (tailscale_advertise_routes.split(',') | reject('equalto', '') | list)
          + (tailscale_advertise_exit_node | ternary(['0.0.0.0/0', '::/0'], [])) }}
