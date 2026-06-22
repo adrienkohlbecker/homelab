@@ -39,9 +39,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="homeassistant" \
     --user root \
-{% for arg in 0 | podman_idmap_args(homeassistant_user.uid, homeassistant_user.group) %}
-    {{ arg }} \
-{% endfor %}
+    {{ 0 | podman_idmap_args(homeassistant_user.uid, homeassistant_user.group) | join(" \\\n    ") }} \
 {% for net in homeassistant_networks %}
 {%   set _opts = [] %}
 {%   if net.ip is defined %}{% set _ = _opts.append('ip=' ~ net.ip) %}{% endif %}
@@ -60,8 +58,8 @@ ExecStart=/usr/bin/podman run \
     {# remains reachable for mDNS / discovery; that's a separate plane. #}
     --publish {{ ansible_default_ipv4.address | mandatory }}:{{ service_ports.homeassistant_sonos }}:1400/tcp \
     --publish {{ ansible_default_ipv4.address | mandatory }}:{{ service_ports.homeassistant_homekit }}:3722/udp \
-    --health-cmd         {{ "http://localhost:8123/manifest.json" | podman_health_curl(head=true, request="GET") }} \
-    --health-startup-cmd {{ "http://localhost:8123/manifest.json" | podman_health_curl(head=true, request="GET") }} \
+    --health-cmd         {{ "http://localhost:8123/manifest.json" | podman_health_curl }} \
+    --health-startup-cmd {{ "http://localhost:8123/manifest.json" | podman_health_curl }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \

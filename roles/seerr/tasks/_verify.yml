@@ -136,7 +136,7 @@
     _rendered: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
   assert:
     that:
-      - (_seerr_shape_b64 | slurp_text) == _rendered
+      - (_seerr_shape_b64 | slurp_text(trim=false)) == _rendered
     fail_msg: >-
       settings.json.j2 no longer reproduces the on-disk file -- seerr persisted a
       shape (key set or order) the template does not emit, so a converge would

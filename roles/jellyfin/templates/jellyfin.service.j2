@@ -56,9 +56,7 @@ ExecStart=/usr/bin/podman run \
     --name jellyfin \
     --init \
     --security-opt=no-new-privileges \
-{% for arg in 0 | podman_idmap_args(jellyfin_user.uid, jellyfin_user.group) %}
-    {{ arg }} \
-{% endfor %}
+    {{ 0 | podman_idmap_args(jellyfin_user.uid, jellyfin_user.group) | join(" \\\n    ") }} \
     --group-add={{ media_group.gid }} \
     --log-driver journald \
     --log-opt tag="jellyfin" \

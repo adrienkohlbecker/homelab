@@ -35,33 +35,32 @@ def zfs_mount_unit(mountpoint: str) -> str:
     return f"zfs_mount{normalized.replace('/', '_')}.service"
 
 
-def slurp_text(result: Mapping[str, Any], default: str | None = None) -> str:
+def slurp_text(result: Mapping[str, Any], default: str | None = None, trim: bool = True) -> str:
     """Decode text content from an Ansible slurp result."""
     if "content" not in result:
         if default is not None:
-            return default
+            return default.strip() if trim else default
         raise AnsibleError("slurp_text requires a slurp result with content")
 
     try:
-        return base64.b64decode(result["content"]).decode()
+        text = base64.b64decode(result["content"]).decode()
     except Exception as exc:
         raise AnsibleError(f"slurp_text could not decode slurp content: {exc}") from exc
+    return text.strip() if trim else text
 
 
-def podman_health_argv(argv: Sequence[Any]) -> str:
-    """Render a podman health command as a single-quoted JSON argv string."""
+def json_argv(argv: Sequence[Any]) -> str:
+    """Render a command argv as a single-quoted compact JSON string."""
     if not isinstance(argv, Sequence) or isinstance(argv, str):
-        raise AnsibleError("podman_health_argv expects a sequence of arguments")
+        raise AnsibleError("json_argv expects a sequence of arguments")
     if not argv:
-        raise AnsibleError("podman_health_argv requires at least one argument")
+        raise AnsibleError("json_argv requires at least one argument")
     return "'" + json.dumps([str(arg) for arg in argv], separators=(",", ":")) + "'"
 
 
 def podman_health_curl(
     url: str,
     *,
-    head: bool = False,
-    request: str | None = None,
     location: bool = True,
     fail: bool = True,
     connect_timeout: int = 1,
@@ -69,10 +68,6 @@ def podman_health_curl(
 ) -> str:
     """Render the repo's standard curl-based podman health probe."""
     argv: list[str] = ["curl"]
-    if head:
-        argv.append("--head")
-    if request is not None:
-        argv.extend(["--request", request])
     if location:
         argv.append("--location")
     if fail:
@@ -90,7 +85,22 @@ def podman_health_curl(
             url,
         ]
     )
-    return podman_health_argv(argv)
+    return json_argv(argv)
+
+
+def podman_health_wget(url: str, *, tries: int = 1, timeout: int = 5) -> str:
+    """Render the repo's standard wget-based podman health probe."""
+    return json_argv(
+        [
+            "wget",
+            "--quiet",
+            f"--tries={tries}",
+            f"--timeout={timeout}",
+            "-O",
+            "/dev/null",
+            url,
+        ]
+    )
 
 
 def podman_idmap_args(
@@ -107,16 +117,6 @@ def podman_idmap_args(
         f"--uidmap=+{container_uid}:{host_uid}:1",
         "--gidmap=0:0:65536",
         f"--gidmap=+{container_gid}:{host_gid}:1",
-    ]
-
-
-def podman_secret_file_args(secret: str, target: str, env: str) -> list[str]:
-    """Return podman secret mount plus matching file-env argument."""
-    if not secret or not target or not env:
-        raise AnsibleError("podman_secret_file_args requires secret, target, and env")
-    return [
-        f"--secret={secret},type=mount,target={target}",
-        f"--env {env}=/run/secrets/{target}",
     ]
 
 
@@ -191,16 +191,16 @@ class FilterModule:
     def filters(self):
         return {
             "ansible_var_key": ansible_var_key,
+            "json_argv": json_argv,
             "matching_by_attr": matching_by_attr,
             "nft_counters_by_name": nft_counters_by_name,
             "nft_rule_by_counter": nft_rule_by_counter,
             "nft_rules_by_counter": nft_rules_by_counter,
             "one_by_attr": one_by_attr,
             "only_by_attr": one_by_attr,
-            "podman_health_argv": podman_health_argv,
             "podman_health_curl": podman_health_curl,
+            "podman_health_wget": podman_health_wget,
             "podman_idmap_args": podman_idmap_args,
-            "podman_secret_file_args": podman_secret_file_args,
             "slurp_text": slurp_text,
             "zfs_mount_unit": zfs_mount_unit,
         }

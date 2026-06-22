@@ -68,8 +68,8 @@ ExecStart=/usr/bin/podman run \
     --volume /opt/nzbToMedia:/opt/nzbToMedia \
     --network media \
     --publish 127.0.0.1:{{ service_ports.sabnzbd }}:8080/tcp \
-    --health-cmd         {{ "http://localhost:8080/api?mode=version" | podman_health_curl(head=true) }} \
-    --health-startup-cmd {{ "http://localhost:8080/api?mode=version" | podman_health_curl(head=true) }} \
+    --health-cmd         {{ "http://localhost:8080/api?mode=version" | podman_health_curl }} \
+    --health-startup-cmd {{ "http://localhost:8080/api?mode=version" | podman_health_curl }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \

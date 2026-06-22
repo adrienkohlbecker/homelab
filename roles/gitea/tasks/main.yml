@@ -199,7 +199,7 @@
   when: not qemu_test
   set_fact:
     gitea_oidc_desired_fp: "{{ gitea_oidc_source_state | to_json(sort_keys=true) | hash('sha256') }}"
-    gitea_oidc_current_fp: "{{ gitea_oidc_fp_slurp | slurp_text(default='') | trim }}"
+    gitea_oidc_current_fp: "{{ gitea_oidc_fp_slurp | slurp_text(default='') }}"
   tags:
     - gitea
 
