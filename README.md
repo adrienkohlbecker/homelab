@@ -99,7 +99,7 @@ ansible-vault encrypt_string
 
 - Ansible vault: per-id passwords come from `vault-client.sh` (macOS keychain `homelab-vault-<id>`, Linux file `~/.config/homelab/vault-pass-<id>`, or `HOMELAB_VAULT_PASSWORD_<UPPER_ID>` env var for CI). Two ids in use: `prod` (workstation-only) and `test` (also pushed to CI as a GitHub repo secret). Vaulted values live inline in `group_vars/*.yml` and `host_vars/*.yml`. See CLAUDE.md "Vault ids" for details.
 - 1Password: `mise.toml [env]` declares `op://Lab/...` refs for Cloudflare, Nexus, MinIO and the OpenTofu state passphrase. `mise run tf` is wrapped in `op run --` so values are only ever in the wrapped process's env.
-- WireGuard: peer private keys are vaulted in `group_vars/{prod,test}.yml` and PSKs derive from a vaulted seed (`roles/wireguard/filter_plugins/wireguard_psk.py`); client configs are rendered on demand by `mise run wg:show <device>` (terminal QR for iOS, `--conf` to stdout for macOS) and never written to disk.
+- WireGuard: peer private keys are vaulted in `group_vars/{prod,test}.yml` and PSKs derive from a vaulted seed (`filter_plugins/wireguard_psk.py`); client configs are rendered on demand by `mise run wg:show <device>` (terminal QR for iOS, `--conf` to stdout for macOS) and never written to disk.
 
 ## License
 

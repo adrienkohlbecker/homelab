@@ -10,7 +10,7 @@ mac_addresses:
   lab_i225p1: c8:7f:54:5c:57:5b
   lab_i225p2: c8:7f:54:5c:57:5c
 
-# Master seed for deriving per-pair PSKs (roles/wireguard/filter_plugins/wireguard_psk.py):
+# Master seed for deriving per-pair PSKs (filter_plugins/wireguard_psk.py):
 # PresharedKey = base64(HMAC-SHA256(seed, sorted-pair-name)). One value, no
 # per-pair files; both ends of a pair compute the same key. Rotating this
 # rotates every pair's PSK at once.
