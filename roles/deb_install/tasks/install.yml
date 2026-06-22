@@ -131,4 +131,4 @@
 # renders it as a string).
 - name: Record whether an install happened
   set_fact:
-    "{{ _deb_install_name | regex_replace('[^A-Za-z0-9_]', '_') }}_deb_changed": "{{ deb_install_apt.changed | default(false) }}"
+    "{{ _deb_install_name | ansible_var_key }}_deb_changed": "{{ deb_install_apt.changed | default(false) }}"

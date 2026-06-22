@@ -25,8 +25,8 @@
 
 - name: _verify | Every line matches name:start:count format
   vars:
-    _subuid_lines: "{{ (_subid_subuid.content | b64decode).splitlines() }}"
-    _subgid_lines: "{{ (_subid_subgid.content | b64decode).splitlines() }}"
+    _subuid_lines: "{{ (_subid_subuid | slurp_text).splitlines() }}"
+    _subgid_lines: "{{ (_subid_subgid | slurp_text).splitlines() }}"
     _bad_subuid: "{{ _subuid_lines | reject('match', '^[a-z_][a-z0-9_.-]*:[0-9]+:[0-9]+$') | list }}"
     _bad_subgid: "{{ _subgid_lines | reject('match', '^[a-z_][a-z0-9_.-]*:[0-9]+:[0-9]+$') | list }}"
   assert:
@@ -39,8 +39,8 @@
 
 - name: _verify | Operator user has the base 100000:65536 range in both files
   vars:
-    _subuid_lines: "{{ (_subid_subuid.content | b64decode).splitlines() }}"
-    _subgid_lines: "{{ (_subid_subgid.content | b64decode).splitlines() }}"
+    _subuid_lines: "{{ (_subid_subuid | slurp_text).splitlines() }}"
+    _subgid_lines: "{{ (_subid_subgid | slurp_text).splitlines() }}"
   assert:
     that:
       - _subuid_lines | select('match', '^' ~ ansible_user_id ~ ':100000:65536$') | list | length == 1
@@ -52,8 +52,8 @@
 
 - name: _verify | Each subid_users entry has a 65536-count range in both files
   vars:
-    _subuid_lines: "{{ (_subid_subuid.content | b64decode).splitlines() }}"
-    _subgid_lines: "{{ (_subid_subgid.content | b64decode).splitlines() }}"
+    _subuid_lines: "{{ (_subid_subuid | slurp_text).splitlines() }}"
+    _subgid_lines: "{{ (_subid_subgid | slurp_text).splitlines() }}"
   assert:
     that:
       - _subuid_lines | select('match', '^' ~ item ~ ':[0-9]+:65536$') | list | length >= 1
@@ -78,7 +78,7 @@
 
 - name: _verify | Extra subgid entries map the resolved gid
   vars:
-    _subgid_lines: "{{ (_subid_subgid.content | b64decode).splitlines() }}"
+    _subgid_lines: "{{ (_subid_subgid | slurp_text).splitlines() }}"
     _gid: "{{ ansible_facts.getent_group[item.group][1] }}"
   assert:
     that:
@@ -92,7 +92,7 @@
 
 - name: _verify | Extra subuid entries map the resolved uid
   vars:
-    _subuid_lines: "{{ (_subid_subuid.content | b64decode).splitlines() }}"
+    _subuid_lines: "{{ (_subid_subuid | slurp_text).splitlines() }}"
     _uid: "{{ ansible_facts.getent_passwd[item.source_user][1] }}"
   assert:
     that:

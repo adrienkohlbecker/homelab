@@ -149,5 +149,5 @@
 # helper's per-unit fact convention.
 - name: charts_d | Record install result for {{ netdata_args.name }}
   set_fact:
-    "netdata_charts_d_{{ netdata_args.name | regex_replace('[^A-Za-z0-9_]', '_') }}_result":
+    "netdata_charts_d_{{ netdata_args.name | ansible_var_key }}_result":
       changed: "{{ _netdata_charts_d_apt.changed or _netdata_charts_d_chart_sh.changed or _netdata_charts_d_conf_result.changed }}"

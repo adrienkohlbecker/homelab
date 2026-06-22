@@ -278,4 +278,4 @@
 # systemd_unit_started is undefined; default to changed=false in that case.
 - name: service | Record service result for {{ systemd_unit_args.src | default(systemd_unit_args.dest | default('?')) }}
   set_fact:
-    "{{ _systemd_unit_name | regex_replace('[^A-Za-z0-9_]', '_') }}_started_result": "{{ systemd_unit_started | default({'changed': false}) }}"
+    "{{ _systemd_unit_name | ansible_var_key }}_started_result": "{{ systemd_unit_started | default({'changed': false}) }}"

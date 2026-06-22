@@ -249,7 +249,7 @@
     # set_fact'd _systemd_unit_name because by execution time it's set.
     - name: install | Record install result for {{ systemd_unit_args.src }}
       set_fact:
-        "{{ _systemd_unit_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ systemd_unit_file }}"
+        "{{ _systemd_unit_name | ansible_var_key }}_result": "{{ systemd_unit_file }}"
 
   # systemd-analyze verify takes a file path, so the unit has to land at
   # its production location first and is then validated in place. If

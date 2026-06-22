@@ -48,7 +48,7 @@
 
 - name: unit | Derive unit name suffix
   set_fact:
-    _zfs_mount_unit_suffix: "{{ zfs_mount_args.mountpoint | regex_replace('^/$', '/root') | replace('/', '_') }}"
+    _zfs_mount_unit_name: "{{ zfs_mount_args.mountpoint | zfs_mount_unit }}"
   tags:
     - zfs_mount
 
@@ -59,7 +59,7 @@
   vars:
     systemd_unit_args:
       src: zfs_mount.service.j2
-      dest: "zfs_mount{{ _zfs_mount_unit_suffix }}.service"
+      dest: "{{ _zfs_mount_unit_name }}"
   tags:
     - zfs_mount
 
@@ -69,8 +69,8 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: "zfs_mount{{ _zfs_mount_unit_suffix }}"
-      condition: "{{ not (ansible_check_mode and (lookup('vars', 'zfs_mount' ~ _zfs_mount_unit_suffix ~ '_service_result', default={}) | default({})).changed | default(false)) }}"
-      restart: "{{ (lookup('vars', 'zfs_mount' ~ _zfs_mount_unit_suffix ~ '_service_result', default={}) | default({})).changed | default(false) }}"
+      src: "{{ _zfs_mount_unit_name | regex_replace('\\.service$', '') }}"
+      condition: "{{ not (ansible_check_mode and (lookup('vars', (_zfs_mount_unit_name | ansible_var_key) ~ '_result', default={}) | default({})).changed | default(false)) }}"
+      restart: "{{ (lookup('vars', (_zfs_mount_unit_name | ansible_var_key) ~ '_result', default={}) | default({})).changed | default(false) }}"
   tags:
     - zfs_mount

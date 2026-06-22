@@ -85,7 +85,7 @@
   block:
     - name: Parse existing settings.json
       set_fact:
-        seerr_settings_json: "{{ _seerr_settings_b64['content'] | default('e30=') | b64decode | from_json }}"
+        seerr_settings_json: "{{ _seerr_settings_b64 | slurp_text(default='{}') | from_json }}"
   rescue:
     - name: Treat corrupt settings.json as fresh
       set_fact:

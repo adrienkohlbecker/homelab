@@ -398,7 +398,7 @@
 # condition gated the site off.
 - name: site | Record site result
   set_fact:
-    "{{ nginx_site_args.subdomain | regex_replace('[^A-Za-z0-9_]', '_') }}_site_result":
+    "{{ nginx_site_args.subdomain | ansible_var_key }}_site_result":
       changed: "{{ ((nginx_static_conf.changed | default(false)) or (nginx_static_conf_enable.changed | default(false)) or (nginx_upstream_auth_map.changed | default(false)) or (nginx_static_conf_absent.changed | default(false))) | bool }}"
   tags:
     - nginx_site

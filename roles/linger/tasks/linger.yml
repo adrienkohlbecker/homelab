@@ -54,13 +54,11 @@
   become: true
   register: _linger_enable_result
 
-# The fact key is sanitized via regex_replace because ansible variable
-# names must match [A-Za-z_][A-Za-z0-9_]* — a hyphen (which the name regex
-# above permits, and which some upstream daemons hardcode) would otherwise
-# fail set_fact with "Invalid variable name". Same pattern as service_user.
+# The fact key is sanitized because ansible variable names must match
+# [A-Za-z_][A-Za-z0-9_]*. Some upstream daemons hardcode hyphenated names.
 - name: linger | Record linger result for {{ linger_args.name }}
   set_fact:
-    "{{ linger_args.name | regex_replace('[^A-Za-z0-9_]', '_') }}_lingered": "{{ _linger_enable_result is changed }}"
+    "{{ linger_args.name | ansible_var_key }}_lingered": "{{ _linger_enable_result is changed }}"
 
 - name: linger | Ensure user manager is running for {{ linger_args.name }}
   when: not (ansible_check_mode and _linger_enable_result.changed)
