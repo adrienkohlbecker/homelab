@@ -403,10 +403,10 @@ class Machine:
     # Machine.stop() to do its graceful->SIGKILL escalation.
     WRAPPER_GRACE_SECONDS: ClassVar[int] = 60
 
-    # SSH endpoint host -- loopback (qemu hostfwd). Every SSH/scp/ansible
+    # SSH endpoint host -- loopback (qemu hostfwd). Every SSH and ansible
     # invocation and the banner probe read this, never SSH_HOST.
     ssh_host: str
-    # Private key handed to ssh/scp/ansible via -i: the qemu fixtures bake the
+    # Private key handed to ssh and ansible via -i: the qemu fixtures bake the
     # well-known vagrant key.
     ssh_key: str
     output_file: Path
@@ -711,7 +711,7 @@ class Machine:
     def ssh_control_path(self) -> str:
         """Stable ControlMaster socket path shared by every connection to this cell.
 
-        One socket per cell, reused by the harness's own ssh/scp AND by every
+        One socket per cell, reused by the harness's own ssh AND by every
         ansible-playbook phase, so phases 2..N skip the SSH handshake + agent
         round-trip + mitogen interpreter bootstrap. Keyed on the cell's unique
         ssh_port so two concurrent cells never collide on one socket. Lives in
@@ -722,7 +722,7 @@ class Machine:
         return f"/tmp/homelab-cm-{self.ssh_port}"
 
     def _ssh_options(self) -> list[str]:
-        """Return the shared `-o flag=value` pairs for ssh and scp."""
+        """Return the shared `-o flag=value` pairs for harness SSH commands."""
         return [
             "-o",
             f"ControlPath={self.ssh_control_path}",
@@ -744,8 +744,7 @@ class Machine:
             # Surface a dead peer in ~60s. A cell that vanishes mid-task (spot
             # reclaim, network partition) leaves a half-open TCP the kernel
             # would otherwise hold for many minutes; without this, a command
-            # reading from it (apt over mitogen, a long scp) hangs until the
-            # harness deadline instead of failing fast.
+            # reading from it hangs until the harness deadline instead of failing fast.
             "-o",
             "ServerAliveInterval=15",
             "-o",
@@ -759,15 +758,11 @@ class Machine:
     def format_ssh_cmd(self, *cmd: str) -> list[str]:
         """Return an ssh invocation pinned to this instance."""
 
-        # ForwardAgent=yes on every connection (ssh and scp) so whichever
-        # one happens to create the ControlMaster (per the user's
-        # ~/.ssh/config Host *: ControlMaster auto) seeds it with an
-        # agent-forwarding channel. Otherwise ansible's later
-        # ForwardAgent=yes silently reuses the agent-less master and
-        # breaks roles that ssh out to git@github.com from the target
-        # (e.g. compta: the harness's pre-playbook scp can win the race
-        # over the mirrors playbook's ssh and the master comes up
-        # agent-less).
+        # ForwardAgent=yes on every harness SSH connection means whichever
+        # connection creates the ControlMaster seeds it with an agent-forwarding
+        # channel. Otherwise ansible's later ForwardAgent=yes can silently reuse
+        # an agent-less master and break roles that ssh to git@github.com from
+        # the target.
         base = [
             "ssh",
             "-i",
@@ -780,27 +775,6 @@ class Machine:
             f"{self.ssh_user}@{self.ssh_host}",
         ]
         return [*base, shlex.join(cmd)] if cmd else base
-
-    def format_scp_cmd(self, local: str, remote: str) -> list[str]:
-        """Return an scp invocation pinned to this instance.
-
-        Shares `_ssh_options()` with `format_ssh_cmd`; only the port flag
-        differs (scp uses `-P`, ssh uses `-p`). ForwardAgent matches ssh
-        so a master created by scp carries the agent channel — see the
-        block comment in `format_ssh_cmd` for why this matters.
-        """
-        return [
-            "scp",
-            "-i",
-            self.ssh_key,
-            "-P",
-            str(self.ssh_port),
-            *self._ssh_options(),
-            "-o",
-            "ForwardAgent=yes",
-            local,
-            f"{self.ssh_user}@{self.ssh_host}:{remote}",
-        ]
 
     def ansible_env(self) -> dict[str, str]:
         """ANSIBLE_* environment overrides layered on top of os.environ.

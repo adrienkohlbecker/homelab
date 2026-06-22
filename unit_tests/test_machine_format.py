@@ -1,4 +1,4 @@
-"""Exact-output tests for Machine.format_{ssh,scp,ansible}_cmd."""
+"""Exact-output tests for Machine.format_{ssh,ansible}_cmd."""
 
 import shlex
 from collections.abc import Callable
@@ -63,43 +63,6 @@ def test_format_ssh_cmd_quotes_remote_with_spaces(
     cmd = m.format_ssh_cmd("echo", "hello world")
     # shlex.join quotes the second arg because of the space.
     assert cmd[-1] == "echo 'hello world'"
-
-
-def test_format_scp_cmd_uses_capital_P_and_keeps_forward_agent(
-    machine_factory: Callable[..., machine.Machine],
-) -> None:
-    m = machine_factory(ssh_port=2222, ssh_user="vagrant")
-    assert m.format_scp_cmd("local.sh", "/tmp/remote.sh") == [
-        "scp",
-        "-i",
-        "packer/vagrant.key",
-        "-P",
-        "2222",
-        "-o",
-        "ControlPath=/tmp/homelab-cm-2222",
-        "-o",
-        "ControlMaster=auto",
-        "-o",
-        "ControlPersist=600s",
-        "-o",
-        "StrictHostKeyChecking=no",
-        "-o",
-        "UserKnownHostsFile=/dev/null",
-        "-o",
-        "ConnectTimeout=10",
-        "-o",
-        "ServerAliveInterval=15",
-        "-o",
-        "ServerAliveCountMax=4",
-        "-o",
-        "LogLevel=ERROR",
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "ForwardAgent=yes",
-        "local.sh",
-        "vagrant@127.0.0.1:/tmp/remote.sh",
-    ]
 
 
 def test_format_ansible_cmd_default_envelope(
