@@ -423,49 +423,31 @@ qemu_host_ami:
     - mise run packer:seed-deps --ubuntu "$UBUNTU"
     - mise run packer:upload-s3 box_deps --ubuntu "$UBUNTU" --promote
 
-"qemu_image:box:jammy":
+"qemu_image:box":
   extends: .qemu_image_box
-  variables:
-    UBUNTU: jammy
+  parallel:
+    matrix:
+      - UBUNTU:
+          - jammy
+          - noble
+          - resolute
 
-"qemu_image:box:noble":
-  extends: .qemu_image_box
-  variables:
-    UBUNTU: noble
-
-"qemu_image:box:resolute":
-  extends: .qemu_image_box
-  variables:
-    UBUNTU: resolute
-
-# needs the box bake from this pipeline (artifacts ride lab's HOMELAB_CI_DIR, not
-# GitLab artifacts -- so artifacts: false). The edge is what orders box_deps after
-# box: they now sit in distinct per-(machine,release) resource groups, so the
-# needs edge -- not a shared group -- is the sole guarantee box has published
-# before seed-deps reads it.
-"qemu_image:box_deps:jammy":
+# needs:parallel:matrix keeps each box_deps:<ubuntu> behind the matching
+# box:<ubuntu>; artifacts ride lab's HOMELAB_CI_DIR, not GitLab artifacts.
+"qemu_image:box_deps":
   extends: .qemu_image_box_deps
+  parallel:
+    matrix:
+      - UBUNTU:
+          - jammy
+          - noble
+          - resolute
   needs:
-    - job: "qemu_image:box:jammy"
+    - job: "qemu_image:box"
+      parallel:
+        matrix:
+          - UBUNTU: [ '$[[ matrix.UBUNTU ]]' ]
       artifacts: false
-  variables:
-    UBUNTU: jammy
-
-"qemu_image:box_deps:noble":
-  extends: .qemu_image_box_deps
-  needs:
-    - job: "qemu_image:box:noble"
-      artifacts: false
-  variables:
-    UBUNTU: noble
-
-"qemu_image:box_deps:resolute":
-  extends: .qemu_image_box_deps
-  needs:
-    - job: "qemu_image:box:resolute"
-      artifacts: false
-  variables:
-    UBUNTU: resolute
 
 # Semantic cleanup for nested-qemu image bundles in S3. Bucket lifecycle handles
 # multipart leftovers and noncurrent versions; this job reads the promoted.json
