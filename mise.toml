@@ -96,6 +96,7 @@ python = "3.14"
 uv = "0.9.26"
 shellcheck = "0.11.0"
 shfmt = "3.13.1"
+yq = "4.53.3"
 stylua = "2.5.2"
 # selene (Lua linter) has no short registry name; pin the aqua backend.
 "aqua:Kampfkarren/selene" = "0.31.0"
