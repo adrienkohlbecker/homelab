@@ -370,7 +370,7 @@ def test_passt_netdev_params_skip_address_off_topology(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
     """minimal isn't in the topology, so the native netdev omits the address
-    pin (mirrors the sidecar's empty passt_address_args)."""
+    pin, matching the sidecar path's omitted address flags."""
     m = machine_factory(host_arch="x86_64", machine="minimal")
     _setup(m)
     m._net_backend = "passt"

@@ -37,31 +37,6 @@ class TestQemuUserNetArgs:
 
 
 # ---------------------------------------------------------------------------
-# passt_address_args
-# ---------------------------------------------------------------------------
-
-
-class TestPasstAddressArgs:
-    def test_returns_empty_for_unknown_machine(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            machine, "_load_test_topology", lambda: {"hosts": {}, "partitions": {"physical": {"cidr": "10.234.0.0/16"}}}
-        )
-        assert machine.passt_address_args("nonexistent") == []
-
-    def test_returns_flags_for_known_machine(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        topo = {
-            "hosts": {"box": {"physical": "10.234.0.2"}},
-            "partitions": {"physical": {"cidr": "10.234.0.0/16"}},
-        }
-        monkeypatch.setattr(machine, "_load_test_topology", lambda: topo)
-        result = machine.passt_address_args("box")
-        assert "--address" in result
-        assert "10.234.0.2" in result
-        assert "--netmask" in result
-        assert "--gateway" in result
-
-
-# ---------------------------------------------------------------------------
 # _qemu_ansible_args
 # ---------------------------------------------------------------------------
 
