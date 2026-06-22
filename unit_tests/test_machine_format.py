@@ -105,6 +105,21 @@ def test_format_ansible_cmd_default_envelope(
     # Cloud-environment discriminator. With HOMELAB_TEST_IN_AWS unset, the
     # guest is not in AWS.
     assert '{"test_in_aws": false}' in cmd
+    assert not any("tailscale_wan_direct" in part for part in cmd)
+    assert not any("headscale_oidc_enabled" in part for part in cmd)
+    assert not any("podman_zvol_size" in part for part in cmd)
+
+
+def test_format_ansible_cmd_role_fixture_vars(
+    machine_factory: Callable[..., machine.Machine],
+) -> None:
+    firewall_cmd = machine_factory(role="firewall").format_ansible_cmd("site.yml")
+    headscale_cmd = machine_factory(role="headscale").format_ansible_cmd("site.yml")
+    site_cmd = machine_factory(role="_site_test").format_ansible_cmd("site.yml")
+
+    assert '{"tailscale_wan_direct":true}' in firewall_cmd
+    assert '{"headscale_oidc_enabled":true}' in headscale_cmd
+    assert '{"podman_zvol_size":"53687091200"}' in site_cmd
 
 
 def test_format_ansible_cmd_in_aws_env_sets_flag_and_clears_nexus(
