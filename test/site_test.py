@@ -94,9 +94,9 @@ async def run_site_test(m: Machine, *, timeout: int) -> None:
                         print_line(f"System ready: {state}")
 
                         print_line("Running mirrors prelude")
-                        await m.ansible_command(f"{m.workdir.name}/_mirrors.yml")
+                        await m.ansible_command(str(m.workdir_path / "_mirrors.yml"))
 
-                        staged = Path(m.workdir.name) / "site.yml"
+                        staged = m.workdir_path / "site.yml"
                         shutil.copy(Path("site.yml"), staged)
 
                         print_line("Running site.yml converge")

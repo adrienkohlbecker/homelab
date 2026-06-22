@@ -41,9 +41,10 @@ OUT_DIR = Path("test/out")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 SSH_KEY = "packer/vagrant.key"
-# Loopback endpoint: qemu hostfwd binds, VNC displays, and Machine.ssh_host
-# all live here.
+# Loopback endpoint for qemu hostfwd binds, VNC displays, SSH, and delegated
+# WAN probes.
 SSH_HOST = "127.0.0.1"
+PIDFILE_NAME = "pid"
 
 TOPOLOGY_PATH = Path(__file__).parent.parent / "data" / "network_topology.yml"
 WAN_PROBE_PORTS_PATH = Path(__file__).parent.parent / "data" / "wan_probe_ports.yml"
@@ -403,18 +404,13 @@ class Machine:
     # Machine.stop() to do its graceful->SIGKILL escalation.
     WRAPPER_GRACE_SECONDS: ClassVar[int] = 60
 
-    # SSH endpoint host -- loopback (qemu hostfwd). Every SSH and ansible
-    # invocation and the banner probe read this, never SSH_HOST.
-    ssh_host: str
-    # Private key handed to ssh and ansible via -i: the qemu fixtures bake the
-    # well-known vagrant key.
-    ssh_key: str
     output_file: Path
     journal_file: Path
     boot_file: Path
     dmesg_file: Path
     systemctl_failed_file: Path
     workdir: tempfile.TemporaryDirectory[str]
+    workdir_path: Path
     # fd of <workdir>/.live, held with fcntl.LOCK_EX|LOCK_NB for the lifetime
     # of the Machine. Liveness signal consumed by sweep_stale_workdirs(): the
     # kernel releases the lock on process death (clean or SIGKILL/OOM), so a
@@ -442,7 +438,6 @@ class Machine:
     # WAN interface (traffic originating inside the VM never ingresses on
     # the WAN iface). qemu slirp/passt forwards pre-picked free 127.0.0.1
     # ports, mapped to guest ports in wan_forward_ports.
-    wan_probe_host: str
     wan_forward_ports: dict[str, dict[str, int]]
 
     drives: list[str]
@@ -595,15 +590,6 @@ class Machine:
         self.ubuntu_name = ubuntu_name
         self.machine_timeout = machine_timeout
         self.upstream_mirrors = upstream_mirrors
-        # Optional workdir parent override. When None it falls through to the
-        # imagedir default below. Wired by testrole.py from --workdir-parent /
-        # $HOMELAB_WORKDIR_PARENT so CI workflows can keep the qcow2 tree
-        # mounted ro and stage the per-run TempDir somewhere ephemeral.
-        self.workdir_parent = workdir_parent
-        self.ssh_host = SSH_HOST
-        self.ssh_key = SSH_KEY
-        # Filename (under the per-run workdir) where qemu writes its pidfile.
-        self.idfile = "pid"
         self.proc: asyncio.subprocess.Process | None = None
         # Backgrounded `ssh -M -N` master, opened in ensure_ssh() once the
         # banner is up and torn down in stop(). Keeps a single ControlMaster
@@ -614,7 +600,6 @@ class Machine:
         self._live_lock_fd = -1
         self._publish_lock_fd = -1
         self.peak_rss_kb = 0
-        self.wan_probe_host = SSH_HOST
         self.wan_forward_ports = {"tcp": {}, "udp": {}}
 
         if self.ubuntu_name not in UBUNTU_RELEASES:
@@ -637,24 +622,22 @@ class Machine:
         # survive into a healthy run -- drop them explicitly.
         for stale in (self.journal_file, self.dmesg_file, self.systemctl_failed_file):
             stale.unlink(missing_ok=True)
-        # The workdir lands alongside the packer qcow2s: qemu-img backing-file
-        # overlays reach the source qcow2 by absolute path so colocation isn't
-        # strictly required, but keeping it on the same filesystem matches the
-        # operator's mental model and keeps `du` totals predictable. An explicit
+        # The workdir lands alongside the packer qcow2s by default. An explicit
         # workdir_parent (CI flag) overrides so the imagedir can be ro-mounted.
         # Auto-create the parent so --workdir-parent /some/new/path just works
         # without callers having to mkdir -p first; tempfile itself doesn't
         # create the dir argument, only the per-run subdir under it.
-        wd_parent = self.workdir_parent or self.imagedir
+        wd_parent = workdir_parent or self.imagedir
         Path(wd_parent).mkdir(parents=True, exist_ok=True)
         self.workdir = tempfile.TemporaryDirectory(dir=wd_parent)
+        self.workdir_path = Path(self.workdir.name)
         # Claim the liveness lock immediately after the workdir exists so a
         # sweep racing us from another container can't reap the dir between
         # mkdtemp and the first qemu/ansible spawn. LOCK_NB so a contended
         # lock fails loudly (would only happen if two Machines somehow shared
         # a workdir, which mkdtemp prevents -- a BlockingIOError here is a
         # bug, not a race).
-        self._live_lock_fd = os.open(f"{self.workdir.name}/.live", os.O_WRONLY | os.O_CREAT, 0o644)
+        self._live_lock_fd = os.open(self.workdir_path / ".live", os.O_WRONLY | os.O_CREAT, 0o644)
         fcntl.flock(self._live_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         self._preflight()
 
@@ -692,6 +675,11 @@ class Machine:
     def _require_binary(name: str, hint: str) -> None:
         if shutil.which(name) is None:
             raise RuntimeError(f"Required binary {name!r} not found on PATH. {hint}")
+
+    @property
+    def pid_file(self) -> Path:
+        """QEMU pidfile path under the per-run workdir."""
+        return self.workdir_path / PIDFILE_NAME
 
     @property
     def wrapper_timeout(self) -> int:
@@ -766,13 +754,13 @@ class Machine:
         base = [
             "ssh",
             "-i",
-            self.ssh_key,
+            SSH_KEY,
             "-p",
             str(self.ssh_port),
             *self._ssh_options(),
             "-o",
             "ForwardAgent=yes",
-            f"{self.ssh_user}@{self.ssh_host}",
+            f"{self.ssh_user}@{SSH_HOST}",
         ]
         return [*base, shlex.join(cmd)] if cmd else base
 
@@ -809,7 +797,7 @@ class Machine:
             # the whole test.
             "ANSIBLE_TIMEOUT": "30",
             "ANSIBLE_FACT_CACHING": "jsonfile",
-            "ANSIBLE_FACT_CACHING_CONNECTION": f"{self.workdir.name}/facts",
+            "ANSIBLE_FACT_CACHING_CONNECTION": str(self.workdir_path / "facts"),
             "ANSIBLE_FACT_CACHING_TIMEOUT": "7200",
         }
 
@@ -851,11 +839,11 @@ class Machine:
             "-e",
             f"ansible_ssh_port={self.ssh_port}",
             "-e",
-            f"ansible_ssh_host={self.ssh_host}",
+            f"ansible_ssh_host={SSH_HOST}",
             "-e",
             f"ansible_ssh_user={self.ssh_user}",
             "-e",
-            f"ansible_ssh_private_key_file={self.ssh_key}",
+            f"ansible_ssh_private_key_file={SSH_KEY}",
             # Static playbooks declare `hosts: all`; --limit pins the play to
             # the inventory host we actually provisioned.
             "--limit",
@@ -874,7 +862,7 @@ class Machine:
             # Controller-side WAN probe endpoint for verify probes that
             # delegate_to: localhost (see the wan_* field comment).
             "-e",
-            f"wan_probe_host={self.wan_probe_host}",
+            f"wan_probe_host={SSH_HOST}",
             "-e",
             json.dumps({"wan_forward_ports": self.wan_forward_ports}, sort_keys=True, separators=(",", ":")),
             # Keepalives on the ansible/mitogen SSH transport too, matching
@@ -945,7 +933,7 @@ class Machine:
         """Block until the hypervisor writes the PID/CID file or the launch fails."""
 
         deadline = time.monotonic() + IDFILE_TIMEOUT
-        id_path = Path(f"{self.workdir.name}/{self.idfile}")
+        id_path = self.pid_file
         while not id_path.exists():
             if self.proc and self.proc.returncode is not None:
                 raise RuntimeError("Launching machine failed")
@@ -994,13 +982,13 @@ class Machine:
             "-N",
             "-f",
             "-i",
-            self.ssh_key,
+            SSH_KEY,
             "-p",
             str(self.ssh_port),
             *self._ssh_options(),
             "-o",
             "ForwardAgent=yes",
-            f"{self.ssh_user}@{self.ssh_host}",
+            f"{self.ssh_user}@{SSH_HOST}",
         ]
         print_cmd_line(cmd)
         # -f backgrounds ssh itself once the master socket is up, so the
@@ -1034,7 +1022,7 @@ class Machine:
 
         try:
             reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(self.ssh_host, self.ssh_port),
+                asyncio.open_connection(SSH_HOST, self.ssh_port),
                 timeout=2,
             )
         except (OSError, TimeoutError):
@@ -1165,7 +1153,7 @@ class Machine:
         after 5s in case something pathological keeps it alive (zombie
         subprocess, hung pipe).
         """
-        pid_path = Path(f"{self.workdir.name}/{self.idfile}")
+        pid_path = self.pid_file
         pid: int | None = None
         if pid_path.exists():
             with contextlib.suppress(ValueError):
@@ -1259,7 +1247,7 @@ class Machine:
         # Stage the inventory snippets, roles, and data files that playbooks
         # read relative to their workdir.
         for required_tree in ("group_vars", "host_vars", "roles", "data"):
-            Path(required_tree).copy_into(self.workdir.name)
+            Path(required_tree).copy_into(self.workdir_path)
 
         # Role-local filter plugins are copied with roles/. A top-level
         # filter_plugins/, if present, also needs to sit beside the playbooks.
@@ -1268,7 +1256,7 @@ class Machine:
         for optional_tree in ("filter_plugins", "wireguard"):
             src = Path(optional_tree)
             if src.exists():
-                src.copy_into(self.workdir.name)
+                src.copy_into(self.workdir_path)
 
         # mise.toml + uv lock + pyproject are repo-root files a role may
         # reference via `{{ playbook_dir }}/<file>` during converge. Stage
@@ -1277,7 +1265,7 @@ class Machine:
         for repo_root_file in ("mise.toml", "pyproject.toml", "uv.lock"):
             src = Path(repo_root_file)
             if src.exists():
-                src.copy_into(self.workdir.name)
+                src.copy_into(self.workdir_path)
 
         # Copy the static role-agnostic playbooks (site / _setup /
         # _verify / _mirrors) into the workdir so ansible loads
@@ -1286,7 +1274,7 @@ class Machine:
         # format_ansible_cmd. testrole.py decides which hook playbook to
         # invoke by checking roles/<role>/tasks/<hook>.yml at the source.
         for playbook in Path("test/playbooks").glob("*.yml"):
-            playbook.copy_into(self.workdir.name)
+            playbook.copy_into(self.workdir_path)
 
         # Acquire the publish-lock before any read of the imagedir starts.
         # _create_overlay's qemu-img embeds the backing file's absolute path
@@ -1367,20 +1355,22 @@ class Machine:
 
         if self.machine == "minimal":
             cloud_image = await self._ensure_minimal_cloudimg()
+            seed_img = self.workdir_path / "seed.img"
+            disk_img = self.workdir_path / "disk.img"
             await build_seed_iso(
-                Path(self.workdir.name) / "seed.img",
+                seed_img,
                 Path("test/minimal/user-data"),
                 Path("test/minimal/meta-data"),
             )
             await self._create_overlay(
                 str(cloud_image),
-                f"{self.workdir.name}/disk.img",
+                str(disk_img),
                 size="20G",
                 backing_fmt="qcow2",
             )
             self.drives = [
-                self._virtio_drive(f"{self.workdir.name}/disk.img"),
-                f"file={self.workdir.name}/seed.img,if=virtio,format=raw",
+                self._virtio_drive(str(disk_img)),
+                f"file={seed_img},if=virtio,format=raw",
             ]
             # x86_64's q35 falls back to SeaBIOS off the OS disk; aarch64's
             # `virt` boots only via UEFI, so flash is required there.
@@ -1417,13 +1407,13 @@ class Machine:
                 drive_format = self._packer_disk_format
             else:
                 for idx, src in enumerate(os_src_paths, start=1):
-                    dest = f"{self.workdir.name}/packer-ubuntu-{idx}"
-                    await self._create_overlay(src, dest)
-                    os_disk_paths.append(dest)
+                    dest = self.workdir_path / f"packer-ubuntu-{idx}"
+                    await self._create_overlay(src, str(dest))
+                    os_disk_paths.append(str(dest))
                 drive_format = "qcow2"
 
             self.drives = [self._virtio_drive(path, drive_format) for path in os_disk_paths]
-            shutil.copyfile(Path(image_dir) / "efivars.fd", Path(self.workdir.name) / "efivars.fd")
+            shutil.copyfile(Path(image_dir) / "efivars.fd", self.workdir_path / "efivars.fd")
             self.drives += await self._uefi_drives()
 
         # launch.py --kernel/--initrd/--append: bypass the firmware boot
@@ -1603,11 +1593,11 @@ class Machine:
         if self._efi_vars is not None:
             vars_path = self._efi_vars
         else:
-            packer_vars = Path(f"{self.workdir.name}/efivars.fd")
+            packer_vars = self.workdir_path / "efivars.fd"
             if packer_vars.exists():
                 vars_path = packer_vars
             else:
-                vars_path = Path(f"{self.workdir.name}/uefi-vars.fd")
+                vars_path = self.workdir_path / "uefi-vars.fd"
                 with vars_path.open("wb") as handle:
                     handle.truncate(code_path.stat().st_size)
         return [
@@ -1869,7 +1859,7 @@ class Machine:
             "-device",
             net_device_arg,
             "-pidfile",
-            f"{self.workdir.name}/{self.idfile}",
+            str(self.pid_file),
         ]
 
         # launch.py-only post-process. Each branch is a no-op when the
@@ -1952,7 +1942,7 @@ class Machine:
             f"ControlPath={self.ssh_control_path}",
             "-p",
             str(self.ssh_port),
-            f"{self.ssh_user}@{self.ssh_host}",
+            f"{self.ssh_user}@{SSH_HOST}",
         ]
         with contextlib.suppress(OSError, TimeoutError):
             proc = await asyncio.create_subprocess_exec(

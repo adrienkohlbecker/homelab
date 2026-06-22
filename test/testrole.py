@@ -260,7 +260,7 @@ async def run_test(
                             print_line(f"Skipping mirrors prelude: {m.role!r} is the role that configures it")
                         else:
                             async with _phase("mirrors playbook"):
-                                await m.ansible_command(f"{m.workdir.name}/_mirrors.yml")
+                                await m.ansible_command(str(m.workdir_path / "_mirrors.yml"))
 
                         if m.machine == "minimal":
                             # Fixes systemd-analyze validation error:
@@ -273,9 +273,9 @@ async def run_test(
                         # roles/<role>/tasks/_setup.yml for it to import.
                         if Path(f"roles/{m.role}/tasks/_setup.yml").exists():
                             async with _phase("hook _setup.yml"):
-                                await m.ansible_command(f"{m.workdir.name}/_setup.yml")
+                                await m.ansible_command(str(m.workdir_path / "_setup.yml"))
 
-                        site_yml = f"{m.workdir.name}/site.yml"
+                        site_yml = str(m.workdir_path / "site.yml")
                         if checkmode:
                             async with _phase("checkmode --check"):
                                 await m.ansible_command(site_yml, "--check", *pass_args)
@@ -289,7 +289,7 @@ async def run_test(
                         # Post-role assertions, if the role declares any.
                         if Path(f"roles/{m.role}/tasks/_verify.yml").exists():
                             async with _phase("verify.yml"):
-                                await m.ansible_command(f"{m.workdir.name}/_verify.yml")
+                                await m.ansible_command(str(m.workdir_path / "_verify.yml"))
 
                     except CommandFailedException:
                         print_line("Command failed")
