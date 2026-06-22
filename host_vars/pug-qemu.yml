@@ -4,6 +4,13 @@
 # and on-demand `testrole.py --machine pug` go through here.
 qemu_test: true
 
+# The prod 50GB podman zvol (group_vars/all/main.yml) is non-sparse, so its
+# refreservation equals volsize -- it doesn't fit the 40GB pug qemu rpool
+# (which also carries 8GB swap + the OS). box hosts the prod size only because
+# its fixture rpool was grown to 96GB; lab/pug keep prod-faithful 40GB pools.
+# A single role test never needs the full-fleet size, so shrink it here.
+podman_zvol_size: '{{ "15GB" | human_to_bytes | string }}'
+
 # Same block formula as host_vars/pug.yml; only `parent` differs (the
 # QEMU NIC isn't named eth0). See host_vars/lab-qemu.yml for the
 # rationale around qemu's user-net being pinned to the topology
