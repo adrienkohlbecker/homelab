@@ -1,7 +1,7 @@
-"""Unit tests for filter_plugins/wireguard_psk.py — PSK derivation."""
+"""Unit tests for filter_plugins/wireguard_psk.py."""
 
 import base64
-import importlib
+import importlib.util
 from pathlib import Path
 
 _MODULE_PATH = Path(__file__).resolve().parent.parent / "filter_plugins" / "wireguard_psk.py"
@@ -18,35 +18,21 @@ wg = _load()
 
 
 class TestWireguardPsk:
-    def test_returns_base64_string(self) -> None:
+    def test_derives_expected_hmac_key(self) -> None:
         result = wg.wireguard_psk("lab-phone", "myseed")
-        decoded = base64.b64decode(result)
-        assert len(decoded) == 32
+        assert result == "tdKX6ZCAE7lZYoreT1IAumcVTTcntOZLvLgtdtWACXI="
+        assert len(base64.b64decode(result)) == 32
 
     def test_deterministic(self) -> None:
         a = wg.wireguard_psk("lab-phone", "seed1")
         b = wg.wireguard_psk("lab-phone", "seed1")
         assert a == b
 
-    def test_different_seeds_differ(self) -> None:
-        a = wg.wireguard_psk("lab-phone", "seed1")
-        b = wg.wireguard_psk("lab-phone", "seed2")
-        assert a != b
-
-    def test_different_pairs_differ(self) -> None:
-        a = wg.wireguard_psk("lab-phone", "seed")
-        b = wg.wireguard_psk("lab-pug", "seed")
-        assert a != b
-
-    def test_pair_order_matters(self) -> None:
-        a = wg.wireguard_psk("lab-phone", "seed")
-        b = wg.wireguard_psk("phone-lab", "seed")
-        assert a != b
-
-    def test_valid_wireguard_key_length(self) -> None:
-        result = wg.wireguard_psk("a-b", "s")
-        raw = base64.b64decode(result)
-        assert len(raw) == 32
+    def test_seed_pair_and_pair_order_select_the_key(self) -> None:
+        key = wg.wireguard_psk("lab-phone", "seed")
+        assert key != wg.wireguard_psk("lab-phone", "other-seed")
+        assert key != wg.wireguard_psk("lab-pug", "seed")
+        assert key != wg.wireguard_psk("phone-lab", "seed")
 
 
 class TestFilterModule:

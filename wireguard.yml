@@ -4,7 +4,7 @@
 # only in this run's JSON output, which the task streams through a pipe.
 #
 # localhost is in [prod] (hosts.ini), so it loads the vaulted wireguard_keys +
-# wireguard_psk_seed. The PSK is derived (roles/wireguard/filter_plugins/wireguard_psk.py), so
+# wireguard_psk_seed. The PSK is derived (filter_plugins/wireguard_psk.py), so
 # no .psk files are needed either.
 - name: Render a wireguard client config to stdout
   hosts: localhost
