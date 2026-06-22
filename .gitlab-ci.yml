@@ -21,9 +21,6 @@
 #     a manual pipeline with HOMELAB_CI_TARGET=lab renders the same matrix and
 #     drives the local qemu harness directly on lab.
 #
-# This is the sole CI: the former GitHub Actions setup (.github/workflows/) has
-# been retired.
-#
 # Required project CI/CD variable: HOMELAB_VAULT_PASSWORD_TEST — the `test`
 # vault identity's password (masked).
 # The prod identity's password is never available to CI by design (CLAUDE.md:
@@ -91,6 +88,28 @@ workflow:
 # nothing here reads.
 .hosted:
   image: $CI_REGISTRY_IMAGE/ci:latest
+
+.push_or_web:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "push"
+
+.manual_job:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - when: manual
+      allow_failure: true
+
+.protected_manual_job:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+      when: manual
+      allow_failure: true
 
 # Change detection + dynamic child pipeline (notes/ci_aws_nested_qemu_cells.md).
 # `detect` runs the classification core (mise-tasks/ci/detect.py) and writes one
@@ -218,12 +237,9 @@ test_cells:
 
 lint:
   stage: prepare
-  extends: .hosted
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - if: $CI_PIPELINE_SOURCE == "web"
-    - if: $CI_PIPELINE_SOURCE == "push"
+  extends:
+    - .hosted
+    - .push_or_web
   # The default (small) hosted runner is 2 vCPU; lint fans its linters out in
   # parallel, so the 4-vCPU medium tier roughly halves the wall-clock.
   tags:
@@ -252,12 +268,9 @@ lint:
 # (with noisy resolution warnings).
 unit_tests:
   stage: prepare
-  extends: .hosted
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - if: $CI_PIPELINE_SOURCE == "web"
-    - if: $CI_PIPELINE_SOURCE == "push"
+  extends:
+    - .hosted
+    - .push_or_web
   timeout: 15m
   script:
     - mise install
@@ -277,21 +290,14 @@ unit_tests:
 # build still works, mounted only as a BuildKit secret either way.
 ci_image:
   stage: prepare
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - when: manual
-      # A skipped manual job must not hold the pipeline in "blocked".
-      allow_failure: true
+  extends: .manual_job
   image: docker:28.3.3
   services:
     - docker:28.3.3-dind
   tags:
     - saas-linux-medium-amd64
-  # Serialize builds across pipelines (the GH workflow's concurrency group):
-  # two concurrent runs would race on the floating :latest push. Don't let
-  # auto-cancel kill a build mid-push either — a half-pushed manifest is
-  # strictly worse than a delayed run.
+  # Two concurrent runs would race on the floating :latest push. Don't let
+  # auto-cancel kill a build mid-push either.
   resource_group: ci_image
   interruptible: false
   timeout: 45m
@@ -324,13 +330,7 @@ ci_image:
 # template resolves /homelab-ci/ami/qemu-host/noble.
 qemu_host_ami:
   stage: prepare
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
-      when: manual
-      # A skipped manual job must not hold the pipeline in "blocked".
-      allow_failure: true
+  extends: .protected_manual_job
   tags:
     - fox-docker-aws
   id_tokens:
@@ -373,13 +373,7 @@ qemu_host_ami:
 # *same* cell from overlapping its own in-flight publish.
 .qemu_image:
   stage: prepare
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
-      when: manual
-      # A skipped manual job must not hold the pipeline in "blocked".
-      allow_failure: true
+  extends: .protected_manual_job
   # lab's shell runner is the KVM builder (the same host the lab qemu target
   # tests on). The build writes HOMELAB_CI_DIR, which doubles as lab's local
   # image store: the lab cells boot those artifacts in place (no hydration), so
@@ -484,7 +478,6 @@ qemu_image_reaper:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_REF_PROTECTED == "true"
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
-      # A skipped manual job must not hold the pipeline in "blocked".
       allow_failure: true
   tags:
     - fox-docker-aws
@@ -528,13 +521,7 @@ qemu_image_reaper:
 # local qemu and the publish authenticates to Hetzner with HCLOUD_TOKEN alone.
 fox_image:
   stage: prepare
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
-      when: manual
-      # A skipped manual job must not hold the pipeline in "blocked".
-      allow_failure: true
+  extends: .protected_manual_job
   # lab's shell runner is the KVM builder (the same host the lab qemu cells test
   # on). The qemu build writes HOMELAB_CI_DIR, which packer:hetzner then reads to
   # stream onto the rescue server -- both steps must land on this one host.
@@ -577,13 +564,9 @@ fox_image:
 # from master only (branch dispatches keep the job artifacts).
 zbm_build:
   stage: prepare
-  extends: .hosted
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - when: manual
-      # A skipped manual job must not hold the pipeline in "blocked".
-      allow_failure: true
+  extends:
+    - .hosted
+    - .manual_job
   services:
     - docker:28.3.3-dind
   # xbps-install + dracut parallelize poorly but the buildx layer pulls and
