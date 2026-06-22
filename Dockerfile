@@ -1,20 +1,13 @@
-# Container image consumed by every github-actions workflow in this
-# repo. Built and pushed exclusively by the ci-image workflow
-# to the homelab nexus docker hosted repo at
-# nexus.lab.fahm.fr/homelab/ci:latest. Other
-# workflows reference that URL directly in their `container:` block;
-# anonymous pulls are enabled on Nexus so the runner just fetches it.
-# On a brand-new lab runner with no prior image in nexus, kick the
-# ci-image workflow once via `workflow_dispatch` before any
-# other workflow can succeed. Layered FROM ubuntu:24.04 with everything
-# the test harness, lint, and packer-build need pre-installed so jobs
-# cold-start in ~3s.
+# Container image for the hosted GitLab jobs in .gitlab-ci.yml. The manual
+# ci_image job publishes it to this project's registry as
+# $CI_REGISTRY_IMAGE/ci:latest. It layers ubuntu:24.04 with the test harness,
+# lint, and packer-build toolchain preinstalled so hosted jobs cold-start fast.
 #
 # Build inputs (mise.toml / pyproject.toml / uv.lock /
 # packer/qemu.pkr.hcl) are COPYed in so a bump to any of them
 # invalidates the dependency layers and triggers a fresh `mise
 # install` + `uv sync` + `packer init`. Build context root is the repo
-# root; the workflow uses actions/checkout's workspace directly.
+# root; the ci_image job builds from the checked-out repository directly.
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -68,10 +61,6 @@ RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
 # for the `minimal` variant's seed iso; python3-yaml so mise-tasks/ci
 # scripts can run without uv. build-essential is for any wheel that
 # needs to compile. gpg + apt-transport-https are for the mise apt repo.
-# nodejs because every actions/checkout / actions/upload-artifact / etc.
-# is a JS action and crun aborts with "executable file 'node' not found"
-# without it. npm comes from mise's node = "24" install, which
-# markdownlint-cli2 depends on.
 #
 # curl + netcat-openbsd back the WAN-side delegate_to: localhost probes
 # in roles/iptables/tasks/_verify.yml — TCP via curl, UDP via `nc -u`.
@@ -93,7 +82,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       passt \
       xorriso cloud-image-utils \
       python3-yaml \
-      nodejs \
       build-essential \
     && rm -rf /var/lib/apt/lists/*
 
@@ -141,15 +129,11 @@ RUN install -dm 755 /etc/apt/keyrings && \
     rm -rf /var/lib/apt/lists/*
 
 # Pin uv's cache to a fixed absolute path instead of the default
-# $HOME/.cache/uv. GitHub Actions overrides HOME to /github/home inside
-# job containers (same reason PACKER_PLUGIN_PATH is pinned below), so a
-# cache warmed at build time under root's home would never be consulted
-# at runtime -- every `uv sync` would re-download from the index. Pinning
-# here means the warm-up below and every workflow `uv sync` share
-# /opt/uv-cache. UV_LINK_MODE=copy because the per-checkout .venv lands on
-# the bind-mounted GITHUB_WORKSPACE (a different filesystem than the
-# cache), so uv's default hardlink fails and falls back to copy with a
-# warning anyway -- this just makes the copy the deliberate path.
+# $HOME/.cache/uv. Hosted jobs may run with a fresh HOME, so a cache warmed
+# under root's home would be missed at runtime. Pinning here means the warm-up
+# below and every job `uv sync` share /opt/uv-cache. UV_LINK_MODE=copy because
+# checkout workspaces land on a different filesystem than the cache, so uv's
+# default hardlink would warn and fall back to copying anyway.
 # Bake the resolved venv into the image and reuse it at runtime, instead of
 # rebuilding a per-checkout .venv in every job. The 60-wide CI fan-out
 # otherwise rebuilds this venv 60x concurrently, and copy-mode materialization
