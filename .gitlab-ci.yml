@@ -349,9 +349,8 @@ qemu_host_ami:
 # Build + promote the box / box_deps nested-qemu guest images the test cells
 # boot, one manual job per (image, release). Unlike qemu_host_ami (an EC2 AMI
 # bake on fox) these are qemu fixtures that only build under nested KVM, so they
-# run on lab's shell runner: packer:build box boots a qemu VM and installs the
-# platform; box_deps additionally layers seed_deps.yml (podman/nginx/backports)
-# via packer:seed-deps; upload-s3 --promote publishes each bundle to
+# run on lab's shell runner: packer:publish-qemu builds or seeds the requested
+# fixture and then uploads/promotes the resulting bundle to
 # s3://homelab-ci-images and writes the promoted.json pointer object the aws_qemu
 # cells hydrate. Without these the S3 bundles only refresh from a manual local
 # build, so promoted images drift behind role code.
@@ -395,8 +394,7 @@ qemu_host_ami:
   extends: .qemu_image
   resource_group: qemu_image_box_$UBUNTU
   script:
-    - mise run packer:build box --ubuntu "$UBUNTU"
-    - mise run packer:upload-s3 box --ubuntu "$UBUNTU" --promote
+    - mise run packer:publish-qemu box --ubuntu "$UBUNTU" --promote
 
 # box_deps: box with podman/nginx/backports pre-baked. Layers seed_deps.yml onto
 # the box bake from the same pipeline -- each box_deps:<rel> `needs:` its matching
@@ -409,8 +407,7 @@ qemu_host_ami:
   rules: !reference [ .protected_on_success_job, rules ]
   resource_group: qemu_image_box_deps_$UBUNTU
   script:
-    - mise run packer:seed-deps --ubuntu "$UBUNTU"
-    - mise run packer:upload-s3 box_deps --ubuntu "$UBUNTU" --promote
+    - mise run packer:publish-qemu box_deps --ubuntu "$UBUNTU" --promote
 
 "qemu_image:box":
   extends: .qemu_image_box
