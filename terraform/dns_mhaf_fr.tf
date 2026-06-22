@@ -30,9 +30,7 @@ locals {
     mx_wildcard_in1 = { type = "MX", name = "*.mhaf.fr", content = "in1-smtp.messagingengine.com", priority = 10, comment = "fastmail" }
     mx_wildcard_in2 = { type = "MX", name = "*.mhaf.fr", content = "in2-smtp.messagingengine.com", priority = 20, comment = "fastmail" }
   }
-}
 
-locals {
   # Host A records for mhaf.fr (the test zone) — derive from
   # `local.test_network` (the gsub'd 10.234.x view of the topology).
   # Names resolve to the host's physical IP in the test environment,

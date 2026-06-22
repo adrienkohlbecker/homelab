@@ -1,8 +1,8 @@
 # Mailgun powers transactional / notification email for the homelab: four
 # service SMTP credentials (postfix/sabnzbd/gitea/overseerr@
-# noreply.fahm.fr) relay through smtp.eu.mailgun.org. The DNS surface (MX,
-# DKIM, SPF, DMARC, click tracking CNAME) is in dns.tf; this file owns the
-# Mailgun-side domain configuration that those DNS records point at.
+# noreply.fahm.fr) relay through smtp.eu.mailgun.org. The DNS surface lives in
+# dns_fahm_fr.tf; this file owns the Mailgun-side domain configuration those
+# records point at.
 #
 # Auth uses an account-scoped Mailgun Private API key (settings ->
 # "API security" in the Mailgun UI). Stored in 1Password and surfaced
