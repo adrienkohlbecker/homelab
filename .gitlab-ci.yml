@@ -514,14 +514,9 @@ fox_image:
 # tarball version in roles/zfsbootmenu/vars/main.yml +
 # packer/scripts/chroot.sh.
 #
-# Runs docker-in-docker on a hosted runner: buildx with a docker-container
-# builder against the dind service (the upstream Dockerfile needs real
-# BuildKit for heredoc RUN blocks); the zbm scripts drive the docker CLI
-# throughout — here against dind, on workstations against the podman
-# socket's docker-compatible API. The builder layer cache lives in this
-# project's container registry (zbm-builder:v<version>-<arch>), pushed back
-# under the job token; the tarball publishes to the generic package registry
-# from master only (branch dispatches keep the job artifacts).
+# Runs docker-in-docker on a hosted runner. The job owns the service and
+# artifacts; zbm:ci-build owns buildx setup, registry cache, tarball assertions,
+# and default-branch package upload.
 zbm_build:
   stage: prepare
   extends:
@@ -558,44 +553,4 @@ zbm_build:
       - zbm-build/**/*.sha256sum
   script:
     - mise run ci:bootstrap
-    # Bounded wait for dind to finish generating its TLS certs and serve.
-    - timeout 60 bash -c 'until docker info >/dev/null 2>&1; do sleep 1; done'
-    # The default docker driver can't export cache to a registry; a
-    # docker-container builder can, and --load imports the result into the
-    # dind daemon where the scripts' post-build container runs read it.
-    # buildx refuses to create a builder from TLS env vars alone, so wrap
-    # the dind endpoint in a named context; plain docker commands keep
-    # reading the env.
-    - docker context create dind --docker "host=${DOCKER_HOST},ca=${DOCKER_CERT_PATH}/ca.pem,cert=${DOCKER_CERT_PATH}/cert.pem,key=${DOCKER_CERT_PATH}/key.pem"
-    - docker buildx create dind --name zbm --driver docker-container --use
-    - docker buildx inspect --bootstrap zbm
-    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
-    - |
-      set -euo pipefail
-      # Resolve through mise, not by parsing mise.toml: these vars are tera
-      # conditionals (`{% if arch() == "arm64" %}…`) whose embedded double-quoted
-      # arch literals defeat a naive awk -F'"' extraction (it grabs `arm64`).
-      eval "$(mise env)"
-      [ -n "${ZBM_VERSION:-}" ] && [ -n "${ZBM_KERNEL_VERSION:-}" ] || { echo "ZBM_VERSION/ZBM_KERNEL_VERSION not set in mise env" >&2; exit 1; }
-      ARCH="$(uname -m)"
-      export ZBM_BUILD_SUFFIX="-ci.${CI_PIPELINE_ID}.${CI_JOB_ID}"
-      export ZBM_BUILDER_CACHE_REF="${CI_REGISTRY_IMAGE}/zbm-builder:v${ZBM_VERSION}-${ARCH}"
-      echo "Building ZFSBootMenu v${ZBM_VERSION}${ZBM_BUILD_SUFFIX} for ${ARCH}"
-      mise run zbm:builder-image
-      mise run zbm:build
-      # Turn "it ran" into an assertion: the tarball exists and carries the
-      # components kernel + initrd and the renamed unified EFI.
-      tarball="zbm-build/${ARCH}/zfsbootmenu-v${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX}-${ARCH}.tar.gz"
-      test -f "$tarball" || { echo "tarball not produced: $tarball" >&2; exit 1; }
-      members="$(tar tzf "$tarball")"
-      echo "$members"
-      for f in initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub; do
-        grep -qxF "$f" <<<"$members" || { echo "missing $f in tarball" >&2; exit 1; }
-      done
-      grep -qE '^vmlin.*-bootmenu$' <<<"$members" || { echo "missing vmlin*-bootmenu kernel in tarball" >&2; exit 1; }
-      echo "ZBM tarball OK: $tarball"
-      # Publish via the job token (upload.sh prefers CI_JOB_TOKEN); master
-      # only, so a branch dispatch cannot ship a pinnable version.
-      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
-        mise run zbm:upload
-      fi
+    - mise run zbm:ci-build
