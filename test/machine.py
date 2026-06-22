@@ -244,8 +244,9 @@ def passt_address_fields(machine: str) -> dict[str, str] | None:
     Mirrors `qemu_user_net_args`' slirp dhcpstart/host pinning so roles that
     key on the host's physical address see the same value under either backend.
     The gateway is the supernet's broadcast-1, exactly the `host=` slirp uses.
-    Shared by both passt paths: the sidecar renders these as -a/-n/-g flags
-    (passt_address_args), the native netdev as address=/netmask=/gateway=.
+    Shared by both passt paths: the sidecar renders these as
+    --address/--netmask/--gateway flags; the native netdev as
+    address=/netmask=/gateway=.
     """
     topo = _load_test_topology()
     host = topo["hosts"].get(machine)
@@ -257,19 +258,6 @@ def passt_address_fields(machine: str) -> dict[str, str] | None:
         "netmask": str(net.prefixlen),
         "gateway": str(net.broadcast_address - 1),
     }
-
-
-def passt_address_args(machine: str) -> list[str]:
-    """passt -a/-n/-g sidecar flags for the topology IP pin (or [] off-topology).
-
-    Empty for machines absent from the topology (e.g. `minimal`): passt then
-    assigns from the container's default-route interface, matching slirp's
-    default-net behaviour there.
-    """
-    fields = passt_address_fields(machine)
-    if fields is None:
-        return []
-    return ["--address", fields["address"], "--netmask", fields["netmask"], "--gateway", fields["gateway"]]
 
 
 # git only tracks the executable bit; a fresh checkout (notably CI's
@@ -1830,10 +1818,10 @@ class Machine:
         ]
         if udp_spec is not None:
             cmd += ["--udp-ports", udp_spec]
-        return [
-            *cmd,
-            *passt_address_args(self.inventory_host),
-        ]
+        fields = passt_address_fields(self.inventory_host)
+        if fields is not None:
+            cmd += ["--address", fields["address"], "--netmask", fields["netmask"], "--gateway", fields["gateway"]]
+        return cmd
 
     async def _start_passt(self) -> None:
         """Launch the passt sidecar and block until its socket is listening.
