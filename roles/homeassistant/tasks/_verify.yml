@@ -115,7 +115,6 @@
       - exec
       - homeassistant
       - curl
-      - --head
       - --location
       - --fail
       - --silent

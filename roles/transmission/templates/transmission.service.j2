@@ -52,9 +52,8 @@ ExecStart=/usr/bin/podman run \
     --env TZ={{ system_timezone }} \
     --env USER=transmission \
     --env HOST_WHITELIST={{ transmission_host_whitelist }} \
-{% for arg in "transmission_rpc_password" | podman_secret_file_args("pass", "FILE__PASS") %}
-    {{ arg }} \
-{% endfor %}
+    --secret=transmission_rpc_password,type=mount,target=pass \
+    --env FILE__PASS=/run/secrets/pass \
     --volume /mnt/services/transmission:/config \
     --volume /mnt/media/Torrents:/downloads/complete \
     --volume /mnt/scratch/transmission:/downloads/incomplete \

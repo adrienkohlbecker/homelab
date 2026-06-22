@@ -34,7 +34,12 @@ def test_zfs_mount_unit_rejects_invalid_or_ambiguous_mountpoints(mountpoint: str
 
 def test_slurp_text_decodes_content() -> None:
     result = {"content": base64.b64encode(b"hello\n").decode()}
-    assert homelab.slurp_text(result) == "hello\n"
+    assert homelab.slurp_text(result) == "hello"
+
+
+def test_slurp_text_can_preserve_surrounding_whitespace() -> None:
+    result = {"content": base64.b64encode(b"hello\n").decode()}
+    assert homelab.slurp_text(result, trim=False) == "hello\n"
 
 
 def test_slurp_text_uses_default_for_missing_content() -> None:
@@ -46,8 +51,8 @@ def test_slurp_text_rejects_missing_content_without_default() -> None:
         homelab.slurp_text({})
 
 
-def test_podman_health_argv_renders_compact_json_in_single_quotes() -> None:
-    assert homelab.podman_health_argv(["extra/healthcheck"]) == "'[\"extra/healthcheck\"]'"
+def test_json_argv_renders_compact_json_in_single_quotes() -> None:
+    assert homelab.json_argv(["extra/healthcheck"]) == "'[\"extra/healthcheck\"]'"
 
 
 def test_podman_health_curl_renders_repo_default_probe() -> None:
@@ -58,11 +63,25 @@ def test_podman_health_curl_renders_repo_default_probe() -> None:
     )
 
 
-def test_podman_health_curl_supports_head_and_request() -> None:
-    rendered = homelab.podman_health_curl("http://localhost:8123/manifest.json", head=True, request="GET")
+def test_podman_health_curl_can_skip_fail_and_location() -> None:
+    rendered = homelab.podman_health_curl("http://127.0.0.1:9091/transmission/rpc", location=False, fail=False)
     argv = json.loads(rendered.strip("'"))
-    assert argv[:4] == ["curl", "--head", "--request", "GET"]
-    assert argv[-1] == "http://localhost:8123/manifest.json"
+    assert "--location" not in argv
+    assert "--fail" not in argv
+    assert argv[-1] == "http://127.0.0.1:9091/transmission/rpc"
+
+
+def test_podman_health_wget_renders_get_probe_to_dev_null() -> None:
+    rendered = homelab.podman_health_wget("http://localhost:5055/api/v1/status")
+    assert json.loads(rendered.strip("'")) == [
+        "wget",
+        "--quiet",
+        "--tries=1",
+        "--timeout=5",
+        "-O",
+        "/dev/null",
+        "http://localhost:5055/api/v1/status",
+    ]
 
 
 def test_podman_idmap_args_maps_one_container_identity() -> None:
@@ -76,15 +95,6 @@ def test_podman_idmap_args_maps_one_container_identity() -> None:
 
 def test_podman_idmap_args_allows_distinct_container_gid() -> None:
     assert homelab.podman_idmap_args(1000, 120001, 120002, container_gid=2000)[-1] == "--gidmap=+2000:120002:1"
-
-
-def test_podman_secret_file_args_pairs_target_with_env_path() -> None:
-    assert homelab.podman_secret_file_args(
-        "authelia_session_secret", "session_secret", "AUTHELIA_SESSION_SECRET_FILE"
-    ) == [
-        "--secret=authelia_session_secret,type=mount,target=session_secret",
-        "--env AUTHELIA_SESSION_SECRET_FILE=/run/secrets/session_secret",
-    ]
 
 
 def test_one_by_attr_supports_simple_and_nested_paths() -> None:
@@ -116,5 +126,7 @@ def test_nft_helpers_extract_counters_and_rules_by_counter_reference() -> None:
 def test_exposes_filters() -> None:
     filters = homelab.FilterModule().filters()
     assert filters["ansible_var_key"] is homelab.ansible_var_key
+    assert filters["json_argv"] is homelab.json_argv
     assert filters["only_by_attr"] is homelab.one_by_attr
+    assert filters["podman_health_wget"] is homelab.podman_health_wget
     assert filters["zfs_mount_unit"] is homelab.zfs_mount_unit

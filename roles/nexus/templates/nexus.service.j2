@@ -66,15 +66,13 @@ ExecStart=/usr/bin/podman run \
     --env INSTALL4J_ADD_VM_PARAMS="{{ nexus_jvm_params }} -Djava.util.prefs.userRoot=/user-root" \
     --env NEXUS_SECRETS_KEY_FILE=/user-root/encryption.json \
     --user 200:200 \
-{% for arg in 200 | podman_idmap_args(nexus_user.uid, nexus_user.group) %}
-    {{ arg }} \
-{% endfor %}
+    {{ 200 | podman_idmap_args(nexus_user.uid, nexus_user.group) | join(" \\\n    ") }} \
     --volume /mnt/services/nexus/data:/nexus-data \
     --volume /mnt/scratch/nexus:/nexus-data/blobs/default \
     --volume /mnt/services/nexus/user:/user-root \
     --publish 127.0.0.1:{{ service_ports.nexus }}:8081/tcp \
-    --health-cmd         {{ ["wget", "--quiet", "--tries=1", "--timeout=5", "--spider", "http://localhost:8081/service/rest/v1/status/writable"] | podman_health_argv }} \
-    --health-startup-cmd {{ ["wget", "--quiet", "--tries=1", "--timeout=5", "--spider", "http://localhost:8081/service/rest/v1/status/writable"] | podman_health_argv }} \
+    --health-cmd         {{ "http://localhost:8081/service/rest/v1/status/writable" | podman_health_wget }} \
+    --health-startup-cmd {{ "http://localhost:8081/service/rest/v1/status/writable" | podman_health_wget }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "180s" \

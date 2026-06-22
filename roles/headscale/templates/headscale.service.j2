@@ -92,8 +92,8 @@ ExecStart=/usr/bin/podman run \
        so it proves the server is actually answering (not just that the
        process exists). The headscale image is a Go-binary base with no curl,
        so the HTTP /health probe isn't available in-container. #}
-    --health-cmd         {{ ["headscale", "users", "list"] | podman_health_argv }} \
-    --health-startup-cmd {{ ["headscale", "users", "list"] | podman_health_argv }} \
+    --health-cmd         {{ ["headscale", "users", "list"] | json_argv }} \
+    --health-startup-cmd {{ ["headscale", "users", "list"] | json_argv }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "60s" \

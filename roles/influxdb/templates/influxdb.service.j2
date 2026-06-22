@@ -49,21 +49,18 @@ ExecStart=/usr/bin/podman run \
     --env DOCKER_INFLUXDB_INIT_MODE=setup \
     --env DOCKER_INFLUXDB_INIT_ORG={{ influxdb_root_org }} \
     --env DOCKER_INFLUXDB_INIT_BUCKET=default \
-{% for secret, target, env in [
-  ("influxdb_root_user", "influxdb_root_user", "DOCKER_INFLUXDB_INIT_USERNAME_FILE"),
-  ("influxdb_root_password", "influxdb_root_password", "DOCKER_INFLUXDB_INIT_PASSWORD_FILE"),
-  ("influxdb_admin_token", "influxdb_admin_token", "DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE"),
-] %}
-{% for arg in secret | podman_secret_file_args(target, env) %}
-    {{ arg }} \
-{% endfor %}
-{% endfor %}
+    --secret=influxdb_root_user,type=mount,target=influxdb_root_user \
+    --secret=influxdb_root_password,type=mount,target=influxdb_root_password \
+    --secret=influxdb_admin_token,type=mount,target=influxdb_admin_token \
+    --env DOCKER_INFLUXDB_INIT_USERNAME_FILE=/run/secrets/influxdb_root_user \
+    --env DOCKER_INFLUXDB_INIT_PASSWORD_FILE=/run/secrets/influxdb_root_password \
+    --env DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE=/run/secrets/influxdb_admin_token \
     --volume /mnt/services/influxdb/data:/var/lib/influxdb2 \
     --volume /mnt/services/influxdb/config:/etc/influxdb2 \
     --network homeassistant \
     --publish 127.0.0.1:{{ service_ports.influxdb }}:8086/tcp \
-    --health-cmd         {{ "http://localhost:8086/health" | podman_health_curl(head=true) }} \
-    --health-startup-cmd {{ "http://localhost:8086/health" | podman_health_curl(head=true) }} \
+    --health-cmd         {{ "http://localhost:8086/health" | podman_health_curl }} \
+    --health-startup-cmd {{ "http://localhost:8086/health" | podman_health_curl }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "30s" \
