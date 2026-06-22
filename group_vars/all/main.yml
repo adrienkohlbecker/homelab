@@ -25,6 +25,7 @@ zfs_has_brumath_mount: "{{ not (qemu_test | bool) }}"
 zfs_has_eckwersheim_mount: "{{ not (qemu_test | bool) }}"
 zfs_has_minio_mount: "{{ not (qemu_test | bool) }}"
 zfs_root: true
+podman_zvol_size: '{{ "50GB" | human_to_bytes | string }}'
 grub_bootloader: false
 zfs_dozer_filesystem: rpool
 zfs_tank_filesystem: rpool

@@ -800,10 +800,6 @@ class Machine:
             fixture_vars["headscale_oidc_issuer"] = "http://10.166.0.10:8090/oidc"
             fixture_vars["headscale_oidc_client_id"] = "headscale"
             fixture_vars["headscale_oidc_client_secret"] = "test-oidc-client-secret"
-        if self.role == "_site_test":
-            # Full-site converge pulls every service image into one guest; match
-            # prod's 50 GiB podman zvol while keeping per-role cells at 15 GiB.
-            fixture_vars["podman_zvol_size"] = str(50 * 1024**3)
         if fixture_vars:
             parts += ["-e", json.dumps(fixture_vars, sort_keys=True, separators=(",", ":"))]
         # --upstream-mirrors clears nexus_url so all mirror_* Jinja in

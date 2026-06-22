@@ -141,8 +141,6 @@ wireguard_keys:
 
 certbot_production_certificates: false
 
-podman_zvol_size: '{{ "15GB" | human_to_bytes | string }}'
-
 postfix_smtp_user: changeme
 postfix_smtp_password: changeme
 cloudflare_api_token: !vault |

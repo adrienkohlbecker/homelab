@@ -123,7 +123,7 @@ def test_format_ansible_cmd_role_fixture_vars(
         '"headscale_oidc_client_secret":"test-oidc-client-secret",'
         '"headscale_oidc_issuer":"http://10.166.0.10:8090/oidc"}'
     ) in headscale_cmd
-    assert '{"podman_zvol_size":"53687091200"}' in site_cmd
+    assert not any("podman_zvol_size" in part for part in site_cmd)
 
 
 def test_format_ansible_cmd_in_aws_env_sets_flag_and_clears_nexus(

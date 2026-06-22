@@ -193,8 +193,7 @@
 #   exhaustion (vs. ~7 today) and turns "ran out of pool" into a loud
 #   create-time error rather than a quiet drift into untrusted space.
 #   default_subnet and default_subnet_pools draw from podman_default_network
-#   / podman_bridge_pool (group_vars/all/main.yml defaults -- unlike the
-#   per-host podman_zvol_size they always resolve, so no assert here).
+#   / podman_bridge_pool (group_vars/all/main.yml).
 # - dns_bind_port: move aardvark-dns off port 53 so it doesn't fight
 #   with services (adguard) that bind on the bridge-gateway interface.
 #   netavark redirects container DNS queries to gateway:5333 via
@@ -341,13 +340,10 @@
   tags:
     - podman
 
-# Required input — set per-host in group_vars (prod 50GB, test 15GB),
-# not defaulted in vars/main.yml per the repo's required-input rule. An
-# unset value would sail through the shrink-guard (`'' | int` == 0) and
-# fail the zvol create below with an opaque empty-volsize error. Set it to
-# a volblocksize (8K) multiple: ZFS rounds volsize up to the next 8K, and a
-# rounded-up reported size reads as larger than the request on the next
-# converge, tripping the shrink-guard below with a false positive.
+# The size is explicit so the shrink-guard below has a real target. Set it to a
+# volblocksize (8K) multiple: ZFS rounds volsize up to the next 8K, and a
+# rounded-up reported size reads as larger than the request on the next converge,
+# tripping the shrink-guard below with a false positive.
 - name: install | Assert podman_zvol_size is set
   when: zfs_root
   assert:
