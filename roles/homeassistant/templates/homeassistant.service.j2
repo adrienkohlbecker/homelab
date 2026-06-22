@@ -39,7 +39,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="homeassistant" \
     --user root \
-    {{ 0 | podman_idmap_args(homeassistant_user.uid, homeassistant_user.group) | join(" \\\n    ") }} \
+    {{ homeassistant_user | podman_idmap_args | join(" \\\n    ") }} \
 {% for net in homeassistant_networks %}
 {%   set _opts = [] %}
 {%   if net.ip is defined %}{% set _ = _opts.append('ip=' ~ net.ip) %}{% endif %}

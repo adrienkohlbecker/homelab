@@ -104,12 +104,15 @@ def podman_health_wget(url: str, *, tries: int = 1, timeout: int = 5) -> str:
 
 
 def podman_idmap_args(
-    container_uid: int | str,
-    host_uid: int | str,
-    host_gid: int | str,
+    user: Mapping[str, Any],
+    container_uid: int | str = 0,
     container_gid: int | str | None = None,
 ) -> list[str]:
     """Return podman uid/gid map args for one in-container identity."""
+    host_uid = _get_path(user, "uid")
+    host_gid = _get_path(user, "group")
+    if host_uid is None or host_gid is None:
+        raise AnsibleError("podman_idmap_args requires a user mapping with uid and group")
     if container_gid is None:
         container_gid = container_uid
     return [

@@ -59,7 +59,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="seerr" \
     --user 1000:1000 \
-    {{ 1000 | podman_idmap_args(seerr_user.uid, seerr_user.group) | join(" \\\n    ") }} \
+    {{ seerr_user | podman_idmap_args(container_uid=1000) | join(" \\\n    ") }} \
     --env TZ={{ system_timezone }} \
     --volume /mnt/services/seerr:/app/config \
     --volume /mnt/services/sqlite/seerr:/app/config/db \
