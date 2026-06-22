@@ -16,10 +16,6 @@
     name: podman
     tasks_from: install
 
-- name: _setup | Install bash functions
-  import_role:
-    name: bash
-
 - name: _setup | Install dependencies
   apt:
     pkg:
