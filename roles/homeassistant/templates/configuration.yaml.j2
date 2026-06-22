@@ -12,7 +12,11 @@ scene: !include scenes.yaml
 sensor: !include sensors.yaml
 template: !include templates.yaml
 input_number: !include input_numbers.yaml
+input_select: !include input_selects.yaml
 timer: !include timers.yaml
+# climate_template platform from HACS (litinoveweedle/hass-template-climate):
+# per-room dashboard thermostats wrapping the Daikin units.
+climate: !include climate.yaml
 
 # notify.family fans one message out to both phones. Consumed by household
 # alerts in automations.yaml (water leak, humidifier-empty, dog-walk reminder)
