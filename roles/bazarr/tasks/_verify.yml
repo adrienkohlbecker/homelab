@@ -55,7 +55,4 @@
     follow_redirects: none
     status_code: 302
   register: _bazarr_nginx_gate
-  failed_when: >-
-    _bazarr_nginx_gate.status != 302
-    or 'auth.' not in (_bazarr_nginx_gate.location | default(''))
-    or ('rd=https://bazarr.' ~ inventory_hostname ~ '.' ~ domain) not in (_bazarr_nginx_gate.location | default(''))
+  failed_when: not (_bazarr_nginx_gate | authelia_redirects_to('bazarr', inventory_hostname, domain))

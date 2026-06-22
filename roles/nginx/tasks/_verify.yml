@@ -156,9 +156,7 @@
       Sec-Fetch-Mode: navigate
     status_code: 302
   register: nginx_verify_unauth
-  failed_when: >-
-    nginx_verify_unauth.status != 302
-    or 'https://auth.' not in (nginx_verify_unauth.location | default(''))
+  failed_when: not (nginx_verify_unauth | authelia_redirects_to('nginxverifyauth', inventory_hostname, domain, require_rd=false))
 
 # An XHR/fetch (Sec-Fetch-Mode != navigate) that fails auth must get a bare 401,
 # NOT a 302 to the cross-origin portal: an SPA cannot follow that redirect and

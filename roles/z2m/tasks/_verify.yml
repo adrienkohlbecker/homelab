@@ -154,10 +154,7 @@
     follow_redirects: none
     status_code: 302
   register: z2m_verify_gate
-  failed_when: >-
-    z2m_verify_gate.status != 302
-    or 'auth.' not in (z2m_verify_gate.location | default(''))
-    or ('rd=https://z2m.' ~ inventory_hostname ~ '.' ~ domain) not in (z2m_verify_gate.location | default(''))
+  failed_when: not (z2m_verify_gate | authelia_redirects_to('z2m', inventory_hostname, domain))
 
 # The WindFront UI loads device images from zigbee2mqtt.io and device docs from
 # raw.githubusercontent.com; assert csp_additional widened img-src/connect-src
