@@ -1,20 +1,14 @@
 #!/usr/bin/env python3
 # [MISE] description="Verify local markdown links point to existing files"
-"""
-Checks every local markdown link in git-tracked .md files.
-Skips http/https/ftp/mailto URLs and bare anchors.
-Strips fenced code blocks and inline code before scanning to avoid
-false positives from [label]: ... patterns inside code fences.
+"""Check git-tracked Markdown links that should resolve to local files."""
 
-Run via `mise run lint:md-links` or bundled into `mise run lint`.
-Exits non-zero with a per-file diagnostic on failure.
-"""
 import re
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
-SKIP_PREFIXES = ("http://", "https://", "ftp://", "mailto:")
+SKIP_SCHEMES = {"http", "https", "ftp", "mailto"}
 INLINE_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 REF_RE = re.compile(r"^\[[^\]]+\]:\s+(\S+)", re.MULTILINE)
 FENCE_RE = re.compile(r"^(`{3,}|~{3,})[^\n]*\n.*?\n\1", re.MULTILINE | re.DOTALL)
@@ -29,6 +23,13 @@ def iter_links(text):
         yield m.group(1)
 
 
+def local_path(raw):
+    parsed = urlsplit(raw.strip().strip("<>"))
+    if parsed.scheme in SKIP_SCHEMES or not parsed.path:
+        return None
+    return parsed.path
+
+
 def main():
     root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
     # The private notes/ clone is absent in CI; skip links into it only then.
@@ -40,8 +41,8 @@ def main():
         if path.is_symlink():
             continue
         for raw in iter_links(path.read_text(encoding="utf-8", errors="replace")):
-            url_path = raw.strip().strip("<>").split("#")[0].strip()
-            if not url_path or any(url_path.startswith(p) for p in SKIP_PREFIXES):
+            url_path = local_path(raw)
+            if url_path is None:
                 continue
             target = (path.parent / url_path).resolve()
             if missing_notes_dir is not None and target.is_relative_to(missing_notes_dir):
