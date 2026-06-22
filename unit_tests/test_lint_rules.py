@@ -1,9 +1,4 @@
-"""Unit tests for custom ansible-lint rules.
-
-Tests the regex matching and task-classification logic in
-lint/ansible_rules/{require_backup,shell_strict_mode}.py without needing
-a full ansible-lint invocation.
-"""
+"""Unit tests for custom ansible-lint rules."""
 
 import importlib
 import subprocess
@@ -13,21 +8,17 @@ from pathlib import Path
 _LINT_DIR = Path(__file__).resolve().parent.parent / "lint" / "ansible_rules"
 
 
-# ---------------------------------------------------------------------------
-# shell_strict_mode regexes — imported from the real rule module
-# ---------------------------------------------------------------------------
-
-
-def _load_shell_strict_mode():
-    spec = importlib.util.spec_from_file_location("shell_strict_mode", _LINT_DIR / "shell_strict_mode.py")
+def _load_homelab_rules():
+    spec = importlib.util.spec_from_file_location("homelab_rules", _LINT_DIR / "homelab.py")
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
-_ssm = _load_shell_strict_mode()
-SET_E_RE, SET_U_RE, PIPEFAIL_RE = _ssm._SET_E_RE, _ssm._SET_U_RE, _ssm._PIPEFAIL_RE
+_rules = _load_homelab_rules()
+SET_E_RE, SET_U_RE, PIPEFAIL_RE = _rules._SET_E_RE, _rules._SET_U_RE, _rules._PIPEFAIL_RE
+FILE_WRITE_MODULES = _rules._FILE_WRITE_MODULES
 
 
 class TestShellStrictModeRegex:
@@ -86,10 +77,16 @@ class TestShellStrictModeRegex:
 
 
 class TestRequireBackupModuleSet:
-    def test_expected_modules_in_source(self) -> None:
-        text = (_LINT_DIR / "require_backup.py").read_text()
-        for mod in ("copy", "template", "replace", "lineinfile", "blockinfile", "assemble", "ini_file"):
-            assert f'"{mod}"' in text
+    def test_expected_modules(self) -> None:
+        assert FILE_WRITE_MODULES == {
+            "copy",
+            "template",
+            "replace",
+            "lineinfile",
+            "blockinfile",
+            "assemble",
+            "ini_file",
+        }
 
 
 # ---------------------------------------------------------------------------
