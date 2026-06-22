@@ -196,22 +196,28 @@ statistics:
 {# An empty list must render `[]`, not a bare key (YAML null): AdGuard's
    startup rewrite serializes empty lists as `[]`, and any mismatch with
    that rendering re-templates -- and restarts DNS -- on every converge. #}
-{% for filter_set in [
-  {'key': 'filters', 'urls': adguard_adlists, 'name': 'blocklist', 'id_offset': 0},
-  {'key': 'whitelist_filters', 'urls': adguard_whitelists, 'name': 'allowlist', 'id_offset': 1000},
-] %}
-{% if filter_set.urls %}
-{{ filter_set.key }}:
-{% for url in filter_set.urls %}
+{% if adguard_adlists %}
+filters:
+{% for url in adguard_adlists %}
   - enabled: true
     url: {{ url }}
-    name: {{ filter_set.name }}_{{ loop.index }}
-    id: {{ filter_set.id_offset + loop.index }}
+    name: blocklist_{{ loop.index }}
+    id: {{ loop.index }}
 {% endfor %}
 {% else %}
-{{ filter_set.key }}: []
+filters: []
 {% endif %}
+{% if adguard_whitelists %}
+whitelist_filters:
+{% for url in adguard_whitelists %}
+  - enabled: true
+    url: {{ url }}
+    name: allowlist_{{ loop.index }}
+    id: {{ 1000 + loop.index }}
 {% endfor %}
+{% else %}
+whitelist_filters: []
+{% endif %}
 {# Entries starting with ! are adblock-style comments: data to AdGuard,
    shown in the Custom filtering rules UI, and preserved by its startup
    rewrite (which strips YAML comments -- hence Jinja comments elsewhere
