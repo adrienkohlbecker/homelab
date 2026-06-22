@@ -18,17 +18,13 @@
 # scope; the impact is low enough on a static github-pages site
 # that we leave it UI-managed).
 
-locals {
-  hsts_zones = toset(["adrienkohlbecker.com"])
-}
-
 resource "cloudflare_zone_setting" "security_header" {
   for_each = local.zones
 
   zone_id    = each.value
   setting_id = "security_header"
   value = {
-    strict_transport_security = contains(local.hsts_zones, each.key) ? {
+    strict_transport_security = each.key == "adrienkohlbecker.com" ? {
       enabled            = true
       max_age            = 31536000
       include_subdomains = true
