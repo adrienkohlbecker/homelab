@@ -519,7 +519,9 @@ def main() -> None:
     )
 
     data = collect(hosts, cfg)
-    iso = datetime.datetime.now(tz=datetime.UTC).isoformat(timespec="seconds")
+    # datetime.timezone.utc, not the datetime.UTC alias: this runs under the
+    # target host's /usr/bin/python3 (3.10 on jammy), where the alias is absent.
+    iso = datetime.datetime.now(tz=datetime.timezone.utc).isoformat(timespec="seconds")  # noqa: UP017
 
     # No top-level try/except — an exception here (disk full, permission
     # denied, etc.) propagates to Python's default print-traceback-and-exit-1.
