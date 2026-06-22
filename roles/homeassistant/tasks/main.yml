@@ -366,7 +366,7 @@
   shell: |
     set -euo pipefail
     podman create --replace --name homeassistant-prestage \
-      {{ (homeassistant_user | podman_idmap_args) | join(" \\\n      ") }} \
+      {{ (homeassistant_user | podman_idmap_args) | join(" ") }} \
       {{ homeassistant_image | quote }} true
     podman rm homeassistant-prestage
     touch {{ homeassistant_prestage_sentinel | quote }}

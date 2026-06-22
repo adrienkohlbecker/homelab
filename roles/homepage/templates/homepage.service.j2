@@ -51,7 +51,7 @@ ExecStart=/usr/bin/podman run \
     --network homepage \
     --init \
     --user 0:0 \
-    {{ homepage_user | podman_idmap_args | join(" \\\n    ") }} \
+    {{ homepage_user | podman_idmap_args | join(" ") }} \
     --volume /mnt/services/homepage:/app/config:ro \
     --tz={{ system_timezone }} \
     --env HOMEPAGE_ALLOWED_HOSTS=homepage.{{ inventory_hostname }}.{{ domain }},localhost:{{ service_ports.homepage }},localhost:3000 \

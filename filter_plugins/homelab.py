@@ -88,14 +88,14 @@ def podman_health_curl(
     return json_argv(argv)
 
 
-def podman_health_wget(url: str, *, tries: int = 1, timeout: int = 5) -> str:
+def podman_health_wget(url: str) -> str:
     """Render the repo's standard wget-based podman health probe."""
     return json_argv(
         [
             "wget",
             "--quiet",
-            f"--tries={tries}",
-            f"--timeout={timeout}",
+            "--tries=1",
+            "--timeout=5",
             "-O",
             "/dev/null",
             url,
