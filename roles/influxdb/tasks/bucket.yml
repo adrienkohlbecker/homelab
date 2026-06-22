@@ -80,8 +80,8 @@
       - _influxdb_bucket_org_query.rc == 0
       - (_influxdb_bucket_org_query.stdout
           | from_json
-          | selectattr('name', 'equalto', influxdb_bucket_args.org)
-          | list | length) > 0
+          | matching_by_attr('name', influxdb_bucket_args.org)
+          | length) > 0
     fail_msg: >-
       influxdb org '{{ influxdb_bucket_args.org }}' not found.
       The influxdb role's main.yml bootstraps only `{{ influxdb_root_org }}`
@@ -98,13 +98,11 @@
     _influxdb_org_id: >-
       {{ (_influxdb_bucket_org_query.stdout
           | from_json
-          | selectattr('name', 'equalto', influxdb_bucket_args.org)
-          | first).id }}
+          | one_by_attr('name', influxdb_bucket_args.org)).id }}
     _influxdb_bucket_id: >-
       {{ (_influxdb_bucket_bucket_id_query.stdout
           | from_json
-          | selectattr('name', 'equalto', influxdb_bucket_args.bucket)
-          | first).id }}
+          | one_by_attr('name', influxdb_bucket_args.bucket)).id }}
   block:
     - name: bucket | Query user {{ influxdb_bucket_args.user }}
       command:
@@ -156,8 +154,8 @@
              and (_influxdb_bucket_user_query.stdout | from_json | length) > 0 }}
         _user_in_org: >-
           {{ ((_influxdb_bucket_members_query.stdout | default('[]') | from_json)
-              | selectattr('name', 'equalto', influxdb_bucket_args.user)
-              | list | length) > 0 }}
+              | matching_by_attr('name', influxdb_bucket_args.user)
+              | length) > 0 }}
       assert:
         that:
           - not (_user_exists | bool) or (_user_in_org | bool)
@@ -250,8 +248,8 @@
         _influxdb_bucket_bucket_id_query.rc != 0
         or (_influxdb_bucket_bucket_id_query.stdout
             | from_json
-            | selectattr('name', 'equalto', influxdb_bucket_args.bucket)
-            | list | length) == 0
+            | matching_by_attr('name', influxdb_bucket_args.bucket)
+            | length) == 0
       become: true
 
     - name: bucket | Query auth for {{ influxdb_bucket_args.user }}

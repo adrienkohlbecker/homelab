@@ -124,7 +124,7 @@
     - name: register | Assert the headscale user for this node exists exactly once
       assert:
         that:
-          - (tailscale_users.stdout | from_json | selectattr('name', 'equalto', tailscale_headscale_user) | list | length) == 1
+          - (tailscale_users.stdout | from_json | matching_by_attr('name', tailscale_headscale_user) | length) == 1
         fail_msg: >-
           headscale user {{ tailscale_headscale_user }} is not present exactly once
           on {{ tailscale_headscale_host }}. The `users create` above swallows all
@@ -135,7 +135,7 @@
     - name: register | Mint a single-use pre-auth key
       command: >-
         podman exec headscale headscale preauthkeys create
-        --user {{ (tailscale_users.stdout | from_json | selectattr('name', 'equalto', tailscale_headscale_user) | list | first).id }}
+        --user {{ (tailscale_users.stdout | from_json | one_by_attr('name', tailscale_headscale_user)).id }}
         --expiration 5m
         -o json
       delegate_to: "{{ tailscale_headscale_host }}"
@@ -281,8 +281,8 @@
   delay: 2
   until: >-
     ((tailscale_nodes.stdout | default('[]', true) | from_json)
-        | selectattr('user.name', 'equalto', tailscale_headscale_user)
-        | selectattr('given_name', 'equalto', ansible_hostname | lower) | list | length > 0)
+        | matching_by_attr({'user.name': tailscale_headscale_user, 'given_name': (ansible_hostname | lower)})
+        | length > 0)
   become: true
   tags:
     - tailscale
@@ -300,13 +300,11 @@
   set_fact:
     tailscale_node_matches: >-
       {{ (tailscale_nodes.stdout | default('[]', true) | from_json)
-         | selectattr('user.name', 'equalto', tailscale_headscale_user)
-         | selectattr('given_name', 'equalto', ansible_hostname | lower) | list }}
+         | matching_by_attr({'user.name': tailscale_headscale_user, 'given_name': (ansible_hostname | lower)}) }}
     tailscale_node: >-
       {{ (tailscale_nodes.stdout | default('[]', true) | from_json)
-         | selectattr('user.name', 'equalto', tailscale_headscale_user)
-         | selectattr('given_name', 'equalto', ansible_hostname | lower)
-         | list | first | default({}) }}
+         | matching_by_attr({'user.name': tailscale_headscale_user, 'given_name': (ansible_hostname | lower)})
+         | first | default({}) }}
   when:
     - not ansible_check_mode
     - tailscale_approve_routes_needed

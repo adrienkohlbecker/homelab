@@ -75,48 +75,45 @@
 # `rule.expr` also have a `counter` key but no `family`).
 - name: _verify_counters | Counter-checked rules each fired the expected number of times
   vars:
-    nft_counters: "{{ (_firewall_counters_after_crafted.stdout | from_json).nftables
-                      | selectattr('counter', 'defined')
-                      | map(attribute='counter')
-                      | selectattr('family', 'defined') | list }}"
-    input_nonsyn_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_nonsyn') | first).packets }}"
-    forward_nonsyn_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'forward_nonsyn') | first).packets }}"
-    forward_podman_isolation_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'forward_podman_isolation') | first).packets }}"
-    forward_catchall_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'forward_catchall') | first).packets }}"
-    icmp_overflow_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'icmp_overflow') | first).packets }}"
-    input_silenced_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_silenced') | first).packets }}"
-    input_silenced_netbios_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_silenced_netbios') | first).packets }}"
-    igmp_accept_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'igmp_accept') | first).packets }}"
-    input_catchall_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_catchall') | first).packets }}"
+    nft_counters: "{{ _firewall_counters_after_crafted.stdout | nft_counters_by_name }}"
+    input_nonsyn_pkts: "{{ nft_counters.input_nonsyn.packets }}"
+    forward_nonsyn_pkts: "{{ nft_counters.forward_nonsyn.packets }}"
+    forward_podman_isolation_pkts: "{{ nft_counters.forward_podman_isolation.packets }}"
+    forward_catchall_pkts: "{{ nft_counters.forward_catchall.packets }}"
+    icmp_overflow_pkts: "{{ nft_counters.icmp_overflow.packets }}"
+    input_silenced_pkts: "{{ nft_counters.input_silenced.packets }}"
+    input_silenced_netbios_pkts: "{{ nft_counters.input_silenced_netbios.packets }}"
+    igmp_accept_pkts: "{{ nft_counters.igmp_accept.packets }}"
+    input_catchall_pkts: "{{ nft_counters.input_catchall.packets }}"
     # VRRP rule's counter is asserted at 0 — the negative probe sends
     # proto-112 from wg0 (extns ingress) and the iif scope must reject.
-    vrrp_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'vrrp_accept') | first).packets }}"
+    vrrp_pkts: "{{ nft_counters.vrrp_accept.packets }}"
     # UDP accept rule counters (A6) — advertised WAN forwards exercise the
     # WAN-scoped Transmission/Tailscale positives. mDNS remains negative-only:
     # the controller-side WAN forward does not preserve a HOME_LAN source
     # address.
-    mosh_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'mosh_accept') | first).packets }}"
-    aardvark_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'aardvark_accept') | first).packets }}"
-    wireguard_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'wireguard_accept') | first).packets }}"
-    mdns_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'mdns_accept') | first).packets }}"
+    mosh_pkts: "{{ nft_counters.mosh_accept.packets }}"
+    aardvark_pkts: "{{ nft_counters.aardvark_accept.packets }}"
+    wireguard_pkts: "{{ nft_counters.wireguard_accept.packets }}"
+    mdns_pkts: "{{ nft_counters.mdns_accept.packets }}"
     # TCP accept rule counters — most probes intentionally have no
     # listener, so the rule-specific counter is the signal that each
     # firewall branch matched. Keep these split so one open port can't
     # mask another regressing out of the ruleset.
-    input_ssh_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_ssh') | first).packets }}"
-    input_http_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_http') | first).packets }}"
-    input_https_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_https') | first).packets }}"
-    input_admin_samba_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_admin_samba') | first).packets }}"
-    input_admin_nut_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_admin_nut') | first).packets }}"
-    input_transmission_tcp_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_transmission_tcp') | first).packets }}"
-    input_transmission_udp_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_transmission_udp') | first).packets }}"
-    input_nut_podman_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_nut_podman') | first).packets }}"
-    input_loopback_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_loopback') | first).packets }}"
-    input_icmp_accept_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_icmp_accept') | first).packets }}"
-    input_authelia_wg_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_authelia_wg') | first).packets }}"
-    tailscale_input_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'tailscale_input_accept') | first).packets }}"
-    tailscale_forward_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'tailscale_forward_accept') | first).packets }}"
-    tailscale_underlay_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'tailscale_underlay_accept') | first).packets }}"
+    input_ssh_pkts: "{{ nft_counters.input_ssh.packets }}"
+    input_http_pkts: "{{ nft_counters.input_http.packets }}"
+    input_https_pkts: "{{ nft_counters.input_https.packets }}"
+    input_admin_samba_pkts: "{{ nft_counters.input_admin_samba.packets }}"
+    input_admin_nut_pkts: "{{ nft_counters.input_admin_nut.packets }}"
+    input_transmission_tcp_pkts: "{{ nft_counters.input_transmission_tcp.packets }}"
+    input_transmission_udp_pkts: "{{ nft_counters.input_transmission_udp.packets }}"
+    input_nut_podman_pkts: "{{ nft_counters.input_nut_podman.packets }}"
+    input_loopback_pkts: "{{ nft_counters.input_loopback.packets }}"
+    input_icmp_accept_pkts: "{{ nft_counters.input_icmp_accept.packets }}"
+    input_authelia_wg_pkts: "{{ nft_counters.input_authelia_wg.packets }}"
+    tailscale_input_pkts: "{{ nft_counters.tailscale_input_accept.packets }}"
+    tailscale_forward_pkts: "{{ nft_counters.tailscale_forward_accept.packets }}"
+    tailscale_underlay_pkts: "{{ nft_counters.tailscale_underlay_accept.packets }}"
   assert:
     that:
       - input_nonsyn_pkts | int >= 1

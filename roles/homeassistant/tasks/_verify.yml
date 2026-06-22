@@ -81,7 +81,7 @@
 # network's ip_range (the upper /29 of mac_iot's role-derived block).
 - name: _verify | Homeassistant mac_iot IP is in this host's IoT /29
   vars:
-    _mac_iot_vlan: "{{ (macvlan_blocks | selectattr('name', 'eq', 'mac_iot') | list | first).vlan }}"
+    _mac_iot_vlan: "{{ (macvlan_blocks | one_by_attr('name', 'mac_iot')).vlan }}"
     _mac_iot_block: >-
       {{ network.sites[network.hosts[inventory_hostname].site].vlans[_mac_iot_vlan].cidr
          | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}

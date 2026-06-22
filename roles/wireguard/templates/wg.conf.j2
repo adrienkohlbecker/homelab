@@ -1,4 +1,4 @@
-{% set own_peer = wireguard_peers|selectattr("name", "eq", own_peer_name)|first -%}
+{% set own_peer = wireguard_peers | one_by_attr("name", own_peer_name) -%}
 [Interface]
 # PublicKey = {{ own_peer.public_key }}
 PrivateKey = {{ own_peer.private_key }}
