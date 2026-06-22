@@ -214,6 +214,7 @@
     group: root
     mode: "0640"
     backup: true
+    validate: grep -qE '^vrrp_instance[[:space:]]+' %s
   register: adguard_keepalived_cfg
   become: true
   tags:
@@ -270,6 +271,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' %s
   become: true
   tags:
     - adguard

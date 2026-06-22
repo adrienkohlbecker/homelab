@@ -50,10 +50,13 @@ skip_list:
   - yaml
   # Loop vars with no prefix at all — too noisy to gate on for now.
   - loop-var-prefix[missing]
+  # Experimental module-argument introspection logs warnings on this repo's
+  # dynamic helper tasks and local plugins even when there are no violations,
+  # making a clean lint run noisy.
+  - args
 
 # Opt-in rules (not loaded by default) we do want enforced.
 enable_list:
-  - args
   - empty-string-compare
   - no-log-password
   - no-prompting

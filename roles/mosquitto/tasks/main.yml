@@ -82,6 +82,7 @@
     group: mosquitto
     mode: "0640"
     backup: true
+    validate: grep -qE '^(listener|persistence_location)[[:space:]]+' %s
   register: mosquitto_conf
   become: true
   tags:

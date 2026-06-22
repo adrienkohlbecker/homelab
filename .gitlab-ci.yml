@@ -112,7 +112,7 @@ workflow:
       allow_failure: true
 
 .protected_on_success_job:
-  rules:
+  rules: &protected_on_success_rules
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
@@ -386,7 +386,7 @@ qemu_host_ami:
 # build-box-first hint if the artifact is absent.
 .qemu_image_box_deps:
   extends: .qemu_image
-  rules: !reference [ .protected_on_success_job, rules ]
+  rules: *protected_on_success_rules
   resource_group: qemu_image_box_deps_$UBUNTU
   script:
     - mise run packer:publish-qemu box_deps --ubuntu "$UBUNTU" --promote

@@ -252,4 +252,5 @@
     group: netdata
     mode: "0644"
     backup: true
+    validate: 'sh -c ''. "%s" && test "${period_secs:-0}" -gt 0'''
   become: true

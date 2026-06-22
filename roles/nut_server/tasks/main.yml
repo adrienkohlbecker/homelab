@@ -38,6 +38,7 @@
     owner: root
     group: nut
     mode: "0640"
+    validate: grep -qE '^[[:space:]]*MODE=' %s
   become: true
   register: nut_server_nut_conf
   tags:
@@ -74,6 +75,7 @@
     owner: root
     group: nut
     mode: "0640"
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(allow_no_value=True).read(sys.argv[1])' %s
   become: true
   register: nut_server_upsd_conf
   tags:
@@ -103,6 +105,7 @@
     owner: root
     group: root
     mode: "0644"
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(allow_no_value=True).read(sys.argv[1])' %s
   become: true
   tags:
     - nut_server
@@ -116,6 +119,7 @@
     owner: root
     group: root
     mode: "0644"
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(allow_no_value=True).read(sys.argv[1])' %s
   become: true
   tags:
     - nut_server

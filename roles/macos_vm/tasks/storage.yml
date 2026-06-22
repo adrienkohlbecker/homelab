@@ -116,6 +116,7 @@
     backup: true
     content: |
       SUBSYSTEM=="block", KERNEL=="zd*", ENV{DEVLINKS}=="*/zvol/{{ macos_vm_zvol_dataset }}*", OWNER="root", GROUP="kvm", MODE="0660"
+    validate: grep -qE '^SUBSYSTEM=="block"' %s
   become: true
   register: macos_vm_zvol_udev_rule
 

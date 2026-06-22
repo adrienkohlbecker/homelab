@@ -96,6 +96,7 @@
     owner: root
     group: root
     backup: true
+    validate: test -s %s
   register: boot_cmdline_zbm_present
   become: true
 

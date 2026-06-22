@@ -207,6 +207,8 @@
     group: root
     mode: "0644"
     backup: true
+    validate: >-
+      sh -c 'd=$(mktemp -d); trap "rm -rf $d" EXIT; cp "%s" "$d/tmp.mount"; systemd-analyze verify "$d/tmp.mount"'
   register: boot_tmp_mount_staged
   become: true
   tags:

@@ -66,6 +66,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: grep -qE '^(function|local[[:space:]])' %s
   loop:
     - strip_ansi.lua
     - level_from_message.lua
@@ -96,6 +97,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: grep -q '^\[PARSER\]' %s
   loop:
     - parsers_nginx.conf
   become: true

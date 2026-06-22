@@ -178,6 +178,7 @@
     group: media
     mode: "0600"
     backup: true
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, allow_no_value=True).read_string("[__top__]\n" + open(sys.argv[1]).read())' "%s"
   register: sabnzbd_media_conf
   become: true
   tags:

@@ -70,6 +70,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: grep -qE '^[[:space:]]*nf_conntrack[[:space:]]*$' %s
   become: true
   tags:
     - firewall
@@ -432,6 +433,7 @@
     dest: /etc/nftables.conf.pre-reload
     remote_src: true
     mode: "0644"
+    validate: nft -c -f %s
   become: true
   tags:
     - firewall

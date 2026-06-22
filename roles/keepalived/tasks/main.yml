@@ -99,6 +99,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: grep -qE '^ACTION=="add".*SUBSYSTEM=="net"' %s
   register: keepalived_martians_rule
   become: true
   tags:
@@ -151,12 +152,10 @@
   tags:
     - keepalived
 
-# No inline `validate:` here (unlike most config-writing tasks): the
-# validator is `keepalived -t`, which needs the package installed (it may
-# not exist yet on a fresh host, esp. in check mode) and parses the whole
-# assembled config including conf.d. Both conditions are handled by the
-# gated "Validate assembled keepalived config" block below, so validation
-# lives there rather than on this task.
+# `keepalived -t` needs the package installed (it may not exist yet on a
+# fresh host in check mode) and parses the whole assembled config including
+# conf.d. Skip only that bootstrap check-mode gap; otherwise parse the staged
+# base file before placing it, then run the assembled in-place check below.
 - name: Copy the configuration
   copy:
     src: keepalived.conf
@@ -165,6 +164,7 @@
     owner: root
     group: root
     backup: true
+    validate: "{{ 'keepalived -t -f %s' if not (ansible_check_mode and keepalived_apt.changed) else omit }}"
   register: keepalived_base_conf
   become: true
   tags:
@@ -243,6 +243,7 @@
         src: "{{ keepalived_base_conf.backup_file }}"
         dest: /etc/keepalived/keepalived.conf
         mode: "0640"
+        validate: keepalived -t -f %s
         owner: root
         group: root
       become: true

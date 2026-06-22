@@ -123,6 +123,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: grep -qE '^proxy_set_header[[:space:]]+Host[[:space:]]+' %s
   become: true
   register: nginx_proxy_params
   tags:

@@ -106,6 +106,7 @@
     owner: tautulli
     group: media
     mode: "0600"
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' "%s"
   register: _tautulli_conf_probe
   # noqa: require-backup — probe never writes; backup on the real write task below
   when: not (ansible_check_mode and (tautulli_user.changed or media_group.changed))

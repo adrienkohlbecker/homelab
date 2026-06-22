@@ -78,11 +78,10 @@
   tags:
     - ntp
 
-# No validate: chronyd is AppArmor-confined to /etc/chrony/ (see
-# /etc/apparmor.d/usr.sbin.chronyd), so `chronyd -p` can't read ansible's
-# temp file and would fail every render. It's that path constraint, not a
-# lack of syntax to check, that rules validate out; _verify's post-converge
-# `chronyc tracking` confirms the rendered file parses.
+# chronyd is AppArmor-confined to /etc/chrony/ (see
+# /etc/apparmor.d/usr.sbin.chronyd), so its own parser can't read ansible's
+# temp file. Validate the rendered NTS source stanza shape here; _verify's
+# post-converge `chronyc tracking` confirms the live file parses.
 - name: Configure chrony for NTS-only time sync
   when: not (ansible_check_mode and ntp_chrony_apt.changed)
   template:
@@ -92,6 +91,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: grep -qE '^(pool|server)[[:space:]].*[[:space:]]nts([[:space:]]|$)' %s
   register: ntp_chrony_conf
   become: true
   tags:

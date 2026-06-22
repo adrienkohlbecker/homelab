@@ -59,6 +59,7 @@
             group: root
             mode: "0600"
             backup: true
+            validate: grep -qE '^\[(Interface|Peer)\]$' %s
           vars:
             own_peer_name: "{{ inventory_hostname }}"
           become: true

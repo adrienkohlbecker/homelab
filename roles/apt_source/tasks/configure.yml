@@ -315,6 +315,8 @@
     group: root
     mode: "0644"
     backup: true
+    validate: >-
+      python3 -c 'import sys; s=open(sys.argv[1]).read().splitlines(); keys={l.split(":",1)[0] for l in s if ":" in l}; sys.exit(0 if {"Package","Pin","Pin-Priority"} <= keys else 1)' %s
   become: true
 
 # Tombstone cleanup: the repo modules above remove the .list/.sources on
