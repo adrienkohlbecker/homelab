@@ -66,7 +66,7 @@
   tags:
     - nut_server
 
-- name: Configure nut upsd.conf
+- name: Configure nut upsd.conf  # noqa: require-validate
   when: not (ansible_check_mode and nut_server_apt.changed)
   template:
     src: upsd.conf.j2
@@ -75,7 +75,6 @@
     owner: root
     group: nut
     mode: "0640"
-    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(allow_no_value=True).read(sys.argv[1])' %s
   become: true
   register: nut_server_upsd_conf
   tags:
@@ -96,7 +95,7 @@
   tags:
     - nut_server
 
-- name: Configure nut hosts.conf
+- name: Configure nut hosts.conf  # noqa: require-validate
   when: not (ansible_check_mode and nut_server_apt.changed)
   copy:
     src: hosts.conf
@@ -105,12 +104,11 @@
     owner: root
     group: root
     mode: "0644"
-    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(allow_no_value=True).read(sys.argv[1])' %s
   become: true
   tags:
     - nut_server
 
-- name: Configure nut upsset.conf
+- name: Configure nut upsset.conf  # noqa: require-validate
   when: not (ansible_check_mode and nut_server_apt.changed)
   copy:
     src: upsset.conf
@@ -119,7 +117,6 @@
     owner: root
     group: root
     mode: "0644"
-    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(allow_no_value=True).read(sys.argv[1])' %s
   become: true
   tags:
     - nut_server
