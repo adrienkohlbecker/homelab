@@ -466,6 +466,13 @@
     - name: Run the startup wizard to create the first admin
       when: not (jellyfin_public_info.json.StartupWizardCompleted | default(false))
       block:
+        # /System/Info/Public answers 200 well before the wizard subsystem is
+        # serviceable, so the wait above clears while POSTs here still 503 with
+        # "Server is still starting up" -- especially right after the service
+        # task restarts a seconds-old container (SIGINT ignored mid-startup ->
+        # 60s SIGKILL -> cold .NET restart). Retry this first wizard call
+        # through that window; once it 200s the server is past startup and the
+        # rest of the block follows immediately.
         - name: Set the startup-wizard locale
           uri:
             url: http://localhost:{{ service_ports.jellyfin }}/Startup/Configuration
@@ -476,6 +483,10 @@
               MetadataCountryCode: US
               PreferredMetadataLanguage: en
             status_code: [ 200, 204 ]
+          register: jellyfin_wizard_locale
+          retries: 30
+          delay: 2
+          until: jellyfin_wizard_locale.status | default(0) in [200, 204]
           changed_when: true
 
         # GET /Startup/User creates and returns the default admin; the POST below
