@@ -67,6 +67,7 @@ SYNC_SPEC = [
     ("input_numbers.yaml", "0600", "input_number.reload"),
     ("input_selects.yaml", "0600", "input_select.reload"),
     ("timers.yaml", "0600", "timer.reload"),
+    ("counters.yaml", "0600", "counter.reload"),
     # `statistics` sensors have no hot reload, so restart for the whole file.
     ("sensors.yaml", "0600", None),
     # climate_template is a legacy `climate:` platform — no hot reload, restart.

@@ -212,6 +212,7 @@
     - input_numbers.yaml
     - input_selects.yaml
     - climate.yaml
+    - counters.yaml
     - timers.yaml
   tags:
     - homeassistant
