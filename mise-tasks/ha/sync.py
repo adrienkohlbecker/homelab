@@ -59,21 +59,25 @@ class PendingChange:
 
 # `None` reload means a changed file needs homeassistant.restart; one restart
 # covers every changed file, otherwise the touched domains reload individually.
+# Mode is 0644 to match the homeassistant role's "Ensure files exist" stub —
+# otherwise push (0600) and converge (0644) fight over the bits every run. None
+# of these GUI YAML files carry secrets (those stay in the un-synced
+# secrets.yaml), so group/other read is harmless.
 SYNC_SPEC = [
-    ("automations.yaml", "0600", "automation.reload"),
-    ("scripts.yaml", "0600", "script.reload"),
-    ("scenes.yaml", "0600", "scene.reload"),
-    ("templates.yaml", "0600", "template.reload"),
-    ("input_numbers.yaml", "0600", "input_number.reload"),
-    ("input_selects.yaml", "0600", "input_select.reload"),
-    ("timers.yaml", "0600", "timer.reload"),
-    ("counters.yaml", "0600", "counter.reload"),
+    ("automations.yaml", "0644", "automation.reload"),
+    ("scripts.yaml", "0644", "script.reload"),
+    ("scenes.yaml", "0644", "scene.reload"),
+    ("templates.yaml", "0644", "template.reload"),
+    ("input_numbers.yaml", "0644", "input_number.reload"),
+    ("input_selects.yaml", "0644", "input_select.reload"),
+    ("timers.yaml", "0644", "timer.reload"),
+    ("counters.yaml", "0644", "counter.reload"),
     # `statistics` sensors have no hot reload, so restart for the whole file.
-    ("sensors.yaml", "0600", None),
+    ("sensors.yaml", "0644", None),
     # climate_template is a legacy `climate:` platform — no hot reload, restart.
-    ("climate.yaml", "0600", None),
+    ("climate.yaml", "0644", None),
     # HA returns a clear API warning if this reload service is unavailable.
-    ("custom_templates/*", "0600", "homeassistant.reload_custom_templates"),
+    ("custom_templates/*", "0644", "homeassistant.reload_custom_templates"),
     # Reload automations so blueprint consumers re-read changed sources.
     ("blueprints/automation/*", "0644", "automation.reload"),
 ]
