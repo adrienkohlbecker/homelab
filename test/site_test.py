@@ -157,8 +157,7 @@ async def run_site_test(m: Machine, *, timeout: int) -> None:
                                 await asyncio.wait_for(m.wait(), timeout=POWEROFF_TIMEOUT)
                             except TimeoutError:
                                 print_line(
-                                    f"Guest did not power off within {POWEROFF_TIMEOUT}s "
-                                    "after a passed converge",
+                                    f"Guest did not power off within {POWEROFF_TIMEOUT}s " "after a passed converge",
                                     error=True,
                                 )
                                 with contextlib.suppress(Exception):
