@@ -142,6 +142,17 @@ storage:
   local:
     path: '/db/db.sqlite3'
 
+# Authelia checks the system clock against an NTP server at startup and
+# fatals if it is not synchronized accurately enough -- accurate time is
+# load-bearing for TOTP and short-lived tokens. The qemu test fixture has
+# no working NTP sync (chrony can't reach upstream over SLIRP UDP, so the
+# clock is never marked synchronized), which fails the check on every
+# boot; skip it there. Kept on for prod, where a drifting clock would
+# silently break TOTP and should surface loudly at startup rather than as
+# mysterious auth failures later.
+ntp:
+  disable_startup_check: {% if qemu_test %}true{% else %}false{% endif %}
+
 notifier:
   # disable_startup_check skips the SMTP connect probe at boot.
   # Disabled on the qemu test fixture (stub credentials always fail
