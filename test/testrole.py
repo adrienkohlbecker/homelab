@@ -393,7 +393,14 @@ def main() -> int:
             print_line(str(exc), error=True)
             print_line(f"{parsed_args.role}.{parsed_args.machine} not idempotent", error=True)
             rc = 125
-        except TimeoutError:
+        except TimeoutError as exc:
+            # The outer asyncio.timeout deadline raises a message-less
+            # TimeoutError; the phase guards (ensure_booted, ensure_ssh, passt
+            # socket, publish-lock) each raise one carrying a specific cause.
+            # Surface that cause when present so a slow boot-to-sshd is
+            # attributable as such, not misread as the overall per-test timeout.
+            if str(exc):
+                print_line(str(exc), error=True)
             print_line(
                 f"{parsed_args.role}.{parsed_args.machine} timed out after {parsed_args.timeout}s",
                 error=True,
