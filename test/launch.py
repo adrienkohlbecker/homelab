@@ -26,6 +26,7 @@ from pathlib import Path
 
 from machine import (
     QEMU_MACHINE_SPECS,
+    SSH_HOST,
     LaunchOptions,
     Machine,
 )
@@ -353,7 +354,7 @@ def _run_foreground(m: Machine, write_hostfwds: Path | None = None) -> int:
     try:
         asyncio.run(m.prepare())
         for guest_port, host_port in m.extra_hostfwd_ports.items():
-            print_line(f"Extra hostfwd: 127.0.0.1:{host_port} -> guest:{guest_port}")
+            print_line(f"Extra hostfwd: {m.ssh_host}:{host_port} -> guest:{guest_port}")
         _write_hostfwds(m, write_hostfwds)
         cmd = m._boot_command()
         print_cmd_line(cmd)
@@ -399,6 +400,9 @@ def main() -> int:
             commit_in_place=args.commit,
             extra_hostfwds=tuple(args.extra_hostfwds),
         ),
+        # Pin the default loopback: --write-hostfwds emits ports only, and its
+        # consumers (mise-tasks/packer/seed-deps.sh) connect at 127.0.0.1.
+        loopback_host=SSH_HOST,
     )
 
     if args.foreground:

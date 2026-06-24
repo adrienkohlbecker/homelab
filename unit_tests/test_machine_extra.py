@@ -198,3 +198,50 @@ class TestMachineUbuntuValidation:
     def test_unknown_ubuntu_raises(self, machine_factory: Callable[..., machine.Machine]) -> None:
         with pytest.raises(ValueError, match="Unknown Ubuntu release"):
             machine_factory(machine="box", role="test", ubuntu_name="bogus")
+
+
+# ---------------------------------------------------------------------------
+# _cell_loopback_host: per-cell loopback so concurrent qemu hostfwds don't
+# collide on the shared ephemeral port range.
+# ---------------------------------------------------------------------------
+
+
+class TestCellLoopbackHost:
+    def test_linux_derives_per_pid_address_in_127_8(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(machine.platform, "system", lambda: "Linux")
+        # pid 0x010203 -> 127.1.2.3 (each octet a byte of the 24-bit pid).
+        monkeypatch.setattr(machine.os, "getpid", lambda: 0x010203)
+        assert machine._cell_loopback_host() == "127.1.2.3"
+
+    def test_linux_masks_pid_into_24_bits(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # A pid above 2^24 wraps into the low 24 bits rather than overflowing
+        # the address; the high byte stays 127.
+        monkeypatch.setattr(machine.platform, "system", lambda: "Linux")
+        monkeypatch.setattr(machine.os, "getpid", lambda: 0xAB010203)
+        assert machine._cell_loopback_host() == "127.1.2.3"
+
+    def test_non_linux_keeps_single_loopback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Only 127.0.0.1 is configured on macOS by default.
+        monkeypatch.setattr(machine.platform, "system", lambda: "Darwin")
+        assert machine._cell_loopback_host() == machine.SSH_HOST
+
+    def test_explicit_loopback_threads_through_ssh_and_ansible(
+        self, machine_factory: Callable[..., machine.Machine]
+    ) -> None:
+        # A pinned per-cell address must reach every controller-side endpoint:
+        # the SSH target, the ControlMaster socket path (host-keyed so two cells
+        # reusing a port don't share one socket), and ansible's connection vars.
+        m = machine_factory(ssh_port=2222, ssh_user="vagrant", loopback_host="127.5.6.7")
+        assert m.format_ssh_cmd()[-1] == "vagrant@127.5.6.7"
+        assert m.ssh_control_path == "/tmp/homelab-cm-127.5.6.7-2222"
+        cmd = m.format_ansible_cmd("site.yml")
+        assert "ansible_ssh_host=127.5.6.7" in cmd
+        assert "wan_probe_host=127.5.6.7" in cmd
+
+    def test_explicit_loopback_binds_hostfwds(self, machine_factory: Callable[..., machine.Machine]) -> None:
+        m = machine_factory(machine="box", loopback_host="127.5.6.7")
+        m.ssh_port = 2222
+        m.wan_forward_ports = {"tcp": {}, "udp": {}}
+        m._net_backend = "slirp"
+        netdev, _ = m._netdev_args()
+        assert "hostfwd=tcp:127.5.6.7:2222-:22" in netdev

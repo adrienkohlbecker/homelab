@@ -40,10 +40,44 @@ OUT_DIR = Path("test/out")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 SSH_KEY = "packer/vagrant.key"
-# Loopback endpoint for qemu hostfwd binds, VNC displays, SSH, and delegated
-# WAN probes.
+# Default loopback endpoint for qemu hostfwd binds, VNC displays, SSH, and
+# delegated WAN probes. Each harness-driven cell overrides this with a private
+# 127.x.y.z address (see _cell_loopback_host); launch.py pins it back here.
 SSH_HOST = "127.0.0.1"
 PIDFILE_NAME = "pid"
+
+
+def _cell_loopback_host() -> str:
+    """Per-process loopback bind address for this cell's qemu hostfwds.
+
+    qemu's user-net (SLIRP) opens its own hostfwd listening sockets, so the
+    harness can't pre-bind a socket and hand it to qemu -- it can only reserve a
+    port, close it, and rely on qemu rebinding it before anything else grabs it
+    (prepare()'s _reserve dance). Under a burst of co-tenant cells on one CI
+    host that close->rebind window loses: two cells' `bind(addr, 0)` (or a host
+    outbound connection) draw the same port from the shared ephemeral range and
+    qemu dies on launch with "Could not set up host forwarding rule".
+
+    Giving each cell its own 127.x.y.z address removes the contention by
+    construction: bind uniqueness is per (addr, port), nothing else on the host
+    sources traffic from this address, and sibling cells live on different
+    addresses -- so a reused or freshly-released port can't collide. The whole
+    127.0.0.0/8 is loopback on Linux, bindable with no setup.
+
+    Keyed on PID: testall.py spawns one testrole.py subprocess per cell, so the
+    PID is unique among the cells live on a host. Only 127.0.0.1 is configured
+    on macOS by default (the rest of 127/8 needs `ifconfig lo0 alias`), and the
+    Mac path isn't the bursty one, so non-Linux keeps the single loopback.
+    """
+    if platform.system() != "Linux":
+        return SSH_HOST
+    # PID fits the low 24 bits of 127.0.0.0/8 (default pid_max is 2^22, and the
+    # kernel max is 2^22 on 32-bit / configurable to 2^30 on 64-bit -- masking
+    # keeps us in-range, and live PIDs stay distinct in practice). pid >= 1, so
+    # the network address 127.0.0.0 never occurs.
+    pid = os.getpid() & 0xFFFFFF
+    return f"127.{(pid >> 16) & 0xFF}.{(pid >> 8) & 0xFF}.{pid & 0xFF}"
+
 
 TOPOLOGY_PATH = Path(__file__).parent.parent / "data" / "network_topology.yml"
 WAN_PROBE_PORTS_PATH = Path(__file__).parent.parent / "data" / "wan_probe_ports.yml"
@@ -383,8 +417,8 @@ class Machine:
     # Controller-side WAN probe endpoint, so `delegate_to: localhost`
     # probes in roles/firewall's _verify can exercise rules keying on the
     # WAN interface (traffic originating inside the VM never ingresses on
-    # the WAN iface). qemu slirp/passt forwards pre-picked free 127.0.0.1
-    # ports, mapped to guest ports in wan_forward_ports.
+    # the WAN iface). qemu slirp/passt forwards pre-picked free ports on the
+    # cell's loopback (self.ssh_host), mapped to guest ports in wan_forward_ports.
     wan_forward_ports: dict[str, dict[str, int]]
 
     drives: list[str]
@@ -425,11 +459,17 @@ class Machine:
         *,
         workdir_parent: Path | None = None,
         launch: LaunchOptions | None = None,
+        loopback_host: str | None = None,
     ):
         """QEMU-backed machine wrapper used by integration tests.
 
         launch carries launch.py-only qemu overrides. Role tests and the site
         converge use the default image/firmware/network path.
+
+        loopback_host pins the 127.x bind address for this cell's hostfwds/SSH;
+        None derives a per-process address (see _cell_loopback_host) so parallel
+        cells don't collide. launch.py passes 127.0.0.1 to keep its
+        --write-hostfwds contract (consumers assume the default loopback).
         """
         launch = launch or LaunchOptions()
         try:
@@ -498,6 +538,7 @@ class Machine:
         self.arch: ArchProfile = detect_host_arch()
 
         self.ssh_port = 0
+        self.ssh_host = loopback_host if loopback_host is not None else _cell_loopback_host()
         self.ssh_user = spec.ssh_user
         self.ansible_args = _qemu_ansible_args(spec)
         self.inventory_host = spec.inventory_host
@@ -616,12 +657,13 @@ class Machine:
         One socket per cell, reused by the harness's own ssh AND by every
         ansible-playbook phase, so phases 2..N skip the SSH handshake + agent
         round-trip + mitogen interpreter bootstrap. Keyed on the cell's unique
-        ssh_port so two concurrent cells never collide on one socket. Lives in
-        /tmp (writable, short) rather than the per-cell workdir: workdir lands
-        on /mnt/scratch on Linux CI hosts, and a unix socket path must stay
-        under ~104 chars -- a port-keyed /tmp path is short and per-cell unique.
+        (ssh_host, ssh_port) -- the port alone can repeat across cells now that
+        each binds a private loopback address, so the host is part of the key.
+        Lives in /tmp (writable, short) rather than the per-cell workdir: workdir
+        lands on /mnt/scratch on Linux CI hosts, and a unix socket path must stay
+        under ~104 chars -- this /tmp path is short and per-cell unique.
         """
-        return f"/tmp/homelab-cm-{self.ssh_port}"
+        return f"/tmp/homelab-cm-{self.ssh_host}-{self.ssh_port}"
 
     def _ssh_options(self) -> list[str]:
         """Return the shared `-o flag=value` pairs for harness SSH commands."""
@@ -674,7 +716,7 @@ class Machine:
             *self._ssh_options(),
             "-o",
             "ForwardAgent=yes",
-            f"{self.ssh_user}@{SSH_HOST}",
+            f"{self.ssh_user}@{self.ssh_host}",
         ]
         return [*base, shlex.join(cmd)] if cmd else base
 
@@ -753,7 +795,7 @@ class Machine:
             "-e",
             f"ansible_ssh_port={self.ssh_port}",
             "-e",
-            f"ansible_ssh_host={SSH_HOST}",
+            f"ansible_ssh_host={self.ssh_host}",
             "-e",
             f"ansible_ssh_user={self.ssh_user}",
             "-e",
@@ -776,7 +818,7 @@ class Machine:
             # Controller-side WAN probe endpoint for verify probes that
             # delegate_to: localhost (see the wan_* field comment).
             "-e",
-            f"wan_probe_host={SSH_HOST}",
+            f"wan_probe_host={self.ssh_host}",
             "-e",
             json.dumps({"wan_forward_ports": self.wan_forward_ports}, sort_keys=True, separators=(",", ":")),
             # Keepalives on the ansible/mitogen SSH transport too, matching
@@ -909,7 +951,7 @@ class Machine:
             *self._ssh_options(),
             "-o",
             "ForwardAgent=yes",
-            f"{self.ssh_user}@{SSH_HOST}",
+            f"{self.ssh_user}@{self.ssh_host}",
         ]
         print_cmd_line(cmd)
         # -f backgrounds ssh itself once the master socket is up, so the
@@ -943,7 +985,7 @@ class Machine:
 
         try:
             reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(SSH_HOST, self.ssh_port),
+                asyncio.open_connection(self.ssh_host, self.ssh_port),
                 timeout=2,
             )
         except (OSError, TimeoutError):
@@ -1142,10 +1184,9 @@ class Machine:
         else:
             # vnc_display is only set when keep_vm=True and local GUI display
             # is disabled; print_ssh_instructions itself is also keep-only.
-            print_line(f"VNC: 127.0.0.1:{5900 + self.vnc_display}")
+            print_line(f"VNC: {self.ssh_host}:{5900 + self.vnc_display}")
 
-    @staticmethod
-    def _pick_vnc_display() -> int:
+    def _pick_vnc_display(self) -> int:
         """Walk VNC ports 5900..5999 and return the first free display number.
 
         qemu's `vnc=:N` syntax binds to port 5900+N, so we test bind on the
@@ -1156,11 +1197,11 @@ class Machine:
         for display in range(100):
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.bind((SSH_HOST, 5900 + display))
+                    s.bind((self.ssh_host, 5900 + display))
                     return display
             except OSError:
                 continue
-        raise RuntimeError("No free VNC display in 0..99 on 127.0.0.1")
+        raise RuntimeError(f"No free VNC display in 0..99 on {self.ssh_host}")
 
     async def prepare(self) -> None:
         """Stage the workdir, then create overlay images and seed data for the selected template."""
@@ -1210,7 +1251,7 @@ class Machine:
         self._direct_boot = None
 
         # Reserve every hostfwd port up front by binding an ephemeral socket on
-        # 127.0.0.1 and reading back the assigned port. Avoids an lsof-poll
+        # self.ssh_host and reading back the assigned port. Avoids an lsof-poll
         # heuristic, which would have to filter VNC ports and re-tangle if any
         # future qemu service published TCP. Every reservation socket stays
         # open until all ports are picked: closing one before the next bind
@@ -1218,15 +1259,17 @@ class Machine:
         # sharing a host port make qemu refuse to launch outright ("Could not
         # set up host forwarding rule"). Uniqueness only has to hold within a
         # protocol -- qemu keys hostfwd on proto+hostport -- so the TCP and UDP
-        # reservations are independent. Tiny race between closing the sockets
-        # and qemu's bind, but qemu launches near-immediately and the kernel
-        # rarely reissues a freshly-released port within microseconds.
+        # reservations are independent. There is still a tiny race between
+        # closing the sockets and qemu's bind, but each cell binds a private
+        # loopback address (_cell_loopback_host), so the only contender for a
+        # just-released (addr, port) is this same sequential process -- no
+        # co-tenant cell or host outbound connection sources from this address.
         self.wan_forward_ports = {"tcp": {}, "udp": {}}
         reserved: list[socket.socket] = []
 
         def _reserve(sock_type: int) -> int:
             s = socket.socket(socket.AF_INET, sock_type)
-            s.bind((SSH_HOST, 0))
+            s.bind((self.ssh_host, 0))
             reserved.append(s)
             return s.getsockname()[1]
 
@@ -1573,17 +1616,17 @@ class Machine:
         # empty for machines absent from the topology (minimal -> slirp's
         # default 10.0.2.0/24). Keyed on inventory_host (box), not machine
         # (box_deps), because the topology indexes inventory names.
-        hostfwds = [f"hostfwd=tcp:{SSH_HOST}:{self.ssh_port}-:22"]
+        hostfwds = [f"hostfwd=tcp:{self.ssh_host}:{self.ssh_port}-:22"]
         for proto in ("tcp", "udp"):
             hostfwds.extend(
-                f"hostfwd={proto}:{SSH_HOST}:{host_port}-:{guest_port}"
+                f"hostfwd={proto}:{self.ssh_host}:{host_port}-:{guest_port}"
                 for guest_port, host_port in self.wan_forward_ports[proto].items()
             )
         netdev = f"user,id=user.0," f"{','.join(hostfwds)}" f"{qemu_user_net_args(self.inventory_host)}"
         return netdev, "virtio-net,netdev=user.0"
 
     def _passt_port_specs(self) -> tuple[str, str | None]:
-        """The 127.0.0.1-bound passt port-forward specs.
+        """The self.ssh_host-bound passt port-forward specs.
 
         Includes the SSH hop plus every wan_forward_ports entry, as passt
         `addr/host:guest[,host:guest...]` strings.
@@ -1592,15 +1635,15 @@ class Machine:
         The single `addr/` prefix binds the whole comma-list -- repeating it
         (addr/a,addr/b) is an "Invalid port specifier" to passt, so the address
         appears once. Matches slirp's hostfwd set so the harness keeps
-        connecting at SSH_HOST:<port> under any backend.
+        connecting at self.ssh_host:<port> under any backend.
         """
         tcp_forwards = [
             f"{self.ssh_port}:22",
             *(f"{host_port}:{guest_port}" for guest_port, host_port in self.wan_forward_ports["tcp"].items()),
         ]
         udp_forwards = [f"{host_port}:{guest_port}" for guest_port, host_port in self.wan_forward_ports["udp"].items()]
-        tcp_spec = f"{SSH_HOST}/{','.join(tcp_forwards)}"
-        udp_spec = f"{SSH_HOST}/{','.join(udp_forwards)}" if udp_forwards else None
+        tcp_spec = f"{self.ssh_host}/{','.join(tcp_forwards)}"
+        udp_spec = f"{self.ssh_host}/{','.join(udp_forwards)}" if udp_forwards else None
         return tcp_spec, udp_spec
 
     def _passt_command(self) -> list[str]:
@@ -1686,7 +1729,7 @@ class Machine:
                     display_backend
                     if self._display_window
                     # Display number pre-picked in prepare(); qemu binds to
-                    # 5900+display so the user can connect at 127.0.0.1:<port>.
+                    # 5900+display so the user can connect at self.ssh_host:<port>.
                     else f"vnc=:{self.vnc_display}"
                 ),
                 *self.arch.keep_vm_extra_devices,
@@ -1824,7 +1867,7 @@ class Machine:
             f"ControlPath={self.ssh_control_path}",
             "-p",
             str(self.ssh_port),
-            f"{self.ssh_user}@{SSH_HOST}",
+            f"{self.ssh_user}@{self.ssh_host}",
         ]
         with contextlib.suppress(OSError, TimeoutError):
             proc = await asyncio.create_subprocess_exec(
