@@ -17,6 +17,7 @@ _CONSTRUCTOR_PARAMS = frozenset(
         "upstream_mirrors",
         "workdir_parent",
         "launch",
+        "loopback_host",
     }
 )
 

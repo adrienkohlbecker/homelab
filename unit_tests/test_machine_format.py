@@ -18,7 +18,7 @@ def test_format_ssh_cmd_no_remote_returns_bare_prefix(
         "-p",
         "2222",
         "-o",
-        "ControlPath=/tmp/homelab-cm-2222",
+        "ControlPath=/tmp/homelab-cm-127.0.0.1-2222",
         "-o",
         "ControlMaster=auto",
         "-o",
