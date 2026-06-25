@@ -333,6 +333,28 @@ else
   # mdadm raid0 stripe (mirror rpool already gives redundancy without
   # the lose-one-disk-lose-all-swap failure mode of the raid0 layout).
   SWAP_DEVICE=/dev/zvol/rpool/swap
+
+  # Assemble the podman store raid5 across the per-disk podman partitions
+  # ($PARTITIONS_PODMAN, present when PODMAN_SIZE is set). One disk of
+  # redundancy at (N-1)/N usable -- the operator accepts a single-disk failure
+  # for the reconstructible container store. metadata=1.2 in its default
+  # (start-of-device) location -- none of the metadata=1.0 ESP constraints apply
+  # since this is not a boot device. Let mdadm run the initial parity resync (no
+  # --assume-clean): it backgrounds while mkfs proceeds, costs seconds on a fresh
+  # array, and leaves parity consistent so a later `mdadm --action=check` scrub
+  # finds no spurious mismatches. --bitmap=none (like the EFI array): the store
+  # is optimized for write throughput -- bypassing ZFS amplification is the whole
+  # point -- so we skip the write-intent bitmap's per-stripe logging and accept a
+  # full resync on disk replacement (the data is reconstructible regardless). The
+  # mdadm.conf line makes it auto-assemble at boot (and from the initramfs once
+  # update-initramfs runs below). The podman role then formats + mounts
+  # /dev/md/podman.
+  if [ -n "${PARTITIONS_PODMAN:-}" ]; then
+    # shellcheck disable=SC2086  # word-splitting on PARTITIONS_PODMAN is the point
+    mdadm --create /dev/md/podman --name=podman --metadata=1.2 --level=raid5 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_PODMAN
+    udevadm settle --timeout=10
+    mdadm --detail --brief /dev/md/podman >>/etc/mdadm/mdadm.conf
+  fi
 fi
 
 # Create filesystems

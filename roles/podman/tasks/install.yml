@@ -361,12 +361,26 @@
   tags:
     - podman
 
+# Fail closed on a bad backend value before any of the gated tasks below: every
+# zvol/partition task keys on exact string equality, so a typo (e.g. "partion")
+# would silently skip *both* backends and leave /var/lib/containers on the root
+# filesystem -- podman still works, so the regression is invisible until the disk
+# fills. Assert the value is one of the two known backends up front.
+- name: install | Assert podman_storage_backend is valid
+  assert:
+    that: podman_storage_backend in ['zvol', 'partition']
+    fail_msg: >-
+      podman_storage_backend must be 'zvol' or 'partition';
+      got {{ podman_storage_backend | default('<unset>') }}.
+  tags:
+    - podman
+
 # The size is explicit so the shrink-guard below has a real target. Set it to a
 # volblocksize (8K) multiple: ZFS rounds volsize up to the next 8K, and a
 # rounded-up reported size reads as larger than the request on the next converge,
 # tripping the shrink-guard below with a false positive.
 - name: install | Assert podman_zvol_size is set
-  when: zfs_root
+  when: zfs_root and podman_storage_backend == 'zvol'
   assert:
     that:
       - podman_zvol_size is defined
@@ -387,7 +401,7 @@
 # the shrink lands; the only safe path is offline e2fsck + resize2fs +
 # zfs set volsize, then commit the new size here.
 - name: install | Read current podman zvol size
-  when: zfs_root
+  when: zfs_root and podman_storage_backend == 'zvol'
   command: zfs get -Hp -o value volsize rpool/podman
   register: podman_zvol_current
   changed_when: false
@@ -402,7 +416,7 @@
 # failure must stop the play rather than silently bypass the check below.
 - name: install | Assert the zvol size probe did not error unexpectedly
   when:
-    - zfs_root
+    - zfs_root and podman_storage_backend == 'zvol'
     - podman_zvol_current.rc != 0
   assert:
     that: "'does not exist' in podman_zvol_current.stderr"
@@ -416,7 +430,7 @@
 
 - name: install | Refuse to shrink podman zvol
   when:
-    - zfs_root
+    - zfs_root and podman_storage_backend == 'zvol'
     - podman_zvol_current.rc == 0
   assert:
     that: (podman_zvol_size | int) >= (podman_zvol_current.stdout | int)
@@ -446,7 +460,7 @@
 #     zvols keep working and adopt 8K only on a deliberate destroy+recreate (see
 #     notes/runbooks/fox_podman_zvol_volblocksize_migration.md).
 - name: install | Create podman zvol
-  when: zfs_root
+  when: zfs_root and podman_storage_backend == 'zvol'
   zfs:
     name: rpool/podman
     state: present
@@ -476,7 +490,7 @@
 #     only reconstructible images + overlay layers (service state lives on
 #     /mnt/services bind-mounts) -- see defaults/main.yml.
 - name: install | Disable sync on podman zvol for fast chown
-  when: zfs_root and (qemu_test or podman_zvol_sync_disabled)
+  when: zfs_root and podman_storage_backend == 'zvol' and (qemu_test or podman_zvol_sync_disabled)
   zfs:
     name: rpool/podman
     state: present
@@ -487,7 +501,7 @@
     - podman
 
 - name: install | Create ext4 filesystem on podman zvol
-  when: not (ansible_check_mode and podman_zfs_zvol.changed) and zfs_root
+  when: zfs_root and podman_storage_backend == 'zvol' and not (ansible_check_mode and podman_zfs_zvol.changed)
   filesystem:
     fstype: ext4
     dev: /dev/zvol/rpool/podman
@@ -497,7 +511,7 @@
     - podman
 
 - name: install | Mount podman zvol
-  when: not (ansible_check_mode and podman_zfs_zvol.changed) and zfs_root
+  when: zfs_root and podman_storage_backend == 'zvol' and not (ansible_check_mode and podman_zfs_zvol.changed)
   mount:
     path: /var/lib/containers
     src: /dev/zvol/rpool/podman
@@ -508,6 +522,59 @@
     # explicit target dep removes any reliance on udev winning the
     # race against systemd's device-wait timeout.
     opts: defaults,noatime,x-systemd.requires=zfs-volumes.target
+    state: mounted
+    backup: true
+  become: true
+  tags:
+    - podman
+
+# The partition backend (podman_storage_backend == 'partition') puts the
+# container store on a dedicated raw ext4 partition (single-disk) or an mdadm
+# array of them (multi-disk) instead of an rpool zvol -- bypassing ZFS so
+# reconstructible image/overlay data doesn't pay the COW + checksum + ZIL write
+# amplification. The partition/array itself is created by the install layer
+# (packer/scripts for fixtures, notes/runbooks/podman_partition_rebuild.md for
+# prod); the role only formats and mounts it. podman_storage_device is the
+# stable pre-mkfs path: /dev/disk/by-partlabel/podman (single-disk) or
+# /dev/md/podman (mdadm). Unlike the zvol, it pre-exists this converge, so no
+# check-mode guard is needed.
+- name: install | Assert podman_storage_device is set for the partition backend
+  when: podman_storage_backend == 'partition'
+  assert:
+    that:
+      - podman_storage_device is defined
+      - podman_storage_device | length > 0
+    fail_msg: >-
+      podman_storage_backend=partition requires podman_storage_device
+      (the partition or /dev/md path) in host_vars; got
+      {{ podman_storage_device | default('<unset>') }}.
+  tags:
+    - podman
+
+# resizefs grows ext4 to fill the device on a deliberately enlarged partition;
+# a no-op on the fixed fixture partition. mkfs opts (podman_partition_mkfs_opts)
+# carry raid5 stride/stripe-width geometry and apply at creation only.
+- name: install | Create ext4 filesystem on the podman partition
+  when: podman_storage_backend == 'partition'
+  filesystem:
+    fstype: ext4
+    dev: "{{ podman_storage_device }}"
+    opts: "{{ podman_partition_mkfs_opts }}"
+    resizefs: true
+  become: true
+  tags:
+    - podman
+
+# No x-systemd.requires=zfs-volumes.target here (unlike the zvol mount): a raw
+# partition is exposed by udev early, and an mdadm array assembles from
+# mdadm.conf in the initramfs/udev, both well before local-fs.target.
+- name: install | Mount the podman partition
+  when: podman_storage_backend == 'partition'
+  mount:
+    path: /var/lib/containers
+    src: "{{ podman_storage_device }}"
+    fstype: ext4
+    opts: defaults,noatime
     state: mounted
     backup: true
   become: true

@@ -52,6 +52,42 @@
       graphroot={{ _info.store.graphRoot }},
       seccomp={{ _info.host.security.seccompProfilePath }}.
 
+# When the store is on a dedicated partition/array (podman_storage_backend ==
+# 'partition') rather than the rpool zvol, prove /var/lib/containers is actually
+# backed by it. graphRoot above only shows the path, not what it sits on -- a
+# regression that left the store on the root fs (skipped mount) or reverted to a
+# zvol would silently undo the write-amplification win. The container start above
+# is the functional proof; this pins the backend identity. findmnt --mountpoint
+# requires /var/lib/containers to be a real mount (exits non-zero, failing the
+# task, if it's just a dir on the root fs); readlink resolves the by-partlabel /
+# /dev/md symlink to the kernel device findmnt reports.
+- name: _verify | The podman store is on its dedicated partition backend
+  when: podman_storage_backend == 'partition'
+  block:
+    - name: _verify | Read the /var/lib/containers mount source + fstype
+      command: findmnt --noheadings --output SOURCE,FSTYPE --mountpoint /var/lib/containers
+      become: true
+      register: podman_store_mount
+      changed_when: false
+
+    - name: _verify | Resolve the configured podman storage device
+      command: readlink -f {{ podman_storage_device }}
+      become: true
+      register: podman_store_dev
+      changed_when: false
+
+    - name: _verify | Assert /var/lib/containers is ext4 on podman_storage_device
+      vars:
+        _src: "{{ podman_store_mount.stdout.split()[0] }}"
+        _fstype: "{{ podman_store_mount.stdout.split()[1] }}"
+      assert:
+        that:
+          - _fstype == 'ext4'
+          - _src == podman_store_dev.stdout
+        fail_msg: >-
+          /var/lib/containers is {{ _fstype }} on {{ _src }}, expected ext4 on
+          {{ podman_store_dev.stdout }} ({{ podman_storage_device }}).
+
 # Confirm the rendered containers.conf carries every pinned key -- catches a
 # template regression in the keys podman info doesn't surface (dns_bind_port,
 # the default network *name*, the seccomp default path, the rootless pasta

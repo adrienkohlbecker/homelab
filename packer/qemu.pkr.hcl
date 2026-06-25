@@ -137,6 +137,13 @@ locals {
   #   this size; mirror bakes an rpool zvol of it (the swap role grows it
   #   to the per-host size; see notes/swap_strategy.md). Consumed by
   #   provision.sh as $SWAP_SIZE.
+  # - podman_size: per-disk size of the dedicated podman-store partition
+  #   (p5). "" => no podman partition (host keeps the rpool/podman zvol).
+  #   Single-disk bakes one plain ext4 partition; mirror bakes one per rpool
+  #   disk and chroot.sh mdadm's them into a raid5 (/dev/md/podman). The
+  #   podman role formats + mounts it. Fixture sizes only prove the
+  #   mechanism; prod sizes itself at rebuild (notes/runbooks/
+  #   podman_partition_rebuild.md). Consumed by provision.sh as $PODMAN_SIZE.
   # - extra_pools: space-delimited list of non-rpool pool layouts
   #   provision.sh creates after the rpool arch-chroot completes.
   #   Layouts: apoc (mirror, 2 disks), dozer (mirror, 2 disks),
@@ -157,6 +164,7 @@ locals {
       disk_sizes      = ["40G", "1G", "1G"]
       layout          = ""
       swap_size       = "8G"
+      podman_size     = ""
       extra_pools     = "apoc"
       image_target    = "qemu"
       qemu_test_image = true
@@ -172,6 +180,7 @@ locals {
       disk_sizes      = ["40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
       layout          = "mirror"
       swap_size       = "8G"
+      podman_size     = "4G"
       extra_pools     = "dozer tank_mouse"
       image_target    = "qemu"
       qemu_test_image = true
@@ -190,23 +199,25 @@ locals {
     # box_deps is derived from box by `mise run packer:seed-deps`, which boots
     # box with launch.py --commit, applies packer/seed_deps.yml, and publishes
     # the result. It is not a packer source.
-    # The rpool is 96G (not 40G like lab/pug, whose prod-faithful geometry
-    # spreads state across many pools): box is the only fixture the _site_test
-    # cell converges the *whole* fleet onto, and that converge sizes the
-    # rpool/podman zvol up to 50G (host_vars/box.yml, keyed on _role_under_test)
-    # so /var/lib/containers can hold every service image plus a
-    # storage-chown-by-maps duplicate for each fake-root service (homeassistant,
-    # jellyfin, authelia, ...). A 50G zvol's refreservation + the 4G swap zvol +
-    # the OS dataset does not fit a 64G pool, so the pool has to be large enough
-    # to host the enlarged zvol with headroom -- 96G leaves ~30G slack. (The
-    # ENOSPC this fixes is the zvol filling, not the pool; the pool size is the
-    # enabler that lets the zvol grow.)
+    # box uses the partition podman backend (podman_storage_backend=partition in
+    # host_vars/box.yml): the container store is a dedicated 50G ext4 partition
+    # (p5), not an rpool zvol. box is the only fixture the _site_test cell
+    # converges the *whole* fleet onto, and that store must hold every service
+    # image plus a storage-chown-by-maps duplicate for each fake-root service
+    # (homeassistant, jellyfin, authelia, ...), hence 50G. With podman out of the
+    # pool, the rpool only carries the OS + the prod producer datasets
+    # (data/media/scratch/minio/services land flat on it here), so it no longer
+    # needs the headroom the old 50G-zvol-inside-rpool layout demanded. vdb is
+    # sized for swap(4G) + podman(50G) + a ~40G rpool; the disk_sizes total stays
+    # 96G. (The earlier 96G existed to host an in-pool 50G zvol with slack; the
+    # partition guarantees the 50G directly now.)
     box = {
       disks           = "/dev/vdb"
       extra_disks     = "/dev/vdc"
       disk_sizes      = ["96G", "1G"]
       layout          = ""
       swap_size       = "4G"
+      podman_size     = "50G"
       extra_pools     = "zee"
       image_target    = "qemu"
       qemu_test_image = true
@@ -221,6 +232,7 @@ locals {
       disk_sizes      = ["20G"]
       layout          = ""
       swap_size       = "4G"
+      podman_size     = ""
       extra_pools     = ""
       image_target    = "hetzner"
       qemu_test_image = false
@@ -380,6 +392,7 @@ build {
       "EXTRA_DISKS"                     = local.variant_config[source.name].extra_disks
       "LAYOUT"                          = local.variant_config[source.name].layout
       "SWAP_SIZE"                       = local.variant_config[source.name].swap_size
+      "PODMAN_SIZE"                     = local.variant_config[source.name].podman_size
       "EXTRA_POOLS"                     = local.variant_config[source.name].extra_pools
       "UBUNTU_NAME"                     = "${var.ubuntu_name}"
       "UBUNTU_MIRROR"                   = local.build_archive

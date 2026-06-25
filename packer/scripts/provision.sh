@@ -194,13 +194,17 @@ create_extra_pools() {
 
 # Per-disk partition paths, computed once and exported as space-delimited
 # strings so chroot.sh consumes them directly without re-running partdev.
-# Partition layout (sgdisk below, numbered in on-disk order): 1 = BIOS
-# boot (EF02), 2 = EFI, 3 = swap (single-disk) / metadata vdev (mirror),
-# 4 = rpool. rpool is last so a cloud-image deploy can grow it into the
-# rest of the disk (chroot.sh's hetzner_growpart grows p4). Each gets a
-# GPT name (sgdisk -c: bios/efi/swap|meta/rpool) for readable lsblk/gdisk
-# output; consumers resolve by filesystem UUID or device path, never
-# by-partlabel (non-unique across the mirror's identically-named disks).
+# Partition layout (sgdisk below): 1 = BIOS boot (EF02), 2 = EFI, 3 = swap
+# (single-disk) / metadata vdev (mirror), 5 = podman store (optional, when
+# PODMAN_SIZE is set), 4 = rpool. rpool keeps number 4 and is carved last
+# (-n4:0:0) so it grows into the rest of the disk regardless of whether the
+# podman partition is present -- a cloud-image deploy still grows p4
+# (chroot.sh's hetzner_growpart). The podman partition is numbered 5 but sits
+# physically before rpool. Each gets a GPT name (sgdisk -c:
+# bios/efi/swap|meta/podman/rpool) for readable lsblk/gdisk output; consumers
+# resolve by filesystem UUID or device path, never by-partlabel (non-unique
+# across the mirror's identically-named disks) -- except the single-disk
+# podman partition, where by-partlabel IS unique (one disk).
 #
 # Swap is the disk-backed *overflow* behind zram, which the swap role
 # runs as the primary high-priority device (notes/swap_strategy.md),
@@ -217,15 +221,19 @@ create_extra_pools() {
 # nothing consumes it yet (see notes/special-vdev-sizing.md).
 PARTITIONS_EFI=""
 PARTITIONS_SWAP=""
+PARTITIONS_PODMAN=""
 PARTITIONS_RPOOL=""
 for d in $DISKS; do
   PARTITIONS_EFI+="${PARTITIONS_EFI:+ }$(partdev "$d" 2)"
   if [ "$LAYOUT" = "" ]; then
     PARTITIONS_SWAP+="${PARTITIONS_SWAP:+ }$(partdev "$d" 3)"
   fi
+  if [ -n "${PODMAN_SIZE:-}" ]; then
+    PARTITIONS_PODMAN+="${PARTITIONS_PODMAN:+ }$(partdev "$d" 5)"
+  fi
   PARTITIONS_RPOOL+="${PARTITIONS_RPOOL:+ }$(partdev "$d" 4)"
 done
-export PARTITIONS_EFI PARTITIONS_SWAP PARTITIONS_RPOOL
+export PARTITIONS_EFI PARTITIONS_SWAP PARTITIONS_PODMAN PARTITIONS_RPOOL
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -304,6 +312,14 @@ for disk in $DISKS; do
 
   if [ "$LAYOUT" = "mirror" ]; then
     sgdisk -n3:0:+2G -t3:BF01 -c3:meta "$disk" # metadata vdev (BF01 = Solaris /usr & Mac ZFS, default when doing zpool create)
+  fi
+
+  # Dedicated podman store partition (number 5, carved before rpool so rpool
+  # keeps number 4 and still grows to the end of the disk). Single-disk hosts
+  # carry a plain ext4 here; mirror hosts mdadm the per-disk p5s into a raid5
+  # (chroot.sh). 8300 = Linux filesystem.
+  if [ -n "${PODMAN_SIZE:-}" ]; then
+    sgdisk "-n5:0:+$PODMAN_SIZE" -t5:8300 -c5:podman "$disk"
   fi
   sgdisk -n4:0:0 -t4:BF00 -c4:rpool "$disk" # rpool (BF00 = Solaris root)
 
