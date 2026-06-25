@@ -7,6 +7,11 @@
 # duplicate log noise by disabling martian logging on the vmac iface the moment
 # udev creates it.
 #
+# This only takes effect because roles/firewall pins
+# net.ipv4.conf.all.log_martians=0: the kernel OR-folds `all` into every
+# interface's effective value, so an all=1 would override the per-iface 0
+# written here and the flood would continue regardless of this rule.
+#
 # This must be a udev rule, not a sysctl.d value: the vrrp interface does not
 # exist at boot (keepalived creates it at start), so systemd-sysctl has nothing
 # to apply. %k is the kernel iface name; writing /proc directly avoids the
