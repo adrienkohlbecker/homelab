@@ -79,6 +79,7 @@ table inet homelab {
 {% endif %}
 {% if tailscale_wan_direct | default(false) %}
     counter tailscale_underlay_accept {}
+    counter tailscale_lan_accept {}
 {% endif %}
 
     # Admin services (samba/nut/mosh/NetBIOS) require an (iif, saddr)
@@ -246,6 +247,17 @@ table inet homelab {
         # the home WAN, so each pins a distinct tailscale_port (41641 / 41642) with
         # its own forward. iifname $WAN_IFACE so a LAN-side source can't reach it.
         iifname $WAN_IFACE udp dport {{ tailscale_port }} counter name "tailscale_underlay_accept" accept comment "tailscale direct endpoint (WAN underlay ingress)"
+
+        # Tailscale direct LAN endpoint: LAN/wireguard peers reaching this
+        # host's tailscaled underlay for a direct path instead of relaying via
+        # fox's DERP. tailscaled binds 0.0.0.0, so a LAN peer probes every
+        # endpoint this host advertises -- including the mgmt macvlan IP, whose
+        # packets ingress on mac_mgmt (not $WAN_IFACE), so the WAN rule above
+        # misses them (observed as SRC=<home LAN> DPT={{ tailscale_port }} drops
+        # to the mac_mgmt address). lan_admin_pairs scopes to (WAN/mac_mgmt .
+        # HOME_LAN) + (wg0 . WG_SUBNET) -- the same L2-trust boundary mosh/samba
+        # use -- so a future untrusted VLAN still can't reach it.
+        iifname . ip saddr @lan_admin_pairs udp dport {{ tailscale_port }} counter name "tailscale_lan_accept" accept comment "tailscale direct endpoint (LAN/wireguard peers)"
 {% endif %}
 
         # Mosh sessions originate from admin clients on the home LAN
