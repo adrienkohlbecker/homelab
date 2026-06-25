@@ -12,7 +12,7 @@
 #    /etc/sudoers.d/vagrant before the host gets a routable IP. The
 #    shipped image is otherwise a free root shell on any lab LAN.
 #  - on mirror-rpool variants, supply matching-size disks. The
-#    rpool mirror caps at the smallest disk's partition 3, so a
+#    rpool mirror caps at the smallest disk's partition 5, so a
 #    2T+4T+4T mix silently halves usable rpool capacity.
 #  - verify the rpool ashift=12 below matches the disks. 4 KiB is
 #    right for ~95% of drives but some enterprise SSDs / SMR HDDs
