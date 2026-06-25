@@ -60,13 +60,16 @@ lm_sensors_modules:
 # -128/+127 C and oscillate across their crit threshold, so netdata's
 # debugfs.plugin logs a state transition for each flap (~tens of thousands of
 # journal lines/day). temp4/temp6 (AUXTIN1/3) read plausible values and stay
-# quiet, so they are left charted. Feature names per `sensors -u nct6798-isa-0290`.
+# quiet, so they are left charted. in6 is the same story on the voltage side:
+# an unwired rail reading 0 V with min==max==0, whose kernel alarm bit flaps
+# clear<->alarm (~500 lines/day). Feature names per `sensors -u nct6798-isa-0290`.
 lm_sensors_ignore:
   - chip: nct6798-isa-0290
     features:
       - temp3
       - temp5
       - temp7
+      - in6
 
 # Each entry names a VLAN; the macvlan role derives this host's slot-indexed
 # /28 from data/network_topology.yml. host_ip defaults to that block's first IP.
