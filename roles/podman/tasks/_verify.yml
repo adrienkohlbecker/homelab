@@ -88,6 +88,51 @@
           /var/lib/containers is {{ _fstype }} on {{ _src }}, expected ext4 on
           {{ podman_store_dev.stdout }} ({{ podman_storage_device }}).
 
+    # On a multi-disk host the store sits on an mdadm raid5 whose one-disk-failure
+    # tolerance is the entire reason to use it -- the ext4-on-device assert above
+    # proves it's mounted and usable but not that the redundancy is actually
+    # intact. A regression that assembled the wrong level (raid0), left the array
+    # degraded (a member missing), or dropped podman_partition_mkfs_opts would
+    # pass the check above yet silently lose fault tolerance or the stripe
+    # geometry. Gated on the resolved device being an md node, so the single-disk
+    # partition fixtures (box) skip it. (Initial-create resync may still be
+    # running here -- harmless: all members are active-sync throughout, so the
+    # membership/level/failed-count asserts hold; we deliberately don't gate on
+    # 'clean' to avoid racing the resync.)
+    - name: _verify | Inspect the podman raid array when the store is on mdadm
+      when: podman_store_dev.stdout.startswith('/dev/md')
+      block:
+        - name: _verify | Read mdadm detail + ext4 geometry for the podman array
+          command: "{{ item }}"
+          become: true
+          changed_when: false
+          register: podman_md_probes
+          loop:
+            - mdadm --detail {{ podman_storage_device }}
+            - dumpe2fs -h {{ podman_storage_device }}
+
+        - name: _verify | Assert the store is a healthy raid5 with the configured stripe geometry
+          vars:
+            _detail: "{{ podman_md_probes.results[0].stdout }}"
+            _dump: "{{ podman_md_probes.results[1].stdout }}"
+          assert:
+            that:
+              # raid5 specifically, every member present, none failed, not degraded.
+              - "'Raid Level : raid5' in _detail"
+              - "'Failed Devices : 0' in _detail"
+              - "'degraded' not in _detail"
+              # ext4 was built with the raid geometry (plain mkfs omits these
+              # lines entirely) -- proves podman_partition_mkfs_opts reached mkfs.
+              - "'RAID stride:' in _dump"
+              - "'RAID stripe width:' in _dump"
+            fail_msg: >-
+              The podman store is not a healthy raid5 with stripe geometry.
+              mdadm --detail:
+              {{ _detail }}
+              ---
+              dumpe2fs -h:
+              {{ _dump }}
+
 # Confirm the rendered containers.conf carries every pinned key -- catches a
 # template regression in the keys podman info doesn't surface (dns_bind_port,
 # the default network *name*, the seccomp default path, the rootless pasta
