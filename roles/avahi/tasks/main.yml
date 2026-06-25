@@ -26,27 +26,29 @@
   tags:
     - avahi
 
-- name: Render avahi device-info service
-  template:
-    src: device-info.service.j2
-    dest: /etc/avahi/services/device-info.service
-    mode: "0644"
-    owner: root
-    group: root
-    backup: true
-    validate: xmllint --noout --dtdvalid /usr/share/avahi/avahi-service.dtd %s
-  when: not (ansible_check_mode and avahi_apt.changed)
+# The host deliberately does NOT advertise _device-info._tcp. Claiming
+# an Apple `model=` made macOS treat these Linux servers as
+# Continuity-capable Macs and open rapportd/Handoff sessions to them on
+# udp/3722, dropped at the firewall as pure log noise. Samba shares still
+# surface in Finder via the samba role's _smb._tcp advert; the
+# mounted-share icon comes from `fruit:model` in smb.conf (in-band over
+# the SMB AAPL extension), independent of this record. Remove any file
+# left by a prior converge so the advert disappears on the next reload.
+- name: Remove the avahi device-info service
+  file:
+    path: /etc/avahi/services/device-info.service
+    state: absent
   become: true
-  register: avahi_device_info
+  register: avahi_device_info_removed
   tags:
     - avahi
 
 - name: Enable avahi service
   # Daemon conf changes need a real restart (allow-interfaces et al.
-  # are only read at startup). Service-XML drops into
-  # /etc/avahi/services/ are picked up via SIGHUP, so reload keeps
-  # the LAN's mDNS cache warm across per-host model overrides. A conf
-  # change wins both — restart already re-reads the services dir, so
+  # are only read at startup). Service-XML changes under
+  # /etc/avahi/services/ are picked up via SIGHUP, so a reload drops the
+  # removed device-info advert without flushing the LAN's mDNS cache. A
+  # conf change wins both — restart already re-reads the services dir, so
   # the reload is redundant in that case.
   import_role:
     name: systemd_unit
@@ -56,6 +58,6 @@
       src: avahi-daemon
       condition: "{{ not (ansible_check_mode and avahi_apt.changed) }}"
       restart: "{{ avahi_daemon_conf.changed }}"
-      reload: "{{ avahi_device_info.changed and not avahi_daemon_conf.changed }}"
+      reload: "{{ avahi_device_info_removed.changed and not avahi_daemon_conf.changed }}"
   tags:
     - avahi

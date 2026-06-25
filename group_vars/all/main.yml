@@ -243,11 +243,6 @@ service_ports:
 # authelia_host, make sure it has a wireguard_peers entry first.
 authelia_internal_url: "http://{% if inventory_hostname == authelia_host -%} 127.0.0.1{%- else -%} {{ (wireguard_peers | selectattr('name', 'eq', authelia_host) | first).address }}{%- endif -%} :{{ service_ports.authelia }}/api/authz/auth-request"
 
-# mDNS device-info model -- drives the Finder sidebar icon for the host.
-# Maps to an .icns under /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/
-# on macOS clients. Override per host (e.g. `avahi_device_model: Macmini8,1`).
-avahi_device_model: RackMac3,1
-
 # Sonatype Nexus pull-through cache. Empty = use upstream URLs directly.
 # Overridden in group_vars/test.yml to route fetches through nexus.lab.fahm.fr.
 nexus_url: ""

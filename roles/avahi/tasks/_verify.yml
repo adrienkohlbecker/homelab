@@ -36,29 +36,23 @@
         | selectattr('family', 'equalto', 'inet')
         | map(attribute='address') | list)
 
-# Proves the device-info.service XML loaded and the templated model
-# field rendered through to a TXT record. `-p` parseable, `-r`
-# resolve (TXT records appear on `=` lines), `-t` terminate after
-# one cycle. Asserts the resolved row's iface column equals the
-# pinned iface and the templated model field came through. Pinned
-# to ansible_hostname in the service-name column so a peer
-# publishing the same default model can't false-positive the test.
-#
-# Cross-iface leak is the failure mode the role exists to prevent,
-# but every harness variant (box/lab/pug/minimal) is single-NIC
-# QEMU -- a negative "no other iface" assertion would be
-# tautologically true and not regress on a real bug. The
-# allow-interfaces pin + check-response-ttl in the conf are the
-# enforcement; this probe is functional-positive only.
-- name: _verify | Device-info service is announced on the pinned iface with the configured model
-  command: avahi-browse -prt _device-info._tcp
-  register: _avahi_browse
-  retries: 20
-  delay: 2
-  until:
-    - _avahi_browse.rc == 0
-    - _avahi_browse.stdout_lines
-        | select('match', '^=;' + default_interface + ';IPv4;' + ansible_hostname + ';')
-        | select('search', '"model=' + avahi_device_model + '"')
-        | list | length > 0
-  changed_when: false
+# The role no longer publishes _device-info._tcp: advertising an Apple
+# `model=` made macOS treat the host as a Continuity Mac and probe it on
+# udp/3722 (see main.yml). Assert the service XML is gone so a
+# re-introduced template regresses loudly. (Absence-on-the-wire would be
+# the functional check, but proving a record never arrives needs an
+# unbounded wait and false-positives on mDNS timing -- the file stat is
+# the deterministic guard against the template coming back.)
+- name: _verify | Stat the (removed) device-info service file
+  stat:
+    path: /etc/avahi/services/device-info.service
+  register: _avahi_device_info
+  become: true
+
+- name: _verify | Assert the device-info advert is not published
+  assert:
+    that:
+      - not _avahi_device_info.stat.exists
+    fail_msg: >-
+      /etc/avahi/services/device-info.service is present -- the host is
+      advertising as an Apple device again and will draw rapportd/3722 probes.

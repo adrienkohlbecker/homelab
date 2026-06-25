@@ -40,9 +40,8 @@ disallow-other-stacks=yes
 # packaged conf overrides to no, preserved here). The service-name
 # format embeds the publishing interface's MAC address
 # (`<host> [aa:bb:cc:dd:ee:ff]._workstation._tcp`), a fingerprinting
-# leak across mDNS; on macOS clients it also duplicates the host in
-# the Finder sidebar alongside the _device-info-driven entry this
-# role already publishes.
+# leak across mDNS, and adds a redundant Finder-sidebar entry for the
+# host with no functional benefit.
 publish-workstation=no
 # Defensive: pin against a future upstream re-enable of HINFO
 # (CPU/arch broadcast); upstream default is already `no`.
