@@ -676,6 +676,17 @@ if [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
   # cloud-guest-utils ships growpart, used by hetzner_growpart.service below.
   apt-get install --yes cloud-init cloud-guest-utils
 
+  # Install the Hetzner cloud-init drop-in this release's stock hcloud image
+  # ships (captured verbatim under packer/hetzner/, staged into /var/tmp by
+  # provision.sh). It carries the mirror.hetzner.com package_mirrors and the
+  # Hetzner module set, so our debootstrap'd cloud-init behaves like the stock
+  # image: apt_configure points sources.list.d at the Hetzner mirror on first
+  # boot. Its default_user is root, but terraform user_data's `users:` block
+  # replaces that list with `ak` (verified: ak is the sole login user, root
+  # locked). The 99-hetzner.cfg datasource pin below sorts last and wins.
+  install -m 0644 /var/tmp/90-hetznercloud.cfg /etc/cloud/cloud.cfg.d/90-hetznercloud.cfg
+  rm /var/tmp/90-hetznercloud.cfg
+
   # Pin the datasource so a fresh cloud-init (debootstrap'd, not the
   # Hetzner-tuned stock image) finds Hetzner's metadata + user-data fast
   # instead of probing the full list. Hetzner provides networking + user-data

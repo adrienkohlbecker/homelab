@@ -420,6 +420,16 @@ cp /etc/hostid /mnt/etc
 # regardless. Removed before the image is sealed.
 echo force-unsafe-io >/mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
 
+# Stage the Hetzner cloud-init drop-in for this release so chroot.sh can install
+# it into /etc/cloud/cloud.cfg.d, making the image behave like the stock hcloud
+# image (mirror.hetzner.com apt, Hetzner module set). Under /var/tmp, not /tmp:
+# arch-chroot shadows the chroot's /tmp with a private tmpfs, hiding files
+# pre-staged there. Skipped on the qemu fixtures and the bare-metal path (no
+# hetzner dir, IMAGE_TARGET != hetzner).
+if [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
+  install -D -m 0644 "$SCRIPTS_DIR/hetzner/90-hetznercloud.cfg.$UBUNTU_NAME" /mnt/var/tmp/90-hetznercloud.cfg
+fi
+
 # Chroot into the new OS via arch-chroot (arch-install-scripts). It
 # bind-mounts proc/sys/dev/devpts/run/efivarfs and /etc/resolv.conf
 # under /mnt for the chroot's lifetime, so apt can resolve hostnames
