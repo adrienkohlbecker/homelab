@@ -49,6 +49,117 @@
   tags:
     - tailscale
 
+# Relocate tailscaled's state directory onto the services dataset so the node
+# identity -- tailscaled.state (the node key + prefs + advertised routes) -- rides
+# the nightly ZFS backup instead of living only on rpool/ROOT, which a re-image
+# wipes. Without this a rebuilt host re-registers as a NEW node against its
+# headscale and its exit-node / subnet routes need re-approval. The stock apt
+# unit hardcodes --state=/var/lib/tailscale/tailscaled.state, so keep that path
+# but make it a symlink to /mnt/services/tailscale (the repo's state: link idiom,
+# cf. roles/resolved). 0700: tailscaled.state is a secret (the node private key).
+- name: Create the tailscale state directory on the services dataset
+  file:
+    path: /mnt/services/tailscale
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  tags:
+    - tailscale
+
+- name: Stat the tailscale state path
+  stat:
+    path: /var/lib/tailscale
+  register: tailscale_statedir
+  become: true
+  tags:
+    - tailscale
+
+# One-time migration: an already-provisioned host carries its live identity in
+# the real /var/lib/tailscale directory. Stop the daemon, copy the state across,
+# then replace the directory with the symlink. cp -an never clobbers an identity
+# already on the dataset (e.g. one just restored during a rebuild), so it is safe
+# to re-run; the whole block is skipped once /var/lib/tailscale is already a link.
+- name: Relocate existing tailscale state onto the services dataset
+  when:
+    - tailscale_statedir.stat.isdir | default(false)
+    - not (tailscale_statedir.stat.islnk | default(false))
+  tags:
+    - tailscale
+  block:
+    - name: Stop tailscaled before relocating its state
+      systemd:
+        name: tailscaled
+        state: stopped
+      become: true
+
+    - name: Copy existing tailscale state onto the dataset without clobbering
+      command: cp -an /var/lib/tailscale/. /mnt/services/tailscale/
+      changed_when: true
+      become: true
+
+    - name: Remove the old tailscale state directory
+      file:
+        path: /var/lib/tailscale
+        state: absent
+      become: true
+
+- name: Symlink the tailscale state path onto the services dataset
+  file:
+    src: /mnt/services/tailscale
+    dest: /var/lib/tailscale
+    state: link
+    force: true
+  become: true
+  tags:
+    - tailscale
+
+# Single override.conf carrying every tailscaled customization. It (a) clears the
+# stock StateDirectory=tailscale so systemd accepts our /var/lib/tailscale ->
+# /mnt/services/tailscale symlink, (b) orders the daemon after the services-dataset
+# mount and binds it to the nightly snapshot target, and (c) persists the GRO
+# offload across reboots (the only conditional line -- routers/exit-nodes only).
+# Requires/After the mount is load-bearing: if tailscaled started before the
+# dataset mounted it would mint a fresh identity into the bare mountpoint on the
+# root fs, which the dataset then mounts over (shadowing it) -- re-registering
+# every boot. PartOf the snapshot target quiesces the daemon during the snapshot
+# so tailscaled.state is captured consistently. Installed before the daemon starts
+# so the StateDirectory clear is in effect on first start.
+- name: Install the tailscaled drop-in
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      for: tailscaled.service
+      src: tailscaled-override.conf.j2
+  tags:
+    - tailscale
+
+# PartOf only propagates the snapshot target's *stop* (its pre-snapshot-cmd), not
+# the post-snapshot *start*, and `systemctl enable` doesn't reliably honour a
+# stock unit's drop-in [Install]. Wire the want explicitly so tailscaled comes
+# back up after each nightly snapshot. The target is installed by zfs_autobackup
+# (base play, ahead of tailscale), so gate on its presence: absent on the qemu
+# tailscale fixture (no snapshot machinery there) where add-wants would error.
+- name: Check whether the snapshot target is installed
+  stat:
+    path: /etc/systemd/system/zfs_autosnapshot.target
+  register: tailscale_snapshot_target
+  become: true
+  tags:
+    - tailscale
+
+- name: Bind tailscaled to the snapshot target so it restarts after snapshots
+  command: systemctl add-wants zfs_autosnapshot.target tailscaled.service  # noqa: command-instead-of-module
+  args:
+    creates: /etc/systemd/system/zfs_autosnapshot.target.wants/tailscaled.service
+  when: tailscale_snapshot_target.stat.exists
+  become: true
+  tags:
+    - tailscale
+
 # Restart (not just start) when the port changed, so the daemon rebinds before
 # register.yml runs `tailscale up`/`set` against the new endpoint. No handler --
 # the restart is driven inline off the EnvironmentFile change (CLAUDE.md Hard
@@ -102,11 +213,11 @@
 # enable UDP GRO forwarding offload on the UNDERLAY NIC -- the physical device
 # that actually receives the WireGuard-encapsulated UDP -- so traffic batches
 # instead of hitting the per-packet path. It must target the physical interface,
-# NOT tailscale0 (a tun device that does no hardware offload). Applied on every
-# converge for immediate effect; the tailscaled-gro.conf drop-in (installed
-# below) persists it across reboots via ExecStartPost=. failed_when:false:
-# drivers that don't support the offload (e.g. qemu virtio on the box fixture)
-# reject it harmlessly. https://tailscale.com/kb/1320/performance-best-practices
+# NOT tailscale0 (a tun device that does no hardware offload). Applied here on
+# every converge for immediate effect; the override.conf drop-in's ExecStartPost=
+# (installed above) persists it across reboots. failed_when:false: drivers that
+# don't support the offload (e.g. qemu virtio on the box fixture) reject it
+# harmlessly. https://tailscale.com/kb/1320/performance-best-practices
 - name: Enable UDP GRO forwarding offload on the underlay NIC
   command: ethtool -K {{ ansible_default_ipv4.interface }} rx-udp-gro-forwarding on rx-gro-list off
   when:
@@ -115,19 +226,5 @@
   changed_when: false
   failed_when: false
   become: true
-  tags:
-    - tailscale
-
-- name: Install tailscaled GRO offload drop-in for reboot persistence
-  import_role:
-    name: systemd_unit
-    tasks_from: dropin
-  vars:
-    systemd_unit_args:
-      src: tailscaled-gro.conf.j2
-      for: tailscaled.service
-  when:
-    - ansible_default_ipv4.interface is defined
-    - (tailscale_advertise_routes | length > 0) or (tailscale_advertise_exit_node | bool)
   tags:
     - tailscale

@@ -1,0 +1,27 @@
+#jinja2: lstrip_blocks: True
+[Unit]
+{% if zfs_root %}
+{% if zfs_has_services_mount %}
+After=zfs_mount_mnt_services.service
+Requires=zfs_mount_mnt_services.service
+{% endif %}
+After=zfs_autosnapshot.target
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+# The stock unit declares StateDirectory=tailscale, so systemd manages
+# /var/lib/tailscale itself and refuses our symlink to the services dataset
+# ("Not a directory", 238/STATE_DIRECTORY). Clear it: tailscaled then falls back
+# to its --state=/var/lib/tailscale/tailscaled.state, which follows the symlink
+# onto /mnt/services/tailscale so the node identity rides the ZFS backup.
+StateDirectory=
+{% if ansible_default_ipv4.interface is defined and ((tailscale_advertise_routes | length > 0) or (tailscale_advertise_exit_node | bool)) %}
+# Persist UDP GRO forwarding offload on the underlay NIC across reboots. The
+# role also applies this via ethtool on every converge for immediate effect;
+# this ExecStartPost= fires whenever tailscaled starts so the setting survives
+# reboots without waiting for the next ansible run.
+# https://tailscale.com/kb/1320/performance-best-practices
+# -prefix: drivers that reject the offload (e.g. qemu virtio) are ignored.
+ExecStartPost=-/usr/sbin/ethtool -K {{ ansible_default_ipv4.interface }} rx-udp-gro-forwarding on rx-gro-list off
+{% endif %}
