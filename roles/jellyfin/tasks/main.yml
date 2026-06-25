@@ -471,8 +471,9 @@
         # "Server is still starting up" -- especially right after the service
         # task restarts a seconds-old container (SIGINT ignored mid-startup ->
         # 60s SIGKILL -> cold .NET restart). Retry this first wizard call
-        # through that window; once it 200s the server is past startup and the
-        # rest of the block follows immediately.
+        # through that window; once it returns 2xx (this endpoint answers 204)
+        # the server is past startup and the rest of the block follows
+        # immediately.
         - name: Set the startup-wizard locale
           uri:
             url: http://localhost:{{ service_ports.jellyfin }}/Startup/Configuration
