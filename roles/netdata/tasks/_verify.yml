@@ -560,7 +560,7 @@
     - /tmp/netdata_poll_verify_cm
   changed_when: false
 
-# poll_access enables linger for netdata_poll so the ~15s poll cadence reuses one
+# poll_access enables linger for netdata_poll so the 30s poll cadence reuses one
 # resident `systemd --user` manager instead of rebuilding it per login (which
 # otherwise floods the journal with slice/socket/target bringup every poll).
 - name: _verify | Linger keeps the netdata_poll user manager resident
@@ -582,7 +582,7 @@
     set -euo pipefail
     rm -f /tmp/nd_verify_cursor
     journalctl -u netdata -n0 --cursor-file=/tmp/nd_verify_cursor >/dev/null 2>&1 || true
-    for i in 1 2 3 4; do curl -s -o /dev/null "http://localhost:{{ service_ports.netdata }}/api/v1/info"; done
+    for i in 1 2 3 4; do curl -s --connect-timeout 1 --max-time 5 -o /dev/null "http://localhost:{{ service_ports.netdata }}/api/v1/info"; done
     sleep 1
     journalctl -u netdata --cursor-file=/tmp/nd_verify_cursor --no-pager | grep -cF "Cannot validate" || true
     rm -f /tmp/nd_verify_cursor

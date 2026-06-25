@@ -22,10 +22,11 @@ bind to = 127.0.0.1
 # one per poll). The `*` lists short-circuit on the IP match before any lookup,
 # but carry `by dns = no` too for uniformity.
 #
-# management/netdata.conf stay `none`: the nginx vhost fronts netdata with an
-# Authelia bypass keyed on a shared cross-host poll token, so a token-bearer must
-# not be able to reach the management API (silence alarms) or dump the full config
-# (netdata.conf). Nothing legitimate fetches them through the proxy -- the
+# management/netdata.conf stay `none`: the nginx vhost only proxies Authelia-
+# gated browser requests from loopback, and cross-host alert polling reaches
+# netdata over SSH (forced command), not the proxy -- so nothing legitimate
+# fetches the management API (silence alarms) or the full config (netdata.conf)
+# through nginx. Denying them keeps those endpoints off the browser path; the
 # operator reads them on-host.
 allow management from = none
 allow management by dns = no
