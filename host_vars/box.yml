@@ -36,7 +36,7 @@ zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set
 # keyed producer datasets (minio/scratch/data/...) still land flat on rpool;
 # zee activates no named consumers -- it only feeds the generic multi-pool loops.
 
-# Podman container store on a dedicated raw ext4 partition (p5, GPT label
+# Podman container store on a dedicated raw ext4 partition (p4, GPT label
 # "podman"; packer provision.sh) instead of an rpool zvol -- the reconstructible
 # image/overlay data needs no ZFS COW/checksum/ZIL, and a raw partition drops the
 # write amplification. by-partlabel is unique here (single disk). 50G
