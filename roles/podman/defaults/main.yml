@@ -7,3 +7,21 @@
 # exchange for dropping the per-file fsync that bottlenecks image extraction.
 # Opt-in per host; the qemu_test path forces it on separately.
 podman_zvol_sync_disabled: false
+
+# Where the container store (/var/lib/containers) lives:
+#   - zvol: an rpool/podman ZFS zvol carrying an ext4 (the legacy default; the
+#     COW + checksum + ZIL stack underneath ext4 costs write amplification that
+#     reconstructible image/overlay data does not need).
+#   - partition: a dedicated raw ext4 partition (single-disk) or an mdadm array
+#     of them (multi-disk), bypassing ZFS entirely. The install layer
+#     (packer/scripts for fixtures, notes/runbooks/podman_partition_rebuild.md
+#     for prod) carves the partition and assembles any array; the role formats
+#     and mounts podman_storage_device. Set per host in host_vars once that host
+#     has been rebuilt with the partition present.
+# Default zvol so an un-rebuilt zfs_root host keeps its existing zvol store.
+podman_storage_backend: zvol
+
+# Extra mkfs.ext4 options for the partition backend, e.g. raid5 geometry
+# tuning ("-E stride=N,stripe-width=M"). Empty for a plain single-disk
+# partition. Creation-time only -- applied by the filesystem module's mkfs.
+podman_partition_mkfs_opts: ""
