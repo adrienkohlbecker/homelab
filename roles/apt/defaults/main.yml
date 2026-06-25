@@ -1,0 +1,7 @@
+# Manage the stock Ubuntu apt sources (archive + security). When true the role
+# owns /etc/apt/sources.list (jammy) or the deb822 ubuntu/ubuntu-security files
+# (noble+), pointing them at ubuntu_mirror. Set false on hosts where another
+# layer already owns those sources and the role must leave them untouched --
+# e.g. fox, whose cloud-init writes the Hetzner mirror (mirror.hetzner.com) on
+# first boot. The 80-retries apt tuning is managed regardless.
+apt_manage_ubuntu_sources: true

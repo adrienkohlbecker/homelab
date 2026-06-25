@@ -65,6 +65,12 @@ netplan:
 # cleanup role purges cloud-init everywhere else; fox opts out.
 cleanup_purge_cloud_init: false
 
+# Leave apt sources to cloud-init: on first boot it writes the Hetzner mirror
+# (mirror.hetzner.com) from the 90-hetznercloud.cfg drop-in baked into the image
+# (packer/hetzner/). The apt role would otherwise rewrite them to
+# archive.ubuntu.com -- this keeps fox on the in-network Hetzner mirror.
+apt_manage_ubuntu_sources: false
+
 zfs_arc_min: 0
 zfs_arc_max: 536870912
 # rpool carries autoexpand=on (chroot.sh sets it so the 20G image grows into
