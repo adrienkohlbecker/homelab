@@ -19,6 +19,16 @@ podman_storage_backend: partition
 podman_storage_device: /dev/md/podman
 podman_partition_mkfs_opts: "-E stride=128,stripe-width=256"
 
+# Swap on an mdadm raid1 (/dev/md/swap) across the per-disk p3 partitions
+# (provision.sh + chroot.sh), not the rpool/swap zvol -- the unified mirror
+# layout (notes/unified_disk_layout.md). swap_zvol: null disables the prod zvol
+# that lab.yml declares (the swap role treats a null backend as unconfigured),
+# so the fixture exercises the partition path; zram stays primary. Fixture-only:
+# prod lab.yml keeps the zvol until its noble rebuild carves the swap partition.
+swap_zvol: null
+swap_partition:
+  device: /dev/md/swap
+
 # Same block formula as host_vars/lab.yml; only `parent` differs (the
 # QEMU NIC isn't named eth0 and isn't VLAN-trunked, so all macvlan
 # children sit on the single en* user-net iface). The harness pins
