@@ -57,6 +57,52 @@
         extra_zfs_properties: "{{ (zfs_dataset_args.extra_properties | default({})) | combine({'mountpoint': zfs_dataset_args.mountpoint}) }}"
       become: true
 
+    # community.general.zfs treats a property whose value already matches as
+    # set, even when its source is `received` -- so a dataset restored via
+    # `zfs recv` (the fox rebuild lab->fox restore) keeps every property at
+    # source=received and the module never forces it local. That silently
+    # breaks backups: zfs-autobackup picks with `-s local`, so a received
+    # autobackup:bak drops the dataset from all snapshots/offsite, and _verify
+    # (which asserts source=local) would fail. Re-set any extra property whose
+    # live source drifted from local; the get is read-only and the set only
+    # fires on the drifted ones, so a normal converge stays idempotent.
+    - name: Read the source of each extra property
+      when:
+        - zfs_root
+        - (zfs_dataset_args.extra_properties | default({})) | length > 0
+      command:
+        argv:
+          - zfs
+          - get
+          - -H
+          - -o
+          - property,source
+          - "{{ (zfs_dataset_args.extra_properties | default({})).keys() | join(',') }}"
+          - '{{ _zfs_dataset_resolved }}'
+      register: _zfs_dataset_prop_sources
+      changed_when: false
+      become: true
+
+    - name: Force extra properties to a local source when a restore left them received
+      when:
+        - zfs_root
+        - (zfs_dataset_args.extra_properties | default({})) | length > 0
+        - __prop_line.split()[1] != 'local'
+      command:
+        argv:
+          - zfs
+          - set
+          - "{{ __prop_line.split()[0] }}={{ (zfs_dataset_args.extra_properties)[__prop_line.split()[0]] }}"
+          - '{{ _zfs_dataset_resolved }}'
+      loop: "{{ _zfs_dataset_prop_sources.stdout_lines | default([]) }}"
+      loop_control:
+        # Distinct loop_var: the parent services/data role includes this file in a
+        # loop over `item`, so reusing `item` here collides with that outer dict.
+        loop_var: __prop_line
+        label: "{{ _zfs_dataset_resolved }} {{ __prop_line.split()[0] }} ({{ __prop_line.split()[1] | default('?') }} -> local)"
+      changed_when: true
+      become: true
+
     - name: Create mount point
       file:
         dest: '{{ zfs_dataset_args.mountpoint }}'
