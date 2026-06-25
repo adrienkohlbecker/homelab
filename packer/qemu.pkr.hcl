@@ -385,14 +385,6 @@ build {
     destination = "/home/vagrant/"
   }
 
-  # Per-release Hetzner stock cloud.cfg files. provision.sh stages the one
-  # matching $UBUNTU_NAME into the new install for the hetzner image target;
-  # harmless extra ~4KB upload for the qemu fixture sources, which ignore it.
-  provisioner "file" {
-    source      = "${path.root}/hetzner"
-    destination = "/home/vagrant/"
-  }
-
   provisioner "shell" {
     # Resolute ships sudo-rs as the default `sudo` alternative (priority 50 vs
     # classic sudo's 40). sudo-rs silently ignores the SETENV sudoers tag, so
