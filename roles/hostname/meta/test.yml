@@ -1,5 +1,6 @@
-# cloud-init preserve-hostname pin only fires when /etc/cloud/ exists,
-# which it does on the vanilla cloud image (minimal) but not box.
+# minimal is the vanilla cloud image (cloud-init present); box is the
+# debootstrap'd ZFS box (no cloud-init). Covering both proves the hostname
+# and /etc/hosts tasks converge cleanly whether or not cloud-init coexists.
 machines:
   box:
   minimal:
