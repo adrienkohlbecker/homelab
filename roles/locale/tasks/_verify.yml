@@ -72,9 +72,9 @@
 # `\b` -- under ansible-core 2.20 a `\b` in a quoted regex inside a
 # `that:` conditional is mangled into a backspace escape and never
 # matches (see roles/console/tasks/_verify.yml).
-- name: _verify | Read /etc/default/locale
+- name: _verify | Read default locale conf
   slurp:
-    src: /etc/default/locale
+    src: '{{ "/etc/default/locale" if ansible_distribution_release == "jammy" else "/etc/locale.conf" }}'
   register: locale_verify_file
   become: true
   tags:
