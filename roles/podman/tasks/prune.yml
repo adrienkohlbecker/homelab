@@ -54,12 +54,10 @@
       name: podman_prune
       description: Prune unused podman containers, images and networks
       exec_start: /usr/bin/podman system prune -f --filter until=48h
-      # 00:20: past the podman-auto-update.timer window (00:00 +15m random) so
-      # prune sweeps the images auto-update obsoleted rather than racing it -- and
-      # the until=48h filter keeps it safe even on the rare slow pull. Tail of the
-      # compact early small-job cluster, done well before zfs_autosnapshot at
-      # 02:00. No randomized spread: the prune is sub-second and the handful of
-      # per-user units firing together is negligible.
+      # 00:20: tail of the compact early small-job cluster, well before
+      # zfs_autosnapshot at 02:00. The until=48h filter keeps it safe even on the
+      # rare slow pull. No randomized spread: the prune is sub-second and the
+      # handful of per-user units firing together is negligible.
       on_calendar: "*-*-* 00:20:00"
       persistent: false
       user: "{{ podman_prune_args.user | default('root') }}"
