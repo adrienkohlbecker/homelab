@@ -22,6 +22,33 @@
   failed_when: _tailscale_ip.rc != 0 or (_tailscale_ip.stdout | trim | length == 0)
   become: true
 
+# The node identity must live on the services dataset (which rides the ZFS
+# backup), not on rpool/ROOT (wiped on re-image). A real /var/lib/tailscale
+# directory would silently pass every check above yet be lost on rebuild.
+- name: _verify | Read the tailscale state path
+  stat:
+    path: /var/lib/tailscale
+  register: _tailscale_statelink
+  become: true
+
+- name: _verify | Node state file lives on the services dataset
+  stat:
+    path: /mnt/services/tailscale/tailscaled.state
+  register: _tailscale_state_file
+  become: true
+
+- name: _verify | State is symlinked onto the services dataset
+  assert:
+    that:
+      - _tailscale_statelink.stat.islnk | default(false)
+      - _tailscale_statelink.stat.lnk_target == '/mnt/services/tailscale'
+      - _tailscale_state_file.stat.exists | default(false)
+    fail_msg: >-
+      tailscale node identity must ride the backup: /var/lib/tailscale should be
+      a symlink to /mnt/services/tailscale with tailscaled.state present.
+      link_target={{ _tailscale_statelink.stat.lnk_target | default('(not a symlink)') }}
+      state_exists={{ _tailscale_state_file.stat.exists | default(false) }}
+
 - name: _verify | This node appears in headscale's node list
   command: podman exec headscale headscale nodes list -o json
   register: _tailscale_nodes
