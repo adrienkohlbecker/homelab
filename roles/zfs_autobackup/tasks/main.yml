@@ -129,7 +129,14 @@
       description: Daily ZFS autosnapshot
       on_calendar: "*-*-* 02:00:00"
       persistent: false
-      randomized_delay_sec: 1800
+      # Keep all hosts' starts inside one hd-idle spindown window (-i 1200,
+      # 20min, on lab/pug's HDDs). lab pulls from pug and pug from lab, each
+      # peer-pull waking the other's disks early in the run -- so if the
+      # starts drift apart by more than the spindown the disks wake twice a
+      # night (own run + peer pull). A 5min spread « 20min keeps every host
+      # to a single spin-up. fixed_random_delay pins each host's offset
+      # stably within that 5min so the ordering is reproducible.
+      randomized_delay_sec: 300
       fixed_random_delay: true
       exec_start: /usr/local/bin/zfs_autosnapshot
       # Override the helper's 1h default. Snapshotting hundreds of
