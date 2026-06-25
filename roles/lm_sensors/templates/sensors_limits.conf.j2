@@ -1,0 +1,14 @@
+# {{ ansible_managed }}
+# libsensors `set` directives overriding chip alarm limits that ship too
+# conservative for our hardware. Unlike `ignore` (read at enumeration time by
+# every libsensors reader), `set` values are pushed to the chip's sysfs limit
+# files by `sensors -s` -- the role runs it on change and the package's
+# lm-sensors.service re-applies it at boot. Chips are matched by name (not the
+# unstable hwmonN index), so this survives re-enumeration. Subfeature names are
+# as `sensors -u <chip>` reports them.
+{% for entry in lm_sensors_effective_limits %}
+chip "{{ entry.chip }}"
+{% for s in entry.set %}
+    set {{ s.feature }} {{ s.value }}
+{% endfor %}
+{% endfor %}
