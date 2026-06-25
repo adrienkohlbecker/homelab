@@ -1728,9 +1728,13 @@ class Machine:
                 (
                     display_backend
                     if self._display_window
-                    # Display number pre-picked in prepare(); qemu binds to
-                    # 5900+display so the user can connect at self.ssh_host:<port>.
-                    else f"vnc=:{self.vnc_display}"
+                    # Display number pre-picked in prepare(); bind VNC to this
+                    # cell's loopback (self.ssh_host) -- a bare `vnc=:N` binds the
+                    # wildcard host, so the reservation in _pick_vnc_display (which
+                    # probes self.ssh_host) and the actual bind would disagree, and
+                    # two parallel --keep cells reserving the same display N on
+                    # different loopbacks would still collide on the wildcard port.
+                    else f"vnc={self.ssh_host}:{self.vnc_display}"
                 ),
                 *self.arch.keep_vm_extra_devices,
                 "-k",
