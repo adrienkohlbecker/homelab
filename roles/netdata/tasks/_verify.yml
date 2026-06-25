@@ -560,6 +560,16 @@
     - /tmp/netdata_poll_verify_cm
   changed_when: false
 
+# poll_access enables linger for netdata_poll so the ~15s poll cadence reuses one
+# resident `systemd --user` manager instead of rebuilding it per login (which
+# otherwise floods the journal with slice/socket/target bringup every poll).
+- name: _verify | Linger keeps the netdata_poll user manager resident
+  command: loginctl show-user netdata_poll --property=Linger --value
+  register: _netdata_poll_linger
+  changed_when: false
+  become: true
+  failed_when: _netdata_poll_linger.stdout | trim != 'yes'
+
 # Cover the cross-role coupling: netdata's main.yml imports certbot's
 # tasks_from: netdata to render x509check.conf. A break in the
 # certbot-side template (x509check.conf.j2) or the netdata template
