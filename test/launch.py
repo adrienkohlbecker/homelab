@@ -401,7 +401,8 @@ def main() -> int:
             extra_hostfwds=tuple(args.extra_hostfwds),
         ),
         # Pin the default loopback: --write-hostfwds emits ports only, and its
-        # consumers (mise-tasks/packer/seed-deps.sh) connect at 127.0.0.1.
+        # consumers (mise-tasks/zbm/test.sh, mise-tasks/zbm/smoke.sh) connect at
+        # 127.0.0.1.
         loopback_host=SSH_HOST,
     )
 

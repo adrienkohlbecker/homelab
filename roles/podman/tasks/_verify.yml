@@ -5,9 +5,10 @@
 # stack, netavark + aardvark-dns, the rendered containers.conf + seccomp
 # profile, the podman-socket group, and the prune timer; a rootless pass as
 # the box login user then proves the pasta network connector actually backs
-# a container's egress. Only test/testrole.py invokes it, against the box VM
-# (zfs_root, jammy 5.15 -> the fuse-overlayfs storage path), never prod --
-# so the group-membership tweak and probe containers below are safe.
+# a container's egress. Only the test harness invokes it, against the selected
+# --machine (box by default: zfs_root, jammy 5.15 -> the fuse-overlayfs storage
+# path), never prod -- so the group-membership tweak and probe containers below
+# are safe.
 
 - name: _verify | Resolve a tiny probe image
   set_fact:
