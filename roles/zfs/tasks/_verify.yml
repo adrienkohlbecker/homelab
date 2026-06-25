@@ -307,6 +307,40 @@
     state: absent
   become: true
 
+# --- tank special vdev (functional) ---
+# tank carries an NVMe special-vdev mirror across the per-disk p6 meta partitions
+# (provision.sh wires it; notes/unified_disk_layout.md). It is the performance
+# contract behind special_small_blocks on tank/brumath + media -- a regression
+# that dropped the special vdev would silently push that metadata + small blocks
+# back onto the slow raidz2 HDDs. Only real-tank hosts (lab) carry it; box/pug
+# route tank/ -> rpool and have no `tank` pool, so gate on the pool existing.
+# 'mirror' appears in `zpool status tank` only for the special mirror -- the
+# data vdev is raidz2 and the HDD device names carry no such token.
+- name: _verify | Check for a real tank pool
+  command: zpool list -H -o name tank
+  register: _zfs_verify_tank_pool
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Tank carries its NVMe special-vdev mirror
+  when: _zfs_verify_tank_pool.rc == 0
+  block:
+    - name: _verify | Read tank vdev topology
+      command: zpool status tank
+      register: _zfs_verify_tank_status
+      changed_when: false
+      become: true
+
+    - name: _verify | Assert tank has a special mirror vdev
+      assert:
+        that:
+          - "'special' in _zfs_verify_tank_status.stdout"
+          - "'mirror' in _zfs_verify_tank_status.stdout"
+        fail_msg: >-
+          tank has no special-vdev mirror -- the p6 meta partitions were not
+          wired into the pool. {{ _zfs_verify_tank_status.stdout }}
+
 # --- Health script fault detection (functional) ---
 # zfs_health's checks only mean something if they actually fire on a damaged
 # pool -- asserting the script merely "ran" proves nothing, and is exactly how
