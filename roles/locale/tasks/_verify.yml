@@ -1,5 +1,5 @@
 # Functional checks for the locale role. The converge proves apt +
-# locale_gen + the /etc/default/locale write exit cleanly; these verify
+# locale_gen + the default-locale file write exit cleanly; these verify
 # the role's actual contract: en_US.UTF-8 is *compiled and usable*, and
 # it's the *system default* with no higher-priority override masking it.
 
@@ -44,9 +44,10 @@
   tags:
     - locale
 
-# localectl reads /etc/default/locale on Debian/Ubuntu (systemd-localed
-# is patched to use it instead of /etc/locale.conf), so this proves the
-# file we wrote is parseable by systemd and sets the system default.
+# localectl reads the release-appropriate file -- jammy's systemd-localed
+# is patched to use /etc/default/locale, noble+ uses upstream
+# /etc/locale.conf (tasks/main.yml selects the matching dest) -- so this
+# proves the file we wrote is parseable by systemd and sets the system default.
 - name: _verify | Read system default locale
   command: localectl status
   register: locale_verify_localectl
@@ -88,7 +89,7 @@
       - _content | regex_findall('^LANG=en_US\.UTF-8$', multiline=True) | length == 1
       - _content | regex_findall('^LC_ALL=', multiline=True) | length == 0
       - _content | regex_findall('^LANGUAGE=', multiline=True) | length == 0
-    fail_msg: "/etc/default/locale should set LANG only; LC_ALL or LANGUAGE was re-added"
+    fail_msg: "the default-locale file should set LANG only; LC_ALL or LANGUAGE was re-added"
     quiet: true
   tags:
     - locale
