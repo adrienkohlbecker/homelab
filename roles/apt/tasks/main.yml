@@ -15,7 +15,9 @@
     - apt
 
 - name: Configure apt sources (jammy legacy)
-  when: ansible_distribution_release == "jammy"
+  when:
+    - apt_manage_ubuntu_sources
+    - ansible_distribution_release == "jammy"
   template:
     src: sources.list.j2
     dest: /etc/apt/sources.list
@@ -43,6 +45,7 @@
 # egress is gone by then, so the rewrite must be network-free.
 - name: Pre-warm apt cache (real fetch even in --check)  # noqa: command-instead-of-module
   when:
+    - apt_manage_ubuntu_sources
     - ansible_distribution_release != "jammy"
     - not (apt_skip_refresh | default(false))
   command: apt-get update
@@ -60,7 +63,9 @@
 # and the legacy-removal task below explicitly orders after these
 # writes for the same reason.
 - name: Install python3-debian
-  when: ansible_distribution_release != "jammy"
+  when:
+    - apt_manage_ubuntu_sources
+    - ansible_distribution_release != "jammy"
   apt:
     pkg: python3-debian
     cache_valid_time: 3600
@@ -73,6 +78,7 @@
 
 - name: Configure apt sources (deb822 archive, noble+)
   when:
+    - apt_manage_ubuntu_sources
     - ansible_distribution_release != "jammy"
     - not (ansible_check_mode and apt_install_python3_debian.changed)
   deb822_repository:
@@ -95,6 +101,7 @@
 
 - name: Configure apt sources (deb822 security, noble+)
   when:
+    - apt_manage_ubuntu_sources
     - ansible_distribution_release != "jammy"
     - not (ansible_check_mode and apt_install_python3_debian.changed)
   deb822_repository:
@@ -119,7 +126,9 @@
 # already installed but the deb822 files unwritten (e.g. an interrupted
 # previous run) would leave the system with no sources at all.
 - name: Drop legacy /etc/apt/sources.list (noble+)
-  when: ansible_distribution_release != "jammy"
+  when:
+    - apt_manage_ubuntu_sources
+    - ansible_distribution_release != "jammy"
   file:
     path: /etc/apt/sources.list
     state: absent
@@ -134,6 +143,7 @@
 # silently tolerates partial-suite failures.
 - name: Force apt update (--error-on=any)  # noqa: command-instead-of-module
   when:
+    - apt_manage_ubuntu_sources
     - apt_mirror_legacy.changed or apt_mirror_legacy_removed.changed or apt_mirror_deb822.changed or apt_mirror_deb822_security.changed
     - not (apt_skip_refresh | default(false))
   command: apt-get update --error-on=any
