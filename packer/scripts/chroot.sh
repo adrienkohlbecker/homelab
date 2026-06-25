@@ -7,9 +7,10 @@ set -euxo pipefail
 #   UBUNTU_MIRROR_UPSTREAM, UBUNTU_MIRROR_SECURITY_UPSTREAM,
 #   SSH_KEY_PUB.
 # - Inherited from provision.sh: DISKS, DISKS_COUNT, LAYOUT,
-#   PARTITIONS_EFI, PARTITIONS_SWAP, HOSTNAME, USERNAME.
-#   PARTITIONS_SWAP is only set for single-disk (LAYOUT=""); mirror
-#   variants swap on the rpool/swap zvol provision.sh creates.
+#   PARTITIONS_EFI, PARTITIONS_SWAP, PARTITIONS_PODMAN, HOSTNAME, USERNAME.
+#   PARTITIONS_EFI/SWAP are always set; on a mirror they are mdadm'd into
+#   /dev/md/efi (raid1) and /dev/md/swap (raid1). PARTITIONS_PODMAN is set
+#   when PODMAN_SIZE is (raid5 /dev/md/podman on a mirror).
 # - Optional: REFIND_TIMEOUT (default 3) — rEFInd menu countdown in
 #   seconds before the default entry boots.
 # All list-shaped vars are space-delimited strings (bash arrays don't
@@ -328,11 +329,19 @@ else
   mdadm --detail --brief /dev/md/efi >>/etc/mdadm/mdadm.conf
   EFI_DEVICE=/dev/md/efi
 
-  # Swap on the rpool zvol provision.sh created. /dev/zvol/rpool/swap
-  # is a stable udev symlink — no by-uuid translation below, and no
-  # mdadm raid0 stripe (mirror rpool already gives redundancy without
-  # the lose-one-disk-lose-all-swap failure mode of the raid0 layout).
-  SWAP_DEVICE=/dev/zvol/rpool/swap
+  # Swap raid1 across the per-disk swap partitions ($PARTITIONS_SWAP). metadata
+  # 1.2 in its default (start-of-device) location -- not a boot device, so none
+  # of the metadata=1.0 ESP constraints apply. --bitmap=none (like efi/podman):
+  # the redundant mirror replaces what the old rpool/swap zvol got from the pool,
+  # without the zvol's under-pressure deadlock exposure (paging out to a zvol
+  # needs ZFS to allocate memory to complete the write). The mdadm.conf line
+  # auto-assembles it at boot (and from the initramfs once update-initramfs runs
+  # below) so swapon finds it.
+  # shellcheck disable=SC2086  # word-splitting on PARTITIONS_SWAP is the point
+  mdadm --create /dev/md/swap --name=swap --metadata=1.2 --level=raid1 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_SWAP
+  udevadm settle --timeout=10
+  mdadm --detail --brief /dev/md/swap >>/etc/mdadm/mdadm.conf
+  SWAP_DEVICE=/dev/md/swap
 
   # Assemble the podman store raid5 across the per-disk podman partitions
   # ($PARTITIONS_PODMAN, present when PODMAN_SIZE is set). One disk of
@@ -620,9 +629,9 @@ apt-get install --yes efibootmgr
 # "rEFInd" entry (unchanged).
 #
 # -p 2 is the ESP: provision.sh's layout is 1=bios(EF02), 2=efi(EF00),
-# 3=swap/meta, 4=rpool. Keep these efibootmgr -p values in sync with that
-# order -- a stale -p (e.g. 1, the BIOS-boot partition) registers a boot
-# entry the firmware can't load.
+# 3=swap, 4=podman, 5=rpool, 6=meta. Keep these efibootmgr -p values in sync
+# with that order -- a stale -p (e.g. 1, the BIOS-boot partition) registers a
+# boot entry the firmware can't load.
 if [ "$DISKS_COUNT" -eq 1 ]; then
   efibootmgr -c -d "$DISKS" -p 2 \
     -L "rEFInd" \
@@ -679,8 +688,8 @@ datasource_list: [ Hetzner, ConfigDrive, NoCloud, None ]
 EOF
 
   # Image ships at 20G but deploys onto cpx22's ~76G, leaving rpool's partition
-  # (p4, last on disk) short with the GPT backup header mid-disk.
-  # hetzner_growpart.service grows p4 (growpart relocates the backup header) and
+  # (p5, last on disk) short with the GPT backup header mid-disk.
+  # hetzner_growpart.service grows p5 (growpart relocates the backup header) and
   # runs `zpool online -e` once on first boot — late + sentinel-gated so a
   # failure can't wedge the root mount. autoexpand covers any later disk resize.
   zpool set autoexpand=on rpool
@@ -690,7 +699,7 @@ EOF
 set -euo pipefail
 
 disk=/dev/sda
-part=4
+part=5
 
 rc=0
 growpart "$disk" "$part" || rc=$?

@@ -27,8 +27,8 @@
 #    refuse to load it.
 set -euxo pipefail
 
-# DISKS, EXTRA_DISKS, LAYOUT, SWAP_SIZE, EXTRA_POOLS, SOURCE_NAME,
-# IMAGE_TARGET, QEMU_TEST_IMAGE, UBUNTU_NAME, and UBUNTU_MIRROR come from
+# DISKS, EXTRA_DISKS, LAYOUT, SWAP_SIZE, PODMAN_SIZE, META_SIZE, EXTRA_POOLS,
+# SOURCE_NAME, IMAGE_TARGET, QEMU_TEST_IMAGE, UBUNTU_NAME, and UBUNTU_MIRROR come from
 # packer's shell-provisioner env block. Bare-metal callers export them by hand.
 # This script consumes the disk/pool vars and passes the exported install vars
 # through to chroot.sh. The ZBM_*/REFIND_*/UBUNTU_MIRROR_* vars used downstream
@@ -64,10 +64,10 @@ partdev() {
 
 # Export a pool, tolerating the transient "pool is busy" race where
 # udev/systemd still hold a handle on a freshly-created dataset or zvol
-# device node (matches upstream openzfs/zfs#16036) — notably the mirror
-# variants' rpool/swap zvol, whose /dev/zvol/rpool/swap node trips the
-# very next `zpool export`. `zpool export -f` doesn't bypass the
-# spa_refcount EBUSY gate, so force is pointless. udevadm settle drains
+# device node (matches upstream openzfs/zfs#16036) — the freshly-created
+# rpool datasets whose udev probe can trip the very next `zpool export`.
+# `zpool export -f` doesn't bypass the spa_refcount EBUSY gate, so force
+# is pointless. udevadm settle drains
 # pending uevents; one retry after 5s covers the rare slow-drain case.
 # A second failure is a genuinely wedged pool — let the build fail
 # rather than ship an image that wasn't cleanly quiesced.
@@ -160,8 +160,21 @@ create_extra_tank_mouse() {
   done
   udevadm settle
   if ! zpool list -H tank >/dev/null 2>&1; then
+    # tank's special vdev lives on the fast NVMe rpool-mirror disks (their p6
+    # meta partitions, $PARTITIONS_META), not on tank's own slow raidz2 HDDs --
+    # so tank metadata + small-block datasets (special_small_blocks, set per
+    # dataset by the zfs role) land on NVMe. A mirror across all the meta
+    # partitions tolerates the same disk loss as the raidz2 (losing the special
+    # vdev loses the pool). Empty on single-disk hosts (no meta partition), so
+    # tank then has no special vdev. See notes/special-vdev-sizing.md.
+    local special_args=()
+    if [ -n "${PARTITIONS_META:-}" ]; then
+      # shellcheck disable=SC2206  # word-split PARTITIONS_META into vdev members
+      special_args=(special mirror $PARTITIONS_META)
+    fi
     zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" \
-      tank raidz2 "$(partdev "$tm1" 1)" "$(partdev "$tm2" 1)" "$tank3" "$tank4"
+      tank raidz2 "$(partdev "$tm1" 1)" "$(partdev "$tm2" 1)" "$tank3" "$tank4" \
+      "${special_args[@]}"
   fi
   if ! zpool list -H mouse >/dev/null 2>&1; then
     zpool create -f -o autotrim=off "${EXTRA_ZPOOL_OPTS[@]}" \
@@ -194,46 +207,46 @@ create_extra_pools() {
 
 # Per-disk partition paths, computed once and exported as space-delimited
 # strings so chroot.sh consumes them directly without re-running partdev.
-# Partition layout (sgdisk below): 1 = BIOS boot (EF02), 2 = EFI, 3 = swap
-# (single-disk) / metadata vdev (mirror), 5 = podman store (optional, when
-# PODMAN_SIZE is set), 4 = rpool. rpool keeps number 4 and is carved last
-# (-n4:0:0) so it grows into the rest of the disk regardless of whether the
-# podman partition is present -- a cloud-image deploy still grows p4
-# (chroot.sh's hetzner_growpart). The podman partition is numbered 5 but sits
-# physically before rpool. Each gets a GPT name (sgdisk -c:
-# bios/efi/swap|meta/podman/rpool) for readable lsblk/gdisk output; consumers
-# resolve by filesystem UUID or device path, never by-partlabel (non-unique
-# across the mirror's identically-named disks) -- except the single-disk
-# podman partition, where by-partlabel IS unique (one disk).
+# One unified layout for every host (notes/unified_disk_layout.md):
+#   1 = BIOS boot (EF02)
+#   2 = EFI (EF00)
+#   3 = swap (8200)
+#   4 = podman store (8300, optional -- when PODMAN_SIZE is set)
+#   6 = tank special-vdev member (BF01, mirror only -- when META_SIZE is set)
+#   5 = rpool (BF00)
+# rpool is always number 5 (single-disk and mirror) and always carved last
+# (-n5:0:0) so it grows into the rest of the disk -- a cloud-image deploy grows
+# p5 (chroot.sh's hetzner_growpart). The mirror-only meta partition is numbered
+# 6 but carved physically *before* rpool, so rpool's number never shifts with
+# disk count. Each gets a GPT name (sgdisk -c) for readable lsblk/gdisk output;
+# consumers resolve by filesystem UUID, /dev/md path, or pool label, never
+# by-partlabel (non-unique across the mirror's identically-named disks) --
+# except single-disk swap/podman, where by-partlabel IS unique (one disk).
 #
-# Swap is the disk-backed *overflow* behind zram, which the swap role
-# runs as the primary high-priority device (notes/swap_strategy.md),
-# sized by SWAP_SIZE (per-variant in qemu.pkr.hcl):
-#   - single-disk: a dedicated 8200 partition (p3) — a real partition is
-#     deadlock-free, unlike swap on a zvol.
-#   - mirror: drops the swap partition and uses an rpool zvol (created
-#     below). The mirror rpool already gives the redundancy the old
-#     per-disk swap + mdadm raid0 stripe faked, without the failure mode
-#     where one dead disk took the whole stripe (and its swapped-out
-#     pages) down; zram-primary keeps the zvol cold so its residual
-#     deadlock risk is only reached in true exhaustion.
-# The metadata-vdev slot (partition 3, mirror variants only) is reserved;
-# nothing consumes it yet (see notes/special-vdev-sizing.md).
+# swap and podman are raw partitions on every host: single-disk gets a bare
+# partition, mirror an mdadm array across the per-disk partitions (swap raid1,
+# podman raid5 -- chroot.sh). The meta partition becomes tank's special vdev
+# (create_extra_tank_mouse). Swap is the disk-backed *overflow* behind zram,
+# which the swap role runs as the primary high-priority device
+# (notes/swap_strategy.md); a real partition is deadlock-free, unlike swap on a
+# zvol.
 PARTITIONS_EFI=""
 PARTITIONS_SWAP=""
 PARTITIONS_PODMAN=""
+PARTITIONS_META=""
 PARTITIONS_RPOOL=""
 for d in $DISKS; do
   PARTITIONS_EFI+="${PARTITIONS_EFI:+ }$(partdev "$d" 2)"
-  if [ "$LAYOUT" = "" ]; then
-    PARTITIONS_SWAP+="${PARTITIONS_SWAP:+ }$(partdev "$d" 3)"
-  fi
+  PARTITIONS_SWAP+="${PARTITIONS_SWAP:+ }$(partdev "$d" 3)"
   if [ -n "${PODMAN_SIZE:-}" ]; then
-    PARTITIONS_PODMAN+="${PARTITIONS_PODMAN:+ }$(partdev "$d" 5)"
+    PARTITIONS_PODMAN+="${PARTITIONS_PODMAN:+ }$(partdev "$d" 4)"
   fi
-  PARTITIONS_RPOOL+="${PARTITIONS_RPOOL:+ }$(partdev "$d" 4)"
+  if [ -n "${META_SIZE:-}" ]; then
+    PARTITIONS_META+="${PARTITIONS_META:+ }$(partdev "$d" 6)"
+  fi
+  PARTITIONS_RPOOL+="${PARTITIONS_RPOOL:+ }$(partdev "$d" 5)"
 done
-export PARTITIONS_EFI PARTITIONS_SWAP PARTITIONS_PODMAN PARTITIONS_RPOOL
+export PARTITIONS_EFI PARTITIONS_SWAP PARTITIONS_PODMAN PARTITIONS_META PARTITIONS_RPOOL
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -304,24 +317,27 @@ for disk in $DISKS; do
   sgdisk -a1 -n1:24K:+1000K -t1:EF02 -c1:bios "$disk" # MBR booting (EF02 = BIOS boot partition)
   sgdisk -n2:1M:+1G -t2:EF00 -c2:efi "$disk"          # EFI (EF00 = EFI system partition)
 
-  # Single-disk swap partition, sized by SWAP_SIZE. Mirror variants swap
-  # on the rpool zvol below instead (see notes/swap_strategy.md).
-  if [ "$LAYOUT" = "" ]; then
-    sgdisk "-n3:0:+$SWAP_SIZE" -t3:8200 -c3:swap "$disk" # Swap (8200 = Linux Swap)
-  fi
+  # Swap partition (p3), sized by SWAP_SIZE, on every host. Single-disk hosts
+  # mkswap it directly; mirror hosts mdadm the per-disk p3s into a raid1
+  # (chroot.sh). A real partition is deadlock-free, unlike swap on a zvol.
+  sgdisk "-n3:0:+$SWAP_SIZE" -t3:8200 -c3:swap "$disk" # Swap (8200 = Linux Swap)
 
-  if [ "$LAYOUT" = "mirror" ]; then
-    sgdisk -n3:0:+2G -t3:BF01 -c3:meta "$disk" # metadata vdev (BF01 = Solaris /usr & Mac ZFS, default when doing zpool create)
-  fi
-
-  # Dedicated podman store partition (number 5, carved before rpool so rpool
-  # keeps number 4 and still grows to the end of the disk). Single-disk hosts
-  # carry a plain ext4 here; mirror hosts mdadm the per-disk p5s into a raid5
-  # (chroot.sh). 8300 = Linux filesystem.
+  # Dedicated podman store partition (p4). Single-disk hosts carry a plain
+  # ext4 here; mirror hosts mdadm the per-disk p4s into a raid5 (chroot.sh).
+  # 8300 = Linux filesystem.
   if [ -n "${PODMAN_SIZE:-}" ]; then
-    sgdisk "-n5:0:+$PODMAN_SIZE" -t5:8300 -c5:podman "$disk"
+    sgdisk "-n4:0:+$PODMAN_SIZE" -t4:8300 -c4:podman "$disk"
   fi
-  sgdisk -n4:0:0 -t4:BF00 -c4:rpool "$disk" # rpool (BF00 = Solaris root)
+
+  # tank special-vdev member (p6, mirror only). Numbered 6 but carved before
+  # rpool so rpool stays number 5. mdadm-free -- ZFS mirrors the per-disk p6s
+  # into tank's special vdev (create_extra_tank_mouse). BF01 = Solaris /usr &
+  # Mac ZFS.
+  if [ -n "${META_SIZE:-}" ]; then
+    sgdisk "-n6:0:+$META_SIZE" -t6:BF01 -c6:meta "$disk"
+  fi
+
+  sgdisk -n5:0:0 -t5:BF00 -c5:rpool "$disk" # rpool (BF00 = Solaris root), carved last so it grows to end
 
   sgdisk -p "$disk"
 done
@@ -359,51 +375,19 @@ zpool create -f \
 zfs create -o canmount=off -o mountpoint=none rpool/ROOT
 zfs create -o canmount=noauto -o mountpoint=/ "rpool/ROOT/$UBUNTU_NAME"
 
-# Mirror swap lands on this zvol instead of a per-disk swap partition +
-# mdadm raid0; mirror rpool already provides redundancy, and the swap
-# role can grow it to the per-host size later. Options follow OpenZFS
-# swap-zvol guidance:
-#   -b $(getconf PAGESIZE): volblocksize = kernel page size so one
-#     page-out is one ZFS block (4K on x86_64 / arm64 4K-pages kernel).
-#     zfs warns this is below its 8K default minimum, but that minimum
-#     guards against raidz parity/padding waste — rpool is a mirror, so
-#     there's none, and 8K would force a read-modify-write per page-out.
-#     Keep 4K; the warning is benign here.
-#   compression=zle: cheap zero-page squash; pages are already-compressed
-#     memory, so general compression would just burn CPU.
-#   logbias=throughput + sync=always: every write hits stable storage
-#     (otherwise an OOM panic could lose anonymous pages).
-#   primarycache=metadata + secondarycache=none: don't let ARC/L2ARC
-#     re-cache pages the kernel is explicitly evicting.
-#   com.sun:auto-snapshot=false: snapshotting swap pins the working set
-#     forever for no benefit.
-if [ "$LAYOUT" = "mirror" ]; then
-  zfs create \
-    -V "$SWAP_SIZE" \
-    -b "$(getconf PAGESIZE)" \
-    -o compression=zle \
-    -o logbias=throughput \
-    -o sync=always \
-    -o primarycache=metadata \
-    -o secondarycache=none \
-    -o com.sun:auto-snapshot=false \
-    rpool/swap
-fi
+# Swap is a raw partition on every host now (p3; raid1 across the per-disk
+# partitions on a mirror -- chroot.sh), not an rpool zvol. A real partition is
+# deadlock-free, unlike paging out to a zvol under memory pressure.
 
 zpool set "bootfs=rpool/ROOT/$UBUNTU_NAME" rpool
 
-# Export, then re-import with a temporary mountpoint of /mnt. The
-# export races udev's probe of the just-created rpool/swap zvol on
-# mirror variants — zpool_export_retry settles first (see its comment).
+# Export, then re-import with a temporary mountpoint of /mnt.
 
 zpool_export_retry rpool
 zpool import -N -R /mnt rpool
 zfs mount "rpool/ROOT/$UBUNTU_NAME"
 
-# Wait for zvol udev symlinks (notably /dev/zvol/rpool/swap on mirror
-# variants) before arch-chroot runs — `zfs create -V` returns before
-# udev finishes wiring the device, and chroot.sh's mkswap would race
-# the udev create.
+# Wait for udev to wire the new device nodes before arch-chroot runs.
 udevadm settle
 
 # Verify that everything is mounted correctly

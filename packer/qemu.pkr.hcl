@@ -133,17 +133,23 @@ locals {
   # - layout: rpool zpool create layout token. "" for single-disk,
   #   "mirror" for an rpool mirror. Consumed by provision.sh and
   #   chroot.sh.
-  # - swap_size: image swap size. Single-disk bakes an 8200 partition of
-  #   this size; mirror bakes an rpool zvol of it (the swap role grows it
-  #   to the per-host size; see notes/swap_strategy.md). Consumed by
-  #   provision.sh as $SWAP_SIZE.
+  # - swap_size: per-disk size of the swap partition (p3, 8200), baked on
+  #   every host. Single-disk mkswaps it directly; mirror mdadm's the per-disk
+  #   p3s into a raid1 (/dev/md/swap). The swap role runs it as the cold
+  #   overflow behind zram (notes/swap_strategy.md). Consumed by provision.sh
+  #   as $SWAP_SIZE.
   # - podman_size: per-disk size of the dedicated podman-store partition
-  #   (p5). "" => no podman partition (host keeps the rpool/podman zvol).
-  #   Single-disk bakes one plain ext4 partition; mirror bakes one per rpool
-  #   disk and chroot.sh mdadm's them into a raid5 (/dev/md/podman). The
-  #   podman role formats + mounts it. Fixture sizes only prove the
-  #   mechanism; prod sizes itself at rebuild (notes/runbooks/
+  #   (p4). "" => no podman partition (host keeps the rpool/podman zvol -- pug
+  #   until its rebuild). Single-disk bakes one plain ext4 partition; mirror
+  #   bakes one per rpool disk and chroot.sh mdadm's them into a raid5
+  #   (/dev/md/podman). The podman role formats + mounts it. Fixture sizes only
+  #   prove the mechanism; prod sizes itself at rebuild (notes/runbooks/
   #   podman_partition_rebuild.md). Consumed by provision.sh as $PODMAN_SIZE.
+  # - meta_size: per-disk size of tank's special-vdev partition (p6, mirror
+  #   only). "" => no meta partition (tank has no special vdev). provision.sh
+  #   ZFS-mirrors the per-disk p6s into tank's special vdev; the fixture size
+  #   only proves the wiring (prod is 128G, notes/unified_disk_layout.md).
+  #   Consumed by provision.sh as $META_SIZE.
   # - extra_pools: space-delimited list of non-rpool pool layouts
   #   provision.sh creates after the rpool arch-chroot completes.
   #   Layouts: apoc (mirror, 2 disks), dozer (mirror, 2 disks),
@@ -165,15 +171,19 @@ locals {
       layout          = ""
       swap_size       = "8G"
       podman_size     = ""
+      meta_size       = ""
       extra_pools     = "apoc"
       image_target    = "qemu"
       qemu_test_image = true
       zfs_arc_max     = 0
     }
     # lab: mdadm-EFI + 3-disk mirror rpool + dozer mirror + tank raidz2 +
-    # mouse mirror. Matches the lab prod host. swap_size bakes an 8G rpool
-    # zvol; the swap role grows it to 16G from host_vars (zram is the
-    # primary device -- see notes/swap_strategy.md).
+    # mouse mirror. Matches the lab prod host. The mirror layout mdadm's the
+    # per-disk p3/p4 into raid1 swap (/dev/md/swap) + raid5 podman
+    # (/dev/md/podman), and ZFS-mirrors the per-disk p6 (meta_size) into tank's
+    # special vdev -- the prod-faithful unified layout
+    # (notes/unified_disk_layout.md). Fixture sizes only prove the mechanism;
+    # zram is the primary swap device (notes/swap_strategy.md).
     lab = {
       disks           = "/dev/vdb /dev/vdc /dev/vdd"
       extra_disks     = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
@@ -181,6 +191,7 @@ locals {
       layout          = "mirror"
       swap_size       = "8G"
       podman_size     = "4G"
+      meta_size       = "2G"
       extra_pools     = "dozer tank_mouse"
       image_target    = "qemu"
       qemu_test_image = true
@@ -201,7 +212,7 @@ locals {
     # the result. It is not a packer source.
     # box uses the partition podman backend (podman_storage_backend=partition in
     # host_vars/box.yml): the container store is a dedicated 50G ext4 partition
-    # (p5), not an rpool zvol. box is the only fixture the _site_test cell
+    # (p4), not an rpool zvol. box is the only fixture the _site_test cell
     # converges the *whole* fleet onto, and that store must hold every service
     # image plus a storage-chown-by-maps duplicate for each fake-root service
     # (homeassistant, jellyfin, authelia, ...), hence 50G. With podman out of the
@@ -218,6 +229,7 @@ locals {
       layout          = ""
       swap_size       = "4G"
       podman_size     = "50G"
+      meta_size       = ""
       extra_pools     = "zee"
       image_target    = "qemu"
       qemu_test_image = true
@@ -233,6 +245,7 @@ locals {
       layout          = ""
       swap_size       = "4G"
       podman_size     = ""
+      meta_size       = ""
       extra_pools     = ""
       image_target    = "hetzner"
       qemu_test_image = false
@@ -393,6 +406,7 @@ build {
       "LAYOUT"                          = local.variant_config[source.name].layout
       "SWAP_SIZE"                       = local.variant_config[source.name].swap_size
       "PODMAN_SIZE"                     = local.variant_config[source.name].podman_size
+      "META_SIZE"                       = local.variant_config[source.name].meta_size
       "EXTRA_POOLS"                     = local.variant_config[source.name].extra_pools
       "UBUNTU_NAME"                     = "${var.ubuntu_name}"
       "UBUNTU_MIRROR"                   = local.build_archive
