@@ -7,6 +7,17 @@
 # static dummy-ups so upsd has a UPS to serve. Mirrors nut_monitor's _setup
 # fixture (no `mode =`: that directive is nut 2.8+ and the box image is jammy).
 
+# Lock the converged mask contract before the destructive swap below tears it
+# down: under qemu the driver is masked (no UPS to reach), so nut-server's
+# Wants skips it instead of starting a doomed snmp-ups.
+- name: _verify | Driver unit is masked under qemu (no UPS to reach)
+  systemd:
+    name: '{{ "nut-driver.service" if ansible_distribution_release in ["jammy"] else "nut-driver@eaton.service" }}'
+  become: true
+  register: nut_server_driver_unit
+  changed_when: false
+  failed_when: nut_server_driver_unit.status.UnitFileState != 'masked'
+
 # A static dummy-ups stands in for the SNMP Eaton. A .dev file (no TIMER) is
 # served statically, so the published frame is deterministic at query time.
 - name: _verify | Swap the snmp-ups driver for a static dummy-ups
