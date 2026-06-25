@@ -195,6 +195,13 @@ resource "hcloud_server" "fox" {
     disable_root: true
     package_update: true
     package_upgrade: true
+    # Stop cloud-init from owning /etc/hosts: Hetzner's vendor-data sets
+    # manage_etc_hosts: true, which re-renders /etc/hosts from a template on
+    # every boot and fights the ansible `hostname` role (its hosts.j2). A
+    # cloud.cfg.d drop-in can't override this -- vendor-data outranks
+    # /etc/cloud/cloud.cfg.d -- but user-data outranks vendor-data, so pin it
+    # off here. The hostname role then owns /etc/hosts unchallenged.
+    manage_etc_hosts: false
     users:
       - name: ak
         groups: [sudo]
