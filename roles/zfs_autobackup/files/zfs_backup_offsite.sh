@@ -14,6 +14,23 @@ fi
 
 DESTPATH=${DATASET//\//_}
 
+MOUNTPOINT=$(zfs get mountpoint -H -o value "$DATASET")
+
+# Boot environments keep canmount=noauto so sibling BEs never race to mount at
+# boot; all other datasets are canmount=on.
+if [[ "$DATASET" == rpool/ROOT/* ]]; then
+  expected_canmount=noauto
+else
+  expected_canmount=on
+fi
+# Validate the mount first, ahead of every skip path below (no-snapshot and the
+# change-gate): a broken mount is a fault the offsite run must surface
+# (zfs_check_mount fails -> the caller's f_rescue bumps f_failed -> the unit
+# exits 1 for monitoring), and skipping ahead of it would let a degraded
+# /mnt/services or /mnt/data be silently reported as an up-to-date skip. The
+# check is sub-second, so paying it on skip nights costs nothing.
+zfs_check_mount "$DATASET" "$MOUNTPOINT" "$expected_canmount"
+
 # awk collapses the grep|tail|cut pipeline: snapshots arrive sorted by
 # creation (ascending), so the last @bak- line is the newest. A bare
 # grep would exit 1 (tripping pipefail) on a dataset with no @bak-
@@ -27,23 +44,6 @@ if [ -z "$LAST_SNAPSHOT" ]; then
   echo >&2 "No @bak- snapshot for $DATASET, skipping offsite sync"
   exit 0
 fi
-
-MOUNTPOINT=$(zfs get mountpoint -H -o value "$DATASET")
-
-# Boot environments keep canmount=noauto so sibling BEs never race to mount at
-# boot; all other datasets are canmount=on.
-if [[ "$DATASET" == rpool/ROOT/* ]]; then
-  expected_canmount=noauto
-else
-  expected_canmount=on
-fi
-# Validate the mount before the change-gate, not after: a broken mount is a fault
-# the offsite run must surface (zfs_check_mount fails -> the caller's f_rescue
-# bumps f_failed -> the unit exits 1 for monitoring), and gating it out would let
-# a degraded /mnt/services or /mnt/data be silently reported as an up-to-date
-# skip on any unchanged night. The check is sub-second, so paying it on skip
-# nights costs nothing.
-zfs_check_mount "$DATASET" "$MOUNTPOINT" "$expected_canmount"
 
 # Change-gate: skip the nightly rsync when nothing has changed since the last
 # successful offsite sync. rsync's cost here is dominated by walking the whole
@@ -74,7 +74,7 @@ zfs_check_mount "$DATASET" "$MOUNTPOINT" "$expected_canmount"
 # change (where no change-night would otherwise ever re-sync).
 MARKER_FILE="/var/lib/zfs_backup_offsite/$DESTPATH"
 
-if [ -f "$MARKER_FILE" ] && [ -z "$(find "$MARKER_FILE" -mtime +30 -print)" ]; then
+if [ -f "$MARKER_FILE" ] && [ -z "$(find "$MARKER_FILE" -mmin +43200 -print)" ]; then
   marker_snapshot=$(<"$MARKER_FILE")
   if written=$(zfs get -Hp -o value "written@$marker_snapshot" "$DATASET" 2>/dev/null) && [ "$written" = "0" ]; then
     echo "No change on $DATASET since @$marker_snapshot (written=0), skipping offsite sync"

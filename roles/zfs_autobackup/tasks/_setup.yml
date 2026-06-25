@@ -52,3 +52,17 @@
       mountpoint: /mnt/zfs_autobackup_offsite_test
       atime: "off"
   become: true
+
+# A snapshot-free dataset for the no-@bak- mount-ordering regression in _verify.
+# Deliberately NOT tagged autobackup:bak, so zfs_backup_local never snapshots it
+# and the script's no-snapshot branch is reachable -- _verify then unmounts it to
+# prove that branch still runs the mount check first.
+- name: _setup | Create an untagged, snapshot-free dataset for the no-snapshot mount test
+  community.general.zfs:
+    name: rpool/zfs_autobackup_offsite_nosnap_test
+    state: present
+    extra_zfs_properties:
+      canmount: "on"
+      mountpoint: /mnt/zfs_autobackup_offsite_nosnap_test
+      atime: "off"
+  become: true

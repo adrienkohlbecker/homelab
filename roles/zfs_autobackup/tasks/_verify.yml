@@ -327,9 +327,28 @@
       stdout={{ zfs_autobackup_verify_gate_unmounted.stdout }},
       stderr={{ zfs_autobackup_verify_gate_unmounted.stderr }})
 
-# Remount so the role's _verify is re-runnable against a --keep VM (the skip and
-# reconcile tasks above require the dataset mounted).
-- name: _verify | Remount the offsite-gate dataset
-  command: zfs mount rpool/zfs_autobackup_offsite_test
+# Second ordering guard, for the no-@bak- skip path: it too must not short-
+# circuit the mount check. This dataset has no snapshot; unmounted, a correct
+# script fails the mount check rather than exiting cleanly on "No @bak- snapshot".
+- name: _verify | Unmount the snapshot-free dataset
+  command: zfs unmount rpool/zfs_autobackup_offsite_nosnap_test
   changed_when: true
   become: true
+
+- name: _verify | Run the offsite script against the unmounted snapshot-free dataset
+  command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_nosnap_test
+  changed_when: false
+  failed_when: false
+  register: zfs_autobackup_verify_gate_nosnap
+  become: true
+
+- name: _verify | Snapshot-free unmounted dataset fails the mount check, not the no-snapshot skip
+  assert:
+    that:
+      - zfs_autobackup_verify_gate_nosnap.rc != 0
+      - "'skipping offsite sync' not in zfs_autobackup_verify_gate_nosnap.stdout"
+    fail_msg: >-
+      offsite gate skipped a no-snapshot dataset ahead of the mount check
+      (rc={{ zfs_autobackup_verify_gate_nosnap.rc }},
+      stdout={{ zfs_autobackup_verify_gate_nosnap.stdout }},
+      stderr={{ zfs_autobackup_verify_gate_nosnap.stderr }})
