@@ -1,6 +1,7 @@
 # Force the starting state that makes converge do real work, so a broken
-# apt task can't pass as a no-op against the packer-baked image (which ships
-# linux-generic-hwe-* preinstalled per packer/scripts/chroot.sh:189-196):
+# apt task can't pass as a no-op against whatever kernel the baked image ships
+# (box carries the GA linux-generic from packer/scripts/chroot.sh; box_deps
+# already applies the HWE kernel via this role in packer/seed_deps.yml):
 #   - jammy: remove the HWE meta so converge's install registers changed.
 #   - noble: (re)install the HWE meta so converge's removal registers changed.
 #
