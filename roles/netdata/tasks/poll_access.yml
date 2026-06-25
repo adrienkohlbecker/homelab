@@ -68,6 +68,23 @@
   tags:
     - netdata
 
+# The poller logs in every ~15s. Without linger, logind starts and tears down a
+# full `systemd --user` manager per login (~30 journal lines of slice/socket/
+# target bringup each time, thousands of logins/day). Linger keeps one manager
+# resident -- the podman units masked above keep it off the rootless podman
+# socket -- so each poll is just the forced command plus a thin session scope.
+- name: poll_access | Keep a resident user manager for netdata_poll (linger)
+  when: not (ansible_check_mode and netdata_poll_user.changed)
+  import_role:
+    name: linger
+    tasks_from: linger
+  vars:
+    linger_args:
+      name: netdata_poll
+      uid: "{{ netdata_poll_user.uid }}"
+  tags:
+    - netdata
+
 - name: poll_access | Authorize the netdata_poll key (forced command only)
   when: not (ansible_check_mode and netdata_poll_user.changed)
   ansible.posix.authorized_key:
