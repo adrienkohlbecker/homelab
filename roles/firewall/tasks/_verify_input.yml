@@ -149,6 +149,19 @@
   changed_when: false
   become: true
 
+# The Tailscale LAN-direct rule shares lan_admin_pairs with mosh/samba/nut,
+# so the wireguard source (wg0 . WG_SUBNET) is its positive case too. A LAN
+# peer probing tailscaled's underlay on the mgmt iface lands here rather than
+# on the WAN-only underlay rule above. Gated on the same flag that renders the
+# rule and its counter.
+- name: _verify_input | INPUT — tailscale direct endpoint reachable from wireguard source  # noqa: risky-shell-pipe
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_wg }} 192.0.2.1 {{ tailscale_port }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+  when:
+    - tailscale_wan_direct | default(false)
+
 - name: _verify_input | INPUT — Samba (445/tcp) reachable from wireguard source
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_wg }}

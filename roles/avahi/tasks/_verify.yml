@@ -38,21 +38,26 @@
 
 # The role no longer publishes _device-info._tcp: advertising an Apple
 # `model=` made macOS treat the host as a Continuity Mac and probe it on
-# udp/3722 (see main.yml). Assert the service XML is gone so a
-# re-introduced template regresses loudly. (Absence-on-the-wire would be
-# the functional check, but proving a record never arrives needs an
-# unbounded wait and false-positives on mDNS timing -- the file stat is
-# the deterministic guard against the template coming back.)
-- name: _verify | Stat the (removed) device-info service file
-  stat:
-    path: /etc/avahi/services/device-info.service
+# udp/3722 (see main.yml). Functional negative: browse the wire for the
+# type and assert this host isn't announcing it. `-t` terminates after
+# one cache cycle so the wait is bounded; since the role never publishes
+# the record, the host's row is deterministically absent. A re-introduced
+# template would re-announce and this row would reappear -- so it
+# regresses on the real bug rather than being tautological.
+- name: _verify | Browse the wire for _device-info._tcp announcements
+  command: avahi-browse -prt _device-info._tcp
   register: _avahi_device_info
-  become: true
+  changed_when: false
 
-- name: _verify | Assert the device-info advert is not published
+- name: _verify | Assert this host announces no _device-info._tcp record
   assert:
     that:
-      - not _avahi_device_info.stat.exists
+      - _avahi_device_info.rc == 0
+      - _avahi_device_info.stdout_lines
+          | select('match', '^=;' + default_interface + ';IPv4;' + ansible_hostname + ';')
+          | list | length == 0
     fail_msg: >-
-      /etc/avahi/services/device-info.service is present -- the host is
-      advertising as an Apple device again and will draw rapportd/3722 probes.
+      {{ ansible_hostname }} is still announcing _device-info._tcp on
+      {{ default_interface }} -- it is advertising as an Apple device again
+      and will draw rapportd/3722 probes. avahi-browse output:
+      {{ _avahi_device_info.stdout }}
