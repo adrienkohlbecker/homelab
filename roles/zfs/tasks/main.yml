@@ -409,5 +409,30 @@
   tags:
     - zfs
 
+# community.general.zfs no-ops a property whose value already matches even when
+# its source is `received` -- so a root restored via `zfs recv` (a disaster
+# recovery from lab's tank/<host>/rpool/ROOT replica) would keep autobackup:bak
+# at source=received, and zfs-autobackup's `-s local` picker would silently drop
+# the root from every snapshot. The consumer-dataset helper (dataset.yml) guards
+# the same trap; the root takes the direct module above, so guard it here too.
+- name: Read autobackup:bak source on the root dataset
+  when: zfs_root
+  command: zfs get -H -o source autobackup:bak rpool/ROOT/{{ ansible_distribution_release }}
+  register: zfs_root_autobackup_source
+  changed_when: false
+  become: true
+  tags:
+    - zfs
+
+- name: Force autobackup:bak local on the root dataset when a restore left it received
+  when:
+    - zfs_root
+    - zfs_root_autobackup_source.stdout | trim != 'local'
+  command: zfs set autobackup:bak=true rpool/ROOT/{{ ansible_distribution_release }}
+  changed_when: true
+  become: true
+  tags:
+    - zfs
+
 - name: Setup mount generator
   import_tasks: mount_generator.yml
