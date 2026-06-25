@@ -14,7 +14,7 @@
 # ansible run, so converge's register isn't in scope -- and skip the zram
 # assertions where the module, and therefore the zram swap device, is absent.
 - name: _verify | Probe for the zram kernel module
-  when: swap_zram is defined
+  when: (swap_zram | default(none)) is not none
   command: modinfo -k {{ ansible_kernel }} zram
   changed_when: false
   failed_when: false
@@ -22,7 +22,7 @@
 
 - name: _verify | Zram swap active at the configured (primary) priority
   when:
-    - swap_zram is defined
+    - (swap_zram | default(none)) is not none
     - _swap_verify_zram_module.rc == 0
   vars:
     _zram_lines: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | list }}"
@@ -42,7 +42,7 @@
 # SIZE (field 3, bytes) comes directly from swapon --show --bytes; no slurp needed.
 - name: _verify | Zram device sized per config (capped at RAM)
   when:
-    - swap_zram is defined
+    - (swap_zram | default(none)) is not none
     - _swap_verify_zram_module.rc == 0
   vars:
     _zram_line: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | first | default('') }}"
@@ -59,14 +59,14 @@
   become: true
 
 - name: _verify | Resolve zvol device path
-  when: swap_zvol is defined
+  when: (swap_zvol | default(none)) is not none
   command: readlink -f /dev/zvol/{{ swap_zvol.dataset }}
   changed_when: false
   become: true
   register: _swap_verify_zvol_dev
 
 - name: _verify | Zvol swap device is active
-  when: swap_zvol is defined
+  when: (swap_zvol | default(none)) is not none
   vars:
     _names: "{{ _swap_verify_swapon.stdout_lines | map('split') | map('first') | list }}"
   assert:
@@ -78,7 +78,7 @@
   become: true
 
 - name: _verify | Zvol swap is not selected for initramfs resume
-  when: swap_zvol is defined and zfs_root
+  when: (swap_zvol | default(none)) is not none and zfs_root
   slurp:
     src: /etc/initramfs-tools/conf.d/resume
   become: true
@@ -86,14 +86,14 @@
   failed_when: (_swap_verify_resume_conf.content | b64decode | trim) != 'RESUME=none'
 
 - name: _verify | Resolve partition device path
-  when: swap_partition is defined
+  when: (swap_partition | default(none)) is not none
   command: readlink -f {{ swap_partition.device }}
   changed_when: false
   become: true
   register: _swap_verify_partition_dev
 
 - name: _verify | Partition swap device is active
-  when: swap_partition is defined
+  when: (swap_partition | default(none)) is not none
   vars:
     _names: "{{ _swap_verify_swapon.stdout_lines | map('split') | map('first') | list }}"
   assert:
@@ -106,9 +106,9 @@
 
 - name: _verify | Overflow swap priority is below zram
   when:
-    - swap_zram is defined
+    - (swap_zram | default(none)) is not none
     - _swap_verify_zram_module.rc == 0
-    - swap_zvol is defined or swap_partition is defined
+    - (swap_zvol | default(none)) is not none or (swap_partition | default(none)) is not none
   vars:
     _overflow_lines: "{{ _swap_verify_swapon.stdout_lines | reject('search', 'zram') | list }}"
     _zram_prio: "{{ swap_zram.priority | default(100) | int }}"
@@ -123,7 +123,7 @@
 
 - name: _verify | Read vm.swappiness
   when:
-    - swap_zram is defined or swap_zvol is defined or swap_partition is defined
+    - (swap_zram | default(none)) is not none or (swap_zvol | default(none)) is not none or (swap_partition | default(none)) is not none
     - _swap_verify_zram_module.rc == 0
   slurp:
     src: /proc/sys/vm/swappiness
@@ -132,7 +132,7 @@
 
 - name: _verify | Swappiness tuned to the configured value
   when:
-    - swap_zram is defined or swap_zvol is defined or swap_partition is defined
+    - (swap_zram | default(none)) is not none or (swap_zvol | default(none)) is not none or (swap_partition | default(none)) is not none
     - _swap_verify_zram_module.rc == 0
   assert:
     that:
