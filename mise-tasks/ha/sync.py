@@ -351,7 +351,13 @@ def do_push(dry_run: bool = False) -> None:
         tag_blob = blob_sha_at(SYNCED_TAG, file.rel)
         host_bytes = host_file(file.rel)
         host_blob = sha256(host_bytes) if host_bytes is not None else None
-        if tag_blob is not None and host_blob is not None and host_blob != tag_blob:
+        # Push-only files (pull=False) are repo-authoritative: the host copy is
+        # never captured back (do_pull skips them), so a host/tag mismatch must
+        # not block the push -- a pull can't resolve it (it would deadlock: the
+        # role seeds a dashboards/ placeholder that differs from the repo). Only
+        # guard divergence for round-tripped files, where a stale host/GUI edit
+        # would otherwise be clobbered.
+        if file.pull and tag_blob is not None and host_blob is not None and host_blob != tag_blob:
             diverged.append(file.rel)
             continue
         if host_blob != head_blob:
