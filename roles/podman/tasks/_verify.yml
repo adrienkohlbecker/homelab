@@ -328,14 +328,19 @@
   changed_when: false
   failed_when: podman_prune_timer.status.UnitFileState != 'enabled'
 
-# The podman package enables podman-auto-update.timer; install.yml masks it
-# (image tags are ansible-pinned and no container carries an autoupdate label,
-# so the timer would only ever no-op or fire an unpinned pull). Assert the live
-# unit is masked so a package update can't silently re-arm it.
-- name: _verify | The podman-auto-update timer is masked
+# The podman package enables both podman-auto-update.timer and
+# podman-auto-update.service; install.yml masks both (image tags are
+# ansible-pinned and no container carries an autoupdate label, so they would
+# only ever no-op or fire an unpinned pull). Assert both live units are masked
+# so a package update can't silently re-arm either the daily timer or the
+# boot-time service.
+- name: _verify | The podman-auto-update units are masked
   systemd:
-    name: podman-auto-update.timer
+    name: "{{ item }}"
   become: true
-  register: podman_autoupdate_timer
+  register: podman_autoupdate_unit
   changed_when: false
-  failed_when: podman_autoupdate_timer.status.UnitFileState != 'masked'
+  failed_when: podman_autoupdate_unit.status.UnitFileState != 'masked'
+  loop:
+    - podman-auto-update.timer
+    - podman-auto-update.service
