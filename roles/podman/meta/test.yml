@@ -3,12 +3,18 @@
 # pin); resolute drops the iptables compat package and takes the >= 26 branch.
 # Both noble and resolute exercise paths the jammy default cell doesn't.
 #
-# zfs_root hosts get a dedicated zvol + ext4 graphroot; non-ZFS hosts use the
-# plain root filesystem with fuse-overlayfs. The minimal cell exercises the
-# non-zvol storage path.
+# Storage backend, one per machine: box puts the container store on a dedicated
+# raw ext4 partition (podman_storage_backend: partition, single disk); minimal
+# has no ZFS so the store stays on the plain root fs with fuse-overlayfs; pug
+# keeps the legacy rpool/podman zvol (the prod default until a host is rebuilt);
+# lab puts it on a 3-disk mdadm raid5 partition. box + minimal run on every push;
+# pug + lab are the heavyweight on-demand/nightly fixtures (detect drops them
+# from push), giving the zvol and raid5 backends nightly coverage.
 machines:
   box:
   minimal:
+  pug:
+  lab:
 ubuntu:
   - noble
   - resolute
