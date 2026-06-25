@@ -327,11 +327,15 @@ async def run_test(
                         await m.wait()
 
     if timer_absorbed:
-        # Re-surface the timeout we silenced so main() reports rc=124. If a
-        # user Ctrl+C broke the wait above, asyncio.timeout's __aexit__ has
-        # already converted that cancel into TimeoutError before reaching
-        # this line, so the manual raise only covers natural exits.
-        raise TimeoutError(f"Test timed out after {timeout}s")
+        # Re-surface the timeout we silenced so main() reports rc=124. This is
+        # the outer deadline, not a phase cause, so raise it message-less:
+        # main()'s handler then prints only the generic per-test timeout line,
+        # not a duplicate "Test timed out" cause (the "--keep set, dropping to
+        # SSH" notice above already explained why). If a user Ctrl+C broke the
+        # wait above, asyncio.timeout's __aexit__ has already converted that
+        # cancel into TimeoutError before reaching this line, so the manual
+        # raise only covers natural exits.
+        raise TimeoutError()
 
 
 def main() -> int:
