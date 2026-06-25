@@ -676,6 +676,14 @@ if [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
   # cloud-guest-utils ships growpart, used by hetzner_growpart.service below.
   apt-get install --yes cloud-init cloud-guest-utils
 
+  # Replace the debootstrap'd cloud-init's default /etc/cloud/cloud.cfg with the
+  # one Hetzner ships in its stock image for this release (captured verbatim
+  # under packer/hetzner/, staged into /var/tmp by provision.sh) so the base
+  # cloud-init config matches the stock hcloud image exactly. The 99-hetzner.cfg
+  # drop-in below still pins the datasource on top (cloud.cfg.d wins).
+  install -m 0644 /var/tmp/hetzner_cloud.cfg /etc/cloud/cloud.cfg
+  rm /var/tmp/hetzner_cloud.cfg
+
   # Pin the datasource so a fresh cloud-init (debootstrap'd, not the
   # Hetzner-tuned stock image) finds Hetzner's metadata + user-data fast
   # instead of probing the full list. Hetzner provides networking + user-data
