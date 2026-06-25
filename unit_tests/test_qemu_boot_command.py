@@ -111,9 +111,10 @@ def test_keep_vm_zero_timeout_x86_64_uses_minimal_keep_devices(
     assert "virtio-gpu-pci" not in cmd
 
     # VNC display + French keyboard layout. _setup() pinned vnc_display=0
-    # so the cmdline is deterministic.
+    # so the cmdline is deterministic. VNC binds the cell's loopback (not the
+    # wildcard host) so the reservation and the bind agree.
     display_idx = cmd.index("-display")
-    assert cmd[display_idx + 1] == "vnc=:0"
+    assert cmd[display_idx + 1] == f"vnc={machine.SSH_HOST}:0"
     assert cmd[cmd.index("-k") + 1] == "fr"
 
     # usb-tablet is the only -device addition for keep_vm on x86_64.
@@ -130,7 +131,7 @@ def test_keep_vm_display_window_uses_local_qemu_backend(
 
     display_idx = cmd.index("-display")
     assert cmd[display_idx + 1] == "cocoa"
-    assert "vnc=:0" not in cmd
+    assert not any(a.startswith("vnc=") for a in cmd)
 
 
 def test_keep_vm_aarch64_adds_full_input_stack(
