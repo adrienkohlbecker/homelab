@@ -12,17 +12,7 @@ if [ -z "$OFFSITE_IP" ] || [ -z "$DATASET" ]; then
   exit 1
 fi
 
-MOUNTPOINT=$(zfs get mountpoint -H -o value "$DATASET")
 DESTPATH=${DATASET//\//_}
-
-# Boot environments keep canmount=noauto so sibling BEs never race to mount at
-# boot; all other datasets are canmount=on.
-if [[ "$DATASET" == rpool/ROOT/* ]]; then
-  expected_canmount=noauto
-else
-  expected_canmount=on
-fi
-zfs_check_mount "$DATASET" "$MOUNTPOINT" "$expected_canmount"
 
 # awk collapses the grep|tail|cut pipeline: snapshots arrive sorted by
 # creation (ascending), so the last @bak- line is the newest. A bare
@@ -36,6 +26,60 @@ LAST_SNAPSHOT=$(zfs list -t snapshot -o name -s creation -r "$DATASET" | awk -F@
 if [ -z "$LAST_SNAPSHOT" ]; then
   echo >&2 "No @bak- snapshot for $DATASET, skipping offsite sync"
   exit 0
+fi
+
+MOUNTPOINT=$(zfs get mountpoint -H -o value "$DATASET")
+
+# Boot environments keep canmount=noauto so sibling BEs never race to mount at
+# boot; all other datasets are canmount=on.
+if [[ "$DATASET" == rpool/ROOT/* ]]; then
+  expected_canmount=noauto
+else
+  expected_canmount=on
+fi
+# Validate the mount before the change-gate, not after: a broken mount is a fault
+# the offsite run must surface (zfs_check_mount fails -> the caller's f_rescue
+# bumps f_failed -> the unit exits 1 for monitoring), and gating it out would let
+# a degraded /mnt/services or /mnt/data be silently reported as an up-to-date
+# skip on any unchanged night. The check is sub-second, so paying it on skip
+# nights costs nothing.
+zfs_check_mount "$DATASET" "$MOUNTPOINT" "$expected_canmount"
+
+# Change-gate: skip the nightly rsync when nothing has changed since the last
+# successful offsite sync. rsync's cost here is dominated by walking the whole
+# dataset tree on bunk's slow disks, even on the many nights when -- for large,
+# seldom-written datasets (tank/data, the dormant parent-NAS mirrors) -- there is
+# nothing to send. `written@<snap>` is the cumulative bytes written to the
+# dataset since that snapshot: an O(1) property read (no tree walk), and sound in
+# the skip direction -- any create/modify/delete writes blocks, so 0 means
+# nothing changed and bunk's copy is already current. Runs after the mount check
+# above, so a skip still implies a validated mount.
+#
+# The marker records the snapshot last confirmed on bunk. It lives OUTSIDE the
+# backed-up dataset on purpose: a marker stored as a dataset property would itself
+# write metadata, so the next night's written@ could never read 0. It is also
+# local, not on bunk: bunk's rrsync is write-only (-wo), so a source cannot read a
+# marker back from it. It is advanced only after a successful rsync (see below).
+# One dataset is unavoidably self-referential: the root dataset
+# (rpool/ROOT/<release>, mounted at /) holds both this marker dir and the rsync
+# --log-file under /var, so its own written@ is never 0 and root never skips.
+# That is fine -- root is small and was never the slow-walk target; the gate pays
+# off on the large /mnt and tank/* data datasets, which carry neither path.
+#
+# Fall through to a full rsync -- (re)establishing the baseline -- when there is
+# no marker yet (first run); the marker snapshot was thinned away so written@
+# errors; or the last successful sync was over 30 days ago (the marker file's
+# mtime). That last case is a monthly reconciliation: a full rsync re-verifies
+# the whole tree and heals any silent bunk-side drift even on datasets that never
+# change (where no change-night would otherwise ever re-sync).
+MARKER_FILE="/var/lib/zfs_backup_offsite/$DESTPATH"
+
+if [ -f "$MARKER_FILE" ] && [ -z "$(find "$MARKER_FILE" -mtime +30 -print)" ]; then
+  marker_snapshot=$(<"$MARKER_FILE")
+  if written=$(zfs get -Hp -o value "written@$marker_snapshot" "$DATASET" 2>/dev/null) && [ "$written" = "0" ]; then
+    echo "No change on $DATASET since @$marker_snapshot (written=0), skipping offsite sync"
+    exit 0
+  fi
 fi
 
 # rsync's running progress is helpful when an operator runs this by hand but is
@@ -117,6 +161,13 @@ f_trace rsync \
   --exclude /var/crash \
   --exclude "*@*:*:*~" \
   "${MOUNTPOINT%"/"}/.zfs/snapshot/$LAST_SNAPSHOT/" "ak@$OFFSITE_IP:$DESTPATH"
+
+# Record the snapshot now mirrored on bunk so the change-gate above can skip
+# unchanged nights, and stamp the marker's mtime for the 30-day reconciliation
+# clock. Reached only on rsync success: functions.sh sets errexit, so a failed
+# rsync aborts the script before this line, leaving the marker at the last good
+# sync for the next run to retry from.
+echo "$LAST_SNAPSHOT" >"$MARKER_FILE"
 
 # The destination is relative on purpose. bunk forces this key through rrsync
 # (command="rrsync -wo /volume1/Backup/<host>"), which chdirs into that per-host

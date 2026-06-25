@@ -13,6 +13,19 @@
   import_role:
     name: bash
 
+# zfs_backup_offsite calls zfs_check_mount, which the zfs_mount role installs in
+# prod (it runs earlier in site.yml). _verify drives the offsite change-gate, so
+# install just the binary here -- the same dependency-staging pattern as the bash
+# helpers above, without pulling in zfs_mount's per-mountpoint systemd units.
+- name: _setup | Install zfs_check_mount (zfs_backup_offsite dependency)
+  copy:
+    src: "{{ role_path }}/../zfs_mount/files/zfs_check_mount.sh"
+    dest: /usr/local/bin/zfs_check_mount
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
 # A locally-tagged leaf dataset so converge's source.yml grants zfs allow on
 # it and _verify can drive a real local backup. rpool exists on every ZFS
 # fixture (box/lab/pug); minimal has no ZFS and is excluded from this role.
@@ -23,4 +36,19 @@
     extra_zfs_properties:
       autobackup:bak: "true"
       mountpoint: none
+  become: true
+
+# A mounted, tagged dataset for exercising zfs_backup_offsite's change-gate.
+# The mountpoint=none dataset above suffices for the local-backup test but can't
+# pass zfs_check_mount (mounted=no), which the gate's no-skip path reaches.
+# atime=off so a stray read can't bump `written` and perturb the gate.
+- name: _setup | Create a mounted scratch dataset for offsite-gate testing
+  community.general.zfs:
+    name: rpool/zfs_autobackup_offsite_test
+    state: present
+    extra_zfs_properties:
+      autobackup:bak: "true"
+      canmount: "on"
+      mountpoint: /mnt/zfs_autobackup_offsite_test
+      atime: "off"
   become: true

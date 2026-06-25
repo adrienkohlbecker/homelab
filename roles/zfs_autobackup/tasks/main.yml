@@ -89,6 +89,21 @@
   tags:
     - zfs_autobackup
 
+# Root-owned offsite change-gate state: one marker file per dataset recording
+# the snapshot last confirmed on bunk (see zfs_backup_offsite.sh). Kept out of
+# the zfs_autobackup user's home (/var/lib/zfs_autobackup) so the backup user
+# can't tamper with the gate.
+- name: Create offsite marker directory
+  file:
+    dest: /var/lib/zfs_backup_offsite
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  tags:
+    - zfs_autobackup
+
 - name: Copy the backup scripts
   copy:
     src: "{{ item }}.sh"
