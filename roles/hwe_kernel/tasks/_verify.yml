@@ -1,15 +1,16 @@
-# Functional verify. Pairs with _setup.yml: that file forces a
-# "no HWE meta-package" starting state so the role's converge phase
-# performs a real apt install. Here we assert (1) the HWE meta-package
-# is installed (not a tautology -- _setup actively removed it), (2) the
-# power group workaround for thermald's dbus policy is in place.
+# Functional verify. Pairs with _setup.yml, which forces the opposite
+# starting state so converge does real work. We assert (1) converge moved
+# the HWE meta-package to its release-correct end state -- present on jammy
+# (the 6.8 install ran), absent on noble (the rolling-HWE removal ran);
+# neither is a tautology since _setup flipped it -- and (2) the power group
+# workaround for thermald's dbus policy is in place.
 #
-# No reboot-required sentinel check: converge's own "Reboot machine under
-# new kernel" task fires (the HWE install is a change), and /var/run is
+# No reboot-required sentinel check: on jammy converge's own "Reboot machine
+# under new kernel" task fires (the HWE install is a change), and /var/run is
 # tmpfs, so the reboot wipes /var/run/reboot-required before _verify runs.
 # The reboot-surviving proof that converge did real work is the dpkg-query
-# below -- _setup removed the meta-package, so its presence here means the
-# converge install ran.
+# below -- _setup flipped the meta-package, so its release-correct end state
+# here means the converge task ran.
 #
 # No reboot-then-assert-uname check either: on aarch64 the harness boots
 # qemu with -kernel/-initrd extracted from the on-pool image (see CLAUDE.md
@@ -18,13 +19,32 @@
 # after reboot" assertion would always pass on x86_64 (ZBM scans /boot)
 # but always fail on aarch64, violating the per-arch testing policy.
 
-- name: _verify | HWE meta-package reinstalled by converge
+- name: _verify | Probe HWE meta-package status
   command: dpkg-query -W -f='${Status}' linux-generic-hwe-{{ ansible_distribution_version }}
   register: hwe_kernel_verify_dpkg
   changed_when: false
-  failed_when: hwe_kernel_verify_dpkg.stdout != 'install ok installed'
+  failed_when: false
   check_mode: false
   become: true
+
+- name: _verify | Jammy converge installed the HWE meta-package
+  assert:
+    that:
+      - hwe_kernel_verify_dpkg.stdout == 'install ok installed'
+    fail_msg: >-
+      HWE meta-package missing -- converge's jammy install task did not run
+      ({{ hwe_kernel_verify_dpkg.stdout }}).
+  when: ansible_distribution_release == "jammy"
+
+- name: _verify | Noble converge removed the rolling HWE meta-package
+  assert:
+    that:
+      - hwe_kernel_verify_dpkg.stdout != 'install ok installed'
+    fail_msg: >-
+      HWE meta-package still installed -- converge's noble removal task did
+      not run ({{ hwe_kernel_verify_dpkg.stdout }}); the rolling kernel would
+      outrun the 2.2.x zfsutils userspace.
+  when: ansible_distribution_release != "jammy"
 
 - name: _verify | Probe power group
   getent:

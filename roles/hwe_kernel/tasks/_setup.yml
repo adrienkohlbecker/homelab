@@ -1,16 +1,14 @@
-# Force a "no HWE meta-package installed" starting state so the role's
-# converge phase performs a real apt install (the packer-baked images
-# ship linux-generic-hwe-* preinstalled per packer/scripts/chroot.sh:
-# 189-196, which would otherwise mask a broken apt task as a no-op).
-# _verify then proves the install ran by asserting the meta-package is
-# present again.
+# Force the starting state that makes converge do real work, so a broken
+# apt task can't pass as a no-op against the packer-baked image (which ships
+# linux-generic-hwe-* preinstalled per packer/scripts/chroot.sh:189-196):
+#   - jammy: remove the HWE meta so converge's install registers changed.
+#   - noble: (re)install the HWE meta so converge's removal registers changed.
 #
-# We remove only the HWE meta-packages -- dpkg refuses to purge the
-# running kernel image, but that's fine: the meta-packages are what
-# the role's apt task targets, and removing them is what makes
-# converge's install register as `changed: true` and reboot into it.
+# We touch only the meta-package -- dpkg refuses to purge the running kernel
+# image, but the meta is what the role's apt task targets, so flipping it is
+# what makes converge register `changed: true`.
 
-- name: _setup | Remove HWE meta-package + autoremove
+- name: _setup | Remove HWE meta-package (jammy converge reinstalls it)
   apt:
     pkg:
       - linux-generic-hwe-{{ ansible_distribution_version }}
@@ -18,4 +16,14 @@
     autoremove: true
     purge: true
     update_cache: true
+  when: ansible_distribution_release == "jammy"
+  become: true
+
+- name: _setup | Install HWE meta-package (noble converge removes it)
+  apt:
+    pkg:
+      - linux-generic-hwe-{{ ansible_distribution_version }}
+    state: present
+    update_cache: true
+  when: ansible_distribution_release != "jammy"
   become: true

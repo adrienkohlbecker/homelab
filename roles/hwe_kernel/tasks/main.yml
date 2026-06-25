@@ -1,15 +1,45 @@
-# Install Ubuntu's Hardware Enablement (HWE) kernel meta-package. On
-# jammy this pulls noble's 6.8 kernel + matching linux-modules-*-generic,
-# which is also the donor for the ZFS 2.2.x kmod paired with the
-# noble-backports zfsutils userspace. See roles/zfs/tasks/main.yml (top
-# docstring) for the HWE/ZFS pairing rationale. Must run before roles/zfs
-# in site.yml.
-- name: Install HWE kernel
+# Ensure the host runs Ubuntu's 6.8 kernel -- the donor for the ZFS 2.2.x
+# kmod paired with the 2.2.x zfsutils userspace. See roles/zfs/tasks/main.yml
+# (top docstring) for the HWE/ZFS pairing rationale. Must run before
+# roles/zfs in site.yml. The mechanism is release-dependent:
+#
+#   - jammy: GA is 5.15, so install the HWE meta (linux-generic-hwe-22.04)
+#     to pull noble's 6.8 + matching linux-modules-*-generic.
+#   - noble: GA *is* 6.8, so install nothing. There the matching HWE meta
+#     (linux-generic-hwe-24.04) is the *rolling* edge that advances past GA
+#     -- today 6.17, whose bundled zfs.ko 2.3.x outruns noble's 2.2.x
+#     zfsutils userspace and trips roles/zfs's version-skew assert. So we
+#     remove it and let the GA linux-generic carry 6.8.
+- name: Install HWE kernel (jammy GA is 5.15; pull 6.8)
   apt:
     pkg:
       - linux-generic-hwe-{{ ansible_distribution_version }}
     cache_valid_time: 3600
+  when: ansible_distribution_release == "jammy"
   register: hwe_kernel_apt
+  become: true
+  tags:
+    - hwe_kernel
+
+# noble+ ships 6.8 as GA, so the HWE meta only overshoots into the rolling
+# edge. Strip it (and its image/headers metas) and let autoremove reclaim
+# the orphaned rolling kernel. Ubuntu's apt never autoremoves the *running*
+# kernel, so on a host currently booted into the rolling HWE (e.g. fox on
+# 6.17) this drops the meta but leaves the live kernel in place -- demoting
+# that running kernel needs an explicit purge + reboot done by hand, not an
+# unattended converge that could reboot-loop. Once the host is back on 6.8,
+# this task is a no-op.
+- name: Remove rolling HWE kernel (noble+ GA is already 6.8)
+  apt:
+    pkg:
+      - linux-generic-hwe-{{ ansible_distribution_version }}
+      - linux-image-generic-hwe-{{ ansible_distribution_version }}
+      - linux-headers-generic-hwe-{{ ansible_distribution_version }}
+    state: absent
+    autoremove: true
+    purge: true
+  when: ansible_distribution_release != "jammy"
+  register: hwe_kernel_remove
   become: true
   tags:
     - hwe_kernel
@@ -36,7 +66,9 @@
     tasks_from: reboot
   vars:
     reboot_args:
-      condition: "{{ hwe_kernel_apt.changed }}"
+      # jammy-only: the noble branch removes the meta without auto-rebooting
+      # (see "Remove rolling HWE kernel"), so this stays gated on the install.
+      condition: "{{ hwe_kernel_apt.changed | default(false) }}"
       # The initramfs was already rebuilt by the apt postinst above, so
       # the first 6.8 boot does no extra work and this fixture reaches
       # SSH in seconds. Keep the wait short so a stuck reboot (e.g. the
