@@ -266,6 +266,21 @@
   failed_when: _firewall_input_nut_mac_mgmt.rc != 0 or 'firewall-verify-ok' not in _firewall_input_nut_mac_mgmt.stdout
   become: true
 
+# The Tailscale LAN-direct rule's other positive: a home-LAN peer hitting the
+# mgmt macvlan IP, which ingresses on mac_mgmt -- the exact path the WAN underlay
+# rule misses and this rule was added for. Pairs with the wireguard-source probe
+# above; the counter assertion requires BOTH to fire (>= 2), so a regression
+# narrowing the rule to wg-only can't be masked by the wg hit alone. UDP nc, like
+# the wg probe -- tailscaled doesn't answer a synthetic datagram, so the counter
+# is the witness, not a reply.
+- name: _verify_input | INPUT — tailscale direct endpoint reachable from home_LAN source via mac_mgmt  # noqa: risky-shell-pipe
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_home_mac }} {{ _firewall_probe_home_mac_host }} {{ tailscale_port }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+  when:
+    - tailscale_wan_direct | default(false)
+
 # --- probe_nonscope group (out-of-scope negatives) -------------------
 # probe_nonscope (192.0.2.2 primary on veth_ext) is in neither
 # $HOME_LAN nor $WG_SUBNET nor $PODMAN_DEFAULT — every saddr-scoped
