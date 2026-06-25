@@ -117,6 +117,27 @@
     - zfs_backup_local
     - zfs_backup_onsite
     - zfs_backup_offsite
+  register: zfs_autobackup_scripts
+  become: true
+  tags:
+    - zfs_autobackup
+
+# The offsite change-gate skips rsync while a dataset's written@ stays 0, so a
+# change to zfs_backup_offsite.sh -- the rsync excludes/flags or the gate logic
+# itself -- would otherwise not take effect on unchanged datasets until their
+# next write or the 30-day reconcile. (Most pointed for a future secret-spill
+# exclude: already-shipped files would linger on bunk meanwhile.) Drop the
+# markers whenever that script changes so the next run re-establishes every
+# baseline under the new policy. The dir survives (recreated above and needed
+# for the marker write); -delete on an empty dir is a no-op.
+- name: Force an offsite reconcile when the offsite script changed
+  command: find /var/lib/zfs_backup_offsite -mindepth 1 -delete
+  changed_when: true
+  when: >-
+    zfs_autobackup_scripts.results
+    | selectattr('item', 'equalto', 'zfs_backup_offsite')
+    | selectattr('changed')
+    | list | length > 0
   become: true
   tags:
     - zfs_autobackup
