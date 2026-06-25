@@ -159,8 +159,21 @@
     # Don't emit ICMP redirects either — we're not a transit router.
     - { name: net.ipv4.conf.all.send_redirects, value: '0' }
     - { name: net.ipv4.conf.default.send_redirects, value: '0' }
-    # Log packets with bogus source IPs (e.g. RFC1918 on WAN).
-    - { name: net.ipv4.conf.all.log_martians, value: '1' }
+    # Log packets with bogus source IPs (e.g. RFC1918 on WAN). Real
+    # interfaces inherit this from `default` at creation (verified: a host
+    # with default=1 carries log_martians=1 on every real iface, one with
+    # default=0 carries 0), so `default=1` is what actually arms the logging.
+    #
+    # `all` is NOT set to 1: the kernel OR-folds it into every interface's
+    # effective value (IN_DEV_LOG_MARTIANS reads `all || <iface>`). Keepalived
+    # hosts run a vrrp.<VRID> macvlan that ingresses LAN broadcast + VRRP-peer
+    # traffic whose sources don't route back through it, so each such packet
+    # is a "martian" -- tens of thousands of log lines/day. keepalived's
+    # 99-vrrp-martians.rules zeroes that iface's own flag to silence them, but
+    # an `all=1` here would OR straight over that 0 and defeat it. Pinning
+    # `all=0` makes the per-iface suppression effective; real interfaces still
+    # log via their own default-inherited flag, only the vrrp vmac goes quiet.
+    - { name: net.ipv4.conf.all.log_martians, value: '0' }
     - { name: net.ipv4.conf.default.log_martians, value: '1' }
     # SYN-flood mitigation. Default on in modern Ubuntu; pin anyway.
     - { name: net.ipv4.tcp_syncookies, value: '1' }
