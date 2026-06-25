@@ -38,12 +38,23 @@
 
 # The role no longer publishes _device-info._tcp: advertising an Apple
 # `model=` made macOS treat the host as a Continuity Mac and probe it on
-# udp/3722 (see main.yml). Functional negative: browse the wire for the
-# type and assert this host isn't announcing it. `-t` terminates after
-# one cache cycle so the wait is bounded; since the role never publishes
-# the record, the host's row is deterministically absent. A re-introduced
-# template would re-announce and this row would reappear -- so it
-# regresses on the real bug rather than being tautological.
+# udp/3722 (see main.yml). Deterministic guard: the source of the advert is
+# /etc/avahi/services/device-info.service, which main.yml keeps absent -- assert
+# that, since a re-introduced template would land the file again. `avahi-browse`
+# below is the supplemental wire-level witness; on its own it is timing-sensitive
+# (`-t` terminates after a "more or less complete" cache cycle, not a guaranteed
+# one), so the absence stat is the load-bearing regression check.
+- name: _verify | The device-info service file is absent
+  stat:
+    path: /etc/avahi/services/device-info.service
+  register: _avahi_device_info_file
+  failed_when: _avahi_device_info_file.stat.exists
+  become: true
+
+# Functional negative: browse the wire for the type and assert this host
+# isn't announcing it. `-t` terminates after one cache cycle so the wait is
+# bounded; since the role never publishes the record, the host's row is
+# deterministically absent.
 - name: _verify | Browse the wire for _device-info._tcp announcements
   command: avahi-browse -prt _device-info._tcp
   register: _avahi_device_info
