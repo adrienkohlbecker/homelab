@@ -570,6 +570,29 @@
   become: true
   failed_when: _netdata_poll_linger.stdout | trim != 'yes'
 
+# netdata.conf pins `allow ... by dns = no`, so the running instance never
+# reverse-resolves the loopback peer (127.0.0.1 -> localhost, no DNS record) on
+# an accepted connection. Probe it over loopback and assert it stays silent.
+# Cursor-scoped to this probe, not the whole boot: the converge + fast-poll
+# restarts above run transient configs without the toggle (and netdata warns
+# under its stock localhost-DNS config during install), so only a fresh probe
+# against the final production instance is a clean witness.
+- name: _verify | No localhost DNS-validation warning logged on a fresh connect
+  shell: |
+    set -euo pipefail
+    rm -f /tmp/nd_verify_cursor
+    journalctl -u netdata -n0 --cursor-file=/tmp/nd_verify_cursor >/dev/null 2>&1 || true
+    for i in 1 2 3 4; do curl -s -o /dev/null "http://localhost:{{ service_ports.netdata }}/api/v1/info"; done
+    sleep 1
+    journalctl -u netdata --cursor-file=/tmp/nd_verify_cursor --no-pager | grep -cF "Cannot validate" || true
+    rm -f /tmp/nd_verify_cursor
+  args:
+    executable: /bin/bash
+  register: _netdata_localhost_warn
+  changed_when: false
+  become: true
+  failed_when: _netdata_localhost_warn.stdout | trim | int != 0
+
 # Cover the cross-role coupling: netdata's main.yml imports certbot's
 # tasks_from: netdata to render x509check.conf. A break in the
 # certbot-side template (x509check.conf.j2) or the netdata template
