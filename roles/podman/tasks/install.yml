@@ -87,21 +87,27 @@
     - podman
 
 # Every image tag is pinned in versions.yml and updates are driven through
-# ansible, so podman's auto-update timer (enabled by the package) has no role
+# ansible, so podman's auto-update path (enabled by the package) has no role
 # here. No container carries an io.containers.autoupdate label, so it's a no-op
-# today -- mask the timer so a stray label can never trigger an unpinned
-# pull/restart behind ansible's back, and so the daily timer stops churning.
-# Guarded like the seccomp tasks below: the timer unit ships with the podman
-# package (the `Install podman` apt task above), which in check mode on a fresh
-# host only *reports* installing -- so the unit isn't on disk yet and the mask
+# today -- mask it so a stray label can never trigger an unpinned pull/restart
+# behind ansible's back, and so the daily timer stops churning. The package
+# enables BOTH the daily timer (timers.target.wants) and the service itself
+# (default.target.wants/podman-auto-update.service), so masking only the timer
+# would leave a boot-time auto-update path open -- mask both.
+# Guarded like the seccomp tasks below: the units ship with the podman package
+# (the `Install podman` apt task above), which in check mode on a fresh host
+# only *reports* installing -- so the units aren't on disk yet and the mask
 # would fail "Could not find the requested service". Skip in that case; on a
 # converged host (apt no-op) or any real apply it runs normally.
-- name: install | Mask podman-auto-update timer (image tags are ansible-pinned)
+- name: install | Mask podman auto-update units (image tags are ansible-pinned)
   when: not (ansible_check_mode and podman_apt.changed)
   systemd:
-    name: podman-auto-update.timer
+    name: "{{ item }}"
     masked: true
     state: stopped
+  loop:
+    - podman-auto-update.timer
+    - podman-auto-update.service
   become: true
   tags:
     - podman
