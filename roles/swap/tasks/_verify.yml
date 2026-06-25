@@ -13,8 +13,11 @@
 # on the local fixtures ships none). Re-probe here -- _verify is a separate
 # ansible run, so converge's register isn't in scope -- and skip the zram
 # assertions where the module, and therefore the zram swap device, is absent.
+# Run for any swap backend (mirroring main.yml) so the swappiness checks below,
+# which read _swap_verify_zram_module.rc, never hit an undefined .rc on a
+# zvol/partition-only host.
 - name: _verify | Probe for the zram kernel module
-  when: (swap_zram | default(none)) is not none
+  when: (swap_zram | default(none)) is not none or (swap_zvol | default(none)) is not none or (swap_partition | default(none)) is not none
   command: modinfo -k {{ ansible_kernel }} zram
   changed_when: false
   failed_when: false

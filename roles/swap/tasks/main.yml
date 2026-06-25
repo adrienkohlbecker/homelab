@@ -364,8 +364,12 @@
 # and gate the zram tasks on it: present everywhere it matters, skipped only on
 # the arm64 fixtures that physically lack it. check_mode:false so the probe runs
 # (and registers) during the harness's dry-run pass too.
+#
+# Run the probe for *any* swap backend, not just zram: the swappiness task below
+# also reads swap_zram_module.rc, so a zvol/partition-only host (no swap_zram)
+# would otherwise hit an undefined .rc on the skipped register.
 - name: Probe for the zram kernel module
-  when: (swap_zram | default(none)) is not none
+  when: (swap_zram | default(none)) is not none or (swap_zvol | default(none)) is not none or (swap_partition | default(none)) is not none
   command: modinfo -k {{ ansible_kernel }} zram
   changed_when: false
   failed_when: false
