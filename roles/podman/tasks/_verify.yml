@@ -116,18 +116,28 @@
           vars:
             _detail: "{{ podman_md_probes.results[0].stdout }}"
             _dump: "{{ podman_md_probes.results[1].stdout }}"
+            # Expected geometry from the fixture's mkfs opts (-E stride=N,
+            # stripe-width=M); actual geometry as ext4 recorded it at mkfs time.
+            _want_stride: "{{ podman_partition_mkfs_opts | regex_findall('stride=(\\d+)') | first | default('') }}"
+            _want_stripe: "{{ podman_partition_mkfs_opts | regex_findall('stripe-width=(\\d+)') | first | default('') }}"
+            _got_stride: "{{ _dump | regex_findall('RAID stride:\\s+(\\d+)') | first | default('') }}"
+            _got_stripe: "{{ _dump | regex_findall('RAID stripe width:\\s+(\\d+)') | first | default('') }}"
           assert:
             that:
               # raid5 specifically, every member present, none failed, not degraded.
               - "'Raid Level : raid5' in _detail"
               - "'Failed Devices : 0' in _detail"
               - "'degraded' not in _detail"
-              # ext4 was built with the raid geometry (plain mkfs omits these
-              # lines entirely) -- proves podman_partition_mkfs_opts reached mkfs.
-              - "'RAID stride:' in _dump"
-              - "'RAID stripe width:' in _dump"
+              # ext4 was built with the *configured* raid geometry, not just some
+              # geometry: a typo'd stride/stripe-width or a plain mkfs (which omits
+              # these lines) would diverge -- proves podman_partition_mkfs_opts
+              # reached mkfs intact.
+              - _want_stride != '' and _got_stride == _want_stride
+              - _want_stripe != '' and _got_stripe == _want_stripe
             fail_msg: >-
-              The podman store is not a healthy raid5 with stripe geometry.
+              The podman store is not a healthy raid5 with the configured stripe
+              geometry (want stride={{ _want_stride }} stripe-width={{ _want_stripe }};
+              got stride={{ _got_stride }} stripe-width={{ _got_stripe }}).
               mdadm --detail:
               {{ _detail }}
               ---
