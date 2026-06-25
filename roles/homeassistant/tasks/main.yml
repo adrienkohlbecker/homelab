@@ -60,6 +60,7 @@
     - custom_templates
     - blueprints
     - blueprints/automation
+    - dashboards
     - www
     - custom_components
     - .storage
@@ -214,6 +215,31 @@
     - climate.yaml
     - counters.yaml
     - timers.yaml
+  tags:
+    - homeassistant
+
+# YAML-mode Lovelace dashboards (registered under `lovelace:` in
+# configuration.yaml) are deployed by `mise run ha:sync push`. A missing
+# dashboard file logs a per-dashboard error until the first sync, and the
+# "Ensure files exist" touch above leaves an empty file that fails Lovelace
+# validation -- so seed a minimal *valid* placeholder instead. force: false so
+# ha:sync's deployed copy is authoritative and converge never re-clobbers it.
+- name: Seed dashboard placeholders
+  copy:
+    dest: /mnt/services/homeassistant/dashboards/{{ item }}
+    content: |
+      title: Climate
+      views:
+        - title: Climate
+    owner: homeassistant
+    group: homeassistant
+    mode: "0644"
+    force: false
+    backup: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
+  become: true
+  with_items:
+    - climate.yaml
   tags:
     - homeassistant
 
