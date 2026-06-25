@@ -23,6 +23,9 @@
     lm_sensors_effective_ignore: >-
       {{ lm_sensors_qemu_test_ignore
          if (qemu_test | bool) else lm_sensors_ignore }}
+    lm_sensors_effective_limits: >-
+      {{ lm_sensors_qemu_test_limits
+         if (qemu_test | bool) else lm_sensors_limits }}
 
 - name: _verify | Read the modules-load.d file
   slurp:
@@ -58,6 +61,21 @@
       - "'lm-sensors-test-0' in _content"
       - "'ignore temp2' in _content"
     fail_msg: "deployed /etc/sensors.d/zz_netdata_ignore.conf:\n{{ _lm_sensors_ignore.content | b64decode }}"
+
+- name: _verify | Read the deployed libsensors limits file
+  slurp:
+    path: /etc/sensors.d/zz_homelab_limits.conf
+  register: _lm_sensors_limits
+  become: true
+
+- name: _verify | Assert the limits file lists the fixture chip and set directive
+  vars:
+    _content: "{{ _lm_sensors_limits.content | b64decode }}"
+  assert:
+    that:
+      - "'chip \"lm-sensors-test-0\"' in _content"
+      - "'set temp1_max 95' in _content"
+    fail_msg: "deployed /etc/sensors.d/zz_homelab_limits.conf:\n{{ _lm_sensors_limits.content | b64decode }}"
 
 # install.yml uses policy_rc_d=101 so apt won't auto-start netdata; prod
 # starts it in netdata's main.yml after configuration. The test path skips
@@ -125,6 +143,7 @@
     lm_sensors_qemu_test_modules: []
     lm_sensors_qemu_test_relabel: []
     lm_sensors_qemu_test_ignore: []
+    lm_sensors_qemu_test_limits: []
 
 - name: _verify | Re-run the role's module-management tasks
   import_tasks: main.yml
@@ -139,6 +158,12 @@
   stat:
     path: /etc/sensors.d/zz_netdata_ignore.conf
   register: _lm_sensors_ignore_after
+  become: true
+
+- name: _verify | Stat the libsensors limits file after removal
+  stat:
+    path: /etc/sensors.d/zz_homelab_limits.conf
+  register: _lm_sensors_limits_after
   become: true
 
 - name: _verify | Check whether the dropped module is still loaded
@@ -159,10 +184,12 @@
     that:
       - not _lm_sensors_modload_after.stat.exists
       - not _lm_sensors_ignore_after.stat.exists
+      - not _lm_sensors_limits_after.stat.exists
       - _lm_sensors_dummy_loaded.rc != 0
       - not _lm_sensors_reboot_after.stat.exists
     fail_msg: >-
       empty-list removal arm: modules-load.d exists={{ _lm_sensors_modload_after.stat.exists }},
       sensors.d ignore exists={{ _lm_sensors_ignore_after.stat.exists }},
+      sensors.d limits exists={{ _lm_sensors_limits_after.stat.exists }},
       dummy still loaded={{ _lm_sensors_dummy_loaded.rc == 0 }},
       reboot-required exists={{ _lm_sensors_reboot_after.stat.exists }}

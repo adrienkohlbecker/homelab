@@ -13,12 +13,22 @@
 #                 libsensors reader (incl. netdata's chatty debugfs.plugin).
 #                 Shape: list of {chip: <glob>, features: [<feature>, ...]};
 #                 feature names per `sensors -u <chip>` (e.g. temp3).
-# noqa var-naming[no-role-prefix]: lm_sensors_modules/lm_sensors_relabel/lm_sensors_ignore
+# lm_sensors_limits: optional libsensors `set` list overriding chip alarm
+#                 limits that ship too conservative for our hardware (e.g. a
+#                 super-I/O channel whose default tempN_max sits below the
+#                 CPU's normal load temperature, flapping the kernel alarm bit
+#                 and netdata's debugfs.plugin). Writes /etc/sensors.d/ and is
+#                 applied with `sensors -s` (re-applied at boot by the
+#                 lm-sensors.service the package enables). Shape: list of
+#                 {chip: <name>, set: [{feature: <subfeature>, value: <num>}]};
+#                 subfeature names per `sensors -u <chip>` (e.g. temp7_max).
+# noqa var-naming[no-role-prefix]: lm_sensors_modules/lm_sensors_relabel/lm_sensors_ignore/lm_sensors_limits
 # are the established un-prefixed cross-host interface (set in host_vars), not
 # role-internal vars -- same exemption netdata's metrics installs use.
 lm_sensors_modules: []
 lm_sensors_relabel: []
 lm_sensors_ignore: []
+lm_sensors_limits: []
 
 lm_sensors_qemu_test_modules: "{{ ['dummy'] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
 lm_sensors_qemu_test_relabel: >-
@@ -26,4 +36,7 @@ lm_sensors_qemu_test_relabel: >-
      if (_role_under_test | default('')) == 'lm_sensors' else [] }}
 lm_sensors_qemu_test_ignore: >-
   {{ [{'chip': 'lm-sensors-test-0', 'features': ['temp2']}]
+     if (_role_under_test | default('')) == 'lm_sensors' else [] }}
+lm_sensors_qemu_test_limits: >-
+  {{ [{'chip': 'lm-sensors-test-0', 'set': [{'feature': 'temp1_max', 'value': 95}]}]
      if (_role_under_test | default('')) == 'lm_sensors' else [] }}

@@ -9,6 +9,30 @@
     lm_sensors_effective_ignore: >-
       {{ lm_sensors_qemu_test_ignore
          if (qemu_test | bool) else lm_sensors_ignore }}
+    lm_sensors_effective_limits: >-
+      {{ lm_sensors_qemu_test_limits
+         if (qemu_test | bool) else lm_sensors_limits }}
+  tags:
+    - lm_sensors
+
+- name: Assert lm_sensors_limits is well-formed
+  vars:
+    _limits: "{{ lm_sensors_effective_limits }}"
+    _sets: "{{ _limits | map(attribute='set', default=[]) | flatten }}"
+  assert:
+    that:
+      - _limits is sequence and _limits is not string
+      - _limits | selectattr('chip', 'undefined') | list | length == 0
+      - _limits | selectattr('set', 'undefined') | list | length == 0
+      - _sets | selectattr('feature', 'undefined') | list | length == 0
+      - _sets | selectattr('value', 'undefined') | list | length == 0
+      - _sets | rejectattr('feature', 'match', '^[a-z0-9_]+\Z') | list | length == 0
+      - _sets | map(attribute='value') | reject('match', '^-?[0-9]+(\.[0-9]+)?\Z') | list | length == 0
+    fail_msg: >-
+      lm_sensors_limits entries each need a `chip` and a `set` list of
+      {feature, value} dicts -- feature a hwmon subfeature name (lowercase
+      letters, digits, underscore -- e.g. temp7_max), value numeric.
+      Got: {{ _limits }}
   tags:
     - lm_sensors
 
@@ -192,6 +216,92 @@
   tags:
     - lm_sensors
 
+# Chip alarm-limit overrides (see the template header). `set` directives,
+# unlike `ignore`, must be pushed to the chip with `sensors -s`; the apply
+# task below does it live and the package's lm-sensors.service re-runs it at
+# boot (ensured enabled when limits are configured).
+- name: Write the libsensors limits overrides
+  when: lm_sensors_effective_limits | length > 0
+  template:
+    src: sensors_limits.conf.j2
+    dest: /etc/sensors.d/zz_homelab_limits.conf
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+    validate: grep -qE '^[[:space:]]*set[[:space:]]' %s
+  register: lm_sensors_limits_file
+  become: true
+  tags:
+    - lm_sensors
+
+# Removing the file stops it being re-applied at the next boot; the live chip
+# keeps the last-set limit until then (libsensors has no record of the factory
+# default to restore), which is harmless -- a raised threshold simply persists
+# one more boot.
+- name: Remove the libsensors limits overrides when empty
+  when: lm_sensors_effective_limits | length == 0
+  file:
+    path: /etc/sensors.d/zz_homelab_limits.conf
+    state: absent
+  register: lm_sensors_limits_removed
+  become: true
+  tags:
+    - lm_sensors
+
+# The lm-sensors package ships lm-sensors.service (runs `sensors -s` at boot)
+# on prod (amd64); the arm64 test box's build omits the unit. Probe for it so
+# the enable is a no-op where the unit is absent rather than failing -- those
+# hosts have no real chip to persist limits for anyway, and the live apply
+# below still covers the current boot.
+- name: Check whether lm-sensors.service exists  # noqa: command-instead-of-module
+  command: systemctl list-unit-files lm-sensors.service
+  register: lm_sensors_unit
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - lm_sensors
+
+- name: Ensure lm-sensors.service is enabled to re-apply limits at boot
+  when:
+    - lm_sensors_effective_limits | length > 0
+    - "'lm-sensors.service' in lm_sensors_unit.stdout"
+  systemd:
+    name: lm-sensors.service
+    enabled: true
+  become: true
+  tags:
+    - lm_sensors
+
+# `sensors -s` errors ("No sensors found", rc 1) on a host with no hwmon chip
+# -- the arm64 test box exposes none. Gate the apply on a real chip being
+# present so the box skips cleanly; where chips exist a non-zero rc is a
+# genuine config parse error and should fail the converge.
+- name: Detect whether any hwmon chip is present
+  find:
+    paths: /sys/class/hwmon
+    patterns: hwmon*
+    file_type: any
+  register: lm_sensors_hwmon
+  become: true
+  tags:
+    - lm_sensors
+
+# `sensors -s` evaluates every /etc/sensors.d `set` directive against the
+# detected chips, pushing the new limits to sysfs. Run only when the file
+# changed so converges stay quiet.
+- name: Apply the libsensors limits live
+  when:
+    - lm_sensors_limits_file.changed | default(false)
+    - lm_sensors_hwmon.matched | int > 0
+  command: sensors -s
+  changed_when: true
+  become: true
+  tags:
+    - lm_sensors
+
 # debugfs.plugin reads libsensors once at startup, so a live change needs a
 # netdata restart to be picked up. Only when netdata is already running -- in
 # the role's standalone test converge netdata is installed but not yet started
@@ -207,9 +317,13 @@
   tags:
     - lm_sensors
 
-- name: Restart netdata to re-read the sensor ignore list
+- name: Restart netdata to re-read the sensor ignore list and limits
   when:
-    - (lm_sensors_ignore_file.changed | default(false)) or (lm_sensors_ignore_removed.changed | default(false))
+    - >-
+      (lm_sensors_ignore_file.changed | default(false))
+      or (lm_sensors_ignore_removed.changed | default(false))
+      or (lm_sensors_limits_file.changed | default(false))
+      or (lm_sensors_limits_removed.changed | default(false))
     - lm_sensors_netdata_active.rc == 0
   systemd:
     name: netdata
