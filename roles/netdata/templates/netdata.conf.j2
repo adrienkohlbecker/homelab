@@ -10,26 +10,33 @@
 
 [web]
 bind to = 127.0.0.1
-# The nginx vhost fronts netdata with an Authelia bypass keyed on a shared
-# cross-host poll token (see "Configure nginx" in main.yml). nginx proxies from
-# loopback, so netdata's default `allow {management,netdata.conf} from =
-# localhost` would let any token-bearer reach the management API (silence
-# alarms) and dump the full config. Deny both -- nothing legitimate fetches
-# them through the proxy (the operator reads them on-host).
+# netdata's bind is loopback-only, so every peer is 127.0.0.1 (nginx proxies from
+# localhost -- see "Configure nginx" in main.yml). Pin `... by dns = no` on every
+# ACL so netdata never reverse-resolves a peer. Its default DNS decision is
+# `heuristic`, which runs a reverse+forward (FCrDNS) lookup on any access list
+# that isn't purely IP/subnet. The load-bearing pair is management/netdata.conf
+# below: their `none` pattern matches no IP, so on every connection netdata falls
+# through to the DNS check, reverse-resolves 127.0.0.1 to `localhost` (via
+# /etc/hosts), and -- localhost having no DNS record -- logs `LISTENER: Cannot
+# validate 'localhost' as ip of 'localhost', not listed in DNS` (~16k/day on fox,
+# one per poll). The `*` lists short-circuit on the IP match before any lookup,
+# but carry `by dns = no` too for uniformity.
+#
+# management/netdata.conf stay `none`: the nginx vhost fronts netdata with an
+# Authelia bypass keyed on a shared cross-host poll token, so a token-bearer must
+# not be able to reach the management API (silence alarms) or dump the full config
+# (netdata.conf). Nothing legitimate fetches them through the proxy -- the
+# operator reads them on-host.
 allow management from = none
+allow management by dns = no
 allow netdata.conf from = none
-# The compiled defaults for the connection/dashboard/badges ACLs all carry the
-# literal name `localhost` (`allow connections from = localhost *`, likewise
-# `allow dashboard from` and `allow badges from`), so netdata reverse-DNS-
-# validates against it on every request the ACL gates; 127.0.0.1 has no PTR, so
-# it logs `LISTENER: Cannot validate 'localhost' ...` on each scrape (~24k/day
-# on lab). Overriding only `connections` leaves the per-endpoint dashboard/api
-# scrape path (gated by `allow dashboard from`) still emitting it, so drop the
-# name token from all three -- `*` is safe because `bind to` above is loopback-
-# only -- and no DNS validation is attempted anywhere.
+allow netdata.conf by dns = no
 allow connections from = *
+allow connections by dns = no
 allow dashboard from = *
+allow dashboard by dns = no
 allow badges from = *
+allow badges by dns = no
 
 # v2 moved access logging out of [global] into [logs]; `[global] access log` is
 # silently ignored, re-enabling the file. Accesses are logged by nginx.
