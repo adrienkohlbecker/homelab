@@ -167,7 +167,7 @@
       - tailscale_input_pkts | int >= 1
       - tailscale_forward_pkts | int >= 1
       - tailscale_underlay_pkts | int >= 1
-      - tailscale_lan_pkts | int >= 1
+      - tailscale_lan_pkts | int >= 2  # two probes: wireguard-source + mac_mgmt path
     fail_msg: >-
       Counter-based probes didn't fire all expected rules: non-SYN
       (input/forward), podman direct cross-network isolation,
@@ -176,7 +176,8 @@
       accepted a wg0-ingress packet (vrrp_pkts > 0); OR an INPUT
       accept rule failed to fire (SSH/HTTP/HTTPS, admin samba/nut,
       Authelia WG, podman-pool nut, Tailscale input/forward/underlay,
-      Tailscale LAN-direct (wireguard-source), loopback, icmp accept, or
+      Tailscale LAN-direct (needs both wireguard-source and mac_mgmt
+      probes, >= 2), loopback, icmp accept, or
       Transmission WAN ingress; OR mDNS
       accepted a non-home fixture packet.
       Either a rule is missing, the probe didn't reach the chain, or

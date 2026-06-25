@@ -252,11 +252,15 @@ table inet homelab {
         # host's tailscaled underlay for a direct path instead of relaying via
         # fox's DERP. tailscaled binds 0.0.0.0, so a LAN peer probes every
         # endpoint this host advertises -- including the mgmt macvlan IP, whose
-        # packets ingress on mac_mgmt (not $WAN_IFACE), so the WAN rule above
-        # misses them (observed as SRC=<home LAN> DPT={{ tailscale_port }} drops
-        # to the mac_mgmt address). lan_admin_pairs scopes to (WAN/mac_mgmt .
-        # HOME_LAN) + (wg0 . WG_SUBNET) -- the same L2-trust boundary mosh/samba
-        # use -- so a future untrusted VLAN still can't reach it.
+        # packets ingress on mac_mgmt (not $WAN_IFACE), so the broad WAN rule
+        # above misses them (observed as SRC=<home LAN> DPT={{ tailscale_port }}
+        # drops to the mac_mgmt address). This rule covers those non-WAN paths:
+        # lan_admin_pairs scopes the accept to (mac_mgmt . HOME_LAN) +
+        # (wg0 . WG_SUBNET) -- the same L2-trust boundary mosh/samba use -- so a
+        # future untrusted VLAN, arriving on its own iface, still can't reach it.
+        # (WAN-iface ingress is already accepted unconditionally by the underlay
+        # rule above, so the WAN . HOME_LAN pair in the set is moot for this
+        # dport -- it carries the boundary only for mosh/samba/nut.)
         iifname . ip saddr @lan_admin_pairs udp dport {{ tailscale_port }} counter name "tailscale_lan_accept" accept comment "tailscale direct endpoint (LAN/wireguard peers)"
 {% endif %}
 
