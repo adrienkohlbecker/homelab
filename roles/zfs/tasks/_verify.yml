@@ -24,20 +24,23 @@
 
 # --- Root dataset autobackup property ---
 
-- name: _verify | Read autobackup:bak on root dataset
+- name: _verify | Read autobackup:bak value+source on root dataset
   when: zfs_root
-  command: zfs get -H -o value autobackup:bak rpool/ROOT/{{ ansible_distribution_release }}
+  command: zfs get -H -o value,source autobackup:bak rpool/ROOT/{{ ansible_distribution_release }}
   register: _zfs_verify_autobackup
   changed_when: false
   become: true
 
-- name: _verify | Root dataset autobackup:bak is set
+# Value AND source must be right: zfs-autobackup's picker filters `-s local`, so
+# an autobackup:bak=true left inherited or `received` (after a DR `zfs recv`)
+# reads back true yet never gets snapshotted. Assert source=local, not just true.
+- name: _verify | Root dataset autobackup:bak is true with a local source
   when: zfs_root
   assert:
-    that: _zfs_verify_autobackup.stdout | trim == "true"
+    that: (_zfs_verify_autobackup.stdout | trim).split() == ["true", "local"]
     fail_msg: >-
       autobackup:bak on rpool/ROOT/{{ ansible_distribution_release }} is
-      {{ _zfs_verify_autobackup.stdout | trim }}, expected true.
+      "{{ _zfs_verify_autobackup.stdout | trim }}", expected value=true source=local.
 
 # --- Zed service ---
 
