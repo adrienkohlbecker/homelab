@@ -171,3 +171,165 @@
     fail_msg: >-
       zfs_backup_local created no @bak- snapshot on rpool/zfs_autobackup_test
       ({{ zfs_autobackup_verify_snaps.stdout }})
+
+# Functional check for zfs_backup_offsite's change-gate. With a marker recording
+# the latest snapshot and nothing written since, the script must skip before any
+# rsync; once a write bumps written@, it must proceed to the transfer. bunk is
+# unreachable from the fixture, so the no-skip path targets an unresolvable host
+# and we assert it reached the rsync stage (the f_trace banner), not its outcome.
+- name: _verify | Latest bak snapshot on the offsite-gate dataset
+  shell: set -euo pipefail; zfs list -t snapshot -o name -s creation -r rpool/zfs_autobackup_offsite_test | awk -F@ '/@bak-/ {s=$2} END {print s}'
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: zfs_autobackup_verify_gate_snap
+  become: true
+
+- name: _verify | A bak snapshot exists to gate against
+  assert:
+    that:
+      - zfs_autobackup_verify_gate_snap.stdout | length > 0
+    fail_msg: "no @bak- snapshot on rpool/zfs_autobackup_offsite_test to seed the gate marker"
+
+- name: _verify | Seed the offsite marker (simulate a prior successful sync)
+  copy:
+    dest: /var/lib/zfs_backup_offsite/rpool_zfs_autobackup_offsite_test
+    content: "{{ zfs_autobackup_verify_gate_snap.stdout }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify | Offsite gate skips an unchanged dataset (written=0)
+  command: /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_test
+  changed_when: false
+  register: zfs_autobackup_verify_gate_skip
+  become: true
+
+- name: _verify | Skip path exited cleanly without attempting rsync
+  assert:
+    that:
+      - "'skipping offsite sync' in zfs_autobackup_verify_gate_skip.stdout"
+      - "'rsync' not in zfs_autobackup_verify_gate_skip.stdout"
+    fail_msg: >-
+      offsite gate did not skip an unchanged dataset
+      (stdout={{ zfs_autobackup_verify_gate_skip.stdout }})
+
+# Monthly reconciliation: even with nothing written since the marker snapshot,
+# a marker older than 30 days must fall through to a full rsync (re-verifying the
+# tree against bunk). Age the marker's mtime past the threshold and confirm the
+# gate no longer short-circuits. The dataset is still unchanged here, so reaching
+# rsync can only be the mtime branch, not a real write.
+- name: _verify | Age the marker past the 30-day reconciliation threshold
+  command: touch -d "40 days ago" /var/lib/zfs_backup_offsite/rpool_zfs_autobackup_offsite_test
+  changed_when: false
+  become: true
+
+- name: _verify | Offsite gate reconciles an unchanged dataset with a stale marker
+  command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_test
+  changed_when: false
+  failed_when: false
+  register: zfs_autobackup_verify_gate_reconcile
+  become: true
+
+- name: _verify | Stale-marker dataset reconciles to a full rsync
+  assert:
+    that:
+      - "'skipping offsite sync' not in zfs_autobackup_verify_gate_reconcile.stdout"
+      - "'rsync' in zfs_autobackup_verify_gate_reconcile.stdout"
+    fail_msg: >-
+      offsite gate failed to reconcile an unchanged dataset with a >30d marker
+      (rc={{ zfs_autobackup_verify_gate_reconcile.rc }},
+      stdout={{ zfs_autobackup_verify_gate_reconcile.stdout }})
+
+# Restore a fresh-mtime marker so the change test below exercises the written@
+# branch, not the stale-mtime fallthrough just aged above.
+- name: _verify | Re-seed the offsite marker with a current mtime
+  copy:
+    dest: /var/lib/zfs_backup_offsite/rpool_zfs_autobackup_offsite_test
+    content: "{{ zfs_autobackup_verify_gate_snap.stdout }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify | Change the dataset so written@ is no longer zero
+  copy:
+    dest: /mnt/zfs_autobackup_offsite_test/changed.txt
+    content: "changed\n"
+    mode: "0644"
+  become: true
+
+# written@ only reflects data once its txg commits (~5s cadence); the copy
+# above lands in an open txg, so force a sync before checking. Test-only race:
+# in prod the gate compares against a prior day's long-committed snapshot.
+- name: _verify | Commit the write to a txg so written@ reflects it
+  command: zpool sync rpool
+  changed_when: false
+  become: true
+
+- name: _verify | Offsite gate does NOT skip after a change
+  command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_test
+  changed_when: false
+  failed_when: false
+  register: zfs_autobackup_verify_gate_nochange
+  become: true
+
+- name: _verify | Changed dataset passes the gate and reaches the rsync stage
+  assert:
+    that:
+      - "'skipping offsite sync' not in zfs_autobackup_verify_gate_nochange.stdout"
+      - "'rsync' in zfs_autobackup_verify_gate_nochange.stdout"
+    fail_msg: >-
+      offsite gate failed to proceed to rsync after a change
+      (rc={{ zfs_autobackup_verify_gate_nochange.rc }},
+      stdout={{ zfs_autobackup_verify_gate_nochange.stdout }})
+
+# Regression guard for the gate/mount ordering: the change-gate must never
+# short-circuit the mount check. Seed a marker that WOULD skip (a fresh snapshot
+# with nothing written since, recent mtime), then unmount the dataset. A correct
+# script validates the mount first and fails loudly; a gate-before-mount order
+# would skip an unmounted dataset and report a phantom up-to-date backup.
+- name: _verify | Snapshot the offsite-gate dataset for the unmount test
+  command: zfs snapshot rpool/zfs_autobackup_offsite_test@bak-verify-unmount
+  changed_when: true
+  become: true
+
+- name: _verify | Seed a would-skip marker (fresh snapshot, written=0, current mtime)
+  copy:
+    dest: /var/lib/zfs_backup_offsite/rpool_zfs_autobackup_offsite_test
+    content: "bak-verify-unmount\n"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify | Unmount the offsite-gate dataset
+  command: zfs unmount rpool/zfs_autobackup_offsite_test
+  changed_when: true
+  become: true
+
+- name: _verify | Run the offsite script against the unmounted dataset
+  command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_test
+  changed_when: false
+  failed_when: false
+  register: zfs_autobackup_verify_gate_unmounted
+  become: true
+
+- name: _verify | Unmounted dataset fails the mount check instead of skipping
+  assert:
+    that:
+      - zfs_autobackup_verify_gate_unmounted.rc != 0
+      - "'skipping offsite sync' not in zfs_autobackup_verify_gate_unmounted.stdout"
+    fail_msg: >-
+      offsite gate did not fail on an unmounted dataset
+      (rc={{ zfs_autobackup_verify_gate_unmounted.rc }},
+      stdout={{ zfs_autobackup_verify_gate_unmounted.stdout }},
+      stderr={{ zfs_autobackup_verify_gate_unmounted.stderr }})
+
+# Remount so the role's _verify is re-runnable against a --keep VM (the skip and
+# reconcile tasks above require the dataset mounted).
+- name: _verify | Remount the offsite-gate dataset
+  command: zfs mount rpool/zfs_autobackup_offsite_test
+  changed_when: true
+  become: true
