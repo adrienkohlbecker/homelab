@@ -28,6 +28,26 @@
   failed_when: '"Activating recovery mode" in _homeassistant_recovery_mode.stdout'
   become: true
 
+# A malformed notify platform (e.g. bad SMTP config or a password that broke
+# YAML quoting) makes HA log "Invalid config for 'notify'" and silently drop the
+# platform WITHOUT entering recovery mode -- so the checks above pass while
+# notify.email never registers. Assert no notify config error in this boot.
+- name: _verify | Homeassistant loaded the notify config without error
+  command:
+    argv:
+      - journalctl
+      - -u
+      - homeassistant
+      - -b
+      - --no-pager
+      - --grep=Invalid config for .notify
+  register: _homeassistant_notify_config
+  changed_when: false
+  # journalctl --grep prints "-- No entries --" (and exits 1) when nothing
+  # matches, so match the message text rather than testing stdout length.
+  failed_when: '"Invalid config" in _homeassistant_notify_config.stdout'
+  become: true
+
 # Functional probe of HA itself. /manifest.json is the same endpoint
 # the unit's --health-cmd polls, so a 200 here proves the container
 # is serving on the published port -- not just that systemd called it

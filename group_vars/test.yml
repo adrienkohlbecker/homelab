@@ -247,6 +247,9 @@ nexus_encryption_iv: changeme
 nexus_jvm_params: -Xms512M -Xmx1G -XX:MaxDirectMemorySize=512m
 spouse_firstname: changeme
 udm_dns_failover_heartbeat_url: http://127.0.0.1:9/api/push/box-test
+homeassistant_smtp_from: changeme@example.com
+homeassistant_smtp_user: changeme@example.com
+homeassistant_smtp_password: changeme
 
 minio_users:
   - access_key: test

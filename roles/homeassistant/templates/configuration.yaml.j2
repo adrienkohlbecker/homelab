@@ -47,6 +47,23 @@ notify:
     services:
       - service: mobile_app_adriens_iphone
       - service: mobile_app_iphone_de_{{ spouse_firstname }}
+  # notify.email -> SMTP via the shared Mailgun relay (smtp_host/smtp_port),
+  # per-service sender/credentials (homeassistant_smtp_*), delivered to
+  # root_email. Consumed by the "Daikin - Email on active fault" automation.
+  # The password is the only secret here, so it lives in secrets.yaml (rendered
+  # by the role) and is pulled in via !secret. starttls because the relay
+  # submission port is 587.
+  - platform: smtp
+    name: email
+    server: {{ smtp_host }}
+    port: {{ smtp_port }}
+    encryption: starttls
+    sender: {{ homeassistant_smtp_from }}
+    sender_name: Home Assistant
+    username: {{ homeassistant_smtp_user }}
+    password: !secret homeassistant_smtp_password
+    recipient:
+      - {{ root_email }}
 
 recorder:
   db_url: sqlite:////config/db/home-assistant_v2.db
