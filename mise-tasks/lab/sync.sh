@@ -21,19 +21,19 @@ dest="${usage_dest}"
 #  --exclude /out.log /vault.sh  -> local-only files .gitignore does not cover.
 #  --delete                      -> the remote is a throwaway mirror; prune stale.
 rsync_args=(
-	-vah --progress --delete
-	--exclude="/out.log" --exclude="/vault.sh"
-	--filter="dir-merge,- .gitignore"
+  -vah --progress --delete
+  --exclude="/out.log" --exclude="/vault.sh"
+  --filter="dir-merge,- .gitignore"
 )
 if [ "${usage_dry_run:-false}" = "true" ]; then
-	rsync_args+=(--dry-run)
-	echo "==> DRY RUN: previewing sync to ${host}:${dest} (nothing will be written)"
+  rsync_args+=(--dry-run)
+  echo "==> DRY RUN: previewing sync to ${host}:${dest} (nothing will be written)"
 fi
 
 rsync "${rsync_args[@]}" . "${host}:${dest}"
 
 if [ "${usage_dry_run:-false}" != "true" ]; then
-	cat <<EOF
+  cat <<EOF
 
 ==> Synced to ${host}:${dest}. To bake fox's image there (see notes/runbooks/fox_rebuild.md):
     ssh ${host}
