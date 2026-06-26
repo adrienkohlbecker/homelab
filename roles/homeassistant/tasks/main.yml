@@ -170,6 +170,39 @@
 # (key missing) both parse fine here -- the stub returns None and YAML
 # is structurally valid. HA's own schema + integration loaders catch
 # those at startup, where they're loud but post-deploy.
+- name: Assert SMTP notify inputs are set
+  assert:
+    that:
+      - homeassistant_smtp_from | default('') | length > 0
+      - homeassistant_smtp_user | default('') | length > 0
+      - homeassistant_smtp_password | default('') | length > 0
+    fail_msg: >-
+      homeassistant_smtp_from/user/password must be set (host_vars/group_vars) --
+      they render the notify.email SMTP platform in configuration.yaml.
+  tags:
+    - homeassistant
+
+# The SMTP password is the only secret in configuration.yaml, so it goes through
+# HA's secrets.yaml (referenced as `!secret homeassistant_smtp_password`) rather
+# than being inlined. lineinfile (not template) so any other keys an operator or
+# integration placed in secrets.yaml are preserved -- this role owns only its own
+# key. create: true seeds the file on a fresh host before HA first reads it.
+- name: Render homeassistant SMTP password into secrets.yaml
+  lineinfile:
+    path: /mnt/services/homeassistant/secrets.yaml
+    regexp: '^homeassistant_smtp_password:'
+    line: "homeassistant_smtp_password: {{ homeassistant_smtp_password | to_json }}"
+    create: true
+    owner: homeassistant
+    group: homeassistant
+    mode: "0600"
+    backup: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
+  register: homeassistant_secrets
+  become: true
+  tags:
+    - homeassistant
+
 - name: Configure homeassistant
   template:
     src: configuration.yaml.j2
@@ -414,7 +447,7 @@
     systemd_unit_args:
       src: homeassistant
       condition: "{{ not (ansible_check_mode and (homeassistant_service_result.changed or homeassistant_user.changed)) }}"
-      restart: "{{ homeassistant_service_result.changed or homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_route_script.changed }}"
+      restart: "{{ homeassistant_service_result.changed or homeassistant_conf.changed or homeassistant_secrets.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_route_script.changed }}"
   tags:
     - homeassistant
 
