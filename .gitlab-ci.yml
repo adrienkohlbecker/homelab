@@ -417,6 +417,27 @@ qemu_host_ami:
           - UBUNTU: [ '$[[ matrix.UBUNTU ]]' ]
       artifacts: false
 
+# Scheduled-pipeline status guard. A schedule runs only the reaper (every code
+# job is when:never for the schedule source), so without this it is green
+# regardless of master's real test state -- flipping the branch badge green and
+# firing GitLab's "Pipeline fixed" email even when the last full test failed.
+# This job mirrors the branch's last full-test verdict onto the scheduled
+# pipeline (red unless that test was green), so a schedule can never manufacture
+# a spurious "fixed". Schedule-only and runs on the cheap hosted pool; it only
+# queries the GitLab API (CI_JOB_TOKEN), no qemu/AWS. NOT allow_failure -- that
+# would zero its effect on the pipeline status and defeat the whole point.
+schedule_status_guard:
+  stage: prepare
+  extends: .hosted
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_REF_PROTECTED == "true"
+  tags:
+    - saas-linux-small-amd64
+  timeout: 10m
+  script:
+    - mise run ci:bootstrap
+    - mise run ci:schedule-guard
+
 # Semantic cleanup for nested-qemu image bundles in S3. Bucket lifecycle handles
 # multipart leftovers and noncurrent versions; this job reads the promoted.json
 # pointer object and deletes old immutable build prefixes without touching promoted
