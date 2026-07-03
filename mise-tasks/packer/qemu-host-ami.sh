@@ -79,6 +79,49 @@ bake_backstop_disarm() {
   aws --region "$region" scheduler delete-schedule --name "$schedule_name" >/dev/null 2>&1 || true
 }
 
+# Keep only the newest two AMIs in this category (same Name tag), deleting the
+# older builds and their ~40GB backing snapshots so stale images don't bill.
+# The currently-promoted AMI is never pruned even if it falls outside the
+# newest two, since the launch template still selects it via SSM.
+prune_old_amis() {
+  local name_tag="homelab-ci-qemu-host-${ubuntu}" promoted stale image_id snaps sid
+  promoted=$(aws --region "$region" ssm get-parameter \
+    --name "/homelab-ci/ami/qemu-host/${ubuntu}" \
+    --query Parameter.Value --output text 2>/dev/null || true)
+
+  stale=$(aws --region "$region" ec2 describe-images --owners self \
+    --filters "Name=tag:Name,Values=${name_tag}" \
+    --query 'Images[].[ImageId,CreationDate]' --output json |
+    python3 -c '
+import json, sys
+keep, promoted = 2, sys.argv[1]
+imgs = sorted(json.load(sys.stdin), key=lambda x: x[1], reverse=True)
+survivors = {image_id for image_id, _ in imgs[:keep]} | {promoted}
+for image_id, _ in imgs[keep:]:
+    if image_id not in survivors:
+        print(image_id)
+' "$promoted")
+
+  if [ -z "$stale" ]; then
+    echo "==> Prune: nothing to remove (<= 2 AMIs in ${name_tag})"
+    return 0
+  fi
+
+  while IFS= read -r image_id; do
+    [ -n "$image_id" ] || continue
+    snaps=$(aws --region "$region" ec2 describe-images --owners self \
+      --image-ids "$image_id" \
+      --query 'Images[].BlockDeviceMappings[].Ebs.SnapshotId' --output text 2>/dev/null || true)
+    echo "==> Prune: deregistering ${image_id}"
+    aws --region "$region" ec2 deregister-image --image-id "$image_id" >/dev/null 2>&1 || true
+    for sid in $snaps; do
+      [ "$sid" = "None" ] && continue
+      echo "==> Prune: deleting snapshot ${sid}"
+      aws --region "$region" ec2 delete-snapshot --snapshot-id "$sid" >/dev/null 2>&1 || true
+    done
+  done <<<"$stale"
+}
+
 case "$ubuntu" in
 noble) ;;
 *)
@@ -145,3 +188,5 @@ else
   echo "==> Candidate AMI: ${ami}"
   echo "    Promote: aws --region ${region} ssm put-parameter --name ${param} --type String --data-type aws:ec2:image --value ${ami} --overwrite"
 fi
+
+prune_old_amis
