@@ -23,14 +23,25 @@ snapshots (a snapshot not backing any live AMI, the classic
 deregister/interrupted-packer leftover). Account-global S3 is checked too; the
 qemu image bundle bucket is expected, while any other bucket is drift.
 
-It NEVER mutates. For each orphaned snapshot it prints the exact
-`aws ec2 delete-snapshot` line for the operator to review and run by hand.
+Owned AMIs are also held to a retention rule: only the newest
+AMI_RETAIN_PER_CATEGORY builds per category are legitimate; each category is a
+group of AMIs sharing a `Name` tag (packer stamps every qemu-host build with a
+stable `homelab-ci-qemu-host-<ubuntu>` Name, so the current sole category is
+`homelab-ci-qemu-host-noble`). Any AMI beyond the newest N in its category is a
+stray -- it and its ~40GB backing snapshot bill for nothing -- and its
+deregister-then-delete-snapshot lines are emitted.
+
+It NEVER mutates. For each stray AMI and orphaned snapshot it prints the exact
+`aws ec2 deregister-image` / `aws ec2 delete-snapshot` lines for the operator
+to review and run by hand.
 
 Exposed as ci:audit-aws. Exits 1 if any anomaly is found, 0 when clean, so it
 can double as a periodic check.
 """
 
+import re
 import sys
+from collections import defaultdict
 
 import boto3
 from botocore.config import Config
@@ -41,6 +52,8 @@ from botocore.exceptions import ClientError
 # read as "no resources" -- exactly the false-clean an audit must avoid.
 CFG = Config(retries={"max_attempts": 10, "mode": "adaptive"})
 EXPECTED_GLOBAL_S3_BUCKETS = {"homelab-ci-images"}
+# Newest N builds kept per AMI category (same Name tag); older ones are strays.
+AMI_RETAIN_PER_CATEGORY = 2
 
 anomalies: list[str] = []  # human-readable lines, one per unexpected resource
 deletes: list[str] = []  # suggested cleanup commands (never executed here)
@@ -63,6 +76,23 @@ def safe(label, fn, default=None):
         return default if default is not None else []
 
 
+def ami_category(im):
+    """Retention bucket for an AMI. AMIs sharing a `Name` tag are one category
+    (packer stamps each qemu-host build with a stable Name like
+    homelab-ci-qemu-host-noble); untagged images fall back to their AMI name
+    with a trailing -<timestamp> stripped so sibling builds still bucket together."""
+    tag = next((t["Value"] for t in im.get("Tags", []) if t["Key"] == "Name"), None)
+    return tag or re.sub(r"-\d+$", "", im.get("Name", im["ImageId"]))
+
+
+def snapshot_ids(im):
+    return [
+        bdm["Ebs"]["SnapshotId"]
+        for bdm in im.get("BlockDeviceMappings", [])
+        if "Ebs" in bdm and "SnapshotId" in bdm["Ebs"]
+    ]
+
+
 def sweep_region(region):
     ec2 = client("ec2", region)
 
@@ -79,10 +109,14 @@ def sweep_region(region):
 
     anomalies.extend(
         f"[{region}] EBS volume {v['VolumeId']} ({v['Size']}GB, {v['State']})"
-        for v in safe(f"{region} volumes", lambda: ec2.describe_volumes().get("Volumes", []))
+        for v in safe(
+            f"{region} volumes", lambda: ec2.describe_volumes().get("Volumes", [])
+        )
     )
 
-    for a in safe(f"{region} addresses", lambda: ec2.describe_addresses().get("Addresses", [])):
+    for a in safe(
+        f"{region} addresses", lambda: ec2.describe_addresses().get("Addresses", [])
+    ):
         assoc = a.get("InstanceId") or a.get("AssociationId") or "UNASSOCIATED"
         anomalies.append(f"[{region}] Elastic IP {a['PublicIp']} ({assoc})")
 
@@ -111,7 +145,11 @@ def sweep_region(region):
         f"[{region}] load balancer {lb['LoadBalancerName']} ({lb['Type']})"
         for lb in safe(
             f"{region} elbv2",
-            lambda: client("elbv2", region).describe_load_balancers().get("LoadBalancers", []),
+            lambda: (
+                client("elbv2", region)
+                .describe_load_balancers()
+                .get("LoadBalancers", [])
+            ),
         )
     )
 
@@ -119,7 +157,11 @@ def sweep_region(region):
         f"[{region}] classic ELB {lb['LoadBalancerName']}"
         for lb in safe(
             f"{region} elb-classic",
-            lambda: client("elb", region).describe_load_balancers().get("LoadBalancerDescriptions", []),
+            lambda: (
+                client("elb", region)
+                .describe_load_balancers()
+                .get("LoadBalancerDescriptions", [])
+            ),
         )
     )
 
@@ -127,7 +169,9 @@ def sweep_region(region):
         f"[{region}] RDS instance {db['DBInstanceIdentifier']} ({db['DBInstanceClass']})"
         for db in safe(
             f"{region} rds",
-            lambda: client("rds", region).describe_db_instances().get("DBInstances", []),
+            lambda: (
+                client("rds", region).describe_db_instances().get("DBInstances", [])
+            ),
         )
     )
 
@@ -141,37 +185,78 @@ def sweep_region(region):
         lambda: ec2.describe_snapshots(OwnerIds=["self"]).get("Snapshots", []),
     )
 
-    referenced = {
-        bdm["Ebs"]["SnapshotId"]
-        for im in images
-        for bdm in im.get("BlockDeviceMappings", [])
-        if "Ebs" in bdm and "SnapshotId" in bdm["Ebs"]
-    }
+    # Retention: within each category keep the newest N by CreationDate; the
+    # rest are strays. Only *retained* AMIs protect their backing snapshots --
+    # a stray AMI's snapshot is cleaned up alongside the deregister below.
+    by_category = defaultdict(list)
+    for im in images:
+        by_category[ami_category(im)].append(im)
+    retained, strays = [], []
+    for group in by_category.values():
+        group.sort(key=lambda im: im["CreationDate"], reverse=True)
+        retained.extend(group[:AMI_RETAIN_PER_CATEGORY])
+        strays.extend(group[AMI_RETAIN_PER_CATEGORY:])
+
+    referenced = {sid for im in retained for sid in snapshot_ids(im)}
+    stray_backed = {sid for im in strays for sid in snapshot_ids(im)}
+
     if images or snaps:
-        expected.append(f"[{region}] {len(images)} owned AMIs + {len(referenced)} backing snapshots")
+        expected.append(
+            f"[{region}] {len(retained)} retained AMIs + {len(referenced)} backing snapshots"
+        )
+
+    for im in strays:
+        anomalies.append(
+            f"[{region}] stray AMI {im['ImageId']} "
+            f"({ami_category(im)}, {im['CreationDate'][:10]}) "
+            f"-- beyond newest {AMI_RETAIN_PER_CATEGORY} in category"
+        )
+        # Deregister must precede snapshot deletion (the AMI still references it).
+        deletes.append(
+            f"aws ec2 deregister-image --region {region} --image-id {im['ImageId']}"
+        )
+        deletes.extend(
+            f"aws ec2 delete-snapshot --region {region} --snapshot-id {sid}"
+            for sid in snapshot_ids(im)
+        )
+
     for s in snaps:
-        if s["SnapshotId"] not in referenced:
-            name = next((t["Value"] for t in s.get("Tags", []) if t["Key"] == "Name"), "")
-            anomalies.append(
-                f"[{region}] orphan snapshot {s['SnapshotId']} "
-                f"({s['VolumeSize']}GB, {s['StartTime']:%Y-%m-%d}, "
-                f"{name or s.get('Description', '')[:40]!r}) -- backs no AMI"
-            )
-            deletes.append(f"aws ec2 delete-snapshot --region {region} --snapshot-id {s['SnapshotId']}")
+        # Snapshots behind a stray AMI are already covered by its deregister
+        # sequence above; only flag snapshots that back no AMI at all.
+        if s["SnapshotId"] in referenced or s["SnapshotId"] in stray_backed:
+            continue
+        name = next((t["Value"] for t in s.get("Tags", []) if t["Key"] == "Name"), "")
+        anomalies.append(
+            f"[{region}] orphan snapshot {s['SnapshotId']} "
+            f"({s['VolumeSize']}GB, {s['StartTime']:%Y-%m-%d}, "
+            f"{name or s.get('Description', '')[:40]!r}) -- backs no AMI"
+        )
+        deletes.append(
+            f"aws ec2 delete-snapshot --region {region} --snapshot-id {s['SnapshotId']}"
+        )
 
 
 def main():
     ident = client("sts", "eu-central-1").get_caller_identity()
-    print(f"== AWS CI account audit — account {ident['Account']} as {ident['Arn']} ==\n")
+    print(
+        f"== AWS CI account audit — account {ident['Account']} as {ident['Arn']} ==\n"
+    )
 
-    regions = [r["RegionName"] for r in client("ec2", "eu-central-1").describe_regions()["Regions"]]
-    print(f"sweeping {len(regions)} regions for billable strays + orphaned snapshots...")
+    regions = [
+        r["RegionName"]
+        for r in client("ec2", "eu-central-1").describe_regions()["Regions"]
+    ]
+    print(
+        f"sweeping {len(regions)} regions for billable strays + orphaned snapshots..."
+    )
     for region in regions:
         sweep_region(region)
 
     # Account-global: S3 (terraform state is in MinIO; only CI image bundles
     # live in AWS S3).
-    for b in safe("s3", lambda: client("s3", "eu-central-1").list_buckets().get("Buckets", [])):
+    for b in safe(
+        "s3", lambda: client("s3", "eu-central-1").list_buckets().get("Buckets", [])
+    ):
         if b["Name"] in EXPECTED_GLOBAL_S3_BUCKETS:
             expected.append(f"[global] S3 bucket {b['Name']}")
         else:
