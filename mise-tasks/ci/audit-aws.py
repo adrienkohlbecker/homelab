@@ -109,14 +109,10 @@ def sweep_region(region):
 
     anomalies.extend(
         f"[{region}] EBS volume {v['VolumeId']} ({v['Size']}GB, {v['State']})"
-        for v in safe(
-            f"{region} volumes", lambda: ec2.describe_volumes().get("Volumes", [])
-        )
+        for v in safe(f"{region} volumes", lambda: ec2.describe_volumes().get("Volumes", []))
     )
 
-    for a in safe(
-        f"{region} addresses", lambda: ec2.describe_addresses().get("Addresses", [])
-    ):
+    for a in safe(f"{region} addresses", lambda: ec2.describe_addresses().get("Addresses", [])):
         assoc = a.get("InstanceId") or a.get("AssociationId") or "UNASSOCIATED"
         anomalies.append(f"[{region}] Elastic IP {a['PublicIp']} ({assoc})")
 
@@ -145,11 +141,7 @@ def sweep_region(region):
         f"[{region}] load balancer {lb['LoadBalancerName']} ({lb['Type']})"
         for lb in safe(
             f"{region} elbv2",
-            lambda: (
-                client("elbv2", region)
-                .describe_load_balancers()
-                .get("LoadBalancers", [])
-            ),
+            lambda: (client("elbv2", region).describe_load_balancers().get("LoadBalancers", [])),
         )
     )
 
@@ -157,11 +149,7 @@ def sweep_region(region):
         f"[{region}] classic ELB {lb['LoadBalancerName']}"
         for lb in safe(
             f"{region} elb-classic",
-            lambda: (
-                client("elb", region)
-                .describe_load_balancers()
-                .get("LoadBalancerDescriptions", [])
-            ),
+            lambda: (client("elb", region).describe_load_balancers().get("LoadBalancerDescriptions", [])),
         )
     )
 
@@ -169,9 +157,7 @@ def sweep_region(region):
         f"[{region}] RDS instance {db['DBInstanceIdentifier']} ({db['DBInstanceClass']})"
         for db in safe(
             f"{region} rds",
-            lambda: (
-                client("rds", region).describe_db_instances().get("DBInstances", [])
-            ),
+            lambda: (client("rds", region).describe_db_instances().get("DBInstances", [])),
         )
     )
 
@@ -201,9 +187,7 @@ def sweep_region(region):
     stray_backed = {sid for im in strays for sid in snapshot_ids(im)}
 
     if images or snaps:
-        expected.append(
-            f"[{region}] {len(retained)} retained AMIs + {len(referenced)} backing snapshots"
-        )
+        expected.append(f"[{region}] {len(retained)} retained AMIs + {len(referenced)} backing snapshots")
 
     for im in strays:
         anomalies.append(
@@ -212,13 +196,8 @@ def sweep_region(region):
             f"-- beyond newest {AMI_RETAIN_PER_CATEGORY} in category"
         )
         # Deregister must precede snapshot deletion (the AMI still references it).
-        deletes.append(
-            f"aws ec2 deregister-image --region {region} --image-id {im['ImageId']}"
-        )
-        deletes.extend(
-            f"aws ec2 delete-snapshot --region {region} --snapshot-id {sid}"
-            for sid in snapshot_ids(im)
-        )
+        deletes.append(f"aws ec2 deregister-image --region {region} --image-id {im['ImageId']}")
+        deletes.extend(f"aws ec2 delete-snapshot --region {region} --snapshot-id {sid}" for sid in snapshot_ids(im))
 
     for s in snaps:
         # Snapshots behind a stray AMI are already covered by its deregister
@@ -231,32 +210,21 @@ def sweep_region(region):
             f"({s['VolumeSize']}GB, {s['StartTime']:%Y-%m-%d}, "
             f"{name or s.get('Description', '')[:40]!r}) -- backs no AMI"
         )
-        deletes.append(
-            f"aws ec2 delete-snapshot --region {region} --snapshot-id {s['SnapshotId']}"
-        )
+        deletes.append(f"aws ec2 delete-snapshot --region {region} --snapshot-id {s['SnapshotId']}")
 
 
 def main():
     ident = client("sts", "eu-central-1").get_caller_identity()
-    print(
-        f"== AWS CI account audit — account {ident['Account']} as {ident['Arn']} ==\n"
-    )
+    print(f"== AWS CI account audit — account {ident['Account']} as {ident['Arn']} ==\n")
 
-    regions = [
-        r["RegionName"]
-        for r in client("ec2", "eu-central-1").describe_regions()["Regions"]
-    ]
-    print(
-        f"sweeping {len(regions)} regions for billable strays + orphaned snapshots..."
-    )
+    regions = [r["RegionName"] for r in client("ec2", "eu-central-1").describe_regions()["Regions"]]
+    print(f"sweeping {len(regions)} regions for billable strays + orphaned snapshots...")
     for region in regions:
         sweep_region(region)
 
     # Account-global: S3 (terraform state is in MinIO; only CI image bundles
     # live in AWS S3).
-    for b in safe(
-        "s3", lambda: client("s3", "eu-central-1").list_buckets().get("Buckets", [])
-    ):
+    for b in safe("s3", lambda: client("s3", "eu-central-1").list_buckets().get("Buckets", [])):
         if b["Name"] in EXPECTED_GLOBAL_S3_BUCKETS:
             expected.append(f"[global] S3 bucket {b['Name']}")
         else:
