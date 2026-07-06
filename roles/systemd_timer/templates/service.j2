@@ -19,13 +19,17 @@ Environment="{{ k }}={{ v | string | replace('\\', '\\\\') | replace('"', '\\"')
 {% endfor %}
 {% endif %}
 {% if (systemd_timer_args.user | default('root')) == 'root' %}
-{# Update the netdata overdue-monitoring stamp after each successful run.
-   Persistent=false (our default) suppresses catch-up fires on fresh installs
-   but also means systemd never maintains this stamp itself; service.j2 fills
-   the gap. The '+' prefix runs touch with full privileges even when run_as:
-   drops ExecStart to a non-root user. No-ops on first ever run (touch creates
-   the file); from then on the stamp mtime matches the last successful fire. #}
-ExecStartPost=+/usr/bin/touch /var/lib/systemd/timers/stamp-{{ systemd_timer_args.name }}.timer
+{# Update the netdata overdue-monitoring stamp after each run. systemd only
+   maintains this stamp itself for Persistent=true timers (touched at trigger
+   time); for persistent: false ones this line is the sole writer. ExecStopPost
+   rather than ExecStartPost so the touch happens whether the run succeeded or
+   failed: the stamp tracks "the timer fired", matching the overdue alert's
+   contract, while "fired but failing" is the stock
+   systemd_service_unit_failed_state alert's signal (see
+   systemd_timers_alerts.conf) and must not also trip overdue. The '+' prefix
+   runs touch with full privileges even when run_as: drops ExecStart to a
+   non-root user. #}
+ExecStopPost=+/usr/bin/touch /var/lib/systemd/timers/stamp-{{ systemd_timer_args.name }}.timer
 {% endif %}
 {% if systemd_timer_args.additional_service_directives is defined %}
 {% for line in systemd_timer_args.additional_service_directives %}

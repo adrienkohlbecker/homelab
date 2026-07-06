@@ -289,6 +289,27 @@
       - _systemd_timer_exitcode_start.rc != 0
       - _systemd_timer_exitcode_result.stdout == 'exit-code'
 
+# The overdue-monitoring stamp must be touched even when the run fails:
+# service.j2 places the touch in ExecStopPost (not ExecStartPost) so the
+# stamp means "the timer fired", not "the run succeeded" -- otherwise a
+# job that fires on schedule but keeps failing trips the overdue alert on
+# top of the unit-failed alert. Nothing else creates this file (install
+# doesn't, and the fixture's 23:59 OnCalendar can't fire mid-test), so
+# existence after the failed start proves the ExecStopPost placement.
+- name: _verify | Stat the trigger stamp after the failed run
+  stat:
+    path: /var/lib/systemd/timers/stamp-_verify_timer_exitcode.timer
+  register: _systemd_timer_exitcode_stamp
+  become: true
+- name: _verify | Assert the failed run still touched the trigger stamp
+  assert:
+    that:
+      - _systemd_timer_exitcode_stamp.stat.exists
+    fail_msg: >-
+      stamp-_verify_timer_exitcode.timer missing after a failed service run;
+      the stamp touch is gated on success (ExecStartPost) instead of running
+      on every stop (ExecStopPost).
+
 - name: _verify | Remove the exit-code fixture timer
   import_role:
     name: systemd_timer
