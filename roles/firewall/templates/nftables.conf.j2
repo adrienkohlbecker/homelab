@@ -80,6 +80,7 @@ table inet homelab {
 {% if tailscale_wan_direct | default(false) %}
     counter tailscale_underlay_accept {}
     counter tailscale_lan_accept {}
+    counter input_silenced_tailscale {}
 {% endif %}
 {% if inventory_hostname in dns_keepalived_peers %}
     counter input_silenced_vip_tcp {}
@@ -384,6 +385,20 @@ table inet homelab {
         # on SYN retries.
         iifname "vrrp.{{ dns_keepalived_vrid }}" meta l4proto tcp counter name "input_silenced_vip_tcp" reject with tcp reset comment "DNS VIP leakage (resolver restart window)"
         iifname "vrrp.{{ dns_keepalived_vrid }}" counter name "input_silenced_vip" drop comment "DNS VIP leakage (resolver restart + tailscale endpoint probes)"
+{% endif %}
+{% if tailscale_wan_direct | default(false) %}
+
+        # Tailscale disco probes from non-admin zones: tailscaled binds
+        # 0.0.0.0 and advertises every local address (the iot/mgmt macvlans
+        # included) as a candidate direct endpoint, so tailscale clients on
+        # other VLANs probe udp/{{ tailscale_port }} on all of them forever
+        # (~200/day logged drops). The accepts above deliberately scope
+        # direct paths to the WAN forward and the admin L2-trust boundary;
+        # peers outside it still establish direct via those candidates (or
+        # this host's own outbound probes), so dropping the rest is harmless.
+        # Recurring and benign -- silence with a named counter like the
+        # NetBIOS/VIP noise above.
+        udp dport {{ tailscale_port }} counter name "input_silenced_tailscale" drop comment "tailscale disco probes (cross-zone candidate endpoints)"
 {% endif %}
 
         # Catch-all: log+drop UDP and non-TCP/UDP protocols silently

@@ -101,6 +101,17 @@
   failed_when: false
   become: true
 
+# Tailscale disco silenced-noise — UDP to the tailscale underlay port from a
+# source outside @lan_admin_pairs (and not on the WAN iface) must land on the
+# tailscale silence rule, not the catch-all.
+- name: _verify_drops | Input — UDP to tailscale port from non-scope source hits the tailscale silenced-noise drop  # noqa: risky-shell-pipe
+  when: tailscale_wan_direct | default(false)
+  shell: echo ping | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 192.0.2.1 {{ tailscale_port }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  failed_when: false
+  become: true
+
 # Catch-all (UDP to a port with no rule, no listener, no scope match)
 # — falls through to the trailing counter-drop.
 - name: _verify_drops | Input — UDP to unscoped 18181 hits the catch-all drop  # noqa: risky-shell-pipe
