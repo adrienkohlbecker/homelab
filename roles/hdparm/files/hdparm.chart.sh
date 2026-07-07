@@ -35,14 +35,20 @@ _hdparm_safe() {
 }
 
 hdparm_check() {
+  # Hosts with no rotational disks legitimately ship an empty list --
+  # roles/netdata/tasks/metrics.yml installs this collector fleet-wide,
+  # so it also lands on cloud VMs and test boxes that never get the
+  # hdparm package (that apt install runs only in the hdparm role's
+  # play). With nothing to poll, return 0 before probing the binary:
+  # the module stays enabled quietly (no per-start check() failure in
+  # the journal) and hdparm_update()'s for-loop no-ops on the empty
+  # array. The binary check below then only fires where it signals a
+  # real problem: drives configured but the tool to read them missing.
+  [ "${#hdparm_disks[@]}" -eq 0 ] && return 0
   command -v hdparm >/dev/null 2>&1 || {
     error "hdparm: 'hdparm' binary missing"
     return 1
   }
-  # Hosts with no rotational disks legitimately ship an empty list
-  # (box, cloud VMs). Return 0 so charts.d.plugin doesn't log
-  # "module disabled" at startup; hdparm_update()'s for-loop
-  # naturally no-ops on the empty array.
   return 0
 }
 
