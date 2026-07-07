@@ -27,6 +27,34 @@
     status_code: 200
   become: true
 
+# The vendored vhost skips access-logging for loopback sources -- the
+# in-container healthcheck probes. The unit is active (--sdnotify=healthy), so
+# at least one probe has already succeeded; none may appear in the journal.
+- name: _verify | Healthcheck probes are absent from the access log
+  shell: |
+    set -euo pipefail
+    journalctl -t speedtest -o cat --no-pager | { grep -cE "^(127\.0\.0\.1|::1) - -" || true; }
+  args:
+    executable: /bin/bash
+  register: _speedtest_probe_lines
+  changed_when: false
+  failed_when: _speedtest_probe_lines.stdout | int != 0
+  become: true
+
+# Positive control so the previous assertion cannot pass by logging being
+# broken outright: the loopback and upload probes above arrived through the
+# published port (source = podman gateway) and must have been logged.
+- name: _verify | Real requests still reach the access log
+  shell: |
+    set -euo pipefail
+    journalctl -t speedtest -o cat --no-pager | { grep -cE "GET / HTTP" || true; }
+  args:
+    executable: /bin/bash
+  register: _speedtest_access_lines
+  changed_when: false
+  failed_when: _speedtest_access_lines.stdout | int == 0
+  become: true
+
 # Map the vhost FQDN to loopback so the SNI matches the server_name --
 # keeps SNI correct on every release. Test-only mutation; box is torn down.
 - name: _verify | Map the speedtest vhost FQDN to loopback for SNI-correct probing

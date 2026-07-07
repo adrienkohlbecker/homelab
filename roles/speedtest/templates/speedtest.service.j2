@@ -32,6 +32,9 @@ ExecStart=/usr/bin/podman run \
     --security-opt=no-new-privileges \
     --user 0:0 \
     {{ speedtest_user | podman_idmap_args | join(" ") }} \
+{# Not :ro -- the entrypoint sed -i's 000-default.conf under set -e, and sed's
+   rename step fails on a read-only mount, killing the container at startup. #}
+    --volume /mnt/services/speedtest/sites_available:/etc/apache2/sites-available \
     --env MODE=standalone \
     --env WEBPORT={{ service_ports.speedtest }} \
     --env DISABLE_IPINFO=true \
