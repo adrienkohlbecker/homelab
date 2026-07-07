@@ -64,12 +64,26 @@ while true; do
     SYSLOG_IDENTIFIER=adguard-keepalived -f -n 0 -o cat 2>/dev/null)
   JCTL_PID=$!
 
-  while IFS= read -r -t 30 line <&3; do
-    case "$line" in
-      *BACKUP*|*MASTER*|*FAULT*|*STOP*)
-        update_lock
-        ;;
-    esac
+  # read -t returns >128 on timeout, and 1 on EOF. A timeout is the normal
+  # idle path (keepalived quiet for 30s): re-check peer health and keep
+  # reading from the same follower. Only a real EOF -- journalctl actually
+  # died -- falls through to the teardown/backoff/respawn below. Folding
+  # the two (a plain `while read -t`) respawns the follower and logs a
+  # spurious "exited" line every 35s around the clock.
+  while true; do
+    if IFS= read -r -t 30 line <&3; then
+      case "$line" in
+        *BACKUP*|*MASTER*|*FAULT*|*STOP*)
+          update_lock
+          ;;
+      esac
+    else
+      rc=$?
+      if [ "$rc" -le 128 ]; then
+        break
+      fi
+      update_lock
+    fi
   done
 
   exec 3<&-
