@@ -148,15 +148,24 @@
       become: true
       register: netplan_cfg
 
-    - name: Cleanup config added by cloud-init and installer
+    - name: Cleanup config added by installer
       file:
-        path: "{{ item }}"
+        path: /etc/netplan/00-installer-config.yaml
         state: absent
       become: true
-      register: netplan_cleanup
-      loop:
-        - /etc/netplan/00-installer-config.yaml
-        - /etc/netplan/50-cloud-init.yaml
+      register: netplan_cleanup_installer
+
+    # Gated on cleanup_purge_cloud_init (false on fox): fox trusts cloud-init's
+    # own rendered config to match/address both NICs, so its netplan stanza
+    # only overlays extras (critical/dhcp4-overrides/optional -- see
+    # host_vars/fox.yml) and this file must survive.
+    - name: Cleanup config added by cloud-init
+      when: cleanup_purge_cloud_init
+      file:
+        path: /etc/netplan/50-cloud-init.yaml
+        state: absent
+      become: true
+      register: netplan_cleanup_cloudinit
 
     - name: Validate the netplan schema before applying
       # The template's `validate:` only checks YAML syntax; a misspelled key
@@ -168,7 +177,7 @@
       command: netplan generate
       become: true
       changed_when: false
-      when: (netplan_cfg.changed or netplan_cleanup.changed) and not ansible_check_mode
+      when: (netplan_cfg.changed or netplan_cleanup_installer.changed or netplan_cleanup_cloudinit.changed) and not ansible_check_mode
 
     # Apply tasks extracted to apply.yml so _verify can invoke the same
     # path with a deliberately-broken /etc/netplan and exercise the
@@ -176,5 +185,5 @@
     # Gated on `not ansible_check_mode` because all of this is destructive.
     - name: Apply netplan safely
       import_tasks: apply.yml
-      when: (netplan_cfg.changed or netplan_cleanup.changed) and not ansible_check_mode
+      when: (netplan_cfg.changed or netplan_cleanup_installer.changed or netplan_cleanup_cloudinit.changed) and not ansible_check_mode
       become: true
