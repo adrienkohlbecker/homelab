@@ -81,6 +81,11 @@ table inet homelab {
     counter tailscale_underlay_accept {}
     counter tailscale_lan_accept {}
 {% endif %}
+{% if inventory_hostname in dns_keepalived_peers %}
+    counter input_silenced_vip_tcp {}
+    counter input_silenced_vip {}
+    counter forward_silenced_vip {}
+{% endif %}
 
     # Admin services (samba/nut/mosh/NetBIOS) require an (iif, saddr)
     # *intersection*, not union: home-LAN saddrs must arrive on the WAN
@@ -361,6 +366,25 @@ table inet homelab {
         # consumer — is handled by an accept rule above, not here: lab is a
         # multicast subscriber and must answer the snooping querier.)
         udp dport { 137, 138 } counter name "input_silenced_netbios" drop comment "NetBIOS broadcast noise (no local nmbd)"
+{% if inventory_hostname in dns_keepalived_peers %}
+
+        # Traffic to the DNS VIP only reaches INPUT when the PREROUTING DNAT
+        # to the adguard container is absent — i.e. the few seconds of the
+        # nightly zfs_autosnapshot restart while netavark has removed the
+        # DNAT with the container (peer resolvers keep querying the VIP and
+        # land here). The steady-state remainder is tailscale disco probes:
+        # tailscaled binds 0.0.0.0 and advertises the VIP as a candidate
+        # endpoint, so LAN peers probe VIP:<tailscale_port> forever — the
+        # VIP floats between hosts, so that endpoint is never usable and
+        # dropping it is harmless (peers have the real host IPs as
+        # candidates). Both recurring and benign — silence with named
+        # counters to keep the rate-limited catch-all log slot free. TCP
+        # keeps the fast-fail RST the catch-all would have sent, so DoT
+        # clients hitting the restart window fail over instead of hanging
+        # on SYN retries.
+        iifname "vrrp.{{ dns_keepalived_vrid }}" meta l4proto tcp counter name "input_silenced_vip_tcp" reject with tcp reset comment "DNS VIP leakage (resolver restart window)"
+        iifname "vrrp.{{ dns_keepalived_vrid }}" counter name "input_silenced_vip" drop comment "DNS VIP leakage (resolver restart + tailscale endpoint probes)"
+{% endif %}
 
         # Catch-all: log+drop UDP and non-TCP/UDP protocols silently
         # to avoid ICMP amplification (every spoofed UDP probe would
@@ -471,6 +495,18 @@ table inet homelab {
         # proved did not stop cross-bridge traffic under this table.
         ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } ip daddr { $PODMAN_DEFAULT, $PODMAN_POOL } \
             counter name "forward_podman_isolation" drop comment "podman direct cross-network isolation"
+
+{% if inventory_hostname in dns_keepalived_peers %}
+        # VIP-handoff leakage reaching FORWARD during the nightly resolver
+        # restart: a peer's stale conntrack can still DNAT VIP traffic toward
+        # the previous (now dead) container IP, and while the VIP lives on
+        # the peer, stale ARP still steers VIP-addressed packets into this
+        # host's vmac, where they'd route back out toward the holder. Legit
+        # VIP traffic is accepted earlier via the ct-status-dnat rules, so
+        # whatever falls through on the vmac is transient by construction —
+        # silence it with its own counter.
+        iifname "vrrp.{{ dns_keepalived_vrid }}" counter name "forward_silenced_vip" drop comment "DNS VIP handoff leakage"
+{% endif %}
 
         # Catch-all log+drop. Counter for _verify.yml.
         limit rate 5/minute burst 10 packets log prefix "[nftables] FORWARD:REJECT: "
