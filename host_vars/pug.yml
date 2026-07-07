@@ -112,13 +112,18 @@ netdata_collectors:
   - go.d:collector:smartctl:smartctl
   - go.d:collector:systemdunits:service-units
   - go.d:collector:upsd:local
-  # - go.d:collector:web_log:nginx # is down when no http requests have been made recently, let's skip alerting on this
+  # No web_log: pug's nginx serves essentially no traffic, so access.log is
+  # empty after every rotation and the collector can never build its parser
+  # (an error retry every 60s, ~10k journal lines/week). The job itself is
+  # skipped via nginx_web_log_metrics below.
   - go.d:collector:wireguard:wireguard
   # No apex (https://{{ domain }}/) site to monitor -- nginx only serves
   # subdomain hosts. The certbot role's x509check.conf.j2 ships only the
   # host_cert job; this list intentionally mirrors that.
   - go.d:collector:x509check:host_cert
   - go.d:collector:zfspool:zfspool
+# See the web_log note in netdata_collectors above.
+nginx_web_log_metrics: false
 netdata_zfspool_thresholds:
   rpool: [ 85, 90, 95 ] #  464GiB => 70GiB, 47GiB, 24GiB
   apoc: [ 85, 90, 95 ] # 9,312GiB => 464GiB => 1,397GiB, 932GiB, 467GiB

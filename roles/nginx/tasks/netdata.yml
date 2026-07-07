@@ -6,6 +6,29 @@
     netdata_args:
       src: web_log.conf
       dest: go.d/web_log.conf
-      condition: "{{ nginx_netdata_condition | default(true) }}"
+      condition: "{{ (nginx_netdata_condition | default(true)) and (nginx_web_log_metrics | default(true)) }}"
+  tags:
+    - nginx
+
+# Hosts whose nginx serves ~no traffic opt out via nginx_web_log_metrics:
+# after log rotation access.log sits empty, and go.d's web_log collector
+# needs at least one line to build its parser even with an explicit csv
+# log_type -- it errors and retries every 60s, forever.
+- name: Remove web log metrics config
+  when: not (nginx_web_log_metrics | default(true))
+  file:
+    path: /etc/netdata/go.d/web_log.conf
+    state: absent
+  register: nginx_web_log_config_removed
+  become: true
+  tags:
+    - nginx
+
+- name: Restart netdata to drop the web_log job
+  when: nginx_web_log_config_removed.changed | default(false)
+  systemd:
+    name: netdata
+    state: restarted
+  become: true
   tags:
     - nginx
