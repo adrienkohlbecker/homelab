@@ -43,13 +43,19 @@
   tags:
     - resolved
 
+# On noble+ systemd-resolved is a separate package no longer pulled in by
+# systemd itself. The role deliberately does not install it: both
+# provisioning paths already seed it (the debootstrap image build and the
+# Ubuntu cloud images), and this assert is the loud failure if a future
+# minimal base ever drops it.
 - name: Assert systemd-resolved is producing its resolv.conf
   assert:
     that:
       - resolved_run_resolv_conf.stat.exists
     fail_msg: >-
       /run/systemd/resolve/resolv.conf is missing -- systemd-resolved is not
-      running, so symlinking /etc/resolv.conf to it would black-hole DNS.
+      running (on noble+ it is a separate package the base image must seed),
+      so symlinking /etc/resolv.conf to it would black-hole DNS.
       Check `systemctl status systemd-resolved` before re-running.
   tags:
     - resolved
