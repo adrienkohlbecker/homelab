@@ -4,8 +4,11 @@
 # foreground upsd) -- fine, the box is torn down afterwards. converge points
 # ups.conf at the real Eaton over SNMP (external_ips.eaton), which nothing
 # answers on the box, and gates the unit start on qemu_test; this swaps in a
-# static dummy-ups so upsd has a UPS to serve. Mirrors nut_monitor's _setup
-# fixture (no `mode =`: that directive is nut 2.8+ and the box image is jammy).
+# static dummy-ups so upsd has a UPS to serve. No `mode =` on purpose: jammy's
+# nut 2.7.4 rejects the directive outright, and both defaults serve the static
+# frame deterministically -- 2.7.4 replays the .dev file in a loop, while 2.8+
+# (noble/resolute) defaults to dummy-once, playing it once and holding the
+# final values.
 
 # Lock the converged mask contract before the destructive swap below tears it
 # down: under qemu the driver is masked (no UPS to reach), so nut-server's
