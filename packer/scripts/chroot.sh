@@ -88,8 +88,29 @@ apt_update() {
 # Configure apt. Called twice: once now with the build-time mirror
 # ($UBUNTU_MIRROR, defaults to Nexus), and once at the very end with
 # the upstream pair so the shipped image points at canonical Ubuntu
-# URLs regardless of build-time routing.
+# URLs regardless of build-time routing. jammy gets the classic one-line
+# /etc/apt/sources.list; noble+ gets deb822 .sources files, matching
+# both the stock noble layout and what roles/apt converges to.
 write_sources_list() {
+  if [ "$UBUNTU_NAME" = "jammy" ]; then
+    write_sources_list_legacy "$1" "$2"
+  else
+    write_sources_list_deb822 "$1" "$2"
+  fi
+
+  # apt keys /var/lib/apt/lists/ by mirror URL, so changing the mirror
+  # here orphans the cached indices. The frozen base suite's InRelease is
+  # byte-identical whichever mirror serves it (Nexus just proxies
+  # upstream), so the next apt-get update records a content "Hit", skips
+  # the re-download, then can't open the list file that was never written
+  # under the new URL ("can not open …InRelease"). Drop the cache so each
+  # rewrite re-fetches cleanly under the current URLs. No-op on the first
+  # call (debootstrap leaves the dir empty); load-bearing on the upstream
+  # rewrite below.
+  find /var/lib/apt/lists -type f -delete
+}
+
+write_sources_list_legacy() {
   # Shape matches roles/apt/templates/sources.list.j2 -- the role
   # overwrites this file on first apply, so keeping the two byte-similar
   # makes a `diff` between packer-baked image and post-apply state a
@@ -138,17 +159,51 @@ deb $2 $UBUNTU_NAME-security universe
 deb $2 $UBUNTU_NAME-security multiverse
 # deb-src $2 $UBUNTU_NAME-security multiverse
 EOF
+}
 
-  # apt keys /var/lib/apt/lists/ by mirror URL, so changing the mirror
-  # here orphans the cached indices. The frozen base suite's InRelease is
-  # byte-identical whichever mirror serves it (Nexus just proxies
-  # upstream), so the next apt-get update records a content "Hit", skips
-  # the re-download, then can't open the list file that was never written
-  # under the new URL ("can not open …InRelease"). Drop the cache so each
-  # rewrite re-fetches cleanly under the current URLs. No-op on the first
-  # call (debootstrap leaves the dir empty); load-bearing on the upstream
-  # rewrite below.
-  find /var/lib/apt/lists -type f -delete
+write_sources_list_deb822() {
+  # Shape matches what roles/apt's deb822_repository tasks render (the
+  # module emits fields sorted by parameter name), so a diff between the
+  # packer-baked files and the post-apply state highlights real drift
+  # (mirror substitution) rather than format noise. Stock noble ships a
+  # single ubuntu.sources; the archive/security split mirrors roles/apt,
+  # which overwrites ubuntu.sources and adds ubuntu-security.sources on
+  # first apply.
+  local deb_arch
+  if [ "$ZBM_ARCH" = "aarch64" ]; then
+    deb_arch=arm64
+  else
+    deb_arch=amd64
+  fi
+
+  rm -f /etc/apt/sources.list
+  mkdir -p /etc/apt/sources.list.d
+
+  cat <<EOF >/etc/apt/sources.list.d/ubuntu.sources
+Architectures: $deb_arch
+By-Hash: yes
+Components: main universe restricted multiverse
+Languages: none
+X-Repolib-Name: ubuntu
+Pdiffs: yes
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+Suites: $UBUNTU_NAME $UBUNTU_NAME-updates $UBUNTU_NAME-backports
+Types: deb
+URIs: $1
+EOF
+
+  cat <<EOF >/etc/apt/sources.list.d/ubuntu-security.sources
+Architectures: $deb_arch
+By-Hash: yes
+Components: main universe restricted multiverse
+Languages: none
+X-Repolib-Name: ubuntu-security
+Pdiffs: yes
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+Suites: $UBUNTU_NAME-security
+Types: deb
+URIs: $2
+EOF
 }
 
 write_sources_list "$UBUNTU_MIRROR" "$UBUNTU_MIRROR_SECURITY"

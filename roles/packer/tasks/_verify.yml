@@ -12,27 +12,52 @@
 
 # --- chroot.sh apt-sources reset (universal) ---
 #
-# chroot.sh writes sources.list twice: once with $UBUNTU_MIRROR (Nexus
+# chroot.sh writes the apt sources twice: once with $UBUNTU_MIRROR (Nexus
 # during the build for fast cached fetches) and once at the very end
 # with $UBUNTU_MIRROR_UPSTREAM so the at-rest image isn't pinned to a
 # Nexus-internal URL someone deploying to a new site can't reach. A
 # regression where the final reset gets skipped would silently ship
 # images with build-time URLs -- works on lab, fails everywhere else.
+# jammy ships the classic /etc/apt/sources.list; noble+ ships the deb822
+# ubuntu.sources / ubuntu-security.sources pair (see write_sources_list
+# in packer/scripts/chroot.sh).
 #
 # testrole.py skips the mirrors prelude for packer
 # (_SKIP_MIRRORS_PRELUDE_ROLES) so the VM stays in its packer-shipped
 # state and these asserts see what chroot.sh actually wrote, not what
 # the prelude rewrote on top.
 
-- name: _verify | Slurp packer-shipped /etc/apt/sources.list
+- name: _verify | Slurp packer-shipped apt sources (jammy legacy)
+  when: ansible_distribution_release == "jammy"
   slurp:
     src: /etc/apt/sources.list
-  register: packer_verify_sources_list
+  register: packer_verify_sources_legacy
   become: true
 
-- name: _verify | Decode sources.list + resolve expected upstream URLs
+- name: _verify | Slurp packer-shipped apt sources (noble+ deb822)
+  when: ansible_distribution_release != "jammy"
+  slurp:
+    src: "{{ item }}"
+  loop:
+    - /etc/apt/sources.list.d/ubuntu.sources
+    - /etc/apt/sources.list.d/ubuntu-security.sources
+  register: packer_verify_sources_deb822
+  become: true
+
+- name: _verify | Legacy /etc/apt/sources.list is absent (noble+)
+  when: ansible_distribution_release != "jammy"
+  stat:
+    path: /etc/apt/sources.list
+  register: packer_verify_sources_legacy_stat
+  become: true
+  failed_when: packer_verify_sources_legacy_stat.stat.exists
+
+- name: _verify | Decode apt sources + resolve expected upstream URLs
   set_fact:
-    packer_verify_sources_list_text: "{{ packer_verify_sources_list.content | b64decode }}"
+    packer_verify_sources_list_text: >-
+      {{ (packer_verify_sources_legacy.content | default('') | b64decode)
+         ~ (packer_verify_sources_deb822.results | default([])
+            | map(attribute='content', default='') | map('b64decode') | join(' ')) }}
     # Upstream URLs match packer/qemu.pkr.hcl's arch_table.upstream_*
     # entries; chroot.sh inherits them via $UBUNTU_MIRROR_UPSTREAM /
     # $UBUNTU_MIRROR_SECURITY_UPSTREAM. Hardcoded here rather than
@@ -42,43 +67,43 @@
     packer_verify_upstream_archive: "{{ 'http://ports.ubuntu.com/ubuntu-ports' if ansible_architecture == 'aarch64' else 'http://archive.ubuntu.com/ubuntu' }}"
     packer_verify_upstream_security: "{{ 'http://ports.ubuntu.com/ubuntu-ports' if ansible_architecture == 'aarch64' else 'http://security.ubuntu.com/ubuntu' }}"
 
-- name: _verify | Sources.list points at upstream Ubuntu mirrors
+- name: _verify | Apt sources point at upstream Ubuntu mirrors
   assert:
     that:
       - packer_verify_upstream_archive in packer_verify_sources_list_text
       - packer_verify_upstream_security in packer_verify_sources_list_text
     fail_msg: >-
-      /etc/apt/sources.list missing upstream URL
+      packer-shipped apt sources missing upstream URL
       ({{ packer_verify_upstream_archive }} and/or
       {{ packer_verify_upstream_security }}) -- chroot.sh's final
       write_sources_list with $UBUNTU_MIRROR_UPSTREAM didn't run or
       didn't land; shipped image is pinned to a build-time URL.
 
-- name: _verify | Sources.list doesn't carry the build-time Nexus URL
+- name: _verify | Apt sources don't carry the build-time Nexus URL
   assert:
     that:
       - "'nexus' not in packer_verify_sources_list_text"
     fail_msg: >-
-      /etc/apt/sources.list contains 'nexus' -- chroot.sh's final
+      packer-shipped apt sources contain 'nexus' -- chroot.sh's final
       upstream reset got skipped, image is shipping with build-time
       mirror URLs and won't apt-update at sites without Nexus access.
 
-- name: _verify | Sources.list mentions every expected suite
+- name: _verify | Apt sources mention every expected suite
   assert:
     that:
       - item in packer_verify_sources_list_text
-    fail_msg: "/etc/apt/sources.list missing suite '{{ item }}'."
+    fail_msg: "packer-shipped apt sources missing suite '{{ item }}'."
   loop:
     - "{{ ansible_distribution_release }}"
     - "{{ ansible_distribution_release }}-updates"
     - "{{ ansible_distribution_release }}-backports"
     - "{{ ansible_distribution_release }}-security"
 
-- name: _verify | Sources.list mentions every expected component
+- name: _verify | Apt sources mention every expected component
   assert:
     that:
       - item in packer_verify_sources_list_text
-    fail_msg: "/etc/apt/sources.list missing component '{{ item }}'."
+    fail_msg: "packer-shipped apt sources missing component '{{ item }}'."
   loop:
     - main
     - restricted
