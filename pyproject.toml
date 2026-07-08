@@ -33,6 +33,19 @@ extend-select = ["B", "I", "PERF", "PIE", "PT", "RET", "RUF", "SIM", "UP"]
 # mise usage flags are exposed as lowercase `usage_*` environment variables.
 ignore = ["SIM112"]
 
+[tool.pyright]
+# Point at the uv venv explicitly: the pyright binary comes from mise's npm
+# backend, outside the venv, so PATH-based interpreter discovery can't be
+# relied on (CI runs tasks without an activated shell).
+venvPath = "."
+venv = ".venv"
+# Mirrors pytest's pythonpath: unit_tests import test-harness modules
+# (machine, testrole, ...) as top-level names.
+extraPaths = ["test"]
+# First three are pyright's defaults (setting exclude replaces them); notes/
+# and zbm-build/ are gitignored in-place clones with their own tooling.
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "notes", "zbm-build"]
+
 [tool.pytest.ini_options]
 testpaths = ["unit_tests"]
 pythonpath = [".", "test"]
