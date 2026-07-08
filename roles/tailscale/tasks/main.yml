@@ -78,9 +78,12 @@
 
 # One-time migration: an already-provisioned host carries its live identity in
 # the real /var/lib/tailscale directory. Stop the daemon, copy the state across,
-# then replace the directory with the symlink. cp -an never clobbers an identity
-# already on the dataset (e.g. one just restored during a rebuild), so it is safe
-# to re-run; the whole block is skipped once /var/lib/tailscale is already a link.
+# then replace the directory with the symlink. The copy skips entries already on
+# the dataset (e.g. an identity just restored during a rebuild) so it is safe to
+# re-run; cp -n cannot express that reliably across releases (coreutils flags -n
+# as non-portable and subject to change -- 9.2 briefly made skips exit nonzero
+# -- while jammy's 8.32 lacks the --update=none replacement). The whole block
+# is skipped once /var/lib/tailscale is already a link.
 - name: Relocate existing tailscale state onto the services dataset
   when:
     - tailscale_statedir.stat.isdir | default(false)
@@ -95,7 +98,17 @@
       become: true
 
     - name: Copy existing tailscale state onto the dataset without clobbering
-      command: cp -an /var/lib/tailscale/. /mnt/services/tailscale/
+      shell: |
+        set -euo pipefail
+        shopt -s dotglob nullglob
+        for src in /var/lib/tailscale/*; do
+          dest="/mnt/services/tailscale/$(basename "$src")"
+          if [ ! -e "$dest" ]; then
+            cp -a "$src" "$dest"
+          fi
+        done
+      args:
+        executable: /bin/bash
       changed_when: true
       become: true
 
