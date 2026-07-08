@@ -1,9 +1,9 @@
 """Tests for Machine._boot_command across the arch/keep_vm/direct-boot matrix.
 
-prepare() does the IO-heavy work of populating drives / _direct_boot /
-_extra_disk_devices, which aren't safe to run in a unit test (qemu-img,
-file IO against packer artifacts). Each test sets those attrs manually
-and asserts on the shape of the assembled command line.
+prepare() does the IO-heavy work of populating drives / _direct_boot,
+which isn't safe to run in a unit test (qemu-img, file IO against packer
+artifacts). Each test sets those attrs manually and asserts on the shape
+of the assembled command line.
 """
 
 from collections.abc import Callable
@@ -24,7 +24,6 @@ def _setup(m: machine.Machine, drives: list[str] | None = None) -> None:
     """Bypass prepare(): give the instance the attributes _boot_command reads."""
     m.drives = list(drives or [])
     m._direct_boot = None
-    m._extra_disk_devices = []
     # prepare() picks vnc_display when keep_vm; bypass tests pin it so the
     # cmdline has a deterministic value.
     m.vnc_display = 0
