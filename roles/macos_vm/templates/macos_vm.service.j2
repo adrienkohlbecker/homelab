@@ -39,7 +39,7 @@ ExecStart={% if macos_vm_cpu_pinset | length > 0 %}/usr/bin/taskset -c {{ macos_
   -device usb-kbd,id=kbd_xhci,bus=xhci.0 \
   -device usb-tablet,id=tablet_xhci,bus=xhci.0 \
   -device isa-applesmc,osk=ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc \
-  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
+  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
   -drive if=pflash,format=raw,file={{ macos_vm_workdir }}/OVMF_VARS.fd \
   -smbios type=2 \
   -boot strict=on \

@@ -202,21 +202,20 @@
   register: macos_vm_ovmf_vars
   become: true
 
-- name: artifacts | Check legacy libvirt OVMF vars file
+- name: artifacts | Check packaged OVMF vars template
   stat:
-    path: "/var/lib/libvirt/qemu/nvram/{{ macos_vm_name }}_VARS.fd"
-  register: macos_vm_legacy_ovmf_vars
+    path: /usr/share/OVMF/OVMF_VARS_4M.fd
+  register: macos_vm_ovmf_vars_pkg
   become: true
 
-- name: artifacts | Migrate legacy libvirt OVMF vars file
+- name: artifacts | Stage fresh OVMF vars file
   # In check mode the workdir is only notionally created, so a copy into it
   # fails its destination-directory check; skip until a real run makes the dir.
   when:
     - not macos_vm_ovmf_vars.stat.exists
-    - macos_vm_legacy_ovmf_vars.stat.exists
     - not (ansible_check_mode and macos_vm_workdir_result.changed)
   copy:
-    src: "/var/lib/libvirt/qemu/nvram/{{ macos_vm_name }}_VARS.fd"
+    src: /usr/share/OVMF/OVMF_VARS_4M.fd
     dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
     remote_src: true
     owner: root
@@ -226,20 +225,26 @@
     backup: true
   become: true
 
-- name: artifacts | Stage fresh OVMF vars file
+# pflash requires CODE and VARS to share the same flash layout: a 2M vars
+# file (staged before this role used the 4M variant, the only one noble
+# ships) cannot pair with OVMF_CODE_4M.fd and qemu refuses to start. NVRAM
+# contents are disposable here -- boot order comes from the unit's
+# per-device bootindex, not NVRAM boot entries -- so replace any
+# wrong-sized vars with a fresh copy of the packaged template.
+- name: artifacts | Reseed wrong-sized OVMF vars at the 4M layout
   when:
-    - not macos_vm_ovmf_vars.stat.exists
-    - not macos_vm_legacy_ovmf_vars.stat.exists
-    - not (ansible_check_mode and macos_vm_workdir_result.changed)
+    - macos_vm_ovmf_vars.stat.exists
+    - macos_vm_ovmf_vars.stat.size != macos_vm_ovmf_vars_pkg.stat.size
   copy:
-    src: /usr/share/OVMF/OVMF_VARS.fd
+    src: /usr/share/OVMF/OVMF_VARS_4M.fd
     dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
     remote_src: true
     owner: root
     group: kvm
     mode: "0644"
-    force: false
+    force: true
     backup: true
+  register: macos_vm_ovmf_vars_reseed
   become: true
 
 - name: artifacts | Stage fetch-macOS script
