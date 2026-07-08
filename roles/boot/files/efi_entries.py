@@ -39,14 +39,31 @@ def _norm_loader(path):
 
 
 def _decode_optional_data(raw):
-    # efibootmgr -v renders the UTF-16LE optional data that --unicode writes byte
-    # by byte, so each character's null high-byte prints as a '.' separator:
-    # "root" -> "r.o.o.t.". Drop those null placeholders to recover the plain
-    # cmdline. Only decode when the odd positions are all '.' (the dotted
-    # signature) — other entries' optional data is left untouched.
+    # efibootmgr 17 (jammy) renders the UTF-16LE optional data that --unicode
+    # writes byte by byte on the entry line itself, so each character's null
+    # high-byte prints as a '.' separator: "root" -> "r.o.o.t.". Drop those
+    # null placeholders to recover the plain cmdline. Only decode when the odd
+    # positions are all '.' (the dotted signature) — other entries' optional
+    # data is left untouched.
     if len(raw) >= 2 and all(c == "." for c in raw[1::2]):
         return raw[::2]
     return raw
+
+
+def _decode_data_hex(hexstr):
+    # efibootmgr 18 (noble) instead moves optional data off the entry line onto
+    # an indented "data: xx xx .." hex dump. Decode a --unicode-written UTF-16LE
+    # payload back to the plain cmdline; anything that isn't printable UTF-16LE
+    # (some firmware entries carry binary blobs) is kept as the raw hex text so
+    # comparisons stay stable without pretending to understand it.
+    raw = bytes.fromhex(hexstr.replace(" ", ""))
+    try:
+        text = raw.decode("utf-16-le").rstrip("\x00")
+    except UnicodeDecodeError:
+        return hexstr
+    if text.isprintable():
+        return text
+    return hexstr
 
 
 def _norm_options(opts):
@@ -76,6 +93,10 @@ def parse_efibootmgr():
             m_timeout = re.match(r"Timeout:\s*(\d+)\s*seconds?", line)
             if m_timeout:
                 timeout = int(m_timeout.group(1))
+            continue
+        m_data = re.match(r"^\s+data:\s*((?:[0-9a-fA-F]{2}\s*)+)$", line)
+        if m_data and entries:
+            entries[-1]["options"] = _decode_data_hex(m_data.group(1)).strip()
             continue
         m = re.match(r"^Boot([0-9A-Fa-f]{4})(\*)?\s+(.*?)\t(.*)", line)
         if not m:

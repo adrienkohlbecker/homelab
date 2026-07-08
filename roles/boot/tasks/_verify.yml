@@ -215,17 +215,24 @@
 
 # Match each managed label against the *entry label* anchored to the start of
 # its `Boot####* ` line (not a substring of the whole -v dump, which would also
-# hit device paths and one label nested inside another). The disk-suffix strip
-# lets a base label like `rEFInd` match its per-disk `rEFInd (disk 0)` variants
-# on mdadm hosts. Regexes use char classes ([(], [0-9]) over backslash escapes
-# to stay clear of ansible's conditional escape reprocessing.
+# hit device paths and one label nested inside another). efibootmgr 18 (noble)
+# appends a tab plus the device path to every entry line even without -v, so
+# the label is whatever precedes the first tab (jammy's 17 emits no tab; the
+# split is a no-op there). The tab lives in a YAML double-quoted var because
+# jinja-level '\t' does not survive ansible's escape reprocessing -- same
+# reason the regexes use char classes ([(], [0-9]) over backslash escapes.
+# The disk-suffix strip lets a base label like `rEFInd` match its per-disk
+# `rEFInd (disk 0)` variants on mdadm hosts.
 - name: _verify | Expected EFI labels present in NVRAM
   when: not grub_bootloader
   vars:
+    _tab: "\t"  # noqa: no-tabs (the split delimiter *is* a tab)
     _actual_labels: >-
       {{ _boot_verify_efi_list.stdout_lines
          | select('match', '^Boot[0-9A-Fa-f]{4}[ *] ')
          | map('regex_replace', '^Boot[0-9A-Fa-f]{4}[ *] ', '')
+         | map('split', _tab)
+         | map('first')
          | map('regex_replace', ' [(]disk [0-9]+[)]$', '')
          | list }}
     _expected_labels: "{{ boot_efi_entries | map(attribute='label') | list }}"

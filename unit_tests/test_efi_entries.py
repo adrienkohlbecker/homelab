@@ -339,7 +339,44 @@ class TestHelpers:
         assert efi._decode_optional_data("plain") == "plain"
         assert efi._decode_optional_data("") == ""
 
+    def test_decode_data_hex_utf16_and_binary(self):
+        cmdline = "root=zfs:rpool/ROOT/noble console=tty0"
+        hexstr = " ".join(f"{b:02x}" for b in cmdline.encode("utf-16-le") + b"\x00\x00")
+        assert efi._decode_data_hex(hexstr) == cmdline
+        # A control character is not printable UTF-16LE: kept as raw hex text.
+        assert efi._decode_data_hex("07 00") == "07 00"
+        # A lone surrogate does not decode at all: kept as raw hex text.
+        assert efi._decode_data_hex("00 d8 00 00") == "00 d8 00 00"
+
     def test_removable_fallback_detection(self):
         assert efi._is_removable_fallback("\\EFI\\BOOT\\BOOTX64.EFI")
         assert efi._is_removable_fallback("\\EFI\\BOOT\\BOOTAA64.EFI")
         assert not efi._is_removable_fallback("\\EFI\\refind\\refind_x64.efi")
+
+
+class TestParseEfibootmgr18:
+    """efibootmgr 18 (noble) moves optional data off the entry line onto
+    indented `dp:` / `data:` hex-dump continuation lines."""
+
+    def test_parse_v18_data_lines(self, monkeypatch):
+        cmdline = "root=zfs:rpool/ROOT/noble initrd=\\EFI\\Linux\\initrd"
+        hexstr = " ".join(f"{b:02x}" for b in cmdline.encode("utf-16-le") + b"\x00\x00")
+        uuid = "6191bc58-2e95-4493-b10c-b83df5181e9f"
+        out = "\n".join(
+            [
+                "BootCurrent: 0001",
+                "Timeout: 3 seconds",
+                "BootOrder: 0001,0002",
+                "Boot0001* Linux\t" + _hd(uuid, "\\EFI\\Linux\\vmlinuz.efi"),
+                "      dp: 04 01 2a 00 02 00 00 00 / 7f ff 04 00",
+                "      data: " + hexstr,
+                "Boot0002* rEFInd\t" + _hd(uuid, "\\EFI\\refind\\refind_x64.efi"),
+                "      dp: 04 01 2a 00 02 00 00 00 / 7f ff 04 00",
+            ]
+        )
+        monkeypatch.setattr(efi, "run", lambda cmd: out)
+        entries, order, timeout = efi.parse_efibootmgr()
+        assert entries[0]["options"] == cmdline
+        assert entries[1]["options"] == ""
+        assert order == ["0001", "0002"]
+        assert timeout == 3
