@@ -1,6 +1,7 @@
 """Unit tests for callback_plugins/digest.py."""
 
 import copy
+from typing import Any, cast
 
 import callback_plugins.digest as digest
 
@@ -47,8 +48,10 @@ FULL_STAT = SUMMARY_STAT | {
 }
 
 
-def display_result(result):
-    return digest.CallbackModule()._dump_results(result, serialize=False)
+def display_result(result) -> dict[str, Any]:
+    # serialize=False makes _dump_results return the digested dict, not the
+    # JSON string its annotation declares.
+    return cast("dict[str, Any]", digest.CallbackModule()._dump_results(result, serialize=False))
 
 
 def test_status_collapsed_top_level():

@@ -1,6 +1,6 @@
 """Unit tests for roles/z2m/files/patch_cover_tilt.py — Z2M tilt nullifier."""
 
-import importlib
+import importlib.util
 import re
 from pathlib import Path
 
@@ -9,6 +9,8 @@ _MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "z2m" / "files
 
 def _load():
     spec = importlib.util.spec_from_file_location("patch_cover_tilt", _MODULE_PATH)
+    assert spec is not None
+    assert spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

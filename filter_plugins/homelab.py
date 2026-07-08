@@ -180,7 +180,9 @@ def host_vlan_block(
     subnet_size = 1 << (parent.max_prefixlen - prefix)
     subnet_address = ipaddress.ip_address(int(parent.network_address) + index * subnet_size)
     subnet = ipaddress.ip_network(f"{subnet_address}/{prefix}", strict=False)
-    if not subnet.subnet_of(parent):
+    # subnet is derived from parent's own addresses, so the families always
+    # match; pyright can't see that through the v4/v6 union.
+    if not subnet.subnet_of(parent):  # pyright: ignore[reportArgumentType]
         raise AnsibleError(f"host_vlan_block derived {subnet} outside parent {parent}")
     return str(subnet)
 

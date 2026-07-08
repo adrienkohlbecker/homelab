@@ -268,8 +268,7 @@ def main() -> None:
 
     # No user-netdev to rewrite (e.g. a `-version` probe), an explicit slirp
     # override, or passt not usable -> run real qemu untouched (slirp path).
-    use_passt = override != "slirp" and usable and netdev_idx is not None
-    if not use_passt:
+    if override == "slirp" or not usable or netdev_idx is None:
         _log(
             "backing build-VM NIC with slirp (passthrough): "
             + (

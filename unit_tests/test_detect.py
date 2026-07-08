@@ -5,7 +5,8 @@ propagation, git helpers, GitLab pipelines-API green-base resolution, role
 dependency map, and the ``gitlab`` child-pipeline command.
 """
 
-import importlib
+import email.message
+import importlib.util
 import json
 import subprocess
 import urllib.error
@@ -19,6 +20,8 @@ _MODULE_PATH = Path(__file__).resolve().parent.parent / "mise-tasks" / "ci" / "d
 
 def _load():
     spec = importlib.util.spec_from_file_location("detect", _MODULE_PATH)
+    assert spec is not None
+    assert spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -500,7 +503,7 @@ class TestGlApiGet:
 
         def mock_urlopen(req, timeout=None):
             attempts["n"] += 1
-            raise urllib.error.HTTPError("http://x", 403, "Forbidden", {}, None)
+            raise urllib.error.HTTPError("http://x", 403, "Forbidden", email.message.Message(), None)
 
         monkeypatch.setattr(detect.urllib.request, "urlopen", mock_urlopen)
         monkeypatch.setattr(detect.time, "sleep", lambda _: None)
@@ -513,7 +516,7 @@ class TestGlApiGet:
         def mock_urlopen(req, timeout=None):
             attempts["n"] += 1
             if attempts["n"] < 2:
-                raise urllib.error.HTTPError("http://x", 502, "Bad Gateway", {}, None)
+                raise urllib.error.HTTPError("http://x", 502, "Bad Gateway", email.message.Message(), None)
             return _FakeListResponse([{"ok": 1}])
 
         monkeypatch.setattr(detect.urllib.request, "urlopen", mock_urlopen)

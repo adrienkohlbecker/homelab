@@ -10,7 +10,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import pytest
 
@@ -19,6 +19,8 @@ _MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "boot" / "file
 
 def _load():
     spec = importlib.util.spec_from_file_location("efi_entries", _MODULE_PATH)
+    assert spec is not None
+    assert spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -130,7 +132,7 @@ def run_check(
 
 # --- Single-disk (box) fixtures ------------------------------------------
 
-_SINGLE = dict(
+_SINGLE: dict[str, Any] = dict(
     findmnt="/dev/sda1",
     lsblk_map={"/dev/sda1": {"blockdevices": [{"name": "sda1", "pkname": "sda", "partuuid": "AAA-0"}]}},
     partn={"/sys/class/block/sda1/partition": "1"},

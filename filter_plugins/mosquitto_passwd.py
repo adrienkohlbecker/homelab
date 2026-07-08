@@ -2,7 +2,10 @@ import base64
 import hashlib
 
 from ansible.errors import AnsibleError
-from passlib.hash import pbkdf2_sha512
+
+# passlib.hash populates its handlers lazily at import time, so pyright can't
+# see the symbol statically.
+from passlib.hash import pbkdf2_sha512  # pyright: ignore[reportAttributeAccessIssue]
 from passlib.utils.binary import ab64_decode
 
 _ITERATIONS = 210000

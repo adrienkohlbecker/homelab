@@ -1,5 +1,10 @@
 """Homelab-specific ansible-lint rules."""
 
+# ansible-lint's BaseRule declares `tags` as an instance variable, but shadowing
+# it with a class-level list is the upstream rule-authoring idiom (every bundled
+# rule does it), so the override check only flags the unavoidable.
+# pyright: reportIncompatibleVariableOverride=false
+
 from __future__ import annotations
 
 import re

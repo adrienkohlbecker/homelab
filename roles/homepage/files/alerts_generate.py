@@ -160,8 +160,9 @@ class _SshHostClient:
             # full message lands in the journal.
             err = proc.stderr.decode("utf-8", "replace").strip()
             raise OSError(f"ssh {self._target} exited {proc.returncode}: {err}")
-        self._bundle = json.loads(proc.stdout)
-        return self._bundle
+        bundle: dict = json.loads(proc.stdout)
+        self._bundle = bundle
+        return bundle
 
     def alarms(self) -> dict:
         return self._fetch().get("alarms") or {}
@@ -271,7 +272,7 @@ def normalize(payload: dict) -> list[dict]:
 
 
 def _fetch_one(name: str, query_url: str, click_url: str, cfg: _SshConfig) -> dict:
-    entry = {"name": name, "url": query_url, "click_url": click_url}
+    entry: dict = {"name": name, "url": query_url, "click_url": click_url}
     client = None
     try:
         client = _SshHostClient(query_url, cfg)

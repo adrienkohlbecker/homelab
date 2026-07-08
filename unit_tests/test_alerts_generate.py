@@ -5,7 +5,7 @@ alarm_href, _humanize_delta, _format_value, render_html) without needing
 network access or a running netdata instance.
 """
 
-import importlib
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -15,6 +15,8 @@ _MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "homepage" / "
 
 def _load():
     spec = importlib.util.spec_from_file_location("alerts_generate", _MODULE_PATH)
+    assert spec is not None
+    assert spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

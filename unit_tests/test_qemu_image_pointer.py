@@ -26,6 +26,8 @@ _HYDRATE_PATH = _TASKS / "ci" / "hydrate-qemu-images.py"
 
 def _load(name: str, path: Path) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None
+    assert spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     # Register before exec so dataclasses can resolve string annotations
     # (the modules use `from __future__ import annotations`).
@@ -39,7 +41,7 @@ hydrate = _load("hydrate_qemu_images", _HYDRATE_PATH)
 
 
 def _args(**overrides: object) -> argparse.Namespace:
-    base = {"build_id": "ci-42-gdeadbeef0000", "machine": "box", "ubuntu": "jammy"}
+    base: dict[str, object] = {"build_id": "ci-42-gdeadbeef0000", "machine": "box", "ubuntu": "jammy"}
     base.update(overrides)
     return argparse.Namespace(**base)
 
@@ -65,7 +67,7 @@ class TestPointerBody:
 class TestResolveBuildId:
     def _resolve(self, monkeypatch: pytest.MonkeyPatch, body: str, **arg_overrides: object) -> str:
         monkeypatch.setattr(hydrate, "output", lambda argv, **kw: body)
-        base = {"machine": "box", "ubuntu": "jammy"}
+        base: dict[str, object] = {"machine": "box", "ubuntu": "jammy"}
         base.update(arg_overrides)
         args = argparse.Namespace(**base)
         return hydrate.resolve_build_id(args)
