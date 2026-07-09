@@ -149,8 +149,8 @@
       state: absent
 
 # ---- csplogger (was box,lab,pug,fox) ----
-# No unit/secret/dir -- just the nginx vhost plus the http-scope rate-limit
-# conf.d drop the role installed.
+# No unit/secret -- just the nginx vhost, the http-scope rate-limit conf.d
+# drop, and the empty service_user config dir the role left behind.
 - name: Retire csplogger nginx site
   import_role:
     name: nginx
@@ -168,6 +168,12 @@
     nginx_conf_d_args:
       name: csp_ratelimit.conf
       state: absent
+
+- name: Remove csplogger state directory
+  file:
+    path: /mnt/services/csplogger
+    state: absent
+  become: true
 
 # ---- hyperdx (was box,lab) ----
 - name: Retire hyperdx service
