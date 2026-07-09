@@ -9,6 +9,7 @@ mac_addresses:
   lab_i210: e8:ea:6a:09:97:67
   lab_i225p1: c8:7f:54:5c:57:5b
   lab_i225p2: c8:7f:54:5c:57:5c
+  game: d8:43:ae:2d:59:b9
 
 # Master seed for deriving per-pair PSKs (filter_plugins/wireguard_psk.py):
 # PresharedKey = base64(HMAC-SHA256(seed, sorted-pair-name)). One value, no

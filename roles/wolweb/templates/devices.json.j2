@@ -4,17 +4,16 @@
 {# segment, with WoL discard port :9 -- NOT the device's unicast IP. The   #}
 {# global config.json `bcastip` is unused by the wake path; do not "fix"   #}
 {# this to a unicast address. `interface` is the host NIC the packet       #}
-{# egresses; every wolweb target must share the host's default L2 segment  #}
-{# (the management VLAN). Off-segment targets are deliberately not listed  #}
-{# here; management/trusted clients wake home-VLAN machines via the UDM    #}
-{# UDP/9 relay in roles/udm_wol_relay instead.                            #}
+{# egresses. By default devices use the host's management-VLAN broadcast;  #}
+{# off-segment devices set wake_destination to the UDM management gateway  #}
+{# so roles/udm_wol_relay can rebroadcast the packet on the target VLAN.   #}
 {
   "devices": [
 {% for d in wolweb_devices %}
     {
       "name": "{{ d.name }}",
       "mac": "{{ d.mac }}",
-      "ip": "{{ wolweb_broadcast_ip }}:9",
+      "ip": "{{ d.wake_destination | default(wolweb_broadcast_ip ~ ':9') }}",
       "interface": "{{ ansible_facts.default_ipv4.interface }}"
     }{{ "," if not loop.last else "" }}
 {% endfor %}

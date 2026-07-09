@@ -44,6 +44,7 @@ mac_addresses:
   lab_i210: 20:08:e9:30:e7:e9
   lab_i225p1: 4c:4b:b9:1b:60:0c
   lab_i225p2: d2:7d:10:e0:9c:68
+  game: 02:5a:f1:9c:63:2e
 
 # 5-peer test fixture (lab/pug/box + fox + laptop). fox is cross-site
 # (hetzner) to exercise the AllowedIPs physical-/32 branch; laptop is a
