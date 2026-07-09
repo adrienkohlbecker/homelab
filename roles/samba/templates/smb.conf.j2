@@ -50,6 +50,14 @@
 
 #### Debugging/Accounting ####
 
+# This tells Samba to use a separate log file for each machine
+# that connects
+#   log file = /var/log/samba/log.%m
+
+# Cap the size of the individual log files (in KiB).
+#   max log size = 1000
+
+# send logs to journald
    logging = systemd
 
 # Do something sensible when Samba crashes: mail the admin a backtrace
@@ -124,6 +132,7 @@
 # RPC pipe.  The example command creates a user account with a disabled Unix
 # password; please adapt to your needs
 ; add user script = /usr/sbin/adduser --quiet --disabled-password --gecos "" %u
+; add user script = /usr/sbin/useradd --create-home %u
 
 # This allows machine accounts to be created on the domain controller via the
 # SAMR RPC pipe.

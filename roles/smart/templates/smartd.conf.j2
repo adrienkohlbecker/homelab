@@ -1,6 +1,6 @@
 # Sample configuration file for smartd.  See man smartd.conf.
 
-# Home page is: http://www.smartmontools.org
+# Home page is: https://www.smartmontools.org
 
 # smartd will re-read the configuration file if it receives a HUP
 # signal
@@ -8,9 +8,6 @@
 # The file gives a list of devices to monitor using smartd, with one
 # device per line. Text after a hash (#) is ignored, and you may use
 # spaces and tabs for white space. You may use '\' to continue lines.
-
-# You can usually identify which hard disks are on your system by
-# looking in /proc/ide and in /proc/scsi.
 
 # The word DEVICESCAN will cause any remaining lines in this
 # configuration file to be ignored: it tells smartd to scan for all
@@ -49,9 +46,8 @@
 
 # An ATA disk may appear as a SCSI device to the OS. If a SCSI to
 # ATA Translation (SAT) layer is between the OS and the device then
-# this can be flagged with the '-d sat' option. This situation may
-# become common with SATA disks in SAS and FC environments.
-# /dev/sda -a -d sat
+# this can be flagged with the '-d sat' option.
+#/dev/sda -a -d sat
 
 # A very silent check.  Only report SMART health status if it fails
 # But send an email in this case
@@ -63,23 +59,6 @@
 #/dev/sda -d scsi -s L/../../3/18
 #/dev/sdb -d scsi -s L/../../7/01
 
-# Monitor 4 ATA disks connected to a 3ware 6/7/8000 controller which uses
-# the 3w-xxxx driver. Start long self-tests Sundays between 1-2, 2-3, 3-4,
-# and 4-5 am.
-# NOTE: starting with the Linux 2.6 kernel series, the /dev/sdX interface
-# is DEPRECATED.  Use the /dev/tweN character device interface instead.
-# For example /dev/twe0, /dev/twe1, and so on.
-#/dev/sdc -d 3ware,0 -a -s L/../../7/01
-#/dev/sdc -d 3ware,1 -a -s L/../../7/02
-#/dev/sdc -d 3ware,2 -a -s L/../../7/03
-#/dev/sdc -d 3ware,3 -a -s L/../../7/04
-
-# Monitor 2 ATA disks connected to a 3ware 9000 controller which
-# uses the 3w-9xxx driver (Linux, FreeBSD). Start long self-tests Tuesdays
-# between 1-2 and 3-4 am.
-#/dev/twa0 -d 3ware,0 -a -s L/../../2/01
-#/dev/twa0 -d 3ware,1 -a -s L/../../2/03
-
 # Monitor 2 SATA (not SAS) disks connected to a 3ware 9000 controller which
 # uses the 3w-sas driver (Linux). Start long self-tests Tuesdays
 # between 1-2 and 3-4 am.
@@ -87,15 +66,9 @@
 #/dev/twl0 -d 3ware,0 -a -s L/../../2/01
 #/dev/twl0 -d 3ware,1 -a -s L/../../2/03
 
-# Same as above for Windows. Option '-d 3ware,N' is not necessary,
-# disk (port) number is specified in device name.
-# NOTE: On Windows, DEVICESCAN works also for 3ware controllers.
-#/dev/hdc,0 -a -s L/../../2/01
-#/dev/hdc,1 -a -s L/../../2/03
-#
-# Monitor 2 disks connected to the first HP SmartArray controller which
-# uses the cciss driver. Start long tests on Sunday nights and short
-# self-tests every night and send errors to root
+# Monitor 2 disks connected to the first HP SmartArray controller which uses
+# the Linux cciss driver. Start long self-tests on Sunday nights and short
+# self-tests every night and send errors to root.
 #/dev/sda -d cciss,0 -a -s (L/../../7/02|S/../.././02) -m root
 #/dev/sda -d cciss,1 -a -s (L/../../7/03|S/../.././03) -m root
 
@@ -113,41 +86,49 @@
 # HERE IS A LIST OF DIRECTIVES FOR THIS CONFIGURATION FILE.
 # PLEASE SEE THE smartd.conf MAN PAGE FOR DETAILS
 #
-#   -d TYPE Set the device type: ata, scsi, marvell, removable, 3ware,N, hpt,L/M/N
-#   -T TYPE set the tolerance to one of: normal, permissive
+#   -d TYPE Set the device type: ata, scsi[+TYPE], nvme[,NSID],
+#           sat[,auto][,N][+TYPE], usbcypress[,X], usbjmicron[,p][,x][,N],
+#           usbprolific, usbsunplus, sntasmedia, sntjmicron[,NSID], sntrealtek,
+#           ... (platform specific)
+#   -T TYPE Set the tolerance to one of: normal, permissive
 #   -o VAL  Enable/disable automatic offline tests (on/off)
 #   -S VAL  Enable/disable attribute autosave (on/off)
-#   -n MODE No check. MODE is one of: never, sleep, standby, idle
+#   -n MODE No check if: never, sleep[,N][,q], standby[,N][,q], idle[,N][,q]
 #   -H      Monitor SMART Health Status, report if failed
-#   -l TYPE Monitor SMART log.  Type is one of: error, selftest
-#   -f      Monitor for failure of any 'Usage' Attributes
-#   -m ADD  Send warning email to ADD for -H, -l error, -l selftest, and -f
+#   -s REG  Do Self-Test at time(s) given by regular expression REG
+#   -l TYPE Monitor SMART log or self-test status:
+#           error, selftest, xerror, offlinests[,ns], selfteststs[,ns]
+#   -l scterc,R,W  Set SCT Error Recovery Control
+#   -e      Change device setting: aam,[N|off], apm,[N|off], dsn,[on|off],
+#           lookahead,[on|off], security-freeze, standby,[N|off], wcache,[on|off]
+#   -f      Monitor 'Usage' Attributes, report failures
+#   -m ADD  Send email warning to address ADD
 #   -M TYPE Modify email warning behavior (see man page)
-#   -s REGE Start self-test when type/date matches regular expression (see man page)
-#   -p      Report changes in 'Prefailure' Normalized Attributes
-#   -u      Report changes in 'Usage' Normalized Attributes
+#   -p      Report changes in 'Prefailure' Attributes
+#   -u      Report changes in 'Usage' Attributes
 #   -t      Equivalent to -p and -u Directives
 #   -r ID   Also report Raw values of Attribute ID with -p, -u or -t
 #   -R ID   Track changes in Attribute ID Raw value with -p, -u or -t
 #   -i ID   Ignore Attribute ID for -f Directive
 #   -I ID   Ignore Attribute ID for -p, -u or -t Directive
-#   -C ID   Report if Current Pending Sector count non-zero
-#   -U ID   Report if Offline Uncorrectable count non-zero
+#   -C ID[+] Monitor [increases of] Current Pending Sectors in Attribute ID
+#   -U ID[+] Monitor [increases of] Offline Uncorrectable Sectors in Attribute ID
 #   -W D,I,C Monitor Temperature D)ifference, I)nformal limit, C)ritical limit
 #   -v N,ST Modifies labeling of Attribute N (see man page)
-#   -a      Default: equivalent to -H -f -t -l error -l selftest -C 197 -U 198
-#   -F TYPE Use firmware bug workaround. Type is one of: none, samsung
 #   -P TYPE Drive-specific presets: use, ignore, show, showall
+#   -a      Default: -H -f -t -l error -l selftest -l selfteststs -C 197 -U 198
+#   -F TYPE Use firmware bug workaround:
+#           none, nologdir, samsung, samsung2, samsung3, xerrorlba
+#   -c i=N  Set interval between disk checks to N seconds
 #    #      Comment: text after a hash sign is ignored
 #    \      Line continuation character
 # Attribute ID is a decimal integer 1 <= ID <= 255
 # except for -C and -U, where ID = 0 turns them off.
-# All but -d, -m and -M Directives are only implemented for ATA devices
-#
+
 # If the test string DEVICESCAN is the first uncommented text
 # then smartd will scan for devices.
 # DEVICESCAN may be followed by any desired Directives.
-# -n standby : don't wake up devices
+# -n standby : do not wake up devices
 # -W 0,45,50 log above 40°, critical above 50°
 # -s (L/../01/./04:024|S/../.././02:001) short test daily at 2am staggered by 1h. long tests 1st of the month at 4am staggered by 24h
 # -I 194 : Do not log Temperature_Celsius changes
@@ -168,7 +149,7 @@ DEFAULT -H -f -t -l error -l selftest -C 197+ -U 198+ -n standby,q -m root -M ex
 {% elif dev.startswith('ata-') %}
 {#- Crucial MX500 firmware spuriously flaps Current_Pending_Sector (197)
     and Offline_Uncorrectable (198) to 1 and back to 0 with no real media
-    defect (Reallocated_Sector_Ct stays 0) — a well-documented firmware
+    defect (Reallocated_Sector_Ct stays 0) -- a well-documented firmware
     bug. -C 0 -U 0 disables those two reports for MX500 drives only;
     DEFAULT's -H, selftest, and reallocated-count tracking still apply. #}
 /dev/disk/by-id/{{ dev }} -d ata -e security-freeze -W 0,50,55 -l error -l selftest -l xerror -l scterc,70,70{{ ' -C 0 -U 0' if dev | regex_search('CT\\d+MX500SSD') else '' }}

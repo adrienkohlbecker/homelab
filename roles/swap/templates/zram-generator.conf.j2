@@ -1,4 +1,13 @@
-# {{ ansible_managed }}
+# This config file enables a /dev/zram0 swap device
+#
+# This device's properties can be modified by adding options under the
+# `[zram0]` section, or disabled by removing the section header.
+# Additional zram devices can be created by appending new `[zramX]`
+# sections and setting the appropriate options for each device.
+#
+# See /usr/share/doc/systemd-zram-generator/zram-generator.conf.example
+# and/or zram-generator.conf(5) for a list of available options.
+#
 # zram swap: the primary, high-priority swap device. Routine cold-page
 # eviction compresses into RAM here; the disk/zvol swap (priority 10) is
 # reached only under genuine exhaustion. See

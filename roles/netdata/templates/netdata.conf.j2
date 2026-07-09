@@ -1,4 +1,14 @@
-# Managed by ansible (roles/netdata/templates/netdata.conf.j2).
+# netdata configuration
+#
+# You can get the latest version of this file, using:
+#
+#  netdatacli dumpconfig > /etc/netdata/netdata.conf
+#
+# You can also download it using:
+#
+#  wget -O /etc/netdata/netdata.conf http://localhost:19999/netdata.conf
+# or
+#  curl -o /etc/netdata/netdata.conf http://localhost:19999/netdata.conf
 #
 # Only the load-bearing overrides live here. netdata overlays this file on its
 # compiled-in defaults, so every option not listed keeps its auto-tuned value

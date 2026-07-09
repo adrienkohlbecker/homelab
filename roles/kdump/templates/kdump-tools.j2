@@ -1,10 +1,4 @@
-# {{ ansible_managed }}
-#
-# Owned wholesale by roles/kdump. The shape and comments below mirror
-# the upstream package's shipped /etc/default/kdump-tools so an
-# operator can still see every supported key in context; our
-# overrides land *uncommented* below each defaults block.
-#
+# kdump-tools configuration
 # ---------------------------------------------------------------------------
 # USE_KDUMP - controls kdump will be configured
 #     0 - kdump kernel will not be loaded
@@ -30,6 +24,8 @@ KDUMP_INITRD=/var/lib/kdump/initrd.img
 # KDUMP_FAIL_CMD - This variable can be used to cause a reboot or
 #     start a shell if saving the vmcore fails.  If not set, "reboot -f"
 #     is the default.
+#     Example - start a shell if the vmcore copy fails:
+#         KDUMP_FAIL_CMD="echo 'makedumpfile FAILED.'; /bin/bash; reboot -f"
 # KDUMP_DUMP_DMESG - This variable controls if the dmesg buffer is dumped.
 #     If unset or set to 1, the dmesg buffer is dumped. If set to 0, the dmesg
 #     buffer is not dumped.
@@ -87,10 +83,10 @@ MAKEDUMP_ARGS="-l -d 31"
 #     Set this variable to override /proc/cmdline.
 # KDUMP_CMDLINE_APPEND - Additional arguments to append to the command line
 #     for the kdump kernel.  If unset, it defaults to
-#     "reset_devices systemd.unit=kdump-tools-dump.service nr_cpus=1 irqpoll nousb"
+#     "reset_devices systemd.unit=kdump-tools-dump.service nr_cpus=1"
 #KDUMP_KEXEC_ARGS=""
 #KDUMP_CMDLINE=""
-#KDUMP_CMDLINE_APPEND="reset_devices systemd.unit=kdump-tools-dump.service nr_cpus=1 irqpoll nousb"
+#KDUMP_CMDLINE_APPEND="reset_devices systemd.unit=kdump-tools-dump.service nr_cpus=1"
 
 # ---------------------------------------------------------------------------
 # Architecture specific Overrides:
@@ -113,7 +109,7 @@ MAKEDUMP_ARGS="-l -d 31"
 
 # FTP - Hostname and path of the FTP server configured to receive the crash dump.
 #       The syntax is {HOSTNAME}[:{PATH}] with PATH defaulting to /.
-# FTP_USER - FTP username. An anonymous upload will be used if not set.
+# FTP_USER - FTP username. A anonomous upload will be used if not set.
 # FTP_PASSWORD - password for the FTP user
 # FTP_PORT=21 - FTP port. Port 21 will be used by default.
 #FTP="<server>:<path>"

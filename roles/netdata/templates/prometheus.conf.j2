@@ -1,5 +1,11 @@
 # vim:ft=yaml
+## All available configuration options, their descriptions and default values:
+## https://github.com/netdata/netdata/tree/master/src/go/plugin/go.d/collector/prometheus#readme
+
 jobs:
+#  - name: node_exporter_local
+#    url: 'http://127.0.0.1:9100/metrics'
+
   # fluent-bit's HTTP_Server exposes a prometheus endpoint with
   # output_dropped_records_total + output_retried_records_total. Dropped
   # records mean fluent-bit gave up after exhausting retries against

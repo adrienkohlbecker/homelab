@@ -1,52 +1,99 @@
-# Pinned to the host's primary uplink. Without this, multi-NIC hosts
-# (eth0 + macvlan children mac_mgmt/mac_iot sharing one L2, plus
-# virbr0/podman*/iot VLAN) hear their own mDNS announcements echoed back via a sibling
-# interface and rename to <host>-NNNN every time a netlink address-
-# change fires — e.g. keepalived adding the DNS VIP to eth0 on
-# MASTER transition.
+# This file is part of avahi.
+#
+# avahi is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation; either version 2 of the
+# License, or (at your option) any later version.
+#
+# avahi is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+# or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public
+# License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with avahi; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+# USA.
+
+# See avahi-daemon.conf(5) for more information on this configuration
+# file!
+
 [server]
-allow-interfaces={{ default_interface }}
+#host-name=foo
 # Pin avahi's hostname to inventory; without this it reads
 # gethostname(2) which can drift from inventory after a DHCP/
 # cloud-init rename, and _verify's `getent ahosts {host}.local`
 # would then fail opaquely (daemon healthy, wrong answer).
 host-name={{ ansible_hostname }}
-# Drop incoming mDNS packets whose TTL != 255 -- i.e. anything that
-# crossed a router or TTL-decrementing bridge. Belt-and-braces to
-# the allow-interfaces pin: catches a sibling-iface echo path that
-# slipped past the L2 socket-membership pin, by enforcing direct-
-# link multicast at the IP layer.
-check-response-ttl=yes
-# IPv4-only stance: allow-interfaces above pins one IPv4 iface, but
+#domain-name=local
+#browse-domains=0pointer.de, zeroconf.org
+use-ipv4=yes
+# IPv4-only stance: allow-interfaces below pins one IPv4 iface, but
 # avahi otherwise still binds :: and answers AAAA queries over IPv4
 # mDNS via publish-aaaa-on-ipv4. Make the v4-only intent explicit so
-# AAAA records for podman bridges / virbr0 / macvlan parent don't
+# AAAA records for podman bridges / virbr0 / macvlan parent do not
 # leak through the same echo-loop class the allow-interfaces pin
 # defends against, just over a different record type.
-use-ipv4=yes
 use-ipv6=no
-# Refuse to share UDP 5353 with another mDNS responder. Defense-
-# in-depth: roles/resolved pins MulticastDNS=no on Ubuntu noble's
-# systemd-resolved (whose default `MulticastDNS=resolve` would
-# otherwise race avahi for the multicast socket on cold boot). If
-# that pin is ever lost, or another mDNS responder lands here, this
-# catches the conflict at avahi startup -- loud failure, not the
-# silent collision-rename flap that two responders on the same
-# socket would otherwise cause.
+#allow-interfaces=eth0
+# Pinned to the host's primary uplink. Without this, multi-NIC hosts
+# (eth0 + macvlan children mac_mgmt/mac_iot sharing one L2, plus
+# virbr0/podman*/iot VLAN) hear their own mDNS announcements echoed
+# back via a sibling interface and rename to <host>-NNNN every time a
+# netlink address-change fires.
+allow-interfaces={{ default_interface }}
+#deny-interfaces=eth1
+#check-response-ttl=no
+# Drop incoming mDNS packets whose TTL != 255 -- i.e. anything that
+# crossed a router or TTL-decrementing bridge. Belt-and-braces to the
+# allow-interfaces pin: catches a sibling-iface echo path that slipped
+# past the L2 socket-membership pin, by enforcing direct-link multicast
+# at the IP layer.
+check-response-ttl=yes
+#use-iff-running=no
+#enable-dbus=yes
+#disallow-other-stacks=no
+# Refuse to share UDP 5353 with another mDNS responder. Defense-in-depth:
+# roles/resolved pins MulticastDNS=no on Ubuntu noble's systemd-resolved
+# (whose default `MulticastDNS=resolve` would otherwise race avahi for
+# the multicast socket on cold boot). If that pin is ever lost, or
+# another mDNS responder lands here, this catches the conflict at avahi
+# startup -- loud failure, not silent collision-rename flap.
 disallow-other-stacks=yes
+#allow-point-to-point=no
+#cache-entries-max=4096
+#clients-max=4096
+#objects-per-client-max=1024
+#entries-per-entry-group-max=32
+ratelimit-interval-usec=1000000
+ratelimit-burst=1000
+
+[wide-area]
+enable-wide-area=yes
 
 [publish]
-# Suppress _workstation._tcp (avahi upstream default = yes; Ubuntu's
-# packaged conf overrides to no, preserved here). The service-name
-# format embeds the publishing interface's MAC address
-# (`<host> [aa:bb:cc:dd:ee:ff]._workstation._tcp`), a fingerprinting
-# leak across mDNS, and adds a redundant Finder-sidebar entry for the
-# host with no functional benefit.
-publish-workstation=no
-# Defensive: pin against a future upstream re-enable of HINFO
-# (CPU/arch broadcast); upstream default is already `no`.
+#disable-publishing=no
+#disable-user-service-publishing=no
+#add-service-cookie=no
+#publish-addresses=yes
 publish-hinfo=no
-# Match the IPv4-only stance above: don't synthesize AAAA on IPv4 or
-# A on IPv6. Upstream defaults are yes for both.
+publish-workstation=no
+#publish-domain=yes
+#publish-dns-servers=192.168.50.1, 192.168.50.2
+#publish-resolv-conf-dns-servers=yes
 publish-aaaa-on-ipv4=no
 publish-a-on-ipv6=no
+
+[reflector]
+#enable-reflector=no
+#reflect-ipv=no
+#reflect-filters=_airplay._tcp.local,_raop._tcp.local
+
+[rlimits]
+#rlimit-as=
+#rlimit-core=0
+#rlimit-data=8388608
+#rlimit-fsize=0
+#rlimit-nofile=768
+#rlimit-stack=8388608
+#rlimit-nproc=3
