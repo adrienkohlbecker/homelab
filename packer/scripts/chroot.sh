@@ -26,13 +26,13 @@ case $ZBM_ARCH in
 x86_64)
   REFIND_NAME=refind_x64.efi
   REFIND_FALLBACK_NAME=BOOTX64.EFI
-  ZBM_VERSION=v3.1.0-linux6.18-ci.27033469422.1-x86_64
+  ZBM_VERSION=v3.0.1-linux6.1-ci.2615022324.14945838188-x86_64
   CONSOLE_CMDLINE="console=tty0 earlycon=uart8250,io,0x3f8 console=ttyS0,115200"
   ;;
 aarch64)
   REFIND_NAME=refind_aa64.efi
   REFIND_FALLBACK_NAME=BOOTAA64.EFI
-  ZBM_VERSION=v3.1.0-linux6.18-local.20260605230757-aarch64
+  ZBM_VERSION=v3.1.0-linux6.18-local.20260619193945-aarch64
   CONSOLE_CMDLINE="console=tty0 earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200"
   ;;
 *)
