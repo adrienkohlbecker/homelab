@@ -27,13 +27,13 @@ x86_64)
   REFIND_NAME=refind_x64.efi
   REFIND_FALLBACK_NAME=BOOTX64.EFI
   ZBM_VERSION=v3.0.1-linux6.1-ci.2615022324.14945838188-x86_64
-  CONSOLE_CMDLINE="console=tty0 earlycon=uart8250,io,0x3f8 console=ttyS0,115200"
+  SERIAL_CMDLINE="earlycon=uart8250,io,0x3f8 console=ttyS0,115200"
   ;;
 aarch64)
   REFIND_NAME=refind_aa64.efi
   REFIND_FALLBACK_NAME=BOOTAA64.EFI
   ZBM_VERSION=v3.1.0-linux6.18-local.20260619193945-aarch64
-  CONSOLE_CMDLINE="console=tty0 earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200"
+  SERIAL_CMDLINE="earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200"
   ;;
 *)
   echo >&2 "Unsupported arch: $ZBM_ARCH"
@@ -340,13 +340,22 @@ fi
 # from /etc/zfsbootmenu/*) keeps it across an in-test reboot. The fragment only
 # exists in the test image; prod is stock Ubuntu via ansible and has no such
 # file, so mitigations=off can never reach a prod host.
+#
+# Bare-metal physical hosts (lab/pug) have no 16550 UART, so the serial console
+# args are inert; use the VGA console only. This is only the pre-converge value
+# -- the boot role reconverges it from _console_cmdline (group_vars/all/main.yml),
+# which carries the same console=tty0 base.
+COMMANDLINE="console=tty0"
+
 if [ "${QEMU_TEST_IMAGE:-false}" = "true" ]; then
-  COMMANDLINE="$CONSOLE_CMDLINE mitigations=off"
+  COMMANDLINE="$COMMANDLINE $SERIAL_CMDLINE mitigations=off"
   mkdir -p /etc/zfsbootmenu
   echo "mitigations=off" >/etc/zfsbootmenu/mitigations
-else
-  COMMANDLINE="$CONSOLE_CMDLINE"
+elif [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
+  # Hetzner Cloud exposes a serial console, so keep the serial args.
+  COMMANDLINE="$COMMANDLINE $SERIAL_CMDLINE"
 fi
+
 zfs set org.zfsbootmenu:commandline="$COMMANDLINE" "rpool/ROOT"
 
 # Create efi & swap
@@ -622,19 +631,13 @@ timeout $REFIND_TIMEOUT
 default_selection "$refind_default_selection"
 dont_scan_dirs $refind_dont_scan_dirs
 
-# $CONSOLE_CMDLINE is passed explicitly to every ZBM stage so the rEFInd ->
-# ZBM -> kexec handoff narrates itself on the serial console. A stalled boot
-# (e.g. the intermittent first-boot SSH-bringup flake the test harness hits)
-# is only diagnosable if that stage is visible. zbm.skip still bypasses the
-# menu so the boot stays non-interactive.
-#
 # Twin of the converge-time roles/refind/templates/refind.conf.j2, kept in sync by
 # hand.
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/VMLINUZ.EFI
-    options "$ZBM_CMDLINE $CONSOLE_CMDLINE zbm.skip"
+    options "$ZBM_CMDLINE $COMMANDLINE zbm.skip"
     submenuentry "Show ZFSBootMenu" {
-      options "$ZBM_CMDLINE $CONSOLE_CMDLINE zbm.show"
+      options "$ZBM_CMDLINE $COMMANDLINE zbm.show"
     }
 }
 EOF
@@ -645,16 +648,16 @@ if [ "$ZBM_ARCH" = "aarch64" ]; then
 menuentry "Ubuntu (ZBM, Components)" {
     loader /EFI/ZBM/${ZBM_KERNEL}
     initrd /EFI/ZBM/initramfs-bootmenu.img
-    options "$ZBM_CMDLINE $CONSOLE_CMDLINE zbm.skip"
+    options "$ZBM_CMDLINE $COMMANDLINE zbm.skip"
     submenuentry "Show ZFSBootMenu" {
-      options "$ZBM_CMDLINE $CONSOLE_CMDLINE zbm.show"
+      options "$ZBM_CMDLINE $COMMANDLINE zbm.show"
     }
 }
 
 menuentry "Ubuntu (Linux EFI Stub)" {
     loader /EFI/Linux/vmlinuz.efi
     initrd /EFI/Linux/initrd
-    options "root=zfs:rpool/ROOT/${UBUNTU_NAME} $(zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT)"
+    options "root=zfs:rpool/ROOT/${UBUNTU_NAME} $COMMANDLINE"
 }
 EOF
 
