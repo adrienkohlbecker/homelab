@@ -45,7 +45,12 @@ ConditionPathExists=/sys/class/net/wg0
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/sbin/nft add flowtable inet homelab bulk { devices = { wg0 }; }
+# nft 1.0.9 (noble) rejects a bare `{ devices = {...}; }` add to an existing
+# flowtable with "missing hook and priority"; the block must restate them (nft
+# 1.0.2 on jammy accepts either form). They must stay in sync with the base
+# `flowtable bulk` declaration in nftables.conf.j2 -- nft merges wg0 into that
+# flowtable's existing device set ($WAN_IFACE), it does not replace it.
+ExecStart=/usr/sbin/nft add flowtable inet homelab bulk { hook ingress priority filter; devices = { wg0 }; }
 
 [Install]
 WantedBy=wg-quick@wg0.service
