@@ -412,13 +412,27 @@ debootstrap --verbose "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR" || {
 
 cp /etc/hostid /mnt/etc
 
-# Build-time dpkg I/O mode: dpkg fsyncs every unpacked file by default,
-# which dominates the chroot install's wall-clock on network-backed disks
-# (EBS on the AWS bake) and still costs plenty locally. A build that
-# crashes mid-install is rebuilt, never booted, so per-file durability buys
-# nothing — and the shipped image is quiesced by the zpool export below
-# regardless. Removed before the image is sealed.
-echo force-unsafe-io >/mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
+# A disposable image build (qemu test fixture or the Hetzner snapshot) is
+# either re-baked on failure or grown + verified on first boot; a bare-metal
+# copy-paste run installs onto the real host. Every packer source sets one of
+# the two flags below, so "neither" is exactly the bare-metal path. Gates the
+# build-only speed hacks that trade durability for wall-clock.
+building_image=false
+if [ "${QEMU_TEST_IMAGE:-false}" = "true" ] || [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
+  building_image=true
+fi
+
+# Build-time dpkg I/O mode: dpkg fsyncs every unpacked file by default, which
+# dominates the chroot install's wall-clock on network-backed disks (EBS on the
+# AWS bake) and still costs plenty locally. A disposable build that crashes
+# mid-install is re-baked, never booted, so per-file durability buys nothing --
+# and the image is quiesced by the zpool export below regardless. Skipped on a
+# bare-metal install: an interrupted provision is costlier to redo, the
+# local-SSD speed win is small, and fsync durability is worth keeping. Removed
+# before the image is sealed.
+if [ "$building_image" = "true" ]; then
+  echo force-unsafe-io >/mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
+fi
 
 # Stage the Hetzner cloud-init drop-in for this release so chroot.sh can install
 # it into /etc/cloud/cloud.cfg.d, making the image behave like the stock hcloud
@@ -451,7 +465,9 @@ fi
 # consumes it the same way via unquoted `for d in $DISKS` word-splitting.
 unshare --mount --propagation private arch-chroot /mnt bash <"$SCRIPTS_DIR/chroot.sh"
 
-rm /mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
+if [ "$building_image" = "true" ]; then
+  rm /mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
+fi
 
 # Create any non-rpool pools while /mnt is still rpool's root so the current
 # zpool.cache can be copied into the shipped install.
