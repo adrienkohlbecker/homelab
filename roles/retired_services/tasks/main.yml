@@ -709,7 +709,7 @@
   when: retired_services_godconf.stat.exists
   lineinfile:
     path: /etc/netdata/go.d.conf
-    regexp: '^[#\s]*pihole:\s+'
+    regexp: '^[\s]*pihole:\s+yes'
     line: '  pihole: no'
     backup: true
     validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
