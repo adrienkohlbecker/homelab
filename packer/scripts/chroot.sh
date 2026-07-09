@@ -714,7 +714,17 @@ fi
 
 # Add more packages
 
-apt-get install --yes openssh-server qemu-guest-agent
+apt-get install --yes openssh-server
+
+# qemu-guest-agent is a KVM guest<->host channel (graceful shutdown, IP
+# reporting) that binds the virtio-serial port /dev/virtio-ports/org.qemu.
+# guest_agent.0; on bare metal that port never appears and the service sits
+# inert. Install it only on the virtualized targets -- the qemu test fixtures
+# (QEMU_TEST_IMAGE) and the Hetzner cloud image (IMAGE_TARGET=hetzner). A
+# bare-metal copy-paste run sets neither flag and skips it.
+if [ "${QEMU_TEST_IMAGE:-false}" = "true" ] || [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
+  apt-get install --yes qemu-guest-agent
+fi
 
 # Disable ssh password authentication. The vagrant account is
 # key-only (no password set, see below); other users on the image
