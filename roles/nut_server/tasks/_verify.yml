@@ -13,6 +13,16 @@
 # Lock the converged mask contract before the destructive swap below tears it
 # down: under qemu the driver is masked (no UPS to reach), so nut-server's
 # Wants skips it instead of starting a doomed snmp-ups.
+- name: _verify | Nut-monitor is disabled and stopped
+  systemd:
+    name: nut-monitor.service
+  become: true
+  register: nut_server_monitor_unit
+  changed_when: false
+  failed_when: >-
+    nut_server_monitor_unit.status.UnitFileState != 'disabled'
+    or nut_server_monitor_unit.status.ActiveState != 'inactive'
+
 - name: _verify | Driver unit is masked under qemu (no UPS to reach)
   systemd:
     name: '{{ "nut-driver.service" if ansible_distribution_release in ["jammy"] else "nut-driver@eaton.service" }}'

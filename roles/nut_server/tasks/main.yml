@@ -29,6 +29,29 @@
   tags:
     - nut_server
 
+# nut-snmp/nut-cgi pull nut-client, whose package ships nut-monitor.service
+# (upsmon). This role is server-only: it runs the SNMP driver + upsd for
+# Home Assistant/operator reads, while active shutdown stays owned by
+# eaton_ipp. Keep the client unit inert without masking it, so a future
+# upsmon revival can enable it deliberately.
+- name: Disable nut-monitor service
+  when: not (ansible_check_mode and nut_server_apt.changed)
+  systemd:
+    name: nut-monitor.service
+    enabled: false
+    state: stopped
+  become: true
+  tags:
+    - nut_server
+
+- name: Reset failed nut-monitor state
+  when: not (ansible_check_mode and nut_server_apt.changed)
+  command: systemctl reset-failed nut-monitor.service
+  changed_when: false
+  become: true
+  tags:
+    - nut_server
+
 - name: Configure nut nut.conf
   when: not (ansible_check_mode and nut_server_apt.changed)
   copy:
