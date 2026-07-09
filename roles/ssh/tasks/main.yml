@@ -55,7 +55,8 @@
     msg: >-
       /mnt/services/ssh_host_keys holds a DIFFERENT host identity than
       /etc/ssh -- this host was likely rebuilt without restoring its host
-      keys. Either restore the persisted identity (rebuild runbooks Phase 5):
+      keys. Either restore the persisted identity (the rebuild runbooks
+      restore-state phase):
       sudo cp -a /mnt/services/ssh_host_keys/ssh_host_* /etc/ssh/ &&
       sudo systemctl restart ssh -- or adopt the new identity by deleting
       /mnt/services/ssh_host_keys, then update every known_hosts pin of
