@@ -17,6 +17,13 @@ f_require_root
 # way the nightly does. 48h absorbs one slow nightly (the 02:00 run may
 # legitimately still be transferring when this fires) without letting a
 # second one pass unnoticed.
+#
+# To RETIRE a replica deliberately (a pre-rebuild rpool/ROOT/<release>
+# whose source dataset is gone and will never advance again), set a local
+# override on the holder: `zfs set autobackup:bak=false <replica>`. The
+# local value wins over the received one, the value filter below skips it,
+# and the onsite pull no longer touches the dataset so the override sticks.
+# Destroy the replica once its rollback window closes.
 MAX_AGE_HOURS=48
 
 now=$(date +%s)
