@@ -118,6 +118,7 @@
     - zfs_backup_onsite
     - zfs_backup_offsite
     - zfs_backup_restore
+    - zfs_backup_freshness
   register: zfs_autobackup_scripts
   become: true
   tags:
@@ -187,6 +188,24 @@
       # oneshot units don't inherit any HOME by default.
       environment:
         HOME: /root
+  tags:
+    - zfs_autobackup
+
+# Data-level dead-man switch behind the nightly (see the script header):
+# every tagged dataset must carry a fresh @bak-. 10:00 leaves the 02:00 run
+# ample time to finish; a failure fails this unit, which the netdata
+# systemd-units alert pages on like any other failed unit.
+- name: Schedule the zfs_backup_freshness timer
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: zfs_backup_freshness
+      description: Daily ZFS backup freshness check
+      on_calendar: "*-*-* 10:00:00"
+      persistent: false
+      exec_start: /usr/local/bin/zfs_backup_freshness
   tags:
     - zfs_autobackup
 

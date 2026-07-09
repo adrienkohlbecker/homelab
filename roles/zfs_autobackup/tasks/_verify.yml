@@ -32,6 +32,7 @@
     - zfs_backup_onsite
     - zfs_backup_offsite
     - zfs_backup_restore
+    - zfs_backup_freshness
     - zfs_autosnapshot
   register: zfs_autobackup_verify_scripts
 
@@ -503,3 +504,57 @@
       (marker={{ zfs_autobackup_verify_restore_marker.stdout }},
       state={{ zfs_autobackup_verify_restore_state.stdout_lines }},
       restore stdout={{ zfs_autobackup_verify_restore_run.stdout }})
+
+# Functional check for the freshness dead-man switch: it must pass right
+# after the local backup runs above (every tagged dataset just got a fresh
+# @bak-), then flag a tagged dataset that has never been snapshotted.
+- name: _verify | Inspect zfs_backup_freshness.timer
+  systemd:
+    name: zfs_backup_freshness.timer
+  register: zfs_autobackup_verify_freshness_timer
+  become: true
+
+- name: _verify | Freshness timer is loaded, enabled, and active
+  assert:
+    that:
+      - zfs_autobackup_verify_freshness_timer.status.LoadState == "loaded"
+      - zfs_autobackup_verify_freshness_timer.status.UnitFileState == "enabled"
+      - zfs_autobackup_verify_freshness_timer.status.ActiveState == "active"
+    fail_msg: zfs_backup_freshness.timer not in expected state
+
+- name: _verify | Freshness check passes while everything is fresh
+  command: /usr/local/bin/zfs_backup_freshness
+  changed_when: false
+  become: true
+
+- name: _verify | Create a tagged dataset with no snapshot (silent-exclusion shape)
+  community.general.zfs:
+    name: rpool/zfs_autobackup_freshness_test
+    state: present
+    extra_zfs_properties:
+      autobackup:bak: "true"
+      mountpoint: none
+  become: true
+
+- name: _verify | Freshness check flags the never-snapshotted dataset
+  command: /usr/local/bin/zfs_backup_freshness
+  changed_when: false
+  failed_when: false
+  register: zfs_autobackup_verify_freshness_stale
+  become: true
+
+- name: _verify | Stale dataset produced a nonzero exit and a STALE line
+  assert:
+    that:
+      - zfs_autobackup_verify_freshness_stale.rc != 0
+      - "'STALE: rpool/zfs_autobackup_freshness_test' in zfs_autobackup_verify_freshness_stale.stderr"
+    fail_msg: >-
+      freshness check did not flag the never-snapshotted dataset
+      (rc={{ zfs_autobackup_verify_freshness_stale.rc }},
+      stderr={{ zfs_autobackup_verify_freshness_stale.stderr }})
+
+- name: _verify | Drop the freshness-test dataset
+  community.general.zfs:
+    name: rpool/zfs_autobackup_freshness_test
+    state: absent
+  become: true
