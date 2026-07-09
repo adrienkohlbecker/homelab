@@ -97,7 +97,7 @@
 # refuses to start. The drop-in declares our audited Subsystem, so the stock
 # line must be commented out. Noble (9.6+) tolerates duplicates via
 # first-match-wins, but the comment-out is harmless there.
-- name: Comment out stock sftp Subsystem to avoid duplicate on jammy
+- name: Comment out stock sftp Subsystem to avoid duplicate
   lineinfile:
     path: /etc/ssh/sshd_config
     regexp: '^([#\s]*)Subsystem(\s+)sftp(\s+)(.*)$'
