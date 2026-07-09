@@ -24,8 +24,8 @@ source /usr/local/lib/functions.sh
 
 ASSUME_YES=0
 if [ "${1:-}" = --yes ]; then
-	ASSUME_YES=1
-	shift
+  ASSUME_YES=1
+  shift
 fi
 
 TARGET_SSH=${1:-}
@@ -34,14 +34,14 @@ TARGET_DATASET=${3:-}
 MOUNTPOINT=${4:-}
 
 if [ -z "$TARGET_SSH" ] || [ -z "$REPLICA_DATASET" ] || [ -z "$TARGET_DATASET" ] || [ -z "$MOUNTPOINT" ]; then
-	echo >&2 "Usage: zfs_backup_restore [--yes] TARGET_SSH REPLICA_DATASET TARGET_DATASET MOUNTPOINT"
-	exit 1
+  echo >&2 "Usage: zfs_backup_restore [--yes] TARGET_SSH REPLICA_DATASET TARGET_DATASET MOUNTPOINT"
+  exit 1
 fi
 
 SNAP=$(zfs list -t snapshot -H -o name -s creation "$REPLICA_DATASET" | tail -1)
 if [ -z "$SNAP" ]; then
-	echo >&2 "ERROR: no snapshot found on $REPLICA_DATASET"
-	exit 1
+  echo >&2 "ERROR: no snapshot found on $REPLICA_DATASET"
+  exit 1
 fi
 
 # recv -F rolls back / clobbers the target, so prove the far end is the
@@ -49,8 +49,8 @@ fi
 # DNS answer pointed us at, before sending anything.
 REMOTE_HOSTNAME=$(ssh "$TARGET_SSH" 'hostnamectl --static')
 if ssh "$TARGET_SSH" "sudo zfs list -H -o name '$TARGET_DATASET'" >/dev/null 2>&1; then
-	echo >&2 "ERROR: $TARGET_DATASET already exists on $REMOTE_HOSTNAME -- refusing to clobber; destroy it first if this is intentional"
-	exit 1
+  echo >&2 "ERROR: $TARGET_DATASET already exists on $REMOTE_HOSTNAME -- refusing to clobber; destroy it first if this is intentional"
+  exit 1
 fi
 
 # Send-side preview: lists every snapshot with sizes (the oldest shown as
@@ -62,11 +62,11 @@ f_trace sudo zfs send -Rnv "$SNAP"
 echo
 echo "Restoring $SNAP -> $REMOTE_HOSTNAME ($TARGET_SSH) as $TARGET_DATASET, mountpoint $MOUNTPOINT"
 if ((!ASSUME_YES)); then
-	read -r -p "Proceed? [y/N] " REPLY </dev/tty
-	if [ "$REPLY" != y ]; then
-		echo >&2 "Aborted"
-		exit 1
-	fi
+  read -r -p "Proceed? [y/N] " REPLY </dev/tty
+  if [ "$REPLY" != y ]; then
+    echo >&2 "Aborted"
+    exit 1
+  fi
 fi
 
 # mbuffer (unmuted) shows a live throughput + ETA meter on top of send -v's

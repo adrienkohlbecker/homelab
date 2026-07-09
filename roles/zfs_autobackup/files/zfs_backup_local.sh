@@ -9,12 +9,12 @@ f_require_root
 # bring the state writers back up between the final snapshot and the wipe.
 post_snapshot_cmd='systemctl start zfs_autosnapshot.target'
 case "${1:-}" in
-  '') ;;
-  --no-resume) post_snapshot_cmd=true ;;
-  *)
-    echo >&2 "Usage: zfs_backup_local [--no-resume]"
-    exit 2
-    ;;
+'') ;;
+--no-resume) post_snapshot_cmd=true ;;
+*)
+  echo >&2 "Usage: zfs_backup_local [--no-resume]"
+  exit 2
+  ;;
 esac
 
 # --no-send takes only local snapshots, so --keep-source is the live
