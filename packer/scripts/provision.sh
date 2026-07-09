@@ -299,6 +299,14 @@ cloud-init status --wait || true
 # (debootstrap, zfsutils-linux, ...). Wipe the dir so update re-fetches every
 # index cleanly -- the same guard write_sources_list applies in chroot.sh.
 find /var/lib/apt/lists -type f -delete
+
+# When installing from live ISO, this contains the cdrom source, which
+# makes apt-get update fail
+# E: The repository 'cdrom://Ubuntu-Server 24.04.4 LTS _Noble Numbat_ - Release amd64 (20260210) noble Release' does not have a Release file.
+# N: Updating from such a repository can't be done securely, and is therefore disabled by default.
+# N: See apt-secure(8) manpage for repository creation and user configuration details.
+rm -f /etc/apt/sources.list
+
 apt_update
 apt-get install --yes arch-install-scripts debootstrap gdisk zfsutils-linux
 
