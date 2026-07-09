@@ -66,3 +66,67 @@
   failed_when: ssh_verify_stock_subsystem.stdout | int > 0
   become: true
 
+
+# --- host-key identity persistence -------------------------------------------
+- name: _verify | Stat the live and persisted host identities
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/ssh/ssh_host_ed25519_key
+    - /mnt/services/ssh_host_keys/ssh_host_ed25519_key
+  become: true
+  register: ssh_verify_persist_stats
+
+- name: _verify | Persisted host keys exist and match the live identity
+  assert:
+    that:
+      - ssh_verify_persist_stats.results[1].stat.exists
+      - ssh_verify_persist_stats.results[0].stat.checksum == ssh_verify_persist_stats.results[1].stat.checksum
+    fail_msg: >-
+      /mnt/services/ssh_host_keys missing or diverged from /etc/ssh --
+      the host identity would not survive a rebuild.
+
+# Divergence guard: a persisted identity that differs from the live one
+# (rebuilt host, restore step skipped) must HALT the converge instead of
+# silently overwriting the old identity. Corrupt the persisted copy, re-run
+# the role, and expect the failure; then repair.
+- name: _verify | Corrupt the persisted host identity
+  copy:
+    dest: /mnt/services/ssh_host_keys/ssh_host_ed25519_key
+    content: "not the real key\n"
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+
+- name: _verify | Re-run the role against the divergent persisted identity
+  block:
+    - name: _verify | Import the role (must fail on the divergence guard)
+      import_role:
+        name: ssh
+    - name: _verify | Unreachable when the guard fires
+      set_fact:
+        ssh_verify_guard_tripped: false
+  rescue:
+    - name: _verify | Record the guard firing
+      set_fact:
+        ssh_verify_guard_tripped: true
+
+- name: _verify | The divergence guard halted the converge
+  assert:
+    that:
+      - ssh_verify_guard_tripped
+    fail_msg: >-
+      re-running the role with a divergent persisted host identity did not
+      fail -- a rebuilt host would silently overwrite the old identity and
+      strand every known_hosts pin.
+
+- name: _verify | Repair the persisted host identity
+  copy:
+    src: /etc/ssh/ssh_host_ed25519_key
+    remote_src: true
+    dest: /mnt/services/ssh_host_keys/ssh_host_ed25519_key
+    owner: root
+    group: root
+    mode: preserve
+  become: true

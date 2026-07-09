@@ -9,6 +9,102 @@
   tags:
     - ssh
 
+# --- host-key identity persistence -----------------------------------------
+# Copies of /etc/ssh/ssh_host_* ride /mnt/services (rpool/services) so a
+# wipe-and-restore rebuild can bring the host identity back and every
+# known_hosts pin of this host -- operator workstations, lab root's pin the
+# nightly pull authenticates against -- stays valid. Unlike ssh_root's
+# keypair, converge only BACKS UP, never restores: swapping host keys
+# mid-converge would invalidate the pin the play's own ssh connection was
+# verified against. The rebuild runbooks restore by hand right after the
+# dataset restore (Phase 5), before ansible first connects. Like ssh_root,
+# the tasks self-gate on /mnt/services being mounted (ssh runs in the
+# host-base band, before zfs_mount/services) and catch up on the next run.
+- name: Check whether /mnt/services is mounted
+  command: findmnt --mountpoint /mnt/services
+  register: ssh_services_mount
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - ssh
+
+- name: Stat the live and persisted host identities
+  when: ssh_services_mount.rc == 0
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/ssh/ssh_host_ed25519_key
+    - /mnt/services/ssh_host_keys/ssh_host_ed25519_key
+  become: true
+  register: ssh_host_identity_stats
+  tags:
+    - ssh
+
+# A divergent persisted identity means this host was rebuilt without
+# restoring its host keys -- silently re-persisting would destroy the old
+# identity and strand every known_hosts pin, so halt and make it a decision.
+- name: Refuse to overwrite a divergent persisted host identity
+  when:
+    - ssh_services_mount.rc == 0
+    - ssh_host_identity_stats.results[0].stat.exists
+    - ssh_host_identity_stats.results[1].stat.exists
+    - ssh_host_identity_stats.results[0].stat.checksum != ssh_host_identity_stats.results[1].stat.checksum
+  fail:
+    msg: >-
+      /mnt/services/ssh_host_keys holds a DIFFERENT host identity than
+      /etc/ssh -- this host was likely rebuilt without restoring its host
+      keys. Either restore the persisted identity (rebuild runbooks Phase 5):
+      sudo cp -a /mnt/services/ssh_host_keys/ssh_host_* /etc/ssh/ &&
+      sudo systemctl restart ssh -- or adopt the new identity by deleting
+      /mnt/services/ssh_host_keys, then update every known_hosts pin of
+      this host.
+  tags:
+    - ssh
+
+- name: Create the host-key persistence directory
+  when: ssh_services_mount.rc == 0
+  file:
+    dest: /mnt/services/ssh_host_keys
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  register: ssh_host_persist_dir
+  tags:
+    - ssh
+
+- name: Enumerate live host keys
+  when: ssh_services_mount.rc == 0
+  find:
+    paths: /etc/ssh
+    patterns: "ssh_host_*_key*"
+  become: true
+  register: ssh_host_keys_found
+  tags:
+    - ssh
+
+- name: Persist the host keys
+  when:
+    - ssh_services_mount.rc == 0
+    - not (ansible_check_mode and ssh_host_persist_dir.changed)
+  copy:
+    src: "{{ item }}"
+    remote_src: true
+    dest: /mnt/services/ssh_host_keys/{{ item | basename }}
+    owner: root
+    group: root
+    mode: preserve
+    backup: true
+  loop: "{{ ssh_host_keys_found.files | default([]) | map(attribute='path') | sort }}"
+  loop_control:
+    label: "{{ item | basename }}"
+  become: true
+  tags:
+    - ssh
+
 - name: Remove legacy drop-in path
   file:
     path: /etc/ssh/sshd_config.d/config.conf

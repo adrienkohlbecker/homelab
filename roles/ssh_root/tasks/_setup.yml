@@ -1,0 +1,11 @@
+# The identity persistence in main.yml self-gates on /mnt/services being
+# mounted -- in prod the services role provides it later in site.yml. Create
+# the dataset here so the fixture converge exercises the persist/restore
+# paths (box is ZFS-root).
+- name: _setup | Create the services dataset
+  community.general.zfs:
+    name: rpool/services
+    state: present
+    extra_zfs_properties:
+      mountpoint: /mnt/services
+  become: true

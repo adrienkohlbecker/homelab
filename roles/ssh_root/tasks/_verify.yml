@@ -82,6 +82,58 @@
       - "'connecttimeout 10' in _ssh_root_config.stdout"
     fail_msg: "ssh_config missing expected directives"
 
+# --- identity persistence ---------------------------------------------------
+- name: _verify | Stat the live and persisted keypair
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /root/.ssh/id_ed25519
+    - /mnt/services/ssh_root/id_ed25519
+  become: true
+  register: _ssh_root_persist_stats
+
+- name: _verify | Persisted copy exists and matches the live key
+  assert:
+    that:
+      - _ssh_root_persist_stats.results[1].stat.exists
+      - _ssh_root_persist_stats.results[0].stat.checksum == _ssh_root_persist_stats.results[1].stat.checksum
+    fail_msg: >-
+      /mnt/services/ssh_root/id_ed25519 missing or diverged from
+      /root/.ssh/id_ed25519 -- the identity would not survive a rebuild.
+
+# Rebuild simulation: after a wipe-and-restore, the persisted copy is in
+# place but /root/.ssh is fresh. Re-running the role must bring back the
+# SAME identity, not generate a new one (that is what keeps the lab/bunk
+# pins valid across a rebuild).
+- name: _verify | Remove the live keypair (simulated rebuild)
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /root/.ssh/id_ed25519
+    - /root/.ssh/id_ed25519.pub
+  become: true
+
+- name: _verify | Re-run the role against the persisted identity
+  import_role:
+    name: ssh_root
+
+- name: _verify | Stat the restored key
+  stat:
+    path: /root/.ssh/id_ed25519
+  become: true
+  register: _ssh_root_restored
+
+- name: _verify | The restored key is the persisted identity
+  assert:
+    that:
+      - _ssh_root_restored.stat.exists
+      - _ssh_root_restored.stat.checksum == _ssh_root_persist_stats.results[1].stat.checksum
+    fail_msg: >-
+      re-running the role after deleting /root/.ssh/id_ed25519 did not
+      restore the persisted identity (a new key was generated instead --
+      every pin of this key would go stale on a real rebuild).
+
 - name: _verify | Capture key fingerprint before forced regeneration
   command: ssh-keygen -l -f /root/.ssh/id_ed25519
   register: _ssh_root_fp_before
