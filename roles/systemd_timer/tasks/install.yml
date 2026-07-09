@@ -156,8 +156,8 @@
       condition: >-
         {{ _systemd_timer_condition
            and not (ansible_check_mode
-                    and (vars[systemd_timer_args.name ~ '_service_result'].changed
-                         or vars[systemd_timer_args.name ~ '_timer_result'].changed)) }}
+                    and (lookup('vars', systemd_timer_args.name ~ '_service_result').changed
+                         or lookup('vars', systemd_timer_args.name ~ '_timer_result').changed)) }}
 
 # --- netdata overdue monitoring -------------------------------------------
 # Register the timer with the netdata systemd_timers collector. Placed after

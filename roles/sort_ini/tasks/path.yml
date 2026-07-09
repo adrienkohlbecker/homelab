@@ -25,7 +25,7 @@
   # ansible_var_key filter. Mirror that key so the check-mode start-skip guard
   # sees the install result for sort_ini_<escaped>.path.
   set_fact:
-    _sort_ini_path_unit_changed: "{{ vars[('sort_ini_' ~ sort_ini_escaped_path ~ '.path') | ansible_var_key ~ '_result'].changed | default(false) }}"
+    _sort_ini_path_unit_changed: "{{ lookup('vars', ('sort_ini_' ~ sort_ini_escaped_path ~ '.path') | ansible_var_key ~ '_result', default={}).changed | default(false) }}"
 
 - name: path | Enable sort_ini.path
   import_role:
