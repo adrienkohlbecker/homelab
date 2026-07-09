@@ -1,0 +1,177 @@
+- name: Validate WoL relay inputs
+  assert:
+    quiet: true
+    that:
+      - udm_wol_relay_port is integer
+      - udm_wol_relay_port | int > 0
+      - udm_wol_relay_port | int <= 65535
+      - udm_wol_relay_source_vlans | length > 0
+      - udm_wol_relay_target_vlans | length > 0
+      - udm_wol_relay_source_vlans | difference(network.sites.home.vlans.keys() | list) | length == 0
+      - udm_wol_relay_target_vlans | difference(network.sites.home.vlans.keys() | list) | length == 0
+    fail_msg: >-
+      udm_wol_relay requires a UDP port plus source/target VLAN names that
+      exist under network.sites.home.vlans.
+  tags:
+    - udm_wol_relay
+
+- name: Derive source CIDRs and target broadcasts
+  set_fact:
+    udm_wol_relay_source_cidrs: >-
+      {{ udm_wol_relay_source_vlans
+         | map('extract', network.sites.home.vlans, 'cidr')
+         | list }}
+    udm_wol_relay_targets: >-
+      {{ udm_wol_relay_target_vlans
+         | map('extract', network.sites.home.vlans, 'cidr')
+         | map('ansible.utils.ipaddr', 'broadcast')
+         | map('regex_replace', '$', ':' ~ (udm_wol_relay_port | string))
+         | list }}
+  tags:
+    - udm_wol_relay
+
+- name: Create persistent relay directory
+  file:
+    path: /data/wol_relay
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - udm_wol_relay
+
+- name: Create on-boot script directory
+  file:
+    path: /data/on_boot.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - udm_wol_relay
+
+- name: Deploy WoL relay script
+  template:
+    src: wol_relay.py.j2
+    dest: /data/wol_relay/wol_relay.py
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: python3 -m py_compile %s
+  register: udm_wol_relay_script
+  become: true
+  tags:
+    - udm_wol_relay
+
+- name: Deploy WoL relay service to persistent storage
+  template:
+    src: udm_wol_relay.service.j2
+    dest: /data/wol_relay/udm_wol_relay.service
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: >-
+      sh -c 'd=$(mktemp -d); trap "rm -rf $d" EXIT; cp "%s" "$d/udm_wol_relay.service"; systemd-analyze verify "$d/udm_wol_relay.service"'
+  register: udm_wol_relay_unit
+  become: true
+  tags:
+    - udm_wol_relay
+
+- name: Symlink WoL relay service into systemd
+  file:
+    src: /data/wol_relay/udm_wol_relay.service
+    dest: /etc/systemd/system/udm_wol_relay.service
+    state: link
+    force: true
+  register: udm_wol_relay_unit_link
+  become: true
+  tags:
+    - udm_wol_relay
+
+- name: Deploy on-boot framework unit
+  copy:
+    src: on-boot.service
+    dest: /etc/systemd/system/on-boot.service
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: >-
+      sh -c 'd=$(mktemp -d); trap "rm -rf $d" EXIT; cp "%s" "$d/on-boot.service"; systemd-analyze verify "$d/on-boot.service"'
+  register: udm_wol_relay_onboot_unit
+  become: true
+  tags:
+    - udm_wol_relay
+
+- name: Deploy on-boot WoL relay script
+  template:
+    src: on-boot-wol-relay.sh.j2
+    dest: /data/on_boot.d/40-wol-relay.sh
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  register: udm_wol_relay_onboot_script
+  become: true
+  tags:
+    - udm_wol_relay
+
+- name: Check WoL relay iptables rules
+  command: >-
+    iptables -w 5 -C INPUT -s {{ item }} -p udp --dport {{ udm_wol_relay_port }}
+    -m comment --comment "wol relay" -j ACCEPT
+  loop: "{{ udm_wol_relay_source_cidrs }}"
+  register: udm_wol_relay_iptables_check
+  changed_when: false
+  failed_when: false
+  become: true
+  tags:
+    - udm_wol_relay
+
+- name: Add WoL relay iptables rules
+  when: item.rc != 0
+  command: >-
+    iptables -w 5 -A INPUT -s {{ item.item }} -p udp --dport {{ udm_wol_relay_port }}
+    -m comment --comment "wol relay" -j ACCEPT
+  loop: "{{ udm_wol_relay_iptables_check.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  changed_when: true
+  become: true
+  tags:
+    - udm_wol_relay
+
+- name: Reload systemd
+  when: >-
+    udm_wol_relay_unit.changed or
+    udm_wol_relay_unit_link.changed or
+    udm_wol_relay_onboot_unit.changed
+  systemd:
+    daemon_reload: true
+  become: true
+  tags:
+    - udm_wol_relay
+
+- name: Enable on-boot framework
+  when: not (ansible_check_mode and udm_wol_relay_onboot_unit.changed)
+  systemd:
+    name: on-boot.service
+    enabled: true
+  become: true
+  tags:
+    - udm_wol_relay
+
+- name: Start WoL relay
+  when: not (ansible_check_mode and udm_wol_relay_unit_link.changed)
+  systemd:
+    name: udm_wol_relay.service
+    state: "{{ (udm_wol_relay_script.changed or udm_wol_relay_unit.changed) | ternary('restarted', 'started') }}"
+    enabled: true
+  become: true
+  tags:
+    - udm_wol_relay

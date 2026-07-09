@@ -1,0 +1,15 @@
+#!/bin/bash
+set -euo pipefail
+
+DATADIR=/data/wol_relay
+
+ln -sfn "$DATADIR/udm_wol_relay.service" /etc/systemd/system/udm_wol_relay.service
+
+for src in {{ udm_wol_relay_source_cidrs | join(" ") }}; do
+  if ! iptables -w 5 -C INPUT -s "$src" -p udp --dport {{ udm_wol_relay_port }} -m comment --comment "wol relay" -j ACCEPT 2>/dev/null; then
+    iptables -w 5 -A INPUT -s "$src" -p udp --dport {{ udm_wol_relay_port }} -m comment --comment "wol relay" -j ACCEPT
+  fi
+done
+
+systemctl daemon-reload
+systemctl enable --now udm_wol_relay.service

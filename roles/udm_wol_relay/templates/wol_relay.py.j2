@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Relay Wake-on-LAN magic packets from selected VLANs to target VLAN broadcasts."""
+
+from __future__ import annotations
+
+import ipaddress
+import logging
+import socket
+import sys
+
+
+LISTEN_PORT = {{ udm_wol_relay_port | to_json }}
+ALLOWED_SOURCES = [ipaddress.ip_network(cidr) for cidr in {{ udm_wol_relay_source_cidrs | to_json }}]
+TARGETS = [
+    (host, int(port))
+    for host, port in (
+        target.rsplit(":", 1) for target in {{ udm_wol_relay_targets | to_json }}
+    )
+]
+
+
+def is_allowed_source(host: str) -> bool:
+    address = ipaddress.ip_address(host)
+    return any(address in network for network in ALLOWED_SOURCES)
+
+
+def is_magic_packet(payload: bytes) -> bool:
+    marker = b"\xff" * 6
+    start = 0
+    while True:
+        index = payload.find(marker, start)
+        if index < 0:
+            return False
+        if index + 102 > len(payload):
+            return False
+        mac = payload[index + 6 : index + 12]
+        if mac != marker and payload[index + 6 : index + 102] == mac * 16:
+            return True
+        start = index + 1
+
+
+def check_config() -> None:
+    if LISTEN_PORT < 1 or LISTEN_PORT > 65535:
+        raise SystemExit(f"invalid listen port: {LISTEN_PORT}")
+    if not ALLOWED_SOURCES:
+        raise SystemExit("at least one allowed source network is required")
+    if not TARGETS:
+        raise SystemExit("at least one target broadcast is required")
+    for host, port in TARGETS:
+        ipaddress.ip_address(host)
+        if port < 1 or port > 65535:
+            raise SystemExit(f"invalid target port: {host}:{port}")
+    print(
+        "listening on udp/%d; allowing %s; relaying to %s"
+        % (
+            LISTEN_PORT,
+            ", ".join(str(network) for network in ALLOWED_SOURCES),
+            ", ".join("%s:%d" % target for target in TARGETS),
+        )
+    )
+
+
+def serve() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    check_config()
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.bind(("", LISTEN_PORT))
+        logging.info("wol relay listening on udp/%d", LISTEN_PORT)
+        while True:
+            payload, (source_host, source_port) = sock.recvfrom(2048)
+            if not is_allowed_source(source_host):
+                continue
+            if not is_magic_packet(payload):
+                continue
+            for target in TARGETS:
+                sock.sendto(payload, target)
+            logging.info(
+                "relayed magic packet from %s:%d to %d target broadcast(s)",
+                source_host,
+                source_port,
+                len(TARGETS),
+            )
+
+
+def main() -> None:
+    if len(sys.argv) == 2 and sys.argv[1] == "--check-config":
+        check_config()
+        return
+    if len(sys.argv) != 1:
+        raise SystemExit("usage: wol_relay.py [--check-config]")
+    serve()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,9 @@
+# _setup is test-only (runs only under test/testrole.py, never against
+# prod). UniFi OS ships iptables; the stock box fixture does not.
+- name: _setup | Install iptables for the UDM-local firewall rules
+  apt:
+    pkg:
+      - iptables
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true

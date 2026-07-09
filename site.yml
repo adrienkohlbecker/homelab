@@ -148,6 +148,7 @@
   hosts: udm
   roles:
     - udm_dns_failover
+    - udm_wol_relay
 
 - name: Decomission services
   hosts: box,lab,pug,fox

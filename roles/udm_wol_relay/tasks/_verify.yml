@@ -1,0 +1,85 @@
+- name: _verify | Derive source CIDRs for standalone verification
+  set_fact:
+    udm_wol_relay_source_cidrs: >-
+      {{ udm_wol_relay_source_vlans
+         | map('extract', network.sites.home.vlans, 'cidr')
+         | list }}
+
+- name: _verify | Stat persistent relay files
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /data/wol_relay/wol_relay.py
+    - /data/wol_relay/udm_wol_relay.service
+    - /data/on_boot.d/40-wol-relay.sh
+  register: _udm_wol_relay_files
+  become: true
+
+- name: _verify | Persistent files exist with expected modes
+  assert:
+    that:
+      - _udm_wol_relay_files.results | map(attribute='stat.exists') | list == [true, true, true]
+      - _udm_wol_relay_files.results | map(attribute='stat.pw_name') | list == ['root', 'root', 'root']
+      - _udm_wol_relay_files.results[0].stat.mode == '0755'
+      - _udm_wol_relay_files.results[1].stat.mode == '0644'
+      - _udm_wol_relay_files.results[2].stat.mode == '0755'
+
+- name: _verify | Stat active unit symlink
+  stat:
+    path: /etc/systemd/system/udm_wol_relay.service
+  register: _udm_wol_relay_unit_link
+  become: true
+
+- name: _verify | Active unit points at the persistent master
+  assert:
+    that:
+      - _udm_wol_relay_unit_link.stat.islnk
+      - _udm_wol_relay_unit_link.stat.lnk_target == '/data/wol_relay/udm_wol_relay.service'
+
+- name: _verify | Relay script config self-test passes
+  command: /data/wol_relay/wol_relay.py --check-config
+  changed_when: false
+  become: true
+
+- name: _verify | Relay service is active and enabled
+  systemd:
+    name: udm_wol_relay.service
+  register: _udm_wol_relay_service
+  failed_when: >-
+    _udm_wol_relay_service.status.ActiveState != 'active' or
+    _udm_wol_relay_service.status.UnitFileState != 'enabled'
+  become: true
+
+- name: _verify | Relay is listening on UDP port 9
+  command: ss -H -lun 'sport = :9'
+  register: _udm_wol_relay_socket
+  changed_when: false
+  failed_when: _udm_wol_relay_socket.stdout | trim == ''
+  become: true
+
+- name: _verify | Source-scoped UDP/9 iptables accepts are present
+  command: >-
+    iptables -w 5 -C INPUT -s {{ item }} -p udp --dport {{ udm_wol_relay_port }}
+    -m comment --comment "wol relay" -j ACCEPT
+  loop: "{{ udm_wol_relay_source_cidrs }}"
+  changed_when: false
+  become: true
+
+- name: _verify | On-boot framework unit is enabled
+  systemd:
+    name: on-boot.service
+  register: _udm_wol_relay_onboot
+  failed_when: _udm_wol_relay_onboot.status.UnitFileState != 'enabled'
+  become: true
+
+- name: _verify | Run the on-boot recovery script by hand
+  command: /data/on_boot.d/40-wol-relay.sh
+  changed_when: false
+  become: true
+
+- name: _verify | Relay remains active after recovery
+  systemd:
+    name: udm_wol_relay.service
+  register: _udm_wol_relay_after_recovery
+  failed_when: _udm_wol_relay_after_recovery.status.ActiveState != 'active'
+  become: true

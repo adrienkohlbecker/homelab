@@ -1,0 +1,17 @@
+[Unit]
+Description=UDM Wake-on-LAN relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/data/wol_relay/wol_relay.py
+Restart=always
+RestartSec=5
+User=root
+Group=root
+Environment=PYTHONUNBUFFERED=1
+SyslogIdentifier=udm_wol_relay
+
+[Install]
+WantedBy=multi-user.target

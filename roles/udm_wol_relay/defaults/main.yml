@@ -1,0 +1,6 @@
+udm_wol_relay_port: 9
+udm_wol_relay_source_vlans:
+  - management
+  - trusted
+udm_wol_relay_target_vlans:
+  - home
