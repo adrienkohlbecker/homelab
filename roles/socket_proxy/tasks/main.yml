@@ -13,7 +13,21 @@
   tags:
     - socket_proxy
 
+# socket_proxy sits in the base band, ahead of most podman consumers, so a
+# fresh-host `--check` run reaches the pull before the podman role has actually
+# installed podman (its apt install was only simulated). podman_image would then
+# fail invoking a missing /usr/bin/podman. Probe for the binary (stat runs for
+# real in check mode) and skip the pull only in that case; a real converge --
+# where podman is installed by the time this runs -- always pulls.
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: socket_proxy_podman
+  tags:
+    - socket_proxy
+
 - name: Pull socket_proxy image
+  when: not ansible_check_mode or socket_proxy_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ socket_proxy_image }}"
   register: socket_proxy_image_pull

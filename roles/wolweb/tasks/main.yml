@@ -95,7 +95,15 @@
   tags:
     - wolweb
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: wolweb_podman
+  tags:
+    - wolweb
+
 - name: Pull wolweb image
+  when: not ansible_check_mode or wolweb_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ wolweb_image }}"
   register: wolweb_image_pull

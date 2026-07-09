@@ -146,6 +146,21 @@
   tags:
     - nginx_site
 
+# nginx_site runs from the base band and from service roles; on a fresh-host
+# `--check` the nginx role's apt install is only simulated, so the reload tasks
+# below would fail asking systemd to reload a nginx unit that isn't installed
+# yet. Probe for the binary -- only needed in check mode, since a real converge
+# has nginx by the time any site reloads -- so the reloads skip in exactly that
+# case while still reporting "would reload" on an already-provisioned host. stat
+# runs for real in check mode.
+- name: site | Check whether nginx is installed (check-mode reload guard)
+  when: ansible_check_mode
+  stat:
+    path: /usr/sbin/nginx
+  register: _nginx_site_binary
+  tags:
+    - nginx_site
+
 # The value-shape asserts below gate on state: present -- a state: absent teardown
 # renders none of these inputs (it only removes files), so validating them would
 # couple a tombstone to input shape it never uses (and reject a legacy subdomain
@@ -328,6 +343,7 @@
       when:
         - _nginx_site_reload
         - nginx_static_conf.changed or nginx_static_conf_enable.changed or (nginx_upstream_auth_map.changed | default(false))
+        - not ansible_check_mode or (_nginx_site_binary.stat.exists | default(false))
       systemd:
         name: nginx
         state: reloaded
@@ -377,6 +393,7 @@
     - _nginx_site_state == 'absent'
     - _nginx_site_reload
     - nginx_static_conf_absent.changed | default(false)
+    - not ansible_check_mode or (_nginx_site_binary.stat.exists | default(false))
   systemd:
     name: nginx
     state: reloaded

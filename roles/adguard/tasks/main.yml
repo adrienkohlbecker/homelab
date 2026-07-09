@@ -172,7 +172,15 @@
   tags:
     - adguard
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: adguard_podman
+  tags:
+    - adguard
+
 - name: Pull adguard image
+  when: not ansible_check_mode or adguard_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ adguard_image }}"
   register: adguard_image_pull
@@ -222,6 +230,13 @@
   tags:
     - adguard
 
+- name: Check whether keepalived is installed
+  stat:
+    path: /usr/sbin/keepalived
+  register: adguard_keepalived
+  tags:
+    - adguard
+
 # SIGHUP-reload (hitless) for the common edits: priority, VIP, peers,
 # healthcheck params, notify hooks. Structural changes (interface, VRID)
 # need a manual `systemctl restart keepalived`. throttle: 1 serializes
@@ -242,7 +257,7 @@
 # -- the VIP stays with the throttled-out peer while the operator fixes
 # the template, with the previous rendering preserved by backup: true.
 - name: Reload keepalived
-  when: adguard_keepalived_cfg.changed
+  when: not (ansible_check_mode and not adguard_keepalived.stat.exists) and adguard_keepalived_cfg.changed
   systemd:
     name: keepalived
     state: reloaded

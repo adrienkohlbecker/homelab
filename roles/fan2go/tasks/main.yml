@@ -115,7 +115,14 @@
       register: fan2go_binary_build
 
 - name: Symlink /usr/local/bin/fan2go to versioned binary
-  when: fan2go_enabled
+  when:
+    - fan2go_enabled
+    # The versioned binary is downloaded (x86_64) or built (aarch64) above; in a
+    # fresh-host check run those only "would" happen, so the target isn't on disk
+    # yet and `file: state: link` (force off) errors "src does not exist". Skip
+    # the symlink in exactly that case -- a real converge always has the binary
+    # here.
+    - not (ansible_check_mode and (fan2go_binary_download.changed | default(false) or fan2go_binary_build.changed | default(false)))
   file:
     src: "/usr/local/bin/fan2go-{{ fan2go_version }}"
     dest: /usr/local/bin/fan2go
@@ -145,8 +152,18 @@
         version: "{{ fan2go_tui_artifacts.git_ref }}"
         dest: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src"
       become: true
+      register: fan2go_tui_clone
 
     - name: Build fan2go-tui
+      # In a fresh-host check run the clone above only "would" happen, so the
+      # source dir isn't on disk and this `command` fails on its chdir before
+      # `creates:` is even consulted (chdir is applied regardless of check mode).
+      # The copy + symlink below likewise have no built binary to act on. Gate
+      # the whole build -> install -> symlink chain on the clone actually being
+      # present (clone.changed is true on a fresh host AND a version bump, when
+      # the versioned src dir won't exist), so a real converge -- and an
+      # unchanged existing host in check mode -- still run.
+      when: not (ansible_check_mode and (fan2go_tui_clone.changed | default(false)))
       command:
         chdir: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src"
         argv:
@@ -161,6 +178,9 @@
       become: true
 
     - name: Install built fan2go-tui binary  # noqa: require-backup
+      # Same chain guard: nothing was built in a fresh-host check run, so the
+      # copy's remote_src wouldn't exist to validate.
+      when: not (ansible_check_mode and (fan2go_tui_clone.changed | default(false)))
       copy:
         src: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src/bin/fan2go-tui"
         dest: "/usr/local/bin/fan2go-tui-{{ fan2go_tui_version }}"
@@ -172,6 +192,9 @@
       register: fan2go_tui_binary_build
 
     - name: Symlink /usr/local/bin/fan2go-tui to versioned binary
+      # Tail of the same chain: skip on a fresh-host check run where the source
+      # was only "would"-cloned, so the versioned binary isn't on disk to link.
+      when: not (ansible_check_mode and (fan2go_tui_clone.changed | default(false)))
       file:
         src: "/usr/local/bin/fan2go-tui-{{ fan2go_tui_version }}"
         dest: /usr/local/bin/fan2go-tui
