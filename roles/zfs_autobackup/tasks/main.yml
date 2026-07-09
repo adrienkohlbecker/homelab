@@ -117,6 +117,7 @@
     - zfs_backup_local
     - zfs_backup_onsite
     - zfs_backup_offsite
+    - zfs_backup_restore
   register: zfs_autobackup_scripts
   become: true
   tags:

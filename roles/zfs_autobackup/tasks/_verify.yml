@@ -31,6 +31,7 @@
     - zfs_backup_local
     - zfs_backup_onsite
     - zfs_backup_offsite
+    - zfs_backup_restore
     - zfs_autosnapshot
   register: zfs_autobackup_verify_scripts
 
@@ -385,3 +386,120 @@
       (rc={{ zfs_autobackup_verify_gate_nosnap.rc }},
       stdout={{ zfs_autobackup_verify_gate_nosnap.stdout }},
       stderr={{ zfs_autobackup_verify_gate_nosnap.stderr }})
+
+# Functional round-trip for zfs_backup_restore: the fixture acts as both
+# replica holder and rebuilt target over a loopback ssh hop. A marker file
+# and a child dataset (shaped like a pull replica: readonly=on,
+# mountpoint=none, canmount=noauto scrub overrides) go in, the tree is
+# restored to a new name, and the marker must come out with the whole tree
+# reset -- writable, mounted, the child on path inheritance under the new
+# root -- and autobackup:bak re-tagged at a local source.
+- name: _verify | Generate a loopback ssh key for the restore test
+  command:
+    argv:
+      - ssh-keygen
+      - -t
+      - ed25519
+      - -N
+      - ''
+      - -f
+      - "{{ ansible_user_dir }}/.ssh/zfs_restore_test_key"
+    creates: "{{ ansible_user_dir }}/.ssh/zfs_restore_test_key"
+
+- name: _verify | Read the loopback pubkey
+  slurp:
+    src: "{{ ansible_user_dir }}/.ssh/zfs_restore_test_key.pub"
+  register: zfs_autobackup_verify_restore_pubkey
+
+- name: _verify | Authorize the loopback key
+  ansible.posix.authorized_key:
+    user: "{{ ansible_user_id }}"
+    key: "{{ zfs_autobackup_verify_restore_pubkey.content | b64decode }}"
+
+- name: _verify | Point loopback ssh at the test key
+  blockinfile:
+    path: "{{ ansible_user_dir }}/.ssh/config"
+    create: true
+    mode: "0600"
+    block: |
+      Host 127.0.0.1
+        IdentityFile ~/.ssh/zfs_restore_test_key
+        StrictHostKeyChecking accept-new
+
+- name: _verify | Remount the offsite-gate dataset for the restore round-trip
+  command: zfs mount rpool/zfs_autobackup_offsite_test
+  changed_when: true
+  become: true
+
+- name: _verify | Create a child carrying the pull-replica scrub overrides
+  community.general.zfs:
+    name: rpool/zfs_autobackup_offsite_test/child
+    state: present
+    extra_zfs_properties:
+      autobackup:bak: "true"
+      readonly: "on"
+      canmount: "noauto"
+      mountpoint: none
+  become: true
+
+- name: _verify | Write a marker the restore must carry across
+  copy:
+    dest: /mnt/zfs_autobackup_offsite_test/restore_marker.txt
+    content: "round-trip\n"
+    mode: "0644"
+  become: true
+
+- name: _verify | Snapshot the tree for the restore stream
+  command: zfs snapshot -r rpool/zfs_autobackup_offsite_test@bak-verify-restore
+  changed_when: true
+  become: true
+
+# Runs as the fixture user, exactly like the operator would on the replica
+# holder: the ssh hop authenticates with the user key, sudo happens inside.
+- name: _verify | Restore the tree over loopback ssh
+  command: >-
+    /usr/local/bin/zfs_backup_restore --yes
+    {{ ansible_user_id }}@127.0.0.1
+    rpool/zfs_autobackup_offsite_test
+    rpool/zfs_autobackup_restore_test
+    /mnt/zfs_autobackup_restore_test
+  changed_when: true
+  register: zfs_autobackup_verify_restore_run
+
+- name: _verify | Read the restored marker
+  command: cat /mnt/zfs_autobackup_restore_test/restore_marker.txt
+  changed_when: false
+  register: zfs_autobackup_verify_restore_marker
+  become: true
+
+- name: _verify | Read restored dataset state
+  shell: |
+    set -euo pipefail
+    zfs get -H -o value readonly rpool/zfs_autobackup_restore_test
+    zfs get -H -o value mounted rpool/zfs_autobackup_restore_test
+    zfs get -H -o value mountpoint rpool/zfs_autobackup_restore_test
+    zfs get -H -o value autobackup:bak rpool/zfs_autobackup_restore_test
+    zfs get -H -o source autobackup:bak rpool/zfs_autobackup_restore_test
+    zfs get -H -o value readonly rpool/zfs_autobackup_restore_test/child
+    zfs get -H -o value mounted rpool/zfs_autobackup_restore_test/child
+    zfs get -H -o value mountpoint rpool/zfs_autobackup_restore_test/child
+    zfs get -H -o value autobackup:bak rpool/zfs_autobackup_restore_test/child
+    zfs get -H -o source autobackup:bak rpool/zfs_autobackup_restore_test/child
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: zfs_autobackup_verify_restore_state
+  become: true
+
+- name: _verify | Restore carried the data and reset the pull-scrubbed properties
+  assert:
+    that:
+      - zfs_autobackup_verify_restore_marker.stdout == 'round-trip'
+      - zfs_autobackup_verify_restore_state.stdout_lines == [
+          'off', 'yes', '/mnt/zfs_autobackup_restore_test', 'true', 'local',
+          'off', 'yes', '/mnt/zfs_autobackup_restore_test/child', 'true', 'local']
+    fail_msg: >-
+      restore round-trip state mismatch
+      (marker={{ zfs_autobackup_verify_restore_marker.stdout }},
+      state={{ zfs_autobackup_verify_restore_state.stdout_lines }},
+      restore stdout={{ zfs_autobackup_verify_restore_run.stdout }})
