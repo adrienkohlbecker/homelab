@@ -11,6 +11,52 @@
     # SNMP/shutdown path is exercised in production by the absence of
     # spurious shutdowns, not by this verify file.
 
+    - name: _verify | Stat the relocated state directories
+      stat:
+        path: /usr/local/eaton/IntelligentPowerProtector/{{ item }}
+      loop:
+        - configs
+        - db
+      register: _eaton_ipp_state_links
+
+    - name: _verify | State directories are symlinks onto /mnt/services
+      assert:
+        that:
+          - item.stat.islnk
+          - item.stat.lnk_source == "/mnt/services/eaton_ipp/" ~ item.item
+        quiet: true
+      loop: "{{ _eaton_ipp_state_links.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # Exercise the snapshot quiesce coupling for real: stopping the target
+    # must stop the daemon (PartOf=), starting it must bring the daemon
+    # back (WantedBy= wants-symlink planted by the converge reenable). The
+    # HTTPS probes below then prove the resumed daemon actually serves.
+    # zfs_root-gated to mirror the override condition in main.yml.
+    - name: _verify | Stopping the snapshot target quiesces the daemon
+      when: zfs_root
+      shell:
+        executable: /bin/bash
+        cmd: |
+          set -euo pipefail
+          systemctl stop zfs_autosnapshot.target
+          state=$(systemctl is-active eaton-ipp.service || true)
+          test "$state" = inactive
+      changed_when: true
+      become: true
+
+    - name: _verify | Starting the snapshot target resumes the daemon
+      when: zfs_root
+      shell:
+        executable: /bin/bash
+        cmd: |
+          set -euo pipefail
+          systemctl start zfs_autosnapshot.target
+          systemctl is-active eaton-ipp.service
+      changed_when: true
+      become: true
+
     # IPP's HTTP listener on 4679 unconditionally 301s to https://
     # 4680/, so the real UI only lives on the HTTPS socket. Self-
     # signed cert on the daemon; we're on loopback so there's no
@@ -50,3 +96,15 @@
       retries: 5
       delay: 2
       until: _eaton_ipp_http_nginx is succeeded
+
+    # The daemon creates mc2.db on first start; it appearing here proves
+    # the write path really lands on the dataset, not just that the
+    # symlinks point there. Bounded retry: the file shows up within a few
+    # seconds of the daemon serving.
+    - name: _verify | Daemon writes its database on /mnt/services
+      stat:
+        path: /mnt/services/eaton_ipp/db/mc2.db
+      register: _eaton_ipp_db
+      retries: 5
+      delay: 2
+      until: _eaton_ipp_db.stat.exists

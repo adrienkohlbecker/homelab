@@ -15,6 +15,117 @@
   tags:
     - eaton_ipp
 
+# The deb drops binaries and mutable state side by side under
+# /usr/local/eaton/IntelligentPowerProtector on the rootfs: configs/
+# (config.js with the admin password hash and shutdown thresholds, TLS
+# material, scripts) and db/ (the mc2.db event database). Relocate both
+# onto rpool/services so they ride the ZFS snapshot schedule and the
+# offsite replica and survive a host rebuild -- the rootfs does not. The
+# daemon opens both paths relative to its install dir, so directory
+# symlinks are transparent to it. A future deb upgrade whose postinst
+# recreates real directories next to the migrated copies is refused
+# loudly below rather than reconciled silently.
+- name: Create state directory on /mnt/services
+  when: ansible_architecture == "x86_64" and not (ansible_check_mode and (ipp_linux_deb_changed | default(false) | bool))
+  file:
+    path: /mnt/services/eaton_ipp
+    state: directory
+    owner: eaton-ipp
+    group: eaton-ipp
+    mode: "0755"
+  become: true
+  tags:
+    - eaton_ipp
+
+- name: Check state directories for pending migration
+  when: ansible_architecture == "x86_64"
+  stat:
+    path: /usr/local/eaton/IntelligentPowerProtector/{{ item }}
+  loop:
+    - configs
+    - db
+  register: eaton_ipp_state_src
+  become: true
+  tags:
+    - eaton_ipp
+
+# One-shot: only runs while a real (non-symlink) state directory sits in
+# the install tree, i.e. the first converge after install or after a deb
+# upgrade recreated one. Refuses before stopping anything when both sides
+# exist (snapshot restore or upgrade) -- picking a side silently could
+# discard live state, so the operator reconciles and re-runs.
+- name: Migrate state directories onto /mnt/services
+  when:
+    - ansible_architecture == "x86_64"
+    - not (ansible_check_mode and (ipp_linux_deb_changed | default(false) | bool))
+    - eaton_ipp_state_src.results | selectattr('stat.exists') | rejectattr('stat.islnk') | list | length > 0
+  shell:
+    executable: /bin/bash
+    cmd: |
+      set -euo pipefail
+      install_dir=/usr/local/eaton/IntelligentPowerProtector
+      state_dir=/mnt/services/eaton_ipp
+      for d in configs db; do
+        if [ -d "$install_dir/$d" ] && [ ! -L "$install_dir/$d" ] && [ -e "$state_dir/$d" ]; then
+          echo "Refusing to migrate $d: both $install_dir/$d and $state_dir/$d exist; move one aside and re-run" >&2
+          exit 1
+        fi
+      done
+      systemctl stop eaton-ipp.service
+      for d in configs db; do
+        if [ -d "$install_dir/$d" ] && [ ! -L "$install_dir/$d" ]; then
+          mv "$install_dir/$d" "$state_dir/$d"
+          ln -sT "$state_dir/$d" "$install_dir/$d"
+          chown -h eaton-ipp:eaton-ipp "$install_dir/$d"
+        fi
+      done
+  # The when: above already restricts this task to converges where a real
+  # directory needs moving, so it always mutates when it runs.
+  changed_when: true
+  become: true
+  tags:
+    - eaton_ipp
+
+# Steady-state enforcement of the symlinks the migration planted. Gated
+# per-directory on the pre-migration stat: on the converge that migrates,
+# the stat still shows a real directory (the shell above already linked
+# it), and in check mode on an unmigrated host state=link would otherwise
+# fail refusing to convert the directory. No force: -- a real directory
+# reappearing at the dest (deb upgrade) must fail loudly, same safety as
+# roles/sqlite_dataset.
+- name: Symlink state directories into the install tree
+  when:
+    - ansible_architecture == "x86_64"
+    - not (ansible_check_mode and (ipp_linux_deb_changed | default(false) | bool))
+    - not item.stat.exists or item.stat.islnk
+  file:
+    src: /mnt/services/eaton_ipp/{{ item.item }}
+    dest: /usr/local/eaton/IntelligentPowerProtector/{{ item.item }}
+    state: link
+    owner: eaton-ipp
+    group: eaton-ipp
+  loop: "{{ eaton_ipp_state_src.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  become: true
+  tags:
+    - eaton_ipp
+
+# Couple the daemon to the storage it now lives on: refuse to start ahead
+# of the /mnt/services mount, and join zfs_autosnapshot.target so the
+# nightly backup quiesces it around the snapshot (consistent mc2.db).
+- name: Install eaton-ipp service override
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      src: override_service.conf.j2
+      for: eaton-ipp.service
+      condition: '{{ zfs_root and ansible_architecture == "x86_64" }}'
+  tags:
+    - eaton_ipp
+
 - name: Enable eaton-ipp service
   import_role:
     name: systemd_unit
@@ -30,7 +141,7 @@
       # service eaton-ipp". Use the real var so the enable is correctly skipped
       # whenever the deb-install block runs under check mode.
       condition: '{{ not (ansible_check_mode and (ipp_linux_deb_changed | default(false) | bool)) and ansible_architecture == "x86_64" }}'
-      restart: '{{ ipp_linux_deb_changed | default(false) | bool }}'
+      restart: '{{ (ipp_linux_deb_changed | default(false) | bool) or ((eaton_ipp_service_d_override_conf_result | default({})).changed | default(false)) }}'
   tags:
     - eaton_ipp
 
