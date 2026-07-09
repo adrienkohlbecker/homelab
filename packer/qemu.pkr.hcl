@@ -139,8 +139,8 @@ locals {
   #   overflow behind zram (notes/swap_strategy.md). Consumed by provision.sh
   #   as $SWAP_SIZE.
   # - podman_size: per-disk size of the dedicated podman-store partition
-  #   (p4). "" => no podman partition (host keeps the rpool/podman zvol -- pug
-  #   until its rebuild). Single-disk bakes one plain ext4 partition; mirror
+  #   (p4). "" => no podman partition (host keeps the rpool/podman zvol for
+  #   legacy-backend coverage). Single-disk bakes one plain ext4 partition; mirror
   #   bakes one per rpool disk and chroot.sh mdadm's them into a raid5
   #   (/dev/md/podman). The podman role formats + mounts it. Fixture sizes only
   #   prove the mechanism; prod sizes itself at rebuild (notes/runbooks/
@@ -178,19 +178,18 @@ locals {
       zfs_arc_max     = 0
     }
     # lab: mdadm-EFI + 3-disk mirror rpool + dozer mirror + tank raidz2 +
-    # mouse mirror. Matches the lab prod host. The mirror layout mdadm's the
-    # per-disk p3/p4 into raid1 swap (/dev/md/swap) + raid5 podman
-    # (/dev/md/podman), and ZFS-mirrors the per-disk p6 (meta_size) into tank's
-    # special vdev -- the prod-faithful unified layout
-    # (notes/unified_disk_layout.md). Fixture sizes only prove the mechanism;
-    # zram is the primary swap device (notes/swap_strategy.md).
+    # mouse mirror. Matches prod lab's pool shape. The mirror layout mdadm's the
+    # per-disk p3 into raid1 swap (/dev/md/swap) and ZFS-mirrors p6 (meta_size)
+    # into tank's special vdev. podman_size stays empty until prod lab rebuilds:
+    # lab-qemu deliberately keeps rpool/podman zvol coverage while lab/fox still
+    # run that live backend.
     lab = {
       disks           = "/dev/vdb /dev/vdc /dev/vdd"
       extra_disks     = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
       disk_sizes      = ["40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
       layout          = "mirror"
       swap_size       = "8G"
-      podman_size     = "4G"
+      podman_size     = ""
       meta_size       = "2G"
       extra_pools     = "dozer tank_mouse"
       image_target    = "qemu"
