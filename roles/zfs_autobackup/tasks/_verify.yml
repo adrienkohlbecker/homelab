@@ -172,6 +172,39 @@
       zfs_backup_local created no @bak- snapshot on rpool/zfs_autobackup_test
       ({{ zfs_autobackup_verify_snaps.stdout }})
 
+# Functional check for the quiesce path: --no-resume must snapshot but leave
+# zfs_autosnapshot.target stopped (the rebuild runbooks depend on state
+# writers NOT restarting after the final pre-wipe snapshot).
+- name: _verify | Wait out the snapshot-name second (bak-%Y%m%d%H%M%S)
+  pause:
+    seconds: 2
+
+- name: _verify | Run a local backup with --no-resume
+  command: /usr/local/bin/zfs_backup_local --no-resume
+  changed_when: false
+  become: true
+
+- name: _verify | Read zfs_autosnapshot.target state after --no-resume  # noqa: command-instead-of-module
+  command: systemctl is-active zfs_autosnapshot.target
+  changed_when: false
+  failed_when: false
+  register: zfs_autobackup_verify_target_state
+  become: true
+
+- name: _verify | Target stayed stopped after --no-resume
+  assert:
+    that:
+      - zfs_autobackup_verify_target_state.stdout | trim == 'inactive'
+    fail_msg: >-
+      zfs_backup_local --no-resume left zfs_autosnapshot.target
+      {{ zfs_autobackup_verify_target_state.stdout }} (expected inactive)
+
+- name: _verify | Restart the target the --no-resume run left down
+  systemd:
+    name: zfs_autosnapshot.target
+    state: started
+  become: true
+
 # Functional check for zfs_backup_offsite's change-gate. With a marker recording
 # the latest snapshot and nothing written since, the script must skip before any
 # rsync; once a write bumps written@, it must proceed to the transfer. bunk is

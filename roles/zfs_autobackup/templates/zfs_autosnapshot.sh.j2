@@ -4,6 +4,20 @@ source /usr/local/lib/functions.sh
 
 f_require_root
 
+# --final: quiesce mode for the rebuild runbooks. Runs the full nightly (local
+# snapshots, onsite pulls, offsite rsync) but leaves zfs_autosnapshot.target
+# stopped afterwards, so no state writer restarts between the final snapshot
+# and the host being wiped/restored.
+zfs_backup_local_args=()
+case "${1:-}" in
+  '') ;;
+  --final) zfs_backup_local_args=(--no-resume) ;;
+  *)
+    echo >&2 "Usage: zfs_autosnapshot [--final]"
+    exit 2
+    ;;
+esac
+
 # Pause any in-progress scrub for the duration of the backup. A monthly scrub
 # (see roles/zfs zfs_scrub) on a multi-TB pool runs for many hours and overlaps
 # this nightly run; its random-read load would otherwise contend with the
@@ -30,7 +44,7 @@ for pool in $(zpool list -H -o name); do
 done
 
 # create local snapshots
-f_rescue f_trace zfs_backup_local
+f_rescue f_trace zfs_backup_local "${zfs_backup_local_args[@]}"
 
 # Gate offsite replication on the local snapshot succeeding. The offsite leg
 # rsyncs from this host's just-taken @bak- snapshots and picks the newest @bak-
