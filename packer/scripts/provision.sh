@@ -11,6 +11,8 @@
 #    the publicly-known vagrant insecure pubkey) and remove
 #    /etc/sudoers.d/vagrant before the host gets a routable IP. The
 #    shipped image is otherwise a free root shell on any lab LAN.
+#    Moot when TARGET_USERNAME + SSH_KEY_PUB are set: the real operator
+#    user is created instead and no vagrant user ever exists.
 #  - on mirror-rpool variants, supply matching-size disks. The
 #    rpool mirror caps at the smallest disk's partition 5, so a
 #    2T+4T+4T mix silently halves usable rpool capacity.
@@ -40,9 +42,13 @@ DISKS_COUNT=$(wc -w <<<"$DISKS")
 # Placeholder hostname for the shipped image — the deploy step
 # (ansible / cloud-init / bare-metal wrapper) is expected to overwrite
 # it before first boot. USERNAME is the vagrant user chroot.sh creates
-# so packer can SSH back in for the next provisioner stage.
-export HOSTNAME=ubuntu
-export USERNAME=vagrant
+# so packer can SSH back in for the next provisioner stage. Bare-metal
+# callers override both via TARGET_HOSTNAME / TARGET_USERNAME (distinct
+# names: the live-USB shell already sets HOSTNAME) so the installed
+# system boots as the real host with the real operator user and no
+# vagrant user is ever created.
+export HOSTNAME="${TARGET_HOSTNAME:-ubuntu}"
+export USERNAME="${TARGET_USERNAME:-vagrant}"
 
 # Directory holding chroot.sh. The qemu build VM's packer file-provisioner
 # lands it in /home/vagrant.
