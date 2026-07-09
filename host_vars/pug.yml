@@ -171,6 +171,6 @@ nut_server_battery_runtime_low: 180
 # Wake lab when a short outage ends before its Group 1 cut ever fired (the
 # 20%->15% window; lab's own outlet kept power, so BIOS restore-on-AC has
 # nothing to do). The windows box is deliberately NOT listed: its equivalent
-# gap is recovered manually via wolweb.
+# gap is recovered manually by sending WoL to the UDM relay for the home VLAN.
 nut_monitor_wake_peers:
   - "{{ mac_addresses.lab_i210 }}"

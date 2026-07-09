@@ -11,6 +11,10 @@
 # the role assumes it's present. The box cloud image ships neither iptables
 # nor a resolver, so the fixture provides them — mirroring how prod roles
 # (firewall, the appliance OS) would have on the target.
+- name: _setup | Install the site-level UDM on-boot prerequisite
+  import_role:
+    name: udm_on_boot
+
 - name: _setup | Install iptables, dig, and a stub resolver for the test
   apt:
     pkg:

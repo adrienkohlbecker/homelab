@@ -4,9 +4,10 @@
 {# segment, with WoL discard port :9 -- NOT the device's unicast IP. The   #}
 {# global config.json `bcastip` is unused by the wake path; do not "fix"   #}
 {# this to a unicast address. `interface` is the host NIC the packet       #}
-{# egresses; every target is assumed to share the host's default L2        #}
-{# segment (the management VLAN). A target on another VLAN/segment is not  #}
-{# reachable -- which is why the IoT-only i225 NICs are not listed.        #}
+{# egresses; every wolweb target must share the host's default L2 segment  #}
+{# (the management VLAN). Off-segment targets are deliberately not listed  #}
+{# here; management/trusted clients wake home-VLAN machines via the UDM    #}
+{# UDP/9 relay in roles/udm_wol_relay instead.                            #}
 {
   "devices": [
 {% for d in wolweb_devices %}

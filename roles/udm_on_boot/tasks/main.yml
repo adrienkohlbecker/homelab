@@ -1,0 +1,44 @@
+- name: Create on-boot script directory
+  file:
+    path: /data/on_boot.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - udm_on_boot
+
+- name: Deploy on-boot framework unit
+  copy:
+    src: on-boot.service
+    dest: /etc/systemd/system/on-boot.service
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: >-
+      sh -c 'd=$(mktemp -d); trap "rm -rf $d" EXIT; cp "%s" "$d/on-boot.service"; systemd-analyze verify "$d/on-boot.service"'
+  register: udm_on_boot_unit
+  become: true
+  tags:
+    - udm_on_boot
+
+- name: Reload systemd
+  when: udm_on_boot_unit.changed
+  systemd:
+    daemon_reload: true
+  become: true
+  tags:
+    - udm_on_boot
+
+# In check mode on a fresh UDM, the copy above only reports it would create
+# the unit, so enabling it would fail because systemd cannot find it.
+- name: Enable on-boot framework
+  when: not (ansible_check_mode and udm_on_boot_unit.changed)
+  systemd:
+    name: on-boot.service
+    enabled: true
+  become: true
+  tags:
+    - udm_on_boot

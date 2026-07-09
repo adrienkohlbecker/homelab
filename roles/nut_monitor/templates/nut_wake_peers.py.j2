@@ -4,8 +4,9 @@
 Invoked by upssched (as the unprivileged upsmon user) with the fired timer
 name as argv[1]; the only timer wired up is `wake_peers` (upssched.conf).
 Sends one magic packet per configured MAC on this host's primary-subnet
-broadcast -- same derivation as roles/wolweb, and like wolweb it can only
-wake NICs on this host's own L2 broadcast domain.
+broadcast -- same direct-L2 derivation as roles/wolweb. This automation is
+for management-VLAN peers reachable from the host itself; cross-VLAN manual
+wakes use the UDM UDP/9 relay.
 """
 
 import socket

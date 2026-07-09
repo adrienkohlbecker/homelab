@@ -41,17 +41,6 @@
   tags:
     - udm_wol_relay
 
-- name: Create on-boot script directory
-  file:
-    path: /data/on_boot.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - udm_wol_relay
-
 - name: Deploy WoL relay script
   template:
     src: wol_relay.py.j2
@@ -88,21 +77,6 @@
     state: link
     force: true
   register: udm_wol_relay_unit_link
-  become: true
-  tags:
-    - udm_wol_relay
-
-- name: Deploy on-boot framework unit
-  copy:
-    src: on-boot.service
-    dest: /etc/systemd/system/on-boot.service
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: >-
-      sh -c 'd=$(mktemp -d); trap "rm -rf $d" EXIT; cp "%s" "$d/on-boot.service"; systemd-analyze verify "$d/on-boot.service"'
-  register: udm_wol_relay_onboot_unit
   become: true
   tags:
     - udm_wol_relay
@@ -149,19 +123,9 @@
 - name: Reload systemd
   when: >-
     udm_wol_relay_unit.changed or
-    udm_wol_relay_unit_link.changed or
-    udm_wol_relay_onboot_unit.changed
+    udm_wol_relay_unit_link.changed
   systemd:
     daemon_reload: true
-  become: true
-  tags:
-    - udm_wol_relay
-
-- name: Enable on-boot framework
-  when: not (ansible_check_mode and udm_wol_relay_onboot_unit.changed)
-  systemd:
-    name: on-boot.service
-    enabled: true
   become: true
   tags:
     - udm_wol_relay

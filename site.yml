@@ -144,9 +144,14 @@
   roles:
     - macos_vm
 
-- name: UDM DNS failover
+- name: UDM appliance services
   hosts: udm
   roles:
+    - role: udm_on_boot
+      tags:
+        - udm_on_boot
+        - udm_dns_failover
+        - udm_wol_relay
     - udm_dns_failover
     - udm_wol_relay
 

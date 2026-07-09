@@ -19,9 +19,8 @@ nut_monitor_ups: eaton@localhost
 # the UPS just runs the battery down to its own cutoff.
 nut_monitor_ups_powerdown: false
 
-# MAC addresses to wake (WoL magic packet on this host's primary-subnet
-# broadcast) once mains power has been back for 60s -- peers that shut down
-# earlier in the ladder stay dark if the outage ended before the UPS ever
-# power-cycled their outlets. Empty list disables the upssched timer and the
-# wake script install.
+# MAC addresses to wake via this host's primary-subnet broadcast once mains
+# power has been back for 60s. This is intentionally a direct-L2 recovery leg
+# for management-VLAN peers; cross-VLAN manual wakes go through the UDM UDP/9
+# relay. Empty list disables the upssched timer and the wake script install.
 nut_monitor_wake_peers: []
