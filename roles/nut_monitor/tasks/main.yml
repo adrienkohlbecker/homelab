@@ -1,0 +1,147 @@
+# nut_monitor runs upsmon on every home host, monitoring the co-located
+# upsd from roles/nut_server (ordered just before this role in site.yml).
+# Together with the per-host low-battery overrides in nut_server's ups.conf
+# this forms the staged shutdown ladder: the windows box (unmanaged, on
+# Eaton's vendor IPP agent) drops first on a short on-battery timer, lab at
+# 20%/300s, pug last at 5%/180s -- pug also powering the UPS off behind it
+# (nut_monitor_ups_powerdown) and waking lab back up when a short outage
+# ends before the UPS ever cut power (nut_monitor_wake_peers).
+
+- name: Assert required inputs
+  assert:
+    that:
+      - nut_upsmon_password | default('') | length > 0
+      - nut_monitor_ups | default('') | length > 0
+      - "'@' in (nut_monitor_ups | default(''))"
+    fail_msg: >-
+      nut_monitor requires a vaulted nut_upsmon_password
+      (group_vars/{prod,test}.yml) and a nut_monitor_ups of the form
+      <upsname>@<host>
+  tags:
+    - nut_monitor
+
+# nut-notify delivers via the bare `mail` binary (mailutils, from the postfix
+# role ordered before nut in site.yml). This asserts the binary is PRESENT --
+# not that mail is deliverable: root->operator routing is owned by postfix's
+# aliases.j2 and relay health is the postfix role's concern. Catches the common
+# gap (monitoring enabled on a host that never ran postfix) at converge rather
+# than during a real outage.
+- name: Check for the mail binary
+  command: which mail
+  register: nut_monitor_mail_bin
+  changed_when: false
+  failed_when: false
+  tags:
+    - nut_monitor
+
+- name: Assert mail is available
+  assert:
+    that:
+      - nut_monitor_mail_bin.rc == 0
+    fail_msg: >-
+      The `mail` binary is missing. It is provided by mailutils via the
+      postfix role (ordered before nut in site.yml) -- run that role on this
+      host first, then re-converge nut_monitor.
+  tags:
+    - nut_monitor
+
+- name: Install nut
+  apt:
+    pkg:
+      - nut-client
+    cache_valid_time: 3600
+  become: true
+  register: nut_monitor_apt
+  tags:
+    - nut_monitor
+
+# upsmon.conf/upssched.conf carry no validate: -- NUT ships no offline config
+# checker (the daemons only parse at startup) and the whitespace-directive
+# format isn't INI, so there's no real parser to invent. nut-notify below
+# validates with `bash -n` since it is a script.
+- name: Configure nut upsmon.conf  # noqa: require-validate
+  when: not (ansible_check_mode and nut_monitor_apt.changed)
+  template:
+    src: upsmon.conf.j2
+    dest: /etc/nut/upsmon.conf
+    backup: true
+    owner: root
+    group: nut
+    mode: "0640"
+  become: true
+  register: nut_monitor_upsmon_conf
+  tags:
+    - nut_monitor
+
+- name: Configure nut upssched.conf  # noqa: require-validate
+  when: not (ansible_check_mode and nut_monitor_apt.changed)
+  template:
+    src: upssched.conf.j2
+    dest: /etc/nut/upssched.conf
+    backup: true
+    owner: root
+    group: nut
+    mode: "0640"
+  become: true
+  register: nut_monitor_upssched_conf
+  tags:
+    - nut_monitor
+
+- name: Configure nut-notify
+  template:
+    src: nut-notify.sh.j2
+    dest: /usr/local/bin/nut-notify
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - nut_monitor
+
+# Only on hosts late enough in the shutdown ladder to have peers to revive
+# (nut_monitor_wake_peers, host_vars/pug.yml). No absent-state cleanup: the
+# list has never shrunk on a deployed host, and an orphaned script is inert
+# once the upssched.conf timer lines are gone.
+- name: Install the wake_peers script
+  when: nut_monitor_wake_peers | length > 0
+  template:
+    src: nut_wake_peers.py.j2
+    dest: /usr/local/bin/nut_wake_peers
+    backup: true
+    owner: root
+    group: root
+    mode: "0755"
+    validate: python3 -m py_compile %s
+  become: true
+  tags:
+    - nut_monitor
+
+# start: gates on qemu_test -- the fixture has no real UPS to reach, so the
+# unit is only enabled (it still starts at the _site_test reboot and idles
+# on NOCOMM retries, which upsmon tolerates indefinitely).
+#
+# restart (not `upsmon -c reload`) is deliberate: reload cannot change
+# SHUTDOWNCMD or POWERDOWNFLAG -- the privileged (root) half keeps its
+# startup copy (upsmon split-process model) -- and POWERDOWNFLAG is now
+# host-variable via nut_monitor_ups_powerdown. jammy's 2.7.4 packaged unit
+# also ships no ExecReload. The cost is that a config converge mid-outage
+# drops any in-flight upssched debounce timer; acceptable for a rare event.
+# nut-notify/nut_wake_peers are never triggers -- upssched exec's them fresh
+# per event, so a script-only change needs nothing.
+- name: Enable nut_monitor service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      # nut-client.service is a symlink to nut-monitor.service (the upsmon
+      # unit); unlike nut-driver, the name doesn't shift across releases, so no
+      # version branch is needed here (cf. nut_server's nut-driver@eaton).
+      src: nut-client
+      condition: "{{ not (ansible_check_mode and nut_monitor_apt.changed) }}"
+      start: "{{ not qemu_test }}"
+      restart: "{{ nut_monitor_upsmon_conf.changed or nut_monitor_upssched_conf.changed }}"
+  tags:
+    - nut_monitor

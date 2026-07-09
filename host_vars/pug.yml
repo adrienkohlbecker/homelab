@@ -159,3 +159,17 @@ nginx_static_proxies:
   - ups
   - tubeszb
   - unifi
+
+# NUT staged-shutdown ladder (roles/nut_server thresholds + roles/nut_monitor
+# upsmon): the windows box (unmanaged, on Eaton's vendor IPP agent) drops out
+# first on a short on-battery delay, lab at the 20%/300s role defaults, pug
+# last at 5%/180s. As the last host standing pug also powers the UPS off as
+# it halts (power-cycling the outlets so every host restarts on AC return)
+# and, when a short outage ends before lab's threshold ever tripped, wakes
+# lab back up over WoL.
+nut_server_battery_charge_low: 5
+nut_server_battery_runtime_low: 180
+nut_monitor_ups_powerdown: true
+nut_monitor_wake_peers:
+  - "{{ mac_addresses.lab_i210 }}"
+  # windows box: add its MAC here once known

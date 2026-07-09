@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+"""upssched CMDSCRIPT: wake WoL peers after mains power returns.
+
+Invoked by upssched (as the unprivileged upsmon user) with the fired timer
+name as argv[1]; the only timer wired up is `wake_peers` (upssched.conf).
+Sends one magic packet per configured MAC on this host's primary-subnet
+broadcast -- same derivation as roles/wolweb, and like wolweb it can only
+wake NICs on this host's own L2 broadcast domain.
+"""
+
+import socket
+import sys
+
+MACS = {{ nut_monitor_wake_peers | to_json }}
+BROADCAST = ("{{ (ansible_facts.default_ipv4.address + '/' + ansible_facts.default_ipv4.netmask) | ansible.utils.ipaddr('broadcast') }}", 9)
+
+
+def main() -> None:
+    if len(sys.argv) != 2 or sys.argv[1] != "wake_peers":
+        raise SystemExit(f"unknown upssched command: {sys.argv[1:]}")
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        for mac in MACS:
+            packet = bytes.fromhex("ff" * 6 + mac.replace(":", "") * 16)
+            sock.sendto(packet, BROADCAST)
+            print(f"sent wake-on-lan packet for {mac} to {BROADCAST[0]}")
+
+
+if __name__ == "__main__":
+    main()

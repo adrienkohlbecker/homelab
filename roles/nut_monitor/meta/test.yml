@@ -1,0 +1,7 @@
+# Mirror nut_server: the 2.8-only NOTIFYFLAG block and dummy-ups semantics
+# differ per release, so cover both supported ones. jammy (lab, nut 2.7.4)
+# has no packer image; its master-keyword branch is exercised by --check
+# against the live host instead.
+ubuntu:
+  - noble
+  - resolute

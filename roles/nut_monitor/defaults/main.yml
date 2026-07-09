@@ -1,0 +1,27 @@
+# The upsmon system identifier (<upsname>@<host>[:<port>]) this host
+# monitors. Single source of truth for the MONITOR line in upsmon.conf and
+# the upsc queries in nut-notify, so the two can't drift out of agreement.
+# Host-overridable; defaults to the Eaton served by the co-located upsd.
+#
+# Overriding away from @localhost has two couplings to keep in sync: nut_server's
+# files/hosts.conf (the CGI allowlist, hard-coded eaton@localhost) and the
+# emailed status link, which nut-notify builds against inventory_hostname's
+# `nut.` subdomain -- a remote <host> would point the link at the wrong CGI.
+nut_monitor_ups: eaton@localhost
+
+# When true, upsmon marks POWERDOWNFLAG on its forced shutdown and the halt
+# path (nut-client's /lib/systemd/system-shutdown/nutshutdown hook ->
+# upsdrvctl shutdown) commands the UPS to cut output and restore it when
+# mains return. Reserve for the host that shuts down LAST in the ladder
+# (pug, host_vars/pug.yml): any earlier host powering the UPS off would yank
+# power from the survivors. Requires SNMP write access on the UPS network
+# card to actually bite; without it the command fails harmlessly at halt and
+# the UPS just runs the battery down to its own cutoff.
+nut_monitor_ups_powerdown: false
+
+# MAC addresses to wake (WoL magic packet on this host's primary-subnet
+# broadcast) once mains power has been back for 60s -- peers that shut down
+# earlier in the ladder stay dark if the outage ended before the UPS ever
+# power-cycled their outlets. Empty list disables the upssched timer and the
+# wake script install.
+nut_monitor_wake_peers: []
