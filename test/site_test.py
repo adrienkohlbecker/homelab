@@ -6,6 +6,12 @@ Boots a box qemu fixture, configures mirrors (apt/podman/pip via Nexus, or
 upstream when test_in_aws), then runs the real site.yml with --limit box.
 Catches role-ordering and cross-role interaction bugs that per-role tests miss.
 
+--check runs the same full site.yml in ansible check mode (a dry run) instead
+of a real converge: it makes no changes, so it needs no post-converge settle or
+poweroff dance, and it exercises the whole playbook's check-mode safety (every
+role's template rendering and check-mode gating) across the full fleet in one
+pass -- something the per-role cells, each running one role in isolation, can't.
+
 Exit codes match testrole.py: 0 success, 1 converge failure, 124 timeout,
 130 interrupted.
 """
@@ -65,6 +71,11 @@ def parse_args() -> argparse.Namespace:
         help="Overall timeout for boot + converge (default: %(default)s)",
     )
     parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Run site.yml in ansible check mode (dry run; makes no changes)",
+    )
+    parser.add_argument(
         "--keep",
         action="store_true",
         help="Keep the machine running after the test (for debugging)",
@@ -79,7 +90,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def run_site_test(m: Machine, *, timeout: int) -> None:
+async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -> None:
     task = asyncio.current_task()
     assert task is not None
 
@@ -113,17 +124,25 @@ async def run_site_test(m: Machine, *, timeout: int) -> None:
                         staged = m.workdir_path / "site.yml"
                         shutil.copy(Path("site.yml"), staged)
 
-                        print_line("Running site.yml converge")
+                        label = "check" if check_mode else "converge"
+                        print_line(f"Running site.yml {label}")
                         try:
-                            await m.ansible_command(str(staged))
+                            extra = ["--check"] if check_mode else []
+                            await m.ansible_command(str(staged), *extra)
                         except CommandFailedException:
-                            print_line("Site converge failed")
+                            print_line(f"Site {label} failed")
                             with contextlib.suppress(Exception):
                                 await m.collect_failure_artifacts()
                             raise
 
-                        print_line("Site converge passed")
-                        if not m.keep_vm:
+                        print_line(f"Site {label} passed")
+                        # Check mode makes no changes: nothing was installed, no
+                        # kernel upgrade set reboot-required, no container is
+                        # mid-bootstrap -- so the settle gate and poweroff dance
+                        # below (all about draining a live converge cleanly) don't
+                        # apply. Fall through and let the context manager tear the
+                        # guest down.
+                        if not check_mode and not m.keep_vm:
                             # The converge's final [Reboot check] play reboots when a
                             # kernel upgrade set /var/run/reboot-required, so the fleet is
                             # mid-restart here: ansible returns once SSH is back, but the
@@ -196,7 +215,11 @@ def main() -> int:
 
     m = Machine(
         machine="box",
-        role="_site_test",
+        # A distinct role name so the check run's artifacts (output_file,
+        # failure dumps) don't collide with a converge run's and machine.py can
+        # tell the two apart (the log-volume tuning applies to both; the
+        # dedicated-host spec bump only to the real converge).
+        role="_site_check" if args.check else "_site_test",
         keep_vm=args.keep,
         ubuntu_name=args.ubuntu,
         machine_timeout=args.timeout,
@@ -206,7 +229,7 @@ def main() -> int:
     rc = 0
     with tee_output(m.output_file):
         try:
-            asyncio.run(run_site_test(m, timeout=args.timeout))
+            asyncio.run(run_site_test(m, timeout=args.timeout, check_mode=args.check))
         except CommandFailedException as exc:
             print_line(str(exc), error=True)
             print_line("site_test failed", error=True)

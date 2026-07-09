@@ -766,7 +766,7 @@ class Machine:
         # regardless of verbosity), so drop the ok/skipped firehose and the
         # -v result bodies for non-failing tasks here. Per-role tests keep the
         # verbose detail for single-role debugging.
-        if self.role == "_site_test":
+        if self.role in ("_site_test", "_site_check"):
             env["ANSIBLE_DISPLAY_OK_HOSTS"] = "false"
             env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] = "false"
             env["ANSIBLE_VERBOSITY"] = "0"

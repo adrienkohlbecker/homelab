@@ -131,6 +131,26 @@ stages:
       mise exec -- timeout --kill-after=30s 3060 test/site_test.py --timeout 3000 || rc=$?
       echo "harness exit code: $rc"
       exit $rc
+
+# _site_check runs the same full site.yml in ansible check mode. It makes no
+# changes -- no installs, no reboots, no service bringup -- so it is much faster
+# than the converge and needs neither the widened dedicated-host guest spec nor
+# the site pool: it stays on the regular cell runner (the default .cell tag) and
+# just shares the leading `site` stage for id-ordering priority. Its value is
+# cross-role check-mode safety over the whole fleet in one pass -- template
+# rendering and check-mode gating that the isolated per-role cells can't cover.
+"_site_check:box":
+  extends: .cell
+  stage: site
+  timeout: 35m
+  script:
+    # Same watchdog pattern as _site_test:box. 1860 = 1800 + the harness's 60s
+    # teardown grace; the check run has no converge tail so this is generous.
+    - |
+      rc=0
+      mise exec -- timeout --kill-after=30s 1860 test/site_test.py --check --timeout 1800 || rc=$?
+      echo "harness exit code: $rc"
+      exit $rc
 {% endif %}
 {% for group in cell_groups %}
 {% for cell in group.cells %}
