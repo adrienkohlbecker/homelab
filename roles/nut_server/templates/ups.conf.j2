@@ -218,10 +218,14 @@ maxretry = 3
 [eaton]
 driver = snmp-ups
 port = {{ external_ips.eaton }}
-# SNMP v1 + the default `public` community is deliberate: the UPS sits on
-# the admin-only management VLAN (Block-All default), and SNMPv3 would need
-# coordinated reconfig on the device + the daemons — disproportionate for
-# this home threat model.
+# SNMP v1 + the read-only `public` community is deliberate: the UPS sits on
+# the admin-only management VLAN (Block-All default), NUT only ever reads --
+# every power cut is card-native load shedding, see
+# notes/ups_shutdown_ladder.md -- and SNMPv3 would need coordinated reconfig
+# on the device + the daemons, disproportionate for this home threat model.
+# (The card also has an enabled read/write community for the dormant
+# nut_monitor_ups_powerdown fallback; wire it here if that ever activates,
+# since snmp-ups has a single community for reads and the halt-path SETs.)
 community = public
 snmp_version = v1
 pollfreq = 15

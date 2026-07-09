@@ -3,9 +3,11 @@
 # Together with the per-host low-battery overrides in nut_server's ups.conf
 # this forms the staged shutdown ladder: the windows box (unmanaged, on
 # Eaton's vendor IPP agent) drops first on a short on-battery timer, lab at
-# 20%/300s, pug last at 5%/180s -- pug also powering the UPS off behind it
-# (nut_monitor_ups_powerdown) and waking lab back up when a short outage
-# ends before the UPS ever cut power (nut_monitor_wake_peers).
+# 20%/300s, pug last at 5%/180s. Power cuts and restarts are card-native
+# (per-group load shedding below each trigger, forced reboot on AC return;
+# notes/ups_shutdown_ladder.md); the wake_peers hooks cover the hosts an
+# outage strands shut-down-but-still-powered. nut_monitor_ups_powerdown is
+# a dormant fallback, unused in this design.
 
 - name: Assert required inputs
   assert:
@@ -115,6 +117,33 @@
     mode: "0755"
     validate: python3 -m py_compile %s
   become: true
+  tags:
+    - nut_monitor
+
+- name: Install the boot-time peer wake unit
+  when: nut_monitor_wake_peers | length > 0
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: nut_wake_peers.service
+  tags:
+    - nut_monitor
+
+# Starting the oneshot at converge just re-sends the packets to peers that
+# are already up -- a harmless no-op, same as every regular boot.
+- name: Enable the boot-time peer wake
+  when: nut_monitor_wake_peers | length > 0
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: nut_wake_peers
+      condition: "{{ not (ansible_check_mode and nut_monitor_apt.changed) }}"
+      start: "{{ not qemu_test }}"
+      restart: false
   tags:
     - nut_monitor
 
