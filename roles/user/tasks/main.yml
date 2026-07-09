@@ -166,7 +166,7 @@
     backup: true
     owner: root
     group: root
-    mode: "0440"
+    mode: "0400"
   become: true
   tags:
     - user
