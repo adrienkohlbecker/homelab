@@ -141,7 +141,15 @@
   tags:
     - authelia
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: authelia_podman
+  tags:
+    - authelia
+
 - name: Pull authelia image
+  when: not ansible_check_mode or authelia_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ authelia_image }}"
   register: authelia_image_pull

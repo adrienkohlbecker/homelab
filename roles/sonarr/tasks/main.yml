@@ -90,7 +90,15 @@
   tags:
     - sonarr
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: sonarr_podman
+  tags:
+    - sonarr
+
 - name: Pull sonarr image
+  when: not ansible_check_mode or sonarr_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ sonarr_image }}"
   register: sonarr_image_pull

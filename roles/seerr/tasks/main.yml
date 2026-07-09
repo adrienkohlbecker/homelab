@@ -127,7 +127,15 @@
   tags:
     - seerr
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: seerr_podman
+  tags:
+    - seerr
+
 - name: Pull seerr image
+  when: not ansible_check_mode or seerr_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ seerr_image }}"
   register: seerr_image_pull

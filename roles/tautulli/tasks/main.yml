@@ -154,7 +154,15 @@
   tags:
     - tautulli
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: tautulli_podman
+  tags:
+    - tautulli
+
 - name: Pull tautulli image
+  when: not ansible_check_mode or tautulli_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ tautulli_image }}"
   register: tautulli_image_pull

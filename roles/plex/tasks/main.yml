@@ -133,7 +133,15 @@
   tags:
     - plex
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: plex_podman
+  tags:
+    - plex
+
 - name: Pull plex image
+  when: not ansible_check_mode or plex_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ plex_image }}"
   register: plex_image_pull

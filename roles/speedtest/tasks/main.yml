@@ -53,7 +53,15 @@
   tags:
     - speedtest
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: speedtest_podman
+  tags:
+    - speedtest
+
 - name: Pull speedtest image
+  when: not ansible_check_mode or speedtest_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ speedtest_image }}"
   register: speedtest_image_pull

@@ -99,7 +99,15 @@
   tags:
     - mosquitto
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: mosquitto_podman
+  tags:
+    - mosquitto
+
 - name: Pull mosquitto image
+  when: not ansible_check_mode or mosquitto_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ mosquitto_image }}"
   register: mosquitto_image_pull

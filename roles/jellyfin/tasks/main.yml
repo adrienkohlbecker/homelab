@@ -319,7 +319,15 @@
   tags:
     - jellyfin
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: jellyfin_podman
+  tags:
+    - jellyfin
+
 - name: Pull jellyfin image
+  when: not ansible_check_mode or jellyfin_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ jellyfin_image }}"
   register: jellyfin_image_pull

@@ -47,7 +47,15 @@
   tags:
     - profilarr
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: profilarr_podman
+  tags:
+    - profilarr
+
 - name: Pull profilarr image
+  when: not ansible_check_mode or profilarr_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ profilarr_image }}"
   register: profilarr_image_pull

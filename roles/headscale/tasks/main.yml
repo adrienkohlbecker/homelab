@@ -193,7 +193,15 @@
   tags:
     - headscale
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: headscale_podman
+  tags:
+    - headscale
+
 - name: Pull headscale image
+  when: not ansible_check_mode or headscale_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ headscale_image }}"
   register: headscale_image_pull

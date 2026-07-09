@@ -73,7 +73,15 @@
   tags:
     - bazarr
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: bazarr_podman
+  tags:
+    - bazarr
+
 - name: Pull bazarr image
+  when: not ansible_check_mode or bazarr_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ bazarr_image }}"
   register: bazarr_image_pull

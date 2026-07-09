@@ -164,7 +164,15 @@
   tags:
     - transmission
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: transmission_podman
+  tags:
+    - transmission
+
 - name: Pull transmission image
+  when: not ansible_check_mode or transmission_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ transmission_image }}"
   register: transmission_image_pull

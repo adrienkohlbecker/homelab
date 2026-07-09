@@ -387,7 +387,15 @@
 
 # Pull the image before the prestage below so its `podman create` finds it
 # already present rather than doing an unbounded implicit pull mid-task.
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: homeassistant_podman
+  tags:
+    - homeassistant
+
 - name: Pull homeassistant image
+  when: not ansible_check_mode or homeassistant_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ homeassistant_image }}"
   register: homeassistant_image_pull

@@ -162,7 +162,15 @@
   tags:
     - influxdb
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: influxdb_podman
+  tags:
+    - influxdb
+
 - name: Pull influxdb image
+  when: not ansible_check_mode or influxdb_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ influxdb_image }}"
   register: influxdb_image_pull

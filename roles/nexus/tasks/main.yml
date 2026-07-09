@@ -119,7 +119,15 @@
   tags:
     - nexus
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: nexus_podman
+  tags:
+    - nexus
+
 - name: Pull nexus image
+  when: not ansible_check_mode or nexus_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ nexus_image }}"
   register: nexus_image_pull

@@ -131,7 +131,15 @@
   tags:
     - z2m
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: z2m_podman
+  tags:
+    - z2m
+
 - name: Pull z2m image
+  when: not ansible_check_mode or z2m_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ z2m_image }}"
   register: z2m_image_pull
