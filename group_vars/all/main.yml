@@ -147,7 +147,6 @@ service_ports:
   authelia: 9092
   adguard: 9874
   bazarr: 6767
-  eaton_ipp: 4680
   # fan2go's upstream default is 9001 but that collides with the
   # minio console on the same hosts. fan2go's API + the fan2go-tui
   # config both pull from this single value.

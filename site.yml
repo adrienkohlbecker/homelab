@@ -86,10 +86,10 @@
     - avahi
     - samba
     - kdump
-    - eaton_ipp
     - wolweb
     - keepalived
     - nut_server
+    - nut_monitor
     - resolved
     - adguard
     - docker_client

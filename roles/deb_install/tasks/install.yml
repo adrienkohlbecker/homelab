@@ -1,6 +1,6 @@
 # Generic "install a pinned .deb when the installed version differs" helper.
 # Callers pass a single dict `deb_install_args`:
-#   name      required; dpkg package name (minio, mcli, ipp-linux, ...) --
+#   name      required; dpkg package name (minio, mcli, ...) --
 #             also the staged-file basename and the prefix of the result fact.
 #             Must be unique within a play: it is both the /var/cache staging
 #             path and the set_fact key, so two calls sharing a name collide on
@@ -10,8 +10,8 @@
 #   version   required; the exact dpkg ${Version} to match, *including* epoch
 #             (1:2.3) and Debian revision (2.3-1) when present. This is what
 #             `dpkg-query -W -f='${Version}'` records, which can differ from the
-#             .deb *filename* -- e.g. eaton's ipp-linux_1.75.183-1_amd64.deb
-#             records ${Version} 1.75.183. Pin the recorded version, not the URL.
+#             .deb *filename* -- e.g. a vendor foo_1.75.183-1_amd64.deb may
+#             record ${Version} 1.75.183. Pin the recorded version, not the URL.
 #   url       required; .deb download URL
 #   sha256    required; expected sha256 of the .deb
 #   timeout   optional; get_url timeout (seconds); omitted -> module default
@@ -23,7 +23,7 @@
 # Exposes `<name>_deb_changed` (non-identifier chars -> '_') so callers can gate
 # a service restart on a fresh install. The prefix is the *deb package name*,
 # not the calling role, so a hyphenated package folds the dash to '_' -- e.g.
-# `ipp-linux` -> `ipp_linux_deb_changed` (NOT `eaton_ipp_deb_changed`). The dict
+# a package `foo-bar` -> `foo_bar_deb_changed` (NOT `<role>_deb_changed`). The dict
 # form prevents inter-call leakage at play-vars scope: each import_role pass
 # replaces it wholesale.
 #

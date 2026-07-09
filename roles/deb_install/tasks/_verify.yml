@@ -237,8 +237,8 @@
 # Check mode on an already-current package must leave the gate closed: the
 # install block's when: is false, so the apt task registers a skipped result
 # (changed=false) and the fact stays false. Callers gate check-mode-sensitive
-# follow-on tasks on exactly this (eaton_ipp's enable uses
-# `not (ansible_check_mode and ipp_linux_deb_changed)`). deb-install-test is
+# follow-on tasks on exactly this (minio's enable uses
+# `not (ansible_check_mode and minio_deb_changed)`). deb-install-test is
 # installed at 2.0-1 here.
 - name: _verify | Re-run the current pin under check mode
   import_role:

@@ -806,3 +806,74 @@
     - /mnt/services/sqlite/pihole
     - /var/log/pihole
   become: true
+
+# ---- eaton_ipp (was lab,pug; replaced by roles/nut_monitor upsmon) ----
+# The windows box keeps its own vendor IPP agent (unmanaged); only the
+# linux agents retire. Converge nut_monitor before or in the same run as
+# this tombstone so the host is never without a shutdown agent.
+- name: Retire eaton-ipp service
+  systemd:
+    name: eaton-ipp.service
+    state: stopped
+    enabled: false
+  register: retired_services_eaton_ipp_unit
+  # Absent on hosts that never ran it (box, fox) and after the purge below
+  # has converged once; only a real stop/disable failure should surface.
+  failed_when: >-
+    retired_services_eaton_ipp_unit.failed | default(false)
+    and 'Could not find the requested service' not in (retired_services_eaton_ipp_unit.msg | default(''))
+  become: true
+
+# The configs/db entries under the install dir are symlinks into
+# /mnt/services/eaton_ipp (planted by the retired role). Remove the links
+# BEFORE the purge so no uninstall script can descend through them into the
+# preserved state. state=absent on a symlink removes only the link; the
+# stat guard skips hosts still carrying real directories (never migrated)
+# so their state is left for the purge to handle as package content.
+- name: Check eaton-ipp state symlinks
+  stat:
+    path: /usr/local/eaton/IntelligentPowerProtector/{{ item }}
+  loop:
+    - configs
+    - db
+  register: retired_services_eaton_ipp_links
+  become: true
+
+- name: Remove eaton-ipp state symlinks before the package purge
+  when: item.stat.exists and item.stat.islnk
+  file:
+    path: /usr/local/eaton/IntelligentPowerProtector/{{ item.item }}
+    state: absent
+  loop: "{{ retired_services_eaton_ipp_links.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  become: true
+
+- name: Remove ipp-linux package
+  apt:
+    pkg: ipp-linux
+    state: absent
+    purge: true
+  become: true
+
+- name: Remove eaton-ipp systemd override
+  file:
+    path: /etc/systemd/system/eaton-ipp.service.d
+    state: absent
+  become: true
+
+- name: Retire ipp nginx site
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: ipp
+      state: absent
+
+# /mnt/services/eaton_ipp is deliberately LEFT in place (unlike the other
+# tombstones): it holds the freshly-restored tuned config (admin password,
+# SNMP target, shutdown thresholds) that the windows box's still-live IPP
+# mirrors, and it only entered the ZFS snapshot stream the night after the
+# restore. Remove manually once the windows box leaves IPP. The eaton-ipp
+# system user is left per role policy (uid reuse risk outweighs tidiness).
