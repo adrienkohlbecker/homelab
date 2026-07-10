@@ -36,6 +36,81 @@ set -euxo pipefail
 # through to chroot.sh. The ZBM_*/REFIND_*/UBUNTU_MIRROR_* vars used downstream
 # are documented at the top of chroot.sh.
 
+preflight() {
+  local name disk
+  local -A seen_disks=()
+  local required=(
+    DISKS EXTRA_DISKS LAYOUT SWAP_SIZE PODMAN_SIZE META_SIZE EXTRA_POOLS
+    UBUNTU_NAME UBUNTU_MIRROR UBUNTU_MIRROR_SECURITY
+    UBUNTU_MIRROR_UPSTREAM UBUNTU_MIRROR_SECURITY_UPSTREAM
+  )
+
+  for name in "${required[@]}"; do
+    if ! [[ -v $name ]]; then
+      echo "provision.sh: required variable $name is not set" >&2
+      return 1
+    fi
+  done
+
+  for name in DISKS SWAP_SIZE UBUNTU_NAME UBUNTU_MIRROR UBUNTU_MIRROR_SECURITY UBUNTU_MIRROR_UPSTREAM UBUNTU_MIRROR_SECURITY_UPSTREAM; do
+    if [ -z "${!name}" ]; then
+      echo "provision.sh: required variable $name is empty" >&2
+      return 1
+    fi
+  done
+
+  case $LAYOUT in '' | mirror) ;; *)
+    echo "provision.sh: LAYOUT must be empty or mirror (got '$LAYOUT')" >&2
+    return 1
+    ;;
+  esac
+  case ${IMAGE_TARGET:-qemu} in qemu | hetzner) ;; *)
+    echo "provision.sh: IMAGE_TARGET must be qemu or hetzner (got '$IMAGE_TARGET')" >&2
+    return 1
+    ;;
+  esac
+  case ${QEMU_TEST_IMAGE:-false} in true | false) ;; *)
+    echo "provision.sh: QEMU_TEST_IMAGE must be true or false (got '$QEMU_TEST_IMAGE')" >&2
+    return 1
+    ;;
+  esac
+
+  if { [[ -v TARGET_HOSTNAME ]] && ! [[ -v TARGET_USERNAME ]]; } ||
+    { [[ -v TARGET_USERNAME ]] && ! [[ -v TARGET_HOSTNAME ]]; }; then
+    echo "provision.sh: TARGET_HOSTNAME and TARGET_USERNAME must be set together" >&2
+    return 1
+  fi
+  if [[ -v TARGET_HOSTNAME ]] && ! [[ $TARGET_HOSTNAME =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]]; then
+    echo "provision.sh: invalid TARGET_HOSTNAME '$TARGET_HOSTNAME'" >&2
+    return 1
+  fi
+  if [[ -v TARGET_USERNAME ]] && ! [[ $TARGET_USERNAME =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+    echo "provision.sh: invalid TARGET_USERNAME '$TARGET_USERNAME'" >&2
+    return 1
+  fi
+
+  if [ "${IMAGE_TARGET:-qemu}" != hetzner ]; then
+    if ! [[ -v SSH_KEY_PUB ]] || ! [[ $SSH_KEY_PUB =~ ^(ssh-(ed25519|rsa)|ecdsa-sha2-nistp(256|384|521))[[:space:]] ]]; then
+      echo "provision.sh: SSH_KEY_PUB must contain a supported public key" >&2
+      return 1
+    fi
+  fi
+
+  for disk in $DISKS $EXTRA_DISKS; do
+    if [[ $disk != /dev/* ]]; then
+      echo "provision.sh: disk path must start with /dev/ (got '$disk')" >&2
+      return 1
+    fi
+    if [[ -v seen_disks[$disk] ]]; then
+      echo "provision.sh: disk '$disk' is listed more than once" >&2
+      return 1
+    fi
+    seen_disks[$disk]=1
+  done
+}
+
+preflight
+
 export DISKS_COUNT
 DISKS_COUNT=$(wc -w <<<"$DISKS")
 
