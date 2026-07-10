@@ -1,8 +1,8 @@
 # Roles are ordered as a layer ladder: each section builds on the guarantees
-# of the ones above it. "Base machine install" (host base -> storage -> service
-# platform -> observability) runs on every managed host; the service plays below
-# are host-scoped and assume the full platform is already in place. See CLAUDE.md
-# "Role layering" for the rule on where a new role belongs.
+# of the ones above it. "Base machine install" (host base -> persistent state ->
+# storage -> service platform -> observability) runs on every managed host; the
+# service plays below are host-scoped and assume the full platform is already in
+# place. See CLAUDE.md "Role layering" for the rule on where a new role belongs.
 - name: Base machine install
   hosts: box,lab,pug,fox
   roles:
@@ -29,10 +29,14 @@
     - unattended_upgrades
     - logrotate
     - journald
-    - ssh
-    - ssh_root
     - ntp
     - postfix
+    # Persistent state -- the services dataset producer precedes SSH's identity
+    # consumers. It invokes the ZFS helpers directly and does not depend on the
+    # later zfs policy role.
+    - services
+    - ssh
+    - ssh_root
     # Storage & boot substrate -- ZFS datasets/snapshots and the bootloader.
     - zfs
     - zfs_mount
@@ -40,9 +44,8 @@
     - boot
     - zfsbootmenu
     - refind
-    # Service platform -- container runtime, /mnt/services, web/TLS front door.
+    # Service platform -- container runtime and web/TLS front door.
     - podman
-    - services
     - certbot
     - nginx
     # Observability.

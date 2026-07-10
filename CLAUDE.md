@@ -69,7 +69,7 @@ Repo-local skills and hook scripts live once under `.agents/` (`skills/`, `hooks
 
 `site.yml` is ordered as a **layer ladder** — a role's converge position *is* its layer, and each layer builds on the guarantees of the ones above. Two bands:
 
-- **Base machine install** (`hosts: box,lab,pug,fox`) — sub-bands: *host base* (OS, networking, access), *storage & boot* (`zfs`/`zfs_mount`/`zfs_autobackup`/`zfsbootmenu`/`refind`), *service platform* (`podman`, `services`, `certbot`, `nginx`), *observability* (`csplogger`/`netdata`/`fluentbit`). Roles within host-base are mutually independent.
+- **Base machine install** (`hosts: box,lab,pug,fox`) — sub-bands: *host base* (OS, networking, access), *persistent state* (`services` before its `ssh`/`ssh_root` identity consumers), *storage & boot* (`zfs`/`zfs_mount`/`zfs_autobackup`/`zfsbootmenu`/`refind`), *service platform* (`podman`, `certbot`, `nginx`), *observability* (`csplogger`/`netdata`/`fluentbit`). Roles within host-base are mutually independent.
 - **Services** — host-scoped plays that assume the full platform is already in place.
 
 **Where does a new role go?** Stop at the first layer whose guarantees you need: booted OS → host base; ZFS → after storage; podman/nginx-TLS → after platform (the base⇄service watershed); app for subset of hosts → service play. Keep dataset *producers* ahead of consumers.
