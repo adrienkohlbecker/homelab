@@ -9,16 +9,6 @@
 # `nut.` subdomain -- a remote <host> would point the link at the wrong CGI.
 nut_monitor_ups: eaton@localhost
 
-# When true, upsmon marks POWERDOWNFLAG on its forced shutdown and the halt
-# path (nut-client's /lib/systemd/system-shutdown/nutshutdown hook ->
-# upsdrvctl shutdown) commands the UPS to cut output and restore it when
-# mains return. Reserve for the host that shuts down LAST in the ladder
-# (pug, host_vars/pug.yml): any earlier host powering the UPS off would yank
-# power from the survivors. Requires SNMP write access on the UPS network
-# card to actually bite; without it the command fails harmlessly at halt and
-# the UPS just runs the battery down to its own cutoff.
-nut_monitor_ups_powerdown: false
-
 # MAC addresses to wake via this host's primary-subnet broadcast once mains
 # power has been back for 60s. This is intentionally a direct-L2 recovery leg
 # for management-VLAN peers; cross-VLAN manual wakes go through the UDM UDP/9

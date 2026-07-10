@@ -6,8 +6,7 @@
 # 20%/300s, pug last at 5%/180s. Power cuts and restarts are card-native
 # (per-group load shedding below each trigger, forced reboot on AC return;
 # notes/ups_shutdown_ladder.md); the wake_peers hooks cover the hosts an
-# outage strands shut-down-but-still-powered. nut_monitor_ups_powerdown is
-# a dormant fallback, unused in this design.
+# outage strands shut-down-but-still-powered.
 
 - name: Assert required inputs
   assert:
@@ -153,8 +152,7 @@
 #
 # restart (not `upsmon -c reload`) is deliberate: reload cannot change
 # SHUTDOWNCMD or POWERDOWNFLAG -- the privileged (root) half keeps its
-# startup copy (upsmon split-process model) -- and POWERDOWNFLAG is now
-# host-variable via nut_monitor_ups_powerdown. jammy's 2.7.4 packaged unit
+# startup copy (upsmon split-process model). jammy's 2.7.4 packaged unit
 # also ships no ExecReload. The cost is that a config converge mid-outage
 # drops any in-flight upssched debounce timer; acceptable for a rare event.
 # nut-notify/nut_wake_peers are never triggers -- upssched exec's them fresh

@@ -225,16 +225,17 @@ DEADTIME 15
 # [[UPS_shutdown]] "Configuring automatic shutdowns for low battery events"
 # or refer to the online version.
 
-# Consumed at the end of OS shutdown by the nut-client package's
-# /lib/systemd/system-shutdown/nutshutdown hook (`upsmon -K && upsdrvctl
-# shutdown`), so a co-located primary cuts UPS power and the box reboots when
-# mains returns. Keep this path aligned with that hook.
-{% if nut_monitor_ups_powerdown %}
-{# Only the last host in the shutdown ladder powers the UPS off (see
-   nut_monitor_ups_powerdown in defaults/main.yml). Without the flag,
-   `upsmon -K` reports no flag configured and the halt hook no-ops. #}
-POWERDOWNFLAG /etc/killpower
-{% endif %}
+# Deliberately unset: every power cut is card-native load shedding
+# (notes/ups_shutdown_ladder.md). Should the card path ever disappoint, the
+# fallback is uncommenting the flag below on the LAST host in the ladder
+# only (an earlier host powering the UPS off would yank power from the
+# survivors) -- the nut-client package's halt hook
+# (/lib/systemd/system-shutdown/nutshutdown: `upsmon -K && upsdrvctl
+# shutdown`) then cuts UPS output at the end of OS shutdown. It only bites
+# once ups.conf's community is also switched to the card's read/write one
+# (re-enable it card-side first); without write access the SET fails
+# harmlessly at halt.
+# POWERDOWNFLAG /etc/killpower
 
 # --------------------------------------------------------------------------
 # NOTIFYMSG - change messages sent by upsmon when certain events occur

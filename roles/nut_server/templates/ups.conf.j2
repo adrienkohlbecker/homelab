@@ -223,9 +223,10 @@ port = {{ external_ips.eaton }}
 # every power cut is card-native load shedding, see
 # notes/ups_shutdown_ladder.md -- and SNMPv3 would need coordinated reconfig
 # on the device + the daemons, disproportionate for this home threat model.
-# (The card also has an enabled read/write community for the dormant
-# nut_monitor_ups_powerdown fallback; wire it here if that ever activates,
-# since snmp-ups has a single community for reads and the halt-path SETs.)
+# (The card's read/write community is disabled while nothing needs it; if
+# the POWERDOWNFLAG fallback in roles/nut_monitor's upsmon.conf.j2 is ever
+# activated, re-enable it card-side and wire it here, since snmp-ups has a
+# single community for reads and the halt-path SETs.)
 community = public
 snmp_version = v1
 pollfreq = 15
