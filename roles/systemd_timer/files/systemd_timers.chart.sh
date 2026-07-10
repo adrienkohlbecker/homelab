@@ -26,9 +26,9 @@ systemd_timers_priority=90100
 systemd_timers_meta_dir="${systemd_timers_meta_dir:-/etc/netdata/charts.d/systemd_timers.d}"
 systemd_timers_stamp_dir="${systemd_timers_stamp_dir:-/var/lib/systemd/timers}"
 
-# Netdata chart/dim ids must be alnum + underscore.
+# Use charts.d's identifier rules; callers cache the result per timer.
 _systemd_timers_safe() {
-  printf '%s' "$1" | tr -c '[:alnum:]_' '_'
+  fixid "$1"
 }
 
 # Last-fire time = the mtime of the stamp file at

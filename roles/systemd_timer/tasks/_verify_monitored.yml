@@ -94,12 +94,12 @@
   delay: 2
   until: _systemd_timer_charts.status == 200
   loop:
-    - systemd_timers._verify_timer_recent
-    - systemd_timers._verify_timer_overdue
+    - systemd_timers.verify_timer_recent
+    - systemd_timers.verify_timer_overdue
 
 - name: _verify | Recent fixture reports overdue=0
   uri:
-    url: http://localhost:19999/api/v1/data?chart=systemd_timers._verify_timer_recent&points=1&after=-30&format=json
+    url: http://localhost:19999/api/v1/data?chart=systemd_timers.verify_timer_recent&points=1&after=-30&format=json
     return_content: true
   register: _systemd_timer_recent_data
   retries: 30
@@ -114,7 +114,7 @@
 
 - name: _verify | Overdue fixture reports overdue=1
   uri:
-    url: http://localhost:19999/api/v1/data?chart=systemd_timers._verify_timer_overdue&points=1&after=-30&format=json
+    url: http://localhost:19999/api/v1/data?chart=systemd_timers.verify_timer_overdue&points=1&after=-30&format=json
     return_content: true
   register: _systemd_timer_overdue_data
   retries: 30
@@ -128,7 +128,7 @@
 
 # Alert binds on context systemd.timer_lag; netdata keys the instance
 # as <chart_id>.<template_name>, e.g.
-# systemd_timers._verify_timer_overdue.systemd_timer_overdue.
+# systemd_timers.verify_timer_overdue.systemd_timer_overdue.
 - name: _verify | Wait for overdue alert to register against the fixture
   uri:
     url: http://localhost:19999/api/v1/alarms?all
@@ -139,15 +139,15 @@
   until: >-
     _systemd_timer_alarms.status == 200
     and (_systemd_timer_alarms.content | from_json).alarms.keys() | list
-        | select('search', 'systemd_timers._verify_timer_overdue.systemd_timer_overdue') | list | length > 0
+        | select('search', 'systemd_timers.verify_timer_overdue.systemd_timer_overdue') | list | length > 0
 
 - name: _verify | Assert overdue alert instantiated against both fixtures
   vars:
     _keys: "{{ (_systemd_timer_alarms.content | from_json).alarms.keys() | list }}"
   assert:
     that:
-      - _keys | select('search', 'systemd_timers._verify_timer_recent.systemd_timer_overdue') | list | length > 0
-      - _keys | select('search', 'systemd_timers._verify_timer_overdue.systemd_timer_overdue') | list | length > 0
+      - _keys | select('search', 'systemd_timers.verify_timer_recent.systemd_timer_overdue') | list | length > 0
+      - _keys | select('search', 'systemd_timers.verify_timer_overdue.systemd_timer_overdue') | list | length > 0
     fail_msg: >-
       Expected systemd_timer_overdue template to bind on both fixtures.
       Got keys: {{ _keys | select('search', 'systemd_timers') | list }}
