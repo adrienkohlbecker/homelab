@@ -76,11 +76,10 @@
 
 [upsmon]
 password = {{ nut_upsmon_password }}
-{# jammy's nut 2.7.4 predates the primary/secondary rename and rejects the
-   new keyword outright ("Unknown upsmon type primary"), which silently
-   strips the monitor privilege from this user. Same release-keyed
-   blacklist as the driver unit name in tasks/main.yml. #}
-upsmon {{ "master" if ansible_distribution_release in ["jammy"] else "primary" }}
+{# Release-keyed keyword: group_vars/all/main.yml, shared with the MONITOR
+   line in roles/nut_monitor -- both sides must agree or upsd strips the
+   privilege. #}
+upsmon {{ nut_upsmon_keyword_primary }}
 
 # HA's NUT integration only reads UPS state -- no actions/instcmds (least
 # privilege: a leaked credential cannot issue SET/INSTCMD against the UPS).
@@ -96,4 +95,4 @@ password = {{ nut_homeassistant_password }}
 # cert would mean certutil DB conversion machinery on every certbot renewal).
 [winnut]
 password = {{ nut_winnut_password }}
-upsmon {{ "slave" if ansible_distribution_release in ["jammy"] else "secondary" }}
+upsmon {{ nut_upsmon_keyword_secondary }}

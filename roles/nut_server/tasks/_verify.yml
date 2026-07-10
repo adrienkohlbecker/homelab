@@ -124,7 +124,7 @@
     that:
       - "'[winnut]' in (nut_server_upsd_users_file.content | b64decode)"
       - "'password = ' ~ nut_winnut_password in (nut_server_upsd_users_file.content | b64decode)"
-      - "'upsmon ' ~ ('slave' if ansible_distribution_release in ['jammy'] else 'secondary') in (nut_server_upsd_users_file.content | b64decode)"
+      - "'upsmon ' ~ nut_upsmon_keyword_secondary in (nut_server_upsd_users_file.content | b64decode)"
     quiet: true
 
 # The CGI probe must hit the vhost by its real FQDN, not https://localhost/

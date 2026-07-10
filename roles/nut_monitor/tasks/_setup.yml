@@ -20,7 +20,7 @@
 # The FSD drill in _verify runs a real upsmon against the dummy upsd, so
 # the upsmon login must exist server-side. Normally roles/nut_server's
 # upsd.users provides it; testrole.py runs only this role. Same release-
-# keyed keyword blacklist as that template (2.7.4 rejects "primary").
+# keyed keyword as that template (group_vars/all/main.yml).
 - name: _setup | Configure upsd.users for the upsmon login
   copy:
     dest: /etc/nut/upsd.users
@@ -30,7 +30,7 @@
     content: |
       [upsmon]
       password = {{ nut_upsmon_password }}
-      upsmon {{ "master" if ansible_distribution_release in ["jammy"] else "primary" }}
+      upsmon {{ nut_upsmon_keyword_primary }}
   become: true
 
 - name: _setup | Configure a static dummy-ups

@@ -123,11 +123,9 @@ RUN_AS_USER nut
 # MONITOR su700@server.example.com 1 monuser secretpass secondary
 # MONITOR myups@localhost 1 monuser pass primary	# (or secondary)
 
-{# "primary" is the nut 2.8 spelling of the old "master" role token: it was
-   introduced in 2.8.0, so 2.7.4 (jammy) understands only master/slave and
-   rejects the new keyword. Same release-keyed blacklist as upsd.users.j2 in
-   roles/nut_server -- both sides must agree or upsd strips the privilege. #}
-MONITOR {{ nut_monitor_ups }} 1 upsmon {{ nut_upsmon_password }} {{ "master" if ansible_distribution_release in ["jammy"] else "primary" }}
+{# Release-keyed keyword: group_vars/all/main.yml, shared with upsd.users.j2
+   in roles/nut_server -- both sides must agree or upsd strips the privilege. #}
+MONITOR {{ nut_monitor_ups }} 1 upsmon {{ nut_upsmon_password }} {{ nut_upsmon_keyword_primary }}
 
 # --------------------------------------------------------------------------
 # MINSUPPLIES <num>
