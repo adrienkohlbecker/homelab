@@ -49,7 +49,7 @@ noparent)
 wake_peers)
   for round in 1 2 3; do
     if [ "$round" -gt 1 ]; then sleep 30; fi
-    wakeonlan -i {{ ansible_facts.default_ipv4.broadcast }} {{ nut_monitor_wake_peers | join(' ') }} || true
+    wakeonlan -i {{ nut_monitor_broadcast }} {{ nut_monitor_wake_peers | join(' ') }} || true
   done
   exit 0
   ;;

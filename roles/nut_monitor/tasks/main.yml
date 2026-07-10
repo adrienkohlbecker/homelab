@@ -88,22 +88,41 @@
 # nut_notify's wake_peers arm broadcasts on the primary subnet; a degraded
 # default_ipv4 fact (wg/podman/bridge default route) would render a
 # syntactically valid but unwakeable destination that only surfaces
-# mid-outage-recovery. Same guards as roles/wolweb.
-- name: Assert the wake broadcast derivation is sane
+# mid-outage-recovery. Same guards and derivation as roles/wolweb -- computed
+# from address+netmask because the fact's own `broadcast` key is empty on
+# some NICs (the qemu SLIRP fixture among them).
+- name: Assert default interface is a plausible LAN NIC
   when: nut_monitor_wake_peers | length > 0
   assert:
     quiet: true
     that:
       - ansible_facts.default_ipv4.interface is defined
       - ansible_facts.default_ipv4.interface is not match('^(wg|podman|virbr|docker|br-|veth)')
-      - ansible_facts.default_ipv4.broadcast is defined
-      - ansible_facts.default_ipv4.broadcast is match('^([0-9]{1,3}[.]){3}[0-9]{1,3}$')
     fail_msg: >-
-      ansible_facts.default_ipv4 resolved to interface
-      '{{ ansible_facts.default_ipv4.interface | default("") }}' with broadcast
-      '{{ ansible_facts.default_ipv4.broadcast | default("") }}' -- a
-      bridge/tunnel or empty fact rather than the management NIC, which would
-      render an unwakeable wake_peers arm in nut_notify
+      ansible_facts.default_ipv4.interface resolved to
+      '{{ ansible_facts.default_ipv4.interface | default("") }}', which looks
+      like a bridge/tunnel rather than the management NIC -- the wake_peers
+      arm broadcasts on this interface's segment
+  tags:
+    - nut_monitor
+
+- name: Compute the wake broadcast ip
+  when: nut_monitor_wake_peers | length > 0
+  set_fact:
+    nut_monitor_broadcast: "{{ (ansible_facts.default_ipv4.address + '/' + ansible_facts.default_ipv4.netmask) | ansible.utils.ipaddr('broadcast') }}"
+  tags:
+    - nut_monitor
+
+- name: Assert the computed wake broadcast ip
+  when: nut_monitor_wake_peers | length > 0
+  assert:
+    quiet: true
+    that:
+      - nut_monitor_broadcast is match('^([0-9]{1,3}[.]){3}[0-9]{1,3}$')
+    fail_msg: >-
+      Computed nut_monitor_broadcast ('{{ nut_monitor_broadcast }}') is not a
+      valid IPv4 address -- ansible_facts.default_ipv4 may be empty on this
+      host, which would render an unwakeable wake_peers arm in nut_notify
   tags:
     - nut_monitor
 
