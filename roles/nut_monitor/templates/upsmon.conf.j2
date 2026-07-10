@@ -478,6 +478,14 @@ NOCOMMWARNTIME 300
 #
 #POLLFAIL_LOG_THROTTLE_MAX 100
 
+# Without the throttle a prolonged comm loss to upsd/the UPS card logs a
+# poll-failure line every POLLFREQ (5s) -- ~17k journal lines a day through
+# fluentbit. 60 cycles = one line every ~5 minutes, matching NOCOMMWARNTIME.
+# The directive is 2.8.1+, so it is release-gated like the NOTIFYFLAG block.
+{% if ansible_distribution_release not in ["jammy"] %}
+POLLFAIL_LOG_THROTTLE_MAX 60
+{% endif %}
+
 # --------------------------------------------------------------------------
 # FINALDELAY - last sleep interval before shutting down the system
 #
