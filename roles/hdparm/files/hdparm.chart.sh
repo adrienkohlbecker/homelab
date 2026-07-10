@@ -21,35 +21,21 @@ hdparm_priority=90000
 
 hdparm_disks=()
 
-# Netdata dim/chart ids must be alnum + underscore. Memoize per
-# device to avoid a `tr` fork on every poll -- charts.d contract is
-# "AVOID FORKS in the update loop". First call per device populates
-# the map; subsequent calls are pure-bash lookups.
+# Memoize Netdata's normalized chart id per device; fixid otherwise forks on
+# every call and charts.d update loops must stay cheap.
 declare -A _hdparm_safe_ids=()
 _hdparm_safe() {
   local dev="$1"
   if [ -z "${_hdparm_safe_ids[$dev]:-}" ]; then
-    _hdparm_safe_ids[$dev]=$(printf '%s' "$dev" | tr -c '[:alnum:]_' '_')
+    _hdparm_safe_ids[$dev]=$(fixid "$dev")
   fi
   printf '%s' "${_hdparm_safe_ids[$dev]}"
 }
 
 hdparm_check() {
-  # Hosts with no rotational disks legitimately ship an empty list --
-  # roles/netdata/tasks/metrics.yml installs this collector fleet-wide,
-  # so it also lands on cloud VMs and test boxes that never get the
-  # hdparm package (that apt install runs only in the hdparm role's
-  # play). With nothing to poll, return 0 before probing the binary:
-  # the module stays enabled quietly (no per-start check() failure in
-  # the journal) and hdparm_update()'s for-loop no-ops on the empty
-  # array. The binary check below then only fires where it signals a
-  # real problem: drives configured but the tool to read them missing.
+  # An empty fleet-wide config is valid; configured disks require hdparm.
   [ "${#hdparm_disks[@]}" -eq 0 ] && return 0
-  command -v hdparm >/dev/null 2>&1 || {
-    error "hdparm: 'hdparm' binary missing"
-    return 1
-  }
-  return 0
+  require_cmd hdparm || return 1
 }
 
 hdparm_create() {

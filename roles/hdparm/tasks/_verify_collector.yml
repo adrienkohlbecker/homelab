@@ -33,21 +33,34 @@
 # The collector is installed fleet-wide (roles/netdata/tasks/metrics.yml)
 # while the hdparm binary is only installed where the hdparm role is in
 # play -- so on a diskless host without the binary (fox), check() must
-# stay quiet: empty disk list means nothing to poll, and the missing
-# binary is only an error once drives are actually configured. Exercise
-# both arms by sourcing the deployed chart.sh with a PATH that hides
-# every hdparm (real binary and test shim live in sbin dirs).
+# stay quiet: empty disk list means nothing to poll, and the missing binary is
+# only an error once drives are configured. Exercise both arms with the
+# charts.d dependency-helper contract and a PATH that hides every hdparm.
 - name: _verify | Check() is quiet with no disks and loud with disks but no binary
   shell: |
     set -euo pipefail
     error() { echo "chartsd-error: $*" >&2; }
+    require_cmd() {
+      command -v "$1" >/dev/null 2>&1 || {
+        error "missing required command: $1"
+        return 1
+      }
+    }
     source /usr/libexec/netdata/charts.d/hdparm.chart.sh
     PATH=/usr/bin
     hdparm_disks=()
-    hdparm_check
+    diagnostic=$(hdparm_check 2>&1)
+    if [ -n "$diagnostic" ]; then
+      echo "empty disk list emitted a diagnostic: $diagnostic" >&2
+      exit 1
+    fi
     hdparm_disks=(_verify_ghost)
-    if hdparm_check; then
+    if diagnostic=$(hdparm_check 2>&1); then
       echo "check() passed despite configured disks and a missing hdparm binary" >&2
+      exit 1
+    fi
+    if [[ "$diagnostic" != *hdparm* ]]; then
+      echo "missing-binary diagnostic did not identify hdparm: $diagnostic" >&2
       exit 1
     fi
   args:
@@ -137,8 +150,8 @@
     state: restarted
   become: true
 
-# Chart id is derived from _hdparm_safe(); the _verify_* stems are
-# already safe. Gate first on the charts appearing in the registry --
+# Chart id is derived from charts.d fixid(), which trims the fixture's leading
+# underscore. Gate first on the charts appearing in the registry --
 # the data endpoint 404s for unknown charts (uri module fails the task),
 # and an `until:` expression on the data response can't run before the
 # charts exist.
@@ -151,10 +164,10 @@
   delay: 2
   until: >-
     _hdparm_charts.status == 200
-    and 'hdparm._verify_ghost' in (_hdparm_charts.content | from_json).charts.keys()
-    and 'hdparm._verify_active' in (_hdparm_charts.content | from_json).charts.keys()
-    and 'hdparm._verify_standby' in (_hdparm_charts.content | from_json).charts.keys()
-    and 'hdparm._verify_sleeping' in (_hdparm_charts.content | from_json).charts.keys()
+    and 'hdparm.verify_ghost' in (_hdparm_charts.content | from_json).charts.keys()
+    and 'hdparm.verify_active' in (_hdparm_charts.content | from_json).charts.keys()
+    and 'hdparm.verify_standby' in (_hdparm_charts.content | from_json).charts.keys()
+    and 'hdparm.verify_sleeping' in (_hdparm_charts.content | from_json).charts.keys()
     and 'zfs_scan.any_in_progress' in (_hdparm_charts.content | from_json).charts.keys()
 
 # `points=1` with no &after defaults to a 1-second window; with our
@@ -163,9 +176,9 @@
 # Membership test (`'collector_error' in labels`) instead of `.index(...)`
 # so a transient response shape (no dimension labels collected yet)
 # returns False cleanly rather than raising and aborting the retry loop.
-- name: _verify | Hdparm._verify_ghost reports collector_error=1 (active=0)
+- name: _verify | Hdparm.verify_ghost reports collector_error=1 (active=0)
   uri:
-    url: http://localhost:19999/api/v1/data?chart=hdparm._verify_ghost&points=1&after=-30&format=json
+    url: http://localhost:19999/api/v1/data?chart=hdparm.verify_ghost&points=1&after=-30&format=json
     return_content: true
   register: _hdparm_ghost_data
   retries: 30
@@ -183,9 +196,9 @@
 # `active/idle`, two-space prefix in the awk `sub`) -- a regression in
 # either would flip all three to collector_error and only the existing
 # collector_error assertion above would still pass.
-- name: _verify | Hdparm._verify_<state> reports <state>=1
+- name: _verify | Hdparm.verify_<state> reports <state>=1
   uri:
-    url: "http://localhost:19999/api/v1/data?chart=hdparm._verify_{{ item }}&points=1&after=-30&format=json"
+    url: "http://localhost:19999/api/v1/data?chart=hdparm.verify_{{ item }}&points=1&after=-30&format=json"
     return_content: true
   register: _hdparm_state_data
   retries: 30
@@ -205,9 +218,9 @@
 
 # The chart carries the device label from CLABEL; alerts use ${label:device}
 # so the alert text identifies which drive misbehaved. Verify it's set.
-- name: _verify | Hdparm._verify_ghost chart carries device label
+- name: _verify | Hdparm.verify_ghost chart carries device label
   uri:
-    url: http://localhost:19999/api/v1/chart?chart=hdparm._verify_ghost
+    url: http://localhost:19999/api/v1/chart?chart=hdparm.verify_ghost
     return_content: true
   register: _hdparm_ghost_chart
 - name: _verify | Assert device label and shared context
@@ -221,10 +234,10 @@
 
 # The health templates bind on context (`on: hdparm.power_state`), so
 # they should instantiate against the new chart with alarm names
-# `hdparm._verify_ghost.hdparm_drive_{active,unknown,collector_error}`.
+# `hdparm.verify_ghost.hdparm_drive_{active,unknown,collector_error}`.
 # `?all` is needed so UNDEFINED instances (active alert's calc is NaN
 # because the test doesn't run for 8h) still appear in the listing.
-- name: _verify | Alerts registered against hdparm._verify_ghost
+- name: _verify | Alerts registered against hdparm.verify_ghost
   uri:
     url: http://localhost:19999/api/v1/alarms?all
     return_content: true
@@ -234,18 +247,18 @@
   until: >-
     _hdparm_alarms.status == 200
     and (_hdparm_alarms.content | from_json).alarms.keys() | list
-        | select('search', 'hdparm._verify_ghost.hdparm_drive_collector_error') | list | length > 0
+        | select('search', 'hdparm.verify_ghost.hdparm_drive_collector_error') | list | length > 0
 - name: _verify | All three alert templates instantiated
   vars:
     _keys: "{{ (_hdparm_alarms.content | from_json).alarms.keys() | list }}"
   assert:
     that:
-      - _keys | select('search', 'hdparm._verify_ghost.hdparm_drive_active') | list | length > 0
-      - _keys | select('search', 'hdparm._verify_ghost.hdparm_drive_unknown') | list | length > 0
-      - _keys | select('search', 'hdparm._verify_ghost.hdparm_drive_collector_error') | list | length > 0
+      - _keys | select('search', 'hdparm.verify_ghost.hdparm_drive_active') | list | length > 0
+      - _keys | select('search', 'hdparm.verify_ghost.hdparm_drive_unknown') | list | length > 0
+      - _keys | select('search', 'hdparm.verify_ghost.hdparm_drive_collector_error') | list | length > 0
     fail_msg: >-
       Expected hdparm_drive_{active,unknown,collector_error} to bind on
-      hdparm._verify_ghost. Got keys: {{ _keys | select('search', 'hdparm') | list }}
+      hdparm.verify_ghost. Got keys: {{ _keys | select('search', 'hdparm') | list }}
 
 - name: _verify | Restore empty hdparm.conf
   template:
