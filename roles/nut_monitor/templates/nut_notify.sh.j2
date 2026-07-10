@@ -89,4 +89,4 @@ DATE=$(date --iso-8601=seconds)
 # string, so a stray %/\ in the value can't corrupt the body.
 printf "%s\n\nStatus Page: https://nut.{{ inventory_hostname }}.{{ domain }}/upsstats.cgi?host=%s\nDate: %s\nStatus: %s\nBattery charge: %s\nRuntime: %s\n\n" \
   "$MSG" "$UPS" "$DATE" "${STAT:-unknown}" "${BATT:-unknown}" "$RUNTIME" |
-  mail -s "UPS event $EVENT on {{ inventory_hostname }}" root
+  mail -s "[{{ inventory_hostname }}] UPS event $EVENT" root
