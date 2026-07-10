@@ -1,5 +1,5 @@
-
 # vim:ft=yaml
+{% if nginx_web_log_metrics | default(true) %}
 jobs:
   - name: nginx
     autodetection_retry: 60
@@ -19,3 +19,8 @@ jobs:
       # $authelia_user/$authelia_groups pair) are placeholdered with `-` to hold
       # their column position; $ssl_protocol/$ssl_cipher feed the TLS charts.
       format: '$remote_addr - - [$time_local] $host "$request" - $status $body_bytes_sent $request_length $request_time $upstream_response_time "-" "-" "-" "-" $ssl_protocol $ssl_cipher'
+{% else %}
+# Near-idle hosts opt out: an empty access.log leaves web_log unable to build
+# its parser, so an enabled job would retry and log an error every 60 seconds.
+jobs: []
+{% endif %}

@@ -16,6 +16,55 @@
   set_fact:
     nginx_verify_host: "nginxverify.{{ inventory_hostname }}.{{ domain }}"
 
+# Exercise the web-log collector's enabled-to-disabled transition while
+# access.log is still empty. The disabled template must replace the active job
+# and let the shared netdata helper own the required restart.
+- name: _verify | Enable nginx web-log metrics
+  import_tasks: netdata.yml
+  vars:
+    nginx_web_log_metrics: true
+
+- name: _verify | Read enabled web-log metrics config
+  slurp:
+    src: /etc/netdata/go.d/web_log.conf
+  register: nginx_verify_web_log_enabled
+  become: true
+
+- name: _verify | Enabled web-log metrics config carries the nginx job
+  assert:
+    that:
+      - (nginx_verify_web_log_enabled.content | b64decode | from_yaml).jobs | map(attribute='name') | list == ['nginx']
+
+- name: _verify | Disable nginx web-log metrics
+  import_tasks: netdata.yml
+  vars:
+    nginx_web_log_metrics: false
+
+- name: _verify | Read disabled web-log metrics config
+  slurp:
+    src: /etc/netdata/go.d/web_log.conf
+  register: nginx_verify_web_log_disabled
+  become: true
+
+- name: _verify | Disabled web-log metrics config has no jobs and netdata stayed active
+  systemd:
+    name: netdata.service
+  register: nginx_verify_netdata_active
+  failed_when: >-
+    (nginx_verify_web_log_disabled.content | b64decode | from_yaml).jobs != []
+    or nginx_verify_netdata_active.status.ActiveState != 'active'
+  become: true
+
+- name: _verify | Reapply disabled nginx web-log metrics
+  import_tasks: netdata.yml
+  vars:
+    nginx_web_log_metrics: false
+
+- name: _verify | Disabled nginx web-log metrics are idempotent
+  assert:
+    that:
+      - not netdata_config.changed
+
 # TLS SNI follows the URL host, not the Host header. On noble/resolute (OpenSSL
 # 3.x), an SNI of `localhost` that matches no server_name triggers a fatal
 # TLSV1_UNRECOGNIZED_NAME. Map every test-vhost FQDN to loopback so probes can
