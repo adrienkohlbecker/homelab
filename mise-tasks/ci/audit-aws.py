@@ -23,27 +23,27 @@ snapshots (a snapshot not backing any live AMI, the classic
 deregister/interrupted-packer leftover). Account-global S3 is checked too; the
 qemu image bundle bucket is expected, while any other bucket is drift.
 
-Owned AMIs are also held to a retention rule: only the newest
-AMI_RETAIN_PER_CATEGORY builds per category are legitimate; each category is a
-group of AMIs sharing a `Name` tag (packer stamps every qemu-host build with a
-stable `homelab-ci-qemu-host-<ubuntu>` Name, so the current sole category is
-`homelab-ci-qemu-host-noble`). Any AMI beyond the newest N in its category is a
-stray -- it and its ~40GB backing snapshot bill for nothing -- and its
-deregister-then-delete-snapshot lines are emitted.
+Owned AMIs are also held to a retention rule: the promoted qemu-host image plus
+the newest AMI_RETAIN_PER_CATEGORY builds per category are legitimate. Each
+category is a group of AMIs sharing a `Name` tag. Any other AMI is a stray,
+and its reviewable cleanup task is emitted.
 
-It NEVER mutates. For each stray AMI and orphaned snapshot it prints the exact
-`aws ec2 deregister-image` / `aws ec2 delete-snapshot` lines for the operator
-to review and run by hand.
+It NEVER mutates. For each stray AMI it prints the repository's guarded
+deregistration task; orphan snapshots still get an exact AWS deletion command.
 
 Exposed as ci:audit-aws. Exits 1 if any anomaly is found, 0 when clean, so it
 can double as a periodic check.
 """
 
-import re
 import sys
-from collections import defaultdict
 
 import boto3
+from ami_retention import (
+    AMI_RETAIN_PER_CATEGORY,
+    ami_category,
+    retention_plan,
+    snapshot_ids,
+)
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
@@ -52,9 +52,6 @@ from botocore.exceptions import ClientError
 # read as "no resources" -- exactly the false-clean an audit must avoid.
 CFG = Config(retries={"max_attempts": 10, "mode": "adaptive"})
 EXPECTED_GLOBAL_S3_BUCKETS = {"homelab-ci-images"}
-# Newest N builds kept per AMI category (same Name tag); older ones are strays.
-AMI_RETAIN_PER_CATEGORY = 2
-
 anomalies: list[str] = []  # human-readable lines, one per unexpected resource
 deletes: list[str] = []  # suggested cleanup commands (never executed here)
 expected: list[str] = []  # legitimate standing infra, reported for context
@@ -76,21 +73,33 @@ def safe(label, fn, default=None):
         return default if default is not None else []
 
 
-def ami_category(im):
-    """Retention bucket for an AMI. AMIs sharing a `Name` tag are one category
-    (packer stamps each qemu-host build with a stable Name like
-    homelab-ci-qemu-host-noble); untagged images fall back to their AMI name
-    with a trailing -<timestamp> stripped so sibling builds still bucket together."""
-    tag = next((t["Value"] for t in im.get("Tags", []) if t["Key"] == "Name"), None)
-    return tag or re.sub(r"-\d+$", "", im.get("Name", im["ImageId"]))
+def promoted_qemu_host_amis(region: str, images: list[dict]) -> set[str]:
+    """Return qemu-host AMIs protected by their SSM promotion pointers."""
+    if region != "eu-central-1":
+        return set()
 
-
-def snapshot_ids(im):
-    return [
-        bdm["Ebs"]["SnapshotId"]
-        for bdm in im.get("BlockDeviceMappings", [])
-        if "Ebs" in bdm and "SnapshotId" in bdm["Ebs"]
-    ]
+    ubuntus = {
+        tags["ubuntu"]
+        for image in images
+        if (tags := {tag["Key"]: tag["Value"] for tag in image.get("Tags", [])})
+        and tags.get("role") == "ci-ami"
+        and tags.get("machine") == "qemu_host"
+        and "ubuntu" in tags
+    }
+    promoted: set[str] = set()
+    ssm = client("ssm", region)
+    for ubuntu in ubuntus:
+        parameter = f"/homelab-ci/ami/qemu-host/{ubuntu}"
+        try:
+            value = ssm.get_parameter(Name=parameter)["Parameter"]["Value"]
+        except ClientError as error:
+            code = error.response["Error"].get("Code", "Error")
+            if code == "ParameterNotFound":
+                continue
+            errors.append(f"{region} promoted qemu-host {ubuntu}: {code}")
+            continue
+        promoted.add(value)
+    return promoted
 
 
 def sweep_region(region):
@@ -171,17 +180,12 @@ def sweep_region(region):
         lambda: ec2.describe_snapshots(OwnerIds=["self"]).get("Snapshots", []),
     )
 
-    # Retention: within each category keep the newest N by CreationDate; the
-    # rest are strays. Only *retained* AMIs protect their backing snapshots --
-    # a stray AMI's snapshot is cleaned up alongside the deregister below.
-    by_category = defaultdict(list)
-    for im in images:
-        by_category[ami_category(im)].append(im)
-    retained, strays = [], []
-    for group in by_category.values():
-        group.sort(key=lambda im: im["CreationDate"], reverse=True)
-        retained.extend(group[:AMI_RETAIN_PER_CATEGORY])
-        strays.extend(group[AMI_RETAIN_PER_CATEGORY:])
+    # Shared with qemu-host-ami.sh so audit and automatic cleanup agree on the
+    # promoted image and the per-category keep count.
+    retained, strays = retention_plan(
+        images,
+        promoted_qemu_host_amis(region, images),
+    )
 
     referenced = {sid for im in retained for sid in snapshot_ids(im)}
     stray_backed = {sid for im in strays for sid in snapshot_ids(im)}
@@ -195,9 +199,7 @@ def sweep_region(region):
             f"({ami_category(im)}, {im['CreationDate'][:10]}) "
             f"-- beyond newest {AMI_RETAIN_PER_CATEGORY} in category"
         )
-        # Deregister must precede snapshot deletion (the AMI still references it).
-        deletes.append(f"aws ec2 deregister-image --region {region} --image-id {im['ImageId']}")
-        deletes.extend(f"aws ec2 delete-snapshot --region {region} --snapshot-id {sid}" for sid in snapshot_ids(im))
+        deletes.append(f"mise run packer:deregister-ami -- {im['ImageId']} {region}")
 
     for s in snaps:
         # Snapshots behind a stray AMI are already covered by its deregister
