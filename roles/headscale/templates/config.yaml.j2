@@ -98,10 +98,10 @@ tls_key_path: ""
 log:
   format: text
   # Headscale logs to stderr, which podman's journald log driver records at
-  # err priority -- at the default `info` every routine INF line (node
-  # registrations, DNS updates) lands in the journal looking like an error.
-  # warn keeps the unit's journal to genuine problems.
-  level: warn
+  # err priority. Keep info-level control-plane events for audit and outage
+  # diagnosis; fluent-bit's level_from_message filter classifies Headscale's
+  # INF/WRN/ERR tokens by semantic severity before aggregation.
+  level: info
 
 policy:
   mode: file

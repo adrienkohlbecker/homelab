@@ -171,14 +171,16 @@
 
 # Read the rendered config from the host (the distroless headscale image has no
 # cat to podman-exec); /mnt/services/headscale/config.yaml is the file mounted
-# read-only into the container.
-- name: _verify | Rendered config enabled OIDC + PKCE against the mock issuer
+# read-only into the container. Keep info-level events for the audit trail; the
+# log pipeline fixes their misleading raw journald priority downstream.
+- name: _verify | Rendered config enabled OIDC + PKCE and info logging
   command: cat /mnt/services/headscale/config.yaml
   register: _headscale_hs_oidc_cfg
   changed_when: false
   failed_when: >-
     'http://10.166.0.10:8090/oidc' not in _headscale_hs_oidc_cfg.stdout
     or 'pkce:' not in _headscale_hs_oidc_cfg.stdout
+    or 'level: info' not in _headscale_hs_oidc_cfg.stdout
   become: true
 
 # Exercise the ACL SIGHUP reload's fail-soft contract (tasks/main.yml): a
