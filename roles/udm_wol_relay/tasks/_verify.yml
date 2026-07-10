@@ -51,6 +51,79 @@
     udm_wol_relay_source_gateways | reject('in', _udm_wol_relay_socket.stdout) | list | length > 0
   become: true
 
+# -- functional path -------------------------------------------------------
+# The relay binds the source-VLAN gateways (FREEBIND, the fixture does not
+# own them); aliasing the management gateway onto lo makes packets sent to it
+# deliver locally, with a source address inside the management CIDR.
+- name: _verify | Alias the management gateway onto loopback for local delivery
+  command: ip addr replace {{ udm_wol_relay_source_gateways[0] }}/32 dev lo
+  changed_when: true
+  become: true
+
+- name: _verify | Send a magic packet from an allowed source
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.sendto(b"\xff" * 6 + bytes.fromhex("aabbccddeeff") * 16, ("{{ udm_wol_relay_source_gateways[0] }}", {{ udm_wol_relay_port }}))
+  changed_when: false
+
+- name: _verify | Relay logged the first rebroadcast
+  command: journalctl -u udm_wol_relay.service --no-pager -o cat
+  register: _udm_wol_relay_journal
+  changed_when: false
+  retries: 10
+  delay: 1
+  until: _udm_wol_relay_journal.stdout_lines | select('search', 'relayed magic packet') | list | length >= 1
+  become: true
+
+# Both must be dropped: junk payload from an allowed source, and a valid
+# magic packet whose source (loopback) is outside every allowed CIDR.
+- name: _verify | Send a junk payload and a disallowed-source packet
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.sendto(b"\x00" * 102, ("{{ udm_wol_relay_source_gateways[0] }}", {{ udm_wol_relay_port }}))
+        outsider = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        outsider.bind(("127.0.0.1", 0))
+        outsider.sendto(b"\xff" * 6 + bytes.fromhex("aabbccddeeff") * 16, ("{{ udm_wol_relay_source_gateways[0] }}", {{ udm_wol_relay_port }}))
+  changed_when: false
+
+# The relay loop is single-threaded and loopback delivery is ordered, so once
+# the second valid packet is logged the two negatives above were already
+# processed -- an exact count of 2 proves both were dropped, without sleeps.
+- name: _verify | Send a second magic packet from an allowed source
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.sendto(b"\xff" * 6 + bytes.fromhex("aabbccddeeff") * 16, ("{{ udm_wol_relay_source_gateways[0] }}", {{ udm_wol_relay_port }}))
+  changed_when: false
+
+- name: _verify | Relay logged the second rebroadcast
+  command: journalctl -u udm_wol_relay.service --no-pager -o cat
+  register: _udm_wol_relay_journal
+  changed_when: false
+  retries: 10
+  delay: 1
+  until: _udm_wol_relay_journal.stdout_lines | select('search', 'relayed magic packet') | list | length >= 2
+  become: true
+
+- name: _verify | Only the two allowed packets were relayed
+  assert:
+    that:
+      - _udm_wol_relay_journal.stdout_lines | select('search', 'relayed magic packet') | list | length == 2
+
 # -- firmware-wipe recovery ------------------------------------------------
 - name: _verify | On-boot framework unit is enabled
   systemd:
