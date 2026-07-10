@@ -1,6 +1,6 @@
-# nut-notify sources /usr/local/lib/functions.sh from the bash role, which
+# nut_notify sources /usr/local/lib/functions.sh from the bash role, which
 # site.yml runs before nut_monitor. testrole.py runs only this role, so the
-# _verify path that executes nut-notify needs the library deployed here.
+# _verify path that executes nut_notify needs the library deployed here.
 - name: _setup | Install bash functions.sh
   import_role:
     name: bash
@@ -50,7 +50,7 @@
     # frames and reports ups.status WAIT until the first poll lands, which
     # makes the published values non-deterministic at query time.
     # charge/runtime are floats ("42.00"/"900.00") to mirror the real Eaton's
-    # snmp-ups output -- this is what regression-guards nut-notify's fractional
+    # snmp-ups output -- this is what regression-guards nut_notify's fractional
     # battery.runtime handling (an integer frame would never exercise it).
     cat <<EOF >/etc/nut/eaton.dev
     ups.status: OB DISCHRG

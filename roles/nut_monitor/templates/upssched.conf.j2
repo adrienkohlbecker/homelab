@@ -14,7 +14,7 @@
 # A shell script with a big case..esac construct should work nicely for this.
 # An example has been provided to help you get started.
 
-CMDSCRIPT /usr/local/bin/nut-notify
+CMDSCRIPT /usr/local/bin/nut_notify
 
 # ============================================================================
 #
@@ -137,7 +137,7 @@ AT SHUTDOWN * EXECUTE shutdown
 AT REPLBATT * EXECUTE replbatt
 AT NOPARENT * EXECUTE noparent
 # nut 2.8+ device-status events (the fleet is migrating to it). Inert on 2.7.4,
-# which never emits them. Keep these AT names in lockstep with nut-notify's arms.
+# which never emits them. Keep these AT names in lockstep with nut_notify's arms.
 AT BYPASS * EXECUTE bypass
 AT OVER * EXECUTE over
 AT CAL * EXECUTE cal
@@ -148,7 +148,7 @@ AT NOTOFF * EXECUTE notoff
    switches between this host and the peers to finish booting if they lost
    power too. ONBATT cancels the timer so a flapping supply never fires a
    wake mid-outage. Firing when the peers never went down is harmless: a
-   magic packet to a running host is a no-op. nut-notify's wake_peers arm
+   magic packet to a running host is a no-op. nut_notify's wake_peers arm
    delegates to /usr/local/bin/nut_wake_peers. #}
 AT ONLINE * START-TIMER wake_peers 60
 AT ONBATT * CANCEL-TIMER wake_peers

@@ -18,7 +18,7 @@
   tags:
     - nut_monitor
 
-# nut-notify delivers via the bare `mail` binary (mailutils, from the postfix
+# nut_notify delivers via the bare `mail` binary (mailutils, from the postfix
 # role ordered before nut in site.yml). This asserts the binary is PRESENT --
 # not that mail is deliverable: root->operator routing is owned by postfix's
 # aliases.j2 and relay health is the postfix role's concern. Catches the common
@@ -55,7 +55,7 @@
 
 # upsmon.conf/upssched.conf carry no validate: -- NUT ships no offline config
 # checker (the daemons only parse at startup) and the whitespace-directive
-# format isn't INI, so there's no real parser to invent. nut-notify below
+# format isn't INI, so there's no real parser to invent. nut_notify below
 # validates with `bash -n` since it is a script.
 - name: Configure nut upsmon.conf  # noqa: require-validate
   when: not (ansible_check_mode and nut_monitor_apt.changed)
@@ -85,15 +85,25 @@
   tags:
     - nut_monitor
 
-- name: Configure nut-notify
+- name: Configure nut_notify
   template:
-    src: nut-notify.sh.j2
-    dest: /usr/local/bin/nut-notify
+    src: nut_notify.sh.j2
+    dest: /usr/local/bin/nut_notify
     owner: root
     group: root
     mode: "0755"
     backup: true
     validate: bash -n %s
+  become: true
+  tags:
+    - nut_monitor
+
+# Converged hosts still carry the script under its pre-convention hyphenated
+# name; nothing references it once upssched.conf points at nut_notify.
+- name: Remove the stale nut-notify copy
+  file:
+    path: /usr/local/bin/nut-notify
+    state: absent
   become: true
   tags:
     - nut_monitor
@@ -152,7 +162,7 @@
 # startup copy (upsmon split-process model). jammy's 2.7.4 packaged unit
 # also ships no ExecReload. The cost is that a config converge mid-outage
 # drops any in-flight upssched debounce timer; acceptable for a rare event.
-# nut-notify/nut_wake_peers are never triggers -- upssched exec's them fresh
+# nut_notify/nut_wake_peers are never triggers -- upssched exec's them fresh
 # per event, so a script-only change needs nothing.
 - name: Enable nut_monitor service
   import_role:
