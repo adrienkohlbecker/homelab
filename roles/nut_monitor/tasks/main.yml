@@ -85,6 +85,28 @@
   tags:
     - nut_monitor
 
+# nut_notify's wake_peers arm broadcasts on the primary subnet; a degraded
+# default_ipv4 fact (wg/podman/bridge default route) would render a
+# syntactically valid but unwakeable destination that only surfaces
+# mid-outage-recovery. Same guards as roles/wolweb.
+- name: Assert the wake broadcast derivation is sane
+  when: nut_monitor_wake_peers | length > 0
+  assert:
+    quiet: true
+    that:
+      - ansible_facts.default_ipv4.interface is defined
+      - ansible_facts.default_ipv4.interface is not match('^(wg|podman|virbr|docker|br-|veth)')
+      - ansible_facts.default_ipv4.broadcast is defined
+      - ansible_facts.default_ipv4.broadcast is match('^([0-9]{1,3}[.]){3}[0-9]{1,3}$')
+    fail_msg: >-
+      ansible_facts.default_ipv4 resolved to interface
+      '{{ ansible_facts.default_ipv4.interface | default("") }}' with broadcast
+      '{{ ansible_facts.default_ipv4.broadcast | default("") }}' -- a
+      bridge/tunnel or empty fact rather than the management NIC, which would
+      render an unwakeable wake_peers arm in nut_notify
+  tags:
+    - nut_monitor
+
 - name: Configure nut_notify
   template:
     src: nut_notify.sh.j2
@@ -108,20 +130,15 @@
   tags:
     - nut_monitor
 
-# Only on hosts late enough in the shutdown ladder to have peers to revive
-# (nut_monitor_wake_peers, host_vars/pug.yml). No absent-state cleanup: the
-# list has never shrunk on a deployed host, and an orphaned script is inert
-# once the upssched.conf timer lines are gone.
-- name: Install the wake_peers script
+# The wake leg exists only on hosts late enough in the shutdown ladder to
+# have peers to revive (nut_monitor_wake_peers, host_vars/pug.yml + lab.yml).
+# wakeonlan is the packaged sender nut_notify's wake_peers arm shells out to.
+- name: Install wakeonlan
   when: nut_monitor_wake_peers | length > 0
-  template:
-    src: nut_wake_peers.py.j2
-    dest: /usr/local/bin/nut_wake_peers
-    backup: true
-    owner: root
-    group: root
-    mode: "0755"
-    validate: python3 -m py_compile %s
+  apt:
+    pkg:
+      - wakeonlan
+    cache_valid_time: 3600
   become: true
   tags:
     - nut_monitor
@@ -137,8 +154,9 @@
   tags:
     - nut_monitor
 
-# Starting the oneshot at converge just re-sends the packets to peers that
-# are already up -- a harmless no-op, same as every regular boot.
+# The unit's RemainAfterExit keeps it active after the boot run, so the
+# `start` here is a boot-behaviour no-op at converge instead of a
+# re-broadcast at peers the operator may have deliberately powered off.
 - name: Enable the boot-time peer wake
   when: nut_monitor_wake_peers | length > 0
   import_role:
@@ -153,6 +171,29 @@
   tags:
     - nut_monitor
 
+# Emptying the list must retire the unit too: it fires nut_notify wake_peers
+# on every boot all by itself -- no upssched involved -- so an orphan would
+# keep waking the stale MAC list forever.
+- name: Remove the boot-time peer wake unit
+  when: nut_monitor_wake_peers | length == 0
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      src: nut_wake_peers.service
+  tags:
+    - nut_monitor
+
+# The wake sender used to be a bespoke python script; wakeonlan replaced it.
+- name: Remove the retired nut_wake_peers script
+  file:
+    path: /usr/local/bin/nut_wake_peers
+    state: absent
+  become: true
+  tags:
+    - nut_monitor
+
 # start: gates on qemu_test -- the fixture has no real UPS to reach, so the
 # unit is only enabled (it still starts at the _site_test reboot and idles
 # on NOCOMM retries, which upsmon tolerates indefinitely).
@@ -162,8 +203,8 @@
 # startup copy (upsmon split-process model). jammy's 2.7.4 packaged unit
 # also ships no ExecReload. The cost is that a config converge mid-outage
 # drops any in-flight upssched debounce timer; acceptable for a rare event.
-# nut_notify/nut_wake_peers are never triggers -- upssched exec's them fresh
-# per event, so a script-only change needs nothing.
+# nut_notify is never a trigger -- upssched exec's it fresh per event, so a
+# script-only change needs nothing.
 - name: Enable nut_monitor service
   import_role:
     name: systemd_unit

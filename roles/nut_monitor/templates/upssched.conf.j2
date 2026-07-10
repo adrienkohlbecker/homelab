@@ -149,7 +149,7 @@ AT NOTOFF * EXECUTE notoff
    power too. ONBATT cancels the timer so a flapping supply never fires a
    wake mid-outage. Firing when the peers never went down is harmless: a
    magic packet to a running host is a no-op. nut_notify's wake_peers arm
-   delegates to /usr/local/bin/nut_wake_peers. #}
+   sends the packets via wakeonlan. #}
 AT ONLINE * START-TIMER wake_peers 60
 AT ONBATT * CANCEL-TIMER wake_peers
 {% endif %}

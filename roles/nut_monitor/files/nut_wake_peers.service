@@ -12,7 +12,11 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/nut_wake_peers wake_peers
+# Stay active after the boot run so a converge's `started` is a no-op
+# rather than a re-broadcast (which could wake a peer the operator
+# deliberately powered off).
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/nut_notify wake_peers
 
 [Install]
 WantedBy=multi-user.target

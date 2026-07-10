@@ -38,13 +38,22 @@ replbatt)
 noparent)
   MSG="upsmon parent process died - shutdown impossible"
   ;;
-# Not a mail event: wake_peers is upssched's timer for reviving WoL peers
-# after mains power returned (upssched.conf.j2, rendered only on hosts with
-# nut_monitor_wake_peers set -- so this arm is unreachable where the script
-# below is absent). Delegate and stop; the wake itself logs per packet.
+{% if nut_monitor_wake_peers %}
+# Not a mail event: wake_peers revives WoL peers after mains power returned.
+# Both legs land here -- upssched's timer (60s after ONLINE) and the boot-time
+# nut_wake_peers.service oneshot. Waking a running host is a no-op; three
+# rounds cover switches between this host and the peers that are still
+# booting after an outage, and a failed send (no route yet) must not abort
+# the later rounds. Direct-L2 broadcast for management-VLAN peers, guarded at
+# converge like roles/wolweb; cross-VLAN manual wakes use the UDM UDP/9 relay.
 wake_peers)
-  exec /usr/local/bin/nut_wake_peers wake_peers
+  for round in 1 2 3; do
+    if [ "$round" -gt 1 ]; then sleep 30; fi
+    wakeonlan -i {{ ansible_facts.default_ipv4.broadcast }} {{ nut_monitor_wake_peers | join(' ') }} || true
+  done
+  exit 0
   ;;
+{% endif %}
 # Any name upssched dispatches without a bespoke sentence above -- the nut
 # 2.8+ device-status events (bypass/over/cal/off/notoff), a future timer, a
 # typo'd AT line -- still mails, with the raw event name carrying the news.
