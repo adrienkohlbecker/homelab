@@ -76,14 +76,15 @@
 
 # -- keepalived (apt) -----------------------------------------------------
 
-- name: Check keepalived install state
-  when: ansible_check_mode
-  command: dpkg-query -W -f=${Status} keepalived
-  register: udm_dns_failover_keepalived_check_mode
-  changed_when: udm_dns_failover_keepalived_check_mode.stdout != "install ok installed"
-  failed_when: udm_dns_failover_keepalived_check_mode.rc not in [0, 1]
-  check_mode: false
-  become: true
+# The install must skip check mode outright: no roles/apt maintains the
+# UDM's package cache, so a fresh appliance has nothing for --check's
+# no-refresh apt to resolve keepalived against. The stat probe stands in as
+# the fresh-host signal (binary absent <=> apt would install), same shape as
+# roles/adguard's keepalived guard.
+- name: Check whether keepalived is installed
+  stat:
+    path: /usr/sbin/keepalived
+  register: udm_dns_failover_keepalived
   tags:
     - udm_dns_failover
 
@@ -94,22 +95,7 @@
       - keepalived
     cache_valid_time: 3600
     policy_rc_d: 101
-  register: udm_dns_failover_keepalived_install
   become: true
-  tags:
-    - udm_dns_failover
-
-- name: Record keepalived install state
-  when: ansible_check_mode
-  set_fact:
-    udm_dns_failover_keepalived_apt: "{{ udm_dns_failover_keepalived_check_mode }}"
-  tags:
-    - udm_dns_failover
-
-- name: Record keepalived install result
-  when: not ansible_check_mode
-  set_fact:
-    udm_dns_failover_keepalived_apt: "{{ udm_dns_failover_keepalived_install }}"
   tags:
     - udm_dns_failover
 
@@ -499,12 +485,11 @@
   tags:
     - udm_dns_failover
 
-# Same check-mode guard as the on-boot enable: when apt would have installed
-# keepalived this run, keepalived.service isn't on disk yet, so a check-mode
-# start can't find the unit. On a converged host apt is unchanged and the
-# start/reload idempotence check still runs under --check.
+# Check-mode guard: on a fresh host apt hasn't installed keepalived yet, so
+# a check-mode start can't find the unit. On a converged host the binary
+# exists and the start/reload idempotence check still runs under --check.
 - name: Start keepalived
-  when: not (ansible_check_mode and udm_dns_failover_keepalived_apt.changed)
+  when: not (ansible_check_mode and not udm_dns_failover_keepalived.stat.exists)
   systemd:
     name: keepalived.service
     state: "{{ (udm_dns_failover_base_conf.changed or udm_dns_failover_vrrp_conf.changed) | ternary('reloaded', 'started') }}"
