@@ -59,6 +59,15 @@
     status_code: [ 200, 500 ]
   become: true
 
+# The wake_destination path sends unicast (to the UDM gateway), which needs
+# no SO_BROADCAST and succeeds under SLIRP -- unlike the broadcast case above
+# this one is deterministic, so require a plain 200.
+- name: _verify | Wolweb wake route sends to a wake_destination device
+  uri:
+    url: http://localhost:{{ service_ports.wolweb }}/wake/Windows
+    status_code: 200
+  become: true
+
 # read_only:true leaves the /data/save POST route unregistered upstream, so a
 # hit returns 404. This fails if a future image ignores read_only or the flag
 # is dropped, which would let any authenticated user rewrite the device list.

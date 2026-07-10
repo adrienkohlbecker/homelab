@@ -1,3 +1,6 @@
+# The host/port checks are semantic, not just shape: ipaddr rejects
+# out-of-range octets (999.999.999.999) and the int bounds reject port 0 or
+# 99999, so a typo fails here at converge instead of at wake time.
 - name: Validate wolweb device inputs
   assert:
     quiet: true
@@ -5,10 +8,14 @@
       - wolweb_devices is defined
       - wolweb_devices | length > 0
       - wolweb_devices | rejectattr('mac', 'match', '^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$') | list | length == 0
-      - wolweb_devices | selectattr('wake_destination', 'defined') | rejectattr('wake_destination', 'match', '^([0-9]{1,3}[.]){3}[0-9]{1,3}:[0-9]{1,5}$') | list | length == 0
+      - wolweb_wake_destinations | rejectattr('wake_destination', 'match', '^([0-9]{1,3}[.]){3}[0-9]{1,3}:[0-9]{1,5}$') | list | length == 0
+      - wolweb_wake_destinations | map(attribute='wake_destination') | map('regex_replace', ':[0-9]+$', '') | ansible.utils.ipaddr('address') | length == wolweb_wake_destinations | length
+      - wolweb_wake_destinations | map(attribute='wake_destination') | map('regex_replace', '^.*:', '') | map('int') | select('ge', 1) | select('le', 65535) | list | length == wolweb_wake_destinations | length
     fail_msg: >-
       wolweb_devices must be a non-empty list of {name, mac} entries with
       valid MAC addresses and optional IPv4:port wake_destination values
+  vars:
+    wolweb_wake_destinations: "{{ wolweb_devices | selectattr('wake_destination', 'defined') | list }}"
   tags:
     - wolweb
 
