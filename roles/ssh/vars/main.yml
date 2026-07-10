@@ -1,0 +1,11 @@
+# Keep this manifest aligned with the HostKey directives in
+# files/00-hardening.conf. Persist the public companions needed by tooling too.
+_ssh_host_private_key_files:
+  - ssh_host_ed25519_key
+  - ssh_host_rsa_key
+
+_ssh_host_key_files:
+  - ssh_host_ed25519_key
+  - ssh_host_ed25519_key.pub
+  - ssh_host_rsa_key
+  - ssh_host_rsa_key.pub

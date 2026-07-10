@@ -1,0 +1,27 @@
+- name: Stat the live host identity
+  stat:
+    path: "/etc/ssh/{{ ssh_host_private_key_file }}"
+  become: true
+  register: _ssh_host_live_identity
+
+- name: Stat the persisted host identity
+  stat:
+    path: "/mnt/services/ssh_host_keys/{{ ssh_host_private_key_file }}"
+  become: true
+  register: _ssh_host_persisted_identity
+
+# A divergent persisted identity means this host was rebuilt without
+# restoring its host keys. Halt before the copy loop can destroy the old pin.
+- name: Refuse to overwrite a divergent persisted host identity
+  when:
+    - _ssh_host_live_identity.stat.exists
+    - _ssh_host_persisted_identity.stat.exists
+    - _ssh_host_live_identity.stat.checksum != _ssh_host_persisted_identity.stat.checksum
+  fail:
+    msg: >-
+      /mnt/services/ssh_host_keys holds a DIFFERENT {{ ssh_host_private_key_file }}
+      identity than /etc/ssh. Either restore the persisted identities:
+      sudo cp -a /mnt/services/ssh_host_keys/ssh_host_ed25519_key{,.pub}
+      /mnt/services/ssh_host_keys/ssh_host_rsa_key{,.pub} /etc/ssh/ &&
+      sudo systemctl restart ssh -- or adopt the new identities by deleting
+      /mnt/services/ssh_host_keys, then update every known_hosts pin of this host.
