@@ -7,7 +7,7 @@
 #     this host's pubkey to a forced `rrsync -wo` command (host_vars/bunk.yml).
 # /root/.ssh/known_hosts for those peers is owned by zfs_autobackup (dest.yml,
 # ssh-keyscan), not this role -- so a regenerated keypair needs a manual bunk.yml
-# update, which the "Warn on keypair regeneration" task below enforces.
+# update. Existing invalid keys fail closed before replacement.
 - name: Create ssh directory
   file:
     dest: /root/.ssh
@@ -25,15 +25,13 @@
 # rebuild brings the same root identity back and the pins that authorize it
 # -- zfs_autobackup_ssh_public_key on the pull peer, bunk's forced-command
 # authorized_keys -- stay valid, with no Phase-7 re-pinning (see the rebuild
-# runbooks). ssh_root runs in the host-base band, before zfs_mount/services,
-# so on a first converge /mnt/services may not be mounted yet: the
-# persistence tasks self-gate on the mount and catch up on the next run. On
-# a rebuild the dataset restore precedes converge, so the persisted key is
-# already in place here and the restore below wins over the fresh install's
-# just-generated key. Deliberate rotation: delete both the persisted pair
-# and /root/.ssh/id_ed25519*, converge, then update the pins.
-- name: Check whether /mnt/services is mounted
-  command: findmnt --mountpoint /mnt/services
+# runbooks). The services role runs earlier and installs the shared mount
+# validator used here. On a rebuild the dataset restore precedes converge, so
+# the persisted key is already in place and wins over the fresh install's key.
+# Deliberate rotation: delete both the persisted pair and
+# /root/.ssh/id_ed25519*, converge, then update the pins.
+- name: Check the services dataset mount
+  command: /usr/local/bin/zfs_check_mount rpool/services /mnt/services
   register: ssh_root_services_mount
   changed_when: false
   failed_when: false
@@ -84,14 +82,6 @@
   tags:
     - ssh_root
 
-- name: Check for existing keypair
-  stat:
-    path: /root/.ssh/id_ed25519
-  become: true
-  register: ssh_root_key_stat
-  tags:
-    - ssh_root
-
 - name: Generate an OpenSSH keypair
   when: not (ansible_check_mode and ssh_root_directory.changed)
   community.crypto.openssh_keypair:
@@ -101,51 +91,15 @@
     group: root
     mode: "0600"
     comment: root@{{ inventory_hostname }}
-    regenerate: full_idempotence
+    regenerate: fail
     backend: opensshbin
   become: true
   register: ssh_root_keypair
   tags:
     - ssh_root
 
-# The module reports `changed` for benign repairs too (rewriting a missing
-# .pub after a restore, mode fixes), so the regeneration guard compares the
-# private key file itself before/after instead of trusting `changed`.
-- name: Stat the keypair after generation
-  stat:
-    path: /root/.ssh/id_ed25519
-  become: true
-  register: ssh_root_key_stat_after
-  tags:
-    - ssh_root
-
-# A regenerated key no longer matches the pubkey bunk pins in its forced-command
-# authorized_keys, so offsite backups would fail to authenticate until
-# host_vars/bunk.yml is updated by hand. Halting the converge here is deliberate:
-# it forces that manual step before the host proceeds. Regeneration only happens
-# on real key drift/corruption (regenerate: full_idempotence above), never on a
-# clean re-run. Skipped under --check so a dry-run never aborts.
-- name: Warn on keypair regeneration
-  when:
-    - not ansible_check_mode
-    - ssh_root_key_stat.stat.exists
-    - ssh_root_key_stat.stat.checksum != ssh_root_key_stat_after.stat.checksum
-  fail:
-    msg: >-
-      Root SSH keypair regenerated on {{ inventory_hostname }} -- the old public
-      key is now stale in bunk authorized_keys, so offsite backups will fail to
-      authenticate. Replace the entry for root@{{ inventory_hostname }} in
-      host_vars/bunk.yml ssh_public_keys_additional with the new public key below,
-      then re-converge bunk. (If the host was recently renamed in inventory, a
-      comment mismatch on the existing key may have triggered this regeneration.)
-      {{ ssh_root_keypair.public_key }}
-  tags:
-    - ssh_root
-
-# Live -> persisted, idempotent by checksum. On a fresh host this seeds the
-# persisted copy; afterwards it is a no-op (a live key that diverged from the
-# persisted one can only reach here on first generation -- real drift trips
-# the regeneration guard above first, and a restored key already matches).
+# Live -> persisted, idempotent by checksum. A fresh host seeds the persisted
+# copy; afterwards the restore above makes the live key match before this task.
 - name: Persist the key
   when:
     - ssh_root_services_mount.rc == 0

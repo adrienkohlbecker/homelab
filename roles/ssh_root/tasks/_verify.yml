@@ -83,23 +83,42 @@
     fail_msg: "ssh_config missing expected directives"
 
 # --- identity persistence ---------------------------------------------------
-- name: _verify | Stat the live and persisted keypair
-  stat:
-    path: "{{ item }}"
-  loop:
-    - /root/.ssh/id_ed25519
-    - /mnt/services/ssh_root/id_ed25519
+- name: _verify | Live and persisted private keys match
+  command:
+    argv:
+      - cmp
+      - -s
+      - /root/.ssh/id_ed25519
+      - /mnt/services/ssh_root/id_ed25519
+  changed_when: false
   become: true
-  register: _ssh_root_persist_stats
 
-- name: _verify | Persisted copy exists and matches the live key
+- name: _verify | Stat the identity persistence directory
+  stat:
+    path: /mnt/services/ssh_root
+  become: true
+  register: _ssh_root_persist_dir
+
+- name: _verify | Stat the persisted private key
+  stat:
+    path: /mnt/services/ssh_root/id_ed25519
+  become: true
+  register: _ssh_root_persisted_key
+
+- name: _verify | Persisted root identity is private to root
   assert:
     that:
-      - _ssh_root_persist_stats.results[1].stat.exists
-      - _ssh_root_persist_stats.results[0].stat.checksum == _ssh_root_persist_stats.results[1].stat.checksum
+      - _ssh_root_persist_dir.stat.exists
+      - _ssh_root_persist_dir.stat.mode == '0700'
+      - _ssh_root_persist_dir.stat.pw_name == 'root'
+      - _ssh_root_persist_dir.stat.gr_name == 'root'
+      - _ssh_root_persisted_key.stat.exists
+      - _ssh_root_persisted_key.stat.mode == '0600'
+      - _ssh_root_persisted_key.stat.pw_name == 'root'
+      - _ssh_root_persisted_key.stat.gr_name == 'root'
     fail_msg: >-
-      /mnt/services/ssh_root/id_ed25519 missing or diverged from
-      /root/.ssh/id_ed25519 -- the identity would not survive a rebuild.
+      /mnt/services/ssh_root or its private key has unsafe ownership or
+      permissions.
 
 # Rebuild simulation: after a wipe-and-restore, the persisted copy is in
 # place but /root/.ssh is fresh. Re-running the role must bring back the
@@ -118,56 +137,103 @@
   import_role:
     name: ssh_root
 
-- name: _verify | Stat the restored key
-  stat:
-    path: /root/.ssh/id_ed25519
-  become: true
-  register: _ssh_root_restored
-
 - name: _verify | The restored key is the persisted identity
-  assert:
-    that:
-      - _ssh_root_restored.stat.exists
-      - _ssh_root_restored.stat.checksum == _ssh_root_persist_stats.results[1].stat.checksum
-    fail_msg: >-
-      re-running the role after deleting /root/.ssh/id_ed25519 did not
-      restore the persisted identity (a new key was generated instead --
-      every pin of this key would go stale on a real rebuild).
-
-- name: _verify | Capture key fingerprint before forced regeneration
-  command: ssh-keygen -l -f /root/.ssh/id_ed25519
-  register: _ssh_root_fp_before
-  become: true
+  command:
+    argv:
+      - cmp
+      - -s
+      - /root/.ssh/id_ed25519
+      - /mnt/services/ssh_root/id_ed25519
   changed_when: false
-  failed_when: "'ED25519' not in _ssh_root_fp_before.stdout"
+  become: true
 
-- name: _verify | Force keypair regeneration to exercise the regen-detection path
-  community.crypto.openssh_keypair:
-    path: /root/.ssh/id_ed25519
-    type: ed25519
+- name: _verify | Preserve the valid root identity for repair
+  copy:
+    src: /root/.ssh/id_ed25519
+    remote_src: true
+    dest: /root/.ssh/id_ed25519.verify-backup
     owner: root
     group: root
     mode: "0600"
-    comment: root@{{ inventory_hostname }}
-    regenerate: always
-    backend: opensshbin
   become: true
-  register: _ssh_root_regen
 
-- name: _verify | Assert regeneration surfaces as a change with a new public key
+- name: _verify | Corrupt both root identity copies
+  copy:
+    dest: "{{ item }}"
+    content: "not a valid private key\n"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - /root/.ssh/id_ed25519
+    - /mnt/services/ssh_root/id_ed25519
+  become: true
+
+- name: _verify | Stat the corrupt live identity
+  stat:
+    path: /root/.ssh/id_ed25519
+  become: true
+  register: _ssh_root_corrupt_before
+
+- name: _verify | Re-run the role against the corrupt identity
+  block:
+    - name: _verify | Import the role (must fail before regeneration)
+      import_role:
+        name: ssh_root
+
+    - name: _verify | Unreachable when regeneration fails closed
+      set_fact:
+        _ssh_root_regen_guard_tripped: false
+
+  rescue:
+    - name: _verify | The keypair task failed closed
+      assert:
+        that:
+          - ansible_failed_task.name is search('Generate an OpenSSH keypair')
+          - ansible_failed_result.msg is search('Unable to read the key')
+        fail_msg: >-
+          The nested role failed in {{ ansible_failed_task.name | default('<unknown>') }},
+          not in the expected openssh_keypair validation.
+
+    - name: _verify | Stat the rejected live identity
+      stat:
+        path: /root/.ssh/id_ed25519
+      become: true
+      register: _ssh_root_corrupt_after
+
+    - name: _verify | Invalid key was rejected without replacement
+      assert:
+        that:
+          - _ssh_root_corrupt_after.stat.checksum == _ssh_root_corrupt_before.stat.checksum
+
+    - name: _verify | Record the regeneration guard firing
+      set_fact:
+        _ssh_root_regen_guard_tripped: true
+
+  always:
+    - name: _verify | Restore the valid root identity copies
+      copy:
+        src: /root/.ssh/id_ed25519.verify-backup
+        remote_src: true
+        dest: "{{ item }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop:
+        - /root/.ssh/id_ed25519
+        - /mnt/services/ssh_root/id_ed25519
+      become: true
+
+    - name: _verify | Remove the identity repair copy
+      file:
+        path: /root/.ssh/id_ed25519.verify-backup
+        state: absent
+      become: true
+
+- name: _verify | Regeneration guard halted the converge
   assert:
     that:
-      - _ssh_root_regen.changed
-      - _ssh_root_regen.public_key is defined
-      - _ssh_root_regen.public_key | length > 0
+      - _ssh_root_regen_guard_tripped
     fail_msg: >-
-      openssh_keypair regenerate did not surface as a change -- the warn/fail gate
-      in main.yml would miss a real key rotation.
-
-- name: _verify | Assert the regenerated key fingerprint actually differs
-  command: ssh-keygen -l -f /root/.ssh/id_ed25519
-  register: _ssh_root_fp_after
-  become: true
-  changed_when: false
-  failed_when: _ssh_root_fp_after.stdout == _ssh_root_fp_before.stdout
-# Terminal task: key has been rotated; do not add SSH connectivity assertions below this point.
+      re-running ssh_root with an invalid existing key did not fail before
+      replacing the pinned identity.

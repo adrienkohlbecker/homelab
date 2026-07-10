@@ -1,11 +1,11 @@
-# The identity persistence in main.yml self-gates on /mnt/services being
-# mounted -- in prod the services role provides it later in site.yml. Create
-# the dataset here so the fixture converge exercises the persist/restore
-# paths (box is ZFS-root).
-- name: _setup | Create the services dataset
-  community.general.zfs:
-    name: rpool/services
-    state: present
-    extra_zfs_properties:
-      mountpoint: /mnt/services
-  become: true
+# zfs_check_mount sources /usr/local/lib/functions.sh. Site.yml puts bash
+# before services in prod; testrole.py runs only this role, so stage it here.
+- name: _setup | Install bash helpers
+  import_role:
+    name: bash
+
+# Mirror the production producer so the fixture gets the real dataset
+# properties, mount unit, and zfs_check_mount dependency before ssh_root runs.
+- name: _setup | Configure the services datasets
+  import_role:
+    name: services
