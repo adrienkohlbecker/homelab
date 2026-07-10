@@ -13,6 +13,7 @@ region=eu-central-1
 machine=qemu_host
 ubuntu="${usage_ubuntu:-noble}"
 build_id="${CI_PIPELINE_ID:-local}"
+repo_root=$(git rev-parse --show-toplevel)
 
 # CI job timeouts can skip packer's cleanup. Arm a self-deleting terminate
 # schedule for the build instance, then disarm it on normal exit.
@@ -79,28 +80,46 @@ bake_backstop_disarm() {
   aws --region "$region" scheduler delete-schedule --name "$schedule_name" >/dev/null 2>&1 || true
 }
 
-# Keep only the newest two AMIs in this category (same Name tag), deleting the
-# older builds and their ~40GB backing snapshots so stale images don't bill.
-# The currently-promoted AMI is never pruned even if it falls outside the
-# newest two, since the launch template still selects it via SSM.
-prune_old_amis() {
-  local name_tag="homelab-ci-qemu-host-${ubuntu}" promoted stale image_id snaps sid
-  promoted=$(aws --region "$region" ssm get-parameter \
+promoted_ami() {
+  local error_file value rc
+  error_file=$(mktemp)
+  if value=$(aws --region "$region" ssm get-parameter \
     --name "/homelab-ci/ami/qemu-host/${ubuntu}" \
-    --query Parameter.Value --output text 2>/dev/null || true)
+    --query Parameter.Value --output text 2>"$error_file"); then
+    rm -f "$error_file"
+    printf '%s\n' "$value"
+    return 0
+  else
+    rc=$?
+  fi
+
+  if grep -q ParameterNotFound "$error_file"; then
+    rm -f "$error_file"
+    return 0
+  fi
+  cat "$error_file" >&2
+  rm -f "$error_file"
+  return "$rc"
+}
+
+# Keep the promoted image plus the newest two provenance-tagged builds. The
+# shared planner also drives ci:audit-aws, so the two paths cannot disagree.
+prune_old_amis() {
+  local name_tag="homelab-ci-qemu-host-${ubuntu}" promoted stale image_id current matches
+  local -a retention_args=()
+  promoted=$(promoted_ami)
+  if [ -n "$promoted" ]; then
+    retention_args+=(--protected "$promoted")
+  fi
 
   stale=$(aws --region "$region" ec2 describe-images --owners self \
-    --filters "Name=tag:Name,Values=${name_tag}" \
-    --query 'Images[].[ImageId,CreationDate]' --output json |
-    python3 -c '
-import json, sys
-keep, promoted = 2, sys.argv[1]
-imgs = sorted(json.load(sys.stdin), key=lambda x: x[1], reverse=True)
-survivors = {image_id for image_id, _ in imgs[:keep]} | {promoted}
-for image_id, _ in imgs[keep:]:
-    if image_id not in survivors:
-        print(image_id)
-' "$promoted")
+    --filters \
+    "Name=tag:Name,Values=${name_tag}" \
+    "Name=tag:role,Values=ci-ami" \
+    "Name=tag:machine,Values=qemu_host" \
+    "Name=tag:ubuntu,Values=${ubuntu}" \
+    --query Images --output json |
+    python3 "$repo_root/mise-tasks/ci/ami_retention.py" "${retention_args[@]}")
 
   if [ -z "$stale" ]; then
     echo "==> Prune: nothing to remove (<= 2 AMIs in ${name_tag})"
@@ -109,16 +128,29 @@ for image_id, _ in imgs[keep:]:
 
   while IFS= read -r image_id; do
     [ -n "$image_id" ] || continue
-    snaps=$(aws --region "$region" ec2 describe-images --owners self \
+
+    # Promotion and tags can change after the initial list. Re-read both at the
+    # destructive boundary and abort rather than act on stale selection state.
+    current=$(promoted_ami)
+    if [ "$image_id" = "$current" ]; then
+      echo "==> Prune: skipping newly promoted ${image_id}"
+      continue
+    fi
+    matches=$(aws --region "$region" ec2 describe-images --owners self \
       --image-ids "$image_id" \
-      --query 'Images[].BlockDeviceMappings[].Ebs.SnapshotId' --output text 2>/dev/null || true)
+      --filters \
+      "Name=tag:Name,Values=${name_tag}" \
+      "Name=tag:role,Values=ci-ami" \
+      "Name=tag:machine,Values=qemu_host" \
+      "Name=tag:ubuntu,Values=${ubuntu}" \
+      --query 'length(Images)' --output text)
+    if [ "$matches" != 1 ]; then
+      echo "Prune: refusing ${image_id}; provenance tags changed after selection" >&2
+      return 1
+    fi
+
     echo "==> Prune: deregistering ${image_id}"
-    aws --region "$region" ec2 deregister-image --image-id "$image_id" >/dev/null 2>&1 || true
-    for sid in $snaps; do
-      [ "$sid" = "None" ] && continue
-      echo "==> Prune: deleting snapshot ${sid}"
-      aws --region "$region" ec2 delete-snapshot --snapshot-id "$sid" >/dev/null 2>&1 || true
-    done
+    "$repo_root/mise-tasks/packer/deregister-ami.sh" "$image_id" "$region"
   done <<<"$stale"
 }
 
