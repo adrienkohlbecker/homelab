@@ -1,0 +1,34 @@
+# Relay generic WoL clients from operator-controlled VLANs into the home VLAN.
+# wolweb and nut_monitor still send only on their local L2 segment; this UDM
+# service is the cross-VLAN bridge for clients that can target the gateway.
+#
+# Role-owned constants, deliberately not host-tunable: udp/9 is the WoL
+# convention that wolweb's wake_destination entries hardcode, and the VLAN
+# sets are a segmentation boundary — widening them is a reviewed code change,
+# not a host_var. Everything below derives from data/network_topology.yml.
+udm_wol_relay_port: 9
+udm_wol_relay_source_vlans:
+  - management
+  - trusted
+udm_wol_relay_target_vlans:
+  - home
+
+udm_wol_relay_source_cidrs: >-
+  {{ udm_wol_relay_source_vlans
+     | map('extract', network.sites.home.vlans, 'cidr')
+     | list }}
+
+# The relay binds these instead of the wildcard: they are the addresses
+# clients actually target, and unicast-bound sockets neither exist on the WAN
+# interface nor receive broadcasts (so the relay cannot re-ingest its own
+# rebroadcasts or the directed broadcasts wolweb already emits on-segment).
+udm_wol_relay_source_gateways: >-
+  {{ udm_wol_relay_source_vlans
+     | map('extract', network.sites.home.vlans, 'gateway')
+     | list }}
+
+udm_wol_relay_target_broadcasts: >-
+  {{ udm_wol_relay_target_vlans
+     | map('extract', network.sites.home.vlans, 'cidr')
+     | map('ansible.utils.ipaddr', 'broadcast')
+     | list }}

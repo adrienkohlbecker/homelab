@@ -4,7 +4,11 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+# exec (not simple): the start job only succeeds once execve() does, so a
+# missing script or broken python3 -- the post-firmware-wipe window this
+# design exists for -- fails `systemctl start` loudly instead of flapping
+# invisibly under Restart=always.
+Type=exec
 ExecStart=/data/wol_relay/wol_relay.py
 Restart=always
 RestartSec=5

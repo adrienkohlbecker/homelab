@@ -1,35 +1,3 @@
-- name: Validate WoL relay inputs
-  assert:
-    quiet: true
-    that:
-      - udm_wol_relay_port is integer
-      - udm_wol_relay_port | int > 0
-      - udm_wol_relay_port | int <= 65535
-      - udm_wol_relay_source_vlans | length > 0
-      - udm_wol_relay_target_vlans | length > 0
-      - udm_wol_relay_source_vlans | difference(network.sites.home.vlans.keys() | list) | length == 0
-      - udm_wol_relay_target_vlans | difference(network.sites.home.vlans.keys() | list) | length == 0
-    fail_msg: >-
-      udm_wol_relay requires a UDP port plus source/target VLAN names that
-      exist under network.sites.home.vlans.
-  tags:
-    - udm_wol_relay
-
-- name: Derive source CIDRs and target broadcasts
-  set_fact:
-    udm_wol_relay_source_cidrs: >-
-      {{ udm_wol_relay_source_vlans
-         | map('extract', network.sites.home.vlans, 'cidr')
-         | list }}
-    udm_wol_relay_targets: >-
-      {{ udm_wol_relay_target_vlans
-         | map('extract', network.sites.home.vlans, 'cidr')
-         | map('ansible.utils.ipaddr', 'broadcast')
-         | map('regex_replace', '$', ':' ~ (udm_wol_relay_port | string))
-         | list }}
-  tags:
-    - udm_wol_relay
-
 - name: Create persistent relay directory
   file:
     path: /data/wol_relay
@@ -49,15 +17,15 @@
     group: root
     mode: "0755"
     backup: true
-    validate: python3 -m py_compile %s
+    validate: python3 %s --check-config
   register: udm_wol_relay_script
   become: true
   tags:
     - udm_wol_relay
 
 - name: Deploy WoL relay service to persistent storage
-  template:
-    src: udm_wol_relay.service.j2
+  copy:
+    src: udm_wol_relay.service
     dest: /data/wol_relay/udm_wol_relay.service
     owner: root
     group: root

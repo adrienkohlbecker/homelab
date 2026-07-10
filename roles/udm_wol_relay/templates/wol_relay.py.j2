@@ -5,18 +5,21 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import select
 import socket
 import sys
 
 
 LISTEN_PORT = {{ udm_wol_relay_port | to_json }}
+BIND_ADDRESSES = {{ udm_wol_relay_source_gateways | to_json }}
 ALLOWED_SOURCES = [ipaddress.ip_network(cidr) for cidr in {{ udm_wol_relay_source_cidrs | to_json }}]
-TARGETS = [
-    (host, int(port))
-    for host, port in (
-        target.rsplit(":", 1) for target in {{ udm_wol_relay_targets | to_json }}
-    )
-]
+TARGET_BROADCASTS = {{ udm_wol_relay_target_broadcasts | to_json }}
+
+# UniFi OS ships Python 3.9, whose socket module does not expose IP_FREEBIND;
+# 15 is its value in linux/in.h. FREEBIND lets the qemu test fixture bind
+# gateway addresses the box does not own.
+IP_FREEBIND = getattr(socket, "IP_FREEBIND", 15)
+MAGIC_PACKET_LENGTH = 102
 
 
 def is_allowed_source(host: str) -> bool:
@@ -25,37 +28,35 @@ def is_allowed_source(host: str) -> bool:
 
 
 def is_magic_packet(payload: bytes) -> bool:
-    marker = b"\xff" * 6
-    start = 0
-    while True:
-        index = payload.find(marker, start)
-        if index < 0:
-            return False
-        if index + 102 > len(payload):
-            return False
-        mac = payload[index + 6 : index + 12]
-        if mac != marker and payload[index + 6 : index + 102] == mac * 16:
-            return True
-        start = index + 1
+    # Strict prefix match: every real sender puts the packet at offset 0. The
+    # payload[6:12] exclusion rejects an all-0xff pseudo-packet (broadcast MAC
+    # is not a wakeable NIC).
+    return (
+        len(payload) >= MAGIC_PACKET_LENGTH
+        and payload[:6] == b"\xff" * 6
+        and payload[6:12] != b"\xff" * 6
+        and payload[6:MAGIC_PACKET_LENGTH] == payload[6:12] * 16
+    )
 
 
 def check_config() -> None:
     if LISTEN_PORT < 1 or LISTEN_PORT > 65535:
         raise SystemExit(f"invalid listen port: {LISTEN_PORT}")
-    if not ALLOWED_SOURCES:
-        raise SystemExit("at least one allowed source network is required")
-    if not TARGETS:
-        raise SystemExit("at least one target broadcast is required")
-    for host, port in TARGETS:
+    if not BIND_ADDRESSES or not ALLOWED_SOURCES or not TARGET_BROADCASTS:
+        raise SystemExit("bind addresses, allowed sources, and target broadcasts are all required")
+    for host in BIND_ADDRESSES + TARGET_BROADCASTS:
         ipaddress.ip_address(host)
-        if port < 1 or port > 65535:
-            raise SystemExit(f"invalid target port: {host}:{port}")
+    # A target broadcast inside an allowed source network would let the relay
+    # re-ingest its own rebroadcasts in a tight loop: refuse at config time.
+    for target in TARGET_BROADCASTS:
+        if is_allowed_source(target):
+            raise SystemExit(f"target broadcast {target} lies inside an allowed source network")
     print(
-        "listening on udp/%d; allowing %s; relaying to %s"
+        "listening on %s; allowing %s; relaying to %s"
         % (
-            LISTEN_PORT,
+            ", ".join("%s:%d" % (address, LISTEN_PORT) for address in BIND_ADDRESSES),
             ", ".join(str(network) for network in ALLOWED_SOURCES),
-            ", ".join("%s:%d" % target for target in TARGETS),
+            ", ".join("%s:%d" % (target, LISTEN_PORT) for target in TARGET_BROADCASTS),
         )
     )
 
@@ -63,24 +64,45 @@ def check_config() -> None:
 def serve() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     check_config()
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.bind(("", LISTEN_PORT))
-        logging.info("wol relay listening on udp/%d", LISTEN_PORT)
-        while True:
-            payload, (source_host, source_port) = sock.recvfrom(2048)
+    listeners = []
+    for address in BIND_ADDRESSES:
+        listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.setsockopt(socket.IPPROTO_IP, IP_FREEBIND, 1)
+        listener.bind((address, LISTEN_PORT))
+        listeners.append(listener)
+    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sender.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    logging.info(
+        "wol relay listening on %s",
+        ", ".join("%s:%d" % (address, LISTEN_PORT) for address in BIND_ADDRESSES),
+    )
+    while True:
+        readable, _, _ = select.select(listeners, [], [])
+        for listener in readable:
+            payload, (source_host, source_port) = listener.recvfrom(2048)
             if not is_allowed_source(source_host):
                 continue
             if not is_magic_packet(payload):
                 continue
-            for target in TARGETS:
-                sock.sendto(payload, target)
+            # Rebroadcast a normalized packet, never the raw payload: the
+            # relay moves exactly one magic packet across the VLAN boundary,
+            # not arbitrary trailing bytes.
+            packet = payload[:MAGIC_PACKET_LENGTH]
+            sent = 0
+            for target in TARGET_BROADCASTS:
+                try:
+                    sender.sendto(packet, (target, LISTEN_PORT))
+                    sent += 1
+                except OSError as error:
+                    # A down target interface must not kill relaying to the
+                    # healthy ones (or crash-loop the daemon).
+                    logging.warning("send to %s:%d failed: %s", target, LISTEN_PORT, error)
             logging.info(
                 "relayed magic packet from %s:%d to %d target broadcast(s)",
                 source_host,
                 source_port,
-                len(TARGETS),
+                sent,
             )
 
 
