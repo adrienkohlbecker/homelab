@@ -31,10 +31,9 @@ vrrp_instance dns {
   # scenario where the UniFi client-tracker cosmetic flipping is a non-issue.
 
   # No `authentication` block: VRRPv2 auth is plaintext (worthless against
-  # anyone who can sniff the segment), so it isn't the control here. The real
-  # takeover protection is the per-peer iptables source-scoping (only the
-  # listed peers may deliver proto-112 adverts) plus check_unicast_src below,
-  # which validates each advert's source against unicast_peer.
+  # anyone who can sniff the segment), so it isn't the control here. The
+  # takeover protection is check_unicast_src below, which validates each
+  # advert's source against unicast_peer.
   check_unicast_src
 
   unicast_src_ip {{ external_ips[inventory_hostname] }}

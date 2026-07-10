@@ -33,11 +33,10 @@
       # its own -- a full copied push URL (…?status=up&msg=…) would render
       # …?status=up&msg=…?status=down and Kuma would read the first status.
       - udm_dns_failover_heartbeat_url is not search('[?]')
-      # Shell-injection guard, not a validity check: the interface is
-      # interpolated into the iptables `command:` tasks below and the
-      # on-boot script's iptables loop. The charset rules out metacharacters;
-      # a wrong-but-valid interface name still passes (keepalived would fault
-      # on it at runtime).
+      # Charset guard, not a validity check: rules out whitespace and shell
+      # metacharacters before the value lands in command lines and rendered
+      # configs; a wrong-but-valid interface name still passes (keepalived
+      # would fault on it at runtime).
       - udm_dns_failover_interface is regex("^[a-zA-Z0-9._-]+$")
     fail_msg: >-
       udm_dns_failover requires network.virtual_ips.dns plus
@@ -233,43 +232,38 @@
   tags:
     - udm_dns_failover
 
-# -- iptables VRRP accept -------------------------------------------------
-# INPUT has policy ACCEPT with jumps to ALIEN/TOR/UBIOS_INPUT_JUMP (no
-# trailing DROP), so appending is safe. One rule per peer source IP (not a
-# blanket proto-112 accept) so only the real VRRP peers can deliver adverts
-# on br0 -- mirrors the peer-scoped accept the prod hosts apply via nftables
-# vrrp_peer_ips. Idempotent via the -C check.
-
-- name: Check VRRP iptables rule per peer
-  command: iptables -w 5 -C INPUT -i {{ udm_dns_failover_interface }} -s {{ item }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
+# -- iptables VRRP accept tombstones ---------------------------------------
+# No ACCEPT rules of our own: UniFi keeps the INPUT policy ACCEPT with all
+# verdicts inside its own jumped chains, so an appended accept can never
+# change a packet's fate -- proven live (rule counters stayed 0 across live
+# VRRP traffic). Peer scoping is enforced by keepalived itself
+# (check_unicast_src against unicast_peer). These tombstones clear the
+# per-peer rules earlier deployments appended, and the pre-scoping blanket
+# proto-112 rule before them.
+- name: Remove per-peer VRRP iptables rules
+  iptables:
+    chain: INPUT
+    in_interface: "{{ udm_dns_failover_interface }}"
+    protocol: "112"
+    source: "{{ item }}"
+    comment: keepalived VRRP
+    jump: ACCEPT
+    wait: "5"
+    state: absent
   loop: "{{ dns_keepalived_peers | select('ne', inventory_hostname) | map('extract', external_ips) | sort }}"
-  register: udm_dns_failover_iptables_check
-  changed_when: false
-  failed_when: false
   become: true
   tags:
     - udm_dns_failover
 
-- name: Add VRRP iptables rule per peer
-  when: item.rc != 0
-  command: iptables -w 5 -A INPUT -i {{ udm_dns_failover_interface }} -s {{ item.item }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
-  loop: "{{ udm_dns_failover_iptables_check.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  changed_when: true
-  become: true
-  tags:
-    - udm_dns_failover
-
-# One-time cleanup of the pre-scoping blanket rule (proto 112 from any
-# source). Converge only appends, so the legacy unscoped rule would linger
-# beside the new per-peer rules until a reboot flushes it; -D removes it
-# idempotently (rc != 0 once it is gone).
 - name: Remove legacy unscoped VRRP iptables rule
-  command: iptables -w 5 -D INPUT -i {{ udm_dns_failover_interface }} -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
-  register: udm_dns_failover_iptables_legacy
-  changed_when: udm_dns_failover_iptables_legacy.rc == 0
-  failed_when: false
+  iptables:
+    chain: INPUT
+    in_interface: "{{ udm_dns_failover_interface }}"
+    protocol: "112"
+    comment: keepalived VRRP
+    jump: ACCEPT
+    wait: "5"
+    state: absent
   become: true
   tags:
     - udm_dns_failover

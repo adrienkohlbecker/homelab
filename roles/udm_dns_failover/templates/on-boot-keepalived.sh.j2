@@ -10,11 +10,11 @@ DATADIR=/data/keepalived
 
 # -- keepalived ----------------------------------------------------------
 # Wrapped in a subshell so a dpkg/apt failure does not abort the rest of
-# the recovery (sysctl, iptables, service start).
+# the recovery (sysctl, service start).
 if ! command -v keepalived &>/dev/null; then
   (
     # Suppress the package postinst from auto-starting keepalived before the
-    # symlinks/sysctl/iptables below are in place (mirrors converge's
+    # symlinks/sysctl below are in place (mirrors converge's
     # policy_rc_d: 101). The EXIT trap removes the shim on any subshell exit.
     printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
     chmod +x /usr/sbin/policy-rc.d
@@ -51,14 +51,6 @@ systemctl daemon-reload
 
 # -- sysctl ---------------------------------------------------------------
 sysctl -w net.ipv4.ip_nonlocal_bind=1
-
-# -- iptables VRRP accept ------------------------------------------------
-# One rule per peer source IP -- only the real peers may deliver adverts.
-for src in {{ dns_keepalived_peers | select("ne", inventory_hostname) | map("extract", external_ips) | sort | join(" ") }}; do
-  if ! iptables -w 5 -C INPUT -i {{ udm_dns_failover_interface }} -s "$src" -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT 2>/dev/null; then
-    iptables -w 5 -A INPUT -i {{ udm_dns_failover_interface }} -s "$src" -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
-  fi
-done
 
 # -- validate and start ---------------------------------------------------
 # keepalived -t passes even when conf.d/dns.conf is a dangling or

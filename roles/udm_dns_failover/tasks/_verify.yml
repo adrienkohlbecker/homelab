@@ -9,10 +9,9 @@
 #   * keepalived assembles + validates, leaves init_fail FAULT once the
 #     loopback healthcheck passes, and (alone on the closed bridge) becomes
 #     MASTER and claims the VIP — the catastrophic-failover path.
-#   * The peer-scoped iptables accept, the ip_nonlocal_bind sysctl, and the
-#     heartbeat timer are all in place.
+#   * The ip_nonlocal_bind sysctl and the heartbeat timer are in place.
 #   * The on-boot recovery script (30-keepalived.sh) is idempotent: running
-#     it by hand re-applies symlinks/sysctl/iptables and leaves keepalived
+#     it by hand re-applies symlinks/sysctl and leaves keepalived
 #     active with the VIP still held — proving the firmware-recovery path
 #     without needing an actual firmware wipe.
 #
@@ -88,14 +87,6 @@
   register: _udm_dns_failover_nonlocal
   changed_when: false
   failed_when: _udm_dns_failover_nonlocal.stdout | trim != '1'
-  become: true
-
-- name: _verify | The peer-scoped VRRP iptables accept is present
-  command: >-
-    iptables -w 5 -C INPUT -i {{ udm_dns_failover_interface }} -s {{ item }}
-    -p 112 -m comment --comment "keepalived VRRP" -j ACCEPT
-  loop: "{{ dns_keepalived_peers | select('ne', inventory_hostname) | map('extract', external_ips) | sort }}"
-  changed_when: false
   become: true
 
 - name: _verify | The heartbeat timer is active and enabled
