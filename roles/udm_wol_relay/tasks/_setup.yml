@@ -4,7 +4,7 @@
   import_role:
     name: udm_on_boot
 
-- name: _setup | Install iptables for the UDM-local firewall rules
+- name: _setup | Install iptables for the legacy-rule removal task
   apt:
     pkg:
       - iptables

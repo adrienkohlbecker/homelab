@@ -51,14 +51,6 @@
     udm_wol_relay_source_gateways | reject('in', _udm_wol_relay_socket.stdout) | list | length > 0
   become: true
 
-- name: _verify | Source-scoped UDP/9 iptables accepts are present
-  command: >-
-    iptables -w 5 -C INPUT -s {{ item }} -p udp --dport {{ udm_wol_relay_port }}
-    -m comment --comment "wol relay" -j ACCEPT
-  loop: "{{ udm_wol_relay_source_cidrs }}"
-  changed_when: false
-  become: true
-
 # -- firmware-wipe recovery ------------------------------------------------
 - name: _verify | On-boot framework unit is enabled
   systemd:

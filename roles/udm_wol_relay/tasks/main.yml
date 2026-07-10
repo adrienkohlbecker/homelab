@@ -50,8 +50,8 @@
     - udm_wol_relay
 
 - name: Deploy on-boot WoL relay script
-  template:
-    src: on-boot-wol-relay.sh.j2
+  copy:
+    src: on-boot-wol-relay.sh
     dest: /data/on_boot.d/40-wol-relay.sh
     owner: root
     group: root
@@ -63,27 +63,23 @@
   tags:
     - udm_wol_relay
 
-- name: Check WoL relay iptables rules
-  command: >-
-    iptables -w 5 -C INPUT -s {{ item }} -p udp --dport {{ udm_wol_relay_port }}
-    -m comment --comment "wol relay" -j ACCEPT
+# No ACCEPT rules of our own: UniFi keeps the INPUT policy ACCEPT with all
+# verdicts inside its own jumped chains, so an appended accept can never
+# change a packet's fate -- proven live (rule counters stayed 0 across real
+# relays). This tombstone clears the rules the first deployment appended;
+# packets reach the relay through the vendor chains, and source filtering is
+# the script's ALLOWED_SOURCES check.
+- name: Remove WoL relay iptables rules
+  iptables:
+    chain: INPUT
+    protocol: udp
+    source: "{{ item }}"
+    destination_port: "{{ udm_wol_relay_port }}"
+    comment: wol relay
+    jump: ACCEPT
+    wait: "5"
+    state: absent
   loop: "{{ udm_wol_relay_source_cidrs }}"
-  register: udm_wol_relay_iptables_check
-  changed_when: false
-  failed_when: false
-  become: true
-  tags:
-    - udm_wol_relay
-
-- name: Add WoL relay iptables rules
-  when: item.rc != 0
-  command: >-
-    iptables -w 5 -A INPUT -s {{ item.item }} -p udp --dport {{ udm_wol_relay_port }}
-    -m comment --comment "wol relay" -j ACCEPT
-  loop: "{{ udm_wol_relay_iptables_check.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  changed_when: true
   become: true
   tags:
     - udm_wol_relay
