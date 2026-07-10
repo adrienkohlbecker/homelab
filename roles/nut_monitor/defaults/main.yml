@@ -1,14 +1,3 @@
-# The upsmon system identifier (<upsname>@<host>[:<port>]) this host
-# monitors. Single source of truth for the MONITOR line in upsmon.conf and
-# the upsc queries in nut-notify, so the two can't drift out of agreement.
-# Host-overridable; defaults to the Eaton served by the co-located upsd.
-#
-# Overriding away from @localhost has two couplings to keep in sync: nut_server's
-# files/hosts.conf (the CGI allowlist, hard-coded eaton@localhost) and the
-# emailed status link, which nut-notify builds against inventory_hostname's
-# `nut.` subdomain -- a remote <host> would point the link at the wrong CGI.
-nut_monitor_ups: eaton@localhost
-
 # MAC addresses to wake via this host's primary-subnet broadcast once mains
 # power has been back for 60s. This is intentionally a direct-L2 recovery leg
 # for management-VLAN peers; cross-VLAN manual wakes go through the UDM UDP/9

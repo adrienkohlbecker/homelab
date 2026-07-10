@@ -12,12 +12,9 @@
   assert:
     that:
       - nut_upsmon_password | default('') | length > 0
-      - nut_monitor_ups | default('') | length > 0
-      - "'@' in (nut_monitor_ups | default(''))"
     fail_msg: >-
       nut_monitor requires a vaulted nut_upsmon_password
-      (group_vars/{prod,test}.yml) and a nut_monitor_ups of the form
-      <upsname>@<host>
+      (group_vars/{prod,test}.yml)
   tags:
     - nut_monitor
 
