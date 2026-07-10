@@ -139,7 +139,7 @@ AT NOPARENT * EXECUTE noparent
 # nut 2.8+ device-status events (the fleet is migrating to it). Inert on 2.7.4,
 # which never emits them; nut_notify's catch-all arm mails them by name.
 AT BYPASS * EXECUTE bypass
-AT OVER * EXECUTE over
+AT NOTBYPASS * EXECUTE notbypass
 AT CAL * EXECUTE cal
 AT OFF * EXECUTE off
 AT NOTOFF * EXECUTE notoff

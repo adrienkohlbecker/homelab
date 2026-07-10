@@ -188,13 +188,16 @@
   failed_when: "'FSD' not in nut_monitor_fsd_status.stdout"
   become: true
 
-# The FSD NOTIFY rode the real chain (upsmon's nut-user half -> upssched ->
-# nut_notify -> mail); its absence means the unprivileged dispatch path is
-# broken even though the marker proved SHUTDOWNCMD ran.
-- name: _verify | The FSD notification reached the mail
-  command: grep -qF "UPS is being shutdown by the primary" /tmp/nut-mail.out
-  register: nut_monitor_fsd_mail
-  until: nut_monitor_fsd_mail.rc == 0
+# The SHUTDOWN NOTIFY rode the real chain (upsmon's nut-user half ->
+# upssched -> nut_notify -> mail); its absence means the unprivileged
+# dispatch path is broken even though the marker proved SHUTDOWNCMD ran.
+# SHUTDOWN, not FSD: a primary declaring FSD notifies itself with SHUTDOWN
+# ("Auto logout and shutdown proceeding") -- the FSD notify type is what
+# secondaries receive when they observe the flag.
+- name: _verify | The shutdown notification reached the mail
+  command: grep -qF "The system is being shutdown" /tmp/nut-mail.out
+  register: nut_monitor_shutdown_mail
+  until: nut_monitor_shutdown_mail.rc == 0
   retries: 10
   delay: 1
   changed_when: false

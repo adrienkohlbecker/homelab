@@ -395,18 +395,19 @@ NOTIFYFLAG REPLBATT SYSLOG+WALL+EXEC
 # deliberately -- upssched needs those events to CANCEL-TIMER.
 NOTIFYFLAG NOCOMM   SYSLOG+WALL
 NOTIFYFLAG NOPARENT SYSLOG+WALL+EXEC
-# nut 2.8+ only: these notify types were added in 2.8 -- BYPASS (on bypass,
-# load unprotected), OVER (overloaded), CAL (battery calibration), and
-# OFF/NOTOFF (UPS load administratively off, then restored). 2.7.4 (jammy)
-# rejects unknown NOTIFYFLAG types outright, so the block is release-gated
-# rather than the whole role -- lab must be protected today, not after its
-# noble upgrade.
+# nut 2.8+ only: these notify types were added in 2.8 -- BYPASS/NOTBYPASS
+# (on bypass and back, load unprotected meanwhile), CAL (battery
+# calibration), and OFF/NOTOFF (UPS load administratively off, then
+# restored) -- exactly 2.8.1's vocabulary, no more (upsmon warns "invalid
+# notify type" per unknown name). 2.7.4 (jammy) predates them all, so the
+# block is release-gated rather than the whole role -- lab must be protected
+# today, not after its noble upgrade.
 {% if ansible_distribution_release not in ["jammy"] %}
-NOTIFYFLAG BYPASS   SYSLOG+WALL+EXEC
-NOTIFYFLAG OVER     SYSLOG+WALL+EXEC
-NOTIFYFLAG CAL      SYSLOG+WALL+EXEC
-NOTIFYFLAG OFF      SYSLOG+WALL+EXEC
-NOTIFYFLAG NOTOFF   SYSLOG+WALL+EXEC
+NOTIFYFLAG BYPASS    SYSLOG+WALL+EXEC
+NOTIFYFLAG NOTBYPASS SYSLOG+WALL+EXEC
+NOTIFYFLAG CAL       SYSLOG+WALL+EXEC
+NOTIFYFLAG OFF       SYSLOG+WALL+EXEC
+NOTIFYFLAG NOTOFF    SYSLOG+WALL+EXEC
 {% endif %}
 #
 # Possible values for the flags:
