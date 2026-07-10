@@ -31,6 +31,9 @@
       [upsmon]
       password = {{ nut_upsmon_password }}
       upsmon {{ nut_upsmon_keyword_primary }}
+      # Fixture-only, unlike the prod upsd.users: lets _verify's FSD drill
+      # flip the dummy UPS critical via upsrw instead of a driver restart.
+      actions = SET
   become: true
 
 - name: _setup | Configure nut.conf for the dummy-ups
