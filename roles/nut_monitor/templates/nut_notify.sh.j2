@@ -35,30 +35,8 @@ shutdown)
 replbatt)
   MSG="The UPS battery is bad and needs to be replaced"
   ;;
-# NOCOMM is SYSLOG+WALL-only in upsmon.conf (no EXEC), so upssched never
-# dispatches it -- this arm is for a manual `nut_notify nocomm` invocation.
-nocomm)
-  MSG="A UPS is unavailable (can't be contacted for monitoring)"
-  ;;
 noparent)
   MSG="upsmon parent process died - shutdown impossible"
-  ;;
-# nut 2.8+ device-status events (the fleet is migrating to it). upssched only
-# dispatches these once upsmon emits them, so the arms stay inert on 2.7.4.
-bypass)
-  MSG="UPS is on bypass - the load is NOT protected by the battery"
-  ;;
-over)
-  MSG="UPS is overloaded"
-  ;;
-cal)
-  MSG="UPS is calibrating its battery"
-  ;;
-off)
-  MSG="UPS is administratively OFF or asleep - the load is NOT powered"
-  ;;
-notoff)
-  MSG="UPS is no longer OFF - the load is powered again"
   ;;
 # Not a mail event: wake_peers is upssched's timer for reviving WoL peers
 # after mains power returned (upssched.conf.j2, rendered only on hosts with
@@ -67,9 +45,12 @@ notoff)
 wake_peers)
   exec /usr/local/bin/nut_wake_peers wake_peers
   ;;
+# Any name upssched dispatches without a bespoke sentence above -- the nut
+# 2.8+ device-status events (bypass/over/cal/off/notoff), a future timer, a
+# typo'd AT line -- still mails, with the raw event name carrying the news.
+# A lost notification is the one failure mode this script must not have.
 *)
-  echo >&2 "unexpected event $EVENT"
-  exit 1
+  MSG="UPS event: $EVENT"
   ;;
 esac
 

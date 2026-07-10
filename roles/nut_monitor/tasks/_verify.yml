@@ -64,43 +64,6 @@
   changed_when: false
   become: true
 
-# Names upssched feeds to CMDSCRIPT: START-TIMER's timer name, EXECUTE's
-# command, and CANCEL-TIMER's optional already-fired command. Every one must
-# resolve to a case arm in nut_notify -- this is the guard that would have
-# caught the SHUTDOWN/powerdown mismatch.
-- name: _verify | Enumerate the events upssched dispatches to nut_notify
-  command: >-
-    awk '/^AT /{ if ($4 == "START-TIMER") print $5;
-    else if ($4 == "CANCEL-TIMER") print $6;
-    else if ($4 == "EXECUTE") print $5 }' /etc/nut/upssched.conf
-  register: nut_monitor_dispatched
-  changed_when: false
-  become: true
-
-- name: _verify | Reset the mail capture
-  copy:
-    dest: /tmp/nut-mail.out
-    mode: "0644"
-    content: ""
-  become: true
-
-- name: _verify | Every dispatched event is handled by nut_notify (exit 0, mail sent)
-  command: /usr/local/bin/nut_notify {{ item }}
-  loop: "{{ nut_monitor_dispatched.stdout_lines }}"
-  changed_when: false
-  become: true
-
-- name: _verify | Live UPS status reached the mail (upsc dump + field extraction)
-  command: grep -qF "{{ item }}" /tmp/nut-mail.out
-  loop:
-    - "Status: OB DISCHRG"
-    - "Battery charge: 42.00"
-    # 900.00 (float, as the real Eaton reports) must still format to a real
-    # HH:MM:SS -- "unknown" here means nut_notify rejected the fractional value.
-    - "Runtime: 00:15:00"
-  changed_when: false
-  become: true
-
 # Exercise the REAL dispatch path upsmon uses -- NOTIFYCMD=upssched reading
 # upssched.conf and matching AT rules to CMDSCRIPT=nut_notify -- not just
 # nut_notify in isolation. upssched takes the event from $NOTIFYTYPE/$UPSNAME
@@ -136,6 +99,17 @@
   until: nut_monitor_upssched_mail.rc == 0
   retries: 5
   delay: 1
+  changed_when: false
+  become: true
+
+- name: _verify | Live UPS status reached the mail (upsc dump + field extraction)
+  command: grep -qF "{{ item }}" /tmp/nut-mail.out
+  loop:
+    - "Status: OB DISCHRG"
+    - "Battery charge: 42.00"
+    # 900.00 (float, as the real Eaton reports) must still format to a real
+    # HH:MM:SS -- "unknown" here means nut_notify rejected the fractional value.
+    - "Runtime: 00:15:00"
   changed_when: false
   become: true
 
@@ -239,9 +213,15 @@
   changed_when: false
   become: true
 
-- name: _verify | Unknown events are rejected with a non-zero exit
+# The catch-all arm: an event without a bespoke sentence (2.8+ device-status
+# events, a future timer name) must still deliver a mail naming it, never
+# vanish.
+- name: _verify | Unknown events fall back to a generic mail
   command: /usr/local/bin/nut_notify bogus
-  register: nut_monitor_bogus
-  failed_when: nut_monitor_bogus.rc != 1
+  changed_when: false
+  become: true
+
+- name: _verify | The generic mail names the event
+  command: 'grep -qF "UPS event: bogus" /tmp/nut-mail.out'
   changed_when: false
   become: true
