@@ -223,3 +223,10 @@ tailscale_accept_routes: true
 # role-specific harness override.
 tailscale_port: 41641
 tailscale_wan_direct: true
+
+# roles/nut_monitor wake-leg fixture: one MAC (the test-vault twin of prod's
+# lab NIC, group_vars/test.yml) so the wakeonlan arm in nut_notify, the
+# upssched timer lines and the boot-time wake unit all render and _verify can
+# drive them end-to-end.
+nut_monitor_wake_peers:
+  - "{{ mac_addresses.lab_i210 }}"
