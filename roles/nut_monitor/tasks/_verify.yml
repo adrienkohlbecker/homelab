@@ -78,10 +78,12 @@
     mode: "0770"
   become: true
 
+# 0666: the real dispatches run as the unprivileged nut user (upsmon's
+# RUN_AS_USER) and must be able to append.
 - name: _verify | Reset the mail capture before the upssched dispatch test
   copy:
     dest: /tmp/nut-mail.out
-    mode: "0644"
+    mode: "0666"
     content: ""
   become: true
 
@@ -92,6 +94,7 @@
     NOTIFYTYPE: LOWBATT
   changed_when: false
   become: true
+  become_user: nut
 
 - name: _verify | The upssched-dispatched event reached the mail
   command: grep -qF "UPS is on battery and has a low battery" /tmp/nut-mail.out
@@ -110,6 +113,29 @@
     # 900.00 (float, as the real Eaton reports) must still format to a real
     # HH:MM:SS -- "unknown" here means nut_notify rejected the fractional value.
     - "Runtime: 00:15:00"
+  changed_when: false
+  become: true
+
+# The debounce leg: a START-TIMER rule makes upssched spawn its background
+# daemon, create PIPEFN/LOCKFN in /run/nut as the nut user, and only fire
+# CMDSCRIPT after the interval -- the machinery every real outage mail rides,
+# which the synchronous EXECUTE above never touches.
+- name: _verify | Dispatch a debounced START-TIMER event through upssched
+  command: /usr/sbin/upssched
+  environment:
+    UPSNAME: "{{ nut_monitor_ups }}"
+    NOTIFYTYPE: COMMBAD
+  changed_when: false
+  become: true
+  become_user: nut
+
+# The commbad timer runs 30s; 45 bounds it with margin.
+- name: _verify | The debounced event fired after its interval
+  command: grep -qF "Communications lost to the UPS" /tmp/nut-mail.out
+  register: nut_monitor_timer_mail
+  until: nut_monitor_timer_mail.rc == 0
+  retries: 45
+  delay: 1
   changed_when: false
   become: true
 
@@ -179,6 +205,18 @@
   failed_when: "'FSD' not in nut_monitor_fsd_status.stdout"
   become: true
 
+# The FSD NOTIFY rode the real chain (upsmon's nut-user half -> upssched ->
+# nut_notify -> mail); its absence means the unprivileged dispatch path is
+# broken even though the marker proved SHUTDOWNCMD ran.
+- name: _verify | The FSD notification reached the mail
+  command: grep -qF "UPS is being shutdown by the primary" /tmp/nut-mail.out
+  register: nut_monitor_fsd_mail
+  until: nut_monitor_fsd_mail.rc == 0
+  retries: 10
+  delay: 1
+  changed_when: false
+  become: true
+
 # Stop upsmon before the unreachable-UPS tests below take upsd down, so
 # its NOCOMM reactions don't interleave mail-shim writes with the greps.
 - name: _verify | Stop upsmon after the drill
@@ -197,7 +235,7 @@
 - name: _verify | Clear the mail capture
   copy:
     dest: /tmp/nut-mail.out
-    mode: "0644"
+    mode: "0666"
     content: ""
   become: true
 
