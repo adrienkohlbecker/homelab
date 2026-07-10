@@ -53,6 +53,7 @@ locals {
   # latter; uname -m reports the former). Pass-through for x86_64.
   arch_raw = trimspace(data.external-raw.host_arch.result)
   arch     = local.arch_raw == "arm64" ? "aarch64" : local.arch_raw
+  versions = yamldecode(file("${path.cwd}/group_vars/all/versions.yml"))
 
   # Cloud image pins (snapshot date + sha256) live in ubuntu_images.json.
   # Bump when refreshing; older snapshots eventually fall out of the
@@ -83,6 +84,7 @@ locals {
       qemu_binary  = "qemu-system-x86_64"
       machine_type = "q35"
       accelerator  = "kvm"
+      zbm_version  = local.versions.zfsbootmenu_release.x86_64.version
       # 4M variants because Ubuntu 24.04 dropped the legacy non-4M
       # OVMF_{CODE,VARS}.fd from the `ovmf` package; jammy ships both,
       # noble only the 4M ones. test/arch.py:uefi_code_candidates carries
@@ -101,6 +103,7 @@ locals {
       qemu_binary       = "qemu-system-aarch64"
       machine_type      = "virt"
       accelerator       = "hvf"
+      zbm_version       = local.versions.zfsbootmenu_release.aarch64.version
       efi_firmware_code = "/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
       efi_firmware_vars = "/opt/homebrew/share/qemu/edk2-arm-vars.fd"
       image_format      = "qcow2"
@@ -422,6 +425,7 @@ build {
       "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.arch_cfg.upstream_security
       "SSH_KEY_PUB"                     = join("\n", local.vagrant_ssh_keys)
       "IMAGE_TARGET"                    = local.variant_config[source.name].image_target
+      "ZBM_VERSION"                     = local.arch_cfg.zbm_version
       "ZFS_ARC_MAX"                     = "${local.variant_config[source.name].zfs_arc_max}"
       # true only for the qemu test fixtures (box/lab/pug); false for hetzner.
       # Gates the test-only kernel tuning + ambient-unit masking in chroot.sh.

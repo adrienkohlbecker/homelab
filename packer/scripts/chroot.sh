@@ -5,7 +5,7 @@ set -euxo pipefail
 # - From packer's shell-provisioner env block (qemu.pkr.hcl):
 #   UBUNTU_NAME, UBUNTU_MIRROR, UBUNTU_MIRROR_SECURITY,
 #   UBUNTU_MIRROR_UPSTREAM, UBUNTU_MIRROR_SECURITY_UPSTREAM,
-#   SSH_KEY_PUB.
+#   SSH_KEY_PUB, ZBM_VERSION.
 # - Inherited from provision.sh: DISKS, DISKS_COUNT, LAYOUT,
 #   PARTITIONS_EFI, PARTITIONS_SWAP, PARTITIONS_PODMAN, HOSTNAME, USERNAME.
 #   PARTITIONS_EFI/SWAP are always set; on a mirror they are mdadm'd into
@@ -26,13 +26,11 @@ case $ZBM_ARCH in
 x86_64)
   REFIND_NAME=refind_x64.efi
   REFIND_FALLBACK_NAME=BOOTX64.EFI
-  ZBM_VERSION=v3.0.1-linux6.1-ci.2615022324.14945838188-x86_64
   SERIAL_CMDLINE="earlycon=uart8250,io,0x3f8 console=ttyS0,115200"
   ;;
 aarch64)
   REFIND_NAME=refind_aa64.efi
   REFIND_FALLBACK_NAME=BOOTAA64.EFI
-  ZBM_VERSION=v3.1.0-linux6.18-local.20260619193945-aarch64
   SERIAL_CMDLINE="earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200"
   ;;
 *)
@@ -474,11 +472,9 @@ mount /boot/efi
 
 # Install ZFSBootMenu
 #
-# ZBM is built + published out-of-band by `mise run zbm:build && zbm:upload`
-# (mise.toml's [vars] zbm_version drives those). The version installed
-# here is decoupled — it's the $ZBM_VERSION constant set at the top of
-# this script. Bump it once a new tarball has been built + published to
-# the GitLab generic package registry and verified.
+# ZBM is built + published out-of-band by `mise run zbm:build && zbm:upload`.
+# qemu.pkr.hcl reads the architecture-specific release from
+# group_vars/all/versions.yml and passes it here as $ZBM_VERSION.
 #
 # The tarball carries both the unified ZBM EFI image and the components-mode
 # kernel + initrd. The shipped default ZBM entry uses the unified image
