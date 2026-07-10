@@ -33,35 +33,39 @@
       upsmon {{ nut_upsmon_keyword_primary }}
   become: true
 
-- name: _setup | Configure a static dummy-ups
-  shell: |
-    set -euo pipefail
+- name: _setup | Configure nut.conf for the dummy-ups
+  copy:
+    dest: /etc/nut/nut.conf
+    mode: "0644"
+    content: |
+      MODE=standalone
+  become: true
 
-    echo "MODE=standalone" >/etc/nut/nut.conf
+- name: _setup | Configure ups.conf for the dummy-ups
+  copy:
+    dest: /etc/nut/ups.conf
+    mode: "0644"
+    content: |
+      [eaton]
+          driver = dummy-ups
+          port = eaton.dev
+          desc = "static dummy-ups for tests"
+  become: true
 
-    cat <<EOF >/etc/nut/ups.conf
-    [eaton]
-        driver = dummy-ups
-        port = eaton.dev
-        desc = "static dummy-ups for tests"
-    EOF
-
-    # A .dev file (no TIMER) is served statically -- a .seq cycles through
-    # frames and reports ups.status WAIT until the first poll lands, which
-    # makes the published values non-deterministic at query time.
-    # charge/runtime are floats ("42.00"/"900.00") to mirror the real Eaton's
-    # snmp-ups output -- this is what regression-guards nut_notify's fractional
-    # battery.runtime handling (an integer frame would never exercise it).
-    cat <<EOF >/etc/nut/eaton.dev
-    ups.status: OB DISCHRG
-    battery.charge: 42.00
-    battery.runtime: 900.00
-    ups.mfr: dummy
-    ups.model: evolution500
-    EOF
-
-    touch /tmp/done
-  args:
-    executable: /bin/bash
-    creates: /tmp/done
+# A .dev file (no TIMER) is served statically -- a .seq cycles through
+# frames and reports ups.status WAIT until the first poll lands, which
+# makes the published values non-deterministic at query time.
+# charge/runtime are floats ("42.00"/"900.00") to mirror the real Eaton's
+# snmp-ups output -- this is what regression-guards nut_notify's fractional
+# battery.runtime handling (an integer frame would never exercise it).
+- name: _setup | Configure the static dummy-ups frame
+  copy:
+    dest: /etc/nut/eaton.dev
+    mode: "0644"
+    content: |
+      ups.status: OB DISCHRG
+      battery.charge: 42.00
+      battery.runtime: 900.00
+      ups.mfr: dummy
+      ups.model: evolution500
   become: true
