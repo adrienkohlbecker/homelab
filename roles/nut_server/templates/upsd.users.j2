@@ -89,6 +89,11 @@ password = {{ nut_homeassistant_password }}
 
 # WinNUT runs on the Windows desktop as a remote monitor: it can react to UPS
 # state/FSD locally, but cannot issue SET or instant commands against the UPS.
+# Its login crosses the LAN in cleartext on every reconnect -- accepted: the
+# account is read-only secondary on the admin VLAN, and TLS was examined and
+# rejected (WinNUT-Client speaks no STARTTLS, nginx cannot front NUT's
+# in-band STARTTLS protocol, and Ubuntu links nut against NSS so a server
+# cert would mean certutil DB conversion machinery on every certbot renewal).
 [winnut]
 password = {{ nut_winnut_password }}
 upsmon {{ "slave" if ansible_distribution_release in ["jammy"] else "secondary" }}
