@@ -13,8 +13,9 @@
     that:
       - nut_upsmon_password is defined and (nut_upsmon_password | length > 0)
       - nut_homeassistant_password is defined and (nut_homeassistant_password | length > 0)
+      - nut_winnut_password is defined and (nut_winnut_password | length > 0)
     fail_msg: >-
-      nut_upsmon_password and nut_homeassistant_password must be set
+      nut_upsmon_password, nut_homeassistant_password and nut_winnut_password must be set
       (group_vars/{prod,test}.yml); upsd.users renders them verbatim.
   tags:
     - nut_server

@@ -86,3 +86,9 @@ upsmon {{ "master" if ansible_distribution_release in ["jammy"] else "primary" }
 # privilege: a leaked credential cannot issue SET/INSTCMD against the UPS).
 [homeassistant]
 password = {{ nut_homeassistant_password }}
+
+# WinNUT runs on the Windows desktop as a remote monitor: it can react to UPS
+# state/FSD locally, but cannot issue SET or instant commands against the UPS.
+[winnut]
+password = {{ nut_winnut_password }}
+upsmon {{ "slave" if ansible_distribution_release in ["jammy"] else "secondary" }}

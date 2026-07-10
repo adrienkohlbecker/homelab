@@ -113,6 +113,20 @@
   changed_when: false
   become: true
 
+- name: _verify | Read configured upsd users
+  slurp:
+    path: /etc/nut/upsd.users
+  register: nut_server_upsd_users_file
+  become: true
+
+- name: _verify | WinNUT account is configured as a remote monitor
+  assert:
+    that:
+      - "'[winnut]' in (nut_server_upsd_users_file.content | b64decode)"
+      - "'password = ' ~ nut_winnut_password in (nut_server_upsd_users_file.content | b64decode)"
+      - "'upsmon ' ~ ('slave' if ansible_distribution_release in ['jammy'] else 'secondary') in (nut_server_upsd_users_file.content | b64decode)"
+    quiet: true
+
 # The CGI probe must hit the vhost by its real FQDN, not https://localhost/
 # with a Host header: TLS SNI follows the URL host, so a localhost SNI matches
 # no server_name and nginx answers with an unrecognized_name TLS alert. jammy's

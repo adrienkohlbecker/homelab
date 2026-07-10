@@ -184,6 +184,7 @@ telegram_personal_chat_id: changeme
 telegram_home_chat_id: changeme
 nut_upsmon_password: changeme
 nut_homeassistant_password: changeme
+nut_winnut_password: changeme
 sabnzbd_api_key: changeme
 sabnzbd_smtp_from: changeme@example.com
 sabnzbd_smtp_username: apikey
