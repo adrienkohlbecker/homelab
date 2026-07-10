@@ -270,6 +270,17 @@
       exec_start: /bin/sh -c 'exit 2'
       monitor: false
 
+- name: _verify | Remove any stale exit-code fixture stamp
+  file:
+    path: /var/lib/systemd/timers/stamp-_verify_timer_exitcode.timer
+    state: absent
+  become: true
+
+- name: _verify | Record time before triggering the exit-code fixture
+  command: date +%s
+  register: _systemd_timer_exitcode_started_at
+  changed_when: false
+
 - name: _verify | Trigger the exit-code fixture manually  # noqa: command-instead-of-module
   command: systemctl start --wait _verify_timer_exitcode.service
   register: _systemd_timer_exitcode_start
@@ -289,13 +300,7 @@
       - _systemd_timer_exitcode_start.rc != 0
       - _systemd_timer_exitcode_result.stdout == 'exit-code'
 
-# The overdue-monitoring stamp must be touched even when the run fails:
-# service.j2 places the touch in ExecStopPost (not ExecStartPost) so the
-# stamp means "the timer fired", not "the run succeeded" -- otherwise a
-# job that fires on schedule but keeps failing trips the overdue alert on
-# top of the unit-failed alert. Nothing else creates this file (install
-# doesn't, and the fixture's 23:59 OnCalendar can't fire mid-test), so
-# existence after the failed start proves the ExecStopPost placement.
+# ExecStartPre must refresh the stamp before a failing workload starts.
 - name: _verify | Stat the trigger stamp after the failed run
   stat:
     path: /var/lib/systemd/timers/stamp-_verify_timer_exitcode.timer
@@ -305,10 +310,10 @@
   assert:
     that:
       - _systemd_timer_exitcode_stamp.stat.exists
+      - _systemd_timer_exitcode_stamp.stat.mtime | int >= _systemd_timer_exitcode_started_at.stdout | int
     fail_msg: >-
-      stamp-_verify_timer_exitcode.timer missing after a failed service run;
-      the stamp touch is gated on success (ExecStartPost) instead of running
-      on every stop (ExecStopPost).
+      stamp-_verify_timer_exitcode.timer was not refreshed before the failed
+      service run.
 
 - name: _verify | Remove the exit-code fixture timer
   import_role:

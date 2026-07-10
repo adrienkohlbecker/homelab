@@ -33,10 +33,8 @@ _systemd_timers_safe() {
 
 # Last-fire time = the mtime of the stamp file at
 # /var/lib/systemd/timers/stamp-<name>.timer. System-scope monitored timers
-# touch this file in ExecStopPost (service.j2) after each run -- success or
-# failure, regardless of whether Persistent= is set -- so age_secs tracks
-# "when did the timer last fire", not "when did it last succeed" (a firing
-# but failing service is the unit-failed alert's signal, not overdue's).
+# touch it in ExecStartPre (service.j2), so age_secs tracks attempted starts;
+# failed runs are reported by the unit-failed alert instead of overdue.
 # Reading the stamp beats
 # `systemctl show LastTriggerUSec`: the stamp survives both reboots and unit
 # reloads, whereas LastTriggerUSec blanks to n/a whenever the .timer is
