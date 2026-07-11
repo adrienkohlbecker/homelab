@@ -34,7 +34,15 @@ pipeline:
       parser: homepage_winston
       reserve_data: true
       preserve_key: true
-    - name: lua
+    - name: modify
       match: svc.homepage.service
-      script: /etc/fluent-bit/homepage_normalize.lua
-      call: normalize_homepage
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists homepage_message
+        - key_exists homepage_level
+      hard_rename:
+        - homepage_message log
+        - homepage_level _level
+        - homepage_source source
+      remove: homepage_timestamp
+      add: parser_status parsed

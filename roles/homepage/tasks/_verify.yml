@@ -176,8 +176,7 @@
                     )
                 if "Ready in" in record.get("message", ""):
                     startup = (
-                        fields.get("parser_status") == "skipped"
-                        and fields.get("parser_reason") == "non_winston"
+                        "parser_status" not in fields
                         and "PRIORITY" not in fields
                         and "CONTAINER_TAG" not in fields
                     )
