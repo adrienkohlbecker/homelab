@@ -145,6 +145,53 @@
   tags:
     - headscale
 
+# The observability platform runs before service roles in site.yml and exposes
+# parsers.d/filters.d extension points. Headscale owns its output format and the
+# matching parser together so the fleet-wide fluentbit role stays service-free.
+- name: Install headscale fluent-bit extensions  # noqa: require-validate
+  copy:
+    src: fluentbit/{{ item.src }}
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  loop:
+    - src: parsers.conf
+      dest: /etc/fluent-bit/parsers.d/headscale.conf
+    - src: filters.conf
+      dest: /etc/fluent-bit/filters.d/50-headscale.conf
+    - src: normalize.lua
+      dest: /etc/fluent-bit/headscale_normalize.lua
+  loop_control:
+    label: "{{ item.dest }}"
+  register: headscale_fluentbit_files
+  become: true
+  tags:
+    - headscale
+
+- name: Validate fluent-bit with headscale extensions
+  when:
+    - not ansible_check_mode
+    - headscale_fluentbit_files.changed
+  command: /opt/fluent-bit/bin/fluent-bit --config /etc/fluent-bit/fluent-bit.conf --dry-run
+  changed_when: false
+  become: true
+  tags:
+    - headscale
+
+- name: Reload fluent-bit for headscale extensions
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: fluent-bit
+      condition: "{{ not ansible_check_mode and headscale_fluentbit_files.changed }}"
+      reload: true
+  tags:
+    - headscale
+
 # Dedicated dual-stack podman network so the embedded DERP STUN answers over
 # IPv6 too (fox is a dual-stack relay -- see host_vars/fox.yml). The default
 # podman bridge is IPv4-only; ipv6:true makes netavark hand the container an

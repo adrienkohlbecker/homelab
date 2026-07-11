@@ -23,6 +23,11 @@ globals:
       - type: any
       - type: any
       - type: any
+  normalize_headscale:
+    args:
+      - type: any
+      - type: any
+      - type: any
   normalize_homeassistant:
     args:
       - type: any

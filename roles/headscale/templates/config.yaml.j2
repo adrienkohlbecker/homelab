@@ -96,11 +96,12 @@ tls_cert_path: ""
 tls_key_path: ""
 
 log:
-  format: text
-  # Headscale logs to stderr, which podman's journald log driver records at
-  # err priority. Keep info-level control-plane events for audit and outage
-  # diagnosis; fluent-bit's level_from_message filter classifies Headscale's
-  # INF/WRN/ERR tokens by semantic severity before aggregation.
+  # Zerolog JSON keeps message metadata as typed fields and writes to stdout,
+  # avoiding the duplicate timestamp/level prefix and the misleading journald
+  # err priority that Headscale's text-mode stderr output receives. The role's
+  # fluent-bit extension promotes the useful fields into the lnav store.
+  format: json
+  # Keep info-level control-plane events for audit and outage diagnosis.
   level: info
 
 policy:

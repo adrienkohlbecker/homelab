@@ -171,16 +171,86 @@
 
 # Read the rendered config from the host (the distroless headscale image has no
 # cat to podman-exec); /mnt/services/headscale/config.yaml is the file mounted
-# read-only into the container. Keep info-level events for the audit trail; the
-# log pipeline fixes their misleading raw journald priority downstream.
-- name: _verify | Rendered config enabled OIDC + PKCE and info logging
+# read-only into the container. Keep info-level events for the audit trail and
+# emit them as structured JSON on stdout.
+- name: _verify | Rendered config enabled OIDC + PKCE and structured logging
   command: cat /mnt/services/headscale/config.yaml
   register: _headscale_hs_oidc_cfg
   changed_when: false
   failed_when: >-
     'http://10.166.0.10:8090/oidc' not in _headscale_hs_oidc_cfg.stdout
     or 'pkce:' not in _headscale_hs_oidc_cfg.stdout
+    or 'format: json' not in _headscale_hs_oidc_cfg.stdout
     or 'level: info' not in _headscale_hs_oidc_cfg.stdout
+  become: true
+
+- name: _verify | Read headscale container logs
+  command: podman logs headscale
+  register: _headscale_container_logs
+  changed_when: false
+  become: true
+
+- name: _verify | Assert headscale emits zerolog JSON
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        for line in sys.stdin:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if (
+                isinstance(record.get("time"), (int, float))
+                and isinstance(record.get("level"), str)
+                and isinstance(record.get("message"), str)
+            ):
+                sys.exit(0)
+        sys.exit(1)
+  args:
+    stdin: "{{ _headscale_container_logs.stdout }}"
+  changed_when: false
+
+- name: _verify | Wait for normalized headscale record in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "headscale"
+                    and fields.get("parser_status") == "parsed"
+                    and fields.get("CONTAINER_ID")
+                    and "time" not in fields
+                    and "level" not in fields
+                    and "message" not in fields
+                    and "CONTAINER_TAG" not in fields
+                    and "CONTAINER_ID_FULL" not in fields
+                    and "CMDLINE" not in fields
+                ):
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _headscale_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _headscale_lnav_record.rc == 0
   become: true
 
 # Native schema validation must reject semantically invalid YAML, not merely
@@ -215,7 +285,8 @@
   changed_when: false
   failed_when: >-
     _headscale_invalid_configtest.rc == 0
-    or 'invalid database type' not in _headscale_invalid_configtest.stderr
+    or (_headscale_invalid_configtest.stdout | from_json).level != 'fatal'
+    or 'invalid database type' not in (_headscale_invalid_configtest.stdout | from_json).message
   become: true
 
 # Exercise the ACL SIGHUP reload's fail-soft contract (tasks/main.yml): a
