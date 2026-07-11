@@ -16,28 +16,10 @@
   register: fluentbit_extension_config
   become: true
 
-# Temporary compatibility for services not yet converted to declarative filters.
-# Once the last normalizer is gone this branch disappears with it.
-- name: Install fluent-bit service normalizer  # noqa: require-validate
-  copy:
-    src: "{{ item }}"
-    dest: "/etc/fluent-bit/{{ fluentbit_extension_args.name }}_normalize.lua"
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  loop: >-
-    {{ query('fileglob',
-             playbook_dir ~ '/roles/' ~ fluentbit_extension_args.name ~
-             '/files/fluentbit/normalize.lua') }}
-  register: fluentbit_extension_lua
-  become: true
-
 - name: Remove obsolete fluent-bit service normalizer
   file:
     path: "/etc/fluent-bit/{{ fluentbit_extension_args.name }}_normalize.lua"
     state: absent
-  when: fluentbit_extension_lua.results | length == 0
   register: fluentbit_extension_lua_removed
   become: true
 
@@ -71,7 +53,6 @@
     - not ansible_check_mode
     - >-
       fluentbit_extension_config.changed or
-      fluentbit_extension_lua.changed or
       fluentbit_extension_lua_removed.changed or
       fluentbit_extension_manifest.changed
   become: true
@@ -86,6 +67,5 @@
       condition: "{{ not ansible_check_mode }}"
       reload: >-
         {{ fluentbit_extension_config.changed or
-           fluentbit_extension_lua.changed or
            fluentbit_extension_lua_removed.changed or
            fluentbit_extension_manifest.changed }}

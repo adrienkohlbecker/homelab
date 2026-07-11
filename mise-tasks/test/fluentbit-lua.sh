@@ -14,10 +14,9 @@ if [[ -z "$lua" ]]; then
   exit 0
 fi
 
-# Each filter has a sibling <name>_test.lua. Core filters live in the Fluent Bit
-# role; service-owned filters live under the owning role's fluentbit directory.
+# Each shared filter has a sibling <name>_test.lua.
 rc=0
-for t in roles/fluentbit/files/*_test.lua roles/*/files/fluentbit/*_test.lua; do
+for t in roles/fluentbit/files/*_test.lua; do
   echo "== $t =="
   "$lua" "$t" || rc=1
 done
