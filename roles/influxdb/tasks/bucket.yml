@@ -44,7 +44,29 @@
     fail_msg: >-
       influxdb_bucket requires influxdb_bucket_args.{org,user,bucket}.
 
+- name: bucket | Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: _influxdb_bucket_podman
+
+- name: bucket | Check whether the influxdb container exists
+  when: not ansible_check_mode or _influxdb_bucket_podman.stat.exists
+  command: podman container exists influxdb
+  register: _influxdb_bucket_container
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  become: true
+
+- name: bucket | Decide whether the running influxdb API is available
+  set_fact:
+    _influxdb_bucket_api_available: >-
+      {{ not ansible_check_mode
+         or (_influxdb_bucket_podman.stat.exists
+             and (_influxdb_bucket_container.rc | default(1)) == 0) }}
+
 - name: bucket | Query org {{ influxdb_bucket_args.org }}
+  when: _influxdb_bucket_api_available
   command:
     argv:
       - podman
@@ -75,6 +97,7 @@
 # `that:` clause short-circuits the from_json filter when stdout is
 # non-JSON (rc != 0 case).
 - name: "bucket | Assert org exists: {{ influxdb_bucket_args.org }}"
+  when: _influxdb_bucket_api_available
   assert:
     that:
       - _influxdb_bucket_org_query.rc == 0
@@ -94,6 +117,7 @@
 # never enter host-fact scope, so a subsequent import_role with
 # different inputs can't pick up the previous call's ids.
 - name: bucket | Provision tenant {{ influxdb_bucket_args.user ~ ' / ' ~ influxdb_bucket_args.bucket ~ ' in org ' ~ influxdb_bucket_args.org }}
+  when: _influxdb_bucket_api_available
   vars:
     _influxdb_org_id: >-
       {{ (_influxdb_bucket_org_query.stdout
