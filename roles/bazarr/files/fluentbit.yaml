@@ -15,7 +15,14 @@ pipeline:
       parser: bazarr_console
       reserve_data: true
       preserve_key: true
-    - name: lua
+    - name: modify
       match: svc.bazarr.service
-      script: /etc/fluent-bit/bazarr_normalize.lua
-      call: normalize_bazarr
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists message
+        - key_exists bazarr_level
+      hard_rename:
+        - message log
+        - bazarr_level _level
+      remove: bazarr_time
+      add: parser_status parsed
