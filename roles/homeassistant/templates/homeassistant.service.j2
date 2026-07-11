@@ -47,6 +47,7 @@ ExecStart=/usr/bin/podman run \
     --network={{ net.name }}{{ (':' ~ _opts | join(',')) if _opts else '' }} \
 {% endfor %}
     --env TZ={{ system_timezone }} \
+    --env NO_COLOR=1 \
     --tz={{ system_timezone }} \
     --volume /mnt/services/homeassistant:/config \
     --volume /mnt/services/sqlite/homeassistant:/config/db \
