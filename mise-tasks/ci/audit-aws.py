@@ -24,9 +24,9 @@ deregister/interrupted-packer leftover). Account-global S3 is checked too; the
 qemu image bundle bucket is expected, while any other bucket is drift.
 
 Owned AMIs are also held to a retention rule: the promoted qemu-host image plus
-the newest AMI_RETAIN_PER_CATEGORY builds per category are legitimate. Each
-category is a group of AMIs sharing a `Name` tag. Any other AMI is a stray,
-and its reviewable cleanup task is emitted.
+the newest AMI_RETAIN_PER_CATEGORY supported builds are legitimate. Only
+provenance-tagged noble qemu-host images in eu-central-1 are eligible for
+automatic cleanup. Any other owned AMI is reported for manual review.
 
 It NEVER mutates. For each stray AMI it prints the repository's guarded
 deregistration task; orphan snapshots still get an exact AWS deletion command.
@@ -36,6 +36,7 @@ can double as a periodic check.
 """
 
 import sys
+from typing import Any
 
 import boto3
 from ami_retention import (
@@ -57,35 +58,48 @@ deletes: list[str] = []  # suggested cleanup commands (never executed here)
 expected: list[str] = []  # legitimate standing infra, reported for context
 # per-call failures, so a denied/throttled query is never mistaken for empty
 errors: list[str] = []
+_DEFAULT: Any = object()
 
 
 def client(svc, region):
     return boto3.client(svc, region_name=region, config=CFG)
 
 
-def safe(label, fn, default=None):
+def safe(label, fn, default=_DEFAULT) -> Any:
     """Run a describe call, recording (not raising) any failure so the sweep
     finishes and the operator sees which queries could not be trusted."""
     try:
         return fn()
     except ClientError as e:
         errors.append(f"{label}: {e.response['Error'].get('Code', 'Error')}")
-        return default if default is not None else []
+        return [] if default is _DEFAULT else default
 
 
-def promoted_qemu_host_amis(region: str, images: list[dict]) -> set[str]:
+def image_tags(image: dict) -> dict[str, str]:
+    """Return an AMI's tags as a key-value mapping."""
+    return {tag["Key"]: tag["Value"] for tag in image.get("Tags", [])}
+
+
+def is_supported_qemu_host_image(region: str, image: dict) -> bool:
+    """Return whether an AMI is eligible for automatic retention cleanup."""
+    tags = image_tags(image)
+    return region == "eu-central-1" and all(
+        tags.get(key) == value
+        for key, value in {
+            "Name": "homelab-ci-qemu-host-noble",
+            "role": "ci-ami",
+            "machine": "qemu_host",
+            "ubuntu": "noble",
+        }.items()
+    )
+
+
+def promoted_qemu_host_amis(region: str, images: list[dict]) -> set[str] | None:
     """Return qemu-host AMIs protected by their SSM promotion pointers."""
     if region != "eu-central-1":
         return set()
 
-    ubuntus = {
-        tags["ubuntu"]
-        for image in images
-        if (tags := {tag["Key"]: tag["Value"] for tag in image.get("Tags", [])})
-        and tags.get("role") == "ci-ami"
-        and tags.get("machine") == "qemu_host"
-        and "ubuntu" in tags
-    }
+    ubuntus = {image_tags(image)["ubuntu"] for image in images}
     promoted: set[str] = set()
     ssm = client("ssm", region)
     for ubuntu in ubuntus:
@@ -97,9 +111,61 @@ def promoted_qemu_host_amis(region: str, images: list[dict]) -> set[str]:
             if code == "ParameterNotFound":
                 continue
             errors.append(f"{region} promoted qemu-host {ubuntu}: {code}")
-            continue
+            return None
         promoted.add(value)
     return promoted
+
+
+def audit_ami_inventory(
+    region: str,
+    images: list[dict] | None,
+    snaps: list[dict] | None,
+) -> None:
+    """Classify owned AMIs and snapshots when both inventories are trusted."""
+    if images is None or snaps is None:
+        return
+
+    supported = [image for image in images if is_supported_qemu_host_image(region, image)]
+    unsupported = [image for image in images if image not in supported]
+    promoted = promoted_qemu_host_amis(region, supported)
+    if promoted is None:
+        return
+
+    retained, strays = retention_plan(supported, promoted)
+    all_referenced = {sid for image in images for sid in snapshot_ids(image)}
+
+    if images or snaps:
+        expected.append(
+            f"[{region}] {len(retained)} retained AMIs + "
+            f"{len({sid for image in retained for sid in snapshot_ids(image)})} backing snapshots"
+        )
+
+    anomalies.extend(
+        (
+            f"[{region}] unexpected AMI {image['ImageId']} "
+            f"({ami_category(image)}, {image['CreationDate'][:10]}) -- manual review required"
+        )
+        for image in unsupported
+    )
+
+    for image in strays:
+        anomalies.append(
+            f"[{region}] stray AMI {image['ImageId']} "
+            f"({ami_category(image)}, {image['CreationDate'][:10]}) "
+            f"-- beyond newest {AMI_RETAIN_PER_CATEGORY} supported builds"
+        )
+        deletes.append(f"mise run packer:deregister-ami -- {image['ImageId']} {region}")
+
+    for snap in snaps:
+        if snap["SnapshotId"] in all_referenced:
+            continue
+        name = next((tag["Value"] for tag in snap.get("Tags", []) if tag["Key"] == "Name"), "")
+        anomalies.append(
+            f"[{region}] orphan snapshot {snap['SnapshotId']} "
+            f"({snap['VolumeSize']}GB, {snap['StartTime']:%Y-%m-%d}, "
+            f"{name or snap.get('Description', '')[:40]!r}) -- backs no AMI"
+        )
+        deletes.append(f"aws ec2 delete-snapshot --region {region} --snapshot-id {snap['SnapshotId']}")
 
 
 def sweep_region(region):
@@ -174,45 +240,14 @@ def sweep_region(region):
     images = safe(
         f"{region} images",
         lambda: ec2.describe_images(Owners=["self"]).get("Images", []),
+        default=None,
     )
     snaps = safe(
         f"{region} snapshots",
         lambda: ec2.describe_snapshots(OwnerIds=["self"]).get("Snapshots", []),
+        default=None,
     )
-
-    # Shared with qemu-host-ami.sh so audit and automatic cleanup agree on the
-    # promoted image and the per-category keep count.
-    retained, strays = retention_plan(
-        images,
-        promoted_qemu_host_amis(region, images),
-    )
-
-    referenced = {sid for im in retained for sid in snapshot_ids(im)}
-    stray_backed = {sid for im in strays for sid in snapshot_ids(im)}
-
-    if images or snaps:
-        expected.append(f"[{region}] {len(retained)} retained AMIs + {len(referenced)} backing snapshots")
-
-    for im in strays:
-        anomalies.append(
-            f"[{region}] stray AMI {im['ImageId']} "
-            f"({ami_category(im)}, {im['CreationDate'][:10]}) "
-            f"-- beyond newest {AMI_RETAIN_PER_CATEGORY} in category"
-        )
-        deletes.append(f"mise run packer:deregister-ami -- {im['ImageId']} {region}")
-
-    for s in snaps:
-        # Snapshots behind a stray AMI are already covered by its deregister
-        # sequence above; only flag snapshots that back no AMI at all.
-        if s["SnapshotId"] in referenced or s["SnapshotId"] in stray_backed:
-            continue
-        name = next((t["Value"] for t in s.get("Tags", []) if t["Key"] == "Name"), "")
-        anomalies.append(
-            f"[{region}] orphan snapshot {s['SnapshotId']} "
-            f"({s['VolumeSize']}GB, {s['StartTime']:%Y-%m-%d}, "
-            f"{name or s.get('Description', '')[:40]!r}) -- backs no AMI"
-        )
-        deletes.append(f"aws ec2 delete-snapshot --region {region} --snapshot-id {s['SnapshotId']}")
+    audit_ami_inventory(region, images, snaps)
 
 
 def main():
