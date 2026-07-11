@@ -18,6 +18,11 @@ globals:
       - type: any
       - type: any
       - type: any
+  normalize_z2m:
+    args:
+      - type: any
+      - type: any
+      - type: any
   strip_ansi:
     args:
       - type: any
