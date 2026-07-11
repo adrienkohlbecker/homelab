@@ -7,6 +7,20 @@
 # Numbered 99-: resolved.conf.d/ merges lexicographically, last-wins,
 # so a high number keeps these settings on top of any lower-numbered
 # drop-in a package or cloud-init might land here.
+# Noble splits resolved into a separate package. Install it here instead of
+# relying on systemd's Recommends or the base-image package selection.
+- name: Install systemd-resolved package
+  when: ansible_distribution_release != "jammy"
+  apt:
+    name: systemd-resolved
+    state: present
+    cache_valid_time: 3600
+    policy_rc_d: 101
+  register: resolved_apt
+  become: true
+  tags:
+    - resolved
+
 - name: Render resolved.conf.d/99-custom.conf
   import_role:
     name: systemd_unit
@@ -16,6 +30,7 @@
       for: systemd-resolved.service
       dest_abs: /etc/systemd/resolved.conf.d/99-custom.conf
       src: 99-custom.conf
+      condition: "{{ not (ansible_check_mode and resolved_apt.changed) }}"
   tags:
     - resolved
 
@@ -36,6 +51,7 @@
 # fail loudly here rather than silently linking the host into a DNS black
 # hole.
 - name: Stat the resolved-managed resolv.conf
+  when: not (ansible_check_mode and resolved_apt.changed)
   stat:
     path: /run/systemd/resolve/resolv.conf
   register: resolved_run_resolv_conf
@@ -43,19 +59,14 @@
   tags:
     - resolved
 
-# On noble+ systemd-resolved is a separate package no longer pulled in by
-# systemd itself. The role deliberately does not install it: both
-# provisioning paths already seed it (the debootstrap image build and the
-# Ubuntu cloud images), and this assert is the loud failure if a future
-# minimal base ever drops it.
 - name: Assert systemd-resolved is producing its resolv.conf
+  when: not (ansible_check_mode and resolved_apt.changed)
   assert:
     that:
       - resolved_run_resolv_conf.stat.exists
     fail_msg: >-
       /run/systemd/resolve/resolv.conf is missing -- systemd-resolved is not
-      running (on noble+ it is a separate package the base image must seed),
-      so symlinking /etc/resolv.conf to it would black-hole DNS.
+      running, so symlinking /etc/resolv.conf to it would black-hole DNS.
       Check `systemctl status systemd-resolved` before re-running.
   tags:
     - resolved
@@ -68,6 +79,7 @@
 # /run target and re-chown it every run -- a symlink has no meaningful
 # perms of its own.
 - name: Update resolv conf symlink
+  when: not (ansible_check_mode and resolved_apt.changed)
   file:
     src: /run/systemd/resolve/resolv.conf
     dest: /etc/resolv.conf
@@ -99,6 +111,10 @@
   vars:
     systemd_unit_args:
       src: systemd-resolved
-      restart: "{{ resolved_conf_d_99_custom_conf_result.changed or resolved_resolv_conf.changed }}"
+      condition: "{{ not (ansible_check_mode and resolved_apt.changed) }}"
+      restart: >-
+        {{ resolved_apt.changed
+           or resolved_conf_d_99_custom_conf_result.changed
+           or resolved_resolv_conf.changed }}
   tags:
     - resolved
