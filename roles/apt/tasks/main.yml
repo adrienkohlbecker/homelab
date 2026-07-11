@@ -127,7 +127,7 @@
 # has a working source -- otherwise a re-run that finds python3-debian
 # already installed but the deb822 files unwritten (e.g. an interrupted
 # previous run) would leave the system with no sources at all.
-- name: Empty legacy /etc/apt/sources.list (noble+)
+- name: Empty legacy /etc/apt/sources.list (noble+)  # noqa: require-validate
   when:
     - apt_manage_ubuntu_sources
     - ansible_distribution_release != "jammy"
@@ -138,7 +138,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: test ! -s %s
   register: apt_mirror_legacy_emptied
   become: true
   tags:

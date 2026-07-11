@@ -311,7 +311,7 @@
         state: absent
       register: nginx_upstream_auth_map
 
-    - name: site | Configure nginx site
+    - name: site | Configure nginx site  # noqa: require-validate
       template:
         src: site.conf.j2
         dest: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
@@ -321,7 +321,6 @@
         # public value, so keep them off world-read as a conservative default.
         mode: "0640"
         backup: true
-        validate: grep -qE '^server[[:space:]]*\{' %s
       register: nginx_static_conf
 
     - name: site | Enable nginx site

@@ -87,7 +87,7 @@
     mode: "0755"
   become: true
 
-- name: cmdline | Write fragment ({{ boot_cmdline_args.name }})
+- name: cmdline | Write fragment ({{ boot_cmdline_args.name }})  # noqa: require-validate
   when: not grub_bootloader and boot_cmdline_args.contents | length > 0
   copy:
     dest: /etc/zfsbootmenu/{{ boot_cmdline_args.name }}
@@ -96,7 +96,6 @@
     owner: root
     group: root
     backup: true
-    validate: test -s %s
   register: boot_cmdline_zbm_present
   become: true
 

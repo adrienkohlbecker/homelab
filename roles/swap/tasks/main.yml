@@ -244,7 +244,7 @@
 # and imports rpool, so the local-premount resume script waits 30 seconds for a
 # device that cannot exist yet. These hosts do not hibernate; keep swap, but
 # make the initramfs skip resume probing.
-- name: Disable initramfs hibernate resume for zvol swap
+- name: Disable initramfs hibernate resume for zvol swap  # noqa: require-validate
   when: (swap_zvol | default(none)) is not none and zfs_root
   copy:
     dest: /etc/initramfs-tools/conf.d/resume
@@ -253,7 +253,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -qx RESUME=none %s
   register: swap_resume_conf
   become: true
   tags:

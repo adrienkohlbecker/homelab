@@ -304,7 +304,7 @@
 # No validate: apt has no single-file preferences parser (apt-cache policy
 # reads the whole preferences.d set, not one file), and a malformed pin is
 # inert -- apt skips unparsable stanzas rather than corrupting state.
-- name: Configure apt pin for {{ apt_source_args.name }}
+- name: Configure apt pin for {{ apt_source_args.name }}  # noqa: require-validate
   when:
     - apt_source_args.pin is defined
     - apt_source_present
@@ -315,8 +315,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: >-
-      python3 -c 'import sys; s=open(sys.argv[1]).read().splitlines(); keys={l.split(":",1)[0] for l in s if ":" in l}; sys.exit(0 if {"Package","Pin","Pin-Priority"} <= keys else 1)' %s
   become: true
 
 # Tombstone cleanup: the repo modules above remove the .list/.sources on

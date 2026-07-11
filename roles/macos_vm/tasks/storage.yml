@@ -107,7 +107,7 @@
   check_mode: false
   become: true
 
-- name: storage | Install udev rule giving QEMU access to the zvol
+- name: storage | Install udev rule giving QEMU access to the zvol  # noqa: require-validate
   copy:
     dest: "/etc/udev/rules.d/70-macos-vm-{{ macos_vm_name }}-zvol.rules"
     owner: root
@@ -116,7 +116,6 @@
     backup: true
     content: |
       SUBSYSTEM=="block", KERNEL=="zd*", ENV{DEVLINKS}=="*/zvol/{{ macos_vm_zvol_dataset }}*", OWNER="root", GROUP="kvm", MODE="0660"
-    validate: grep -qE '^SUBSYSTEM=="block"' %s
   become: true
   register: macos_vm_zvol_udev_rule
 

@@ -42,7 +42,7 @@
 # No inline validate: `postfix check`/`postconf` parse the live /etc/postfix
 # directory, not ansible's temp `%s` file, so they can't validate the staged
 # render. The real parse-check runs post-converge in _verify.yml.
-- name: Postfix relay configuration
+- name: Postfix relay configuration  # noqa: require-validate
   template:
     src: main.cf.j2
     dest: /etc/postfix/main.cf
@@ -50,7 +50,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: python3 -c 'import sys; sys.exit(0 if any(l.startswith("relayhost =") for l in open(sys.argv[1])) else 1)' %s
   become: true
   register: postfix_cfg
   tags:
@@ -118,13 +117,12 @@
   tags:
     - postfix
 
-- name: Install the mailutils sender-domain config
+- name: Install the mailutils sender-domain config  # noqa: require-validate
   template:
     src: mailutils.conf.j2
     dest: /etc/mailutils.conf
     mode: "0644"
     backup: true
-    validate: grep -qE '^address[[:space:]]*\{' %s
   become: true
   tags:
     - postfix

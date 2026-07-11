@@ -27,7 +27,16 @@
     group: root
     mode: "0644"
     backup: true
-    validate: 'grep -q "^DEFAULT " %s'
+    # smartd returns 17 after successfully parsing a config with no device
+    # entries, which is the expected QEMU shape. Accept only that explicit
+    # parsed result; syntax errors retain their nonzero status.
+    validate: >-
+      python3 -c 'import subprocess,sys;
+      p=subprocess.run(["smartd","-q","showtests","-c",sys.argv[1]],
+      capture_output=True,text=True);
+      sys.stdout.write(p.stdout); sys.stderr.write(p.stderr);
+      sys.exit(0 if p.returncode == 17 and "parsed but has no entries" in p.stdout
+      else p.returncode)' %s
   when: not (ansible_check_mode and smart_apt.changed)
   register: smart_smartd_cfg
   become: true

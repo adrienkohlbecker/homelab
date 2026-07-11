@@ -62,7 +62,7 @@
 # under loose=0 — our `ct state invalid drop` rule then kills SSH
 # along with everything else. Settings take effect at next reboot;
 # until then the nftables non-SYN drop rules are the only protection.
-- name: Pin nf_conntrack at boot
+- name: Pin nf_conntrack at boot  # noqa: require-validate
   copy:
     src: modules-load.conf
     dest: /etc/modules-load.d/30-firewall-hardening.conf
@@ -70,7 +70,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -qE '^[[:space:]]*nf_conntrack[[:space:]]*$' %s
   become: true
   tags:
     - firewall

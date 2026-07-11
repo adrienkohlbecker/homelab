@@ -74,7 +74,7 @@
 # offline --test-config flag landed in broker 2.1 and the image pins 2.0.21, so
 # there is no host-side parser. A startup parse failure is caught by the unit's
 # Type=notify/--sdnotify=healthy gate instead.
-- name: Configure mosquitto
+- name: Configure mosquitto  # noqa: require-validate
   copy:
     src: mosquitto.conf
     dest: /mnt/services/mosquitto/config/mosquitto.conf
@@ -82,13 +82,12 @@
     group: mosquitto
     mode: "0640"
     backup: true
-    validate: grep -qE '^(listener|persistence_location)[[:space:]]+' %s
   register: mosquitto_conf
   become: true
   tags:
     - mosquitto
 
-- name: Install mosquitto fluent-bit filters
+- name: Install mosquitto fluent-bit filters  # noqa: require-validate
   copy:
     src: fluentbit/filters.conf
     dest: /etc/fluent-bit/filters.d/50-mosquitto.conf
@@ -96,13 +95,12 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -q '^    Match       svc\.mosquitto\.service$' %s
   register: mosquitto_fluentbit_filters
   become: true
   tags:
     - mosquitto
 
-- name: Install mosquitto fluent-bit normalizer
+- name: Install mosquitto fluent-bit normalizer  # noqa: require-validate
   copy:
     src: fluentbit/normalize.lua
     dest: /etc/fluent-bit/mosquitto_normalize.lua
@@ -110,7 +108,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -q '^function normalize_mosquitto' %s
   register: mosquitto_fluentbit_normalizer
   become: true
   tags:

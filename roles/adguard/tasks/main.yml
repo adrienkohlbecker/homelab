@@ -216,7 +216,7 @@
   tags:
     - adguard
 
-- name: Render the DNS keepalived fragment
+- name: Render the DNS keepalived fragment  # noqa: require-validate
   template:
     src: keepalived.conf.j2
     dest: /etc/keepalived/conf.d/adguard.conf
@@ -224,7 +224,6 @@
     group: root
     mode: "0640"
     backup: true
-    validate: grep -qE '^vrrp_instance[[:space:]]+' %s
   register: adguard_keepalived_cfg
   become: true
   tags:

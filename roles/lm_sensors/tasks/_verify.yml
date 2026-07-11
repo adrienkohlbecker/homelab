@@ -58,7 +58,7 @@
     _content: "{{ _lm_sensors_ignore.content | b64decode }}"
   assert:
     that:
-      - "'lm-sensors-test-0' in _content"
+      - "'verify-isa-0000' in _content"
       - "'ignore temp2' in _content"
     fail_msg: "deployed /etc/sensors.d/zz_netdata_ignore.conf:\n{{ _lm_sensors_ignore.content | b64decode }}"
 
@@ -73,7 +73,7 @@
     _content: "{{ _lm_sensors_limits.content | b64decode }}"
   assert:
     that:
-      - "'chip \"lm-sensors-test-0\"' in _content"
+      - "'chip \"verify-isa-0000\"' in _content"
       - "'set temp1_max 95' in _content"
     fail_msg: "deployed /etc/sensors.d/zz_homelab_limits.conf:\n{{ _lm_sensors_limits.content | b64decode }}"
 
@@ -123,7 +123,7 @@
     that:
       - _parsed.jobs | length > 0
       - _parsed.jobs[0].name == 'sensors'
-      - _parsed.jobs[0].relabel[0].chip == 'lm-sensors-test-0'
+      - _parsed.jobs[0].relabel[0].chip == 'verify-isa-0000'
       - _parsed.jobs[0].relabel[0].sensors[0].label == 'Verify Probe'
     fail_msg: "deployed /etc/netdata/go.d/sensors.conf:\n{{ _lm_sensors_godconf | slurp_text(trim=false) }}"
 

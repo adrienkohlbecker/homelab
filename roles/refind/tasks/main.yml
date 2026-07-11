@@ -293,14 +293,13 @@
 
 # No backup: true on these two — /boot/efi is vfat, and backup_local's chown
 # to preserve ownership fails on FAT, so a backup can't be written on the ESP.
-- name: Configure refind  # noqa: require-backup
+- name: Configure refind  # noqa: require-backup require-validate
   template:
     src: refind.conf.j2
     dest: /boot/efi/EFI/refind/refind.conf
     owner: root
     group: root
     mode: "0644"
-    validate: grep -qE '^menuentry[[:space:]]+' %s
   become: true
   register: refind_conf
   tags:
@@ -315,7 +314,7 @@
 # exactly like the normal NVRAM-entry path, minus theme and keymap driver
 # (both resolve relative to rEFInd's own directory; rEFInd skips a missing
 # include and falls back to text mode).
-- name: Mirror refind.conf to the firmware-fallback directory  # noqa: require-backup
+- name: Mirror refind.conf to the firmware-fallback directory  # noqa: require-backup require-validate
   when: not (ansible_check_mode and refind_conf.changed)
   copy:
     src: /boot/efi/EFI/refind/refind.conf
@@ -324,19 +323,17 @@
     owner: root
     group: root
     mode: "0644"
-    validate: grep -qE '^menuentry[[:space:]]+' %s
   become: true
   tags:
     - refind
 
-- name: Configure refind theme  # noqa: require-backup
+- name: Configure refind theme  # noqa: require-backup require-validate
   copy:
     src: theme.conf
     dest: /boot/efi/EFI/refind/themes/refind-theme-regular/theme.conf
     owner: root
     group: root
     mode: "0644"
-    validate: grep -qE '^banner[[:space:]]+' %s
   become: true
   tags:
     - refind

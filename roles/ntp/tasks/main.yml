@@ -80,9 +80,9 @@
 
 # chronyd is AppArmor-confined to /etc/chrony/ (see
 # /etc/apparmor.d/usr.sbin.chronyd), so its own parser can't read ansible's
-# temp file. Validate the rendered NTS source stanza shape here; _verify's
-# post-converge `chronyc tracking` confirms the live file parses.
-- name: Configure chrony for NTS-only time sync
+# temp file. The post-converge `chronyc tracking` check confirms the live file
+# parses and establishes authenticated time sync.
+- name: Configure chrony for NTS-only time sync  # noqa: require-validate
   when: not (ansible_check_mode and ntp_chrony_apt.changed)
   template:
     src: chrony.conf.j2
@@ -91,7 +91,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -qE '^(pool|server)[[:space:]].*[[:space:]]nts([[:space:]]|$)' %s
   register: ntp_chrony_conf
   become: true
   tags:

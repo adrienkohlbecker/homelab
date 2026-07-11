@@ -119,7 +119,7 @@
   tags:
     - lm_sensors
 
-- name: Persist the sensor module list for boot
+- name: Persist the sensor module list for boot  # noqa: require-validate
   when: lm_sensors_effective_modules | length > 0
   copy:
     dest: /etc/modules-load.d/lm_sensors.conf
@@ -128,7 +128,6 @@
     owner: root
     group: root
     backup: true
-    validate: grep -qE '^[A-Za-z0-9_-]+$' %s
   become: true
   tags:
     - lm_sensors
@@ -200,7 +199,14 @@
     owner: root
     group: root
     backup: true
-    validate: grep -qE '^chip[[:space:]]+"' %s
+    # A sensor-less fixture returns 1 after a successful parse. Syntax errors
+    # start with an Error line, so accept only the explicit no-sensors result.
+    validate: >-
+      python3 -c 'import subprocess,sys;
+      p=subprocess.run(["sensors","-c",sys.argv[1]],capture_output=True,text=True);
+      sys.stdout.write(p.stdout); sys.stderr.write(p.stderr);
+      sys.exit(0 if p.returncode == 1 and p.stderr.startswith("No sensors found!")
+      else p.returncode)' %s
   register: lm_sensors_ignore_file
   become: true
   tags:
@@ -229,7 +235,14 @@
     owner: root
     group: root
     backup: true
-    validate: grep -qE '^[[:space:]]*set[[:space:]]' %s
+    # A sensor-less fixture returns 1 after a successful parse. Syntax errors
+    # start with an Error line, so accept only the explicit no-sensors result.
+    validate: >-
+      python3 -c 'import subprocess,sys;
+      p=subprocess.run(["sensors","-c",sys.argv[1]],capture_output=True,text=True);
+      sys.stdout.write(p.stdout); sys.stderr.write(p.stderr);
+      sys.exit(0 if p.returncode == 1 and p.stderr.startswith("No sensors found!")
+      else p.returncode)' %s
   register: lm_sensors_limits_file
   become: true
   tags:

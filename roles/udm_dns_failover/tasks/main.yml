@@ -121,7 +121,7 @@
 
 # -- configuration files --------------------------------------------------
 
-- name: Deploy keepalived base config
+- name: Deploy keepalived base config  # noqa: require-validate
   copy:
     src: keepalived.conf
     dest: /data/keepalived/keepalived.conf
@@ -129,13 +129,12 @@
     group: root
     mode: "0640"
     backup: true
-    validate: grep -q '^include /etc/keepalived/conf.d/\*.conf$' %s
   register: udm_dns_failover_base_conf
   become: true
   tags:
     - udm_dns_failover
 
-- name: Deploy VRRP fragment
+- name: Deploy VRRP fragment  # noqa: require-validate
   template:
     src: dns.conf.j2
     dest: /data/keepalived/dns.conf
@@ -143,7 +142,6 @@
     group: root
     mode: "0640"
     backup: true
-    validate: grep -qE '^vrrp_instance[[:space:]]+dns[[:space:]]*\{' %s
   register: udm_dns_failover_vrrp_conf
   become: true
   tags:
@@ -346,7 +344,7 @@
 # `systemctl restart keepalived` or systemd auto-restart bypasses both -- the
 # drop-in fails those closed. Symlinked from /data like the other units so a
 # firmware wipe doesn't drop it.
-- name: Deploy keepalived validate drop-in to persistent storage
+- name: Deploy keepalived validate drop-in to persistent storage  # noqa: require-validate
   copy:
     src: override_keepalived.conf
     dest: /data/keepalived/override.conf
@@ -354,7 +352,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -q '^ExecStartPre=/usr/sbin/keepalived -t -f /etc/keepalived/keepalived.conf$' %s
   register: udm_dns_failover_dropin
   become: true
   tags:

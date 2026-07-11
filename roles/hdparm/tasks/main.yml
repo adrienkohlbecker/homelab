@@ -51,7 +51,10 @@
     group: root
     mode: "0644"
     backup: true
-    validate: 'grep -qvE "^[[:space:]]*[^#a-z_/{}[:space:]]" %s'
+    validate: >-
+      python3 -c 'import sys;
+      sys.exit(any(l.lstrip()[0] not in "#abcdefghijklmnopqrstuvwxyz_/{}"
+      for l in open(sys.argv[1]) if l.strip()))' %s
   register: hdparm_conf
   become: true
   tags:

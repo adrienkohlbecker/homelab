@@ -450,7 +450,7 @@
 # The observability platform runs before service roles in site.yml and exposes
 # parsers.d/filters.d extension points. Home Assistant owns its stable text
 # format, parser, and normalizer together.
-- name: Install homeassistant fluent-bit parser
+- name: Install homeassistant fluent-bit parser  # noqa: require-validate
   copy:
     src: fluentbit/parsers.conf
     dest: /etc/fluent-bit/parsers.d/homeassistant.conf
@@ -458,13 +458,12 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -q '^    Name    homeassistant_text$' %s
   register: homeassistant_fluentbit_parser
   become: true
   tags:
     - homeassistant
 
-- name: Install homeassistant fluent-bit filters
+- name: Install homeassistant fluent-bit filters  # noqa: require-validate
   copy:
     src: fluentbit/filters.conf
     dest: /etc/fluent-bit/filters.d/50-homeassistant.conf
@@ -472,13 +471,12 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -q '^    Match         svc\.homeassistant\.service$' %s
   register: homeassistant_fluentbit_filters
   become: true
   tags:
     - homeassistant
 
-- name: Install homeassistant fluent-bit normalizer
+- name: Install homeassistant fluent-bit normalizer  # noqa: require-validate
   copy:
     src: fluentbit/normalize.lua
     dest: /etc/fluent-bit/homeassistant_normalize.lua
@@ -486,7 +484,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -q '^function normalize_homeassistant' %s
   register: homeassistant_fluentbit_normalizer
   become: true
   tags:

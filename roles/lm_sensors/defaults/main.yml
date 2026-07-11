@@ -32,11 +32,11 @@ lm_sensors_limits: []
 
 lm_sensors_qemu_test_modules: "{{ ['dummy'] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
 lm_sensors_qemu_test_relabel: >-
-  {{ [{'chip': 'lm-sensors-test-0', 'sensors': [{'name': 'temp1', 'label': 'Verify Probe'}]}]
+  {{ [{'chip': 'verify-isa-0000', 'sensors': [{'name': 'temp1', 'label': 'Verify Probe'}]}]
      if (_role_under_test | default('')) == 'lm_sensors' else [] }}
 lm_sensors_qemu_test_ignore: >-
-  {{ [{'chip': 'lm-sensors-test-0', 'features': ['temp2']}]
+  {{ [{'chip': 'verify-isa-0000', 'features': ['temp2']}]
      if (_role_under_test | default('')) == 'lm_sensors' else [] }}
 lm_sensors_qemu_test_limits: >-
-  {{ [{'chip': 'lm-sensors-test-0', 'set': [{'feature': 'temp1_max', 'value': 95}]}]
+  {{ [{'chip': 'verify-isa-0000', 'set': [{'feature': 'temp1_max', 'value': 95}]}]
      if (_role_under_test | default('')) == 'lm_sensors' else [] }}

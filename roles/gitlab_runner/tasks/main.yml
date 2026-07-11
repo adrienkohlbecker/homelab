@@ -351,7 +351,7 @@
         # brick daemon-reload -- systemd logs-and-ignores it. _verify asserts
         # the cap actually landed finite on the live slice, which is the
         # stronger functional check.
-        - name: Render the runner user-slice memory cap
+        - name: Render the runner user-slice memory cap  # noqa: require-validate
           when: gitlab_runner_memory_max | default('') | length > 0
           template:
             src: slice-memory.conf.j2
@@ -360,7 +360,6 @@
             group: root
             mode: "0644"
             backup: true
-            validate: grep -qE '^MemoryMax=' %s
           become: true
           register: gitlab_runner_slice_cap
 

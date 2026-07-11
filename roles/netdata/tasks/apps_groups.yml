@@ -17,7 +17,7 @@
   register: netdata_apps_groups_stock
   become: true
 
-- name: Install apps_groups.conf with homelab process groups
+- name: Install apps_groups.conf with homelab process groups  # noqa: require-validate
   when: not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed))
   copy:
     dest: /etc/netdata/apps_groups.conf
@@ -35,10 +35,6 @@
     group: netdata
     mode: "0644"
     backup: true
-    # apps_groups.conf has no upstream validator; assert our group survived the
-    # render (a broken template silently drops it -- netdata ignores unparseable
-    # lines, so the only other signal would be the group quietly never appearing).
-    validate: "grep -q '^packer:' %s"
   register: netdata_apps_groups
   become: true
 

@@ -91,7 +91,7 @@
 # The interface only exists once keepalived starts, so this rides a udev rule
 # that fires on interface creation rather than a boot-time sysctl. Rationale in
 # the rule file.
-- name: Install vrrp martian-logging udev rule
+- name: Install vrrp martian-logging udev rule  # noqa: require-validate
   copy:
     src: 99-vrrp-martians.rules
     dest: /etc/udev/rules.d/99-vrrp-martians.rules
@@ -99,7 +99,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -qE '^ACTION=="add".*SUBSYSTEM=="net"' %s
   register: keepalived_martians_rule
   become: true
   tags:

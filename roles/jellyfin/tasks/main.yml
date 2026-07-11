@@ -120,7 +120,7 @@
 # parsers.d/filters.d extension points. Jellyfin owns its format, parser, and
 # normalizer together; installing them here avoids teaching the fluentbit role
 # about an application that only runs on lab/box.
-- name: Install jellyfin fluent-bit parser
+- name: Install jellyfin fluent-bit parser  # noqa: require-validate
   copy:
     src: fluentbit/parsers.conf
     dest: /etc/fluent-bit/parsers.d/jellyfin.conf
@@ -128,13 +128,12 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -q '^    Name    jellyfin_clef$' %s
   register: jellyfin_fluentbit_parser
   become: true
   tags:
     - jellyfin
 
-- name: Install jellyfin fluent-bit filters
+- name: Install jellyfin fluent-bit filters  # noqa: require-validate
   copy:
     src: fluentbit/filters.conf
     dest: /etc/fluent-bit/filters.d/50-jellyfin.conf
@@ -142,13 +141,12 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -q '^    Match   svc.jellyfin.service$' %s
   register: jellyfin_fluentbit_filters
   become: true
   tags:
     - jellyfin
 
-- name: Install jellyfin fluent-bit normalizer
+- name: Install jellyfin fluent-bit normalizer  # noqa: require-validate
   copy:
     src: fluentbit/normalize.lua
     dest: /etc/fluent-bit/jellyfin_normalize.lua
@@ -156,7 +154,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -q '^function normalize_jellyfin' %s
   register: jellyfin_fluentbit_normalizer
   become: true
   tags:

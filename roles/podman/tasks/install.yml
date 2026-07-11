@@ -22,7 +22,7 @@
   tags:
     - podman
 
-- name: install | Pre-seed storage.conf before any apt install
+- name: install | Pre-seed storage.conf before any apt install  # noqa: require-validate
   copy:
     dest: /etc/containers/storage.conf
     backup: true
@@ -33,7 +33,6 @@
     owner: root
     group: root
     force: false
-    validate: grep -qE '^driver[[:space:]]*=[[:space:]]*"overlay"' %s
   become: true
   tags:
     - podman

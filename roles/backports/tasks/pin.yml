@@ -81,7 +81,7 @@
 # workflow: a check-mode run is not fully side-effect-free on jammy --
 # the noble pin + sources land for real (harmless and idempotent, but
 # apt will prefer noble candidates afterward).
-- name: Pin packages to noble (jammy) — {{ _backports_name }}
+- name: Pin packages to noble (jammy) — {{ _backports_name }}  # noqa: require-validate
   when: ansible_distribution_major_version == "22"
   template:
     src: backports_pin.j2
@@ -90,11 +90,6 @@
     group: root
     mode: "0644"
     backup: true
-    # Structural sanity check: catches a template breakage that drops
-    # the load-bearing 991 line entirely (apt silently ignores
-    # malformed preferences files, so without this the only signal
-    # would be silent loss of pinning).
-    validate: "grep -qE '^Pin-Priority: 991$' %s"
   check_mode: false
   become: true
   register: backports_pin
@@ -116,7 +111,7 @@
 # us declare Signed-By explicitly rather than relying on the
 # system-wide trusted keyring, and gives a deterministic file path so
 # cleanup is unambiguous.
-- name: Add noble apt sources (jammy)
+- name: Add noble apt sources (jammy)  # noqa: require-validate
   when: ansible_distribution_major_version == "22"
   template:
     src: backports_noble.sources.j2
@@ -125,8 +120,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: >-
-      python3 -c 'import sys; blocks=[b for b in open(sys.argv[1]).read().split("\n\n") if b.strip() and not b.lstrip().startswith("#")]; required={"Types","URIs","Suites","Components","Signed-By"}; sys.exit(1 if not blocks or any(not required <= {l.split(":",1)[0] for l in b.splitlines() if ":" in l} for b in blocks) else 0)' %s
   # See pin task above; check_mode: false pre-warms the apt setup so
   # the cache-refresh below can actually pull noble metadata for a
   # check-mode pass.

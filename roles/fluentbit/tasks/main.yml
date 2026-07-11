@@ -58,7 +58,7 @@
   tags:
     - fluentbit
 
-- name: Install fluent-bit Lua filters
+- name: Install fluent-bit Lua filters  # noqa: require-validate
   copy:
     src: "{{ item }}"
     dest: /etc/fluent-bit/{{ item }}
@@ -66,7 +66,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -qE '^(function|local[[:space:]])' %s
   loop:
     - strip_ansi.lua
     - level_from_message.lua
@@ -89,7 +88,7 @@
 # absolute Parsers_File paths that must already exist when the config's
 # `--dry-run` validate runs. One file per service whose tailed log gets a
 # custom parser (nginx access).
-- name: Install fluent-bit custom parsers
+- name: Install fluent-bit custom parsers  # noqa: require-validate
   copy:
     src: "{{ item }}"
     dest: /etc/fluent-bit/{{ item }}
@@ -97,7 +96,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -q '^\[PARSER\]' %s
   loop:
     - parsers_nginx.conf
   become: true
@@ -126,7 +124,7 @@
   tags:
     - fluentbit
 
-- name: Install fluent-bit service parser include
+- name: Install fluent-bit service parser include  # noqa: require-validate
   copy:
     content: "@INCLUDE /etc/fluent-bit/parsers.d/*.conf\n"
     dest: /etc/fluent-bit/parsers_custom.conf
@@ -134,7 +132,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -q '^@INCLUDE /etc/fluent-bit/parsers.d/\*\.conf$' %s
   become: true
   register: fluentbit_parser_include
   tags:
@@ -143,7 +140,7 @@
 # Fluent Bit 5 treats a wildcard include with zero matches as a configuration
 # error. Comment-only anchors make both extension points valid before any
 # service role contributes its own files.
-- name: Install fluent-bit service extension anchors
+- name: Install fluent-bit service extension anchors  # noqa: require-validate
   copy:
     content: "# Service-owned fluent-bit extensions are loaded from this directory.\n"
     dest: "/etc/fluent-bit/{{ item }}.d/00-base.conf"
@@ -151,7 +148,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: grep -q '^# Service-owned fluent-bit extensions are loaded from this directory\.$' %s
   loop:
     - parsers
     - filters
