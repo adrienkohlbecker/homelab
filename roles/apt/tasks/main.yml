@@ -123,18 +123,23 @@
   tags:
     - apt
 
-# Dropped only after the deb822 files are in place, so apt always
+# Emptied only after the deb822 files are in place, so apt always
 # has a working source -- otherwise a re-run that finds python3-debian
 # already installed but the deb822 files unwritten (e.g. an interrupted
 # previous run) would leave the system with no sources at all.
-- name: Drop legacy /etc/apt/sources.list (noble+)
+- name: Empty legacy /etc/apt/sources.list (noble+)
   when:
     - apt_manage_ubuntu_sources
     - ansible_distribution_release != "jammy"
-  file:
-    path: /etc/apt/sources.list
-    state: absent
-  register: apt_mirror_legacy_removed
+  copy:
+    content: ""
+    dest: /etc/apt/sources.list
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: test ! -s %s
+  register: apt_mirror_legacy_emptied
   become: true
   tags:
     - apt
@@ -146,7 +151,7 @@
 - name: Force apt update (--error-on=any)  # noqa: command-instead-of-module
   when:
     - apt_manage_ubuntu_sources
-    - apt_mirror_legacy.changed or apt_mirror_legacy_removed.changed or apt_mirror_deb822.changed or apt_mirror_deb822_security.changed
+    - apt_mirror_legacy.changed or apt_mirror_legacy_emptied.changed or apt_mirror_deb822.changed or apt_mirror_deb822_security.changed
     - not (apt_skip_refresh | default(false))
   command: apt-get update --error-on=any
   register: _apt_force_update

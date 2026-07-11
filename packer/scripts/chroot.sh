@@ -174,7 +174,7 @@ write_sources_list_deb822() {
     deb_arch=amd64
   fi
 
-  rm -f /etc/apt/sources.list
+  truncate -s0 /etc/apt/sources.list
   mkdir -p /etc/apt/sources.list.d
 
   cat <<EOF >/etc/apt/sources.list.d/ubuntu.sources
