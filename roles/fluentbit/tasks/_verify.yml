@@ -29,6 +29,29 @@
   loop_control:
     label: "{{ item.stat.path }}"
 
+- name: _verify | Service extension scaffold | stat
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/fluent-bit/parsers.d
+    - /etc/fluent-bit/filters.d
+    - /etc/fluent-bit/parsers.d/00-base.conf
+    - /etc/fluent-bit/filters.d/00-base.conf
+    - /etc/fluent-bit/parsers_custom.conf
+  register: _fluentbit_extension_scaffold
+  become: true
+
+- name: _verify | Service extension scaffold | assert present
+  assert:
+    that:
+      - item.stat.exists
+      - item.stat.pw_name == 'root'
+      - item.stat.gr_name == 'root'
+    fail_msg: "fluent-bit service extension path missing or misowned: {{ item.item }}"
+  loop: "{{ _fluentbit_extension_scaffold.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
 - name: _verify | JSONL store perms | stat
   stat:
     path: /var/log/fluent-bit/lnav.jsonl

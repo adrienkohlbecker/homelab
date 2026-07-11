@@ -14,6 +14,10 @@
     # copy, so a relative Parsers_File would resolve against the temp dir and
     # fail to load. The role deploys these parser files before this validate.
     Parsers_File      /etc/fluent-bit/parsers_nginx.conf
+    # Service roles own their application-specific parsers under parsers.d.
+    # This stable include file exists before the first config validation even
+    # when no service extensions have been installed yet.
+    Parsers_File      /etc/fluent-bit/parsers_custom.conf
     # HTTP_Server exposes /api/v1/metrics/prometheus on the loopback for
     # netdata's prometheus collector. The output_dropped_records_total
     # counter increases when fluent-bit exhausts retries against an
@@ -446,6 +450,11 @@
     Match             *
     Set               host {{ inventory_hostname }}
     Rename            MESSAGE log
+
+# Service-specific filters run after all inputs share the `log` key but before
+# generic ANSI stripping and severity inference. Files are tag-scoped and
+# independent, so wildcard include ordering does not affect their behaviour.
+@INCLUDE /etc/fluent-bit/filters.d/*.conf
 
 # Strip ANSI escape sequences (colour/SGR codes, cursor moves) from the
 # message. seerr (jellyseerr) wraps its level token in colour codes and
