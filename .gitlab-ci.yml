@@ -374,6 +374,15 @@ qemu_host_ami:
 # box: the bare OS + zfs + networking platform every cell needs.
 .qemu_image_box:
   extends: .qemu_image
+  # A failed box bake must remain a failed dependency. The generic protected
+  # manual job is optional (allow_failure), which GitLab treats as successful
+  # for `needs:` and would let box_deps seed from the previous published box.
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+      when: manual
+      allow_failure: false
   resource_group: qemu_image_box_$UBUNTU
   script:
     - mise run packer:publish-qemu box --ubuntu "$UBUNTU" --promote
