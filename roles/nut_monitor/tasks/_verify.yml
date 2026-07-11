@@ -163,10 +163,9 @@
   become: true
 
 # dummy-ups accepts live variable writes via upsrw -- no frame-file rewrite,
-# no driver restart, no reconnect window inside the FSD wait. On 2.8's
-# default dummy-once mode the written value persists (meta/test.yml pins the
-# fixtures to noble/resolute; jammy's loop mode would replay the file over
-# it). _setup grants the fixture upsmon user actions = SET for this.
+# driver restart, or reconnect window inside the FSD wait. The initial frame's
+# TIMER keeps Jammy's replay loop paused; 2.8's default dummy-once mode holds
+# the value natively. _setup grants the fixture upsmon user actions = SET.
 - name: _verify | Flip the dummy UPS to on-battery low-battery
   command: upsrw -s "ups.status=OB LB" -u upsmon -p {{ nut_upsmon_password }} {{ nut_monitor_ups }}
   changed_when: false

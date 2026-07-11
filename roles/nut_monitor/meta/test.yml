@@ -1,7 +1,5 @@
-# Mirror nut_server: the 2.8-only NOTIFYFLAG block and dummy-ups semantics
-# differ per release, so cover both supported ones. jammy (lab, nut 2.7.4)
-# has no packer image; its master-keyword branch is exercised by --check
-# against the live host instead.
+# The default Jammy cell covers NUT 2.7.4's looping dummy-ups behavior; these
+# additional releases cover the 2.8-only NOTIFYFLAG block and one-shot mode.
 ubuntu:
   - noble
   - resolute

@@ -55,9 +55,9 @@
           desc = "static dummy-ups for tests"
   become: true
 
-# A .dev file (no TIMER) is served statically -- a .seq cycles through
-# frames and reports ups.status WAIT until the first poll lands, which
-# makes the published values non-deterministic at query time.
+# NUT 2.7.4 loops .dev files, while 2.8+ reads them once. End the initial
+# frame with a long native TIMER so Jammy pauses its replay loop and the FSD
+# drill's later upsrw mutation persists without a driver restart.
 # charge/runtime are floats ("42.00"/"900.00") to mirror the real Eaton's
 # snmp-ups output -- this is what regression-guards nut_notify's fractional
 # battery.runtime handling (an integer frame would never exercise it).
@@ -71,4 +71,5 @@
       battery.runtime: 900.00
       ups.mfr: dummy
       ups.model: evolution500
+      TIMER 3600
   become: true
