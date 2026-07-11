@@ -1,3 +1,8 @@
+parsers:
+  - name: mosquitto_text
+    format: regex
+    regex: '/^(?:[0-9]+: )?(?:(?<mosquitto_level>Debug|Error|Notice|Warning): )?(?<mosquitto_message>.*)$/m'
+
 pipeline:
   filters:
     - name: modify
@@ -9,7 +14,17 @@ pipeline:
       exclude:
         - 'CONTAINER_TAG ^.+$'
         - 'log ^([0-9]+: )?Saving in-memory database'
-    - name: lua
+    - name: parser
       match: svc.mosquitto.service
-      script: /etc/fluent-bit/mosquitto_normalize.lua
-      call: normalize_mosquitto
+      key_name: log
+      parser: mosquitto_text
+      reserve_data: true
+      preserve_key: true
+    - name: modify
+      match: svc.mosquitto.service
+      condition: key_exists CONTAINER_TAG
+      hard_rename: mosquitto_message log
+    - name: modify
+      match: svc.mosquitto.service
+      condition: key_exists mosquitto_level
+      hard_rename: mosquitto_level _level
