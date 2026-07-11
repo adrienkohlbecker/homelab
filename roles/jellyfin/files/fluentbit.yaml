@@ -13,7 +13,29 @@ pipeline:
       parser: jellyfin_clef
       reserve_data: true
       preserve_key: true
-    - name: lua
+    - name: modify
       match: svc.jellyfin.service
-      script: /etc/fluent-bit/jellyfin_normalize.lua
-      call: normalize_jellyfin
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_value_equals JellyfinFormat clef
+        - key_exists '@m'
+      hard_rename: '@m log'
+      rename:
+        - SourceContext source
+        - ThreadId thread_id
+        - '@x exception'
+        - '@tr trace_id'
+        - '@sp span_id'
+        - '@i event_id'
+      remove:
+        - '@t'
+        - '@mt'
+        - '@r'
+        - JellyfinFormat
+      add:
+        - _level Information
+        - parser_status parsed
+    - name: modify
+      match: svc.jellyfin.service
+      condition: key_exists '@l'
+      hard_rename: '@l _level'
