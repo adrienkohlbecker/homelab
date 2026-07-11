@@ -35,8 +35,8 @@ do
     check("journald.level", rec.level, "warn")
     check("journald.message", rec.message, "WARNING connection failed")
     check("journald.stream", rec.stream, "journald")
-    check("journald.fields.systemd_unit", rec.fields.SYSTEMD_UNIT, "homeassistant.service")
-    check("journald.fields.container_name", rec.fields.CONTAINER_NAME, "homeassistant")
+    check("journald.fields.systemd_unit", rec.fields.SYSTEMD_UNIT, nil)
+    check("journald.fields.container_name", rec.fields.CONTAINER_NAME, nil)
     check("journald.fields.no_log", rec.fields.log, nil)
 end
 

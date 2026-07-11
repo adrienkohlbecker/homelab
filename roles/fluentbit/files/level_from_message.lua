@@ -58,6 +58,30 @@ local LEVEL_RULES = {
     { keywords = { "trace", "trc" }, text = "trace" },
 }
 
+local LEVEL_ALIASES = {
+    trace = "trace",
+    verbose = "trace",
+    silly = "trace",
+    debug = "debug",
+    dbg = "debug",
+    info = "info",
+    inf = "info",
+    information = "info",
+    notice = "info",
+    http = "info",
+    log = "info",
+    warn = "warn",
+    warning = "warn",
+    wrn = "warn",
+    error = "error",
+    err = "error",
+    fatal = "fatal",
+    ftl = "fatal",
+    critical = "fatal",
+    panic = "fatal",
+    pnc = "fatal",
+}
+
 local function match_rule(head, rule)
     if rule.keywords then
         for _, kw in ipairs(rule.keywords) do
@@ -72,8 +96,20 @@ end
 
 function set_priority(tag, ts, record)
     if record["_level"] ~= nil then
-        -- An upstream filter already pinned the level; leave it alone.
-        return 0, ts, record
+        local raw_level = record["_level"]
+        if type(raw_level) == "string" then
+            local level = LEVEL_ALIASES[raw_level:lower()]
+            if level ~= nil then
+                if level == raw_level then
+                    return 0, ts, record
+                end
+                record["_level"] = level
+                return 1, ts, record
+            end
+        end
+        record["_level"] = "warn"
+        record["parse_error"] = record["parse_error"] or "level"
+        return 1, ts, record
     end
 
     -- An upstream modify filter scoped to nginx.access pre-stamps

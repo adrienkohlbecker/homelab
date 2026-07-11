@@ -167,8 +167,7 @@ do
     check("nginx.access.gate-scoped", t, "error")
 end
 
--- 17. Upstream filter already pinned _level: leave it untouched, return 0
---     (no modification).
+-- 17. A canonical upstream level stays untouched.
 do
     local record = {
         log = "this body says ERROR but severity is already warn",
@@ -177,6 +176,21 @@ do
     local code = set_priority("svc.some.service", 0, record)
     check("prepinned.code", code, 0)
     check("prepinned.kept", record["_level"], "warn")
+end
+
+do
+    local record = { log = "structured", _level = "Information" }
+    local code = set_priority("svc.some.service", 0, record)
+    check("structured.alias.code", code, 1)
+    check("structured.alias.level", record["_level"], "info")
+end
+
+do
+    local record = { log = "structured", _level = "mystery" }
+    local code = set_priority("svc.some.service", 0, record)
+    check("structured.unknown.code", code, 1)
+    check("structured.unknown.level", record["_level"], "warn")
+    check("structured.unknown.error", record.parse_error, "level")
 end
 
 -- 18. Non-string body (already-structured record): return 0, no level set.
