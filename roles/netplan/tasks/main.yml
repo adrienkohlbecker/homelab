@@ -155,12 +155,10 @@
       become: true
       register: netplan_cleanup_installer
 
-    # Gated on cleanup_purge_cloud_init (false on fox): fox trusts cloud-init's
-    # own rendered config to match/address both NICs, so its netplan stanza
-    # only overlays extras (critical/dhcp4-overrides/optional -- see
-    # host_vars/fox.yml) and this file must survive.
+    # Hosts where cloud-init owns networking keep its rendered configuration;
+    # their Ansible netplan stanza only layers local overrides on top.
     - name: Cleanup config added by cloud-init
-      when: cleanup_purge_cloud_init
+      when: not cloud_init_managed
       file:
         path: /etc/netplan/50-cloud-init.yaml
         state: absent

@@ -11,24 +11,14 @@
 # without routing whole home subnets. Provisioned by terraform/hetzner.tf;
 # reached at fox.fahm.fr (public A -> reserved primary IP).
 
-# Networking is cloud-init-managed: Hetzner's own 50-cloud-init.yaml owns
-# matching/addressing for both NICs -- including enp7s0's private-net DHCP
-# (10.123.55.2, the `hetzner` topology IP from terraform/hetzner.tf
-# hcloud_server_network) and eth0's static v6 -- and the netplan role now
-# keeps that file instead of deleting it (cleanup_purge_cloud_init: false
-# below also gates that deletion). fox's own netplan stanza just layers a
-# couple of extras on top rather than re-templating what cloud-init already
-# renders:
+# Hetzner cloud-init owns matching and addressing for both NICs, including the
+# private-net DHCP address and eth0's static IPv6 configuration. This stanza
+# layers only the local behavior Ansible needs:
 #   - eth0: critical preserves the DHCP lease across the networkd restart
 #     `netplan apply` triggers (remote-apply safety; cf. lab/pug).
 #   - enp7s0: dhcp4-overrides keeps fox's own resolvers off the private net;
 #     optional means a private-net DHCP hiccup never blocks boot (eth0 is the
 #     only boot-critical link).
-# This trusts cloud-init to match each NIC correctly on its own -- the
-# private NIC previously went unmanaged after Hetzner reassigned its MAC on
-# detach/reattach (the reason a prior revision of this file matched both NICs
-# by predictable PCI name instead). If that recurs, go back to an
-# independent match/dhcp4 stanza here rather than relying on cloud-init alone.
 netplan:
   ethernets:
     eth0:
@@ -38,13 +28,9 @@ netplan:
         use-dns: false
       optional: true
 
-# Keep cloud-init installed: on Hetzner it owns first-boot bootstrap (terraform
-# user_data injects the ak user + SSH key, locks root) and network bring-up,
-# including the enp7s0 private NIC ansible reaches fox through (10.123.55.2). The
-# cleanup role purges cloud-init everywhere else; fox opts out. The netplan
-# role's own cloud-init file cleanup (roles/netplan/tasks/main.yml) is gated on
-# this same flag, so fox also keeps cloud-init's rendered 50-cloud-init.yaml.
-cleanup_purge_cloud_init: false
+# Cloud-init owns first-boot bootstrap and networking, so cleanup retains the
+# package and netplan retains its rendered 50-cloud-init.yaml.
+cloud_init_managed: true
 
 # Leave apt sources to cloud-init: on first boot it writes the Hetzner mirror
 # (mirror.hetzner.com) from the 90-hetznercloud.cfg drop-in baked into the image

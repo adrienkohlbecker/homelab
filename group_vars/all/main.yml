@@ -51,15 +51,10 @@ has_transcoding_acceleration: false
 minio_enabled: false
 dns_reboot_guard_enabled: false
 ssh_public_keys_additional: ""
-# Purge cloud-init as an unwanted baseline package. True everywhere by default:
-# the debootstrap'd ZFS boxes never have it (no-op) and the minimal cloud-image
-# fixture should shed it. fox overrides this to false in host_vars -- on Hetzner
-# cloud-init owns first-boot bootstrap (terraform user_data injects the ak user
-# + SSH key, locks root) and networking, so purging it would break rebuilds and
-# the private-NIC bring-up ansible reaches fox through. Shared here (not in
-# roles/cleanup/defaults/) because roles/netplan also gates on it and role
-# defaults from one role aren't visible when another role is tested standalone.
-cleanup_purge_cloud_init: true
+# Whether cloud-init owns bootstrap and networking on this host. The cleanup
+# and netplan roles share this host capability, so it must remain globally
+# visible when either role is tested alone.
+cloud_init_managed: false
 
 # Auto-discovered /dev/disk/by-id stems for every rotational drive on
 # the host. Consumed by roles/hdparm (charts.d collector) and
