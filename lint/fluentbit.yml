@@ -28,6 +28,11 @@ globals:
       - type: any
       - type: any
       - type: any
+  normalize_influxdb:
+    args:
+      - type: any
+      - type: any
+      - type: any
   normalize_mosquitto:
     args:
       - type: any

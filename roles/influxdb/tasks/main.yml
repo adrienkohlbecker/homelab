@@ -151,6 +151,77 @@
   tags:
     - influxdb
 
+# The observability platform runs before service roles in site.yml and exposes
+# parsers.d/filters.d extension points. InfluxDB owns its logfmt parser and
+# normalizer here so the application format and its processing stay together.
+- name: Install influxdb fluent-bit parser  # noqa: require-validate
+  copy:
+    src: fluentbit/parsers.conf
+    dest: /etc/fluent-bit/parsers.d/influxdb.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: influxdb_fluentbit_parser
+  become: true
+  tags:
+    - influxdb
+
+- name: Install influxdb fluent-bit filters  # noqa: require-validate
+  copy:
+    src: fluentbit/filters.conf
+    dest: /etc/fluent-bit/filters.d/50-influxdb.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: influxdb_fluentbit_filters
+  become: true
+  tags:
+    - influxdb
+
+- name: Install influxdb fluent-bit normalizer  # noqa: require-validate
+  copy:
+    src: fluentbit/normalize.lua
+    dest: /etc/fluent-bit/influxdb_normalize.lua
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: influxdb_fluentbit_normalizer
+  become: true
+  tags:
+    - influxdb
+
+- name: Validate fluent-bit with influxdb extensions
+  when:
+    - not ansible_check_mode
+    - >-
+      influxdb_fluentbit_parser.changed or
+      influxdb_fluentbit_filters.changed or
+      influxdb_fluentbit_normalizer.changed
+  command: /opt/fluent-bit/bin/fluent-bit --config /etc/fluent-bit/fluent-bit.conf --dry-run
+  changed_when: false
+  become: true
+  tags:
+    - influxdb
+
+- name: Reload fluent-bit for influxdb extensions
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: fluent-bit
+      condition: >-
+        {{ not ansible_check_mode and
+           (influxdb_fluentbit_parser.changed or
+            influxdb_fluentbit_filters.changed or
+            influxdb_fluentbit_normalizer.changed) }}
+      reload: true
+  tags:
+    - influxdb
+
 - name: Install influxdb service
   import_role:
     name: systemd_unit
