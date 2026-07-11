@@ -246,10 +246,11 @@ lint:
     - mise run ci:bootstrap
     - mise run lint
 
-# Hermetic pytest suite (testpaths=unit_tests). Installs the full tool tree
-# even though it only needs python + uv: `mise run` auto-installs whatever is
-# missing anyway, so a partial install would just move the rest to task time
-# (with noisy resolution warnings).
+# Hermetic pytest suite (testpaths=unit_tests) plus Fluent Bit Lua filter tests.
+# Installs the full tool tree even though these only need python + uv + the
+# image's lua5.4: `mise run` auto-installs whatever is missing anyway, so a
+# partial install would just move the rest to task time (with noisy resolution
+# warnings).
 unit_tests:
   stage: prepare
   extends:
@@ -259,6 +260,7 @@ unit_tests:
   script:
     - mise run ci:bootstrap
     - mise run test
+    - mise run test:fluentbit-lua
 
 # Rebuild of the CI container image (the repo Dockerfile), pushed to this
 # project's registry as $CI_REGISTRY_IMAGE/ci:<sha> (+ :latest from master).

@@ -5,8 +5,8 @@ set -euo pipefail
 # The Lua filters run inside fluent-bit's embedded interpreter on lab, which
 # has no standalone CLI. The unit tests are plain Lua, so we run them under any
 # system Lua. Lua isn't a fleet/mise tool (mise only offers source-compiled
-# builds), so locate whatever the developer has; skip cleanly where absent
-# (e.g. the CI container) rather than failing a check we can't run there.
+# builds), so skip cleanly on developer machines where it is absent. The CI
+# image includes lua5.4 and always runs this task.
 lua="$(command -v lua5.4 || command -v lua5.3 || command -v lua || command -v luajit || true)"
 
 if [[ -z "$lua" ]]; then

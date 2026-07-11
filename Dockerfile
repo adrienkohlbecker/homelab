@@ -57,10 +57,11 @@ RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
 # the package manager -- so no /etc/pip.conf either.)
 
 # Harness needs qemu-system-x86 + qemu-utils for booting test VMs;
-# openssh-client for talking to the guests; xorriso + cloud-image-utils
-# for the `minimal` variant's seed iso; python3-yaml so mise-tasks/ci
-# scripts can run without uv. build-essential is for any wheel that
-# needs to compile. gpg + apt-transport-https are for the mise apt repo.
+# openssh-client for talking to the guests; xorriso + cloud-image-utils for the
+# `minimal` variant's seed iso; python3-yaml so mise-tasks/ci scripts can run
+# without uv; lua5.4 for the Fluent Bit filter unit suite. build-essential is
+# for any wheel that needs to compile. gpg + apt-transport-https are for the
+# mise apt repo.
 #
 # curl + netcat-openbsd back the WAN-side delegate_to: localhost probes
 # in roles/iptables/tasks/_verify.yml — TCP via curl, UDP via `nc -u`.
@@ -81,7 +82,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       netcat-openbsd \
       passt \
       xorriso cloud-image-utils \
-      python3-yaml \
+      python3-yaml lua5.4 \
       build-essential \
     && rm -rf /var/lib/apt/lists/*
 
