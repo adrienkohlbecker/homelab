@@ -2,6 +2,13 @@ parsers:
   - name: adguard_text
     format: regex
     regex: '/^(?<adguard_timestamp>[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}) \[(?<adguard_level>[a-z]+)\] (?<adguard_body>.*)$/m'
+  - name: adguard_body
+    format: regex
+    regex: '/^(?:(?<source>[a-z][a-z0-9_]*):[[:space:]]+)?(?<adguard_message>.*?)(?:[[:space:]]+(?<adguard_attributes>[a-z][a-z0-9_]*=.*))?$/m'
+  - name: adguard_logfmt
+    format: logfmt
+    logfmt_no_bare_keys: true
+    types: retry:bool count:integer
 
 pipeline:
   filters:
@@ -14,7 +21,28 @@ pipeline:
       parser: adguard_text
       reserve_data: true
       preserve_key: true
-    - name: lua
+    - name: parser
       match: svc.adguard.service
-      script: /etc/fluent-bit/adguard_normalize.lua
-      call: normalize_adguard
+      key_name: adguard_body
+      parser: adguard_body
+      reserve_data: true
+      preserve_key: true
+    - name: parser
+      match: svc.adguard.service
+      key_name: adguard_attributes
+      parser: adguard_logfmt
+      reserve_data: true
+    - name: modify
+      match: svc.adguard.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists adguard_message
+        - key_exists adguard_level
+      hard_rename:
+        - adguard_message log
+        - adguard_level _level
+      remove:
+        - adguard_timestamp
+        - adguard_body
+        - adguard_attributes
+      add: parser_status parsed
