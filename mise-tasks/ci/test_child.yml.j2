@@ -137,8 +137,8 @@ stages:
 # than the converge and needs neither the widened dedicated-host guest spec nor
 # the site pool: it stays on the regular cell runner (the default .cell tag) and
 # just shares the leading `site` stage for id-ordering priority. Its value is
-# cross-role check-mode safety over the whole fleet in one pass -- template
-# rendering and check-mode gating that the isolated per-role cells can't cover.
+# cross-role check-mode safety through the box-applicable full-site role ladder
+# -- template rendering and gating that isolated per-role cells can't cover.
 "_site_check:box":
   extends: .cell
   stage: site

@@ -9,8 +9,9 @@ Catches role-ordering and cross-role interaction bugs that per-role tests miss.
 --check runs the same full site.yml in ansible check mode (a dry run) instead
 of a real converge: it makes no changes, so it needs no post-converge settle or
 poweroff dance, and it exercises the whole playbook's check-mode safety (every
-role's template rendering and check-mode gating) across the full fleet in one
-pass -- something the per-role cells, each running one role in isolation, can't.
+box-applicable role's template rendering and check-mode gating) through the
+full-site role ladder in one pass -- something the per-role cells, each running
+one role in isolation, can't.
 
 Exit codes match testrole.py: 0 success, 1 converge failure, 124 timeout,
 130 interrupted.
