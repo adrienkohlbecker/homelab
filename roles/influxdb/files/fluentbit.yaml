@@ -1,0 +1,20 @@
+parsers:
+  - name: influxdb_logfmt
+    format: logfmt
+    logfmt_no_bare_keys: true
+
+pipeline:
+  filters:
+    - name: modify
+      match: svc.influxdb.service
+      rename: MESSAGE log
+    - name: parser
+      match: svc.influxdb.service
+      key_name: log
+      parser: influxdb_logfmt
+      reserve_data: true
+      preserve_key: true
+    - name: lua
+      match: svc.influxdb.service
+      script: /etc/fluent-bit/influxdb_normalize.lua
+      call: normalize_influxdb

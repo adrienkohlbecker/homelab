@@ -1,0 +1,19 @@
+parsers:
+  - name: z2m_json
+    format: json
+
+pipeline:
+  filters:
+    - name: modify
+      match: svc.z2m.service
+      rename: MESSAGE log
+    - name: parser
+      match: svc.z2m.service
+      key_name: log
+      parser: z2m_json
+      reserve_data: true
+      preserve_key: true
+    - name: lua
+      match: svc.z2m.service
+      script: /etc/fluent-bit/z2m_normalize.lua
+      call: normalize_z2m

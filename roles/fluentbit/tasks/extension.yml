@@ -1,0 +1,91 @@
+- name: Assert fluent-bit extension arguments
+  assert:
+    that:
+      - fluentbit_extension_args.keys() | list | difference(['name']) | length == 0
+      - fluentbit_extension_args.name is string
+      - fluentbit_extension_args.name is match('^[a-z0-9_]+$')
+
+- name: Install fluent-bit service extension  # noqa: require-validate
+  copy:
+    src: "{{ playbook_dir }}/roles/{{ fluentbit_extension_args.name }}/files/fluentbit.yaml"
+    dest: "/etc/fluent-bit/services/{{ fluentbit_extension_args.name }}.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: fluentbit_extension_config
+  become: true
+
+# Temporary compatibility for services not yet converted to declarative filters.
+# Once the last normalizer is gone this branch disappears with it.
+- name: Install fluent-bit service normalizer  # noqa: require-validate
+  copy:
+    src: "{{ item }}"
+    dest: "/etc/fluent-bit/{{ fluentbit_extension_args.name }}_normalize.lua"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  loop: >-
+    {{ query('fileglob',
+             playbook_dir ~ '/roles/' ~ fluentbit_extension_args.name ~
+             '/files/fluentbit/normalize.lua') }}
+  register: fluentbit_extension_lua
+  become: true
+
+- name: Remove obsolete fluent-bit service normalizer
+  file:
+    path: "/etc/fluent-bit/{{ fluentbit_extension_args.name }}_normalize.lua"
+    state: absent
+  when: fluentbit_extension_lua.results | length == 0
+  register: fluentbit_extension_lua_removed
+  become: true
+
+- name: Find installed fluent-bit service extensions
+  find:
+    paths: /etc/fluent-bit/services
+    patterns: "*.yaml"
+    file_type: file
+  register: fluentbit_installed_extensions
+  become: true
+
+- name: Configure fluent-bit service extension manifest  # noqa: require-validate
+  copy:
+    content: |
+      includes:
+      {% for extension in fluentbit_installed_extensions.files | map(attribute='path') | sort %}
+        - {{ extension }}
+      {% endfor %}
+    dest: /etc/fluent-bit/services.yaml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: fluentbit_extension_manifest
+  become: true
+
+- name: Validate fluent-bit service extension
+  command: /opt/fluent-bit/bin/fluent-bit --config /etc/fluent-bit/fluent-bit.yaml --dry-run
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - >-
+      fluentbit_extension_config.changed or
+      fluentbit_extension_lua.changed or
+      fluentbit_extension_lua_removed.changed or
+      fluentbit_extension_manifest.changed
+  become: true
+
+- name: Reload fluent-bit for service extension
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: fluent-bit
+      condition: "{{ not ansible_check_mode }}"
+      reload: >-
+        {{ fluentbit_extension_config.changed or
+           fluentbit_extension_lua.changed or
+           fluentbit_extension_lua_removed.changed or
+           fluentbit_extension_manifest.changed }}

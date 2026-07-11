@@ -1,0 +1,26 @@
+pipeline:
+  filters:
+    - name: modify
+      match: '*'
+      set: host {{ inventory_hostname }}
+      rename: MESSAGE log
+
+    - name: lua
+      match: '*'
+      script: /etc/fluent-bit/strip_ansi.lua
+      call: strip_ansi
+
+    - name: modify
+      match: nginx.access
+      condition: Key_does_not_exist severity_text
+      set: severity_text info
+
+    - name: lua
+      match: '*'
+      script: /etc/fluent-bit/level_from_message.lua
+      call: set_priority
+
+    - name: lua
+      match: '*'
+      script: /etc/fluent-bit/lnav_shape.lua
+      call: shape_lnav

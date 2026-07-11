@@ -84,75 +84,55 @@
   tags:
     - fluentbit
 
-# Deployed before the main config below: fluent-bit.conf references these with
-# absolute Parsers_File paths that must already exist when the config's
-# `--dry-run` validate runs. One file per service whose tailed log gets a
-# custom parser (nginx access).
-- name: Install fluent-bit custom parsers  # noqa: require-validate
-  copy:
-    src: "{{ item }}"
-    dest: /etc/fluent-bit/{{ item }}
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  loop:
-    - parsers_nginx.conf
-  become: true
-  register: fluentbit_parsers
-  when: not (ansible_check_mode and fluentbit_apt.changed)
-  tags:
-    - fluentbit
-
-# Service roles can add parsers and filters without making this platform role
-# know about every application log format. The parser include file is stable so
-# the main config can reference it even when no service extensions are present;
-# service roles populate the two directories later in the layer ladder and
-# reload fluent-bit after validating the complete config.
-- name: Create fluent-bit service extension directories
+- name: Create fluent-bit service extension directory
   file:
-    path: "/etc/fluent-bit/{{ item }}.d"
+    path: /etc/fluent-bit/services
     state: directory
     owner: root
     group: root
     mode: "0755"
-  loop:
-    - parsers
-    - filters
   become: true
-  register: fluentbit_extension_dirs
+  register: fluentbit_extension_dir
   tags:
     - fluentbit
 
-- name: Install fluent-bit service parser include  # noqa: require-validate
+- name: Initialize fluent-bit service manifest  # noqa: require-validate
   copy:
-    content: "@INCLUDE /etc/fluent-bit/parsers.d/*.conf\n"
-    dest: /etc/fluent-bit/parsers_custom.conf
+    content: "includes: []\n"
+    dest: /etc/fluent-bit/services.yaml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    force: false
+  become: true
+  register: fluentbit_service_manifest
+  tags:
+    - fluentbit
+
+- name: Install fluent-bit pre-service filters  # noqa: require-validate
+  copy:
+    src: filters-pre.yaml
+    dest: /etc/fluent-bit/filters-pre.yaml
     owner: root
     group: root
     mode: "0644"
     backup: true
   become: true
-  register: fluentbit_parser_include
+  register: fluentbit_filters_pre
   tags:
     - fluentbit
 
-# Fluent Bit 5 treats a wildcard include with zero matches as a configuration
-# error. Comment-only anchors make both extension points valid before any
-# service role contributes its own files.
-- name: Install fluent-bit service extension anchors  # noqa: require-validate
-  copy:
-    content: "# Service-owned fluent-bit extensions are loaded from this directory.\n"
-    dest: "/etc/fluent-bit/{{ item }}.d/00-base.conf"
+- name: Install fluent-bit post-service filters  # noqa: require-validate
+  template:
+    src: filters-post.yaml.j2
+    dest: /etc/fluent-bit/filters-post.yaml
     owner: root
     group: root
     mode: "0644"
     backup: true
-  loop:
-    - parsers
-    - filters
   become: true
-  register: fluentbit_extension_anchors
+  register: fluentbit_filters_post
   tags:
     - fluentbit
 
@@ -193,8 +173,8 @@
 
 - name: Configure fluent-bit
   template:
-    src: fluent-bit.conf.j2
-    dest: /etc/fluent-bit/fluent-bit.conf
+    src: fluent-bit.yaml.j2
+    dest: /etc/fluent-bit/fluent-bit.yaml
     owner: root
     group: root
     mode: "0600"
@@ -205,8 +185,22 @@
   when: >-
     not (ansible_check_mode and
          (fluentbit_apt.changed or fluentbit_lua.changed or
-          fluentbit_extension_dirs.changed or fluentbit_parser_include.changed or
-          fluentbit_extension_anchors.changed))
+          fluentbit_extension_dir.changed or fluentbit_service_manifest.changed or
+          fluentbit_filters_pre.changed or fluentbit_filters_post.changed))
+  tags:
+    - fluentbit
+
+- name: Remove classic fluent-bit configuration
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/fluent-bit/fluent-bit.conf
+    - /etc/fluent-bit/parsers_nginx.conf
+    - /etc/fluent-bit/parsers_custom.conf
+    - /etc/fluent-bit/parsers.d
+    - /etc/fluent-bit/filters.d
+  become: true
   tags:
     - fluentbit
 
@@ -237,8 +231,8 @@
       restart: "{{ fluentbit_apt.changed or fluent_bit_service_d_override_conf_result.changed }}"
       reload: >-
         {{ (fluentbit_conf.changed or fluentbit_lua.changed or
-            fluentbit_parsers.changed or fluentbit_extension_dirs.changed or
-            fluentbit_parser_include.changed or fluentbit_extension_anchors.changed)
+            fluentbit_extension_dir.changed or fluentbit_service_manifest.changed or
+            fluentbit_filters_pre.changed or fluentbit_filters_post.changed)
            and not (fluentbit_apt.changed or fluent_bit_service_d_override_conf_result.changed) }}
   tags:
     - fluentbit

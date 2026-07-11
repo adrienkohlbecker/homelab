@@ -1,0 +1,15 @@
+pipeline:
+  filters:
+    - name: modify
+      match: svc.mosquitto.service
+      rename: MESSAGE log
+    - name: grep
+      match: svc.mosquitto.service
+      logical_op: and
+      exclude:
+        - 'CONTAINER_TAG ^.+$'
+        - 'log ^([0-9]+: )?Saving in-memory database'
+    - name: lua
+      match: svc.mosquitto.service
+      script: /etc/fluent-bit/mosquitto_normalize.lua
+      call: normalize_mosquitto

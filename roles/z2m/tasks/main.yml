@@ -60,73 +60,13 @@
   tags:
     - z2m
 
-# These three fragments have no standalone validator; the complete Fluent Bit
-# configuration is parsed by --dry-run immediately after they are installed.
-- name: Install z2m fluent-bit parser  # noqa: require-validate
-  copy:
-    src: fluentbit/parsers.conf
-    dest: /etc/fluent-bit/parsers.d/z2m.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: z2m_fluentbit_parser
-  become: true
-  tags:
-    - z2m
-
-- name: Install z2m fluent-bit filters  # noqa: require-validate
-  copy:
-    src: fluentbit/filters.conf
-    dest: /etc/fluent-bit/filters.d/50-z2m.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: z2m_fluentbit_filters
-  become: true
-  tags:
-    - z2m
-
-- name: Install z2m fluent-bit normalizer  # noqa: require-validate
-  copy:
-    src: fluentbit/normalize.lua
-    dest: /etc/fluent-bit/z2m_normalize.lua
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: z2m_fluentbit_normalizer
-  become: true
-  tags:
-    - z2m
-
-- name: Validate fluent-bit with z2m extensions
-  when:
-    - not ansible_check_mode
-    - >-
-      z2m_fluentbit_parser.changed or
-      z2m_fluentbit_filters.changed or
-      z2m_fluentbit_normalizer.changed
-  command: /opt/fluent-bit/bin/fluent-bit --config /etc/fluent-bit/fluent-bit.conf --dry-run
-  changed_when: false
-  become: true
-  tags:
-    - z2m
-
-- name: Reload fluent-bit for z2m extensions
+- name: Install z2m fluent-bit extension
   import_role:
-    name: systemd_unit
-    tasks_from: service
+    name: fluentbit
+    tasks_from: extension
   vars:
-    systemd_unit_args:
-      src: fluent-bit
-      condition: >-
-        {{ not ansible_check_mode and
-           (z2m_fluentbit_parser.changed or
-            z2m_fluentbit_filters.changed or
-            z2m_fluentbit_normalizer.changed) }}
-      reload: true
+    fluentbit_extension_args:
+      name: z2m
   tags:
     - z2m
 

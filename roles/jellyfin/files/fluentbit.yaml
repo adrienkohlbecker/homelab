@@ -1,0 +1,19 @@
+parsers:
+  - name: jellyfin_clef
+    format: json
+
+pipeline:
+  filters:
+    - name: modify
+      match: svc.jellyfin.service
+      rename: MESSAGE log
+    - name: parser
+      match: svc.jellyfin.service
+      key_name: log
+      parser: jellyfin_clef
+      reserve_data: true
+      preserve_key: true
+    - name: lua
+      match: svc.jellyfin.service
+      script: /etc/fluent-bit/jellyfin_normalize.lua
+      call: normalize_jellyfin

@@ -1,0 +1,19 @@
+parsers:
+  - name: headscale_json
+    format: json
+
+pipeline:
+  filters:
+    - name: modify
+      match: svc.headscale.service
+      rename: MESSAGE log
+    - name: parser
+      match: svc.headscale.service
+      key_name: log
+      parser: headscale_json
+      reserve_data: true
+      preserve_key: true
+    - name: lua
+      match: svc.headscale.service
+      script: /etc/fluent-bit/headscale_normalize.lua
+      call: normalize_headscale

@@ -1,0 +1,19 @@
+parsers:
+  - name: authelia_json
+    format: json
+
+pipeline:
+  filters:
+    - name: modify
+      match: svc.authelia.service
+      rename: MESSAGE log
+    - name: parser
+      match: svc.authelia.service
+      key_name: log
+      parser: authelia_json
+      reserve_data: true
+      preserve_key: true
+    - name: lua
+      match: svc.authelia.service
+      script: /etc/fluent-bit/authelia_normalize.lua
+      call: normalize_authelia

@@ -1,6 +1,6 @@
 # {{ ansible_managed }}
 # Adds ExecReload to the upstream fluent-bit.service. Paired with
-# Hot_Reload On in fluent-bit.conf, conf and lua filter changes apply
+# Hot reload in fluent-bit.yaml lets configuration and Lua changes apply
 # without dropping in-flight records (a restart would empty the
 # in-memory backlog despite storage.backlog.flush_on_shutdown=on).
 #
@@ -10,6 +10,8 @@
 # build), and the unit timed out after 90s on start. /api/v1/health
 # probed from _verify is the practical alternative.
 [Service]
+ExecStart=
+ExecStart=/opt/fluent-bit/bin/fluent-bit --config=/etc/fluent-bit/fluent-bit.yaml
 ExecReload=/bin/kill -s HUP $MAINPID
 StandardOutput=append:/var/log/fluent-bit/lnav.jsonl
 StandardError=journal

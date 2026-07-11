@@ -1,0 +1,40 @@
+parsers:
+  - name: homepage_winston
+    format: regex
+    regex: '/^\[(?<homepage_timestamp>[^]]+)\] (?:\x1b\[[0-9;]*m)?(?<homepage_level>error|warn|info|http|verbose|debug|silly)(?:\x1b\[[0-9;]*m)?: (?:<(?<homepage_source>[^>]+)> )?(?<homepage_message>.*)$/m'
+
+multiline_parsers:
+  - name: multiline_homepage
+    type: regex
+    flush_timeout: 1000
+    rules:
+      - state: start_state
+        regex: '/^\[[^]]+\] (?:\x1b\[[0-9;]*m)?(error|warn|info|http|verbose|debug|silly)/'
+        next_state: continuation
+      - state: continuation
+        regex: '/^([[:space:]]+at |Caused by:|[A-Za-z_$][A-Za-z0-9_$.]*(Error|Exception):)/'
+        next_state: continuation
+
+pipeline:
+  filters:
+    - name: modify
+      match: svc.homepage.service
+      rename: MESSAGE log
+    - name: multiline
+      match: svc.homepage.service
+      multiline.parser: multiline_homepage
+      multiline.key_content: log
+      buffer: true
+      flush_ms: 1000
+      emitter_name: multiline_homepage_emitter
+      emitter_storage.type: filesystem
+    - name: parser
+      match: svc.homepage.service
+      key_name: log
+      parser: homepage_winston
+      reserve_data: true
+      preserve_key: true
+    - name: lua
+      match: svc.homepage.service
+      script: /etc/fluent-bit/homepage_normalize.lua
+      call: normalize_homepage

@@ -1,0 +1,96 @@
+pipeline:
+  filters:
+    # High-volume records retained in their source journal/file but omitted from
+    # the operator aggregate.
+    - name: grep
+      match: svc.*
+      exclude:
+        - 'MESSAGE ^Printing VRRP as json for process'
+        - 'MESSAGE ^ansible-[A-Za-z0-9._]+ Invoked with'
+        - 'MESSAGE ^pam_unix\(cron:session\)'
+        - 'MESSAGE ^podman0: port'
+        - 'MESSAGE ^veth[0-9]+( |@|: )'
+        - 'MESSAGE name="/etc/gnutls/config"'
+        - 'MESSAGE Failed to get interface "(veth|podman)'
+        - 'MESSAGE Unknown index .* seen, reloading interface list'
+        - 'MESSAGE which is not our child'
+        - 'MESSAGE ^Configuration file /run/systemd/system/netplan-ovs-cleanup\.service is marked world-inaccessible'
+        - 'MESSAGE container health_status .*health_status=healthy'
+        - 'MESSAGE ^(Starting|Finished) Generate homepage alerts panel static files'
+        - 'MESSAGE ^homepage_alerts\.service: Deactivated successfully'
+
+    - name: grep
+      match: audit
+      exclude: "log ^type=SERVICE_(START|STOP) msg=audit\\([0-9.]+:[0-9]+\\): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=[a-f0-9]{64}"
+
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
+        - 'SYSTEMD_UNIT ^speedtest\.service$'
+        - 'MESSAGE "(HEAD|GET) / HTTP/1\.1" 200 [0-9]+ "-" "curl/'
+
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
+        - 'SYSTEMD_UNIT ^profilarr\.service$'
+        - 'MESSAGE (Task Repository Sync \(ID: 1\) status changed to:|Updating remote status for branch:|Processing 0 incoming changes|apscheduler\.scheduler - DEBUG - (Looking for jobs to run|Next wakeup is due)|apscheduler\.executors\.default - INFO - (Running job|Job )|task_system - INFO - (Starting task: Repository Sync|Task Repository Sync completed successfully))'
+
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
+        - 'SYSTEMD_UNIT ^netdata\.service$'
+        - 'MESSAGE (^Failed to prepare statement SQL_SELECT_HEALTH_LOG|^Failed to execute ''DROP TABLE|^LISTENER: Cannot validate ''localhost'')'
+
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
+        - 'SYSTEMD_UNIT ^netdata\.service$'
+        - 'MESSAGE ^voltage sensor ''[^'']+'' transitioned from state'
+
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
+        - 'SYSTEMD_UNIT ^netdata\.service$'
+        - 'MESSAGE ^temperature sensor ''temperature_nct6798-isa-'
+
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
+        - 'SYSTEMD_UNIT ^tailscaled\.service$'
+        - 'MESSAGE (disco: failed to send ping .* sendto: destination address required|derp-[0-9]+ does not know about peer .* removing route)'
+
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
+        - 'SYSTEMD_UNIT ^hd-idle\.service$'
+        - 'MESSAGE ^probing sd[a-z]+: reads:'
+
+    - name: grep
+      match: nginx.access
+      exclude:
+        - 'log "homepage-alerts/1"'
+        - 'log "POST /api/v2/write\?'
+
+    - name: parser
+      match: nginx.access
+      key_name: log
+      parser: nginx_access_custom
+      reserve_data: true
+      preserve_key: true
+
+    # Services with header-aware grammars add their own multiline filter.
+    - name: multiline
+      match_regex: '^svc\.(?!(?:homeassistant|homepage)\.service$).*'
+      multiline.parser: python,go,java,ruby
+      multiline.key_content: MESSAGE
+      buffer: true
+      flush_ms: 1000
+      emitter_name: multiline_emitter
+      emitter_storage.type: filesystem

@@ -58,74 +58,13 @@
   tags:
     - authelia
 
-# Fluent Bit is part of the platform layer on prod and is installed explicitly
-# by this role's test setup. Authelia owns its application log format and keeps
-# the matching parser, normalizer, and reload trigger here.
-- name: Install authelia fluent-bit parser  # noqa: require-validate
-  copy:
-    src: fluentbit/parsers.conf
-    dest: /etc/fluent-bit/parsers.d/authelia.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: authelia_fluentbit_parser
-  become: true
-  tags:
-    - authelia
-
-- name: Install authelia fluent-bit filters  # noqa: require-validate
-  copy:
-    src: fluentbit/filters.conf
-    dest: /etc/fluent-bit/filters.d/50-authelia.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: authelia_fluentbit_filters
-  become: true
-  tags:
-    - authelia
-
-- name: Install authelia fluent-bit normalizer  # noqa: require-validate
-  copy:
-    src: fluentbit/normalize.lua
-    dest: /etc/fluent-bit/authelia_normalize.lua
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: authelia_fluentbit_normalizer
-  become: true
-  tags:
-    - authelia
-
-- name: Validate fluent-bit with authelia extensions
-  when:
-    - not ansible_check_mode
-    - >-
-      authelia_fluentbit_parser.changed or
-      authelia_fluentbit_filters.changed or
-      authelia_fluentbit_normalizer.changed
-  command: /opt/fluent-bit/bin/fluent-bit --config /etc/fluent-bit/fluent-bit.conf --dry-run
-  changed_when: false
-  become: true
-  tags:
-    - authelia
-
-- name: Reload fluent-bit for authelia extensions
+- name: Install authelia fluent-bit extension
   import_role:
-    name: systemd_unit
-    tasks_from: service
+    name: fluentbit
+    tasks_from: extension
   vars:
-    systemd_unit_args:
-      src: fluent-bit
-      condition: >-
-        {{ not ansible_check_mode and
-           (authelia_fluentbit_parser.changed or
-            authelia_fluentbit_filters.changed or
-            authelia_fluentbit_normalizer.changed) }}
-      reload: true
+    fluentbit_extension_args:
+      name: authelia
   tags:
     - authelia
 

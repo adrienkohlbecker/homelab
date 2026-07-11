@@ -1,0 +1,108 @@
+# {{ ansible_managed }}
+# Normalizes host logs into one JSON Lines stream for lnav.
+
+service:
+  flush: 5
+  log_level: warn
+  daemon: false
+  http_server: true
+  http_listen: 127.0.0.1
+  http_port: {{ service_ports.fluentbit }}
+  hot_reload: true
+  storage.path: /var/lib/fluent-bit/storage/
+  storage.sync: normal
+  storage.checksum: false
+  storage.metrics: true
+  storage.backlog.mem_limit: 5M
+  storage.backlog.flush_on_shutdown: true
+
+# Filters execute in include order. Service roles add literal includes to the
+# manifest so hot reload never depends on wildcard expansion.
+includes:
+  - /etc/fluent-bit/filters-pre.yaml
+  - /etc/fluent-bit/services.yaml
+  - /etc/fluent-bit/filters-post.yaml
+
+parsers:
+  - name: nginx_access_custom
+    format: regex
+    regex: '^(?<remote_addr>[^ ]+) - (?<remote_user>[^ ]+) \[(?<time_local>[^\]]+)\] (?<http_host>[^ ]+) "(?<method>\S+)(?: +(?<path>[^"]*?)(?: +(?<protocol>\S+))?)?" (?<server_name>[^ ]+) (?<status>\d{3}) (?<body_bytes_sent>\d+) (?<request_length>\d+) (?<request_time>[\d.]+) (?<upstream_response_time>[\d.]+|-) "(?<referer>[^"]*)" "(?<user_agent>[^"]*)" "(?<authelia_user>[^"]*)" "(?<authelia_groups>[^"]*)" (?<ssl_protocol>\S+) (?<ssl_cipher>\S+)$'
+    types: status:integer body_bytes_sent:integer request_length:integer request_time:float
+
+pipeline:
+  inputs:
+    # The cursor makes read_from_tail a first-install choice; subsequent starts
+    # resume from journal.db regardless of retained journal location.
+    - name: systemd
+      tag: svc.*
+      db: /var/lib/fluent-bit/journal.db
+      read_from_tail: true
+      strip_underscores: true
+      storage.type: filesystem
+      storage.pause_on_chunks_overlimit: true
+
+    - name: tail
+      tag: nginx.access
+      path: /var/log/nginx/access.log
+      db: /var/lib/fluent-bit/nginx-access.db
+      db.locking: true
+      path_key: filepath
+      read_from_head: false
+      skip_long_lines: true
+      skip_empty_lines: true
+      rotate_wait: 30
+      buffer_max_size: 256k
+      storage.type: filesystem
+      storage.pause_on_chunks_overlimit: true
+
+    - name: tail
+      tag: nginx.error
+      path: /var/log/nginx/error.log
+      db: /var/lib/fluent-bit/nginx-error.db
+      db.locking: true
+      path_key: filepath
+      read_from_head: false
+      skip_long_lines: true
+      skip_empty_lines: true
+      rotate_wait: 30
+      buffer_max_size: 256k
+      storage.type: filesystem
+      storage.pause_on_chunks_overlimit: true
+
+    # auditd is authoritative because journald's parallel audit subscription is
+    # disabled. Package transaction detail likewise exists only in these files.
+    - name: tail
+      tag: audit
+      path: /var/log/audit/audit.log
+      db: /var/lib/fluent-bit/audit.db
+      db.locking: true
+      path_key: filepath
+      read_from_head: false
+      skip_long_lines: true
+      skip_empty_lines: true
+      rotate_wait: 30
+      buffer_max_size: 256k
+      storage.type: filesystem
+      storage.pause_on_chunks_overlimit: true
+
+    - name: tail
+      tag: host_packages
+      path: /var/log/apt/*.log,/var/log/dpkg.log,/var/log/unattended-upgrades/*.log,/var/log/alternatives.log,/var/log/ubuntu-advantage.log,/var/log/ubuntu-advantage-apt-hook.log
+      db: /var/lib/fluent-bit/host_packages.db
+      db.locking: true
+      path_key: filepath
+      read_from_head: false
+      skip_long_lines: true
+      skip_empty_lines: true
+      rotate_wait: 30
+      buffer_max_size: 256k
+      storage.type: filesystem
+      storage.pause_on_chunks_overlimit: true
+
+  outputs:
+    - name: stdout
+      match: '*'
+      format: json_lines
+      json_date_key: time
+      json_date_format: iso8601
+      workers: 1

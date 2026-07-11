@@ -33,11 +33,11 @@
   stat:
     path: "{{ item }}"
   loop:
-    - /etc/fluent-bit/parsers.d
-    - /etc/fluent-bit/filters.d
-    - /etc/fluent-bit/parsers.d/00-base.conf
-    - /etc/fluent-bit/filters.d/00-base.conf
-    - /etc/fluent-bit/parsers_custom.conf
+    - /etc/fluent-bit/services
+    - /etc/fluent-bit/services.yaml
+    - /etc/fluent-bit/filters-pre.yaml
+    - /etc/fluent-bit/filters-post.yaml
+    - /etc/fluent-bit/fluent-bit.yaml
   register: _fluentbit_extension_scaffold
   become: true
 
