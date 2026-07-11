@@ -375,7 +375,7 @@
     fail_msg: >-
       Non-keepalived host rendered a VRRP accept rule; only hosts in
       dns_keepalived_peers should accept peer VRRP.
-  when: inventory_hostname not in dns_keepalived_peers
+  when: not (inventory_hostname in dns_keepalived_peers or qemu_test | default(false))
 
 - name: _verify_input | INPUT — VRRP rule renders with iifname + protocol scope
   vars:
@@ -399,7 +399,25 @@
     fail_msg: >-
       VRRP rule referencing counter `vrrp_accept` is missing
       iifname={{ default_interface }} or protocol=vrrp scope.
-  when: inventory_hostname in dns_keepalived_peers
+  when: inventory_hostname in dns_keepalived_peers or qemu_test | default(false)
+
+- name: _verify_input | DNS VIP silence rules retain their destination scope
+  vars:
+    input_vip_tcp_rule: "{{ _firewall_nft_ruleset_scope.stdout | nft_rule_by_counter('input_silenced_vip_tcp') }}"
+    input_vip_rule: "{{ _firewall_nft_ruleset_scope.stdout | nft_rule_by_counter('input_silenced_vip') }}"
+    forward_vip_rule: "{{ _firewall_nft_ruleset_scope.stdout | nft_rule_by_counter('forward_silenced_vip') }}"
+    input_vip_tcp_matches: "{{ input_vip_tcp_rule.expr | selectattr('match', 'defined') | map(attribute='match') | list }}"
+    input_vip_matches: "{{ input_vip_rule.expr | selectattr('match', 'defined') | map(attribute='match') | list }}"
+    forward_vip_matches: "{{ forward_vip_rule.expr | selectattr('match', 'defined') | map(attribute='match') | list }}"
+  assert:
+    that:
+      - (input_vip_tcp_matches | selectattr('left.payload', 'defined') | selectattr('left.payload.field', 'eq', 'daddr') | map(attribute='right') | first) == network.virtual_ips.dns
+      - (input_vip_matches | selectattr('left.payload', 'defined') | selectattr('left.payload.field', 'eq', 'daddr') | map(attribute='right') | first) == network.virtual_ips.dns
+      - (forward_vip_matches | selectattr('left.ct', 'defined') | selectattr('left.ct.key', 'eq', 'ip daddr') | selectattr('left.ct.dir', 'eq', 'original') | map(attribute='right') | first) == network.virtual_ips.dns
+    fail_msg: >-
+      DNS VIP silence rules must match the current INPUT destination or the
+      original FORWARD destination so unrelated vmac traffic stays observable.
+  when: inventory_hostname in dns_keepalived_peers or qemu_test | default(false)
 
 - name: _verify_input | INPUT — mDNS rendered rule keeps LAN iif/source/port scope
   vars:

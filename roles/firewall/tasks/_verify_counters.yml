@@ -138,6 +138,9 @@
     tailscale_underlay_pkts: "{{ nft_counters.tailscale_underlay_accept.packets }}"
     tailscale_lan_pkts: "{{ nft_counters.tailscale_lan_accept.packets }}"
     input_silenced_tailscale_pkts: "{{ nft_counters.input_silenced_tailscale.packets }}"
+    input_silenced_vip_tcp_pkts: "{{ nft_counters.input_silenced_vip_tcp.packets }}"
+    input_silenced_vip_pkts: "{{ nft_counters.input_silenced_vip.packets }}"
+    forward_silenced_vip_pkts: "{{ nft_counters.forward_silenced_vip.packets }}"
   assert:
     that:
       - input_nonsyn_pkts | int >= 1
@@ -170,6 +173,9 @@
       - tailscale_underlay_pkts | int >= 1
       - tailscale_lan_pkts | int >= 2  # two probes: wireguard-source + mac_mgmt path
       - input_silenced_tailscale_pkts | int >= 1  # udp dport tailscale_port from non-scope source
+      - input_silenced_vip_tcp_pkts | int >= 1
+      - input_silenced_vip_pkts | int >= 1
+      - forward_silenced_vip_pkts | int >= 1
     fail_msg: >-
       Counter-based probes didn't fire all expected rules: non-SYN
       (input/forward), podman direct cross-network isolation,

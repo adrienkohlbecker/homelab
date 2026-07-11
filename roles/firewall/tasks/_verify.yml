@@ -45,6 +45,10 @@
     _firewall_probe_podman: "{{ podman_default_network | ansible.utils.ipmath(250) }}"
     _firewall_probe_podman_pool: "{{ podman_bridge_pool | ansible.utils.ipmath(250) }}"
     _firewall_probe_tailscale: 100.64.99.2
+    _firewall_probe_untrusted_host: 203.0.113.1
+    _firewall_probe_untrusted_peer: 203.0.113.2
+    _firewall_probe_vrrp_host: 198.51.100.1
+    _firewall_probe_vrrp_peer: 198.51.100.2
     # Non-scope source: in-subnet on the netns veth (192.0.2.0/24, see
     # the topology header above) but outside any allowlisted saddr —
     # used by the OOS negative probes (samba, nut, mosh).

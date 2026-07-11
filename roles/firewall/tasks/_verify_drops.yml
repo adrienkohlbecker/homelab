@@ -101,13 +101,98 @@
   failed_when: false
   become: true
 
-# Tailscale disco silenced-noise — UDP to the tailscale underlay port from a
-# source outside @lan_admin_pairs (and not on the WAN iface) must land on the
-# tailscale silence rule, not the catch-all.
-- name: _verify_drops | Input — UDP to tailscale port from non-scope source hits the tailscale silenced-noise drop  # noqa: risky-shell-pipe
+# DNS VIP fallthrough during an AdGuard restart terminates on the vmac because
+# netavark's DNAT is temporarily absent. Exercise TCP and UDP separately: TCP
+# must preserve the fast-fail reset, while UDP is silently dropped.
+- name: _verify_drops | Input — TCP to the DNS VIP through the vmac hits the VIP reset rule
+  command: >
+    ip netns exec extns hping3 -S -p 853 -c 1 --quiet
+    --interface vrrp_ext {{ network.virtual_ips.dns }}
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify_drops | Input — UDP to the DNS VIP through the vmac hits the VIP drop rule
+  command:
+    argv:
+      - ip
+      - netns
+      - exec
+      - extns
+      - nc
+      - -u
+      - -w
+      - "1"
+      - -s
+      - "{{ _firewall_probe_vrrp_peer }}"
+      - "{{ network.virtual_ips.dns }}"
+      - "9999"
+    stdin: ping
+  changed_when: false
+  failed_when: false
+  become: true
+
+# Reproduce the stale-DNAT handoff shape: original destination is the DNS VIP,
+# but PREROUTING rewrites it to a peer reachable through wg0. The packet enters
+# on the vmac and reaches FORWARD without matching the earlier podman DNAT allow.
+- name: _verify_drops | Stage stale DNS VIP DNAT fixture
+  copy:
+    dest: /tmp/firewall_verify_vip_dnat.nft
+    mode: "0600"
+    content: |
+      add chain inet homelab firewall_verify_vip_dnat {
+          type nat hook prerouting priority -101; policy accept;
+      }
+      add rule inet homelab firewall_verify_vip_dnat \
+          iifname "vrrp.{{ dns_keepalived_vrid }}" \
+          ip daddr {{ network.virtual_ips.dns }} udp dport 12345 \
+          dnat ip to {{ _firewall_probe_nonscope }}
+  become: true
+
+- name: _verify_drops | Install stale DNS VIP DNAT fixture
+  command: nft -f /tmp/firewall_verify_vip_dnat.nft
+  changed_when: true
+  become: true
+
+- name: _verify_drops | Forward — stale DNS VIP DNAT through the vmac hits the VIP drop rule
+  command:
+    argv:
+      - ip
+      - netns
+      - exec
+      - extns
+      - nc
+      - -u
+      - -w
+      - "1"
+      - -s
+      - "{{ _firewall_probe_vrrp_peer }}"
+      - "{{ network.virtual_ips.dns }}"
+      - "12345"
+    stdin: ping
+  changed_when: false
+  failed_when: false
+  become: true
+
+# Tailscale disco silenced-noise — UDP from a representative untrusted zone
+# must land on the Tailscale silence rule rather than the catch-all.
+- name: _verify_drops | Input — UDP to tailscale port from untrusted zone hits the tailscale silenced-noise drop
   when: tailscale_wan_direct | default(false)
-  shell: echo ping | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 192.0.2.1 {{ tailscale_port }}
-  args: { executable: /bin/bash }
+  command:
+    argv:
+      - ip
+      - netns
+      - exec
+      - extns
+      - nc
+      - -u
+      - -w
+      - "1"
+      - -s
+      - "{{ _firewall_probe_untrusted_peer }}"
+      - "{{ _firewall_probe_untrusted_host }}"
+      - "{{ tailscale_port }}"
+    stdin: ping
   changed_when: false
   failed_when: false
   become: true
