@@ -603,9 +603,9 @@
       - "'already exists' in zfs_autobackup_verify_restore_refusal.stderr"
       - zfs_autobackup_verify_restore_marker.stdout == 'round-trip'
 
-# Functional check for the freshness dead-man switch: it must pass right
-# after the local backup runs above (every tagged dataset just got a fresh
-# @bak-), then flag a tagged dataset that has never been snapshotted.
+# Functional check for the freshness dead-man switch: cover a fresh fleet,
+# missing snapshots, deliberate retirement, the exact age boundary, and the
+# invalid state where no dataset remains protected.
 - name: _verify | Inspect zfs_backup_freshness.timer
   systemd:
     name: zfs_backup_freshness.timer
@@ -650,6 +650,112 @@
       freshness check did not flag the never-snapshotted dataset
       (rc={{ zfs_autobackup_verify_freshness_stale.rc }},
       stderr={{ zfs_autobackup_verify_freshness_stale.stderr }})
+
+- name: _verify | Retire the snapshot-free dataset from freshness monitoring
+  command:
+    argv:
+      - zfs
+      - set
+      - autobackup:bak=false
+      - rpool/zfs_autobackup_freshness_test
+  changed_when: true
+  become: true
+
+- name: _verify | Freshness check skips a deliberately retired dataset
+  command: /usr/local/bin/zfs_backup_freshness
+  changed_when: false
+  become: true
+
+- name: _verify | List currently enabled backup datasets
+  shell: |
+    set -euo pipefail
+    zfs get -t filesystem -H -o name,value autobackup:bak | awk -F '\t' '$2 == "true" {print $1}'
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: zfs_autobackup_verify_enabled_datasets
+  become: true
+
+- name: _verify | Disable every enabled tag except the boundary-test dataset
+  command:
+    argv:
+      - zfs
+      - set
+      - autobackup:bak=false
+      - "{{ item }}"
+  changed_when: true
+  when: item != 'rpool/zfs_autobackup_test'
+  loop: "{{ zfs_autobackup_verify_enabled_datasets.stdout_lines }}"
+  become: true
+
+- name: _verify | Read the boundary-test snapshot creation time
+  shell: |
+    set -euo pipefail
+    zfs list -t snapshot -H -p -o name,creation -s creation rpool/zfs_autobackup_test |
+      awk -F '\t' '$1 ~ /@bak-/ {c = $2} END {print c}'
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: zfs_autobackup_verify_boundary_creation
+  become: true
+
+- name: _verify | Snapshot exactly at the age limit is fresh
+  command: /usr/local/bin/zfs_backup_freshness
+  environment:
+    MAX_AGE_SECONDS: "0"
+    NOW_SECONDS: "{{ zfs_autobackup_verify_boundary_creation.stdout }}"
+  changed_when: false
+  become: true
+
+- name: _verify | Snapshot one second beyond the age limit is stale
+  command: /usr/local/bin/zfs_backup_freshness
+  environment:
+    MAX_AGE_SECONDS: "0"
+    NOW_SECONDS: "{{ zfs_autobackup_verify_boundary_creation.stdout | int + 1 }}"
+  changed_when: false
+  failed_when: false
+  register: zfs_autobackup_verify_boundary_stale
+  become: true
+
+- name: _verify | Age boundary produced the expected stale result
+  assert:
+    that:
+      - zfs_autobackup_verify_boundary_stale.rc != 0
+      - "'STALE: rpool/zfs_autobackup_test' in zfs_autobackup_verify_boundary_stale.stderr"
+
+- name: _verify | Disable the final enabled backup tag
+  command:
+    argv:
+      - zfs
+      - set
+      - autobackup:bak=false
+      - rpool/zfs_autobackup_test
+  changed_when: true
+  become: true
+
+- name: _verify | Freshness check rejects an empty protected set
+  command: /usr/local/bin/zfs_backup_freshness
+  changed_when: false
+  failed_when: false
+  register: zfs_autobackup_verify_no_enabled_datasets
+  become: true
+
+- name: _verify | Empty protected set failed loudly
+  assert:
+    that:
+      - zfs_autobackup_verify_no_enabled_datasets.rc != 0
+      - "'no datasets have autobackup:bak=true' in zfs_autobackup_verify_no_enabled_datasets.stderr"
+
+- name: _verify | Restore enabled backup tags
+  command:
+    argv:
+      - zfs
+      - set
+      - autobackup:bak=true
+      - "{{ item }}"
+  changed_when: true
+  loop: "{{ zfs_autobackup_verify_enabled_datasets.stdout_lines }}"
+  become: true
 
 - name: _verify | Drop the freshness-test dataset
   community.general.zfs:
