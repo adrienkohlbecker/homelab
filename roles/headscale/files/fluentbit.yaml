@@ -13,7 +13,14 @@ pipeline:
       parser: headscale_json
       reserve_data: true
       preserve_key: true
-    - name: lua
+    - name: modify
       match: svc.headscale.service
-      script: /etc/fluent-bit/headscale_normalize.lua
-      call: normalize_headscale
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists message
+        - key_exists level
+      hard_rename:
+        - message log
+        - level _level
+      remove: time
+      add: parser_status parsed
