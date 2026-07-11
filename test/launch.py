@@ -280,7 +280,12 @@ async def _run_async(
     with cancel_on_signal(task):
         async with m:
             _write_hostfwds(m, write_hostfwds)
-            await m.ensure_booted()
+            try:
+                await m.ensure_booted()
+            except (RuntimeError, TimeoutError) as exc:
+                print_line(f"Machine did not start: {exc}")
+                _dump_boot_console(m)
+                raise
             print_line("Booted")
             if wait_for_ssh:
                 try:
@@ -396,6 +401,10 @@ def main() -> int:
             virtfs=tuple(args.virtfs),
             foreground=args.foreground,
             display_window=args.display_window,
+            # Automated verify/seed runs have no display consumer. Keeping
+            # them off VNC also removes the port-selection race between
+            # parallel Packer post-processors on the shared builder.
+            headless=args.exit_after_ready or args.seed is not None,
             qmp_socket=args.qmp,
             commit_in_place=args.commit,
             extra_hostfwds=tuple(args.extra_hostfwds),

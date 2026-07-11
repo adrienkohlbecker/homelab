@@ -331,6 +331,7 @@ class LaunchOptions:
     virtfs: tuple[tuple[Path, str], ...] = ()
     foreground: bool = False
     display_window: bool = False
+    headless: bool = False
     qmp_socket: Path | None = None
     commit_in_place: bool = False
     extra_hostfwds: tuple[int, ...] = ()
@@ -518,6 +519,7 @@ class Machine:
         self._virtfs = list(launch.virtfs)
         self._foreground = launch.foreground
         self._display_window = launch.display_window
+        self._headless = launch.headless
         # commit_in_place: skip the qcow2-overlay step for the OS disks and
         # mount the image_dir's packer-ubuntu-N.<format> files as the qemu
         # drives directly. Writes during the run mutate those files in
@@ -899,7 +901,10 @@ class Machine:
         id_path = self.pid_file
         while not id_path.exists():
             if self.proc and self.proc.returncode is not None:
-                raise RuntimeError("Launching machine failed")
+                raise RuntimeError(
+                    f"Launching machine failed (qemu wrapper exited with {self.proc.returncode}); "
+                    f"see {self.boot_file}"
+                )
             if time.monotonic() > deadline:
                 raise TimeoutError(f"PID file {id_path} not created within {IDFILE_TIMEOUT}s")
             await sleep_tick()
@@ -1311,7 +1316,7 @@ class Machine:
             self._passt_socket_dir = tempfile.TemporaryDirectory(prefix="homelab-passt-", ignore_cleanup_errors=True)
             self._passt_socket = Path(self._passt_socket_dir.name) / "passt.sock"
 
-        if self.keep_vm and not self._display_window:
+        if self.keep_vm and not self._display_window and not self._headless:
             # qemu's vnc= syntax interprets the number as a display
             # (port = 5900+display); pick it up front so we can print it.
             self.vnc_display = self._pick_vnc_display()
@@ -1715,7 +1720,9 @@ class Machine:
         """
         accel = "hvf" if platform.system() == "Darwin" else "kvm"
 
-        if self.keep_vm:
+        if self._headless:
+            display_args = ["-display", "none"]
+        elif self.keep_vm:
             # q35 has std VGA + PS/2 keyboard by default but USB is opt-in
             # (machine flag usb=on, applied below); usb-tablet then attaches
             # to the built-in EHCI/UHCI for absolute-coordinate mouse.

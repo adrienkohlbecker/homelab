@@ -133,6 +133,18 @@ def test_keep_vm_display_window_uses_local_qemu_backend(
     assert not any(a.startswith("vnc=") for a in cmd)
 
 
+def test_keep_vm_headless_disables_display_devices(
+    machine_factory: Callable[..., machine.Machine],
+) -> None:
+    m = machine_factory(host_arch="x86_64", keep_vm=True, launch=machine.LaunchOptions(headless=True))
+    _setup(m)
+    cmd = m._boot_command()
+
+    assert cmd[cmd.index("-display") + 1] == "none"
+    assert "-k" not in cmd
+    assert "usb-tablet" not in cmd
+
+
 def test_keep_vm_aarch64_adds_full_input_stack(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:

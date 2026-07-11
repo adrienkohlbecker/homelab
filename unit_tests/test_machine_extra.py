@@ -1,10 +1,13 @@
 """Unit tests for machine.py functions not covered by existing test_*.py files."""
 
+import asyncio
 import fcntl
 import os
 import time
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import machine
 import matrix
@@ -198,6 +201,16 @@ class TestMachineUbuntuValidation:
     def test_unknown_ubuntu_raises(self, machine_factory: Callable[..., machine.Machine]) -> None:
         with pytest.raises(ValueError, match="Unknown Ubuntu release"):
             machine_factory(machine="box", role="test", ubuntu_name="bogus")
+
+
+def test_ensure_booted_reports_early_qemu_exit(
+    machine_factory: Callable[..., machine.Machine],
+) -> None:
+    m = machine_factory(machine="box", role="test")
+    m.proc = cast(asyncio.subprocess.Process, SimpleNamespace(returncode=1))
+
+    with pytest.raises(RuntimeError, match=r"qemu wrapper exited with 1.*box\.jammy\.test\.boot\.ansi"):
+        asyncio.run(m.ensure_booted())
 
 
 # ---------------------------------------------------------------------------
