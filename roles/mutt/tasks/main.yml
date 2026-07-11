@@ -162,6 +162,7 @@
     - mutt
 
 - name: Assert the getmail archive Maildir exists
+  when: not ansible_check_mode or _mutt_getmail_maildir.stat.exists
   assert:
     that:
       - _mutt_getmail_maildir.stat.exists
