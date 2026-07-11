@@ -14,7 +14,14 @@ pipeline:
       parser: influxdb_logfmt
       reserve_data: true
       preserve_key: true
-    - name: lua
+    - name: modify
       match: svc.influxdb.service
-      script: /etc/fluent-bit/influxdb_normalize.lua
-      call: normalize_influxdb
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists msg
+        - key_exists lvl
+      hard_rename:
+        - msg log
+        - lvl _level
+      remove: ts
+      add: parser_status parsed
