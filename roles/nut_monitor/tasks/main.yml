@@ -173,9 +173,8 @@
   tags:
     - nut_monitor
 
-# The unit's RemainAfterExit keeps it active after the boot run, so the
-# `start` here is a boot-behaviour no-op at converge instead of a
-# re-broadcast at peers the operator may have deliberately powered off.
+# Enable the unit for the next boot without waking peers during convergence;
+# the ONLINE event remains the live recovery path after a short outage.
 - name: Enable the boot-time peer wake
   when: nut_monitor_wake_peers | length > 0
   import_role:
@@ -185,7 +184,7 @@
     systemd_unit_args:
       src: nut_wake_peers
       condition: "{{ not (ansible_check_mode and nut_monitor_apt.changed) }}"
-      start: "{{ not qemu_test }}"
+      start: false
       restart: false
   tags:
     - nut_monitor
