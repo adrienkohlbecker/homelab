@@ -55,6 +55,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/homepage:/app/config:ro \
     --tz={{ system_timezone }} \
     --env HOMEPAGE_ALLOWED_HOSTS=homepage.{{ inventory_hostname }}.{{ domain }},localhost:{{ service_ports.homepage }},localhost:3000 \
+    --env LOG_TARGETS=stdout \
     --publish 127.0.0.1:{{ service_ports.homepage }}:3000/tcp \
     --health-cmd {{ "http://localhost:3000/api/healthcheck" | podman_health_wget }} \
     --health-startup-cmd {{ "http://localhost:3000/api/healthcheck" | podman_health_wget }} \

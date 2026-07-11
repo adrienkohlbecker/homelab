@@ -426,10 +426,10 @@
 # of the error type.
 [FILTER]
     Name              multiline
-    # Home Assistant supplies a service-owned multiline parser that joins its
-    # metadata header to the following traceback. Exclude that tag here: two
-    # multiline emitters on one stream can loop records through each other.
-    Match_Regex       ^svc\.(?!homeassistant\.service$).*
+    # Home Assistant and Homepage supply service-owned multiline parsers that
+    # join metadata headers to following stack frames. Exclude those tags here:
+    # two multiline emitters on one stream can loop records through each other.
+    Match_Regex       ^svc\.(?!(?:homeassistant|homepage)\.service$).*
     multiline.parser  python,go,java,ruby
     multiline.key_content  MESSAGE
     buffer            on

@@ -107,3 +107,86 @@
   delay: 2
   until: "'HomepageVerifySentinel' in _homepage_hotreload.content"
   become: true
+
+- name: _verify | Set unique Homepage log-normalization marker
+  set_fact:
+    _homepage_lnav_marker: "homepage-normalize-{{ ansible_date_time.epoch }}"
+
+# Write through the running container's PID 1 stderr so conmon sends the
+# representative colored Winston record through the real journald pipeline.
+- name: _verify | Emit colored multiline Homepage log record
+  command:
+    argv:
+      - podman
+      - exec
+      - homepage
+      - /bin/sh
+      - -c
+      - |
+        printf "[2026-07-11T21:00:00.000Z] \033[31merror\033[39m: <homepage.verify> Error: {{ _homepage_lnav_marker }}\n    at verify (/app/verify.js:7:1)\n    at async handler (/app/api.js:9:2)\n" > /proc/1/fd/2
+  changed_when: false
+  become: true
+
+- name: _verify | Wait for normalized Homepage records in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        marker = sys.argv[2]
+        expected = (
+            f"Error: {marker}\n"
+            "    at verify (/app/verify.js:7:1)\n"
+            "    at async handler (/app/api.js:9:2)"
+        )
+        parsed = False
+        startup = False
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if record.get("service") != "homepage":
+                    continue
+                fields = record.get("fields", {})
+                if marker in record.get("message", ""):
+                    forbidden = {
+                        "CMDLINE",
+                        "CONTAINER_ID_FULL",
+                        "CONTAINER_TAG",
+                        "PRIORITY",
+                        "SOURCE_REALTIME_TIMESTAMP",
+                        "SYSTEMD_UNIT",
+                        "homepage_level",
+                        "homepage_message",
+                        "homepage_source",
+                        "homepage_timestamp",
+                    }
+                    parsed = (
+                        record.get("level") == "error"
+                        and record.get("message") == expected
+                        and fields.get("source") == "homepage.verify"
+                        and fields.get("parser_status") == "parsed"
+                        and fields.get("CONTAINER_ID")
+                        and not forbidden.intersection(fields)
+                    )
+                if "Ready in" in record.get("message", ""):
+                    startup = (
+                        fields.get("parser_status") == "skipped"
+                        and fields.get("parser_reason") == "non_winston"
+                        and "PRIORITY" not in fields
+                        and "CONTAINER_TAG" not in fields
+                    )
+        sys.exit(0 if parsed and startup else 1)
+      - /var/log/fluent-bit/lnav.jsonl
+      - "{{ _homepage_lnav_marker }}"
+  register: _homepage_lnav_normalized
+  changed_when: false
+  retries: 30
+  delay: 1
+  until: _homepage_lnav_normalized.rc == 0
+  become: true
