@@ -1126,6 +1126,7 @@ class TestRenderChildPipeline:
         assert doc["podman:box:noble"]["variables"] == {"ROLE": "podman", "VARIANT": "box", "UBUNTU": "noble"}
         assert doc["nginx:box"]["extends"] == ".cell"
         assert "_site_test:box" not in doc
+        assert "_site_check:box" not in doc
         assert "no_cells" not in doc
 
     def test_cells_run_on_the_shell_qemu_runner(self) -> None:
@@ -1142,6 +1143,10 @@ class TestRenderChildPipeline:
         # runs uncontended off the role-cell pool.
         assert doc["_site_test:box"]["extends"] == ".cell"
         assert doc["_site_test:box"]["tags"] == ["aws-shell-qemu-site"]
+        # The check run stays on the ordinary cell pool by inheriting .cell's
+        # tag; only the resource-heavy converge needs the dedicated site pool.
+        assert doc["_site_check:box"]["extends"] == ".cell"
+        assert "tags" not in doc["_site_check:box"]
 
     def test_cells_auto_run_by_default(self) -> None:
         # Without SKIP_TEST_CELLS the cells carry no when:/allow_failure: -- they
@@ -1161,6 +1166,7 @@ class TestRenderChildPipeline:
         # Cells inherit it via extends: .cell -- they don't set their own.
         assert "when" not in doc["nginx:box"]
         assert "when" not in doc["_site_test:box"]
+        assert "when" not in doc["_site_check:box"]
 
     def test_no_cells_placeholder_stays_on_fox(self) -> None:
         # The placeholder carries no own tag, so it inherits the fox-docker-aws
@@ -1174,6 +1180,11 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(["nginx:box"], site_test=True)
         assert "_site_test:box" in doc
         assert doc["_site_test:box"]["timeout"] == "60m"
+        assert "_site_check:box" in doc
+        assert doc["_site_check:box"]["timeout"] == "35m"
+        script = "\n".join(doc["_site_check:box"]["script"])
+        assert "site_test.py --check --timeout 1800" in script
+        assert "timeout --kill-after=30s 1860" in script
         assert "no_cells" not in doc
 
     def test_site_test_seeded_first_in_leading_stage(self) -> None:
@@ -1185,6 +1196,7 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(["nginx:box", "podman:box:noble"], site_test=True)
         assert doc["stages"] == ["site", "test1", "test2"]
         assert doc["_site_test:box"]["stage"] == "site"
+        assert doc["_site_check:box"]["stage"] == "site"
         assert doc[".cell"]["needs"] == []
 
     def test_site_test_only_stage(self) -> None:
@@ -1192,12 +1204,14 @@ class TestRenderChildPipeline:
         doc = _render_child_doc([], site_test=True)
         assert doc["stages"] == ["site"]
         assert doc["_site_test:box"]["stage"] == "site"
+        assert doc["_site_check:box"]["stage"] == "site"
         assert "no_cells" not in doc
 
     def test_empty_gets_noop_placeholder(self) -> None:
         doc = _render_child_doc([], site_test=False)
         assert "no_cells" in doc
         assert "_site_test:box" not in doc
+        assert "_site_check:box" not in doc
         # No cell jobs beyond the scaffolding + placeholder.
         jobs = [k for k in doc if k not in ("default", "stages", ".cell")]
         assert jobs == ["no_cells"]
