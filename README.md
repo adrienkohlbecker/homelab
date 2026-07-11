@@ -67,9 +67,9 @@ mise run packer:build box           # one source (push CI's target)
 mise run packer:build --ubuntu noble
 
 # Test a single role end-to-end in QEMU
-test/testrole.py kuma                        # defaults to --machine box
-test/testrole.py zfs --machine lab --keep    # on-demand prod-shape regression
-test/testall.py --jobs 5            # full role × machine matrix
+mise run test:role -- kuma                        # defaults to --machine box
+mise run test:role -- zfs --machine lab --keep    # on-demand prod-shape regression
+mise run test:all -- --jobs 5            # full role × machine matrix
 
 # Lint / format
 mise run lint
