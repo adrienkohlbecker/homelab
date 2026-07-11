@@ -54,6 +54,9 @@ advanced:
   # records/day to HyperDX). The broker / bulb states are observable
   # via MQTT itself, so the per-publish stdout is pure noise.
   log_level: warning
+  # Journald already supplies the event envelope. JSON keeps the application
+  # level and message machine-readable and avoids ANSI bytes in MESSAGE.
+  log_console_json: true
   log_output:
     - console
   enable_external_js: false
