@@ -147,6 +147,37 @@
   failed_when: _adguard_verify_reboot_guard.status.ActiveState != 'active'
   become: true
 
+- name: _verify | Capture reboot guard journal cursor
+  command:
+    argv:
+      - journalctl
+      - --unit=adguard_reboot_guard.service
+      - --lines=0
+      - --show-cursor
+      - --no-pager
+  register: _adguard_verify_reboot_guard_cursor
+  changed_when: false
+  become: true
+
+# The guard waits 30 seconds for keepalived state changes. A timeout is an idle
+# poll, not follower failure; wait through one bounded cycle to catch a respawn.
+- name: _verify | Wait through one reboot guard idle poll
+  pause:
+    seconds: 32
+
+- name: _verify | Reboot guard keeps its journal follower across idle polls
+  command:
+    argv:
+      - journalctl
+      - --unit=adguard_reboot_guard.service
+      - "--after-cursor={{ _adguard_verify_reboot_guard_cursor.stdout | regex_replace('(?s)^.*-- cursor: ', '') | trim }}"
+      - --output=cat
+      - --no-pager
+  register: _adguard_verify_reboot_guard_idle_log
+  changed_when: false
+  failed_when: "'journal follower exited' in _adguard_verify_reboot_guard_idle_log.stdout"
+  become: true
+
 # Plain grep (not -q): it consumes all input so systemd-inhibit never
 # takes a SIGPIPE under pipefail, and the matching line lands in the
 # task output for debugging.
