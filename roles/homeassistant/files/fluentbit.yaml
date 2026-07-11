@@ -34,7 +34,16 @@ pipeline:
       parser: homeassistant_text
       reserve_data: true
       preserve_key: true
-    - name: lua
+    - name: modify
       match: svc.homeassistant.service
-      script: /etc/fluent-bit/homeassistant_normalize.lua
-      call: normalize_homeassistant
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists ha_message
+        - key_exists ha_level
+      hard_rename:
+        - ha_message log
+        - ha_level _level
+        - ha_thread thread
+        - ha_source source
+      remove: ha_timestamp
+      add: parser_status parsed
