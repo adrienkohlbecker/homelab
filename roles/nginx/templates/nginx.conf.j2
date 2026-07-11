@@ -67,6 +67,15 @@ http {
         default                            $request;
     }
 
+    # The same credential must not reach forward-auth in X-Original-URL or
+    # X-Forwarded-Uri: Authelia includes those URLs in its authorization logs.
+    # Preserve the path and other query parameters so the auth decision sees
+    # the same resource shape, replacing only the secret value.
+    map $request_uri $request_uri_safe {
+        "~*^(.*?[?&])apikey=[^&]*(.*)$"  "$1apikey=REDACTED$2";
+        default                           $request_uri;
+    }
+
     # Forward-auth unauthenticated-response mode. When the Authelia auth_request
     # subrequest 401s, the per-vhost @authelia_unauth handler (site.conf.j2)
     # redirects to the portal only for top-level navigations and returns a bare
