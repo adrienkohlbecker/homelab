@@ -162,8 +162,8 @@
 
 # Jellyfin logs "Loaded plugin: <Name> <Version>" (PluginManager.cs:604)
 # only for plugins whose targetAbi <= the running server version
-# (:702). A plugin pinned too new is skipped, not loaded -- so a matched
-# line is the proof the ABI pin in vars/main.yml is right, which a stat
+# (:702). A plugin pinned too new is skipped, not loaded -- so matching the
+# structured PluginName/PluginVersion fields proves the ABI pin is right; a stat
 # of the DLL on disk can't give. Logs come over the journald log-driver;
 # the container is the same instance from converge, so startup lines are
 # still readable.
@@ -173,17 +173,91 @@
   changed_when: false
   become: true
 
+- name: _verify | Assert jellyfin emits rendered compact JSON
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        for line in sys.stdin:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if (
+                record.get("JellyfinFormat") == "clef"
+                and isinstance(record.get("@t"), str)
+                and isinstance(record.get("@m"), str)
+            ):
+                sys.exit(0)
+        sys.exit(1)
+  args:
+    stdin: "{{ _jellyfin_jf_logs.stdout }}"
+  changed_when: false
+
+- name: _verify | Wait for normalized jellyfin record in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "jellyfin"
+                    and fields.get("parser_status") == "parsed"
+                    and fields.get("source")
+                    and "@t" not in fields
+                    and "@m" not in fields
+                    and "JellyfinFormat" not in fields
+                ):
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _jellyfin_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _jellyfin_lnav_record.rc == 0
+  become: true
+
 - name: _verify | Assert SSO plugin loaded (ABI-compatible)
-  assert:
-    that:
-      - >-
-        (_jellyfin_jf_logs.stdout ~ _jellyfin_jf_logs.stderr)
-        is search('Loaded plugin: SSO-Auth ' ~ jellyfin_sso_plugin_version)
-    fail_msg: >-
-      Jellyfin did not log loading SSO-Auth {{ jellyfin_sso_plugin_version }}.
-      The pin's targetAbi most likely exceeds the running Jellyfin -- check
-      jellyfin_sso_plugin_version in vars/main.yml against the server image
-      tag in jellyfin.service.j2.
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        expected = sys.argv[1]
+        for line in sys.stdin:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if (
+                record.get("PluginName") == "SSO-Auth"
+                and record.get("PluginVersion") == expected
+            ):
+                sys.exit(0)
+        sys.exit(1)
+      - "{{ jellyfin_sso_plugin_version }}"
+  args:
+    stdin: "{{ _jellyfin_jf_logs.stdout ~ _jellyfin_jf_logs.stderr }}"
+  changed_when: false
 
 - name: _verify | Read seeded branding.xml
   slurp:

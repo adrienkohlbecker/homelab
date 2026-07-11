@@ -71,6 +71,7 @@ local EXCLUDE_FROM_FIELDS = {
     log = true,
     severity_text = true,
     _level = true,
+    parse_error = true,
 }
 
 -- Tags whose tail input has a dedicated parser. Each parser sets a signature
@@ -117,9 +118,9 @@ function shape_lnav(tag, ts, record)
     -- `... WHERE parse_error IS NOT NULL`) and raise it to warn so a silently
     -- drifting parser is loud in the stream rather than blending into info. The
     -- raw line stays the message (Preserve_Key kept it under log).
-    local parse_error
+    local parse_error = record["parse_error"]
     local discriminant = PARSE_DISCRIMINANT[tag]
-    if discriminant ~= nil and record[discriminant.field] == nil then
+    if parse_error == nil and discriminant ~= nil and record[discriminant.field] == nil then
         parse_error = discriminant.parser
         level = "warn"
     end

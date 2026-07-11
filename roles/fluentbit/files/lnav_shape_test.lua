@@ -80,6 +80,20 @@ do
 end
 
 do
+    -- Service-owned parsers can mark malformed records before the common
+    -- shaper runs. Preserve that marker at the top level for easy querying,
+    -- but do not duplicate it under fields.
+    local rec = shape("svc.jellyfin.service", {
+        host = "lab",
+        log = "not json",
+        parse_error = "jellyfin_json",
+    }, "warn")
+    check("service_parser.parse_error", rec.parse_error, "jellyfin_json")
+    check("service_parser.fields.no_parse_error", rec.fields.parse_error, nil)
+    check("service_parser.level", rec.level, "warn")
+end
+
+do
     -- Parsed access record (fields set by the nginx_access_custom parser):
     -- parsed keys land in fields, status stays an integer, a 2xx keeps the
     -- pinned info level.

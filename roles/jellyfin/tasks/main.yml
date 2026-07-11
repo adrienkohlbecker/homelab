@@ -80,29 +80,114 @@
   tags:
     - jellyfin
 
-# Override jellyfin's default Serilog config to drop the Async-wrapped
+# Replace jellyfin's default Serilog config to drop the Async-wrapped
 # File sink (which writes /config/log/log_<date>.log -> host
-# /var/log/jellyfin/log_*.log). The Console sink still routes the same
-# records to container stdout, which podman's journald log-driver
-# ships to journald -> fluent-bit's systemd input -> HyperDX. Serilog's
-# user override replaces the WriteTo array wholesale; the rest of the
-# config (MinimumLevel, Enrich) matches the bundled logging.default.json
-# so they stay in sync if jellyfin ever changes a default. Per-transcode
+# /var/log/jellyfin/log_*.log). The Console sink emits rendered Compact Log
+# Event Format JSON to container stdout, which podman's journald log-driver
+# ships to journald and fluent-bit. Manage logging.default.json directly:
+# Microsoft configuration providers merge nested sink arguments, so a later
+# logging.json override cannot remove the default Console outputTemplate and
+# Serilog selects the plain-text overload instead of the formatter overload.
+# Per-transcode
 # FFmpeg.*.log files in /var/log/jellyfin are written by jellyfin core
 # (not Serilog) and are unaffected -- they're per-stream and not tailed
 # by fluent-bit either way.
-- name: Disable jellyfin Serilog File sink
+- name: Configure jellyfin structured console logging
   when: not (ansible_check_mode and jellyfin_user.changed)
   copy:
     src: logging.json
-    dest: /mnt/services/jellyfin/config/logging.json
+    dest: /mnt/services/jellyfin/config/logging.default.json
     owner: jellyfin
     group: media
     mode: "0644"
     backup: true
     validate: python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "%s"
+  register: jellyfin_logging_default_json
+  become: true
+  tags:
+    - jellyfin
+
+- name: Remove jellyfin logging system override
+  file:
+    path: /mnt/services/jellyfin/config/logging.json
+    state: absent
   register: jellyfin_logging_json
   become: true
+  tags:
+    - jellyfin
+
+# The observability platform runs before service roles in site.yml and exposes
+# parsers.d/filters.d extension points. Jellyfin owns its format, parser, and
+# normalizer together; installing them here avoids teaching the fluentbit role
+# about an application that only runs on lab/box.
+- name: Install jellyfin fluent-bit parser
+  copy:
+    src: fluentbit/parsers.conf
+    dest: /etc/fluent-bit/parsers.d/jellyfin.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: grep -q '^    Name    jellyfin_clef$' %s
+  register: jellyfin_fluentbit_parser
+  become: true
+  tags:
+    - jellyfin
+
+- name: Install jellyfin fluent-bit filters
+  copy:
+    src: fluentbit/filters.conf
+    dest: /etc/fluent-bit/filters.d/50-jellyfin.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: grep -q '^    Match   svc.jellyfin.service$' %s
+  register: jellyfin_fluentbit_filters
+  become: true
+  tags:
+    - jellyfin
+
+- name: Install jellyfin fluent-bit normalizer
+  copy:
+    src: fluentbit/normalize.lua
+    dest: /etc/fluent-bit/jellyfin_normalize.lua
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: grep -q '^function normalize_jellyfin' %s
+  register: jellyfin_fluentbit_normalizer
+  become: true
+  tags:
+    - jellyfin
+
+- name: Validate fluent-bit with jellyfin extensions
+  when:
+    - not ansible_check_mode
+    - >-
+      jellyfin_fluentbit_parser.changed or
+      jellyfin_fluentbit_filters.changed or
+      jellyfin_fluentbit_normalizer.changed
+  command: /opt/fluent-bit/bin/fluent-bit --config /etc/fluent-bit/fluent-bit.conf --dry-run
+  changed_when: false
+  become: true
+  tags:
+    - jellyfin
+
+- name: Reload fluent-bit for jellyfin extensions
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: fluent-bit
+      condition: >-
+        {{ not ansible_check_mode and
+           (jellyfin_fluentbit_parser.changed or
+            jellyfin_fluentbit_filters.changed or
+            jellyfin_fluentbit_normalizer.changed) }}
+      reload: true
   tags:
     - jellyfin
 
@@ -350,6 +435,7 @@
         {{ jellyfin_service_result.changed
            or jellyfin_user.changed
            or media_group.changed
+           or jellyfin_logging_default_json.changed | default(false)
            or jellyfin_logging_json.changed | default(false)
            or jellyfin_sso_extract.changed | default(false)
            or jellyfin_branding.changed | default(false)

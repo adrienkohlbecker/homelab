@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Run the fluent-bit Lua filter unit tests (parser, severity, otlp-shape, csp)"
+#MISE description="Run Fluent Bit Lua filter unit tests"
 set -euo pipefail
 
 # The Lua filters run inside fluent-bit's embedded interpreter on lab, which
@@ -14,9 +14,10 @@ if [[ -z "$lua" ]]; then
   exit 0
 fi
 
-# Each filter has a sibling <name>_test.lua; run them all, fail if any fails.
+# Each filter has a sibling <name>_test.lua. Core filters live in the Fluent Bit
+# role; service-owned filters live under the owning role's fluentbit directory.
 rc=0
-for t in roles/fluentbit/files/*_test.lua; do
+for t in roles/fluentbit/files/*_test.lua roles/*/files/fluentbit/*_test.lua; do
   echo "== $t =="
   "$lua" "$t" || rc=1
 done

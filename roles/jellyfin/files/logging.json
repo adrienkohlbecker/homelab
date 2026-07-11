@@ -1,5 +1,6 @@
 {
     "Serilog": {
+        "Using": [ "Serilog.Formatting.Compact" ],
         "MinimumLevel": {
             "Default": "Information",
             "Override": {
@@ -11,10 +12,13 @@
             {
                 "Name": "Console",
                 "Args": {
-                    "outputTemplate": "[{Timestamp:HH:mm:ss}] [{Level:u3}] [{ThreadId}] {SourceContext}: {Message:lj}{NewLine}{Exception}"
+                    "formatter": "Serilog.Formatting.Compact.RenderedCompactJsonFormatter, Serilog.Formatting.Compact"
                 }
             }
         ],
-        "Enrich": [ "FromLogContext", "WithThreadId" ]
+        "Enrich": [ "FromLogContext", "WithThreadId" ],
+        "Properties": {
+            "JellyfinFormat": "clef"
+        }
     }
 }

@@ -41,6 +41,8 @@
       "/fields/CONTAINER_NAME": { "kind": "string", "hidden": true },
       "/fields/SYSTEMD_UNIT": { "kind": "string", "hidden": true },
       "/fields/SYSLOG_IDENTIFIER": { "kind": "string", "hidden": true },
+      "/fields/parser_status": { "kind": "string", "identifier": true, "hidden": true },
+      "/fields/parser_reason": { "kind": "string", "identifier": true, "hidden": true },
       "/fields/method": { "kind": "string", "identifier": true },
       "/fields/path": { "kind": "string" },
       "/fields/status": { "kind": "integer" },

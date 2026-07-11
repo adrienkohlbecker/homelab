@@ -13,6 +13,11 @@ globals:
       - type: any
       - type: any
       - type: any
+  normalize_jellyfin:
+    args:
+      - type: any
+      - type: any
+      - type: any
   strip_ansi:
     args:
       - type: any
