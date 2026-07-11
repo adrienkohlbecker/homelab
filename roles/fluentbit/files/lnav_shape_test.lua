@@ -147,7 +147,7 @@ end
 do
     local rec = shape("host_packages", { host = "lab", log = "updated\npackage", severity_text = "debug" }, nil)
     check("fallback.level", rec.level, "info")
-    check("scrub.message", rec.message, "updated package")
+    check("preserve.message_newline", rec.message, "updated\npackage")
     check("fields.no_severity_text", rec.fields.severity_text, nil)
 end
 

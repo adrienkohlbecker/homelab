@@ -15,6 +15,16 @@ local function scrub(value)
     return value:gsub("[%c]", " ")
 end
 
+local function scrub_message(value)
+    if type(value) ~= "string" then
+        return value
+    end
+    -- JSON Lines escapes LF inside the encoded string, so preserving it keeps
+    -- a traceback in one physical JSONL record while lnav can render its frames
+    -- on separate lines. Strip the other controls that can corrupt a terminal.
+    return value:gsub("\r\n", "\n"):gsub("\r", "\n"):gsub("[%z\1-\9\11\12\14-\31\127]", " ")
+end
+
 local function service_from_tag(tag, record)
     local svc
     if string.sub(tag, 1, 4) == "svc." then
@@ -138,7 +148,7 @@ function shape_lnav(tag, ts, record)
         unit = scrub(unit),
         identifier = scrub(identifier),
         level = scrub(level),
-        message = scrub(record["log"] or ""),
+        message = scrub_message(record["log"] or ""),
         stream = scrub(stream_from_tag(tag)),
         fields = fields,
     }

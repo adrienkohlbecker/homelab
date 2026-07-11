@@ -8,6 +8,10 @@
     name: test
     tasks_from: nginx
 
+- name: _setup | Install fluent-bit
+  import_role:
+    name: fluentbit
+
 - name: _setup | Create dummy iot interface
   # The role's macvlan network uses `iot` as its parent. Production hosts
   # have a real iot VLAN; test environments don't, so stand up a dummy

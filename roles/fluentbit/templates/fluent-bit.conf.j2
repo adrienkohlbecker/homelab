@@ -426,7 +426,10 @@
 # of the error type.
 [FILTER]
     Name              multiline
-    Match             svc.*
+    # Home Assistant supplies a service-owned multiline parser that joins its
+    # metadata header to the following traceback. Exclude that tag here: two
+    # multiline emitters on one stream can loop records through each other.
+    Match_Regex       ^svc\.(?!homeassistant\.service$).*
     multiline.parser  python,go,java,ruby
     multiline.key_content  MESSAGE
     buffer            on
@@ -454,6 +457,8 @@
 # Service-specific filters run after all inputs share the `log` key but before
 # generic ANSI stripping and severity inference. Files are tag-scoped and
 # independent, so wildcard include ordering does not affect their behaviour.
+# A role that owns a multiline grammar must also be excluded from the generic
+# multiline filter above so only one emitter processes its tag.
 @INCLUDE /etc/fluent-bit/filters.d/*.conf
 
 # Strip ANSI escape sequences (colour/SGR codes, cursor moves) from the

@@ -48,6 +48,92 @@
   failed_when: '"Invalid config" in _homeassistant_notify_config.stdout'
   become: true
 
+- name: _verify | Create unique homeassistant fluent-bit markers
+  set_fact:
+    homeassistant_lnav_warning_marker: "verify_ha_warn_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    homeassistant_lnav_error_marker: "verify_ha_error_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+# Write through PID 1's stderr so conmon records these exactly like Home
+# Assistant logger output. `podman exec` stderr itself is attached to Ansible
+# and would bypass the container's journald log driver.
+- name: _verify | Emit representative homeassistant logger records
+  command:
+    argv:
+      - podman
+      - exec
+      - homeassistant
+      - /bin/sh
+      - -c
+      - >-
+        printf "%s\n" "2099-01-02 03:04:05.678 WARNING (MainThread)
+        [homeassistant.verify] {{ homeassistant_lnav_warning_marker }}"
+        "2099-01-02 03:04:06.789 ERROR (SyncWorker_0)
+        [homeassistant.verify] {{ homeassistant_lnav_error_marker }}"
+        "Traceback (most recent call last):"
+        "  File \"verify.py\", line 7, in run"
+        "RuntimeError: {{ homeassistant_lnav_error_marker }}"
+        > /proc/1/fd/2
+  changed_when: false
+  become: true
+
+- name: _verify | Wait for normalized homeassistant records in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        expected = {
+            sys.argv[2]: ("warn", "MainThread"),
+            (
+                f"{sys.argv[3]}\n"
+                "Traceback (most recent call last):\n"
+                '  File "verify.py", line 7, in run\n'
+                f"RuntimeError: {sys.argv[3]}"
+            ): ("error", "SyncWorker_0"),
+        }
+        found = {}
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                message = record.get("message")
+                if message not in expected:
+                    continue
+                fields = record.get("fields", {})
+                found[message] = (
+                    record.get("service") == "homeassistant"
+                    and record.get("unit") == "homeassistant.service"
+                    and record.get("level") == expected[message][0]
+                    and fields.get("thread") == expected[message][1]
+                    and fields.get("source") == "homeassistant.verify"
+                    and fields.get("parser_status") == "parsed"
+                    and fields.get("CONTAINER_ID")
+                    and "ha_timestamp" not in fields
+                    and "CONTAINER_TAG" not in fields
+                    and "CONTAINER_ID_FULL" not in fields
+                    and "CMDLINE" not in fields
+                    and "PRIORITY" not in fields
+                    and "SYSTEMD_UNIT" not in fields
+                )
+        if all(found.get(message) for message in expected):
+            print(json.dumps(found, sort_keys=True))
+            sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+      - "{{ homeassistant_lnav_warning_marker }}"
+      - "{{ homeassistant_lnav_error_marker }}"
+  register: _homeassistant_lnav_records
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _homeassistant_lnav_records.rc == 0
+  become: true
+
 # Functional probe of HA itself. /manifest.json is the same endpoint
 # the unit's --health-cmd polls, so a 200 here proves the container
 # is serving on the published port -- not just that systemd called it
