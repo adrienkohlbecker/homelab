@@ -84,6 +84,41 @@
   delay: 2
   changed_when: false
 
+- name: _verify | Wait for cleaned mosquitto listener record in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "mosquitto"
+                    and record.get("message") == "Opening ipv4 listen socket on port 1883."
+                    and "CONTAINER_TAG" not in fields
+                    and "PRIORITY" not in fields
+                    and "event" not in fields
+                    and "port" not in fields
+                ):
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _mosquitto_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _mosquitto_lnav_record.rc == 0
+  become: true
+
 # Clear the retained test messages so a re-run against a --keep VM starts clean.
 - name: _verify | Clear retained test messages
   shell: |
