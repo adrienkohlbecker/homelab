@@ -124,43 +124,32 @@
   failed_when: >-
     z2m_verify_unit.status.UnitFileState != 'enabled'
 
-# Exercise Fluent Bit's JSON parser and the Lua postprocessor together. The
-# dummy input makes this independent of the unavailable Zigbee coordinator in
-# QEMU while still running the same deployed parser and filter code as prod.
+# The dummy input makes this independent of the unavailable Zigbee coordinator
+# in QEMU while exercising the deployed service extension and shared shaper.
 - name: _verify | Write fluent-bit pipeline fixture
   copy:
-    dest: /tmp/z2m-fluent-bit-pipeline.conf
+    dest: /tmp/z2m-fluent-bit-pipeline.yaml
     mode: "0644"
     content: |
-      [SERVICE]
-          Flush         1
-          Log_Level     error
-          Parsers_File  /etc/fluent-bit/parsers.d/z2m.conf
+      service:
+        flush: 1
+        log_level: error
 
-      [INPUT]
-          Name     dummy
-          Tag      svc.z2m.service
-          Dummy    {"log":"{\"level\":\"warning\",\"message\":\"z2m: Failed to ping test/device\",\"timestamp\":\"2026-07-11 12:00:00\"}","CONTAINER_TAG":"z2m","CONTAINER_ID":"123456789abc","CONTAINER_ID_FULL":"123456789abcdef0","PRIORITY":"6"}
-          Samples  1
+      includes:
+        - /etc/fluent-bit/services/z2m.yaml
+        - /etc/fluent-bit/filters-post.yaml
 
-      [FILTER]
-          Name          parser
-          Match         svc.z2m.service
-          Key_Name      log
-          Parser        z2m_json
-          Reserve_Data  On
-          Preserve_Key  On
+      pipeline:
+        inputs:
+          - name: dummy
+            tag: svc.z2m.service
+            dummy: '{"MESSAGE":"{\"level\":\"warning\",\"message\":\"z2m: Failed to ping test/device\",\"timestamp\":\"2026-07-11 12:00:00\"}","CONTAINER_TAG":"z2m","CONTAINER_ID":"123456789abc","CONTAINER_ID_FULL":"123456789abcdef0","PRIORITY":"6"}'
+            samples: 1
 
-      [FILTER]
-          Name    lua
-          Match   svc.z2m.service
-          script  /etc/fluent-bit/z2m_normalize.lua
-          call    normalize_z2m
-
-      [OUTPUT]
-          Name    stdout
-          Match   *
-          Format  json_lines
+        outputs:
+          - name: stdout
+            match: '*'
+            format: json_lines
   become: true
 
 - name: _verify | Run fluent-bit pipeline fixture
@@ -171,7 +160,7 @@
       - "4"
       - /opt/fluent-bit/bin/fluent-bit
       - --config
-      - /tmp/z2m-fluent-bit-pipeline.conf
+      - /tmp/z2m-fluent-bit-pipeline.yaml
   register: z2m_verify_fluentbit_pipeline
   changed_when: false
   failed_when: z2m_verify_fluentbit_pipeline.rc not in [0, 124]
@@ -195,20 +184,22 @@
 
         assert len(records) == 1, records
         record = records[0]
-        assert record["log"] == "Failed to ping test/device", record
-        assert record["_level"] == "warn", record
-        assert record["namespace"] == "z2m", record
-        assert record["parser_status"] == "parsed", record
-        assert record["CONTAINER_ID"] == "123456789abc", record
+        assert record["message"] == "Failed to ping test/device", record
+        assert record["level"] == "warn", record
+        assert record["service"] == "z2m", record
+        fields = record["fields"]
+        assert fields["namespace"] == "z2m", record
+        assert fields["parser_status"] == "parsed", record
+        assert fields["CONTAINER_ID"] == "123456789abc", record
         for key in ("timestamp", "level", "message", "CONTAINER_TAG", "CONTAINER_ID_FULL", "PRIORITY"):
-            assert key not in record, record
+            assert key not in fields, record
   args:
     stdin: "{{ z2m_verify_fluentbit_pipeline.stdout }}"
   changed_when: false
 
 - name: _verify | Remove fluent-bit pipeline fixture
   file:
-    path: /tmp/z2m-fluent-bit-pipeline.conf
+    path: /tmp/z2m-fluent-bit-pipeline.yaml
     state: absent
   become: true
 

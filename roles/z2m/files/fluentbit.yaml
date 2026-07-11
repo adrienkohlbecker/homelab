@@ -1,6 +1,9 @@
 parsers:
   - name: z2m_json
     format: json
+  - name: z2m_message
+    format: regex
+    regex: '/^(?<z2m_namespace>[[:alnum:]_:-]+):[[:space:]]+(?<z2m_message>.*)$/m'
 
 pipeline:
   filters:
@@ -13,7 +16,24 @@ pipeline:
       parser: z2m_json
       reserve_data: true
       preserve_key: true
-    - name: lua
+    - name: parser
       match: svc.z2m.service
-      script: /etc/fluent-bit/z2m_normalize.lua
-      call: normalize_z2m
+      key_name: message
+      parser: z2m_message
+      reserve_data: true
+      preserve_key: true
+    - name: modify
+      match: svc.z2m.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists z2m_message
+        - key_exists level
+      hard_rename:
+        - z2m_message log
+        - z2m_namespace namespace
+        - level _level
+      rename: stack exception
+      remove:
+        - message
+        - timestamp
+      add: parser_status parsed
