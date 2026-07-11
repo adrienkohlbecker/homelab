@@ -11,10 +11,45 @@
 # override_nftables.conf is on the exercised path; a regression
 # (typo, removal, wrong target) surfaces here instead of silently
 # leaving operator `systemctl reload` no-op'd.
+- name: _verify_lifecycle | Read wg0 flowtable unit invocation before reload
+  systemd:
+    name: wg0_flowtable.service
+  register: _firewall_flowtable_invocation_before_reload
+  become: true
+
+- name: _verify_lifecycle | Inspect flowtable devices before reload
+  command: nft list flowtable inet homelab bulk
+  register: _firewall_flowtable_before_reload
+  changed_when: false
+  failed_when:
+    - default_interface not in _firewall_flowtable_before_reload.stdout
+      or 'wg0' not in _firewall_flowtable_before_reload.stdout
+  become: true
+
 - name: _verify_lifecycle | Re-apply nftables ruleset via systemctl reload (must not disturb netavark)
   systemd:
     name: nftables.service
     state: reloaded
+  become: true
+
+- name: _verify_lifecycle | Wait for reload to re-run wg0 flowtable attachment
+  systemd:
+    name: wg0_flowtable.service
+  register: _firewall_flowtable_invocation_after_reload
+  until:
+    - _firewall_flowtable_invocation_after_reload.status.InvocationID | length > 0
+    - _firewall_flowtable_invocation_after_reload.status.InvocationID != _firewall_flowtable_invocation_before_reload.status.InvocationID
+  retries: 20
+  delay: 1
+  become: true
+
+- name: _verify_lifecycle | Inspect flowtable devices after reload
+  command: nft list flowtable inet homelab bulk
+  register: _firewall_flowtable_after_reload
+  changed_when: false
+  failed_when:
+    - default_interface not in _firewall_flowtable_after_reload.stdout
+      or 'wg0' not in _firewall_flowtable_after_reload.stdout
   become: true
 
 - name: _verify_lifecycle | FORWARD/DNAT after re-apply — published 32400 still reachable
