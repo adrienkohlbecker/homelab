@@ -40,7 +40,11 @@ server:
 
 log:
   level: 'info'
-  format: 'text'
+  # Journald already supplies the transport envelope. JSON keeps Authelia's
+  # method, path, remote_ip, error, and flow metadata machine-readable on
+  # stdout so the service-owned Fluent Bit normalizer can remove only the
+  # duplicate timestamp and severity fields.
+  format: 'json'
 
 totp:
   disable: false

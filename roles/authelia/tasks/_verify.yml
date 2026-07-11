@@ -74,6 +74,89 @@
     status_code: 401
   become: true
 
+- name: _verify | Read recent authelia container stdout
+  command:
+    argv:
+      - journalctl
+      - -u
+      - authelia.service
+      - -n
+      - "200"
+      - -o
+      - cat
+      - --no-pager
+  register: authelia_verify_journal
+  changed_when: false
+  become: true
+
+- name: _verify | Authelia stdout is structured JSON
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        for line in sys.stdin:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if (
+                record.get("level") == "info"
+                and record.get("method") == "GET"
+                and record.get("path") == "/api/authz/auth-request"
+                and record.get("remote_ip")
+                and isinstance(record.get("msg"), str)
+                and isinstance(record.get("time"), str)
+            ):
+                sys.exit(0)
+        sys.exit(1)
+  args:
+    stdin: "{{ authelia_verify_journal.stdout }}"
+  changed_when: false
+
+- name: _verify | Wait for normalized authelia record in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "authelia"
+                    and record.get("level") == "info"
+                    and fields.get("parser_status") == "parsed"
+                    and fields.get("method") == "GET"
+                    and fields.get("path") == "/api/authz/auth-request"
+                    and fields.get("remote_ip")
+                    and "time" not in fields
+                    and "level" not in fields
+                    and "msg" not in fields
+                    and "CONTAINER_TAG" not in fields
+                    and "PRIORITY" not in fields
+                ):
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: authelia_verify_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: authelia_verify_lnav_record.rc == 0
+  become: true
+
 # OIDC discovery endpoint. Asserts the identity_providers.oidc block
 # in configuration.yml.j2 parsed, the JWKS loaded the RSA private
 # key, and the HMAC secret env var was wired through. A
