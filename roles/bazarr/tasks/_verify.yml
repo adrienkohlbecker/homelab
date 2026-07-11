@@ -27,6 +27,47 @@
   until: _bazarr_http.status == 200
   failed_when: (_bazarr_http.json.data | default({})) | length == 0
 
+- name: _verify | Wait for normalized bazarr record in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "bazarr"
+                    and fields.get("parser_status") == "parsed"
+                    and fields.get("logger")
+                    and fields.get("thread_id")
+                    and fields.get("source")
+                    and isinstance(fields.get("source_line"), int)
+                    and record.get("level") in {"debug", "info", "warn", "error", "fatal"}
+                    and not record.get("message", "").startswith("20")
+                    and "bazarr_time" not in fields
+                    and "bazarr_level" not in fields
+                    and "CONTAINER_TAG" not in fields
+                    and "PRIORITY" not in fields
+                ):
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _bazarr_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _bazarr_lnav_record.rc == 0
+  become: true
+
 # The vhost is `auth: required`, so the real browser access pattern is an
 # Authelia-gated UI -- the API path above is reached intra-stack via
 # bazarr.dns.podman with X-API-KEY, bypassing nginx entirely. With the

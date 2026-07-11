@@ -13,6 +13,10 @@
     name: podman
     tasks_from: install
 
+- name: _setup | Install fluent-bit for container-log normalization
+  import_role:
+    name: fluentbit
+
 - name: _setup | Create media podman network
   import_role:
     name: media

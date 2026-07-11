@@ -13,6 +13,11 @@ globals:
       - type: any
       - type: any
       - type: any
+  normalize_bazarr:
+    args:
+      - type: any
+      - type: any
+      - type: any
   normalize_jellyfin:
     args:
       - type: any
