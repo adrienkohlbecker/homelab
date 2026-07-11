@@ -212,7 +212,7 @@ SSH to `lab`/`pug`/`bunk` for diagnostics, including service logs, is pre-author
 
 ### Test environment design
 
-Details in [notes/test_environment_design.md](notes/test_environment_design.md). **Packer images exist only for qemu test fixtures** — prod hosts are configured by ansible from stock Ubuntu. Variants: `minimal` (cloud ext4), `box` (single-disk rpool, default CI fixture), `box_deps` (box + pre-baked podman/nginx, opt-in via `machines: {box_deps:}` in `meta/test.yml`, saves ~140s/test), `pug`/`lab` (on-demand/nightly). `box_deps` rebuild: `mise run packer:seed-deps --ubuntu <codename>` after every `packer:build box`.
+Details in [notes/test_environment_design.md](notes/test_environment_design.md). **Packer images exist only for qemu test fixtures** — prod hosts are configured by ansible from stock Ubuntu. Variants: `minimal` (cloud ext4), `box` (single-disk rpool, default CI fixture), `box_deps` (box + pre-baked podman/nginx/fluent-bit, opt-in via `machines: {box_deps:}` in `meta/test.yml`, saves repeated dependency installs), `pug`/`lab` (on-demand/nightly). `box_deps` rebuild: `mise run packer:seed-deps --ubuntu <codename>` after every `packer:build box`.
 
 ## Continuous Integration
 

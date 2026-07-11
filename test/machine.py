@@ -277,7 +277,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         inventory_host="box",
         # box_deps: same disks/inventory as box (incl. the second `zee`
         # disk), but the packer build pre-bakes podman (with the noble
-        # backports applied) and nginx + snakeoil cert via
+        # backports applied), nginx + snakeoil cert, and fluent-bit via
         # packer/seed_deps.yml. Roles opt in via roles/<role>/meta/test.yml's
         # `machine: box_deps`. Reuses host_vars/box.yml because
         # inventory_host stays box.

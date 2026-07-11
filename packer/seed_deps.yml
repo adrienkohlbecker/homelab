@@ -1,7 +1,7 @@
 # Bake the heavy cross-cutting test deps (podman + noble backports,
-# nginx + snakeoil certs) into the box_deps variant image so role
+# nginx + snakeoil certs, and fluent-bit) into the box_deps variant image so role
 # tests that opt in via roles/<role>/meta/test.yml skip the ~140s of
-# backports-upgrade + ~50s of podman+nginx install every _setup.yml
+# backports-upgrade + podman/nginx/fluent-bit install every _setup.yml
 # hook pays today. Invoked by qemu.pkr.hcl's seed-deps post-processor,
 # which boots the freshly-built image, runs this playbook against it,
 # and shuts it down cleanly so the shipped artifacts carry the deps.
@@ -44,6 +44,10 @@
       import_role:
         name: test
         tasks_from: nginx
+
+    - name: Install fluent-bit
+      import_role:
+        name: fluentbit
 
     # Everything above wrote its apt sources through the lab Nexus: test
     # hosts set nexus_url, and the bake needs Nexus because external egress

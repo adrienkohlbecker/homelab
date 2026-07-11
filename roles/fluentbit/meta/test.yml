@@ -1,5 +1,0 @@
-# _setup.yml imports test/nginx + logrotate directly. Both prerequisites are
-# pre-baked in box_deps via packer/seed_deps.yml, saving the same package
-# install work seen on every other consumer.
-machines:
-  box_deps:
