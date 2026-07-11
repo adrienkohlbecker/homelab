@@ -1,0 +1,4 @@
+# The role deliberately diverges by release: jammy installs the HWE kernel and
+# thermald power-group workaround, while noble removes the rolling HWE package.
+ubuntu:
+  - noble

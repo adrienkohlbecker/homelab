@@ -3,7 +3,7 @@
 # the HWE meta-package to its release-correct end state -- present on jammy
 # (the 6.8 install ran), absent on noble (the rolling-HWE removal ran);
 # neither is a tautology since _setup flipped it -- and (2) the power group
-# workaround for thermald's dbus policy is in place.
+# workaround for jammy thermald's dbus policy is in place.
 #
 # No reboot-required sentinel check: on jammy converge's own "Reboot machine
 # under new kernel" task fires (the HWE install is a change), and /var/run is
@@ -47,11 +47,13 @@
   when: ansible_distribution_release != "jammy"
 
 - name: _verify | Probe power group
+  when: ansible_distribution_release == "jammy"
   getent:
     database: group
     key: power
 
 - name: _verify | Power group exists (for thermald dbus policy)
+  when: ansible_distribution_release == "jammy"
   assert:
     that:
       - getent_group is defined
