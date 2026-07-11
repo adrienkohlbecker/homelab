@@ -35,6 +35,9 @@ local DISCARD = {
     "SYSTEMD_UNIT",
     "TRANSPORT",
     "UID",
+}
+
+local PARSER_FIELDS = {
     "ha_level",
     "ha_message",
     "ha_source",
@@ -42,10 +45,22 @@ local DISCARD = {
     "ha_timestamp",
 }
 
+local function discard_parser_fields(record)
+    local changed = false
+    for _, key in ipairs(PARSER_FIELDS) do
+        if record[key] ~= nil then
+            record[key] = nil
+            changed = true
+        end
+    end
+    return changed
+end
+
 local function discard_envelope(record)
     for _, key in ipairs(DISCARD) do
         record[key] = nil
     end
+    discard_parser_fields(record)
 end
 
 local function looks_like_homeassistant_header(value)
@@ -59,8 +74,12 @@ local function mark_failure(record, reason)
 end
 
 function normalize_homeassistant(tag, ts, record)
-    if tag ~= "svc.homeassistant.service" or record["CONTAINER_TAG"] == nil then
+    if tag ~= "svc.homeassistant.service" then
         return 0, ts, record
+    end
+    if record["CONTAINER_TAG"] == nil then
+        local changed = discard_parser_fields(record)
+        return changed and 1 or 0, ts, record
     end
 
     local raw = record["log"]

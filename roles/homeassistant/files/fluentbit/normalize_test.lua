@@ -58,7 +58,7 @@ do
         ha_level = "ERROR",
         ha_thread = "SyncWorker_0",
         ha_source = "aiodhcpwatcher",
-        ha_message = 'Operation not permitted\nTraceback (most recent call last):\n  File "watcher.py", line 7\nPermissionError',
+        ha_message = 'Operation not permitted\nTraceback (most recent call last):\n  File "watcher.py", line 7\nValueError\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File "watcher.py", line 9\nException: failed',
     })
     check("error.level", rec._level, "error")
     check("error.thread", rec.thread, "SyncWorker_0")
@@ -66,7 +66,7 @@ do
     check(
         "error.message",
         rec.log,
-        'Operation not permitted\nTraceback (most recent call last):\n  File "watcher.py", line 7\nPermissionError'
+        'Operation not permitted\nTraceback (most recent call last):\n  File "watcher.py", line 7\nValueError\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File "watcher.py", line 9\nException: failed'
     )
 end
 
@@ -103,6 +103,27 @@ do
     check("unit_output.code", code, 0)
     check("unit_output.status", rec.parser_status, nil)
     check("unit_output.raw", rec.log, "podman command output")
+end
+
+do
+    local raw = "2026-07-11 18:28:00.000 WARNING (systemd) [lifecycle] untouched"
+    local rec, code = normalize({
+        log = raw,
+        SYSTEMD_UNIT = "homeassistant.service",
+        ha_timestamp = "2026-07-11 18:28:00.000",
+        ha_level = "WARNING",
+        ha_thread = "systemd",
+        ha_source = "lifecycle",
+        ha_message = "untouched",
+    })
+    check("unit_parser_fields.code", code, 1)
+    check("unit_parser_fields.raw", rec.log, raw)
+    check("unit_parser_fields.unit_kept", rec.SYSTEMD_UNIT, "homeassistant.service")
+    check("unit_parser_fields.timestamp_removed", rec.ha_timestamp, nil)
+    check("unit_parser_fields.level_removed", rec.ha_level, nil)
+    check("unit_parser_fields.thread_removed", rec.ha_thread, nil)
+    check("unit_parser_fields.source_removed", rec.ha_source, nil)
+    check("unit_parser_fields.message_removed", rec.ha_message, nil)
 end
 
 do

@@ -71,7 +71,13 @@
         [homeassistant.verify] {{ homeassistant_lnav_error_marker }}"
         "Traceback (most recent call last):"
         "  File \"verify.py\", line 7, in run"
-        "RuntimeError: {{ homeassistant_lnav_error_marker }}"
+        "ValueError: first failure"
+        ""
+        "During handling of the above exception, another exception occurred:"
+        ""
+        "Traceback (most recent call last):"
+        "  File \"verify.py\", line 9, in run"
+        "Exception: {{ homeassistant_lnav_error_marker }}"
         > /proc/1/fd/2
   changed_when: false
   become: true
@@ -91,7 +97,11 @@
                 f"{sys.argv[3]}\n"
                 "Traceback (most recent call last):\n"
                 '  File "verify.py", line 7, in run\n'
-                f"RuntimeError: {sys.argv[3]}"
+                "ValueError: first failure\n\n"
+                "During handling of the above exception, another exception occurred:\n\n"
+                "Traceback (most recent call last):\n"
+                '  File "verify.py", line 9, in run\n'
+                f"Exception: {sys.argv[3]}"
             ): ("error", "SyncWorker_0"),
         }
         found = {}
