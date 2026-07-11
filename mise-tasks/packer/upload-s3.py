@@ -6,7 +6,7 @@
 # USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
 # USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
 # USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
-# USAGE flag "--build-id <build_id>" help="Immutable S3 build id; default is timestamp + current git SHA"
+# USAGE flag "--build-id <build_id>" help="Immutable S3 build id; default is pipeline.job in CI or timestamp + current git SHA"
 # USAGE flag "--artifact-dir <path>" help="Artifact dir to bundle; default is $HOMELAB_CI_DIR/<ubuntu>/<machine>"
 # USAGE flag "--promote" help="After upload, write the promoted.json pointer to this build id"
 # USAGE flag "--dry-run" help="Build and print the manifest plan without creating the tarball, uploading, or promoting"
@@ -72,11 +72,13 @@ def git_output(args: list[str], default: str = "unknown") -> str:
 
 
 def default_build_id() -> str:
+    pipeline = os.environ.get("CI_PIPELINE_ID")
+    job = os.environ.get("CI_JOB_ID")
+    if pipeline and job:
+        return f"{pipeline}.{job}"
     sha = git_output(["rev-parse", "--short=12", "HEAD"])
     stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
-    pipeline = os.environ.get("CI_PIPELINE_ID")
-    prefix = f"ci-{pipeline}" if pipeline else stamp
-    return f"{prefix}-g{sha}"
+    return f"{stamp}-g{sha}"
 
 
 def parse_args() -> argparse.Namespace:

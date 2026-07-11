@@ -13,6 +13,7 @@ side-effect-free: both modules do their work under ``if __name__ == "__main__"``
 import argparse
 import importlib.util
 import json
+import re
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -44,6 +45,24 @@ def _args(**overrides: object) -> argparse.Namespace:
     base: dict[str, object] = {"build_id": "ci-42-gdeadbeef0000", "machine": "box", "ubuntu": "jammy"}
     base.update(overrides)
     return argparse.Namespace(**base)
+
+
+class TestDefaultBuildId:
+    def test_ci_retries_get_job_specific_ids(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CI_PIPELINE_ID", "42")
+        monkeypatch.setenv("CI_JOB_ID", "1001")
+
+        assert upload.default_build_id() == "42.1001"
+
+        monkeypatch.setenv("CI_JOB_ID", "1002")
+        assert upload.default_build_id() == "42.1002"
+
+    def test_incomplete_ci_environment_uses_local_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(upload, "git_output", lambda _args: "deadbeef0000")
+        monkeypatch.setenv("CI_PIPELINE_ID", "42")
+        monkeypatch.delenv("CI_JOB_ID", raising=False)
+
+        assert re.fullmatch(r"\d{8}T\d{6}Z-gdeadbeef0000", upload.default_build_id())
 
 
 class TestPointerBody:
