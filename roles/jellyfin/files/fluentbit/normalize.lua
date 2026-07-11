@@ -33,6 +33,34 @@ local DISCARD = {
     "JellyfinFormat",
     "SourceContext",
     "ThreadId",
+    -- Journald/conmon envelope fields duplicated by the final shaper or its
+    -- tag-derived service/unit fields. Keep only the short container id as
+    -- useful instance metadata; identifier is redundant with service here.
+    "BOOT_ID",
+    "CAP_EFFECTIVE",
+    "CMDLINE",
+    "CODE_FILE",
+    "CODE_FUNC",
+    "CODE_LINE",
+    "COMM",
+    "CONTAINER_ID_FULL",
+    "CONTAINER_NAME",
+    "CONTAINER_TAG",
+    "EXE",
+    "GID",
+    "HOSTNAME",
+    "MACHINE_ID",
+    "PID",
+    "PRIORITY",
+    "SELINUX_CONTEXT",
+    "SOURCE_REALTIME_TIMESTAMP",
+    "SYSLOG_IDENTIFIER",
+    "SYSTEMD_CGROUP",
+    "SYSTEMD_INVOCATION_ID",
+    "SYSTEMD_SLICE",
+    "SYSTEMD_UNIT",
+    "TRANSPORT",
+    "UID",
 }
 
 local function looks_like_json(value)
@@ -46,7 +74,10 @@ local function mark_failure(record, reason)
 end
 
 function normalize_jellyfin(tag, ts, record)
-    if tag ~= "svc.jellyfin.service" then
+    -- The systemd input tags every record from the unit identically. Podman's
+    -- journald driver adds CONTAINER_TAG only to container stdout/stderr, so
+    -- use its presence to leave podman command and unit lifecycle output alone.
+    if tag ~= "svc.jellyfin.service" or record["CONTAINER_TAG"] == nil then
         return 0, ts, record
     end
 

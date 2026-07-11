@@ -21,6 +21,13 @@ end
 do
     local rec, code = normalize({
         log = '{"@t":"2026-07-11T12:00:00Z","@m":"Loaded plugin: SSO-Auth 4.0.0.4","JellyfinFormat":"clef"}',
+        CONTAINER_TAG = "jellyfin",
+        CONTAINER_ID = "123456789abc",
+        CONTAINER_ID_FULL = "123456789abcdef0",
+        CMDLINE = "/usr/bin/conmon --log-tag jellyfin",
+        PRIORITY = "6",
+        SYSTEMD_UNIT = "jellyfin.service",
+        SYSLOG_IDENTIFIER = "jellyfin",
         ["@t"] = "2026-07-11T12:00:00Z",
         ["@m"] = "Loaded plugin: SSO-Auth 4.0.0.4",
         ["@mt"] = "Loaded plugin: {Name} {Version}",
@@ -39,11 +46,19 @@ do
     check("info.timestamp_removed", rec["@t"], nil)
     check("info.template_removed", rec["@mt"], nil)
     check("info.format_removed", rec.JellyfinFormat, nil)
+    check("info.short_container_id_kept", rec.CONTAINER_ID, "123456789abc")
+    check("info.container_tag_removed", rec.CONTAINER_TAG, nil)
+    check("info.full_container_id_removed", rec.CONTAINER_ID_FULL, nil)
+    check("info.cmdline_removed", rec.CMDLINE, nil)
+    check("info.priority_removed", rec.PRIORITY, nil)
+    check("info.unit_removed", rec.SYSTEMD_UNIT, nil)
+    check("info.identifier_removed", rec.SYSLOG_IDENTIFIER, nil)
 end
 
 do
     local rec = normalize({
         log = "raw JSON",
+        CONTAINER_TAG = "jellyfin",
         ["@t"] = "2026-07-11T12:01:00Z",
         ["@m"] = "Error processing request.",
         ["@l"] = "Error",
@@ -66,6 +81,7 @@ end
 do
     local rec = normalize({
         log = '{"@t":"2026-07-11T12:02:00Z","JellyfinFormat":"clef"}',
+        CONTAINER_TAG = "jellyfin",
         ["@t"] = "2026-07-11T12:02:00Z",
         JellyfinFormat = "clef",
     })
@@ -76,7 +92,7 @@ do
 end
 
 do
-    local rec = normalize({ log = '{"@t":"broken"' })
+    local rec = normalize({ log = '{"@t":"broken"', CONTAINER_TAG = "jellyfin" })
     check("json.status", rec.parser_status, "failed")
     check("json.error", rec.parse_error, "jellyfin_json")
     check("json.level", rec._level, "warn")
@@ -87,7 +103,7 @@ for label, line in pairs({
     libva = "libva info: va_openDriver() returns 0",
     ffmpeg = "[h264 @ 0x1234] reference picture missing during reorder",
 }) do
-    local rec = normalize({ log = line })
+    local rec = normalize({ log = line, CONTAINER_TAG = "jellyfin" })
     check(label .. ".status", rec.parser_status, "skipped")
     check(label .. ".reason", rec.parser_reason, "non_json")
     check(label .. ".raw", rec.log, line)
@@ -98,6 +114,13 @@ do
     local rec, code = normalize({ log = "untouched" }, "svc.other.service")
     check("tag.code", code, 0)
     check("tag.status", rec.parser_status, nil)
+end
+
+do
+    local rec, code = normalize({ log = "podman command output" })
+    check("unit_output.code", code, 0)
+    check("unit_output.status", rec.parser_status, nil)
+    check("unit_output.raw", rec.log, "podman command output")
 end
 
 if failures > 0 then
