@@ -46,12 +46,12 @@ from ami_retention import (
     snapshot_ids,
 )
 from botocore.config import Config
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 # Adaptive retries with a deep attempt budget: a naive fan-out across ~17
 # regions throttles, and a throttled describe that silently returns empty would
 # read as "no resources" -- exactly the false-clean an audit must avoid.
-CFG = Config(retries={"max_attempts": 10, "mode": "adaptive"})
+CFG = Config(retries={"total_max_attempts": 10, "mode": "adaptive"})
 EXPECTED_GLOBAL_S3_BUCKETS = {"homelab-ci-images"}
 anomalies: list[str] = []  # human-readable lines, one per unexpected resource
 deletes: list[str] = []  # suggested cleanup commands (never executed here)
@@ -73,6 +73,19 @@ def safe(label, fn, default=_DEFAULT) -> Any:
     except ClientError as e:
         errors.append(f"{label}: {e.response['Error'].get('Code', 'Error')}")
         return [] if default is _DEFAULT else default
+    except BotoCoreError as e:
+        errors.append(f"{label}: {type(e).__name__}: {e}")
+        return [] if default is _DEFAULT else default
+
+
+def paginated(label, service, operation, result_key, *, default=_DEFAULT, **kwargs) -> Any:
+    """Collect one result list across every page of an AWS operation."""
+
+    def collect():
+        paginator = service.get_paginator(operation)
+        return [item for page in paginator.paginate(**kwargs) for item in page.get(result_key, [])]
+
+    return safe(label, collect, default)
 
 
 def image_tags(image: dict) -> dict[str, str]:
@@ -111,6 +124,9 @@ def promoted_qemu_host_amis(region: str, images: list[dict]) -> set[str] | None:
             if code == "ParameterNotFound":
                 continue
             errors.append(f"{region} promoted qemu-host {ubuntu}: {code}")
+            return None
+        except BotoCoreError as error:
+            errors.append(f"{region} promoted qemu-host {ubuntu}: {type(error).__name__}: {error}")
             return None
         promoted.add(value)
     return promoted
@@ -174,9 +190,11 @@ def sweep_region(region):
     # ── Compute-shaped strays (should be none -- cells are one-time spot) ──
     anomalies.extend(
         f"[{region}] EC2 instance {i['InstanceId']} ({i['InstanceType']}, {i['State']['Name']})"
-        for resv in safe(
+        for resv in paginated(
             f"{region} instances",
-            lambda: ec2.describe_instances().get("Reservations", []),
+            ec2,
+            "describe_instances",
+            "Reservations",
         )
         for i in resv.get("Instances", [])
         if i["State"]["Name"] != "terminated"
@@ -184,7 +202,7 @@ def sweep_region(region):
 
     anomalies.extend(
         f"[{region}] EBS volume {v['VolumeId']} ({v['Size']}GB, {v['State']})"
-        for v in safe(f"{region} volumes", lambda: ec2.describe_volumes().get("Volumes", []))
+        for v in paginated(f"{region} volumes", ec2, "describe_volumes", "Volumes")
     )
 
     for a in safe(f"{region} addresses", lambda: ec2.describe_addresses().get("Addresses", [])):
@@ -193,16 +211,20 @@ def sweep_region(region):
 
     anomalies.extend(
         f"[{region}] NAT gateway {n['NatGatewayId']} ({n['State']})"
-        for n in safe(
+        for n in paginated(
             f"{region} nat",
-            lambda: ec2.describe_nat_gateways().get("NatGateways", []),
+            ec2,
+            "describe_nat_gateways",
+            "NatGateways",
         )
         if n["State"] != "deleted"
     )
 
-    endpoints = safe(
+    endpoints = paginated(
         f"{region} vpc-endpoints",
-        lambda: ec2.describe_vpc_endpoints().get("VpcEndpoints", []),
+        ec2,
+        "describe_vpc_endpoints",
+        "VpcEndpoints",
     )
     # Only interface endpoints bill (hourly + data); gateway endpoints (S3
     # /DynamoDB) are free, so they are not flagged.
@@ -214,38 +236,50 @@ def sweep_region(region):
 
     anomalies.extend(
         f"[{region}] load balancer {lb['LoadBalancerName']} ({lb['Type']})"
-        for lb in safe(
+        for lb in paginated(
             f"{region} elbv2",
-            lambda: (client("elbv2", region).describe_load_balancers().get("LoadBalancers", [])),
+            client("elbv2", region),
+            "describe_load_balancers",
+            "LoadBalancers",
         )
     )
 
     anomalies.extend(
         f"[{region}] classic ELB {lb['LoadBalancerName']}"
-        for lb in safe(
+        for lb in paginated(
             f"{region} elb-classic",
-            lambda: (client("elb", region).describe_load_balancers().get("LoadBalancerDescriptions", [])),
+            client("elb", region),
+            "describe_load_balancers",
+            "LoadBalancerDescriptions",
         )
     )
 
     anomalies.extend(
         f"[{region}] RDS instance {db['DBInstanceIdentifier']} ({db['DBInstanceClass']})"
-        for db in safe(
+        for db in paginated(
             f"{region} rds",
-            lambda: (client("rds", region).describe_db_instances().get("DBInstances", [])),
+            client("rds", region),
+            "describe_db_instances",
+            "DBInstances",
         )
     )
 
     # ── AMIs + snapshots: distinguish legitimate cell images from orphans ──
-    images = safe(
+    images = paginated(
         f"{region} images",
-        lambda: ec2.describe_images(Owners=["self"]).get("Images", []),
+        ec2,
+        "describe_images",
+        "Images",
         default=None,
+        Owners=["self"],
     )
-    snaps = safe(
+    snaps = paginated(
         f"{region} snapshots",
-        lambda: ec2.describe_snapshots(OwnerIds=["self"]).get("Snapshots", []),
+        ec2,
+        "describe_snapshots",
+        "Snapshots",
         default=None,
+        OwnerIds=["self"],
     )
     audit_ami_inventory(region, images, snaps)
 
@@ -254,14 +288,24 @@ def main():
     ident = client("sts", "eu-central-1").get_caller_identity()
     print(f"== AWS CI account audit — account {ident['Account']} as {ident['Arn']} ==\n")
 
-    regions = [r["RegionName"] for r in client("ec2", "eu-central-1").describe_regions()["Regions"]]
-    print(f"sweeping {len(regions)} regions for billable strays + orphaned snapshots...")
-    for region in regions:
+    regions = safe(
+        "regions",
+        lambda: client("ec2", "eu-central-1").describe_regions()["Regions"],
+        default=None,
+    )
+    region_names = [region["RegionName"] for region in regions or []]
+    print(f"sweeping {len(region_names)} regions for billable strays + orphaned snapshots...")
+    for region in region_names:
         sweep_region(region)
 
     # Account-global: S3 (terraform state is in MinIO; only CI image bundles
     # live in AWS S3).
-    for b in safe("s3", lambda: client("s3", "eu-central-1").list_buckets().get("Buckets", [])):
+    for b in paginated(
+        "s3",
+        client("s3", "eu-central-1"),
+        "list_buckets",
+        "Buckets",
+    ):
         if b["Name"] in EXPECTED_GLOBAL_S3_BUCKETS:
             expected.append(f"[global] S3 bucket {b['Name']}")
         else:
