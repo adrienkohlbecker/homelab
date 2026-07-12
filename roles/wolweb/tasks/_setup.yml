@@ -8,6 +8,10 @@
     name: podman
     tasks_from: install
 
+- name: _setup | Install fluent-bit for container-log normalization
+  import_role:
+    name: fluentbit
+
 - name: _setup | Install authelia stub for auth=required tests
   import_role:
     name: test

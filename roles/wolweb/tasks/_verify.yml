@@ -8,6 +8,71 @@
   until: _wolweb_health.status == 200
   become: true
 
+- name: _verify | Create unique wolweb fluent-bit marker
+  set_fact:
+    wolweb_lnav_marker: "verify_wolweb_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+# Write through the container init's stderr so conmon records the fixture with
+# the same journald metadata as wolweb's Go logger. `podman exec` stderr would
+# return to Ansible directly and bypass the container log driver.
+- name: _verify | Emit representative wolweb logger record
+  command:
+    argv:
+      - podman
+      - exec
+      - wolweb
+      - /bin/sh
+      - -c
+      - >-
+        printf "%s\n" "2099/01/02 03:04:05 Warning: {{ wolweb_lnav_marker }}"
+        > /proc/1/fd/2
+  changed_when: false
+  become: true
+
+- name: _verify | Wait for normalized wolweb record in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if record.get("message") != sys.argv[2]:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "wolweb"
+                    and record.get("unit") == "wolweb.service"
+                    and record.get("level") == "warn"
+                    and fields.get("parser_status") == "parsed"
+                    and fields.get("CONTAINER_ID")
+                    and "wolweb_timestamp" not in fields
+                    and "wolweb_level" not in fields
+                    and "CONTAINER_TAG" not in fields
+                    and "CONTAINER_ID_FULL" not in fields
+                    and "CMDLINE" not in fields
+                    and "PRIORITY" not in fields
+                    and "SYSTEMD_UNIT" not in fields
+                ):
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+      - "{{ wolweb_lnav_marker }}"
+  register: _wolweb_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _wolweb_lnav_record.rc == 0
+  become: true
+
 # --network host strips podman's port-publishing boundary, so the only thing
 # keeping the unauthenticated UI off the management VLAN is the loopback bind
 # (config.json host=127.0.0.1 + --unsetenv WOLWEBHOST). Prove the port is NOT
@@ -101,3 +166,64 @@
   until: _wolweb_auth_gate.status == 302
   failed_when: _wolweb_auth_gate is not authelia_redirects_to('wolweb', inventory_hostname, domain)
   become: true
+
+- name: _verify | Exercise wolweb fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: wolweb
+      records:
+        - MESSAGE: "2099/01/02 03:04:05 Startup Webserver on \"127.0.0.1:8089\"\n"
+          CONTAINER_TAG: wolweb
+          SYSLOG_IDENTIFIER: wolweb
+          SYSTEMD_UNIT: wolweb.service
+        - MESSAGE: "2099/01/02 03:04:06 Warning: 101 bytes written, 102 expected!\n"
+          CONTAINER_TAG: wolweb
+          SYSLOG_IDENTIFIER: wolweb
+          SYSTEMD_UNIT: wolweb.service
+        - MESSAGE: "2099/01/02 03:04:07 ERROR: synthetic interface failure\n"
+          CONTAINER_TAG: wolweb
+          SYSLOG_IDENTIFIER: wolweb
+          SYSTEMD_UNIT: wolweb.service
+        - MESSAGE: "2099/01/02 03:04:08 Attempting to send a magic packet to MAC 00:11:22:33:44:55\n"
+          CONTAINER_TAG: wolweb
+          SYSLOG_IDENTIFIER: wolweb
+          SYSTEMD_UNIT: wolweb.service
+        - MESSAGE: "wolweb-raw\n"
+          CONTAINER_TAG: wolweb
+          SYSLOG_IDENTIFIER: wolweb
+          SYSTEMD_UNIT: wolweb.service
+        - MESSAGE: "2099/01/02 03:04:09 same-unit lifecycle record\n"
+          SYSLOG_IDENTIFIER: systemd
+          SYSTEMD_UNIT: wolweb.service
+      expected:
+        - message: 'Startup Webserver on "127.0.0.1:8089"'
+          level: info
+          service: wolweb
+          fields.parser_status: parsed
+          _absent:
+            - fields.wolweb_timestamp
+            - fields.wolweb_level
+        - message: "101 bytes written, 102 expected!"
+          level: warn
+          fields.parser_status: parsed
+        - message: synthetic interface failure
+          level: error
+          fields.parser_status: parsed
+        - message: "Attempting to send a magic packet to MAC 00:11:22:33:44:55"
+          level: info
+          fields.parser_status: parsed
+          _absent:
+            - fields.mac
+            - fields.ip
+        - message: wolweb-raw
+          service: wolweb
+          _absent:
+            - fields.parser_status
+        - message: "2099/01/02 03:04:09 same-unit lifecycle record"
+          service: systemd
+          _absent:
+            - fields.parser_status
+            - fields.wolweb_timestamp

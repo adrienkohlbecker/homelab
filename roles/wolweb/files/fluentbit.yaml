@@ -1,0 +1,31 @@
+parsers:
+  - name: wolweb_text
+    format: regex
+    regex: '/^(?<wolweb_timestamp>[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})(?: (?<wolweb_level>ERROR|Warning):)? (?<wolweb_message>.*)$/m'
+
+pipeline:
+  filters:
+    - name: modify
+      match: svc.wolweb.service
+      condition: key_exists CONTAINER_TAG
+      rename: MESSAGE log
+    - name: parser
+      match: svc.wolweb.service
+      key_name: log
+      parser: wolweb_text
+      reserve_data: true
+      preserve_key: true
+    - name: modify
+      match: svc.wolweb.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists wolweb_message
+      hard_rename: wolweb_message log
+      remove: wolweb_timestamp
+      set: parser_status parsed
+    - name: modify
+      match: svc.wolweb.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists wolweb_level
+      hard_rename: wolweb_level _level
