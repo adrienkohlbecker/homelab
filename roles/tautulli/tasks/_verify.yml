@@ -197,3 +197,102 @@
     that:
       - _tautulli_sort_ini_path.status.ActiveState == "active"
     fail_msg: "sort_ini path unit is {{ _tautulli_sort_ini_path.status.ActiveState }}, expected active"
+
+- name: _verify | Wait for normalized tautulli startup record in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not record.get("message", "").startswith("Starting Tautulli v"):
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "tautulli"
+                    and record.get("unit") == "tautulli.service"
+                    and record.get("level") == "info"
+                    and fields.get("thread") == "MainThread"
+                    and fields.get("parser_status") == "parsed"
+                    and fields.get("CONTAINER_ID")
+                    and "source" not in fields
+                    and "CONTAINER_TAG" not in fields
+                    and "CONTAINER_ID_FULL" not in fields
+                    and "PRIORITY" not in fields
+                    and "SYSTEMD_UNIT" not in fields
+                ):
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _tautulli_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 1
+  until: _tautulli_lnav_record.rc == 0
+  become: true
+
+- name: _verify | Exercise tautulli fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: tautulli
+      records:
+        - MESSAGE: "2099-01-02 03:04:05 - INFO :: MainThread : Tautulli WebStart :: tautulli-info\n"
+          CONTAINER_TAG: tautulli
+          SYSLOG_IDENTIFIER: tautulli
+          SYSTEMD_UNIT: tautulli.service
+          parser_status: forged
+        - MESSAGE: "2099-01-02 03:04:06 - WARNING :: Thread-15 (run) : tautulli-warning\n"
+          CONTAINER_TAG: tautulli
+          SYSLOG_IDENTIFIER: tautulli
+          SYSTEMD_UNIT: tautulli.service
+        - MESSAGE: "[migrations] no migrations found\n"
+          CONTAINER_TAG: tautulli
+          SYSLOG_IDENTIFIER: tautulli
+          SYSTEMD_UNIT: tautulli.service
+        - MESSAGE: "2099-01-02 03:04:07 - ERROR :: MainThread : Tautulli WebSocket :: tautulli-unit-record\n"
+          SYSLOG_IDENTIFIER: systemd
+          SYSTEMD_UNIT: tautulli.service
+      expected:
+        - message: tautulli-info
+          level: info
+          service: tautulli
+          fields.source: Tautulli WebStart
+          fields.thread: MainThread
+          fields.parser_status: parsed
+          _absent:
+            - fields.tautulli_timestamp
+            - fields.tautulli_level
+            - fields.tautulli_thread
+            - fields.tautulli_source
+            - fields.tautulli_message
+            - fields.CONTAINER_TAG
+            - fields.CMDLINE
+        - message: tautulli-warning
+          level: warn
+          fields.thread: Thread-15 (run)
+          _absent:
+            - fields.source
+        - message: "[migrations] no migrations found"
+          level: info
+          _absent:
+            - fields.parser_status
+            - fields.source
+            - fields.thread
+        - message: "2099-01-02 03:04:07 - ERROR :: MainThread : Tautulli WebSocket :: tautulli-unit-record"
+          service: systemd
+          level: error
+          _absent:
+            - fields.parser_status
+            - fields.source
+            - fields.thread

@@ -1,0 +1,30 @@
+parsers:
+  - name: tautulli_console
+    format: regex
+    regex: '/\A(?<tautulli_timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - (?<tautulli_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)[[:space:]]+:: (?<tautulli_thread>.*?) : (?:(?<tautulli_source>Tautulli [^:\n]+) :: )?(?<tautulli_message>[\s\S]*?)[[:space:]]*\z/'
+
+pipeline:
+  filters:
+    - name: modify
+      match: svc.tautulli.service
+      condition: key_exists CONTAINER_TAG
+      rename: MESSAGE log
+    - name: parser
+      match: svc.tautulli.service
+      key_name: log
+      parser: tautulli_console
+      reserve_data: true
+      preserve_key: true
+    - name: modify
+      match: svc.tautulli.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists tautulli_message
+        - key_exists tautulli_level
+      hard_rename:
+        - tautulli_message log
+        - tautulli_level _level
+        - tautulli_thread thread
+        - tautulli_source source
+      remove: tautulli_timestamp
+      set: parser_status parsed
