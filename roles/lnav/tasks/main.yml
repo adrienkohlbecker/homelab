@@ -127,13 +127,13 @@
 
 - name: Deploy lnav-journal wrapper
   copy:
-    src: lnav-journal
+    src: lnav_journal.py
     dest: /usr/local/bin/lnav-journal
     owner: root
     group: root
     mode: "0755"
     backup: true
-    validate: bash -n %s
+    validate: python3 -m py_compile %s
   become: true
   tags:
     - lnav

@@ -77,7 +77,6 @@
       - get
   changed_when: false
   loop:
-    - journald_json_log
     - fluentbit_lnav
     - syslog_body_scan
   tags:
@@ -231,8 +230,19 @@
   copy:
     dest: /var/log/fluent-bit/lnav.jsonl
     content: |
-      {"time":"2026-06-08T12:34:56.789Z","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"info","message":"lnav wrapper verification","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
-      {"time":"2026-06-08T12:34:57.789Z","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"debug","message":"lnav wrapper debug hidden","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
+      {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_other","unit":"lnav_other.service","identifier":"lnav_other","level":"info","message":"lnav wrapper other unit","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_other.service"}}
+      {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"info","message":"lnav wrapper verification","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
+      {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"debug","message":"lnav wrapper debug hidden","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
+    mode: "0644"
+  become: true
+  tags:
+    - lnav
+
+- name: Write lnav-journal rotated verification store
+  copy:
+    dest: /var/log/fluent-bit/lnav.jsonl.1
+    content: |
+      {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_rotated","unit":"lnav_rotated.service","identifier":"lnav_rotated","level":"info","message":"lnav wrapper rotated history","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_rotated.service"}}
     mode: "0644"
   become: true
   tags:
@@ -292,7 +302,53 @@
   failed_when: >-
     lnav_journal_goto.rc != 0 or
     'lnav wrapper verification' not in lnav_journal_goto.stdout or
-    'lnav wrapper debug hidden' in lnav_journal_goto.stdout
+    'lnav wrapper debug hidden' in lnav_journal_goto.stdout or
+    'lnav wrapper rotated history' in lnav_journal_goto.stdout
+  tags:
+    - lnav
+
+- name: Lnav-journal filters the JSONL store by unit
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  command:
+    argv:
+      - timeout
+      - -k
+      - 5s
+      - 20s
+      - /usr/local/bin/lnav-journal
+      - -n
+      - -u
+      - lnav_verify
+  register: lnav_journal_unit
+  changed_when: false
+  failed_when: >-
+    lnav_journal_unit.rc != 0 or
+    'lnav wrapper verification' not in lnav_journal_unit.stdout or
+    'lnav wrapper other unit' in lnav_journal_unit.stdout
+  tags:
+    - lnav
+
+- name: Lnav-journal opens rotated JSONL history explicitly
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  command:
+    argv:
+      - timeout
+      - -k
+      - 5s
+      - 20s
+      - /usr/local/bin/lnav-journal
+      - -n
+      - --all
+      - -c
+      - ':goto 0'
+  register: lnav_journal_all
+  changed_when: false
+  failed_when: >-
+    lnav_journal_all.rc != 0 or
+    'lnav wrapper verification' not in lnav_journal_all.stdout or
+    'lnav wrapper rotated history' not in lnav_journal_all.stdout
   tags:
     - lnav
 
