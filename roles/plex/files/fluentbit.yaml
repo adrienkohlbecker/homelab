@@ -43,6 +43,39 @@ pipeline:
       storage.type: filesystem
       storage.pause_on_chunks_overlimit: true
 
+    - name: tail
+      tag: plex.scanner
+      path: "/mnt/services/plex/Library/Application Support/Plex Media Server/Logs/Plex Media Scanner*.log"
+      exclude_path: "/mnt/services/plex/Library/Application Support/Plex Media Server/Logs/Plex Media Scanner*.[0-9].log"
+      db: /var/lib/fluent-bit/plex-scanner.db
+      db.locking: true
+      path_key: filepath
+      read_from_head: false
+      refresh_interval: 5
+      multiline.parser: multiline_plex_file
+      skip_empty_lines: true
+      skip_long_lines: false
+      rotate_wait: 30
+      buffer_max_size: 1M
+      storage.type: filesystem
+      storage.pause_on_chunks_overlimit: true
+
+    - name: tail
+      tag: plex.crash_uploader
+      path: "/mnt/services/plex/Library/Application Support/Plex Media Server/Logs/Plex Crash Uploader.log"
+      db: /var/lib/fluent-bit/plex-crash-uploader.db
+      db.locking: true
+      path_key: filepath
+      read_from_head: false
+      refresh_interval: 5
+      multiline.parser: multiline_plex_file
+      skip_empty_lines: true
+      skip_long_lines: false
+      rotate_wait: 30
+      buffer_max_size: 1M
+      storage.type: filesystem
+      storage.pause_on_chunks_overlimit: true
+
   filters:
     - name: modify
       match: svc.plex.service
@@ -68,15 +101,33 @@ pipeline:
       remove: plex_stdout
       set: parser_status parsed
 
-    - name: parser
+    - name: modify
       match: plex.file
+      add:
+        - source plex_media_server
+        - _stream plex_file
+
+    - name: modify
+      match: plex.scanner
+      add:
+        - source plex_media_scanner
+        - _stream plex_scanner
+
+    - name: modify
+      match: plex.crash_uploader
+      add:
+        - source plex_crash_uploader
+        - _stream plex_crash_uploader
+
+    - name: parser
+      match: 'plex.*'
       key_name: log
       parser: plex_file
       reserve_data: true
       preserve_key: true
 
     - name: modify
-      match: plex.file
+      match: 'plex.*'
       condition: key_does_not_exist plex_message
       add:
         - parser_status failed
@@ -84,7 +135,7 @@ pipeline:
         - _level warn
 
     - name: modify
-      match: plex.file
+      match: 'plex.*'
       condition: key_exists plex_message
       hard_rename:
         - plex_message log
@@ -94,9 +145,7 @@ pipeline:
         - plex_timestamp
         - filepath
       add:
-        - source plex_media_server
         - _service plex
-        - _stream plex_file
         - _unit plex.service
         - _identifier plex
       set: parser_status parsed

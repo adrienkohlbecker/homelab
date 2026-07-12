@@ -253,23 +253,32 @@
       - records.plain.fields.parser_status == 'parsed'
       - records.plain.fields.source is not defined
 
-- name: _verify | Define plex file-ingestion marker
+- name: _verify | Define plex file-ingestion markers
   set_fact:
-    plex_file_marker: "plex_file_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    plex_server_marker: "plex_server_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    plex_scanner_marker: "plex_scanner_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    plex_crash_marker: "plex_crash_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
-- name: _verify | Append a multiline plex file record
+- name: _verify | Append plex file-ingestion records
   shell: |
     set -euo pipefail
     printf "%s\n%s\n" \
-      "Jul 12, 2026 12:00:00.000 [1a2b] WARN - {{ plex_file_marker }} first line" \
+      "Jul 12, 2026 12:00:00.000 [1a2b] WARN - {{ plex_server_marker }} first line" \
       "continuation line" \
       >> "/mnt/services/plex/Library/Application Support/Plex Media Server/Logs/Plex Media Server.log"
+    printf "%s\n%s\n" \
+      "Jul 12, 2026 12:00:01.000 [2b3c] ERROR - {{ plex_scanner_marker }} first line" \
+      "scanner continuation" \
+      >> "/mnt/services/plex/Library/Application Support/Plex Media Server/Logs/Plex Media Scanner Analysis.log"
+    printf "%s\n" \
+      "Jul 12, 2026 12:00:02.000 [3c4d] WARN - {{ plex_crash_marker }}" \
+      >> "/mnt/services/plex/Library/Application Support/Plex Media Server/Logs/Plex Crash Uploader.log"
   args:
     executable: /bin/bash
   changed_when: true
   become: true
 
-- name: _verify | Read normalized plex file record
+- name: _verify | Read normalized plex file records
   command:
     argv:
       - python3
@@ -278,36 +287,70 @@
         import json
         import sys
 
-        marker, path = sys.argv[1:]
+        server_marker, scanner_marker, crash_marker, path = sys.argv[1:]
+        expected = {
+            "plex_file": server_marker,
+            "plex_scanner": scanner_marker,
+            "plex_crash_uploader": crash_marker,
+        }
+        found = {}
         with open(path) as records:
             for line in records:
                 record = json.loads(line)
-                if record.get("stream") == "plex_file" and marker in record.get("message", ""):
-                    print(json.dumps(record))
-                    raise SystemExit(0)
-        raise SystemExit(1)
-      - "{{ plex_file_marker }}"
+                stream = record.get("stream")
+                if stream in expected and expected[stream] in record.get("message", ""):
+                    found[stream] = record
+        if len(found) != len(expected):
+            raise SystemExit(1)
+        print(json.dumps(found))
+      - "{{ plex_server_marker }}"
+      - "{{ plex_scanner_marker }}"
+      - "{{ plex_crash_marker }}"
       - /var/log/fluent-bit/lnav.jsonl
-  register: plex_file_record
-  retries: 10
+  register: plex_file_records
+  retries: 15
   delay: 1
-  until: plex_file_record.rc == 0
+  until: plex_file_records.rc == 0
   changed_when: false
 
 - name: _verify | Assert normalized plex file fields
   vars:
-    record: "{{ plex_file_record.stdout | from_json }}"
+    records: "{{ plex_file_records.stdout | from_json }}"
   assert:
     that:
-      - record.service == 'plex'
-      - record.stream == 'plex_file'
-      - record.unit == 'plex.service'
-      - record.identifier == 'plex'
-      - record.level == 'warn'
-      - record.message == plex_file_marker ~ ' first line\ncontinuation line'
-      - record.fields.thread == '1a2b'
-      - record.fields.source == 'plex_media_server'
-      - record.fields.parser_status == 'parsed'
-      - record.parse_error is not defined
-      - record.fields.plex_timestamp is not defined
-      - record.fields.filepath is not defined
+      - records.plex_file.service == 'plex'
+      - records.plex_file.stream == 'plex_file'
+      - records.plex_file.unit == 'plex.service'
+      - records.plex_file.identifier == 'plex'
+      - records.plex_file.level == 'warn'
+      - records.plex_file.message == plex_server_marker ~ ' first line\ncontinuation line'
+      - records.plex_file.fields.thread == '1a2b'
+      - records.plex_file.fields.source == 'plex_media_server'
+      - records.plex_file.fields.parser_status == 'parsed'
+      - records.plex_file.parse_error is not defined
+      - records.plex_file.fields.plex_timestamp is not defined
+      - records.plex_file.fields.filepath is not defined
+      - records.plex_scanner.service == 'plex'
+      - records.plex_scanner.stream == 'plex_scanner'
+      - records.plex_scanner.unit == 'plex.service'
+      - records.plex_scanner.identifier == 'plex'
+      - records.plex_scanner.level == 'error'
+      - records.plex_scanner.message == plex_scanner_marker ~ ' first line\nscanner continuation'
+      - records.plex_scanner.fields.thread == '2b3c'
+      - records.plex_scanner.fields.source == 'plex_media_scanner'
+      - records.plex_scanner.fields.parser_status == 'parsed'
+      - records.plex_scanner.parse_error is not defined
+      - records.plex_scanner.fields.plex_timestamp is not defined
+      - records.plex_scanner.fields.filepath is not defined
+      - records.plex_crash_uploader.service == 'plex'
+      - records.plex_crash_uploader.stream == 'plex_crash_uploader'
+      - records.plex_crash_uploader.unit == 'plex.service'
+      - records.plex_crash_uploader.identifier == 'plex'
+      - records.plex_crash_uploader.level == 'warn'
+      - records.plex_crash_uploader.message == plex_crash_marker
+      - records.plex_crash_uploader.fields.thread == '3c4d'
+      - records.plex_crash_uploader.fields.source == 'plex_crash_uploader'
+      - records.plex_crash_uploader.fields.parser_status == 'parsed'
+      - records.plex_crash_uploader.parse_error is not defined
+      - records.plex_crash_uploader.fields.plex_timestamp is not defined
+      - records.plex_crash_uploader.fields.filepath is not defined
