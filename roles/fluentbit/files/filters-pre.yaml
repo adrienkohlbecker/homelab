@@ -27,13 +27,6 @@ pipeline:
       match: svc.*
       logical_op: and
       exclude:
-        - 'SYSTEMD_UNIT ^speedtest\.service$'
-        - 'MESSAGE "(HEAD|GET) / HTTP/1\.1" 200 [0-9]+ "-" "curl/'
-
-    - name: grep
-      match: svc.*
-      logical_op: and
-      exclude:
         - 'SYSTEMD_UNIT ^netdata\.service$'
         - 'MESSAGE (^Failed to prepare statement SQL_SELECT_HEALTH_LOG|^Failed to execute ''DROP TABLE|^LISTENER: Cannot validate ''localhost'')'
 

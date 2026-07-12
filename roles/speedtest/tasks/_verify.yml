@@ -6,6 +6,7 @@
     url: http://localhost:{{ service_ports.speedtest }}/
     status_code: 200
     return_content: true
+    http_agent: speedtest-verify
   register: _speedtest_loopback
   retries: 5
   delay: 1
@@ -26,6 +27,107 @@
     body: "{{ 'x' * 65536 }}"
     status_code: 200
   become: true
+
+- name: _verify | Wait for the normalized speedtest access record
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        verified = False
+        healthcheck = False
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if record.get("service") != "speedtest":
+                    continue
+                fields = record.get("fields", {})
+                user_agent = fields.get("user_agent", "")
+                if user_agent.startswith("curl/") or '"curl/' in record.get("message", ""):
+                    healthcheck = True
+                if (
+                    record.get("message", "").endswith('"speedtest-verify"')
+                    and fields.get("method") == "GET"
+                    and fields.get("path") == "/"
+                    and fields.get("status") == 200
+                    and fields.get("user_agent") == "speedtest-verify"
+                    and fields.get("parser_status") == "parsed"
+                    and "speedtest_access_timestamp" not in fields
+                    and "CONTAINER_TAG" not in fields
+                ):
+                    verified = True
+        sys.exit(0 if verified and not healthcheck else 1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _speedtest_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _speedtest_lnav_record.rc == 0
+  become: true
+
+- name: _verify | Exercise speedtest fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: speedtest
+      records:
+        - MESSAGE: '192.0.2.10 - - [02/Jan/2099:03:04:05 +0000] "GET /backend/empty.php HTTP/1.1" 200 0 "-" "curl/8.14.1"'
+          CONTAINER_TAG: speedtest
+          SYSLOG_IDENTIFIER: speedtest
+          SYSTEMD_UNIT: speedtest.service
+        - MESSAGE: '[Fri Jan 02 03:04:05.678901 2099] [mpm_prefork:notice] [pid 42:tid 43] Apache/2.4 configured -- resuming normal operations'
+          CONTAINER_TAG: speedtest
+          SYSLOG_IDENTIFIER: speedtest
+          SYSTEMD_UNIT: speedtest.service
+        - MESSAGE: Setting up docker env...
+          CONTAINER_TAG: speedtest
+          SYSLOG_IDENTIFIER: speedtest
+          SYSTEMD_UNIT: speedtest.service
+        - MESSAGE: Started speedtest.
+          SYSLOG_IDENTIFIER: systemd
+          SYSTEMD_UNIT: speedtest.service
+      expected:
+        - message: '192.0.2.10 - - [02/Jan/2099:03:04:05 +0000] "GET /backend/empty.php HTTP/1.1" 200 0 "-" "curl/8.14.1"'
+          level: info
+          service: speedtest
+          fields.client_ip: 192.0.2.10
+          fields.method: GET
+          fields.path: /backend/empty.php
+          fields.protocol: HTTP/1.1
+          fields.status: 200
+          fields.bytes_sent: "0"
+          fields.referrer: "-"
+          fields.user_agent: curl/8.14.1
+          fields.parser_status: parsed
+          _absent:
+            - fields.speedtest_access_timestamp
+            - fields.CONTAINER_TAG
+        - message: Apache/2.4 configured -- resuming normal operations
+          level: info
+          fields.source: mpm_prefork
+          fields.process_id: 42
+          fields.thread_id: 43
+          fields.parser_status: parsed
+          _absent:
+            - fields.speedtest_error_timestamp
+        - message: Setting up docker env...
+          service: speedtest
+          _absent:
+            - fields.parser_status
+            - fields.source
+        - message: Started speedtest.
+          service: systemd
+          _absent:
+            - fields.parser_status
+            - fields.source
 
 # Map the vhost FQDN to loopback so the SNI matches the server_name --
 # keeps SNI correct on every release. Test-only mutation; box is torn down.

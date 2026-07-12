@@ -9,6 +9,16 @@
   tags:
     - speedtest
 
+- name: Install speedtest fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension
+  vars:
+    fluentbit_extension_args:
+      name: speedtest
+  tags:
+    - speedtest
+
 - name: Install speedtest service
   import_role:
     name: systemd_unit
