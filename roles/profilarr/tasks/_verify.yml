@@ -79,3 +79,75 @@
     or (_profilarr_db_owner.stat.mode[-1] | int) >= 4
     or _profilarr_db_owner.stat.size == 0
   become: true
+
+- name: _verify | Exercise profilarr fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: profilarr
+      records:
+        - MESSAGE: "2099-01-02 03:04:05 - app.verify - INFO - profilarr-info\n"
+          CONTAINER_TAG: profilarr
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: profilarr.service
+        - MESSAGE: "2099-01-02 03:04:06 - task_system - DEBUG - profilarr-debug\n"
+          CONTAINER_TAG: profilarr
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: profilarr.service
+        - MESSAGE: "[2099-01-02 03:04:07 +0000] [42] [WARNING] profilarr-gunicorn\n"
+          CONTAINER_TAG: profilarr
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: profilarr.service
+        - MESSAGE: "Starting application as user 1000:1000\n"
+          CONTAINER_TAG: profilarr
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: profilarr.service
+        - MESSAGE: "2099-01-02 03:04:08 - app.verify - ERROR - must-not-parse\n"
+          SYSLOG_IDENTIFIER: systemd
+          SYSTEMD_UNIT: profilarr.service
+        - MESSAGE: "2099-01-02 03:04:09 - apscheduler.scheduler - DEBUG - Looking for jobs to run profilarr-routine\n"
+          CONTAINER_TAG: profilarr
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: profilarr.service
+      expected:
+        - message: profilarr-info
+          level: info
+          service: profilarr
+          fields.source: app.verify
+          fields.parser_status: parsed
+          _absent:
+            - fields.profilarr_timestamp
+            - fields.profilarr_level
+            - fields.profilarr_message
+        - message: profilarr-debug
+          level: debug
+          service: profilarr
+          fields.source: task_system
+          fields.parser_status: parsed
+        - message: profilarr-gunicorn
+          level: warn
+          service: profilarr
+          fields.source: gunicorn
+          fields.parser_status: parsed
+          _absent:
+            - fields.profilarr_gunicorn_timestamp
+            - fields.profilarr_gunicorn_pid
+            - fields.profilarr_gunicorn_level
+            - fields.profilarr_gunicorn_message
+        - message: Starting application as user 1000:1000
+          level: info
+          service: profilarr
+          _absent:
+            - fields.parser_status
+            - fields.source
+        - message: 2099-01-02 03:04:08 - app.verify - ERROR - must-not-parse
+          service: systemd
+          _absent:
+            - fields.parser_status
+            - fields.source
+
+- name: _verify | Routine repository-sync record is omitted from the aggregate
+  assert:
+    that: "'profilarr-routine' not in fluentbit_verify_result.stdout"

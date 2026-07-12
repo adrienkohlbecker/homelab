@@ -34,13 +34,6 @@ pipeline:
       match: svc.*
       logical_op: and
       exclude:
-        - 'SYSTEMD_UNIT ^profilarr\.service$'
-        - 'MESSAGE (Task Repository Sync \(ID: 1\) status changed to:|Updating remote status for branch:|Processing 0 incoming changes|apscheduler\.scheduler - DEBUG - (Looking for jobs to run|Next wakeup is due)|apscheduler\.executors\.default - INFO - (Running job|Job )|task_system - INFO - (Starting task: Repository Sync|Task Repository Sync completed successfully))'
-
-    - name: grep
-      match: svc.*
-      logical_op: and
-      exclude:
         - 'SYSTEMD_UNIT ^netdata\.service$'
         - 'MESSAGE (^Failed to prepare statement SQL_SELECT_HEALTH_LOG|^Failed to execute ''DROP TABLE|^LISTENER: Cannot validate ''localhost'')'
 

@@ -66,6 +66,16 @@
   tags:
     - profilarr
 
+- name: Install profilarr fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension
+  vars:
+    fluentbit_extension_args:
+      name: profilarr
+  tags:
+    - profilarr
+
 - name: Enable profilarr service
   import_role:
     name: systemd_unit

@@ -1,0 +1,58 @@
+parsers:
+  - name: profilarr_python
+    format: regex
+    regex: '/\A(?<profilarr_timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - (?<profilarr_source>.+?) - (?<profilarr_level>DEBUG|INFO|WARNING|ERROR|CRITICAL) - (?<profilarr_message>[\s\S]*?)[[:space:]]*\z/'
+  - name: profilarr_gunicorn
+    format: regex
+    regex: '/\A\[(?<profilarr_gunicorn_timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{4})\] \[(?<profilarr_gunicorn_pid>\d+)\] \[(?<profilarr_gunicorn_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)\] (?<profilarr_gunicorn_message>[\s\S]*?)[[:space:]]*\z/'
+
+pipeline:
+  filters:
+    - name: modify
+      match: svc.profilarr.service
+      condition: key_exists CONTAINER_TAG
+      rename: MESSAGE log
+    - name: grep
+      match: svc.profilarr.service
+      logical_op: and
+      exclude:
+        - 'CONTAINER_TAG ^.+$'
+        - 'log (Task Repository Sync \(ID: 1\) status changed to:|Updating remote status for branch:|Processing 0 incoming changes|apscheduler\.scheduler - DEBUG - (Looking for jobs to run|Next wakeup is due)|apscheduler\.executors\.default - INFO - (Running job|Job )|task_system - INFO - (Starting task: Repository Sync|Task Repository Sync completed successfully))'
+    - name: parser
+      match: svc.profilarr.service
+      key_name: log
+      parser: profilarr_python
+      reserve_data: true
+      preserve_key: true
+    - name: parser
+      match: svc.profilarr.service
+      key_name: log
+      parser: profilarr_gunicorn
+      reserve_data: true
+      preserve_key: true
+    - name: modify
+      match: svc.profilarr.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists profilarr_message
+        - key_exists profilarr_level
+      hard_rename:
+        - profilarr_message log
+        - profilarr_level _level
+        - profilarr_source source
+      remove: profilarr_timestamp
+      set: parser_status parsed
+    - name: modify
+      match: svc.profilarr.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists profilarr_gunicorn_message
+        - key_exists profilarr_gunicorn_level
+      hard_rename:
+        - profilarr_gunicorn_message log
+        - profilarr_gunicorn_level _level
+      remove:
+        - profilarr_gunicorn_timestamp
+        - profilarr_gunicorn_pid
+      add: source gunicorn
+      set: parser_status parsed
