@@ -1,0 +1,46 @@
+parsers:
+  - name: nexus_json
+    format: json
+
+pipeline:
+  filters:
+    - name: modify
+      match: svc.nexus.service
+      condition: key_exists CONTAINER_TAG
+      rename: MESSAGE log
+    - name: parser
+      match: svc.nexus.service
+      key_name: log
+      parser: nexus_json
+      reserve_data: true
+      preserve_key: true
+    - name: modify
+      match: svc.nexus.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists formattedMessage
+        - key_exists level
+      hard_rename:
+        - formattedMessage log
+        - level _level
+        - threadName thread
+        - loggerName source
+        - throwable exception
+      remove:
+        - sequenceNumber
+        - timestamp
+        - nanoseconds
+        - context
+        - message
+        - arguments
+      set: parser_status parsed
+    - name: modify
+      match: svc.nexus.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_value_matches log '^\{'
+        - key_does_not_exist formattedMessage
+      add:
+        - parser_status failed
+        - parse_error nexus_json
+        - _level warn

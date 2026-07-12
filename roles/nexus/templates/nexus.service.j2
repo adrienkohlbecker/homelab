@@ -70,6 +70,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/nexus/data:/nexus-data \
     --volume /mnt/scratch/nexus:/nexus-data/blobs/default \
     --volume /mnt/services/nexus/user:/user-root \
+    --volume /mnt/services/nexus/user/logback.xml:/opt/sonatype/nexus/etc/logback/logback.xml:ro \
     --publish 127.0.0.1:{{ service_ports.nexus }}:8081/tcp \
     --health-cmd         {{ "http://localhost:8081/service/rest/v1/status/writable" | podman_health_wget }} \
     --health-startup-cmd {{ "http://localhost:8081/service/rest/v1/status/writable" | podman_health_wget }} \

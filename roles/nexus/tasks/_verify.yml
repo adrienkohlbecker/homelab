@@ -41,6 +41,96 @@
   delay: 2
   until: _nexus_status.status == 200
 
+- name: _verify | Exercise nexus fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: nexus
+      records:
+        - MESSAGE: '{"level":"WARN","threadName":"verify-thread","loggerName":"org.sonatype.nexus.Verify","mdc":{"userId":"*TASK"},"formattedMessage":"nexus-valid","throwable":{"className":"java.lang.IllegalStateException","message":"boom"},"parser_status":"forged","service":"attribute"}'
+          CONTAINER_TAG: nexus
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
+        - MESSAGE: nexus-raw
+          CONTAINER_TAG: nexus
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
+        - MESSAGE: '{"level":"WARN","formattedMessage":"broken"'
+          CONTAINER_TAG: nexus
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
+        - MESSAGE: '{"level":"ERROR","threadName":"systemd","loggerName":"systemd","formattedMessage":"must-not-parse"}'
+          SYSLOG_IDENTIFIER: systemd
+          SYSTEMD_UNIT: nexus.service
+      expected:
+        - message: nexus-valid
+          level: warn
+          service: nexus
+          fields.parser_status: parsed
+          fields.thread: verify-thread
+          fields.source: org.sonatype.nexus.Verify
+          fields.mdc.userId: '*TASK'
+          fields.exception.className: java.lang.IllegalStateException
+          fields.service: attribute
+          _absent:
+            - fields.formattedMessage
+            - fields.level
+            - fields.threadName
+            - fields.loggerName
+            - fields.throwable
+        - message: nexus-raw
+          level: info
+          service: nexus
+          _absent:
+            - fields.parser_status
+        - message: '{"level":"WARN","formattedMessage":"broken"'
+          level: warn
+          service: nexus
+          parse_error: nexus_json
+          fields.parser_status: failed
+        - message: '{"level":"ERROR","threadName":"systemd","loggerName":"systemd","formattedMessage":"must-not-parse"}'
+          service: systemd
+          _absent:
+            - fields.parser_status
+            - fields.source
+
+- name: _verify | Wait for parsed nexus startup output in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "nexus"
+                    and fields.get("parser_status") == "parsed"
+                    and fields.get("source")
+                    and record.get("message")
+                ):
+                    assert "timestamp" not in fields, record
+                    assert "formattedMessage" not in fields, record
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _nexus_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _nexus_lnav_record.rc == 0
+  become: true
+
 # The dir-ownership checks above stat paths the role itself chowned, so they
 # pass even if the +200 uidmap regressed. This one stats a path Nexus wrote
 # as in-container uid 200 (its log dir, created on boot) -- a broken mapping
