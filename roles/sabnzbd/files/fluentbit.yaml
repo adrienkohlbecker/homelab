@@ -4,7 +4,32 @@ parsers:
     regex: '/\A(?<sabnzbd_time>[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3})::(?<sabnzbd_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)::\[(?<sabnzbd_source>[^]:]+):(?<sabnzbd_source_line>[0-9]+)\] (?<sabnzbd_message>[\s\S]*)\z/'
     types: sabnzbd_source_line:integer
 
+  - name: nzbtomedia_file
+    format: regex
+    regex: '/\A(?<nzbtomedia_timestamp>[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}) (?<nzbtomedia_level>DEBUG|INFO|WARNING|ERROR|POSTPROCESS|DB)[[:space:]]*::(?<nzbtomedia_source>[^:]+):[[:space:]]*(?<nzbtomedia_message>[\s\S]*)\z/'
+    time_key: nzbtomedia_timestamp
+    time_format: '%Y-%m-%d %H:%M:%S'
+    time_system_timezone: true
+
 pipeline:
+  inputs:
+    # Tail only the active path. nzbToMedia renames it during rotation; Fluent
+    # Bit follows that inode and discovers the replacement without reading .1+.
+    - name: tail
+      tag: sabnzbd.nzbtomedia
+      path: /opt/nzbToMedia/logs/nzbtomedia.log
+      db: /var/lib/fluent-bit/nzbtomedia.db
+      db.locking: true
+      path_key: filepath
+      read_from_head: false
+      refresh_interval: 5
+      skip_empty_lines: true
+      skip_long_lines: false
+      rotate_wait: 30
+      buffer_max_size: 256k
+      storage.type: filesystem
+      storage.pause_on_chunks_overlimit: true
+
   filters:
     - name: modify
       match: svc.sabnzbd.service
@@ -28,3 +53,48 @@ pipeline:
         - sabnzbd_source_line source_line
       remove: sabnzbd_time
       set: parser_status parsed
+
+    - name: modify
+      match: sabnzbd.nzbtomedia
+      add:
+        - _service sabnzbd
+        - _unit sabnzbd.service
+        - _identifier nzbtomedia
+        - _stream nzbtomedia
+
+    - name: parser
+      match: sabnzbd.nzbtomedia
+      key_name: log
+      parser: nzbtomedia_file
+      reserve_data: true
+      preserve_key: true
+
+    - name: modify
+      match: sabnzbd.nzbtomedia
+      condition: key_does_not_exist nzbtomedia_message
+      add:
+        - parser_status failed
+        - parse_error nzbtomedia_file
+        - _level warn
+
+    - name: modify
+      match: sabnzbd.nzbtomedia
+      condition: key_exists nzbtomedia_message
+      hard_rename:
+        - nzbtomedia_message log
+        - nzbtomedia_level _level
+        - nzbtomedia_source source
+      remove:
+        - nzbtomedia_timestamp
+        - filepath
+      set: parser_status parsed
+
+    - name: modify
+      match: sabnzbd.nzbtomedia
+      condition: key_value_equals _level POSTPROCESS
+      set: _level info
+
+    - name: modify
+      match: sabnzbd.nzbtomedia
+      condition: key_value_equals _level DB
+      set: _level debug

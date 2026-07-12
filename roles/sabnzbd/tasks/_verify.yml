@@ -196,6 +196,79 @@
   until: _sabnzbd_lnav_record.rc == 0
   become: true
 
+- name: _verify | Define nzbToMedia file-ingestion marker
+  set_fact:
+    sabnzbd_nzbtomedia_marker: "nzbtomedia_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+- name: _verify | Create the nzbToMedia runtime log fixture directory
+  file:
+    path: /opt/nzbToMedia/logs
+    state: directory
+    owner: sabnzbd
+    group: media
+    mode: "0755"
+  become: true
+
+- name: _verify | Append nzbToMedia file-ingestion record
+  command:
+    argv:
+      - /usr/bin/tee
+      - --append
+      - /opt/nzbToMedia/logs/nzbtomedia.log
+    stdin: >-
+      2026-07-12 12:00:00 POSTPROCESS::RADARR: {{ sabnzbd_nzbtomedia_marker }} succeeded
+  changed_when: true
+  become: true
+  become_user: sabnzbd
+
+- name: _verify | Read normalized nzbToMedia file record
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        marker, path = sys.argv[1:]
+        with open(path) as records:
+            for line in records:
+                record = json.loads(line)
+                if record.get("stream") == "nzbtomedia" and marker in record.get("message", ""):
+                    print(json.dumps(record))
+                    sys.exit(0)
+        sys.exit(1)
+      - "{{ sabnzbd_nzbtomedia_marker }}"
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _sabnzbd_nzbtomedia_record
+  retries: 15
+  delay: 1
+  until: _sabnzbd_nzbtomedia_record.rc == 0
+  changed_when: false
+
+- name: _verify | Assert normalized nzbToMedia file fields
+  vars:
+    record: "{{ _sabnzbd_nzbtomedia_record.stdout | from_json }}"
+  assert:
+    that:
+      - record.service == "sabnzbd"
+      - record.stream == "nzbtomedia"
+      - record.unit == "sabnzbd.service"
+      - record.identifier == "nzbtomedia"
+      - record.level == "info"
+      - record.message == sabnzbd_nzbtomedia_marker ~ " succeeded"
+      - record.fields.source == "RADARR"
+      - record.fields.parser_status == "parsed"
+      - record.parse_error is not defined
+      - record.fields.nzbtomedia_timestamp is not defined
+      - record.fields.filepath is not defined
+
+- name: _verify | Stop fluent-bit before the isolated extension fixture
+  systemd:
+    name: fluent-bit
+    state: stopped
+  become: true
+
 - name: _verify | Exercise sabnzbd fluent-bit record contracts
   import_role:
     name: fluentbit
@@ -256,6 +329,12 @@
             - fields.parser_status
             - fields.source
             - fields.source_line
+
+- name: _verify | Restart fluent-bit after the isolated extension fixture
+  systemd:
+    name: fluent-bit
+    state: started
+  become: true
 
 # usage_at_start preservation (main.yml's slurp+regex readback) is the role's
 # most fragile mechanism and the HTTP/DB probes can't see it: a broken readback
