@@ -49,6 +49,16 @@
   tags:
     - socket_proxy
 
+- name: Install socket_proxy fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension
+  vars:
+    fluentbit_extension_args:
+      name: socket_proxy
+  tags:
+    - socket_proxy
+
 - name: Enable socket_proxy service
   import_role:
     name: systemd_unit
@@ -58,15 +68,5 @@
       src: socket_proxy
       condition: "{{ not (ansible_check_mode and socket_proxy_service_result.changed) }}"
       restart: "{{ socket_proxy_service_result.changed or socket_proxy_network.changed }}"
-  tags:
-    - socket_proxy
-
-- name: Install socket_proxy fluent-bit extension
-  import_role:
-    name: fluentbit
-    tasks_from: extension
-  vars:
-    fluentbit_extension_args:
-      name: socket_proxy
   tags:
     - socket_proxy

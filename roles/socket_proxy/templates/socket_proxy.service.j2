@@ -5,13 +5,13 @@
 # instead of joining the podman-socket group, so a netdata compromise can't
 # reach the container-create API. POST is denied by default (read-only); only
 # the GET sections the collector needs are enabled (CONTAINERS/IMAGES/INFO;
-# VERSION/PING are on by default; EVENTS is explicitly disabled). LOG_LEVEL is
-# raised to warning so HAProxy stops logging every proxied request -- netdata's
-# docker collector and homepage poll this socket every few seconds (~21 MB/day
-# of journald access-log noise otherwise); warning still surfaces real
-# proxy/backend errors. The proxy
-# itself necessarily holds
-# the socket access -- it is the deliberate isolation boundary, a tiny audited
+# VERSION/PING are on by default; EVENTS is explicitly disabled). HAProxy logs
+# requests at info so the retained journal shows which consumers exercised the
+# privileged API boundary. The role-owned Fluent Bit extension removes only the
+# container's loopback /version healthcheck chatter from the derived lnav store;
+# consumer requests and proxy/backend errors remain visible. The proxy itself
+# necessarily holds the socket access -- it is the deliberate isolation
+# boundary, a tiny audited
 # HAProxy rather than the full netdata daemon. No --user: the bind-mounted
 # podman socket is root-owned (0660) and the proxy needs read access.
 [Unit]
@@ -55,7 +55,7 @@ ExecStart=/usr/bin/podman run \
     --env POST=0 \
     --env EXEC=0 \
     --env DISABLE_IPV6=1 \
-    --env LOG_LEVEL=warning \
+    --env LOG_LEVEL=info \
     --publish 127.0.0.1:{{ service_ports.socket_proxy }}:2375/tcp \
     --health-cmd {{ ["sh", "-c", "wget -q -O /dev/null http://127.0.0.1:2375/version"] | json_argv }} \
     --health-startup-cmd {{ ["sh", "-c", "wget -q -O /dev/null http://127.0.0.1:2375/version"] | json_argv }} \
