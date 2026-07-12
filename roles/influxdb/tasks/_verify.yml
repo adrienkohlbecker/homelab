@@ -340,3 +340,30 @@
     not _influxdb_dir_owner.stat.exists
     or _influxdb_dir_owner.stat.pw_name != 'influxdb'
   become: true
+
+- name: _verify | Exercise influxdb fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: influxdb
+      records:
+        - MESSAGE: 'ts=2099-01-02T03:04:05Z lvl=WARNING msg="influxdb-valid" parser_status=forged service=attribute'
+          CONTAINER_TAG: influxdb
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: influxdb.service
+        - MESSAGE: influxdb-raw
+          CONTAINER_TAG: influxdb
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: influxdb.service
+      expected:
+        - message: influxdb-valid
+          level: warn
+          service: influxdb
+          fields.parser_status: parsed
+          fields.service: attribute
+        - message: influxdb-raw
+          service: influxdb
+          _absent:
+            - fields.parser_status

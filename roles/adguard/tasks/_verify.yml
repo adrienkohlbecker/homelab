@@ -265,3 +265,37 @@
   delay: 5
   until: _adguard_verify_inhibitor.rc == 0
   become: true
+
+- name: _verify | Exercise adguard fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: adguard
+      records:
+        - MESSAGE: >-
+            2099/01/02 03:04:05.678901 [error] dnsproxy: adguard-valid
+            retry=true count=3 parser_status=forged source=attribute service=attribute
+          CONTAINER_TAG: adguard
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: adguard.service
+        - MESSAGE: adguard-raw
+          CONTAINER_TAG: adguard
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: adguard.service
+      expected:
+        - message: adguard-valid
+          level: error
+          service: adguard
+          fields.parser_status: parsed
+          fields.source: dnsproxy
+          fields.retry: true
+          fields.count: 3
+          fields.adguard_parser_status: forged
+          fields.adguard_source: attribute
+          fields.adguard_service: attribute
+        - message: adguard-raw
+          service: adguard
+          _absent:
+            - fields.parser_status

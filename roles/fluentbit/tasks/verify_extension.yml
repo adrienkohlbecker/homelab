@@ -1,0 +1,99 @@
+- name: _verify | Validate fluent-bit extension fixture arguments
+  assert:
+    that:
+      - fluentbit_verify_args.keys() | list | difference(['name', 'records', 'expected']) | length == 0
+      - fluentbit_verify_args.name is string
+      - fluentbit_verify_args.records | length > 0
+      - fluentbit_verify_args.expected | length > 0
+
+- name: _verify | Write fluent-bit extension fixture  # noqa: require-backup require-validate
+  copy:
+    dest: "/tmp/fluent-bit-{{ fluentbit_verify_args.name }}-verify.yaml"
+    mode: "0644"
+    content: |
+      service:
+        flush: 1
+        log_level: error
+        storage.path: /tmp/fluent-bit-{{ fluentbit_verify_args.name }}-storage
+
+      includes:
+        - /etc/fluent-bit/services/{{ fluentbit_verify_args.name }}.yaml
+        - /etc/fluent-bit/filters-post.yaml
+
+      pipeline:
+        inputs:
+      {% for record in fluentbit_verify_args.records %}
+          - name: dummy
+            tag: svc.{{ fluentbit_verify_args.name }}.service
+            dummy: >-
+              {{ record | to_json }}
+            samples: 1
+      {% endfor %}
+
+        outputs:
+          - name: stdout
+            match: '*'
+            format: json_lines
+  become: true
+
+- name: _verify | Run fluent-bit extension fixture
+  command:
+    argv:
+      - timeout
+      - --signal=TERM
+      - "4"
+      - /opt/fluent-bit/bin/fluent-bit
+      - --config
+      - "/tmp/fluent-bit-{{ fluentbit_verify_args.name }}-verify.yaml"
+  register: fluentbit_verify_result
+  changed_when: false
+  failed_when: fluentbit_verify_result.rc not in [0, 124]
+  become: true
+
+- name: _verify | Assert fluent-bit extension records
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        expected = json.loads(sys.argv[1])
+        records = []
+        for line in sys.stdin:
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+        def value_at(record, path):
+            value = record
+            for part in path.split("."):
+                if not isinstance(value, dict) or part not in value:
+                    return False, None
+                value = value[part]
+            return True, value
+
+        def matches(record, wanted):
+            for path, value in wanted.items():
+                if path == "_absent":
+                    if any(value_at(record, item)[0] for item in value):
+                        return False
+                    continue
+                present, actual = value_at(record, path)
+                if not present or actual != value:
+                    return False
+            return True
+
+        for wanted in expected:
+            assert any(matches(record, wanted) for record in records), (wanted, records)
+      - "{{ fluentbit_verify_args.expected | to_json }}"
+    stdin: "{{ fluentbit_verify_result.stdout }}"
+  changed_when: false
+
+- name: _verify | Remove fluent-bit extension fixture
+  file:
+    path: "/tmp/fluent-bit-{{ fluentbit_verify_args.name }}-verify.yaml"
+    state: absent
+  become: true

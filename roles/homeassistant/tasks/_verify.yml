@@ -395,3 +395,32 @@
     label: "{{ item.item }}"
   when: item.stat.exists
   become: true
+
+- name: _verify | Exercise homeassistant fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: homeassistant
+      records:
+        - MESSAGE: 2099-01-02 03:04:05.678 CRITICAL (MainThread) [homeassistant.verify] homeassistant-valid
+          CONTAINER_TAG: homeassistant
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: homeassistant.service
+          parser_status: forged
+        - MESSAGE: homeassistant-raw
+          CONTAINER_TAG: homeassistant
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: homeassistant.service
+      expected:
+        - message: homeassistant-valid
+          level: fatal
+          service: homeassistant
+          fields.parser_status: parsed
+          fields.thread: MainThread
+          fields.source: homeassistant.verify
+        - message: homeassistant-raw
+          service: homeassistant
+          _absent:
+            - fields.parser_status

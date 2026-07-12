@@ -124,85 +124,6 @@
   failed_when: >-
     z2m_verify_unit.status.UnitFileState != 'enabled'
 
-# The dummy input makes this independent of the unavailable Zigbee coordinator
-# in QEMU while exercising the deployed service extension and shared shaper.
-- name: _verify | Write fluent-bit pipeline fixture
-  copy:
-    dest: /tmp/z2m-fluent-bit-pipeline.yaml
-    mode: "0644"
-    content: |
-      service:
-        flush: 1
-        log_level: error
-
-      includes:
-        - /etc/fluent-bit/services/z2m.yaml
-        - /etc/fluent-bit/filters-post.yaml
-
-      pipeline:
-        inputs:
-          - name: dummy
-            tag: svc.z2m.service
-            dummy: '{"MESSAGE":"{\"level\":\"warning\",\"message\":\"z2m: Failed to ping test/device\",\"timestamp\":\"2026-07-11 12:00:00\"}","CONTAINER_TAG":"z2m","CONTAINER_ID":"123456789abc","CONTAINER_ID_FULL":"123456789abcdef0","PRIORITY":"6"}'
-            samples: 1
-
-        outputs:
-          - name: stdout
-            match: '*'
-            format: json_lines
-  become: true
-
-- name: _verify | Run fluent-bit pipeline fixture
-  command:
-    argv:
-      - timeout
-      - --signal=TERM
-      - "4"
-      - /opt/fluent-bit/bin/fluent-bit
-      - --config
-      - /tmp/z2m-fluent-bit-pipeline.yaml
-  register: z2m_verify_fluentbit_pipeline
-  changed_when: false
-  failed_when: z2m_verify_fluentbit_pipeline.rc not in [0, 124]
-  become: true
-
-- name: _verify | Assert fluent-bit normalized the fixture
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        records = []
-        for line in sys.stdin:
-            try:
-                records.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-
-        assert len(records) == 1, records
-        record = records[0]
-        assert record["message"] == "Failed to ping test/device", record
-        assert record["level"] == "warn", record
-        assert record["service"] == "z2m", record
-        fields = record["fields"]
-        assert fields["namespace"] == "z2m", record
-        assert fields["parser_status"] == "parsed", record
-        assert fields["CONTAINER_ID"] == "123456789abc", record
-        for key in ("timestamp", "level", "message", "CONTAINER_TAG", "CONTAINER_ID_FULL", "PRIORITY"):
-            assert key not in fields, record
-  args:
-    stdin: "{{ z2m_verify_fluentbit_pipeline.stdout }}"
-  changed_when: false
-
-- name: _verify | Remove fluent-bit pipeline fixture
-  file:
-    path: /tmp/z2m-fluent-bit-pipeline.yaml
-    state: absent
-  become: true
-
 - name: _verify | Nginx vhost is installed
   stat:
     path: /etc/nginx/sites-enabled/z2m
@@ -276,3 +197,32 @@
   delay: 2
   until: z2m_verify_http.status == 200
   become: true
+
+- name: _verify | Exercise z2m fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: z2m
+      records:
+        - MESSAGE: '{"level":"WARNING","message":"z2m:mqtt: z2m-valid","timestamp":"2099-01-02T03:04:05Z","stack":"trace","parser_status":"forged","service":"attribute"}'
+          CONTAINER_TAG: z2m
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: z2m.service
+        - MESSAGE: z2m-raw
+          CONTAINER_TAG: z2m
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: z2m.service
+      expected:
+        - message: z2m-valid
+          level: warn
+          service: z2m
+          fields.parser_status: parsed
+          fields.namespace: z2m:mqtt
+          fields.exception: trace
+          fields.service: attribute
+        - message: z2m-raw
+          service: z2m
+          _absent:
+            - fields.parser_status

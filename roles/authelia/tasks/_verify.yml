@@ -197,3 +197,30 @@
 # the wg0 ingress firewall rule that gates cross-host access. The
 # loopback probe + auth-request probe above already cover the
 # Authelia-specific bits (listener up, gate semantics correct).
+
+- name: _verify | Exercise authelia fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: authelia
+      records:
+        - MESSAGE: '{"level":"WARNING","msg":"authelia-valid","time":"2099-01-02T03:04:05Z","parser_status":"forged","service":"attribute"}'
+          CONTAINER_TAG: authelia
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: authelia.service
+        - MESSAGE: authelia-raw
+          CONTAINER_TAG: authelia
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: authelia.service
+      expected:
+        - message: authelia-valid
+          level: warn
+          service: authelia
+          fields.parser_status: parsed
+          fields.service: attribute
+        - message: authelia-raw
+          service: authelia
+          _absent:
+            - fields.parser_status

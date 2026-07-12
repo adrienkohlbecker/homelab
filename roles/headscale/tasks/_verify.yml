@@ -328,3 +328,30 @@
   delay: 1
   until: _headscale_failsoft_list.rc == 0
   become: true
+
+- name: _verify | Exercise headscale fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: headscale
+      records:
+        - MESSAGE: '{"level":"WARNING","message":"headscale-valid","time":4070908800,"parser_status":"forged","service":"attribute"}'
+          CONTAINER_TAG: headscale
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: headscale.service
+        - MESSAGE: headscale-raw
+          CONTAINER_TAG: headscale
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: headscale.service
+      expected:
+        - message: headscale-valid
+          level: warn
+          service: headscale
+          fields.parser_status: parsed
+          fields.service: attribute
+        - message: headscale-raw
+          service: headscale
+          _absent:
+            - fields.parser_status

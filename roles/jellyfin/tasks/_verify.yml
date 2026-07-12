@@ -319,3 +319,31 @@
   loop: "{{ jellyfin_scheduled_task_times | dict2items }}"
   loop_control:
     label: "{{ item.key }} -> {{ item.value }}"
+
+- name: _verify | Exercise jellyfin fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: jellyfin
+      records:
+        - MESSAGE: '{"@t":"2099-01-02T03:04:05Z","@m":"jellyfin-valid","@l":"Warning","JellyfinFormat":"clef","SourceContext":"Verify","parser_status":"forged","service":"attribute"}'
+          CONTAINER_TAG: jellyfin
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: jellyfin.service
+        - MESSAGE: jellyfin-raw
+          CONTAINER_TAG: jellyfin
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: jellyfin.service
+      expected:
+        - message: jellyfin-valid
+          level: warn
+          service: jellyfin
+          fields.parser_status: parsed
+          fields.source: Verify
+          fields.service: attribute
+        - message: jellyfin-raw
+          service: jellyfin
+          _absent:
+            - fields.parser_status

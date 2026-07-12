@@ -97,3 +97,31 @@
     status_code: 302
   register: _bazarr_nginx_gate
   failed_when: _bazarr_nginx_gate is not authelia_redirects_to('bazarr', inventory_hostname, domain)
+
+- name: _verify | Exercise bazarr fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: bazarr
+      records:
+        - MESSAGE: "2099-01-02 03:04:05,678 - root (abcdef) : CRITICAL (server:42) - bazarr-valid"
+          CONTAINER_TAG: bazarr
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: bazarr.service
+          parser_status: forged
+        - MESSAGE: bazarr-raw
+          CONTAINER_TAG: bazarr
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: bazarr.service
+      expected:
+        - message: bazarr-valid
+          level: fatal
+          service: bazarr
+          fields.parser_status: parsed
+          fields.source_line: 42
+        - message: bazarr-raw
+          service: bazarr
+          _absent:
+            - fields.parser_status

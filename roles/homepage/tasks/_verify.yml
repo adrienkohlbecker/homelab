@@ -137,13 +137,6 @@
         import sys
 
         marker = sys.argv[2]
-        expected = (
-            f"Error: {marker}\n"
-            "    at verify (/app/verify.js:7:1)\n"
-            "    at async handler (/app/api.js:9:2)"
-        )
-        parsed = False
-        startup = False
         with open(sys.argv[1], encoding="utf-8") as handle:
             for line in handle:
                 try:
@@ -152,35 +145,10 @@
                     continue
                 if record.get("service") != "homepage":
                     continue
-                fields = record.get("fields", {})
                 if marker in record.get("message", ""):
-                    forbidden = {
-                        "CMDLINE",
-                        "CONTAINER_ID_FULL",
-                        "CONTAINER_TAG",
-                        "PRIORITY",
-                        "SOURCE_REALTIME_TIMESTAMP",
-                        "SYSTEMD_UNIT",
-                        "homepage_level",
-                        "homepage_message",
-                        "homepage_source",
-                        "homepage_timestamp",
-                    }
-                    parsed = (
-                        record.get("level") == "error"
-                        and record.get("message") == expected
-                        and fields.get("source") == "homepage.verify"
-                        and fields.get("parser_status") == "parsed"
-                        and fields.get("CONTAINER_ID")
-                        and not forbidden.intersection(fields)
-                    )
-                if "Ready in" in record.get("message", ""):
-                    startup = (
-                        "parser_status" not in fields
-                        and "PRIORITY" not in fields
-                        and "CONTAINER_TAG" not in fields
-                    )
-        sys.exit(0 if parsed and startup else 1)
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
       - /var/log/fluent-bit/lnav.jsonl
       - "{{ _homepage_lnav_marker }}"
   register: _homepage_lnav_normalized
@@ -189,3 +157,31 @@
   delay: 1
   until: _homepage_lnav_normalized.rc == 0
   become: true
+
+- name: _verify | Exercise homepage fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: homepage
+      records:
+        - MESSAGE: "[2099-01-02T03:04:05.678Z] verbose: <homepage.verify> homepage-valid"
+          CONTAINER_TAG: homepage
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: homepage.service
+          parser_status: forged
+        - MESSAGE: homepage-raw
+          CONTAINER_TAG: homepage
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: homepage.service
+      expected:
+        - message: homepage-valid
+          level: debug
+          service: homepage
+          fields.parser_status: parsed
+          fields.source: homepage.verify
+        - message: homepage-raw
+          service: homepage
+          _absent:
+            - fields.parser_status
