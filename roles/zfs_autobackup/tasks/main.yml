@@ -78,17 +78,6 @@
   tags:
     - zfs_autobackup
 
-- name: Create log directory
-  file:
-    dest: /var/log/zfs_autobackup
-    state: directory
-    owner: root
-    group: root
-    mode: "0700"
-  become: true
-  tags:
-    - zfs_autobackup
-
 # Root-owned offsite change-gate state: one marker file per dataset recording
 # the snapshot last confirmed on bunk (see zfs_backup_offsite.sh). Kept out of
 # the zfs_autobackup user's home (/var/lib/zfs_autobackup) so the backup user
@@ -209,14 +198,11 @@
   tags:
     - zfs_autobackup
 
-- name: Configure logrotate
-  import_role:
-    name: logrotate
-    tasks_from: template
-  vars:
-    logrotate_args:
-      src: logrotate.j2
-      dest: /etc/logrotate.d/zfs_autobackup
+- name: Remove zfs_autobackup logrotate configuration
+  file:
+    path: /etc/logrotate.d/zfs_autobackup
+    state: absent
+  become: true
   tags:
     - zfs_autobackup
 

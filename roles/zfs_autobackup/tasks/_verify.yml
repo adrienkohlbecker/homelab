@@ -105,34 +105,17 @@
   loop_control:
     label: "{{ item.item }}"
 
-- name: _verify | Stat log directory
-  stat:
-    path: /var/log/zfs_autobackup
-  register: zfs_autobackup_verify_logdir
-  become: true
-
-- name: _verify | Log directory exists with correct permissions
-  assert:
-    that:
-      - zfs_autobackup_verify_logdir.stat.exists
-      - zfs_autobackup_verify_logdir.stat.isdir
-      - zfs_autobackup_verify_logdir.stat.mode == "0700"
-      - zfs_autobackup_verify_logdir.stat.pw_name == "root"
-    fail_msg: >-
-      /var/log/zfs_autobackup missing or wrong perms
-      ({{ zfs_autobackup_verify_logdir.stat }})
-
 - name: _verify | Stat logrotate config
   stat:
     path: /etc/logrotate.d/zfs_autobackup
   register: zfs_autobackup_verify_logrotate
   become: true
 
-- name: _verify | Logrotate config exists
+- name: _verify | Logrotate config is absent
   assert:
     that:
-      - zfs_autobackup_verify_logrotate.stat.exists
-    fail_msg: "logrotate config missing at /etc/logrotate.d/zfs_autobackup"
+      - not zfs_autobackup_verify_logrotate.stat.exists
+    fail_msg: "obsolete logrotate config remains at /etc/logrotate.d/zfs_autobackup"
 
 # Functional check: converge granted zfs allow on the scratch dataset that
 # _setup tagged; assert the grant landed, then drive a real local backup and
@@ -272,6 +255,10 @@
     that:
       - "'skipping offsite sync' not in zfs_autobackup_verify_gate_reconcile.stdout"
       - "'rsync' in zfs_autobackup_verify_gate_reconcile.stdout"
+      - "'--out-format=dataset=rpool/zfs_autobackup_offsite_test' in zfs_autobackup_verify_gate_reconcile.stdout"
+      - "'change=%i' in zfs_autobackup_verify_gate_reconcile.stdout"
+      - "'path=%n%L' in zfs_autobackup_verify_gate_reconcile.stdout"
+      - "'--log-file' not in zfs_autobackup_verify_gate_reconcile.stdout"
     fail_msg: >-
       offsite gate failed to reconcile an unchanged dataset with a >30d marker
       (rc={{ zfs_autobackup_verify_gate_reconcile.rc }},
@@ -315,6 +302,10 @@
     that:
       - "'skipping offsite sync' not in zfs_autobackup_verify_gate_nochange.stdout"
       - "'rsync' in zfs_autobackup_verify_gate_nochange.stdout"
+      - "'--out-format=dataset=rpool/zfs_autobackup_offsite_test' in zfs_autobackup_verify_gate_nochange.stdout"
+      - "'change=%i' in zfs_autobackup_verify_gate_nochange.stdout"
+      - "'path=%n%L' in zfs_autobackup_verify_gate_nochange.stdout"
+      - "'--log-file' not in zfs_autobackup_verify_gate_nochange.stdout"
     fail_msg: >-
       offsite gate failed to proceed to rsync after a change
       (rc={{ zfs_autobackup_verify_gate_nochange.rc }},

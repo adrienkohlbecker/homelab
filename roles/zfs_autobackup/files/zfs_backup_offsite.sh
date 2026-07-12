@@ -61,10 +61,10 @@ fi
 # local, not on bunk: bunk's rrsync is write-only (-wo), so a source cannot read a
 # marker back from it. It is advanced only after a successful rsync (see below).
 # One dataset is unavoidably self-referential: the root dataset
-# (rpool/ROOT/<release>, mounted at /) holds both this marker dir and the rsync
-# --log-file under /var, so its own written@ is never 0 and root never skips.
-# That is fine -- root is small and was never the slow-walk target; the gate pays
-# off on the large /mnt and tank/* data datasets, which carry neither path.
+# (rpool/ROOT/<release>, mounted at /) holds this marker dir under /var, so
+# advancing its marker makes its own written@ nonzero and root never skips. That
+# is fine -- root is small and was never the slow-walk target; the gate pays off
+# on the large /mnt and tank/* data datasets, which do not carry the marker.
 #
 # Fall through to a full rsync -- (re)establishing the baseline -- when there is
 # no marker yet (first run); the marker snapshot was thinned away so written@
@@ -89,6 +89,11 @@ rsync_progress=()
 if [ -t 1 ]; then
   rsync_progress=(--info=progress2)
 fi
+
+# Emit each update through stdout so the systemd timer sends the detail through
+# journald and Fluent Bit. %i %n%L is rsync's per-update payload; the dataset
+# prefix keeps the context that every line needs in the shared journal stream.
+rsync_out_format="dataset=$DATASET change=%i path=%n%L"
 
 # Both ends now speak rsync >= 3.2 (the source hosts, and bunk via rrsync's
 # RSYNC override at SynoCli 3.4.1), unlocking the negotiated fast paths: plain
@@ -149,7 +154,7 @@ f_trace rsync \
   -M--fake-super \
   --numeric-ids \
   --stats \
-  --log-file="/var/log/zfs_autobackup/$DESTPATH.log" \
+  --out-format="$rsync_out_format" \
   --one-file-system \
   --exclude .DS_Store \
   --exclude "._*" \
