@@ -164,3 +164,134 @@
         path: /tmp/_verify_kuma_seed.db
         state: absent
       become: true
+
+- name: _verify | Kuma emits native structured records
+  command: podman logs kuma
+  register: _kuma_container_logs
+  changed_when: false
+  become: true
+
+- name: _verify | Validate kuma structured log schema
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        for line in sys.stdin:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if (
+                isinstance(record.get("time"), str)
+                and isinstance(record.get("module"), str)
+                and isinstance(record.get("level"), str)
+                and isinstance(record.get("msg"), str)
+            ):
+                sys.exit(0)
+        sys.exit(1)
+  args:
+    stdin: "{{ _kuma_container_logs.stdout }}"
+  changed_when: false
+
+- name: _verify | Wait for normalized kuma record in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "kuma"
+                    and fields.get("parser_status") == "parsed"
+                    and fields.get("source")
+                    and fields.get("CONTAINER_ID")
+                    and "time" not in fields
+                    and "module" not in fields
+                    and "level" not in fields
+                    and "msg" not in fields
+                    and "CONTAINER_TAG" not in fields
+                    and "CONTAINER_ID_FULL" not in fields
+                ):
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _kuma_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _kuma_lnav_record.rc == 0
+  become: true
+
+- name: _verify | Exercise kuma fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: kuma
+      records:
+        - MESSAGE: '{"time":"2099-01-02T03:04:05Z","module":"SERVER","level":"WARN","msg":"kuma-valid","parser_status":"forged","service":"attribute"}'
+          CONTAINER_TAG: kuma
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: kuma.service
+        - MESSAGE: Welcome to Uptime Kuma
+          CONTAINER_TAG: kuma
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: kuma.service
+        - MESSAGE: '(node:42) [DEP0040] DeprecationWarning: punycode is deprecated.'
+          CONTAINER_TAG: kuma
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: kuma.service
+        - MESSAGE: '{"time":"broken"'
+          CONTAINER_TAG: kuma
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: kuma.service
+        - MESSAGE: '{"time":"2099-01-02T03:04:05Z","module":"SYSTEMD","level":"ERROR","msg":"must-not-parse"}'
+          SYSLOG_IDENTIFIER: systemd
+          SYSTEMD_UNIT: kuma.service
+      expected:
+        - message: kuma-valid
+          level: warn
+          service: kuma
+          fields.parser_status: parsed
+          fields.source: SERVER
+          fields.service: attribute
+          _absent:
+            - fields.time
+            - fields.module
+            - fields.msg
+        - message: Welcome to Uptime Kuma
+          level: info
+          service: kuma
+          _absent:
+            - fields.parser_status
+            - fields.source
+        - message: '(node:42) [DEP0040] DeprecationWarning: punycode is deprecated.'
+          level: info
+          service: kuma
+          _absent:
+            - fields.parser_status
+        - message: '{"time":"broken"'
+          level: warn
+          service: kuma
+          parse_error: kuma_json
+          fields.parser_status: failed
+        - message: '{"time":"2099-01-02T03:04:05Z","module":"SYSTEMD","level":"ERROR","msg":"must-not-parse"}'
+          service: systemd
+          _absent:
+            - fields.parser_status
+            - fields.source

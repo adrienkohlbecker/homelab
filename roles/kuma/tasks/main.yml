@@ -87,6 +87,16 @@
   tags:
     - kuma
 
+- name: Install kuma fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension
+  vars:
+    fluentbit_extension_args:
+      name: kuma
+  tags:
+    - kuma
+
 - name: Enable kuma service
   import_role:
     name: systemd_unit
