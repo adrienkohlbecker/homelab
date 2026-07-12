@@ -159,6 +159,104 @@
       - omdb_api_key in _apm
     fail_msg: "autoProcessMedia.cfg is missing a rendered api key (sabnzbd/radarr/sonarr/lidarr/omdb)"
 
+- name: _verify | Wait for normalized sabnzbd startup record in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "sabnzbd"
+                    and fields.get("parser_status") == "parsed"
+                    and fields.get("source") == "SABnzbd"
+                    and isinstance(fields.get("source_line"), int)
+                    and record.get("message", "").startswith("SABnzbd.py-")
+                    and "CONTAINER_TAG" not in fields
+                    and "sabnzbd_time" not in fields
+                    and "sabnzbd_level" not in fields
+                ):
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _sabnzbd_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _sabnzbd_lnav_record.rc == 0
+  become: true
+
+- name: _verify | Exercise sabnzbd fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: sabnzbd
+      records:
+        - MESSAGE: '2099-01-02 03:04:05,678::INFO::[newswrapper:424] 1@example.invalid: Connected using TLSv1.3'
+          CONTAINER_TAG: sabnzbd
+          SYSLOG_IDENTIFIER: sabnzbd
+          SYSTEMD_UNIT: sabnzbd.service
+        - MESSAGE: '2099-01-02 03:04:06,789::WARNING::[__init__:641] Signal 15 caught, saving and exiting...'
+          CONTAINER_TAG: sabnzbd
+          SYSLOG_IDENTIFIER: sabnzbd
+          SYSTEMD_UNIT: sabnzbd.service
+        - MESSAGE: '2099-01-02 03:04:07,890::ERROR::[filesystem:1088] Saving /config/admin/postproc2.sab failed'
+          CONTAINER_TAG: sabnzbd
+          SYSLOG_IDENTIFIER: sabnzbd
+          SYSTEMD_UNIT: sabnzbd.service
+        - MESSAGE: '[ls.io-init] done.'
+          CONTAINER_TAG: sabnzbd
+          SYSLOG_IDENTIFIER: sabnzbd
+          SYSTEMD_UNIT: sabnzbd.service
+        - MESSAGE: Started sabnzbd.
+          SYSLOG_IDENTIFIER: systemd
+          SYSTEMD_UNIT: sabnzbd.service
+      expected:
+        - message: '1@example.invalid: Connected using TLSv1.3'
+          level: info
+          service: sabnzbd
+          fields.source: newswrapper
+          fields.source_line: 424
+          fields.parser_status: parsed
+          _absent:
+            - fields.sabnzbd_time
+            - fields.sabnzbd_level
+            - fields.CONTAINER_TAG
+        - message: 'Signal 15 caught, saving and exiting...'
+          level: warn
+          fields.source: __init__
+          fields.source_line: 641
+          fields.parser_status: parsed
+        - message: Saving /config/admin/postproc2.sab failed
+          level: error
+          fields.source: filesystem
+          fields.source_line: 1088
+          fields.parser_status: parsed
+        - message: '[ls.io-init] done.'
+          service: sabnzbd
+          _absent:
+            - fields.parser_status
+            - fields.source
+            - fields.source_line
+        - message: Started sabnzbd.
+          service: systemd
+          _absent:
+            - fields.parser_status
+            - fields.source
+            - fields.source_line
+
 # usage_at_start preservation (main.yml's slurp+regex readback) is the role's
 # most fragile mechanism and the HTTP/DB probes can't see it: a broken readback
 # silently resets the per-server quota odometer to the template baseline on the

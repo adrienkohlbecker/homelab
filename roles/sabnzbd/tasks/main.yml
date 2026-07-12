@@ -250,6 +250,16 @@
   tags:
     - sabnzbd
 
+- name: Install sabnzbd fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension
+  vars:
+    fluentbit_extension_args:
+      name: sabnzbd
+  tags:
+    - sabnzbd
+
 - name: Install sabnzbd service
   import_role:
     name: systemd_unit
