@@ -61,14 +61,11 @@ ExecStart=/usr/bin/podman run \
     --publish 127.0.0.1:{{ service_ports.transmission }}:9091/tcp \
     --publish 0.0.0.0:{{ service_ports.transmission_bt }}:51413/tcp \
     --publish 0.0.0.0:{{ service_ports.transmission_bt }}:51413/udp \
-{# Liveness only -- a credential-free probe so it needs neither the rpc secret
-   nor the host-whitelist. RPC auth is enforced for real clients (the *arr leg,
-   asserted in _verify); here a bare GET to the RPC endpoint draws transmission's
-   409 CSRF response, which precedes auth, and curl without -f exits 0 on any
-   HTTP reply (only a refused/closed port is non-zero). 127.0.0.1 is always
-   allowed regardless of rpc-host-whitelist. #}
-    --health-cmd         {{ "http://127.0.0.1:9091/transmission/rpc" | podman_health_curl(location=false, fail=false) }} \
-    --health-startup-cmd {{ "http://127.0.0.1:9091/transmission/rpc" | podman_health_curl(location=false, fail=false) }} \
+{# Liveness only. An unauthenticated RPC request is noisy and eventually trips
+   transmission's brute-force protection. The image uses this same TCP probe
+   to gate s6 readiness, and _verify exercises authenticated RPC separately. #}
+    --health-cmd         {{ ["nc", "-z", "127.0.0.1", "9091"] | json_argv }} \
+    --health-startup-cmd {{ ["nc", "-z", "127.0.0.1", "9091"] | json_argv }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \

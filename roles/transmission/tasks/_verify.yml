@@ -14,6 +14,52 @@
   delay: 2
   until: _transmission_rpc.status == 401
 
+- name: _verify | Read authentication warnings before the container healthcheck
+  command:
+    argv:
+      - journalctl
+      - --boot
+      - CONTAINER_TAG=transmission
+      - --grep=Rejected request from 127.0.0.1
+      - --output=json
+      - --no-pager
+  register: _transmission_auth_warnings_before_healthcheck
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Run the configured container healthcheck
+  command:
+    argv:
+      - podman
+      - healthcheck
+      - run
+      - transmission
+  changed_when: false
+  become: true
+
+- name: _verify | Read authentication warnings after the container healthcheck
+  command:
+    argv:
+      - journalctl
+      - --boot
+      - CONTAINER_TAG=transmission
+      - --grep=Rejected request from 127.0.0.1
+      - --output=json
+      - --no-pager
+  register: _transmission_auth_warnings_after_healthcheck
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Container healthcheck does not attempt RPC authentication
+  assert:
+    that:
+      - >-
+        _transmission_auth_warnings_after_healthcheck.stdout_lines | length ==
+        _transmission_auth_warnings_before_healthcheck.stdout_lines | length
+    fail_msg: "Transmission healthcheck emitted an RPC authentication warning"
+
 # SNI follows the URL host, not the Host header, so probing https://localhost/
 # with a Host: override trips TLSV1_UNRECOGNIZED_NAME on openssl 3.x
 # (noble/resolute). Map the vhost FQDN to loopback and probe it directly so
