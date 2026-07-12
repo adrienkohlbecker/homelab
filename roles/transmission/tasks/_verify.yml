@@ -175,3 +175,90 @@
       transmission rewrote settings.json into a form settings.json.j2 no longer
       matches -- its key order/types drifted from the writeback, so deploying
       would restart-churn. Re-capture settings.json.j2 from a running instance.
+
+- name: _verify | Wait for normalized transmission output in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "transmission"
+                    and record.get("level") == "warn"
+                    and record.get("message", "").startswith("Rejected request from 127.0.0.1")
+                    and fields.get("source") == "rpc-server.cc"
+                    and isinstance(fields.get("source_line"), int)
+                    and fields.get("parser_status") == "parsed"
+                    and "transmission_timestamp" not in fields
+                    and "transmission_level" not in fields
+                    and "CONTAINER_TAG" not in fields
+                ):
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _transmission_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _transmission_lnav_record.rc == 0
+  become: true
+
+- name: _verify | Exercise transmission fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: transmission
+      records:
+        - MESSAGE: "[2099-01-02T03:04:05.678+0100] ERR utils.cc:144 Couldn't read '/config/queue.json': No such file or directory (2) (utils.cc:144)"
+          CONTAINER_TAG: transmission
+          SYSLOG_IDENTIFIER: transmission
+          SYSTEMD_UNIT: transmission.service
+        - MESSAGE: '[2099-01-02T03:04:06.789+0100] WRN rpc-server.cc:570 Rejected request from 127.0.0.1 (failed authentication) (rpc-server.cc:570)'
+          CONTAINER_TAG: transmission
+          SYSLOG_IDENTIFIER: transmission
+          SYSTEMD_UNIT: transmission.service
+        - MESSAGE: '[ls.io-init] done.'
+          CONTAINER_TAG: transmission
+          SYSLOG_IDENTIFIER: transmission
+          SYSTEMD_UNIT: transmission.service
+        - MESSAGE: Started transmission.
+          SYSLOG_IDENTIFIER: systemd
+          SYSTEMD_UNIT: transmission.service
+      expected:
+        - message: "Couldn't read '/config/queue.json': No such file or directory (2)"
+          level: error
+          service: transmission
+          fields.source: utils.cc
+          fields.source_line: 144
+          fields.parser_status: parsed
+          _absent:
+            - fields.transmission_timestamp
+            - fields.transmission_level
+            - fields.transmission_origin
+            - fields.transmission_origin_line
+            - fields.CONTAINER_TAG
+        - message: Rejected request from 127.0.0.1 (failed authentication)
+          level: warn
+          fields.source: rpc-server.cc
+          fields.source_line: 570
+          fields.parser_status: parsed
+        - message: '[ls.io-init] done.'
+          service: transmission
+          _absent:
+            - fields.parser_status
+        - message: Started transmission.
+          service: systemd
+          _absent:
+            - fields.parser_status
