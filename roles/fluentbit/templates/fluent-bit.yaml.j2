@@ -29,6 +29,22 @@ parsers:
     regex: '^(?<remote_addr>[^ ]+) - (?<remote_user>[^ ]+) \[(?<time_local>[^\]]+)\] (?<http_host>[^ ]+) "(?<method>\S+)(?: +(?<path>[^"]*?)(?: +(?<protocol>\S+))?)?" (?<server_name>[^ ]+) (?<status>\d{3}) (?<body_bytes_sent>\d+) (?<request_length>\d+) (?<request_time>[\d.]+) (?<upstream_response_time>[\d.]+|-) "(?<referer>[^"]*)" "(?<user_agent>[^"]*)" "(?<authelia_user>[^"]*)" "(?<authelia_groups>[^"]*)" (?<ssl_protocol>\S+) (?<ssl_cipher>\S+)$'
     types: status:integer body_bytes_sent:integer request_length:integer request_time:float
 
+  - name: certbot_file
+    format: regex
+    regex: '/^(?<certbot_timestamp>[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}):(?<certbot_level>DEBUG|INFO|WARNING|ERROR|CRITICAL):(?<certbot_source>[^:]+):(?<certbot_message>.*)$/m'
+
+multiline_parsers:
+  - name: multiline_certbot_file
+    type: regex
+    flush_timeout: 1000
+    rules:
+      - state: start_state
+        regex: '/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}:(DEBUG|INFO|WARNING|ERROR|CRITICAL):/'
+        next_state: continuation
+      - state: continuation
+        regex: '/^(?![0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}:(DEBUG|INFO|WARNING|ERROR|CRITICAL):)/'
+        next_state: continuation
+
 pipeline:
   inputs:
     # The cursor makes read_from_tail a first-install choice; subsequent starts
@@ -66,6 +82,25 @@ pipeline:
       skip_empty_lines: true
       rotate_wait: 30
       buffer_max_size: 256k
+      storage.type: filesystem
+      storage.pause_on_chunks_overlimit: true
+
+    # Certbot has no switch to disable its detailed file logger or send the
+    # equivalent DEBUG stream to stdout. Tail only the active path: Fluent Bit
+    # follows a rotated inode, while also globbing rotations would duplicate it.
+    - name: tail
+      tag: certbot.file
+      path: /var/log/letsencrypt/letsencrypt.log
+      db: /var/lib/fluent-bit/certbot.db
+      db.locking: true
+      path_key: filepath
+      read_from_head: false
+      refresh_interval: 5
+      multiline.parser: multiline_certbot_file
+      skip_empty_lines: true
+      skip_long_lines: false
+      rotate_wait: 30
+      buffer_max_size: 1M
       storage.type: filesystem
       storage.pause_on_chunks_overlimit: true
 

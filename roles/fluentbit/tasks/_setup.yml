@@ -6,3 +6,24 @@
 - name: _setup | Install logrotate
   import_role:
     name: logrotate
+
+- name: _setup | Create the certbot log fixture directory
+  file:
+    path: /var/log/letsencrypt
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+# The file must exist before Fluent Bit starts: read_from_head is deliberately
+# false, so creating it with content after startup could make the initial tail
+# attach at EOF and skip the fixture record.
+- name: _setup | Create an empty certbot log fixture
+  copy:
+    dest: /var/log/letsencrypt/letsencrypt.log
+    content: ""
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
