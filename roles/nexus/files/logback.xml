@@ -92,25 +92,19 @@
     <appender-ref ref="auditconsole"/>
   </logger>
 
-  <appender name="blobstore-reconciliation-log-file" class="ch.qos.logback.classic.sift.SiftingAppender">
-    <discriminator>
-      <key>blobstore-reconciliation-path</key>
-      <defaultValue>unknown</defaultValue>
-    </discriminator>
-    <sift>
-      <appender name="FILE-${blobstore}" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
-          <Pattern>%d{"yyyy-MM-dd HH:mm:ss"},%msg%n</Pattern>
-        </encoder>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-          <fileNamePattern>${blobstore-reconciliation-path}/%d</fileNamePattern>
-          <maxHistory>90</maxHistory>
-        </rollingPolicy>
-      </appender>
-    </sift>
+  <appender name="reconciliationconsole" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="ch.qos.logback.classic.encoder.JsonEncoder">
+      <withSequenceNumber>false</withSequenceNumber>
+      <withTimestamp>false</withTimestamp>
+      <withNanoseconds>false</withNanoseconds>
+      <withContext>false</withContext>
+      <withFormattedMessage>true</withFormattedMessage>
+      <withMessage>false</withMessage>
+      <withArguments>false</withArguments>
+    </encoder>
   </appender>
   <logger name="blobstore-reconciliation-log" additivity="false">
-    <appender-ref ref="blobstore-reconciliation-log-file"/>
+    <appender-ref ref="reconciliationconsole"/>
   </logger>
 
   <appender name="metrics" class="org.sonatype.nexus.logging.InstrumentedAppender"/>

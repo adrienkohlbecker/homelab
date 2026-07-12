@@ -80,6 +80,10 @@
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: nexus.service
+        - MESSAGE: '{"level":"INFO","threadName":"quartz-1-thread-1","loggerName":"blobstore-reconciliation-log","mdc":{"blobstore-reconciliation-path":"/nexus-data/blobs/default/reconciliation"},"formattedMessage":"nexus-reconciliation-detail"}'
+          CONTAINER_TAG: nexus
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
         - MESSAGE: '{"level":"INFO","threadName":"qtp-1","loggerName":"org.eclipse.jetty.server.RequestLog","formattedMessage":"[0:0:0:0:0:0:0:1] - - [12/Jul/2026:00:00:01 +0000] \"GET /service/rest/v1/status/writable HTTP/1.1\" 200 - 0 0 \"Wget\" [qtp-1]"}'
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
@@ -156,6 +160,12 @@
           fields.parser_status: parsed
           fields.source: org.sonatype.nexus.replication.internal.ReplicationTask
           fields.mdc.repositoryName: nexus-releases
+        - message: nexus-reconciliation-detail
+          level: info
+          service: nexus
+          fields.parser_status: parsed
+          fields.source: blobstore-reconciliation-log
+          fields.mdc.blobstore-reconciliation-path: /nexus-data/blobs/default/reconciliation
         - message: '[0:0:0:0:0:0:0:1] - - [12/Jul/2026:00:00:02 +0000] "GET /service/rest/v1/status/writable HTTP/1.1" 503 - 0 1 "Wget" [qtp-2]'
           level: debug
           service: nexus
