@@ -64,6 +64,14 @@
         - MESSAGE: '{"level":"ERROR","threadName":"systemd","loggerName":"systemd","formattedMessage":"must-not-parse"}'
           SYSLOG_IDENTIFIER: systemd
           SYSTEMD_UNIT: nexus.service
+        - MESSAGE: '{"level":"INFO","threadName":"quartz-1-thread-1","loggerName":"org.sonatype.nexus.quartz.internal.task.QuartzTaskInfo","formattedMessage":"Task ''nexus-routine-success'' [assetBlob.cleanup] state change RUNNING -> WAITING (OK)"}'
+          CONTAINER_TAG: nexus
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
+        - MESSAGE: '{"level":"ERROR","threadName":"quartz-1-thread-1","loggerName":"org.sonatype.nexus.quartz.internal.task.QuartzTaskInfo","formattedMessage":"Task ''nexus-task-failed'' [assetBlob.cleanup] state change RUNNING -> WAITING (FAILED)"}'
+          CONTAINER_TAG: nexus
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
       expected:
         - message: nexus-valid
           level: warn
@@ -95,6 +103,17 @@
           _absent:
             - fields.parser_status
             - fields.source
+        - message: "Task 'nexus-task-failed' [assetBlob.cleanup] state change RUNNING -> WAITING (FAILED)"
+          level: error
+          service: nexus
+          fields.parser_status: parsed
+          fields.source: org.sonatype.nexus.quartz.internal.task.QuartzTaskInfo
+
+- name: _verify | Routine nexus task transitions are omitted
+  assert:
+    that:
+      - "'nexus-routine-success' not in fluentbit_verify_result.stdout"
+      - "'nexus-task-failed' in fluentbit_verify_result.stdout"
 
 - name: _verify | Wait for parsed nexus startup output in lnav store
   command:
