@@ -204,3 +204,110 @@
   changed_when: false
   failed_when: getent_group.render[1] not in _plex_container_groups.stdout.split()
   become: true
+
+- name: _verify | Read normalized plex stdout records
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        path = sys.argv[1]
+        found = {}
+        with open(path) as records:
+            for line in records:
+                record = json.loads(line)
+                message = record.get("message", "")
+                if message == "40-plex-first-run: exited 0.":
+                    found["entrypoint"] = record
+                elif message == "libusb_init failed":
+                    found["critical"] = record
+                elif message == "Starting Plex Media Server.":
+                    found["plain"] = record
+        if len(found) != 3:
+            raise SystemExit(1)
+        print(json.dumps(found))
+      - /var/log/fluent-bit/lnav.jsonl
+  register: plex_stdout_records
+  retries: 15
+  delay: 1
+  until: plex_stdout_records.rc == 0
+  changed_when: false
+
+- name: _verify | Assert normalized plex stdout fields
+  vars:
+    records: "{{ plex_stdout_records.stdout | from_json }}"
+  assert:
+    that:
+      - records.entrypoint.service == 'plex'
+      - records.entrypoint.level == 'info'
+      - records.entrypoint.fields.source == 'cont-init.d'
+      - records.entrypoint.fields.parser_status == 'parsed'
+      - records.critical.service == 'plex'
+      - records.critical.level == 'fatal'
+      - records.critical.fields.parser_status == 'parsed'
+      - records.plain.service == 'plex'
+      - records.plain.level == 'info'
+      - records.plain.fields.parser_status == 'parsed'
+      - records.plain.fields.source is not defined
+
+- name: _verify | Define plex file-ingestion marker
+  set_fact:
+    plex_file_marker: "plex_file_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+- name: _verify | Append a multiline plex file record
+  shell: |
+    set -euo pipefail
+    printf "%s\n%s\n" \
+      "Jul 12, 2026 12:00:00.000 [1a2b] WARN - {{ plex_file_marker }} first line" \
+      "continuation line" \
+      >> "/mnt/services/plex/Library/Application Support/Plex Media Server/Logs/Plex Media Server.log"
+  args:
+    executable: /bin/bash
+  changed_when: true
+  become: true
+
+- name: _verify | Read normalized plex file record
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        marker, path = sys.argv[1:]
+        with open(path) as records:
+            for line in records:
+                record = json.loads(line)
+                if record.get("stream") == "plex_file" and marker in record.get("message", ""):
+                    print(json.dumps(record))
+                    raise SystemExit(0)
+        raise SystemExit(1)
+      - "{{ plex_file_marker }}"
+      - /var/log/fluent-bit/lnav.jsonl
+  register: plex_file_record
+  retries: 10
+  delay: 1
+  until: plex_file_record.rc == 0
+  changed_when: false
+
+- name: _verify | Assert normalized plex file fields
+  vars:
+    record: "{{ plex_file_record.stdout | from_json }}"
+  assert:
+    that:
+      - record.service == 'plex'
+      - record.stream == 'plex_file'
+      - record.unit == 'plex.service'
+      - record.identifier == 'plex'
+      - record.level == 'warn'
+      - record.message == plex_file_marker ~ ' first line\ncontinuation line'
+      - record.fields.thread == '1a2b'
+      - record.fields.source == 'plex_media_server'
+      - record.fields.parser_status == 'parsed'
+      - record.parse_error is not defined
+      - record.fields.plex_timestamp is not defined
+      - record.fields.filepath is not defined

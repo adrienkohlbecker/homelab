@@ -148,10 +148,30 @@ do
 end
 
 do
-    local rec = shape("host_packages", { host = "lab", log = "  updated\n\npackage \t\n", severity_text = "debug" }, nil)
+    local rec =
+        shape("host_packages", { host = "lab", log = "  updated\n\npackage \t\n", severity_text = "debug" }, nil)
     check("fallback.level", rec.level, "info")
     check("message.trim_trailing_whitespace", rec.message, "  updated\n\npackage")
     check("fields.no_severity_text", rec.fields.severity_text, nil)
+end
+
+do
+    local rec = shape("plex.file", {
+        host = "lab",
+        log = "library scan completed",
+        _service = "plex",
+        _stream = "plex_file",
+        _unit = "plex.service",
+        _identifier = "plex",
+    }, "info")
+    check("override.service", rec.service, "plex")
+    check("override.stream", rec.stream, "plex_file")
+    check("override.unit", rec.unit, "plex.service")
+    check("override.identifier", rec.identifier, "plex")
+    check("override.fields.service", rec.fields._service, nil)
+    check("override.fields.stream", rec.fields._stream, nil)
+    check("override.fields.unit", rec.fields._unit, nil)
+    check("override.fields.identifier", rec.fields._identifier, nil)
 end
 
 if failures == 0 then

@@ -1,0 +1,102 @@
+parsers:
+  - name: plex_stdout
+    format: regex
+    regex: '/^(?:\[(?<plex_source>[^]]+)\] )?(?:(?<plex_level>Critical|Error|Warning|Info|Debug): )?(?<plex_message>.*)$/m'
+
+  - name: plex_file
+    format: regex
+    regex: '/^(?<plex_timestamp>[A-Z][a-z]{2} [0-9]{2}, [0-9]{4} [0-9:.]+) \[(?<plex_thread>[0-9A-Fa-f]+)\] (?<plex_level>DEBUG|INFO|WARN|ERROR|FATAL) - (?<plex_message>.*)$/m'
+    time_key: plex_timestamp
+    time_format: '%b %d, %Y %H:%M:%S.%L'
+    time_system_timezone: true
+
+multiline_parsers:
+  - name: multiline_plex_file
+    type: regex
+    flush_timeout: 1000
+    rules:
+      - state: start_state
+        regex: '/^[A-Z][a-z]{2} [0-9]{2}, [0-9]{4} [0-9:.]+ \[[0-9A-Fa-f]+\] (DEBUG|INFO|WARN|ERROR|FATAL) - /'
+        next_state: continuation
+      - state: continuation
+        regex: '/^(?![A-Z][a-z]{2} [0-9]{2}, [0-9]{4} [0-9:.]+ \[[0-9A-Fa-f]+\] (DEBUG|INFO|WARN|ERROR|FATAL) - )/'
+        next_state: continuation
+
+pipeline:
+  inputs:
+    # Tail only the active path. Fluent Bit follows its inode through Plex's
+    # rename and discovers the replacement; also globbing .1.log rotations
+    # makes the renamed inode appear a second time and duplicates records.
+    - name: tail
+      tag: plex.file
+      path: "/mnt/services/plex/Library/Application Support/Plex Media Server/Logs/Plex Media Server.log"
+      db: /var/lib/fluent-bit/plex.db
+      db.locking: true
+      path_key: filepath
+      read_from_head: false
+      refresh_interval: 5
+      multiline.parser: multiline_plex_file
+      skip_empty_lines: true
+      skip_long_lines: false
+      rotate_wait: 30
+      buffer_max_size: 1M
+      storage.type: filesystem
+      storage.pause_on_chunks_overlimit: true
+
+  filters:
+    - name: modify
+      match: svc.plex.service
+      condition: key_exists CONTAINER_TAG
+      rename: MESSAGE plex_stdout
+
+    - name: parser
+      match: svc.plex.service
+      key_name: plex_stdout
+      parser: plex_stdout
+      reserve_data: true
+      preserve_key: true
+
+    - name: modify
+      match: svc.plex.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists plex_message
+      hard_rename: plex_message log
+      rename:
+        - plex_level _level
+        - plex_source source
+      remove: plex_stdout
+      set: parser_status parsed
+
+    - name: parser
+      match: plex.file
+      key_name: log
+      parser: plex_file
+      reserve_data: true
+      preserve_key: true
+
+    - name: modify
+      match: plex.file
+      condition: key_does_not_exist plex_message
+      add:
+        - parser_status failed
+        - parse_error plex_file
+        - _level warn
+
+    - name: modify
+      match: plex.file
+      condition: key_exists plex_message
+      hard_rename:
+        - plex_message log
+        - plex_level _level
+        - plex_thread thread
+      remove:
+        - plex_timestamp
+        - filepath
+      add:
+        - source plex_media_server
+        - _service plex
+        - _stream plex_file
+        - _unit plex.service
+        - _identifier plex
+      set: parser_status parsed

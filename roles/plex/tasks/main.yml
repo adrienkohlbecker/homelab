@@ -133,6 +133,16 @@
   tags:
     - plex
 
+- name: Install plex fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension
+  vars:
+    fluentbit_extension_args:
+      name: plex
+  tags:
+    - plex
+
 - name: Check whether podman is installed
   stat:
     path: /usr/bin/podman
