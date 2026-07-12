@@ -25,4 +25,4 @@ pipeline:
         - message log
         - bazarr_level _level
       remove: bazarr_time
-      add: parser_status parsed
+      set: parser_status parsed

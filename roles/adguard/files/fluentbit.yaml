@@ -4,7 +4,7 @@ parsers:
     regex: '/^(?<adguard_timestamp>[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}) \[(?<adguard_level>[a-z]+)\] (?<adguard_body>.*)$/m'
   - name: adguard_body
     format: regex
-    regex: '/^(?:(?<source>[a-z][a-z0-9_]*):[[:space:]]+)?(?<adguard_message>.*?)(?:[[:space:]]+(?<adguard_attributes>[a-z][a-z0-9_]*=.*))?$/m'
+    regex: '/^(?:(?<adguard_origin>[a-z][a-z0-9_]*):[[:space:]]+)?(?<adguard_message>.*?)(?:[[:space:]]+(?<adguard_attributes>[a-z][a-z0-9_]*=.*))?$/m'
   - name: adguard_logfmt
     format: logfmt
     logfmt_no_bare_keys: true
@@ -34,6 +34,21 @@ pipeline:
       reserve_data: true
     - name: modify
       match: svc.adguard.service
+      rename:
+        - _level adguard__level
+        - fields adguard_fields
+        - host adguard_host
+        - parse_error adguard_parse_error
+        - parser_reason adguard_parser_reason
+        - parser_status adguard_parser_status
+        - service adguard_service
+        - severity_text adguard_severity_text
+        - source adguard_source
+        - stream adguard_stream
+        - time adguard_time
+        - unit adguard_unit
+    - name: modify
+      match: svc.adguard.service
       condition:
         - key_exists CONTAINER_TAG
         - key_exists adguard_message
@@ -41,8 +56,9 @@ pipeline:
       hard_rename:
         - adguard_message log
         - adguard_level _level
+        - adguard_origin source
       remove:
         - adguard_timestamp
         - adguard_body
         - adguard_attributes
-      add: parser_status parsed
+      set: parser_status parsed

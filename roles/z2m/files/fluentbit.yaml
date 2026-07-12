@@ -36,4 +36,4 @@ pipeline:
       remove:
         - message
         - timestamp
-      add: parser_status parsed
+      set: parser_status parsed

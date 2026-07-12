@@ -45,4 +45,16 @@ pipeline:
         - homepage_level _level
         - homepage_source source
       remove: homepage_timestamp
-      add: parser_status parsed
+      set: parser_status parsed
+    - name: modify
+      match: svc.homepage.service
+      condition: key_value_equals _level http
+      set: _level info
+    - name: modify
+      match: svc.homepage.service
+      condition: key_value_equals _level verbose
+      set: _level debug
+    - name: modify
+      match: svc.homepage.service
+      condition: key_value_equals _level silly
+      set: _level trace

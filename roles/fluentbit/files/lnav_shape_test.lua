@@ -25,18 +25,21 @@ do
         host = "lab",
         log = "WARNING connection failed",
         SYSTEMD_UNIT = "homeassistant.service",
-        SYSLOG_IDENTIFIER = "homeassistant",
+        SYSLOG_IDENTIFIER = "conmon",
         CONTAINER_NAME = "homeassistant",
+        CONTAINER_TAG = "homeassistant",
+        CONTAINER_ID_FULL = "123456789abcdef0",
     }, "warn")
     check("journald.host", rec.host, "lab")
     check("journald.service", rec.service, "homeassistant")
     check("journald.unit", rec.unit, "homeassistant.service")
-    check("journald.identifier", rec.identifier, "homeassistant")
+    check("journald.identifier", rec.identifier, "conmon")
     check("journald.level", rec.level, "warn")
     check("journald.message", rec.message, "WARNING connection failed")
     check("journald.stream", rec.stream, "journald")
     check("journald.fields.systemd_unit", rec.fields.SYSTEMD_UNIT, nil)
     check("journald.fields.container_name", rec.fields.CONTAINER_NAME, nil)
+    check("journald.fields.container_id_full", rec.fields.CONTAINER_ID_FULL, nil)
     check("journald.fields.no_log", rec.fields.log, nil)
 end
 

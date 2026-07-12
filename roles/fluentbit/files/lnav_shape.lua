@@ -32,7 +32,7 @@ local function service_from_tag(tag, record)
             svc = "podman_unnamed"
         else
             local sysid = record["SYSLOG_IDENTIFIER"]
-            if type(sysid) == "string" and sysid ~= "" then
+            if record["CONTAINER_TAG"] == nil and type(sysid) == "string" and sysid ~= "" then
                 if sysid:find("(mitogen:", 1, true) then
                     svc = "mitogen"
                 else
@@ -84,6 +84,7 @@ local EXCLUDE_FROM_FIELDS = {
     CODE_FUNC = true,
     CODE_LINE = true,
     COMM = true,
+    CONTAINER_ID_FULL = true,
     CONTAINER_NAME = true,
     CONTAINER_TAG = true,
     EXE = true,

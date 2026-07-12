@@ -24,4 +24,4 @@ pipeline:
         - msg log
         - lvl _level
       remove: ts
-      add: parser_status parsed
+      set: parser_status parsed
