@@ -60,6 +60,11 @@
 # send logs to journald
    logging = systemd
 
+# This host serves files only. Disabling the print RPC endpoint also prevents
+# smbd from spawning samba-bgqd, whose logger bypasses the systemd backend.
+   disable spoolss = yes
+   load printers = no
+
 # Do something sensible when Samba crashes: mail the admin a backtrace
    panic action = /usr/share/samba/panic-action %d
 

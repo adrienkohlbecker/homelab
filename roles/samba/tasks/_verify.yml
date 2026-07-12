@@ -60,6 +60,31 @@
       testparm -v does not report `server smb encrypt = required` -- mandatory
       encryption was silently dropped to its default.
 
+- name: _verify | Printing subsystem is disabled
+  assert:
+    that:
+      - samba_testparm_verbose.stdout is search('disable spoolss = Yes')
+      - samba_testparm_verbose.stdout is search('load printers = No')
+    fail_msg: >-
+      testparm -v does not report `disable spoolss = Yes` / `load printers = No`
+      -- the unused printing subsystem could spawn samba-bgqd and write outside
+      journald.
+
+- name: _verify | Inspect samba-bgqd process state
+  command: pgrep -x samba-bgqd
+  register: samba_bgqd_process
+  changed_when: false
+  failed_when: samba_bgqd_process.rc not in [0, 1]
+  become: true
+
+- name: _verify | Printing helper is not running
+  assert:
+    that:
+      - samba_bgqd_process.rc == 1
+    fail_msg: >-
+      samba-bgqd is still running despite the disabled printing subsystem
+      (pids={{ samba_bgqd_process.stdout_lines }}).
+
 # NetBIOS is retired: smbd must not announce over NetBIOS and must serve only
 # 445 (no legacy 139 session port). testparm canonicalises the values, so
 # assert the resolved form rather than the rendered literal.
