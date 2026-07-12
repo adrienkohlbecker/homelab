@@ -19,10 +19,11 @@ local function scrub_message(value)
     if type(value) ~= "string" then
         return value
     end
-    -- JSON Lines escapes LF inside the encoded string, so preserving it keeps
-    -- a traceback in one physical JSONL record while lnav can render its frames
-    -- on separate lines. Strip the other controls that can corrupt a terminal.
-    return value:gsub("\r\n", "\n"):gsub("\r", "\n"):gsub("[%z\1-\9\11\12\14-\31\127]", " ")
+    -- JSON Lines escapes internal LF inside the encoded string, so preserving
+    -- it keeps a traceback in one physical JSONL record while lnav can render
+    -- its frames on separate lines. Strip the other controls that can corrupt
+    -- a terminal, then discard whitespace that carries no message content.
+    return value:gsub("\r\n", "\n"):gsub("\r", "\n"):gsub("[%z\1-\9\11\12\14-\31\127]", " "):gsub("[ \t\n]+$", "")
 end
 
 local function service_from_tag(tag, record)
