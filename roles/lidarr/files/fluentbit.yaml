@@ -1,0 +1,35 @@
+parsers:
+  - name: lidarr_console
+    format: regex
+    regex: '/\A\[(?<lidarr_level>Trace|Debug|Info|Warn|Error|Fatal)\] (?<lidarr_source>[^:]+): (?<lidarr_message>[^\r\n]*?)[ \t]*(?:\r?\n\r?\n\[v(?<lidarr_version>[^]]+)\] (?<lidarr_exception>[\s\S]*?))?[[:space:]]*\z/'
+
+pipeline:
+  filters:
+    - name: modify
+      match: svc.lidarr.service
+      rename: MESSAGE log
+    - name: grep
+      match: svc.lidarr.service
+      logical_op: and
+      exclude:
+        - 'CONTAINER_TAG ^.+$'
+        - 'log ^\[Info\] (RssSyncService: Starting RSS Sync|DownloadDecisionMaker: No results found|RssSyncService: RSS Sync Completed\. Reports found: 0, Reports grabbed: 0)[[:space:]]*$'
+    - name: parser
+      match: svc.lidarr.service
+      key_name: log
+      parser: lidarr_console
+      reserve_data: true
+      preserve_key: true
+    - name: modify
+      match: svc.lidarr.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists lidarr_message
+        - key_exists lidarr_level
+      hard_rename:
+        - lidarr_message log
+        - lidarr_level _level
+        - lidarr_source source
+        - lidarr_version app_version
+        - lidarr_exception exception
+      set: parser_status parsed

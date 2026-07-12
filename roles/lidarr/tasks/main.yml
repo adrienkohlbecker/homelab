@@ -80,6 +80,16 @@
   tags:
     - lidarr
 
+- name: Install lidarr fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension
+  vars:
+    fluentbit_extension_args:
+      name: lidarr
+  tags:
+    - lidarr
+
 - name: Install lidarr service
   import_role:
     name: systemd_unit

@@ -147,3 +147,103 @@
       lidarr rewrote config.xml into a form config.xml.j2 no longer matches --
       its element order/casing drifted from lidarr's writeback, so deploying
       would restart-churn. Re-capture config.xml.j2 from a running instance.
+
+- name: _verify | Wait for normalized lidarr startup record in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "lidarr"
+                    and record.get("message") == "Data directory is being overridden to [/config]"
+                    and record.get("level") == "info"
+                    and fields.get("source") == "AppFolderInfo"
+                    and fields.get("parser_status") == "parsed"
+                    and "CONTAINER_TAG" not in fields
+                    and "CMDLINE" not in fields
+                ):
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _lidarr_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _lidarr_lnav_record.rc == 0
+  become: true
+
+- name: _verify | Exercise lidarr fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: lidarr
+      records:
+        - MESSAGE: "[Info] VerifyInfo: lidarr-info \n"
+          CONTAINER_TAG: lidarr
+          SYSLOG_IDENTIFIER: lidarr
+          SYSTEMD_UNIT: lidarr.service
+        - MESSAGE: "[Warn] VerifyWarn: lidarr-warn \n"
+          CONTAINER_TAG: lidarr
+          SYSLOG_IDENTIFIER: lidarr
+          SYSTEMD_UNIT: lidarr.service
+        - MESSAGE: "[Error] VerifyError: lidarr-error \n\n[v3.1.0.4875] System.InvalidOperationException: failed\n   at Verify.Run()\n"
+          CONTAINER_TAG: lidarr
+          SYSLOG_IDENTIFIER: lidarr
+          SYSTEMD_UNIT: lidarr.service
+        - MESSAGE: "[migrations] no migrations found\n"
+          CONTAINER_TAG: lidarr
+          SYSLOG_IDENTIFIER: lidarr
+          SYSTEMD_UNIT: lidarr.service
+        - MESSAGE: "[Info] Lifecycle: lidarr-unit-record \n"
+          SYSLOG_IDENTIFIER: systemd
+          SYSTEMD_UNIT: lidarr.service
+        - MESSAGE: "[Info] RssSyncService: Starting RSS Sync \n"
+          CONTAINER_TAG: lidarr
+          SYSLOG_IDENTIFIER: lidarr
+          SYSTEMD_UNIT: lidarr.service
+        - MESSAGE: "[Info] RssSyncService: RSS Sync Completed. Reports found: 1, Reports grabbed: 0 \n"
+          CONTAINER_TAG: lidarr
+          SYSLOG_IDENTIFIER: lidarr
+          SYSTEMD_UNIT: lidarr.service
+      expected:
+        - message: lidarr-info
+          level: info
+          service: lidarr
+          fields.source: VerifyInfo
+          fields.parser_status: parsed
+          _absent:
+            - fields.CONTAINER_TAG
+            - fields.CMDLINE
+        - message: lidarr-warn
+          level: warn
+          fields.source: VerifyWarn
+        - message: lidarr-error
+          level: error
+          fields.source: VerifyError
+          fields.app_version: 3.1.0.4875
+          fields.exception: "System.InvalidOperationException: failed    at Verify.Run()"
+        - message: "[migrations] no migrations found"
+          level: info
+          _absent:
+            - fields.parser_status
+            - fields.source
+        - message: "[Info] Lifecycle: lidarr-unit-record"
+          service: systemd
+          _absent:
+            - fields.parser_status
+            - fields.source
+        - message: "RSS Sync Completed. Reports found: 1, Reports grabbed: 0"
+          fields.source: RssSyncService
