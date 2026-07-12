@@ -3,7 +3,32 @@ parsers:
     format: regex
     regex: '/\A(?<tautulli_timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - (?<tautulli_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)[[:space:]]+:: (?<tautulli_thread>.*?) : (?:(?<tautulli_source>Tautulli [^:\n]+) :: )?(?<tautulli_message>[\s\S]*?)[[:space:]]*\z/'
 
+  - name: tautulli_websocket_file
+    format: regex
+    regex: '/\A(?<tautulli_websocket_timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - (?<tautulli_websocket_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)[[:space:]]+:: (?<tautulli_websocket_thread>.*?) : (?<tautulli_websocket_message>[\s\S]*?)[[:space:]]*\z/'
+    time_key: tautulli_websocket_timestamp
+    time_format: '%Y-%m-%d %H:%M:%S'
+    time_system_timezone: true
+
 pipeline:
+  inputs:
+    # Tail only the active file. Fluent Bit follows the renamed inode through
+    # Tautulli's rotation and discovers the replacement without rereading .1+.
+    - name: tail
+      tag: tautulli.websocket
+      path: /mnt/services/tautulli/logs/plex_websocket.log
+      db: /var/lib/fluent-bit/tautulli-websocket.db
+      db.locking: true
+      path_key: filepath
+      read_from_head: false
+      refresh_interval: 5
+      skip_empty_lines: true
+      skip_long_lines: false
+      rotate_wait: 30
+      buffer_max_size: 1M
+      storage.type: filesystem
+      storage.pause_on_chunks_overlimit: true
+
   filters:
     - name: modify
       match: svc.tautulli.service
@@ -27,4 +52,40 @@ pipeline:
         - tautulli_thread thread
         - tautulli_source source
       remove: tautulli_timestamp
+      set: parser_status parsed
+
+    - name: modify
+      match: tautulli.websocket
+      add:
+        - source plex_websocket
+        - _service tautulli
+        - _unit tautulli.service
+        - _identifier tautulli
+        - _stream tautulli_websocket
+
+    - name: parser
+      match: tautulli.websocket
+      key_name: log
+      parser: tautulli_websocket_file
+      reserve_data: true
+      preserve_key: true
+
+    - name: modify
+      match: tautulli.websocket
+      condition: key_does_not_exist tautulli_websocket_message
+      add:
+        - parser_status failed
+        - parse_error tautulli_websocket_file
+        - _level warn
+
+    - name: modify
+      match: tautulli.websocket
+      condition: key_exists tautulli_websocket_message
+      hard_rename:
+        - tautulli_websocket_message log
+        - tautulli_websocket_level _level
+        - tautulli_websocket_thread thread
+      remove:
+        - tautulli_websocket_timestamp
+        - filepath
       set: parser_status parsed

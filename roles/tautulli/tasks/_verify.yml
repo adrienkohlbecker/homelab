@@ -239,6 +239,71 @@
   until: _tautulli_lnav_record.rc == 0
   become: true
 
+- name: _verify | Define tautulli websocket file-ingestion marker
+  set_fact:
+    tautulli_websocket_marker: "tautulli_websocket_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+- name: _verify | Append tautulli websocket file-ingestion record
+  command:
+    argv:
+      - /usr/bin/tee
+      - --append
+      - /mnt/services/tautulli/logs/plex_websocket.log
+    stdin: >-
+      2026-07-12 12:00:00 - WARNING :: Thread-99 (run) : {"marker":"{{ tautulli_websocket_marker }}"}
+  changed_when: true
+  become: true
+  become_user: tautulli
+
+- name: _verify | Read normalized tautulli websocket file record
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        marker, path = sys.argv[1:]
+        with open(path) as records:
+            for line in records:
+                record = json.loads(line)
+                if record.get("stream") == "tautulli_websocket" and marker in record.get("message", ""):
+                    print(json.dumps(record))
+                    sys.exit(0)
+        sys.exit(1)
+      - "{{ tautulli_websocket_marker }}"
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _tautulli_websocket_record
+  retries: 15
+  delay: 1
+  until: _tautulli_websocket_record.rc == 0
+  changed_when: false
+
+- name: _verify | Assert normalized tautulli websocket file fields
+  vars:
+    record: "{{ _tautulli_websocket_record.stdout | from_json }}"
+  assert:
+    that:
+      - record.service == "tautulli"
+      - record.stream == "tautulli_websocket"
+      - record.unit == "tautulli.service"
+      - record.identifier == "tautulli"
+      - record.level == "warn"
+      - record.message == '{"marker":"' ~ tautulli_websocket_marker ~ '"}'
+      - record.fields.thread == "Thread-99 (run)"
+      - record.fields.source == "plex_websocket"
+      - record.fields.parser_status == "parsed"
+      - record.parse_error is not defined
+      - record.fields.tautulli_websocket_timestamp is not defined
+      - record.fields.filepath is not defined
+
+- name: _verify | Stop fluent-bit before the isolated extension fixture
+  systemd:
+    name: fluent-bit
+    state: stopped
+  become: true
+
 - name: _verify | Exercise tautulli fluent-bit record contracts
   import_role:
     name: fluentbit
@@ -296,3 +361,9 @@
             - fields.parser_status
             - fields.source
             - fields.thread
+
+- name: _verify | Restart fluent-bit after the isolated extension fixture
+  systemd:
+    name: fluent-bit
+    state: started
+  become: true
