@@ -1,0 +1,59 @@
+parsers:
+  - name: socket_proxy_haproxy
+    format: regex
+    regex: '/\A\[(?<socket_proxy_level>ALERT|WARNING|NOTICE|INFO|DEBUG)\][[:space:]]+\((?<socket_proxy_process_id>[0-9]+)\)[[:space:]]+:[[:space:]]+(?<socket_proxy_message>[\s\S]*?)[[:space:]]*\z/'
+    types: socket_proxy_process_id:integer
+
+multiline_parsers:
+  - name: multiline_socket_proxy
+    type: regex
+    flush_timeout: 1000
+    rules:
+      - state: start_state
+        regex: '/^\[(ALERT|WARNING|NOTICE|INFO|DEBUG)\][[:space:]]+\([0-9]+\)[[:space:]]+:/'
+        next_state: continuation
+      - state: continuation
+        regex: '/^[[:space:]]+\| /'
+        next_state: continuation
+
+pipeline:
+  filters:
+    # HAProxy emits these shutdown counters once through its configured stdout
+    # logger and once through its decorated process diagnostics. Keep the
+    # decorated copy, which carries explicit severity and process metadata.
+    - name: grep
+      match: svc.socket_proxy.service
+      logical_op: and
+      exclude:
+        - 'CONTAINER_TAG ^.+$'
+        - 'MESSAGE ^Proxy (dockerfrontend|dockerbackend|docker-events) stopped \(cumulated conns: FE: [0-9]+, BE: [0-9]+\)\.[[:space:]]*$'
+    - name: multiline
+      match: svc.socket_proxy.service
+      multiline.parser: multiline_socket_proxy
+      multiline.key_content: MESSAGE
+      buffer: true
+      flush_ms: 1000
+      emitter_name: multiline_socket_proxy_emitter
+      emitter_storage.type: filesystem
+    - name: modify
+      match: svc.socket_proxy.service
+      condition: key_exists CONTAINER_TAG
+      rename: MESSAGE log
+    - name: parser
+      match: svc.socket_proxy.service
+      key_name: log
+      parser: socket_proxy_haproxy
+      reserve_data: true
+      preserve_key: true
+    - name: modify
+      match: svc.socket_proxy.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists socket_proxy_message
+        - key_exists socket_proxy_level
+        - key_exists socket_proxy_process_id
+      hard_rename:
+        - socket_proxy_message log
+        - socket_proxy_level _level
+        - socket_proxy_process_id process_id
+      set: parser_status parsed

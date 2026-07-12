@@ -7,3 +7,7 @@
     enabled: true
     state: started
   become: true
+
+- name: _setup | Install fluent-bit for container-log normalization
+  import_role:
+    name: fluentbit

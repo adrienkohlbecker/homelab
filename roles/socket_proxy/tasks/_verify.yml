@@ -11,6 +11,132 @@
     or _socket_proxy_unit.status.ActiveState != "active"
   become: true
 
+- name: _verify | Create unique socket_proxy fluent-bit marker
+  set_fact:
+    socket_proxy_lnav_marker: "verify_socket_proxy_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+# Write through the container init stderr so conmon records the fixture with
+# the same journald metadata as HAProxy itself. The continuation lines exercise
+# the retained startup-warning grammar, including the service-owned emitter.
+- name: _verify | Emit representative multiline HAProxy warning
+  command:
+    argv:
+      - podman
+      - exec
+      - socket_proxy
+      - /bin/sh
+      - -c
+      - >-
+        printf "%s\n" "[WARNING]  (42) : {{ socket_proxy_lnav_marker }}"
+        "   | first detail" "   | second detail" > /proc/1/fd/2
+  changed_when: false
+  become: true
+
+- name: _verify | Wait for normalized socket_proxy record in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not record.get("message", "").startswith(sys.argv[2]):
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "socket_proxy"
+                    and record.get("unit") == "socket_proxy.service"
+                    and record.get("level") == "warn"
+                    and record.get("message")
+                    == sys.argv[2] + "\n   | first detail\n   | second detail"
+                    and fields.get("process_id") == 42
+                    and fields.get("parser_status") == "parsed"
+                    and fields.get("CONTAINER_ID")
+                    and "socket_proxy_level" not in fields
+                    and "socket_proxy_message" not in fields
+                    and "socket_proxy_process_id" not in fields
+                    and "CONTAINER_TAG" not in fields
+                    and "CONTAINER_ID_FULL" not in fields
+                    and "PRIORITY" not in fields
+                    and "SYSTEMD_UNIT" not in fields
+                ):
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+      - "{{ socket_proxy_lnav_marker }}"
+  register: _socket_proxy_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 1
+  until: _socket_proxy_lnav_record.rc == 0
+  become: true
+
+- name: _verify | Exercise socket_proxy fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: socket_proxy
+      records:
+        - MESSAGE: "[NOTICE]   (2) : Loading success."
+          CONTAINER_TAG: socket_proxy
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: socket_proxy.service
+          parser_status: forged
+        - MESSAGE: "[WARNING]  (8) : Current worker (9) exited with code 0 (Exit)"
+          CONTAINER_TAG: socket_proxy
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: socket_proxy.service
+        - MESSAGE: "Proxy dockerbackend stopped (cumulated conns: FE: 0, BE: 1181)."
+          CONTAINER_TAG: socket_proxy
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: socket_proxy.service
+        - MESSAGE: socket-proxy-prose
+          CONTAINER_TAG: socket_proxy
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: socket_proxy.service
+        - MESSAGE: "[WARNING]  (8) : socket-proxy-lifecycle"
+          SYSLOG_IDENTIFIER: systemd
+          SYSTEMD_UNIT: socket_proxy.service
+      expected:
+        - message: Loading success.
+          level: info
+          service: socket_proxy
+          fields.process_id: 2
+          fields.parser_status: parsed
+          _absent:
+            - fields.socket_proxy_level
+            - fields.socket_proxy_message
+            - fields.socket_proxy_process_id
+            - fields.CONTAINER_TAG
+        - message: Current worker (9) exited with code 0 (Exit)
+          level: warn
+          fields.process_id: 8
+          fields.parser_status: parsed
+        - message: socket-proxy-prose
+          service: socket_proxy
+          _absent:
+            - fields.parser_status
+            - fields.process_id
+        - message: "[WARNING]  (8) : socket-proxy-lifecycle"
+          service: systemd
+          _absent:
+            - fields.parser_status
+            - fields.process_id
+
+- name: _verify | Duplicate HAProxy shutdown record is omitted from aggregate
+  assert:
+    that: "'Proxy dockerbackend stopped (cumulated conns: FE: 0, BE: 1181).' not in fluentbit_verify_result.stdout"
+
 - name: _verify | Allowed GET /version returns 200
   uri:
     url: http://127.0.0.1:{{ service_ports.socket_proxy }}/version

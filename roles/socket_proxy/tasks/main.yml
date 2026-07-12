@@ -60,3 +60,13 @@
       restart: "{{ socket_proxy_service_result.changed or socket_proxy_network.changed }}"
   tags:
     - socket_proxy
+
+- name: Install socket_proxy fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension
+  vars:
+    fluentbit_extension_args:
+      name: socket_proxy
+  tags:
+    - socket_proxy

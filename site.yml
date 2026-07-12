@@ -49,9 +49,9 @@
     - certbot
     - nginx
     # Observability.
+    - fluentbit
     - socket_proxy
     - netdata
-    - fluentbit
 
 # Services -- host-scoped, built on the platform above. A role belongs here
 # (not in Base machine install) when only a subset of hosts run it.
