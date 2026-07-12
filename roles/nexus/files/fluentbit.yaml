@@ -1,6 +1,10 @@
 parsers:
   - name: nexus_json
     format: json
+  - name: nexus_outbound_request
+    format: regex
+    regex: '^\[(?<app_timestamp>[^\]]+)\] (?<actor>\S+) "(?<method>\S+) (?<url>\S+) (?<protocol>\S+)" (?<status>\d+) (?<bytes_sent>-?\d+) (?<bytes_received>-?\d+) (?<response_time>\d+) \[(?<outbound_thread>[^\]]+)\]$'
+    types: status:integer bytes_sent:integer bytes_received:integer response_time:integer
 
 pipeline:
   filters:
@@ -21,6 +25,49 @@ pipeline:
         - 'CONTAINER_TAG ^.+$'
         - 'loggerName ^org\.sonatype\.nexus\.quartz\.internal\.task\.QuartzTaskInfo$'
         - 'formattedMessage ^Task .+ state change (WAITING -> RUNNING|RUNNING -> WAITING \(OK\))$'
+    - name: grep
+      match: svc.nexus.service
+      logical_op: and
+      exclude:
+        - 'CONTAINER_TAG ^.+$'
+        - 'initiator ^\*TASK$'
+        - 'domain ^tasks$'
+        - 'type ^(started|taskstartedrunningevent|finished|blocked|scheduled)$'
+    - name: grep
+      match: svc.nexus.service
+      logical_op: and
+      exclude:
+        - 'CONTAINER_TAG ^.+$'
+        - 'domain ^repository\.asset$'
+        - 'type ^(created|updated-(attribute|downloaded|uploaded))$'
+    - name: parser
+      match: svc.nexus.service
+      key_name: formattedMessage
+      parser: nexus_outbound_request
+      reserve_data: true
+      preserve_key: true
+    - name: modify
+      match: svc.nexus.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_value_matches loggerName '^outboundRequests$'
+        - key_exists method
+        - key_exists status
+      hard_rename:
+        - formattedMessage log
+        - level _level
+        - threadName thread
+        - loggerName source
+      remove:
+        - sequenceNumber
+        - timestamp
+        - nanoseconds
+        - context
+        - message
+        - arguments
+        - app_timestamp
+        - outbound_thread
+      set: parser_status parsed
     - name: modify
       match: svc.nexus.service
       condition:
@@ -45,8 +92,26 @@ pipeline:
       match: svc.nexus.service
       condition:
         - key_exists CONTAINER_TAG
+        - key_exists domain
+        - key_exists type
+        - key_exists context
+      hard_rename:
+        - context log
+        - type event
+        - initiator actor
+        - domain audit_domain
+      remove:
+        - timestamp
+        - nodeId
+      add: _level info
+      set: parser_status parsed
+    - name: modify
+      match: svc.nexus.service
+      condition:
+        - key_exists CONTAINER_TAG
         - key_value_matches log '^\{'
         - key_does_not_exist formattedMessage
+        - key_does_not_exist domain
       add:
         - parser_status failed
         - parse_error nexus_json

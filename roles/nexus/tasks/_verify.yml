@@ -72,6 +72,30 @@
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: nexus.service
+        - MESSAGE: '{"level":"INFO","threadName":"quartz-1-thread-1","loggerName":"org.sonatype.nexus.cleanup.internal.task.CleanupTask","mdc":{"userId":"*TASK","taskIdAndDate":"repository.cleanup-20260712010000008"},"formattedMessage":"nexus-task-detail"}'
+          CONTAINER_TAG: nexus
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
+        - MESSAGE: '{"level":"INFO","threadName":"replication-1","loggerName":"org.sonatype.nexus.replication.internal.ReplicationTask","mdc":{"repositoryName":"nexus-releases"},"formattedMessage":"nexus-replication-detail"}'
+          CONTAINER_TAG: nexus
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
+        - MESSAGE: '{"level":"INFO","threadName":"qtp2132356553-1528","loggerName":"outboundRequests","formattedMessage":"[12/Jul/2026:08:53:12 +0000] - \"GET https://ports.ubuntu.com/ubuntu-ports/dists/jammy/InRelease HTTP/1.1\" 304 0 312 45 [qtp2132356553-1528]"}'
+          CONTAINER_TAG: nexus
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
+        - MESSAGE: '{"timestamp":"2026-07-12 00:00:00,009+0000","nodeId":"node-id","initiator":"*TASK","domain":"tasks","type":"finished","context":"nexus-audit-routine","thread":"quartz-1-thread-1","attributes":{"endState":"OK"}}'
+          CONTAINER_TAG: nexus
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
+        - MESSAGE: '{"timestamp":"2026-07-12 00:00:00,009+0000","nodeId":"node-id","initiator":"anonymous/127.0.0.1","domain":"repository.asset","type":"updated-downloaded","context":"nexus-audit-asset","thread":"qtp-1","attributes":{"repositoryName":"ubuntu"}}'
+          CONTAINER_TAG: nexus
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
+        - MESSAGE: '{"timestamp":"2026-07-12 00:00:00,009+0000","nodeId":"node-id","initiator":"admin/127.0.0.1","domain":"repository","type":"created","context":"nexus-audit-useful","thread":"qtp-1","attributes":{"name":"test-repository"}}'
+          CONTAINER_TAG: nexus
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
       expected:
         - message: nexus-valid
           level: warn
@@ -108,12 +132,72 @@
           service: nexus
           fields.parser_status: parsed
           fields.source: org.sonatype.nexus.quartz.internal.task.QuartzTaskInfo
+        - message: nexus-task-detail
+          level: info
+          service: nexus
+          fields.parser_status: parsed
+          fields.source: org.sonatype.nexus.cleanup.internal.task.CleanupTask
+          fields.mdc.taskIdAndDate: repository.cleanup-20260712010000008
+        - message: nexus-replication-detail
+          level: info
+          service: nexus
+          fields.parser_status: parsed
+          fields.source: org.sonatype.nexus.replication.internal.ReplicationTask
+          fields.mdc.repositoryName: nexus-releases
+        - message: '[12/Jul/2026:08:53:12 +0000] - "GET https://ports.ubuntu.com/ubuntu-ports/dists/jammy/InRelease HTTP/1.1" 304 0 312 45 [qtp2132356553-1528]'
+          level: info
+          service: nexus
+          fields.parser_status: parsed
+          fields.source: outboundRequests
+          fields.method: GET
+          fields.url: https://ports.ubuntu.com/ubuntu-ports/dists/jammy/InRelease
+          fields.protocol: HTTP/1.1
+          fields.status: 304
+          fields.bytes_sent: 0
+          fields.bytes_received: 312
+          fields.response_time: 45
+          _absent:
+            - fields.app_timestamp
+            - fields.outbound_thread
+        - message: nexus-audit-useful
+          level: info
+          service: nexus
+          fields.parser_status: parsed
+          fields.audit_domain: repository
+          fields.event: created
+          fields.actor: admin/127.0.0.1
+          fields.thread: qtp-1
+          fields.attributes.name: test-repository
+          _absent:
+            - fields.timestamp
+            - fields.nodeId
+            - fields.domain
+            - fields.type
+            - fields.initiator
 
-- name: _verify | Routine nexus task transitions are omitted
+- name: _verify | Routine nexus events are omitted
   assert:
     that:
       - "'nexus-routine-success' not in fluentbit_verify_result.stdout"
       - "'nexus-task-failed' in fluentbit_verify_result.stdout"
+      - "'nexus-audit-routine' not in fluentbit_verify_result.stdout"
+      - "'nexus-audit-asset' not in fluentbit_verify_result.stdout"
+      - "'nexus-audit-useful' in fluentbit_verify_result.stdout"
+
+- name: _verify | Specialized nexus logs use stdout instead of files
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /mnt/services/nexus/data/log/nexus.log
+    - /mnt/services/nexus/data/log/request.log
+    - /mnt/services/nexus/data/log/outbound-request.log
+    - /mnt/services/nexus/data/log/audit/audit.log
+  register: _nexus_retired_logs
+  become: true
+
+- name: _verify | Specialized nexus log files are absent
+  assert:
+    that: _nexus_retired_logs.results | selectattr('stat.exists') | list | length == 0
 
 - name: _verify | Wait for parsed nexus startup output in lnav store
   command:
@@ -148,6 +232,40 @@
   retries: 30
   delay: 2
   until: _nexus_lnav_record.rc == 0
+  become: true
+
+- name: _verify | Wait for parsed nexus audit output in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "nexus"
+                    and fields.get("parser_status") == "parsed"
+                    and fields.get("audit_domain")
+                    and fields.get("event")
+                    and record.get("message")
+                ):
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _nexus_lnav_audit_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _nexus_lnav_audit_record.rc == 0
   become: true
 
 # The dir-ownership checks above stat paths the role itself chowned, so they
