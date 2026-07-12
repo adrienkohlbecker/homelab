@@ -142,7 +142,7 @@ do
     local cid = "75ca2e2b110c2a3e6af421033e99bc1dbc8f58d3eacf929cb2b395377d63e4bc"
     local rec = shape("svc.init.scope", { SYSLOG_IDENTIFIER = "systemd", UNIT = cid .. ".service", log = cid }, "info")
     check("healthcheck.service", rec.service, "podman_healthcheck")
-    check("healthcheck.cid_full", rec.fields.CONTAINER_ID_FULL, cid)
+    check("healthcheck.no_cid_full", rec.fields.CONTAINER_ID_FULL, nil)
     check("healthcheck.cid_short", rec.fields.CONTAINER_ID, string.sub(cid, 1, 12))
     check("healthcheck.unit", rec.fields.UNIT, cid .. ".service")
 end
