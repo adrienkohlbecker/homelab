@@ -118,7 +118,7 @@
   become: true
 
 # A 5xx line must be promoted to error level by lnav_shape even though the
-# upstream modify filter pins nginx.access at info.
+# upstream modify filter pins nginx.access at debug.
 - name: _verify | Nginx access parse | append a 503 custom-format line
   command: tee -a /var/log/nginx/access.log
   args:
@@ -291,7 +291,7 @@
     row: "{{ _fluentbit_lnav_by_name.nginx_access }}"
   assert:
     that:
-      - "row.level == 'info'"
+      - "row.level == 'debug'"
       - "row.service == 'nginx_access'"
       - "row.stream == 'nginx'"
       # Raw request line preserved as the message body (marker lives in path).

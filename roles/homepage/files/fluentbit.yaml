@@ -49,7 +49,7 @@ pipeline:
     - name: modify
       match: svc.homepage.service
       condition: key_value_equals _level http
-      set: _level info
+      set: _level debug
     - name: modify
       match: svc.homepage.service
       condition: key_value_equals _level verbose

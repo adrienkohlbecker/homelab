@@ -113,7 +113,7 @@ function set_priority(tag, ts, record)
     end
 
     -- An upstream modify filter scoped to nginx.access pre-stamps
-    -- record["severity_text"] = "info" so this filter doesn't scan URL
+    -- record["severity_text"] = "debug" so this filter doesn't scan URL
     -- noise for level keywords. Tag-gated to nginx.access: today's
     -- only writer of record["severity_text"] is that modify filter
     -- (systemd journal fields arrive uppercased, so SEVERITY_TEXT !=

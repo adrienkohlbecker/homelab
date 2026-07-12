@@ -144,7 +144,7 @@ function shape_lnav(tag, ts, record)
     -- A 5xx in an nginx access record is an upstream/proxy failure: promote it
     -- to error level so lnav's error navigation lands on it. The status field
     -- is set by the nginx_access_custom parser (typed integer). 4xx -- auth
-    -- redirects, favicon 404s, scanner probes -- stay at the pinned info level:
+    -- redirects, favicon 404s, scanner probes -- stay at the pinned debug level:
     -- they are normal traffic on these reverse-proxy vhosts and would swamp the
     -- error stream. Done here rather than in a modify filter so the comparison
     -- is a plain numeric test on the typed value, not a regex on its rendering.

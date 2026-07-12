@@ -66,7 +66,6 @@ pipeline:
         - key_exists status
       hard_rename:
         - formattedMessage log
-        - level _level
         - threadName thread
         - loggerName source
       remove:
@@ -76,9 +75,12 @@ pipeline:
         - context
         - message
         - arguments
+        - level
         - app_timestamp
         - request_thread
-      set: parser_status parsed
+      set:
+        - _level debug
+        - parser_status parsed
     - name: parser
       match: svc.nexus.service
       key_name: formattedMessage
@@ -94,7 +96,6 @@ pipeline:
         - key_exists status
       hard_rename:
         - formattedMessage log
-        - level _level
         - threadName thread
         - loggerName source
       remove:
@@ -104,9 +105,12 @@ pipeline:
         - context
         - message
         - arguments
+        - level
         - app_timestamp
         - outbound_thread
-      set: parser_status parsed
+      set:
+        - _level debug
+        - parser_status parsed
     - name: modify
       match: svc.nexus.service
       condition:

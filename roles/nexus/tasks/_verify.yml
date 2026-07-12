@@ -157,7 +157,7 @@
           fields.source: org.sonatype.nexus.replication.internal.ReplicationTask
           fields.mdc.repositoryName: nexus-releases
         - message: '[0:0:0:0:0:0:0:1] - - [12/Jul/2026:00:00:02 +0000] "GET /service/rest/v1/status/writable HTTP/1.1" 503 - 0 1 "Wget" [qtp-2]'
-          level: info
+          level: debug
           service: nexus
           fields.parser_status: parsed
           fields.source: org.eclipse.jetty.server.RequestLog
@@ -172,7 +172,7 @@
           fields.response_time: 1
           fields.user_agent: Wget
         - message: '10.89.0.1 - anonymous [12/Jul/2026:00:00:03 +0000] "GET /repository/ubuntu/dists/noble/InRelease HTTP/1.1" 200 - 126904 12 "Debian APT-HTTP/1.3" [qtp-3]'
-          level: info
+          level: debug
           service: nexus
           fields.parser_status: parsed
           fields.source: org.eclipse.jetty.server.RequestLog
@@ -187,7 +187,7 @@
           fields.response_time: 12
           fields.user_agent: Debian APT-HTTP/1.3
         - message: '[12/Jul/2026:08:53:12 +0000] - "GET https://ports.ubuntu.com/ubuntu-ports/dists/jammy/InRelease HTTP/1.1" 304 0 312 45 [qtp2132356553-1528]'
-          level: info
+          level: debug
           service: nexus
           fields.parser_status: parsed
           fields.source: outboundRequests
@@ -369,6 +369,7 @@
                 fields = record.get("fields", {})
                 if (
                     record.get("service") == "nexus"
+                    and record.get("level") == "debug"
                     and fields.get("parser_status") == "parsed"
                     and fields.get("source") == "org.eclipse.jetty.server.RequestLog"
                     and fields.get("path") == "/"

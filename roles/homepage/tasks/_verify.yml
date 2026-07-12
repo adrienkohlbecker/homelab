@@ -171,12 +171,21 @@
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: homepage.service
           parser_status: forged
+        - MESSAGE: "[2099-01-02T03:04:05.679Z] http: <homepage.verify> homepage-access"
+          CONTAINER_TAG: homepage
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: homepage.service
         - MESSAGE: homepage-raw
           CONTAINER_TAG: homepage
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: homepage.service
       expected:
         - message: homepage-valid
+          level: debug
+          service: homepage
+          fields.parser_status: parsed
+          fields.source: homepage.verify
+        - message: homepage-access
           level: debug
           service: homepage
           fields.parser_status: parsed

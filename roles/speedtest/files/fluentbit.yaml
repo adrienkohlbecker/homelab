@@ -51,7 +51,9 @@ pipeline:
         - speedtest_referrer referrer
         - speedtest_user_agent user_agent
       remove: speedtest_access_timestamp
-      set: parser_status parsed
+      set:
+        - _level debug
+        - parser_status parsed
     - name: modify
       match: svc.speedtest.service
       condition:

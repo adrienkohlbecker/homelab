@@ -53,6 +53,7 @@
                     healthcheck = True
                 if (
                     record.get("message", "").endswith('"speedtest-verify"')
+                    and record.get("level") == "debug"
                     and fields.get("method") == "GET"
                     and fields.get("path") == "/"
                     and fields.get("status") == 200
@@ -96,7 +97,7 @@
           SYSTEMD_UNIT: speedtest.service
       expected:
         - message: '192.0.2.10 - - [02/Jan/2099:03:04:05 +0000] "GET /backend/empty.php HTTP/1.1" 200 0 "-" "curl/8.14.1"'
-          level: info
+          level: debug
           service: speedtest
           fields.client_ip: 192.0.2.10
           fields.method: GET

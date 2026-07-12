@@ -149,15 +149,15 @@ do
 end
 
 -- 15. nginx.access pre-stamp branch: an upstream modify filter sets
---     record.severity_text=info so this filter trusts it and does NOT scan
+--     record.severity_text=debug so this filter trusts it and does NOT scan
 --     the URL (which here contains "error") for keywords.
 do
     local t = sev(
         '10.89.0.4 - - [03/Jun/2026:17:41:02 +0000] "GET /admin/error-report?fatal=1 HTTP/1.1" 200 12',
         "nginx.access",
-        { severity_text = "info" }
+        { severity_text = "debug" }
     )
-    check("nginx.access.trusted.text", t, "info")
+    check("nginx.access.trusted.text", t, "debug")
 end
 
 -- 16. The nginx.access trust gate is tag-scoped: the same severity_text on a

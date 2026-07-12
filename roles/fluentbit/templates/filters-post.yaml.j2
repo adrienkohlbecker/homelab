@@ -13,7 +13,7 @@ pipeline:
     - name: modify
       match: nginx.access
       condition: Key_does_not_exist severity_text
-      set: severity_text info
+      set: severity_text debug
 
     - name: lua
       match: '*'

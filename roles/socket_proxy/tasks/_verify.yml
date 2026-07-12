@@ -131,7 +131,7 @@
           fields.process_id: 8
           fields.parser_status: parsed
         - message: GET /info HTTP/1.1
-          level: info
+          level: debug
           fields.client_address: 10.89.0.1
           fields.client_port: 54321
           fields.frontend: dockerfrontend
@@ -294,7 +294,7 @@
                 if (
                     record.get("service") == "socket_proxy"
                     and record.get("message") == "GET /info HTTP/1.1"
-                    and record.get("level") == "info"
+                    and record.get("level") == "debug"
                     and fields.get("method") == "GET"
                     and fields.get("path") == "/info"
                     and fields.get("status") == 200

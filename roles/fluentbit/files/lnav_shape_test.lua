@@ -99,7 +99,7 @@ end
 do
     -- Parsed access record (fields set by the nginx_access_custom parser):
     -- parsed keys land in fields, status stays an integer, a 2xx keeps the
-    -- pinned info level.
+    -- pinned debug level.
     local rec = shape("nginx.access", {
         host = "lab",
         log = '203.0.113.5 - - [08/Jun/2026:12:00:00 +0200] g.example "GET /ok HTTP/2.0" g.example 200 1 2 0.01 0.01 "-" "curl/8" "" "" 0 TLSv1.3 X',
@@ -107,8 +107,8 @@ do
         path = "/ok",
         status = 200,
         http_host = "g.example",
-    }, "info")
-    check("nginx.access.level", rec.level, "info")
+    }, "debug")
+    check("nginx.access.level", rec.level, "debug")
     check("nginx.access.fields.method", rec.fields.method, "GET")
     check("nginx.access.fields.path", rec.fields.path, "/ok")
     check("nginx.access.fields.status", rec.fields.status, 200)
@@ -119,13 +119,13 @@ end
 
 do
     -- A 5xx status promotes the record to error level even though the upstream
-    -- modify filter pinned it to info; a 4xx must NOT (stays info).
-    local rec5xx = shape("nginx.access", { host = "lab", log = "x", status = 503 }, "info")
+    -- modify filter pinned it to debug; a 4xx must NOT (stays debug).
+    local rec5xx = shape("nginx.access", { host = "lab", log = "x", status = 503 }, "debug")
     check("nginx.access.5xx.level", rec5xx.level, "error")
     check("nginx.access.5xx.fields.status", rec5xx.fields.status, 503)
 
-    local rec4xx = shape("nginx.access", { host = "lab", log = "x", status = 404 }, "info")
-    check("nginx.access.4xx.level", rec4xx.level, "info")
+    local rec4xx = shape("nginx.access", { host = "lab", log = "x", status = 404 }, "debug")
+    check("nginx.access.4xx.level", rec4xx.level, "debug")
 end
 
 do
