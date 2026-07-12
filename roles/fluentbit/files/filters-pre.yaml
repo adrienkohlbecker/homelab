@@ -73,7 +73,7 @@ pipeline:
 
     # Services with header-aware grammars add their own multiline filter.
     - name: multiline
-      match_regex: '^svc\.(?!(?:homeassistant|homepage|socket_proxy)\.service$).*'
+      match_regex: '^svc\.(?!(?:homeassistant|homepage|sonarr|socket_proxy)\.service$).*'
       multiline.parser: python,go,java,ruby
       multiline.key_content: MESSAGE
       buffer: true

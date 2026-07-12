@@ -79,6 +79,16 @@
   tags:
     - sonarr
 
+- name: Install sonarr fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension
+  vars:
+    fluentbit_extension_args:
+      name: sonarr
+  tags:
+    - sonarr
+
 - name: Install sonarr service
   import_role:
     name: systemd_unit

@@ -1,0 +1,58 @@
+parsers:
+  - name: sonarr_console
+    format: regex
+    regex: '/\A\[(?<sonarr_level>Trace|Debug|Info|Warn|Error|Fatal)\] (?<sonarr_source>[^:]+): (?<sonarr_message>[^\r\n]*?)[ \t]*(?:\r?\n(?:[[:space:]]*\r?\n)*\[v(?<sonarr_version>[^]]+)\] (?<sonarr_exception>[\s\S]*?))?[[:space:]]*\z/'
+
+multiline_parsers:
+  - name: multiline_sonarr
+    type: regex
+    flush_timeout: 1000
+    rules:
+      - state: start_state
+        regex: '/^\[(Trace|Debug|Info|Warn|Error|Fatal)\] [^:]+: /'
+        next_state: continuation
+      - state: continuation
+        regex: '/^([[:space:]]*$|\[v[^]]+\] |[[:space:]]|<[^>]+>)/'
+        next_state: continuation
+
+pipeline:
+  filters:
+    # Keep successful no-op scans in journald, but omit them from the operator
+    # aggregate. Nonzero imports, grabs, pending reports, and failures remain.
+    - name: grep
+      match: svc.sonarr.service
+      logical_op: and
+      exclude:
+        - 'CONTAINER_TAG ^.+$'
+        - 'MESSAGE ^\[Info\] (ExistingMetadataImporter: Found 0 existing metadata files|ExistingSubtitleImporter: Found 0 existing subtitle files|ExistingOtherExtraImporter: Found 0 existing other extra files|ExistingExtraFileService: Found 0 possible extra files, imported 0 files\.|RssSyncService: Starting RSS Sync|DownloadDecisionMaker: Processing [0-9]+ releases|RssSyncService: RSS Sync Completed\. Reports found: [0-9]+, Reports grabbed: 0)[[:space:]]*$'
+    - name: multiline
+      match: svc.sonarr.service
+      multiline.parser: multiline_sonarr
+      multiline.key_content: MESSAGE
+      buffer: true
+      flush_ms: 1000
+      emitter_name: multiline_sonarr_emitter
+      emitter_storage.type: filesystem
+    - name: modify
+      match: svc.sonarr.service
+      condition: key_exists CONTAINER_TAG
+      rename: MESSAGE log
+    - name: parser
+      match: svc.sonarr.service
+      key_name: log
+      parser: sonarr_console
+      reserve_data: true
+      preserve_key: true
+    - name: modify
+      match: svc.sonarr.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists sonarr_message
+        - key_exists sonarr_level
+      hard_rename:
+        - sonarr_message log
+        - sonarr_level _level
+        - sonarr_source source
+        - sonarr_version app_version
+        - sonarr_exception exception
+      set: parser_status parsed
