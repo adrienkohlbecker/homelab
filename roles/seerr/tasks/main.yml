@@ -116,6 +116,16 @@
   tags:
     - seerr
 
+- name: Install seerr fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension
+  vars:
+    fluentbit_extension_args:
+      name: seerr
+  tags:
+    - seerr
+
 - name: Install seerr service
   import_role:
     name: systemd_unit

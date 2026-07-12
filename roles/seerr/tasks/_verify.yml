@@ -116,6 +116,127 @@
   delay: 2
   until: _seerr_media_dns.rc == 0
 
+- name: _verify | Wait for normalized seerr startup record in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "seerr"
+                    and record.get("message", "").startswith("Starting Seerr version ")
+                    and fields.get("parser_status") == "parsed"
+                    and "CONTAINER_TAG" not in fields
+                    and "seerr_timestamp" not in fields
+                    and "seerr_level" not in fields
+                ):
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _seerr_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _seerr_lnav_record.rc == 0
+  become: true
+
+- name: _verify | Exercise seerr fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: seerr
+      records:
+        - MESSAGE: "2099-01-02T03:04:05.678Z [\u001b[32minfo\u001b[39m][Jellyfin Sync]: Scan starting {\"sessionId\":\"verify-session\"}\n"
+          CONTAINER_TAG: seerr
+          SYSLOG_IDENTIFIER: seerr
+          SYSTEMD_UNIT: seerr.service
+        - MESSAGE: "2099-01-02T03:04:06.789Z [\u001b[31merror\u001b[39m][Jellyfin API]: Request failed {\"error\":500}\n"
+          CONTAINER_TAG: seerr
+          SYSLOG_IDENTIFIER: seerr
+          SYSTEMD_UNIT: seerr.service
+        - MESSAGE: "2099-01-02T03:04:07.890Z [\u001b[32minfo\u001b[39m]: Starting Seerr version 3.2.0 \n"
+          CONTAINER_TAG: seerr
+          SYSLOG_IDENTIFIER: seerr
+          SYSTEMD_UNIT: seerr.service
+        - MESSAGE: '> seerr@3.2.0 start'
+          CONTAINER_TAG: seerr
+          SYSLOG_IDENTIFIER: seerr
+          SYSTEMD_UNIT: seerr.service
+        - MESSAGE: '2099-01-02T03:04:08.901Z [info][Server]: malformed-json {"port":5055'
+          CONTAINER_TAG: seerr
+          SYSLOG_IDENTIFIER: seerr
+          SYSTEMD_UNIT: seerr.service
+        - MESSAGE: '2099-01-02T03:04:09.012Z [info][Server]: must-not-parse'
+          SYSLOG_IDENTIFIER: systemd
+          SYSTEMD_UNIT: seerr.service
+        - MESSAGE: '2099-01-02T03:04:10.123Z [debug][Jellyfin Sync]: Title already exists and no changes detected for routine-token'
+          CONTAINER_TAG: seerr
+          SYSLOG_IDENTIFIER: seerr
+          SYSTEMD_UNIT: seerr.service
+        - MESSAGE: '2099-01-02T03:04:11.234Z [debug][Jobs]: non-routine-debug'
+          CONTAINER_TAG: seerr
+          SYSLOG_IDENTIFIER: seerr
+          SYSTEMD_UNIT: seerr.service
+      expected:
+        - message: Scan starting
+          level: info
+          service: seerr
+          fields.source: Jellyfin Sync
+          fields.sessionId: verify-session
+          fields.parser_status: parsed
+          _absent:
+            - fields.seerr_timestamp
+            - fields.seerr_level
+            - fields.seerr_metadata
+            - fields.CONTAINER_TAG
+        - message: Request failed
+          level: error
+          fields.source: Jellyfin API
+          fields.error: 500
+          fields.parser_status: parsed
+        - message: Starting Seerr version 3.2.0
+          level: info
+          fields.parser_status: parsed
+          _absent:
+            - fields.source
+        - message: '> seerr@3.2.0 start'
+          service: seerr
+          _absent:
+            - fields.parser_status
+            - fields.source
+        - message: malformed-json
+          level: warn
+          service: seerr
+          parse_error: seerr_metadata
+          fields.parser_status: failed
+          fields.seerr_metadata: '{"port":5055'
+        - message: '2099-01-02T03:04:09.012Z [info][Server]: must-not-parse'
+          service: systemd
+          _absent:
+            - fields.parser_status
+            - fields.source
+        - message: non-routine-debug
+          level: debug
+          fields.source: Jobs
+          fields.parser_status: parsed
+
+- name: _verify | Routine seerr debug record is omitted from the aggregate
+  assert:
+    that: "'routine-token' not in fluentbit_verify_result.stdout"
+
 # Canonical-shape contract. Unlike radarr (which rewrites config.xml on every
 # shutdown), seerr only writes settings.json when a setting actually changes --
 # the migrator skips the write when settingsBefore == settingsAfter -- so a

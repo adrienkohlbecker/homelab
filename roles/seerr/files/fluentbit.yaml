@@ -1,0 +1,62 @@
+parsers:
+  - name: seerr_console
+    format: regex
+    regex: '/\A(?<seerr_timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z) \[(?:\x1b\[[0-9;]*m)?(?<seerr_level>debug|info|warn|error)(?:\x1b\[[0-9;]*m)?\](?:\[(?<seerr_source>[^]]+)\])?: (?<seerr_message>[\s\S]*?)(?: (?<seerr_metadata>\{[\s\S]*))?[[:space:]]*\z/'
+  - name: seerr_metadata
+    format: json
+
+pipeline:
+  filters:
+    - name: modify
+      match: svc.seerr.service
+      condition: key_exists CONTAINER_TAG
+      rename: MESSAGE log
+    - name: parser
+      match: svc.seerr.service
+      key_name: log
+      parser: seerr_console
+      reserve_data: true
+      preserve_key: true
+    - name: parser
+      match: svc.seerr.service
+      key_name: seerr_metadata
+      parser: seerr_metadata
+      reserve_data: true
+    - name: modify
+      match: svc.seerr.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists seerr_message
+        - key_exists seerr_level
+        - key_does_not_exist seerr_metadata
+      hard_rename:
+        - seerr_message log
+        - seerr_level _level
+        - seerr_source source
+      remove: seerr_timestamp
+      set: parser_status parsed
+    - name: modify
+      match: svc.seerr.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_exists seerr_message
+        - key_exists seerr_level
+        - key_exists seerr_metadata
+      hard_rename:
+        - seerr_message log
+        - seerr_source source
+      remove:
+        - seerr_timestamp
+        - seerr_level
+      add:
+        - parser_status failed
+        - parse_error seerr_metadata
+        - _level warn
+    - name: grep
+      match: svc.seerr.service
+      logical_op: and
+      exclude:
+        - 'CONTAINER_TAG ^.+$'
+        - '_level ^debug$'
+        - 'source ^(Jellyfin Sync|Jobs|Download Tracker)$'
+        - 'log ^(Title already exists and no changes detected for |Updating existing title: |Starting scheduled job: Download Sync[[:space:]]*$|Found [0-9]+ item\(s\) in progress on (Sonarr|Radarr) server: (sonarr|radarr)[[:space:]]*$)'
