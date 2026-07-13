@@ -260,6 +260,25 @@
       Expected hdparm_drive_{active,unknown,collector_error} to bind on
       hdparm.verify_ghost. Got keys: {{ _keys | select('search', 'hdparm') | list }}
 
+- name: _verify | Hdparm faults use one sustained-state window
+  vars:
+    _alarms: "{{ (_hdparm_alarms.content | from_json).alarms }}"
+    _names:
+      - hdparm_drive_unknown
+      - hdparm_drive_collector_error
+    _alarm: "{{ _alarms['hdparm.verify_ghost.' ~ item] | default({}) }}"
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - _alarm.lookup_method | default('') == "min"
+      - _alarm.lookup_after | default(0) == -300
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 1800
+    fail_msg: >-
+      Expected {{ item }} to alert after one five-minute state window and
+      retain only recovery hysteresis. Got: {{ _alarm }}
+  loop: "{{ _names }}"
+
 - name: _verify | Restore empty hdparm.conf
   template:
     src: charts_d_hdparm.conf.j2
