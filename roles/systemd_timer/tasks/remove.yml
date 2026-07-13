@@ -30,7 +30,6 @@
 
 - name: remove | Resolve caller defaults for {{ systemd_timer_args.name }}
   set_fact:
-    _systemd_timer_condition: "{{ systemd_timer_args.condition | default(true) }}"
     _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
 
 - name: remove | Remove timer unit for {{ systemd_timer_args.name }}
@@ -41,7 +40,6 @@
     systemd_unit_args:
       dest: "{{ systemd_timer_args.name }}.timer"
       user: "{{ _systemd_timer_user }}"
-      condition: "{{ _systemd_timer_condition }}"
 
 - name: remove | Remove service unit for {{ systemd_timer_args.name }}
   import_role:
@@ -51,7 +49,6 @@
     systemd_unit_args:
       dest: "{{ systemd_timer_args.name }}.service"
       user: "{{ _systemd_timer_user }}"
-      condition: "{{ _systemd_timer_condition }}"
 
 # Mirror install.yml's metadata write so a removed timer also stops
 # being polled by the netdata systemd_timers collector. state: absent
@@ -60,7 +57,6 @@
 # For user-scope timers install.yml never writes the file, so state:absent
 # here is always a no-op -- no guard needed.
 - name: remove | Drop systemd_timers metadata for {{ systemd_timer_args.name }}
-  when: _systemd_timer_condition
   file:
     path: /etc/netdata/charts.d/systemd_timers.d/{{ systemd_timer_args.name }}.conf
     state: absent
@@ -74,7 +70,6 @@
 # the owning user's ~/.local/share/systemd/timers.
 - name: remove | Drop persistent trigger stamp for {{ systemd_timer_args.name }}
   when:
-    - _systemd_timer_condition
     - _systemd_timer_user == 'root'
   file:
     path: /var/lib/systemd/timers/stamp-{{ systemd_timer_args.name }}.timer

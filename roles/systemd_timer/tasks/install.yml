@@ -31,7 +31,6 @@
 
 - name: install | Resolve caller defaults for {{ systemd_timer_args.name }}
   set_fact:
-    _systemd_timer_condition: "{{ systemd_timer_args.condition | default(true) }}"
     _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
     # Reset from any prior invocation so a subsequent monitor:false timer can't
     # inherit a stale period if the two when: gates ever fall out of sync.
@@ -51,7 +50,6 @@
 # unit template emit something systemd would reject at load time.
 - name: install | Reject run_as on user-scope timer for {{ systemd_timer_args.name }}
   when:
-    - _systemd_timer_condition
     - systemd_timer_args.run_as is defined
   assert:
     quiet: true
@@ -64,7 +62,6 @@
 
 - name: install | Validate environment keys for {{ systemd_timer_args.name }}
   when:
-    - _systemd_timer_condition
     - systemd_timer_args.environment is defined
   assert:
     quiet: true
@@ -83,7 +80,6 @@
 # thundering-herd it was meant to prevent. Reject the combination loudly.
 - name: install | Reject fixed_random_delay without randomized_delay_sec for {{ systemd_timer_args.name }}
   when:
-    - _systemd_timer_condition
     - systemd_timer_args.fixed_random_delay | default(false)
   assert:
     quiet: true
@@ -99,7 +95,6 @@
 # in the journal at priority err. Install before the unit so
 # systemd-analyze's "ExecStart executable exists" check passes.
 - name: install | Install stderr_priority wrapper
-  when: _systemd_timer_condition
   copy:
     src: stderr_priority
     dest: /usr/local/bin/stderr_priority
@@ -126,7 +121,6 @@
       src: service.j2
       dest: "{{ systemd_timer_args.name }}.service"
       user: "{{ _systemd_timer_user }}"
-      condition: "{{ _systemd_timer_condition }}"
 
 - name: install | Install timer unit
   import_role:
@@ -137,7 +131,6 @@
       src: timer.j2
       dest: "{{ systemd_timer_args.name }}.timer"
       user: "{{ _systemd_timer_user }}"
-      condition: "{{ _systemd_timer_condition }}"
 
 # Skip enable+start when systemd_unit just (mock-)wrote either unit file
 # in check-mode — the file isn't actually on disk, so `systemctl enable`
@@ -154,10 +147,9 @@
       src: "{{ systemd_timer_args.name }}.timer"
       user: "{{ _systemd_timer_user }}"
       condition: >-
-        {{ _systemd_timer_condition
-           and not (ansible_check_mode
-                    and (lookup('vars', systemd_timer_args.name ~ '_service_result').changed
-                         or lookup('vars', systemd_timer_args.name ~ '_timer_result').changed)) }}
+        {{ not (ansible_check_mode
+                and (lookup('vars', systemd_timer_args.name ~ '_service_result').changed
+                     or lookup('vars', systemd_timer_args.name ~ '_timer_result').changed)) }}
 
 # --- netdata overdue monitoring -------------------------------------------
 # Register the timer with the netdata systemd_timers collector. Placed after
@@ -176,7 +168,6 @@
 # shift it by an hour, which the 2 * period grace absorbs.
 - name: install | Derive overdue period from on_calendar for {{ systemd_timer_args.name }}
   when:
-    - _systemd_timer_condition
     - _systemd_timer_monitor
     - not ansible_check_mode
   shell: |
@@ -208,7 +199,6 @@
 # redundantly creating it.
 - name: install | Ensure netdata user exists for metadata file ownership
   when:
-    - _systemd_timer_condition
     - _systemd_timer_monitor
   user:
     name: netdata
@@ -223,7 +213,6 @@
 # metadata files inside are netdata:netdata.
 - name: install | Ensure systemd_timers metadata dir exists
   when:
-    - _systemd_timer_condition
     - _systemd_timer_monitor
   file:
     path: /etc/netdata/charts.d/systemd_timers.d
@@ -238,7 +227,6 @@
 # overdue before its first fire.
 - name: install | Write systemd_timers metadata for {{ systemd_timer_args.name }}
   when:
-    - _systemd_timer_condition
     - _systemd_timer_monitor
     - not ansible_check_mode
   copy:
