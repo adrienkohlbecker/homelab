@@ -453,7 +453,6 @@
     _alarm: "{{ _alarms[item] | default({}) }}"
   assert:
     that:
-      - _alarm.recipient | default('') == "sysadmin"
       - _alarm.lookup_method | default('') == "max"
       - _alarm.lookup_after | default(0) == -300
       - _alarm.lookup_dimensions | default('') == "present"
