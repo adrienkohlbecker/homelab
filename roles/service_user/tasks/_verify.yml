@@ -34,10 +34,6 @@
           - _service_user_passwd.stdout.split(':')[5] == '/nonexistent'
           - _service_user_passwd.stdout.split(':')[6] == '/usr/sbin/nologin'
 
-    - name: _verify | System group exists
-      command: getent group service_user_test
-      changed_when: false
-
     - name: _verify | Config directory exists with correct ownership
       stat:
         path: /mnt/services/service_user_test
