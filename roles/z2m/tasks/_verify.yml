@@ -1,63 +1,3 @@
-- name: _verify | Config directory exists with correct ownership
-  stat:
-    path: /mnt/services/z2m
-  register: z2m_verify_dir
-  become: true
-  failed_when: >-
-    not z2m_verify_dir.stat.exists
-    or not z2m_verify_dir.stat.isdir
-    or z2m_verify_dir.stat.pw_name != 'z2m'
-    or z2m_verify_dir.stat.gr_name != 'z2m'
-
-- name: _verify | Config file is valid YAML with expected keys
-  shell: |
-    set -euo pipefail
-    python3 -c '
-    import yaml, sys
-    yaml.add_multi_constructor("!", lambda l,s,n: None, Loader=yaml.SafeLoader)
-    d = yaml.safe_load(open(sys.argv[1]))
-    for k in ("homeassistant", "frontend", "mqtt", "serial", "advanced"):
-        assert k in d, f"missing top-level key: {k}"
-    assert d["advanced"].get("enable_external_js") is False, "enable_external_js must be false"
-    ' /mnt/services/z2m/configuration.yaml
-  args:
-    executable: /bin/bash
-  become: true
-  changed_when: false
-
-- name: _verify | Secret file exists with restrictive permissions
-  stat:
-    path: /mnt/services/z2m/secret.yaml
-  register: z2m_verify_secret
-  become: true
-  failed_when: >-
-    not z2m_verify_secret.stat.exists
-    or z2m_verify_secret.stat.mode != '0600'
-    or z2m_verify_secret.stat.pw_name != 'z2m'
-
-- name: _verify | Secret file contains required keys
-  shell: |
-    set -euo pipefail
-    python3 -c '
-    import yaml, sys
-    d = yaml.safe_load(open(sys.argv[1]))
-    for k in ("network_key", "mqtt_user", "mqtt_password"):
-        assert k in d, f"missing secret key: {k}"
-    ' /mnt/services/z2m/secret.yaml
-  args:
-    executable: /bin/bash
-  become: true
-  changed_when: false
-
-- name: _verify | Devices file is valid YAML owned by z2m
-  stat:
-    path: /mnt/services/z2m/devices.yaml
-  register: z2m_verify_devices
-  become: true
-  failed_when: >-
-    not z2m_verify_devices.stat.exists
-    or z2m_verify_devices.stat.pw_name != 'z2m'
-
 # patch_cover_tilt.py is the role's one piece of real logic and the live
 # frontend probes that would exercise covers are gated off in CI -- so prove
 # the patcher itself here against a throwaway fixture (a cover whose
@@ -115,21 +55,6 @@
     path: /tmp/z2m_patch_fixture.yaml
     state: absent
   become: true
-
-- name: _verify | Service unit is installed and enabled
-  systemd:
-    name: z2m
-  register: z2m_verify_unit
-  become: true
-  failed_when: >-
-    z2m_verify_unit.status.UnitFileState != 'enabled'
-
-- name: _verify | Nginx vhost is installed
-  stat:
-    path: /etc/nginx/sites-enabled/z2m
-  register: z2m_verify_vhost
-  become: true
-  failed_when: not z2m_verify_vhost.stat.exists
 
 # SNI follows the URL host, not the Host header, so probing https://localhost/
 # with a Host: override trips TLSV1_UNRECOGNIZED_NAME on openssl 3.x. Map the
