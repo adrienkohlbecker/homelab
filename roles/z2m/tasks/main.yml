@@ -64,49 +64,17 @@
   tags:
     - z2m
 
-- name: Seed z2m devices
-  copy:
-    content: "{}\n"
-    dest: /mnt/services/z2m/devices.yaml
-    owner: z2m
-    group: z2m
-    mode: "0644"
-    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' %s
-    force: false
-    backup: true
-  register: z2m_devices
-  become: true
-  tags:
-    - z2m
-
 # Per-device tilt-null override for covers. See patch_cover_tilt.py for
 # why the global `device_options.homeassistant.cover` block in
 # configuration.yaml is not enough.
 - name: Patch cover devices to suppress phantom tilt_* in HA discovery
+  when: not (ansible_check_mode and z2m_user.changed)
   ansible.builtin.script:
     cmd: patch_cover_tilt.py '{{ z2m_cover_friendly_name_pattern }}' /mnt/services/z2m/devices.yaml
   register: z2m_cover_patch
   changed_when: "'CHANGED' in z2m_cover_patch.stdout"
   become: true
-  tags:
-    - z2m
-
-# Converge devices.yaml ownership — z2m writes back to it at runtime and
-# any prior root-owned state (e.g. from the first patch_cover_tilt run
-# before it preserved uid/gid) would break container startup with EACCES.
-# In check mode where the seed copy above didn't actually write the
-# file, the file: state: file probe complains "file is absent" -- skip
-# in that bootstrap window. Real applies hit the file by the time we
-# get here.
-- name: Ensure devices.yaml ownership
-  when: not (ansible_check_mode and z2m_devices.changed)
-  file:
-    path: /mnt/services/z2m/devices.yaml
-    owner: z2m
-    group: z2m
-    mode: "0644"
-  register: z2m_devices_perms
-  become: true
+  become_user: z2m
   tags:
     - z2m
 
@@ -154,10 +122,6 @@
   tags:
     - z2m
 
-# z2m_devices.changed only fires on the first converge (the seed copy is
-# force: false; z2m owns devices.yaml at runtime thereafter), so a later
-# operator edit to devices.yaml does NOT bounce the mesh -- runtime content
-# changes flow through z2m_cover_patch / z2m_devices_perms instead.
 - name: Enable z2m service
   import_role:
     name: systemd_unit
@@ -166,7 +130,7 @@
     systemd_unit_args:
       src: z2m
       condition: "{{ not (ansible_check_mode and (z2m_service_result.changed or z2m_user.changed)) }}"
-      restart: "{{ z2m_service_result.changed or z2m_conf.changed or z2m_secret.changed or z2m_devices.changed or z2m_cover_patch.changed or z2m_devices_perms.changed }}"
+      restart: "{{ z2m_service_result.changed or z2m_conf.changed or z2m_secret.changed or z2m_cover_patch.changed }}"
       # QEMU has no coordinator, so z2m waits for the serial adapter and never
       # becomes healthy.
       start: "{{ not (qemu_test | bool) }}"

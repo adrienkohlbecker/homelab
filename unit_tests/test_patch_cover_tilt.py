@@ -2,6 +2,7 @@
 
 import importlib.util
 import re
+import sys
 from pathlib import Path
 
 _MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "z2m" / "files" / "patch_cover_tilt.py"
@@ -20,6 +21,13 @@ pct = _load()
 
 
 class TestPatch:
+    def test_missing_file_is_noop(self, tmp_path, monkeypatch, capsys) -> None:
+        path = tmp_path / "devices.yaml"
+        monkeypatch.setattr(sys, "argv", ["patch_cover_tilt.py", "shutter$", str(path)])
+
+        assert pct.main() == 0
+        assert capsys.readouterr().out == "OK\n"
+
     def test_patches_matching_device(self) -> None:
         devices = {
             "0x1234": {"friendly_name": "Kitchen Blind", "homeassistant": {}},

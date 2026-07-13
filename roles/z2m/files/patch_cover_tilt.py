@@ -50,6 +50,9 @@ def main() -> int:
         return 2
     name_re = re.compile(sys.argv[1])
     path = Path(sys.argv[2])
+    if not path.exists():
+        print("OK")
+        return 0
     raw = path.read_text()
     devices = yaml.safe_load(raw) or {}
     if not isinstance(devices, dict):
@@ -68,7 +71,6 @@ def main() -> int:
     ) as tmp:
         yaml.safe_dump(devices, tmp, default_flow_style=False, sort_keys=False, allow_unicode=True)
         tmp.flush()
-        os.fchown(tmp.fileno(), st.st_uid, st.st_gid)
         os.fchmod(tmp.fileno(), st.st_mode & 0o777)
         tmp_path = Path(tmp.name)
     tmp_path.replace(path)
