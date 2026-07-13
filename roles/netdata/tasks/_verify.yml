@@ -77,6 +77,24 @@
       Expected the Fluent Bit alarm to require a sustained positive drop rate
       and retain only recovery hysteresis.
 
+- name: _verify | Read Postfix health configuration
+  slurp:
+    src: /etc/netdata/health.d/postfix.conf
+  register: _netdata_postfix_health
+  become: true
+
+- name: _verify | Postfix alert uses sustained queue depth
+  vars:
+    _health: "{{ _netdata_postfix_health.content | b64decode }}"
+  assert:
+    that:
+      - "lookup: min -10m unaligned of emails" in _health
+      - "delay: up" not in _health
+      - "delay: down 30m" in _health
+    fail_msg: >-
+      Expected the Postfix alarm to require a sustained queue depth and retain
+      only recovery hysteresis.
+
 # netdata is the only flat-repo (trailing-slash suite, no components) + glob-pin
 # ("netdata*") consumer, so the shared apt_source _verify runs here to cover
 # that path: the signing key is scoped (not globally trusted) and the 2.* pin
