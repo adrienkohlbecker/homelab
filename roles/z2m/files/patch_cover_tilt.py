@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Inject `homeassistant.cover.tilt_{command,status}_topic: null` +
-# `tilt_status_template: null` on every cover device in z2m's devices.yaml.
+# `tilt_status_template: null` on every shutter device in z2m's devices.yaml.
 #
 # Why: z2m's HA discovery override system (extension/homeassistant.js)
 # DOES honour null-for-delete and DOES support a per-object_id `cover:`
@@ -13,43 +13,33 @@
 # place where the override actually gets applied.
 
 import os
-import re
 import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 import yaml
 
-TILT_NULLS = {
-    "tilt_status_topic": None,
-    "tilt_status_template": None,
-    "tilt_command_topic": None,
-}
-
-
-def patch(devices: dict, name_re: re.Pattern) -> bool:
+def patch(devices: dict) -> bool:
     changed = False
     for dev in devices.values():
         if not isinstance(dev, dict):
             continue
-        fn = dev.get("friendly_name", "")
-        if not name_re.search(fn):
+        if not dev.get("friendly_name", "").endswith("shutter"):
             continue
         ha = dev.setdefault("homeassistant", {})
         cover = ha.setdefault("cover", {})
-        for k, v in TILT_NULLS.items():
-            if k not in cover or cover[k] is not v:
-                cover[k] = v
+        for key in ("tilt_status_topic", "tilt_status_template", "tilt_command_topic"):
+            if key not in cover or cover[key] is not None:
+                cover[key] = None
                 changed = True
     return changed
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
-        print(f"usage: {sys.argv[0]} <friendly-name-regex> <devices.yaml>", file=sys.stderr)
+    if len(sys.argv) != 2:
+        print(f"usage: {sys.argv[0]} <devices.yaml>", file=sys.stderr)
         return 2
-    name_re = re.compile(sys.argv[1])
-    path = Path(sys.argv[2])
+    path = Path(sys.argv[1])
     if not path.exists():
         print("OK")
         return 0
@@ -58,7 +48,7 @@ def main() -> int:
     if not isinstance(devices, dict):
         print(f"unexpected root type {type(devices).__name__} in {path}", file=sys.stderr)
         return 1
-    if not patch(devices, name_re):
+    if not patch(devices):
         print("OK")
         return 0
     st = path.stat()

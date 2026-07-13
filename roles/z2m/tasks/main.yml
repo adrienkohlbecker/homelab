@@ -70,7 +70,7 @@
 - name: Patch cover devices to suppress phantom tilt_* in HA discovery
   when: not (ansible_check_mode and z2m_user.changed)
   ansible.builtin.script:
-    cmd: patch_cover_tilt.py '{{ z2m_cover_friendly_name_pattern }}' /mnt/services/z2m/devices.yaml
+    cmd: patch_cover_tilt.py /mnt/services/z2m/devices.yaml
   register: z2m_cover_patch
   changed_when: "'CHANGED' in z2m_cover_patch.stdout"
   become: true
