@@ -374,6 +374,29 @@
       required stayed high for 30m. Got:
       {{ _alarm }}
 
+- name: _verify | Systemd service failure alarm uses sustained state
+  vars:
+    _alarm: >-
+      {{
+        ((_netdata_alarms.content | from_json).alarms.values()
+         | selectattr('name', 'equalto', 'systemd_service_unit_failed_state')
+         | first)
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - _alarm.lookup_method | default('') == "average"
+      - _alarm.lookup_after | default(0) == -300
+      - _alarm.lookup_before | default(0) == 0
+      - _alarm.lookup_dimensions | default('') == "failed"
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 0
+    fail_msg: >-
+      Expected systemd_service_unit_failed_state to require a sustained 5m
+      failure without queued notification delays. Got:
+      {{ _alarm }}
+
 # Closes the loop the on-disk un-silence assert (main.yml) can't: prove the
 # reload-health actually propagated the un-silence into a LIVE alarm. The
 # out_of_disk_space_time template (un-silenced from upstream's `to: silent`)
