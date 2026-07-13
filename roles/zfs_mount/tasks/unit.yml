@@ -1,23 +1,13 @@
-# Install a per-mountpoint oneshot (zfs_mount_<path>.service) that asserts
-# the dataset is correctly mounted at boot; consumer service units
-# Requires= it so they refuse to start on a failed/missing mount. Caller
-# passes one dict `zfs_mount_args`:
+# Install a per-mountpoint oneshot that asserts the dataset is mounted before
+# consumer services start. Callers pass one `zfs_mount_args` dict:
 #   dataset    zfs dataset path (e.g. rpool/services)
 #   mountpoint absolute mountpoint (e.g. /mnt/services)
 #   canmount   optional expected canmount; 'on' (default) for auto-mount
 #              datasets, 'noauto' for boot environments.
 #
-# The dict form mirrors systemd_unit / service_user: each import_role pass
-# replaces the whole `zfs_mount_args` value at play-vars scope so a previous
-# caller's args can't bleed into the next call.
-#
-# Unit-name suffix: mountpoint with '/' -> '_' ('/' itself -> 'root'). This
-# is not systemd-escape and is non-injective when a mountpoint holds a
-# literal '_' (e.g. /mnt/ci_scratch and a hypothetical /mnt/ci/scratch both
-# map to mnt_ci_scratch). The live mountpoint set is collision-free; the
-# assert below rejects only the one concrete footgun (/root aliasing /).
-# ~14 consumer *.service.j2 hard-code the resulting names as Requires=, so
-# changing this derivation is a fleet-wide rename.
+# Unit names preserve the historical slash-to-underscore mapping ('root' for
+# '/'). It is non-injective, so the filter rejects the known /root alias.
+# Consumers hard-code these names; changing the mapping is a fleet-wide rename.
 - name: unit | Assert required inputs
   assert:
     that:
