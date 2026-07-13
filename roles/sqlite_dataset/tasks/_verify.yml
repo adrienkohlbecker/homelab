@@ -97,11 +97,19 @@
         that:
           - _sqlite_dataset_dir_s2.stat.mode == '0750'
 
-    # -- Scenario 3: idempotence — an identical re-apply is a no-op ------
-    # The harness idempotence pass targets the empty main.yml stub, so
-    # dataset.yml's touch/symlink tasks are otherwise never re-run; assert
-    # here that src mtimes survive an identical second apply (catches a
-    # non-idempotent touch or a symlink that re-lchowns every converge).
+    # -- Scenario 3: populated DBs survive an identical re-apply ----------
+    # Write through the app-facing symlink, then prove an identical converge
+    # preserves the bytes, source mtimes, and indirection.
+    - name: _verify | Scenario 3 — write through the dest symlink
+      copy:
+        content: "WRITE-THROUGH"
+        dest: /mnt/services/sqlite_dataset_test/test.db
+        owner: root
+        group: root
+        mode: "0640"
+        follow: true
+      become: true
+
     - name: _verify | Scenario 3 — capture src mtimes before re-run
       stat:
         path: "/mnt/services/sqlite/sqlite_dataset_test/{{ item }}"
@@ -134,82 +142,30 @@
       register: _sqlite_dataset_after
       become: true
 
-    - name: _verify | Scenario 3 — mtimes unchanged across the re-apply
-      assert:
-        that:
-          - item.0.stat.mtime == item.1.stat.mtime
-        fail_msg: >-
-          {{ item.0.item }} mtime changed across an identical re-apply --
-          the target creation or symlink is not idempotent.
-      loop: "{{ _sqlite_dataset_before.results | zip(_sqlite_dataset_after.results) | list }}"
-      loop_control:
-        label: "{{ item.0.item }}"
-
-    # -- Scenario 4: functional write-through ----------------------------
-    # Prove the indirection: bytes written to the dest path land at the
-    # sqlite-dataset src (what an app's SQLite engine actually does), and the
-    # symlink survives the write.
-    - name: _verify | Scenario 4 — write through the dest symlink
-      copy:
-        content: "WRITE-THROUGH"
-        dest: /mnt/services/sqlite_dataset_test/test.db
-        owner: root
-        group: root
-        mode: "0640"
-        follow: true
-      become: true
-
-    - name: _verify | Scenario 4 — re-stat the dest (still a symlink)
+    - name: _verify | Scenario 3 — re-stat the dest symlink
       stat:
         path: /mnt/services/sqlite_dataset_test/test.db
         follow: false
       register: _sqlite_dataset_through_link
       become: true
 
-    - name: _verify | Scenario 4 — read back from the sqlite-dataset src
+    - name: _verify | Scenario 3 — read back from the sqlite-dataset src
       slurp:
         src: /mnt/services/sqlite/sqlite_dataset_test/test.db
       register: _sqlite_dataset_through
       become: true
 
-    - name: _verify | Scenario 4 — bytes resolved onto the dataset, symlink intact
+    - name: _verify | Scenario 3 — populated DB and symlink survived the re-apply
       assert:
         that:
+          - item.0.stat.mtime == item.1.stat.mtime
           - _sqlite_dataset_through_link.stat.islnk
           - _sqlite_dataset_through.content | b64decode == 'WRITE-THROUGH'
-
-    # -- Scenario 5: target creation does not clobber an existing src -----
-    - name: _verify | Scenario 5 — write sentinel directly into the src
-      copy:
-        content: "SENTINEL"
-        dest: /mnt/services/sqlite/sqlite_dataset_test/test.db
-        owner: root
-        group: root
-        mode: "0640"
-      become: true
-
-    - name: _verify | Scenario 5 — re-run with the existing src
-      import_role:
-        name: sqlite_dataset
-        tasks_from: dataset
-      vars:
-        sqlite_dataset_args:
-          name: sqlite_dataset_test
-          owner: root
-          group: root
-          links:
-            - /mnt/services/sqlite_dataset_test/test.db
-
-    - name: _verify | Scenario 5 — read src content
-      slurp:
-        src: /mnt/services/sqlite/sqlite_dataset_test/test.db
-      register: _sqlite_dataset_sentinel
-      become: true
-
-    - name: _verify | Scenario 5 — sentinel content preserved (touch did not truncate)
-      assert:
-        that:
-          - _sqlite_dataset_sentinel.content | b64decode == 'SENTINEL'
+        fail_msg: >-
+          {{ item.0.item }} changed across an identical re-apply.
+      loop: "{{ _sqlite_dataset_before.results | zip(_sqlite_dataset_after.results) | list }}"
+      loop_control:
+        label: "{{ item.0.item }}"
 
     # -- Scenario 6: no-force state=link refuses to clobber a real DB -----
     # The load-bearing safety: a real file already at a dest is never
