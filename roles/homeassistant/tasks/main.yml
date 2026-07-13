@@ -36,7 +36,7 @@
     - homeassistant
 
 - name: Create sqlite directory
-  when: homeassistant_user.uid is defined
+  when: not ansible_check_mode or homeassistant_user.uid is defined
   file:
     dest: /mnt/services/sqlite/homeassistant
     state: directory
@@ -48,7 +48,7 @@
     - homeassistant
 
 - name: Create homeassistant subdirectories
-  when: homeassistant_user.uid is defined
+  when: not ansible_check_mode or homeassistant_user.uid is defined
   file:
     dest: "/mnt/services/homeassistant/{{ item }}"
     state: directory
@@ -306,7 +306,7 @@
     - homeassistant
 
 - name: Create HACS install dir
-  when: homeassistant_user.uid is defined
+  when: not ansible_check_mode or homeassistant_user.uid is defined
   file:
     path: /mnt/services/homeassistant/custom_components/hacs
     state: directory
@@ -334,7 +334,7 @@
     - homeassistant
 
 - name: Unpack HACS
-  when: homeassistant_user.uid is defined
+  when: not ansible_check_mode or homeassistant_user.uid is defined
   unarchive:
     src: /var/cache/homeassistant/hacs.zip
     remote_src: true
@@ -381,7 +381,7 @@
   vars:
     systemd_unit_args:
       src: homeassistant.service.j2
-      condition: "{{ homeassistant_user.uid is defined }}"
+      condition: "{{ not ansible_check_mode or homeassistant_user.uid is defined }}"
   tags:
     - homeassistant
 

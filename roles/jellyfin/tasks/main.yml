@@ -30,7 +30,7 @@
 # on a fresh deploy; jellyfin would create them on first start, but that
 # race breaks idempotency.
 - name: Create jellyfin state directories
-  when: jellyfin_user.uid is defined
+  when: not ansible_check_mode or jellyfin_user.uid is defined
   file:
     dest: "{{ item }}"
     state: directory
@@ -59,7 +59,7 @@
     - jellyfin
 
 - name: Install tmpfiles.d entry for /var/log/jellyfin reaping
-  when: jellyfin_user.uid is defined
+  when: not ansible_check_mode or jellyfin_user.uid is defined
   template:
     src: jellyfin.tmpfiles.conf.j2
     dest: /etc/tmpfiles.d/jellyfin.conf
@@ -92,7 +92,7 @@
 # (not Serilog) and are unaffected -- they're per-stream and not tailed
 # by fluent-bit either way.
 - name: Configure jellyfin structured console logging
-  when: jellyfin_user.uid is defined
+  when: not ansible_check_mode or jellyfin_user.uid is defined
   copy:
     src: logging.json
     dest: /mnt/services/jellyfin/config/logging.default.json
@@ -143,7 +143,7 @@
     - jellyfin
 
 - name: Create SSO plugin directories
-  when: jellyfin_user.uid is defined
+  when: not ansible_check_mode or jellyfin_user.uid is defined
   file:
     dest: "{{ item }}"
     state: directory
@@ -227,7 +227,7 @@
 # bump re-extracts (overwriting the stable-named DLLs) while an unchanged
 # version is a no-op.
 - name: Extract SSO plugin
-  when: jellyfin_user.uid is defined
+  when: not ansible_check_mode or jellyfin_user.uid is defined
   unarchive:
     src: /tmp/sso-authentication_{{ jellyfin_sso_plugin_version }}.zip
     dest: /mnt/services/jellyfin/plugins/sso
@@ -242,7 +242,7 @@
 
 - name: Stamp installed SSO plugin version
   when:
-    - jellyfin_user.uid is defined
+    - not ansible_check_mode or jellyfin_user.uid is defined
     - jellyfin_sso_extract is changed
   file:
     path: /mnt/services/jellyfin/plugins/sso/.installed-{{ jellyfin_sso_plugin_version }}
@@ -266,7 +266,7 @@
 # touched the file would re-diff and trigger a needless restart. Same
 # pattern as roles/sonarr (config.xml).
 - name: Configure Jellyfin network settings
-  when: jellyfin_user.uid is defined
+  when: not ansible_check_mode or jellyfin_user.uid is defined
   copy:
     content: "{{ lookup('template', 'network.xml.j2') | rstrip_newlines }}"
     dest: /mnt/services/jellyfin/config/network.xml
@@ -281,7 +281,7 @@
     - jellyfin
 
 - name: Configure Jellyfin branding (SSO login button)
-  when: jellyfin_user.uid is defined
+  when: not ansible_check_mode or jellyfin_user.uid is defined
   copy:
     content: "{{ lookup('template', 'branding.xml.j2') | rstrip_newlines }}"
     dest: /mnt/services/jellyfin/config/branding.xml
@@ -309,7 +309,7 @@
       owner: jellyfin
       group: media
       mode: "0750"
-      condition: "{{ jellyfin_user.uid is defined }}"
+      condition: "{{ not ansible_check_mode or jellyfin_user.uid is defined }}"
       # Jellyfin creates these DBs on first boot, so on a cold host the
       # symlink targets don't exist yet -- pre_create plants empty files
       # so state=link doesn't refuse the dangling symlink.

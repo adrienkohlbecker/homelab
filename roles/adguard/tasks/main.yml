@@ -42,7 +42,7 @@
     - adguard
 
 - name: Create adguard directories
-  when: adguard_user.uid is defined
+  when: not ansible_check_mode or adguard_user.uid is defined
   file:
     dest: "{{ item.path }}"
     state: directory
@@ -66,7 +66,7 @@
 # blast radius). Copy the pair into service state owned by the adguard
 # user instead; renewals re-copy through the certbot deploy hook below.
 - name: Copy host certificate for DoT
-  when: adguard_user.uid is defined
+  when: not ansible_check_mode or adguard_user.uid is defined
   copy:
     src: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/{{ item }}
     remote_src: true
@@ -98,7 +98,7 @@
     - adguard
 
 - name: Install certbot deploy hook for DoT certs
-  when: adguard_user.uid is defined
+  when: not ansible_check_mode or adguard_user.uid is defined
   template:
     src: adguard_certbot_deploy.j2
     dest: /etc/letsencrypt/renewal-hooks/deploy/adguard
@@ -112,7 +112,7 @@
     - adguard
 
 - name: Configure adguard
-  when: adguard_user.uid is defined
+  when: not ansible_check_mode or adguard_user.uid is defined
   template:
     src: AdGuardHome.yaml.j2
     dest: /mnt/services/adguard/conf/AdGuardHome.yaml
@@ -178,7 +178,7 @@
   vars:
     systemd_unit_args:
       src: adguard.service.j2
-      condition: "{{ adguard_user.uid is defined }}"
+      condition: "{{ not ansible_check_mode or adguard_user.uid is defined }}"
   tags:
     - adguard
 

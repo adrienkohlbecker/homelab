@@ -30,7 +30,7 @@
 # and the read-only mount stays read-only. On prod the dir already
 # exists from before the :ro switch -- this task is a no-op there.
 - name: Create homepage logs dir (mkdir'd by entrypoint, ro-mount can't)
-  when: homepage_user.uid is defined
+  when: not ansible_check_mode or homepage_user.uid is defined
   file:
     path: /mnt/services/homepage/logs
     state: directory
@@ -50,7 +50,7 @@
 # force: false leaves any operator-edited content alone on prod
 # (those files preexist from before the :ro switch).
 - name: Touch homepage skeleton-seeded config files (entrypoint copyfile no-op)  # noqa: require-backup
-  when: homepage_user.uid is defined
+  when: not ansible_check_mode or homepage_user.uid is defined
   copy:
     content: ""
     dest: "/mnt/services/homepage/{{ item }}"
@@ -80,7 +80,7 @@
     - homepage
 
 - name: Configure homepage YAML config
-  when: homepage_user.uid is defined
+  when: not ansible_check_mode or homepage_user.uid is defined
   template:
     src: "{{ item }}.yaml.j2"
     dest: "/mnt/services/homepage/{{ item }}.yaml"
@@ -115,7 +115,7 @@
   vars:
     systemd_unit_args:
       src: homepage.service.j2
-      condition: "{{ homepage_user.uid is defined }}"
+      condition: "{{ not ansible_check_mode or homepage_user.uid is defined }}"
   tags:
     - homepage
 
@@ -209,7 +209,7 @@
     owner: homepage
     group: homepage
     mode: "0755"
-  when: homepage_user.uid is defined
+  when: not ansible_check_mode or homepage_user.uid is defined
   become: true
   tags:
     - homepage
@@ -218,7 +218,7 @@
 # password is available only to the oneshot poller and never enters its
 # environment or command line.
 - name: Deploy Homepage alerts Authelia password
-  when: homepage_user.uid is defined
+  when: not ansible_check_mode or homepage_user.uid is defined
   copy:
     content: "{{ homepage_alerts_authelia_password }}\n"
     dest: /opt/homepage_alerts/authelia_password

@@ -56,7 +56,7 @@
 # parent dir to exist already. Pre-create with matching ownership (the
 # sqlite_dataset helper leaves the dest's parent to the caller).
 - name: Create admin directory
-  when: sabnzbd_user.uid is defined
+  when: not ansible_check_mode or sabnzbd_user.uid is defined
   file:
     dest: /mnt/services/sabnzbd/admin
     state: directory
@@ -88,7 +88,7 @@
       owner: sabnzbd
       group: media
       mode: "0750"
-      condition: "{{ sabnzbd_user.uid is defined }}"
+      condition: "{{ not ansible_check_mode or sabnzbd_user.uid is defined }}"
       force: true
       links:
         - /mnt/services/sabnzbd/admin/history1.db
@@ -102,7 +102,7 @@
 # sabnzbd creates the dirs, each *arr app (own uid, media group) reads/moves
 # from them -- so the 0775 group-write is load-bearing, not cosmetic.
 - name: Create storage directories
-  when: sabnzbd_user.uid is defined
+  when: not ansible_check_mode or sabnzbd_user.uid is defined
   file:
     dest: "{{ item }}"
     state: directory
@@ -186,7 +186,7 @@
 # Download scratch dir (the unit bind-mounts /mnt/scratch/sabnzbd) and the
 # nzbToMedia code dir the unarchive below populates -- both sabnzbd:media 0755.
 - name: Create scratch and nzbToMedia directories
-  when: sabnzbd_user.uid is defined
+  when: not ansible_check_mode or sabnzbd_user.uid is defined
   file:
     dest: "{{ item }}"
     state: directory
@@ -204,7 +204,7 @@
 # the name alone is no guarantee) and drives re-download on a version bump --
 # a sha mismatch re-fetches rather than reusing the stale archive.
 - name: Download nzbToMedia archive
-  when: sabnzbd_user.uid is defined
+  when: not ansible_check_mode or sabnzbd_user.uid is defined
   get_url:
     url: "{{ sabnzbd_nzbtomedia_url }}"
     dest: "/opt/nzbToMedia/.nzbToMedia-{{ sabnzbd_nzbtomedia_version }}.tar.gz"
@@ -221,7 +221,7 @@
 # stable-named scripts) while an unchanged version is a no-op. `creates:`
 # short-circuits the extract entirely once the sentinel is present.
 - name: Extract nzbToMedia
-  when: sabnzbd_user.uid is defined
+  when: not ansible_check_mode or sabnzbd_user.uid is defined
   unarchive:
     src: "/opt/nzbToMedia/.nzbToMedia-{{ sabnzbd_nzbtomedia_version }}.tar.gz"
     dest: /opt/nzbToMedia
@@ -237,7 +237,7 @@
 
 - name: Stamp installed nzbToMedia version  # noqa: require-backup
   when:
-    - sabnzbd_user.uid is defined
+    - not ansible_check_mode or sabnzbd_user.uid is defined
     - sabnzbd_nzbtomedia_extract is changed
   file:
     path: "/opt/nzbToMedia/.installed-{{ sabnzbd_nzbtomedia_version }}"
@@ -266,7 +266,7 @@
   vars:
     systemd_unit_args:
       src: sabnzbd.service.j2
-      condition: "{{ sabnzbd_user.uid is defined }}"
+      condition: "{{ not ansible_check_mode or sabnzbd_user.uid is defined }}"
   tags:
     - sabnzbd
 

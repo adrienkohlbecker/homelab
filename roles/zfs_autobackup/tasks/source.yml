@@ -13,7 +13,7 @@
     - zfs_autobackup
 
 - name: source | Add authorized keys
-  when: zfs_autobackup_user.uid is defined
+  when: not ansible_check_mode or zfs_autobackup_user.uid is defined
   ansible.posix.authorized_key:
     user: zfs_autobackup
     key: "{{ zfs_autobackup_ssh_public_key }}"
@@ -27,7 +27,7 @@
     - zfs_autobackup
 
 - name: source | Create zfs_autobackup user systemd unit dir
-  when: zfs_autobackup_user.uid is defined
+  when: not ansible_check_mode or zfs_autobackup_user.uid is defined
   file:
     path: /var/lib/zfs_autobackup/.config/systemd/user
     state: directory
@@ -49,7 +49,7 @@
 # would silence the error but legitimise a pointless container socket on a
 # backup account, so mask instead.
 - name: source | Mask podman user units for zfs_autobackup
-  when: zfs_autobackup_user.uid is defined
+  when: not ansible_check_mode or zfs_autobackup_user.uid is defined
   file:
     path: "/var/lib/zfs_autobackup/.config/systemd/user/{{ item }}"
     src: /dev/null

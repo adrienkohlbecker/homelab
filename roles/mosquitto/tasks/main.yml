@@ -43,7 +43,7 @@
 # the broker writes mosquitto.db (its own format, no symlinks -- a plain dir
 # like authelia's, not the symlink-oriented sqlite_dataset helper).
 - name: Create mosquitto config and persistence directories
-  when: mosquitto_user.uid is defined
+  when: not ansible_check_mode or mosquitto_user.uid is defined
   file:
     dest: "{{ item }}"
     state: directory
@@ -104,7 +104,7 @@
   vars:
     systemd_unit_args:
       src: mosquitto.service.j2
-      condition: "{{ mosquitto_user.uid is defined }}"
+      condition: "{{ not ansible_check_mode or mosquitto_user.uid is defined }}"
   tags:
     - mosquitto
 

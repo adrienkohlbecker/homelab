@@ -63,7 +63,7 @@
 # dedicated sqlite dataset instead (symlinked in below). Owned by the headscale
 # uid (tier-1 --user, no uidmap) so the container writes them directly.
 - name: Create headscale data dir
-  when: headscale_user.uid is defined
+  when: not ansible_check_mode or headscale_user.uid is defined
   file:
     dest: /mnt/services/headscale/data
     state: directory
@@ -92,7 +92,7 @@
       pre_create: true
       links:
         - /mnt/services/headscale/data/db.sqlite
-      condition: "{{ headscale_user.uid is defined }}"
+      condition: "{{ not ansible_check_mode or headscale_user.uid is defined }}"
   tags:
     - headscale
 
@@ -103,7 +103,7 @@
 # previously-loaded policy, and _verify exercises exactly that with a planted
 # malformed file. Per AGENTS.md: omit validate rather than invent a fake one.
 - name: Render headscale ACL policy
-  when: headscale_user.uid is defined
+  when: not ansible_check_mode or headscale_user.uid is defined
   template:
     src: acl.hujson.j2
     dest: /mnt/services/headscale/acl.hujson
@@ -136,7 +136,7 @@
     - headscale
 
 - name: Render headscale config
-  when: headscale_user.uid is defined
+  when: not ansible_check_mode or headscale_user.uid is defined
   template:
     src: config.yaml.j2
     dest: /mnt/services/headscale/config.yaml
@@ -188,7 +188,7 @@
   vars:
     systemd_unit_args:
       src: headscale.service.j2
-      condition: "{{ headscale_user.uid is defined }}"
+      condition: "{{ not ansible_check_mode or headscale_user.uid is defined }}"
   tags:
     - headscale
 

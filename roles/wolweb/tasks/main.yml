@@ -63,7 +63,7 @@
     - wolweb
 
 - name: Configure wolweb settings
-  when: wolweb_user.uid is defined
+  when: not ansible_check_mode or wolweb_user.uid is defined
   template:
     src: config.json.j2
     dest: /mnt/services/wolweb/config.json
@@ -78,7 +78,7 @@
     - wolweb
 
 - name: Configure wolweb devices
-  when: wolweb_user.uid is defined
+  when: not ansible_check_mode or wolweb_user.uid is defined
   template:
     src: devices.json.j2
     dest: /mnt/services/wolweb/devices.json
@@ -109,7 +109,7 @@
   vars:
     systemd_unit_args:
       src: wolweb.service.j2
-      condition: "{{ wolweb_user.uid is defined }}"
+      condition: "{{ not ansible_check_mode or wolweb_user.uid is defined }}"
   tags:
     - wolweb
 

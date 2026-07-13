@@ -39,7 +39,7 @@
       name: kuma
       owner: kuma
       group: kuma
-      condition: "{{ kuma_user.uid is defined }}"
+      condition: "{{ not ansible_check_mode or kuma_user.uid is defined }}"
       force: true
       links:
         - /mnt/services/kuma/kuma.db
@@ -64,7 +64,7 @@
   vars:
     systemd_unit_args:
       src: kuma.service.j2
-      condition: "{{ kuma_user.uid is defined }}"
+      condition: "{{ not ansible_check_mode or kuma_user.uid is defined }}"
   tags:
     - kuma
 

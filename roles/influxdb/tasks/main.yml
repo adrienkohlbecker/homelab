@@ -22,7 +22,7 @@
 # is 0600 from `influx setup`; the 0775 parent only widens *traversal*
 # to the host group, which has only the influxdb user as a member.
 - name: Create influxdb config and data directories
-  when: influxdb_user.uid is defined
+  when: not ansible_check_mode or influxdb_user.uid is defined
   file:
     dest: "{{ item.path }}"
     state: directory
@@ -178,7 +178,7 @@
   vars:
     systemd_unit_args:
       src: influxdb.service.j2
-      condition: "{{ influxdb_user.uid is defined }}"
+      condition: "{{ not ansible_check_mode or influxdb_user.uid is defined }}"
   tags:
     - influxdb
 
@@ -242,7 +242,7 @@
 # the single source of truth; influxd does not read it (the CLI reads it
 # per-exec) so no restart is needed.
 - name: Template the influx CLI default config
-  when: influxdb_user.uid is defined
+  when: not ansible_check_mode or influxdb_user.uid is defined
   template:
     src: influx-configs.j2
     dest: /mnt/services/influxdb/config/influx-configs

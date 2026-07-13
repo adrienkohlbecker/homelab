@@ -105,7 +105,7 @@
     # checksum: drives re-download on a version bump (sha mismatch forces fetch)
     # and surfaces tampering on the plain-https URL.
     - name: Download gitlab-runner binary
-      when: gitlab_runner_user.uid is defined
+      when: not ansible_check_mode or gitlab_runner_user.uid is defined
       get_url:
         url: "{{ gitlab_runner_archive[ansible_architecture].url }}"
         dest: /usr/local/bin/gitlab-runner
@@ -122,7 +122,7 @@
     - name: Download fleeting-plugin-aws binary
       when:
         - gitlab_runner_aws_qemu_enabled
-        - gitlab_runner_user.uid is defined
+        - not ansible_check_mode or gitlab_runner_user.uid is defined
       get_url:
         url: "{{ gitlab_runner_fleeting_aws_archive[ansible_architecture].url }}"
         dest: /usr/local/bin/fleeting-plugin-aws
@@ -137,7 +137,7 @@
     - name: Render AWS qemu runner credential profile
       when:
         - gitlab_runner_aws_qemu_enabled
-        - gitlab_runner_user.uid is defined
+        - not ansible_check_mode or gitlab_runner_user.uid is defined
       block:
         - name: Create gitlab_runner AWS config directory
           file:
@@ -230,7 +230,7 @@
     - name: Disable Docker-executor runtime state for non-Docker executors
       when:
         - gitlab_runner_executor != 'docker'
-        - gitlab_runner_user.uid is defined
+        - not ansible_check_mode or gitlab_runner_user.uid is defined
       block:
         - name: Check whether gitlab_runner linger is enabled
           stat:
@@ -279,7 +279,7 @@
     # (dials gitlab.com with the configured token), not an offline lint --
     # upstream ships none.
     - name: Render gitlab-runner config.toml
-      when: gitlab_runner_user.uid is defined
+      when: not ansible_check_mode or gitlab_runner_user.uid is defined
       template:
         src: config.toml.j2
         dest: /mnt/services/gitlab_runner/config.toml
@@ -305,7 +305,7 @@
       vars:
         systemd_unit_args:
           src: gitlab_runner.service.j2
-          condition: "{{ gitlab_runner_user.uid is defined }}"
+          condition: "{{ not ansible_check_mode or gitlab_runner_user.uid is defined }}"
 
     # Live registration needs a real gitlab.com runner token -- none exists in
     # the qemu harness, so enable-only under qemu_test and let _verify exercise
@@ -339,7 +339,7 @@
     - name: Cap the rootless runner user slice memory
       when:
         - gitlab_runner_executor == 'docker'
-        - gitlab_runner_user.uid is defined
+        - not ansible_check_mode or gitlab_runner_user.uid is defined
       vars:
         _slice_dropin_dir: /etc/systemd/system/user-{{ gitlab_runner_user.uid }}.slice.d
       block:
