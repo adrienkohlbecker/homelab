@@ -152,6 +152,26 @@
       Expected systemd_timer_overdue template to bind on both fixtures.
       Got keys: {{ _keys | select('search', 'systemd_timers') | list }}
 
+- name: _verify | Assert overdue alert uses an uptime state guard
+  vars:
+    _alarm: >-
+      {{
+        ((_systemd_timer_alarms.content | from_json).alarms.values()
+         | selectattr('name', 'equalto', 'systemd_timer_overdue')
+         | first)
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - "'system.uptime.uptime' in (_alarm.crit | default(''))"
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 600
+    fail_msg: >-
+      Expected systemd_timer_overdue to suppress alert state during the first
+      35 minutes of host uptime without an up-notification delay. Got:
+      {{ _alarm }}
+
 # Cleanup: remove fixtures so a follow-on test run starts clean.
 # Two separate import_role calls instead of a loop — import_role
 # doesn't accept `loop:`, and include_role + loop binds the vars
