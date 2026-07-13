@@ -91,16 +91,16 @@ for volume in $ZFS_VOLUMES; do
     continue
   }
 
-  if echo "$vol_status" | grep -q -e "scrub canceled"; then
+  if [[ "$vol_status" == *"scrub canceled"* ]]; then
     echo >&2 "ERROR :: Last scrub canceled on $volume"
     ((f_failed += 1))
     continue
-  elif echo "$vol_status" | grep -q -e "scrub in progress\|resilver"; then
+  elif [[ "$vol_status" == *"scrub in progress"* || "$vol_status" == *resilver* ]]; then
     echo "Scrub in progress for $volume, skipping."
     continue
   fi
 
-  if (! echo "$vol_status" | grep -q -e "scan: scrub") || (echo "$vol_status" | grep -q "none requested"); then
+  if [[ "$vol_status" != *"scan: scrub"* || "$vol_status" == *"none requested"* ]]; then
     SCRUB_DATE=$(zfs get creation -Hpo value "$volume")
   else
     # Take the trailing 5 fields by position from the end ("Sun Mar 10 03:12:34
