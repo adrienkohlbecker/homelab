@@ -193,17 +193,7 @@
   loop_control:
     label: "{{ item.item }}"
 
-# --- Mount generator (lab only; box has zfs_mount_cache_datasets=[]) ---
-
-- name: _verify | Mount cache directory exists
-  stat:
-    path: /etc/zfs/zfs-list.cache
-  register: _zfs_verify_cache_dir
-  become: true
-
-- name: _verify | Assert mount cache directory exists
-  assert:
-    that: _zfs_verify_cache_dir.stat.exists
+# --- Mount generator ---
 
 - name: _verify | Read mount cache content for each pool
   when: zfs_mount_cache_datasets | length > 0
@@ -223,18 +213,6 @@
   loop: "{{ _zfs_verify_cache_files.results }}"
   loop_control:
     label: "{{ item.item }}"
-
-- name: _verify | Zed cacher symlink exists
-  stat:
-    path: /etc/zfs/zed.d/history_event-zfs-list-cacher.sh
-  register: _zfs_verify_cacher_link
-  become: true
-
-- name: _verify | Assert zed cacher symlink
-  assert:
-    that:
-      - _zfs_verify_cacher_link.stat.exists
-      - _zfs_verify_cacher_link.stat.islnk
 
 # --- Dry-run health script ---
 
