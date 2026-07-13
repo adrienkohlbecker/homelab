@@ -150,7 +150,7 @@
 
 - name: _verify | Read timer and service properties  # noqa: command-instead-of-module
   command: >-
-    systemctl show -p AccuracyUSec,RandomizedDelayUSec,FixedRandomDelay,ProtectSystem,ProtectHome
+    systemctl show -p AccuracyUSec,RandomizedDelayUSec,FixedRandomDelay,TimeoutStopUSec,ProtectSystem,ProtectHome
     _verify_timer.timer _verify_timer.service
   register: _systemd_timer_knobs_show
   changed_when: false
@@ -168,6 +168,7 @@
       - "'AccuracyUSec=1s' in _systemd_timer_knobs_show.stdout"
       - "'RandomizedDelayUSec=10min' in _systemd_timer_knobs_show.stdout"
       - "'FixedRandomDelay=yes' in _systemd_timer_knobs_show.stdout"
+      - "'TimeoutStopUSec=30s' in _systemd_timer_knobs_show.stdout"
       - "'ProtectSystem=strict' in _systemd_timer_knobs_show.stdout"
       - "'ProtectHome=yes' in _systemd_timer_knobs_show.stdout"
 
