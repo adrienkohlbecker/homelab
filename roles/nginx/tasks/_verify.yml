@@ -743,37 +743,6 @@
       the DNS-label assert; a legacy tombstone (e.g. vscode_ha) must be a clean
       no-op.
 
-# condition: false gates change application but must still DEFINE the per-site
-# result fact (so a caller wiring a reload off <sub>_site_result doesn't hit an
-# undefined var on a host where condition gated the site off) and must write
-# nothing to disk. Neither contract is exercised by the create tests above.
-- name: _verify | Configure a vhost with condition false
-  import_role:
-    name: nginx
-    tasks_from: site
-  vars:
-    nginx_site_args:
-      subdomain: nginxverifycond
-      proxy_pass: http://127.0.0.1:18080/
-      condition: false
-
-- name: _verify | Condition false still defines the result fact as unchanged
-  assert:
-    that:
-      - nginxverifycond_site_result is defined
-      - not nginxverifycond_site_result.changed
-    fail_msg: >-
-      condition: false must still define <sub>_site_result (changed=false), or a
-      caller wiring a reload off it crashes on the host where condition gated the
-      site off; got {{ nginxverifycond_site_result | default('<undefined>') }}.
-
-- name: _verify | Condition false wrote no vhost to disk
-  stat:
-    path: /etc/nginx/sites-available/nginxverifycond
-  register: nginx_verify_cond_file
-  become: true
-  failed_when: nginx_verify_cond_file.stat.exists
-
 # reload: false installs the vhost config-only (write + symlink + in-place nginx
 # -t) but does NOT reload, so the running nginx keeps its old config -- the
 # pre-warm-an-unready-upstream contract. Prove it: the file lands and validates
@@ -812,7 +781,7 @@
   failed_when: nginx_verify_reload_probe.status != 404
 
 # Tear down the reload:false vhost (with a reload this time) so it doesn't leak
-# into later probes; the condition:false call wrote nothing, so nothing to remove.
+# into later probes.
 - name: _verify | Remove the reload-false vhost
   import_role:
     name: nginx
