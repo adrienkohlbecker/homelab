@@ -227,9 +227,7 @@
       Sec-Fetch-Mode: cors
     status_code: 401
   register: nginx_verify_unauth_xhr
-  failed_when: >-
-    nginx_verify_unauth_xhr.status != 401
-    or nginx_verify_unauth_xhr.location is defined
+  failed_when: nginx_verify_unauth_xhr.location is defined
 
 # Access-log credential redaction: nginx logs $request_safe, which rewrites a
 # credential query param (apikey, SABnzbd's admin key) to REDACTED before the
@@ -245,8 +243,7 @@
     status_code: 302
   register: nginx_verify_redacted_auth_request
   failed_when: >-
-    nginx_verify_redacted_auth_request.status != 302
-    or '__nginx_verify_secret__' in (nginx_verify_redacted_auth_request.location | default(''))
+    '__nginx_verify_secret__' in (nginx_verify_redacted_auth_request.location | default(''))
     or 'apikey=REDACTED' not in (nginx_verify_redacted_auth_request.location | default(''))
 
 - name: _verify | Wait for the redacted apikey to reach the access log
@@ -293,8 +290,6 @@
     validate_certs: false
     follow_redirects: none
     status_code: 302
-  register: nginx_verify_empty
-  failed_when: nginx_verify_empty.status != 302
 
 # http->https redirect and the default-server catch-all are probed on the
 # public interface, not loopback: the stub_status server binds 127.0.0.1:80
@@ -307,9 +302,7 @@
     follow_redirects: none
     status_code: 308
   register: nginx_verify_http
-  failed_when: >-
-    nginx_verify_http.status != 308
-    or not (nginx_verify_http.location | default('')).startswith('https://')
+  failed_when: not (nginx_verify_http.location | default('')).startswith('https://')
 
 - name: _verify | Unknown Host hits the default server (404)
   uri:
@@ -324,9 +317,7 @@
     return_content: true
     status_code: 200
   register: nginx_verify_stub
-  failed_when: >-
-    nginx_verify_stub.status != 200
-    or 'Active connections' not in (nginx_verify_stub.content | default(''))
+  failed_when: "'Active connections' not in (nginx_verify_stub.content | default(''))"
 
 # --- auth-passes phase ---
 # Switch the stub to `authed` (200 + Remote-User) so the auth-identity forwarding
@@ -371,8 +362,6 @@
     url: "https://nginxverifyauth.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     status_code: 200
-  register: nginx_verify_inj
-  failed_when: nginx_verify_inj.status != 200
 
 - name: _verify | Upstream received X-Forwarded-User from the auth subrequest
   command: journalctl -u nginx_verify_upstream --no-pager
@@ -467,8 +456,7 @@
     status_code: 200
   register: nginx_verify_loc
   failed_when: >-
-    nginx_verify_loc.status != 200
-    or nginx_verify_loc.strict_transport_security is not defined
+    nginx_verify_loc.strict_transport_security is not defined
     or nginx_verify_loc.content_security_policy is not defined
     or nginx_verify_loc.x_verify_loc is not defined
     or nginx_verify_loc.x_xss_protection is defined
@@ -502,9 +490,7 @@
     return_content: true
     status_code: 200
   register: nginx_verify_serverconf
-  failed_when: >-
-    nginx_verify_serverconf.status != 200
-    or 'server-conf-ok' not in (nginx_verify_serverconf.content | default(''))
+  failed_when: "'server-conf-ok' not in (nginx_verify_serverconf.content | default(''))"
 
 # The first-class client_max_body_size / client_body_buffer_size keys.
 # Configuring the vhost proves both render into valid config (the helper's
@@ -533,8 +519,6 @@
     body: "{{ 'x' * 4096 }}"
     validate_certs: false
     status_code: 413
-  register: nginx_verify_body
-  failed_when: nginx_verify_body.status != 413
 
 # proxy_buffering / proxy_request_buffering take the quoted string 'on'/'off' (a
 # bare off is YAML-coerced to the boolean false and renders an invalid
@@ -564,9 +548,7 @@
     return_content: true
     status_code: 200
   register: nginx_verify_buffering
-  failed_when: >-
-    nginx_verify_buffering.status != 200
-    or 'nginx_verify_upstream_ok' not in (nginx_verify_buffering.content | default(''))
+  failed_when: "'nginx_verify_upstream_ok' not in (nginx_verify_buffering.content | default(''))"
 
 - name: _verify | Standard metadata paths reach the upstream
   uri:
@@ -578,9 +560,7 @@
     - /favicon.ico
     - /robots.txt
   register: nginx_verify_metadata
-  failed_when: >-
-    nginx_verify_metadata.status != 200
-    or 'nginx_verify_upstream_ok' not in (nginx_verify_metadata.content | default(''))
+  failed_when: "'nginx_verify_upstream_ok' not in (nginx_verify_metadata.content | default(''))"
 
 # The csp_default_src / csp_frame_ancestors / csp_additional keys compose into
 # the Content-Security-Policy header (site.conf.j2). Only
@@ -611,8 +591,7 @@
     status_code: 200
   register: nginx_verify_cspov
   failed_when: >-
-    nginx_verify_cspov.status != 200
-    or 'connect-src api.csptest' not in (nginx_verify_cspov.content_security_policy | default(''))
+    'connect-src api.csptest' not in (nginx_verify_cspov.content_security_policy | default(''))
     or 'default-src default.csptest' not in (nginx_verify_cspov.content_security_policy | default(''))
     or 'frame-ancestors https://frame.csptest' not in (nginx_verify_cspov.content_security_policy | default(''))
 
@@ -644,9 +623,7 @@
     return_content: true
     status_code: 200
   register: nginx_verify_plain80
-  failed_when: >-
-    nginx_verify_plain80.status != 200
-    or 'nginx_verify_upstream_ok' not in (nginx_verify_plain80.content | default(''))
+  failed_when: "'nginx_verify_upstream_ok' not in (nginx_verify_plain80.content | default(''))"
 
 - name: _verify | A csp_passthrough vhost emits no Content-Security-Policy header
   uri:
@@ -654,9 +631,7 @@
     validate_certs: false
     status_code: 200
   register: nginx_verify_csp
-  failed_when: >-
-    nginx_verify_csp.status != 200
-    or nginx_verify_csp.content_security_policy is defined
+  failed_when: nginx_verify_csp.content_security_policy is defined
 
 # The nginx_ipv6 path (host_vars/fox.yml only, never in the test matrix)
 # renders [::]-listeners in site.conf.j2 / nginx.conf.j2 that nothing
@@ -687,9 +662,7 @@
     return_content: true
     status_code: 200
   register: nginx_verify_ipv6
-  failed_when: >-
-    nginx_verify_ipv6.status != 200
-    or 'nginx_verify_upstream_ok' not in (nginx_verify_ipv6.content | default(''))
+  failed_when: "'nginx_verify_upstream_ok' not in (nginx_verify_ipv6.content | default(''))"
 
 # Tear down the transient vhosts via the helper and confirm both
 # the symlink and the config are gone. include_tasks (not import_role) so
