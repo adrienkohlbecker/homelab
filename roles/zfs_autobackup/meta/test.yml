@@ -1,4 +1,0 @@
-# The functional checks use rpool-only scratch datasets, so prod-shaped lab/pug
-# storage adds no coverage. Those fixtures remain available through --machine.
-machines:
-  box:
