@@ -211,38 +211,12 @@
         that:
           - _sqlite_dataset_sentinel.content | b64decode == 'SENTINEL'
 
-    # -- Scenario 6: custom file_mode ------------------------------------
-    - name: _verify | Scenario 6 — custom file_mode 0600
-      import_role:
-        name: sqlite_dataset
-        tasks_from: dataset
-      vars:
-        sqlite_dataset_args:
-          name: sqlite_dataset_test
-          owner: root
-          group: root
-          file_mode: "0600"
-          links:
-            - /mnt/services/sqlite_dataset_test/private.db
-
-    - name: _verify | Scenario 6 — stat the private src file
-      stat:
-        path: /mnt/services/sqlite/sqlite_dataset_test/private.db
-      register: _sqlite_dataset_private
-      become: true
-
-    - name: _verify | Scenario 6 — file mode is 0600
-      assert:
-        that:
-          - _sqlite_dataset_private.stat.exists
-          - _sqlite_dataset_private.stat.mode == '0600'
-
-    # -- Scenario 7: no-force state=link refuses to clobber a real DB -----
+    # -- Scenario 6: no-force state=link refuses to clobber a real DB -----
     # The load-bearing safety: a real file already at a dest is never
     # converted to a symlink (snapshot-restore / downgrade protection). The
-    # The helper creates the src first, so the only reason to fail is the real
+    # helper creates the src first, so the only reason to fail is the real
     # dest, not a dangling target.
-    - name: _verify | Scenario 7 — plant a real DB at the dest
+    - name: _verify | Scenario 6 — plant a real DB at the dest
       copy:
         content: "REAL-DB"
         dest: /mnt/services/sqlite_dataset_test/real.db
@@ -251,9 +225,9 @@
         mode: "0640"
       become: true
 
-    - name: _verify | Scenario 7 — applying the helper must refuse the clobber
+    - name: _verify | Scenario 6 — applying the helper must refuse the clobber
       block:
-        - name: _verify | Scenario 7 — attempt symlink over the real DB
+        - name: _verify | Scenario 6 — attempt symlink over the real DB
           import_role:
             name: sqlite_dataset
             tasks_from: dataset
@@ -265,28 +239,28 @@
               links:
                 - /mnt/services/sqlite_dataset_test/real.db
 
-        - name: _verify | Scenario 7 — record wrongly converted
+        - name: _verify | Scenario 6 — record wrongly converted
           set_fact:
             _sqlite_dataset_clobber_refused: false
       rescue:
-        - name: _verify | Scenario 7 — record refused (expected)
+        - name: _verify | Scenario 6 — record refused (expected)
           set_fact:
             _sqlite_dataset_clobber_refused: true
 
-    - name: _verify | Scenario 7 — re-stat the dest
+    - name: _verify | Scenario 6 — re-stat the dest
       stat:
         path: /mnt/services/sqlite_dataset_test/real.db
         follow: false
       register: _sqlite_dataset_real
       become: true
 
-    - name: _verify | Scenario 7 — read the surviving dest content
+    - name: _verify | Scenario 6 — read the surviving dest content
       slurp:
         src: /mnt/services/sqlite_dataset_test/real.db
       register: _sqlite_dataset_real_content
       become: true
 
-    - name: _verify | Scenario 7 — converge refused and the real DB survived intact
+    - name: _verify | Scenario 6 — converge refused and the real DB survived intact
       assert:
         that:
           - _sqlite_dataset_clobber_refused
@@ -294,8 +268,8 @@
           - not _sqlite_dataset_real.stat.islnk
           - _sqlite_dataset_real_content.content | b64decode == 'REAL-DB'
 
-    # -- Scenario 8: force plants a dangling symlink ---------------------
-    - name: _verify | Scenario 8 — force on a cold (dangling) target
+    # -- Scenario 7: force plants a dangling symlink ---------------------
+    - name: _verify | Scenario 7 — force on a cold (dangling) target
       import_role:
         name: sqlite_dataset
         tasks_from: dataset
@@ -308,20 +282,20 @@
           links:
             - /mnt/services/sqlite_dataset_test/forced.db
 
-    - name: _verify | Scenario 8 — stat the dest symlink
+    - name: _verify | Scenario 7 — stat the dest symlink
       stat:
         path: /mnt/services/sqlite_dataset_test/forced.db
         follow: false
       register: _sqlite_dataset_forced
       become: true
 
-    - name: _verify | Scenario 8 — stat the (absent) target
+    - name: _verify | Scenario 7 — stat the (absent) target
       stat:
         path: /mnt/services/sqlite/sqlite_dataset_test/forced.db
       register: _sqlite_dataset_forced_target
       become: true
 
-    - name: _verify | Scenario 8 — a dangling symlink was planted
+    - name: _verify | Scenario 7 — a dangling symlink was planted
       assert:
         that:
           - _sqlite_dataset_forced.stat.exists
@@ -330,11 +304,11 @@
           # target absent -> the link is genuinely dangling, not pre-created
           - not _sqlite_dataset_forced_target.stat.exists
 
-    # -- Scenario 8b: force idempotence — re-apply leaves symlink unchanged -
+    # -- Scenario 7b: force idempotence — re-apply leaves symlink unchanged -
     # The harness idempotence pass targets main.yml (the stub), so dataset.yml
     # is never re-exercised by it; assert here that a second identical apply
     # with force: true is a no-op (symlink still dangling, attrs unchanged).
-    - name: _verify | Scenario 8b — re-apply identical force args
+    - name: _verify | Scenario 7b — re-apply identical force args
       import_role:
         name: sqlite_dataset
         tasks_from: dataset
@@ -347,20 +321,20 @@
           links:
             - /mnt/services/sqlite_dataset_test/forced.db
 
-    - name: _verify | Scenario 8b — re-stat the symlink after re-apply
+    - name: _verify | Scenario 7b — re-stat the symlink after re-apply
       stat:
         path: /mnt/services/sqlite_dataset_test/forced.db
         follow: false
       register: _sqlite_dataset_forced_again
       become: true
 
-    - name: _verify | Scenario 8b — re-stat the (still absent) target after re-apply
+    - name: _verify | Scenario 7b — re-stat the (still absent) target after re-apply
       stat:
         path: /mnt/services/sqlite/sqlite_dataset_test/forced.db
       register: _sqlite_dataset_forced_target_again
       become: true
 
-    - name: _verify | Scenario 8b — symlink still dangling and unchanged after re-apply
+    - name: _verify | Scenario 7b — symlink still dangling and unchanged after re-apply
       assert:
         that:
           - _sqlite_dataset_forced_again.stat.exists
@@ -371,10 +345,10 @@
           # target still absent -> the re-apply did not pre-create the src
           - not _sqlite_dataset_forced_target_again.stat.exists
 
-    # -- Scenario 9: validation rejects invalid args ---------------------
+    # -- Scenario 8: validation rejects invalid args ---------------------
     # include_tasks (not import_role) so sqlite_dataset_args re-evaluates per
     # iteration; each case must fail the dataset role's assert.
-    - name: _verify | Scenario 9 — invalid args are rejected
+    - name: _verify | Scenario 8 — invalid args are rejected
       include_tasks: _verify_expect_invalid.yml
       loop:
         - label: duplicate basenames
@@ -398,10 +372,10 @@
         loop_var: sqlite_dataset_invalid
         label: "{{ sqlite_dataset_invalid.label }}"
 
-    # -- Scenario 10: force still refuses to clobber a real DB at a dest -
+    # -- Scenario 9: force still refuses to clobber a real DB at a dest --
     # force relaxes only the dangling-target refusal; a real file at the dest
     # must still be protected (snapshot-restore safety).
-    - name: _verify | Scenario 10 — plant a real DB at a force dest
+    - name: _verify | Scenario 9 — plant a real DB at a force dest
       copy:
         content: "FORCE-REAL"
         dest: /mnt/services/sqlite_dataset_test/force_real.db
@@ -410,9 +384,9 @@
         mode: "0640"
       become: true
 
-    - name: _verify | Scenario 10 — force must still refuse the real-file clobber
+    - name: _verify | Scenario 9 — force must still refuse the real-file clobber
       block:
-        - name: _verify | Scenario 10 — attempt force symlink over the real DB
+        - name: _verify | Scenario 9 — attempt force symlink over the real DB
           import_role:
             name: sqlite_dataset
             tasks_from: dataset
@@ -425,28 +399,28 @@
               links:
                 - /mnt/services/sqlite_dataset_test/force_real.db
 
-        - name: _verify | Scenario 10 — record wrongly clobbered
+        - name: _verify | Scenario 9 — record wrongly clobbered
           set_fact:
             _sqlite_dataset_force_refused: false
       rescue:
-        - name: _verify | Scenario 10 — record refused (expected)
+        - name: _verify | Scenario 9 — record refused (expected)
           set_fact:
             _sqlite_dataset_force_refused: true
 
-    - name: _verify | Scenario 10 — re-stat the dest
+    - name: _verify | Scenario 9 — re-stat the dest
       stat:
         path: /mnt/services/sqlite_dataset_test/force_real.db
         follow: false
       register: _sqlite_dataset_force_real
       become: true
 
-    - name: _verify | Scenario 10 — read the surviving dest content
+    - name: _verify | Scenario 9 — read the surviving dest content
       slurp:
         src: /mnt/services/sqlite_dataset_test/force_real.db
       register: _sqlite_dataset_force_real_content
       become: true
 
-    - name: _verify | Scenario 10 — force refused and the real DB survived intact
+    - name: _verify | Scenario 9 — force refused and the real DB survived intact
       assert:
         that:
           - _sqlite_dataset_force_refused

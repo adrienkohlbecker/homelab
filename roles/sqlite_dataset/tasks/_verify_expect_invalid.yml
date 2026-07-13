@@ -1,4 +1,4 @@
-# Included once per invalid-args case (Scenario 10 loop). include_tasks (not
+# Included once per invalid-args case (Scenario 8 loop). include_tasks (not
 # import_role) so sqlite_dataset_args re-evaluates per iteration. Asserts the
 # dataset role's validation rejects the args: a successful import_role falls
 # through to _sqlite_dataset_rejected=false; a failed one (the assert firing)

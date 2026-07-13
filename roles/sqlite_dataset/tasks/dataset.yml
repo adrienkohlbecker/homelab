@@ -60,7 +60,6 @@
   set_fact:
     _sqlite_dataset_force: "{{ sqlite_dataset_args.force | default(false) | bool }}"
     _sqlite_dataset_mode: "{{ sqlite_dataset_args.mode | default('0750') }}"
-    _sqlite_dataset_file_mode: "{{ sqlite_dataset_args.file_mode | default('0640') }}"
     sqlite_dataset_force_stat: {}
 
 - name: Pre-create /mnt/services/sqlite/{{ sqlite_dataset_args.name }}
@@ -83,7 +82,7 @@
     state: touch
     owner: "{{ sqlite_dataset_args.owner }}"
     group: "{{ sqlite_dataset_args.group }}"
-    mode: "{{ _sqlite_dataset_file_mode }}"
+    mode: "0640"
     modification_time: preserve
     access_time: preserve
   become: true
