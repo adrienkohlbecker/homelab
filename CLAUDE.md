@@ -138,6 +138,11 @@ Prefer these over re-implementing boilerplate. All take inputs through a single 
 
 Helper roles expose named task files and keep `tasks/main.yml` operationally empty (comments only), so the test harness can target the role without invoking an argument-requiring entry point. Call them with `tasks_from`; do not add a default dispatcher to `main.yml`.
 
+Helpers that publish a caller-facing result must implement a `condition` input
+themselves and publish a no-change result when it is false. Pass the condition
+inside the helper's `*_args`; do not put `when:` on `import_role`, because a
+skipped import cannot uphold the result-variable contract for its callers.
+
 | Helper | Entry point | Exposes / creates |
 |--------|-------------|-------------------|
 | `service_user` | `tasks_from: user` | `<svc>_user.uid`/`.gid`; `/mnt/services/<svc>` dir |
