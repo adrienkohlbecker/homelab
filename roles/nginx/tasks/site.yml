@@ -248,22 +248,6 @@
       therefore requires `auth: required`.
   tags:
     - nginx_site
-
-- name: site | Ensure directories exists
-  when: _nginx_site_state == 'present'
-  file:
-    state: directory
-    path: "{{ item }}"
-    mode: '0755'
-    owner: root
-    group: root
-  loop:
-    - /etc/nginx/sites-available
-    - /etc/nginx/sites-enabled
-  become: true
-  tags:
-    - nginx_site
-
 # Place-validate-then-rollback, mirroring conf_d.yml: the rendered vhost is
 # written to sites-available/ and symlinked into sites-enabled/ (where it
 # joins nginx's active config), then `nginx -t` validates it in place. On
