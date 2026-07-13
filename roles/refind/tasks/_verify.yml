@@ -1,7 +1,5 @@
-# No reboot here, unlike the console/zfsbootmenu _verify which reboot to observe
-# next-boot state: rEFInd re-parses refind.conf + theme.conf off the ESP fresh
-# at every boot, so the on-disk files this role writes ARE the observable
-# end-state — there is no next-boot transform to test.
+# rEFInd reads its configuration and assets from the ESP at every boot, so the
+# on-disk files are the observable end state.
 - name: _verify | Stat installed theme files
   stat:
     path: "/boot/efi/EFI/refind/themes/refind-theme-regular/{{ item }}"
@@ -77,18 +75,28 @@
       /boot/efi/EFI/refind/refind.conf — the fallback boot path (empty/wiped
       NVRAM) would use a stale config.
 
-- name: _verify | Stat the loader referenced by the menuentry
+- name: _verify | Stat ZBM artifacts referenced by refind.conf
   stat:
-    path: /boot/efi/EFI/ZBM/VMLINUZ.EFI
-  register: _refind_verify_loader
+    path: "/boot/efi/EFI/ZBM/{{ item }}"
+  loop: >-
+    {{
+      ['VMLINUZ.EFI', 'VMLINUZ-BACKUP.EFI']
+      + (['vmlinux-bootmenu', 'initramfs-bootmenu.img'] if ansible_architecture == 'aarch64' else [])
+    }}
+  loop_control:
+    label: "{{ item }}"
+  register: _refind_verify_zbm_artifacts
   become: true
 
-- name: _verify | Menuentry loader exists on the ESP
+- name: _verify | ZBM menuentry artifacts exist on the ESP
   assert:
-    that: _refind_verify_loader.stat.exists
-    fail_msg: >-
-      refind.conf boots /EFI/ZBM/VMLINUZ.EFI but it is absent from the ESP —
-      the zfsbootmenu role must run before refind.
+    that:
+      - item.stat.exists
+      - item.stat.size > 0
+    fail_msg: "refind.conf references missing or empty ZBM artifact: {{ item.item }}"
+  loop: "{{ _refind_verify_zbm_artifacts.results }}"
+  loop_control:
+    label: "{{ item.item }}"
 
 - name: _verify | Stat aarch64 Linux EFI-stub files
   when: ansible_architecture == "aarch64"
