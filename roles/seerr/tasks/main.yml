@@ -38,7 +38,7 @@
 # helper, which symlinks a single fixed DB *file* (radarr's /config/*.db) and
 # refuses a dangling-symlink cold start. A directory mountpoint sidesteps that.
 - name: Create sqlite directory
-  when: not (ansible_check_mode and seerr_user.changed)
+  when: seerr_user.uid is defined
   file:
     dest: /mnt/services/sqlite/seerr
     state: directory
@@ -107,7 +107,7 @@
   # On a fresh-host --check run seerr_user + its config dir are only reported
   # (their creating tasks are guarded), so an unguarded copy with owner=seerr
   # would fail resolving the not-yet-created user/dir.
-  when: not (ansible_check_mode and seerr_user.changed)
+  when: seerr_user.uid is defined
   tags:
     - seerr
 
@@ -128,7 +128,7 @@
   vars:
     systemd_unit_args:
       src: seerr.service.j2
-      condition: "{{ not (ansible_check_mode and seerr_user.changed) }}"
+      condition: "{{ seerr_user.uid is defined }}"
   tags:
     - seerr
 

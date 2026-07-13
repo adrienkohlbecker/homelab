@@ -48,7 +48,7 @@
       owner: lidarr
       group: media
       mode: "0750"
-      condition: "{{ not (ansible_check_mode and lidarr_user.changed) }}"
+      condition: "{{ lidarr_user.uid is defined }}"
       pre_create: true
       links:
         - /mnt/services/lidarr/lidarr.db
@@ -75,7 +75,7 @@
   # On a fresh-host --check run lidarr_user + its config dir are only reported
   # (their creating tasks are guarded), so an unguarded copy with owner=lidarr
   # would fail resolving the not-yet-created user/dir.
-  when: not (ansible_check_mode and lidarr_user.changed)
+  when: lidarr_user.uid is defined
   tags:
     - lidarr
 
@@ -96,7 +96,7 @@
   vars:
     systemd_unit_args:
       src: lidarr.service.j2
-      condition: "{{ not (ansible_check_mode and lidarr_user.changed) }}"
+      condition: "{{ lidarr_user.uid is defined }}"
   tags:
     - lidarr
 

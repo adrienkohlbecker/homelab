@@ -26,7 +26,7 @@
   vars:
     systemd_unit_args:
       src: speedtest.service.j2
-      condition: "{{ not (ansible_check_mode and speedtest_user.changed) }}"
+      condition: "{{ speedtest_user.uid is defined }}"
   tags:
     - speedtest
 

@@ -49,7 +49,7 @@
       owner: sonarr
       group: media
       mode: "0750"
-      condition: "{{ not (ansible_check_mode and sonarr_user.changed) }}"
+      condition: "{{ sonarr_user.uid is defined }}"
       pre_create: true
       links:
         - /mnt/services/sonarr/sonarr.db
@@ -74,7 +74,7 @@
   # On a fresh-host --check run sonarr_user + its config dir are only reported
   # (their creating tasks are guarded), so an unguarded copy with owner=sonarr
   # would fail resolving the not-yet-created user/dir.
-  when: not (ansible_check_mode and sonarr_user.changed)
+  when: sonarr_user.uid is defined
   tags:
     - sonarr
 
@@ -95,7 +95,7 @@
   vars:
     systemd_unit_args:
       src: sonarr.service.j2
-      condition: "{{ not (ansible_check_mode and sonarr_user.changed) }}"
+      condition: "{{ sonarr_user.uid is defined }}"
   tags:
     - sonarr
 

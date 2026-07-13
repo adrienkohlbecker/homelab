@@ -29,7 +29,7 @@
     - transmission
 
 - name: Create scratch directory
-  when: not (ansible_check_mode and transmission_user.changed)
+  when: transmission_user.uid is defined
   file:
     dest: /mnt/scratch/transmission
     state: directory
@@ -41,7 +41,7 @@
     - transmission
 
 - name: Create storage directory
-  when: not (ansible_check_mode and transmission_user.changed)
+  when: transmission_user.uid is defined
   file:
     dest: /mnt/media/Torrents
     state: directory
@@ -86,7 +86,7 @@
 # then Ansible overwrites it, then the service starts with our values.
 - name: Probe transmission config drift to gate the pre-write service stop
   check_mode: true
-  when: not (ansible_check_mode and transmission_user.changed)
+  when: transmission_user.uid is defined
   vars:
     transmission_rpc_password_hash: "{{ _transmission_rpc_password_hash }}"
   copy:
@@ -117,7 +117,7 @@
     - transmission
 
 - name: Configure transmission
-  when: not (ansible_check_mode and transmission_user.changed)
+  when: transmission_user.uid is defined
   # Render via copy:content + rstrip_newlines because transmission rewrites
   # settings.json on every shutdown without a trailing newline; a plain
   # template: leaves us drifting forever.
@@ -175,7 +175,7 @@
   vars:
     systemd_unit_args:
       src: transmission.service.j2
-      condition: "{{ not (ansible_check_mode and transmission_user.changed) }}"
+      condition: "{{ transmission_user.uid is defined }}"
   tags:
     - transmission
 

@@ -49,7 +49,7 @@
       owner: radarr
       group: media
       mode: "0750"
-      condition: "{{ not (ansible_check_mode and radarr_user.changed) }}"
+      condition: "{{ radarr_user.uid is defined }}"
       pre_create: true
       links:
         - /mnt/services/radarr/radarr.db
@@ -82,7 +82,7 @@
   # On a fresh-host --check run radarr_user + its config dir are only reported
   # (their creating tasks are guarded), so an unguarded copy with owner=radarr
   # would fail resolving the not-yet-created user/dir.
-  when: not (ansible_check_mode and radarr_user.changed)
+  when: radarr_user.uid is defined
   tags:
     - radarr
 
@@ -93,7 +93,7 @@
   vars:
     systemd_unit_args:
       src: radarr.service.j2
-      condition: "{{ not (ansible_check_mode and radarr_user.changed) }}"
+      condition: "{{ radarr_user.uid is defined }}"
   tags:
     - radarr
 

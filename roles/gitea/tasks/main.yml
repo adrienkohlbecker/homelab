@@ -51,7 +51,7 @@
     - gitea
 
 - name: Create gitea data directories
-  when: not (ansible_check_mode and git_user.changed)
+  when: git_user.uid is defined
   file:
     dest: "{{ item }}"
     state: directory
@@ -71,7 +71,7 @@
 # app.ini. Stricter dir mode contains app.ini backup files left by
 # `template: backup:` (they may not inherit 0600).
 - name: Create /etc/gitea
-  when: not (ansible_check_mode and git_user.changed)
+  when: git_user.uid is defined
   file:
     dest: /etc/gitea
     state: directory
@@ -111,7 +111,7 @@
   vars:
     systemd_unit_args:
       src: gitea.service.j2
-      condition: "{{ not (ansible_check_mode and git_user.changed) }}"
+      condition: "{{ git_user.uid is defined }}"
   tags:
     - gitea
 

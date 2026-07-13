@@ -30,8 +30,7 @@
 # non-identifier chars in name with '_'
 # (name='foo-bar' -> foo_bar_user). In --check mode on a host where the user
 # does not exist yet the user task only reports the create, so .uid/.group
-# are undefined -- gate consumers with
-# `when: not (ansible_check_mode and <name>_user.changed)`.
+# are undefined -- gate consumers with `<name>_user.uid is defined`.
 - name: "Validate inputs for {{ service_user_args.name | default('<unset>') }}"
   assert:
     quiet: true
@@ -118,7 +117,7 @@
 - name: Create configuration directory for {{ service_user_args.name }}
   when:
     - _service_user.config_dir
-    - not (ansible_check_mode and service_user_result.changed)
+    - service_user_result.uid is defined
   file:
     dest: /mnt/services/{{ _service_user.name }}
     state: directory

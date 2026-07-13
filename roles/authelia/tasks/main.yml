@@ -14,7 +14,7 @@
 # zfs_has_services_mount flag still gates the consumer side; on the
 # test fixture both paths are plain dirs.
 - name: Create authelia sqlite directory
-  when: not (ansible_check_mode and authelia_user.changed)
+  when: authelia_user.uid is defined
   file:
     dest: /mnt/services/sqlite/authelia
     state: directory
@@ -149,7 +149,7 @@
   vars:
     systemd_unit_args:
       src: authelia.service.j2
-      condition: "{{ not (ansible_check_mode and authelia_user.changed) }}"
+      condition: "{{ authelia_user.uid is defined }}"
   tags:
     - authelia
 
