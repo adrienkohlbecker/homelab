@@ -2,3 +2,7 @@
   import_role:
     name: test
     tasks_from: nginx
+
+- name: _setup | Install fluent-bit for structured-log integration
+  import_role:
+    name: fluentbit

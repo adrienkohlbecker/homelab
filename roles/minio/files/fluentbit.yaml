@@ -1,0 +1,37 @@
+parsers:
+  - name: minio_json
+    format: json
+
+pipeline:
+  filters:
+    - name: modify
+      match: svc.minio.service
+      condition: key_value_matches SYSLOG_IDENTIFIER '^minio$'
+      rename: MESSAGE log
+    - name: parser
+      match: svc.minio.service
+      key_name: log
+      parser: minio_json
+      reserve_data: true
+      preserve_key: true
+    - name: modify
+      match: svc.minio.service
+      condition:
+        - key_value_matches SYSLOG_IDENTIFIER '^minio$'
+        - key_exists message
+        - key_exists level
+      hard_rename:
+        - message log
+        - level _level
+      remove: time
+      set: parser_status parsed
+    - name: modify
+      match: svc.minio.service
+      condition:
+        - key_value_matches SYSLOG_IDENTIFIER '^minio$'
+        - key_value_matches log '^\{'
+        - key_does_not_exist message
+      add:
+        - parser_status failed
+        - parse_error minio_json
+        - _level warn

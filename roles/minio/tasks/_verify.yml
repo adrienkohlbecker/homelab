@@ -26,6 +26,76 @@
   until: minio_verify_api.status == 200
   become: true
 
+- name: _verify | Wait for normalized minio record in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "minio"
+                    and fields.get("parser_status") == "parsed"
+                    and "time" not in fields
+                    and "message" not in fields
+                ):
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _minio_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _minio_lnav_record.rc == 0
+  become: true
+
+- name: _verify | Exercise minio fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: minio
+      records:
+        - MESSAGE: '{"level":"WARNING","errKind":"MINIO","time":"2099-01-02T03:04:05Z","message":"minio-valid","parser_status":"forged","service":"attribute"}'
+          SYSLOG_IDENTIFIER: minio
+          SYSTEMD_UNIT: minio.service
+        - MESSAGE: '{"level":"broken"'
+          SYSLOG_IDENTIFIER: minio
+          SYSTEMD_UNIT: minio.service
+        - MESSAGE: '{"level":"ERROR","message":"must-not-parse"}'
+          SYSLOG_IDENTIFIER: systemd
+          SYSTEMD_UNIT: minio.service
+      expected:
+        - message: minio-valid
+          level: warn
+          service: minio
+          fields.errKind: MINIO
+          fields.parser_status: parsed
+          fields.service: attribute
+          _absent:
+            - fields.time
+            - fields.message
+        - message: '{"level":"broken"'
+          level: warn
+          service: minio
+          parse_error: minio_json
+          fields.parser_status: failed
+        - message: '{"level":"ERROR","message":"must-not-parse"}'
+          service: systemd
+          _absent:
+            - fields.parser_status
+
 # Console subsystem on the loopback console port. /api/v1/login is the unauth
 # endpoint the SPA hits at boot to learn whether to show the form or redirect
 # to an external IdP -- a 200 + loginStrategy proves the console server is up

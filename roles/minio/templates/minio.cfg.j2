@@ -17,7 +17,7 @@ MINIO_VOLUMES="/mnt/minio"
 # port 9001 on all network interfaces. The default behavior is dynamic
 # port selection.
 
-MINIO_OPTS="--address 127.0.0.1:{{ service_ports.minio_api }} --console-address 127.0.0.1:{{ service_ports.minio_console }}"
+MINIO_OPTS="--json --address 127.0.0.1:{{ service_ports.minio_api }} --console-address 127.0.0.1:{{ service_ports.minio_console }}"
 
 # Set the root username. This user has unrestricted permissions to
 # perform S3 and administrative API operations on any resource in the

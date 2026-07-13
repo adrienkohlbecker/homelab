@@ -88,6 +88,16 @@
   tags:
     - minio
 
+- name: Install minio fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension
+  vars:
+    fluentbit_extension_args:
+      name: minio
+  tags:
+    - minio
+
 - name: Install minio service override
   import_role:
     name: systemd_unit
