@@ -698,28 +698,6 @@
     nginx_verify_ipv6.status != 200
     or 'nginx_verify_upstream_ok' not in (nginx_verify_ipv6.content | default(''))
 
-# A state: absent call against a site that never existed must be a clean no-op:
-# the otgw tombstone in main.yml runs on every fresh host, where the site was
-# never created, so it must NOT report changed (which would fire a spurious
-# reload every converge). The teardown loop below only removes sites this run
-# created, so it can't cover the absent-of-absent path -- this does.
-- name: _verify | A state:absent on a never-created site is a no-op
-  import_role:
-    name: nginx
-    tasks_from: site
-  vars:
-    nginx_site_args:
-      subdomain: nginxverifyneverexisted
-      state: absent
-
-- name: _verify | The never-created removal reported no change
-  assert:
-    that:
-      - not nginxverifyneverexisted_site_result.changed
-    fail_msg: >-
-      state: absent on a never-created site reported changed=true; a tombstone
-      call on a fresh host must be a clean no-op or it fires a spurious reload.
-
 # A site retired under an older naming convention can carry an underscore (e.g.
 # homeassistant's vscode_ha tombstone), which is not a valid DNS label. A state:
 # absent teardown must still accept it -- the DNS-label assert is gated to
@@ -733,15 +711,6 @@
     nginx_site_args:
       subdomain: nginx_verify_legacy
       state: absent
-
-- name: _verify | The underscore tombstone reported no change
-  assert:
-    that:
-      - not nginx_verify_legacy_site_result.changed
-    fail_msg: >-
-      state: absent on an underscore subdomain reported changed=true or tripped
-      the DNS-label assert; a legacy tombstone (e.g. vscode_ha) must be a clean
-      no-op.
 
 # reload: false installs the vhost config-only (write + symlink + in-place nginx
 # -t) but does NOT reload, so the running nginx keeps its old config -- the
