@@ -90,7 +90,7 @@
 - name: Install smbd zfs-mount dependency override
   import_role:
     name: systemd_unit
-    tasks_from: dropin
+    tasks_from: install
   vars:
     systemd_unit_args:
       src: smbd_zfs_mounts_override.conf.j2

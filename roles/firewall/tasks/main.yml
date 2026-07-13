@@ -47,7 +47,7 @@
 - name: Install nftables.service ExecStop drop-in
   import_role:
     name: systemd_unit
-    tasks_from: dropin
+    tasks_from: install
   vars:
     systemd_unit_args:
       src: override_nftables.conf

@@ -99,7 +99,7 @@
 - name: Install the tailscaled drop-in
   import_role:
     name: systemd_unit
-    tasks_from: dropin
+    tasks_from: install
   vars:
     systemd_unit_args:
       for: tailscaled.service

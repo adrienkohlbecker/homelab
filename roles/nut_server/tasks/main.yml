@@ -145,7 +145,7 @@
   when: not qemu_test
   import_role:
     name: systemd_unit
-    tasks_from: dropin
+    tasks_from: install
   vars:
     systemd_unit_args:
       for: '{{ "nut-driver.service" if ansible_distribution_release in ["jammy"] else "nut-driver@eaton.service" }}'

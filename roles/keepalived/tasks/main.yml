@@ -188,7 +188,7 @@
 - name: Install conf.d-gating drop-in for keepalived.service
   import_role:
     name: systemd_unit
-    tasks_from: dropin
+    tasks_from: install
   vars:
     systemd_unit_args:
       src: override_keepalived.conf

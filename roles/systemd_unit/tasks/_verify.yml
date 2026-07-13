@@ -164,14 +164,14 @@
           - systemd_unit_verify_copy_ok_service_result.changed
           - _systemd_unit_copy_stat.stat.exists
 
-# Drop-in entrypoint smoke test. dropin.yml derives dest as
-# <unit>.d/override.conf and verify as the parent unit, so the override
+# Drop-in install smoke test. install.yml derives dest as <unit>.d/override.conf
+# and verify as the parent unit, so the override
 # is validated as part of the composed unit. Layer over the still-installed
 # copy-path fixture (cleanup is shared below).
-- name: _verify | Install drop-in via tasks_from=dropin
+- name: _verify | Install default drop-in
   import_role:
     name: systemd_unit
-    tasks_from: dropin
+    tasks_from: install
   vars:
     systemd_unit_args:
       src: systemd_unit_verify_dropin.conf
@@ -199,7 +199,7 @@
 - name: _verify | Install drop-in via dest_abs mode
   import_role:
     name: systemd_unit
-    tasks_from: dropin
+    tasks_from: install
   vars:
     systemd_unit_args:
       src: systemd_unit_verify_dropin.conf

@@ -40,7 +40,7 @@
 - name: Run hd-idle in the foreground (jammy/noble fork-tracking race)
   import_role:
     name: systemd_unit
-    tasks_from: dropin
+    tasks_from: install
   vars:
     systemd_unit_args:
       for: hd-idle.service

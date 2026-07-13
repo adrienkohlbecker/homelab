@@ -208,7 +208,7 @@
 - name: Install fluent-bit reload override
   import_role:
     name: systemd_unit
-    tasks_from: dropin
+    tasks_from: install
   vars:
     systemd_unit_args:
       src: override.conf.j2

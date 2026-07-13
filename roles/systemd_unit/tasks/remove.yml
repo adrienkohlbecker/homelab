@@ -125,7 +125,7 @@
   find:
     # dest_abs drop-ins (journald.conf.d/*, resolved.conf.d/*) live under
     # dest_abs | dirname, not under _systemd_unit_dir/for.d. Mirror
-    # dropin.yml's path derivation so remove is symmetric with install.
+    # install.yml's path derivation so removal stays symmetric.
     paths: >-
       {{ (systemd_unit_args.dest_abs | dirname)
          if systemd_unit_args.dest_abs is defined

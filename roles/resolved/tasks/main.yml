@@ -24,7 +24,7 @@
 - name: Render resolved.conf.d/99-custom.conf
   import_role:
     name: systemd_unit
-    tasks_from: dropin
+    tasks_from: install
   vars:
     systemd_unit_args:
       for: systemd-resolved.service

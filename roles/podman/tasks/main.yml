@@ -16,7 +16,7 @@
 - name: Install podman socket override
   import_role:
     name: systemd_unit
-    tasks_from: dropin
+    tasks_from: install
   vars:
     systemd_unit_args:
       src: override_socket.conf
@@ -27,7 +27,7 @@
 - name: Install podman service override
   import_role:
     name: systemd_unit
-    tasks_from: dropin
+    tasks_from: install
   vars:
     systemd_unit_args:
       src: override_service.conf
