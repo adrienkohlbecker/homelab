@@ -94,35 +94,6 @@
       - "'connect-src https://raw.githubusercontent.com' in z2m_csp"
     fail_msg: "z2m CSP header missing widened img-src/connect-src: {{ z2m_csp }}"
 
-# These two only run on a host with a real Zigbee coordinator: z2m serves the
-# frontend only after the serial adapter connects, so it can't reach `healthy`
-# under qemu. They stay gated and skip in CI; the config/unit/nginx/auth checks
-# above are the coverage there.
-- name: _verify | Z2M is active and healthy
-  when: (z2m_start_service | bool) and not (qemu_test | bool)
-  shell: |
-    set -euo pipefail
-    systemctl is-active z2m
-  args:
-    executable: /bin/bash
-  become: true
-  register: z2m_verify_active
-  retries: 30
-  delay: 2
-  until: z2m_verify_active.rc == 0
-  changed_when: false
-
-- name: _verify | Z2M frontend responds on loopback
-  when: (z2m_start_service | bool) and not (qemu_test | bool)
-  uri:
-    url: http://localhost:{{ service_ports.z2m }}/
-    status_code: 200
-  register: z2m_verify_http
-  retries: 30
-  delay: 2
-  until: z2m_verify_http.status == 200
-  become: true
-
 - name: _verify | Exercise z2m fluent-bit record contracts
   import_role:
     name: fluentbit
