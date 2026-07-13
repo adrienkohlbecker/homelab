@@ -125,6 +125,22 @@ pipeline:
       set:
         - _level debug
         - parser_status parsed
+    # Netdata's docker collector issues these six successful reads every ten
+    # seconds. Keep failures and unfamiliar requests; only omit the repetitive
+    # success path from the operator aggregate.
+    - name: type_converter
+      match: svc.socket_proxy.service
+      int_key: status _socket_proxy_status_text string
+    - name: grep
+      match: svc.socket_proxy.service
+      logical_op: and
+      exclude:
+        - '_socket_proxy_status_text ^200$'
+        - 'method ^GET$'
+        - 'path ^/v[0-9]+[.][0-9]+/(info|images/json|containers/json[?]all=1&filters=%7B%22health%22%3A%7B%22(healthy|unhealthy|starting|none)%22%3Atrue%7D%7D)$'
+    - name: modify
+      match: svc.socket_proxy.service
+      remove: _socket_proxy_status_text
     - name: modify
       match: svc.socket_proxy.service
       condition:
