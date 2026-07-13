@@ -333,10 +333,10 @@
 # backing files, corrupt one leg's data region underneath ZFS, scrub to surface
 # the checksum errors, and assert the script flags them via the drive-error
 # branch. A mirror self-heals, so `zpool status -x` still reports the pool
-# healthy -- this deliberately isolates the READ/WRITE/CKSUM counter check (the
-# one that regressed) from the pool-state check. qemu-only (gated on zfs_root,
-# which the harness sets on box/lab/pug but not the poolless minimal fixture);
-# never prod, and fully torn down at the end of the block.
+# healthy -- this isolates the READ/WRITE/CKSUM counter check. Clear those
+# repaired errors, offline one leg, then use the same mirror to isolate the
+# pool-state check. qemu-only (gated on zfs_root); never prod, and fully torn
+# down at the end of the block.
 - name: _verify | Health fault detection
   when: zfs_root
   become: true
@@ -396,6 +396,29 @@
           zfs_health did not flag the corrupted pool via the drive-error check.
           rc={{ _zfs_health_damaged.rc }} stderr={{ _zfs_health_damaged.stderr }}
 
+    - name: _verify | Health fault | Clear repaired checksum errors
+      command: zpool clear zfs_health_test
+      changed_when: true
+
+    - name: _verify | Health fault | Offline one leg to degrade the pool
+      command: zpool offline zfs_health_test /var/tmp/zfs_health_test_0.img
+      changed_when: true
+
+    - name: _verify | Health fault | Run the health script against the degraded pool
+      command: /usr/local/bin/zfs_health
+      register: _zfs_health_degraded
+      changed_when: false
+      failed_when: false
+
+    - name: _verify | Health fault | Script flags the degraded pool and exits non-zero
+      assert:
+        that:
+          - _zfs_health_degraded.rc != 0
+          - "'zpool status -x reports a problem' in _zfs_health_degraded.stderr"
+        fail_msg: >-
+          zfs_health did not flag the DEGRADED pool via the pool-health check.
+          rc={{ _zfs_health_degraded.rc }} stderr={{ _zfs_health_degraded.stderr }}
+
   always:
     # Teardown runs even if an assertion above fails, so a red test leaves no
     # stray pool/files behind for a re-run on the same (kept) VM.
@@ -440,58 +463,3 @@
     fail_msg: >-
       zfs_health did not flag an expired scrub with SCRUB_EXPIRE=1.
       rc={{ _zfs_health_scrub_age.rc }} stderr={{ _zfs_health_scrub_age.stderr }}
-
-# --- Health script pool-fault detection (functional) ---
-# Covers the pool-state branch (`zpool status -x`), distinct from the
-# READ/WRITE/CKSUM counter branch the corruption test above exercises. Build a
-# throwaway mirror, take one leg offline to degrade the pool (a clean state
-# change -- no error counters, so this isolates the -x check), and assert the
-# script flags it. qemu-only (zfs_root), torn down in the always: block.
-- name: _verify | Health pool-fault detection
-  when: zfs_root
-  become: true
-  block:
-    - name: _verify | Health pool-fault | Create backing files for a throwaway pool
-      command: truncate -s 64M /var/tmp/zfs_fault_test_{{ item }}.img
-      loop: [ 0, 1 ]
-      changed_when: true
-
-    - name: _verify | Health pool-fault | Create a mirror pool over the files
-      command: >-
-        zpool create -f zfs_fault_test mirror
-        /var/tmp/zfs_fault_test_0.img /var/tmp/zfs_fault_test_1.img
-      changed_when: true
-
-    - name: _verify | Health pool-fault | Offline one leg to degrade the pool
-      command: zpool offline zfs_fault_test /var/tmp/zfs_fault_test_0.img
-      changed_when: true
-
-    - name: _verify | Health pool-fault | Run the health script against the degraded pool
-      command: /usr/local/bin/zfs_health
-      register: _zfs_health_degraded
-      changed_when: false
-      failed_when: false
-
-    - name: _verify | Health pool-fault | Script flags the degraded pool and exits non-zero
-      assert:
-        that:
-          - _zfs_health_degraded.rc != 0
-          - "'zpool status -x reports a problem' in _zfs_health_degraded.stderr"
-        fail_msg: >-
-          zfs_health did not flag the DEGRADED pool via the pool-health check.
-          rc={{ _zfs_health_degraded.rc }} stderr={{ _zfs_health_degraded.stderr }}
-
-  always:
-    - name: _verify | Health pool-fault | Destroy the throwaway pool
-      command: zpool destroy zfs_fault_test
-      changed_when: true
-      failed_when: false
-
-    - name: _verify | Health pool-fault | Remove backing files and mountpoint
-      file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /var/tmp/zfs_fault_test_0.img
-        - /var/tmp/zfs_fault_test_1.img
-        - /zfs_fault_test
