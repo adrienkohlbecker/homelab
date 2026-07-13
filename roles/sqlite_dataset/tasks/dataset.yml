@@ -10,8 +10,6 @@
 #   owner       owner of the dir and the symlinks (lchown for the latter)
 #   group       group of the dir and the symlinks
 #   mode        sqlite dir mode (e.g. "0750"); default "0750"
-#   condition   optional bool; gates the dir/pre_create/symlink tasks
-#               (default true). The arg validation runs regardless.
 #   links       optional list of dest paths; src derived as
 #               /mnt/services/sqlite/<name>/<basename(dest)>. Parent dir
 #               of each dest is the caller's responsibility.
@@ -83,7 +81,6 @@
 # import_role call's register cannot bleed into this invocation's assert task.
 - name: Resolve defaults for {{ sqlite_dataset_args.name }}
   set_fact:
-    _sqlite_dataset_condition: "{{ sqlite_dataset_args.condition | default(true) | bool }}"
     _sqlite_dataset_pre_create: "{{ sqlite_dataset_args.pre_create | default(false) | bool }}"
     _sqlite_dataset_force: "{{ sqlite_dataset_args.force | default(false) | bool }}"
     _sqlite_dataset_mode: "{{ sqlite_dataset_args.mode | default('0750') }}"
@@ -91,7 +88,6 @@
     sqlite_dataset_force_stat: {}
 
 - name: Pre-create /mnt/services/sqlite/{{ sqlite_dataset_args.name }}
-  when: _sqlite_dataset_condition
   file:
     path: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}"
     state: directory
@@ -104,7 +100,6 @@
 # absent, leaves an existing DB untouched (no truncation, no mtime bump).
 - name: Pre-create SQLite DB src files for {{ sqlite_dataset_args.name }}
   when:
-    - _sqlite_dataset_condition
     - _sqlite_dataset_pre_create
     - sqlite_dataset_args.links is defined
   file:
@@ -127,7 +122,6 @@
 # force -- the no-force path gets this refusal from the file module itself.
 - name: Stat force dests for {{ sqlite_dataset_args.name }}
   when:
-    - _sqlite_dataset_condition
     - _sqlite_dataset_force
     - sqlite_dataset_args.links is defined
   stat:
@@ -141,7 +135,7 @@
     loop_var: sqlite_dataset_link
 
 # selectattr keeps only real stat results. When the stat above was skipped
-# (force false, condition false, or no links) its register still carries
+# (force false or no links) its register still carries
 # per-item skip entries that lack .stat; filter them out so the loop empties
 # and nothing is asserted. A plain `when:` gate wouldn't help -- ansible
 # templates the loop and the `that:`/label args (which dereference .stat)
@@ -164,7 +158,6 @@
 
 - name: Symlink DBs onto sqlite dataset for {{ sqlite_dataset_args.name }}
   when:
-    - _sqlite_dataset_condition
     - sqlite_dataset_args.links is defined
   file:
     src: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ sqlite_dataset_link | basename }}"

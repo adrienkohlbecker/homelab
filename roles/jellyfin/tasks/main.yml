@@ -309,7 +309,6 @@
       owner: jellyfin
       group: media
       mode: "0750"
-      condition: "{{ not ansible_check_mode or jellyfin_user.uid is defined }}"
       # Jellyfin creates these DBs on first boot, so on a cold host the
       # symlink targets don't exist yet -- pre_create plants empty files
       # so state=link doesn't refuse the dangling symlink.
@@ -324,6 +323,7 @@
       links:
         - /mnt/services/jellyfin/data/jellyfin.db
         - /mnt/services/jellyfin/data/introskipper/introskipper.db
+  when: not ansible_check_mode or jellyfin_user.uid is defined
   tags:
     - jellyfin
 

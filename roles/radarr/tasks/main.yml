@@ -49,11 +49,11 @@
       owner: radarr
       group: media
       mode: "0750"
-      condition: "{{ not ansible_check_mode or radarr_user.uid is defined }}"
       pre_create: true
       links:
         - /mnt/services/radarr/radarr.db
         - /mnt/services/radarr/logs.db
+  when: not ansible_check_mode or radarr_user.uid is defined
   tags:
     - radarr
 

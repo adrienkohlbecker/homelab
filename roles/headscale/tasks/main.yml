@@ -92,7 +92,7 @@
       pre_create: true
       links:
         - /mnt/services/headscale/data/db.sqlite
-      condition: "{{ not ansible_check_mode or headscale_user.uid is defined }}"
+  when: not ansible_check_mode or headscale_user.uid is defined
   tags:
     - headscale
 

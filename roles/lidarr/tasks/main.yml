@@ -48,11 +48,11 @@
       owner: lidarr
       group: media
       mode: "0750"
-      condition: "{{ not ansible_check_mode or lidarr_user.uid is defined }}"
       pre_create: true
       links:
         - /mnt/services/lidarr/lidarr.db
         - /mnt/services/lidarr/logs.db
+  when: not ansible_check_mode or lidarr_user.uid is defined
   tags:
     - lidarr
 

@@ -25,10 +25,10 @@
       owner: profilarr
       group: profilarr
       mode: "0750"
-      condition: "{{ not ansible_check_mode or profilarr_user.uid is defined }}"
       pre_create: true
       links:
         - /mnt/services/profilarr/profilarr.db
+  when: not ansible_check_mode or profilarr_user.uid is defined
   tags:
     - profilarr
 

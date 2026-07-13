@@ -39,10 +39,10 @@
       name: kuma
       owner: kuma
       group: kuma
-      condition: "{{ not ansible_check_mode or kuma_user.uid is defined }}"
       force: true
       links:
         - /mnt/services/kuma/kuma.db
+  when: not ansible_check_mode or kuma_user.uid is defined
   tags:
     - kuma
 

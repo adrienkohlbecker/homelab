@@ -61,7 +61,7 @@
       owner: plex
       group: plex
       mode: "0700"
-      condition: "{{ not ansible_check_mode or plex_user.uid is defined }}"
+  when: not ansible_check_mode or plex_user.uid is defined
   tags:
     - plex
 
