@@ -51,9 +51,33 @@
   until: _systemd_timer_netdata_api.status == 200
 
 # ============================================================
-# Contract 1+2: install/remove and stderr priority (monitor:false)
+# Contracts 1+2+5: one fixture exercises the successful lifecycle, privilege
+# drop, environment, timer knobs, service hardening, and journal priorities.
 # ============================================================
-- name: "_verify | Install fixture timer (monitor: false)"
+# systemd-analyze verify (run by systemd_unit) warns "Special user nobody
+# configured, this is not safe!" for User=nobody, and systemd_unit treats any
+# verify stderr as a failure. Use a dedicated created user instead -- it also
+# mirrors how real run_as callers work (a service's own system user).
+- name: _verify | Create a dedicated user for the run_as fixture
+  user:
+    name: _verify_runas
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+  become: true
+
+- name: _verify | Remove stale fixture output
+  file:
+    path: /tmp/_verify_timer.out
+    state: absent
+  become: true
+
+- name: _verify | Capture pre-run timestamp for journal filter
+  command: date +%s
+  register: _systemd_timer_stderr_t0
+  changed_when: false
+
+- name: "_verify | Install combined fixture timer (monitor: false)"
   import_role:
     name: systemd_timer
     tasks_from: install
@@ -62,11 +86,44 @@
       name: _verify_timer
       description: systemd_timer self-test
       on_calendar: "*-*-* 23:59:00"
-      exec_start: /bin/sh -c 'echo CRON_VERIFY_OK > /tmp/_verify_timer.out'
+      exec_start: >-
+        /usr/bin/python3 -c 'import os, sys;
+        open("/tmp/_verify_timer.out", "w").write("ENV_KEY=" + os.environ["ENV_KEY"] + "|ENV_OTHER=" + os.environ["ENV_OTHER"] + chr(10));
+        print("STDOUT_VERIFY_LINE"); print("STDERR_VERIFY_LINE", file=sys.stderr)'
       monitor: false
+      run_as: _verify_runas
+      environment:
+        ENV_KEY: knob_value
+        ENV_OTHER: "value with spaces, and a comma"
+      accuracy_sec: 1s
+      on_active_sec: "0"
+      randomized_delay_sec: 600
+      fixed_random_delay: true
+      additional_service_directives:
+        # ProtectSystem=strict makes the filesystem read-only except for the
+        # explicit test output path, exercising the directive passthrough.
+        - "ProtectSystem=strict"
+        - "ProtectHome=yes"
+        - "ReadWritePaths=/tmp"
 
-- name: _verify | Trigger the fixture service manually  # noqa: command-instead-of-module
+- name: _verify | Trigger the combined fixture manually  # noqa: command-instead-of-module
   command: systemctl start --wait _verify_timer.service
+  changed_when: false
+  become: true
+
+- name: _verify | Sync journal before reading
+  command: journalctl --sync
+  changed_when: false
+  become: true
+
+- name: _verify | Read stderr through unit and identifier journal filters
+  command: >-
+    journalctl {{ item }} -p err
+    --since=@{{ _systemd_timer_stderr_t0.stdout }} --no-pager --output=cat
+  loop:
+    - -u _verify_timer.service
+    - --identifier _verify_timer
+  register: _systemd_timer_stderr_journals
   changed_when: false
   become: true
 
@@ -76,35 +133,65 @@
   changed_when: false
   become: true
 
-- name: _verify | Read the file the service wrote
-  slurp:
-    src: /tmp/_verify_timer.out
-  register: _systemd_timer_timer_out
-  become: true
-
 - name: _verify | Read timer ActiveState  # noqa: command-instead-of-module
   command: systemctl show -p ActiveState --value _verify_timer.timer
   register: _systemd_timer_timer_active
   changed_when: false
   become: true
 
-- name: _verify | Functional assertions for state=present
-  assert:
-    that:
-      - _systemd_timer_timer_result.stdout == 'success'
-      - (_systemd_timer_timer_out.content | b64decode) == "CRON_VERIFY_OK\n"
-      - _systemd_timer_timer_active.stdout == 'active'
+- name: _verify | Read fixture output
+  slurp:
+    src: /tmp/_verify_timer.out
+  register: _systemd_timer_timer_out
+  become: true
+
+- name: _verify | Stat fixture output ownership
+  stat:
+    path: /tmp/_verify_timer.out
+  register: _systemd_timer_timer_out_stat
+  become: true
+
+# OnActiveSec= has no scalar property; it surfaces in TimersMonotonic.
+- name: _verify | Read timer and service properties  # noqa: command-instead-of-module
+  command: >-
+    systemctl show -p AccuracyUSec,TimersMonotonic,RandomizedDelayUSec,FixedRandomDelay,ProtectSystem,ProtectHome
+    _verify_timer.timer _verify_timer.service
+  register: _systemd_timer_knobs_show
+  changed_when: false
+  become: true
 
 - name: "_verify | Stat netdata metadata file (should NOT exist for monitor: false)"
   stat:
     path: /etc/netdata/charts.d/systemd_timers.d/_verify_timer.conf
   register: _systemd_timer_timer_meta
-- name: _verify | Assert no metadata written for monitor=false
+
+- name: _verify | Assert combined fixture behavior
+  vars:
+    _output: "{{ (_systemd_timer_timer_out.content | b64decode).rstrip() }}"
   assert:
     that:
+      - _systemd_timer_timer_result.stdout == 'success'
+      - _systemd_timer_timer_active.stdout == 'active'
+      - _systemd_timer_timer_out_stat.stat.pw_name == '_verify_runas'
+      - _output == "ENV_KEY=knob_value|ENV_OTHER=value with spaces, and a comma"
+      - "'AccuracyUSec=1s' in _systemd_timer_knobs_show.stdout"
+      - "'OnActiveUSec=0' in _systemd_timer_knobs_show.stdout"
+      - "'RandomizedDelayUSec=10min' in _systemd_timer_knobs_show.stdout"
+      - "'FixedRandomDelay=yes' in _systemd_timer_knobs_show.stdout"
+      - "'ProtectSystem=strict' in _systemd_timer_knobs_show.stdout"
+      - "'ProtectHome=yes' in _systemd_timer_knobs_show.stdout"
       - not _systemd_timer_timer_meta.stat.exists
 
-- name: _verify | Remove the fixture timer
+- name: _verify | Assert stderr priority through each journal filter
+  assert:
+    that:
+      - "'STDERR_VERIFY_LINE' in item.stdout"
+      - "'STDOUT_VERIFY_LINE' not in item.stdout"
+  loop: "{{ _systemd_timer_stderr_journals.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: _verify | Remove the combined fixture timer
   import_role:
     name: systemd_timer
     tasks_from: remove
@@ -128,75 +215,16 @@
   failed_when: false
   become: true
 
-- name: _verify | Assertions for state=absent
+- name: _verify | Assert fixture removal
   assert:
     that:
       - not _systemd_timer_timer_files.results[0].stat.exists
       - not _systemd_timer_timer_files.results[1].stat.exists
       - _systemd_timer_timer_status.rc != 0
 
-- name: _verify | Cleanup fixture output
+- name: _verify | Cleanup combined fixture
   file:
     path: /tmp/_verify_timer.out
-    state: absent
-  become: true
-
-# ----- run_as (privilege drop in system-scope unit) -----
-# systemd-analyze verify (run by systemd_unit) warns "Special user nobody
-# configured, this is not safe!" for User=nobody, and systemd_unit treats any
-# verify stderr as a failure. Use a dedicated created user instead -- it also
-# mirrors how real run_as callers work (a service's own system user).
-- name: _verify | Create a dedicated user for the run_as fixture
-  user:
-    name: _verify_runas
-    system: true
-    create_home: false
-    shell: /usr/sbin/nologin
-  register: _systemd_timer_runas_created
-  become: true
-
-- name: "_verify | Install run_as fixture (monitor: false)"
-  import_role:
-    name: systemd_timer
-    tasks_from: install
-  vars:
-    systemd_timer_args:
-      name: _verify_timer_runas
-      description: run_as self-test
-      on_calendar: "*-*-* 23:59:00"
-      exec_start: /bin/sh -c 'id -u > /tmp/_verify_timer_runas.out'
-      monitor: false
-      run_as: _verify_runas
-
-- name: _verify | Trigger the run_as fixture manually  # noqa: command-instead-of-module
-  command: systemctl start --wait _verify_timer_runas.service
-  changed_when: false
-  become: true
-
-- name: _verify | Read run_as fixture output
-  slurp:
-    src: /tmp/_verify_timer_runas.out
-  register: _systemd_timer_runas_out
-  become: true
-
-- name: _verify | Functional assertions for run_as
-  vars:
-    _uid: "{{ (_systemd_timer_runas_out.content | b64decode).strip() }}"
-  assert:
-    that:
-      - _uid == (_systemd_timer_runas_created.uid | string)
-
-- name: _verify | Remove the run_as fixture timer
-  import_role:
-    name: systemd_timer
-    tasks_from: remove
-  vars:
-    systemd_timer_args:
-      name: _verify_timer_runas
-
-- name: _verify | Cleanup run_as fixture output
-  file:
-    path: /tmp/_verify_timer_runas.out
     state: absent
   become: true
 
@@ -205,48 +233,6 @@
     name: _verify_runas
     state: absent
   become: true
-
-# ----- stderr priority -----
-- name: _verify | Capture pre-run timestamp for journal filter
-  command: date +%s
-  register: _systemd_timer_stderr_t0
-  changed_when: false
-
-- name: "_verify | Install stderr-test timer (monitor: false)"
-  import_role:
-    name: systemd_timer
-    tasks_from: install
-  vars:
-    systemd_timer_args:
-      name: _verify_timer_stderr
-      description: stderr priority self-test
-      on_calendar: "*-*-* 23:59:00"
-      exec_start: /bin/sh -c 'echo STDOUT_VERIFY_LINE; echo STDERR_VERIFY_LINE >&2'
-      monitor: false
-
-- name: _verify | Trigger the stderr fixture manually  # noqa: command-instead-of-module
-  command: systemctl start --wait _verify_timer_stderr.service
-  changed_when: false
-  become: true
-
-- name: _verify | Sync journal before reading
-  command: journalctl --sync
-  changed_when: false
-  become: true
-
-- name: _verify | Read journal at priority err for the stderr unit
-  command: >-
-    journalctl -u _verify_timer_stderr.service -p err
-    --since=@{{ _systemd_timer_stderr_t0.stdout }} --no-pager --output=cat
-  register: _systemd_timer_stderr_journal_err
-  changed_when: false
-  become: true
-
-- name: _verify | Functional assertions for stderr priority
-  assert:
-    that:
-      - "'STDERR_VERIFY_LINE' in _systemd_timer_stderr_journal_err.stdout"
-      - "'STDOUT_VERIFY_LINE' not in _systemd_timer_stderr_journal_err.stdout"
 
 # --- exit-code propagation ---
 # The logging transport must preserve a failing command's status so systemd
@@ -314,99 +300,6 @@
   vars:
     systemd_timer_args:
       name: _verify_timer_exitcode
-
-- name: _verify | Remove the stderr fixture timer
-  import_role:
-    name: systemd_timer
-    tasks_from: remove
-  vars:
-    systemd_timer_args:
-      name: _verify_timer_stderr
-
-# ============================================================
-# Contract 5: new knobs — environment, accuracy_sec, on_active_sec,
-# additional_service_directives
-# ============================================================
-- name: "_verify | Install knobs fixture (monitor: false)"
-  import_role:
-    name: systemd_timer
-    tasks_from: install
-  vars:
-    systemd_timer_args:
-      name: _verify_timer_knobs
-      description: timer helper extension knobs
-      on_calendar: "*-*-* 23:59:00"
-      exec_start: /bin/sh -c 'echo "ENV_KEY=$ENV_KEY|ENV_OTHER=$ENV_OTHER" > /tmp/_verify_timer_knobs.out'
-      monitor: false
-      environment:
-        ENV_KEY: knob_value
-        ENV_OTHER: "value with spaces, and a comma"
-      accuracy_sec: 1s
-      on_active_sec: "0"
-      randomized_delay_sec: 600
-      fixed_random_delay: true
-      additional_service_directives:
-        # ProtectSystem=strict makes the whole filesystem read-only
-        # except /dev /proc /sys, so the exec_start above can't write
-        # to /tmp without ReadWritePaths punching a hole. Including it
-        # exercises the directive emission and lets the assertion
-        # below actually read the script's output.
-        - "ProtectSystem=strict"
-        - "ProtectHome=yes"
-        - "ReadWritePaths=/tmp"
-
-- name: _verify | Trigger the knobs fixture manually  # noqa: command-instead-of-module
-  command: systemctl start --wait _verify_timer_knobs.service
-  changed_when: false
-  become: true
-
-- name: _verify | Read knobs fixture output
-  slurp:
-    src: /tmp/_verify_timer_knobs.out
-  register: _systemd_timer_knobs_out
-  become: true
-
-# OnActiveSec= has no scalar property -- monotonic timer settings surface in
-# the TimersMonotonic list as e.g. "TimersMonotonic={ OnActiveUSec=0 ; ... }",
-# so query that (the OnActiveUSec=0 assertion below matches its content).
-- name: _verify | Read systemctl show properties for knobs fixture  # noqa: command-instead-of-module
-  command: >-
-    systemctl show -p AccuracyUSec,TimersMonotonic,RandomizedDelayUSec,FixedRandomDelay,ProtectSystem,ProtectHome
-    _verify_timer_knobs.timer _verify_timer_knobs.service
-  register: _systemd_timer_knobs_show
-  changed_when: false
-  become: true
-
-- name: _verify | Functional + property assertions for new knobs
-  vars:
-    _stdout: "{{ (_systemd_timer_knobs_out.content | b64decode).rstrip() }}"
-  assert:
-    that:
-      - _stdout == "ENV_KEY=knob_value|ENV_OTHER=value with spaces, and a comma"
-      - "'AccuracyUSec=1s' in _systemd_timer_knobs_show.stdout"
-      - "'OnActiveUSec=0' in _systemd_timer_knobs_show.stdout"
-      - "'RandomizedDelayUSec=10min' in _systemd_timer_knobs_show.stdout"
-      - "'FixedRandomDelay=yes' in _systemd_timer_knobs_show.stdout"
-      - "'ProtectSystem=strict' in _systemd_timer_knobs_show.stdout"
-      - "'ProtectHome=yes' in _systemd_timer_knobs_show.stdout"
-    fail_msg: |
-      Knobs fixture failed.
-      stdout: {{ _stdout }}
-      systemctl show: {{ _systemd_timer_knobs_show.stdout }}
-
-- name: _verify | Remove the knobs fixture timer
-  import_role:
-    name: systemd_timer
-    tasks_from: remove
-  vars:
-    systemd_timer_args:
-      name: _verify_timer_knobs
-
-- name: _verify | Cleanup knobs fixture output
-  file:
-    path: /tmp/_verify_timer_knobs.out
-    state: absent
-  become: true
 
 # Contracts 3+4 exercise the netdata charts.d collector. netdata installs
 # from repo.netdata.cloud's multi-arch 2.x series (see roles/netdata), so
