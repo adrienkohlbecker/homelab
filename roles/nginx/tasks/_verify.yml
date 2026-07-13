@@ -664,57 +664,44 @@
   register: nginx_verify_ipv6
   failed_when: "'nginx_verify_upstream_ok' not in (nginx_verify_ipv6.content | default(''))"
 
-# Tear down the transient vhosts via the helper and confirm both
-# the symlink and the config are gone. include_tasks (not import_role) so
-# nginx_site_remove_args re-evaluates per loop iteration.
-- name: _verify | Remove the transient test vhosts via the nginx site removal helper
-  include_tasks:
-    file: site_remove.yml
+# Remove the supporting fixtures before the representative helper call so its
+# single reload applies the whole teardown.
+- name: _verify | Remove supporting transient test vhosts
+  file:
+    path: "/etc/nginx/{{ item.1 }}/{{ item.0 }}"
+    state: absent
+  become: true
+  loop: "{{ nginx_verify_supporting_sites | product(['sites-enabled', 'sites-available']) | list }}"
+  loop_control:
+    label: "{{ item.0 }} ({{ item.1 }})"
+  vars:
+    nginx_verify_supporting_sites:
+      - nginxverifyauth
+      - nginxverifybasic
+      - nginxverifyloc
+      - nginxverifyserverconf
+      - nginxverifyplain
+      - nginxverifyempty
+      - nginxverifybody
+      - nginxverifybuffering
+      - nginxverifycsp
+      - nginxverifyipv6
+
+- name: _verify | Remove a transient vhost via the nginx site removal helper
+  import_role:
+    name: nginx
+    tasks_from: site_remove
   vars:
     nginx_site_remove_args:
-      subdomain: "{{ item }}"
-  loop:
-    - nginxverify
-    - nginxverifyauth
-    - nginxverifybasic
-    - nginxverifyloc
-    - nginxverifyserverconf
-    - nginxverifyplain
-    - nginxverifyempty
-    - nginxverifybody
-    - nginxverifybuffering
-    - nginxverifycsp
-    - nginxverifyipv6
-  loop_control:
-    label: "{{ item }}"
+      subdomain: nginxverify
 
-- name: _verify | Removed vhost configs and symlinks are gone
+- name: _verify | The helper removed the vhost config and symlink
   stat:
     path: "{{ item }}"
   register: nginx_verify_removed
   loop:
     - /etc/nginx/sites-available/nginxverify
     - /etc/nginx/sites-enabled/nginxverify
-    - /etc/nginx/sites-available/nginxverifyauth
-    - /etc/nginx/sites-enabled/nginxverifyauth
-    - /etc/nginx/sites-available/nginxverifybasic
-    - /etc/nginx/sites-enabled/nginxverifybasic
-    - /etc/nginx/sites-available/nginxverifyloc
-    - /etc/nginx/sites-enabled/nginxverifyloc
-    - /etc/nginx/sites-available/nginxverifyserverconf
-    - /etc/nginx/sites-enabled/nginxverifyserverconf
-    - /etc/nginx/sites-available/nginxverifyplain
-    - /etc/nginx/sites-enabled/nginxverifyplain
-    - /etc/nginx/sites-available/nginxverifyempty
-    - /etc/nginx/sites-enabled/nginxverifyempty
-    - /etc/nginx/sites-available/nginxverifybody
-    - /etc/nginx/sites-enabled/nginxverifybody
-    - /etc/nginx/sites-available/nginxverifybuffering
-    - /etc/nginx/sites-enabled/nginxverifybuffering
-    - /etc/nginx/sites-available/nginxverifycsp
-    - /etc/nginx/sites-enabled/nginxverifycsp
-    - /etc/nginx/sites-available/nginxverifyipv6
-    - /etc/nginx/sites-enabled/nginxverifyipv6
   become: true
   failed_when: nginx_verify_removed.stat.exists
 
