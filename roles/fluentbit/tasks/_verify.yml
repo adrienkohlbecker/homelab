@@ -89,6 +89,7 @@
     fluentbit_lnav_certbot_marker: "verify_certbot_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_ansi_marker: "verify_ansi_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_warn_marker: "verify_warn_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    fluentbit_lnav_priority_marker: "verify_priority_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_multiline_marker: "verify_trace_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_mitogen_marker: "verify_mitogen_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_healthcheck_marker: "verify_healthcheck_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
@@ -159,6 +160,16 @@
     systemd-run --unit=fluentbit_verify_warn --no-block --quiet
     /usr/bin/logger -t fluentbit_verify_warn
     "WARNING {{ fluentbit_lnav_warn_marker }}"
+  changed_when: false
+  become: true
+
+- name: _verify | Journald priority | emit native error without a level token
+  command: logger --journald
+  args:
+    stdin: |
+      MESSAGE=host service failure {{ fluentbit_lnav_priority_marker }}
+      PRIORITY=3
+      SYSLOG_IDENTIFIER=fluentbit_verify_priority
   changed_when: false
   become: true
 
@@ -265,6 +276,9 @@
     - name: warn
       marker: "{{ fluentbit_lnav_warn_marker }}"
       service: fluentbit_verify_warn
+    - name: priority
+      marker: "{{ fluentbit_lnav_priority_marker }}"
+      service: fluentbit_verify_priority
     - name: multiline
       marker: "{{ fluentbit_lnav_multiline_marker }}"
       service: fluentbit_verify_multiline
@@ -303,8 +317,8 @@
       - "row.identifier == 'fluentbit_verify_journald'"
       - "row.host == inventory_hostname"
       - "row.stream == 'journald'"
-      - "row.fields.SYSTEMD_UNIT == 'fluentbit_verify_journald.service'"
-      - "row.fields.SYSLOG_IDENTIFIER == 'fluentbit_verify_journald'"
+      - "'SYSTEMD_UNIT' not in row.fields"
+      - "'SYSLOG_IDENTIFIER' not in row.fields"
       # The lua filters must use the classic 3-arg signature so Fluent Bit does
       # not serialize event metadata into the JSONL as an __internal__ object.
       - "'__internal__' not in row"
@@ -416,6 +430,16 @@
       - "fluentbit_lnav_warn_marker in row.message"
     fail_msg: "WARN keyword classified wrong: {{ row }}"
 
+- name: _verify | Journald priority | assert native severity fallback
+  vars:
+    row: "{{ _fluentbit_lnav_by_name.priority }}"
+  assert:
+    that:
+      - "row.level == 'error'"
+      - "fluentbit_lnav_priority_marker in row.message"
+      - "row.service == 'fluentbit_verify_priority'"
+    fail_msg: "Native journald priority fallback classified wrong: {{ row }}"
+
 - name: _verify | Multiline | assert traceback joined
   vars:
     row: "{{ _fluentbit_lnav_by_name.multiline }}"
@@ -462,7 +486,7 @@
   assert:
     that:
       - "row.service == 'podman_healthcheck'"
-      - "row.fields.CONTAINER_ID_FULL == fluentbit_lnav_healthcheck_cid"
+      - "'CONTAINER_ID_FULL' not in row.fields"
       - "row.fields.CONTAINER_ID == fluentbit_lnav_healthcheck_cid[:12]"
       - "row.fields.UNIT == fluentbit_lnav_healthcheck_cid ~ '.service'"
       - "fluentbit_lnav_healthcheck_cid in row.message"

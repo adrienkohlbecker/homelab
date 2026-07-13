@@ -5,7 +5,7 @@
 -- The message samples are real lines captured from lab's journal
 -- (journalctl -o json) across the services that actually run there, picked
 -- to cover each LEVEL_RULES branch plus the deliberate quirks (notice->info,
--- LOG:->info, first-120-char scope, default-info fallback). Keep them
+-- LOG:->info, first-120-char scope, journal fallback). Keep them
 -- verbatim -- they are the regression corpus.
 
 local here = arg[0]:match("^(.*/)") or "./"
@@ -119,29 +119,45 @@ do
     check("nokw.default.text", t, "info")
 end
 
--- 14. The scan is body-text only, independent of journald PRIORITY: this
---     real line was emitted at PRIORITY=3 (err) but carries no level keyword
---     in its first 120 chars ("JSONDecodeError" has no word boundary before
---     "error"), so it defaults to info.
+-- 14. Native host services fall back to journald PRIORITY when the body has no
+--     level keyword in its first 120 chars ("JSONDecodeError" has no word
+--     boundary before "error").
 do
-    local t = sev("[pug] alarm_log fetch failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)")
-    check("body-only.default", t, "info")
+    local t = sev(
+        "[pug] alarm_log fetch failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)",
+        nil,
+        { PRIORITY = "3" }
+    )
+    check("host-priority.error", t, "error")
 end
 
--- 14a. headscale (zerolog) abbreviated INF level right after the timestamp.
+-- 14a. Container PRIORITY remains ignored because it only describes the
+--      stdout/stderr stream.
+do
+    local t = sev("container line without a level", nil, { PRIORITY = "3", CONTAINER_TAG = "fixture" })
+    check("container-priority.ignored", t, "info")
+end
+
+-- 14b. An explicit body level wins over the native journal priority.
+do
+    local t = sev("WARNING host message", nil, { PRIORITY = "6" })
+    check("host-priority.body-wins", t, "warn")
+end
+
+-- 14c. headscale (zerolog) abbreviated INF level right after the timestamp.
 do
     local t = sev("2026-06-10T08:54:39Z INF Received signal to stop, shutting down gracefully signal=terminated")
     check("headscale.inf", t, "info")
 end
 
--- 14b. headscale WRN -- the abbreviated token must map to warn, not fall
+-- 14d. headscale WRN -- the abbreviated token must map to warn, not fall
 --      through to the info default (the bug the zerolog tokens fix).
 do
     local t = sev("2026-06-10T08:54:40Z WRN Listening without TLS but ServerURL does not start with http://")
     check("headscale.wrn", t, "warn")
 end
 
--- 14c. headscale ERR -- already matched via the "err" keyword; pin it so the
+-- 14e. headscale ERR -- already matched via the "err" keyword; pin it so the
 --      zerolog additions can't regress it.
 do
     local t = sev("2026-06-14T07:26:08Z ERR user msg: node not found code=404")

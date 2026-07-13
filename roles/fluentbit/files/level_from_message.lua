@@ -2,9 +2,10 @@
 -- (info), stderr=3 (err). Everything from postgres / celery / linuxserver
 -- entrypoints arrives at err because the apps write INFO to stderr, which
 -- loses useful severity filtering. Parse the message text for a level keyword
--- and write the inferred text level into the temp record field _level; the
--- final lnav shaper reads it, promotes it into the JSONL record body (level),
--- and drops the temp field. The local journal is untouched.
+-- first. For native host services only, fall back to journald PRIORITY when no
+-- keyword is present. Write the inferred text level into the temp record field
+-- _level; the final lnav shaper reads it, promotes it into the JSONL record body
+-- (level), and drops the temp field. The local journal is untouched.
 --
 -- This and lnav_shape use the classic 3-argument lua-filter signature
 -- (tag, timestamp, record). Fluent Bit auto-selects the metadata-aware
@@ -82,6 +83,17 @@ local LEVEL_ALIASES = {
     pnc = "fatal",
 }
 
+local JOURNAL_LEVELS = {
+    [0] = "fatal",
+    [1] = "fatal",
+    [2] = "fatal",
+    [3] = "error",
+    [4] = "warn",
+    [5] = "info",
+    [6] = "info",
+    [7] = "debug",
+}
+
 local function match_rule(head, rule)
     if rule.keywords then
         for _, kw in ipairs(rule.keywords) do
@@ -142,9 +154,13 @@ function set_priority(tag, ts, record)
     end
 
     if sev_text == nil then
-        -- No level keyword found. Stamp level=info so the final
-        -- JSONL record still has a predictable lnav level.
-        sev_text = "info"
+        -- Container PRIORITY reflects stdout/stderr, not application severity.
+        -- Native services write real syslog priorities, so use those before
+        -- the predictable info default.
+        if record["CONTAINER_TAG"] == nil then
+            sev_text = JOURNAL_LEVELS[tonumber(record["PRIORITY"])]
+        end
+        sev_text = sev_text or "info"
     end
 
     record["_level"] = sev_text
