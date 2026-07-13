@@ -52,7 +52,7 @@
 
 - name: mount_generator | Generate mount cache
   when: not (ansible_check_mode and zfs_list_cache_directory.changed)
-  command: /usr/local/bin/zfs_update_mount_cache {{ item }} {{ item.split('/')[0] }}
+  command: /usr/local/bin/zfs_update_mount_cache {{ item }}
   args:
     chdir: /etc/zfs/zfs-list.cache
   register: zfs_mount_cache_cmd

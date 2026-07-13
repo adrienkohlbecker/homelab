@@ -4,19 +4,19 @@ source /usr/local/lib/functions.sh
 
 f_require_root
 
-filesystem=$1
-cachefile=$2
+filesystem=${1:-}
 
-if [ -z "$filesystem" ] || [ -z "$cachefile" ]; then
-  echo >&2 "Usage: zfs_update_mount_cache FILESYSTEM CACHEFILE"
+if [ -z "$filesystem" ]; then
+  echo >&2 "Usage: zfs_update_mount_cache FILESYSTEM"
   exit 1
 fi
 if [[ ! "$filesystem" =~ ^[a-zA-Z0-9_./-]+$ ]]; then
   echo >&2 "Invalid filesystem name: $filesystem"
   exit 1
 fi
+cachefile=${filesystem%%/*}
 if [[ ! "$cachefile" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-  echo >&2 "Invalid cachefile name: $cachefile"
+  echo >&2 "Invalid pool name derived from filesystem: $cachefile"
   exit 1
 fi
 if [ ! -f "/etc/zfs/zfs-list.cache/$cachefile" ]; then
