@@ -27,8 +27,8 @@
           - _sqlite_dataset_dir.stat.gr_name == 'root'
           - _sqlite_dataset_dir.stat.mode == '0700'
 
-    # -- Scenario 2: pre_create + symlinks -------------------------------
-    - name: _verify | Scenario 2 — pre_create + symlinks
+    # -- Scenario 2: default symlink mode --------------------------------
+    - name: _verify | Scenario 2 — pre-created targets and symlinks
       import_role:
         name: sqlite_dataset
         tasks_from: dataset
@@ -38,7 +38,6 @@
           owner: root
           group: root
           mode: "0750"
-          pre_create: true
           links:
             - /mnt/services/sqlite_dataset_test/test.db
             - /mnt/services/sqlite_dataset_test/sub/other.db
@@ -122,7 +121,6 @@
           owner: root
           group: root
           mode: "0750"
-          pre_create: true
           links:
             - /mnt/services/sqlite_dataset_test/test.db
             - /mnt/services/sqlite_dataset_test/sub/other.db
@@ -142,7 +140,7 @@
           - item.0.stat.mtime == item.1.stat.mtime
         fail_msg: >-
           {{ item.0.item }} mtime changed across an identical re-apply --
-          the pre_create touch or symlink is not idempotent.
+          the target creation or symlink is not idempotent.
       loop: "{{ _sqlite_dataset_before.results | zip(_sqlite_dataset_after.results) | list }}"
       loop_control:
         label: "{{ item.0.item }}"
@@ -180,7 +178,7 @@
           - _sqlite_dataset_through_link.stat.islnk
           - _sqlite_dataset_through.content | b64decode == 'WRITE-THROUGH'
 
-    # -- Scenario 5: pre_create does not clobber an existing src ----------
+    # -- Scenario 5: target creation does not clobber an existing src -----
     - name: _verify | Scenario 5 — write sentinel directly into the src
       copy:
         content: "SENTINEL"
@@ -190,7 +188,7 @@
         mode: "0640"
       become: true
 
-    - name: _verify | Scenario 5 — re-run with pre_create
+    - name: _verify | Scenario 5 — re-run with the existing src
       import_role:
         name: sqlite_dataset
         tasks_from: dataset
@@ -199,7 +197,6 @@
           name: sqlite_dataset_test
           owner: root
           group: root
-          pre_create: true
           links:
             - /mnt/services/sqlite_dataset_test/test.db
 
@@ -215,7 +212,7 @@
           - _sqlite_dataset_sentinel.content | b64decode == 'SENTINEL'
 
     # -- Scenario 6: custom file_mode ------------------------------------
-    - name: _verify | Scenario 6 — pre_create with file_mode 0600
+    - name: _verify | Scenario 6 — custom file_mode 0600
       import_role:
         name: sqlite_dataset
         tasks_from: dataset
@@ -224,7 +221,6 @@
           name: sqlite_dataset_test
           owner: root
           group: root
-          pre_create: true
           file_mode: "0600"
           links:
             - /mnt/services/sqlite_dataset_test/private.db
@@ -244,8 +240,8 @@
     # -- Scenario 7: no-force state=link refuses to clobber a real DB -----
     # The load-bearing safety: a real file already at a dest is never
     # converted to a symlink (snapshot-restore / downgrade protection). The
-    # src is pre_create'd so the only reason to fail is the real dest, not a
-    # dangling target.
+    # The helper creates the src first, so the only reason to fail is the real
+    # dest, not a dangling target.
     - name: _verify | Scenario 7 — plant a real DB at the dest
       copy:
         content: "REAL-DB"
@@ -266,7 +262,6 @@
               name: sqlite_dataset_test
               owner: root
               group: root
-              pre_create: true
               links:
                 - /mnt/services/sqlite_dataset_test/real.db
 
@@ -376,7 +371,7 @@
           # target still absent -> the re-apply did not pre-create the src
           - not _sqlite_dataset_forced_target_again.stat.exists
 
-    # -- Scenario 9: validation rejects incoherent args ------------------
+    # -- Scenario 9: validation rejects invalid args ---------------------
     # include_tasks (not import_role) so sqlite_dataset_args re-evaluates per
     # iteration; each case must fail the dataset role's assert.
     - name: _verify | Scenario 9 — invalid args are rejected
@@ -399,21 +394,6 @@
           args:
             name: sqlite_dataset_test
             group: root
-        - label: pre_create without links
-          args:
-            name: sqlite_dataset_test
-            owner: root
-            group: root
-            pre_create: true
-        - label: force with pre_create
-          args:
-            name: sqlite_dataset_test
-            owner: root
-            group: root
-            pre_create: true
-            force: true
-            links:
-              - /mnt/services/sqlite_dataset_test/both.db
       loop_control:
         loop_var: sqlite_dataset_invalid
         label: "{{ sqlite_dataset_invalid.label }}"
@@ -473,54 +453,6 @@
           - _sqlite_dataset_force_real.stat.exists
           - not _sqlite_dataset_force_real.stat.islnk
           - _sqlite_dataset_force_real_content.content | b64decode == 'FORCE-REAL'
-
-    # -- Scenario 11: caller pre-creates src externally (no pre_create/force) -
-    # The third cold-start mode: the calling role creates the src file itself
-    # (e.g. via sqlite3 or copy: with creates:) before invoking this helper.
-    # state=link without force succeeds because the src already exists, and
-    # the content is preserved. Use this when the link target is already a
-    # real, populated DB that the role must not clobber into a symlink.
-    - name: _verify | Scenario 11 — caller pre-creates the src with content
-      copy:
-        content: "PRE-INITIALIZED"
-        dest: /mnt/services/sqlite/sqlite_dataset_test/prebuilt.db
-        owner: root
-        group: root
-        mode: "0640"
-      become: true
-
-    - name: _verify | Scenario 11 — apply helper with no pre_create and no force
-      import_role:
-        name: sqlite_dataset
-        tasks_from: dataset
-      vars:
-        sqlite_dataset_args:
-          name: sqlite_dataset_test
-          owner: root
-          group: root
-          links:
-            - /mnt/services/sqlite_dataset_test/prebuilt.db
-
-    - name: _verify | Scenario 11 — stat the dest symlink
-      stat:
-        path: /mnt/services/sqlite_dataset_test/prebuilt.db
-        follow: false
-      register: _sqlite_dataset_prebuilt_lnk
-      become: true
-
-    - name: _verify | Scenario 11 — read back through the symlink
-      slurp:
-        src: /mnt/services/sqlite/sqlite_dataset_test/prebuilt.db
-      register: _sqlite_dataset_prebuilt_content
-      become: true
-
-    - name: _verify | Scenario 11 — symlink planted and pre-initialized content preserved
-      assert:
-        that:
-          - _sqlite_dataset_prebuilt_lnk.stat.exists
-          - _sqlite_dataset_prebuilt_lnk.stat.islnk
-          - _sqlite_dataset_prebuilt_lnk.stat.lnk_target == '/mnt/services/sqlite/sqlite_dataset_test/prebuilt.db'
-          - _sqlite_dataset_prebuilt_content.content | b64decode == 'PRE-INITIALIZED'
 
   always:
     - name: _verify | Teardown — remove test fixtures

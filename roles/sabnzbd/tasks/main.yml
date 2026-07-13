@@ -72,9 +72,9 @@
 # SQLite resolves through to the 4K sqlite dataset before computing WAL/SHM
 # placement.
 #
-# force: true (no pre_create) plants a dangling link on a cold host: sabnzbd
+# force: true skips target pre-creation and plants a dangling link: sabnzbd
 # creates history1.db *through* it on first start, writing the real DB at the
-# sqlite-dataset target. Do NOT pre_create an empty target: sabnzbd treats a
+# sqlite-dataset target. An empty target is unsafe because sabnzbd treats a
 # 0-byte history1.db as needing reinitialization and rewrites it via
 # temp+rename, replacing the symlink with a real file -- breaking both the 4K
 # placement and idempotence. (roles/kuma uses force: true for the same reason.)

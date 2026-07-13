@@ -12,9 +12,8 @@
 # to the resolved path. Symlink at /config so SQLite resolves through to the
 # 4K-recordsize sqlite dataset before computing WAL placement. The symlink
 # target matches the host path so it resolves identically inside the container
-# (see matching --volume in profilarr.service.j2). pre_create plants an empty
-# file on a cold host so state=link doesn't refuse the dangling symlink before
-# profilarr creates the DB on first boot.
+# (see matching --volume in profilarr.service.j2). The helper plants an empty
+# file before profilarr creates the DB on first boot.
 - name: Pre-create sqlite dataset and symlink profilarr DB onto it
   import_role:
     name: sqlite_dataset
@@ -25,7 +24,6 @@
       owner: profilarr
       group: profilarr
       mode: "0750"
-      pre_create: true
       links:
         - /mnt/services/profilarr/profilarr.db
   when: not ansible_check_mode or profilarr_user.uid is defined

@@ -77,9 +77,8 @@
 # Park db.sqlite on the dedicated 4K-recordsize sqlite dataset and symlink
 # data/db.sqlite onto it (config.yaml points headscale at /var/lib/headscale/
 # db.sqlite, i.e. the symlink; the unit mounts the dataset at the same path so
-# it resolves in-container). pre_create plants an empty src file first --
-# headscale creates its DB on first boot, and state=link refuses to plant a
-# dangling symlink without it.
+# it resolves in-container). The helper plants an empty src file first because
+# headscale creates its DB on first boot.
 - name: Place headscale SQLite DB on the sqlite dataset
   import_role:
     name: sqlite_dataset
@@ -89,7 +88,6 @@
       name: headscale
       owner: headscale
       group: headscale
-      pre_create: true
       links:
         - /mnt/services/headscale/data/db.sqlite
   when: not ansible_check_mode or headscale_user.uid is defined

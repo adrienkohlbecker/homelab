@@ -40,8 +40,8 @@
 # Tautulli's --datadir bundles config.ini, logs, backups, and tautulli.db
 # into one directory. The helper symlinks only the live DB so SQLite resolves
 # to the 4K sqlite dataset; backups stay on the 128K dataset (one-shot full DB
-# files compress and snapshot fine at 128K). force: true (no pre_create) plants
-# the dangling link on a cold host -- Tautulli creates the real DB through it.
+# files compress and snapshot fine at 128K). force: true skips target
+# pre-creation so Tautulli can create the real DB through the dangling link.
 - name: Place tautulli SQLite DB on the sqlite dataset
   import_role:
     name: sqlite_dataset

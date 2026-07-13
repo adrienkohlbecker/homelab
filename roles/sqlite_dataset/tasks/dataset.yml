@@ -13,27 +13,14 @@
 #   links       optional list of dest paths; src derived as
 #               /mnt/services/sqlite/<name>/<basename(dest)>. Parent dir
 #               of each dest is the caller's responsibility.
-#   pre_create  optional bool (default false); when true, create an empty
-#               src file for each link before symlinking. Needed by
-#               consumers whose app creates its SQLite DB on first boot
-#               (jellyfin): without an existing src, state=link refuses to
-#               plant the dangling symlink and the converge dies before the
-#               app ever starts. force=false on the create keeps the
-#               snapshot-restore safety -- a real DB already at the src is
-#               never clobbered -- and the dest-clobber safety (state=link
-#               without force) is unaffected.
 #   force       optional bool (default false); when true, plants the symlink
 #               over a dangling (not-yet-created) target -- for apps that
 #               create the DB themselves on first boot (kuma, sabnzbd,
 #               tautulli). It only relaxes the dangling-target refusal: a
 #               pre-stat guard below still refuses to replace a *real* file
 #               already at a dest, keeping the snapshot-restore safety the
-#               no-force default gives. Mutually exclusive with pre_create.
-#   (no pre_create, no force): caller pre-creates the src file directly
-#               (e.g. via sqlite3 or copy:) before invoking this role.
-#               state=link succeeds because the src already exists. Use this
-#               when the link target is already a real, populated DB that the
-#               role must not clobber into a symlink.
+#               no-force default gives. Without force, the role pre-creates
+#               an empty src file before symlinking.
 #
 # The dict form prevents inter-call leakage: each import_role pass
 # replaces the whole sqlite_dataset_args value at play-vars scope.
@@ -50,16 +37,6 @@
       - sqlite_dataset_args.name is match('^[a-z_][a-z0-9_-]*$')
       - sqlite_dataset_args.owner is defined
       - sqlite_dataset_args.group is defined
-      # pre_create acts only inside the links loop, so it silently no-ops
-      # without links -- reject the incoherent combination loudly.
-      - >-
-        not (sqlite_dataset_args.pre_create | default(false) | bool)
-        or sqlite_dataset_args.links is defined
-      # force re-introduces the dest-clobber on a target pre_create would
-      # have created, so the two contradict -- a caller wants one or the other.
-      - >-
-        not (sqlite_dataset_args.force | default(false) | bool)
-        or not (sqlite_dataset_args.pre_create | default(false) | bool)
       - >-
         sqlite_dataset_args.links is not defined
         or (sqlite_dataset_args.links | map('basename') | select('eq', '') | list | length == 0)
@@ -73,7 +50,7 @@
     fail_msg: >-
       sqlite_dataset_args requires name (a valid identifier matching
       [a-z_][a-z0-9_-]*), owner, group; links basenames must be non-empty
-      and unique; pre_create requires links and excludes force.
+      and unique.
 
 # Resolve caller defaults once so the values are consistent across all tasks
 # and there is no risk of a default() expression drifting between a when: check
@@ -81,7 +58,6 @@
 # import_role call's register cannot bleed into this invocation's assert task.
 - name: Resolve defaults for {{ sqlite_dataset_args.name }}
   set_fact:
-    _sqlite_dataset_pre_create: "{{ sqlite_dataset_args.pre_create | default(false) | bool }}"
     _sqlite_dataset_force: "{{ sqlite_dataset_args.force | default(false) | bool }}"
     _sqlite_dataset_mode: "{{ sqlite_dataset_args.mode | default('0750') }}"
     _sqlite_dataset_file_mode: "{{ sqlite_dataset_args.file_mode | default('0640') }}"
@@ -100,7 +76,7 @@
 # absent, leaves an existing DB untouched (no truncation, no mtime bump).
 - name: Pre-create SQLite DB src files for {{ sqlite_dataset_args.name }}
   when:
-    - _sqlite_dataset_pre_create
+    - not _sqlite_dataset_force
     - sqlite_dataset_args.links is defined
   file:
     path: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ sqlite_dataset_link | basename }}"
