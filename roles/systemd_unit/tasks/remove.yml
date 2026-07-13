@@ -106,30 +106,6 @@
   become: true
   register: systemd_unit_file
 
-- name: remove | Check drop-in directory is empty before removal
-  when:
-    - _systemd_unit_condition
-    - systemd_unit_file.changed
-    - systemd_unit_args.for is defined
-  find:
-    paths: "{{ _systemd_unit_dir }}/{{ systemd_unit_args.for }}.d"
-    file_type: any
-  become: true
-  register: _systemd_unit_dropin_dir_contents
-  failed_when: false
-
-- name: remove | Remove empty drop-in directory
-  when:
-    - _systemd_unit_condition
-    - systemd_unit_file.changed
-    - systemd_unit_args.for is defined
-    - (_systemd_unit_dropin_dir_contents.files | default([])) | length == 0
-    - _systemd_unit_dropin_dir_contents is not failed
-  file:
-    path: "{{ _systemd_unit_dir }}/{{ systemd_unit_args.for }}.d"
-    state: absent
-  become: true
-
 - name: remove | Reload daemon
   when:
     - _systemd_unit_condition
