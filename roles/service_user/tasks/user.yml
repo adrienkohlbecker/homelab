@@ -61,34 +61,35 @@
 
 - name: Resolve caller defaults for {{ service_user_args.name }}
   set_fact:
-    _service_user_name: "{{ service_user_args.name }}"
-    _service_user_extra_groups: "{{ service_user_args.extra_groups | default([]) }}"
-    _service_user_createhome: "{{ service_user_args.createhome | default(false) }}"
-    _service_user_shell: "{{ service_user_args.shell | default('/usr/sbin/nologin') }}"
-    _service_user_home: "{{ service_user_args.home | default('/nonexistent') }}"
-    _service_user_config_dir: "{{ service_user_args.config_dir | default(true) }}"
-    _service_user_config_dir_group: "{{ service_user_args.config_dir_group | default(service_user_args.name) }}"
-    _service_user_config_dir_mode: "{{ service_user_args.config_dir_mode | default('0750') }}"
+    _service_user:
+      name: "{{ service_user_args.name }}"
+      extra_groups: "{{ service_user_args.extra_groups | default([]) }}"
+      createhome: "{{ service_user_args.createhome | default(false) }}"
+      shell: "{{ service_user_args.shell | default('/usr/sbin/nologin') }}"
+      home: "{{ service_user_args.home | default('/nonexistent') }}"
+      config_dir: "{{ service_user_args.config_dir | default(true) }}"
+      config_dir_group: "{{ service_user_args.config_dir_group | default(service_user_args.name) }}"
+      config_dir_mode: "{{ service_user_args.config_dir_mode | default('0750') }}"
 
 - name: "Add group {{ service_user_args.name }}"
   group:
-    name: "{{ _service_user_name }}"
+    name: "{{ _service_user.name }}"
     system: true
   become: true
 
 - name: "Add user {{ service_user_args.name }}"
   user:
-    name: "{{ _service_user_name }}"
-    group: "{{ _service_user_name }}"
-    groups: "{{ _service_user_extra_groups }}"
+    name: "{{ _service_user.name }}"
+    group: "{{ _service_user.name }}"
+    groups: "{{ _service_user.extra_groups }}"
     append: true
-    createhome: "{{ _service_user_createhome }}"
+    createhome: "{{ _service_user.createhome }}"
     system: true
     # nologin + system already lock the account; pin the password field to
     # '!' so the locked state is explicit and survives a future relaxation.
     password: "!"
-    shell: "{{ _service_user_shell }}"
-    home: "{{ _service_user_home }}"
+    shell: "{{ _service_user.shell }}"
+    home: "{{ _service_user.home }}"
   become: true
   register: service_user_result
 
@@ -101,7 +102,7 @@
 # Same filter as systemd_unit's per-unit fact.
 - name: Record user record for {{ service_user_args.name }}
   set_fact:
-    "{{ _service_user_name | ansible_var_key }}_user": >-
+    "{{ _service_user.name | ansible_var_key }}_user": >-
       {{
         service_user_result
         | dict2items
@@ -115,12 +116,12 @@
 # an empty dir.
 - name: Create configuration directory for {{ service_user_args.name }}
   when:
-    - _service_user_config_dir
+    - _service_user.config_dir
     - not (ansible_check_mode and service_user_result.changed)
   file:
-    dest: /mnt/services/{{ _service_user_name }}
+    dest: /mnt/services/{{ _service_user.name }}
     state: directory
-    owner: "{{ _service_user_name }}"
-    group: "{{ _service_user_config_dir_group }}"
-    mode: "{{ _service_user_config_dir_mode }}"
+    owner: "{{ _service_user.name }}"
+    group: "{{ _service_user.config_dir_group }}"
+    mode: "{{ _service_user.config_dir_mode }}"
   become: true
