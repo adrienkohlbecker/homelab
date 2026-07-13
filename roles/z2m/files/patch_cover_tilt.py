@@ -19,6 +19,7 @@ from tempfile import NamedTemporaryFile
 
 import yaml
 
+
 def patch(devices: dict) -> bool:
     changed = False
     for dev in devices.values():
@@ -61,6 +62,7 @@ def main() -> int:
     ) as tmp:
         yaml.safe_dump(devices, tmp, default_flow_style=False, sort_keys=False, allow_unicode=True)
         tmp.flush()
+        os.fchown(tmp.fileno(), st.st_uid, st.st_gid)
         os.fchmod(tmp.fileno(), st.st_mode & 0o777)
         tmp_path = Path(tmp.name)
     tmp_path.replace(path)

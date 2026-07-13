@@ -74,7 +74,6 @@
   register: z2m_cover_patch
   changed_when: "'CHANGED' in z2m_cover_patch.stdout"
   become: true
-  become_user: z2m
   tags:
     - z2m
 
