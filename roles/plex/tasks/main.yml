@@ -45,22 +45,20 @@
 # the dated backups (com.plexapp.plugins.library.{db,blobs.db}-YYYY-MM-DD)
 # lose ~30% compression at 4K, but they're full-file rewrites so their
 # snapshot footprint doesn't depend on recordsize — net win. Plex binds the
-# directory directly (no per-DB symlinks), so no links: are passed.
-- name: Pre-create the plex sqlite dataset directory
-  import_role:
-    name: sqlite_dataset
-    tasks_from: dataset
-  vars:
-    sqlite_dataset_args:
-      name: plex
-      # The library DB here holds the same server/account tokens as
-      # Preferences.xml under /config, so it gets the same owner-only 0700
-      # (group plex, not media): nothing in the media group reads Plex's DB,
-      # and 0750 group=media would let the co-tenants the /config 0700 locks
-      # out (transmission, the arr stack) traverse here and lift a token.
-      owner: plex
-      group: plex
-      mode: "0700"
+# directory directly rather than using the per-DB symlink helper.
+- name: Create the Plex sqlite dataset directory
+  file:
+    path: /mnt/services/sqlite/plex
+    state: directory
+    # The library DB here holds the same server/account tokens as
+    # Preferences.xml under /config, so it gets the same owner-only 0700
+    # (group plex, not media): nothing in the media group reads Plex's DB,
+    # and 0750 group=media would let the co-tenants the /config 0700 locks
+    # out (transmission, the arr stack) traverse here and lift a token.
+    owner: plex
+    group: plex
+    mode: "0700"
+  become: true
   when: not ansible_check_mode or plex_user.uid is defined
   tags:
     - plex

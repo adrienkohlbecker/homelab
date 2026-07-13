@@ -2,8 +2,7 @@
 #
 # Caller passes one dict `sqlite_dataset_args`:
 #   name, owner, group  required directory and ownership
-#   mode                directory mode; default "0750"
-#   links               optional dest paths; parent dirs must already exist
+#   links               required dest paths; parent dirs must already exist
 #   force               optional bool; create dangling links instead of empty
 #                       0640 targets
 #
@@ -22,20 +21,20 @@
       - sqlite_dataset_args.name is match('^[a-z_][a-z0-9_-]*$')
       - sqlite_dataset_args.owner is defined
       - sqlite_dataset_args.group is defined
+      - sqlite_dataset_args.links is defined
+      - sqlite_dataset_args.links | default([]) | length > 0
       - >-
-        sqlite_dataset_args.links is not defined
-        or (sqlite_dataset_args.links | map('basename') | select('eq', '') | list | length == 0)
+        sqlite_dataset_args.links | default([]) | map('basename') | select('eq', '') | list | length == 0
       # case_sensitive: basenames become files on a case-sensitive fs, so
       # Foo.db and foo.db are distinct; the default case-insensitive unique
       # would wrongly reject them as a collision.
       - >-
-        sqlite_dataset_args.links is not defined
-        or (sqlite_dataset_args.links | map('basename') | list | unique(case_sensitive=true) | length
-            == sqlite_dataset_args.links | length)
+        sqlite_dataset_args.links | default([]) | map('basename') | list | unique(case_sensitive=true) | length
+        == sqlite_dataset_args.links | default([]) | length
     fail_msg: >-
       sqlite_dataset_args requires name (a valid identifier matching
-      [a-z_][a-z0-9_-]*), owner, group; links basenames must be non-empty
-      and unique.
+      [a-z_][a-z0-9_-]*), owner, group, and at least one link; links basenames
+      must be non-empty and unique.
 
 - name: Pre-create /mnt/services/sqlite/{{ sqlite_dataset_args.name }}
   file:
@@ -43,7 +42,7 @@
     state: directory
     owner: "{{ sqlite_dataset_args.owner }}"
     group: "{{ sqlite_dataset_args.group }}"
-    mode: "{{ sqlite_dataset_args.mode | default('0750') }}"
+    mode: "0750"
   become: true
 
 # state=touch with preserve timestamps is idempotent: creates the file if
@@ -51,7 +50,6 @@
 - name: Pre-create SQLite DB src files for {{ sqlite_dataset_args.name }}
   when:
     - not (sqlite_dataset_args.force | default(false) | bool)
-    - sqlite_dataset_args.links is defined
   file:
     path: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ sqlite_dataset_link | basename }}"
     state: touch
@@ -71,7 +69,6 @@
 - name: Refuse real files at force destinations for {{ sqlite_dataset_args.name }}
   when:
     - sqlite_dataset_args.force | default(false) | bool
-    - sqlite_dataset_args.links is defined
   stat:
     path: "{{ sqlite_dataset_link }}"
     follow: false
@@ -86,8 +83,6 @@
     loop_var: sqlite_dataset_link
 
 - name: Symlink DBs onto sqlite dataset for {{ sqlite_dataset_args.name }}
-  when:
-    - sqlite_dataset_args.links is defined
   file:
     src: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ sqlite_dataset_link | basename }}"
     dest: "{{ sqlite_dataset_link }}"
