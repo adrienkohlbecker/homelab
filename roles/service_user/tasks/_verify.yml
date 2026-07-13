@@ -54,11 +54,8 @@
           - _service_user_dir.stat.gr_name == 'service_user_test'
           - _service_user_dir.stat.mode == '0750'
 
-    # Second scenario: a hyphenated name (the only path that exercises the
-    # regex_replace fact-key sanitization, foo-bar -> foo_bar_user), plus
-    # extra_groups / config_dir_group / config_dir_mode overrides and an
-    # assertion that the exposed .group is a numeric gid (callers feed it into
-    # podman --user / --uidmap as an integer).
+    # Second scenario exercises every override plus hyphenated fact-key
+    # sanitization (foo-bar -> foo_bar_user).
     - name: _verify | Create a pre-existing group for the override test
       group:
         name: service_user_test_grp
@@ -73,6 +70,9 @@
         service_user_args:
           name: service-user-test-hyphen
           extra_groups: [ service_user_test_grp ]
+          home: /tmp/service-user-test-hyphen
+          createhome: true
+          shell: /bin/bash
           config_dir_group: service_user_test_grp
           config_dir_mode: "0700"
 
@@ -90,6 +90,18 @@
       changed_when: false
       become: true
 
+    - name: _verify | Override user passwd record
+      command: getent passwd service-user-test-hyphen
+      register: _service_user_hyphen_passwd
+      changed_when: false
+      become: true
+
+    - name: _verify | Override home directory
+      stat:
+        path: /tmp/service-user-test-hyphen
+      register: _service_user_hyphen_home
+      become: true
+
     - name: _verify | Config dir honors config_dir_group + config_dir_mode
       stat:
         path: /mnt/services/service-user-test-hyphen
@@ -103,32 +115,15 @@
           # proves the user task appends rather than replaces membership.
           - "'service-user-test-hyphen' in _service_user_hyphen_groups.stdout.split()"
           - "'service_user_test_grp' in _service_user_hyphen_groups.stdout.split()"
+          - _service_user_hyphen_passwd.stdout.split(':')[5] == '/tmp/service-user-test-hyphen'
+          - _service_user_hyphen_passwd.stdout.split(':')[6] == '/bin/bash'
+          - _service_user_hyphen_home.stat.exists
+          - _service_user_hyphen_home.stat.isdir
+          - _service_user_hyphen_home.stat.pw_name == 'service-user-test-hyphen'
+          - _service_user_hyphen_home.stat.gr_name == 'service-user-test-hyphen'
           - _service_user_hyphen_dir.stat.exists
           - _service_user_hyphen_dir.stat.gr_name == 'service_user_test_grp'
           - _service_user_hyphen_dir.stat.mode == '0700'
-
-    # Third scenario: a non-default shell (gitea passes /bin/bash). Confirms
-    # the shell arg reaches the passwd record instead of the nologin default.
-    - name: _verify | Provision a test user with a non-default shell
-      import_role:
-        name: service_user
-        tasks_from: user
-      vars:
-        service_user_args:
-          name: service_user_test_shell
-          shell: /bin/bash
-          config_dir: false
-
-    - name: _verify | Shell user passwd record
-      command: getent passwd service_user_test_shell
-      register: _service_user_shell_passwd
-      changed_when: false
-      become: true
-
-    - name: _verify | Shell field reflects the override
-      assert:
-        that:
-          - _service_user_shell_passwd.stdout.split(':')[6] == '/bin/bash'
 
   always:
     - name: _verify | Tear down test users
@@ -141,7 +136,6 @@
       loop:
         - service_user_test
         - service-user-test-hyphen
-        - service_user_test_shell
 
     - name: _verify | Tear down test groups
       group:
@@ -151,7 +145,6 @@
       loop:
         - service_user_test
         - service-user-test-hyphen
-        - service_user_test_shell
         - service_user_test_grp
 
     - name: _verify | Tear down test config + home dirs
@@ -161,4 +154,5 @@
       become: true
       loop:
         - /mnt/services/service_user_test
+        - /tmp/service-user-test-hyphen
         - /mnt/services/service-user-test-hyphen
