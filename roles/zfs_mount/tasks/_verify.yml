@@ -12,23 +12,17 @@
   changed_when: false
   become: true
 
-- name: _verify | Check mount fails on a mountpoint-property mismatch
-  command: /usr/local/bin/zfs_check_mount rpool/ROOT/{{ ansible_distribution_release }} /nonexistent
+- name: _verify | Check invalid mount states fail
+  command:
+    argv: "{{ ['/usr/local/bin/zfs_check_mount'] + zfs_mount_verify_case.args }}"
   register: _zfs_mount_verify_negative
   changed_when: false
   failed_when: _zfs_mount_verify_negative.rc == 0
-  become: true
-
-- name: _verify | Check mount fails on a canmount mismatch
-  command: /usr/local/bin/zfs_check_mount rpool/ROOT/{{ ansible_distribution_release }} / on
-  register: _zfs_mount_verify_canmount
-  changed_when: false
-  failed_when: _zfs_mount_verify_canmount.rc == 0
-  become: true
-
-- name: _verify | Check mount fails for a nonexistent dataset
-  command: /usr/local/bin/zfs_check_mount rpool/nonexistent_dataset / noauto
-  register: _zfs_mount_verify_missing
-  changed_when: false
-  failed_when: _zfs_mount_verify_missing.rc == 0
+  loop:
+    - { label: mountpoint mismatch, args: ["rpool/ROOT/{{ ansible_distribution_release }}", /nonexistent, noauto] }
+    - { label: canmount mismatch, args: ["rpool/ROOT/{{ ansible_distribution_release }}", /, "on"] }
+    - { label: missing dataset, args: [rpool/nonexistent_dataset, /, noauto] }
+  loop_control:
+    loop_var: zfs_mount_verify_case
+    label: "{{ zfs_mount_verify_case.label }}"
   become: true
