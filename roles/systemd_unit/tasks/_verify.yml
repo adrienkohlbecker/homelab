@@ -419,8 +419,9 @@
       reload: true
 
 # Sad path: a unit with no ExecReload= must raise the actionable message.
-# Reuse the copy-dispatch fixture: it is oneshot+RemainAfterExit and has no
-# ExecReload. Start it, request reload, and assert the CanReload message.
+# Use the copy-dispatch fixture file for a fresh unit: it is
+# oneshot+RemainAfterExit and has no ExecReload. Start it, request reload,
+# and assert the CanReload message.
 - name: _verify | Install non-reloadable fixture for the CanReload=no test
   import_role:
     name: systemd_unit
