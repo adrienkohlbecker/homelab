@@ -281,13 +281,6 @@
       proxy_pass: http://127.0.0.1:18080/
       auth: required
 
-- name: _verify | No upstream-auth conf.d map is ever written
-  stat:
-    path: /etc/nginx/conf.d/upstream_auth_nginxverifyempty.conf
-  register: nginx_verify_empty_map
-  become: true
-  failed_when: nginx_verify_empty_map.stat.exists
-
 - name: _verify | Settle the nginxverifyempty vhost
   import_tasks: _verify_wait_route.yml
   vars:

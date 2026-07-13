@@ -2,9 +2,8 @@
 #   subdomain                 required; serves at <subdomain>.<host>.<domain>
 #   state                     optional, default 'present'. Set to 'absent' to
 #                             remove a retired site: deletes the symlink under
-#                             sites-enabled/, the config under sites-available/
-#                             and any upstream-auth map under conf.d/, then
-#                             reloads. Keep the call in main.yml as a tombstone
+#                             sites-enabled/ and the config under sites-available/,
+#                             then reloads. Keep the call in main.yml as a tombstone
 #                             so retired sites stay decommissioned on fresh
 #                             installs.
 #   proxy_pass                optional; URL to reverse-proxy to (location /)
@@ -281,16 +280,6 @@
   tags:
     - nginx_site
   block:
-    # Prune any leftover per-user upstream-Authorization map: the SSO
-    # token-injection feature was removed, and its conf.d map embedded a token
-    # in plaintext, so ensure no stale file lingers for any site. Registered so
-    # an actual removal still drives the validate + reload below.
-    - name: site | Prune retired upstream Authorization map
-      file:
-        path: /etc/nginx/conf.d/upstream_auth_{{ nginx_site_args.subdomain }}.conf
-        state: absent
-      register: nginx_upstream_auth_map
-
     - name: site | Configure nginx site  # noqa: require-validate
       template:
         src: site.conf.j2
@@ -314,13 +303,13 @@
     - name: site | Validate nginx config in place
       when:
         - not ansible_check_mode
-        - nginx_static_conf.changed or nginx_static_conf_enable.changed or (nginx_upstream_auth_map.changed | default(false))
+        - nginx_static_conf.changed or nginx_static_conf_enable.changed
       command: nginx -t
       changed_when: false
 
     - name: site | Reload nginx config
       when:
-        - nginx_static_conf.changed or nginx_static_conf_enable.changed or (nginx_upstream_auth_map.changed | default(false))
+        - nginx_static_conf.changed or nginx_static_conf_enable.changed
         - not ansible_check_mode
       systemd:
         name: nginx
@@ -334,8 +323,7 @@
   rescue:
     # place_rollback restores the vhost's previous version from its .backup (or
     # removes a freshly-added file + symlink); the explicit fail below raises
-    # after it. The map prune above makes no backup and needs no rollback --
-    # removing an unreferenced orphan can't be what failed `nginx -t`.
+    # after it.
     - name: site | Roll back the failed site write
       import_tasks: place_rollback.yml
       vars:
@@ -359,7 +347,6 @@
   loop:
     - /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
     - /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
-    - /etc/nginx/conf.d/upstream_auth_{{ nginx_site_args.subdomain }}.conf
   become: true
   register: nginx_static_conf_absent
   tags:
