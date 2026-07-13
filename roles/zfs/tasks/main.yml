@@ -150,41 +150,19 @@
   tags:
     - zfs
 
-- name: Copy the cull script
+- name: Copy ZFS scripts
   copy:
-    src: zfs_cull.sh
-    dest: /usr/local/bin/zfs_cull
+    src: "{{ item }}.sh"
+    dest: "/usr/local/bin/{{ item }}"
     mode: "0755"
     owner: root
     group: root
     backup: true
     validate: bash -n %s
-  become: true
-  tags:
-    - zfs
-
-- name: Copy the health script
-  copy:
-    src: zfs_health.sh
-    dest: /usr/local/bin/zfs_health
-    mode: "0755"
-    owner: root
-    group: root
-    backup: true
-    validate: bash -n %s
-  become: true
-  tags:
-    - zfs
-
-- name: Copy the scrub script
-  copy:
-    src: zfs_scrub.sh
-    dest: /usr/local/bin/zfs_scrub
-    mode: "0755"
-    owner: root
-    group: root
-    backup: true
-    validate: bash -n %s
+  loop:
+    - zfs_cull
+    - zfs_health
+    - zfs_scrub
   become: true
   tags:
     - zfs
