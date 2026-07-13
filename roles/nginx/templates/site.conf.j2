@@ -1,6 +1,5 @@
-{# HTTP/2: `http2 on;` (set in nginx.conf.j2's http{}) on nginx >= 1.25.1, the
-   legacy `listen ... http2` parameter on jammy/1.18 and noble/1.24. Mirrors
-   the blacklist gate there so both move together. #}
+{# Jammy and Noble need the legacy listen parameter; newer nginx uses the
+   http-scope `http2 on` in nginx.conf.j2. #}
 {% set _http2_listen = ' http2' if ansible_distribution_release in ['jammy', 'noble'] else '' %}
 server {
   listen              443 ssl{{ _http2_listen }};
@@ -8,11 +7,7 @@ server {
   listen              [::]:443 ssl{{ _http2_listen }};
 {% endif %}
 {% if _nginx_site_enable_http %}
-  # Cleartext :80 in this same server block (no http->https redirect). The
-  # security headers below are emitted here too: HSTS over :80 is a no-op
-  # browsers ignore per RFC 6797, the rest are harmless. Only for upstreams
-  # that need plaintext -- asserted incompatible with auth, whose forward-auth
-  # flow would otherwise travel unencrypted.
+  # Cleartext upstreams only; auth is rejected because its flow would be exposed.
   listen              80;
 {% if nginx_ipv6 %}
   listen              [::]:80;
@@ -21,13 +16,8 @@ server {
 
   server_name         {{ nginx_site_args.subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_site_args.subdomain }}.{{ domain}};
 
-  # Security headers. Captured once into `security_headers` and emitted both
-  # here at server scope (covering the Authelia 401->302 redirect and error
-  # responses, all via the `always` flag) and
-  # re-emitted inside `location /` when a location_conf is present: nginx
-  # inherits add_header only into levels that define none of their own, so a
-  # location_conf adding e.g. Access-Control-Allow-Origin would otherwise
-  # strip every security header from the proxied path.
+  # A location with its own add_header inherits none from the server, so reuse
+  # this block inside location / when location_conf is present.
 {% set security_headers %}
   add_header X-XSS-Protection          "1; mode=block" always;
   add_header X-Content-Type-Options    "nosniff" always;
@@ -35,47 +25,29 @@ server {
 {% if not (nginx_site_args.csp_passthrough | default(false)) %}
   add_header Content-Security-Policy   "{% if nginx_site_args.csp_additional is defined %}{{ nginx_site_args.csp_additional }}; {% endif %}default-src {% if nginx_site_args.csp_default_src is defined %}{{ nginx_site_args.csp_default_src }} {% endif %}{{ nginx_csp_default }}; frame-ancestors {% if nginx_site_args.csp_frame_ancestors is defined %}{{ nginx_site_args.csp_frame_ancestors }}{% else %}'self'{% endif %};" always;
 {% endif %}
-{# interest-cohort (FLoC) was abandoned in 2022 and no browser still parses it;
-   browsing-topics opts out of its live Topics-API successor instead. #}
+{# Opt out of the Topics API. #}
   add_header Permissions-Policy        "browsing-topics=()" always;
-{# max-age 63072000 (2y) per the TLSRef v6.0 / Mozilla Intermediate profile,
-   matching the cipher block in nginx.conf.j2; no preload (deliberate). #}
+{# TLSRef/Mozilla Intermediate: two years, deliberately without preload. #}
   add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
 {% endset %}
 {{ security_headers }}
 
 {% set _auth_enabled = _nginx_site_auth == 'required' %}
 {% if _auth_enabled %}
-  # Authelia forward-auth: every browser hit to this site is subrequested
-  # against Authelia's /api/authz/auth-request endpoint. 200 -> allow; 401
-  # -> error_page routes to @authelia_unauth below (navigations redirect to the
-  # portal with returnUrl; XHR/fetch get a bare 401). The
-  # /internal/authelia location is marked `internal` so external requests
-  # can't bypass the auth by hitting it directly. Authelia upstream URL
-  # is host-parameterized so non-lab hosts (pug, bunk) can point at lab's
-  # Authelia over wireguard when they need forward-auth. (The location name is
-  # a local convention predating upstream's /internal/authelia/authz; it's
-  # internal-only, so the exact path is immaterial -- don't "fix" it.)
+  # Internal auth subrequest: 200 allows the request; 401 reaches the handler
+  # below. The URL is host-configurable for remote Authelia access.
   location /internal/authelia {
     internal;
     proxy_pass {{ authelia_internal_url }};
-    # HTTP/1.1 to the auth endpoint (matches `location /`): the default 1.0
-    # disables chunked transfer and keepalive on the subrequest fired for every
-    # authenticated request.
+    # Keep the per-request auth connection reusable.
     proxy_http_version 1.1;
-    # Bound the auth subrequest so a transient gap on the path to Authelia
-    # (notably fox reaching lab's Authelia over wg0) fails fast instead of
-    # stalling on nginx's 60s default -- a sub-second blip otherwise becomes a
-    # 60s hang and then a 500. Authelia normally answers in ~100ms, so a few
-    # seconds is ample headroom.
+    # Fail fast when remote Authelia is unreachable instead of using nginx's
+    # 60-second defaults.
     proxy_connect_timeout 3s;
     proxy_send_timeout    5s;
     proxy_read_timeout    5s;
-    # Buffer sizing from Authelia's canonical authelia-location.conf: its 401
-    # response carries the portal-redirect Location plus the Remote-* identity
-    # headers, which can overflow nginx's default 4k/8k header buffer on a
-    # subrequest and surface as an intermittent "upstream sent too big header"
-    # 502 on the auth leg.
+    # Authelia's redirect and identity headers can exceed nginx's default
+    # subrequest buffers.
     proxy_buffer_size       32k;
     proxy_buffers           4 32k;
     client_body_buffer_size 128k;
@@ -87,18 +59,11 @@ server {
     # leg below so callers cannot accidentally disclose the service password.
     proxy_set_header Authorization           $http_authorization;
 {% else %}
-    # Strip the client's Authorization header off the auth subrequest so
-    # Authelia decides on the session cookie alone. The header belongs to the
-    # UPSTREAM (an app token the SPA replays) -- not to Authelia's auth decision.
-    # Forwarded, a non-Basic scheme (InfluxDB's `Authorization: Token <t>`) makes
-    # Authelia fail to parse it and 401 even for a request carrying a valid
-    # session cookie, which error_page then turns into a portal redirect loop.
-    # Cleared only on the leg to Authelia; `location /` still forwards the
-    # client's own header upstream.
+    # App tokens belong to the upstream. Sending them to Authelia can turn a
+    # valid session into a redirect loop; location / still forwards them.
     proxy_set_header Authorization           "";
 {% endif %}
-    # Clear any client-supplied Connection header off the internal subrequest
-    # (matches Authelia's canonical snippet).
+    # Do not relay a client-supplied hop-by-hop header.
     proxy_set_header Connection              "";
     proxy_set_header X-Original-Method       $request_method;
     proxy_set_header X-Original-URL          $scheme://$host$request_uri_safe;
@@ -117,17 +82,10 @@ server {
     # access-log schema. Authelia sends Remote-User on every authenticated 200.
     auth_request_set $authelia_user   $upstream_http_remote_user;
     auth_request_set $authelia_groups $upstream_http_remote_groups;
-    # Authelia returns 401 with the portal-redirect target (returnUrl + method
-    # already baked in) in its `Location` response header; capture it so
-    # @authelia_unauth can rewrite the auth_request 401 into a 302 there. This is
-    # Authelia's modern integration -- nginx no longer hardcodes the portal host,
-    # so an Authelia cookie-domain / multi-domain change needs no edit here.
+    # Preserve Authelia's portal target for navigation redirects.
     auth_request_set $redirection_url $upstream_http_location;
-    # Route the auth_request's own 401 to @authelia_unauth (below), which
-    # redirects browser navigations to the portal but returns a bare 401 to
-    # XHR/fetch -- an SPA can't follow a cross-origin portal redirect and would
-    # loop. An UPSTREAM 401 is unaffected: proxy_intercept_errors stays at its
-    # default `off`, so it passes straight to the client and never hits error_page.
+    # Only auth_request 401s reach this handler; upstream 401s pass through
+    # because proxy_intercept_errors remains off.
     error_page 401 = @authelia_unauth;
 {% endif %}
 {% if nginx_site_args.proxy_pass is defined %}
@@ -135,20 +93,13 @@ server {
 
     proxy_http_version 1.1;
 
-    # Proxy SSL. proxy_ssl_server_name forwards SNI to the upstream; the
-    # upstream cert is deliberately NOT verified (no proxy_ssl_verify) -- the
-    # HTTPS upstreams are LAN devices (UDM, Eaton, marantz) carrying self-signed
-    # certs, reached over the trusted home LAN. An on-path attacker on that VLAN
-    # could MITM the leg; that's out of scope for the home threat model.
+    # Send SNI but accept the self-signed certificates used by LAN devices.
     proxy_ssl_server_name on;
 
-    # Detect a silently-dropped upstream (a power-cycled LAN device — Eaton,
-    # marantz) via TCP keepalives, rather than hanging on a half-open socket
-    # until proxy_read_timeout.
+    # Detect silently dropped LAN-device connections before the read timeout.
     proxy_socket_keepalive on;
 
-    # Canonical forwarded headers -- one source, shared with any
-    # server_conf/location_conf location via the same include.
+    # Shared canonical forwarded headers.
     include /etc/nginx/snippets/proxy_params.conf;
 {% if _auth_enabled %}
     # The *arr suite reads this when AuthenticationMethod=External.
@@ -160,7 +111,6 @@ server {
     proxy_set_header Authorization      "";
 {% endif %}
 
-    # Proxy timeouts
     proxy_connect_timeout 60s;
     proxy_send_timeout    {{ nginx_site_args.proxy_send_timeout | default('60s') }};
     proxy_read_timeout    {{ nginx_site_args.proxy_read_timeout | default('60s') }};
@@ -178,9 +128,7 @@ server {
 {% endif %}
 {% endif %}
 {% if nginx_site_args.location_conf is defined %}
-    # Re-establish the server-scope security headers at this location level:
-    # the location_conf below may add its own add_header, which would
-    # otherwise drop them all here (see the security_headers note above).
+    # location_conf may add a header and suppress server-scope inheritance.
 {{ security_headers }}
 
     {{ nginx_site_args.location_conf | trim | indent(4) }}
@@ -188,16 +136,9 @@ server {
   }
 {% if _auth_enabled %}
 
-  # Unauthenticated forward-auth handler. error_page in `location /` routes the
-  # auth_request's own 401 here. Redirect to the Authelia portal only for
-  # top-level navigations; return a bare 401 for XHR/fetch
-  # (Sec-Fetch-Mode cors/same-origin/no-cors), which cannot follow a cross-origin
-  # HTML portal and would otherwise loop an SPA polling an authed endpoint
-  # without a session (the InfluxDB-UI redirect loop). $authelia_unauth_redirect
-  # is computed from Sec-Fetch-Mode in nginx.conf.j2 (maps live at http scope);
-  # $redirection_url is the captured portal target. `if` with only `return` is
-  # the documented-safe use; the server-scope security headers (always) still
-  # apply to both responses since this location declares no add_header.
+  # Redirect navigations to Authelia, but return 401 to XHR/fetch to avoid SPA
+  # redirect loops. nginx.conf.j2 derives the choice from Sec-Fetch-Mode; this
+  # return-only if is safe and both responses inherit the security headers.
   location @authelia_unauth {
     if ($authelia_unauth_redirect) {
       return 302 $redirection_url;
