@@ -1,0 +1,4 @@
+# @synopsis: load_older_journal
+# @description: Load the next older Fluent Bit JSONL rotation
+;REPLACE INTO environ (name, value) SELECT 'LNAV_JOURNAL_NEXT', COALESCE((SELECT st_parent || st_name FROM fstat('/var/log/fluent-bit/lnav.jsonl*') WHERE error IS NULL AND st_name REGEXP '^lnav[.]jsonl[.][0-9]+([.]gz)?$' AND (st_parent || st_name) NOT IN (SELECT filepath FROM lnav_file) ORDER BY CAST(substr(st_name, length('lnav.jsonl.') + 1) AS INTEGER) LIMIT 1), '/var/log/fluent-bit/lnav.jsonl')
+:eval :open ${LNAV_JOURNAL_NEXT}

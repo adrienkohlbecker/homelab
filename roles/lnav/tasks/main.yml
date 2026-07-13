@@ -84,6 +84,30 @@
   tags:
     - lnav
 
+- name: Create lnav configuration directory
+  file:
+    path: /etc/lnav/configs/homelab
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - lnav
+
+- name: Deploy lnav configuration
+  copy:
+    src: configs/homelab.json
+    dest: /etc/lnav/configs/homelab/config.json
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: python3 -m json.tool %s
+  become: true
+  tags:
+    - lnav
+
 - name: Deploy lnav format files
   copy:
     src: "formats/{{ item }}"
@@ -94,6 +118,18 @@
     backup: true
     validate: python3 -m json.tool %s
   loop: "{{ lnav_format_files }}"
+  become: true
+  tags:
+    - lnav
+
+- name: Deploy lnav scripts  # noqa: require-validate
+  copy:
+    src: formats/load_older_journal.lnav
+    dest: /etc/lnav/formats/homelab/load_older_journal.lnav
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
   become: true
   tags:
     - lnav

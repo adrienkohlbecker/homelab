@@ -1,0 +1,15 @@
+{
+    "$schema": "https://lnav.org/schemas/config-v1.schema.json",
+    "ui": {
+        "theme": "dracula",
+        "keymap-defs": {
+            "default": {
+                "f9": {
+                    "id": "load-older-journal",
+                    "command": "|load_older_journal",
+                    "alt-msg": "Load the next older JSONL rotation"
+                }
+            }
+        }
+    }
+}

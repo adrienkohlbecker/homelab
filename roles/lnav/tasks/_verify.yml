@@ -119,6 +119,38 @@
   tags:
     - lnav
 
+- name: Read effective lnav configuration
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  command:
+    argv:
+      - /usr/local/bin/lnav
+      - -m
+      - config
+      - get
+  register: lnav_effective_config
+  changed_when: false
+  tags:
+    - lnav
+
+- name: Select the configured F9 action
+  set_fact:
+    lnav_f9_command: >-
+      {{ (lnav_effective_config.stdout | from_json).ui['keymap-defs']['default'].f9.command }}
+  tags:
+    - lnav
+
+- name: Assert lnav selects its bundled Dracula theme
+  vars:
+    effective_config: "{{ lnav_effective_config.stdout | from_json }}"
+  assert:
+    that:
+      - effective_config.ui.theme == 'dracula'
+      - "'dracula' in effective_config.ui['theme-defs']"
+    fail_msg: "lnav did not select its bundled Dracula theme"
+  tags:
+    - lnav
+
 # Headless render: the fluentbit_lnav format must show each record on a single
 # message-only line -- unit/identifier/stream and the fields object are hidden,
 # not expanded onto their own rows nor appended as JSON.
@@ -243,8 +275,101 @@
     dest: /var/log/fluent-bit/lnav.jsonl.1
     content: |
       {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_rotated","unit":"lnav_rotated.service","identifier":"lnav_rotated","level":"info","message":"lnav wrapper rotated history","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_rotated.service"}}
+      {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"info","message":"lnav wrapper filtered history","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
     mode: "0644"
   become: true
+  tags:
+    - lnav
+
+- name: Write second lnav-journal rotated verification store
+  copy:
+    dest: /var/log/fluent-bit/lnav.jsonl.2
+    content: |
+      {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_older","unit":"lnav_older.service","identifier":"lnav_older","level":"info","message":"lnav wrapper older history","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_older.service"}}
+    mode: "0644"
+  become: true
+  tags:
+    - lnav
+
+- name: Lnav history script loads one rotation at a time
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  command:
+    argv:
+      - timeout
+      - -k
+      - 5s
+      - 20s
+      - /usr/local/bin/lnav
+      - -n
+      - -N
+      - -c
+      - "{{ lnav_f9_command }}"
+      - -c
+      - ':goto 0'
+      - /var/log/fluent-bit/lnav.jsonl
+  register: lnav_history_once
+  changed_when: false
+  failed_when: >-
+    lnav_history_once.rc != 0 or
+    'lnav wrapper rotated history' not in lnav_history_once.stdout or
+    'lnav wrapper older history' in lnav_history_once.stdout
+  tags:
+    - lnav
+
+- name: Lnav history script loads another rotation when repeated
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  command:
+    argv:
+      - timeout
+      - -k
+      - 5s
+      - 20s
+      - /usr/local/bin/lnav
+      - -n
+      - -N
+      - -c
+      - "{{ lnav_f9_command }}"
+      - -c
+      - "{{ lnav_f9_command }}"
+      - -c
+      - "{{ lnav_f9_command }}"
+      - -c
+      - ':goto 0'
+      - /var/log/fluent-bit/lnav.jsonl
+  register: lnav_history_repeated
+  changed_when: false
+  failed_when: >-
+    lnav_history_repeated.rc != 0 or
+    'lnav wrapper rotated history' not in lnav_history_repeated.stdout or
+    'lnav wrapper older history' not in lnav_history_repeated.stdout
+  tags:
+    - lnav
+
+- name: Lnav history script preserves the wrapper unit filter
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  command:
+    argv:
+      - timeout
+      - -k
+      - 5s
+      - 20s
+      - /usr/local/bin/lnav-journal
+      - -n
+      - -u
+      - lnav_verify
+      - -c
+      - "{{ lnav_f9_command }}"
+      - -c
+      - ':goto 0'
+  register: lnav_history_unit
+  changed_when: false
+  failed_when: >-
+    lnav_history_unit.rc != 0 or
+    'lnav wrapper filtered history' not in lnav_history_unit.stdout or
+    'lnav wrapper rotated history' in lnav_history_unit.stdout
   tags:
     - lnav
 
