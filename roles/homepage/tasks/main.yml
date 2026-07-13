@@ -245,9 +245,7 @@
     - homepage
 
 # Install both homepage_alerts.service (Type=oneshot) and homepage_alerts.timer
-# via the systemd_timer helper. monitor: false because one-minute cadences
-# don't map to netdata's overdue-detector hourly/daily/weekly/monthly buckets;
-# systemd_service_unit_failed_state catches a wedged timer independently.
+# via the systemd_timer helper, including cadence-overdue monitoring.
 - name: Install and enable homepage_alerts timer
   import_role:
     name: systemd_timer
@@ -275,7 +273,6 @@
       on_active_sec: "0"
       exec_start: /usr/bin/python3 /opt/homepage_alerts/alerts_generate.py
       run_as: homepage
-      monitor: false
       # Bound a wedged run well within the 60s cadence. Each fire fans out to
       # N netdata hosts in parallel with FETCH_TIMEOUT=5s, so 25s is plenty
       # even when the transition response is large.

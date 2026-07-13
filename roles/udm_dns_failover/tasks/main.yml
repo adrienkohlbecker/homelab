@@ -13,7 +13,7 @@
 # The heartbeat timer is hand-rolled rather than via the systemd_timer
 # helper for two reasons specific to this host: its units must live on
 # persistent /data and be symlinked into /etc (to survive a firmware wipe),
-# which the helper doesn't do; and the helper's netdata `monitor:` cadence
+# which the helper doesn't do; and the helper's netdata cadence
 # alerting has nothing to attach to (no netdata on the UDM). The
 # Kuma push heartbeat below is this peer's alerting channel instead.
 - name: Validate required variables

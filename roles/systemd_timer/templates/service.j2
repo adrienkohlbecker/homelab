@@ -28,7 +28,9 @@ Environment="{{ k }}={{ v | string | replace('\\', '\\\\') | replace('"', '\\"')
    systemd_service_unit_failed_state alert's signal (see
    systemd_timers_alerts.conf) and must not also trip overdue. The '+' prefix
    runs touch with full privileges even when run_as: drops ExecStart to a
-   non-root user. #}
+   non-root user. ReadWritePaths keeps the stamp directory writable when a
+   caller adds ProtectSystem=strict. #}
+ReadWritePaths=/var/lib/systemd/timers
 ExecStartPre=+/usr/bin/touch /var/lib/systemd/timers/stamp-{{ systemd_timer_args.name }}.timer
 {% endif %}
 {% if systemd_timer_args.additional_service_directives is defined %}

@@ -1,8 +1,8 @@
 # Verify covers five contracts:
-#   1. install + manual-trigger + remove for a monitor: false timer
+#   1. install + manual-trigger + remove for a system-scope timer
 #   2. systemd-cat routes stderr to journal priority err and preserves the
 #      command's exit code
-#   3. monitor: true writes the netdata metadata file with period_secs
+#   3. system-scope timers write netdata metadata with period_secs
 #      derived from on_calendar via systemd-analyze
 #   4. systemd_timers.chart.sh emits a chart per registered timer, age_secs
 #      tracks the persistent trigger stamp's mtime, and overdue fires when
@@ -77,7 +77,7 @@
   register: _systemd_timer_stderr_t0
   changed_when: false
 
-- name: "_verify | Install combined fixture timer (monitor: false)"
+- name: _verify | Install combined fixture timer
   import_role:
     name: systemd_timer
     tasks_from: install
@@ -90,7 +90,6 @@
         /usr/bin/python3 -c 'import os, sys;
         open("/tmp/_verify_timer.out", "w").write("ENV_KEY=" + os.environ["ENV_KEY"] + "|ENV_OTHER=" + os.environ["ENV_OTHER"] + chr(10));
         print("STDOUT_VERIFY_LINE"); print("STDERR_VERIFY_LINE", file=sys.stderr)'
-      monitor: false
       run_as: _verify_runas
       environment:
         ENV_KEY: knob_value
@@ -160,11 +159,6 @@
   changed_when: false
   become: true
 
-- name: "_verify | Stat netdata metadata file (should NOT exist for monitor: false)"
-  stat:
-    path: /etc/netdata/charts.d/systemd_timers.d/_verify_timer.conf
-  register: _systemd_timer_timer_meta
-
 - name: _verify | Assert combined fixture behavior
   vars:
     _output: "{{ (_systemd_timer_timer_out.content | b64decode).rstrip() }}"
@@ -180,7 +174,6 @@
       - "'FixedRandomDelay=yes' in _systemd_timer_knobs_show.stdout"
       - "'ProtectSystem=strict' in _systemd_timer_knobs_show.stdout"
       - "'ProtectHome=yes' in _systemd_timer_knobs_show.stdout"
-      - not _systemd_timer_timer_meta.stat.exists
 
 - name: _verify | Assert stderr priority through each journal filter
   assert:

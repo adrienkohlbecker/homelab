@@ -1,4 +1,4 @@
-# Contracts 3+4: monitored timer (monitor: true) writes netdata metadata
+# Contracts 3+4: system-scope timers write netdata metadata
 # with period_secs derived from on_calendar, and the systemd_timers charts.d
 # collector emits a chart per timer with age_secs / overdue tracking read
 # from the persistent trigger stamp (/var/lib/systemd/timers/stamp-*.timer).

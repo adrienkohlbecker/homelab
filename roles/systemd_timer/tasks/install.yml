@@ -10,8 +10,8 @@
 #   - exec_start: literal % → %%, literal $ → $$ (systemd expands both before
 #     the command runs). TimeoutStartSec= bounds oneshot ExecStart (RuntimeMaxSec=
 #     has no effect under Type=oneshot).
-#   - on_calendar must be a repeating schedule when monitor: true; a one-shot
-#     calendar has no second elapse and can't derive a period.
+#   - system-scope on_calendar schedules must repeat so overdue monitoring can
+#     derive their period; user-scope timers are not monitored.
 #
 # The dict form mirrors systemd_unit / sqlite_dataset / service_user: each
 # import_role replaces the whole `systemd_timer_args` value at play-vars
@@ -32,14 +32,9 @@
 - name: install | Resolve caller defaults for {{ systemd_timer_args.name }}
   set_fact:
     _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
-    # The netdata systemd_timers collector reads /var/lib/systemd/timers
-    # stamps (a system path), so it can only observe system-scope timers.
-    # Auto-disable monitoring for user-scope units rather than let the
-    # monitor:true default register a metadata file the collector can never
-    # satisfy -- which would peg the timer permanently `overdue`. User-scope
-    # freshness monitoring is a deferred follow-up; callers don't need to
-    # special-case it.
-    _systemd_timer_monitor: "{{ (systemd_timer_args.monitor | default(true)) and (systemd_timer_args.user | default('root')) == 'root' }}"
+    # The collector reads system-scope stamps, so user-scope timers cannot be
+    # monitored and must not register metadata that would stay overdue forever.
+    _systemd_timer_monitor: "{{ (systemd_timer_args.user | default('root')) == 'root' }}"
 
 # run_as only makes sense for system-scope units; a user-scope unit
 # already runs as the named user, and User= in /etc/systemd/user/ is
@@ -144,8 +139,8 @@
 # period_secs for the overdue check is the gap between the timer's next two
 # elapses, computed from on_calendar by systemd's own parser (no hand-kept
 # frequency->seconds table). A non-repeating calendar yields a single elapse
-# (no "#2" line) and can't be monitored -- fail loud so the caller sets
-# monitor: false. on_calendar is passed via the environment so its value
+# (no "#2" line) cannot supply an overdue period. on_calendar is passed via
+# the environment so its value
 # never lands in the script text (no quoting/escaping hazards). The two-
 # elapse delta is constant for a regular schedule; a DST-straddling day can
 # shift it by an hour, which the 2 * period grace absorbs.
@@ -160,7 +155,7 @@
     e2=$(printf '%s\n' "$out" | awk '/#2:/{sub(/^[^:]*: /, ""); print; exit}')
     if [ -z "$e2" ]; then
       printf 'systemd-analyze output:\n%s\n' "$out" >&2
-      echo "on_calendar=$ON_CALENDAR does not repeat (no second elapse); set monitor: false for one-shot timers" >&2
+      echo "on_calendar=$ON_CALENDAR does not repeat; system-scope timers require a repeating schedule" >&2
       exit 1
     fi
     s1=$(LC_ALL=C date -d "$e1" +%s)
