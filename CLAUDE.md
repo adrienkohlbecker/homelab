@@ -83,7 +83,7 @@ Repo-local skills and hook scripts live once under `.agents/` (`skills/`, `hooks
 - Per-role test hooks live alongside the role's tasks:
   - `tasks/_setup.yml` — pre-role fixture bringup. **Never runs against prod.**
   - `tasks/_verify.yml` — post-converge assertions. **Only invoked by the harness against a qemu VM** — never against prod. That contract lets scaffolding sit alongside real tasks without a `when: qemu_test` gate. Rebooting inside `_verify` is fine for next-boot state (canonical [roles/console/tasks/_verify.yml](roles/console/tasks/_verify.yml)).
-- Tasks depending on a freshly-created user/group/dir must be gated `when: not (ansible_check_mode and <svc>_user.changed)` — in check mode the prerequisite only *reports* creation.
+- Tasks depending on a freshly-created service user/group/dir must be gated on `<svc>_user.uid is defined` — a fresh check-mode run reports creation without exporting numeric IDs.
 - Prefer `import_role`/`import_tasks` over `include_*`. Fall back to `include_*` only for genuinely dynamic name/vars, then wrap the loop body in a per-iteration `include_tasks` for fresh scope.
 - For state-mutating tasks that should run once, gate with `args: creates: <sentinel>` not `changed_when: false`.
 - **Never branch a task `when:` on `inventory_hostname`** (no `inventory_hostname in ['lab','pug']`). Introduce a host_var instead — a `<svc>_enabled` flag set in the relevant `host_vars/` and read as `<svc>_enabled | default(false)` — so behaviour follows declared intent, not a hardcoded host list a new host silently misses. Play-level `hosts:` patterns in `site.yml` are the legitimate exception (that *is* ansible's host-targeting mechanism).
@@ -136,9 +136,11 @@ Valid statuses: `runbook` (active operator procedures) · `current` (deployed st
 
 Prefer these over re-implementing boilerplate. All take inputs through a single `*_args` dict (so each call replaces it wholesale and inter-call vars-leak can't happen). Full API: [notes/helper-roles-reference.md](notes/helper-roles-reference.md).
 
+Helper roles expose named task files and keep `tasks/main.yml` operationally empty (comments only), so the test harness can target the role without invoking an argument-requiring entry point. Call them with `tasks_from`; do not add a default dispatcher to `main.yml`.
+
 | Helper | Entry point | Exposes / creates |
 |--------|-------------|-------------------|
-| `service_user` | `tasks_from: user` | `<svc>_user.uid`/`.group`; `/mnt/services/<svc>` dir |
+| `service_user` | `tasks_from: user` | `<svc>_user.uid`/`.gid`; `/mnt/services/<svc>` dir |
 | `systemd_unit` | `tasks_from: {install,dropin,service,remove}` | `<unit>_started_result`; drives restarts inline |
 | `systemd_timer` | `tasks_from: {install,remove}` | paired `.service`+`.timer` (system scope) |
 | `nginx_site` | `import_role: name: nginx, tasks_from: site` | vhost with TLS/HSTS/CSP + optional Authelia |
@@ -169,7 +171,7 @@ Three paths, preferred order:
 
 ### User namespacing
 
-1. **`--user {{ <svc>_user.uid }}:{{ <svc>_user.group }}`** (default). No namespace mapping. Use whenever the app doesn't insist on `id -u == 0`.
+1. **`--user {{ <svc>_user.uid }}:{{ <svc>_user.gid }}`** (default). No namespace mapping. Use whenever the app doesn't insist on `id -u == 0`.
 2. **linuxserver `PUID`/`PGID`** — s6-overlay aligns the baked-in `abc` user.
 3. **Fake-root uidmap** — last resort: `--user 0:0` + `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1`. Canonical [roles/authelia/](roles/authelia/). When the entrypoint drops to a baked-in non-root uid, allocate a dedicated host user and add a `+N:<uid>:1` override.
 
