@@ -41,6 +41,24 @@
       Expected the rendered WireGuard alarm to encode its stale-age grace in
       the thresholds and retain only recovery hysteresis.
 
+- name: _verify | Read fail2ban health configuration
+  slurp:
+    src: /etc/netdata/health.d/fail2ban.conf
+  register: _netdata_fail2ban_health
+  become: true
+
+- name: _verify | Fail2ban alert uses sustained ban count
+  vars:
+    _health: "{{ _netdata_fail2ban_health.content | b64decode }}"
+  assert:
+    that:
+      - "lookup: min -30m unaligned of banned" in _health
+      - "delay: up" not in _health
+      - "delay: down 1h" in _health
+    fail_msg: >-
+      Expected the fail2ban alarm to require a sustained high ban count and
+      retain only recovery hysteresis.
+
 # netdata is the only flat-repo (trailing-slash suite, no components) + glob-pin
 # ("netdata*") consumer, so the shared apt_source _verify runs here to cover
 # that path: the signing key is scoped (not globally trusted) and the 2.* pin
