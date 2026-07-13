@@ -1,6 +1,0 @@
-# zfs_check_mount sources /usr/local/lib/functions.sh from the bash
-# role. Site.yml puts bash first so prod gets this for free; testrole.py
-# only runs this role, so the install has to be local to the fixture.
-- name: _setup | Install bash functions.sh
-  import_role:
-    name: bash

@@ -1,9 +1,3 @@
-# zfs_check_mount sources /usr/local/lib/functions.sh. Site.yml puts bash
-# before services in prod; testrole.py runs only this role, so stage it here.
-- name: _setup | Install bash helpers
-  import_role:
-    name: bash
-
 # Mirror the production producer so the fixture gets the real dataset
 # properties, mount unit, and zfs_check_mount dependency before ssh_root runs.
 - name: _setup | Configure the services datasets
