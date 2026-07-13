@@ -19,20 +19,6 @@
 # previous caller's user can't bleed into the next caller that doesn't
 # explicitly override.
 
-# Transitional: drop the hand-rolled podman-prune.{service,timer} this
-# role shipped before the systemd_timer migration (the new units are
-# podman_prune.*). No-op on fresh hosts; remove this task once every host
-# has converged past the rename.
-- name: prune | Remove the obsolete hand-rolled podman-prune units
-  import_role:
-    name: systemd_timer
-    tasks_from: remove
-  vars:
-    systemd_timer_args:
-      name: podman-prune
-      user: "{{ podman_prune_args.user | default('root') }}"
-  when: podman_prune_args.condition | default(true)
-
 # prune flags: no -a so named (tagged) images stay warm for the next
 # pull; until=48h spares anything created in the last two days so a recent
 # stopped container or fresh dangling layer survives one daily pass.

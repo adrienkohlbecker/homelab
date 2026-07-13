@@ -10,23 +10,17 @@
 # dest hosts). Order matters: stop+remove the timer first so scheduling
 # halts before the service it triggered disappears.
 #
-# Validate name before it flows into unit names and the metadata path. Unlike
-# install (which enforces the underscores-not-hyphens house style for new
-# timers), remove must also accept hyphenated legacy names being torn down
-# (e.g. the pre-migration podman-prune.* units), so the charset is wider --
-# but still anchored to a leading alnum/underscore so a stray name can't
-# start with `-` (a systemctl flag) or contain a path separator.
+# Validate name before it flows into unit names and the metadata path.
 - name: remove | Validate name for {{ systemd_timer_args.name | default('<unset>') }}
   assert:
     quiet: true
     that:
       - systemd_timer_args.name is defined
-      - systemd_timer_args.name is match('^[A-Za-z0-9_][A-Za-z0-9_-]*$')
+      - systemd_timer_args.name is match('^[a-zA-Z0-9_]+$')
     fail_msg: >-
       systemd_timer remove: name (got
       {{ systemd_timer_args.name | default('<unset>') }}) must be defined and
-      match ^[A-Za-z0-9_][A-Za-z0-9_-]*$ (alnum/underscore, internal hyphens
-      allowed for legacy units).
+      contain only [a-zA-Z0-9_].
 
 - name: remove | Resolve caller defaults for {{ systemd_timer_args.name }}
   set_fact:
