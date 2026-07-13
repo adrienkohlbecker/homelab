@@ -47,7 +47,6 @@
       name: radarr
       owner: radarr
       group: media
-      mode: "0750"
       links:
         - /mnt/services/radarr/radarr.db
         - /mnt/services/radarr/logs.db

@@ -51,7 +51,6 @@
       name: tautulli
       owner: tautulli
       group: media
-      mode: "0750"
       force: true
       links:
         - /mnt/services/tautulli/tautulli.db

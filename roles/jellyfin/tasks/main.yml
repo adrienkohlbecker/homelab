@@ -308,7 +308,6 @@
       name: jellyfin
       owner: jellyfin
       group: media
-      mode: "0750"
       # Jellyfin creates these DBs on first boot, so the helper plants empty
       # files before creating the symlinks.
       #

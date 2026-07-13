@@ -46,7 +46,6 @@
       name: lidarr
       owner: lidarr
       group: media
-      mode: "0750"
       links:
         - /mnt/services/lidarr/lidarr.db
         - /mnt/services/lidarr/logs.db

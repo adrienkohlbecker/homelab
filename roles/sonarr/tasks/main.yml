@@ -47,7 +47,6 @@
       name: sonarr
       owner: sonarr
       group: media
-      mode: "0750"
       links:
         - /mnt/services/sonarr/sonarr.db
         - /mnt/services/sonarr/logs.db

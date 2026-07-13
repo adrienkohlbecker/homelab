@@ -23,7 +23,6 @@
       name: profilarr
       owner: profilarr
       group: profilarr
-      mode: "0750"
       links:
         - /mnt/services/profilarr/profilarr.db
   when: not ansible_check_mode or profilarr_user.uid is defined
