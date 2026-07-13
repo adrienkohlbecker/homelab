@@ -7,8 +7,8 @@
 #   4. systemd_timers.chart.sh emits a chart per registered timer, age_secs
 #      tracks the persistent trigger stamp's mtime, and overdue fires when
 #      the stamp is older than 2 * period
-#   5. extension knobs (environment, accuracy_sec, on_active_sec,
-#      randomized_delay_sec, additional_service_directives)
+#   5. extension knobs (environment, accuracy_sec, randomized_delay_sec,
+#      additional_service_directives)
 
 - name: _verify | Install systemd_timers netdata collector
   import_tasks: netdata.yml
@@ -95,7 +95,6 @@
         ENV_KEY: knob_value
         ENV_OTHER: "value with spaces, and a comma"
       accuracy_sec: 1s
-      on_active_sec: "0"
       randomized_delay_sec: 600
       additional_service_directives:
         # ProtectSystem=strict makes the filesystem read-only except for the
@@ -149,10 +148,9 @@
   register: _systemd_timer_timer_out_stat
   become: true
 
-# OnActiveSec= has no scalar property; it surfaces in TimersMonotonic.
 - name: _verify | Read timer and service properties  # noqa: command-instead-of-module
   command: >-
-    systemctl show -p AccuracyUSec,TimersMonotonic,RandomizedDelayUSec,FixedRandomDelay,ProtectSystem,ProtectHome
+    systemctl show -p AccuracyUSec,RandomizedDelayUSec,FixedRandomDelay,ProtectSystem,ProtectHome
     _verify_timer.timer _verify_timer.service
   register: _systemd_timer_knobs_show
   changed_when: false
@@ -168,7 +166,6 @@
       - _systemd_timer_timer_out_stat.stat.pw_name == '_verify_runas'
       - _output == "ENV_KEY=knob_value|ENV_OTHER=value with spaces, and a comma"
       - "'AccuracyUSec=1s' in _systemd_timer_knobs_show.stdout"
-      - "'OnActiveUSec=0' in _systemd_timer_knobs_show.stdout"
       - "'RandomizedDelayUSec=10min' in _systemd_timer_knobs_show.stdout"
       - "'FixedRandomDelay=yes' in _systemd_timer_knobs_show.stdout"
       - "'ProtectSystem=strict' in _systemd_timer_knobs_show.stdout"

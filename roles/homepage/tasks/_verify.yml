@@ -26,11 +26,9 @@
     status_code: 200
   become: true
 
-# Wait + assert split: the timer fires the .service on OnActiveSec=0 so
-# index.html appears shortly after enable, but ansible may race the first
-# run. Combining retry-until with failed_when=content-check would fail-fast
-# on the first 404; split into two tasks so retries get their full budget
-# before content assertions fire.
+# Wait + assert split: the post-install service start renders index.html, but
+# ansible may race that first run. Combining retry-until with a content check
+# would fail fast on the first 404, so retries get their full budget first.
 - name: _verify | Homepage_alerts renders HTML through nginx
   uri:
     url: https://homepage.{{ inventory_hostname }}.{{ domain }}/alerts/
