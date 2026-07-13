@@ -97,34 +97,32 @@
     - systemd_timers.verify_timer_recent
     - systemd_timers.verify_timer_overdue
 
-- name: _verify | Recent fixture reports overdue=0
+- name: _verify | Fixture data reports expected freshness
   uri:
-    url: http://localhost:19999/api/v1/data?chart=systemd_timers.verify_timer_recent&points=1&after=-30&format=json
+    url: "http://localhost:19999/api/v1/data?chart={{ item.chart }}&points=1&after=-30&format=json"
     return_content: true
-  register: _systemd_timer_recent_data
+  register: _systemd_timer_fixture_data
   retries: 30
   delay: 2
   until: >-
-    _systemd_timer_recent_data.status == 200
-    and 'overdue' in (_systemd_timer_recent_data.json.labels | default([]))
-    and 'age_secs' in _systemd_timer_recent_data.json.labels
-    and (_systemd_timer_recent_data.json.data | default([])) | length > 0
-    and _systemd_timer_recent_data.json.data[0][_systemd_timer_recent_data.json.labels.index('overdue')] | int == 0
-    and _systemd_timer_recent_data.json.data[0][_systemd_timer_recent_data.json.labels.index('age_secs')] | int < 600
-
-- name: _verify | Overdue fixture reports overdue=1
-  uri:
-    url: http://localhost:19999/api/v1/data?chart=systemd_timers.verify_timer_overdue&points=1&after=-30&format=json
-    return_content: true
-  register: _systemd_timer_overdue_data
-  retries: 30
-  delay: 2
-  until: >-
-    _systemd_timer_overdue_data.status == 200
-    and 'overdue' in (_systemd_timer_overdue_data.json.labels | default([]))
-    and (_systemd_timer_overdue_data.json.data | default([])) | length > 0
-    and _systemd_timer_overdue_data.json.data[0][_systemd_timer_overdue_data.json.labels.index('overdue')] | int == 1
-    and _systemd_timer_overdue_data.json.data[0][_systemd_timer_overdue_data.json.labels.index('age_secs')] | int > 7200
+    _systemd_timer_fixture_data.status == 200
+    and 'overdue' in (_systemd_timer_fixture_data.json.labels | default([]))
+    and 'age_secs' in (_systemd_timer_fixture_data.json.labels | default([]))
+    and (_systemd_timer_fixture_data.json.data | default([])) | length > 0
+    and _systemd_timer_fixture_data.json.data[0][_systemd_timer_fixture_data.json.labels.index('overdue')] | int == item.overdue
+    and _systemd_timer_fixture_data.json.data[0][_systemd_timer_fixture_data.json.labels.index('age_secs')] | int > item.min_age
+    and _systemd_timer_fixture_data.json.data[0][_systemd_timer_fixture_data.json.labels.index('age_secs')] | int < item.max_age
+  loop:
+    - chart: systemd_timers.verify_timer_recent
+      overdue: 0
+      min_age: -1
+      max_age: 600
+    - chart: systemd_timers.verify_timer_overdue
+      overdue: 1
+      min_age: 7200
+      max_age: 14400
+  loop_control:
+    label: "{{ item.chart }}"
 
 # Alert binds on context systemd.timer_lag; netdata keys the instance
 # as <chart_id>.<template_name>, e.g.
