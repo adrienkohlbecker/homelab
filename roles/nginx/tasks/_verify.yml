@@ -690,24 +690,9 @@
     nginx_verify_ipv6.status != 200
     or 'nginx_verify_upstream_ok' not in (nginx_verify_ipv6.content | default(''))
 
-# A site retired under an older naming convention can carry an underscore (e.g.
-# homeassistant's vscode_ha tombstone), which is not a valid DNS label. A state:
-# absent teardown must still accept it -- the DNS-label assert is gated to
-# present, so only the weaker path-safety check applies -- or the tombstone
-# breaks the consuming role's converge on every host not yet cleaned.
-- name: _verify | A state:absent on an underscore (legacy) subdomain is accepted
-  import_role:
-    name: nginx
-    tasks_from: site
-  vars:
-    nginx_site_args:
-      subdomain: nginx_verify_legacy
-      state: absent
-
 # state: absent — tear down the transient vhosts via the helper and confirm both
-# the symlink and the config are gone. This is the contract the otgw / vscode_ha
-# tombstones rely on to stay decommissioned on a fresh install. include_tasks
-# (not import_role) so nginx_site_args re-evaluates per loop iteration.
+# the symlink and the config are gone. include_tasks (not import_role) so
+# nginx_site_args re-evaluates per loop iteration.
 - name: _verify | Remove the transient test vhosts via the nginx_site helper
   include_tasks:
     file: site.yml

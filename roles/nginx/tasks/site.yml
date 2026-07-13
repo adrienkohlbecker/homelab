@@ -98,22 +98,14 @@
   tags:
     - nginx_site
 
-# Path-safety runs for BOTH states: a state: absent teardown still interpolates
-# the subdomain into the on-disk paths it removes, so reject path-traversal
-# regardless. Deliberately weaker than the present-only DNS-label assert below --
-# a retired site (e.g. homeassistant's vscode_ha tombstone) may carry a legacy
-# underscore that was a valid name under an older convention, and the tombstone
-# must still be able to remove it. [A-Za-z0-9._-] excludes '/' and control chars;
-# '..' is rejected explicitly.
-- name: site | Assert subdomain is path-safe
+- name: site | Assert subdomain is a safe DNS label
   assert:
     that:
-      - nginx_site_args.subdomain is match('^[A-Za-z0-9._-]+$')
-      - "'..' not in nginx_site_args.subdomain"
+      - nginx_site_args.subdomain is match('^[A-Za-z0-9-]+$')
     fail_msg: >-
-      nginx_site_args.subdomain must be a single path segment ([A-Za-z0-9._-], no
-      '..') -- it is interpolated into the on-disk config paths. Got
-      '{{ nginx_site_args.subdomain }}'.
+      nginx_site_args.subdomain must be a single DNS label ([A-Za-z0-9-]) -- it
+      is interpolated into the on-disk config path and the server_name.
+      Got '{{ nginx_site_args.subdomain }}'.
   tags:
     - nginx_site
 
@@ -128,23 +120,6 @@
     _nginx_site_auth: "{{ nginx_site_args.auth | default('none') }}"
     _nginx_site_auth_request_authorization: "{{ (nginx_site_args.auth_request_authorization | default(false)) | bool }}"
     _nginx_site_enable_http: "{{ (nginx_site_args.enable_http | default(false)) | bool }}"
-  tags:
-    - nginx_site
-
-# The value-shape asserts below gate on state: present -- a state: absent teardown
-# renders none of these inputs (it only removes files), so validating them would
-# couple a tombstone to input shape it never uses (and reject a legacy subdomain
-# the present-only DNS-label rule no longer allows). Path-safety (above) is the
-# only subdomain check a teardown needs.
-- name: site | Assert subdomain is a safe DNS label
-  when: _nginx_site_state == 'present'
-  assert:
-    that:
-      - nginx_site_args.subdomain is match('^[A-Za-z0-9-]+$')
-    fail_msg: >-
-      nginx_site_args.subdomain must be a single DNS label ([A-Za-z0-9-]) -- it
-      is interpolated into the on-disk config path and the server_name.
-      Got '{{ nginx_site_args.subdomain }}'.
   tags:
     - nginx_site
 

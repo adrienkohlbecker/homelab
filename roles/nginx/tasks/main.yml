@@ -9,8 +9,7 @@
 # The device's own firmware login stays in front; Authelia adds
 # defense-in-depth at the perimeter -- accept the second click. include_tasks
 # (not import_tasks) so the per-item nginx_site_args re-evaluates each loop;
-# unifi (special CSP, no auth) and the retired otgw (tombstone) differ and
-# stay as standalone calls below.
+# unifi has special CSP and no auth, so it stays as a standalone call below.
 - name: Configure device-proxy nginx proxies
   include_tasks:
     file: site.yml
