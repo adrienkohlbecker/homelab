@@ -397,6 +397,38 @@
       failure without queued notification delays. Got:
       {{ _alarm }}
 
+- name: _verify | All systemd unit failure alarms use sustained state
+  vars:
+    _alarm: >-
+      {{
+        ((_netdata_alarms.content | from_json).alarms.values()
+         | selectattr('name', 'equalto', item)
+         | first)
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - _alarm.lookup_method | default('') == "average"
+      - _alarm.lookup_after | default(0) == -300
+      - _alarm.lookup_dimensions | default('') == "failed"
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 0
+    fail_msg: >-
+      Expected {{ item }} to use sustained failure state without notification
+      delays. Got: {{ _alarm }}
+  loop:
+    - systemd_socket_unit_failed_state
+    - systemd_target_unit_failed_state
+    - systemd_path_unit_failed_state
+    - systemd_device_unit_failed_state
+    - systemd_mount_unit_failed_state
+    - systemd_automount_unit_failed_state
+    - systemd_swap_unit_failed_state
+    - systemd_scope_unit_failed_state
+    - systemd_slice_unit_failed_state
+    - systemd_timer_unit_failed_state
+
 # Closes the loop the on-disk un-silence assert (main.yml) can't: prove the
 # reload-health actually propagated the un-silence into a LIVE alarm. The
 # out_of_disk_space_time template (un-silenced from upstream's `to: silent`)
