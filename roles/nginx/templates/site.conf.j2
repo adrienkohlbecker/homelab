@@ -22,8 +22,8 @@ server {
   server_name         {{ nginx_site_args.subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_site_args.subdomain }}.{{ domain}};
 
   # Security headers. Captured once into `security_headers` and emitted both
-  # here at server scope (covering the favicon/robots locations, the Authelia
-  # 401->302 redirect, and error responses, all via the `always` flag) and
+  # here at server scope (covering the Authelia 401->302 redirect and error
+  # responses, all via the `always` flag) and
   # re-emitted inside `location /` when a location_conf is present: nginx
   # inherits add_header only into levels that define none of their own, so a
   # location_conf adding e.g. Access-Control-Allow-Origin would otherwise
@@ -43,16 +43,6 @@ server {
   add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
 {% endset %}
 {{ security_headers }}
-
-  # favicon.ico
-  location = /favicon.ico {
-      log_not_found off;
-  }
-
-  # robots.txt
-  location = /robots.txt {
-      log_not_found off;
-  }
 
 {% set _auth_enabled = _nginx_site_auth == 'required' %}
 {% if _auth_enabled %}

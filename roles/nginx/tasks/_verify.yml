@@ -582,6 +582,20 @@
     nginx_verify_buffering.status != 200
     or 'nginx_verify_upstream_ok' not in (nginx_verify_buffering.content | default(''))
 
+- name: _verify | Standard metadata paths reach the upstream
+  uri:
+    url: "https://nginxverifybuffering.{{ inventory_hostname }}.{{ domain }}{{ item }}"
+    validate_certs: false
+    return_content: true
+    status_code: 200
+  loop:
+    - /favicon.ico
+    - /robots.txt
+  register: nginx_verify_metadata
+  failed_when: >-
+    nginx_verify_metadata.status != 200
+    or 'nginx_verify_upstream_ok' not in (nginx_verify_metadata.content | default(''))
+
 # The csp_default_src / csp_frame_ancestors / csp_additional keys compose into
 # the Content-Security-Policy header (site.conf.j2). Only
 # csp_passthrough was tested; assert each override token actually lands in the
