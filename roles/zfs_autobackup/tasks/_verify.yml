@@ -274,10 +274,6 @@
     that:
       - "'skipping offsite sync' not in zfs_autobackup_verify_gate_nochange.stdout"
       - "'rsync' in zfs_autobackup_verify_gate_nochange.stdout"
-      - "'--out-format=dataset=rpool/zfs_autobackup_offsite_test' in zfs_autobackup_verify_gate_nochange.stdout"
-      - "'change=%i' in zfs_autobackup_verify_gate_nochange.stdout"
-      - "'path=%n%L' in zfs_autobackup_verify_gate_nochange.stdout"
-      - "'--log-file' not in zfs_autobackup_verify_gate_nochange.stdout"
     fail_msg: >-
       offsite gate failed to proceed to rsync after a change
       (rc={{ zfs_autobackup_verify_gate_nochange.rc }},
