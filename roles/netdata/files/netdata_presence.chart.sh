@@ -33,6 +33,8 @@ netdata_presence_contexts=()
 netdata_presence_collectors=()
 
 netdata_presence_api="${netdata_presence_api:-http://127.0.0.1:19999}"
+netdata_presence_startup_grace="${netdata_presence_startup_grace:-300}"
+netdata_presence_started_at=$EPOCHSECONDS
 # curl is in our `roles/user` baseline package list; jq likewise. If
 # either is missing on a host we don't ship to, _check fails loud.
 
@@ -112,10 +114,15 @@ _netdata_presence_collector_chart_prefix() {
 }
 
 netdata_presence_update() {
-  local entry name ctx_id present safe expected line _chart_id _mode
+  local entry name ctx_id present ready safe expected line _chart_id _mode
   local contexts_ready=1 charts_ready=1
   local -A api_contexts=()
   local -A api_charts=()
+
+  ready=0
+  if ((EPOCHSECONDS - netdata_presence_started_at >= netdata_presence_startup_grace)); then
+    ready=1
+  fi
 
   if [ "${#netdata_presence_contexts[@]}" -gt 0 ]; then
     while IFS= read -r line; do
@@ -153,12 +160,14 @@ CLABEL context "${name}" 1
 CLABEL context_id "${ctx_id}" 1
 CLABEL_COMMIT
 DIMENSION present '' absolute 1 1
+DIMENSION ready '' absolute 1 1
 EOF
       _netdata_presence_seen_contexts[$name]=1
     fi
     cat <<EOF
 BEGIN netdata_presence.context_${safe} ${1}
 SET present = $present
+SET ready = $ready
 END
 EOF
   done
@@ -197,12 +206,14 @@ CHART netdata_presence.collector_${safe} '' "Netdata collector presence: ${entry
 CLABEL collector "${entry}" 1
 CLABEL_COMMIT
 DIMENSION present '' absolute 1 1
+DIMENSION ready '' absolute 1 1
 EOF
       _netdata_presence_seen_collectors[$entry]=1
     fi
     cat <<EOF
 BEGIN netdata_presence.collector_${safe} ${1}
 SET present = $present
+SET ready = $ready
 END
 EOF
   done
