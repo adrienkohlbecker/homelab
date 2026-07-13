@@ -403,11 +403,6 @@
       auth: required
       auth_request_authorization: true
 
-- name: _verify | Settle the nginxverifybasic vhost
-  import_tasks: _verify_wait_route.yml
-  vars:
-    _wait_route_host: "nginxverifybasic.{{ inventory_hostname }}.{{ domain }}"
-
 - name: _verify | Basic-auth service account is admitted
   uri:
     url: "https://nginxverifybasic.{{ inventory_hostname }}.{{ domain }}/basic-probe"
@@ -417,7 +412,9 @@
     validate_certs: false
     status_code: 200
   register: nginx_verify_basic
-  failed_when: nginx_verify_basic.status != 200
+  until: nginx_verify_basic.status == 200
+  retries: 10
+  delay: 1
 
 - name: _verify | Basic credential was stripped before the protected upstream
   command: journalctl -u nginx_verify_upstream --no-pager
