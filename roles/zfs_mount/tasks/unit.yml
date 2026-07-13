@@ -22,14 +22,16 @@
   assert:
     that:
       - zfs_mount_args.dataset is defined
-      - zfs_mount_args.dataset | length > 0
       - zfs_mount_args.dataset is match('^[A-Za-z0-9][A-Za-z0-9_.:/-]*$')
       - zfs_mount_args.mountpoint is defined
-      - zfs_mount_args.mountpoint is string
-      - zfs_mount_args.mountpoint is match('^/')
-      - zfs_mount_args.mountpoint != '/root'
       - (zfs_mount_args.canmount | default('on')) in ['on', 'noauto']
     quiet: true
+  tags:
+    - zfs_mount
+
+- name: unit | Derive unit name suffix
+  set_fact:
+    _zfs_mount_unit_name: "{{ zfs_mount_args.mountpoint | zfs_mount_unit }}"
   tags:
     - zfs_mount
 
@@ -43,12 +45,6 @@
     backup: true
     validate: bash -n %s
   become: true
-  tags:
-    - zfs_mount
-
-- name: unit | Derive unit name suffix
-  set_fact:
-    _zfs_mount_unit_name: "{{ zfs_mount_args.mountpoint | zfs_mount_unit }}"
   tags:
     - zfs_mount
 
