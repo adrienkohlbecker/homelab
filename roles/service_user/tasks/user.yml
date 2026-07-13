@@ -59,7 +59,7 @@
 
 - name: Resolve caller defaults for {{ service_user_args.name }}
   set_fact:
-    _service_user:
+    service_user_resolved:
       name: "{{ service_user_args.name }}"
       extra_groups: >-
         {{
@@ -75,23 +75,23 @@
 
 - name: "Add group {{ service_user_args.name }}"
   group:
-    name: "{{ _service_user.name }}"
+    name: "{{ service_user_resolved.name }}"
     system: true
   become: true
 
 - name: "Add user {{ service_user_args.name }}"
   user:
-    name: "{{ _service_user.name }}"
-    group: "{{ _service_user.name }}"
-    groups: "{{ _service_user.extra_groups }}"
+    name: "{{ service_user_resolved.name }}"
+    group: "{{ service_user_resolved.name }}"
+    groups: "{{ service_user_resolved.extra_groups }}"
     append: true
-    createhome: "{{ _service_user.createhome }}"
+    createhome: "{{ service_user_resolved.createhome }}"
     system: true
     # nologin + system already lock the account; pin the password field to
     # '!' so the locked state is explicit and survives a future relaxation.
     password: "!"
-    shell: "{{ _service_user.shell }}"
-    home: "{{ _service_user.home }}"
+    shell: "{{ service_user_resolved.shell }}"
+    home: "{{ service_user_resolved.home }}"
   become: true
   register: service_user_result
 
@@ -104,7 +104,7 @@
 # Same filter as systemd_unit's per-unit fact.
 - name: Record user record for {{ service_user_args.name }}
   set_fact:
-    "{{ _service_user.name | ansible_var_key }}_user": >-
+    "{{ service_user_resolved.name | ansible_var_key }}_user": >-
       {{
         {'changed': service_user_result.changed}
         | combine(
@@ -120,12 +120,12 @@
 # an empty dir.
 - name: Create configuration directory for {{ service_user_args.name }}
   when:
-    - _service_user.config_dir
+    - service_user_resolved.config_dir
     - not ansible_check_mode or service_user_result.uid is defined
   file:
-    dest: /mnt/services/{{ _service_user.name }}
+    dest: /mnt/services/{{ service_user_resolved.name }}
     state: directory
-    owner: "{{ _service_user.name }}"
-    group: "{{ _service_user.config_dir_group }}"
-    mode: "{{ _service_user.config_dir_mode }}"
+    owner: "{{ service_user_resolved.name }}"
+    group: "{{ service_user_resolved.config_dir_group }}"
+    mode: "{{ service_user_resolved.config_dir_mode }}"
   become: true
