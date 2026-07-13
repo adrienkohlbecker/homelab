@@ -1,0 +1,2 @@
+---
+zfsbootmenu_artifact: "{{ zfsbootmenu_release[ansible_architecture] }}"

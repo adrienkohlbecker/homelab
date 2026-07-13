@@ -1,5 +1,5 @@
 ssh_x11_forwarding: true
-zfsbootmenu_artifact_override:
+zfsbootmenu_artifact:
   version: v3.0.1-linux6.1-upstream-x86_64
   url: "{{ zfsbootmenu_repository_url }}/v3.0.1-linux6.1-upstream-x86_64/zfsbootmenu-v3.0.1-linux6.1-upstream-x86_64.tar.gz"
   sha256_url: "{{ zfsbootmenu_repository_url }}/v3.0.1-linux6.1-upstream-x86_64/zfsbootmenu-v3.0.1-linux6.1-upstream-x86_64.tar.gz.sha256sum"

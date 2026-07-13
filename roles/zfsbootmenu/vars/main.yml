@@ -1,7 +1,3 @@
 ---
-# Derived from zfsbootmenu_release / zfsbootmenu_repository_url (centralized in
-# group_vars/all/versions.yml). zfsbootmenu_artifact_override lets a host pin a
-# different tarball (see host_vars/lab.yml).
-zfsbootmenu_artifact: "{{ zfsbootmenu_artifact_override | default(zfsbootmenu_release[ansible_architecture]) }}"
 zfsbootmenu_cache_dir: "/var/cache/zfsbootmenu/{{ zfsbootmenu_artifact.version }}"
 zfsbootmenu_tarball_path: "{{ zfsbootmenu_cache_dir }}/{{ zfsbootmenu_artifact.url | basename }}"
