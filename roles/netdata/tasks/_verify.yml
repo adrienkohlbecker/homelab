@@ -22,6 +22,26 @@
     or _netdata_unit.status.ActiveState != "active"
   become: true
 
+- name: _verify | Read systemd unit health configuration
+  slurp:
+    src: /etc/netdata/health.d/systemdunits.conf
+  register: _netdata_systemdunits_health
+  become: true
+
+- name: _verify | Every systemd unit alert uses sustained failure state
+  vars:
+    _health: "{{ _netdata_systemdunits_health.content | b64decode }}"
+  assert:
+    that:
+      - >-
+        _health
+        | regex_findall('lookup: average -5m unaligned of failed')
+        | length == 11
+      - '"delay: up" not in _health'
+    fail_msg: >-
+      Expected all 11 rendered systemd unit alerts to require five minutes of
+      sustained failure without notification-only delay.
+
 - name: _verify | Read rendered WireGuard health configuration
   slurp:
     src: /etc/netdata/health.d/wireguard.conf
@@ -537,7 +557,7 @@
       failure without queued notification delays. Got:
       {{ _alarm }}
 
-- name: _verify | All systemd unit failure alarms use sustained state
+- name: _verify | Available systemd unit failure alarms use sustained state
   vars:
     _alarm: >-
       {{
@@ -565,7 +585,8 @@
     - systemd_mount_unit_failed_state
     - systemd_automount_unit_failed_state
     - systemd_swap_unit_failed_state
-    - systemd_scope_unit_failed_state
+    # skip_transient suppresses scope charts in the fixture, so the rendered
+    # configuration assertion above covers the scope template.
     - systemd_slice_unit_failed_state
     - systemd_timer_unit_failed_state
 
