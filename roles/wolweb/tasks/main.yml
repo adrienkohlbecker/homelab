@@ -67,7 +67,7 @@
     mode: "0600"
     backup: true
     validate: python3 -c 'import json,sys; json.load(open(sys.argv[1]))' %s
-  register: wolweb_devices
+  register: wolweb_devices_result
   become: true
   tags:
     - wolweb
@@ -120,7 +120,7 @@
     systemd_unit_args:
       src: wolweb
       condition: "{{ not (ansible_check_mode and (wolweb_user.changed or wolweb_service_result.changed)) }}"
-      restart: "{{ wolweb_service_result.changed or wolweb_conf.changed or wolweb_devices.changed }}"
+      restart: "{{ wolweb_service_result.changed or wolweb_conf.changed or wolweb_devices_result.changed }}"
   tags:
     - wolweb
 
