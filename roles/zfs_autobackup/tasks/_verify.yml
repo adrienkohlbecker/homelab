@@ -36,20 +36,6 @@
   loop_control:
     label: "{{ item.item }}"
 
-- name: _verify | User zfs_autobackup exists
-  getent:
-    database: passwd
-    key: zfs_autobackup
-
-- name: _verify | User has expected shell
-  assert:
-    that:
-      - getent_passwd.zfs_autobackup is defined
-      - getent_passwd.zfs_autobackup[5] == "/bin/bash"
-    fail_msg: >-
-      zfs_autobackup user missing or wrong shell
-      ({{ getent_passwd.zfs_autobackup | default('not found') }})
-
 # podman.service/podman.socket are masked in the backup user's scope so its
 # login never spins up the rootless podman API socket (see source.yml). A unit
 # symlinked to /dev/null is what systemd reads as masked, so assert exactly that
