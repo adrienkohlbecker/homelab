@@ -19,6 +19,11 @@ pipeline:
         - 'MESSAGE ^(Starting|Finished) Generate homepage alerts panel static files'
         - 'MESSAGE ^homepage_alerts\.service: Deactivated successfully'
 
+    - name: lua
+      match: svc.*
+      script: /etc/fluent-bit/podman_events.lua
+      call: normalize_podman_event
+
     - name: grep
       match: audit
       exclude: "log ^type=SERVICE_(START|STOP) msg=audit\\([0-9.]+:[0-9]+\\): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=[a-f0-9]{64}"

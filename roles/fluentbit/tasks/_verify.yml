@@ -92,6 +92,11 @@
     fluentbit_lnav_multiline_marker: "verify_trace_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_mitogen_marker: "verify_mitogen_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_healthcheck_marker: "verify_healthcheck_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    fluentbit_lnav_podman_event_marker: "verify_podman_event_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+- name: _verify | Podman event | derive fake 64-hex container id
+  set_fact:
+    fluentbit_lnav_podman_event_cid: "{{ fluentbit_lnav_podman_event_marker | hash('sha256') }}"
 
 - name: _verify | Journald path | emit marked log via transient unit
   command: >-
@@ -173,6 +178,23 @@
   changed_when: false
   become: true
 
+- name: _verify | Podman event | emit native structured journal record
+  command: logger --journald
+  args:
+    stdin: |
+      MESSAGE=2026-07-13 02:01:25.445274426 +0000 UTC m=+1.145839344 container start {{ fluentbit_lnav_podman_event_cid }} (image=ghcr.io/example/test:1, name={{ fluentbit_lnav_podman_event_marker }}, org.opencontainers.image.description=verbose metadata)
+      SYSLOG_IDENTIFIER=podman
+      PODMAN_EVENT=start
+      PODMAN_TYPE=container
+      PODMAN_NAME={{ fluentbit_lnav_podman_event_marker }}
+      PODMAN_IMAGE=ghcr.io/example/test:1
+      PODMAN_ID={{ fluentbit_lnav_podman_event_cid }}
+      PODMAN_HEALTH_STATUS=
+      PODMAN_TIME=2026-07-13T02:01:25.445274426Z
+      PODMAN_LABELS={"org.opencontainers.image.description":"verbose metadata"}
+  changed_when: false
+  become: true
+
 - name: _verify | Podman_healthcheck | derive fake 64-hex container id
   set_fact:
     fluentbit_lnav_healthcheck_cid: "{{ fluentbit_lnav_healthcheck_marker | hash('sha256') }}"
@@ -250,6 +272,9 @@
     - name: mitogen
       marker: "{{ fluentbit_lnav_mitogen_marker }}"
       service: mitogen
+    - name: podman_event
+      marker: "{{ fluentbit_lnav_podman_event_marker }}"
+      service: podman
     - name: podman_healthcheck
       marker: "{{ fluentbit_lnav_healthcheck_cid }}"
       service: podman_healthcheck
@@ -410,6 +435,26 @@
       - "row.service == 'mitogen'"
       - "fluentbit_lnav_mitogen_marker in row.message"
     fail_msg: "mitogen-shaped identifier did not collapse to service=mitogen: {{ row }}"
+
+- name: _verify | Podman event | assert normalized structured shape
+  vars:
+    row: "{{ _fluentbit_lnav_by_name.podman_event }}"
+  assert:
+    that:
+      - "row.service == 'podman'"
+      - "row.identifier == 'podman'"
+      - "row.message == 'container start ' ~ fluentbit_lnav_podman_event_marker"
+      - "row.level == 'info'"
+      - "row.fields.event == 'start'"
+      - "row.fields.object_type == 'container'"
+      - "row.fields.name == fluentbit_lnav_podman_event_marker"
+      - "row.fields.image == 'ghcr.io/example/test:1'"
+      - "row.fields.object_id == fluentbit_lnav_podman_event_cid"
+      - "row.fields.parser_status == 'parsed'"
+      - "'PODMAN_EVENT' not in row.fields"
+      - "'PODMAN_TIME' not in row.fields"
+      - "'PODMAN_LABELS' not in row.fields"
+    fail_msg: "podman event did not normalize into a compact structured record: {{ row }}"
 
 - name: _verify | Podman_healthcheck | assert rewrite shape
   vars:

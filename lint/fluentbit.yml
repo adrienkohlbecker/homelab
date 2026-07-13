@@ -8,6 +8,11 @@ globals:
       - type: any
       - type: any
       - type: any
+  normalize_podman_event:
+    args:
+      - type: any
+      - type: any
+      - type: any
   shape_lnav:
     args:
       - type: any
