@@ -92,36 +92,21 @@ http {
         default  0;
     }
 
-    # $authelia_user / $authelia_groups carry the Authelia identity into the
-    # `custom` access log below. Each is populated per-request by an
-    # `auth_request_set` in the auth: required vhosts' `location /`
-    # (site.conf.j2); these http-scope maps give the names an always-declared
-    # empty default. Without a declaration, a host with no auth vhost rendered
-    # -- the nginx role's own converge (nginx_static_proxies defaults to []) or
-    # install.yml's `nginx -t -c %s` on a fresh host before any site exists --
-    # fails config-test with `unknown "authelia_user" variable`. Both `map` and
-    # `auth_request_set` register the name CHANGEABLE, so the per-vhost
-    # auth_request_set value overrides this default when auth runs; a request
-    # that never reaches an auth_request'd location logs the empty default.
-    map $host $authelia_user   { default ""; }
-    map $host $authelia_groups { default ""; }
+    # $authelia_user carries the forward-auth identity into the access log.
+    # The http-scope map declares an empty default so `nginx -t` also succeeds
+    # before any auth vhost has registered the variable via auth_request_set.
+    map $host $authelia_user { default ""; }
 
     # The Authelia identity sits just before the TLS fields so SSO failures are
-    # legible in the access log: "$authelia_user" / "$authelia_groups" are the
-    # forward-auth identity (captured per-vhost by auth_request_set, defaulted by
-    # the maps above). The identity fields are location-scoped: on a request that
-    # didn't run auth_request (a bypassed path, or a vhost with no auth) they log
-    # the empty default -- itself a useful signal.
+    # legible. A request that did not run auth_request logs the empty default.
     # $ssl_protocol/$ssl_cipher trail the line so netdata's web_log collector
     # can chart the TLS-version/cipher distribution per vhost; on a plaintext
     # :80 request they are unset and nginx logs each as `-`, keeping the field
-    # count stable so the positional CSV parse in files/web_log.conf still lines up.
+    # count stable for the positional parser in templates/web_log.conf.j2.
     # Any change to this field list must move in lockstep with all three
-    # downstream consumers: roles/nginx/files/web_log.conf (netdata's positional
-    # CSV collector), roles/fluentbit/files/parsers_nginx.conf (the Fluent Bit
-    # ingest regex) and roles/lnav/files/formats/fluentbit_lnav.json (lnav's
-    # field map + its embedded sample line).
-    log_format custom      '$remote_addr - $remote_user [$time_local] $host "$request_safe" $server_name $status $body_bytes_sent $request_length $request_time $upstream_response_time "$http_referer" "$http_user_agent" "$authelia_user" "$authelia_groups" $ssl_protocol $ssl_cipher';
+    # downstream consumers: templates/web_log.conf.j2, Fluent Bit's parser, and
+    # lnav's field map and embedded sample.
+    log_format custom      '$remote_addr - $remote_user [$time_local] $host "$request_safe" $server_name $status $body_bytes_sent $request_length $request_time $upstream_response_time "$http_referer" "$http_user_agent" "$authelia_user" $ssl_protocol $ssl_cipher';
     access_log             /var/log/nginx/access.log custom buffer=512k flush=5s;
     error_log              stderr warn;
 

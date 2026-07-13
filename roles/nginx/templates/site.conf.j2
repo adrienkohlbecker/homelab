@@ -78,10 +78,8 @@ server {
   location / {
 {% if _auth_enabled %}
     auth_request /internal/authelia;
-    # Capture the authenticated user for the upstream and groups for the
-    # access-log schema. Authelia sends Remote-User on every authenticated 200.
-    auth_request_set $authelia_user   $upstream_http_remote_user;
-    auth_request_set $authelia_groups $upstream_http_remote_groups;
+    # Authelia sends Remote-User on every authenticated 200.
+    auth_request_set $authelia_user $upstream_http_remote_user;
     # Preserve Authelia's portal target for navigation redirects.
     auth_request_set $redirection_url $upstream_http_location;
     # Only auth_request 401s reach this handler; upstream 401s pass through

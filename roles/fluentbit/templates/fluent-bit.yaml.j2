@@ -26,7 +26,7 @@ includes:
 parsers:
   - name: nginx_access_custom
     format: regex
-    regex: '^(?<remote_addr>[^ ]+) - (?<remote_user>[^ ]+) \[(?<time_local>[^\]]+)\] (?<http_host>[^ ]+) "(?<method>\S+)(?: +(?<path>[^"]*?)(?: +(?<protocol>\S+))?)?" (?<server_name>[^ ]+) (?<status>\d{3}) (?<body_bytes_sent>\d+) (?<request_length>\d+) (?<request_time>[\d.]+) (?<upstream_response_time>[\d.]+|-) "(?<referer>[^"]*)" "(?<user_agent>[^"]*)" "(?<authelia_user>[^"]*)" "(?<authelia_groups>[^"]*)" (?<ssl_protocol>\S+) (?<ssl_cipher>\S+)$'
+    regex: '^(?<remote_addr>[^ ]+) - (?<remote_user>[^ ]+) \[(?<time_local>[^\]]+)\] (?<http_host>[^ ]+) "(?<method>\S+)(?: +(?<path>[^"]*?)(?: +(?<protocol>\S+))?)?" (?<server_name>[^ ]+) (?<status>\d{3}) (?<body_bytes_sent>\d+) (?<request_length>\d+) (?<request_time>[\d.]+) (?<upstream_response_time>[\d.]+|-) "(?<referer>[^"]*)" "(?<user_agent>[^"]*)" "(?<authelia_user>[^"]*)" (?<ssl_protocol>\S+) (?<ssl_cipher>\S+)$'
     types: status:integer body_bytes_sent:integer request_length:integer request_time:float
 
   - name: certbot_file
