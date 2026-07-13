@@ -60,7 +60,6 @@
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
-    _systemd_unit_src: "{{ systemd_unit_args.src }}"
     # For dest_abs mode, the identifier used in the per-unit result fact
     # is the last two path components — same shape relative-dest dropins
     # produce (journald.conf.d/99-custom.conf → journald_conf_d_99_custom_conf_result,
@@ -187,20 +186,13 @@
     # the validate + rescue logic below is a single source of truth. The
     # mapping form of `action:` is deprecated in ansible-core 2.23, so the
     # string form with a separate `args:` block is used.
-    #
-    # _module's expression references systemd_unit_args.src (caller var,
-    # import-time scope) instead of _systemd_unit_src (set_fact'd at
-    # runtime), so an import_tasks chain that eager-renders the task's
-    # vars: block before set_facts run still resolves cleanly. Same
-    # reason as the linger-task name above. Task body itself still uses
-    # _systemd_unit_src because by execution time the set_fact has run.
     - name: install | Write the unit file ({{ _module }})
       when: _systemd_unit_condition
       vars:
         _module: "{{ 'template' if systemd_unit_args.src.endswith('.j2') else 'copy' }}"
       action: "{{ _module }}"
       args:
-        src: "{{ _systemd_unit_src }}"
+        src: "{{ systemd_unit_args.src }}"
         dest: "{{ _systemd_unit_path }}"
         owner: root
         group: root
