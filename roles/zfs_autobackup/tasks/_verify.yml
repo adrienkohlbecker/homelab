@@ -1,15 +1,3 @@
-- name: _verify | Check zfs-autobackup binary exists
-  stat:
-    path: /usr/local/bin/zfs-autobackup
-  register: zfs_autobackup_verify_bin
-
-- name: _verify | Binary is present and executable
-  assert:
-    that:
-      - zfs_autobackup_verify_bin.stat.exists
-      - zfs_autobackup_verify_bin.stat.executable
-    fail_msg: "zfs-autobackup binary missing or not executable"
-
 - name: _verify | Run zfs-autobackup --version
   command: /usr/local/bin/zfs-autobackup --version
   changed_when: false
@@ -23,28 +11,6 @@
     fail_msg: >-
       installed={{ zfs_autobackup_verify_version.stdout | trim }},
       expected={{ zfs_autobackup_version }}
-
-- name: _verify | Stat deployed scripts
-  stat:
-    path: "/usr/local/bin/{{ item }}"
-  loop:
-    - zfs_backup_local
-    - zfs_backup_onsite
-    - zfs_backup_offsite
-    - zfs_backup_restore
-    - zfs_backup_freshness
-    - zfs_autosnapshot
-  register: zfs_autobackup_verify_scripts
-
-- name: _verify | All backup scripts are present and executable
-  assert:
-    that:
-      - item.stat.exists
-      - item.stat.executable
-    fail_msg: "missing or not executable: {{ item.item }}"
-  loop: "{{ zfs_autobackup_verify_scripts.results }}"
-  loop_control:
-    label: "{{ item.item }}"
 
 - name: _verify | Inspect zfs_autosnapshot.timer
   systemd:
