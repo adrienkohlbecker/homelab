@@ -196,11 +196,6 @@
       proxy_pass: http://127.0.0.1:18080/
       auth: required
 
-- name: _verify | Settle the nginxverify vhost
-  import_tasks: _verify_wait_route.yml
-  vars:
-    _wait_route_host: "{{ nginx_verify_host }}"
-
 - name: _verify | Unauthenticated navigation redirects to the Authelia portal (302)
   uri:
     url: "https://{{ nginx_verify_host }}/"
@@ -212,7 +207,11 @@
       Sec-Fetch-Mode: navigate
     status_code: 302
   register: nginx_verify_unauth
-  failed_when: nginx_verify_unauth is not authelia_redirects_to('nginxverifyauth', inventory_hostname, domain, require_rd=false)
+  until:
+    - nginx_verify_unauth.status == 302
+    - nginx_verify_unauth is authelia_redirects_to('nginxverifyauth', inventory_hostname, domain, require_rd=false)
+  retries: 10
+  delay: 1
 
 # An XHR/fetch (Sec-Fetch-Mode != navigate) that fails auth must get a bare 401,
 # NOT a 302 to the cross-origin portal: an SPA cannot follow that redirect and
@@ -227,7 +226,11 @@
       Sec-Fetch-Mode: cors
     status_code: 401
   register: nginx_verify_unauth_xhr
-  failed_when: nginx_verify_unauth_xhr.location is defined
+  until:
+    - nginx_verify_unauth_xhr.status == 401
+    - nginx_verify_unauth_xhr.location is not defined
+  retries: 10
+  delay: 1
 
 # Access-log credential redaction: nginx logs $request_safe, which rewrites a
 # credential query param (apikey, SABnzbd's admin key) to REDACTED before the
@@ -242,9 +245,12 @@
     follow_redirects: none
     status_code: 302
   register: nginx_verify_redacted_auth_request
-  failed_when: >-
-    '__nginx_verify_secret__' in (nginx_verify_redacted_auth_request.location | default(''))
-    or 'apikey=REDACTED' not in (nginx_verify_redacted_auth_request.location | default(''))
+  until:
+    - nginx_verify_redacted_auth_request.status == 302
+    - "'__nginx_verify_secret__' not in (nginx_verify_redacted_auth_request.location | default(''))"
+    - "'apikey=REDACTED' in (nginx_verify_redacted_auth_request.location | default(''))"
+  retries: 10
+  delay: 1
 
 - name: _verify | Wait for the redacted apikey to reach the access log
   command: tail -n 200 /var/log/nginx/access.log
@@ -277,11 +283,6 @@
       proxy_pass: http://127.0.0.1:18080/
       auth: required
 
-- name: _verify | Settle the nginxverifyempty vhost
-  import_tasks: _verify_wait_route.yml
-  vars:
-    _wait_route_host: "nginxverifyempty.{{ inventory_hostname }}.{{ domain }}"
-
 - name: _verify | A cookieless Authorization-bearing request is still gated (no bypass)
   uri:
     url: "https://nginxverifyempty.{{ inventory_hostname }}.{{ domain }}/"
@@ -290,6 +291,10 @@
     validate_certs: false
     follow_redirects: none
     status_code: 302
+  register: nginx_verify_empty_auth
+  until: nginx_verify_empty_auth.status == 302
+  retries: 10
+  delay: 1
 
 # http->https redirect and the default-server catch-all are probed on the
 # public interface, not loopback: the stub_status server binds 127.0.0.1:80
@@ -302,7 +307,11 @@
     follow_redirects: none
     status_code: 308
   register: nginx_verify_http
-  failed_when: not (nginx_verify_http.location | default('')).startswith('https://')
+  until:
+    - nginx_verify_http.status == 308
+    - (nginx_verify_http.location | default('')).startswith('https://')
+  retries: 10
+  delay: 1
 
 - name: _verify | Unknown Host hits the default server (404)
   uri:
@@ -352,16 +361,15 @@
       proxy_pass: http://127.0.0.1:18080/
       auth: required
 
-- name: _verify | Settle the nginxverifyauth vhost
-  import_tasks: _verify_wait_route.yml
-  vars:
-    _wait_route_host: "nginxverifyauth.{{ inventory_hostname }}.{{ domain }}"
-
 - name: _verify | Authenticated browser user is admitted and identity-forwarded
   uri:
     url: "https://nginxverifyauth.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     status_code: 200
+  register: nginx_verify_auth
+  until: nginx_verify_auth.status == 200
+  retries: 10
+  delay: 1
 
 - name: _verify | Upstream received X-Forwarded-User from the auth subrequest
   command: journalctl -u nginx_verify_upstream --no-pager
@@ -444,22 +452,20 @@
       location_conf: |
         add_header X-Verify-Loc "1" always;
 
-- name: _verify | Settle the nginxverifyloc vhost
-  import_tasks: _verify_wait_route.yml
-  vars:
-    _wait_route_host: "nginxverifyloc.{{ inventory_hostname }}.{{ domain }}"
-
 - name: _verify | A location_conf keeps the security headers AND its own header
   uri:
     url: "https://nginxverifyloc.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     status_code: 200
   register: nginx_verify_loc
-  failed_when: >-
-    nginx_verify_loc.strict_transport_security is not defined
-    or nginx_verify_loc.content_security_policy is not defined
-    or nginx_verify_loc.x_verify_loc is not defined
-    or nginx_verify_loc.x_xss_protection is defined
+  until:
+    - nginx_verify_loc.status == 200
+    - nginx_verify_loc.strict_transport_security is defined
+    - nginx_verify_loc.content_security_policy is defined
+    - nginx_verify_loc.x_verify_loc is defined
+    - nginx_verify_loc.x_xss_protection is not defined
+  retries: 10
+  delay: 1
 
 # server_conf adds a sibling location at server scope. The only other use of the
 # key feeds a deliberately-broken directive (the rollback test below), so the
@@ -478,11 +484,6 @@
           return 200 "server-conf-ok";
         }
 
-- name: _verify | Settle the nginxverifyserverconf vhost
-  import_tasks: _verify_wait_route.yml
-  vars:
-    _wait_route_host: "nginxverifyserverconf.{{ inventory_hostname }}.{{ domain }}"
-
 - name: _verify | A server_conf snippet adds a working sibling location
   uri:
     url: "https://nginxverifyserverconf.{{ inventory_hostname }}.{{ domain }}/sidecar"
@@ -490,7 +491,11 @@
     return_content: true
     status_code: 200
   register: nginx_verify_serverconf
-  failed_when: "'server-conf-ok' not in (nginx_verify_serverconf.content | default(''))"
+  until:
+    - nginx_verify_serverconf.status == 200
+    - "'server-conf-ok' in (nginx_verify_serverconf.content | default(''))"
+  retries: 10
+  delay: 1
 
 # The first-class client_max_body_size / client_body_buffer_size keys.
 # Configuring the vhost proves both render into valid config (the helper's
@@ -507,11 +512,6 @@
       client_max_body_size: 1k
       client_body_buffer_size: 2k
 
-- name: _verify | Settle the nginxverifybody vhost
-  import_tasks: _verify_wait_route.yml
-  vars:
-    _wait_route_host: "nginxverifybody.{{ inventory_hostname }}.{{ domain }}"
-
 - name: _verify | A body over client_max_body_size is rejected with 413
   uri:
     url: "https://nginxverifybody.{{ inventory_hostname }}.{{ domain }}/"
@@ -519,6 +519,10 @@
     body: "{{ 'x' * 4096 }}"
     validate_certs: false
     status_code: 413
+  register: nginx_verify_body_limit
+  until: nginx_verify_body_limit.status == 413
+  retries: 10
+  delay: 1
 
 # proxy_buffering / proxy_request_buffering take the quoted string 'on'/'off' (a
 # bare off is YAML-coerced to the boolean false and renders an invalid
@@ -536,11 +540,6 @@
       proxy_buffering: "off"
       proxy_request_buffering: "off"
 
-- name: _verify | Settle the nginxverifybuffering vhost
-  import_tasks: _verify_wait_route.yml
-  vars:
-    _wait_route_host: "nginxverifybuffering.{{ inventory_hostname }}.{{ domain }}"
-
 - name: _verify | The proxy-buffering vhost serves the proxied response
   uri:
     url: "https://nginxverifybuffering.{{ inventory_hostname }}.{{ domain }}/"
@@ -548,7 +547,11 @@
     return_content: true
     status_code: 200
   register: nginx_verify_buffering
-  failed_when: "'nginx_verify_upstream_ok' not in (nginx_verify_buffering.content | default(''))"
+  until:
+    - nginx_verify_buffering.status == 200
+    - "'nginx_verify_upstream_ok' in (nginx_verify_buffering.content | default(''))"
+  retries: 10
+  delay: 1
 
 - name: _verify | Standard metadata paths reach the upstream
   uri:
@@ -560,7 +563,11 @@
     - /favicon.ico
     - /robots.txt
   register: nginx_verify_metadata
-  failed_when: "'nginx_verify_upstream_ok' not in (nginx_verify_metadata.content | default(''))"
+  until:
+    - nginx_verify_metadata.status == 200
+    - "'nginx_verify_upstream_ok' in (nginx_verify_metadata.content | default(''))"
+  retries: 10
+  delay: 1
 
 # The csp_default_src / csp_frame_ancestors / csp_additional keys compose into
 # the Content-Security-Policy header (site.conf.j2). Only
@@ -579,21 +586,19 @@
       csp_default_src: default.csptest
       csp_frame_ancestors: https://frame.csptest
 
-- name: _verify | Settle the nginxverifycsp vhost
-  import_tasks: _verify_wait_route.yml
-  vars:
-    _wait_route_host: "nginxverifycsp.{{ inventory_hostname }}.{{ domain }}"
-
 - name: _verify | CSP override tokens all appear in the Content-Security-Policy header
   uri:
     url: "https://nginxverifycsp.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     status_code: 200
   register: nginx_verify_cspov
-  failed_when: >-
-    'connect-src api.csptest' not in (nginx_verify_cspov.content_security_policy | default(''))
-    or 'default-src default.csptest' not in (nginx_verify_cspov.content_security_policy | default(''))
-    or 'frame-ancestors https://frame.csptest' not in (nginx_verify_cspov.content_security_policy | default(''))
+  until:
+    - nginx_verify_cspov.status == 200
+    - "'connect-src api.csptest' in (nginx_verify_cspov.content_security_policy | default(''))"
+    - "'default-src default.csptest' in (nginx_verify_cspov.content_security_policy | default(''))"
+    - "'frame-ancestors https://frame.csptest' in (nginx_verify_cspov.content_security_policy | default(''))"
+  retries: 10
+  delay: 1
 
 # csp_passthrough + enable_http on one auth-less vhost: confirm :80 serves
 # cleartext without a redirect, and that csp_passthrough emits no CSP header
@@ -609,11 +614,6 @@
       enable_http: true
       csp_passthrough: true
 
-- name: _verify | Settle the nginxverifyplain vhost
-  import_tasks: _verify_wait_route.yml
-  vars:
-    _wait_route_host: "nginxverifyplain.{{ inventory_hostname }}.{{ domain }}"
-
 - name: _verify | The enable_http listener serves :80 in cleartext without a redirect
   uri:
     url: "http://{{ ansible_default_ipv4.address }}/"
@@ -623,7 +623,11 @@
     return_content: true
     status_code: 200
   register: nginx_verify_plain80
-  failed_when: "'nginx_verify_upstream_ok' not in (nginx_verify_plain80.content | default(''))"
+  until:
+    - nginx_verify_plain80.status == 200
+    - "'nginx_verify_upstream_ok' in (nginx_verify_plain80.content | default(''))"
+  retries: 10
+  delay: 1
 
 - name: _verify | A csp_passthrough vhost emits no Content-Security-Policy header
   uri:
@@ -631,7 +635,11 @@
     validate_certs: false
     status_code: 200
   register: nginx_verify_csp
-  failed_when: nginx_verify_csp.content_security_policy is defined
+  until:
+    - nginx_verify_csp.status == 200
+    - nginx_verify_csp.content_security_policy is not defined
+  retries: 10
+  delay: 1
 
 # The nginx_ipv6 path (host_vars/fox.yml only, never in the test matrix)
 # renders [::]-listeners in site.conf.j2 / nginx.conf.j2 that nothing
@@ -650,11 +658,6 @@
       subdomain: nginxverifyipv6
       proxy_pass: http://127.0.0.1:18080/
 
-- name: _verify | Settle the nginxverifyipv6 vhost over IPv6
-  import_tasks: _verify_wait_route.yml
-  vars:
-    _wait_route_host: "nginxverifyipv6.{{ inventory_hostname }}.{{ domain }}"
-
 - name: _verify | The [::]:443 listener serves the vhost over ::1
   uri:
     url: "https://nginxverifyipv6.{{ inventory_hostname }}.{{ domain }}/"
@@ -662,7 +665,11 @@
     return_content: true
     status_code: 200
   register: nginx_verify_ipv6
-  failed_when: "'nginx_verify_upstream_ok' not in (nginx_verify_ipv6.content | default(''))"
+  until:
+    - nginx_verify_ipv6.status == 200
+    - "'nginx_verify_upstream_ok' in (nginx_verify_ipv6.content | default(''))"
+  retries: 10
+  delay: 1
 
 # condition:false must apply no changes while still replacing the caller-facing
 # result with an explicit no-change value.
