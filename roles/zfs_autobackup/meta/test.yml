@@ -1,9 +1,4 @@
-# The functional check (_verify drives zfs_backup_local) runs against
-# rpool/zfs_autobackup_test -- rpool-only, identical on every machine. lab/pug
-# only added prod-shaped source config that _verify never exercises.
-# (Cross-pool replication is not functionally asserted on any machine -- see
-# the design note.)
+# The functional checks use rpool-only scratch datasets, so prod-shaped lab/pug
+# storage adds no coverage. Those fixtures remain available through --machine.
 machines:
   box:
-  lab:
-  pug:
