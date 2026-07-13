@@ -125,59 +125,33 @@
   loop_control:
     label: "{{ item.item }}"
 
-# --- Health timer ---
+# --- Role-owned timers ---
 # (script deployment is covered functionally by the live zfs_health run at the
 # end of this file, and by `validate: bash -n` at copy time -- no stat needed.)
 
-- name: _verify | Read health timer state  # noqa: command-instead-of-module
-  command: systemctl show -p ActiveState,UnitFileState --value zfs_health.timer
-  register: _zfs_verify_health_timer
+- name: _verify | Read role-owned timer state  # noqa: command-instead-of-module
+  vars:
+    _zfs_verify_timer_names: >-
+      {{ ['zfs_health', 'zfs_scrub']
+         + (zfs_trim_pools | map('regex_replace', '^', 'zfs_trim_') | list) }}
+  command: systemctl show -p ActiveState,UnitFileState --value {{ item }}.timer
+  loop: "{{ _zfs_verify_timer_names }}"
+  register: _zfs_verify_timers
   changed_when: false
   become: true
 
-- name: _verify | Health timer is active and enabled
-  assert:
-    that:
-      - _zfs_verify_health_timer.stdout_lines[0] == 'active'
-      - _zfs_verify_health_timer.stdout_lines[1] == 'enabled'
-
-# --- Trim timers (lab only; box has zfs_trim_pools=[]) ---
-
-- name: _verify | Read trim timer state  # noqa: command-instead-of-module
-  when: zfs_trim_pools | length > 0
-  command: systemctl show -p ActiveState,UnitFileState --value zfs_trim_{{ item }}.timer
-  loop: "{{ zfs_trim_pools }}"
-  register: _zfs_verify_trim_timers
-  changed_when: false
-  become: true
-
-- name: _verify | Trim timers are active and enabled
-  when: zfs_trim_pools | length > 0
+- name: _verify | Role-owned timers are active and enabled
   assert:
     that:
       - item.stdout_lines[0] == 'active'
       - item.stdout_lines[1] == 'enabled'
     fail_msg: >-
-      zfs_trim_{{ item.item }}.timer is not active+enabled:
-      {{ item.stdout_lines }}.
-  loop: "{{ _zfs_verify_trim_timers.results }}"
+      {{ item.item }}.timer is not active+enabled: {{ item.stdout_lines }}.
+  loop: "{{ _zfs_verify_timers.results }}"
   loop_control:
     label: "{{ item.item }}"
 
-# --- Scrub timer + distro scheduler takeover ---
-
-- name: _verify | Read scrub timer state  # noqa: command-instead-of-module
-  command: systemctl show -p ActiveState,UnitFileState --value zfs_scrub.timer
-  register: _zfs_verify_scrub_timer
-  changed_when: false
-  become: true
-
-- name: _verify | Scrub timer is active and enabled
-  assert:
-    that:
-      - _zfs_verify_scrub_timer.stdout_lines[0] == 'active'
-      - _zfs_verify_scrub_timer.stdout_lines[1] == 'enabled'
-    fail_msg: "zfs_scrub.timer is not active+enabled: {{ _zfs_verify_scrub_timer.stdout_lines }}."
+# --- Scrub behavior + distro scheduler takeover ---
 
 - name: _verify | The scrub script kicks off without error
   command: /usr/local/bin/zfs_scrub
