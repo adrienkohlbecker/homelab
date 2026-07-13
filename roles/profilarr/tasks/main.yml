@@ -19,9 +19,9 @@
       name: profilarr
       owner: profilarr
       group: profilarr
+      condition: "{{ not ansible_check_mode or profilarr_user.uid is defined }}"
       links:
         - /mnt/services/profilarr/profilarr.db
-  when: not ansible_check_mode or profilarr_user.uid is defined
   tags:
     - profilarr
 

@@ -3,6 +3,7 @@
 # Caller passes one dict `sqlite_dataset_args`:
 #   name, owner, group  required directory and ownership
 #   links               required dest paths; parent dirs must already exist
+#   condition           optional bool; gates filesystem changes (default true)
 #   force               optional bool; create dangling links instead of empty
 #                       0640 targets
 #
@@ -37,6 +38,7 @@
       must be non-empty and unique.
 
 - name: Pre-create /mnt/services/sqlite/{{ sqlite_dataset_args.name }}
+  when: sqlite_dataset_args.condition | default(true) | bool
   file:
     path: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}"
     state: directory
@@ -49,6 +51,7 @@
 # absent, leaves an existing DB untouched (no truncation, no mtime bump).
 - name: Pre-create SQLite DB src files for {{ sqlite_dataset_args.name }}
   when:
+    - sqlite_dataset_args.condition | default(true) | bool
     - not (sqlite_dataset_args.force | default(false) | bool)
   file:
     path: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ sqlite_dataset_link | basename }}"
@@ -68,6 +71,7 @@
 # real file is already at a dest so force can never silently replace it.
 - name: Refuse real files at force destinations for {{ sqlite_dataset_args.name }}
   when:
+    - sqlite_dataset_args.condition | default(true) | bool
     - sqlite_dataset_args.force | default(false) | bool
   stat:
     path: "{{ sqlite_dataset_link }}"
@@ -83,6 +87,7 @@
     loop_var: sqlite_dataset_link
 
 - name: Symlink DBs onto sqlite dataset for {{ sqlite_dataset_args.name }}
+  when: sqlite_dataset_args.condition | default(true) | bool
   file:
     src: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ sqlite_dataset_link | basename }}"
     dest: "{{ sqlite_dataset_link }}"

@@ -87,10 +87,10 @@
       name: sabnzbd
       owner: sabnzbd
       group: media
+      condition: "{{ not ansible_check_mode or sabnzbd_user.uid is defined }}"
       force: true
       links:
         - /mnt/services/sabnzbd/admin/history1.db
-  when: not ansible_check_mode or sabnzbd_user.uid is defined
   tags:
     - sabnzbd
 

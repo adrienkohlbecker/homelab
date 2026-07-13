@@ -88,9 +88,9 @@
       name: headscale
       owner: headscale
       group: headscale
+      condition: "{{ not ansible_check_mode or headscale_user.uid is defined }}"
       links:
         - /mnt/services/headscale/data/db.sqlite
-  when: not ansible_check_mode or headscale_user.uid is defined
   tags:
     - headscale
 

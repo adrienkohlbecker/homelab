@@ -43,10 +43,10 @@
       name: sonarr
       owner: sonarr
       group: media
+      condition: "{{ not ansible_check_mode or sonarr_user.uid is defined }}"
       links:
         - /mnt/services/sonarr/sonarr.db
         - /mnt/services/sonarr/logs.db
-  when: not ansible_check_mode or sonarr_user.uid is defined
   tags:
     - sonarr
 

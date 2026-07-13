@@ -43,10 +43,10 @@
       name: radarr
       owner: radarr
       group: media
+      condition: "{{ not ansible_check_mode or radarr_user.uid is defined }}"
       links:
         - /mnt/services/radarr/radarr.db
         - /mnt/services/radarr/logs.db
-  when: not ansible_check_mode or radarr_user.uid is defined
   tags:
     - radarr
 

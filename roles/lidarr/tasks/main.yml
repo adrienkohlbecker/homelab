@@ -42,10 +42,10 @@
       name: lidarr
       owner: lidarr
       group: media
+      condition: "{{ not ansible_check_mode or lidarr_user.uid is defined }}"
       links:
         - /mnt/services/lidarr/lidarr.db
         - /mnt/services/lidarr/logs.db
-  when: not ansible_check_mode or lidarr_user.uid is defined
   tags:
     - lidarr
 
