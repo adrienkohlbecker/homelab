@@ -362,7 +362,6 @@
     state: present
     extra_zfs_properties:
       'autobackup:bak': 'true'
-  register: zfs_root_properties
   become: true
   tags:
     - zfs
