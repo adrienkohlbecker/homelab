@@ -471,6 +471,7 @@
     or nginx_verify_loc.strict_transport_security is not defined
     or nginx_verify_loc.content_security_policy is not defined
     or nginx_verify_loc.x_verify_loc is not defined
+    or nginx_verify_loc.x_xss_protection is defined
 
 # server_conf adds a sibling location at server scope. The only other use of the
 # key feeds a deliberately-broken directive (the rollback test below), so the
