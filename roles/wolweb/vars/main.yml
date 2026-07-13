@@ -4,6 +4,8 @@
 # use the management-VLAN broadcast from the wolweb host. Off-segment devices
 # point at the UDM management gateway; udm_wol_relay rebroadcasts any valid
 # magic packet from trusted source VLANs onto the target VLAN.
+wolweb_broadcast_ip: "{{ (ansible_facts.default_ipv4.address + '/' + ansible_facts.default_ipv4.netmask) | ansible.utils.ipaddr('broadcast') }}"
+
 wolweb_devices:
   - name: Lab
     mac: "{{ mac_addresses.lab_i210 }}"
