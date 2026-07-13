@@ -26,14 +26,6 @@
   tags:
     - zfs_autobackup
 
-- name: Remove legacy virtualenv installation
-  file:
-    path: /opt/virtualenv/zfs_autobackup
-    state: absent
-  become: true
-  tags:
-    - zfs_autobackup
-
 - name: Check zfs-autobackup version
   command: /usr/local/bin/zfs-autobackup --version
   register: _zfs_autobackup_version_check
