@@ -139,18 +139,9 @@
   until: >-
     _systemd_timer_alarms.status == 200
     and (_systemd_timer_alarms.content | from_json).alarms.keys() | list
+        | select('search', 'systemd_timers.verify_timer_recent.systemd_timer_overdue') | list | length > 0
+    and (_systemd_timer_alarms.content | from_json).alarms.keys() | list
         | select('search', 'systemd_timers.verify_timer_overdue.systemd_timer_overdue') | list | length > 0
-
-- name: _verify | Assert overdue alert instantiated against both fixtures
-  vars:
-    _keys: "{{ (_systemd_timer_alarms.content | from_json).alarms.keys() | list }}"
-  assert:
-    that:
-      - _keys | select('search', 'systemd_timers.verify_timer_recent.systemd_timer_overdue') | list | length > 0
-      - _keys | select('search', 'systemd_timers.verify_timer_overdue.systemd_timer_overdue') | list | length > 0
-    fail_msg: >-
-      Expected systemd_timer_overdue template to bind on both fixtures.
-      Got keys: {{ _keys | select('search', 'systemd_timers') | list }}
 
 - name: _verify | Assert overdue alert uses an uptime state guard
   vars:
