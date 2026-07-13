@@ -2,7 +2,6 @@
 # see CLAUDE.md "Helper roles → systemd_timer" for the full key reference.
 #
 # Non-obvious constraints kept here (everything else is in CLAUDE.md):
-#   - fixed_random_delay requires randomized_delay_sec (enforced below).
 #   - run_as is only valid when user == 'root'; rejected early so systemd
 #     doesn't see an invalid User= in a user-scope unit.
 #   - environment values must be non-secret: written into the 0644 unit file.
@@ -65,23 +64,6 @@
   loop: "{{ systemd_timer_args.environment.keys() | list }}"
   loop_control:
     label: "{{ item }}"
-
-# FixedRandomDelay= only has meaning paired with RandomizedDelaySec=, and
-# timer.j2 emits it *inside* the randomized_delay_sec block -- so
-# fixed_random_delay alone is silently dropped, reintroducing the cross-host
-# thundering-herd it was meant to prevent. Reject the combination loudly.
-- name: install | Reject fixed_random_delay without randomized_delay_sec for {{ systemd_timer_args.name }}
-  when:
-    - systemd_timer_args.fixed_random_delay | default(false)
-  assert:
-    quiet: true
-    that:
-      - systemd_timer_args.randomized_delay_sec is defined
-    fail_msg: >-
-      systemd_timer {{ systemd_timer_args.name }}: fixed_random_delay requires
-      randomized_delay_sec (FixedRandomDelay= pins an otherwise-random delay to
-      a stable per-host value; with no RandomizedDelaySec= there is nothing to
-      pin).
 
 # Nested import_role task names stay static. The role is called both
 # from import_role sites (where systemd_timer_args is in scope at

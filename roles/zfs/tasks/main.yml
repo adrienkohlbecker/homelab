@@ -229,8 +229,8 @@
 # /etc/cron.d/zfsutils-linux (second Sunday, 00:24) -- a single scheduler is
 # easier to reason about, and self-owned timing lets zfs_autosnapshot pause an
 # in-progress scrub during the nightly backup window. Second Sunday preserves
-# the distro's monthly cadence; fixed_random_delay spreads the fleet's scrubs
-# over half an hour while pinning each host to a stable offset. The script kicks
+# the distro's monthly cadence; a stable randomized delay spreads the fleet's
+# scrubs over half an hour. The script kicks
 # the scrub off and returns (no -w), so the default 1h TimeoutStartSec is ample;
 # zfs_health + ZED's scrub_finish zedlet are the outcome watchdogs.
 #
@@ -251,7 +251,6 @@
       on_calendar: "Sun *-*-08..14 01:00:00"
       exec_start: /usr/local/bin/zfs_scrub
       randomized_delay_sec: 1800
-      fixed_random_delay: true
   tags:
     - zfs
 

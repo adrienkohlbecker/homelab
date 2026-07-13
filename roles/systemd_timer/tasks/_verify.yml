@@ -8,7 +8,7 @@
 #      tracks the persistent trigger stamp's mtime, and overdue fires when
 #      the stamp is older than 2 * period
 #   5. extension knobs (environment, accuracy_sec, on_active_sec,
-#      randomized_delay_sec, fixed_random_delay, additional_service_directives)
+#      randomized_delay_sec, additional_service_directives)
 
 - name: _verify | Install systemd_timers netdata collector
   import_tasks: netdata.yml
@@ -97,7 +97,6 @@
       accuracy_sec: 1s
       on_active_sec: "0"
       randomized_delay_sec: 600
-      fixed_random_delay: true
       additional_service_directives:
         # ProtectSystem=strict makes the filesystem read-only except for the
         # explicit test output path, exercising the directive passthrough.

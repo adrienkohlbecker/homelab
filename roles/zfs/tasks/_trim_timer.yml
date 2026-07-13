@@ -34,7 +34,6 @@
       # Spread the per-pool trims across the fleet (and across pools on a
       # multi-pool host) instead of all kicking off at 00:05.
       randomized_delay_sec: 3600
-      fixed_random_delay: true
       # -w waits for the trim to finish, so the oneshot's exit status reflects
       # the actual outcome -- a mid-run failure surfaces as a failed unit (and,
       # via the helper's monitor, as overdue) rather than being lost because the
