@@ -77,18 +77,6 @@
   loop_control:
     label: "{{ item.item }}"
 
-- name: _verify | Stat logrotate config
-  stat:
-    path: /etc/logrotate.d/zfs_autobackup
-  register: zfs_autobackup_verify_logrotate
-  become: true
-
-- name: _verify | Logrotate config is absent
-  assert:
-    that:
-      - not zfs_autobackup_verify_logrotate.stat.exists
-    fail_msg: "obsolete logrotate config remains at /etc/logrotate.d/zfs_autobackup"
-
 # Functional check: converge granted zfs allow on the scratch dataset that
 # _setup tagged; assert the grant landed, then drive a real local backup and
 # confirm a @bak- snapshot appears -- exercising script discovery, the

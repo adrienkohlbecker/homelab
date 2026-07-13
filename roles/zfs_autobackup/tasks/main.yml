@@ -189,14 +189,6 @@
   tags:
     - zfs_autobackup
 
-- name: Remove zfs_autobackup logrotate configuration
-  file:
-    path: /etc/logrotate.d/zfs_autobackup
-    state: absent
-  become: true
-  tags:
-    - zfs_autobackup
-
 - name: Configure host as a source for backups
   import_tasks: source.yml
   tags:

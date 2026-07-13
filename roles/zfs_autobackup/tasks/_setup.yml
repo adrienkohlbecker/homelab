@@ -1,11 +1,3 @@
-- name: _setup | Install dependencies
-  apt:
-    pkg:
-      - logrotate
-    install_recommends: false
-    cache_valid_time: 3600
-  become: true
-
 # The backup scripts source /usr/local/lib/functions.sh at runtime; in prod
 # the bash base role guarantees it. _verify drives a real backup, so install
 # it here (mirrors roles/zfs/tasks/_setup.yml).
