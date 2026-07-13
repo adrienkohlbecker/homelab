@@ -1,12 +1,10 @@
 - name: _verify | Wolweb health endpoint answers on loopback port
   uri:
     url: http://localhost:{{ service_ports.wolweb }}/health
-    status_code: 200
   register: _wolweb_health
   retries: 5
   delay: 1
   until: _wolweb_health.status == 200
-  become: true
 
 - name: _verify | Create unique wolweb fluent-bit marker
   set_fact:
@@ -83,13 +81,11 @@
     port: "{{ service_ports.wolweb }}"
     state: stopped
     timeout: 5
-  become: true
 
 - name: _verify | Wolweb serves the templated device list
   uri:
     url: http://localhost:{{ service_ports.wolweb }}/data/get
     return_content: true
-    status_code: 200
   register: _wolweb_data
   retries: 5
   delay: 1
@@ -100,7 +96,6 @@
     or 'Pug' not in (_wolweb_data.content | default(''))
     or 'Windows' not in (_wolweb_data.content | default(''))
     or (network.sites.home.vlans.management.gateway ~ ':9') not in (_wolweb_data.content | default(''))
-  become: true
 
 # /wake actually transmits a magic packet, and a directed-broadcast send is
 # environment-dependent (SO_BROADCAST / SLIRP on the qemu fixture), so assert
@@ -111,7 +106,6 @@
   uri:
     url: http://localhost:{{ service_ports.wolweb }}/wake/__nonexistent__
     status_code: 404
-  become: true
 
 # Complements the 404 case: a known device name must resolve in the loaded
 # list. Upstream returns 200 on a successful send and 500 if the directed
@@ -122,7 +116,6 @@
   uri:
     url: http://localhost:{{ service_ports.wolweb }}/wake/Lab
     status_code: [ 200, 500 ]
-  become: true
 
 # The wake_destination path sends unicast (to the UDM gateway), which needs
 # no SO_BROADCAST and succeeds under SLIRP -- unlike the broadcast case above
@@ -130,8 +123,6 @@
 - name: _verify | Wolweb wake route sends to a wake_destination device
   uri:
     url: http://localhost:{{ service_ports.wolweb }}/wake/Windows
-    status_code: 200
-  become: true
 
 # read_only:true leaves the /data/save POST route unregistered upstream, so a
 # hit returns 404. This fails if a future image ignores read_only or the flag
@@ -145,13 +136,11 @@
       name: __probe__
       mac: "00:00:00:00:00:00"
     status_code: 404
-  become: true
 
 - name: _verify | Map the wolweb vhost FQDN to loopback for SNI-correct probing
   lineinfile:
     path: /etc/hosts
     line: "127.0.0.1 wolweb.{{ inventory_hostname }}.{{ domain }}"
-    state: present
   become: true
 
 - name: _verify | Unauthenticated hit redirects to Authelia
@@ -165,7 +154,6 @@
   delay: 1
   until: _wolweb_auth_gate.status == 302
   failed_when: _wolweb_auth_gate is not authelia_redirects_to('wolweb', inventory_hostname, domain)
-  become: true
 
 - name: _verify | Exercise wolweb fluent-bit record contracts
   import_role:
