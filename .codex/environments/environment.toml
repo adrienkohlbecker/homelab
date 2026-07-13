@@ -3,8 +3,4 @@ version = 1
 name = "homelab"
 
 [setup]
-script = '''
-mise-tasks/worktree/populate.sh "$CODEX_WORKTREE_PATH"
-code --new-window "$CODEX_WORKTREE_PATH"
-cd "$CODEX_WORKTREE_PATH"
-'''
+script = "mise-tasks/worktree/populate.sh \"$CODEX_WORKTREE_PATH\""
