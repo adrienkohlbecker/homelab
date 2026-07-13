@@ -30,11 +30,6 @@
   vars:
     service_user_args:
       name: seerr
-      # settings.json holds many secrets (apiKey, sessionSecret, vapidPrivate,
-      # SMTP password, telegram token, *arr/plex/tautulli keys) at mode 0644
-      # (matching seerr's own umask, to avoid a mode-flip restart loop). The
-      # parent dir is the real access gate, so tighten it from the 0755 default.
-      config_dir_mode: "0750"
   tags:
     - seerr
 

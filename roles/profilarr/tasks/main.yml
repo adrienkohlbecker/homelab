@@ -5,10 +5,6 @@
   vars:
     service_user_args:
       name: profilarr
-      # /config holds profilarr.db, which stores the connection details and
-      # API keys of every *arr instance profilarr syncs -- keep it off-limits
-      # to other local accounts.
-      config_dir_mode: "0750"
   tags:
     - profilarr
 
