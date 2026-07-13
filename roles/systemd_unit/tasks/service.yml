@@ -1,9 +1,7 @@
 # Inputs: caller passes a single dict `systemd_unit_args` with keys
 #   src               bare unit name (e.g. "mosquitto"), full unit filename
 #                     (e.g. "mosquitto.service"), or template path
-#                     (e.g. "mosquitto.service.j2"); used only for the name
-#                     fallback and the task title
-#   dest              optional override for the resolved unit name
+#                     (e.g. "mosquitto.service.j2")
 #   user              default 'root'; non-root drives the named user's
 #                     user manager (linger must already be on)
 #   condition         default true; gates the whole call
@@ -39,11 +37,11 @@
     that:
       - systemd_unit_args is defined
       - systemd_unit_args is mapping
-      - systemd_unit_args.src is defined or systemd_unit_args.dest is defined
+      - systemd_unit_args.src is defined
+      - systemd_unit_args.src is string
     fail_msg: >-
-      systemd_unit_args needs src or dest (unit name);
-      got src={{ systemd_unit_args.src | default('<unset>') }},
-      dest={{ systemd_unit_args.dest | default('<unset>') }}
+      systemd_unit_args needs src (unit name);
+      got {{ systemd_unit_args | default('<unset>') }}
 
 # Two set_fact tasks because ansible's templating engine resolves all
 # keys in a single set_fact concurrently — a key can't read a sibling
@@ -56,8 +54,7 @@
     _systemd_unit_start: "{{ systemd_unit_args.start | default(true) }}"
     # Strip .j2 so a caller can hand `service` the same dict it handed
     # `install` (src: foo.service.j2); install.yml and remove.yml strip it too.
-    _systemd_unit_name: >-
-      {{ systemd_unit_args.dest | default(systemd_unit_args.src | regex_replace('\.j2$', '')) }}
+    _systemd_unit_name: "{{ systemd_unit_args.src | regex_replace('\\.j2$', '') }}"
 
 - name: service | Derive scope for {{ systemd_unit_args.src }}
   set_fact:
@@ -258,6 +255,6 @@
 # play don't have to manually capture `systemd_unit_started` before the next
 # service call rebinds it. When start: false the Start task is skipped and
 # systemd_unit_started is undefined; default to changed=false in that case.
-- name: service | Record service result for {{ systemd_unit_args.src | default(systemd_unit_args.dest | default('?')) }}
+- name: service | Record service result for {{ systemd_unit_args.src }}
   set_fact:
     "{{ _systemd_unit_name | ansible_var_key }}_started_result": "{{ systemd_unit_started | default({'changed': false}) }}"
