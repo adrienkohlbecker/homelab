@@ -3,33 +3,22 @@
   tags:
     - zfs
 
-- name: Assert required inputs
+- name: Assert required inputs and list shapes
   assert:
     that:
       - zfs_root is defined
-      - zfs_root is boolean or zfs_root in [true, false]
+      - zfs_root is boolean
       - zfs_trim_pools is defined
       - zfs_trim_pools is not string
       - zfs_trim_pools is iterable
       - zfs_mount_cache_datasets is defined
       - zfs_mount_cache_datasets is not string
       - zfs_mount_cache_datasets is iterable
-    fail_msg: >-
-      zfs_root (bool), zfs_trim_pools (list), and
-      zfs_mount_cache_datasets (list) must be set in host/group vars.
-  tags:
-    - zfs
-
-- name: Assert pool/dataset list shapes
-  assert:
-    that:
       - zfs_trim_pools | select('search', '/') | list | length == 0
       - zfs_mount_cache_datasets | reject('search', '/') | list | length == 0
     fail_msg: >-
-      zfs_trim_pools entries must be bare pool names (no '/'): each becomes a
-      zfs_trim_<pool> unit name and a `zpool trim <pool>` argument. Each
-      zfs_mount_cache_datasets entry must be a 'pool/dataset' path -- its pool
-      component (split('/')[0]) names the per-pool mount-cache file.
+      zfs_root must be a bool; zfs_trim_pools must contain bare pool names; and
+      zfs_mount_cache_datasets must contain pool/dataset paths.
   tags:
     - zfs
 
