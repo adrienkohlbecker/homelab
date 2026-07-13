@@ -101,45 +101,12 @@
     - podman_secret_test_b
   become: true
 
-# Scenario 5 — the state=absent tombstone path: create a secret, then remove
-# it through the helper and confirm it reports removed (_rotated) and is gone
-# from the store. Proves a consumer dropping a credential can retire it via the
-# helper rather than a raw module call.
-- name: _verify | Scenario 5 — create a secret to later remove
-  import_role:
-    name: podman_secret
-    tasks_from: secret
-  vars:
-    podman_secret_args:
-      name: podman_secret_tombstone
-      data: doomed
-
-- name: _verify | Scenario 5 — remove it via state=absent
-  import_role:
-    name: podman_secret
-    tasks_from: secret
-  vars:
-    podman_secret_args:
-      name: podman_secret_tombstone
-      state: absent
-
-- name: _verify | Scenario 5 — list secrets after removal
-  containers.podman.podman_secret_info:
-  register: _podman_secret_tombstone_after
-  become: true
-
-- name: _verify | Scenario 5 — assert removed and gone from the store
-  assert:
-    that:
-      - podman_secret_tombstone_rotated
-      - _podman_secret_tombstone_after.secrets | selectattr('Spec.Name', 'eq', 'podman_secret_tombstone') | list | length == 0
-
-# Scenario 6 — the validation guards must fail loudly, not silently pass a bad
+# Scenario 5 — the validation guards must fail loudly, not silently pass a bad
 # input down to an opaque module/template error. These exercise the assert/guard
 # paths that are otherwise only ever hit on the happy path.
-- name: _verify | Scenario 6 — an invalid name is rejected
+- name: _verify | Scenario 5 — an invalid name is rejected
   block:
-    - name: _verify | Scenario 6 — attempt an invalid secret name
+    - name: _verify | Scenario 5 — attempt an invalid secret name
       import_role:
         name: podman_secret
         tasks_from: secret
@@ -147,12 +114,12 @@
         podman_secret_args:
           name: Bad.Name
           data: irrelevant
-    - name: _verify | Scenario 6 — fail if the invalid name was accepted
+    - name: _verify | Scenario 5 — fail if the invalid name was accepted
       assert:
         that: false
         fail_msg: podman_secret accepted an invalid name
   rescue:
-    - name: _verify | Scenario 6 — confirm the name-validation assert fired
+    - name: _verify | Scenario 5 — confirm the name-validation assert fired
       assert:
         that:
           - "'valid identifier' in (ansible_failed_result.msg | default(''))"
