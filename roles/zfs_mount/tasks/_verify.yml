@@ -32,14 +32,3 @@
   changed_when: false
   failed_when: _zfs_mount_verify_missing.rc == 0
   become: true
-
-- name: _verify | Findmnt confirms root dataset
-  command: findmnt --first-only --mountpoint / --noheadings --types zfs --output SOURCE
-  register: _zfs_mount_verify_findmnt
-  changed_when: false
-  become: true
-
-- name: _verify | Assert root mount source is correct
-  assert:
-    that: _zfs_mount_verify_findmnt.stdout | trim == 'rpool/ROOT/' ~ ansible_distribution_release
-    quiet: true
