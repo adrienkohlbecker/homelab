@@ -220,10 +220,9 @@
 - name: Remove the retired healthchecks nginx site
   import_role:
     name: nginx
-    tasks_from: site
+    tasks_from: site_remove
   vars:
-    nginx_site_args:
+    nginx_site_remove_args:
       subdomain: healthchecks
-      state: absent
   tags:
     - kuma

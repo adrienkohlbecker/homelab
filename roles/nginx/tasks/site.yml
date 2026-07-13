@@ -1,11 +1,5 @@
 # Inputs: caller passes a single dict `nginx_site_args` with keys
 #   subdomain                 required; serves at <subdomain>.<host>.<domain>
-#   state                     optional, default 'present'. Set to 'absent' to
-#                             remove a retired site: deletes the symlink under
-#                             sites-enabled/ and the config under sites-available/,
-#                             then reloads. Keep the call in main.yml as a tombstone
-#                             so retired sites stay decommissioned on fresh
-#                             installs.
 #   proxy_pass                optional; URL to reverse-proxy to (location /)
 #   proxy_buffering           optional; nginx proxy_buffering directive value.
 #                             Quote it ('on'/'off') -- bare off is YAML-coerced
@@ -87,17 +81,6 @@
   tags:
     - nginx_site
 
-- name: site | Assert state is a known value
-  assert:
-    that:
-      - (nginx_site_args.state | default('present')) in ['present', 'absent']
-    fail_msg: >-
-      nginx_site_args.state must be 'present' or 'absent'; got
-      '{{ nginx_site_args.state | default('present') }}'. A typo silently
-      no-ops both branches, leaving a retired site running.
-  tags:
-    - nginx_site
-
 - name: site | Assert subdomain is a safe DNS label
   assert:
     that:
@@ -110,13 +93,11 @@
     - nginx_site
 
 # Resolve caller defaults once into _nginx_site_* locals (mirrors conf_d.yml), so
-# the state/auth/enable_http defaults live in one place rather than being
-# re-spelled at every gate below and in site.conf.j2. Always set so no stale value
-# leaks into the next nginx_site invocation. Resolved before the value-shape
-# asserts so each can gate on _nginx_site_state.
+# the auth/enable_http defaults live in one place rather than being re-spelled at
+# every gate below and in site.conf.j2. Always set so no stale value leaks into
+# the next nginx_site invocation.
 - name: site | Resolve caller defaults
   set_fact:
-    _nginx_site_state: "{{ nginx_site_args.state | default('present') }}"
     _nginx_site_auth: "{{ nginx_site_args.auth | default('none') }}"
     _nginx_site_auth_request_authorization: "{{ (nginx_site_args.auth_request_authorization | default(false)) | bool }}"
     _nginx_site_enable_http: "{{ (nginx_site_args.enable_http | default(false)) | bool }}"
@@ -124,9 +105,7 @@
     - nginx_site
 
 - name: site | Assert proxy_pass is a well-formed URL
-  when:
-    - _nginx_site_state == 'present'
-    - nginx_site_args.proxy_pass is defined
+  when: nginx_site_args.proxy_pass is defined
   assert:
     that:
       - nginx_site_args.proxy_pass is string
@@ -147,7 +126,6 @@
 # default('on') keeps each item safe when only one of the pair is supplied.
 - name: site | Assert proxy buffering toggles are quoted on/off
   when:
-    - _nginx_site_state == 'present'
     - >-
       nginx_site_args.proxy_buffering is defined
       or nginx_site_args.proxy_request_buffering is defined
@@ -164,7 +142,6 @@
 
 - name: site | Assert CSP overrides are injection-safe
   when:
-    - _nginx_site_state == 'present'
     - >-
       nginx_site_args.csp_additional is defined
       or nginx_site_args.csp_default_src is defined
@@ -181,9 +158,7 @@
     - nginx_site
 
 - name: site | Assert enable_http is not combined with auth
-  when:
-    - _nginx_site_state == 'present'
-    - _nginx_site_enable_http
+  when: _nginx_site_enable_http
   assert:
     that:
       - _nginx_site_auth != 'required'
@@ -194,9 +169,7 @@
     - nginx_site
 
 - name: site | Assert authelia_internal_url is set when auth is required
-  when:
-    - _nginx_site_state == 'present'
-    - _nginx_site_auth == 'required'
+  when: _nginx_site_auth == 'required'
   assert:
     that:
       - authelia_internal_url is defined
@@ -234,7 +207,6 @@
 # (events{}, http{}, the symlink in place), not a standalone server{} snippet
 # -- the same constraint conf_d documents.
 - name: site | Configure and enable nginx site
-  when: _nginx_site_state == 'present'
   become: true
   tags:
     - nginx_site
@@ -297,28 +269,3 @@
           nginx -t failed after writing
           /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}; previous
           state restored. Inspect the validate output above and the managed content.
-
-- name: site | Remove retired nginx site
-  when: _nginx_site_state == 'absent'
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
-    - /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
-  become: true
-  register: nginx_static_conf_absent
-  tags:
-    - nginx_site
-
-- name: site | Reload nginx after removing retired site
-  when:
-    - _nginx_site_state == 'absent'
-    - nginx_static_conf_absent.changed | default(false)
-    - not ansible_check_mode
-  systemd:
-    name: nginx
-    state: reloaded
-  become: true
-  tags:
-    - nginx_site

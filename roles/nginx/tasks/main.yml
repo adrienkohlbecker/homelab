@@ -8,11 +8,14 @@
 # Device admin UIs reverse-proxied to their LAN IPs, all behind Authelia.
 # The device's own firmware login stays in front; Authelia adds
 # defense-in-depth at the perimeter -- accept the second click. include_tasks
-# (not import_tasks) so the per-item nginx_site_args re-evaluates each loop;
+# selects configuration or removal for each host and re-evaluates the per-item
+# inputs on every loop iteration;
 # unifi has special CSP and no auth, so it stays as a standalone call below.
-- name: Configure device-proxy nginx proxies
+- name: Configure or remove device-proxy nginx proxies
   include_tasks:
-    file: site.yml
+    file: >-
+      {{ (nginx_site.subdomain in nginx_static_proxies)
+         | ternary('site.yml', 'site_remove.yml') }}
     apply:
       tags:
         - nginx
@@ -21,7 +24,8 @@
       subdomain: "{{ nginx_site.subdomain }}"
       proxy_pass: "{{ nginx_site.proxy_pass }}"
       auth: required
-      state: "{{ 'present' if nginx_site.subdomain in nginx_static_proxies else 'absent' }}"
+    nginx_site_remove_args:
+      subdomain: "{{ nginx_site.subdomain }}"
   loop:
     - { subdomain: marantz, proxy_pass: "https://{{ external_ips.marantz }}:10443/" }
     - { subdomain: printer, proxy_pass: "http://{{ external_ips.printer }}:80/" }
@@ -38,14 +42,21 @@
 # proxies): the UniFi controller ships its own login, and fronting it with
 # Authelia breaks the mobile app / API clients. The vhost still gets TLS,
 # HSTS and CSP.
-- name: Configure nginx static proxies (unifi)
-  import_tasks: site.yml
+- name: Configure or remove nginx static proxy (unifi)
+  include_tasks:
+    file: >-
+      {{ ('unifi' in nginx_static_proxies)
+         | ternary('site.yml', 'site_remove.yml') }}
+    apply:
+      tags:
+        - nginx
   vars:
     nginx_site_args:
       subdomain: unifi
       proxy_pass: https://{{ external_ips.udm }}:443/
       csp_additional: connect-src api.mapbox.com ui.com *.ui.com {{ nginx_csp_default }}
       csp_default_src: ui.com *.ui.com
-      state: "{{ 'present' if 'unifi' in nginx_static_proxies else 'absent' }}"
+    nginx_site_remove_args:
+      subdomain: unifi
   tags:
     - nginx

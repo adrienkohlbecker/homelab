@@ -29,17 +29,15 @@
   tags:
     - mutt
 
-# state: absent tombstone — removes the roundcube vhost + its sites-enabled
-# symlink and reloads nginx. Gated on nginx being installed so it no-ops on a
-# host that never ran the webmail stack.
+# Removes the roundcube vhost and reloads nginx. Gated on nginx being installed
+# so it no-ops on a host that never ran the webmail stack.
 - name: Remove the roundcube nginx vhost
   import_role:
     name: nginx
-    tasks_from: site
+    tasks_from: site_remove
   vars:
-    nginx_site_args:
+    nginx_site_remove_args:
       subdomain: roundcube
-      state: absent
   tags:
     - mutt
 

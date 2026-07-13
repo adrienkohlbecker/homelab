@@ -1,0 +1,39 @@
+# Inputs: caller passes `nginx_site_remove_args.subdomain`, the DNS label of the
+# retired site. Keep removal calls as tombstones until every relevant host has
+# converged so stale vhosts cannot survive a fresh role run.
+- name: site_remove | Assert subdomain is a safe DNS label
+  assert:
+    that:
+      - nginx_site_remove_args.subdomain is defined
+      - nginx_site_remove_args.subdomain is string
+      - nginx_site_remove_args.subdomain | length > 0
+      - nginx_site_remove_args.subdomain is match('^[A-Za-z0-9-]+$')
+    fail_msg: >-
+      nginx_site_remove_args.subdomain must be a non-empty DNS label
+      ([A-Za-z0-9-]); got
+      {{ nginx_site_remove_args.subdomain | default('<undefined>') }}.
+  tags:
+    - nginx_site
+
+- name: site_remove | Remove retired nginx site
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/nginx/sites-enabled/{{ nginx_site_remove_args.subdomain }}
+    - /etc/nginx/sites-available/{{ nginx_site_remove_args.subdomain }}
+  become: true
+  register: nginx_site_remove_result
+  tags:
+    - nginx_site
+
+- name: site_remove | Reload nginx
+  when:
+    - nginx_site_remove_result.changed
+    - not ansible_check_mode
+  systemd:
+    name: nginx
+    state: reloaded
+  become: true
+  tags:
+    - nginx_site
