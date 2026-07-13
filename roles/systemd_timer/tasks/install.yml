@@ -88,20 +88,6 @@
       a stable per-host value; with no RandomizedDelaySec= there is nothing to
       pin).
 
-# Wrapper script used by every timer's ExecStart so stderr lines land
-# in the journal at priority err. Install before the unit so
-# systemd-analyze's "ExecStart executable exists" check passes.
-- name: install | Install stderr_priority wrapper
-  copy:
-    src: stderr_priority
-    dest: /usr/local/bin/stderr_priority
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-    validate: bash -n %s
-  become: true
-
 # Nested import_role task names stay static. The role is called both
 # from import_role sites (where systemd_timer_args is in scope at
 # parse-time and a `{{ systemd_timer_args.name }}` interpolation would

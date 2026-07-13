@@ -1,7 +1,7 @@
 # Verify covers five contracts:
 #   1. install + manual-trigger + remove for a monitor: false timer
-#   2. stderr_priority wrapper routes stderr to journal priority err,
-#      and propagates the wrapped command's exit code faithfully
+#   2. systemd-cat routes stderr to journal priority err and preserves the
+#      command's exit code
 #   3. monitor: true writes the netdata metadata file with period_secs
 #      derived from on_calendar via systemd-analyze
 #   4. systemd_timers.chart.sh emits a chart per registered timer, age_secs
@@ -51,7 +51,7 @@
   until: _systemd_timer_netdata_api.status == 200
 
 # ============================================================
-# Contract 1+2: install/remove and stderr_priority (monitor:false)
+# Contract 1+2: install/remove and stderr priority (monitor:false)
 # ============================================================
 - name: "_verify | Install fixture timer (monitor: false)"
   import_role:
@@ -206,7 +206,7 @@
     state: absent
   become: true
 
-# ----- stderr_priority -----
+# ----- stderr priority -----
 - name: _verify | Capture pre-run timestamp for journal filter
   command: date +%s
   register: _systemd_timer_stderr_t0
@@ -219,7 +219,7 @@
   vars:
     systemd_timer_args:
       name: _verify_timer_stderr
-      description: stderr_priority self-test
+      description: stderr priority self-test
       on_calendar: "*-*-* 23:59:00"
       exec_start: /bin/sh -c 'echo STDOUT_VERIFY_LINE; echo STDERR_VERIFY_LINE >&2'
       monitor: false
@@ -242,15 +242,15 @@
   changed_when: false
   become: true
 
-- name: _verify | Functional assertions for stderr_priority
+- name: _verify | Functional assertions for stderr priority
   assert:
     that:
       - "'STDERR_VERIFY_LINE' in _systemd_timer_stderr_journal_err.stdout"
       - "'STDOUT_VERIFY_LINE' not in _systemd_timer_stderr_journal_err.stdout"
 
 # --- exit-code propagation ---
-# A broken rc=$? / exit "$rc" in stderr_priority would cause a failing timer
-# to report Result=success to systemd, silently suppressing failed-state alerts.
+# The logging transport must preserve a failing command's status so systemd
+# reports the failure and the stock failed-state alert can fire.
 - name: _verify | Install monitored exit-code fixture
   import_role:
     name: systemd_timer
@@ -258,7 +258,7 @@
   vars:
     systemd_timer_args:
       name: _verify_timer_exitcode
-      description: stderr_priority exit-code propagation self-test
+      description: stderr priority exit-code propagation self-test
       on_calendar: "*-*-* 23:59:00"
       exec_start: /bin/sh -c 'exit 2'
 
@@ -286,7 +286,7 @@
   changed_when: false
   become: true
 
-- name: _verify | Assert exit-code propagated (wrapper must not swallow non-zero rc)
+- name: _verify | Assert logging transport preserves non-zero exit code
   assert:
     that:
       - _systemd_timer_exitcode_start.rc != 0

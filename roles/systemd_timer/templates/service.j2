@@ -3,8 +3,8 @@ Description={{ systemd_timer_args.description | default(systemd_timer_args.name)
 
 [Service]
 Type=oneshot
-# stderr lines land in the journal at priority err; see /usr/local/bin/stderr_priority.
-ExecStart=/usr/local/bin/stderr_priority {{ systemd_timer_args.exec_start }}
+# Keep routine output at info while surfacing stderr through journal priority err.
+ExecStart=/usr/bin/systemd-cat --identifier={{ systemd_timer_args.name }} --priority=info --stderr-priority=err -- {{ systemd_timer_args.exec_start }}
 SyslogIdentifier={{ systemd_timer_args.name }}
 # RuntimeMaxSec= has no effect under Type=oneshot; TimeoutStartSec= is the right knob.
 TimeoutStartSec={{ systemd_timer_args.timeout_start_sec | default('1h') }}
