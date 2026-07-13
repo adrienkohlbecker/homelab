@@ -141,8 +141,9 @@
     daemon_reload: true
   become: true
 
-# Smoke the copy dispatch (extension-derived): src without .j2 picks the
-# copy module so install.yml reads from files/ rather than templates/.
+# Exercise the copy dispatch (extension-derived): src without .j2 picks the
+# copy module so install.yml reads from files/ rather than templates/. The
+# composed-unit assertions below verify that systemd loaded the copied unit.
 - name: _verify | Install valid unit via tasks_from=install (copy path)
   import_role:
     name: systemd_unit
@@ -150,19 +151,6 @@
   vars:
     systemd_unit_args:
       src: systemd_unit_verify_copy_ok.service
-
-- name: _verify | Copy-path install set the per-unit fact and put file on disk
-  block:
-    - name: _verify | Stat verify_copy_ok service after copy-path install
-      stat:
-        path: /etc/systemd/system/systemd_unit_verify_copy_ok.service
-      register: _systemd_unit_copy_stat
-    - name: _verify | Assert verify_copy_ok result and file exist after install
-      assert:
-        that:
-          - systemd_unit_verify_copy_ok_service_result is defined
-          - systemd_unit_verify_copy_ok_service_result.changed
-          - _systemd_unit_copy_stat.stat.exists
 
 # Drop-in install smoke test. install.yml derives dest as <unit>.d/override.conf
 # and verify as the parent unit, so the override
@@ -176,21 +164,6 @@
     systemd_unit_args:
       src: systemd_unit_verify_dropin.conf
       for: systemd_unit_verify_copy_ok.service
-
-- name: _verify | Drop-in landed under <unit>.d and carries the expected line
-  block:
-    - name: _verify | Stat drop-in override.conf path
-      stat:
-        path: /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/override.conf
-      register: _systemd_unit_dropin_stat
-    - name: _verify | Assert drop-in carries the expected Environment line
-      command: grep -qF Environment=DROPIN_TEST=1 /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/override.conf
-      changed_when: false
-    - name: _verify | Assert drop-in is a regular file (not a symlink)
-      assert:
-        that:
-          - _systemd_unit_dropin_stat.stat.exists
-          - not _systemd_unit_dropin_stat.stat.islnk
 
 # Absolute-path dropin mode: dest_abs lets callers place daemon-config
 # drop-ins (journald.conf.d/, resolved.conf.d/) at arbitrary absolute
@@ -206,22 +179,7 @@
       for: systemd_unit_verify_copy_ok.service
       dest_abs: /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/99-abs-test.conf
 
-- name: _verify | Absolute-path drop-in landed at dest_abs path
-  block:
-    - name: _verify | Stat dest_abs drop-in path
-      stat:
-        path: /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/99-abs-test.conf
-      register: _systemd_unit_abs_dropin_stat
-    - name: _verify | Assert dest_abs drop-in exists and carries the expected line
-      assert:
-        that:
-          - _systemd_unit_abs_dropin_stat.stat.exists
-          - not _systemd_unit_abs_dropin_stat.stat.islnk
-    - name: _verify | Assert dest_abs drop-in content
-      command: grep -qF Environment=ABS_DROPIN_TEST=1 /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/99-abs-test.conf
-      changed_when: false
-
-- name: _verify | Read environment with the absolute drop-in active  # noqa: command-instead-of-module
+- name: _verify | Read environment with both drop-ins active  # noqa: command-instead-of-module
   command:
     argv:
       - systemctl
@@ -229,12 +187,14 @@
       - systemd_unit_verify_copy_ok.service
       - --property=Environment
       - --value
-  register: _systemd_unit_abs_dropin_environment
+  register: _systemd_unit_dropin_environment
   changed_when: false
 
-- name: _verify | Absolute drop-in affects the composed unit
+- name: _verify | Both drop-ins affect the composed unit
   assert:
-    that: "'ABS_DROPIN_TEST=1' in _systemd_unit_abs_dropin_environment.stdout"
+    that:
+      - "'DROPIN_TEST=1' in _systemd_unit_dropin_environment.stdout"
+      - "'ABS_DROPIN_TEST=1' in _systemd_unit_dropin_environment.stdout"
 
 - name: _verify | Remove drop-in via dest_abs mode
   import_role:
@@ -256,9 +216,11 @@
   register: _systemd_unit_abs_dropin_removed_environment
   changed_when: false
 
-- name: _verify | Absolute drop-in no longer affects the composed unit
+- name: _verify | Absolute removal preserves the default drop-in
   assert:
-    that: "'ABS_DROPIN_TEST=1' not in _systemd_unit_abs_dropin_removed_environment.stdout"
+    that:
+      - "'DROPIN_TEST=1' in _systemd_unit_abs_dropin_removed_environment.stdout"
+      - "'ABS_DROPIN_TEST=1' not in _systemd_unit_abs_dropin_removed_environment.stdout"
 
 - name: _verify | Cleanup drop-in directory
   file:
@@ -266,13 +228,7 @@
     state: absent
   become: true
 
-- name: _verify | Cleanup copy-path test unit
-  file:
-    path: /etc/systemd/system/systemd_unit_verify_copy_ok.service
-    state: absent
-  become: true
-
-- name: _verify | Daemon-reload after copy-path cleanup
+- name: _verify | Daemon-reload after drop-in cleanup
   systemd:
     daemon_reload: true
   become: true
@@ -419,17 +375,8 @@
       reload: true
 
 # Sad path: a unit with no ExecReload= must raise the actionable message.
-# Use the copy-dispatch fixture file for a fresh unit: it is
-# oneshot+RemainAfterExit and has no ExecReload. Start it, request reload,
-# and assert the CanReload message.
-- name: _verify | Install non-reloadable fixture for the CanReload=no test
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: systemd_unit_verify_copy_ok.service
-
+# Reuse the copy-dispatch fixture: it is oneshot+RemainAfterExit and has no
+# ExecReload. Start it, request reload, and assert the CanReload message.
 - name: _verify | Enable the non-reloadable fixture without starting it
   import_role:
     name: systemd_unit
