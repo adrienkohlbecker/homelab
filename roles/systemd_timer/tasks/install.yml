@@ -191,26 +191,10 @@
   changed_when: false
   become: true
 
-# The metadata file is owned by netdata:netdata so the collector reads it
-# unprivileged. On prod the netdata role installs that user before any timer
-# consumer runs; in the test harness a standalone role run may not have
-# netdata yet, and the chown below would fail. Idempotent precondition that
-# no-ops when the user exists, sparing each consumer's _setup.yml from
-# redundantly creating it.
-- name: install | Ensure netdata user exists for metadata file ownership
-  when:
-    - _systemd_timer_monitor
-  user:
-    name: netdata
-    system: true
-    create_home: false
-  become: true
-
 # Ensure the parent dir exists -- this can fire before netdata is installed
 # (site.yml runs many timer-consuming roles before the netdata block), so the
-# .d directory may not yet exist. Owned by root because netdata may not be
-# installed yet; netdata reads a root:root parent fine so long as the
-# metadata files inside are netdata:netdata.
+# .d directory may not yet exist. The collector only needs read access, so
+# root-owned 0755/0644 paths avoid creating its user ahead of the package.
 - name: install | Ensure systemd_timers metadata dir exists
   when:
     - _systemd_timer_monitor
@@ -236,8 +220,8 @@
       # Consumed by /usr/libexec/netdata/charts.d/systemd_timers.chart.sh.
       # period_secs is derived from on_calendar via systemd-analyze calendar.
       period_secs={{ _systemd_timer_period.stdout | trim }}
-    owner: netdata
-    group: netdata
+    owner: root
+    group: root
     mode: "0644"
     backup: true
     validate: 'sh -c ''. "%s" && test "${period_secs:-0}" -gt 0'''
