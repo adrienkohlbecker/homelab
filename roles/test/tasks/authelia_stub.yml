@@ -24,6 +24,9 @@
 #         like Authelia on a successful auth. Lets a test exercise the
 #         auth-passes paths -- X-Forwarded-User / Remote-User identity
 #         forwarding to the upstream.
+#     basic: returns 200 only for the fixed `nginxverify:secret` HTTP Basic
+#         credential. Exercises selective Authorization forwarding without a
+#         real Authelia instance.
 #   user  optional, default 'nginxverifyuser'. Remote-User value emitted in
 #         authed mode.
 #
@@ -34,9 +37,9 @@
 - name: authelia_stub | Assert mode is a known value
   assert:
     that:
-      - (test_authelia_stub_args | default({})).mode | default('always_200') in ['always_200', 'gate', 'authed']
+      - (test_authelia_stub_args | default({})).mode | default('always_200') in ['always_200', 'gate', 'authed', 'basic']
     fail_msg: >-
-      test_authelia_stub_args.mode must be one of always_200/gate/authed; got
+      test_authelia_stub_args.mode must be one of always_200/gate/authed/basic; got
       '{{ (test_authelia_stub_args | default({})).mode | default('always_200') }}'.
       A typo silently falls through to always_200, so a negative-path auth test
       would spuriously pass.
@@ -74,6 +77,13 @@
             # authed: 200 with a Remote-User header, like Authelia on a
             # successful auth, so the parent's auth_request_set $authelia_user
             # populates (exercises X-Forwarded-User / Remote-User forwarding).
+            add_header Remote-User "{{ _test_authelia_stub_user }}" always;
+            return 200 'test_stub_ok';
+        {% elif _test_authelia_stub_mode == 'basic' %}
+            # Fixed test-only credential: nginxverify:secret.
+            if ($http_authorization != "Basic bmdpbnh2ZXJpZnk6c2VjcmV0") {
+              return 401;
+            }
             add_header Remote-User "{{ _test_authelia_stub_user }}" always;
             return 200 'test_stub_ok';
         {% else %}

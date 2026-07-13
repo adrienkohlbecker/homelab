@@ -78,6 +78,7 @@
       {{ nginx_verify_host }}
       nginxverifyempty.{{ inventory_hostname }}.{{ domain }}
       nginxverifyauth.{{ inventory_hostname }}.{{ domain }}
+      nginxverifybasic.{{ inventory_hostname }}.{{ domain }}
       nginxverifyloc.{{ inventory_hostname }}.{{ domain }}
       nginxverifyserverconf.{{ inventory_hostname }}.{{ domain }}
       nginxverifybody.{{ inventory_hostname }}.{{ domain }}
@@ -136,6 +137,13 @@
                 # assertions can confirm exactly what reached the upstream.
                 print("upstream-saw " + self.path, flush=True)
                 print("upstream-auth " + self.headers.get("Authorization", "<none>"), flush=True)
+                print(
+                    "upstream-request "
+                    + self.path
+                    + " auth="
+                    + self.headers.get("Authorization", "<none>"),
+                    flush=True,
+                )
                 print("upstream-fwduser " + self.headers.get("X-Forwarded-User", "<none>"), flush=True)
                 print("upstream-remoteuser " + self.headers.get("Remote-User", "<none>"), flush=True)
                 body = b"nginx_verify_upstream_ok"
@@ -396,6 +404,64 @@
   until: "'upstream-remoteuser nginxverifyuser' in nginx_verify_remote_journal.stdout"
   retries: 10
   delay: 1
+
+# HTTP Basic service accounts need their Authorization header on the Authelia
+# subrequest, while the protected application should not receive the reusable
+# credential. The helper keeps forwarding opt-in so ordinary Token/Bearer apps
+# retain the cookie-only behavior exercised above.
+- name: _verify | Switch the Authelia stub to Basic mode
+  import_role:
+    name: test
+    tasks_from: authelia_stub
+  vars:
+    test_authelia_stub_args:
+      mode: basic
+
+- name: _verify | Configure a Basic-auth service-account vhost
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: nginxverifybasic
+      proxy_pass: http://127.0.0.1:18080/
+      auth: required
+      auth_request_authorization: true
+      location_conf: |
+        proxy_set_header Authorization "";
+
+- name: _verify | Settle the nginxverifybasic vhost
+  import_tasks: _verify_wait_route.yml
+  vars:
+    _wait_route_host: "nginxverifybasic.{{ inventory_hostname }}.{{ domain }}"
+
+- name: _verify | Basic-auth service account is admitted
+  uri:
+    url: "https://nginxverifybasic.{{ inventory_hostname }}.{{ domain }}/basic-probe"
+    url_username: nginxverify
+    url_password: secret
+    force_basic_auth: true
+    validate_certs: false
+    status_code: 200
+  register: nginx_verify_basic
+  failed_when: nginx_verify_basic.status != 200
+
+- name: _verify | Basic credential was stripped before the protected upstream
+  command: journalctl -u nginx_verify_upstream --no-pager
+  register: nginx_verify_basic_journal
+  changed_when: false
+  become: true
+  until: "'upstream-request /basic-probe auth=<none>' in nginx_verify_basic_journal.stdout"
+  retries: 10
+  delay: 1
+
+- name: _verify | Restore the Authelia stub to authed mode
+  import_role:
+    name: test
+    tasks_from: authelia_stub
+  vars:
+    test_authelia_stub_args:
+      mode: authed
 
 # location_conf: a location-level add_header drops nginx's inherited add_header
 # set, so the helper re-emits the security headers inside `location /`. If that
@@ -772,6 +838,7 @@
   loop:
     - nginxverify
     - nginxverifyauth
+    - nginxverifybasic
     - nginxverifyloc
     - nginxverifyserverconf
     - nginxverifyplain
@@ -792,6 +859,8 @@
     - /etc/nginx/sites-enabled/nginxverify
     - /etc/nginx/sites-available/nginxverifyauth
     - /etc/nginx/sites-enabled/nginxverifyauth
+    - /etc/nginx/sites-available/nginxverifybasic
+    - /etc/nginx/sites-enabled/nginxverifybasic
     - /etc/nginx/sites-available/nginxverifyloc
     - /etc/nginx/sites-enabled/nginxverifyloc
     - /etc/nginx/sites-available/nginxverifyserverconf

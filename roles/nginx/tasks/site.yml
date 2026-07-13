@@ -54,6 +54,12 @@
 #                             /api/authz/auth-request endpoint (defaults to lab's
 #                             local Authelia; pug/bunk need a per-host override if
 #                             they ever enable forward-auth).
+#   auth_request_authorization optional bool, default false. Forward the
+#                             client's Authorization header to Authelia's auth
+#                             subrequest so its HeaderAuthorization strategy can
+#                             authenticate HTTP Basic service accounts. Keep
+#                             false for apps whose own Token/Bearer header must
+#                             reach the upstream without affecting cookie auth.
 #   server_conf               optional snippet inserted in the server block.
 #                             A `location` added here is NOT covered by the
 #                             site's forward-auth (auth_request only wraps
@@ -142,6 +148,7 @@
     _nginx_site_state: "{{ nginx_site_args.state | default('present') }}"
     _nginx_site_reload: "{{ nginx_site_args.reload | default(true) }}"
     _nginx_site_auth: "{{ nginx_site_args.auth | default('none') }}"
+    _nginx_site_auth_request_authorization: "{{ (nginx_site_args.auth_request_authorization | default(false)) | bool }}"
     _nginx_site_enable_http: "{{ (nginx_site_args.enable_http | default(false)) | bool }}"
   tags:
     - nginx_site
@@ -263,6 +270,19 @@
       lab's; pug/bunk need a per-host override). It is rendered straight into the
       /internal/authelia proxy_pass, so an unset value would only fail later at
       `nginx -t` with a generic message.
+  tags:
+    - nginx_site
+
+- name: site | Assert Authorization forwarding is paired with auth
+  when:
+    - _nginx_site_state == 'present'
+    - _nginx_site_auth_request_authorization
+  assert:
+    that:
+      - _nginx_site_auth == 'required'
+    fail_msg: >-
+      auth_request_authorization only affects Authelia auth subrequests and
+      therefore requires `auth: required`.
   tags:
     - nginx_site
 
