@@ -12,104 +12,80 @@
   tags:
     - zfs_autobackup
 
-- name: source | Add authorized keys
+- name: source | Configure backup login
   when: not ansible_check_mode or zfs_autobackup_user.uid is defined
-  ansible.posix.authorized_key:
-    user: zfs_autobackup
-    key: "{{ zfs_autobackup_ssh_public_key }}"
-    # restrict denies all current and future SSH features (pty, all
-    # forwarding, user-rc, etc.), so new OpenSSH primitives cannot leak in
-    # via an outdated allowlist.
-    key_options: "restrict"
-    exclusive: true
   become: true
   tags:
     - zfs_autobackup
+  block:
+    - name: source | Add authorized keys
+      ansible.posix.authorized_key:
+        user: zfs_autobackup
+        key: "{{ zfs_autobackup_ssh_public_key }}"
+        # restrict denies all current and future SSH features (pty, all
+        # forwarding, user-rc, etc.), so new OpenSSH primitives cannot leak in
+        # via an outdated allowlist.
+        key_options: "restrict"
+        exclusive: true
 
-- name: source | Create zfs_autobackup user systemd unit dir
-  when: not ansible_check_mode or zfs_autobackup_user.uid is defined
-  file:
-    path: /var/lib/zfs_autobackup/.config/systemd/user
-    state: directory
-    owner: zfs_autobackup
-    group: zfs_autobackup
-    mode: "0755"
-  become: true
-  tags:
-    - zfs_autobackup
+    - name: source | Create zfs_autobackup user systemd unit dir
+      file:
+        path: /var/lib/zfs_autobackup/.config/systemd/user
+        state: directory
+        owner: zfs_autobackup
+        group: zfs_autobackup
+        mode: "0755"
 
-# zfs_autobackup is a backup-only login user; it never runs containers. The
-# podman package globally enables podman.service/podman.socket for every user
-# (/etc/systemd/user/{default.target,sockets.target}.wants), so each pull-backup
-# login starts a `systemd --user` manager that eagerly brings up the rootless
-# podman API socket. That then errors daily -- "no subuid ranges found for user
-# zfs_autobackup" -- because this user has (correctly) no subuid range. Masking
-# both units in the user scope (~/.config/systemd/user wins over the system-wide
-# enable) stops the login from touching podman at all. Granting a subuid range
-# would silence the error but legitimise a pointless container socket on a
-# backup account, so mask instead.
-- name: source | Mask podman user units for zfs_autobackup
-  when: not ansible_check_mode or zfs_autobackup_user.uid is defined
-  file:
-    path: "/var/lib/zfs_autobackup/.config/systemd/user/{{ item }}"
-    src: /dev/null
-    state: link
-    owner: zfs_autobackup
-    group: zfs_autobackup
-    # lchown the link itself; the file module's default follow: true would
-    # dereference it and chown the shared /dev/null device instead.
-    follow: false
-    force: true
-  become: true
-  loop:
-    - podman.service
-    - podman.socket
-  tags:
-    - zfs_autobackup
+    # zfs_autobackup is a backup-only login user; it never runs containers. The
+    # podman package globally enables podman.service/podman.socket for every user
+    # (/etc/systemd/user/{default.target,sockets.target}.wants), so each login
+    # starts a pointless rootless API socket that fails without subuid ranges.
+    - name: source | Mask podman user units for zfs_autobackup
+      file:
+        path: "/var/lib/zfs_autobackup/.config/systemd/user/{{ item }}"
+        src: /dev/null
+        state: link
+        owner: zfs_autobackup
+        group: zfs_autobackup
+        # lchown the link itself; following it would chown the shared /dev/null.
+        follow: false
+        force: true
+      loop:
+        - podman.service
+        - podman.socket
 
-# The zfs allow machinery runs everywhere ZFS exists -- prod plus the
-# box/lab/pug qemu fixtures (so _verify can exercise it). Only the minimal
-# fixture (vanilla ext4 cloud image, no ZFS) is excluded.
-- name: source | Get back up datasets
+- name: source | Configure backup dataset permissions
   when: not qemu_test_minimal
-  shell: set -euo pipefail; zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'
-  args:
-    executable: /bin/bash
-  changed_when: false
-  register: _zfs_autobackup_datasets
   become: true
   tags:
     - zfs_autobackup
+  block:
+    # The permission machinery runs everywhere ZFS exists; only the minimal
+    # ext4 fixture is excluded.
+    - name: source | Get backed-up datasets
+      shell: set -euo pipefail; zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: _zfs_autobackup_datasets
 
-- name: source | Capture current permissions on backed up datasets
-  when: not qemu_test_minimal
-  command: zfs allow "{{ item }}"
-  changed_when: false
-  register: _zfs_autobackup_allow_before
-  loop: "{{ _zfs_autobackup_datasets.stdout_lines }}"
-  loop_control:
-    index_var: idx
-  become: true
-  tags:
-    - zfs_autobackup
+    - name: source | Capture current permissions on backed-up datasets
+      command: zfs allow "{{ item }}"
+      changed_when: false
+      register: _zfs_autobackup_allow_before
+      loop: "{{ _zfs_autobackup_datasets.stdout_lines }}"
+      loop_control:
+        index_var: idx
 
-- name: source | Grant ZFS permissions on backed up datasets
-  when: not qemu_test_minimal
-  command: zfs allow zfs_autobackup send,hold,release "{{ item }}"
-  changed_when: false
-  loop: "{{ _zfs_autobackup_datasets.stdout_lines }}"
-  become: true
-  tags:
-    - zfs_autobackup
+    - name: source | Grant ZFS permissions on backed-up datasets
+      command: zfs allow zfs_autobackup send,hold,release "{{ item }}"
+      changed_when: false
+      loop: "{{ _zfs_autobackup_datasets.stdout_lines }}"
 
-- name: source | Detect permission changes on backed up datasets
-  when: not qemu_test_minimal
-  command: zfs allow "{{ item }}"
-  changed_when: _zfs_autobackup_allow_before.results[idx].stdout != _zfs_autobackup_allow_after.stdout
-  register: _zfs_autobackup_allow_after
-  loop: "{{ _zfs_autobackup_datasets.stdout_lines }}"
-  loop_control:
-    index_var: idx
-  become: true
-  tags:
-    - zfs_autobackup
+    - name: source | Detect permission changes on backed-up datasets
+      command: zfs allow "{{ item }}"
+      changed_when: _zfs_autobackup_allow_before.results[idx].stdout != _zfs_autobackup_allow_after.stdout
+      register: _zfs_autobackup_allow_after
+      loop: "{{ _zfs_autobackup_datasets.stdout_lines }}"
+      loop_control:
+        index_var: idx
