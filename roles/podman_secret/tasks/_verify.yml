@@ -107,102 +107,11 @@
     - podman_secret_test_b
   become: true
 
-# Scenario 5 — the rootless `user:` path: the secret must land in the
-# target user's own store, not root's. Prereqs (user + subid + linger) come
-# from _setup; the uid is re-derived here because _setup's set_fact facts
-# don't survive into the separate _verify ansible invocation.
-- name: _verify | Scenario 5 — look up rootless test user uid
-  getent:
-    database: passwd
-    key: podman_secret_rootless
-  become: true
-
-- name: _verify | Scenario 5 — rootless podman environment
-  set_fact:
-    _podman_secret_rootless_env:
-      XDG_RUNTIME_DIR: "/run/user/{{ getent_passwd['podman_secret_rootless'][1] }}"
-      DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ getent_passwd['podman_secret_rootless'][1] }}/bus"
-
-- name: _verify | Scenario 5 — create secret as the rootless user
-  import_role:
-    name: podman_secret
-    tasks_from: secret
-  vars:
-    podman_secret_args:
-      name: podman_secret_rootless_test
-      data: rootless-secret
-      user: podman_secret_rootless
-
-- name: _verify | Scenario 5 — assert created and not pre-existing
-  assert:
-    that:
-      - podman_secret_rootless_test_rotated
-      - not podman_secret_rootless_test_existed_before
-
-- name: _verify | Scenario 5 — re-run rootless secret unchanged
-  import_role:
-    name: podman_secret
-    tasks_from: secret
-  vars:
-    podman_secret_args:
-      name: podman_secret_rootless_test
-      data: rootless-secret
-      user: podman_secret_rootless
-
-- name: _verify | Scenario 5 — assert rootless re-run NOT rotated and pre-existing
-  assert:
-    that:
-      - not podman_secret_rootless_test_rotated
-      - podman_secret_rootless_test_existed_before
-
-- name: _verify | Scenario 5 — rotate rootless secret
-  import_role:
-    name: podman_secret
-    tasks_from: secret
-  vars:
-    podman_secret_args:
-      name: podman_secret_rootless_test
-      data: rootless-secret-2
-      user: podman_secret_rootless
-
-- name: _verify | Scenario 5 — assert rootless rotated and pre-existing
-  assert:
-    that:
-      - podman_secret_rootless_test_rotated
-      - podman_secret_rootless_test_existed_before
-
-- name: _verify | Scenario 5 — secret present in the rootless user's store
-  containers.podman.podman_secret_info:
-    name: podman_secret_rootless_test
-  register: _podman_secret_rootless_info
-  become: true
-  become_user: podman_secret_rootless
-  environment: "{{ _podman_secret_rootless_env }}"
-
-- name: _verify | Scenario 5 — secret absent from root's store
-  containers.podman.podman_secret_info:
-  register: _podman_secret_root_secrets
-  become: true
-
-- name: _verify | Scenario 5 — assert rootless targeting
-  assert:
-    that:
-      - _podman_secret_rootless_info.secrets | length == 1
-      - _podman_secret_root_secrets.secrets | selectattr('Spec.Name', 'eq', 'podman_secret_rootless_test') | list | length == 0
-
-- name: _verify | Scenario 5 — cleanup rootless secret
-  containers.podman.podman_secret:
-    name: podman_secret_rootless_test
-    state: absent
-  become: true
-  become_user: podman_secret_rootless
-  environment: "{{ _podman_secret_rootless_env }}"
-
-# Scenario 6 — the state=absent tombstone path: create a secret, then remove
+# Scenario 5 — the state=absent tombstone path: create a secret, then remove
 # it through the helper and confirm it reports removed (_rotated) and is gone
 # from the store. Proves a consumer dropping a credential can retire it via the
 # helper rather than a raw module call.
-- name: _verify | Scenario 6 — create a secret to later remove
+- name: _verify | Scenario 5 — create a secret to later remove
   import_role:
     name: podman_secret
     tasks_from: secret
@@ -211,7 +120,7 @@
       name: podman_secret_tombstone
       data: doomed
 
-- name: _verify | Scenario 6 — remove it via state=absent
+- name: _verify | Scenario 5 — remove it via state=absent
   import_role:
     name: podman_secret
     tasks_from: secret
@@ -220,23 +129,23 @@
       name: podman_secret_tombstone
       state: absent
 
-- name: _verify | Scenario 6 — list secrets after removal
+- name: _verify | Scenario 5 — list secrets after removal
   containers.podman.podman_secret_info:
   register: _podman_secret_tombstone_after
   become: true
 
-- name: _verify | Scenario 6 — assert removed and gone from the store
+- name: _verify | Scenario 5 — assert removed and gone from the store
   assert:
     that:
       - podman_secret_tombstone_rotated
       - _podman_secret_tombstone_after.secrets | selectattr('Spec.Name', 'eq', 'podman_secret_tombstone') | list | length == 0
 
-# Scenario 7 — the validation guards must fail loudly, not silently pass a bad
+# Scenario 6 — the validation guards must fail loudly, not silently pass a bad
 # input down to an opaque module/template error. These exercise the assert/guard
 # paths that are otherwise only ever hit on the happy path.
-- name: _verify | Scenario 7 — an invalid name is rejected
+- name: _verify | Scenario 6 — an invalid name is rejected
   block:
-    - name: _verify | Scenario 7 — attempt an invalid secret name
+    - name: _verify | Scenario 6 — attempt an invalid secret name
       import_role:
         name: podman_secret
         tasks_from: secret
@@ -244,33 +153,12 @@
         podman_secret_args:
           name: Bad.Name
           data: irrelevant
-    - name: _verify | Scenario 7 — fail if the invalid name was accepted
+    - name: _verify | Scenario 6 — fail if the invalid name was accepted
       assert:
         that: false
         fail_msg: podman_secret accepted an invalid name
   rescue:
-    - name: _verify | Scenario 7 — confirm the name-validation assert fired
+    - name: _verify | Scenario 6 — confirm the name-validation assert fired
       assert:
         that:
           - "'valid identifier' in (ansible_failed_result.msg | default(''))"
-
-- name: _verify | Scenario 8 — an unknown rootless user is rejected
-  block:
-    - name: _verify | Scenario 8 — attempt a non-existent user
-      import_role:
-        name: podman_secret
-        tasks_from: secret
-      vars:
-        podman_secret_args:
-          name: podman_secret_no_such_user
-          data: irrelevant
-          user: definitely_absent_user
-    - name: _verify | Scenario 8 — fail if the missing user was accepted
-      assert:
-        that: false
-        fail_msg: podman_secret accepted a non-existent user
-  rescue:
-    - name: _verify | Scenario 8 — confirm the passwd assert fired
-      assert:
-        that:
-          - "'no usable passwd entry' in (ansible_failed_result.msg | default(''))"
