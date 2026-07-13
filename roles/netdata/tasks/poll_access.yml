@@ -68,7 +68,7 @@
   tags:
     - netdata
 
-# The poller logs in every 30s (homepage_alerts timer). Without linger, logind
+# The poller logs in every 60s (homepage_alerts timer). Without linger, logind
 # starts and tears down a full `systemd --user` manager per login (~30 journal
 # lines of slice/socket/target bringup each time, thousands of logins/day).
 # Linger keeps one manager resident -- the podman units masked above keep it

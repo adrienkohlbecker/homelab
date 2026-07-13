@@ -166,7 +166,7 @@
       #
       # Static index.html written by alerts_generate.py at
       # /var/www/homepage_alerts/. Default nginx Last-Modified/ETag handling
-      # is wanted: the iframe's 30s refreshInterval sends conditional GETs
+      # is wanted: the iframe's 60s refreshInterval sends conditional GETs
       # that 304 on unchanged content.
       server_conf: |
         location /alerts/ {
@@ -184,7 +184,7 @@
 # netdata `/api/v1/alarms?active`, renders HTML + JSON, and atomically writes
 # both to /var/www/homepage_alerts/. nginx serves them under /alerts/ on the
 # homepage vhost (same origin, so the iframe widget can resize itself via
-# window.frameElement). Fires every 30s via systemd timer; no long-running
+# window.frameElement). Fires every minute via systemd timer; no long-running
 # process.
 - name: Create alerts sidecar source directory
   file:
@@ -302,7 +302,7 @@
     - homepage
 
 # Install both homepage_alerts.service (Type=oneshot) and homepage_alerts.timer
-# via the systemd_timer helper. monitor: false because sub-minute cadences
+# via the systemd_timer helper. monitor: false because one-minute cadences
 # don't map to netdata's overdue-detector hourly/daily/weekly/monthly buckets;
 # systemd_service_unit_failed_state catches a wedged timer independently.
 - name: Install and enable homepage_alerts timer
@@ -323,10 +323,10 @@
     systemd_timer_args:
       name: homepage_alerts
       description: Generate homepage alerts panel static files
-      # Every 30s (at :00 and :30 of every minute). AccuracySec=1s is
+      # Every minute at :00. AccuracySec=1s is
       # required — systemd's 1min default would let fires drift well past
-      # the iframe widget's 30s refreshInterval.
-      on_calendar: "*:*:0/30"
+      # the iframe widget's 60s refreshInterval.
+      on_calendar: "*:*:00"
       persistent: false
       accuracy_sec: 1s
       # Fire immediately on enable so a fresh install doesn't leave nginx
@@ -335,7 +335,7 @@
       exec_start: /usr/bin/python3 /opt/homepage_alerts/alerts_generate.py
       run_as: homepage
       monitor: false
-      # Bound a wedged run well within the 30s cadence. Each fire fans out to
+      # Bound a wedged run well within the 60s cadence. Each fire fans out to
       # N netdata hosts in parallel with SSH_TIMEOUT=10s, so 25s is plenty
       # even on a chatty agent and a cold (un-multiplexed) connection.
       timeout_start_sec: 25s
@@ -356,7 +356,7 @@
 # Trigger one immediate run when the script or units change. On fresh enable
 # OnActiveSec=0 already fires the first run; this handles subsequent applies
 # (e.g. NETDATA_HOSTS changed) where the timer is already running and would
-# otherwise wait up to 30s for its next OnCalendar tick. state: started is a
+# otherwise wait up to 60s for its next OnCalendar tick. state: started is a
 # no-op if the oneshot is currently mid-run, and starts a fresh run if it's
 # inactive — never SIGTERMs a run in progress.
 - name: Force an immediate alerts_generate run on changes

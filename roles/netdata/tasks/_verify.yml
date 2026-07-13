@@ -566,7 +566,7 @@
     or "uid=" in _netdata_poll_forced.stdout
     or (_netdata_poll_forced.stdout | from_json).alarms is not defined
 
-# ControlMaster reuse is what makes the homepage poller's 30s cadence cheap
+# ControlMaster reuse is what makes the homepage poller's 60s cadence cheap
 # (one warm connection per peer, not a fresh handshake each fire). Prove the
 # forced-command key supports multiplexing: an initial call opens a persistent
 # master, and `-O check` confirms a second call would ride it rather than
@@ -606,7 +606,7 @@
     - /tmp/netdata_poll_verify_cm
   changed_when: false
 
-# poll_access enables linger for netdata_poll so the 30s poll cadence reuses one
+# poll_access enables linger for netdata_poll so the 60s poll cadence reuses one
 # resident `systemd --user` manager instead of rebuilding it per login (which
 # otherwise floods the journal with slice/socket/target bringup every poll).
 - name: _verify | Linger keeps the netdata_poll user manager resident

@@ -17,7 +17,7 @@
           classes: w-full h-32
           referrerPolicy: same-origin
           allowScrolling: 'no'
-          # 30s in ms; matches homepage_alerts.timer's OnCalendar=*:*:0/30
+          # 60s in ms; matches homepage_alerts.timer's OnCalendar=*:*:00
           # cadence. Browser-side conditional GETs (If-Modified-Since) 304 on
-          # unchanged content so the every-30s fetch stays cheap.
-          refreshInterval: 30000
+          # unchanged content so the every-minute fetch stays cheap.
+          refreshInterval: 60000

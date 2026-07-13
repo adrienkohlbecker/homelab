@@ -4,7 +4,7 @@ Polls each configured host's netdata alerts over SSH in parallel and writes
 index.html — a dark-themed, iframe-friendly alert list.
 
 Run as a Type=oneshot systemd service fired by homepage_alerts.timer on
-a sub-minute cadence (OnCalendar=*:*:0/30 + AccuracySec=1s on the
+a one-minute cadence (OnCalendar=*:*:00 + AccuracySec=1s on the
 homepage host). nginx serves the file directly from OUTPUT_DIR; no
 proxy_pass, no long-running process.
 
@@ -488,7 +488,7 @@ def render_html(hosts: list[dict], iso_updated_at: str) -> str:
                 )
         sections.append(f'<section class="host"><h2>{title}</h2>{"".join(rows)}</section>')
     # Footer shows the wall-clock ISO timestamp of this run. The iframe widget
-    # refreshes us every 30s so an operator comparing against the dashboard's
+    # refreshes us every minute so an operator comparing against the dashboard's
     # datetime widget can spot a wedged generator at a glance. We don't render
     # "X ago" client-side because the python _humanize_delta isn't worth
     # replicating in JS for a footer; a wedged generator also fails the
