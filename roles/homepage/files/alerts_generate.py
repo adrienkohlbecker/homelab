@@ -116,12 +116,8 @@ class _HostClient:
     def __init__(self, base_url: str, authorization: str) -> None:
         u = urllib.parse.urlsplit(base_url)
         if u.scheme != "https":
-            raise OSError(
-                f"refusing to send Basic authentication over {u.scheme or 'an invalid URL'}"
-            )
-        self._conn = http.client.HTTPSConnection(
-            u.netloc, timeout=FETCH_TIMEOUT, context=SSL_CTX
-        )
+            raise OSError(f"refusing to send Basic authentication over {u.scheme or 'an invalid URL'}")
+        self._conn = http.client.HTTPSConnection(u.netloc, timeout=FETCH_TIMEOUT, context=SSL_CTX)
         self._authorization = authorization
 
     def close(self) -> None:
@@ -148,9 +144,7 @@ class _HostClient:
         return self._get_json("/api/v1/alarms?active")
 
     def alert_transitions(self) -> dict:
-        query = urllib.parse.urlencode(
-            {"after": f"-{ALERT_TRANSITIONS_WINDOW}", "last": "10000"}
-        )
+        query = urllib.parse.urlencode({"after": f"-{ALERT_TRANSITIONS_WINDOW}", "last": "10000"})
         return self._get_json(f"/api/v2/alert_transitions?{query}")
 
 
@@ -165,9 +159,7 @@ def latest_transition_by_alarm(log) -> dict[tuple[str, str], str]:
     bare list is also accepted for test fixtures."""
     transitions = log.get("transitions") if isinstance(log, dict) else (log or [])
     out: dict[tuple[str, str], str] = {}
-    for entry in sorted(
-        transitions or [], key=lambda e: e.get("gi") or e.get("when") or 0, reverse=True
-    ):
+    for entry in sorted(transitions or [], key=lambda e: e.get("gi") or e.get("when") or 0, reverse=True):
         key = (entry.get("alert"), entry.get("instance"))
         tid = entry.get("transition_id")
         if key[0] and key[1] and tid and key not in out:
@@ -467,9 +459,7 @@ def render_html(hosts: list[dict], iso_updated_at: str) -> str:
                     f'<span class="value">{html.escape(a["value"])}</span>'
                     f"</a>"
                 )
-        sections.append(
-            f'<section class="host"><h2>{title}</h2>{"".join(rows)}</section>'
-        )
+        sections.append(f'<section class="host"><h2>{title}</h2>{"".join(rows)}</section>')
     # Footer shows the wall-clock ISO timestamp of this run. The iframe widget
     # refreshes us every minute so an operator comparing against the dashboard's
     # datetime widget can spot a wedged generator at a glance. We don't render
@@ -500,9 +490,7 @@ def main() -> None:
     username = os.environ.get("NETDATA_BASIC_AUTH_USERNAME", "")
     password_file = os.environ.get("NETDATA_BASIC_AUTH_PASSWORD_FILE", "")
     if not (username and password_file):
-        raise OSError(
-            "NETDATA_BASIC_AUTH_USERNAME and NETDATA_BASIC_AUTH_PASSWORD_FILE are required"
-        )
+        raise OSError("NETDATA_BASIC_AUTH_USERNAME and NETDATA_BASIC_AUTH_PASSWORD_FILE are required")
     password = pathlib.Path(password_file).read_text().strip()
     if not password:
         raise OSError("NETDATA_BASIC_AUTH_PASSWORD_FILE is empty")

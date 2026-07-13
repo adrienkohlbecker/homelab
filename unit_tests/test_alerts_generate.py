@@ -9,13 +9,7 @@ from pathlib import Path
 
 import pytest
 
-_MODULE_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "roles"
-    / "homepage"
-    / "files"
-    / "alerts_generate.py"
-)
+_MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "homepage" / "files" / "alerts_generate.py"
 
 
 def _load():
@@ -41,12 +35,8 @@ class TestParseHosts:
         assert result == [("lab", "http://localhost:19999", "http://localhost:19999")]
 
     def test_three_url_format(self) -> None:
-        result = ag.parse_hosts(
-            "lab=http://localhost:19999=https://netdata.lab.fahm.fr"
-        )
-        assert result == [
-            ("lab", "http://localhost:19999", "https://netdata.lab.fahm.fr")
-        ]
+        result = ag.parse_hosts("lab=http://localhost:19999=https://netdata.lab.fahm.fr")
+        assert result == [("lab", "http://localhost:19999", "https://netdata.lab.fahm.fr")]
 
     def test_multiple_hosts(self) -> None:
         result = ag.parse_hosts("lab=http://a,pug=https://b")
@@ -94,12 +84,8 @@ class _FakeResponse:
 
 
 class TestHostClient:
-    def test_sends_basic_auth_to_both_netdata_endpoints(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        responses = iter(
-            [_FakeResponse(b'{"alarms": {}}'), _FakeResponse(b'{"transitions": []}')]
-        )
+    def test_sends_basic_auth_to_both_netdata_endpoints(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        responses = iter([_FakeResponse(b'{"alarms": {}}'), _FakeResponse(b'{"transitions": []}')])
         requests: list[tuple[str, str, dict[str, str]]] = []
 
         class FakeConnection:
@@ -126,10 +112,7 @@ class TestHostClient:
             "/api/v1/alarms?active",
             "/api/v2/alert_transitions?after=-604800&last=10000",
         ]
-        assert all(
-            request[2]["Authorization"] == "Basic aG9tZXBhZ2VfYWxlcnRzOnNlY3JldA=="
-            for request in requests
-        )
+        assert all(request[2]["Authorization"] == "Basic aG9tZXBhZ2VfYWxlcnRzOnNlY3JldA==" for request in requests)
 
     def test_rejects_cleartext_http(self) -> None:
         with pytest.raises(OSError, match="refusing to send Basic authentication"):
