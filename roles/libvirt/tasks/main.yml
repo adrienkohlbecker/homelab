@@ -88,15 +88,14 @@
     - libvirt
 
 - name: Add current user to virtualization groups
-  import_role:
-    name: usergroup_immediate
-    tasks_from: user
   when: not (ansible_check_mode and libvirt_apt.changed)
-  vars:
-    usergroup_immediate_args:
-      group:
-        - libvirt
-        - kvm
+  user:
+    name: "{{ ansible_user_id }}"
+    groups:
+      - libvirt
+      - kvm
+    append: true
+  become: true
   tags:
     - libvirt
 

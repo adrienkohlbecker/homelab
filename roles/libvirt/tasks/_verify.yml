@@ -5,6 +5,17 @@
 # and dumping it proves the script's real behavior, not just that the
 # file landed on disk.
 
+- name: _verify | Operator belongs to virtualization groups
+  command:
+    argv:
+      - id
+      - -nG
+      - "{{ ansible_user_id }}"
+  register: _libvirt_verify_groups
+  changed_when: false
+  failed_when: >-
+    ['libvirt', 'kvm'] | difference(_libvirt_verify_groups.stdout.split()) | length > 0
+
 - name: _verify | Gather default network state
   command: virsh net-info default
   register: _libvirt_verify_net
