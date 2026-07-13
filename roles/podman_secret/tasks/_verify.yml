@@ -7,11 +7,10 @@
       name: podman_secret_test
       data: alpha
 
-- name: _verify | Scenario 1 — assert created and not pre-existing
+- name: _verify | Scenario 1 — assert created
   assert:
     that:
       - podman_secret_test_rotated
-      - not podman_secret_test_existed_before
 
 - name: _verify | Scenario 2 — re-run with same data
   import_role:
@@ -22,11 +21,10 @@
       name: podman_secret_test
       data: alpha
 
-- name: _verify | Scenario 2 — assert NOT rotated and pre-existing
+- name: _verify | Scenario 2 — assert NOT rotated
   assert:
     that:
       - not podman_secret_test_rotated
-      - podman_secret_test_existed_before
 
 - name: _verify | Scenario 3 — re-run with new data
   import_role:
@@ -37,11 +35,10 @@
       name: podman_secret_test
       data: beta
 
-- name: _verify | Scenario 3 — assert rotated and pre-existing
+- name: _verify | Scenario 3 — assert rotated
   assert:
     that:
       - podman_secret_test_rotated
-      - podman_secret_test_existed_before
 
 - name: _verify | Cleanup test secret
   containers.podman.podman_secret:
@@ -49,11 +46,10 @@
     state: absent
   become: true
 
-# Scenario 4 — two distinct secrets in one play must keep independent
-# facts: A stays un-rotated on its no-op re-run while B rotates, and each
-# carries its own existed_before. Guards the per-secret fact namespacing
-# that every multi-secret consumer (authelia's 5, influxdb's 2) relies on;
-# a leak would clobber one secret's restart trigger with another's.
+# Scenario 4 — two distinct secrets in one play must keep independent facts:
+# A stays un-rotated on its no-op re-run while B rotates. Guards the per-secret
+# fact namespacing that every multi-secret consumer (authelia's 5, influxdb's 3)
+# relies on; a leak would clobber one secret's restart trigger with another's.
 - name: _verify | Scenario 4 — create secret A
   import_role:
     name: podman_secret
@@ -94,9 +90,7 @@
   assert:
     that:
       - not podman_secret_test_a_rotated
-      - podman_secret_test_a_existed_before
       - podman_secret_test_b_rotated
-      - podman_secret_test_b_existed_before
 
 - name: _verify | Scenario 4 — cleanup secrets A and B
   containers.podman.podman_secret:

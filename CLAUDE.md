@@ -139,7 +139,7 @@ Prefer these over re-implementing boilerplate. All take inputs through a single 
 | Helper | Entry point | Exposes / creates |
 |--------|-------------|-------------------|
 | `service_user` | `tasks_from: user` | `<svc>_user.uid`/`.group`; `/mnt/services/<svc>` dir |
-| `podman_secret` | `tasks_from: secret` | `<name>_rotated` / `<name>_existed_before` |
+| `podman_secret` | `tasks_from: secret` | `<name>_rotated` for restart triggers |
 | `systemd_unit` | `tasks_from: {install,dropin,service,remove}` | `<unit>_started_result`; drives restarts inline |
 | `systemd_timer` | `tasks_from: {install,remove}` | paired `.service`+`.timer` (system scope) |
 | `nginx_site` | `import_role: name: nginx, tasks_from: site` | vhost with TLS/HSTS/CSP + optional Authelia |
