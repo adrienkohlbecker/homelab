@@ -22,6 +22,25 @@
     or _netdata_unit.status.ActiveState != "active"
   become: true
 
+- name: _verify | Read rendered WireGuard health configuration
+  slurp:
+    src: /etc/netdata/health.d/wireguard.conf
+  register: _netdata_wireguard_health
+  become: true
+
+- name: _verify | WireGuard stale thresholds carry the full grace period
+  vars:
+    _health: "{{ _netdata_wireguard_health.content | b64decode }}"
+  assert:
+    that:
+      - "warn: $this > 900" in _health
+      - "crit: $this > 1200" in _health
+      - "delay: up" not in _health
+      - "delay: down 30m" in _health
+    fail_msg: >-
+      Expected the rendered WireGuard alarm to encode its stale-age grace in
+      the thresholds and retain only recovery hysteresis.
+
 # netdata is the only flat-repo (trailing-slash suite, no components) + glob-pin
 # ("netdata*") consumer, so the shared apt_source _verify runs here to cover
 # that path: the signing key is scoped (not globally trusted) and the 2.* pin

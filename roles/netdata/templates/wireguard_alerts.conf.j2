@@ -13,9 +13,8 @@
 # handshakes during nightly zfs sends so handshake_ago would naturally
 # climb to ~24h between backups.
 #
-# Threshold 300s warn / 600s crit gives ~10 keepalive intervals of grace
-# before a flap fires. `delay: up 10m` rides out the brief stale period
-# during a wg-quick restart or transient network blip.
+# Threshold 900s warn / 1200s crit directly expresses the tolerated stale
+# period, without a second notification-only delay that can outlive recovery.
 #
 # netdata normalizes chart-label values: `=` is replaced with `:` so the
 # trailing padding character on the public key shows as `:`. Apply the
@@ -30,9 +29,9 @@ component: Network
     calc: $time
    units: seconds
    every: 30s
-    warn: $this > 300
-    crit: $this > 600
-   delay: up 10m down 30m multiplier 1.5 max 1h
+    warn: $this > 900
+    crit: $this > 1200
+   delay: down 30m multiplier 1.5 max 1h
  summary: WireGuard bunk peer (${label:device}) handshake stale
-    info: lab/pug sends a 25s keepalive to bunk; handshake_ago > 300s means the offsite backup link is unreachable. Catches the failure before the next nightly zfs send (which would also fail via systemd_service_unit_failed_state).
+    info: lab/pug sends a 25s keepalive to bunk; handshake_ago > 900s means the offsite backup link is unreachable. Catches the failure before the next nightly zfs send (which would also fail via systemd_service_unit_failed_state).
       to: sysadmin
