@@ -6,6 +6,8 @@
 #                             to false and renders an invalid `... false;`.
 #   proxy_request_buffering   optional; nginx proxy_request_buffering directive
 #                             value (quote it -- same YAML off->false footgun)
+#   condition                 optional bool, default true; gates application of
+#                             changes while still publishing the result fact
 #   proxy_send_timeout        optional nginx timeout override
 #   proxy_read_timeout        optional nginx timeout override
 #   client_max_body_size      optional; sets nginx client_max_body_size
@@ -93,11 +95,12 @@
     - nginx_site
 
 # Resolve caller defaults once into _nginx_site_* locals (mirrors conf_d.yml), so
-# the auth/enable_http defaults live in one place rather than being re-spelled at
-# every gate below and in site.conf.j2. Always set so no stale value leaks into
-# the next nginx_site invocation.
+# the condition/auth/enable_http defaults live in one place rather than being
+# re-spelled at every gate below and in site.conf.j2. Always set so no stale
+# value leaks into the next nginx_site invocation.
 - name: site | Resolve caller defaults
   set_fact:
+    _nginx_site_condition: "{{ nginx_site_args.condition | default(true) }}"
     _nginx_site_auth: "{{ nginx_site_args.auth | default('none') }}"
     _nginx_site_auth_request_authorization: "{{ (nginx_site_args.auth_request_authorization | default(false)) | bool }}"
     _nginx_site_enable_http: "{{ (nginx_site_args.enable_http | default(false)) | bool }}"
@@ -207,6 +210,7 @@
 # (events{}, http{}, the symlink in place), not a standalone server{} snippet
 # -- the same constraint conf_d documents.
 - name: site | Configure and enable nginx site
+  when: _nginx_site_condition
   become: true
   tags:
     - nginx_site
@@ -269,3 +273,22 @@
           nginx -t failed after writing
           /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}; previous
           state restored. Inspect the validate output above and the managed content.
+
+# Publish the result unconditionally so condition:false callers can safely wire
+# follow-up changes to it. Include the condition explicitly to prevent a result
+# from a previous site invocation leaking into the no-change result.
+- name: site | Record site result
+  set_fact:
+    "{{ nginx_site_args.subdomain | ansible_var_key }}_site_result":
+      changed: >-
+        {{
+          (
+            _nginx_site_condition
+            and (
+              (nginx_static_conf.changed | default(false))
+              or (nginx_static_conf_enable.changed | default(false))
+            )
+          ) | bool
+        }}
+  tags:
+    - nginx_site
