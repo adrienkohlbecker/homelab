@@ -258,7 +258,7 @@
 # --- exit-code propagation ---
 # A broken rc=$? / exit "$rc" in stderr_priority would cause a failing timer
 # to report Result=success to systemd, silently suppressing failed-state alerts.
-- name: "_verify | Install exit-code fixture (monitor: false)"
+- name: _verify | Install monitored exit-code fixture
   import_role:
     name: systemd_timer
     tasks_from: install
@@ -268,7 +268,6 @@
       description: stderr_priority exit-code propagation self-test
       on_calendar: "*-*-* 23:59:00"
       exec_start: /bin/sh -c 'exit 2'
-      monitor: false
 
 - name: _verify | Remove any stale exit-code fixture stamp
   file:

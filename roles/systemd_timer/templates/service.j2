@@ -18,7 +18,7 @@ Group={{ systemd_timer_args.run_as_group | default(systemd_timer_args.run_as) }}
 Environment="{{ k }}={{ v | string | replace('\\', '\\\\') | replace('"', '\\"') }}"
 {% endfor %}
 {% endif %}
-{% if (systemd_timer_args.user | default('root')) == 'root' %}
+{% if _systemd_timer_monitor %}
 {# Update the netdata overdue-monitoring stamp when each run starts. systemd only
    maintains this stamp itself for Persistent=true timers (touched at trigger
    time); for persistent: false ones this line is the sole writer. ExecStartPre
