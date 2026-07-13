@@ -390,6 +390,33 @@
     systemd_unit_args:
       src: systemd_unit_verify_copy_ok.service
 
+- name: _verify | Enable the non-reloadable fixture without starting it
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_copy_ok.service
+      start: false
+
+- name: _verify | Read enable-only fixture state  # noqa: command-instead-of-module
+  command:
+    argv:
+      - systemctl
+      - show
+      - systemd_unit_verify_copy_ok.service
+      - --property=UnitFileState
+      - --property=ActiveState
+  register: _systemd_unit_enable_only_state
+  changed_when: false
+
+- name: _verify | Enable-only leaves the fixture inactive
+  assert:
+    that:
+      - not systemd_unit_verify_copy_ok_service_started_result.changed
+      - "'UnitFileState=enabled' in _systemd_unit_enable_only_state.stdout_lines"
+      - "'ActiveState=inactive' in _systemd_unit_enable_only_state.stdout_lines"
+
 - name: _verify | Start the non-reloadable fixture so it is active
   import_role:
     name: systemd_unit
