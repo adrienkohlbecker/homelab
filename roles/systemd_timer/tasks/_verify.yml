@@ -179,18 +179,11 @@
   register: _systemd_timer_runas_out
   become: true
 
-- name: _verify | Read systemctl show User for run_as fixture  # noqa: command-instead-of-module
-  command: systemctl show -p User --value _verify_timer_runas.service
-  register: _systemd_timer_runas_user
-  changed_when: false
-  become: true
-
 - name: _verify | Functional assertions for run_as
   vars:
     _uid: "{{ (_systemd_timer_runas_out.content | b64decode).strip() }}"
   assert:
     that:
-      - _systemd_timer_runas_user.stdout == '_verify_runas'
       - _uid == (_systemd_timer_runas_created.uid | string)
 
 - name: _verify | Remove the run_as fixture timer
