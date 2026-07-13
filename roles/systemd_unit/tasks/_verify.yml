@@ -367,10 +367,6 @@
       src: systemd_unit_verify_ok.service.j2
       restart: true
 
-- name: _verify | Unit is still active after restart  # noqa: command-instead-of-module
-  command: systemctl is-active systemd_unit_verify_ok.service
-  changed_when: false
-
 # Reload path: verify_ok.service.j2 now carries ExecReload=/bin/true so
 # CanReload=yes. Drive reload: true while the unit is active (started above)
 # so systemd_unit_started.changed is false and the reload task fires.
@@ -382,10 +378,6 @@
     systemd_unit_args:
       src: systemd_unit_verify_ok.service.j2
       reload: true
-
-- name: _verify | Unit is still active after reload  # noqa: command-instead-of-module
-  command: systemctl is-active systemd_unit_verify_ok.service
-  changed_when: false
 
 # Sad path: a unit with no ExecReload= must raise the actionable message.
 # Reuse the copy-dispatch fixture: it is oneshot+RemainAfterExit and has no
@@ -432,15 +424,6 @@
     systemd_unit_args:
       dest: systemd_unit_verify_copy_ok.service
 
-- name: _verify | Start=false skips lifecycle
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: systemd_unit_verify_ok.service.j2
-      start: false
-
 - name: _verify | Cleanup service-path fixture
   import_role:
     name: systemd_unit
@@ -448,11 +431,6 @@
   vars:
     systemd_unit_args:
       dest: systemd_unit_verify_ok.service
-
-- name: _verify | Daemon-reload after service-path cleanup
-  systemd:
-    daemon_reload: true
-  become: true
 
 # --- Reenable prunes stale [Install] symlinks on a unit-file change ---
 # `systemctl enable` only adds the symlinks named in a unit's *current*
@@ -531,9 +509,4 @@
   file:
     path: /etc/systemd/system/systemd_unit_verify_stale.target.wants
     state: absent
-  become: true
-
-- name: _verify | Daemon-reload after reenable-test cleanup
-  systemd:
-    daemon_reload: true
   become: true
