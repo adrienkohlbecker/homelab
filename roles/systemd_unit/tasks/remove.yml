@@ -1,9 +1,6 @@
 # Inputs: caller passes a single dict `systemd_unit_args` with keys
-#   dest              required (unless `src` or `for` is set); on-disk
+#   dest              required unless `for` is set; on-disk
 #                     unit filename (e.g. "foo.service").
-#   src               optional shorthand: if set and dest isn't, dest
-#                     defaults to src with .j2 stripped. Lets callers
-#                     hand the same dict shape to install and remove.
 #   for               drop-in only: parent unit, derives
 #                     dest=<for>.d/override.conf
 #   user              default 'root'; non-root acts on the named user's
@@ -23,34 +20,26 @@
     that:
       - systemd_unit_args is defined
       - systemd_unit_args is mapping
-      - systemd_unit_args.dest is defined or systemd_unit_args.src is defined or systemd_unit_args.for is defined or systemd_unit_args.dest_abs is defined
+      - systemd_unit_args.dest is defined or systemd_unit_args.for is defined
     fail_msg: >-
-      systemd_unit_args needs at least one of dest, src, for, or dest_abs;
+      systemd_unit_args needs dest or for;
       got dest={{ systemd_unit_args.dest | default('<unset>') }},
-      src={{ systemd_unit_args.src | default('<unset>') }},
-      for={{ systemd_unit_args.for | default('<unset>') }},
-      dest_abs={{ systemd_unit_args.dest_abs | default('<unset>') }}
+      for={{ systemd_unit_args.for | default('<unset>') }}
 
-- name: remove | Resolve caller defaults for {{ systemd_unit_args.dest | default(systemd_unit_args.src | default('?')) }}
+- name: remove | Resolve caller defaults for {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
-    # For dest_abs mode, the identifier used in the per-unit result fact
-    # is the last two path components — same as install.yml.
     _systemd_unit_name: >-
-      {{ ((systemd_unit_args.dest_abs | dirname | basename) ~ '/' ~ (systemd_unit_args.dest_abs | basename))
-         if systemd_unit_args.dest_abs is defined
-         else (systemd_unit_args.dest
-               | default((systemd_unit_args.for ~ '.d/override.conf') if systemd_unit_args.for is defined
-                         else (systemd_unit_args.src | regex_replace('\.j2$', '')))) }}
+      {{ systemd_unit_args.dest
+         if systemd_unit_args.dest is defined
+         else systemd_unit_args.for ~ '.d/override.conf' }}
 
-- name: remove | Derive scope for {{ systemd_unit_args.dest | default(systemd_unit_args.src | default('?')) }}
+- name: remove | Derive scope for {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}
   set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
-    _systemd_unit_remove_path: >-
-      {{ systemd_unit_args.dest_abs
-         | default(('/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user') ~ '/' ~ _systemd_unit_name) }}
+    _systemd_unit_remove_path: "{{ ('/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user') ~ '/' ~ _systemd_unit_name }}"
 
 # Check-mode tolerance on the linger-marker stat: see install.yml.
 # Name references caller var, not set_fact'd _systemd_unit_user, for the
@@ -93,7 +82,7 @@
 # instance before removing the template -- and systemd answers stop/disable on
 # a still-present template with "unknown state", which is NOT the tolerated
 # "could not find". Deleting the file + daemon-reload below is all that's left.
-- name: remove | Stop and disable {{ systemd_unit_args.dest | default(systemd_unit_args.src | default('?')) }}
+- name: remove | Stop and disable {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}
   when:
     - _systemd_unit_condition
     - "'@.' not in _systemd_unit_name"
@@ -123,13 +112,7 @@
     - systemd_unit_file.changed
     - systemd_unit_args.for is defined
   find:
-    # dest_abs drop-ins (journald.conf.d/*, resolved.conf.d/*) live under
-    # dest_abs | dirname, not under _systemd_unit_dir/for.d. Mirror
-    # install.yml's path derivation so removal stays symmetric.
-    paths: >-
-      {{ (systemd_unit_args.dest_abs | dirname)
-         if systemd_unit_args.dest_abs is defined
-         else (_systemd_unit_dir ~ '/' ~ systemd_unit_args.for ~ '.d') }}
+    paths: "{{ _systemd_unit_dir }}/{{ systemd_unit_args.for }}.d"
     file_type: any
   become: true
   register: _systemd_unit_dropin_dir_contents
@@ -143,10 +126,7 @@
     - (_systemd_unit_dropin_dir_contents.files | default([])) | length == 0
     - _systemd_unit_dropin_dir_contents is not failed
   file:
-    path: >-
-      {{ (systemd_unit_args.dest_abs | dirname)
-         if systemd_unit_args.dest_abs is defined
-         else (_systemd_unit_dir ~ '/' ~ systemd_unit_args.for ~ '.d') }}
+    path: "{{ _systemd_unit_dir }}/{{ systemd_unit_args.for }}.d"
     state: absent
   become: true
 
@@ -162,6 +142,6 @@
 
 # Same fact name install.yml uses, so callers can read `.changed` off
 # `<name>_<type>_result` regardless of which operation just ran.
-- name: remove | Record removal result for {{ systemd_unit_args.dest | default(systemd_unit_args.src | default('?')) }}
+- name: remove | Record removal result for {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}
   set_fact:
     "{{ _systemd_unit_name | ansible_var_key }}_result": "{{ systemd_unit_file }}"

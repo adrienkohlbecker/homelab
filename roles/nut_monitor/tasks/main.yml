@@ -199,7 +199,7 @@
     tasks_from: remove
   vars:
     systemd_unit_args:
-      src: nut_wake_peers.service
+      dest: nut_wake_peers.service
   tags:
     - nut_monitor
 
