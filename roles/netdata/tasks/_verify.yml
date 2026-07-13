@@ -59,6 +59,24 @@
       Expected the fail2ban alarm to require a sustained high ban count and
       retain only recovery hysteresis.
 
+- name: _verify | Read Fluent Bit health configuration
+  slurp:
+    src: /etc/netdata/health.d/fluentbit.conf
+  register: _netdata_fluentbit_health
+  become: true
+
+- name: _verify | Fluent Bit alert uses sustained record drops
+  vars:
+    _health: "{{ _netdata_fluentbit_health.content | b64decode }}"
+  assert:
+    that:
+      - "lookup: min -5m unaligned of fluentbit_output_dropped_records_total" in _health
+      - "delay: up" not in _health
+      - "delay: down 1h" in _health
+    fail_msg: >-
+      Expected the Fluent Bit alarm to require a sustained positive drop rate
+      and retain only recovery hysteresis.
+
 # netdata is the only flat-repo (trailing-slash suite, no components) + glob-pin
 # ("netdata*") consumer, so the shared apt_source _verify runs here to cover
 # that path: the signing key is scoped (not globally trusted) and the 2.* pin
