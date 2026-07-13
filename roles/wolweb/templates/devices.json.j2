@@ -1,12 +1,7 @@
 #jinja2: trim_blocks: True, lstrip_blocks: True
-{# Each device's `ip` is the magic-packet DESTINATION (read into          #}
-{# Device.BroadcastIP) -- the directed broadcast for the host's own        #}
-{# segment, with WoL discard port :9 -- NOT the device's unicast IP. The   #}
-{# global config.json `bcastip` is unused by the wake path; do not "fix"   #}
-{# this to a unicast address. `interface` is the host NIC the packet       #}
-{# egresses. By default devices use the host's management-VLAN broadcast;  #}
-{# off-segment devices set wake_destination to the UDM management gateway  #}
-{# so roles/udm_wol_relay can rebroadcast the packet on the target VLAN.   #}
+{# `ip` is the packet destination, not the device address: the host's       #}
+{# broadcast by default, or the UDM gateway for cross-VLAN relay.           #}
+{# `interface` selects the host NIC; config.json bcastip is not used here.  #}
 {
   "devices": [
 {% for d in wolweb_devices %}

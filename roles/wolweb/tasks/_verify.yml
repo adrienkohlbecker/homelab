@@ -10,9 +10,8 @@
   set_fact:
     wolweb_lnav_marker: "verify_wolweb_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
-# Write through the container init's stderr so conmon records the fixture with
-# the same journald metadata as wolweb's Go logger. `podman exec` stderr would
-# return to Ansible directly and bypass the container log driver.
+# Write through PID 1's stderr so conmon records the fixture; ordinary
+# `podman exec` stderr returns directly to Ansible.
 - name: _verify | Emit representative wolweb logger record
   command:
     argv:
@@ -71,10 +70,8 @@
   until: _wolweb_lnav_record.rc == 0
   become: true
 
-# --network host strips podman's port-publishing boundary, so the only thing
-# keeping the unauthenticated UI off the management VLAN is the loopback bind
-# (config.json host=127.0.0.1 + --unsetenv WOLWEBHOST). Prove the port is NOT
-# reachable on the host's LAN IP so a bind regression to 0.0.0.0 fails here.
+# Host networking removes port isolation, so prove the unauthenticated UI's
+# loopback bind does not regress to the management LAN.
 - name: _verify | Wolweb port is closed on the host LAN IP (bound to loopback only)
   wait_for:
     host: "{{ ansible_facts.default_ipv4.address }}"
@@ -97,36 +94,26 @@
     or 'Windows' not in (_wolweb_data.content | default(''))
     or (network.sites.home.vlans.management.gateway ~ ':9') not in (_wolweb_data.content | default(''))
 
-# /wake actually transmits a magic packet, and a directed-broadcast send is
-# environment-dependent (SO_BROADCAST / SLIRP on the qemu fixture), so assert
-# the route + device-name matching deterministically instead: a known-absent
-# device must 404, proving the wake handler is wired and reads the loaded
-# device list without depending on a packet leaving the box.
+# A missing device exercises route and list loading without relying on a magic
+# packet leaving the QEMU fixture.
 - name: _verify | Wolweb wake route rejects an unknown device with 404
   uri:
     url: http://localhost:{{ service_ports.wolweb }}/wake/__nonexistent__
     status_code: 404
 
-# Complements the 404 case: a known device name must resolve in the loaded
-# list. Upstream returns 200 on a successful send and 500 if the directed
-# broadcast fails to leave the box (SO_BROADCAST / SLIRP on the qemu fixture),
-# so accept either -- both prove name-matching works without depending on a
-# packet landing. A 404 here would mean the name failed to resolve.
+# A known device returns 200 when the broadcast leaves QEMU and 500 when SLIRP
+# blocks it; either result proves name resolution reached the send path.
 - name: _verify | Wolweb wake route resolves a known device (200, or 500 if the send fails under SLIRP)
   uri:
     url: http://localhost:{{ service_ports.wolweb }}/wake/Lab
     status_code: [ 200, 500 ]
 
-# The wake_destination path sends unicast (to the UDM gateway), which needs
-# no SO_BROADCAST and succeeds under SLIRP -- unlike the broadcast case above
-# this one is deterministic, so require a plain 200.
+# The UDM-gateway destination is unicast and deterministic under SLIRP.
 - name: _verify | Wolweb wake route sends to a wake_destination device
   uri:
     url: http://localhost:{{ service_ports.wolweb }}/wake/Windows
 
-# read_only:true leaves the /data/save POST route unregistered upstream, so a
-# hit returns 404. This fails if a future image ignores read_only or the flag
-# is dropped, which would let any authenticated user rewrite the device list.
+# read_only leaves /data/save unregistered, keeping devices Ansible-managed.
 - name: _verify | Wolweb in-UI device editor is disabled under read_only (route unregistered)
   uri:
     url: http://localhost:{{ service_ports.wolweb }}/data/save

@@ -1,19 +1,14 @@
-# Wake-on-LAN targets advertised by the wolweb UI. Each entry references a
-# key in `mac_addresses` (a host/group var); the catalog itself is role-owned
-# structure, mirroring homepage_bookmarks. Devices without wake_destination
-# use the management-VLAN broadcast from the wolweb host. Off-segment devices
-# point at the UDM management gateway; udm_wol_relay rebroadcasts any valid
-# magic packet from trusted source VLANs onto the target VLAN.
 wolweb_broadcast_ip: "{{ (ansible_facts.default_ipv4.address + '/' + ansible_facts.default_ipv4.netmask) | ansible.utils.ipaddr('broadcast') }}"
 
+# Role-owned UI targets whose MACs come from `mac_addresses`. Targets without
+# wake_destination use the host's management broadcast; off-segment targets use
+# the UDM gateway, where udm_wol_relay rebroadcasts the packet.
 wolweb_devices:
   - name: Lab
     mac: "{{ mac_addresses.lab_i210 }}"
   - name: Pug
     mac: "{{ mac_addresses.pug }}"
-  # Windows gaming box: network.static_leases.game (10.123.2.13 in prod) on
-  # the home VLAN. The packet destination is the UDM management gateway, not
-  # the sleeping host IP, because the UDM relay owns cross-VLAN rebroadcast.
+  # The home-VLAN target is relayed through the UDM management gateway.
   - name: Windows
     mac: "{{ mac_addresses.game }}"
     wake_destination: "{{ network.sites.home.vlans.management.gateway }}:9"
