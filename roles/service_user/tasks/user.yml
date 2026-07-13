@@ -8,16 +8,6 @@
 #                     service writes into $HOME (gitea)
 #   shell             optional, default '/usr/sbin/nologin'
 #   home              optional, default '/nonexistent'
-#   home_mode         optional, default null (= don't touch). When set,
-#                     chmods the home dir to this octal mode. Useful when
-#                     /etc/login.defs HOME_MODE (0750 on Ubuntu) is too
-#                     restrictive -- e.g. a podman bind-mount source under
-#                     $HOME is stat'd from a transient userns where the
-#                     process appears as "nobody" and can't traverse a
-#                     group-only dir, surfacing as EACCES at container
-#                     start. Pass "0755" to make the path world-traversable
-#                     (files inside keep their own modes, so this doesn't
-#                     widen actual read access).
 #   config_dir        optional bool, default true; false skips creating and
 #                     owning /mnt/services/<name> -- the caller creates any
 #                     state dirs it needs itself.
@@ -60,22 +50,15 @@
       service_user_args needs name (a valid identifier matching
       [a-z_][a-z0-9_-]*); got name={{ service_user_args.name | default('<unset>') }}
 
-# Catch incoherent home options up front rather than silently no-op'ing.
-- name: "Validate home options for {{ service_user_args.name }}"
+# Avoid materializing /nonexistent, a sentinel several system tools special-case.
+- name: "Validate home for {{ service_user_args.name }}"
   assert:
     quiet: true
     that:
-      # home_mode is applied only by the home-dir file task below, which is
-      # gated on createhome -- so home_mode without createhome is silently
-      # ignored. Fail loudly instead of letting the mode vanish.
-      - service_user_args.home_mode is not defined or (service_user_args.createhome | default(false)) | bool
-      # createhome with the default home would materialize /nonexistent (a
-      # sentinel several system tools special-case) as a real directory.
       - not (service_user_args.createhome | default(false) | bool) or (service_user_args.home | default('/nonexistent')) != '/nonexistent'
     fail_msg: >-
-      Incoherent home options for {{ service_user_args.name }}: home_mode
-      needs createhome: true, and createhome needs a real home (not the
-      /nonexistent sentinel).
+      createhome needs a real home for {{ service_user_args.name }}, not the
+      /nonexistent sentinel.
 
 - name: Resolve caller defaults for {{ service_user_args.name }}
   set_fact:
@@ -84,7 +67,6 @@
     _service_user_createhome: "{{ service_user_args.createhome | default(false) }}"
     _service_user_shell: "{{ service_user_args.shell | default('/usr/sbin/nologin') }}"
     _service_user_home: "{{ service_user_args.home | default('/nonexistent') }}"
-    _service_user_home_mode: "{{ service_user_args.home_mode | default(None) }}"
     _service_user_config_dir: "{{ service_user_args.config_dir | default(true) }}"
     _service_user_config_dir_group: "{{ service_user_args.config_dir_group | default(service_user_args.name) }}"
     _service_user_config_dir_mode: "{{ service_user_args.config_dir_mode | default('0750') }}"
@@ -121,23 +103,6 @@
 - name: Record user record for {{ service_user_args.name }}
   set_fact:
     "{{ _service_user_name | ansible_var_key }}_user": "{{ service_user_result }}"
-
-# Override useradd's HOME_MODE (Ubuntu defaults to 0750) when the caller
-# asked for a specific mode. Idempotent: ansible's file module reports
-# changed only when the mode actually differs. Gated on createhome so
-# we don't try to chmod the placeholder /nonexistent.
-- name: "Set home directory mode for {{ service_user_args.name }}"
-  when:
-    - _service_user_createhome
-    - _service_user_home_mode is not none
-    - not (ansible_check_mode and service_user_result.changed)
-  file:
-    path: "{{ _service_user_home }}"
-    state: directory
-    owner: "{{ _service_user_name }}"
-    group: "{{ _service_user_name }}"
-    mode: "{{ _service_user_home_mode }}"
-  become: true
 
 # Stateless services (no config / no on-host state) opt out via
 # config_dir: false. The helper still owns user/group/uid capture; callers

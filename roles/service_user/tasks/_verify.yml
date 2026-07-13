@@ -54,38 +54,7 @@
           - _service_user_dir.stat.gr_name == 'service_user_test'
           - _service_user_dir.stat.mode == '0750'
 
-    # Second scenario: createhome + home_mode override. Confirms the helper
-    # chmods the home dir to the caller-requested mode instead of relying
-    # on /etc/login.defs HOME_MODE. Motivated by a rootless-podman service
-    # user working around a crun-bind-mount-stat EACCES under 0750.
-    - name: _verify | Provision a test user with createhome + home_mode override
-      import_role:
-        name: service_user
-        tasks_from: user
-      vars:
-        service_user_args:
-          name: service_user_test_home
-          home: /tmp/service_user_test_home
-          createhome: true
-          home_mode: "0755"
-          config_dir: false
-
-    - name: _verify | Home dir landed at the requested mode
-      stat:
-        path: /tmp/service_user_test_home
-      register: _service_user_home
-      become: true
-
-    - name: _verify | Home dir attributes
-      assert:
-        that:
-          - _service_user_home.stat.exists
-          - _service_user_home.stat.isdir
-          - _service_user_home.stat.pw_name == 'service_user_test_home'
-          - _service_user_home.stat.gr_name == 'service_user_test_home'
-          - _service_user_home.stat.mode == '0755'
-
-    # Third scenario: a hyphenated name (the only path that exercises the
+    # Second scenario: a hyphenated name (the only path that exercises the
     # regex_replace fact-key sanitization, foo-bar -> foo_bar_user), plus
     # extra_groups / config_dir_group / config_dir_mode overrides and an
     # assertion that the exposed .group is a numeric gid (callers feed it into
@@ -138,7 +107,7 @@
           - _service_user_hyphen_dir.stat.gr_name == 'service_user_test_grp'
           - _service_user_hyphen_dir.stat.mode == '0700'
 
-    # Fourth scenario: a non-default shell (gitea passes /bin/bash). Confirms
+    # Third scenario: a non-default shell (gitea passes /bin/bash). Confirms
     # the shell arg reaches the passwd record instead of the nologin default.
     - name: _verify | Provision a test user with a non-default shell
       import_role:
@@ -171,7 +140,6 @@
       become: true
       loop:
         - service_user_test
-        - service_user_test_home
         - service-user-test-hyphen
         - service_user_test_shell
 
@@ -182,7 +150,6 @@
       become: true
       loop:
         - service_user_test
-        - service_user_test_home
         - service-user-test-hyphen
         - service_user_test_shell
         - service_user_test_grp
@@ -194,5 +161,4 @@
       become: true
       loop:
         - /mnt/services/service_user_test
-        - /tmp/service_user_test_home
         - /mnt/services/service-user-test-hyphen
