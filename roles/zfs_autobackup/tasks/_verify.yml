@@ -12,23 +12,29 @@
       installed={{ zfs_autobackup_verify_version.stdout | trim }},
       expected={{ zfs_autobackup_version }}
 
-- name: _verify | Inspect zfs_autosnapshot.timer
+- name: _verify | Inspect backup timers
   systemd:
-    name: zfs_autosnapshot.timer
-  register: zfs_autobackup_verify_timer
+    name: "{{ item }}"
+  loop:
+    - zfs_autosnapshot.timer
+    - zfs_backup_freshness.timer
+  register: zfs_autobackup_verify_timers
   become: true
 
-- name: _verify | Timer is loaded, enabled, and active
+- name: _verify | Backup timers are loaded, enabled, and active
   assert:
     that:
-      - zfs_autobackup_verify_timer.status.LoadState == "loaded"
-      - zfs_autobackup_verify_timer.status.UnitFileState == "enabled"
-      - zfs_autobackup_verify_timer.status.ActiveState == "active"
+      - item.status.LoadState == "loaded"
+      - item.status.UnitFileState == "enabled"
+      - item.status.ActiveState == "active"
     fail_msg: >-
-      zfs_autosnapshot.timer not in expected state
-      (LoadState={{ zfs_autobackup_verify_timer.status.LoadState }},
-      UnitFileState={{ zfs_autobackup_verify_timer.status.UnitFileState }},
-      ActiveState={{ zfs_autobackup_verify_timer.status.ActiveState }})
+      {{ item.item }} not in expected state
+      (LoadState={{ item.status.LoadState }},
+      UnitFileState={{ item.status.UnitFileState }},
+      ActiveState={{ item.status.ActiveState }})
+  loop: "{{ zfs_autobackup_verify_timers.results }}"
+  loop_control:
+    label: "{{ item.item }}"
 
 - name: _verify | User zfs_autobackup exists
   getent:
@@ -563,20 +569,6 @@
 # Functional check for the freshness dead-man switch: cover a fresh fleet,
 # missing snapshots, deliberate retirement, the exact age boundary, and the
 # invalid state where no dataset remains protected.
-- name: _verify | Inspect zfs_backup_freshness.timer
-  systemd:
-    name: zfs_backup_freshness.timer
-  register: zfs_autobackup_verify_freshness_timer
-  become: true
-
-- name: _verify | Freshness timer is loaded, enabled, and active
-  assert:
-    that:
-      - zfs_autobackup_verify_freshness_timer.status.LoadState == "loaded"
-      - zfs_autobackup_verify_freshness_timer.status.UnitFileState == "enabled"
-      - zfs_autobackup_verify_freshness_timer.status.ActiveState == "active"
-    fail_msg: zfs_backup_freshness.timer not in expected state
-
 - name: _verify | Freshness check passes while everything is fresh
   command: /usr/local/bin/zfs_backup_freshness
   changed_when: false
