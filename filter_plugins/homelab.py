@@ -144,9 +144,9 @@ def podman_idmap_args(
 ) -> list[str]:
     """Return podman uid/gid map args for one in-container identity."""
     host_uid = _get_path(user, "uid")
-    host_gid = _get_path(user, "group")
+    host_gid = _get_path(user, "gid")
     if host_uid is None or host_gid is None:
-        raise AnsibleError("podman_idmap_args requires a user mapping with uid and group")
+        raise AnsibleError("podman_idmap_args requires a user mapping with uid and gid")
     if container_gid is None:
         container_gid = container_uid
     return [

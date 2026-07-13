@@ -18,7 +18,7 @@
         that:
           - service_user_test_user is defined
           - service_user_test_user.uid is defined
-          - service_user_test_user.group is defined
+          - service_user_test_user.gid is defined
 
     - name: _verify | System user exists with the expected attributes
       command: getent passwd service_user_test
@@ -73,8 +73,8 @@
         that:
           - service_user_test_hyphen_user is defined
           - service_user_test_hyphen_user.uid is defined
-          - service_user_test_hyphen_user.group is defined
-          - service_user_test_hyphen_user.group | string is match('^[0-9]+$')
+          - service_user_test_hyphen_user.gid is defined
+          - service_user_test_hyphen_user.gid | string is match('^[0-9]+$')
 
     - name: _verify | Membership reflects shared_group
       command: id -nG service-user-test-hyphen

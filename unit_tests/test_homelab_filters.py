@@ -109,7 +109,7 @@ def test_podman_health_wget_renders_get_probe_to_dev_null() -> None:
 
 
 def test_podman_idmap_args_maps_one_container_identity() -> None:
-    assert homelab.podman_idmap_args({"uid": 120001, "group": 120002}, container_uid=1000) == [
+    assert homelab.podman_idmap_args({"uid": 120001, "gid": 120002}, container_uid=1000) == [
         "--uidmap=0:0:65536",
         "--uidmap=+1000:120001:1",
         "--gidmap=0:0:65536",
@@ -119,7 +119,7 @@ def test_podman_idmap_args_maps_one_container_identity() -> None:
 
 def test_podman_idmap_args_allows_distinct_container_gid() -> None:
     assert (
-        homelab.podman_idmap_args({"uid": 120001, "group": 120002}, container_uid=1000, container_gid=2000)[-1]
+        homelab.podman_idmap_args({"uid": 120001, "gid": 120002}, container_uid=1000, container_gid=2000)[-1]
         == "--gidmap=+2000:120002:1"
     )
 

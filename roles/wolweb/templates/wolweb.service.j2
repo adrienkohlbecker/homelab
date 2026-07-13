@@ -51,7 +51,7 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="wolweb" \
     --volume /mnt/services/wolweb/config.json:/wolweb/config.json:ro \
     --volume /mnt/services/wolweb/devices.json:/wolweb/devices.json:ro \
-    --user {{ wolweb_user.uid }}:{{ wolweb_user.group }}  \
+    --user {{ wolweb_user.uid }}:{{ wolweb_user.gid }}  \
     --security-opt=no-new-privileges \
     --cap-drop=ALL \
     --unsetenv WOLWEBPORT \

@@ -41,7 +41,7 @@ ExecStart=/usr/bin/podman run \
     --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="influxdb" \
-    --user {{ influxdb_user.uid }}:{{ influxdb_user.group }}  \
+    --user {{ influxdb_user.uid }}:{{ influxdb_user.gid }}  \
     --env INFLUXD_REPORTING_DISABLED=true \
     --env INFLUXD_STORAGE_VALIDATE_KEYS=true \
     --env INFLUXD_PPROF_DISABLED=true \

@@ -47,7 +47,7 @@
     dest: "{{ item.path }}"
     state: directory
     owner: "{{ adguard_user.uid }}"
-    group: "{{ adguard_user.group }}"
+    group: "{{ adguard_user.gid }}"
     mode: "{{ item.mode }}"
   loop:
     - path: /mnt/services/adguard/conf
@@ -72,7 +72,7 @@
     remote_src: true
     dest: /mnt/services/adguard/conf/tls/{{ item }}
     owner: "{{ adguard_user.uid }}"
-    group: "{{ adguard_user.group }}"
+    group: "{{ adguard_user.gid }}"
     mode: "0600"
     backup: true
   loop:
@@ -117,7 +117,7 @@
     src: AdGuardHome.yaml.j2
     dest: /mnt/services/adguard/conf/AdGuardHome.yaml
     owner: "{{ adguard_user.uid }}"
-    group: "{{ adguard_user.group }}"
+    group: "{{ adguard_user.gid }}"
     mode: "0600"
     backup: true
     validate: >-

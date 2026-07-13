@@ -44,7 +44,7 @@ ExecStart=/usr/bin/podman run \
     --rm \
     --name kuma \
     --network kuma \
-    --user {{ kuma_user.uid }}:{{ kuma_user.group }} \
+    --user {{ kuma_user.uid }}:{{ kuma_user.gid }} \
     {# No --entrypoint override: the v2 release image runs
        `dumb-init -- node server/server.js` natively, with no chown-doing
        extra/entrypoint.sh wrapper to bypass. #}

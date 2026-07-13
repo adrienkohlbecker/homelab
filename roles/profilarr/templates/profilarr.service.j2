@@ -51,7 +51,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="profilarr" \
     --env PUID={{ profilarr_user.uid }} \
-    --env PGID={{ profilarr_user.group }} \
+    --env PGID={{ profilarr_user.gid }} \
     --env TZ={{ system_timezone }} \
     --env UMASK=027 \
     --volume /mnt/services/profilarr:/config \

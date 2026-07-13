@@ -43,7 +43,7 @@ ExecStart=/usr/bin/podman run \
     --init \
     --log-driver journald \
     --log-opt tag="adguard" \
-    --user {{ adguard_user.uid }}:{{ adguard_user.group }} \
+    --user {{ adguard_user.uid }}:{{ adguard_user.gid }} \
     --network adguard \
     --env TZ={{ system_timezone }} \
     --volume /mnt/services/adguard/conf:/opt/adguardhome/conf \

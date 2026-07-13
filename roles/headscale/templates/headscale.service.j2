@@ -59,7 +59,7 @@ ExecStart=/usr/bin/podman run \
     --rm \
     --name headscale \
     --network headscale \
-    --user {{ headscale_user.uid }}:{{ headscale_user.group }} \
+    --user {{ headscale_user.uid }}:{{ headscale_user.gid }} \
     --log-driver journald \
     --log-opt tag="headscale" \
     --security-opt=no-new-privileges \

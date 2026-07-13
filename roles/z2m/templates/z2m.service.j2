@@ -39,7 +39,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="z2m" \
     --volume /mnt/services/z2m:/app/data \
-    --user {{ z2m_user.uid }}:{{ z2m_user.group }} \
+    --user {{ z2m_user.uid }}:{{ z2m_user.gid }} \
     --network homeassistant \
     --security-opt=no-new-privileges \
     --tz={{ system_timezone }} \
