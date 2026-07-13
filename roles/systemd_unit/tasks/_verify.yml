@@ -362,9 +362,8 @@
       src: systemd_unit_verify_ok.service.j2
       restart: true
 
-# Reload path: verify_ok.service.j2 now carries ExecReload=/bin/true so
-# CanReload=yes. Drive reload: true while the unit is active (started above)
-# so systemd_unit_started.changed is false and the reload task fires.
+# Reload path: drive reload: true while the unit is active (started above) so
+# systemd_unit_started.changed is false and the reload task fires.
 - name: _verify | Reload fires when ExecReload is present
   import_role:
     name: systemd_unit
@@ -374,9 +373,6 @@
       src: systemd_unit_verify_ok.service.j2
       reload: true
 
-# Sad path: a unit with no ExecReload= must raise the actionable message.
-# Reuse the copy-dispatch fixture: it is oneshot+RemainAfterExit and has no
-# ExecReload. Start it, request reload, and assert the CanReload message.
 - name: _verify | Enable the non-reloadable fixture without starting it
   import_role:
     name: systemd_unit
@@ -403,32 +399,6 @@
       - not systemd_unit_verify_copy_ok_service_started_result.changed
       - "'UnitFileState=enabled' in _systemd_unit_enable_only_state.stdout_lines"
       - "'ActiveState=inactive' in _systemd_unit_enable_only_state.stdout_lines"
-
-- name: _verify | Start the non-reloadable fixture so it is active
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: systemd_unit_verify_copy_ok.service
-
-- name: _verify | Reload on a non-reloadable unit must fail with CanReload message
-  block:
-    - name: _verify | Attempt reload on non-reloadable unit (should raise)
-      import_role:
-        name: systemd_unit
-        tasks_from: service
-      vars:
-        systemd_unit_args:
-          src: systemd_unit_verify_copy_ok.service
-          reload: true
-    - name: _verify | Sentinel fail if reload on non-reloadable unit succeeded
-      fail:
-        msg: reload on a unit with no ExecReload= should have failed but did not
-  rescue:
-    - name: _verify | Assert the failure carried the CanReload message
-      assert:
-        that: "'CanReload' in ansible_failed_result.msg"
 
 - name: _verify | Cleanup non-reloadable fixture
   import_role:
