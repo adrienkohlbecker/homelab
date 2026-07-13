@@ -433,6 +433,29 @@
          | selectattr('name', 'equalto', 'plugin_data_collection_status')
          | rejectattr('recipient', 'equalto', 'silent') | list | length > 0)
 
+- name: _verify | Collector-failure alarm uses sustained state
+  vars:
+    _alarm: >-
+      {{
+        ((_netdata_godplugin_alarm.content | from_json).alarms.values()
+         | selectattr('name', 'equalto', 'plugin_data_collection_status')
+         | first)
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - _alarm.lookup_method | default('') == "average"
+      - _alarm.lookup_after | default(0) == -300
+      - _alarm.lookup_before | default(0) == 0
+      - _alarm.lookup_dimensions | default('') == "failed"
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 0
+    fail_msg: >-
+      Expected plugin_data_collection_status to require a sustained 5m failure
+      without queued notification delays. Got:
+      {{ _alarm }}
+
 # Restore the production conf (update_every back to 60s) so the role
 # leaves no surprise idempotency drift behind.
 - name: _verify | Restore netdata_presence.conf from template
