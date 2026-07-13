@@ -32,11 +32,11 @@ SyslogIdentifier=%N
 # gitea forks worker subprocesses; main alone is too narrow.
 Type=notify
 NotifyAccess=all
-User={{ git_user.name }}
-Group={{ git_user.name }}
+User=git
+Group=git
 WorkingDirectory=/mnt/services/gitea/
 ExecStart=/usr/local/bin/gitea web --config /etc/gitea/app.ini
-Environment=USER={{ git_user.name }} HOME={{ git_user.home }} GITEA_WORK_DIR=/mnt/services/gitea
+Environment=USER=git HOME=/home/git GITEA_WORK_DIR=/mnt/services/gitea
 
 [Install]
 WantedBy=multi-user.target

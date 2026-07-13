@@ -28,10 +28,9 @@
 # previous caller's createhome / extra_groups / etc. can't bleed into
 # the next caller that doesn't explicitly override.
 #
-# Outputs: registers `<name>_user` (the ansible.builtin.user result) so
-# callers can template {{ <name>_user.uid }} (int) and {{ <name>_user.group }}
-# (the primary gid as an int -- safe in podman --user / --uidmap) into unit
-# files. The fact key replaces non-identifier chars in name with '_'
+# Outputs: registers `<name>_user` with changed, uid, and group (the primary
+# gid as an int -- safe in podman --user / --uidmap). The fact key replaces
+# non-identifier chars in name with '_'
 # (name='foo-bar' -> foo_bar_user). In --check mode on a host where the user
 # does not exist yet the user task only reports the create, so .uid/.group
 # are undefined -- gate consumers with
@@ -102,7 +101,13 @@
 # Same filter as systemd_unit's per-unit fact.
 - name: Record user record for {{ service_user_args.name }}
   set_fact:
-    "{{ _service_user_name | ansible_var_key }}_user": "{{ service_user_result }}"
+    "{{ _service_user_name | ansible_var_key }}_user": >-
+      {{
+        service_user_result
+        | dict2items
+        | selectattr('key', 'in', ['changed', 'uid', 'group'])
+        | items2dict
+      }}
 
 # Stateless services (no config / no on-host state) opt out via
 # config_dir: false. The helper still owns user/group/uid capture; callers
