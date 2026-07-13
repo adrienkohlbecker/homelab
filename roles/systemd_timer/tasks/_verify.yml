@@ -7,7 +7,8 @@
 #   4. systemd_timers.chart.sh emits a chart per registered timer, age_secs
 #      tracks the persistent trigger stamp's mtime, and overdue fires when
 #      the stamp is older than 2 * period
-#   5. extension knobs (environment, accuracy_sec, randomized_delay_sec,
+#   5. condition:false is a no-op that still publishes <name>_result
+#   6. extension knobs (environment, accuracy_sec, randomized_delay_sec,
 #      additional_service_directives)
 
 - name: _verify | Install systemd_timers netdata collector
@@ -65,6 +66,40 @@
     create_home: false
     shell: /usr/sbin/nologin
   become: true
+
+- name: _verify | Exercise the false-condition install path
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_condition
+      on_calendar: "2030-01-01 00:00:00"
+      exec_start: /bin/true
+      condition: false
+      # These would fail validation or user-scope setup if the condition did
+      # not gate the helper internally.
+      user: _missing_timer_user
+      run_as: root
+      environment:
+        invalid-key: value
+
+- name: _verify | Stat false-condition install paths
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/systemd/user/_verify_timer_condition.service
+    - /etc/systemd/user/_verify_timer_condition.timer
+    - /etc/netdata/charts.d/systemd_timers.d/_verify_timer_condition.conf
+  register: _systemd_timer_condition_paths
+  become: true
+
+- name: _verify | Assert false-condition install published a no-change result
+  assert:
+    that:
+      - _verify_timer_condition_result is defined
+      - not _verify_timer_condition_result.changed
+      - _systemd_timer_condition_paths.results | map(attribute='stat.exists') | select | list | length == 0
 
 - name: _verify | Remove stale fixture output
   file:
@@ -163,6 +198,7 @@
     that:
       - _systemd_timer_timer_result.stdout == 'success'
       - _systemd_timer_timer_active.stdout == 'active'
+      - _verify_timer_result.changed
       - _systemd_timer_timer_out_stat.stat.pw_name == '_verify_runas'
       - _output == "ENV_KEY=knob_value|ENV_OTHER=value with spaces, and a comma"
       - "'AccuracyUSec=1s' in _systemd_timer_knobs_show.stdout"
@@ -180,6 +216,30 @@
   loop: "{{ _systemd_timer_stderr_journals.results }}"
   loop_control:
     label: "{{ item.item }}"
+
+- name: _verify | Exercise the false-condition remove path
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: _verify_timer
+      condition: false
+
+- name: _verify | Stat unit files after false-condition removal
+  stat:
+    path: "/etc/systemd/system/_verify_timer.{{ item }}"
+  loop:
+    - service
+    - timer
+  register: _systemd_timer_condition_remove_files
+  become: true
+
+- name: _verify | Assert false-condition removal preserved the timer
+  assert:
+    that:
+      - not _verify_timer_result.changed
+      - _systemd_timer_condition_remove_files.results | map(attribute='stat.exists') | select | list | length == 2
 
 - name: _verify | Remove the combined fixture timer
   import_role:
@@ -211,6 +271,7 @@
       - not _systemd_timer_timer_files.results[0].stat.exists
       - not _systemd_timer_timer_files.results[1].stat.exists
       - _systemd_timer_timer_status.rc != 0
+      - _verify_timer_result.changed
 
 - name: _verify | Cleanup combined fixture
   file:
