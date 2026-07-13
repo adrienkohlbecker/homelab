@@ -7,10 +7,6 @@
 #                             reloads. Keep the call in main.yml as a tombstone
 #                             so retired sites stay decommissioned on fresh
 #                             installs.
-#   reload                    optional bool, default true; reload nginx after a
-#                             config change. Setting false makes the install
-#                             config-only — useful for pre-warming a site whose
-#                             upstream isn't ready yet.
 #   proxy_pass                optional; URL to reverse-proxy to (location /)
 #   proxy_buffering           optional; nginx proxy_buffering directive value.
 #                             Quote it ('on'/'off') -- bare off is YAML-coerced
@@ -123,32 +119,16 @@
     - nginx_site
 
 # Resolve caller defaults once into _nginx_site_* locals (mirrors conf_d.yml), so
-# the state/reload/auth/enable_http defaults live in one place rather than being
+# the state/auth/enable_http defaults live in one place rather than being
 # re-spelled at every gate below and in site.conf.j2. Always set so no stale value
 # leaks into the next nginx_site invocation. Resolved before the value-shape
 # asserts so each can gate on _nginx_site_state.
 - name: site | Resolve caller defaults
   set_fact:
     _nginx_site_state: "{{ nginx_site_args.state | default('present') }}"
-    _nginx_site_reload: "{{ nginx_site_args.reload | default(true) }}"
     _nginx_site_auth: "{{ nginx_site_args.auth | default('none') }}"
     _nginx_site_auth_request_authorization: "{{ (nginx_site_args.auth_request_authorization | default(false)) | bool }}"
     _nginx_site_enable_http: "{{ (nginx_site_args.enable_http | default(false)) | bool }}"
-  tags:
-    - nginx_site
-
-# nginx_site runs from the base band and from service roles; on a fresh-host
-# `--check` the nginx role's apt install is only simulated, so the reload tasks
-# below would fail asking systemd to reload a nginx unit that isn't installed
-# yet. Probe for the binary -- only needed in check mode, since a real converge
-# has nginx by the time any site reloads -- so the reloads skip in exactly that
-# case while still reporting "would reload" on an already-provisioned host. stat
-# runs for real in check mode.
-- name: site | Check whether nginx is installed (check-mode reload guard)
-  when: ansible_check_mode
-  stat:
-    path: /usr/sbin/nginx
-  register: _nginx_site_binary
   tags:
     - nginx_site
 
@@ -294,9 +274,7 @@
 # brick the next host-wide reload for every other site. The template task
 # carries no `validate:` because `nginx -t` needs the full assembled config
 # (events{}, http{}, the symlink in place), not a standalone server{} snippet
-# -- the same constraint conf_d documents. Validation runs on every change
-# regardless of the `reload` flag, so a `reload: false` pre-warm still can't
-# leave a broken file on disk to be discovered at the next unrelated reload.
+# -- the same constraint conf_d documents.
 - name: site | Configure and enable nginx site
   when: _nginx_site_state == 'present'
   become: true
@@ -342,9 +320,8 @@
 
     - name: site | Reload nginx config
       when:
-        - _nginx_site_reload
         - nginx_static_conf.changed or nginx_static_conf_enable.changed or (nginx_upstream_auth_map.changed | default(false))
-        - not ansible_check_mode or (_nginx_site_binary.stat.exists | default(false))
+        - not ansible_check_mode
       systemd:
         name: nginx
         state: reloaded
@@ -391,9 +368,8 @@
 - name: site | Reload nginx after removing retired site
   when:
     - _nginx_site_state == 'absent'
-    - _nginx_site_reload
     - nginx_static_conf_absent.changed | default(false)
-    - not ansible_check_mode or (_nginx_site_binary.stat.exists | default(false))
+    - not ansible_check_mode
   systemd:
     name: nginx
     state: reloaded

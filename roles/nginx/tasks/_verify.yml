@@ -712,54 +712,6 @@
       subdomain: nginx_verify_legacy
       state: absent
 
-# reload: false installs the vhost config-only (write + symlink + in-place nginx
-# -t) but does NOT reload, so the running nginx keeps its old config -- the
-# pre-warm-an-unready-upstream contract. Prove it: the file lands and validates
-# (a broken render would have failed the helper's nginx -t regardless of reload),
-# yet a :80 probe still falls through to the default server (404) because no
-# reload made the vhost live. No _verify_wait_route here -- it would poll for a
-# route that, by design, never appears without a reload.
-- name: _verify | Configure a vhost with reload false
-  import_role:
-    name: nginx
-    tasks_from: site
-  vars:
-    nginx_site_args:
-      subdomain: nginxverifyreload
-      proxy_pass: http://127.0.0.1:18080/
-      reload: false
-
-- name: _verify | Reload false wrote and enabled the vhost on disk
-  stat:
-    path: "{{ item }}"
-  register: nginx_verify_reload_files
-  become: true
-  failed_when: not nginx_verify_reload_files.stat.exists
-  loop:
-    - /etc/nginx/sites-available/nginxverifyreload
-    - /etc/nginx/sites-enabled/nginxverifyreload
-
-- name: _verify | Reload false leaves the vhost not yet served (default server 404)
-  uri:
-    url: "http://{{ ansible_default_ipv4.address }}/"
-    headers:
-      Host: "nginxverifyreload.{{ inventory_hostname }}.{{ domain }}"
-    follow_redirects: none
-    status_code: 404
-  register: nginx_verify_reload_probe
-  failed_when: nginx_verify_reload_probe.status != 404
-
-# Tear down the reload:false vhost (with a reload this time) so it doesn't leak
-# into later probes.
-- name: _verify | Remove the reload-false vhost
-  import_role:
-    name: nginx
-    tasks_from: site
-  vars:
-    nginx_site_args:
-      subdomain: nginxverifyreload
-      state: absent
-
 # state: absent — tear down the transient vhosts via the helper and confirm both
 # the symlink and the config are gone. This is the contract the otgw / vscode_ha
 # tombstones rely on to stay decommissioned on a fresh install. include_tasks
