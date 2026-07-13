@@ -37,30 +37,20 @@
       [a-z_][a-z0-9_-]*), owner, group; links basenames must be non-empty
       and unique.
 
-# Resolve caller defaults once so the values are consistent across all tasks
-# and there is no risk of a default() expression drifting between a when: check
-# and a module param. Also resets sqlite_dataset_force_stat so a previous
-# import_role call's register cannot bleed into this invocation's assert task.
-- name: Resolve defaults for {{ sqlite_dataset_args.name }}
-  set_fact:
-    _sqlite_dataset_force: "{{ sqlite_dataset_args.force | default(false) | bool }}"
-    _sqlite_dataset_mode: "{{ sqlite_dataset_args.mode | default('0750') }}"
-    sqlite_dataset_force_stat: {}
-
 - name: Pre-create /mnt/services/sqlite/{{ sqlite_dataset_args.name }}
   file:
     path: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}"
     state: directory
     owner: "{{ sqlite_dataset_args.owner }}"
     group: "{{ sqlite_dataset_args.group }}"
-    mode: "{{ _sqlite_dataset_mode }}"
+    mode: "{{ sqlite_dataset_args.mode | default('0750') }}"
   become: true
 
 # state=touch with preserve timestamps is idempotent: creates the file if
 # absent, leaves an existing DB untouched (no truncation, no mtime bump).
 - name: Pre-create SQLite DB src files for {{ sqlite_dataset_args.name }}
   when:
-    - not _sqlite_dataset_force
+    - not (sqlite_dataset_args.force | default(false) | bool)
     - sqlite_dataset_args.links is defined
   file:
     path: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ sqlite_dataset_link | basename }}"
@@ -76,45 +66,24 @@
     label: "{{ sqlite_dataset_link }}"
     loop_var: sqlite_dataset_link
 
-# force relaxes only the dangling-target refusal, not the real-file one:
-# stat each dest first and fail loud if a regular file (not a symlink) is
-# there, so a snapshot-restored real DB is never silently replaced. Gated on
-# force -- the no-force path gets this refusal from the file module itself.
-- name: Stat force dests for {{ sqlite_dataset_args.name }}
+# force relaxes only the dangling-target refusal. Fail the stat task when a
+# real file is already at a dest so force can never silently replace it.
+- name: Refuse real files at force destinations for {{ sqlite_dataset_args.name }}
   when:
-    - _sqlite_dataset_force
+    - sqlite_dataset_args.force | default(false) | bool
     - sqlite_dataset_args.links is defined
   stat:
     path: "{{ sqlite_dataset_link }}"
     follow: false
   become: true
   register: sqlite_dataset_force_stat
+  failed_when:
+    - sqlite_dataset_force_stat.stat.exists
+    - not sqlite_dataset_force_stat.stat.islnk
   loop: "{{ sqlite_dataset_args.links }}"
   loop_control:
     label: "{{ sqlite_dataset_link }}"
     loop_var: sqlite_dataset_link
-
-# selectattr keeps only real stat results. When the stat above was skipped
-# (force false or no links) its register still carries
-# per-item skip entries that lack .stat; filter them out so the loop empties
-# and nothing is asserted. A plain `when:` gate wouldn't help -- ansible
-# templates the loop and the `that:`/label args (which dereference .stat)
-# before it evaluates when, so a skip entry in the loop errors regardless.
-- name: Refuse to clobber a real file at a force dest for {{ sqlite_dataset_args.name }}
-  assert:
-    quiet: true
-    that:
-      - not (sqlite_dataset_force_item.stat.exists and not sqlite_dataset_force_item.stat.islnk)
-    fail_msg: >-
-      {{ sqlite_dataset_force_item.sqlite_dataset_link }} exists as a regular
-      file; force would replace it with a symlink and lose the DB. Move it
-      under /mnt/services/sqlite/{{ sqlite_dataset_args.name }}/ first.
-  # stat results key the looped item under the stat task's loop_var
-  # (sqlite_dataset_link), not .item; selectattr drops skipped entries (no .stat).
-  loop: "{{ sqlite_dataset_force_stat.results | default([]) | selectattr('stat', 'defined') | list }}"
-  loop_control:
-    label: "{{ sqlite_dataset_force_item.sqlite_dataset_link }}"
-    loop_var: sqlite_dataset_force_item
 
 - name: Symlink DBs onto sqlite dataset for {{ sqlite_dataset_args.name }}
   when:
@@ -126,7 +95,7 @@
     owner: "{{ sqlite_dataset_args.owner }}"
     group: "{{ sqlite_dataset_args.group }}"
     follow: false
-    force: "{{ _sqlite_dataset_force }}"
+    force: "{{ sqlite_dataset_args.force | default(false) | bool }}"
   become: true
   loop: "{{ sqlite_dataset_args.links }}"
   loop_control:
