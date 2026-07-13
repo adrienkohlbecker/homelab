@@ -29,11 +29,10 @@
   vars:
     service_user_args:
       name: tautulli
-      extra_groups: [ media ]
-      config_dir_group: media
+      shared_group: media
       # /config holds config.ini (api_key/pms_token/jwt_secret) and Tautulli's
       # own backups/ which bundle copies of it; 0700 keeps the dir untraversable
-      # by the media co-tenants config_dir_group would otherwise let in.
+      # by the media co-tenants the shared group would otherwise let in.
       config_dir_mode: "0700"
   tags:
     - tautulli

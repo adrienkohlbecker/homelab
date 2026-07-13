@@ -21,8 +21,7 @@
   vars:
     service_user_args:
       name: jellyfin
-      extra_groups: [ media ]
-      config_dir_group: media
+      shared_group: media
   tags:
     - jellyfin
 

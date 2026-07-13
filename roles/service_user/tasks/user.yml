@@ -4,6 +4,8 @@
 #                     The groups must already exist on the host -- create
 #                     them before this import (e.g. jellyfin imports the
 #                     media/render groups first).
+#   shared_group      optional; appended to the user and used as the config
+#                     dir group. The group must already exist.
 #   createhome        optional bool, default false; usually only true when the
 #                     service writes into $HOME (gitea)
 #   shell             optional, default '/usr/sbin/nologin'
@@ -11,17 +13,12 @@
 #   config_dir        optional bool, default true; false skips creating and
 #                     owning /mnt/services/<name> -- the caller creates any
 #                     state dirs it needs itself.
-#   config_dir_group  optional, default <name>; override the dir's group
-#                     when the running container chowns its bind-mount to
-#                     a shared group (e.g. linuxserver/* images with
-#                     PGID=media recursively chown /config on startup,
-#                     and ansible flaps the gid every run otherwise).
 #   config_dir_mode   optional, default "0750"; /mnt/services/<name> holds
 #                     service state (configs, DBs, secrets), so it is
 #                     owner+group only by default. Loosen to "0755" when a
 #                     co-tenant needs world traversal, or tighten to "0700"
 #                     to drop group read (plex does -- Preferences.xml
-#                     carries secrets config_dir_group shouldn't see).
+#                     carries secrets the shared group shouldn't see).
 #
 # The dict form prevents inter-call leakage at play-vars scope: each
 # import_role pass replaces the whole `service_user_args` value, so a
@@ -63,12 +60,16 @@
   set_fact:
     _service_user:
       name: "{{ service_user_args.name }}"
-      extra_groups: "{{ service_user_args.extra_groups | default([]) }}"
+      extra_groups: >-
+        {{
+          (service_user_args.extra_groups | default([]))
+          + ([service_user_args.shared_group] if service_user_args.shared_group is defined else [])
+        }}
       createhome: "{{ service_user_args.createhome | default(false) }}"
       shell: "{{ service_user_args.shell | default('/usr/sbin/nologin') }}"
       home: "{{ service_user_args.home | default('/nonexistent') }}"
       config_dir: "{{ service_user_args.config_dir | default(true) }}"
-      config_dir_group: "{{ service_user_args.config_dir_group | default(service_user_args.name) }}"
+      config_dir_group: "{{ service_user_args.shared_group | default(service_user_args.name) }}"
       config_dir_mode: "{{ service_user_args.config_dir_mode | default('0750') }}"
 
 - name: "Add group {{ service_user_args.name }}"

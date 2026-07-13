@@ -137,7 +137,7 @@
   loop_control:
     label: "{{ item.item }}"
 
-# config_dir_group: media (see main.yml) exists to stop ansible flapping
+# shared_group: media (see main.yml) exists to stop ansible flapping
 # /mnt/services/sonarr's gid back to `sonarr` against linuxserver's startup
 # chown to PUID:PGID=sonarr:media. Assert the dir landed group `media` so a
 # regression in that setting surfaces here, not as a silent per-converge flap.

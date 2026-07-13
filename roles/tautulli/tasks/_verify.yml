@@ -99,7 +99,7 @@
     - (_tautulli_db_file.stat.size | default(0) | int) > 0
   become: true
 
-# config_dir_group: media (see main.yml) stops ansible flapping
+# shared_group: media (see main.yml) stops ansible flapping
 # /mnt/services/tautulli's gid against linuxserver's startup chown to
 # PUID:PGID=tautulli:media.
 - name: _verify | Stat the tautulli config dir

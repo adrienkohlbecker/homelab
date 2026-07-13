@@ -45,11 +45,10 @@
   vars:
     service_user_args:
       name: sabnzbd
-      extra_groups: [ media ]
       # linuxserver/sabnzbd's s6 init recursively chowns /config to
       # PUID:PGID=sabnzbd:media on every container start. Match it here
       # so ansible doesn't flap the dir's gid back to `sabnzbd` each run.
-      config_dir_group: media
+      shared_group: media
   tags:
     - sabnzbd
 

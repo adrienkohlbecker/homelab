@@ -30,8 +30,7 @@
   vars:
     service_user_args:
       name: plex
-      extra_groups: [ media ]
-      config_dir_group: media
+      shared_group: media
       # Preferences.xml under /config holds the server token; 0700 keeps it
       # out of reach of the media-group co-tenants (transmission, the arr
       # stack) that 0750 would let traverse the dir. Plex runs as the owning

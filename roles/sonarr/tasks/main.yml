@@ -25,11 +25,10 @@
   vars:
     service_user_args:
       name: sonarr
-      extra_groups: [ media ]
       # linuxserver/sonarr's s6 init recursively chowns /config to
       # PUID:PGID=sonarr:media on every container start. Match it here
       # so ansible doesn't flap the dir's gid back to `sonarr` each run.
-      config_dir_group: media
+      shared_group: media
   tags:
     - sonarr
 

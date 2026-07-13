@@ -104,7 +104,7 @@
   delay: 2
   changed_when: false
 
-# config_dir_group: media (see main.yml) exists to stop ansible flapping
+# shared_group: media (see main.yml) exists to stop ansible flapping
 # /mnt/services/transmission's gid back to `transmission` against the
 # linuxserver image's startup chown to PUID:PGID=transmission:media. Assert the
 # dir landed group `media` so a regression in that setting surfaces here, not as
