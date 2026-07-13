@@ -52,11 +52,6 @@
                     and fields.get("CONTAINER_ID")
                     and "wolweb_timestamp" not in fields
                     and "wolweb_level" not in fields
-                    and "CONTAINER_TAG" not in fields
-                    and "CONTAINER_ID_FULL" not in fields
-                    and "CMDLINE" not in fields
-                    and "PRIORITY" not in fields
-                    and "SYSTEMD_UNIT" not in fields
                 ):
                     print(json.dumps(record, sort_keys=True))
                     sys.exit(0)
@@ -190,9 +185,6 @@
         - message: "Attempting to send a magic packet to MAC 00:11:22:33:44:55"
           level: info
           fields.parser_status: parsed
-          _absent:
-            - fields.mac
-            - fields.ip
         - message: wolweb-raw
           service: wolweb
           _absent:
