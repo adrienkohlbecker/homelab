@@ -149,7 +149,6 @@ server {
     proxy_pass         {{ nginx_site_args.proxy_pass }};
 
     proxy_http_version 1.1;
-    proxy_cache_bypass $http_upgrade;
 
     # Proxy SSL. proxy_ssl_server_name forwards SNI to the upstream; the
     # upstream cert is deliberately NOT verified (no proxy_ssl_verify) -- the
