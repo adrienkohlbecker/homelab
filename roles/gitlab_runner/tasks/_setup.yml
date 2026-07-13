@@ -45,6 +45,10 @@
     name: podman
     tasks_from: install
 
+- name: _setup | Install fluent-bit for structured-log integration
+  import_role:
+    name: fluentbit
+
 - name: _setup | Seed stale Docker-executor runtime state
   when: gitlab_runner_executor != 'docker'
   block:

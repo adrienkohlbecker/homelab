@@ -15,6 +15,59 @@
   changed_when: false
   become: true
 
+- name: _verify | Exercise gitlab_runner fluent-bit record contracts
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: gitlab_runner
+      records:
+        - MESSAGE: '{"level":"warning","msg":"gitlab-runner-valid","time":"2099-01-02T03:04:05Z","job":42,"runner_name":"fixture","parser_status":"forged","service":"attribute"}'
+          SYSLOG_IDENTIFIER: gitlab-runner
+          SYSTEMD_UNIT: gitlab_runner.service
+        - MESSAGE: '{"level":"info","msg":"required scaling change","time":"2099-01-02T03:04:05Z","subsystem":"taskscaler","marker":"gitlab-runner-drop"}'
+          SYSLOG_IDENTIFIER: gitlab-runner
+          SYSTEMD_UNIT: gitlab_runner.service
+        - MESSAGE: '{"level":"info","msg":"gitlab-runner-action","time":"2099-01-02T03:04:05Z","subsystem":"taskscaler","marker":"gitlab-runner-keep"}'
+          SYSLOG_IDENTIFIER: gitlab-runner
+          SYSTEMD_UNIT: gitlab_runner.service
+        - MESSAGE: '{"level":"broken"'
+          SYSLOG_IDENTIFIER: gitlab-runner
+          SYSTEMD_UNIT: gitlab_runner.service
+        - MESSAGE: '{"level":"error","msg":"must-not-parse"}'
+          SYSLOG_IDENTIFIER: systemd
+          SYSTEMD_UNIT: gitlab_runner.service
+      expected:
+        - message: gitlab-runner-valid
+          level: warn
+          service: gitlab-runner
+          fields.job: 42
+          fields.runner_name: fixture
+          fields.parser_status: parsed
+          fields.service: attribute
+          _absent:
+            - fields.time
+            - fields.msg
+        - message: gitlab-runner-action
+          level: info
+          service: gitlab-runner
+          fields.marker: gitlab-runner-keep
+          fields.parser_status: parsed
+        - message: '{"level":"broken"'
+          level: warn
+          service: gitlab-runner
+          parse_error: gitlab_runner_json
+          fields.parser_status: failed
+        - message: '{"level":"error","msg":"must-not-parse"}'
+          service: systemd
+          _absent:
+            - fields.parser_status
+
+- name: _verify | Routine taskscaler calculation was omitted
+  assert:
+    that: "'gitlab-runner-drop' not in fluentbit_verify_result.stdout"
+
 - name: _verify | Resolve gitlab_runner uid
   command: id -u gitlab_runner
   register: _gitlab_runner_uid
@@ -153,6 +206,39 @@
   retries: 5
   delay: 1
   until: _gitlab_runner_metrics.status | default(0) == 200
+
+- name: _verify | Wait for normalized runner record in lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                fields = record.get("fields", {})
+                if (
+                    record.get("service") == "gitlab-runner"
+                    and fields.get("parser_status") == "parsed"
+                    and "time" not in fields
+                    and "msg" not in fields
+                ):
+                    print(json.dumps(record, sort_keys=True))
+                    sys.exit(0)
+        sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+  register: _gitlab_runner_lnav_record
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _gitlab_runner_lnav_record.rc == 0
+  become: true
 
 # Type=simple is `active` the instant ExecStart forks, so the wait above can
 # catch the brief active window of a crash-looping runner; re-read after the

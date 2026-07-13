@@ -1,0 +1,49 @@
+parsers:
+  - name: gitlab_runner_json
+    format: json
+
+pipeline:
+  filters:
+    - name: modify
+      match: svc.gitlab_runner.service
+      condition: key_value_matches SYSLOG_IDENTIFIER '^gitlab-runner$'
+      rename: MESSAGE log
+    - name: parser
+      match: svc.gitlab_runner.service
+      key_name: log
+      parser: gitlab_runner_json
+      reserve_data: true
+      preserve_key: true
+    - name: modify
+      match: svc.gitlab_runner.service
+      condition:
+        - key_value_matches SYSLOG_IDENTIFIER '^gitlab-runner$'
+        - key_exists msg
+        - key_exists level
+      hard_rename:
+        - msg log
+        - level _level
+      remove: time
+      set: parser_status parsed
+    # Taskscaler emits this calculation every ~50 seconds even while idle.
+    # Actual scale actions have their own increasing/decreasing/instance-update
+    # records, so keep those and omit only the repetitive calculation.
+    - name: grep
+      match: svc.gitlab_runner.service
+      logical_op: and
+      exclude:
+        - 'SYSLOG_IDENTIFIER ^gitlab-runner$'
+        - 'parser_status ^parsed$'
+        - '_level ^info$'
+        - 'subsystem ^taskscaler$'
+        - 'log ^required scaling change$'
+    - name: modify
+      match: svc.gitlab_runner.service
+      condition:
+        - key_value_matches SYSLOG_IDENTIFIER '^gitlab-runner$'
+        - key_value_matches log '^\{'
+        - key_does_not_exist msg
+      add:
+        - parser_status failed
+        - parse_error gitlab_runner_json
+        - _level warn

@@ -290,6 +290,14 @@
         validate: python3 -c 'import {{ "tomllib" if ansible_distribution_version is version("24.04", ">=") else "tomli" }} as t, sys; t.load(open(sys.argv[1], "rb"))' %s
       become: true
 
+    - name: Install gitlab_runner fluent-bit extension
+      import_role:
+        name: fluentbit
+        tasks_from: extension
+      vars:
+        fluentbit_extension_args:
+          name: gitlab_runner
+
     - name: Install gitlab_runner.service
       import_role:
         name: systemd_unit
