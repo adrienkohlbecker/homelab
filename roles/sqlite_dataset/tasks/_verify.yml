@@ -1,5 +1,18 @@
 - name: _verify | All sqlite_dataset scenarios
   block:
+    - name: _verify | Create fixture directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+      loop:
+        - /mnt/services/sqlite
+        - /mnt/services/sqlite_dataset_test
+        - /mnt/services/sqlite_dataset_test/sub
+
     # -- Scenario 1: directory-only (no links, like plex) ----------------
     - name: _verify | Scenario 1 — directory-only
       import_role:
