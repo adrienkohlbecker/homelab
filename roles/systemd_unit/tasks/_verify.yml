@@ -202,7 +202,7 @@
     tasks_from: install
   vars:
     systemd_unit_args:
-      src: systemd_unit_verify_dropin.conf
+      src: systemd_unit_verify_abs_dropin.conf
       for: systemd_unit_verify_copy_ok.service
       dest_abs: /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/99-abs-test.conf
 
@@ -218,8 +218,47 @@
           - _systemd_unit_abs_dropin_stat.stat.exists
           - not _systemd_unit_abs_dropin_stat.stat.islnk
     - name: _verify | Assert dest_abs drop-in content
-      command: grep -qF Environment=DROPIN_TEST=1 /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/99-abs-test.conf
+      command: grep -qF Environment=ABS_DROPIN_TEST=1 /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/99-abs-test.conf
       changed_when: false
+
+- name: _verify | Read environment with the absolute drop-in active  # noqa: command-instead-of-module
+  command:
+    argv:
+      - systemctl
+      - show
+      - systemd_unit_verify_copy_ok.service
+      - --property=Environment
+      - --value
+  register: _systemd_unit_abs_dropin_environment
+  changed_when: false
+
+- name: _verify | Absolute drop-in affects the composed unit
+  assert:
+    that: "'ABS_DROPIN_TEST=1' in _systemd_unit_abs_dropin_environment.stdout"
+
+- name: _verify | Remove drop-in via dest_abs mode
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      for: systemd_unit_verify_copy_ok.service
+      dest_abs: /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/99-abs-test.conf
+
+- name: _verify | Read environment after absolute drop-in removal  # noqa: command-instead-of-module
+  command:
+    argv:
+      - systemctl
+      - show
+      - systemd_unit_verify_copy_ok.service
+      - --property=Environment
+      - --value
+  register: _systemd_unit_abs_dropin_removed_environment
+  changed_when: false
+
+- name: _verify | Absolute drop-in no longer affects the composed unit
+  assert:
+    that: "'ABS_DROPIN_TEST=1' not in _systemd_unit_abs_dropin_removed_environment.stdout"
 
 - name: _verify | Cleanup drop-in directory
   file:
