@@ -295,23 +295,15 @@
   tags:
     - zfs
 
-- name: Enable zed
-  when: not (ansible_check_mode and zfs_apt.changed)
-  systemd:
-    name: zfs-zed
-    enabled: true
-  become: true
-  tags:
-    - zfs
-
 # Restart on a backports upgrade so the running zed picks up the
 # noble binary after a jammy→noble flip, or when zed.rc changed so the
 # notification config takes effect; otherwise just ensure it's started
 # (and leave a healthy daemon undisturbed).
-- name: Start zed
+- name: Enable and start zed
   when: not (ansible_check_mode and zfs_apt.changed)
   systemd:
     name: zfs-zed
+    enabled: true
     state: '{{ "restarted" if (zfs_backports_updated | default(false) or zfs_zedrc.changed) else "started" }}'
   become: true
   tags:
