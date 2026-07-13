@@ -213,8 +213,6 @@ class PreferImport(AnsibleLintRule):
         include_target = _stringify(action.get("_raw_params") or action.get("file") or action.get("name"))
         if "{{" in include_target or "}}" in include_target:
             return False
-        if module == "include_tasks" and "reset_connection" in include_target:
-            return False
 
         return f"use import_{module.removeprefix('include_')} unless this include needs runtime evaluation"
 

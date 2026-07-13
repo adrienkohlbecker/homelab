@@ -141,6 +141,10 @@ class TestPreferImport:
         result = PreferImport().matchtask(_task("include_tasks", _raw_params="service.yml"))
         assert result == "use import_tasks unless this include needs runtime evaluation"
 
+    def test_reset_connection_include_tasks_warns(self) -> None:
+        result = PreferImport().matchtask(_task("include_tasks", _raw_params="reset_connection.yml"))
+        assert result == "use import_tasks unless this include needs runtime evaluation"
+
     def test_loop_include_tasks_is_allowed(self) -> None:
         result = PreferImport().matchtask(
             _task("include_tasks", _raw_params="service.yml", __raw_task__={"loop": [1, 2]})
