@@ -525,8 +525,7 @@ fox_image:
 # mise-tasks/zbm/). Heavy (clones ZBM, xbps-installs a Void toolchain, runs
 # buildx), so never part of the regular pipeline: dispatch it after bumping
 # ZBM_VERSION / the zbm/ overlay, verify the artifacts, then pin the new
-# tarball version in roles/zfsbootmenu/vars/main.yml +
-# packer/scripts/chroot.sh.
+# tarball in group_vars/all/versions.yml (or a host-specific artifact override).
 #
 # Runs docker-in-docker on a hosted runner. The job owns the service and
 # artifacts; zbm:ci-build owns buildx setup, registry cache, tarball assertions,
