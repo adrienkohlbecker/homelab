@@ -354,6 +354,24 @@
       silently dropped (foo.does_not_exist isn't in the chart registry).
       Got liveness keys: {{ _keys | select('search', 'liveness_') | list }}
 
+- name: _verify | Context liveness alarm uses an explicit stale age
+  vars:
+    _alarm: >-
+      {{
+        ((_netdata_alarms.content | from_json).alarms.values()
+         | selectattr('name', 'equalto', 'liveness_system_cpu') | list | first)
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - "360" in (_alarm.crit | default(''))
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 0
+    fail_msg: >-
+      Expected liveness_system_cpu to alert after six minutes of stale data
+      without notification-only delay. Got: {{ _alarm }}
+
 - name: _verify | Reboot-required alarm uses sustained file-presence lookup
   vars:
     _alarm: >-

@@ -23,10 +23,9 @@ template: liveness_{{ name }}
       on: {{ ctx }}
     calc: $now - $last_collected_t
    every: 60s
-    crit: $this > (60)
-   delay: up 5m
+    crit: $this > (360)
  summary: Context {{ name }} ({{ ctx }}) is stale
-    info: netdata has not collected {{ ctx }} for over 60s
+    info: netdata has not collected {{ ctx }} for over 6 minutes
       to: sysadmin
 
 {% endfor %}
