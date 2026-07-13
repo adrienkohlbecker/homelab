@@ -1,6 +1,3 @@
-# box exercises the root-mount path (zfs_root=true) and, with its second zee
-# pool, the multi-pool mount topology. lab adds prod-faithful mirror/raidz
-# geometry that no role asserts.
+# box exercises the root-mount path (zfs_root=true).
 machines:
   box:
-  lab:
