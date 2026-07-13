@@ -1,1 +1,33 @@
 ---
+- name: _setup | Create retired Netdata poller account
+  user:
+    name: netdata_poll
+    home: /var/lib/netdata_poll
+    create_home: true
+  become: true
+
+- name: _setup | Enable lingering for retired Netdata poller
+  command:
+    argv:
+      - loginctl
+      - --no-ask-password
+      - enable-linger
+      - netdata_poll
+    creates: /var/lib/systemd/linger/netdata_poll
+  become: true
+
+- name: _setup | Create retired Netdata poller directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  become: true
+  loop:
+    - /opt/homepage_alerts/.ssh
+
+- name: _setup | Create retired Netdata poller helper
+  copy:
+    content: "#!/bin/sh\n"
+    dest: /usr/local/bin/netdata_poll_fetch
+    mode: "0755"
+  become: true

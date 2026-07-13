@@ -1,1 +1,46 @@
 ---
+- name: Lookup retired Netdata poller account
+  command:
+    argv:
+      - getent
+      - passwd
+      - netdata_poll
+  register: retired_services_netdata_poll_passwd
+  changed_when: false
+  failed_when: retired_services_netdata_poll_passwd.rc not in [0, 2]
+  check_mode: false
+
+- name: Disable lingering for retired Netdata poller
+  import_role:
+    name: linger
+    tasks_from: disable
+  vars:
+    linger_args:
+      name: netdata_poll
+      uid: >-
+        {{ retired_services_netdata_poll_passwd.stdout.split(':')[2] | int
+           if retired_services_netdata_poll_passwd.rc == 0 else omit }}
+
+- name: Remove retired Netdata poller account
+  user:
+    name: netdata_poll
+    state: absent
+    remove: true
+    force: true
+  become: true
+
+- name: Remove retired Netdata poller group
+  group:
+    name: netdata_poll
+    state: absent
+  become: true
+
+- name: Remove retired Netdata poller files
+  file:
+    path: "{{ item }}"
+    state: absent
+  become: true
+  loop:
+    - /var/lib/netdata_poll
+    - /usr/local/bin/netdata_poll_fetch
+    - /opt/homepage_alerts/.ssh
