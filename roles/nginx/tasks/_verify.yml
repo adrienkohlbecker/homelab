@@ -133,7 +133,7 @@
 
             def do_GET(self):
                 # Echo the received request line, Authorization and Authelia
-                # identity headers to the journal so the identity-forwarding
+                # identity header to the journal so the identity-forwarding
                 # assertions can confirm exactly what reached the upstream.
                 print("upstream-saw " + self.path, flush=True)
                 print("upstream-auth " + self.headers.get("Authorization", "<none>"), flush=True)
@@ -145,7 +145,6 @@
                     flush=True,
                 )
                 print("upstream-fwduser " + self.headers.get("X-Forwarded-User", "<none>"), flush=True)
-                print("upstream-remoteuser " + self.headers.get("Remote-User", "<none>"), flush=True)
                 body = b"nginx_verify_upstream_ok"
                 self.send_response(200)
                 self.send_header("Content-Length", str(len(body)))
@@ -350,12 +349,8 @@
   retries: 10
   delay: 1
 
-# Auth-identity forwarding: when Authelia admits a request, the vhost captures
-# Remote-* from the auth subrequest and forwards it upstream under BOTH the
-# X-Forwarded-User name (the *arr suite, AuthenticationMethod=External) and the
-# canonical Remote-User name (Authelia's own snippet), so an upstream wired per
-# either convention picks up the SSO identity. Runs with the stub in authed mode
-# so $authelia_user is populated.
+# When Authelia admits a request, the vhost forwards Remote-User from the auth
+# subrequest as X-Forwarded-User for the *arr suite's External auth mode.
 - name: _verify | Configure an auth-required vhost for identity forwarding
   import_role:
     name: nginx
@@ -385,16 +380,6 @@
   changed_when: false
   become: true
   until: "'upstream-fwduser nginxverifyuser' in nginx_verify_inj_journal.stdout"
-  retries: 10
-  delay: 1
-
-# The same identity is also forwarded under Authelia's canonical Remote-* name.
-- name: _verify | Upstream received Remote-User from the auth subrequest
-  command: journalctl -u nginx_verify_upstream --no-pager
-  register: nginx_verify_remote_journal
-  changed_when: false
-  become: true
-  until: "'upstream-remoteuser nginxverifyuser' in nginx_verify_remote_journal.stdout"
   retries: 10
   delay: 1
 

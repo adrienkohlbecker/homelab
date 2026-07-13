@@ -22,8 +22,7 @@
 #         target to 302 to that routes back to the requested vhost.
 #     authed: returns 200 plus a `Remote-User` header (value from `user`),
 #         like Authelia on a successful auth. Lets a test exercise the
-#         auth-passes paths -- X-Forwarded-User / Remote-User identity
-#         forwarding to the upstream.
+#         auth-passes path and X-Forwarded-User forwarding to the upstream.
 #     basic: returns 200 only for the fixed `nginxverify:secret` HTTP Basic
 #         credential. Exercises selective Authorization forwarding without a
 #         real Authelia instance.
@@ -76,7 +75,7 @@
         {% elif _test_authelia_stub_mode == 'authed' %}
             # authed: 200 with a Remote-User header, like Authelia on a
             # successful auth, so the parent's auth_request_set $authelia_user
-            # populates (exercises X-Forwarded-User / Remote-User forwarding).
+            # populates (exercises X-Forwarded-User forwarding).
             add_header Remote-User "{{ _test_authelia_stub_user }}" always;
             return 200 'test_stub_ok';
         {% elif _test_authelia_stub_mode == 'basic' %}

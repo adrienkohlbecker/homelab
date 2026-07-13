@@ -113,15 +113,10 @@ server {
   location / {
 {% if _auth_enabled %}
     auth_request /internal/authelia;
-    # Capture Authelia's Remote-* response headers from the auth_request
-    # subrequest as nginx variables, then forward them to the upstream
-    # below. Upstreams that trust the proxy (e.g. *arr v4 with
-    # AuthenticationMethod=External) read X-Forwarded-User and skip their
-    # own local login. Authelia sends Remote-User on every authenticated 200.
+    # Capture the authenticated user for the upstream and groups for the
+    # access-log schema. Authelia sends Remote-User on every authenticated 200.
     auth_request_set $authelia_user   $upstream_http_remote_user;
     auth_request_set $authelia_groups $upstream_http_remote_groups;
-    auth_request_set $authelia_name   $upstream_http_remote_name;
-    auth_request_set $authelia_email  $upstream_http_remote_email;
     # Authelia returns 401 with the portal-redirect target (returnUrl + method
     # already baked in) in its `Location` response header; capture it so
     # @authelia_unauth can rewrite the auth_request 401 into a 302 there. This is
@@ -156,18 +151,8 @@ server {
     # server_conf/location_conf location via the same include.
     include /etc/nginx/snippets/proxy_params.conf;
 {% if _auth_enabled %}
-    # Forward the captured Authelia identity to the upstream under both naming
-    # conventions: Authelia's own canonical authrequest snippet uses Remote-*,
-    # while the *arr suite (AuthenticationMethod=External) reads X-Forwarded-User.
-    # Emitting both lets an upstream wired per either convention pick it up.
-    proxy_set_header X-Forwarded-User   $authelia_user;
-    proxy_set_header X-Forwarded-Groups $authelia_groups;
-    proxy_set_header X-Forwarded-Name   $authelia_name;
-    proxy_set_header X-Forwarded-Email  $authelia_email;
-    proxy_set_header Remote-User        $authelia_user;
-    proxy_set_header Remote-Groups      $authelia_groups;
-    proxy_set_header Remote-Name        $authelia_name;
-    proxy_set_header Remote-Email       $authelia_email;
+    # The *arr suite reads this when AuthenticationMethod=External.
+    proxy_set_header X-Forwarded-User $authelia_user;
 {% endif %}
 {% if _nginx_site_auth_request_authorization %}
     # HeaderAuthorization credentials authenticate only the Authelia
