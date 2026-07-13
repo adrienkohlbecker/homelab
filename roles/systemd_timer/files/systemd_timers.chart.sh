@@ -26,11 +26,6 @@ systemd_timers_priority=90100
 systemd_timers_meta_dir="${systemd_timers_meta_dir:-/etc/netdata/charts.d/systemd_timers.d}"
 systemd_timers_stamp_dir="${systemd_timers_stamp_dir:-/var/lib/systemd/timers}"
 
-# Use charts.d's identifier rules; callers cache the result per timer.
-_systemd_timers_safe() {
-  fixid "$1"
-}
-
 # Last-fire time = the mtime of the stamp file at
 # /var/lib/systemd/timers/stamp-<name>.timer. System-scope monitored timers
 # touch it in ExecStartPre (service.j2), so age_secs tracks attempted starts;
@@ -72,7 +67,7 @@ systemd_timers_create() {
 
 # _systemd_timers_seen maps name → safe-name; populated on first observation.
 # Per-process state (sourced once by charts.d.plugin); safe-name is cached
-# so the _systemd_timers_safe tr subshell runs only once per timer lifetime.
+# so fixid runs only once per timer lifetime.
 declare -A _systemd_timers_seen
 
 systemd_timers_update() {
@@ -93,7 +88,7 @@ systemd_timers_update() {
     present[$name]=1
     if [ -z "${_systemd_timers_seen[$name]:-}" ]; then
       # Compute and cache safe name on first observation only.
-      safe=$(_systemd_timers_safe "$name")
+      safe=$(fixid "$name")
       _systemd_timers_seen[$name]="$safe"
       cat <<EOF
 CHART systemd_timers.${safe} '' "systemd timer freshness: ${name}" "secs" systemd_timers systemd.timer_lag area ${systemd_timers_priority} ${systemd_timers_update_every}
