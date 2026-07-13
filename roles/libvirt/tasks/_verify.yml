@@ -5,16 +5,21 @@
 # and dumping it proves the script's real behavior, not just that the
 # file landed on disk.
 
-- name: _verify | Operator belongs to virtualization groups
+# runuser re-reads supplementary groups before invoking virsh, proving the
+# configured libvirt membership grants access to the system daemon.
+- name: _verify | Operator reaches the libvirt system daemon
   command:
     argv:
-      - id
-      - -nG
+      - runuser
+      - -u
       - "{{ ansible_user_id }}"
-  register: _libvirt_verify_groups
+      - --
+      - virsh
+      - -c
+      - qemu:///system
+      - list
+  become: true
   changed_when: false
-  failed_when: >-
-    ['libvirt', 'kvm'] | difference(_libvirt_verify_groups.stdout.split()) | length > 0
 
 - name: _verify | Gather default network state
   command: virsh net-info default
