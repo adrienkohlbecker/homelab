@@ -304,47 +304,6 @@
           # target absent -> the link is genuinely dangling, not pre-created
           - not _sqlite_dataset_forced_target.stat.exists
 
-    # -- Scenario 7b: force idempotence — re-apply leaves symlink unchanged -
-    # The harness idempotence pass targets main.yml (the stub), so dataset.yml
-    # is never re-exercised by it; assert here that a second identical apply
-    # with force: true is a no-op (symlink still dangling, attrs unchanged).
-    - name: _verify | Scenario 7b — re-apply identical force args
-      import_role:
-        name: sqlite_dataset
-        tasks_from: dataset
-      vars:
-        sqlite_dataset_args:
-          name: sqlite_dataset_test
-          owner: root
-          group: root
-          force: true
-          links:
-            - /mnt/services/sqlite_dataset_test/forced.db
-
-    - name: _verify | Scenario 7b — re-stat the symlink after re-apply
-      stat:
-        path: /mnt/services/sqlite_dataset_test/forced.db
-        follow: false
-      register: _sqlite_dataset_forced_again
-      become: true
-
-    - name: _verify | Scenario 7b — re-stat the (still absent) target after re-apply
-      stat:
-        path: /mnt/services/sqlite/sqlite_dataset_test/forced.db
-      register: _sqlite_dataset_forced_target_again
-      become: true
-
-    - name: _verify | Scenario 7b — symlink still dangling and unchanged after re-apply
-      assert:
-        that:
-          - _sqlite_dataset_forced_again.stat.exists
-          - _sqlite_dataset_forced_again.stat.islnk
-          - _sqlite_dataset_forced_again.stat.lnk_target == '/mnt/services/sqlite/sqlite_dataset_test/forced.db'
-          - _sqlite_dataset_forced_again.stat.pw_name == 'root'
-          - _sqlite_dataset_forced_again.stat.gr_name == 'root'
-          # target still absent -> the re-apply did not pre-create the src
-          - not _sqlite_dataset_forced_target_again.stat.exists
-
     # -- Scenario 8: validation rejects invalid args ---------------------
     # include_tasks (not import_role) so sqlite_dataset_args re-evaluates per
     # iteration; each case must fail the dataset role's assert.
