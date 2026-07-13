@@ -119,6 +119,26 @@
     and (_netdata_keepalived_vrrp_alarms.content | from_json).alarms.keys() | list
         | select('search', 'keepalived_vrrp.state.keepalived_lost_master') | list | length > 0
 
+- name: _verify | Keepalived alarm uses sustained VIP absence
+  vars:
+    _alarm: >-
+      {{
+        ((_netdata_keepalived_vrrp_alarms.content | from_json).alarms
+         ["keepalived_vrrp.state.keepalived_lost_master"])
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - _alarm.lookup_method | default('') == "max"
+      - _alarm.lookup_after | default(0) == -300
+      - _alarm.lookup_dimensions | default('') == "holds_vip"
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 0
+    fail_msg: >-
+      Expected keepalived_lost_master to require five minutes without the VIP
+      and no notification-only delay. Got: {{ _alarm }}
+
 - name: _verify | Remove keepalived_vrrp alert fixture
   file:
     path: /etc/netdata/health.d/keepalived_vrrp.conf
