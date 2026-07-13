@@ -22,8 +22,6 @@
 #                     dest=<for>.d/override.conf and verify=<for>
 #   user              default 'root'; non-root drives /etc/systemd/user
 #   condition         default true; gates the whole call
-#   verify            optional path for systemd-analyze verify (drop-ins
-#                     validate the composed parent unit, not the override)
 #
 # The dict form prevents inter-call leakage: each import_role pass replaces
 # the whole `systemd_unit_args` value at play-vars scope, so a previous
@@ -74,10 +72,10 @@
                | default((systemd_unit_args.for ~ '.d/override.conf') if systemd_unit_args.for is defined
                          else (systemd_unit_args.src | regex_replace('\.j2$', '')))) }}
     _systemd_unit_verify: >-
-      {{ systemd_unit_args.verify
-         | default(systemd_unit_args.for if systemd_unit_args.for is defined
-                   else (systemd_unit_args.dest
-                         | default(systemd_unit_args.src | regex_replace('\.j2$', '')))) }}
+      {{ systemd_unit_args.for
+         if systemd_unit_args.for is defined
+         else (systemd_unit_args.dest
+               | default(systemd_unit_args.src | regex_replace('\.j2$', ''))) }}
 
 - name: install | Derive install scope for {{ systemd_unit_args.src }}
   set_fact:
