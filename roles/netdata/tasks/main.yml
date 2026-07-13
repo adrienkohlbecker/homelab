@@ -1,16 +1,3 @@
-- name: Require the netdata_poll SSH public key to be defined
-  assert:
-    that:
-      - netdata_poll_ssh_public_key is defined
-      - netdata_poll_ssh_public_key | length > 0
-    fail_msg: >-
-      netdata_poll_ssh_public_key must be set (group_vars/prod.yml for the
-      prod keypair, group_vars/test.yml for the test keypair). It is the
-      forced-command key lab's homepage_alerts poller uses to pull this
-      host's netdata alerts over SSH; see roles/netdata/tasks/poll_access.yml.
-  tags:
-    - netdata
-
 # Per-host alert/presence inputs. The alert templates iterate these
 # without a default (context_liveness.conf.j2, zfs_alerts_override.conf.j2),
 # so a host that forgets one fails the converge with a cryptic jinja
@@ -82,11 +69,6 @@
   tags:
     - netdata
 
-- name: Configure netdata_poll SSH access
-  import_tasks: poll_access.yml
-  tags:
-    - netdata
-
 - name: Configure nginx
   import_role:
     name: nginx
@@ -95,14 +77,16 @@
     nginx_site_args:
       subdomain: netdata
       proxy_pass: http://127.0.0.1:{{ service_ports.netdata }}/
-      # Browser access is gated by Authelia forward-auth. Alert polling no
-      # longer goes through nginx at all -- lab's homepage_alerts poller pulls
-      # every host's read API over SSH (the netdata_poll forced-command key,
-      # see poll_access.yml above), the converging host's own netdata included,
-      # so there is a single transport. The forced command reads netdata over
-      # loopback on each host. No URL-param bypass and no large-response proxy
-      # buffer tuning are needed here. See notes/authelia_nginx_gating.md.
+      # Browser access uses Authelia sessions. Homepage's machine poller sends
+      # a dedicated Basic-auth service account to the same vhost; forward that
+      # header only to Authelia, then strip it before netdata receives the API
+      # request. See notes/authelia_nginx_gating.md.
       auth: required
+      auth_request_authorization: true
+      location_conf: |
+        proxy_set_header Authorization "";
+        proxy_buffer_size 16k;
+        proxy_buffers 32 128k;
   tags:
     - netdata
 

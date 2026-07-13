@@ -448,9 +448,7 @@ gitea_oidc_client_secret: changeme
 
 # Test-fixture user. Hash is for the password "authelia" -- the
 # canonical example hash from Authelia's docs. Tracked plaintext
-# here because (1) box is ephemeral, (2) _verify.yml only exercises
-# unauthenticated probes, (3) Authelia's file backend needs at
-# least one entry to start. Prod users live vaulted in prod.yml.
+# here because box is ephemeral. Prod users live vaulted in prod.yml.
 authelia_users:
   - username: testuser
     displayname: Test User
@@ -458,6 +456,15 @@ authelia_users:
     email: testuser@{{ inventory_hostname }}.{{ domain }}
     groups:
       - admins
+  - username: homepage_alerts
+    displayname: Homepage Alerts
+    password_hash: "$argon2id$v=19$m=65536,t=3,p=4$Znbh8OkBsNn+T9k9MmYR1A$HFJilg8AIZRXWQSonySoGEyLNndNFByrHO8t8Kxya2w"
+    email: homepage-alerts@{{ inventory_hostname }}.{{ domain }}
+    groups:
+      - netdata
+      - service
+
+homepage_alerts_authelia_password: homepage-alerts-test-credential-0123456789abcdefghijklmnopqrstuvwxyz
 
 # roles/tailscale mesh-client test config. The control plane is the local
 # headscale its _setup stands up, addressed over the plain-http loopback (no TLS

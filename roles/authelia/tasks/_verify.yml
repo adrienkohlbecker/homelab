@@ -74,6 +74,32 @@
     status_code: 401
   become: true
 
+- name: _verify | Homepage service account may read the Netdata alerts API
+  uri:
+    url: https://auth.{{ authelia_cookie_domain }}/api/authz/auth-request
+    url_username: homepage_alerts
+    url_password: "{{ homepage_alerts_authelia_password }}"
+    force_basic_auth: true
+    headers:
+      X-Original-Method: GET
+      X-Original-URL: "https://netdata.{{ inventory_hostname }}.{{ domain }}/api/v1/alarms?active"
+    validate_certs: false
+    status_code: 200
+  become: true
+
+- name: _verify | Homepage service account cannot read other Netdata paths
+  uri:
+    url: https://auth.{{ authelia_cookie_domain }}/api/authz/auth-request
+    url_username: homepage_alerts
+    url_password: "{{ homepage_alerts_authelia_password }}"
+    force_basic_auth: true
+    headers:
+      X-Original-Method: GET
+      X-Original-URL: "https://netdata.{{ inventory_hostname }}.{{ domain }}/api/v1/info"
+    validate_certs: false
+    status_code: 401
+  become: true
+
 - name: _verify | Read recent authelia container stdout
   command:
     argv:

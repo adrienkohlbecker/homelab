@@ -3,7 +3,12 @@
     that:
       - homepage_netdata_hosts is defined
       - homepage_netdata_hosts | length > 0
-    fail_msg: homepage_netdata_hosts must be defined and non-empty in host_vars
+      - homepage_alerts_authelia_password is defined
+      - homepage_alerts_authelia_password | length >= 64
+    fail_msg: >-
+      homepage_netdata_hosts must be non-empty and
+      homepage_alerts_authelia_password must contain the dedicated service
+      account password (at least 64 characters).
   tags:
     - homepage
 
@@ -209,80 +214,18 @@
   tags:
     - homepage
 
-# Alert polling reaches every netdata host over SSH, not nginx (a single
-# transport -- the converging host's own netdata included): the poller logs in
-# as netdata_poll with a key pinned to a forced command that returns the
-# read-only API as a JSON bundle (roles/netdata/tasks/poll_access.yml).
-- name: Create alerts sidecar ssh dir
-  when: not (ansible_check_mode and homepage_user.changed)
-  file:
-    dest: /opt/homepage_alerts/.ssh
-    state: directory
-    owner: homepage
-    group: homepage
-    mode: "0700"
-  become: true
-  tags:
-    - homepage
-
-- name: Deploy netdata_poll private key
+# HTTP Basic authentication follows Authelia's service-account guidance: the
+# password is available only to the oneshot poller and never enters its
+# environment or command line.
+- name: Deploy Homepage alerts Authelia password
   when: not (ansible_check_mode and homepage_user.changed)
   copy:
-    # trim + single trailing newline: a vaulted/plain block scalar can lose or
-    # double the final newline, and ssh rejects a key without exactly one.
-    content: "{{ netdata_poll_ssh_private_key | trim }}\n"
-    dest: /opt/homepage_alerts/.ssh/id_ed25519
+    content: "{{ homepage_alerts_authelia_password }}\n"
+    dest: /opt/homepage_alerts/authelia_password
     owner: homepage
     group: homepage
     mode: "0600"
     backup: true
-  become: true
-  tags:
-    - homepage
-
-# Every netdata host is an SSH peer (the converging host included -- single
-# transport). Addresses come from external_ips (the wg backbone / LAN, same
-# map zfs_autobackup uses).
-- name: Build SSH target list for netdata peers
-  set_fact:
-    _homepage_alerts_ssh_targets: "{{ homepage_netdata_hosts | map('extract', external_ips) | list }}"
-  tags:
-    - homepage
-
-# Pin each netdata peer's SSH host key so the poller can reach it under
-# StrictHostKeyChecking=yes. Scan every target on each converge and feed the
-# result to the known_hosts module, which is idempotent on (host, key) and
-# REPLACES a rotated key in place -- a peer rebuild (new host key, same IP, e.g.
-# a fox rebake) is adopted automatically instead of leaving a stale entry that
-# fails the poll forever. No -H hashing: plaintext is what lets the module match
-# and replace a changed key, and salted lines would re-churn `changed` every run
-# (the random salt never byte-matches). Gated `not qemu_test`: the box fixture's
-# homepage role runs without netdata installed, so its lone peer (itself) has no
-# host to reach -- StrictHostKeyChecking then fails the fetch closed and the
-# panel renders the per-host error div (asserted in _verify).
-- name: Scan SSH host keys from netdata peers
-  when: not qemu_test
-  command: ssh-keyscan -t ed25519 -T 5 "{{ item }}"
-  loop: "{{ _homepage_alerts_ssh_targets }}"
-  changed_when: false
-  failed_when: false
-  register: _homepage_alerts_keyscan
-  tags:
-    - homepage
-
-# Root-owned 0644 known_hosts inside homepage's 0700 .ssh dir: world-readable so
-# the poller (User=homepage) reads it, but only root rewrites it. Entries are
-# cleartext internal IPs -- acceptable for a host-local file that never leaves
-# the fleet.
-- name: Register SSH host keys for netdata peers
-  when: not qemu_test and item.stdout | default('') | length > 0
-  known_hosts:
-    path: /opt/homepage_alerts/.ssh/known_hosts
-    name: "{{ item.item }}"
-    key: "{{ item.stdout }}"
-  loop: "{{ _homepage_alerts_keyscan.results | default([]) }}"
-  loop_control:
-    label: "{{ item.item }}"
   become: true
   tags:
     - homepage
@@ -310,14 +253,12 @@
     name: systemd_timer
     tasks_from: install
   vars:
-    # NETDATA_HOSTS env value: a `<name>=<query-url>=<click-url>` triple per
-    # host, comma-joined. The query-url is the SSH pull target (same for every
-    # host, the converging host included); the click-url is the public netdata
-    # FQDN a browser navigates to. Addresses come from external_ips.
+    # NETDATA_HOSTS env value: one public HTTPS netdata vhost per host. The
+    # same URL is used for the authenticated API query and browser click-through.
     systemd_timer_homepage_alerts_netdata_hosts_env: >-
       {%- set ents = [] -%}
       {%- for h in homepage_netdata_hosts -%}
-      {%- set _ = ents.append(h ~ '=ssh://netdata_poll@' ~ external_ips[h] ~ '=https://netdata.' ~ h ~ '.' ~ domain) -%}
+      {%- set _ = ents.append(h ~ '=https://netdata.' ~ h ~ '.' ~ domain) -%}
       {%- endfor -%}
       {{ ents | join(',') }}
     systemd_timer_args:
@@ -336,14 +277,14 @@
       run_as: homepage
       monitor: false
       # Bound a wedged run well within the 60s cadence. Each fire fans out to
-      # N netdata hosts in parallel with SSH_TIMEOUT=10s, so 25s is plenty
-      # even on a chatty agent and a cold (un-multiplexed) connection.
+      # N netdata hosts in parallel with FETCH_TIMEOUT=5s, so 25s is plenty
+      # even when the transition response is large.
       timeout_start_sec: 25s
       environment:
         NETDATA_HOSTS: "{{ systemd_timer_homepage_alerts_netdata_hosts_env }}"
         OUTPUT_DIR: /var/www/homepage_alerts
-        NETDATA_POLL_SSH_KEY: /opt/homepage_alerts/.ssh/id_ed25519
-        NETDATA_POLL_SSH_KNOWN_HOSTS: /opt/homepage_alerts/.ssh/known_hosts
+        NETDATA_BASIC_AUTH_USERNAME: homepage_alerts
+        NETDATA_BASIC_AUTH_PASSWORD_FILE: /opt/homepage_alerts/authelia_password
       additional_service_directives:
         - "PrivateTmp=yes"
         - "ProtectSystem=strict"

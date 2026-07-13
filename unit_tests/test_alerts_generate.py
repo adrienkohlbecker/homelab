@@ -1,8 +1,7 @@
 """Unit tests for roles/homepage/files/alerts_generate.py.
 
-Tests the pure functions (parse_hosts, normalize, latest_transition_by_alarm,
-alarm_href, _humanize_delta, _format_value, render_html) without needing
-network access or a running netdata instance.
+Tests parsing, rendering, and the authenticated HTTP client without needing a
+running netdata instance.
 """
 
 import importlib.util
@@ -10,7 +9,13 @@ from pathlib import Path
 
 import pytest
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "homepage" / "files" / "alerts_generate.py"
+_MODULE_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "roles"
+    / "homepage"
+    / "files"
+    / "alerts_generate.py"
+)
 
 
 def _load():
@@ -36,8 +41,12 @@ class TestParseHosts:
         assert result == [("lab", "http://localhost:19999", "http://localhost:19999")]
 
     def test_three_url_format(self) -> None:
-        result = ag.parse_hosts("lab=http://localhost:19999=https://netdata.lab.fahm.fr")
-        assert result == [("lab", "http://localhost:19999", "https://netdata.lab.fahm.fr")]
+        result = ag.parse_hosts(
+            "lab=http://localhost:19999=https://netdata.lab.fahm.fr"
+        )
+        assert result == [
+            ("lab", "http://localhost:19999", "https://netdata.lab.fahm.fr")
+        ]
 
     def test_multiple_hosts(self) -> None:
         result = ag.parse_hosts("lab=http://a,pug=https://b")
@@ -64,6 +73,67 @@ class TestParseHosts:
     def test_whitespace_stripped(self) -> None:
         result = ag.parse_hosts("  lab = http://a  ")
         assert result[0] == ("lab", "http://a", "http://a")
+
+
+# ---------------------------------------------------------------------------
+# authenticated HTTP client
+# ---------------------------------------------------------------------------
+
+
+class _FakeResponse:
+    def __init__(self, body: bytes) -> None:
+        self.status = 200
+        self._body = body
+        self.closed = False
+
+    def read(self) -> bytes:
+        return self._body
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class TestHostClient:
+    def test_sends_basic_auth_to_both_netdata_endpoints(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        responses = iter(
+            [_FakeResponse(b'{"alarms": {}}'), _FakeResponse(b'{"transitions": []}')]
+        )
+        requests: list[tuple[str, str, dict[str, str]]] = []
+
+        class FakeConnection:
+            def __init__(self, host: str, **kwargs: object) -> None:
+                assert host == "netdata.lab.fahm.fr"
+                assert kwargs["timeout"] == ag.FETCH_TIMEOUT
+
+            def request(self, method: str, path: str, headers: dict[str, str]) -> None:
+                requests.append((method, path, headers))
+
+            def getresponse(self) -> _FakeResponse:
+                return next(responses)
+
+            def close(self) -> None:
+                pass
+
+        monkeypatch.setattr(ag.http.client, "HTTPSConnection", FakeConnection)
+        authorization = ag._basic_authorization("homepage_alerts", "secret")
+        client = ag._HostClient("https://netdata.lab.fahm.fr", authorization)
+
+        assert client.alarms() == {"alarms": {}}
+        assert client.alert_transitions() == {"transitions": []}
+        assert [request[1] for request in requests] == [
+            "/api/v1/alarms?active",
+            "/api/v2/alert_transitions?after=-604800&last=10000",
+        ]
+        assert all(
+            request[2]["Authorization"] == "Basic aG9tZXBhZ2VfYWxlcnRzOnNlY3JldA=="
+            for request in requests
+        )
+
+    def test_rejects_cleartext_http(self) -> None:
+        with pytest.raises(OSError, match="refusing to send Basic authentication"):
+            ag._HostClient("http://netdata.lab.fahm.fr", "Basic credential")
 
 
 # ---------------------------------------------------------------------------
@@ -164,15 +234,32 @@ class TestLatestTransitionByAlarm:
         # Same (alert, instance): the higher `gi` is the current-state transition.
         log = {
             "transitions": [
-                {"alert": "cpu", "instance": "system.cpu", "gi": 10, "transition_id": "tid-old"},
-                {"alert": "cpu", "instance": "system.cpu", "gi": 20, "transition_id": "tid-new"},
+                {
+                    "alert": "cpu",
+                    "instance": "system.cpu",
+                    "gi": 10,
+                    "transition_id": "tid-old",
+                },
+                {
+                    "alert": "cpu",
+                    "instance": "system.cpu",
+                    "gi": 20,
+                    "transition_id": "tid-new",
+                },
             ]
         }
         result = ag.latest_transition_by_alarm(log)
         assert result == {("cpu", "system.cpu"): "tid-new"}
 
     def test_bare_list_accepted(self) -> None:
-        log = [{"alert": "cpu", "instance": "system.cpu", "gi": 1, "transition_id": "tid-a"}]
+        log = [
+            {
+                "alert": "cpu",
+                "instance": "system.cpu",
+                "gi": 1,
+                "transition_id": "tid-a",
+            }
+        ]
         result = ag.latest_transition_by_alarm(log)
         assert result == {("cpu", "system.cpu"): "tid-a"}
 
@@ -190,8 +277,18 @@ class TestLatestTransitionByAlarm:
         # No `gi`: fall back to `when` for newest-first ordering.
         log = {
             "transitions": [
-                {"alert": "a", "instance": "c", "when": 100, "transition_id": "tid-old"},
-                {"alert": "a", "instance": "c", "when": 200, "transition_id": "tid-new"},
+                {
+                    "alert": "a",
+                    "instance": "c",
+                    "when": 100,
+                    "transition_id": "tid-old",
+                },
+                {
+                    "alert": "a",
+                    "instance": "c",
+                    "when": 200,
+                    "transition_id": "tid-new",
+                },
             ]
         }
         assert ag.latest_transition_by_alarm(log) == {("a", "c"): "tid-new"}
@@ -336,7 +433,14 @@ class TestRenderHtml:
         assert "No active alerts" in html
 
     def test_renders_error(self) -> None:
-        hosts = [{"name": "lab", "click_url": "https://nd", "error": "ConnectionError", "alarms": []}]
+        hosts = [
+            {
+                "name": "lab",
+                "click_url": "https://nd",
+                "error": "ConnectionError",
+                "alarms": [],
+            }
+        ]
         html = ag.render_html(hosts, "2024-01-01T00:00:00+00:00")
         assert "ConnectionError" in html
 

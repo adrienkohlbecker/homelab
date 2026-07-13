@@ -678,9 +678,9 @@
 
 # --- nginx Authelia gate ---
 # Browser path through `https://netdata.<host>.<domain>` is gated by Authelia
-# forward-auth: an unauthenticated hit must 302 to the auth portal. Cross-host
-# alert polling no longer touches nginx (it pulls over SSH, asserted below), so
-# there is no URL-param bypass to exercise here anymore.
+# forward-auth: an unauthenticated hit must 302 to the auth portal. The generic
+# nginx role verification exercises the opt-in Basic Authorization forwarding
+# and confirms the credential is stripped from the protected upstream.
 - name: _verify | Browser hit without auth redirects to Authelia
   uri:
     url: "https://netdata.{{ inventory_hostname }}.{{ domain }}/"
@@ -692,122 +692,6 @@
     _netdata_no_auth.status != 302
     or ("auth." not in (_netdata_no_auth.location | default("")))
   become: true
-
-# --- netdata_poll forced-command SSH access ---
-# Cross-host alert polling reaches netdata over SSH, not nginx. Prove the
-# netdata_poll key (1) returns the expected JSON bundle and (2) is pinned to
-# its forced command -- a client-supplied command is ignored, so the key
-# cannot be turned into a shell or an arbitrary fetch. StrictHostKeyChecking=no
-# + /dev/null known_hosts is fine here: this is a loopback self-connect inside
-# the throwaway test VM, where the prod keyscan-managed known_hosts is moot.
-- name: _verify | Stage the netdata_poll test private key
-  copy:
-    content: "{{ netdata_poll_ssh_private_key | trim }}\n"
-    dest: /tmp/netdata_poll_verify_key
-    mode: "0600"
-  changed_when: false
-
-- name: _verify | Forced-command key returns the alert bundle
-  command: >-
-    ssh -i /tmp/netdata_poll_verify_key
-    -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent=none
-    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
-    -o ConnectTimeout=5
-    netdata_poll@127.0.0.1
-  register: _netdata_poll_bundle
-  changed_when: false
-
-- name: _verify | Bundle carries both read-API payloads
-  assert:
-    that:
-      - (_netdata_poll_bundle.stdout | from_json).alarms is defined
-      - (_netdata_poll_bundle.stdout | from_json).transitions is defined
-    fail_msg: >-
-      netdata_poll_fetch did not return {alarms, transitions}:
-      {{ _netdata_poll_bundle.stdout[:200] }}
-
-# The transition log is filtered server-side to active-alarm rows only (the
-# bandwidth optimisation): every returned transition must name a currently
-# active alarm. With no active alarms the list is empty -- a strong witness
-# that the filter ran rather than passing the full log through.
-- name: _verify | Returned transitions are filtered to active alarms only
-  vars:
-    _bundle: "{{ _netdata_poll_bundle.stdout | from_json }}"
-    _active_names: "{{ (_bundle.alarms.alarms | default({})).values() | map(attribute='name') | list }}"
-  assert:
-    that:
-      - _bundle.transitions.transitions | default([]) | rejectattr('alert', 'in', _active_names) | list | length == 0
-    fail_msg: >-
-      netdata_poll_fetch returned transition rows for inactive alarms
-      ({{ _bundle.transitions.transitions | default([]) | length }} rows,
-      active alarms: {{ _active_names }}); the server-side filter should keep
-      only active-alarm transitions.
-
-# Forced command must win over a client-supplied command: asking for `id`
-# still returns the bundle, never the shell output -- the key can't escape.
-- name: _verify | Client-supplied command is overridden by the forced command
-  command: >-
-    ssh -i /tmp/netdata_poll_verify_key
-    -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent=none
-    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
-    -o ConnectTimeout=5
-    netdata_poll@127.0.0.1 id
-  register: _netdata_poll_forced
-  changed_when: false
-  failed_when: >-
-    _netdata_poll_forced.rc != 0
-    or "uid=" in _netdata_poll_forced.stdout
-    or (_netdata_poll_forced.stdout | from_json).alarms is not defined
-
-# ControlMaster reuse is what makes the homepage poller's 60s cadence cheap
-# (one warm connection per peer, not a fresh handshake each fire). Prove the
-# forced-command key supports multiplexing: an initial call opens a persistent
-# master, and `-O check` confirms a second call would ride it rather than
-# re-handshake.
-- name: _verify | Open a multiplexed master to the netdata_poll key
-  command: >-
-    ssh -i /tmp/netdata_poll_verify_key
-    -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent=none
-    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
-    -o ConnectTimeout=5
-    -o ControlMaster=auto -o ControlPath=/tmp/netdata_poll_verify_cm
-    -o ControlPersist=10
-    netdata_poll@127.0.0.1
-  changed_when: false
-
-- name: _verify | ControlMaster is live for connection reuse
-  command: >-
-    ssh -o ControlPath=/tmp/netdata_poll_verify_cm -O check
-    netdata_poll@127.0.0.1
-  register: _netdata_poll_cm
-  changed_when: false
-  failed_when: "'Master running' not in _netdata_poll_cm.stderr"
-
-- name: _verify | Tear down the multiplexed master
-  command: >-
-    ssh -o ControlPath=/tmp/netdata_poll_verify_cm -O exit
-    netdata_poll@127.0.0.1
-  changed_when: false
-  failed_when: false
-
-- name: _verify | Remove the staged netdata_poll test key
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /tmp/netdata_poll_verify_key
-    - /tmp/netdata_poll_verify_cm
-  changed_when: false
-
-# poll_access enables linger for netdata_poll so the 60s poll cadence reuses one
-# resident `systemd --user` manager instead of rebuilding it per login (which
-# otherwise floods the journal with slice/socket/target bringup every poll).
-- name: _verify | Linger keeps the netdata_poll user manager resident
-  command: loginctl show-user netdata_poll --property=Linger --value
-  register: _netdata_poll_linger
-  changed_when: false
-  become: true
-  failed_when: _netdata_poll_linger.stdout | trim != 'yes'
 
 # netdata.conf pins `allow ... by dns = no`, so the running instance never
 # reverse-resolves the loopback peer (127.0.0.1 -> localhost, no DNS record) on
