@@ -68,7 +68,7 @@
 # why the global `device_options.homeassistant.cover` block in
 # configuration.yaml is not enough.
 - name: Patch cover devices to suppress phantom tilt_* in HA discovery
-  when: not (ansible_check_mode and z2m_user.changed)
+  when: not ansible_check_mode or z2m_user.uid is defined
   ansible.builtin.script:
     cmd: patch_cover_tilt.py /mnt/services/z2m/devices.yaml
   register: z2m_cover_patch
