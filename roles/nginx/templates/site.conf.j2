@@ -93,8 +93,8 @@ server {
     proxy_set_header Content-Length          "";
 {% if _nginx_site_auth_request_authorization %}
     # Opt-in for machine clients using Authelia's HeaderAuthorization strategy.
-    # The caller must strip the header in location_conf when the protected
-    # upstream should not receive the service-account credential itself.
+    # The same helper option clears the credential from the protected upstream
+    # leg below so callers cannot accidentally disclose the service password.
     proxy_set_header Authorization           $http_authorization;
 {% else %}
     # Strip the client's Authorization header off the auth subrequest so
@@ -179,6 +179,11 @@ server {
     proxy_set_header Remote-Groups      $authelia_groups;
     proxy_set_header Remote-Name        $authelia_name;
     proxy_set_header Remote-Email       $authelia_email;
+{% endif %}
+{% if _nginx_site_auth_request_authorization %}
+    # HeaderAuthorization credentials authenticate only the Authelia
+    # subrequest; never disclose the reusable service password upstream.
+    proxy_set_header Authorization      "";
 {% endif %}
 
     # Proxy timeouts

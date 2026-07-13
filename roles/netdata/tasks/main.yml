@@ -84,7 +84,6 @@
       auth: required
       auth_request_authorization: true
       location_conf: |
-        proxy_set_header Authorization "";
         proxy_buffer_size 16k;
         proxy_buffers 32 128k;
   tags:

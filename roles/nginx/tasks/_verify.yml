@@ -427,8 +427,6 @@
       proxy_pass: http://127.0.0.1:18080/
       auth: required
       auth_request_authorization: true
-      location_conf: |
-        proxy_set_header Authorization "";
 
 - name: _verify | Settle the nginxverifybasic vhost
   import_tasks: _verify_wait_route.yml

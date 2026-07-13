@@ -57,9 +57,11 @@
 #   auth_request_authorization optional bool, default false. Forward the
 #                             client's Authorization header to Authelia's auth
 #                             subrequest so its HeaderAuthorization strategy can
-#                             authenticate HTTP Basic service accounts. Keep
-#                             false for apps whose own Token/Bearer header must
-#                             reach the upstream without affecting cookie auth.
+#                             authenticate HTTP Basic service accounts, then
+#                             clear it before proxying to the protected upstream.
+#                             Keep false for apps whose own Token/Bearer header
+#                             must reach the upstream without affecting cookie
+#                             auth.
 #   server_conf               optional snippet inserted in the server block.
 #                             A `location` added here is NOT covered by the
 #                             site's forward-auth (auth_request only wraps
