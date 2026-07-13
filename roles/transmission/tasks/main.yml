@@ -142,14 +142,20 @@
   tags:
     - transmission
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: transmission_podman
+  tags:
+    - transmission
+
 - name: Create transmission rpc-password secret
-  import_role:
-    name: podman_secret
-    tasks_from: secret
-  vars:
-    podman_secret_args:
-      name: transmission_rpc_password
-      data: "{{ transmission_rpc_password }}"
+  when: not ansible_check_mode or transmission_podman.stat.exists
+  containers.podman.podman_secret:
+    name: transmission_rpc_password
+    data: "{{ transmission_rpc_password }}"
+  register: _transmission_rpc_password_secret
+  become: true
   tags:
     - transmission
 
@@ -174,13 +180,6 @@
   tags:
     - transmission
 
-- name: Check whether podman is installed
-  stat:
-    path: /usr/bin/podman
-  register: transmission_podman
-  tags:
-    - transmission
-
 - name: Pull transmission image
   when: not ansible_check_mode or transmission_podman.stat.exists
   containers.podman.podman_image:
@@ -201,7 +200,12 @@
     systemd_unit_args:
       src: transmission
       condition: "{{ not (ansible_check_mode and (transmission_service_result.changed or transmission_user.changed)) }}"
-      restart: "{{ transmission_service_result.changed or transmission_conf.changed or transmission_rpc_password_rotated or transmission_user.changed or media_group.changed }}"
+      restart: >-
+        {{ transmission_service_result.changed
+           or transmission_conf.changed
+           or (_transmission_rpc_password_secret.changed | default(false))
+           or transmission_user.changed
+           or media_group.changed }}
   tags:
     - transmission
 

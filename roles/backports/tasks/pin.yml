@@ -14,7 +14,7 @@
 # The dict form prevents inter-call leakage at play-vars scope: each
 # import_role pass replaces the whole `backports_args` value, so a
 # previous caller's name/packages can't bleed into the next caller's
-# call. Mirrors service_user_args / podman_secret_args / systemd_unit_args.
+# call. Mirrors service_user_args / sqlite_dataset_args / systemd_unit_args.
 #
 # Output fact:
 #   {{ backports_args.name }}_backports_updated  -> bool

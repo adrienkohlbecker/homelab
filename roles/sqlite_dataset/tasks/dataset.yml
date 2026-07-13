@@ -47,7 +47,7 @@
       - sqlite_dataset_args.name is defined
       # is string before is match: a non-string name raises an opaque
       # templating error instead of this role's fail_msg (same guard as
-      # roles/service_user, roles/podman_secret).
+      # roles/service_user).
       - sqlite_dataset_args.name is string
       - sqlite_dataset_args.name is match('^[a-z_][a-z0-9_-]*$')
       - sqlite_dataset_args.owner is defined

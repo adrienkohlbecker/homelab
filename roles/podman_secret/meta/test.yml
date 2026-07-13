@@ -1,5 +1,0 @@
-# secret.yml's _setup installs podman; box_deps pre-bakes it, so route here to
-# skip ~140s of installation on every test run. --machine on the CLI still
-# wins. Same rationale as roles/macvlan/meta/test.yml.
-machines:
-  box_deps:

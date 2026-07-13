@@ -54,7 +54,7 @@
       - service_user_args.name is string
       # name becomes the group/user name, the /mnt/services/<name> basename,
       # and (via ansible_var_key below) the <name>_user fact key, so keep it
-      # inside the repo's service-name shape. Same guard as podman_secret/linger.
+      # inside the repo's service-name shape. Same guard as linger.
       - service_user_args.name is match('^[a-z_][a-z0-9_-]*$')
     fail_msg: >-
       service_user_args needs name (a valid identifier matching

@@ -116,15 +116,22 @@
   tags:
     - headscale
 
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: headscale_podman
+  tags:
+    - headscale
+
 - name: Create headscale OIDC client secret
-  when: _headscale_oidc_configured
-  import_role:
-    name: podman_secret
-    tasks_from: secret
-  vars:
-    podman_secret_args:
-      name: headscale_oidc_secret
-      data: "{{ headscale_oidc_client_secret }}"
+  when:
+    - _headscale_oidc_configured
+    - not ansible_check_mode or headscale_podman.stat.exists
+  containers.podman.podman_secret:
+    name: headscale_oidc_secret
+    data: "{{ headscale_oidc_client_secret }}"
+  register: _headscale_oidc_secret
+  become: true
   tags:
     - headscale
 
@@ -189,21 +196,14 @@
 # and the ACL-reload guard below (single jinja expression so ansible keeps the
 # bool). A restart is also the only thing that re-reads a rotated OIDC secret:
 # it's mounted (--secret type=mount), so the running container won't pick up a
-# new value without one -- hence headscale_oidc_secret_rotated is in the chain.
+# new value without one -- hence the secret result is in the chain.
 - name: Compute whether the headscale unit restarts this run
   set_fact:
     headscale_will_restart: >-
       {{ headscale_service_result.changed
          or headscale_config_result.changed
          or (headscale_network.changed | default(false))
-         or (headscale_oidc_secret_rotated | default(false)) }}
-  tags:
-    - headscale
-
-- name: Check whether podman is installed
-  stat:
-    path: /usr/bin/podman
-  register: headscale_podman
+         or (_headscale_oidc_secret.changed | default(false)) }}
   tags:
     - headscale
 
@@ -230,7 +230,7 @@
     - >-
       headscale_config_result.changed
       or (headscale_image_pull.changed | default(false))
-      or (headscale_oidc_secret_rotated | default(false))
+      or (_headscale_oidc_secret.changed | default(false))
   command:
     argv: >-
       {{

@@ -13,7 +13,7 @@
 #   - on_calendar must be a repeating schedule when monitor: true; a one-shot
 #     calendar has no second elapse and can't derive a period.
 #
-# The dict form mirrors systemd_unit / podman_secret / service_user: each
+# The dict form mirrors systemd_unit / sqlite_dataset / service_user: each
 # import_role replaces the whole `systemd_timer_args` value at play-vars
 # scope so a previous caller's args can't bleed into the next call.
 - name: install | Validate required inputs for {{ systemd_timer_args.name | default('<unset>') }}

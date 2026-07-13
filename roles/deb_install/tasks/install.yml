@@ -44,7 +44,7 @@
       version, url and a 64-hex sha256; got {{ deb_install_args }}
 
 # Resolve the caller's dict into per-call locals once, mirroring the other
-# *_args helper roles (roles/service_user, roles/podman_secret). Hoisting keeps
+# *_args helper roles (roles/service_user, roles/systemd_unit). Hoisting keeps
 # the staged-file path (referenced three times below) in one place. The optional
 # timeout stays inline on get_url below: default(omit) routed through set_fact
 # drops the key entirely, so the fact would be undefined rather than omitted.

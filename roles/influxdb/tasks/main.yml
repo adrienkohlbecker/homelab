@@ -50,25 +50,30 @@
 # idempotent without a sentinel file. Both secrets are mounted via
 # --secret and consumed via *_FILE env so the password never lands on
 # any command line or in `podman inspect` / /proc/<pid>/environ.
+- name: Check whether podman is installed
+  stat:
+    path: /usr/bin/podman
+  register: influxdb_podman
+  tags:
+    - influxdb
+
 - name: Create influxdb_root_user secret
-  import_role:
-    name: podman_secret
-    tasks_from: secret
-  vars:
-    podman_secret_args:
-      name: influxdb_root_user
-      data: "{{ influxdb_root_user }}"
+  when: not ansible_check_mode or influxdb_podman.stat.exists
+  containers.podman.podman_secret:
+    name: influxdb_root_user
+    data: "{{ influxdb_root_user }}"
+  register: _influxdb_root_user_secret
+  become: true
   tags:
     - influxdb
 
 - name: Create influxdb_root_password secret
-  import_role:
-    name: podman_secret
-    tasks_from: secret
-  vars:
-    podman_secret_args:
-      name: influxdb_root_password
-      data: "{{ influxdb_root_password }}"
+  when: not ansible_check_mode or influxdb_podman.stat.exists
+  containers.podman.podman_secret:
+    name: influxdb_root_password
+    data: "{{ influxdb_root_password }}"
+  register: _influxdb_root_password_secret
+  become: true
   tags:
     - influxdb
 
@@ -87,13 +92,11 @@
 # vault, and re-apply. The CLI config template re-points and the auth check below
 # confirms the running BoltDB accepts it.
 - name: Create influxdb_admin_token secret
-  import_role:
-    name: podman_secret
-    tasks_from: secret
-  vars:
-    podman_secret_args:
-      name: influxdb_admin_token
-      data: "{{ influxdb_root_token }}"
+  when: not ansible_check_mode or influxdb_podman.stat.exists
+  containers.podman.podman_secret:
+    name: influxdb_admin_token
+    data: "{{ influxdb_root_token }}"
+  become: true
   tags:
     - influxdb
 
@@ -132,7 +135,7 @@
 
       Then re-run this play.
   when:
-    - influxdb_root_password_rotated
+    - _influxdb_root_password_secret.changed | default(false)
     - influxdb_bolt_db.stat.exists
   tags:
     - influxdb
@@ -153,7 +156,7 @@
 
       Then re-run this play.
   when:
-    - influxdb_root_user_rotated
+    - _influxdb_root_user_secret.changed | default(false)
     - influxdb_bolt_db.stat.exists
   tags:
     - influxdb
@@ -179,13 +182,6 @@
   tags:
     - influxdb
 
-- name: Check whether podman is installed
-  stat:
-    path: /usr/bin/podman
-  register: influxdb_podman
-  tags:
-    - influxdb
-
 - name: Pull influxdb image
   when: not ansible_check_mode or influxdb_podman.stat.exists
   containers.podman.podman_image:
@@ -206,7 +202,11 @@
     systemd_unit_args:
       src: influxdb
       condition: "{{ not (ansible_check_mode and (influxdb_service_result.changed or influxdb_user.changed)) }}"
-      restart: "{{ influxdb_service_result.changed or influxdb_network.changed or influxdb_root_user_rotated or influxdb_root_password_rotated }}"
+      restart: >-
+        {{ influxdb_service_result.changed
+           or influxdb_network.changed
+           or (_influxdb_root_user_secret.changed | default(false))
+           or (_influxdb_root_password_secret.changed | default(false)) }}
   tags:
     - influxdb
 
