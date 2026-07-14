@@ -25,14 +25,14 @@
   changed_when: false
   failed_when: wireguard_ipv6_fwd.stdout | trim != '1'
 
-# One `wg show <iface> dump` carries the whole live interface + peer table as
+# One `wg show wg0 dump` carries the whole live interface + peer table as
 # tab-separated columns, so the scalar probes below parse a single register
 # instead of re-invoking wg (and hand-parsing it) per attribute. Columns:
 #   interface line: private-key  public-key  listen-port  fwmark
 #   peer lines:     public-key  preshared-key  endpoint  allowed-ips
 #                   latest-handshake  transfer-rx  transfer-tx  persistent-keepalive
 - name: _verify | Dump live wg interface + peer state
-  command: wg show {{ iface | default('wg0') }} dump
+  command: wg show wg0 dump
   register: wireguard_dump
   become: true
   changed_when: false
@@ -61,7 +61,7 @@
 - name: _verify | Assert interface carries own_peer.address
   vars:
     own_peer: "{{ wireguard_peers | one_by_attr('name', inventory_hostname) }}"
-  command: ip -4 -o addr show dev {{ iface | default('wg0') }}
+  command: ip -4 -o addr show dev wg0
   register: wireguard_ip_addr
   become: true
   changed_when: false
@@ -101,10 +101,10 @@
   shell: |
     set -euo pipefail
     missing=""
-    cidrs=$(wg show {{ iface | default('wg0') }} allowed-ips | sed 's/\t/ /' | cut -d' ' -f2- \
+    cidrs=$(wg show wg0 allowed-ips | sed 's/\t/ /' | cut -d' ' -f2- \
             | tr ' ' '\n' | grep -E '/[0-9]+$' | grep -vxE '0\.0\.0\.0/0|::/0' | sort -u || true)
     for cidr in $cidrs; do
-      ip route show "$cidr" dev {{ iface | default('wg0') }} | grep -q . || missing="$missing $cidr"
+      ip route show "$cidr" dev wg0 | grep -q . || missing="$missing $cidr"
     done
     echo "missing_routes:$missing"
     test -z "$missing"

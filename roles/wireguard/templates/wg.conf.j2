@@ -1,4 +1,5 @@
-{% set own_peer = wireguard_peers | one_by_attr("name", own_peer_name) -%}
+{% set render_peer_name = own_peer_name | default(inventory_hostname) -%}
+{% set own_peer = wireguard_peers | one_by_attr("name", render_peer_name) -%}
 [Interface]
 # PublicKey = {{ own_peer.public_key }}
 PrivateKey = {{ own_peer.private_key }}
@@ -14,10 +15,10 @@ Address = {{ own_peer.address }}/32
 MTU = 1280
 {% endif %}
 {# Table = auto is wg-quick's default; pinned to document that wg-quick owns
-   route installation -- the full-restart-on-change strategy (wg.yml) and the
+   route installation -- the full-restart-on-change task and the
    _verify kernel-route guard both depend on it, not on `wg syncconf`. #}
 Table = auto
-ListenPort = {{ listen_port | default('51820') }}
+ListenPort = {{ service_ports.wireguard }}
 {# No DNS line: wg0 is a split-tunnel break-glass backbone (peer /32s only),
    so DNS = the adguard VIP would point the device at a resolver outside AllowedIPs
    (unreachable over the tunnel) and would hijack the device's system DNS the
@@ -33,8 +34,8 @@ ListenPort = {{ listen_port | default('51820') }}
    declared *subnet* is what let fox inherit the bonniers /24, so that stays
    out. Same-site peers reach each other on the LAN; roaming clients (no site,
    own_host == {}) keep the pure wg-/32 split tunnel. #}
-{% set own_host = network.hosts.get(own_peer_name, {}) %}
-{% for peer in wireguard_peers if (peer.is_server or own_peer.is_server) and (peer.name != own_peer_name) %}
+{% set own_host = network.hosts.get(render_peer_name, {}) %}
+{% for peer in wireguard_peers if (peer.is_server or own_peer.is_server) and (peer.name != render_peer_name) %}
 {% set tuple = [own_peer.name, peer.name]|sort %}
 {% set peer_host = network.hosts.get(peer.name, {}) %}
 [Peer]
