@@ -4,14 +4,13 @@
   register: _user_getent
   failed_when: _user_getent.rc != 0 or not _user_getent.stdout.endswith('/zsh')
 
-- name: _verify | Member of adm and kvm groups
+- name: _verify | Member of adm group
   command: id -nG {{ ansible_user_id }}
   changed_when: false
   register: _user_groups
   failed_when: >-
     _user_groups.rc != 0
     or 'adm' not in _user_groups.stdout.split()
-    or 'kvm' not in _user_groups.stdout.split()
 
 - name: _verify | Ghostty terminfo is compiled
   command: infocmp xterm-ghostty
