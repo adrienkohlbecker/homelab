@@ -68,13 +68,12 @@
   register: transmission_existing_pw
   become: true
   changed_when: false
-  failed_when: false
 
 - name: Resolve transmission rpc-password (preserve salted hash if already hashed)
   set_fact:
     _transmission_rpc_password_hash: >-
       {{ transmission_existing_pw.stdout
-         if (transmission_existing_pw.stdout | default('')).startswith('{')
+         if transmission_existing_pw.stdout.startswith('{')
          else transmission_rpc_password }}
   tags:
     - transmission
