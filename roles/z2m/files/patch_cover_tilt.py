@@ -25,6 +25,7 @@ def patch(devices: dict) -> bool:
     for dev in devices.values():
         if not isinstance(dev, dict):
             continue
+        # Fleet covers are Schneider S520567 roller shutters named */shutter or *_shutter; revisit for tilt-capable covers.
         if not dev.get("friendly_name", "").endswith("shutter"):
             continue
         ha = dev.setdefault("homeassistant", {})
