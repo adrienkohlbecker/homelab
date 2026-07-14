@@ -139,6 +139,8 @@
   tags:
     - zfs
 
+# zfs_cull is intentionally unscheduled operator tooling; zfs_health and
+# zfs_scrub are timer entry points configured below.
 - name: Copy ZFS scripts
   copy:
     src: "{{ item }}.sh"
