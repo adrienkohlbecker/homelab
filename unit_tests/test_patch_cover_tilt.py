@@ -61,6 +61,7 @@ class TestPatch:
         assert pct.main() == 0
         assert capsys.readouterr().out == "CHANGED\n"
         assert path.stat().st_mode & 0o777 == 0o640
+        assert set(tmp_path.iterdir()) == {path}
         cover = yaml.safe_load(path.read_text())["0x1"]["homeassistant"]["cover"]
         assert set(cover) == {
             "tilt_status_topic",
