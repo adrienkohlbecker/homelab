@@ -123,13 +123,8 @@
   tags:
     - podman
 
-# The per-user prune timer below is user-scope; systemd_unit's
-# install fail-closes in real-apply when /var/lib/systemd/linger/<user>
-# is missing. In site.yml's full run the `user` role enables linger
-# for ansible_user_id earlier, so this is a no-op there; under
-# testrole.py podman (and under any role that imports podman as a
-# dep), the user role hasn't run yet, so enable linger here so
-# podman is self-sufficient.
+# The per-user prune timer needs a persistent user manager. Podman owns the
+# linger prerequisite so the role stays self-sufficient in every call path.
 - name: Enable linger for the operator user (required by user-scope prune timer)
   import_role:
     name: linger
@@ -141,10 +136,8 @@
   tags:
     - podman
 
-# No `condition:` here (unlike a service-user caller that gates on a
-# freshly-created user): the operator is the ansible connection
-# user -- always pre-existing -- and linger was enabled for it one task
-# above, so its user manager is guaranteed live when the timer ticks.
+# The operator is the pre-existing ansible connection user, so this caller does
+# not need the fresh-user condition used by service-user callers.
 - name: Install user-scope podman prune timer for the operator user
   import_tasks: prune.yml
   vars:

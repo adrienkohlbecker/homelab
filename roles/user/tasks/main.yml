@@ -161,22 +161,6 @@
   tags:
     - user
 
-# Linger keeps {{ ansible_user_id }}'s user manager up across SSH sessions so
-# user-scope timers (e.g. podman_prune.timer) fire on schedule instead of
-# only when someone happens to be logged in. Cost: a persistent
-# `systemd --user` process and any backgrounded ssh/tmux processes survive
-# logout instead of being reaped by KillUserProcesses.
-- name: Turn on linger
-  import_role:
-    name: linger
-    tasks_from: linger
-  vars:
-    linger_args:
-      name: "{{ ansible_user_id }}"
-      uid: "{{ ansible_user_uid }}"
-  tags:
-    - user
-
 - name: Add authorized keys
   authorized_key:
     user: "{{ ansible_user_id }}"
