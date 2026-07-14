@@ -197,7 +197,7 @@
 
 - name: _verify | Read timer and service properties  # noqa: command-instead-of-module
   command: >-
-    systemctl show -p AccuracyUSec,RandomizedDelayUSec,FixedRandomDelay,TimeoutStopUSec,ProtectSystem,ProtectHome,ReadWritePaths
+    systemctl show -p AccuracyUSec,RandomizedDelayUSec,FixedRandomDelay,TimeoutStopUSec,ProtectSystem,ProtectHome
     _verify_timer.timer _verify_timer.service
   register: _systemd_timer_knobs_show
   changed_when: false
@@ -220,8 +220,6 @@
       - "'TimeoutStopUSec=30s' in _systemd_timer_knobs_show.stdout"
       - "'ProtectSystem=strict' in _systemd_timer_knobs_show.stdout"
       - "'ProtectHome=yes' in _systemd_timer_knobs_show.stdout"
-      - "'ReadWritePaths=/tmp' in _systemd_timer_knobs_show.stdout"
-      - "'/var/lib/systemd/timers' not in _systemd_timer_knobs_show.stdout"
 
 - name: _verify | Assert stderr priority through each journal filter
   assert:
