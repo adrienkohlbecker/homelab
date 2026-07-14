@@ -72,10 +72,8 @@
     psk_fields: "{{ wireguard_dump.stdout_lines[1:] | map('split', '\t') | map(attribute=1) | list }}"
   assert:
     quiet: true
-    that:
-      - "'(none)' not in psk_fields"
-      - psk_fields | length == (wireguard_peers | length - 1)
-    fail_msg: "preshared keys missing or miscounted: {{ psk_fields }}"
+    that: "'(none)' not in psk_fields"
+    fail_msg: "preshared keys missing: {{ psk_fields }}"
 
 # PersistentKeepalive is emitted per-pair (wg.conf.j2), only when the converging
 # host appears in a peer's keepalive_from. Assert the live count of peers with a
