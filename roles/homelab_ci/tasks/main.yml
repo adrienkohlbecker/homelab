@@ -4,6 +4,18 @@
     state: present
     system: true
   become: true
+  register: homelab_ci_group
+  tags:
+    - homelab_ci
+
+- name: Add operator to homelab_ci group
+  when: not (ansible_check_mode and homelab_ci_group.changed)
+  user:
+    name: "{{ ansible_user_id }}"
+    groups:
+      - homelab_ci
+    append: true
+  become: true
   tags:
     - homelab_ci
 

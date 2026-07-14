@@ -32,3 +32,19 @@
   # member's published tree during publish.py's atomic swap.
   failed_when: "'default:group:homelab_ci:rwx' not in homelab_ci_verify_acl.stdout"
   become: true
+
+- name: _verify | Operator can create a CI artifact
+  command:
+    argv:
+      - touch
+      - /mnt/scratch/homelab_ci/.operator_write_probe
+  changed_when: true
+  become: true
+  become_user: "{{ ansible_user_id }}"
+
+- name: _verify | Operator can remove the CI artifact
+  file:
+    path: /mnt/scratch/homelab_ci/.operator_write_probe
+    state: absent
+  become: true
+  become_user: "{{ ansible_user_id }}"

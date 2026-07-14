@@ -77,34 +77,17 @@
   tags:
     - user
 
-# homelab_ci role runs in the Lab roles play (after Base machine install);
-# create the group here so it exists when the operator is added to it below.
-- name: Create homelab_ci group
-  group:
-    name: homelab_ci
-    state: present
-    system: true
-  become: true
-  register: user_homelab_ci_group
-  tags:
-    - user
-
 # adm owns most of /var/log (syslog, auth.log, journal via systemd-journal),
 # so membership lets the operator tail logs over SSH without sudo -- the
 # diagnostic reads CLAUDE.md treats as pre-authorized. kvm owns /dev/kvm,
 # so membership lets the operator boot qemu VMs (test harness, ad-hoc libvirt)
-# without sudo. homelab_ci gives read/write access to the shared CI artifacts
-# dir and its default ACL (packer artifacts, port reservation files). append
-# is load-bearing: without it `groups:` replaces the supplementary set and
-# would strip sudo. Check-mode gate: on a host that has never converged the
-# group, the task above only reports creation and this one would fail on
-# the missing group.
+# without sudo. append is load-bearing: without it `groups:` replaces the
+# supplementary set and would strip sudo.
 - name: Set login shell and supplementary groups
-  when: not (ansible_check_mode and user_homelab_ci_group.changed)
   user:
     name: "{{ ansible_user_id }}"
     shell: /bin/zsh
-    groups: [ adm, kvm, homelab_ci ]
+    groups: [ adm, kvm ]
     append: true
   become: true
   tags:
