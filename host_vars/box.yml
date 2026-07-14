@@ -105,7 +105,12 @@ netplan:
       # so the rollback path is still exercised.
       critical: true
 
-zfs_autobackup_sources: []
+# Prod-shaped self-reference exercises source validation, template rendering,
+# receive-root creation, and idempotence. _verify runs the local backup script,
+# not the full autosnapshot orchestrator, so it never attempts the SSH pull.
+zfs_autobackup_sources:
+  - host: box
+    dest_dataset: rpool/zfs_autobackup_receive_test
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFyjxLhHELJkvSWbVs696fArHKeBM6k6EvmqDckAic5Z root@box
 
 dns_keepalived_priority: 5
