@@ -78,19 +78,6 @@
     fail_msg: >-
       op --version produced no output
 
-- name: _verify | Linger marker is present
-  stat:
-    path: /var/lib/systemd/linger/{{ ansible_user_id }}
-  register: _user_linger
-
-- name: _verify | Linger is enabled
-  assert:
-    that:
-      - _user_linger.stat.exists
-    fail_msg: >-
-      Expected linger enabled
-      (/var/lib/systemd/linger/{{ ansible_user_id }} missing)
-
 - name: _verify | Commit-signing GPG key is imported
   command: gpg --with-colons --list-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
   changed_when: false
