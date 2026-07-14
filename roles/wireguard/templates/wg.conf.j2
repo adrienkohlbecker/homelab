@@ -37,7 +37,6 @@ ListenPort = {{ service_ports.wireguard }}
    own_host == {}) keep the pure wg-/32 split tunnel. #}
 {% set own_host = network.hosts.get(render_peer_name, {}) %}
 {% for peer_name, peer in wireguard_peers.items() if (peer.is_server or own_peer.is_server) and (peer_name != render_peer_name) %}
-{% set tuple = [render_peer_name, peer_name]|sort %}
 {% set peer_host = network.hosts.get(peer_name, {}) %}
 [Peer]
 # Name = {{ peer_name }}
@@ -47,9 +46,9 @@ AllowedIPs = {{ peer.address }}/32, {{ peer_host.physical }}/32
 {% else %}
 AllowedIPs = {{ peer.address }}/32
 {% endif %}
-{# PSK derived from the vaulted seed, never stored on disk: both ends sort
-   the pair name so they compute the same key. See filter_plugins/wireguard_psk.py. #}
-PresharedKey = {{ tuple | join('-') | wireguard_psk(wireguard_psk_seed) }}
+{# PSK derived from the vaulted seed, never stored on disk: the filter sorts
+   the peer names so both ends compute the same key. #}
+PresharedKey = {{ [render_peer_name, peer_name] | wireguard_psk(wireguard_psk_seed) }}
 {% if peer.public_endpoint is defined %}
 {% if own_peer.is_server and peer.is_server and own_host.site is defined and peer_host.site is defined and peer_host.site == own_host.site %}
 Endpoint = {{ peer_host.physical }}:{{ service_ports.wireguard }}
