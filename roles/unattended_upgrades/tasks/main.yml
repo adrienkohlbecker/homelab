@@ -99,8 +99,8 @@
       # (OnCalendar=*-*-* 6:00); RandomizedDelaySec jitter is absorbed by the
       # collector's 2 * period grace.
       period_secs=86400
-    owner: netdata
-    group: netdata
+    owner: root
+    group: root
     mode: "0644"
     backup: true
     validate: 'sh -c ''. "%s" && test "${period_secs:-0}" -gt 0'''
