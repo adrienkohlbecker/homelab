@@ -92,8 +92,8 @@
           # getent_passwd[user]: [password, uid, gid, gecos, home, shell]
           - ansible_facts.getent_passwd['service_user_test'][4] == '/nonexistent'
           - ansible_facts.getent_passwd['service_user_test'][5] == '/usr/sbin/nologin'
-          # both the primary group and the extra group must be present, which
-          # proves the user task appends rather than replaces membership.
+          # The primary group plus shared_group and extra_groups memberships
+          # must all be present.
           - "'service-user-test-hyphen' in _service_user_hyphen_groups.stdout.split()"
           - "'service_user_test_grp' in _service_user_hyphen_groups.stdout.split()"
           - "'service_user_test_extra_grp' in _service_user_hyphen_groups.stdout.split()"
