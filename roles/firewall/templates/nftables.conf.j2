@@ -435,7 +435,6 @@ table inet homelab {
         # Cross-bridge container traffic still has to go through the
         # DNAT-reach rule below; direct podman → podman is still
         # dropped.
-        iifname "wg0" oifname $WAN_IFACE accept comment "wg → WAN"
         iifname "podman*" oifname != "podman*" accept comment "podman → external (WAN/LAN/wireguard)"
 {% if tailscale_advertise_routes is defined %}
 
@@ -511,11 +510,9 @@ table inet homelab {
     ##################################################
     # Source-scoped so we never silently NAT traffic from a future
     # interface (guest VLAN, mgmt net, an extra macvlan) we hadn't
-    # considered. Two real customers: containers on podman0 and
-    # wireguard clients reaching the internet through us.
+    # considered. The customer is containers on podman0.
     chain postrouting {
         type nat hook postrouting priority srcnat; policy accept;
         ip saddr $PODMAN_DEFAULT oifname $WAN_IFACE masquerade comment "NAT container egress"
-        ip saddr $WG_SUBNET oifname $WAN_IFACE masquerade comment "NAT wireguard-client egress"
     }
 }
