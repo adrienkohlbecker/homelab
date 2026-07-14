@@ -69,7 +69,9 @@
 
 # force relaxes only the dangling-target refusal. Fail the stat task when a
 # real file is already at a dest so force can never silently replace it.
-- name: Refuse real files at force destinations for {{ sqlite_dataset_args.name }}
+- name: >-
+    Refuse real files at force destinations; before re-running, move them under
+    {{ '/mnt/services/sqlite/' ~ sqlite_dataset_args.name ~ '/' }}
   when:
     - sqlite_dataset_args.condition | default(true) | bool
     - sqlite_dataset_args.force | default(false) | bool
