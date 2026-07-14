@@ -15,8 +15,9 @@
   changed_when: true
   become: true
 
-# Two magic packets must be relayed; the junk payload and the magic packet
-# from loopback, outside every allowed CIDR, must be dropped.
+# Two magic packets, including one with trailing bytes, must be relayed; the
+# junk payload and the magic packet from loopback, outside every allowed CIDR,
+# must be dropped.
 - name: _verify | Send allowed, junk, and disallowed-source packets
   command:
     argv:
@@ -29,7 +30,7 @@
         allowed = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         outsider = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         outsider.bind(("127.0.0.1", 0))
-        allowed.sendto(magic, target)
+        allowed.sendto(magic + b"trailing bytes", target)
         allowed.sendto(b"\x00" * 102, target)
         outsider.sendto(magic, target)
         allowed.sendto(magic, target)

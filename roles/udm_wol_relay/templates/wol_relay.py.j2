@@ -62,7 +62,6 @@ def serve() -> None:
     listeners = []
     for address in BIND_ADDRESSES:
         listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         listener.setsockopt(socket.IPPROTO_IP, IP_FREEBIND, 1)
         listener.bind((address, LISTEN_PORT))
         listeners.append(listener)
@@ -71,19 +70,15 @@ def serve() -> None:
     while True:
         readable, _, _ = select.select(listeners, [], [])
         for listener in readable:
-            payload, (source_host, source_port) = listener.recvfrom(2048)
+            payload, (source_host, source_port) = listener.recvfrom(MAGIC_PACKET_LENGTH)
             if not is_allowed_source(source_host):
                 continue
             if not is_magic_packet(payload):
                 continue
-            # Rebroadcast a normalized packet, never the raw payload: the
-            # relay moves exactly one magic packet across the VLAN boundary,
-            # not arbitrary trailing bytes.
-            packet = payload[:MAGIC_PACKET_LENGTH]
             sent = 0
             for target in TARGET_BROADCASTS:
                 try:
-                    sender.sendto(packet, (target, LISTEN_PORT))
+                    sender.sendto(payload, (target, LISTEN_PORT))
                     sent += 1
                 except OSError as error:
                     # A down target interface must not kill relaying to the
