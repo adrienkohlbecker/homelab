@@ -285,33 +285,8 @@
       mountpoint: /mnt/_verify_probe
   import_tasks: dataset.yml
 
-# A wrong rewrite would resolve to a non-existent dataset and these gets would
-# fail loudly -- so dataset existence is itself the rewrite assertion.
-- name: _verify | Read probe dataset mountpoint
-  when: zfs_root
-  command: zfs get -H -o value mountpoint {{ zfs_tank_filesystem }}/_verify_probe
-  register: _zfs_verify_probe_mp
-  changed_when: false
-  become: true
-
-- name: _verify | Read probe dataset mounted state
-  when: zfs_root
-  command: zfs get -H -o value mounted {{ zfs_tank_filesystem }}/_verify_probe
-  register: _zfs_verify_probe_mounted
-  changed_when: false
-  become: true
-
-- name: _verify | Probe dataset resolved, mounted at the right path
-  when: zfs_root
-  assert:
-    that:
-      - _zfs_verify_probe_mp.stdout | trim == '/mnt/_verify_probe'
-      - _zfs_verify_probe_mounted.stdout | trim == 'yes'
-    fail_msg: >-
-      dataset.yml probe mountpoint={{ _zfs_verify_probe_mp.stdout | trim }}
-      mounted={{ _zfs_verify_probe_mounted.stdout | trim }}; expected
-      /mnt/_verify_probe + yes.
-
+# A wrong rewrite makes the resolved dataset lookup fail; the same check also
+# asserts its configured mountpoint and live mount-table entry.
 - name: _verify | Check regular dataset mount passes
   when: zfs_root
   command: /usr/local/bin/zfs_check_mount {{ zfs_tank_filesystem }}/_verify_probe /mnt/_verify_probe
