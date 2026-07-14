@@ -1,7 +1,7 @@
 parsers:
   - name: wolweb_text
     format: regex
-    regex: '/^(?<wolweb_timestamp>[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})(?: (?<wolweb_level>ERROR|Warning):)? (?<wolweb_message>.*)$/m'
+    regex: '/^(?:[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})(?: (?<_level>ERROR|Warning):)? (?<wolweb_message>.*)$/m'
 
 pipeline:
   filters:
@@ -21,11 +21,4 @@ pipeline:
         - key_exists CONTAINER_TAG
         - key_exists wolweb_message
       hard_rename: wolweb_message log
-      remove: wolweb_timestamp
       set: parser_status parsed
-    - name: modify
-      match: svc.wolweb.service
-      condition:
-        - key_exists CONTAINER_TAG
-        - key_exists wolweb_level
-      hard_rename: wolweb_level _level

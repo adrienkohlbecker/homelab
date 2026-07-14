@@ -50,8 +50,6 @@
                     and record.get("level") == "warn"
                     and fields.get("parser_status") == "parsed"
                     and fields.get("CONTAINER_ID")
-                    and "wolweb_timestamp" not in fields
-                    and "wolweb_level" not in fields
                 ):
                     print(json.dumps(record, sort_keys=True))
                     sys.exit(0)
@@ -173,9 +171,6 @@
           level: info
           service: wolweb
           fields.parser_status: parsed
-          _absent:
-            - fields.wolweb_timestamp
-            - fields.wolweb_level
         - message: "101 bytes written, 102 expected!"
           level: warn
           fields.parser_status: parsed
@@ -193,4 +188,3 @@
           service: systemd
           _absent:
             - fields.parser_status
-            - fields.wolweb_timestamp
