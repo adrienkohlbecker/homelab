@@ -1,7 +1,7 @@
 #jinja2: trim_blocks: True, lstrip_blocks: True
 {# `ip` is the packet destination, not the device address: the host's       #}
 {# broadcast by default, or the UDM gateway for cross-VLAN relay.           #}
-{# `interface` selects the host NIC; config.json bcastip is not used here.  #}
+{# `interface` selects the host NIC; the global broadcast is not used here. #}
 {
   "devices": [
 {% for d in wolweb_devices %}

@@ -12,7 +12,7 @@ After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
 {% endif %}
 {% endif %}
-# No zfs_autosnapshot PartOf: both mounted files are read-only.
+# No zfs_autosnapshot PartOf: the mounted device file is read-only.
 
 [Service]
 Environment=PODMAN_SYSTEMD_UNIT=%n
@@ -28,8 +28,6 @@ ExecStartPre=/bin/rm -f %t/%n.ctr-id
 {# Host networking lets wolweb bind the NIC named in devices.json and send #}
 {# L2 broadcasts; udm_wol_relay handles cross-VLAN wakes.                  #}
 {# --cap-drop=ALL is safe: sending a UDP datagram needs no capability.     #}
-{# The image's WOLWEB* environment overrides config.json, so clear the      #}
-{# known values and keep the mounted configuration authoritative.          #}
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \
@@ -41,16 +39,15 @@ ExecStart=/usr/bin/podman run \
     --name wolweb \
     --log-driver journald \
     --log-opt tag="wolweb" \
-    --volume /mnt/services/wolweb/config.json:/wolweb/config.json:ro \
     --volume /mnt/services/wolweb/devices.json:/wolweb/devices.json:ro \
     --user {{ wolweb_user.uid }}:{{ wolweb_user.gid }}  \
     --security-opt=no-new-privileges \
     --cap-drop=ALL \
-    --unsetenv WOLWEBPORT \
-    --unsetenv WOLWEBVDIR \
-    --unsetenv WOLWEBHOST \
-    --unsetenv WOLWEBBCASTIP \
-    --unsetenv WOLWEBREADONLY \
+    --env WOLWEBHOST=127.0.0.1 \
+    --env WOLWEBPORT={{ service_ports.wolweb }} \
+    --env WOLWEBVDIR=/ \
+    --env WOLWEBBCASTIP=255.255.255.255:9 \
+    --env WOLWEBREADONLY=true \
     --network host \
     --health-cmd {{ ('http://localhost:' ~ service_ports.wolweb ~ '/health') | podman_health_curl(location=false) }} \
     --health-startup-cmd {{ ('http://localhost:' ~ service_ports.wolweb ~ '/health') | podman_health_curl(location=false) }} \
