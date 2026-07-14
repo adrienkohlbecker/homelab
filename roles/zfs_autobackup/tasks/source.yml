@@ -26,19 +26,6 @@
   tags:
     - zfs_autobackup
 
-# The podman role removes package-wide user-unit activation, so this backup
-# account does not need per-user masks.
-- name: source | Remove Podman user masks
-  file:
-    path: "/var/lib/zfs_autobackup/.config/systemd/user/{{ item }}"
-    state: absent
-  loop:
-    - podman.service
-    - podman.socket
-  become: true
-  tags:
-    - zfs_autobackup
-
 - name: source | Configure backup dataset permissions
   when: not qemu_test_minimal
   become: true

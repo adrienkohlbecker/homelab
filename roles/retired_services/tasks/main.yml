@@ -1,4 +1,13 @@
 ---
+- name: Remove retired zfs_autobackup Podman user masks
+  file:
+    path: "/var/lib/zfs_autobackup/.config/systemd/user/{{ item }}"
+    state: absent
+  loop:
+    - podman.service
+    - podman.socket
+  become: true
+
 - name: Lookup retired Netdata poller account
   command:
     argv:

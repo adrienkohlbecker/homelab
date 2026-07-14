@@ -1,1 +1,18 @@
 ---
+- name: _setup | Create retired zfs_autobackup user unit directory
+  file:
+    path: /var/lib/zfs_autobackup/.config/systemd/user
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: _setup | Create retired zfs_autobackup Podman user masks
+  file:
+    path: "/var/lib/zfs_autobackup/.config/systemd/user/{{ item }}"
+    src: /dev/null
+    state: link
+    force: true
+  loop:
+    - podman.service
+    - podman.socket
+  become: true
