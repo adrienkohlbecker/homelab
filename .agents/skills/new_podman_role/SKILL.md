@@ -45,7 +45,7 @@ Optional host-overridable values may live in `defaults/main.yml`.
 
 ## Podman Choices
 
-- User: default to `--user {{ <svc>_user.uid }}:{{ <svc>_user.group }}`.
+- User: default to `--user {{ <svc>_user.uid }}:{{ <svc>_user.gid }}`.
   Use linuxserver `PUID`/`PGID` for linuxserver images; use fake-root uidmaps
   only when the image truly requires in-container root.
 - Secrets: prefer app-native `*_FILE`, then linuxserver `FILE__<VAR>`, then
