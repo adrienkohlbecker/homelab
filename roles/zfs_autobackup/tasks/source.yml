@@ -12,47 +12,32 @@
   tags:
     - zfs_autobackup
 
-- name: source | Configure backup login
+- name: source | Add authorized keys
   when: not ansible_check_mode or zfs_autobackup_user.uid is defined
+  ansible.posix.authorized_key:
+    user: zfs_autobackup
+    key: "{{ zfs_autobackup_ssh_public_key }}"
+    # restrict denies all current and future SSH features (pty, all forwarding,
+    # user-rc, etc.), so new OpenSSH primitives cannot leak in via an outdated
+    # allowlist.
+    key_options: "restrict"
+    exclusive: true
   become: true
   tags:
     - zfs_autobackup
-  block:
-    - name: source | Add authorized keys
-      ansible.posix.authorized_key:
-        user: zfs_autobackup
-        key: "{{ zfs_autobackup_ssh_public_key }}"
-        # restrict denies all current and future SSH features (pty, all
-        # forwarding, user-rc, etc.), so new OpenSSH primitives cannot leak in
-        # via an outdated allowlist.
-        key_options: "restrict"
-        exclusive: true
 
-    - name: source | Create zfs_autobackup user systemd unit dir
-      file:
-        path: /var/lib/zfs_autobackup/.config/systemd/user
-        state: directory
-        owner: zfs_autobackup
-        group: zfs_autobackup
-        mode: "0755"
-
-    # zfs_autobackup is a backup-only login user; it never runs containers. The
-    # podman package globally enables podman.service/podman.socket for every user
-    # (/etc/systemd/user/{default.target,sockets.target}.wants), so each login
-    # starts a pointless rootless API socket that fails without subuid ranges.
-    - name: source | Mask podman user units for zfs_autobackup
-      file:
-        path: "/var/lib/zfs_autobackup/.config/systemd/user/{{ item }}"
-        src: /dev/null
-        state: link
-        owner: zfs_autobackup
-        group: zfs_autobackup
-        # lchown the link itself; following it would chown the shared /dev/null.
-        follow: false
-        force: true
-      loop:
-        - podman.service
-        - podman.socket
+# The podman role removes package-wide user-unit activation, so this backup
+# account does not need per-user masks.
+- name: source | Remove Podman user masks
+  file:
+    path: "/var/lib/zfs_autobackup/.config/systemd/user/{{ item }}"
+    state: absent
+  loop:
+    - podman.service
+    - podman.socket
+  become: true
+  tags:
+    - zfs_autobackup
 
 - name: source | Configure backup dataset permissions
   when: not qemu_test_minimal

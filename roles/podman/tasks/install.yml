@@ -85,6 +85,20 @@
   tags:
     - podman
 
+# Ubuntu's Podman package globally enables these user units, so every login
+# starts a rootless API service even when the user never runs containers.
+# Rootless consumers such as gitlab_runner enable their own socket explicitly.
+- name: install | Remove package-wide rootless Podman activation
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/user/default.target.wants/podman.service
+    - /etc/systemd/user/sockets.target.wants/podman.socket
+  become: true
+  tags:
+    - podman
+
 # Every image tag is pinned in versions.yml and updates are driven through
 # ansible, so podman's auto-update path (enabled by the package) has no role
 # here. No container carries an io.containers.autoupdate label, so it's a no-op
