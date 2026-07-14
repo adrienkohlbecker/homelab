@@ -107,6 +107,14 @@
   tags:
     - nginx_site
 
+- name: site | Check whether nginx is installed for check-mode reloads
+  when: ansible_check_mode
+  stat:
+    path: /usr/sbin/nginx
+  register: _nginx_site_binary
+  tags:
+    - nginx_site
+
 - name: site | Assert proxy_pass is a well-formed URL
   when: nginx_site_args.proxy_pass is defined
   assert:
@@ -244,7 +252,7 @@
     - name: site | Reload nginx config
       when:
         - nginx_static_conf.changed or nginx_static_conf_enable.changed
-        - not ansible_check_mode
+        - not ansible_check_mode or (_nginx_site_binary.stat.exists | default(false))
       systemd:
         name: nginx
         state: reloaded

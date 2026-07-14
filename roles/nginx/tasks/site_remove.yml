@@ -22,6 +22,14 @@
   tags:
     - nginx_site
 
+- name: site_remove | Check whether nginx is installed for check-mode reloads
+  when: ansible_check_mode
+  stat:
+    path: /usr/sbin/nginx
+  register: _nginx_site_remove_binary
+  tags:
+    - nginx_site
+
 - name: site_remove | Remove retired nginx site
   when: _nginx_site_remove_condition
   file:
@@ -39,7 +47,7 @@
   when:
     - _nginx_site_remove_condition
     - nginx_site_remove_result.changed | default(false)
-    - not ansible_check_mode
+    - not ansible_check_mode or (_nginx_site_remove_binary.stat.exists | default(false))
   systemd:
     name: nginx
     state: reloaded
