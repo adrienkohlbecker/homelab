@@ -55,6 +55,7 @@
     name: nginx
     state: reloaded
   become: true
+  register: _nginx_site_remove_reload
   tags:
     - nginx_site
 

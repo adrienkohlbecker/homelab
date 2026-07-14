@@ -693,6 +693,29 @@
   become: true
   failed_when: nginx_verify_cond_file.stat.exists
 
+- name: _verify | Preview a pending vhost and its nginx reload
+  import_role:
+    name: nginx
+    tasks_from: site
+  check_mode: true
+  vars:
+    nginx_site_args:
+      subdomain: nginxverifycheck
+      proxy_pass: http://127.0.0.1:18080/
+
+- name: _verify | A pending vhost previews both the write and reload
+  assert:
+    that:
+      - nginxverifycheck_site_result.changed
+      - _nginx_site_reload.changed
+
+- name: _verify | The check-mode vhost preview writes no config
+  stat:
+    path: /etc/nginx/sites-available/nginxverifycheck
+  register: nginx_verify_check_file
+  become: true
+  failed_when: nginx_verify_check_file.stat.exists
+
 # Exercise the same contract on the split removal entrypoint while nginxverify
 # still exists. The real removal below must then overwrite this result as changed.
 - name: _verify | Skip removal of an existing vhost
@@ -716,6 +739,28 @@
   register: nginx_verify_cond_remove_file
   become: true
   failed_when: not nginx_verify_cond_remove_file.stat.exists
+
+- name: _verify | Preview removal of an existing vhost and its nginx reload
+  import_role:
+    name: nginx
+    tasks_from: site_remove
+  check_mode: true
+  vars:
+    nginx_site_remove_args:
+      subdomain: nginxverify
+
+- name: _verify | A pending removal previews both the deletion and reload
+  assert:
+    that:
+      - nginxverify_site_result.changed
+      - _nginx_site_remove_reload.changed
+
+- name: _verify | The check-mode removal preview leaves the vhost enabled
+  stat:
+    path: /etc/nginx/sites-enabled/nginxverify
+  register: nginx_verify_check_remove_file
+  become: true
+  failed_when: not nginx_verify_check_remove_file.stat.exists
 
 # Remove the supporting fixtures before the representative helper call so its
 # single reload applies the whole teardown.

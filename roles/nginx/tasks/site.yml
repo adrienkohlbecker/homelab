@@ -256,6 +256,7 @@
       systemd:
         name: nginx
         state: reloaded
+      register: _nginx_site_reload
 
   # On a failed `nginx -t`, hand off to the shared place-validate rollback
   # (also used by conf_d.yml). It restores the previous version from the
