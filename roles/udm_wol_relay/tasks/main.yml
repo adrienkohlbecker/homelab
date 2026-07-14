@@ -84,22 +84,13 @@
   tags:
     - udm_wol_relay
 
-- name: Reload systemd
-  when: >-
-    udm_wol_relay_unit.changed or
-    udm_wol_relay_unit_link.changed
-  systemd:
-    daemon_reload: true
-  become: true
-  tags:
-    - udm_wol_relay
-
 - name: Start WoL relay
   when: not (ansible_check_mode and udm_wol_relay_unit_link.changed)
   systemd:
     name: udm_wol_relay.service
     state: "{{ (udm_wol_relay_script.changed or udm_wol_relay_unit.changed) | ternary('restarted', 'started') }}"
     enabled: true
+    daemon_reload: "{{ udm_wol_relay_unit.changed or udm_wol_relay_unit_link.changed }}"
   become: true
   tags:
     - udm_wol_relay
