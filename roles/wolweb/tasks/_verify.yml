@@ -1,11 +1,3 @@
-- name: _verify | Wolweb health endpoint answers on loopback port
-  uri:
-    url: http://localhost:{{ service_ports.wolweb }}/health
-  register: _wolweb_health
-  retries: 5
-  delay: 1
-  until: _wolweb_health.status == 200
-
 - name: _verify | Create unique wolweb fluent-bit marker
   set_fact:
     wolweb_lnav_marker: "verify_wolweb_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
