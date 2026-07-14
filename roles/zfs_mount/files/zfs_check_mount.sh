@@ -47,5 +47,3 @@ findmnt --source "$DATASET" --mountpoint "$MOUNTPOINT" --noheadings --types zfs 
   echo >&2 "Error: zfs dataset $DATASET is not the mount at $MOUNTPOINT"
   exit 1
 }
-
-echo "OK: $DATASET mounted at $MOUNTPOINT (canmount=$EXPECTED_CANMOUNT)"

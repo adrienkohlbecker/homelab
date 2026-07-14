@@ -9,8 +9,13 @@
 
 - name: _verify | Check mount passes for root dataset
   command: /usr/local/bin/zfs_check_mount rpool/ROOT/{{ ansible_distribution_release }} /
+  register: _zfs_mount_verify_root
   changed_when: false
   become: true
+
+- name: _verify | Check successful mount check is silent
+  assert:
+    that: _zfs_mount_verify_root.stdout == ''
 
 - name: _verify | Check invalid mount states fail
   command:
