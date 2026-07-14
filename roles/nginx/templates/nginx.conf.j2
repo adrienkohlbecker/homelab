@@ -105,7 +105,9 @@ http {
     # count stable for the positional parser in templates/web_log.conf.j2.
     # Any change to this field list must move in lockstep with all three
     # downstream consumers: templates/web_log.conf.j2, Fluent Bit's parser, and
-    # lnav's field map and embedded sample.
+    # lnav's field map and embedded sample. Deploy field changes with a full
+    # converge or `--tags nginx,fluentbit`; transient parser misses are retained
+    # by Reserve_Data/Preserve_Key and surfaced as parse_error until it reloads.
     log_format custom      '$remote_addr - $remote_user [$time_local] $host "$request_safe" $server_name $status $body_bytes_sent $request_length $request_time $upstream_response_time "$http_referer" "$http_user_agent" "$authelia_user" $ssl_protocol $ssl_cipher';
     access_log             /var/log/nginx/access.log custom buffer=512k flush=5s;
     error_log              stderr warn;
