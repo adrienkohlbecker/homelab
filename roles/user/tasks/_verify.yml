@@ -1,29 +1,17 @@
-- name: _verify | Read login shell for {{ ansible_user_id }}
+- name: _verify | Login shell is zsh
   command: getent passwd {{ ansible_user_id }}
   changed_when: false
   register: _user_getent
+  failed_when: _user_getent.rc != 0 or not _user_getent.stdout.endswith('/zsh')
 
-- name: _verify | Login shell is zsh
-  assert:
-    that:
-      - _user_getent.stdout.endswith('/zsh')
-    fail_msg: >-
-      Expected login shell /bin/zsh,
-      got {{ _user_getent.stdout.split(':')[-1] | default('') }}
-
-- name: _verify | Read supplementary groups
+- name: _verify | Member of adm and kvm groups
   command: id -nG {{ ansible_user_id }}
   changed_when: false
   register: _user_groups
-
-- name: _verify | Member of adm and kvm groups
-  assert:
-    that:
-      - "'adm' in _user_groups.stdout.split()"
-      - "'kvm' in _user_groups.stdout.split()"
-    fail_msg: >-
-      Expected adm and kvm in supplementary groups,
-      got {{ _user_groups.stdout | default('') }}
+  failed_when: >-
+    _user_groups.rc != 0
+    or 'adm' not in _user_groups.stdout.split()
+    or 'kvm' not in _user_groups.stdout.split()
 
 - name: _verify | Ghostty terminfo is compiled
   command: infocmp xterm-ghostty
@@ -51,28 +39,15 @@
   stat:
     path: "{{ ansible_user_dir }}/.zshrc"
   register: _user_zshrc
-
-- name: _verify | .zshrc is a symlink from stow
-  assert:
-    that:
-      - _user_zshrc.stat.exists
-      - _user_zshrc.stat.islnk
-    fail_msg: >-
-      Expected ~/.zshrc to be a symlink (stow deploy),
-      got exists={{ _user_zshrc.stat.exists | default(false) }}
-      islnk={{ _user_zshrc.stat.islnk | default(false) }}
+  failed_when: >-
+    not (_user_zshrc.stat.exists | default(false))
+    or not (_user_zshrc.stat.islnk | default(false))
 
 - name: _verify | 1Password CLI is installed
   command: op --version
   changed_when: false
   register: _user_op_version
-
-- name: _verify | Op version is non-empty
-  assert:
-    that:
-      - _user_op_version.stdout | length > 0
-    fail_msg: >-
-      op --version produced no output
+  failed_when: _user_op_version.rc != 0 or _user_op_version.stdout | length == 0
 
 - name: _verify | Commit-signing GPG key is imported
   command: gpg --with-colons --list-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
