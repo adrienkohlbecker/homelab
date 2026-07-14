@@ -12,12 +12,3 @@
     name: netdata
     state: started
   become: true
-
-- name: _setup | Install retired stderr priority wrapper fixture
-  copy:
-    dest: /usr/local/bin/stderr_priority
-    content: "#!/bin/sh\n"
-    owner: root
-    group: root
-    mode: "0755"
-  become: true

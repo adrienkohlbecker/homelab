@@ -53,16 +53,6 @@
       for system-scope units (user: root). user-scope units already
       run as the named user; User= in /etc/systemd/user/ is invalid.
 
-- name: install | Remove retired stderr priority wrapper
-  when:
-    - _systemd_timer_condition
-    - _systemd_timer_user == 'root'
-  file:
-    path: /usr/local/bin/stderr_priority
-    state: absent
-  register: _systemd_timer_stderr_priority
-  become: true
-
 - name: install | Validate environment keys for {{ systemd_timer_args.name }}
   when:
     - _systemd_timer_condition
@@ -216,5 +206,4 @@
         {{ ((lookup('vars', systemd_timer_args.name ~ '_service_result', default={}).changed | default(false))
             or (lookup('vars', systemd_timer_args.name ~ '_timer_result', default={}).changed | default(false))
             or (lookup('vars', systemd_timer_args.name ~ '_timer_started_result', default={}).changed | default(false))
-            or (_systemd_timer_stderr_priority.changed | default(false))
             or (_systemd_timer_metadata.changed | default(false))) | bool }}

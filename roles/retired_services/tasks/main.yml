@@ -43,4 +43,5 @@
   loop:
     - /var/lib/netdata_poll
     - /usr/local/bin/netdata_poll_fetch
+    - /usr/local/bin/stderr_priority
     - /opt/homepage_alerts/.ssh

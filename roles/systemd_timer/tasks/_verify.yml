@@ -144,12 +144,6 @@
         - "ProtectHome=yes"
         - "ReadWritePaths=/tmp"
 
-- name: _verify | Stat retired stderr priority wrapper
-  stat:
-    path: /usr/local/bin/stderr_priority
-  register: _systemd_timer_stderr_priority_stat
-  become: true
-
 - name: _verify | Trigger the combined fixture manually  # noqa: command-instead-of-module
   command: systemctl start --wait _verify_timer.service
   changed_when: false
@@ -217,7 +211,6 @@
       - _systemd_timer_timer_result.stdout == 'success'
       - _systemd_timer_timer_active.stdout == 'active'
       - _verify_timer_result.changed
-      - not _systemd_timer_stderr_priority_stat.stat.exists
       - _systemd_timer_timer_stamp.stat.exists
       - _systemd_timer_timer_out_stat.stat.pw_name == '_verify_runas'
       - _output == "ENV_KEY=knob_value|ENV_OTHER=value with spaces, and a comma"
