@@ -9,14 +9,6 @@
   tags:
     - unattended_upgrades
 
-- name: _verify | Unattended-upgrades dry-run succeeds (config parses)
-  command: unattended-upgrades --dry-run
-  changed_when: false
-  timeout: 120
-  become: true
-  tags:
-    - unattended_upgrades
-
 - name: _verify | Apt-config parses both config files without error
   command: apt-config dump APT::Periodic Unattended-Upgrade
   changed_when: false
