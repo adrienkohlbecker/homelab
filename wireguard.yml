@@ -11,13 +11,15 @@
   gather_facts: false
   tasks:
     - name: Assert the target device is a known client peer
+      vars:
+        client_peers: "{{ wireguard_peers | dict2items | rejectattr('value.is_server') | map(attribute='key') | list }}"
       assert:
         that:
           - wg_show_peer is defined
-          - wg_show_peer in (wireguard_peers | rejectattr('is_server') | map(attribute='name') | list)
+          - wg_show_peer in client_peers
         fail_msg: >-
           Pass -e wg_show_peer=<device>. Known client peers:
-          {{ wireguard_peers | rejectattr('is_server') | map(attribute='name') | list | join(', ') }}
+          {{ client_peers | join(', ') }}
         quiet: true
 
     - name: Render the client config

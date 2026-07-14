@@ -1,44 +1,42 @@
 # Without this assert, downstream failures (selectattr|first on an
-# empty sequence, undefined .public_key) surface as cryptic jinja
+# missing mapping entry or key) surface as cryptic jinja
 # errors mid-converge. Catch it once, here, with a useful message.
 - name: Assert wireguard_peers entry exists for this host
   vars:
-    own_peer: "{{ wireguard_peers | default([]) | selectattr('name', 'eq', inventory_hostname) | list }}"
-    peer_names: "{{ wireguard_peers | default([]) | map(attribute='name') | list }}"
+    own_peer: "{{ (wireguard_peers | default({})).get(inventory_hostname, {}) }}"
+    peer_names: "{{ wireguard_peers | default({}) | list }}"
+    peer_values: "{{ wireguard_peers | default({}) | dict2items | map(attribute='value') | list }}"
     peer_keys: "{{ wireguard_keys | default({}) | dict2items | selectattr('key', 'in', peer_names) | map(attribute='value') | list }}"
-    server_peers: "{{ wireguard_peers | selectattr('is_server', 'eq', true) | list }}"
-    server_hosts: "{{ server_peers | map(attribute='name') | map('extract', network.hosts) | list }}"
+    server_names: "{{ wireguard_peers | default({}) | dict2items | selectattr('value.is_server', 'eq', true) | map(attribute='key') | list }}"
+    server_hosts: "{{ server_names | map('extract', network.hosts) | list }}"
   assert:
     quiet: true
     that:
       - wireguard_peers is defined
+      - wireguard_peers is mapping
       - wireguard_peers | length > 0
       - wireguard_psk_seed is defined
       # The seed feeds HMAC-SHA256 for every pair's preshared key; a short
       # seed makes all derived PSKs brute-forceable at once (single point of
       # failure), so require ~256 bits of material.
       - wireguard_psk_seed | length >= 32
-      - wireguard_peers | map(attribute='address') | unique | list | length == wireguard_peers | length
+      - peer_values | map(attribute='address') | unique | list | length == wireguard_peers | length
       - peer_names | difference(wireguard_keys | default({}) | list) | length == 0
       - peer_keys | selectattr('public_key', 'defined') | map(attribute='public_key') | unique | list | length == wireguard_peers | length
       - peer_keys | selectattr('private_key', 'defined') | list | length == wireguard_peers | length
-      # Names feed the sorted-pair PSK key and the [Peer] iteration; a
-      # duplicate silently collides a PSK pair and skews the _verify count.
-      - wireguard_peers | map(attribute='name') | unique | list | length == wireguard_peers | length
-      - own_peer | length == 1
-      - own_peer[0].is_server | bool
-      - own_peer[0].address is defined
+      - own_peer.is_server | default(false) | bool
+      - own_peer.address is defined
       # Every server peer must resolve to a topology host with site + physical:
       # the template derives same-site endpoint selection from .site and the
       # cross-site host route from .physical (wg.conf.j2). A missing entry
       # silently drops the cross-site route.
       - server_hosts | selectattr('site', 'undefined') | list | length == 0
       - server_hosts | selectattr('physical', 'undefined') | list | length == 0
-      - wireguard_peers | map(attribute='name') | reject('match', '^[a-z][a-z0-9_]*$') | list | length == 0
+      - peer_names | reject('match', '^[a-z][a-z0-9_]*$') | list | length == 0
     fail_msg: >-
       wireguard_peers must be defined and contain an is_server entry for
       {{ inventory_hostname }} with address set;
-      every peer name must match ^[a-z][a-z0-9_]*$ and be unique; addresses
+      every peer name must match ^[a-z][a-z0-9_]*$; addresses
       must be unique; every peer must have public_key and private_key entries in
       wireguard_keys and public_keys must be unique; wireguard_psk_seed must be
       >= 32 chars;

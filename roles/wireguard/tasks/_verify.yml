@@ -60,7 +60,7 @@
 
 - name: _verify | Assert interface carries own_peer.address
   vars:
-    own_peer: "{{ wireguard_peers | one_by_attr('name', inventory_hostname) }}"
+    own_peer: "{{ wireguard_peers[inventory_hostname] }}"
   command: ip -4 -o addr show dev wg0
   register: wireguard_ip_addr
   become: true
@@ -82,7 +82,7 @@
 # On box no peer lists box, so the expected count is 0.
 - name: _verify | Assert persistent-keepalive matches keepalive_from membership
   vars:
-    expected_keepalive_count: "{{ wireguard_peers | selectattr('keepalive_from', 'defined') | map(attribute='keepalive_from') | select('contains', inventory_hostname) | list | length }}"
+    expected_keepalive_count: "{{ wireguard_peers | dict2items | selectattr('value.keepalive_from', 'defined') | map(attribute='value.keepalive_from') | select('contains', inventory_hostname) | list | length }}"
     keepalive_on_count: "{{ wireguard_dump.stdout_lines[1:] | map('split', '\t') | map(attribute=7) | reject('eq', 'off') | list | length }}"
   assert:
     quiet: true

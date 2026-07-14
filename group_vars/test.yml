@@ -51,22 +51,22 @@ mac_addresses:
 # roaming peer (is_server:false, no endpoint) to exercise the non-server
 # [Peer] branch — plain /32, no Endpoint, no keepalive — in wg.conf.j2.
 wireguard_peers:
-  - name: lab
+  lab:
     address: "{{ network.hosts.lab.wireguard }}"
     public_endpoint: 192.0.2.1:51823
     is_server: true
-  - name: pug
+  pug:
     address: "{{ network.hosts.pug.wireguard }}"
     public_endpoint: 192.0.2.1:51823
     is_server: true
-  - name: box
+  box:
     address: "{{ network.hosts.box.wireguard }}"
     public_endpoint: 192.0.2.1:51823
     is_server: true
-  - name: fox
+  fox:
     address: "{{ network.hosts.fox.wireguard }}"
     is_server: true
-  - name: laptop
+  laptop:
     address: "{{ network.wireguard.roaming.laptop }}"
     is_server: false
 

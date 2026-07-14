@@ -1,5 +1,5 @@
 {% set render_peer_name = own_peer_name | default(inventory_hostname) -%}
-{% set own_peer = wireguard_peers | one_by_attr("name", render_peer_name) -%}
+{% set own_peer = wireguard_peers[render_peer_name] -%}
 {% set own_keys = wireguard_keys[render_peer_name] -%}
 [Interface]
 # PublicKey = {{ own_keys.public_key }}
@@ -36,12 +36,12 @@ ListenPort = {{ service_ports.wireguard }}
    out. Same-site peers reach each other on the LAN; roaming clients (no site,
    own_host == {}) keep the pure wg-/32 split tunnel. #}
 {% set own_host = network.hosts.get(render_peer_name, {}) %}
-{% for peer in wireguard_peers if (peer.is_server or own_peer.is_server) and (peer.name != render_peer_name) %}
-{% set tuple = [own_peer.name, peer.name]|sort %}
-{% set peer_host = network.hosts.get(peer.name, {}) %}
+{% for peer_name, peer in wireguard_peers.items() if (peer.is_server or own_peer.is_server) and (peer_name != render_peer_name) %}
+{% set tuple = [render_peer_name, peer_name]|sort %}
+{% set peer_host = network.hosts.get(peer_name, {}) %}
 [Peer]
-# Name = {{ peer.name }}
-PublicKey = {{ wireguard_keys[peer.name].public_key }}
+# Name = {{ peer_name }}
+PublicKey = {{ wireguard_keys[peer_name].public_key }}
 {% if peer_host.physical is defined and own_host.site is defined and peer_host.site != own_host.site %}
 AllowedIPs = {{ peer.address }}/32, {{ peer_host.physical }}/32
 {% else %}
@@ -68,7 +68,7 @@ Endpoint = {{ peer.public_endpoint }}
    wireguard_peer_handshake_stale alarm to be meaningful -- without
    it, bunk's handshake only refreshes during nightly zfs sends and
    the alarm fires all day. #}
-{% if own_peer.name in peer.get('keepalive_from', []) %}
+{% if render_peer_name in peer.get('keepalive_from', []) %}
 PersistentKeepalive = 25
 {% endif %}
 
