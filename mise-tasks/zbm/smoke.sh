@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Headless ZBM smoke test: boot a tarball against the box image and assert menu, dropbear, and BE handoff"
-# Automates the interactive zbm:test loop end-to-end with no terminal:
+# Exercises the ZBM recovery loop end-to-end with no terminal:
 # direct-boot the ZBM kernel + initrd against the box variant's packer image,
 # wait for the menu on the captured serial log, check dropbear answers with
 # the tarball's own host key, then select the default boot environment

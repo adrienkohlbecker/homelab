@@ -409,9 +409,8 @@ def main() -> int:
             commit_in_place=args.commit,
             extra_hostfwds=tuple(args.extra_hostfwds),
         ),
-        # Pin the default loopback: --write-hostfwds emits ports only, and its
-        # consumers (mise-tasks/zbm/test.sh, mise-tasks/zbm/smoke.sh) connect at
-        # 127.0.0.1.
+        # Pin the default loopback: --write-hostfwds emits ports only, and the
+        # ZBM smoke test connects at 127.0.0.1.
         loopback_host=SSH_HOST,
     )
 
