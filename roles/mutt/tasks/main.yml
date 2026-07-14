@@ -29,8 +29,8 @@
   tags:
     - mutt
 
-# Removes the roundcube vhost and reloads nginx. Gated on nginx being installed
-# so it no-ops on a host that never ran the webmail stack.
+# Removes the roundcube vhost and reloads nginx only when a stale vhost existed,
+# so fresh hosts and already-converged hosts remain clean no-ops.
 - name: Remove the roundcube nginx vhost
   import_role:
     name: nginx
