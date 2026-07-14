@@ -262,11 +262,9 @@
 # executed yet the script still exited 0. Build a throwaway mirror over two
 # backing files, corrupt one leg's data region underneath ZFS, scrub to surface
 # the checksum errors, and assert the script flags them via the drive-error
-# branch. A mirror self-heals, so `zpool status -x` still reports the pool
-# healthy -- this isolates the READ/WRITE/CKSUM counter check. Clear those
-# repaired errors, offline one leg, then use the same mirror to isolate the
-# pool-state check. qemu-only (gated on zfs_root); never prod, and fully torn
-# down at the end of the block.
+# branch. Clear those repaired errors, offline one leg, then use the same mirror
+# to assert the pool-state branch. qemu-only (gated on zfs_root); never prod,
+# and fully torn down at the end of the block.
 - name: _verify | Health fault detection
   when: zfs_root
   become: true
