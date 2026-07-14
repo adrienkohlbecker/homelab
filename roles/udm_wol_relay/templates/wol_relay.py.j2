@@ -73,10 +73,6 @@ def serve() -> None:
         listeners.append(listener)
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sender.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    logging.info(
-        "wol relay listening on %s",
-        ", ".join("%s:%d" % (address, LISTEN_PORT) for address in BIND_ADDRESSES),
-    )
     while True:
         readable, _, _ = select.select(listeners, [], [])
         for listener in readable:
