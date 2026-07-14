@@ -265,7 +265,7 @@ zfs_autobackup_version: "3.3"  # 2024-12-17
 # resolve public names (only nexus rides the seeded /etc/hosts), and the
 # cache spares gitlab.com a ~130 MB pull per cell. Prod (nexus_url == "")
 # dials gitlab.com directly. Each tarball contains the unified EFI image,
-# components-mode kernel/initrd, and the cmdline used by rEFInd on aarch64.
+# components-mode kernel/initrd, and the cmdline rEFInd passes on every arch.
 # Hosts can override zfsbootmenu_artifact directly (see host_vars/lab.yml).
 zfsbootmenu_repository_url: "{{ mirror_gitlab }}/api/v4/projects/83079143/packages/generic/zfsbootmenu"
 zfsbootmenu_release:

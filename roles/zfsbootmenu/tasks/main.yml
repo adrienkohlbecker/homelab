@@ -56,6 +56,8 @@
   tags:
     - zfsbootmenu
 
+# rEFInd LoadOptions replace the cmdline embedded in the unified EFI image, so
+# keep the bundle cmdline beside it for rEFInd to pass explicitly on every arch.
 # No backup: true — /boot/efi is vfat; backup_local's chown fails on FAT.
 - name: Install common ZBM artifacts  # noqa: require-backup
   when:
