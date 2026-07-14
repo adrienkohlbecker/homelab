@@ -235,9 +235,9 @@
 
 # Remove-path coverage: parallels the install-path block above. Install a
 # fresh fixture so this section is independent of state left by prior
-# scenarios, then exercise the three observable behaviours of
+# scenarios, then exercise the four observable behaviours of
 # tasks_from=remove: deletes-on-first-call, idempotent on second call,
-# refuses to delete a mask.
+# reports a stop when the file is already absent, and refuses to delete a mask.
 - name: _verify | Install fixture for remove-path tests
   import_role:
     name: systemd_unit
@@ -278,6 +278,55 @@
 - name: _verify | Second remove reported no change
   assert:
     that: not systemd_unit_verify_ok_service_result.changed
+
+- name: _verify | Reinstall fixture for stop-only removal
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+
+- name: _verify | Start fixture for stop-only removal
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+
+- name: _verify | Disable fixture while leaving it active
+  systemd:
+    name: systemd_unit_verify_ok.service
+    state: started
+    enabled: false
+  become: true
+
+- name: _verify | Delete active fixture file before helper removal
+  file:
+    path: /etc/systemd/system/systemd_unit_verify_ok.service
+    state: absent
+  become: true
+
+- name: _verify | Remove active fixture whose file is already absent
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: systemd_unit_verify_ok.service
+
+- name: _verify | Read stop-only fixture state  # noqa: command-instead-of-module
+  command: systemctl is-active systemd_unit_verify_ok.service
+  register: _systemd_unit_stop_only_state
+  changed_when: false
+  failed_when: false
+
+- name: _verify | Stop-only removal reported the runtime change
+  assert:
+    that:
+      - systemd_unit_verify_ok_service_result.changed
+      - _systemd_unit_stop_only_state.rc != 0
 
 # Mask guardrail (symmetric with the install-path mask test): a
 # pre-existing symlink to /dev/null is operator intent that `rm`
