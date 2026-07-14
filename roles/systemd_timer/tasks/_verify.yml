@@ -107,6 +107,12 @@
     state: absent
   become: true
 
+- name: _verify | Remove stale combined fixture stamp
+  file:
+    path: /var/lib/systemd/timers/stamp-_verify_timer.timer
+    state: absent
+  become: true
+
 - name: _verify | Capture pre-run timestamp for journal filter
   command: date +%s
   register: _systemd_timer_stderr_t0
@@ -141,6 +147,12 @@
 - name: _verify | Trigger the combined fixture manually  # noqa: command-instead-of-module
   command: systemctl start --wait _verify_timer.service
   changed_when: false
+  become: true
+
+- name: _verify | Stat combined fixture trigger stamp
+  stat:
+    path: /var/lib/systemd/timers/stamp-_verify_timer.timer
+  register: _systemd_timer_timer_stamp
   become: true
 
 - name: _verify | Sync journal before reading
@@ -185,7 +197,7 @@
 
 - name: _verify | Read timer and service properties  # noqa: command-instead-of-module
   command: >-
-    systemctl show -p AccuracyUSec,RandomizedDelayUSec,FixedRandomDelay,TimeoutStopUSec,ProtectSystem,ProtectHome
+    systemctl show -p AccuracyUSec,RandomizedDelayUSec,FixedRandomDelay,TimeoutStopUSec,ProtectSystem,ProtectHome,ReadWritePaths
     _verify_timer.timer _verify_timer.service
   register: _systemd_timer_knobs_show
   changed_when: false
@@ -199,6 +211,7 @@
       - _systemd_timer_timer_result.stdout == 'success'
       - _systemd_timer_timer_active.stdout == 'active'
       - _verify_timer_result.changed
+      - _systemd_timer_timer_stamp.stat.exists
       - _systemd_timer_timer_out_stat.stat.pw_name == '_verify_runas'
       - _output == "ENV_KEY=knob_value|ENV_OTHER=value with spaces, and a comma"
       - "'AccuracyUSec=1s' in _systemd_timer_knobs_show.stdout"
@@ -207,6 +220,8 @@
       - "'TimeoutStopUSec=30s' in _systemd_timer_knobs_show.stdout"
       - "'ProtectSystem=strict' in _systemd_timer_knobs_show.stdout"
       - "'ProtectHome=yes' in _systemd_timer_knobs_show.stdout"
+      - "'ReadWritePaths=/tmp' in _systemd_timer_knobs_show.stdout"
+      - "'/var/lib/systemd/timers' not in _systemd_timer_knobs_show.stdout"
 
 - name: _verify | Assert stderr priority through each journal filter
   assert:
