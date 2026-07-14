@@ -351,40 +351,23 @@
   tags:
     - zfs
 
-# Dataset properties go through community.general.zfs: it is idempotent and,
-# unlike the zpool module, cannot destroy a pool -- so the get-then-set command
-# dance above is reserved for pool-level properties where that destroy edge is
-# the concern. dataset.yml uses this same module for consumer datasets.
-- name: Set properties on root dataset
+# A root restored via `zfs recv` can keep autobackup:bak=true with
+# source=received, which zfs-autobackup's `-s local` picker ignores. Read both
+# fields and set once unless the existing root dataset already carries the
+# required local value.
+- name: Read autobackup:bak value and source on the root dataset
   when: zfs_root
-  community.general.zfs:
-    name: rpool/ROOT/{{ ansible_distribution_release }}
-    state: present
-    extra_zfs_properties:
-      'autobackup:bak': 'true'
-  become: true
-  tags:
-    - zfs
-
-# community.general.zfs no-ops a property whose value already matches even when
-# its source is `received` -- so a root restored via `zfs recv` (a disaster
-# recovery from lab's tank/<host>/rpool/ROOT replica) would keep autobackup:bak
-# at source=received, and zfs-autobackup's `-s local` picker would silently drop
-# the root from every snapshot. The consumer-dataset helper (dataset.yml) guards
-# the same trap; the root takes the direct module above, so guard it here too.
-- name: Read autobackup:bak source on the root dataset
-  when: zfs_root
-  command: zfs get -H -o source autobackup:bak rpool/ROOT/{{ ansible_distribution_release }}
-  register: zfs_root_autobackup_source
+  command: zfs get -H -o value,source autobackup:bak rpool/ROOT/{{ ansible_distribution_release }}
+  register: zfs_root_autobackup
   changed_when: false
   become: true
   tags:
     - zfs
 
-- name: Force autobackup:bak local on the root dataset when a restore left it received
+- name: Set autobackup:bak locally on the root dataset
   when:
     - zfs_root
-    - zfs_root_autobackup_source.stdout | trim != 'local'
+    - (zfs_root_autobackup.stdout | trim).split() != ['true', 'local']
   command: zfs set autobackup:bak=true rpool/ROOT/{{ ansible_distribution_release }}
   changed_when: true
   become: true
