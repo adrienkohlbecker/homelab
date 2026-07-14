@@ -309,30 +309,20 @@ wireguard_peers:
     address: "{{ network.hosts.lab.wireguard }}"
     public_endpoint: "{{ home_endpoint }}:51821"
     is_server: true
-    public_key: "{{ wireguard_keys.lab.public_key }}"
-    private_key: "{{ wireguard_keys.lab.private_key }}"
   - name: pug
     address: "{{ network.hosts.pug.wireguard }}"
     public_endpoint: "{{ home_endpoint }}:51822"
     is_server: true
-    public_key: "{{ wireguard_keys.pug.public_key }}"
-    private_key: "{{ wireguard_keys.pug.private_key }}"
   - name: box
     address: "{{ network.hosts.box.wireguard }}"
     public_endpoint: "{{ home_endpoint }}:51823"
     is_server: true
-    public_key: "{{ wireguard_keys.box.public_key }}"
-    private_key: "{{ wireguard_keys.box.private_key }}"
   - name: laptop
     address: "{{ network.wireguard.roaming.laptop }}"
     is_server: false
-    public_key: "{{ wireguard_keys.laptop.public_key }}"
-    private_key: "{{ wireguard_keys.laptop.private_key }}"
   - name: phone
     address: "{{ network.wireguard.roaming.phone }}"
     is_server: false
-    public_key: "{{ wireguard_keys.phone.public_key }}"
-    private_key: "{{ wireguard_keys.phone.private_key }}"
   - name: bunk
     address: "{{ network.hosts.bunk.wireguard }}"
     public_endpoint: "{{ bunk_endpoint }}:51820"
@@ -346,8 +336,6 @@ wireguard_peers:
     # (not per-peer) so battery-sensitive mobile peers don't get a forced
     # heartbeat they don't need.
     keepalive_from: [ lab, pug, fox ]
-    public_key: "{{ wireguard_keys.bunk.public_key }}"
-    private_key: "{{ wireguard_keys.bunk.private_key }}"
   - name: fox
     # External Hetzner Cloud VPS (Headscale control plane) joined to the wg0
     # backbone as a listener: lab/pug dial OUT to it (keepalive_from below) so
@@ -367,8 +355,6 @@ wireguard_peers:
     public_endpoint: "{{ fox_endpoint }}:51820"
     is_server: true
     keepalive_from: [ lab, pug ]
-    public_key: "{{ wireguard_keys.fox.public_key }}"
-    private_key: "{{ wireguard_keys.fox.private_key }}"
 
 podman_default_network: 10.88.0.0/16
 # First range of netavark's default_subnet_pools — every named bridge

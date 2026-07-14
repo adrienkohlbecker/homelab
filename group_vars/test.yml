@@ -55,30 +55,20 @@ wireguard_peers:
     address: "{{ network.hosts.lab.wireguard }}"
     public_endpoint: 192.0.2.1:51823
     is_server: true
-    public_key: "{{ wireguard_keys.lab.public_key }}"
-    private_key: "{{ wireguard_keys.lab.private_key }}"
   - name: pug
     address: "{{ network.hosts.pug.wireguard }}"
     public_endpoint: 192.0.2.1:51823
     is_server: true
-    public_key: "{{ wireguard_keys.pug.public_key }}"
-    private_key: "{{ wireguard_keys.pug.private_key }}"
   - name: box
     address: "{{ network.hosts.box.wireguard }}"
     public_endpoint: 192.0.2.1:51823
     is_server: true
-    public_key: "{{ wireguard_keys.box.public_key }}"
-    private_key: "{{ wireguard_keys.box.private_key }}"
   - name: fox
     address: "{{ network.hosts.fox.wireguard }}"
     is_server: true
-    public_key: "{{ wireguard_keys.fox.public_key }}"
-    private_key: "{{ wireguard_keys.fox.private_key }}"
   - name: laptop
     address: "{{ network.wireguard.roaming.laptop }}"
     is_server: false
-    public_key: "{{ wireguard_keys.laptop.public_key }}"
-    private_key: "{{ wireguard_keys.laptop.private_key }}"
 
 # Master seed for deriving per-pair PSKs (filter_plugins/wireguard_psk.py):
 # PresharedKey = base64(HMAC-SHA256(seed, sorted-pair-name)). One value, no

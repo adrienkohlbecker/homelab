@@ -1,8 +1,9 @@
 {% set render_peer_name = own_peer_name | default(inventory_hostname) -%}
 {% set own_peer = wireguard_peers | one_by_attr("name", render_peer_name) -%}
+{% set own_keys = wireguard_keys[render_peer_name] -%}
 [Interface]
-# PublicKey = {{ own_peer.public_key }}
-PrivateKey = {{ own_peer.private_key }}
+# PublicKey = {{ own_keys.public_key }}
+PrivateKey = {{ own_keys.private_key }}
 Address = {{ own_peer.address }}/32
 {# wg-quick auto-discovers MTU from the endpoint route minus 80 bytes
    (1500 ethernet -> 1420). That breaks for mobile peers on PPPoE
@@ -40,7 +41,7 @@ ListenPort = {{ service_ports.wireguard }}
 {% set peer_host = network.hosts.get(peer.name, {}) %}
 [Peer]
 # Name = {{ peer.name }}
-PublicKey = {{ peer.public_key }}
+PublicKey = {{ wireguard_keys[peer.name].public_key }}
 {% if peer_host.physical is defined and own_host.site is defined and peer_host.site != own_host.site %}
 AllowedIPs = {{ peer.address }}/32, {{ peer_host.physical }}/32
 {% else %}
