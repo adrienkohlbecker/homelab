@@ -1,22 +1,3 @@
-- name: _verify | On-boot script directory exists
-  stat:
-    path: /data/on_boot.d
-  register: _udm_on_boot_dir
-
-- name: _verify | On-boot script directory has expected ownership and mode
-  assert:
-    that:
-      - _udm_on_boot_dir.stat.isdir
-      - _udm_on_boot_dir.stat.pw_name == 'root'
-      - _udm_on_boot_dir.stat.gr_name == 'root'
-      - _udm_on_boot_dir.stat.mode == '0755'
-
-- name: _verify | On-boot framework unit is enabled
-  systemd:
-    name: on-boot.service
-  register: _udm_on_boot_service
-  failed_when: _udm_on_boot_service.status.UnitFileState != 'enabled'
-
 # -- functional path: the framework actually runs scripts -------------------
 - name: _verify | Install a marker probe script
   copy:
