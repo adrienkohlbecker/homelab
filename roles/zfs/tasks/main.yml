@@ -447,4 +447,5 @@
       dataset: "rpool/ROOT/{{ ansible_distribution_release }}"
       mountpoint: /
   tags:
+    - zfs
     - zfs_mount
