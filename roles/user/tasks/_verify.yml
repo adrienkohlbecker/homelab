@@ -66,24 +66,6 @@
       got exists={{ _user_zshrc.stat.exists | default(false) }}
       islnk={{ _user_zshrc.stat.islnk | default(false) }}
 
-# Read through the full git config stack (the stowed ~/.gitconfig and its
-# [include] of ~/.gitconfig.local) rather than the fragment directly, so a
-# dotfiles .gitconfig that ever drops the include is caught here.
-- name: _verify | Gitconfig email resolves through the include chain  # noqa: command-instead-of-module
-  command: git config --global user.email
-  environment:
-    HOME: "{{ ansible_user_dir }}"
-  changed_when: false
-  register: _user_git_email
-
-- name: _verify | Gitconfig email matches root_email
-  assert:
-    that:
-      - _user_git_email.stdout == root_email
-    fail_msg: >-
-      Expected git user.email={{ root_email }},
-      got {{ _user_git_email.stdout | default('') }}
-
 - name: _verify | 1Password CLI is installed
   command: op --version
   changed_when: false

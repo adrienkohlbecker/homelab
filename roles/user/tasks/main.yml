@@ -2,9 +2,8 @@
   assert:
     that:
       - ssh_public_keys is defined and ssh_public_keys | length > 0
-      - root_email is defined and root_email | length > 0
     fail_msg: >-
-      ssh_public_keys and root_email must be set in host_vars/group_vars.
+      ssh_public_keys must be set in host_vars/group_vars.
   tags:
     - user
 
@@ -200,18 +199,6 @@
     user: "{{ ansible_user_id }}"
     key: "{{ (ssh_public_keys + '\n' + ssh_public_keys_additional) | trim }}"
     exclusive: true
-  tags:
-    - user
-
-- name: Configure git
-  template:
-    src: gitconfig.j2
-    dest: "{{ ansible_user_dir }}/.gitconfig.local"
-    mode: "0644"
-    owner: "{{ ansible_user_id }}"
-    group: "{{ ansible_user_id }}"
-    backup: true
-    validate: git config --file %s --list
   tags:
     - user
 
