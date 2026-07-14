@@ -26,25 +26,19 @@ output=$(zfs get -pH -o property,value type,mounted,mountpoint,readonly,canmount
   exit 1
 }
 
-declare -A prop
-while IFS=$'\t' read -r name value; do
-  prop[$name]=$value
+properties=(type mounted mountpoint readonly canmount)
+expected=(filesystem yes "$MOUNTPOINT" off "$EXPECTED_CANMOUNT")
+actual=()
+while IFS=$'\t' read -r _ value; do
+  actual+=("$value")
 done <<<"$output"
 
-check_property() {
-  local property=$1 expected=$2
-  local actual=${prop[$property]:-}
-  if [ "$actual" != "$expected" ]; then
-    echo >&2 "Error: $DATASET $property is '$actual', expected '$expected'"
+for index in "${!properties[@]}"; do
+  if [ "${actual[$index]:-}" != "${expected[$index]}" ]; then
+    echo >&2 "Error: $DATASET ${properties[$index]} is '${actual[$index]:-}', expected '${expected[$index]}'"
     exit 1
   fi
-}
-
-check_property type filesystem
-check_property mounted yes
-check_property mountpoint "$MOUNTPOINT"
-check_property readonly off
-check_property canmount "$EXPECTED_CANMOUNT"
+done
 
 # Cross-check the live mount table: a single findmnt that matches only when
 # DATASET is the zfs source AND it is mounted at MOUNTPOINT. The exit code
