@@ -137,9 +137,9 @@
 # period_secs for the overdue check is the gap between the timer's next two
 # elapses, computed from on_calendar by systemd's own parser (no hand-kept
 # frequency->seconds table). A non-repeating calendar yields a single elapse
-# (no "#2" line) cannot supply an overdue period. on_calendar is passed via
-# the environment so its value
-# never lands in the script text (no quoting/escaping hazards). The two-
+# (no "#2" line) and cannot supply an overdue period. on_calendar is passed
+# via the environment so its value never lands in the script text (no
+# quoting/escaping hazards). The two-
 # elapse delta is constant for a regular schedule; a DST-straddling day can
 # shift it by an hour, which the 2 * period grace absorbs.
 - name: install | Derive overdue period from on_calendar for {{ systemd_timer_args.name }}

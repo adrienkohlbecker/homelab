@@ -147,7 +147,7 @@ skipped import cannot uphold the result-variable contract for its callers.
 |--------|-------------|-------------------|
 | `service_user` | `tasks_from: user` | `<svc>_user.uid`/`.gid`; `/mnt/services/<svc>` dir |
 | `systemd_unit` | `tasks_from: {install,service,remove}` | `<unit>_started_result`; drives restarts inline |
-| `systemd_timer` | `tasks_from: {install,remove}` | paired `.service`+`.timer` (system scope) |
+| `systemd_timer` | `tasks_from: {install,remove}` | paired `.service`+`.timer`; `<name>_result` |
 | `nginx_site` | `import_role: name: nginx, tasks_from: site` | vhost with TLS/HSTS/CSP + optional Authelia |
 | `sqlite_dataset` | `tasks_from: dataset` | `/mnt/services/sqlite/<name>/` + symlinked DBs |
 | `macvlan` | driven by `macvlan_blocks:` in host_vars | ifaces + optional podman networks |

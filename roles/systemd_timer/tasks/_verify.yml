@@ -1,4 +1,4 @@
-# Verify covers five contracts:
+# Verify covers six contracts:
 #   1. install + manual-trigger + remove for a system-scope timer
 #   2. systemd-cat routes stderr to journal priority err and preserves the
 #      command's exit code
