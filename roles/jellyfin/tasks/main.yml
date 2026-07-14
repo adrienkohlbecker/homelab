@@ -299,7 +299,7 @@
 # resolves the symlink targets identically inside the container — do not
 # change the container-side path without updating sqlite_dataset_args.name
 # (which is the host symlink-target stem) in lockstep.
-- name: Pre-create sqlite dataset and symlink jellyfin DBs onto it
+- name: Place Jellyfin SQLite DBs on the sqlite dataset
   import_role:
     name: sqlite_dataset
     tasks_from: dataset
