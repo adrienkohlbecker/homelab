@@ -155,6 +155,7 @@ skipped import cannot uphold the result-variable contract for its callers.
 | `systemd_timer` | `tasks_from: {install,remove}` | paired `.service`+`.timer`; `<name>_result` |
 | `nginx_site` | `import_role: name: nginx, tasks_from: site` | vhost with TLS/HSTS/CSP + optional Authelia |
 | `sqlite_dataset` | `tasks_from: dataset` | `/mnt/services/sqlite/<name>/` + symlinked DBs |
+| `zfs_dataset` | `tasks_from: dataset` | ZFS filesystem + mount unit, or a plain mountpoint on non-ZFS hosts |
 | `macvlan` | driven by `macvlan_blocks:` in host_vars | ifaces + optional podman networks |
 
 ## Podman Service Conventions
