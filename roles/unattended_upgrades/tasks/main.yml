@@ -12,31 +12,20 @@
   tags:
     - unattended_upgrades
 
-- name: Configure unattended-upgrades periodic settings
+- name: Configure unattended-upgrades
   copy:
-    src: 20auto-upgrades
-    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    src: "{{ item }}"
+    dest: /etc/apt/apt.conf.d/{{ item }}
     owner: root
     group: root
     mode: "0644"
     backup: true
     validate: 'apt-config dump -c %s'
   become: true
-  register: unattended_upgrades_apt_20
-  tags:
-    - unattended_upgrades
-
-- name: Configure unattended-upgrades behavior
-  copy:
-    src: 50unattended-upgrades
-    dest: /etc/apt/apt.conf.d/50unattended-upgrades
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: 'apt-config dump -c %s'
-  become: true
-  register: unattended_upgrades_apt_50
+  loop:
+    - 20auto-upgrades
+    - 50unattended-upgrades
+  register: unattended_upgrades_config
   tags:
     - unattended_upgrades
 
@@ -67,7 +56,7 @@
     - unattended_upgrades
 
 - name: Validate unattended-upgrades config
-  when: unattended_upgrades_apt_20.changed or unattended_upgrades_apt_50.changed
+  when: unattended_upgrades_config.changed
   command: unattended-upgrades --dry-run --verbose
   changed_when: false
   timeout: 120
