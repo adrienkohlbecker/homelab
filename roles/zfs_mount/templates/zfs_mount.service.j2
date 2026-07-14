@@ -11,7 +11,7 @@ AssertPathIsMountPoint={{ zfs_mount_args.mountpoint }}
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/usr/local/bin/zfs_check_mount "{{ zfs_mount_args.dataset }}" "{{ zfs_mount_args.mountpoint }}" "{{ zfs_mount_args.canmount | default('on') }}"
+ExecStart=/usr/local/bin/zfs_check_mount "{{ zfs_mount_args.dataset }}" "{{ zfs_mount_args.mountpoint }}"
 SyslogIdentifier=%N
 
 [Install]

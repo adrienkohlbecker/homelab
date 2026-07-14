@@ -5,18 +5,22 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 DATASET=${1:-}
 MOUNTPOINT=${2:-}
-EXPECTED_CANMOUNT=${3:-on}
 
 if [ -z "$DATASET" ] || [ -z "$MOUNTPOINT" ]; then
-  echo >&2 "Usage: zfs_check_mount DATASET MOUNTPOINT [EXPECTED_CANMOUNT]"
+  echo >&2 "Usage: zfs_check_mount DATASET MOUNTPOINT"
   exit 1
 fi
 
 # One query returns every property against a single consistent view of
-# the dataset, rather than forking zfs once per property. The expected
-# canmount differs by dataset class: regular datasets are canmount=on,
-# while boot environments stay noauto so sibling BEs never race to mount.
-# The caller passes the expected value (default on).
+# the dataset, rather than forking zfs once per property. Boot environments
+# stay canmount=noauto so sibling BEs never race to mount; regular datasets
+# must remain canmount=on.
+if [[ "$DATASET" == rpool/ROOT/* ]]; then
+  EXPECTED_CANMOUNT=noauto
+else
+  EXPECTED_CANMOUNT=on
+fi
+
 output=$(zfs get -pH -o property,value type,mounted,mountpoint,readonly,canmount -- "$DATASET") || {
   echo >&2 "Error: failed to query properties on $DATASET"
   exit 1

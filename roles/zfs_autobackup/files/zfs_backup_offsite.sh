@@ -16,20 +16,13 @@ DESTPATH=${DATASET//\//_}
 
 MOUNTPOINT=$(zfs get mountpoint -H -o value "$DATASET")
 
-# Boot environments keep canmount=noauto so sibling BEs never race to mount at
-# boot; all other datasets are canmount=on.
-if [[ "$DATASET" == rpool/ROOT/* ]]; then
-  expected_canmount=noauto
-else
-  expected_canmount=on
-fi
 # Validate the mount first, ahead of every skip path below (no-snapshot and the
 # change-gate): a broken mount is a fault the offsite run must surface
 # (zfs_check_mount fails -> the caller's f_rescue bumps f_failed -> the unit
 # exits 1 for monitoring), and skipping ahead of it would let a degraded
 # /mnt/services or /mnt/data be silently reported as an up-to-date skip. The
 # check is sub-second, so paying it on skip nights costs nothing.
-zfs_check_mount "$DATASET" "$MOUNTPOINT" "$expected_canmount"
+zfs_check_mount "$DATASET" "$MOUNTPOINT"
 
 # awk collapses the grep|tail|cut pipeline: snapshots arrive sorted by
 # creation (ascending), so the last @bak- line is the newest. A bare

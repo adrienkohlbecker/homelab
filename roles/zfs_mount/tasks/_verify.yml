@@ -8,7 +8,7 @@
   become: true
 
 - name: _verify | Check mount passes for root dataset
-  command: /usr/local/bin/zfs_check_mount rpool/ROOT/{{ ansible_distribution_release }} / noauto
+  command: /usr/local/bin/zfs_check_mount rpool/ROOT/{{ ansible_distribution_release }} /
   changed_when: false
   become: true
 
@@ -19,9 +19,8 @@
   changed_when: false
   failed_when: _zfs_mount_verify_negative.rc == 0
   loop:
-    - { label: mountpoint mismatch, args: [ "rpool/ROOT/{{ ansible_distribution_release }}", /nonexistent, noauto ] }
-    - { label: canmount mismatch, args: [ "rpool/ROOT/{{ ansible_distribution_release }}", /, "on" ] }
-    - { label: missing dataset, args: [ rpool/nonexistent_dataset, /, noauto ] }
+    - { label: mountpoint mismatch, args: [ "rpool/ROOT/{{ ansible_distribution_release }}", /nonexistent ] }
+    - { label: missing dataset, args: [ rpool/nonexistent_dataset, / ] }
   loop_control:
     loop_var: zfs_mount_verify_case
     label: "{{ zfs_mount_verify_case.label }}"

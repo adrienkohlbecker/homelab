@@ -12,6 +12,5 @@
     zfs_mount_args:
       dataset: "rpool/ROOT/{{ ansible_distribution_release }}"
       mountpoint: /
-      canmount: noauto
   tags:
     - zfs_mount
