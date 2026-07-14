@@ -114,7 +114,9 @@
 
     - name: Set up mount service
       when: zfs_root
-      import_tasks: mount_unit.yml
+      import_role:
+        name: zfs
+        tasks_from: mount_unit
       vars:
         zfs_mount_args:
           dataset: '{{ _zfs_dataset_resolved }}'

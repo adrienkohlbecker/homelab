@@ -1,0 +1,3 @@
+# zfs_dataset is a helper role accessed only via `tasks_from: dataset`.
+# main.yml exists so testrole.py can target the helper; the implementation
+# lives in dataset.yml and its functional coverage in _verify.yml.

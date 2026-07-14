@@ -1,0 +1,54 @@
+# Functionally exercise the helper's `tank/` -> zfs_tank_filesystem rewrite
+# and its integration with the ZFS mount guard on the default ZFS-root fixture.
+- name: _verify | Exercise dataset helper with a throwaway probe
+  vars:
+    zfs_dataset_args:
+      dataset: tank/_verify_probe
+      mountpoint: /mnt/_verify_probe
+  import_tasks: dataset.yml
+
+# A wrong rewrite makes the resolved dataset lookup fail; the same check also
+# asserts its configured mountpoint and live mount-table entry.
+- name: _verify | Check regular dataset mount passes
+  command: /usr/local/bin/zfs_check_mount {{ zfs_tank_filesystem }}/_verify_probe /mnt/_verify_probe
+  register: _zfs_dataset_verify_probe_mount
+  changed_when: false
+  become: true
+
+- name: _verify | Successful regular dataset mount check is silent
+  assert:
+    that: _zfs_dataset_verify_probe_mount.stdout == ''
+
+- name: _verify | Check invalid mount states fail
+  command:
+    argv: "{{ ['/usr/local/bin/zfs_check_mount'] + zfs_dataset_verify_mount_case.args }}"
+  register: _zfs_dataset_verify_mount_negative
+  changed_when: false
+  failed_when: _zfs_dataset_verify_mount_negative.rc == 0
+  loop:
+    - { label: mountpoint mismatch, args: [ "{{ zfs_tank_filesystem }}/_verify_probe", /nonexistent ] }
+    - { label: missing dataset, args: [ rpool/nonexistent_dataset, / ] }
+    - { label: extra argument, args: [ "{{ zfs_tank_filesystem }}/_verify_probe", /mnt/_verify_probe, "on" ] }
+  loop_control:
+    loop_var: zfs_dataset_verify_mount_case
+    label: "{{ zfs_dataset_verify_mount_case.label }}"
+  become: true
+
+- name: _verify | Remove probe mount unit
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: zfs_mount_mnt__verify_probe.service
+
+- name: _verify | Destroy probe dataset
+  command: zfs destroy -r {{ zfs_tank_filesystem }}/_verify_probe
+  changed_when: true
+  become: true
+
+- name: _verify | Remove probe mountpoint
+  file:
+    path: /mnt/_verify_probe
+    state: absent
+  become: true

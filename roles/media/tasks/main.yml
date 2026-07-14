@@ -16,7 +16,7 @@
 
 - name: Configure media dataset
   import_role:
-    name: zfs
+    name: zfs_dataset
     tasks_from: dataset
   when: not (ansible_check_mode and media_group.changed)
   vars:

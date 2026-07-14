@@ -7,7 +7,7 @@
 # same pattern with the full rationale documented.
 - name: _dataset | Configure dataset for {{ item.dataset }}
   import_role:
-    name: zfs
+    name: zfs_dataset
     tasks_from: dataset
   vars:
     zfs_dataset_args:

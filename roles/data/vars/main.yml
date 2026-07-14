@@ -1,6 +1,6 @@
 # Site datasets carried under tank/ on every zfs_root host that runs this
 # role. The dict-list shape is consumed by both tasks/main.yml (looped
-# into the zfs/tasks_from: dataset helper) and tasks/_verify.yml (looped
+# into the zfs_dataset helper) and tasks/_verify.yml (looped
 # into zfs get assertions), so a new site is one line that updates both
 # halves.
 data_datasets:
@@ -26,6 +26,6 @@ data_extra_properties:
   'autobackup:bak': 'true'
   special_small_blocks: '32768'
 
-# Resolves the host's tank pool name. Mirrors roles/zfs/tasks/dataset.yml's
+# Resolves the host's tank pool name. Mirrors roles/zfs_dataset/tasks/dataset.yml's
 # `^tank/` rewrite so producers and verifiers agree on the actual pool.
 data_pool: "{{ zfs_tank_filesystem }}"

@@ -22,7 +22,7 @@
 #   setuid/devices=off       ignore setuid bits and device nodes dropped by unpackers
 - name: Configure scratch dataset
   import_role:
-    name: zfs
+    name: zfs_dataset
     tasks_from: dataset
   vars:
     zfs_dataset_args:

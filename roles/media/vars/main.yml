@@ -1,5 +1,5 @@
 # Dataset metadata for tank/media, consumed by both tasks/main.yml (fed to
-# the zfs/tasks_from: dataset helper) and tasks/_verify.yml (looped into the
+# the zfs_dataset helper) and tasks/_verify.yml (looped into the
 # zfs get / stat assertions), so a tuning change is one edit that keeps both
 # halves in sync. Mirrors roles/data/vars/main.yml.
 

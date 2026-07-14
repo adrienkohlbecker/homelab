@@ -10,7 +10,7 @@
 # time this import executes at runtime.
 - name: _dataset | Configure dataset for {{ item.name }}
   import_role:
-    name: zfs
+    name: zfs_dataset
     tasks_from: dataset
   vars:
     zfs_dataset_args:
