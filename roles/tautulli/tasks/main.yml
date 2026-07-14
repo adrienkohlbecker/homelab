@@ -107,7 +107,7 @@
     validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' "%s"
   register: _tautulli_conf_probe
   # noqa: require-backup — probe never writes; backup on the real write task below
-  when: not (ansible_check_mode and (tautulli_user.changed or media_group.changed))
+  when: not ansible_check_mode or tautulli_user.uid is defined
   become: true
   tags:
     - tautulli
@@ -136,7 +136,7 @@
     backup: true
     validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' "%s"
   register: tautulli_conf
-  when: not (ansible_check_mode and (tautulli_user.changed or media_group.changed))
+  when: not ansible_check_mode or tautulli_user.uid is defined
   become: true
   tags:
     - tautulli
@@ -158,7 +158,7 @@
   vars:
     systemd_unit_args:
       src: tautulli.service.j2
-      condition: "{{ not (ansible_check_mode and (tautulli_user.changed or media_group.changed)) }}"
+      condition: "{{ not ansible_check_mode or tautulli_user.uid is defined }}"
   tags:
     - tautulli
 
@@ -188,7 +188,7 @@
   vars:
     systemd_unit_args:
       src: tautulli
-      condition: "{{ not (ansible_check_mode and (tautulli_service_result.changed or tautulli_user.changed or media_group.changed)) }}"
+      condition: "{{ not ansible_check_mode or tautulli_user.uid is defined }}"
       restart: "{{ tautulli_service_result.changed or tautulli_conf.changed or tautulli_user.changed or media_group.changed }}"
   tags:
     - tautulli
