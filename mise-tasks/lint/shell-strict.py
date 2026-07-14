@@ -13,7 +13,6 @@ ALLOWLIST = {
     "mise-tasks/packer/_hetzner_rescue.sh": "sourced rescue helper library",
     "mise-tasks/worktree/lib.sh": "sourced helper library",
     "mise-tasks/zbm/lib.sh": "sourced helper library",
-    "roles/systemd_timer/files/stderr_priority": "wrapper intentionally manages exit status manually",
 }
 ALLOWLIST_PATTERNS = [
     "roles/netdata/files/*.chart.sh",

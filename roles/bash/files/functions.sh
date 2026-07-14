@@ -71,11 +71,10 @@ f_require_root() {
 
 # Echo a shell-quoted trace banner, then exec the command. Banner goes
 # to stdout, NOT stderr: every consumer runs under systemd_timer's
-# stderr_priority wrapper (stderr -> journal priority err), so an
-# informational banner on stderr mislabelled every traced command as an
-# error and polluted `journalctl -p err`. stdout lands at info, leaving
-# -p err for real failures. (No cron consumers remain; keeping the
-# banner off the cron-mailed stdout stream was the old stderr rationale.)
+# systemd-cat transport, which assigns stderr journal priority err. An
+# informational banner on stderr would mislabel every traced command and
+# pollute `journalctl -p err`; stdout stays at info and leaves -p err for
+# real failures.
 f_trace() {
   printf '$%s\n' "$(printf ' %q' "$@")"
   "$@"
