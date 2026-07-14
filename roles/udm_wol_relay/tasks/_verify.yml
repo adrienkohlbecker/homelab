@@ -37,7 +37,7 @@
 
 # The single-threaded relay drains the loopback receive queue in send order, so
 # the second allowed log is a barrier proving both intervening drops ran.
-- name: _verify | Relay logged both allowed rebroadcasts
+- name: _verify | Relay logged both allowed fan-outs
   command: journalctl -u udm_wol_relay.service --no-pager -o cat
   register: _udm_wol_relay_journal
   changed_when: false
@@ -50,6 +50,11 @@
   assert:
     that:
       - _udm_wol_relay_journal.stdout_lines | select('search', 'relayed magic packet') | list | length == 2
+      - >-
+        _udm_wol_relay_journal.stdout_lines
+        | select('search', 'relayed magic packet.*to 2 target broadcast')
+        | list
+        | length == 2
 
 # -- firmware-wipe recovery ------------------------------------------------
 - name: _verify | On-boot framework unit is enabled

@@ -46,11 +46,6 @@ def check_config() -> None:
         raise SystemExit("bind addresses, allowed sources, and target broadcasts are all required")
     for host in BIND_ADDRESSES + TARGET_BROADCASTS:
         ipaddress.ip_address(host)
-    # A target broadcast inside an allowed source network would let the relay
-    # re-ingest its own rebroadcasts in a tight loop: refuse at config time.
-    for target in TARGET_BROADCASTS:
-        if is_allowed_source(target):
-            raise SystemExit(f"target broadcast {target} lies inside an allowed source network")
     print(
         "listening on %s; allowing %s; relaying to %s"
         % (

@@ -1,4 +1,4 @@
-# Relay generic WoL clients from operator-controlled VLANs into the home VLAN.
+# Relay generic WoL clients from operator-controlled VLANs into the target VLANs.
 # wolweb and nut_monitor still send only on their local L2 segment; this UDM
 # service is the cross-VLAN bridge for clients that can target the gateway.
 #
@@ -12,6 +12,7 @@ udm_wol_relay_source_vlans:
   - trusted
 udm_wol_relay_target_vlans:
   - home
+  - management
 
 udm_wol_relay_source_cidrs: >-
   {{ udm_wol_relay_source_vlans
