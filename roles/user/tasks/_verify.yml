@@ -33,10 +33,6 @@
   command: sudo -n true
   changed_when: false
 
-- name: _verify | Mise binary is installed
-  command: /usr/bin/mise --version
-  changed_when: false
-
 # `mise ls --installed` lists registry entries even when a tool's binary
 # failed to download; .zshrc eval-loads zoxide and atuin unconditionally, so a
 # listed-but-broken binary breaks every fleet shell. Execute the two
