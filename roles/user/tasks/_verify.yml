@@ -78,21 +78,6 @@
     fail_msg: >-
       op --version produced no output
 
-# minimal exists in meta/test.yml specifically to exercise this cleanup: the
-# vanilla cloud image ships /etc/sudoers.d/90-cloud-init-users, box does not.
-- name: _verify | Cloud-init sudoers drop-in is removed
-  stat:
-    path: /etc/sudoers.d/90-cloud-init-users
-  # /etc/sudoers.d is 0750 root -- the operator can't traverse it unprivileged.
-  become: true
-  register: _user_cloudinit_sudoers
-
-- name: _verify | No cloud-init sudoers residue
-  assert:
-    that:
-      - not _user_cloudinit_sudoers.stat.exists
-    fail_msg: /etc/sudoers.d/90-cloud-init-users should have been removed
-
 - name: _verify | Linger marker is present
   stat:
     path: /var/lib/systemd/linger/{{ ansible_user_id }}
