@@ -36,10 +36,13 @@
 
     # Second scenario exercises every override plus hyphenated fact-key
     # sanitization (foo-bar -> foo_bar_user).
-    - name: _verify | Create a pre-existing group for the override test
+    - name: _verify | Create pre-existing groups for the override test
       group:
-        name: service_user_test_grp
+        name: "{{ item }}"
         system: true
+      loop:
+        - service_user_test_grp
+        - service_user_test_extra_grp
 
     - name: _verify | Provision a hyphenated-name user with arg overrides
       import_role:
@@ -48,6 +51,8 @@
       vars:
         service_user_args:
           name: service-user-test-hyphen
+          extra_groups:
+            - service_user_test_extra_grp
           shared_group: service_user_test_grp
           home: /tmp/service-user-test-hyphen
           createhome: true
@@ -91,6 +96,7 @@
           # proves the user task appends rather than replaces membership.
           - "'service-user-test-hyphen' in _service_user_hyphen_groups.stdout.split()"
           - "'service_user_test_grp' in _service_user_hyphen_groups.stdout.split()"
+          - "'service_user_test_extra_grp' in _service_user_hyphen_groups.stdout.split()"
           - ansible_facts.getent_passwd['service-user-test-hyphen'][4] == '/tmp/service-user-test-hyphen'
           - ansible_facts.getent_passwd['service-user-test-hyphen'][5] == '/bin/bash'
           - _service_user_hyphen_home.stat.exists
@@ -120,6 +126,7 @@
         - service_user_test
         - service-user-test-hyphen
         - service_user_test_grp
+        - service_user_test_extra_grp
 
     - name: _verify | Tear down test config + home dirs
       file:
