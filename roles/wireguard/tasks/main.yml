@@ -67,21 +67,10 @@
   tags:
     - wireguard
 
-# IPv4 forwarding carries the cross-site host route (fox -> a home host's
-# physical IP over the backbone); IPv6 forwarding is enabled for parity with
-# the other forwarding consumers on these hosts (tailscale).
-- name: Enable IP forwarding for the wg0 backbone
-  ansible.posix.sysctl:
-    name: "{{ item }}"
-    value: '1'
-    sysctl_set: true
-    sysctl_file: /etc/sysctl.d/30-wireguard.conf
-    # sysctl_set already pokes the live value per item, so the per-item
-    # `sysctl -p` reload would be redundant.
-    reload: false
-  loop:
-    - net.ipv4.ip_forward
-    - net.ipv6.conf.all.forwarding
+- name: Remove WireGuard forwarding drop-in
+  file:
+    path: /etc/sysctl.d/30-wireguard.conf
+    state: absent
   become: true
   tags:
     - wireguard
