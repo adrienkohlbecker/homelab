@@ -1,6 +1,5 @@
-# Without this assert, downstream failures (selectattr|first on an
-# missing mapping entry or key) surface as cryptic jinja
-# errors mid-converge. Catch it once, here, with a useful message.
+# Validate peer and key mappings before rendering so missing entries fail with
+# a useful message instead of a cryptic Jinja error.
 - name: Assert wireguard_peers entry exists for this host
   vars:
     own_peer: "{{ (wireguard_peers | default({})).get(inventory_hostname, {}) }}"
