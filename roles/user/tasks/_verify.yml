@@ -49,6 +49,6 @@
   register: _user_op_version
   failed_when: _user_op_version.rc != 0 or _user_op_version.stdout | length == 0
 
-- name: _verify | Commit-signing GPG key is imported
+- name: _verify | Operator GPG public key is imported
   command: gpg --with-colons --list-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
   changed_when: false

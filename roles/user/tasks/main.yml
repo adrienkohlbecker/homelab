@@ -202,7 +202,7 @@
   tags:
     - user
 
-- name: Check for the commit-signing GPG key
+- name: Check for the operator GPG key
   command: gpg --with-colons --list-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
   register: user_gpg_check
   failed_when: false
@@ -215,7 +215,7 @@
 # (widely firewalled), and dirmngr hard-fails when keyserver.ubuntu.com
 # resolves to an AAAA the host can't route (the qemu test net has no IPv6
 # route) instead of falling back. curl rides 443 and happy-eyeballs to IPv4.
-- name: Import the commit-signing public key
+- name: Import the operator GPG public key
   when:
     - user_gpg_check.rc != 0
     - not (ansible_check_mode and user_apt_packages.changed)
