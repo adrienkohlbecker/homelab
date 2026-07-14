@@ -53,25 +53,19 @@ mac_addresses:
 wireguard_peers:
   - name: lab
     address: "{{ network.hosts.lab.wireguard }}"
-    endpoint:
-      local: "{{ external_ips.lab }}:{{ service_ports.wireguard }}"
-      remote: 192.0.2.1:51823
+    public_endpoint: 192.0.2.1:51823
     is_server: true
     public_key: "{{ wireguard_keys.lab.public_key }}"
     private_key: "{{ wireguard_keys.lab.private_key }}"
   - name: pug
     address: "{{ network.hosts.pug.wireguard }}"
-    endpoint:
-      local: "{{ external_ips.pug }}:{{ service_ports.wireguard }}"
-      remote: 192.0.2.1:51823
+    public_endpoint: 192.0.2.1:51823
     is_server: true
     public_key: "{{ wireguard_keys.pug.public_key }}"
     private_key: "{{ wireguard_keys.pug.private_key }}"
   - name: box
     address: "{{ network.hosts.box.wireguard }}"
-    endpoint:
-      local: "{{ external_ips.box }}:{{ service_ports.wireguard }}"
-      remote: 192.0.2.1:51823
+    public_endpoint: 192.0.2.1:51823
     is_server: true
     public_key: "{{ wireguard_keys.box.public_key }}"
     private_key: "{{ wireguard_keys.box.private_key }}"
