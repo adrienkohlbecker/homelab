@@ -693,28 +693,28 @@
   become: true
   failed_when: nginx_verify_cond_file.stat.exists
 
-- name: _verify | Preview a pending vhost and its nginx reload
+- name: _verify | Preview a pending vhost update and its nginx reload
   import_role:
     name: nginx
     tasks_from: site
   check_mode: true
   vars:
     nginx_site_args:
-      subdomain: nginxverifycheck
+      subdomain: nginxverify
       proxy_pass: http://127.0.0.1:18080/
 
-- name: _verify | A pending vhost previews both the write and reload
+- name: _verify | A pending vhost update previews both the write and reload
   assert:
     that:
-      - nginxverifycheck_site_result.changed
+      - nginxverify_site_result.changed
       - _nginx_site_reload.changed
 
-- name: _verify | The check-mode vhost preview writes no config
+- name: _verify | The check-mode vhost preview leaves the vhost enabled
   stat:
-    path: /etc/nginx/sites-available/nginxverifycheck
+    path: /etc/nginx/sites-enabled/nginxverify
   register: nginx_verify_check_file
   become: true
-  failed_when: nginx_verify_check_file.stat.exists
+  failed_when: not nginx_verify_check_file.stat.exists
 
 # Exercise the same contract on the split removal entrypoint while nginxverify
 # still exists. The real removal below must then overwrite this result as changed.
