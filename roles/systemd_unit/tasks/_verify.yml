@@ -422,7 +422,7 @@
       src: systemd_unit_verify_ok.service.j2
       reload: true
 
-- name: _verify | Enable the non-reloadable fixture without starting it
+- name: _verify | Enable the copy-path fixture without starting it
   import_role:
     name: systemd_unit
     tasks_from: service
@@ -449,7 +449,7 @@
       - "'UnitFileState=enabled' in _systemd_unit_enable_only_state.stdout_lines"
       - "'ActiveState=inactive' in _systemd_unit_enable_only_state.stdout_lines"
 
-- name: _verify | Cleanup non-reloadable fixture
+- name: _verify | Cleanup enable-only fixture
   import_role:
     name: systemd_unit
     tasks_from: remove
