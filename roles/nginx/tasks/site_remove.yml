@@ -2,6 +2,9 @@
 # retired site, and may pass `condition` (default true) to gate removal while
 # still publishing the result fact. Keep removal calls as tombstones until every
 # relevant host has converged so stale vhosts cannot survive a fresh role run.
+# Legacy filenames containing dots or underscores require fixed-path
+# `file: state=absent` tombstones so this helper keeps a strict interpolation
+# boundary.
 - name: site_remove | Assert subdomain is a safe DNS label
   assert:
     that:
