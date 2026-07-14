@@ -42,6 +42,32 @@
       autobackup:bak on rpool/ROOT/{{ ansible_distribution_release }} is
       "{{ _zfs_verify_autobackup.stdout | trim }}", expected value=true source=local.
 
+# --- Root mount guard ---
+
+- name: _verify | Check root mount guard is active
+  when: zfs_root
+  systemd:
+    name: zfs_mount_root.service
+  register: _zfs_verify_root_mount_unit
+  become: true
+
+- name: _verify | Root mount guard is active
+  when: zfs_root
+  assert:
+    that: _zfs_verify_root_mount_unit.status.ActiveState == 'active'
+
+- name: _verify | Check root mount passes
+  when: zfs_root
+  command: /usr/local/bin/zfs_check_mount rpool/ROOT/{{ ansible_distribution_release }} /
+  register: _zfs_verify_root_mount
+  changed_when: false
+  become: true
+
+- name: _verify | Successful root mount check is silent
+  when: zfs_root
+  assert:
+    that: _zfs_verify_root_mount.stdout == ''
+
 # --- Zed service ---
 
 - name: _verify | Query zed unit state
@@ -285,6 +311,33 @@
       dataset.yml probe mountpoint={{ _zfs_verify_probe_mp.stdout | trim }}
       mounted={{ _zfs_verify_probe_mounted.stdout | trim }}; expected
       /mnt/_verify_probe + yes.
+
+- name: _verify | Check regular dataset mount passes
+  when: zfs_root
+  command: /usr/local/bin/zfs_check_mount {{ zfs_tank_filesystem }}/_verify_probe /mnt/_verify_probe
+  register: _zfs_verify_probe_mount
+  changed_when: false
+  become: true
+
+- name: _verify | Successful regular dataset mount check is silent
+  when: zfs_root
+  assert:
+    that: _zfs_verify_probe_mount.stdout == ''
+
+- name: _verify | Check invalid mount states fail
+  when: zfs_root
+  command:
+    argv: "{{ ['/usr/local/bin/zfs_check_mount'] + zfs_verify_mount_case.args }}"
+  register: _zfs_verify_mount_negative
+  changed_when: false
+  failed_when: _zfs_verify_mount_negative.rc == 0
+  loop:
+    - { label: mountpoint mismatch, args: [ "{{ zfs_tank_filesystem }}/_verify_probe", /nonexistent ] }
+    - { label: missing dataset, args: [ rpool/nonexistent_dataset, / ] }
+  loop_control:
+    loop_var: zfs_verify_mount_case
+    label: "{{ zfs_verify_mount_case.label }}"
+  become: true
 
 # Tear down the probe: remove the mount unit dataset.yml created, destroy the
 # dataset, drop the mountpoint dir.

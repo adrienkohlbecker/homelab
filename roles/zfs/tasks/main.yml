@@ -435,3 +435,16 @@
 
 - name: Setup mount generator
   import_tasks: mount_generator.yml
+
+# Pin the expected root boot environment into a failed-state signal. If a host
+# boots another BE without a converge, generic failed-unit monitoring reports
+# the mismatch immediately. Re-converge after a deliberate BE switch.
+- name: Add zfs mount service for root pool
+  when: zfs_root
+  import_tasks: mount_unit.yml
+  vars:
+    zfs_mount_args:
+      dataset: "rpool/ROOT/{{ ansible_distribution_release }}"
+      mountpoint: /
+  tags:
+    - zfs_mount

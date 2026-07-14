@@ -6,7 +6,7 @@
 # Unit names preserve the historical slash-to-underscore mapping ('root' for
 # '/'). It is non-injective, so the filter rejects the known /root alias.
 # Consumers hard-code these names; changing the mapping is a fleet-wide rename.
-- name: unit | Assert required inputs
+- name: mount_unit | Assert required inputs
   assert:
     that:
       - zfs_mount_args.dataset is defined
@@ -16,7 +16,7 @@
   tags:
     - zfs_mount
 
-- name: unit | Derive unit name suffix
+- name: mount_unit | Derive unit name suffix
   set_fact:
     _zfs_mount_unit_name: "{{ zfs_mount_args.mountpoint | zfs_mount_unit }}"
   tags:
@@ -35,7 +35,7 @@
   tags:
     - zfs_mount
 
-- name: unit | Install systemd mount service
+- name: mount_unit | Install systemd mount service
   import_role:
     name: systemd_unit
     tasks_from: install
@@ -46,7 +46,7 @@
   tags:
     - zfs_mount
 
-- name: unit | Enable zfs_mount service
+- name: mount_unit | Enable zfs_mount service
   import_role:
     name: systemd_unit
     tasks_from: service

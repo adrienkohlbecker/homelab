@@ -78,8 +78,8 @@
 - name: Install zfs mount service
   when: zfs_root
   import_role:
-    name: zfs_mount
-    tasks_from: unit
+    name: zfs
+    tasks_from: mount_unit
   vars:
     zfs_mount_args:
       dataset: rpool/libvirt
