@@ -69,23 +69,13 @@
       changed_when: false
       register: _zfs_autobackup_datasets
 
-    - name: source | Capture current permissions on backed-up datasets
-      command: zfs allow "{{ item }}"
-      changed_when: false
-      register: _zfs_autobackup_allow_before
-      loop: "{{ _zfs_autobackup_datasets.stdout_lines }}"
-      loop_control:
-        index_var: idx
-
     - name: source | Grant ZFS permissions on backed-up datasets
-      command: zfs allow zfs_autobackup send,hold,release "{{ item }}"
-      changed_when: false
+      community.general.zfs_delegate_admin:
+        name: "{{ item }}"
+        users:
+          - zfs_autobackup
+        permissions:
+          - send
+          - hold
+          - release
       loop: "{{ _zfs_autobackup_datasets.stdout_lines }}"
-
-    - name: source | Detect permission changes on backed-up datasets
-      command: zfs allow "{{ item }}"
-      changed_when: _zfs_autobackup_allow_before.results[idx].stdout != _zfs_autobackup_allow_after.stdout
-      register: _zfs_autobackup_allow_after
-      loop: "{{ _zfs_autobackup_datasets.stdout_lines }}"
-      loop_control:
-        index_var: idx
