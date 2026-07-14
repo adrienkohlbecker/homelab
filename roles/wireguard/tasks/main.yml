@@ -32,9 +32,6 @@
       # silently drops the cross-site route.
       - server_hosts | selectattr('site', 'undefined') | list | length == 0
       - server_hosts | selectattr('physical', 'undefined') | list | length == 0
-      # A local endpoint must dial the configured ListenPort; the remote port
-      # may differ (external port-forward), so only .local is checked.
-      - wireguard_peers | selectattr('endpoint', 'defined') | map(attribute='endpoint') | selectattr('local', 'defined') | map(attribute='local') | map('regex_replace', '^.*:', '') | map('int') | reject('eq', service_ports.wireguard) | list | length == 0
       - wireguard_peers | map(attribute='name') | reject('match', '^[a-z][a-z0-9_]*$') | list | length == 0
     fail_msg: >-
       wireguard_peers must be defined and contain an is_server entry for
@@ -42,7 +39,7 @@
       every peer name must match ^[a-z][a-z0-9_]*$ and be unique; addresses
       and public_keys must be unique; wireguard_psk_seed must be >= 32 chars;
       every is_server peer must resolve to a network.hosts entry with site and
-      physical; any endpoint.local must use port {{ service_ports.wireguard }}.
+      physical.
   tags:
     - wireguard
 

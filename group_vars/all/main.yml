@@ -308,7 +308,7 @@ wireguard_peers:
   - name: lab
     address: "{{ network.hosts.lab.wireguard }}"
     endpoint:
-      local: "{{ external_ips.lab }}:51820"
+      local: "{{ external_ips.lab }}:{{ service_ports.wireguard }}"
       remote: "{{ home_endpoint }}:51821"
     is_server: true
     public_key: "{{ wireguard_keys.lab.public_key }}"
@@ -316,7 +316,7 @@ wireguard_peers:
   - name: pug
     address: "{{ network.hosts.pug.wireguard }}"
     endpoint:
-      local: "{{ external_ips.pug }}:51820"
+      local: "{{ external_ips.pug }}:{{ service_ports.wireguard }}"
       remote: "{{ home_endpoint }}:51822"
     is_server: true
     public_key: "{{ wireguard_keys.pug.public_key }}"
@@ -324,7 +324,7 @@ wireguard_peers:
   - name: box
     address: "{{ network.hosts.box.wireguard }}"
     endpoint:
-      local: "{{ external_ips.box }}:51820"
+      local: "{{ external_ips.box }}:{{ service_ports.wireguard }}"
       remote: "{{ home_endpoint }}:51823"
     is_server: true
     public_key: "{{ wireguard_keys.box.public_key }}"
@@ -342,7 +342,7 @@ wireguard_peers:
   - name: bunk
     address: "{{ network.hosts.bunk.wireguard }}"
     endpoint:
-      local: "{{ external_ips.bunk }}:51820"
+      local: "{{ external_ips.bunk }}:{{ service_ports.wireguard }}"
       remote: "{{ bunk_endpoint }}:51820"
     is_server: true
     # Lab, pug, and fox are the consumers of the bunk offsite link (nightly
