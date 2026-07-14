@@ -201,8 +201,8 @@
     - kuma
 
 # Tombstone: retire the self-hosted healthchecks service this host ran
-# before kuma took over availability monitoring. Removes the systemd unit,
-# its nginx vhost (closing the old unauthenticated /ping/ bypass). Leaves
+# before kuma took over availability monitoring. Removes the systemd unit
+# and its nginx vhost (closing the old unauthenticated /ping/ bypass). Leaves
 # /mnt/services/healthchecks and its sqlite dataset in place -- they ride ZFS
 # snapshots and discarding data is not this change's intent. Idempotent: a
 # no-op on any host that never ran healthchecks. Drop this block once lab has
