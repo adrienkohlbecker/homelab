@@ -2,10 +2,13 @@
 # are what apt actually resolves (via apt-config dump — not by re-reading
 # the files this role just wrote).
 
-- name: _verify | Apt-daily-upgrade timer is active  # noqa: command-instead-of-module
-  command: systemctl is-active apt-daily-upgrade.timer
+- name: _verify | Unattended-upgrades timers are active  # noqa: command-instead-of-module
+  command: systemctl is-active {{ item }}
   changed_when: false
   become: true
+  loop:
+    - apt-daily.timer
+    - apt-daily-upgrade.timer
   tags:
     - unattended_upgrades
 
