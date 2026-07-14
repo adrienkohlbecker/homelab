@@ -75,12 +75,12 @@
       /boot/efi/EFI/refind/refind.conf — the fallback boot path (empty/wiped
       NVRAM) would use a stale config.
 
-- name: _verify | Stat ZBM artifacts referenced by refind.conf
+- name: _verify | Stat ZBM artifacts consumed by refind
   stat:
     path: "/boot/efi/EFI/ZBM/{{ item }}"
   loop: >-
     {{
-      ['VMLINUZ.EFI', 'VMLINUZ-BACKUP.EFI']
+      ['VMLINUZ.EFI', 'VMLINUZ-BACKUP.EFI', 'cmdline']
       + (['vmlinux-bootmenu', 'initramfs-bootmenu.img'] if ansible_architecture == 'aarch64' else [])
     }}
   loop_control:
@@ -88,12 +88,12 @@
   register: _refind_verify_zbm_artifacts
   become: true
 
-- name: _verify | ZBM menuentry artifacts exist on the ESP
+- name: _verify | ZBM artifacts consumed by refind exist on the ESP
   assert:
     that:
       - item.stat.exists
       - item.stat.size > 0
-    fail_msg: "refind.conf references missing or empty ZBM artifact: {{ item.item }}"
+    fail_msg: "missing or empty ZBM artifact consumed by refind: {{ item.item }}"
   loop: "{{ _refind_verify_zbm_artifacts.results }}"
   loop_control:
     label: "{{ item.item }}"
