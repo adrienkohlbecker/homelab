@@ -58,7 +58,6 @@
     mode: "0755"
     backup: true
     validate: bash -n %s
-  register: udm_wol_relay_onboot_script
   become: true
   tags:
     - udm_wol_relay
