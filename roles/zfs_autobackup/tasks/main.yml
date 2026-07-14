@@ -14,6 +14,24 @@
   tags:
     - zfs_autobackup
 
+- name: Assert backup source entries are configured
+  assert:
+    that:
+      - item is mapping
+      - (item.host | default(none)) is string
+      - item.host | length > 0
+      - item.host in external_ips
+      - (item.dest_dataset | default(none)) is string
+      - item.dest_dataset | length > 0
+    fail_msg: >-
+      zfs_autobackup_sources entries must contain a host from external_ips and
+      a non-empty dest_dataset.
+  loop: "{{ zfs_autobackup_sources }}"
+  loop_control:
+    label: "{{ item.host | default('(invalid)') }}"
+  tags:
+    - zfs_autobackup
+
 - name: Install zfs autobackup dependencies
   apt:
     package:

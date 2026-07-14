@@ -9,8 +9,7 @@
 # Gated on non-existence rather than letting community.general.zfs reconcile
 # properties every run: an existing receive root is already populated and may
 # carry properties set by zfs receive over time, so we create-if-missing and
-# never touch it again. The empty-string dest_dataset is the skip sentinel
-# (e.g. box's self-reference in the fixture).
+# never touch it again.
 - name: dest | List existing datasets
   command: zfs list -H -o name
   check_mode: false
@@ -24,7 +23,6 @@
 - name: dest | Ensure backup receive-target datasets exist
   when:
     - zfs_root
-    - item.dest_dataset | default('') | length > 0
     - item.dest_dataset not in (_zfs_autobackup_existing_datasets.stdout_lines | default([]))
   community.general.zfs:
     name: "{{ item.dest_dataset }}"
@@ -34,7 +32,7 @@
       mountpoint: none
   loop: "{{ zfs_autobackup_sources }}"
   loop_control:
-    label: "{{ item.dest_dataset | default('(none)') }}"
+    label: "{{ item.dest_dataset }}"
   become: true
   tags:
     - zfs_autobackup
@@ -92,4 +90,3 @@
   become: true
   tags:
     - zfs_autobackup
-

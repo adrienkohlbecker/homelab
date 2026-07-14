@@ -58,13 +58,10 @@ f_rescue f_trace zfs_backup_local "${zfs_backup_local_args[@]}"
 zfs_backup_local_ok=$((f_failed == 0))
 
 # pull each configured source host's snapshots onto this host
-# (an empty dest_dataset is the skip sentinel -- e.g. box's self-reference
-# in the qemu fixture, which has no peer to pull from)
-#
 # Unaffected by the gate above: each onsite leg pulls a *peer* host's own
 # snapshots (--no-snapshot --ssh-source), not the ones taken locally this run,
 # so a local-snapshot failure here doesn't make these copies inconsistent.
-{% for src in zfs_autobackup_sources if src.dest_dataset %}
+{% for src in zfs_autobackup_sources %}
 f_rescue f_trace zfs_backup_onsite "{{ external_ips[src.host] }}" "{{ src.dest_dataset }}"
 {% endfor %}
 # sync each dataset to offsite synology
