@@ -13,7 +13,6 @@
       - attr
       - btop
       - ccze
-      - cloud-image-utils
       - curl
       - dnsutils
       - edac-utils

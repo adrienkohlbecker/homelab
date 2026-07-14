@@ -19,9 +19,11 @@
   tags:
     - homelab_ci
 
-- name: Install acl package
+- name: Install CI host packages
   apt:
-    name: acl
+    name:
+      - acl
+      - cloud-image-utils
     state: present
   become: true
   tags:
