@@ -362,6 +362,7 @@
   command: zfs get -H -o value,source autobackup:bak rpool/ROOT/{{ ansible_distribution_release }}
   register: zfs_root_autobackup
   changed_when: false
+  check_mode: false
   become: true
   tags:
     - zfs
