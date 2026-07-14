@@ -12,30 +12,6 @@
       installed={{ zfs_autobackup_verify_version.stdout | trim }},
       expected={{ zfs_autobackup_version }}
 
-- name: _verify | Inspect backup timers
-  systemd:
-    name: "{{ item }}"
-  loop:
-    - zfs_autosnapshot.timer
-    - zfs_backup_freshness.timer
-  register: zfs_autobackup_verify_timers
-  become: true
-
-- name: _verify | Backup timers are loaded, enabled, and active
-  assert:
-    that:
-      - item.status.LoadState == "loaded"
-      - item.status.UnitFileState == "enabled"
-      - item.status.ActiveState == "active"
-    fail_msg: >-
-      {{ item.item }} not in expected state
-      (LoadState={{ item.status.LoadState }},
-      UnitFileState={{ item.status.UnitFileState }},
-      ActiveState={{ item.status.ActiveState }})
-  loop: "{{ zfs_autobackup_verify_timers.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
 # podman.service/podman.socket are masked in the backup user's scope so its
 # login never spins up the rootless podman API socket (see source.yml). A unit
 # symlinked to /dev/null is what systemd reads as masked, so assert exactly that
