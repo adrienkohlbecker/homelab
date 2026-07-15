@@ -1,3 +1,17 @@
+global_defs {
+  # Required for the vrrp_script block to run under a declared user. Without
+  # it keepalived demotes scripts to `keepalived_script` (not created by the
+  # .deb) and they silently fail -- the healthcheck would never gate VRRP, so
+  # the VIP logic breaks.
+  enable_script_security
+  # Least-privilege default: vrrp_script blocks run as `nobody` unless they
+  # opt up. The dnsmasq healthcheck below opts up because of the UDM-specific
+  # validation constraint documented there.
+  script_user nobody
+  # NB: SIGHUP-reload of global_defs is flaky in 2.2.x, so editing either
+  # directive needs a manual `systemctl restart keepalived` to take effect.
+}
+
 vrrp_script dnsmasq_healthcheck {
   script    /usr/local/bin/dnsmasq_healthcheck
   interval  1
@@ -56,9 +70,8 @@ vrrp_instance dns {
   # No explicit track_interface: keepalived already tracks the instance's own
   # `interface` (above) for link state, so re-listing it is redundant --
   # keepalived ignores it ("since own interface") and that warning makes
-  # `keepalived -t` exit non-zero, failing the validate gate. (The lab/pug
-  # fragment omits it for the same reason -- see the track_interface note in
-  # roles/adguard/templates/keepalived.conf.j2.)
+  # `keepalived -t` exit non-zero, failing the validate gate. The lab/pug
+  # config omits it for the same reason; see roles/adguard's template.
 
   virtual_ipaddress {
     {{ network.virtual_ips.dns }}/32

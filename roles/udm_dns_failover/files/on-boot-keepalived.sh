@@ -39,8 +39,6 @@ fi
 
 # -- symlinks from persistent storage ------------------------------------
 ln -sfn "$DATADIR/keepalived.conf" /etc/keepalived/keepalived.conf
-mkdir -p /etc/keepalived/conf.d
-ln -sfn "$DATADIR/dns.conf" /etc/keepalived/conf.d/dns.conf
 ln -sfn "$DATADIR/healthcheck.sh" /usr/local/bin/dnsmasq_healthcheck
 
 # -- heartbeat timer (firmware-update detection via Kuma push) ------------
@@ -53,16 +51,10 @@ systemctl daemon-reload
 sysctl -w net.ipv4.ip_nonlocal_bind=1
 
 # -- validate and start ---------------------------------------------------
-# keepalived -t passes even when conf.d/dns.conf is a dangling or
-# instance-less fragment (zero vrrp_instances) -- the daemon would then run
-# healthy and pointless, never claiming the VIP, which is exactly the
-# post-firmware-update failure this recovery path must not leave behind.
-# Also require the instance to be present, mirroring the converge assert.
 if command -v keepalived &>/dev/null &&
-  keepalived -t -f /etc/keepalived/keepalived.conf &>/dev/null &&
-  grep -q '^vrrp_instance dns' /etc/keepalived/conf.d/dns.conf 2>/dev/null; then
+  keepalived -t -f /etc/keepalived/keepalived.conf &>/dev/null; then
   systemctl enable --now keepalived.service
 else
-  logger -t on-boot-keepalived "WARNING: keepalived config invalid or VRRP instance missing, skipping start"
+  logger -t on-boot-keepalived "WARNING: keepalived config invalid, skipping start"
 fi
 systemctl enable --now udm_keepalived_heartbeat.timer

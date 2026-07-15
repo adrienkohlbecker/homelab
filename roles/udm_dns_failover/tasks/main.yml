@@ -119,32 +119,6 @@
 
 # -- configuration files --------------------------------------------------
 
-- name: Deploy keepalived base config  # noqa: require-validate
-  copy:
-    src: keepalived.conf
-    dest: /data/keepalived/keepalived.conf
-    owner: root
-    group: root
-    mode: "0640"
-    backup: true
-  register: udm_dns_failover_base_conf
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Deploy VRRP fragment  # noqa: require-validate
-  template:
-    src: dns.conf.j2
-    dest: /data/keepalived/dns.conf
-    owner: root
-    group: root
-    mode: "0640"
-    backup: true
-  register: udm_dns_failover_vrrp_conf
-  become: true
-  tags:
-    - udm_dns_failover
-
 - name: Deploy healthcheck script
   copy:
     src: healthcheck.sh
@@ -158,46 +132,51 @@
   tags:
     - udm_dns_failover
 
-# -- symlinks into /etc/ --------------------------------------------------
-
-- name: Create keepalived conf.d directory
+- name: Symlink persistent healthcheck
   file:
-    path: /etc/keepalived/conf.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0750"
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Symlink persistent keepalived files
-  file:
-    src: "{{ item.src }}"
-    dest: "{{ item.dest }}"
+    src: /data/keepalived/healthcheck.sh
+    dest: /usr/local/bin/dnsmasq_healthcheck
     state: link
     force: true
-  loop:
-    - src: /data/keepalived/keepalived.conf
-      dest: /etc/keepalived/keepalived.conf
-    - src: /data/keepalived/dns.conf
-      dest: /etc/keepalived/conf.d/dns.conf
-    - src: /data/keepalived/healthcheck.sh
-      dest: /usr/local/bin/dnsmasq_healthcheck
-  loop_control:
-    label: "{{ item.dest }}"
   become: true
   tags:
     - udm_dns_failover
 
-# Tombstones for the pihole-era identifier names. The fragment removals are
-# load-bearing, not tidiness: a leftover conf.d/pihole.conf would make the
-# include glob double-define the vrid and fail every keepalived -t gate.
-- name: Remove pihole-era keepalived artifacts
+- name: Deploy keepalived config
+  template:
+    src: keepalived.conf.j2
+    dest: /data/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: "0640"
+    backup: true
+    validate: >-
+      {{ (ansible_check_mode and not udm_dns_failover_keepalived.stat.exists)
+         | ternary(omit, '/usr/sbin/keepalived -t -f %s') }}
+  register: udm_dns_failover_conf
+  become: true
+  tags:
+    - udm_dns_failover
+
+# -- symlink into /etc/ ---------------------------------------------------
+
+- name: Symlink persistent keepalived config
+  file:
+    src: /data/keepalived/keepalived.conf
+    dest: /etc/keepalived/keepalived.conf
+    state: link
+    force: true
+  become: true
+  tags:
+    - udm_dns_failover
+
+- name: Remove obsolete split-config artifacts
   file:
     path: "{{ item }}"
     state: absent
   loop:
+    - /data/keepalived/dns.conf
+    - /etc/keepalived/conf.d/dns.conf
     - /data/keepalived/pihole.conf
     - /etc/keepalived/conf.d/pihole.conf
     - /usr/local/bin/pihole_healthcheck
@@ -350,89 +329,6 @@
   tags:
     - udm_dns_failover
 
-- name: Validate keepalived config before start
-  when: not ansible_check_mode
-  tags:
-    - udm_dns_failover
-  block:
-    - name: Run keepalived -t on the assembled config
-      command: keepalived -t -f /etc/keepalived/keepalived.conf
-      changed_when: false
-      become: true
-  rescue:
-    # keepalived -t reads the assembled config in place, so the bad file is
-    # already on persistent /data -- which the on-boot recovery re-applies on
-    # every boot. Restore the previous version from the backup the copy/
-    # template made (and delete that backup), so a SIGHUP-reload or boot-time
-    # start can't pick it up. On the first-ever write there is no backup, so
-    # drop the freshly-added file instead -- leaving a broken config on /data
-    # would have the on-boot recovery re-apply it forever. Mirrors the
-    # three-arm rescue in roles/keepalived/tasks/main.yml.
-    - name: Restore previous VRRP fragment after failed validation  # noqa: require-backup
-      when: '"backup_file" in udm_dns_failover_vrrp_conf'
-      copy:
-        remote_src: true
-        src: "{{ udm_dns_failover_vrrp_conf.backup_file }}"
-        dest: /data/keepalived/dns.conf
-        owner: root
-        group: root
-        mode: "0640"
-        validate: grep -qE '^vrrp_instance[[:space:]]+dns[[:space:]]*\{' %s
-      become: true
-    - name: Remove the VRRP fragment backup
-      when: '"backup_file" in udm_dns_failover_vrrp_conf'
-      file:
-        path: "{{ udm_dns_failover_vrrp_conf.backup_file }}"
-        state: absent
-      become: true
-    - name: Remove the freshly-added VRRP fragment
-      when: 'udm_dns_failover_vrrp_conf.changed and "backup_file" not in udm_dns_failover_vrrp_conf'
-      file:
-        path: /data/keepalived/dns.conf
-        state: absent
-      become: true
-    - name: Restore previous base config after failed validation  # noqa: require-backup
-      when: '"backup_file" in udm_dns_failover_base_conf'
-      copy:
-        remote_src: true
-        src: "{{ udm_dns_failover_base_conf.backup_file }}"
-        dest: /data/keepalived/keepalived.conf
-        owner: root
-        group: root
-        mode: "0640"
-        validate: grep -q '^include /etc/keepalived/conf.d/\*.conf$' %s
-      become: true
-    - name: Remove the base config backup
-      when: '"backup_file" in udm_dns_failover_base_conf'
-      file:
-        path: "{{ udm_dns_failover_base_conf.backup_file }}"
-        state: absent
-      become: true
-    - name: Remove the freshly-added base config
-      when: 'udm_dns_failover_base_conf.changed and "backup_file" not in udm_dns_failover_base_conf'
-      file:
-        path: /data/keepalived/keepalived.conf
-        state: absent
-      become: true
-    - name: Fail after restoring keepalived config
-      fail:
-        msg: >-
-          keepalived -t failed on the assembled config; the previous configs
-          were restored from backup. Inspect the validate output above --
-          /data/keepalived/dns.conf or keepalived.conf is malformed.
-
-# keepalived -t passes even when conf.d/*.conf is a dangling symlink (zero
-# vrrp_instances): the daemon would then run, healthy and pointless, never
-# claiming the VIP. Assert the fragment actually resolves and defines the
-# instance before starting.
-- name: Assert the VRRP instance is present in the assembled config
-  when: not ansible_check_mode
-  command: grep -q '^vrrp_instance dns' /etc/keepalived/conf.d/dns.conf
-  changed_when: false
-  become: true
-  tags:
-    - udm_dns_failover
-
 # Check-mode guard: on a fresh host apt hasn't installed keepalived yet, so
 # a check-mode start can't find the unit. On a converged host the binary
 # exists and the start/reload idempotence check still runs under --check.
@@ -440,7 +336,7 @@
   when: not (ansible_check_mode and not udm_dns_failover_keepalived.stat.exists)
   systemd:
     name: keepalived.service
-    state: "{{ (udm_dns_failover_base_conf.changed or udm_dns_failover_vrrp_conf.changed) | ternary('reloaded', 'started') }}"
+    state: "{{ udm_dns_failover_conf.changed | ternary('reloaded', 'started') }}"
     enabled: true
   become: true
   tags:
