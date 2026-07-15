@@ -63,6 +63,14 @@
         | length == 2
 
 # -- firmware-wipe recovery ------------------------------------------------
+- name: _verify | Stop relay before firmware recovery
+  systemd:
+    name: udm_wol_relay.service
+    state: stopped
+  become: true
+  tags:
+    - udm_wol_relay
+
 - name: _verify | Run recovery through the on-boot framework
   systemd:
     name: on-boot.service
