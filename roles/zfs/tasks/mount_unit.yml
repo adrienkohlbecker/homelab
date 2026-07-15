@@ -14,12 +14,14 @@
       - zfs_mount_args.mountpoint is defined
     quiet: true
   tags:
+    - zfs
     - zfs_mount
 
 - name: mount_unit | Derive unit name suffix
   set_fact:
     _zfs_mount_unit_name: "{{ zfs_mount_args.mountpoint | zfs_mount_unit }}"
   tags:
+    - zfs
     - zfs_mount
 
 - name: Add check mount binary
@@ -33,6 +35,7 @@
     validate: bash -n %s
   become: true
   tags:
+    - zfs
     - zfs_mount
 
 - name: mount_unit | Install systemd mount service
@@ -44,6 +47,7 @@
       src: zfs_mount.service.j2
       dest: "{{ _zfs_mount_unit_name }}"
   tags:
+    - zfs
     - zfs_mount
 
 - name: mount_unit | Enable zfs_mount service
@@ -56,4 +60,5 @@
       condition: "{{ not (ansible_check_mode and (lookup('vars', (_zfs_mount_unit_name | ansible_var_key) ~ '_result', default={}) | default({})).changed | default(false)) }}"
       restart: "{{ (lookup('vars', (_zfs_mount_unit_name | ansible_var_key) ~ '_result', default={}) | default({})).changed | default(false) }}"
   tags:
+    - zfs
     - zfs_mount
