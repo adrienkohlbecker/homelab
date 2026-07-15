@@ -309,6 +309,7 @@
   loop:
     - { label: mountpoint mismatch, args: [ "{{ zfs_tank_filesystem }}/_verify_probe", /nonexistent ] }
     - { label: missing dataset, args: [ rpool/nonexistent_dataset, / ] }
+    - { label: extra argument, args: [ "{{ zfs_tank_filesystem }}/_verify_probe", /mnt/_verify_probe, "on" ] }
   loop_control:
     loop_var: zfs_verify_mount_case
     label: "{{ zfs_verify_mount_case.label }}"

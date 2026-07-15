@@ -3,13 +3,13 @@ set -euo pipefail
 
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-DATASET=${1:-}
-MOUNTPOINT=${2:-}
-
-if [ -z "$DATASET" ] || [ -z "$MOUNTPOINT" ]; then
+if [ "$#" -ne 2 ] || [ -z "$1" ] || [ -z "$2" ]; then
   echo >&2 "Usage: zfs_check_mount DATASET MOUNTPOINT"
   exit 1
 fi
+
+DATASET=$1
+MOUNTPOINT=$2
 
 # One query returns every property against a single consistent view of
 # the dataset, rather than forking zfs once per property. Boot environments
