@@ -199,7 +199,6 @@
                     and fields.get("source") == "rpc-server.cc"
                     and isinstance(fields.get("source_line"), int)
                     and fields.get("parser_status") == "parsed"
-                    and "transmission_timestamp" not in fields
                     and "transmission_level" not in fields
                     and "CONTAINER_TAG" not in fields
                 ):
@@ -244,10 +243,7 @@
           fields.source_line: 144
           fields.parser_status: parsed
           _absent:
-            - fields.transmission_timestamp
             - fields.transmission_level
-            - fields.transmission_origin
-            - fields.transmission_origin_line
             - fields.CONTAINER_TAG
         - message: Rejected request from 127.0.0.1 (failed authentication)
           level: warn

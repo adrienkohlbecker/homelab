@@ -1,7 +1,7 @@
 parsers:
   - name: transmission_console
     format: regex
-    regex: '/\A\[(?<transmission_timestamp>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}(?:Z|[+-][0-9]{4}))\] (?<transmission_level>TRC|DBG|INF|WRN|ERR|FTL) (?<transmission_source>[^:[:space:]]+):(?<transmission_source_line>[0-9]+) (?<transmission_message>[\s\S]*?) \((?<transmission_origin>[^:()]+):(?<transmission_origin_line>[0-9]+)\)[[:space:]]*\z/'
+    regex: '/\A\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}(?:Z|[+-][0-9]{4})\] (?<transmission_level>TRC|DBG|INF|WRN|ERR|FTL) (?<transmission_source>[^:[:space:]]+):(?<transmission_source_line>[0-9]+) (?<transmission_message>[\s\S]*?) \([^:()]+:[0-9]+\)[[:space:]]*\z/'
     types: transmission_source_line:integer
 
 pipeline:
@@ -27,8 +27,4 @@ pipeline:
         - transmission_level _level
         - transmission_source source
         - transmission_source_line source_line
-      remove:
-        - transmission_timestamp
-        - transmission_origin
-        - transmission_origin_line
       set: parser_status parsed
