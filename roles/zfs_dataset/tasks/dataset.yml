@@ -30,6 +30,8 @@
 - name: Create and mount zfs dataset
   vars:
     _zfs_dataset_resolved: "{{ zfs_dataset_args.dataset | regex_replace('^tank/', zfs_tank_filesystem ~ '/') }}"
+  tags:
+    - zfs_dataset
   block:
     - name: Assert required dataset inputs
       assert:
