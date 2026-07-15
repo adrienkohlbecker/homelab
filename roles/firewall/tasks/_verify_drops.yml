@@ -48,6 +48,18 @@
   failed_when: _firewall_probe_forward_drop.rc == 0
   become: true
 
+# The positive host and container egress probes run before this file, so the
+# external destination is known to be reachable. A WireGuard-scoped source must
+# still fall through the FORWARD chain now that wg0-to-WAN transit is absent.
+- name: _verify_drops | Forward — WireGuard source cannot transit to WAN
+  command: >
+    ip netns exec extns curl --interface {{ _firewall_probe_wg }}
+    --connect-timeout 2 --max-time 3 -sI http://1.1.1.1/
+  register: _firewall_probe_wg_transit_drop
+  changed_when: false
+  failed_when: _firewall_probe_wg_transit_drop.rc == 0
+  become: true
+
 # ICMP echo flood with varying IDs — must vary ICMP-id per packet to
 # exercise the rate-limit rule, because conntrack tracks ICMP echo by
 # (src, dst, type, id): a same-id flood collapses to one flow that
