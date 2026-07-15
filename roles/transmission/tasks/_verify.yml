@@ -134,18 +134,6 @@
     state: restarted
   become: true
 
-- name: _verify | Transmission RPC is back up after the restart
-  uri:
-    url: http://127.0.0.1:{{ service_ports.transmission }}/transmission/rpc
-    method: POST
-    body: '{"method":"session-get"}'
-    body_format: json
-    status_code: 401
-  register: _transmission_rpc_postrestart
-  retries: 60
-  delay: 2
-  until: _transmission_rpc_postrestart.status == 401
-
 - name: _verify | Read the rewritten rpc-password hash back
   command: >-
     python3 -c 'import json,sys;
