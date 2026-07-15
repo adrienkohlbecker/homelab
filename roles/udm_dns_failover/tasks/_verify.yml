@@ -5,9 +5,8 @@
 #   * keepalived validates, leaves init_fail FAULT once the loopback
 #     healthcheck passes, and (alone on the closed bridge) becomes
 #     MASTER and claims the VIP — the catastrophic-failover path.
-#   * The on-boot framework runs the idempotent 30-keepalived.sh recovery and
-#     leaves keepalived active with the VIP still held — proving the
-#     firmware-recovery path without needing an actual firmware wipe.
+#   * Restarting the on-boot framework leaves keepalived active without a
+#     restart and with the VIP still held — proving recovery is non-disruptive.
 #
 # box is alone (its peers lab/pug aren't on the bridge), so it reaches
 # MASTER — unlike the real UDM, which sits BACKUP behind them. That's the
@@ -34,10 +33,9 @@
   delay: 2
   become: true
 
-# Firmware-recovery probe: the on-boot script is the path that re-bootstraps
-# everything after a SquashFS wipe. We can't wipe /usr under qemu, but the
-# framework can re-run the idempotent script and leave keepalived active with
-# the VIP still held.
+# Firmware-recovery non-disruption probe: we can't wipe /usr under qemu, but
+# restarting the framework must leave healthy keepalived active without a
+# restart and with the VIP still held.
 - name: _verify | Capture keepalived's active-enter timestamp before recovery
   set_fact:
     _udm_dns_failover_ts_before: "{{ _udm_dns_failover_keepalived.status.ActiveEnterTimestampMonotonic }}"
