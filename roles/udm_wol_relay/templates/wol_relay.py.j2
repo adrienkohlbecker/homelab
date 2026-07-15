@@ -44,7 +44,14 @@ def check_config() -> None:
         raise SystemExit(f"invalid listen port: {LISTEN_PORT}")
     if not BIND_ADDRESSES or not ALLOWED_SOURCES or not TARGET_BROADCASTS:
         raise SystemExit("bind addresses, allowed sources, and target broadcasts are all required")
-    for host in BIND_ADDRESSES + TARGET_BROADCASTS:
+    for host in BIND_ADDRESSES:
+        address = ipaddress.ip_address(host)
+        if not any(address in network for network in ALLOWED_SOURCES) or any(
+            address in (network.network_address, network.broadcast_address)
+            for network in ALLOWED_SOURCES
+        ):
+            raise SystemExit(f"bind address {address} is not a usable host in an allowed source network")
+    for host in TARGET_BROADCASTS:
         ipaddress.ip_address(host)
     print(
         "listening on %s; allowing %s; relaying to %s"
