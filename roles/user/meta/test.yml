@@ -1,2 +1,5 @@
+# The minimal fixture retains cloud-init sudoers residue, so it exercises the
+# cleanup path that a stock Ubuntu install takes. Box covers the ZFS-root path.
 machines:
   box:
+  minimal:
