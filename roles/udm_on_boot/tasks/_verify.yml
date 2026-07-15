@@ -1,9 +1,12 @@
 # -- functional path: the framework actually runs scripts -------------------
-- name: _verify | Install a marker probe script
+- name: _verify | Install a stateful probe script
   copy:
     content: |
       #!/bin/bash
       set -euo pipefail
+      if [[ -e /run/udm_on_boot_verify_marker ]]; then
+        exit 1
+      fi
       touch /run/udm_on_boot_verify_marker
     dest: /data/on_boot.d/98-verify-marker.sh
     owner: root
@@ -17,27 +20,8 @@
     state: restarted
   become: true
 
-- name: _verify | Marker probe ran
-  stat:
-    path: /run/udm_on_boot_verify_marker
-  register: _udm_on_boot_marker
-  failed_when: not _udm_on_boot_marker.stat.exists
-  become: true
-
-# A failing script must fail the unit -- the exit-code propagation the unit
-# file documents as load-bearing for post-firmware recovery visibility.
-- name: _verify | Install a failing probe script
-  copy:
-    content: |
-      #!/bin/bash
-      set -euo pipefail
-      exit 1
-    dest: /data/on_boot.d/99-verify-fail.sh
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
+# The first run creates the marker, so the same probe fails on its second run.
+# That failure must propagate to the unit for recovery failures to be visible.
 # noqa on the raw systemctl: the systemd module treats the failed restart as
 # a module error; asserting on the exit code needs the plain command.
 - name: _verify | Restart the framework and expect failure  # noqa: command-instead-of-module
@@ -54,13 +38,12 @@
   failed_when: _udm_on_boot_failed_state.status.ActiveState != 'failed'
   become: true
 
-- name: _verify | Remove the probe scripts and marker
+- name: _verify | Remove the probe script and marker
   file:
     path: "{{ item }}"
     state: absent
   loop:
     - /data/on_boot.d/98-verify-marker.sh
-    - /data/on_boot.d/99-verify-fail.sh
     - /run/udm_on_boot_verify_marker
   become: true
 
