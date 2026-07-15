@@ -2,7 +2,7 @@
 # no qemu fixture. box exercises the portable surface — pre-write config
 # validation, the /data on-boot recovery script, the VIP claim, and the
 # heartbeat timer — on a stock Ubuntu VM. Firmware-wipe persistence itself
-# can't be reproduced under qemu; _verify instead runs 30-keepalived.sh
-# directly to prove the recovery path is sound.
+# can't be reproduced under qemu; _verify restarts on-boot.service to prove
+# the complete recovery path is sound.
 machines:
   box:
