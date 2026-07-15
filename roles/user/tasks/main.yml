@@ -165,6 +165,15 @@
   tags:
     - user
 
+# Git identity is owned by the stowed ~/.gitconfig. An included local override
+# would take precedence and let fleet hosts drift from that source of truth.
+- name: Remove local Git identity override
+  file:
+    path: "{{ ansible_user_dir }}/.gitconfig.local"
+    state: absent
+  tags:
+    - user
+
 - name: Check for the operator GPG key
   command: gpg --with-colons --list-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
   register: user_gpg_check
