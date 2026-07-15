@@ -24,14 +24,6 @@
   tags:
     - udm_on_boot
 
-- name: Reload systemd
-  when: udm_on_boot_unit.changed
-  systemd:
-    daemon_reload: true
-  become: true
-  tags:
-    - udm_on_boot
-
 # In check mode on a fresh UDM, the copy above only reports it would create
 # the unit, so enabling it would fail because systemd cannot find it.
 - name: Enable on-boot framework
@@ -39,6 +31,7 @@
   systemd:
     name: on-boot.service
     enabled: true
+    daemon_reload: "{{ udm_on_boot_unit.changed }}"
   become: true
   tags:
     - udm_on_boot
