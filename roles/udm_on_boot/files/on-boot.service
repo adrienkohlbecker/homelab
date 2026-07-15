@@ -1,8 +1,6 @@
-# The /data/on_boot.d/*.sh convention (numeric-prefix ordering, oneshot
-# after network-online) is the community unifios-utilities "on-boot-script"
-# idiom for surviving UniFi firmware updates. This is a deliberate
-# self-contained reimplementation; installing the upstream package would
-# collide on this same unit name and directory.
+# Implements the community unifios-utilities /data/on_boot.d/*.sh convention
+# locally; installing its package would collide with this unit and directory.
+# The framework survives UniFi firmware updates because /data persists.
 [Unit]
 Description=Run /data/on_boot.d scripts
 After=network-online.target
@@ -12,14 +10,10 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=true
 TimeoutStartSec=120
-# --exit-on-error so a recovery script that fails fails the unit (visible in
-# `systemctl status on-boot`) instead of being swallowed -- a broken
-# post-firmware recovery must not look like a clean oneshot success.
-# --regex is load-bearing, not a filter nicety: run-parts by default skips
-# any filename containing a dot, which would silently skip every *.sh entry;
-# it still excludes the trailing-~ ansible backups. Non-executable entries
-# are skipped, and an empty directory exits 0, matching the glob semantics
-# this replaced.
+# --exit-on-error surfaces failed recovery scripts in the unit status.
+# run-parts rejects dotted names by default, so --regex selects *.sh while
+# still excluding Ansible backups; non-executables are skipped and an empty
+# directory succeeds.
 ExecStart=/bin/run-parts --exit-on-error --regex '[.]sh$' --report /data/on_boot.d
 
 [Install]
