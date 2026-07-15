@@ -63,13 +63,6 @@
         | length == 2
 
 # -- firmware-wipe recovery ------------------------------------------------
-- name: _verify | On-boot framework unit is enabled
-  systemd:
-    name: on-boot.service
-  register: _udm_wol_relay_onboot
-  failed_when: _udm_wol_relay_onboot.status.UnitFileState != 'enabled'
-  become: true
-
 - name: _verify | Run recovery through the on-boot framework
   systemd:
     name: on-boot.service
