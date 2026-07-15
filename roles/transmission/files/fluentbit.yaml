@@ -21,7 +21,6 @@ pipeline:
       condition:
         - key_exists CONTAINER_TAG
         - key_exists transmission_message
-        - key_exists transmission_level
       hard_rename:
         - transmission_message log
         - transmission_level _level
