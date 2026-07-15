@@ -9,4 +9,4 @@ set -euo pipefail
 # reply (daemon down) exits non-zero. The query name is irrelevant (we only
 # care that it responds) and stays local so the probe doesn't depend on
 # upstream. dig ships in UniFi OS, surviving firmware updates like dnsmasq.
-exec dig +tries=1 +time=2 +short @127.0.0.1 localhost > /dev/null
+exec dig +tries=1 +time=2 +short @127.0.0.1 localhost >/dev/null
