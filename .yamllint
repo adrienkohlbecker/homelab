@@ -8,6 +8,7 @@ rules:
     max-spaces-before: 0
     min-spaces-after: 1
     max-spaces-after: -1
+  key-duplicates: enable
   octal-values:
     forbid-implicit-octal: true
     forbid-explicit-octal: true
