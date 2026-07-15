@@ -148,8 +148,8 @@
     - udm_dns_failover
 
 - name: Deploy healthcheck script
-  template:
-    src: healthcheck.sh.j2
+  copy:
+    src: healthcheck.sh
     dest: /data/keepalived/healthcheck.sh
     owner: root
     group: root
@@ -269,8 +269,8 @@
 # -- systemd units ---------------------------------------------------------
 
 - name: Deploy on-boot keepalived script
-  template:
-    src: on-boot-keepalived.sh.j2
+  copy:
+    src: on-boot-keepalived.sh
     dest: /data/on_boot.d/30-keepalived.sh
     owner: root
     group: root
