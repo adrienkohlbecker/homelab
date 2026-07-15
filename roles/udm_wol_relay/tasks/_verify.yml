@@ -53,7 +53,12 @@
       - _udm_wol_relay_journal.stdout_lines | select('search', 'relayed magic packet') | list | length == 2
       - >-
         _udm_wol_relay_journal.stdout_lines
-        | select('search', 'relayed magic packet.*to {{ udm_wol_relay_target_broadcasts | length }} target broadcast')
+        | select(
+            'search',
+            'relayed magic packet.*to '
+            ~ (udm_wol_relay_target_broadcasts | length | string)
+            ~ ' target broadcast'
+          )
         | list
         | length == 2
 
