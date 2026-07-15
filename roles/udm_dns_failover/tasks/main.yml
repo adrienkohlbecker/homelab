@@ -58,15 +58,10 @@
   tags:
     - udm_dns_failover
 
-# Root-only: the on-boot recovery path runs `dpkg -i` from here as root, so
-# a non-root write into this dir would be boot-time root code execution.
-- name: Create keepalived .deb cache
+- name: Remove obsolete keepalived package cache
   file:
     path: /data/keepalived/cache
-    state: directory
-    owner: root
-    group: root
-    mode: "0700"
+    state: absent
   become: true
   tags:
     - udm_dns_failover
@@ -92,27 +87,6 @@
       - keepalived
     cache_valid_time: 3600
     policy_rc_d: 101
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Find keepalived .deb in apt cache
-  find:
-    paths: /var/cache/apt/archives
-    patterns: 'keepalived_*.deb'
-  register: udm_dns_failover_keepalived_debs
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Cache keepalived .deb for firmware-update recovery
-  when: udm_dns_failover_keepalived_debs.files | length > 0
-  copy:
-    src: "{{ (udm_dns_failover_keepalived_debs.files | sort(attribute='mtime') | last).path }}"
-    dest: /data/keepalived/cache/
-    remote_src: true
-    mode: "0644"
-    backup: true
   become: true
   tags:
     - udm_dns_failover

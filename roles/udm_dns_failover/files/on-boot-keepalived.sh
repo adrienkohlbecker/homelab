@@ -9,7 +9,7 @@ set -euo pipefail
 DATADIR=/data/keepalived
 
 # -- keepalived ----------------------------------------------------------
-# Wrapped in a subshell so a dpkg/apt failure does not abort the rest of
+# Wrapped in a subshell so an apt failure does not abort the rest of
 # the recovery (sysctl, service start).
 if ! command -v keepalived &>/dev/null; then
   (
@@ -19,21 +19,8 @@ if ! command -v keepalived &>/dev/null; then
     printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
     chmod +x /usr/sbin/policy-rc.d
     trap 'rm -f /usr/sbin/policy-rc.d' EXIT
-    shopt -s nullglob
-    cached_debs=("$DATADIR"/cache/keepalived_*.deb)
-    if ((${#cached_debs[@]})); then
-      latest="$(printf '%s\n' "${cached_debs[@]}" | sort -V | tail -1)"
-      # A firmware update can move libc/libssl, so dpkg -i may exit 0 while
-      # leaving keepalived unrunnable (unmet deps). Verify the binary actually
-      # runs; otherwise fall through to apt, which pulls the updated deps.
-      dpkg -i "$latest" && keepalived -v &>/dev/null || { apt-get update -qq && apt-get install -y -qq keepalived; }
-    else
-      apt-get update -qq
-      apt-get install -y -qq keepalived
-      mkdir -p "$DATADIR/cache"
-      chmod 700 "$DATADIR/cache"
-      cp /var/cache/apt/archives/keepalived_*.deb "$DATADIR/cache/" 2>/dev/null || logger -t on-boot-keepalived "WARNING: failed to re-seed the keepalived .deb cache"
-    fi
+    apt-get update -qq
+    apt-get install -y -qq keepalived
   ) || logger -t on-boot-keepalived "WARNING: keepalived install failed, continuing with infra setup"
 fi
 
