@@ -60,6 +60,38 @@
         _transmission_auth_warnings_before_healthcheck.stdout_lines | length
     fail_msg: "Transmission healthcheck emitted an RPC authentication warning"
 
+- name: _verify | Read the image-managed blocklist schedule
+  command:
+    argv:
+      - podman
+      - exec
+      - transmission
+      - crontab
+      - -l
+      - -u
+      - abc
+  register: _transmission_crontab
+  changed_when: false
+  become: true
+
+- name: _verify | Image schedules the daily blocklist update
+  assert:
+    that:
+      - ("0 3 * * * /app/blocklist-update.sh") in _transmission_crontab.stdout_lines
+    fail_msg: "Transmission image no longer schedules /app/blocklist-update.sh daily at 03:00"
+
+- name: _verify | Image blocklist updater is executable
+  command:
+    argv:
+      - podman
+      - exec
+      - transmission
+      - test
+      - -x
+      - /app/blocklist-update.sh
+  changed_when: false
+  become: true
+
 # SNI follows the URL host, not the Host header, so probing https://localhost/
 # with a Host: override trips TLSV1_UNRECOGNIZED_NAME on openssl 3.x
 # (noble/resolute). Map the vhost FQDN to loopback and probe it directly so
