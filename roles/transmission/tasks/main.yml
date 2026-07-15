@@ -105,12 +105,10 @@
   systemd:
     name: transmission
     state: stopped
-    scope: system
   become: true
   failed_when: false
   when:
     - not ansible_check_mode
-    - _transmission_conf_probe is not skipped
     - _transmission_conf_probe.changed
   tags:
     - transmission
