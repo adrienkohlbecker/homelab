@@ -152,6 +152,7 @@
     - /data/keepalived/pihole.conf
     - /etc/keepalived/conf.d/pihole.conf
     - /usr/local/bin/pihole_healthcheck
+    - /etc/keepalived/conf.d
   become: true
   tags:
     - udm_dns_failover
@@ -283,6 +284,7 @@
   loop:
     - /etc/systemd/system/keepalived.service.d/override.conf
     - /data/keepalived/override.conf
+    - /etc/systemd/system/keepalived.service.d
   register: udm_dns_failover_dropin_removal
   become: true
   tags:
