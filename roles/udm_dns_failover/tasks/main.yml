@@ -49,13 +49,11 @@
 
 - name: Create persistent directory tree
   file:
-    path: "{{ item }}"
+    path: /data/keepalived
     state: directory
     owner: root
     group: root
     mode: "0755"
-  loop:
-    - /data/keepalived
   become: true
   tags:
     - udm_dns_failover
@@ -162,16 +160,6 @@
 
 # -- symlinks into /etc/ --------------------------------------------------
 
-- name: Symlink keepalived base config
-  file:
-    src: /data/keepalived/keepalived.conf
-    dest: /etc/keepalived/keepalived.conf
-    state: link
-    force: true
-  become: true
-  tags:
-    - udm_dns_failover
-
 - name: Create keepalived conf.d directory
   file:
     path: /etc/keepalived/conf.d
@@ -183,22 +171,21 @@
   tags:
     - udm_dns_failover
 
-- name: Symlink VRRP fragment
+- name: Symlink persistent keepalived files
   file:
-    src: /data/keepalived/dns.conf
-    dest: /etc/keepalived/conf.d/dns.conf
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
     state: link
     force: true
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Symlink healthcheck script
-  file:
-    src: /data/keepalived/healthcheck.sh
-    dest: /usr/local/bin/dnsmasq_healthcheck
-    state: link
-    force: true
+  loop:
+    - src: /data/keepalived/keepalived.conf
+      dest: /etc/keepalived/keepalived.conf
+    - src: /data/keepalived/dns.conf
+      dest: /etc/keepalived/conf.d/dns.conf
+    - src: /data/keepalived/healthcheck.sh
+      dest: /usr/local/bin/dnsmasq_healthcheck
+  loop_control:
+    label: "{{ item.dest }}"
   become: true
   tags:
     - udm_dns_failover
