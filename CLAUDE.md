@@ -93,7 +93,8 @@ Repo-local skills and hook scripts live once under `.agents/` (`skills/`, `hooks
 
 - Every task within a role carries the role name as a tag, even when the role
   invocation is already tagged. This keeps task files independently reusable
-  and makes their tag scope explicit.
+  and makes their tag scope explicit. Test hooks (`tasks/_setup.yml` and
+  `tasks/_verify.yml`) are exempt because the harness invokes them directly.
 - Centralize every pinned upstream version — container image tags, downloadable artifacts (debs/tarballs/binaries), and package-manager pins — in [group_vars/all/versions.yml](group_vars/all/versions.yml): full URL **adjacent to its sha256**, keyed by `ansible_architecture` (`x86_64`/`aarch64`) for multi-arch assets. Roles consume the pin by var name (ansible resolves vars globally); a role's `vars/main.yml` keeps only derived/computed values (e.g. arch-selected binary names, paths built from a version), never the raw pin.
 - Every config-writing `copy:`/`template:` carries a best-effort `validate:` that parses the rendered file. Omit rather than invent a fake one. Safe as `validate:` args but **don't** lift into `command:`/`shell:` — embedded quotes break task loading.
 - **Preserve upstream commentary and defaults in configuration derived from an upstream reference.** Keep comments, examples, and explicit default-valued settings intact so the file remains recognizable and comparable with upstream. This is a deliberate exception to sparse comments and the locally-authored rule below: the upstream reference *is* current state for the file.
