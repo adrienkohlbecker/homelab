@@ -13,20 +13,16 @@
 
 - name: mirrors | Select the bootstrap resolver for this backend
   set_fact:
-    # LAN fixtures (local + lab qemu) run on the operator LAN, where the UDM
-    # blocks outbound DoT (853) from every zone but lets clients reach the
-    # household AdGuard VIP — so they resolve through it like any real client
-    # (dns.fahm.fr cert, validated over the system CA store; the #name is SNI
-    # only and is not itself resolved). AWS cells have no LAN VIP and open
-    # public 853, so they bootstrap off the public anycast pair. Both ride TCP
-    # via DoT, which is what keeps qemu's SLIRP UDP drops from flaking
-    # resolution. Gated on test_in_aws (not test_backend == 'qemu'): the
-    # aws_qemu cell is a qemu guest but in AWS, where the LAN VIP is
-    # unreachable, so it must take the public branch. prod_network (not network)
-    # because the VIP is the live LAN address, not the gsub'd test subnet.
+    # Nexus-backed LAN fixtures resolve through the household AdGuard VIP
+    # (dns.fahm.fr cert; the #name is SNI only). AWS cells and
+    # --upstream-mirrors runs clear nexus_url because neither can reach LAN
+    # services, so they bootstrap through the public anycast pair. Both ride
+    # TCP via DoT, which keeps qemu's SLIRP UDP drops from flaking resolution.
+    # prod_network (not network) keeps the LAN branch on the live VIP rather
+    # than the gsub'd test subnet.
     test_dot_servers: >-
       {{ (bootstrap_dns_resolver | join(' '))
-         if test_in_aws | default(false) | bool
+         if nexus_url | length == 0
          else (prod_network.virtual_ips.dns ~ '#dns.fahm.fr') }}
 
 - name: mirrors | Force DNS-over-TLS so all queries ride TCP
