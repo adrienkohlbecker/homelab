@@ -44,6 +44,21 @@
       live peer count {{ wireguard_dump.stdout_lines[1:] | length }} !=
       wireguard_peers - 1 ({{ wireguard_peers | length - 1 }})
 
+# The test inventory deliberately gives same-site server pom no public
+# endpoint. Its live endpoint must therefore come from network topology.
+- name: _verify | Assert LAN-only fixture peer gets its topology endpoint
+  vars:
+    pom_peer_fields: "{{ wireguard_dump.stdout_lines[1:] | map('split', '\t') | selectattr('0', 'eq', wireguard_keys.pom.public_key) | list }}"
+    expected_pom_endpoint: "{{ network.hosts.pom.physical }}:{{ service_ports.wireguard }}"
+  assert:
+    quiet: true
+    that:
+      - pom_peer_fields | length == 1
+      - pom_peer_fields[0][2] == expected_pom_endpoint
+    fail_msg: >-
+      pom endpoint {{ pom_peer_fields[0][2] | default('(missing)') }} !=
+      topology endpoint {{ expected_pom_endpoint }}
+
 - name: _verify | Assert interface carries own_peer.address
   vars:
     own_peer: "{{ wireguard_peers[inventory_hostname] }}"

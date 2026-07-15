@@ -46,9 +46,10 @@ mac_addresses:
   lab_i225p2: d2:7d:10:e0:9c:68
   game: 02:5a:f1:9c:63:2e
 
-# 5-peer test fixture (lab/pug/box + fox + laptop). fox is cross-site
-# (hetzner) to exercise the AllowedIPs physical-/32 branch; laptop is a
-# roaming peer (is_server:false, no endpoint) to exercise the non-server
+# 6-peer test fixture (lab/pug/pom/box + fox + laptop). pom is same-site with
+# no public endpoint to exercise the topology-derived LAN endpoint; fox is
+# cross-site (hetzner) to exercise the AllowedIPs physical-/32 branch; laptop
+# is a roaming peer (is_server:false, no endpoint) to exercise the non-server
 # [Peer] branch — plain /32, no Endpoint, no keepalive — in wg.conf.j2.
 wireguard_peers:
   lab:
@@ -58,6 +59,9 @@ wireguard_peers:
   pug:
     address: "{{ network.hosts.pug.wireguard }}"
     public_endpoint: 192.0.2.1:51823
+    is_server: true
+  pom:
+    address: "{{ network.hosts.pom.wireguard }}"
     is_server: true
   box:
     address: "{{ network.hosts.box.wireguard }}"
@@ -105,6 +109,9 @@ wireguard_keys:
           3638323066326135390a316562363131386134646536323832666638623462353234383966626438
           63353433636163623262356430376432633934323935636539653862356262313264343233386635
           3135366562316662313862636532653935353562343739653532
+  pom:
+    public_key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+    private_key: changeme
   box:
     public_key: box/yMi21GMzxe/6x1zhs/HPXL+LU6WlVUn1nrsmKlM=
     private_key: !vault |

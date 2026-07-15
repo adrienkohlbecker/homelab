@@ -49,15 +49,13 @@ AllowedIPs = {{ peer.address }}/32
 {# PSK derived from the vaulted seed, never stored on disk: the filter sorts
    the peer names so both ends compute the same key. #}
 PresharedKey = {{ [render_peer_name, peer_name] | wireguard_psk(wireguard_psk_seed) }}
-{% if peer.public_endpoint is defined %}
 {% if own_peer.is_server and peer.is_server and own_host.site is defined and peer_host.site is defined and peer_host.site == own_host.site %}
 Endpoint = {{ peer_host.physical }}:{{ service_ports.wireguard }}
-{% else %}
+{% elif peer.public_endpoint is defined %}
 {# Public endpoints are bare IP:port literals (the off-site/home public IPs live
    in the vault, not in DNS), so wg-quick never resolves a name at bring-up and
    there's no template-time dig. A bracketed IPv6 literal would pass through fine. #}
 Endpoint = {{ peer.public_endpoint }}
-{% endif %}
 {% endif %}
 {# Peer-pair keepalive: emit PersistentKeepalive only when own_peer is
    listed in peer.keepalive_from. Per-pair (rather than per-peer) so
