@@ -307,9 +307,8 @@
     append: true
   become: true
 
-# runuser (as root) re-reads the group list via initgroups, so the just-added
-# podman-socket membership is effective for the probe -- unlike become_user to
-# the connection user, which would reuse the login session's stale groups.
+# runuser starts a fresh process with supplementary groups from the account
+# database, so the just-added podman-socket membership is effective here.
 - name: _verify | A podman-socket member reaches the rootful API socket
   command: runuser -u {{ ansible_user_id }} -- podman --url unix:///run/podman/podman.sock info --format json
   become: true
