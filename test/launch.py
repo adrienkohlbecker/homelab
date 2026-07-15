@@ -291,7 +291,8 @@ async def _run_async(
                 try:
                     await m.ensure_ssh()
                     print_line("SSH up")
-                    m.print_ssh_instructions()
+                    if not exit_after_ready and seed is None:
+                        m.print_ssh_instructions()
                 except TimeoutError as exc:
                     print_line(f"SSH did not come up in time: {exc}")
                     _dump_boot_console(m)
