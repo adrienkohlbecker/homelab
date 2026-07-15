@@ -64,14 +64,15 @@
     group: root
     mode: "0755"
   become: true
+  register: unattended_upgrades_timers_dir
   tags:
     - unattended_upgrades
 
 # Mail "root" only reports failed runs; this heartbeat also detects a timer
 # that is disabled or never fires. The collector alerts after 2 * period_secs.
 - name: Register apt-daily-upgrade.timer for netdata overdue monitoring
-  # On a fresh check-mode run the directory above is not actually created.
-  when: not ansible_check_mode
+  # A fresh check-mode run predicts the directory without creating it.
+  when: not (ansible_check_mode and unattended_upgrades_timers_dir.changed)
   copy:
     dest: /etc/netdata/charts.d/systemd_timers.d/apt-daily-upgrade.conf
     content: |
