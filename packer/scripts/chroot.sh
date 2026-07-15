@@ -861,10 +861,8 @@ fi
 # owns a unit unmasks + exercises it (so its _verify still proves it drives the
 # unit from a masked start):
 #   - apt-daily.timer / apt-daily-upgrade.timer: roles/unattended_upgrades
-#     unmasks + enables + starts apt-daily-upgrade.timer and its _verify asserts
-#     it active. apt-daily.timer (the download half) is not exercised by any
-#     role; unattended_upgrades unmasks it too so the upgrade pipeline it feeds
-#     works end to end.
+#     unmasks + enables + starts both timers, and its _verify asserts both
+#     active so the download and upgrade halves are exercised end to end.
 #   - unattended-upgrades.service: not in the debootstrap base (the role apt-
 #     installs it), so the present-gate below skips it here; listed for the day
 #     a derived image bakes it in, in which case the role re-installs it fresh
