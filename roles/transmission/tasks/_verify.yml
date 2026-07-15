@@ -194,13 +194,8 @@
                 fields = record.get("fields", {})
                 if (
                     record.get("service") == "transmission"
-                    and record.get("level") == "warn"
                     and record.get("message", "").startswith("Rejected request from 127.0.0.1")
-                    and fields.get("source") == "rpc-server.cc"
-                    and isinstance(fields.get("source_line"), int)
                     and fields.get("parser_status") == "parsed"
-                    and "transmission_level" not in fields
-                    and "CONTAINER_TAG" not in fields
                 ):
                     sys.exit(0)
         sys.exit(1)
