@@ -124,9 +124,7 @@
     group: root
     mode: "0640"
     backup: true
-    validate: >-
-      {{ (ansible_check_mode and not udm_dns_failover_keepalived.stat.exists)
-         | ternary(omit, '/usr/sbin/keepalived -t -f %s') }}
+    validate: /usr/sbin/keepalived -t -f %s
   register: udm_dns_failover_conf
   become: true
   tags:
