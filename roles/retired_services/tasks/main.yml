@@ -7,6 +7,8 @@
     - /etc/logrotate.d/zfs_autobackup
     - /var/lib/zfs_autobackup/.config/systemd
   become: true
+  tags:
+    - retired_services
 
 - name: Lookup retired Netdata poller account
   command:
