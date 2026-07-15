@@ -25,6 +25,7 @@ if ! command -v keepalived &>/dev/null; then
 fi
 
 # -- symlinks from persistent storage ------------------------------------
+mkdir -p /etc/keepalived
 ln -sfn "$DATADIR/keepalived.conf" /etc/keepalived/keepalived.conf
 ln -sfn "$DATADIR/healthcheck.sh" /usr/local/bin/dnsmasq_healthcheck
 
