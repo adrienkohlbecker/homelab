@@ -1,9 +1,45 @@
 """Unit tests for test/testall.py — joblog I/O and result types."""
 
+import asyncio
 from pathlib import Path
+from typing import cast
 
 import pytest
 import testall
+
+
+def test_parallel_role_child_gets_private_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_kwargs: dict[str, object] = {}
+
+    class Stdout:
+        async def readline(self) -> bytes:
+            return b""
+
+    class Process:
+        def __init__(self) -> None:
+            self.returncode: int | None = 0
+            self.stdout = cast(asyncio.StreamReader, Stdout())
+
+        async def wait(self) -> int:
+            return 0
+
+    async def create_subprocess_exec(*args: str, **kwargs: object) -> asyncio.subprocess.Process:
+        captured_kwargs.update(kwargs)
+        return cast(asyncio.subprocess.Process, Process())
+
+    monkeypatch.setattr(testall.asyncio, "create_subprocess_exec", create_subprocess_exec)
+
+    asyncio.run(
+        testall._run_role(
+            1,
+            testall.TestCell("box", "jammy", "test"),
+            [],
+            asyncio.Semaphore(1),
+        )
+    )
+
+    assert captured_kwargs["stdin"] == asyncio.subprocess.DEVNULL
+
 
 # ---------------------------------------------------------------------------
 # JobResult
