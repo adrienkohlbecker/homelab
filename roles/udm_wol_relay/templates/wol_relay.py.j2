@@ -70,6 +70,8 @@ def serve() -> None:
     while True:
         readable, _, _ = select.select(listeners, [], [])
         for listener in readable:
+            # The kernel discards trailing datagram bytes so only one
+            # normalized magic packet crosses the VLAN boundary.
             payload, (source_host, source_port) = listener.recvfrom(MAGIC_PACKET_LENGTH)
             if not is_allowed_source(source_host):
                 continue
