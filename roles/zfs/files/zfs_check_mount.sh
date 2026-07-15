@@ -28,12 +28,18 @@ output=$(zfs get -pH -o property,value type,mounted,mountpoint,readonly,canmount
 
 properties=(type mounted mountpoint readonly canmount)
 expected=(filesystem yes "$MOUNTPOINT" off "$EXPECTED_CANMOUNT")
+actual_properties=()
 actual=()
-while IFS=$'\t' read -r _ value; do
+while IFS=$'\t' read -r property value; do
+  actual_properties+=("$property")
   actual+=("$value")
 done <<<"$output"
 
 for index in "${!properties[@]}"; do
+  if [ "${actual_properties[$index]:-}" != "${properties[$index]}" ]; then
+    echo >&2 "Error: unexpected ZFS property '${actual_properties[$index]:-}', expected '${properties[$index]}'"
+    exit 1
+  fi
   if [ "${actual[$index]:-}" != "${expected[$index]}" ]; then
     echo >&2 "Error: $DATASET ${properties[$index]} is '${actual[$index]:-}', expected '${expected[$index]}'"
     exit 1
