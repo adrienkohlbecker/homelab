@@ -447,6 +447,8 @@ fi
 
 # Update fstab
 
+# Keep the ESP mount policy in sync with boot_esp_mount_opts in
+# group_vars/all/main.yml.
 echo "$EFI_DEVICE /boot/efi vfat defaults,umask=0077 0 0" >>/etc/fstab
 echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 

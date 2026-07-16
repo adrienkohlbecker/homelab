@@ -1,10 +1,13 @@
+# The boot role mounts the vfat ESP with umask=0077. FAT has no per-path Unix
+# permissions, so every on-ESP task uses the effective mode exposed by that
+# mount policy.
 - name: Create ZBM directory
   file:
     dest: /boot/efi/EFI/ZBM/
     state: directory
     owner: root
     group: root
-    mode: "0755"
+    mode: "{{ boot_esp_mode }}"
   become: true
   register: zfsbootmenu_zbm_directory
   tags:
@@ -68,14 +71,12 @@
     remote_src: true
     owner: root
     group: root
-    mode: "{{ item.mode }}"
+    mode: "{{ boot_esp_mode }}"
   loop:
     - src: zfsbootmenu.EFI
       dest: VMLINUZ.EFI
-      mode: "0755"
     - src: cmdline
       dest: cmdline
-      mode: "0644"
   loop_control:
     label: "{{ item.dest }}"
   become: true
@@ -94,7 +95,7 @@
     remote_src: true
     owner: root
     group: root
-    mode: "0755"
+    mode: "{{ boot_esp_mode }}"
   loop:
     - initramfs-bootmenu.img
     - vmlinux-bootmenu
@@ -119,7 +120,7 @@
     force: false
     owner: root
     group: root
-    mode: "0755"
+    mode: "{{ boot_esp_mode }}"
   become: true
   tags:
     - zfsbootmenu

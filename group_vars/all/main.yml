@@ -1,6 +1,12 @@
 qemu_test: false
 qemu_test_minimal: false
 
+# The ESP is vfat, so its Unix ownership/modes come from mount options rather
+# than per-path metadata. The boot role owns the mount policy; rEFInd and
+# ZFSBootMenu use the effective mode so Ansible check mode matches live state.
+boot_esp_mount_opts: defaults,umask=0077
+boot_esp_mode: "0700"
+
 # Serial console fragment — arch-specific QEMU UART on test VMs, host_vars
 # boot_serial_console on real hardware (empty on lab/pug which have no UART).
 # Mirrors the boot role's _boot_serial derivation so refind and other roles

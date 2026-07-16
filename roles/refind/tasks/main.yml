@@ -1,6 +1,8 @@
 # This role maintains rEFInd's on-ESP binaries, config, theme, and aarch64
 # Linux EFI-stub staging hook. It runs after zfsbootmenu, which installs the
-# ZBM artifacts referenced by the menuentries.
+# ZBM artifacts referenced by the menuentries. The boot role mounts the vfat
+# ESP with umask=0077; use its effective mode for every on-ESP path because FAT
+# has no per-path Unix permissions.
 - name: Install refind
   apt:
     package:
@@ -38,7 +40,7 @@
     state: directory
     owner: root
     group: root
-    mode: "0755"
+    mode: "{{ boot_esp_mode }}"
   loop:
     - /boot/efi/EFI/refind
     - /boot/efi/EFI/refind/drivers_{{ refind_azerty_keymap_arch }}
@@ -68,7 +70,7 @@
     remote_src: true
     owner: root
     group: root
-    mode: "0644"
+    mode: "{{ boot_esp_mode }}"
   become: true
   tags:
     - refind
@@ -81,7 +83,7 @@
     remote_src: true
     owner: root
     group: root
-    mode: "0644"
+    mode: "{{ boot_esp_mode }}"
   become: true
   tags:
     - refind
@@ -96,7 +98,7 @@
     dest: "/boot/efi/EFI/refind/drivers_{{ refind_azerty_keymap_arch }}/{{ refind_azerty_keymap_file }}"
     owner: root
     group: root
-    mode: "0644"
+    mode: "{{ boot_esp_mode }}"
   become: true
   register: refind_azerty_keymap_driver
   tags:
@@ -176,7 +178,7 @@
     state: directory
     owner: root
     group: root
-    mode: "0755"
+    mode: "{{ boot_esp_mode }}"
   loop:
     - /boot/efi/EFI/refind/themes
     - /boot/efi/EFI/refind/themes/refind-theme-regular
@@ -238,7 +240,7 @@
     state: touch
     owner: root
     group: root
-    mode: "0644"
+    mode: "{{ boot_esp_mode }}"
   become: true
   tags:
     - refind
@@ -299,7 +301,7 @@
     dest: /boot/efi/EFI/refind/refind.conf
     owner: root
     group: root
-    mode: "0644"
+    mode: "{{ boot_esp_mode }}"
   become: true
   register: refind_conf
   tags:
@@ -322,7 +324,7 @@
     remote_src: true
     owner: root
     group: root
-    mode: "0644"
+    mode: "{{ boot_esp_mode }}"
   become: true
   tags:
     - refind
@@ -333,7 +335,7 @@
     dest: /boot/efi/EFI/refind/themes/refind-theme-regular/theme.conf
     owner: root
     group: root
-    mode: "0644"
+    mode: "{{ boot_esp_mode }}"
   become: true
   tags:
     - refind

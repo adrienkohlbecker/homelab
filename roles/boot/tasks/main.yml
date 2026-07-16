@@ -4,7 +4,8 @@
 # feature role owns. It runs on the ZBM hosts; grub hosts drive their cmdline
 # through the same engine via the console role and need none of these tasks.
 # Bootloader install + image staging stay role-owned (zfsbootmenu, refind);
-# disk/ESP creation stays one-time bootstrap.
+# disk/ESP creation stays one-time bootstrap, while this role owns its mount
+# policy.
 
 - name: Assert grub_bootloader is set
   assert:
@@ -48,6 +49,42 @@
       - efibootmgr
       - initramfs-tools
     cache_valid_time: 3600
+  become: true
+  tags:
+    - boot
+
+- name: Read the configured ESP mount
+  command: findmnt --fstab --noheadings --output SOURCE,FSTYPE --target /boot/efi
+  register: boot_esp_fstab
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - boot
+
+- name: Assert the ESP has a vfat fstab entry
+  assert:
+    that:
+      - boot_esp_fstab.rc == 0
+      - boot_esp_fstab.stdout.split() | length == 2
+      - boot_esp_fstab.stdout.split()[1] == "vfat"
+    fail_msg: >-
+      boot requires an existing vfat /boot/efi entry in /etc/fstab; got
+      rc={{ boot_esp_fstab.rc }},
+      entry={{ boot_esp_fstab.stdout | default("") | trim | default("<none>", true) }}.
+  tags:
+    - boot
+
+- name: Mount the ESP root-only
+  mount:
+    path: /boot/efi
+    src: "{{ boot_esp_fstab.stdout.split()[0] }}"
+    fstype: vfat
+    opts: "{{ boot_esp_mount_opts }}"
+    state: mounted
+    backup: true
+  register: boot_esp_mount
   become: true
   tags:
     - boot
