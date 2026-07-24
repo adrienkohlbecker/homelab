@@ -1,0 +1,105 @@
+"""Behavioral tests for the Packer mise task wrappers."""
+
+from __future__ import annotations
+
+import os
+import subprocess
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+BUILD_SH = REPO_ROOT / "mise-tasks" / "packer" / "build.sh"
+SEED_DEPS_SH = REPO_ROOT / "mise-tasks" / "packer" / "seed-deps.sh"
+
+
+def _executable(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    path.chmod(0o755)
+
+
+def _environment(tmp_path: Path, ubuntus: str) -> dict[str, str]:
+    env = dict(os.environ)
+    env.update(
+        HOMELAB_CI_DIR=str(tmp_path / "homelab_ci"),
+        usage_no_publish="true",
+        usage_sources="box",
+        usage_ubuntu=ubuntus,
+        usage_upstream="false",
+    )
+    return env
+
+
+def test_usage_specs_make_ubuntu_repeatable() -> None:
+    for task in (BUILD_SH, SEED_DEPS_SH):
+        assert '#USAGE flag "--ubuntu... <ubuntu>"' in task.read_text()
+        assert 'default="jammy"' in task.read_text()
+
+
+@pytest.mark.parametrize("ubuntus", ["jammy", "jammy noble"])
+def test_build_runs_once_per_ubuntu(tmp_path: Path, ubuntus: str) -> None:
+    fake_bin = tmp_path / "bin"
+    log = tmp_path / "packer.log"
+    _executable(
+        fake_bin / "packer",
+        "#!/bin/sh\n" "set -eu\n" 'printf "%s\\n" "$*" >>"$PACKER_TEST_LOG"\n',
+    )
+    env = _environment(tmp_path, ubuntus)
+    env.update(PATH=f"{fake_bin}:{env['PATH']}", PACKER_TEST_LOG=str(log))
+
+    result = subprocess.run(["bash", str(BUILD_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode == 0, result.stderr
+    calls = log.read_text().splitlines()
+    assert len(calls) == len(ubuntus.split())
+    for ubuntu, call in zip(ubuntus.split(), calls, strict=True):
+        assert f"ubuntu_name={ubuntu}" in call
+        assert f"output_directory={env['HOMELAB_CI_DIR']}/{ubuntu}" in call
+        assert "-only=qemu.box" in call
+
+
+def test_seed_deps_runs_once_per_ubuntu(tmp_path: Path) -> None:
+    worktree = tmp_path / "worktree"
+    launch_log = tmp_path / "launch.log"
+    _executable(
+        worktree / "test" / "launch.py",
+        "#!/usr/bin/env python3\n"
+        "import os\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "args = sys.argv[1:]\n"
+        "image_dir = Path(args[args.index('--image-dir') + 1])\n"
+        "(image_dir / 'seeded').write_text('yes\\n')\n"
+        "with Path(os.environ['LAUNCH_TEST_LOG']).open('a') as log:\n"
+        "    log.write(' '.join(args) + '\\n')\n",
+    )
+    _executable(
+        worktree / "packer" / "publish.py",
+        "#!/usr/bin/env python3\n"
+        "import os\n"
+        "import shutil\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "src, dst = map(Path, sys.argv[-2:])\n"
+        "if dst.exists():\n"
+        "    shutil.rmtree(dst)\n"
+        "os.replace(src, dst)\n",
+    )
+    env = _environment(tmp_path, "jammy noble")
+    env["LAUNCH_TEST_LOG"] = str(launch_log)
+    for ubuntu in ("jammy", "noble"):
+        source = Path(env["HOMELAB_CI_DIR"]) / ubuntu / "box"
+        source.mkdir(parents=True)
+        (source / "artifact").write_text("source\n")
+
+    result = subprocess.run(["bash", str(SEED_DEPS_SH)], cwd=worktree, env=env, text=True, capture_output=True)
+
+    assert result.returncode == 0, result.stderr
+    calls = launch_log.read_text().splitlines()
+    assert len(calls) == 2
+    for ubuntu, call in zip(("jammy", "noble"), calls, strict=True):
+        destination = Path(env["HOMELAB_CI_DIR"]) / ubuntu / "box_deps"
+        assert f"--ubuntu {ubuntu}" in call
+        assert (destination / "artifact").read_text() == "source\n"
+        assert (destination / "seeded").read_text() == "yes\n"
