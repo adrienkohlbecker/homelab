@@ -39,6 +39,31 @@
   until: _jellyfin_http_nginx.status == 200
   failed_when: not ((_jellyfin_http_nginx.json.ProductName | default('')) is search('^Jellyfin'))
 
+# Jellyfin stores trickplay images beside their media. Exercise a full
+# create/remove round-trip through the container bind so both mount flags and
+# the shared media-group permissions are covered.
+- name: _verify | Create media write probe from Jellyfin
+  command:
+    argv:
+      - podman
+      - exec
+      - jellyfin
+      - touch
+      - /media/.verify_write_probe
+  changed_when: false
+  become: true
+
+- name: _verify | Remove media write probe from Jellyfin
+  command:
+    argv:
+      - podman
+      - exec
+      - jellyfin
+      - rm
+      - /media/.verify_write_probe
+  changed_when: false
+  become: true
+
 # SQLite wiring: the symlinks at /config/data/<name>.db MUST resolve
 # through to the dedicated /mnt/services/sqlite/ dataset (the role's
 # whole reason to exist). Without this assert a regression in the

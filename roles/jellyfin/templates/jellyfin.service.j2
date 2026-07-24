@@ -65,7 +65,7 @@ ExecStart=/usr/bin/podman run \
     --mount type=tmpfs,destination=/config/transcodes,tmpfs-size=4G,tmpfs-mode=0755 \
     --volume /var/log/jellyfin:/config/log \
     --volume /mnt/scratch/jellyfin/cache:/cache \
-    --volume /mnt/media:/media:ro \
+    --volume /mnt/media:/media \
 {% if has_transcoding_acceleration %}
     --device /dev/dri/renderD128:/dev/dri/renderD128:rw \
     --group-add={{ getent_group.render[1] | int }} \

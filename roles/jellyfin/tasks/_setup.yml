@@ -8,6 +8,11 @@
     name: media
     tasks_from: network
 
+- name: _setup | Create media group
+  import_role:
+    name: media
+    tasks_from: group
+
 - name: _setup | Install nginx
   import_role:
     name: test
@@ -17,7 +22,7 @@
   import_role:
     name: fluentbit
 
-- name: _setup | Ensure /mnt/services, /mnt/scratch, and /mnt/media exist
+- name: _setup | Ensure /mnt/services and /mnt/scratch exist
   file:
     path: "{{ item }}"
     state: directory
@@ -26,5 +31,12 @@
     - /mnt/services
     - /mnt/services/sqlite
     - /mnt/scratch
-    - /mnt/media
+  become: true
+
+- name: _setup | Create writable media fixture
+  file:
+    path: /mnt/media
+    state: directory
+    group: media
+    mode: "0775"
   become: true
