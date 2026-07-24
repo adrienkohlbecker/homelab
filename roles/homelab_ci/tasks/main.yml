@@ -25,6 +25,7 @@
       - acl
       - cloud-image-utils
     state: present
+  register: homelab_ci_packages
   become: true
   tags:
     - homelab_ci
@@ -56,8 +57,10 @@
     default: true
     state: present
   become: true
-  # In check mode the dir-create above only reports creation, so the path is
-  # absent and the acl module errors "Path not found"; skip until it truly exists.
-  when: not (ansible_check_mode and homelab_ci_dir.changed)
+  # In check mode the directory or setfacl may only be predicted present, so
+  # defer the ACL operation until both prerequisites truly exist.
+  when: >-
+    not (ansible_check_mode and
+    (homelab_ci_dir.changed or homelab_ci_packages.changed))
   tags:
     - homelab_ci
