@@ -77,7 +77,11 @@
 - name: _verify | Image schedules the daily blocklist update
   assert:
     that:
-      - ("0 3 * * * /app/blocklist-update.sh") in _transmission_crontab.stdout_lines
+      - >-
+        _transmission_crontab.stdout_lines
+        | select('match',
+        '^0\s+3\s+\*\s+\*\s+\*\s+/app/blocklist-update[.]sh(?:\s+2>&1)?$')
+        | length == 1
     fail_msg: "Transmission image no longer schedules /app/blocklist-update.sh daily at 03:00"
 
 - name: _verify | Image blocklist updater is executable
