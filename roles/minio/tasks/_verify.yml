@@ -70,6 +70,9 @@
         - MESSAGE: '{"level":"WARNING","errKind":"MINIO","time":"2099-01-02T03:04:05Z","message":"minio-valid","parser_status":"forged","service":"attribute"}'
           SYSLOG_IDENTIFIER: minio
           SYSTEMD_UNIT: minio.service
+        - MESSAGE: '{"level":"ERROR","errKind":"MINIO","time":"2099-01-02T03:04:05Z","api":{"name":"SYSTEM","args":{}},"error":{"message":"minio-nested-error","source":["cmd/server-main.go:1:cmd.serverMain()"]}}'
+          SYSLOG_IDENTIFIER: minio
+          SYSTEMD_UNIT: minio.service
         - MESSAGE: '{"level":"broken"'
           SYSLOG_IDENTIFIER: minio
           SYSTEMD_UNIT: minio.service
@@ -86,6 +89,18 @@
           _absent:
             - fields.time
             - fields.message
+        - message: minio-nested-error
+          level: error
+          service: minio
+          fields.errKind: MINIO
+          fields.api.name: SYSTEM
+          fields.error_source:
+            - cmd/server-main.go:1:cmd.serverMain()
+          fields.parser_status: parsed
+          _absent:
+            - fields.time
+            - fields.error
+            - fields.error_message
         - message: '{"level":"broken"'
           level: warn
           service: minio

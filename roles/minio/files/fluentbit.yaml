@@ -14,6 +14,11 @@ pipeline:
       parser: minio_json
       reserve_data: true
       preserve_key: true
+    - name: nest
+      match: svc.minio.service
+      operation: lift
+      nested_under: error
+      add_prefix: error_
     - name: modify
       match: svc.minio.service
       condition:
@@ -22,6 +27,17 @@ pipeline:
         - key_exists level
       hard_rename:
         - message log
+        - level _level
+      remove: time
+      set: parser_status parsed
+    - name: modify
+      match: svc.minio.service
+      condition:
+        - key_value_matches SYSLOG_IDENTIFIER '^minio$'
+        - key_exists error_message
+        - key_exists level
+      hard_rename:
+        - error_message log
         - level _level
       remove: time
       set: parser_status parsed
