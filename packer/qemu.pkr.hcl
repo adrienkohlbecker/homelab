@@ -166,14 +166,16 @@ locals {
   # Add an entry whenever a new source "qemu.ubuntu" block joins the
   # build.
   variant_config = {
-    # pug: single-disk rpool + apoc mirror. Matches the pug prod host.
+    # pug: single-disk rpool + a dedicated podman partition + apoc mirror.
+    # The small fixture partition proves the prod backend without carrying the
+    # full service-image footprint.
     pug = {
       disks           = "/dev/vdb"
       extra_disks     = "/dev/vdc /dev/vdd"
       disk_sizes      = ["40G", "1G", "1G"]
       layout          = ""
       swap_size       = "8G"
-      podman_size     = ""
+      podman_size     = "4G"
       meta_size       = ""
       extra_pools     = "apoc"
       image_target    = "qemu"
