@@ -16,6 +16,8 @@ dev-loop on Mac. fcntl.flock works identically on Linux and macOS.
 
 The lockfile is created lazily here if missing -- packer is the first
 writer of the imagedir, so the bootstrap moment is exactly this script.
+It is opened read-only because flock does not modify its contents and the
+shared artifact directory can retain a lock created by another identity.
 """
 
 from __future__ import annotations
@@ -57,7 +59,7 @@ def main() -> None:
         sys.exit(f"usage: {sys.argv[0]} <lockfile> <src_dir> <dst_dir>")
     lockfile, src, dst = sys.argv[1:4]
 
-    fd = os.open(lockfile, os.O_RDWR | os.O_CREAT, 0o644)
+    fd = os.open(lockfile, os.O_RDONLY | os.O_CREAT, 0o644)
     try:
         acquire_exclusive(fd, lockfile, LOCK_TIMEOUT_SEC)
         # Atomic 3-step publish: park the current tree under .outgoing

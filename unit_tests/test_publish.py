@@ -81,6 +81,19 @@ class TestMainAtomicPublish:
         assert not src.exists()
         assert not any(p.name.startswith("dst.outgoing") for p in artifact_dir.iterdir())
 
+    def test_uses_existing_read_only_lock(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "image.qcow2").write_text("new")
+        dst = tmp_path / "dst"
+        lockfile = tmp_path / ".publish-lock"
+        lockfile.touch(mode=0o444)
+
+        monkeypatch.setattr("sys.argv", ["publish.py", str(lockfile), str(src), str(dst)])
+        pub.main()
+
+        assert (dst / "image.qcow2").read_text() == "new"
+
     def test_usage_on_bad_args(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.argv", ["publish.py"])
         with pytest.raises(SystemExit, match="usage"):
