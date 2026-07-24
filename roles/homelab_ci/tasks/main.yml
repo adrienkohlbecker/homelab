@@ -31,13 +31,11 @@
 
 # Both the operator (ak) running packer:build locally and the CI runner
 # (gitlab_runner) publish qemu test-fixture artifacts here, so a tree one
-# identity built must be fully manageable by the other. The setgid group
-# + default ACL propagate homelab_ci:rwx to all new files and subdirectories --
-# including packer-plugin-qemu's port reservation files (hardcoded 0600 by the
-# plugin) -- so any group member can open them regardless of who created them.
-# The x is load-bearing: publish.py's atomic swap parks the previous tree and
-# shutil.rmtree's it, which needs execute (directory traversal) on every
-# subdirectory; without it a member can read but not delete another's tree.
+# identity built must be fully manageable by the other. The setgid group and
+# default ACL propagate the shared identity into new trees. A creator-supplied
+# mode can still narrow the ACL mask, so publish.py grants group rwx on every
+# staged directory before installation. The x is load-bearing: publish.py needs
+# to traverse and remove the previous tree.
 - name: Create /mnt/scratch/homelab_ci packer artifacts dir
   file:
     path: /mnt/scratch/homelab_ci

@@ -26,6 +26,7 @@ import errno
 import fcntl
 import os
 import shutil
+import stat
 import sys
 import time
 
@@ -54,10 +55,22 @@ def acquire_exclusive(fd: int, lockfile: str, deadline_sec: float) -> None:
             time.sleep(0.5)
 
 
+def make_directories_group_manageable(root: str) -> None:
+    """Let another artifact publisher traverse and remove this tree."""
+    for directory, _, _ in os.walk(root):
+        mode = os.stat(directory).st_mode
+        os.chmod(directory, mode | stat.S_IRWXG)
+
+
 def main() -> None:
     if len(sys.argv) != 4:
         sys.exit(f"usage: {sys.argv[0]} <lockfile> <src_dir> <dst_dir>")
     lockfile, src, dst = sys.argv[1:4]
+
+    # A creator-supplied mode such as 0755 narrows the inherited ACL mask to
+    # r-x. Normalize every directory while the publisher still owns the staged
+    # tree so the other homelab_ci identity can remove it on a later publish.
+    make_directories_group_manageable(src)
 
     fd = os.open(lockfile, os.O_RDONLY | os.O_CREAT, 0o644)
     try:

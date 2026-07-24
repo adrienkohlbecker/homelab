@@ -2,6 +2,7 @@
 
 import importlib.util
 import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -93,6 +94,21 @@ class TestMainAtomicPublish:
         pub.main()
 
         assert (dst / "image.qcow2").read_text() == "new"
+
+    def test_grants_group_access_to_published_directories(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        src = tmp_path / "src"
+        nested = src / "nested"
+        nested.mkdir(parents=True, mode=0o750)
+        dst = tmp_path / "dst"
+        lockfile = tmp_path / ".publish-lock"
+
+        monkeypatch.setattr("sys.argv", ["publish.py", str(lockfile), str(src), str(dst)])
+        pub.main()
+
+        for directory in (dst, dst / "nested"):
+            assert stat.S_IMODE(directory.stat().st_mode) & stat.S_IRWXG == stat.S_IRWXG
 
     def test_usage_on_bad_args(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.argv", ["publish.py"])
