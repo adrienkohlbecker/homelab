@@ -173,9 +173,11 @@
     _netdata_keepalived_vrrp_charts.status == 200
     and 'keepalived_vrrp.state' in (_netdata_keepalived_vrrp_charts.content | from_json).charts.keys()
 
+# Two buckets make the newest partial bucket visible immediately. Netdata 2.10.4
+# can leave a one-bucket query empty until the whole range has aged in.
 - name: _verify | Keepalived_vrrp fixture reports holds_vip=1
   uri:
-    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=keepalived_vrrp.state&points=1&after=-90&format=json
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=keepalived_vrrp.state&points=2&after=-90&format=json
     return_content: true
   register: _netdata_keepalived_vrrp_data
   retries: 30
@@ -312,14 +314,12 @@
     and 'netdata_presence.collector_go_d_collector_systemdunits_service_units' in (_netdata_charts.content | from_json).charts.keys()
     and 'netdata_presence.collector_go_d_collector_fake_plugin_fake_job' in (_netdata_charts.content | from_json).charts.keys()
 
-# `points=1` defaults to a 1-second window; with update_every=5s that
-# misses 4 polls out of 5. `&after=-30` widens to 30s so a healthy
-# collector lands at least a few points in range. Membership tests
-# instead of `.index(...)` so a transient response shape returns False
-# cleanly rather than raising and aborting the retry loop.
+# Two buckets make the newest partial bucket visible immediately; one bucket
+# can remain empty until the whole range has aged in. Membership tests instead
+# of `.index(...)` let a transient response shape retry cleanly.
 - name: _verify | System_cpu context resolves to present=1
   uri:
-    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.context_system_cpu&points=1&after=-30&format=json
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.context_system_cpu&points=2&after=-30&format=json
     return_content: true
   register: _netdata_system_cpu_data
   retries: 30
@@ -334,7 +334,7 @@
 
 - name: _verify | Systemdunits collector resolves to present=1
   uri:
-    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.collector_go_d_collector_systemdunits_service_units&points=1&after=-30&format=json
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.collector_go_d_collector_systemdunits_service_units&points=2&after=-30&format=json
     return_content: true
   register: _netdata_systemdunits_data
   retries: 30
@@ -349,7 +349,7 @@
 
 - name: _verify | Ghost context resolves to present=0
   uri:
-    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.context_ghost&points=1&after=-30&format=json
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.context_ghost&points=2&after=-30&format=json
     return_content: true
   register: _netdata_ghost_data
   retries: 30
@@ -364,7 +364,7 @@
 
 - name: _verify | Fake_plugin:fake_job collector resolves to present=0
   uri:
-    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.collector_go_d_collector_fake_plugin_fake_job&points=1&after=-30&format=json
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/data?chart=netdata_presence.collector_go_d_collector_fake_plugin_fake_job&points=2&after=-30&format=json
     return_content: true
   register: _netdata_fake_collector_data
   retries: 30
