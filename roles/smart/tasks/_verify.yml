@@ -31,7 +31,7 @@
   vars:
     _conf: "{{ _smart_smartd_conf.content | b64decode }}"
     _conf_device_count: "{{ _conf | regex_findall('/dev/disk/by-id/') | length }}"
-    _facts_device_count: "{{ ansible_devices.values() | map(attribute='links') | map(attribute='ids') | select | map('sort') | map('first') | select('match', '^(nvme|ata)-') | list | length }}"
+    _facts_device_count: "{{ ansible_devices | dict2items | rejectattr('key', 'match', '^(md|dm-|loop|sr|ram|zd)') | selectattr('value.links.ids') | map(attribute='value.links.ids') | map('sort') | map('first') | select('match', '^(nvme|ata)-') | list | length }}"
   assert:
     that:
       - _conf_device_count == _facts_device_count

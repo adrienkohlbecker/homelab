@@ -140,7 +140,7 @@
 # TODO: once all hosts are on noble (smartmontools >= 7.4), simplify DEFAULT to -a
 DEFAULT -H -f -t -l error -l selftest -C 197+ -U 198+ -n standby,q -m root -M exec /usr/share/smartmontools/smartd-runner -M diminishing -o on -S on -s (L/../01/./04:024|S/../.././02) -I 194 -I 190 -I 231 -I 9
 
-{% set qualifying_devs = ansible_devices.values() | map(attribute='links') | map(attribute='ids') | select | map('sort') | map('first') | select('match', '^(nvme|ata)-') | sort %}
+{% set qualifying_devs = ansible_devices | dict2items | rejectattr('key', 'match', '^(md|dm-|loop|sr|ram|zd)') | selectattr('value.links.ids') | map(attribute='value.links.ids') | map('sort') | map('first') | select('match', '^(nvme|ata)-') | sort %}
 {% for dev in qualifying_devs %}
 {% if not dev | regex_search('^[a-zA-Z0-9_.:-]+$') %}
 {{ _unsafe_device_id | mandatory('device id contains unsafe characters: ' ~ dev) }}
