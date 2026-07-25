@@ -138,15 +138,15 @@ gitlab_runner_archive:
 # ci_aws_nested_qemu_cells.md). Same shape as the Hetzner plugin: a plain
 # PATH-named Go binary, not an OCI ref. Published as a GitLab generic package
 # (project 39457165 = gitlab-org/fleeting/plugins/aws). sha256s from the
-# v1.2.0 release checksum file on 2026-06-19.
-gitlab_runner_fleeting_aws_version: "1.2.0"
+# v1.3.0 release binaries on 2026-07-25.
+gitlab_runner_fleeting_aws_version: "1.3.0"
 gitlab_runner_fleeting_aws_archive:
   x86_64:
-    url: "https://gitlab.com/api/v4/projects/39457165/packages/generic/releases/v1.2.0/fleeting-plugin-aws-linux-amd64"
-    sha256: "4529b218a6e1e23691cfcfd42de56a234de2a04ba58956ddc801e0220cb388db"
+    url: "https://gitlab.com/api/v4/projects/39457165/packages/generic/releases/v1.3.0/fleeting-plugin-aws-linux-amd64"
+    sha256: "8a21a6e8394963546e699c4de40b1e729f069333f942b6fc741464b99518ed31"
   aarch64:
-    url: "https://gitlab.com/api/v4/projects/39457165/packages/generic/releases/v1.2.0/fleeting-plugin-aws-linux-arm64"
-    sha256: "8dddb3a3824ad2b99e7d599220c4ac8da251fdc9f76443fc0563219b51874010"
+    url: "https://gitlab.com/api/v4/projects/39457165/packages/generic/releases/v1.3.0/fleeting-plugin-aws-linux-arm64"
+    sha256: "4555cf04775a944875e529d6fa1a885ffdc4cc8e35978aceb48b9daf87483b3d"
 
 # HACS: Home Assistant custom-components manager. The archive is
 # arch-independent; the role unpacks it into the HA config dataset.
