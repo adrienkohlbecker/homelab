@@ -126,16 +126,16 @@ workflow:
 # The diff base is the newest fully-green pipeline ancestor, resolved via the
 # GitLab pipelines API (detect.py: resolve_green_base_gitlab) — so a red-push ->
 # fix sequence retests everything changed since the last green commit, not just
-# the fix's own diff. It falls back to the previous branch tip
-# (CI_COMMIT_BEFORE_SHA) when no green base resolves. A full-universe trigger
-# fires on a cross-cutting path change, a new branch, or a schedule/ROLES=ALL
-# dispatch.
+# the fix's own diff. When no green base resolves on the branch or the default
+# branch, CI runs the full universe rather than trusting a possibly-red previous
+# tip. A full-universe trigger also fires on a cross-cutting path change, a new
+# branch, or a schedule/ROLES=ALL dispatch.
 #
 # Optional CI/CD variable: GITLAB_API_TOKEN (a read_api project access token).
 # detect uses the automatic CI_JOB_TOKEN for the pipelines query by default;
 # set GITLAB_API_TOKEN only if that token can't list pipelines (the job log
-# says "pipelines query failed" / "using previous-tip base"). Either way a
-# failure degrades to the previous-tip base, never to a hard error.
+# says "pipelines query failed"). An API failure degrades to the same safe
+# no-green policy rather than failing the detect job itself.
 detect:
   stage: prepare
   # Runs on the qemu shell pool selected by HOMELAB_CI_TARGET: aws-shell-qemu
@@ -170,7 +170,7 @@ detect:
   variables:
     # detect diffs HEAD against the resolved green base; 50 is deep enough for
     # any realistic push, with a fetch-on-demand fallback in detect.py for a
-    # base (green ancestor or previous tip) outside the shallow checkout.
+    # green base outside the shallow checkout.
     GIT_DEPTH: "50"
     # The qemu-host AMI bakes the mise tool tree + uv cache at /opt (matching the
     # cell before_script); the aws-target rules point mise/uv there. UV_LINK_MODE

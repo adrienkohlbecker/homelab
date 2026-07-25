@@ -1140,6 +1140,38 @@ def _render_child_doc(
     )
 
 
+class TestGitlabChangeMatrix:
+    @staticmethod
+    def _empty_diff(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        seen: list[str] = []
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: ref)
+        monkeypatch.setattr(detect, "git_diff_files", lambda base: seen.append(base) or [])
+        monkeypatch.setattr(detect, "list_testable_roles", list)
+        monkeypatch.setattr(detect, "build_role_deps_map", dict)
+        return seen
+
+    @pytest.mark.parametrize("branch", ["master", "feature"])
+    def test_no_green_runs_full_universe(self, monkeypatch: pytest.MonkeyPatch, branch: str) -> None:
+        monkeypatch.delenv("CI_BASE_REF", raising=False)
+        monkeypatch.setenv("CI_COMMIT_BRANCH", branch)
+        monkeypatch.setenv("CI_DEFAULT_BRANCH", "master")
+        monkeypatch.setenv("CI_COMMIT_BEFORE_SHA", "red_previous_tip")
+        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: "full")
+        monkeypatch.setattr(detect, "git_diff_files", lambda base: pytest.fail("red tip must not be used"))
+        logs = []
+        assert detect._gitlab_change_matrix(None, logs.append) == ("full", True)
+        assert any("no green base" in line for line in logs)
+
+    def test_explicit_base_still_wins_on_default_branch(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CI_BASE_REF", "explicit")
+        monkeypatch.setenv("CI_COMMIT_BRANCH", "master")
+        monkeypatch.setenv("CI_DEFAULT_BRANCH", "master")
+        monkeypatch.setenv("CI_COMMIT_BEFORE_SHA", "red_previous_tip")
+        seen = self._empty_diff(monkeypatch)
+        assert detect._gitlab_change_matrix(None, lambda _: None) == ("[]", False)
+        assert seen == ["explicit"]
+
+
 class TestTargets:
     def test_only_two_qemu_targets(self) -> None:
         assert sorted(detect.TARGETS) == ["aws_qemu", "lab"]

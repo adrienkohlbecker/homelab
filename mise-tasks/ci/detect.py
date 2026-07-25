@@ -244,8 +244,7 @@ def _shallow_since_arg(created_at: str) -> str | None:
 # Query the project's pipeline history for the newest *successful* pipeline
 # whose commit is an ancestor of HEAD, and diff against that. This turns a
 # red-push -> fix sequence into "retest everything since the last fully-green
-# commit" rather than only the fix's own diff (all that CI_COMMIT_BEFORE_SHA
-# alone covers).
+# commit" rather than only the fix's own diff.
 #
 # A green base must be a pipeline that actually *ran the cell matrix* and passed
 # it — `success` status alone is not enough. Three ways a `success` pipeline can
@@ -286,7 +285,7 @@ def _gl_api_get(
     token_kind selects the auth header: "private" for a PAT / project access
     token (PRIVATE-TOKEN), "job" for the pipeline's CI_JOB_TOKEN (JOB-TOKEN).
     A 401/403 is terminal (the token is wrong or lacks read_api) — don't burn
-    the retry budget on it; the caller falls back to the previous-tip base.
+    the retry budget on it; the caller applies the no-green fallback policy.
     """
     header = "PRIVATE-TOKEN" if token_kind == "private" else "JOB-TOKEN"
     req = urllib.request.Request(url, headers={header: token})
@@ -695,7 +694,6 @@ def _full_universe_matrix() -> str:
 # image bundles from S3 (terraform/aws_ci.tf); its OIDC trust accepts any
 # branch, so feature-branch pushes can test too.
 CELL_ROLE_ARN = "arn:aws:iam::000390721279:role/homelab-ci-cell"
-EMPTY_SHA = "0" * 40
 
 # Both targets run the qemu backend; they differ only in the fields below.
 #   cell_runner_tag — which shell runner claims the cells.
@@ -872,7 +870,6 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[str, bool]:
     full-universe trigger (a cross-cutting path changed, or no usable diff base)
     returns the whole universe with site_test enabled.
     """
-    before_sha = os.environ.get("CI_COMMIT_BEFORE_SHA", "")
 
     def full_universe(reason):
         log(f"{reason} -> testing the FULL universe")
@@ -883,9 +880,8 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[str, bool]:
     #   2. newest green pipeline ancestor -- the last fully-green commit, via the
     #      GitLab pipelines API; turns a red-push -> fix sequence into "retest
     #      everything since green" instead of only the fix's own diff.
-    #   3. CI_COMMIT_BEFORE_SHA         -- the previous branch tip, when no green
-    #      base resolves (no/rejected token, API down, or none found).
-    #   4. full universe                -- nothing to diff against (new branch).
+    #   3. full universe                -- neither the branch nor the default
+    #      branch has a trustworthy green base.
     ci_base_ref = os.environ.get("CI_BASE_REF", "")
     if ci_base_ref:
         base_ref = ci_base_ref
@@ -893,11 +889,8 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[str, bool]:
     elif green and green.get("sha"):
         base_ref = green["sha"]
         log(f"diff base: {green['sha'][:12]} (last green pipeline)")
-    elif before_sha and before_sha != EMPTY_SHA:
-        base_ref = before_sha
-        log(f"diff base: {before_sha[:12]} (previous branch tip)")
     else:
-        return full_universe("no green base and no previous commit (new branch / first push)")
+        return full_universe("no green base")
 
     if git_rev_parse(base_ref) is None:
         log(f"  base {base_ref[:12]} outside shallow checkout; fetching the commit")
