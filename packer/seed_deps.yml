@@ -51,30 +51,33 @@
 
     # Everything above wrote its apt sources through the lab Nexus: test
     # hosts set nexus_url, and the bake needs Nexus because external egress
-    # dies after the in-guest reboot. That bakes lab-only URLs
-    # (nexus.lab.fahm.fr -> 10.123.0.2) into the shipped fixture, which the
-    # AWS nested-qemu cells can't route to -- so a cell's first strict
-    # `apt-get update --error-on=any` fails before any converge can rewrite
-    # them. Reset every apt source back to plain upstream here so box_deps
-    # matches the portable `box` baseline; the first converge re-points them
-    # at Nexus-or-regional as the running backend dictates. nexus_url='' +
-    # test_in_aws=false force ubuntu_mirror's upstream archive.ubuntu.com
-    # branch, and apt_skip_refresh keeps the rewrite network-free (no egress
-    # left). roles/apt handles the per-release shape (jammy legacy
-    # sources.list vs noble deb822); the noble-on-jammy backports sources
-    # are owned by the backports helper, so re-render that file too.
-    - name: Reset baked apt sources to upstream (portable box_deps fixture)
-      vars:
-        nexus_url: ""
-        test_in_aws: false
-      block:
-        - name: Re-render apt sources at upstream (network-free)
-          import_role:
-            name: apt
-          vars:
-            apt_skip_refresh: true
+    # dies after the in-guest reboot. Strip that prefix before shipping the
+    # fixture so AWS nested-qemu cells do not try to route through the lab.
+    - name: Assert the source Nexus URL is defined
+      assert:
+        that:
+          - nexus_url | length > 0
+        fail_msg: nexus_url must identify the source mirror before sanitizing box_deps.
 
-        - name: Re-render noble backports sources at upstream (jammy)
-          import_role:
-            name: backports
-            tasks_from: reset_sources
+    - name: Find baked apt source files
+      find:
+        paths: /etc/apt
+        file_type: file
+        recurse: true
+        patterns:
+          - sources.list
+          - "*.list"
+          - "*.sources"
+        contains: "{{ nexus_url | regex_escape }}"
+        read_whole_file: true
+      register: box_deps_apt_sources
+
+    - name: Strip Nexus prefixes from baked apt sources
+      replace:
+        path: "{{ item.path }}"
+        regexp: "{{ nexus_url | regex_escape }}"
+        replace: ""
+        backup: true
+      loop: "{{ box_deps_apt_sources.files }}"
+      loop_control:
+        label: "{{ item.path }}"
