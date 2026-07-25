@@ -407,6 +407,16 @@ class TestGitRevParseShort:
         assert detect.git_rev_parse_short("a" * 40) == "a" * 12
 
 
+class TestGitTree:
+    def test_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_git", lambda *a, **kw: _fake_git_result("tree123\n"))
+        assert detect.git_tree("abc") == "tree123"
+
+    def test_failure_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "_git", lambda *a, **kw: _fake_git_result("", returncode=128))
+        assert detect.git_tree("bogus") is None
+
+
 class TestGitFetchCommit:
     def test_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(detect, "_git", lambda *a, **kw: _fake_git_result(""))
@@ -599,6 +609,27 @@ class TestIsLocalAncestor:
         assert detect.is_local_ancestor("abc", "HEAD", since="2026-06-13T00:00:00Z", branch="master") is True
 
 
+class TestTreeEquivalentAncestor:
+    def test_returns_newest_matching_ancestor(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "git_tree", lambda ref: "green_tree")
+        monkeypatch.setattr(
+            detect,
+            "_git",
+            lambda *a, **kw: _fake_git_result("newest other_tree\nrewritten green_tree\nolder green_tree\n"),
+        )
+        assert detect.tree_equivalent_ancestor("old_green", "head") == "rewritten"
+
+    def test_none_when_trees_diverge(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "git_tree", lambda ref: "green_tree")
+        monkeypatch.setattr(detect, "_git", lambda *a, **kw: _fake_git_result("head other_tree\n"))
+        assert detect.tree_equivalent_ancestor("old_green", "head") is None
+
+    def test_none_when_candidate_is_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "git_tree", lambda ref: None)
+        monkeypatch.setattr(detect, "_git", lambda *a, **kw: pytest.fail("git log must not run"))
+        assert detect.tree_equivalent_ancestor("missing", "head") is None
+
+
 class TestNewestGreenPipeline:
     @staticmethod
     def _kw(**overrides):
@@ -694,10 +725,32 @@ class TestNewestGreenPipeline:
         monkeypatch.setattr(detect, "_gl_api_get", mock_api)
         monkeypatch.setattr(detect, "_pipeline_ran_cells", lambda *a, **kw: True)
         monkeypatch.setattr(detect, "is_local_ancestor", lambda sha, head, **kw: sha == "oldgreen")
+        monkeypatch.setattr(detect, "tree_equivalent_ancestor", lambda sha, head: None)
         logs = []
         result = detect.newest_green_pipeline("master", **self._kw(log_fn=logs.append))
         assert result["sha"] == "oldgreen"
         assert any("not an ancestor" in m for m in logs)
+
+    def test_maps_green_pipeline_to_tree_equivalent_ancestor(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect,
+            "_gl_api_get",
+            lambda url, token, **kw: (
+                [{"id": 7, "sha": "oldgreen", "source": "push", "created_at": "2026-01-05"}] if "&page=1" in url else []
+            ),
+        )
+        monkeypatch.setattr(detect, "_pipeline_ran_cells", lambda *a, **kw: True)
+        monkeypatch.setattr(detect, "is_local_ancestor", lambda *a, **kw: False)
+        monkeypatch.setattr(
+            detect,
+            "tree_equivalent_ancestor",
+            lambda sha, head: "rewritten_green",
+        )
+        logs = []
+        result = detect.newest_green_pipeline("master", **self._kw(log_fn=logs.append))
+        assert result["id"] == 7
+        assert result["sha"] == "rewritten_green"
+        assert any("green tree-equivalent ancestor" in m for m in logs)
 
     def test_none_when_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(detect, "_gl_api_get", lambda url, token, **kw: [])

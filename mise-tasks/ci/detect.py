@@ -194,6 +194,11 @@ def git_rev_parse_short(ref: str) -> str:
     return result.stdout.strip() if result.returncode == 0 else ref[:12]
 
 
+def git_tree(ref: str) -> str | None:
+    result = _git("rev-parse", "--verify", "--quiet", f"{ref}^{{tree}}", check=False)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
 def git_fetch_commit(sha: str) -> bool:
     result = _git("fetch", "--no-tags", "--quiet", "origin", sha, check=False)
     return result.returncode == 0
@@ -328,6 +333,26 @@ def is_local_ancestor(sha: str, head: str = "HEAD", *, since: str | None = None,
     return _git("merge-base", "--is-ancestor", sha, head, check=False).returncode == 0
 
 
+def tree_equivalent_ancestor(sha: str, head: str = "HEAD") -> str | None:
+    """Return the newest ancestor of head whose complete tree matches sha.
+
+    A message-only history rewrite changes commit and parent IDs without changing
+    the tested snapshot. Matching the complete tree recovers that green snapshot
+    without accepting a genuinely divergent pipeline.
+    """
+    tree = git_tree(sha)
+    if tree is None:
+        return None
+    result = _git("log", "--format=%H %T", head, check=False)
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        commit, commit_tree = line.split()
+        if commit_tree == tree:
+            return commit
+    return None
+
+
 def _pipeline_ran_cells(project_api: str, pipeline_id: int, token: str, token_kind: str) -> bool:
     """True when the pipeline's triggered child holds at least one real cell job.
 
@@ -405,6 +430,10 @@ def newest_green_pipeline(
             if is_local_ancestor(sha, head_sha, since=created, branch=branch):
                 log_fn(f"  green ancestor: {sha[:12]} ({created}, {source})")
                 return pipe
+            equivalent = tree_equivalent_ancestor(sha, head_sha)
+            if equivalent:
+                log_fn(f"  green tree-equivalent ancestor: {equivalent[:12]} (pipeline {sha[:12]}, {created})")
+                return {**pipe, "sha": equivalent}
             log_fn(f"    skip {sha[:12]} ({created}): not an ancestor of HEAD")
         page += 1
     log_fn(f"  no green ancestor on '{branch}' (searched {page - 1} page(s))")
