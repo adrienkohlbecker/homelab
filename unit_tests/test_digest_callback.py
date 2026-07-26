@@ -1,6 +1,7 @@
 """Unit tests for callback_plugins/digest.py."""
 
 import copy
+import json
 from typing import Any, cast
 
 import callback_plugins.digest as digest
@@ -112,6 +113,43 @@ def test_stat_collapsed_nested_and_in_loop():
 def test_non_stat_dict_without_exists_untouched():
     other = {"stat": {"foo": 1, "bar": 2}}
     assert display_result(other)["stat"] == {"foo": 1, "bar": 2}
+
+
+def test_large_uri_json_response_collapsed():
+    payload = {"alarms": {f"alarm_{i}": {"status": "CLEAR"} for i in range(100)}}
+    content = json.dumps(payload)
+    result = {
+        "changed": False,
+        "status": 200,
+        "url": "http://localhost:19999/api/v1/alarms?all",
+        "json": payload,
+        "content": content,
+    }
+    snapshot = copy.deepcopy(result)
+
+    out = display_result(result)
+
+    assert out["json"].endswith("JSON object with keys: alarms hidden>")
+    assert out["content"] == f"<{len(content)}-character JSON content hidden>"
+    assert out["status"] == 200
+    assert out["url"] == result["url"]
+    assert result == snapshot
+
+
+def test_small_uri_json_response_kept():
+    payload = {"status": "ok"}
+    result = {
+        "status": 200,
+        "url": "http://localhost:19999/api/v1/info",
+        "json": payload,
+        "content": '{"status":"ok"}',
+    }
+    assert display_result(result) == result
+
+
+def test_non_uri_json_result_kept():
+    payload = {f"key_{i}": "x" * 100 for i in range(100)}
+    assert display_result({"json": payload})["json"] == payload
 
 
 def test_diff_dropped_when_persisted_under_facts():
