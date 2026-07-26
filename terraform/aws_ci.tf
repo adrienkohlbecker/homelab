@@ -31,14 +31,14 @@ locals {
     name = "homelab-ci-qemu-host"
     # 16 vCPU / 32 GiB / 950 GB NVMe -- half a c8id.8xlarge, at 13 cells each
     # (~2.46 GiB/cell, same density as one 8xlarge at 26). The runner scales out
-    # to as many of these as the queued burst needs, so a full universe runs in a
-    # single wave instead of serial waves on one big host. max_size is the
-    # 256-vCPU spot-quota ceiling, floor(256 / 16) = 16 hosts; it must match
+    # to as many of these as the queued burst needs. max_size fits five role
+    # hosts plus the separate 8-vCPU site host inside the 96-vCPU Spot quota:
+    # floor((96 - 8) / 16) = 5. It must match
     # gitlab_runner_aws_qemu_max_instances in host_vars/fox.yml. Per-host
     # concurrency is gitlab_runner_aws_qemu_capacity_per_instance there; a future
     # resize touches only this LT-version field, not the ASG name.
     instance_type = "c8id.4xlarge"
-    max_size      = 16
+    max_size      = 5
     # The "d" family carries a local instance-store NVMe disk. A boot service
     # (packer/aws/files/homelab_ci_prepare_scratch.sh) formats and mounts it at
     # /mnt/scratch, so all heavy CI I/O -- qcow2 overlays and the gitlab-runner

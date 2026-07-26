@@ -215,12 +215,12 @@ podman_zvol_sync_disabled: true
 
 # Global job ceiling across BOTH runner blocks (config.toml is process-wide) --
 # the fleet umbrella, NOT the per-runner knob. Set to the sum of the two
-# runners' per-runner `limit`s (16 docker + 208 role-cell aws_qemu + 1 site,
-# role-cell = max_instances*capacity = 16*13, site = 1*1) so each is bounded by
+# runners' per-runner `limit`s (16 docker + 65 role-cell aws_qemu + 1 site,
+# role-cell = max_instances*capacity = 5*13, site = 1*1) so each is bounded by
 # its own limit and neither starves the other. The remote aws_qemu slots are
 # SSH'd to ASG hosts, not run on fox; fox only holds their connections and log
 # streams.
-gitlab_runner_concurrent: 225
+gitlab_runner_concurrent: 82
 
 # Per-runner cap on the Docker-on-podman runner: bounds jobs run directly on
 # fox. The wide cell fan-out runs on the AWS qemu shell hosts (the ASG), off
@@ -245,8 +245,9 @@ gitlab_runner_aws_qemu_enabled: true
 # dedicated to CI). The burst fans out across up to max_instances (below) such
 # hosts at 13 cells each -- the horizontal-burst form of the proven
 # one-8xlarge-at-26 shape: same ~2.46 GiB/cell density per host, but many small
-# hosts instead of one big one, for spot-placement spread, a smaller per-host
-# blast radius, and a single-wave full universe (~8 hosts for ~100 cells).
+# hosts instead of one big one, for spot-placement spread and a smaller
+# per-host blast radius. The current five-host quota ceiling runs up to 65 role
+# cells at once; larger universes finish in a second wave.
 # Memory -- not CPU -- is the ceiling: vCPU oversubscription (13 x 4 = 52 on 16,
 # ~3.25x, identical to the 8xlarge ratio) is a non-issue; peak guest RSS during
 # synchronized converge is the hard wall.
@@ -269,18 +270,20 @@ gitlab_runner_aws_qemu_enabled: true
 # unmergeable.
 # Lower this first if qemu boot flakes or OOM kills reappear.
 gitlab_runner_aws_qemu_capacity_per_instance: 13
-# Host ceiling = the 256-vCPU All-Standard-Spot quota (L-34B43A08, eu-central-1)
-# divided by the 16 vCPU of a c8id.4xlarge: floor(256 / 16) = 16. The runner only
-# launches as many as the queued burst needs (ceil(queued / 13)), so a ~100-cell
-# universe lands on ~8 hosts in one wave; this is just the cap. terraform's
+# Host ceiling fits the 96-vCPU All-Standard-Spot quota (L-34B43A08,
+# eu-central-1) while reserving 8 vCPUs for the c8id.2xlarge site worker:
+# floor((96 - 8) / 16) = 5 c8id.4xlarge role hosts. Fleeting counts accepted
+# ASG desired-capacity changes before AWS fulfills them, so exceeding the quota
+# leaves phantom instances in taskscaler and prevents later scale-ups. The
 # aws_autoscaling_group max_size must match (ci_qemu_host_pool.max_size in
-# terraform/aws_ci.tf). Raise the spot quota before lifting this further.
-gitlab_runner_aws_qemu_max_instances: 16
-# A full-universe run is a one-shot burst: all cells land in ~1 wave, so warm host
-# reuse buys almost nothing within a pipeline, while every idle minute is billed
-# across every host the burst launched. Hold the drain just long enough to absorb
-# a straggler claiming a freed slot, not for cross-push reuse. This is the main
-# AWS cost lever against the free lab baseline. The site pool overrides it below.
+# terraform/aws_ci.tf). Raise the quota to at least 264 vCPUs before restoring
+# the 16-host ceiling.
+gitlab_runner_aws_qemu_max_instances: 5
+# A full-universe run is a short burst: cells land in about two waves, so warm
+# hosts are reused within the pipeline but cross-push reuse buys little. Hold the
+# drain just long enough for a straggler to claim a freed slot while avoiding
+# idle billing across every host the burst launched. This is the main AWS cost
+# lever against the free lab baseline. The site pool overrides it below.
 gitlab_runner_aws_qemu_idle_time: "2m"
 gitlab_runner_aws_qemu_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
