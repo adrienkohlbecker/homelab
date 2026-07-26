@@ -51,15 +51,33 @@
 
     # Everything above wrote its apt sources through the lab Nexus: test
     # hosts set nexus_url, and the bake needs Nexus because external egress
-    # dies after the in-guest reboot. Strip that prefix before shipping the
-    # fixture so AWS nested-qemu cells do not try to route through the lab.
+    # dies after the in-guest reboot. Rewrite each shared apt mirror to the
+    # value it has without Nexus before shipping the fixture so AWS
+    # nested-qemu cells do not try to route through the lab.
     - name: Assert the source Nexus URL is defined
       assert:
         that:
           - nexus_url | length > 0
         fail_msg: nexus_url must identify the source mirror before sanitizing box_deps.
 
-    - name: Find baked apt source files
+    - name: Capture Nexus-backed apt mirror URLs
+      set_fact:
+        box_deps_apt_mirror_sources: >-
+          {{ box_deps_apt_mirror_sources | default({}) |
+             combine({item: lookup('vars', item)}) }}
+      loop: "{{ query('varnames', '^mirror_apt_') | sort }}"
+
+    - name: Resolve upstream apt mirror URLs
+      vars:
+        nexus_url: ""
+        test_in_aws: false
+      set_fact:
+        box_deps_apt_mirror_rewrites: >-
+          {{ box_deps_apt_mirror_rewrites | default([]) +
+             [{'source': item.value, 'replacement': lookup('vars', item.key)}] }}
+      loop: "{{ box_deps_apt_mirror_sources | dict2items }}"
+
+    - name: Find Nexus-backed apt source files
       find:
         paths: /etc/apt
         file_type: file
@@ -72,12 +90,14 @@
         read_whole_file: true
       register: box_deps_apt_sources
 
-    - name: Strip Nexus prefixes from baked apt sources
+    - name: Rewrite baked apt sources to upstream
       replace:
-        path: "{{ item.path }}"
-        regexp: "{{ nexus_url | regex_escape }}"
-        replace: ""
+        path: "{{ item.0.path }}"
+        regexp: "{{ item.1.source | regex_escape }}"
+        replace: "{{ item.1.replacement }}"
         backup: true
-      loop: "{{ box_deps_apt_sources.files }}"
+      loop: >-
+        {{ box_deps_apt_sources.files |
+           product(box_deps_apt_mirror_rewrites) | list }}
       loop_control:
-        label: "{{ item.path }}"
+        label: "{{ item.0.path }}: {{ item.1.source }}"
