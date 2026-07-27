@@ -447,9 +447,13 @@
     url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
     return_content: true
   register: _netdata_alarms
-  retries: 10
+  retries: 30
   delay: 2
-  until: _netdata_alarms.status == 200
+  until: >-
+    _netdata_alarms.status == 200
+    and ((_netdata_alarms.content | from_json).alarms.values()
+         | selectattr('name', 'equalto', 'systemd_service_unit_failed_state')
+         | list | length > 0)
 
 - name: _verify | Presence alerts instantiated against the new charts
   vars:
