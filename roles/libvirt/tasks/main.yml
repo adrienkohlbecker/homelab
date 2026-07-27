@@ -37,8 +37,8 @@
 - name: Reset connection after installing Python libvirt bindings
   # Mitogen reuses the remote interpreter across tasks. Rebuild its context so
   # the libvirt modules below can import the newly-installed libvirtmod extension.
-  # virtinst can pull python3-libvirt into the first package transaction.
-  when: not ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed)
+  # reset_connection does not support conditionals, so always take the cheap
+  # reconnect instead of relying on which apt transaction installed the binding.
   meta: reset_connection
   tags:
     - libvirt
