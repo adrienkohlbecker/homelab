@@ -432,11 +432,12 @@ qemu_host_ami:
 # job is when:never for the schedule source), so without this it is green
 # regardless of master's real test state -- flipping the branch badge green and
 # firing GitLab's "Pipeline fixed" email even when the last full test failed.
-# This job mirrors the branch's last full-test verdict onto the scheduled
-# pipeline (red unless that test was green), so a schedule can never manufacture
-# a spurious "fixed". Schedule-only and runs on the cheap hosted pool; it only
-# queries the GitLab API (CI_JOB_TOKEN), no qemu/AWS. NOT allow_failure -- that
-# would zero its effect on the pipeline status and defeat the whole point.
+# This job mirrors the branch's last full-universe verdict onto the scheduled
+# pipeline. Green requires a complete emitted cell universe in a green child
+# plus a non-failed parent; required manual image-bake jobs may leave that parent
+# blocked. Schedule-only and runs on the cheap hosted pool; it only queries the
+# GitLab API (CI_JOB_TOKEN), no qemu/AWS. NOT allow_failure -- that would zero
+# its effect on the pipeline status and defeat the whole point.
 schedule_status_guard:
   stage: prepare
   extends: .hosted
