@@ -44,6 +44,7 @@
     - /mnt/services/jellyfin/data/introskipper
     - /mnt/scratch/jellyfin
     - /mnt/scratch/jellyfin/cache
+    - /mnt/scratch/jellyfin/cache/transcodes
     - /var/log/jellyfin
   tags:
     - jellyfin
