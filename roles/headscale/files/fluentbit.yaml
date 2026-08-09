@@ -24,3 +24,27 @@ pipeline:
         - level _level
       remove: time
       set: parser_status parsed
+    # TLS terminates at nginx. Headscale therefore correctly listens as plain
+    # HTTP behind the proxy even though its public ServerURL is HTTPS.
+    - name: modify
+      match: svc.headscale.service
+      condition:
+        - key_value_matches _level '^warn$'
+        - key_value_matches log '^Listening without TLS but ServerURL does not start with http://$'
+      set: _level info
+    # The embedded DERP client probes this endpoint every few seconds. Keep
+    # failures and other methods or paths; omit only parsed successful probes.
+    - name: type_converter
+      match: nginx.access
+      int_key: status _headscale_status_text string
+    - name: grep
+      match: nginx.access
+      logical_op: and
+      exclude:
+        - '_headscale_status_text ^200$'
+        - 'method ^GET$'
+        - 'path ^/derp/latency-check$'
+        - 'server_name ^headscale\.'
+    - name: modify
+      match: nginx.access
+      remove: _headscale_status_text

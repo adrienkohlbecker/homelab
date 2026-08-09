@@ -345,6 +345,28 @@
           CONTAINER_TAG: headscale
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: headscale.service
+        - MESSAGE: '{"level":"warn","message":"Listening without TLS but ServerURL does not start with http://","time":4070908800}'
+          CONTAINER_TAG: headscale
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: headscale.service
+        - _tag: nginx.access
+          log: headscale-latency-success
+          method: GET
+          path: /derp/latency-check
+          server_name: headscale.box.example
+          status: 200
+        - _tag: nginx.access
+          log: headscale-latency-failure
+          method: GET
+          path: /derp/latency-check
+          server_name: headscale.box.example
+          status: 503
+        - _tag: nginx.access
+          log: headscale-nearby-path
+          method: GET
+          path: /derp/latency-check/details
+          server_name: headscale.box.example
+          status: 200
       expected:
         - message: headscale-valid
           level: warn
@@ -355,3 +377,16 @@
           service: headscale
           _absent:
             - fields.parser_status
+        - message: Listening without TLS but ServerURL does not start with http://
+          level: info
+          service: headscale
+        - message: headscale-latency-failure
+          level: error
+          fields.status: 503
+        - message: headscale-nearby-path
+          level: debug
+          fields.status: 200
+
+- name: _verify | Successful Headscale DERP latency probe was omitted
+  assert:
+    that: "'headscale-latency-success' not in fluentbit_verify_result.stdout"
