@@ -138,6 +138,21 @@
             tag: svc.zfs_autosnapshot.service
             dummy: '{"MESSAGE":"rsync error: unexplained error","SYSTEMD_UNIT":"zfs_autosnapshot.service","marker":"zfs-error-keep"}'
             samples: 1
+          - name: dummy
+            tag: audit
+            dummy: >-
+              {"log":"type=SERVICE_START msg=audit(4072368012.092:808): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=homepage_alerts comm=systemd exe=/usr/lib/systemd/systemd hostname=? addr=? terminal=? res=success'","marker":"homepage-audit-success-drop"}
+            samples: 1
+          - name: dummy
+            tag: audit
+            dummy: >-
+              {"log":"type=SERVICE_START msg=audit(4072368012.092:809): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=homepage_alerts comm=systemd exe=/usr/lib/systemd/systemd hostname=? addr=? terminal=? res=failed'","marker":"homepage-audit-failed-keep"}
+            samples: 1
+          - name: dummy
+            tag: audit
+            dummy: >-
+              {"log":"type=SERVICE_STOP msg=audit(4072368012.092:810): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=unrelated comm=systemd exe=/usr/lib/systemd/systemd hostname=? addr=? terminal=? res=success'","marker":"unrelated-audit-success-keep"}
+            samples: 1
 
         outputs:
           - name: stdout
@@ -184,6 +199,9 @@
         assert "zfs-blank-drop" not in by_marker, records
         assert by_marker["cron-hourly-keep"]["level"] == "info", records
         assert by_marker["zfs-error-keep"]["level"] == "error", records
+        assert "homepage-audit-success-drop" not in by_marker, records
+        assert "homepage-audit-failed-keep" in by_marker, records
+        assert "unrelated-audit-success-keep" in by_marker, records
     stdin: "{{ _fluentbit_shared_filter_result.stdout }}"
   changed_when: false
 

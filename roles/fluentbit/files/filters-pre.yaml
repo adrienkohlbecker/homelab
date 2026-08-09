@@ -29,6 +29,10 @@ pipeline:
       exclude: "log ^type=SERVICE_(START|STOP) msg=audit\\([0-9.]+:[0-9]+\\): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=[a-f0-9]{64}"
 
     - name: grep
+      match: audit
+      exclude: "log ^type=SERVICE_(START|STOP) msg=audit\\([0-9.]+:[0-9]+\\): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=homepage_alerts .* res=success'"
+
+    - name: grep
       match: svc.*
       logical_op: and
       exclude:
