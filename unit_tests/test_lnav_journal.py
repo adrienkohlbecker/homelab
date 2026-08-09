@@ -24,9 +24,30 @@ def write_record(path: Path, timestamp: str, *, compressed: bool = False) -> Non
 
 
 def test_parse_args_separates_wrapper_options() -> None:
-    parsed = lnav_journal.parse_args(["-S", "2 hours ago", "-u", "ssh", "--all", "-n"])
+    now = datetime(2026, 7, 12, 12, tzinfo=UTC)
+    parsed = lnav_journal.parse_args(["-S", "2 hours ago", "-u", "ssh", "--all", "-n"], now)
 
-    assert parsed == ("2 hours ago", None, True, ["ssh"], ["-S", "2 hours ago", "-n"])
+    assert parsed == ("2 hours ago", None, True, ["ssh"], ["-S", "2026-07-12T10:00:00+00:00", "-n"])
+
+
+def test_parse_args_normalizes_equals_bounds_against_one_clock() -> None:
+    now = datetime(2026, 7, 12, 12, 34, 56, tzinfo=UTC)
+
+    parsed = lnav_journal.parse_args(["--since=10 days ago", "--until=now"], now)
+
+    assert parsed == (
+        "10 days ago",
+        "now",
+        False,
+        [],
+        ["--since=2026-07-02T12:34:56+00:00", "--until=2026-07-12T12:34:56+00:00"],
+    )
+
+
+def test_parse_args_preserves_unknown_lnav_time_syntax() -> None:
+    parsed = lnav_journal.parse_args(["-S", "last blue moon"], datetime(2026, 7, 12, tzinfo=UTC))
+
+    assert parsed[-1] == ["-S", "last blue moon"]
 
 
 def test_line_count_mode_is_rejected() -> None:

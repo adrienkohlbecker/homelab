@@ -39,7 +39,10 @@ def option_value(argv: list[str], index: int) -> str:
     return argv[index + 1]
 
 
-def parse_args(argv: list[str]) -> tuple[str | None, str | None, bool, list[str], list[str]]:
+def parse_args(
+    argv: list[str], now: datetime | None = None
+) -> tuple[str | None, str | None, bool, list[str], list[str]]:
+    now = now or datetime.now().astimezone()
     since = None
     until = None
     include_all = False
@@ -54,33 +57,39 @@ def parse_args(argv: list[str]) -> tuple[str | None, str | None, bool, list[str]
             break
         if arg in ("-S", "--since"):
             since = option_value(argv, index)
-            lnav_args.extend((arg, since))
+            lnav_args.extend((arg, normalize_bound(since, now)))
             index += 2
             continue
         if arg.startswith("--since="):
             since = arg.partition("=")[2]
-        elif arg in ("-U", "--until"):
+            lnav_args.append(f"--since={normalize_bound(since, now)}")
+            index += 1
+            continue
+        if arg in ("-U", "--until"):
             until = option_value(argv, index)
-            lnav_args.extend((arg, until))
+            lnav_args.extend((arg, normalize_bound(until, now)))
             index += 2
             continue
-        elif arg.startswith("--until="):
+        if arg.startswith("--until="):
             until = arg.partition("=")[2]
-        elif arg in ("-u", "--unit"):
+            lnav_args.append(f"--until={normalize_bound(until, now)}")
+            index += 1
+            continue
+        if arg in ("-u", "--unit"):
             units.append(option_value(argv, index))
             index += 2
             continue
-        elif arg.startswith("--unit="):
+        if arg.startswith("--unit="):
             units.append(arg.partition("=")[2])
             index += 1
             continue
-        elif arg == "--all":
+        if arg == "--all":
             include_all = True
             index += 1
             continue
-        elif arg == "--lines" or arg.startswith("--lines="):
+        if arg == "--lines" or arg.startswith("--lines="):
             fail("--lines is not supported; use --since/--until to bound the JSONL store")
-        elif arg == "-n" and index + 1 < len(argv) and argv[index + 1].isdigit():
+        if arg == "-n" and index + 1 < len(argv) and argv[index + 1].isdigit():
             fail("-n <count> is not supported; bare -n still enables lnav headless mode")
 
         lnav_args.append(arg)
@@ -142,6 +151,18 @@ def parse_bound(value: str, now: datetime | None = None) -> float | None:
         return None
 
 
+def normalize_bound(value: str, now: datetime) -> str:
+    text = value.strip().lower()
+    relative = re.fullmatch(r"\d+\s*(seconds?|minutes?|hours?|days?|weeks?)\s+ago", text)
+    if relative is None and text not in ("now", "today", "yesterday"):
+        return value
+
+    epoch = parse_bound(value, now)
+    if epoch is None:
+        return value
+    return datetime.fromtimestamp(epoch, tz=now.tzinfo).isoformat()
+
+
 def select_logs(
     logs: list[Path],
     since: str | None,
@@ -187,12 +208,13 @@ def main(argv: list[str]) -> None:
     if argv[:1] and argv[0] in ("-V", "--version", "-h", "--help"):
         os.execv(LNAV, [LNAV, *argv])
 
-    since, until, include_all, units, lnav_args = parse_args(argv)
+    now = datetime.now().astimezone()
+    since, until, include_all, units, lnav_args = parse_args(argv, now)
     logs = discover_logs()
     if not logs or logs[0] != STORE:
         fail(f"normalized store is missing or unreadable: {STORE}")
 
-    logs = select_logs(logs, since, until, include_all)
+    logs = select_logs(logs, since, until, include_all, now)
     if not logs:
         fail("no retained JSONL files overlap the requested time window")
     if units and any(arg.lstrip().startswith(":filter-expr") for arg in lnav_args):
