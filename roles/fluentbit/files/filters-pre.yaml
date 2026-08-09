@@ -69,13 +69,6 @@ pipeline:
       match: svc.*
       logical_op: and
       exclude:
-        - 'SYSTEMD_UNIT ^tailscaled\.service$'
-        - 'MESSAGE (disco: failed to send ping .* sendto: destination address required|derp-[0-9]+ does not know about peer .* removing route)'
-
-    - name: grep
-      match: svc.*
-      logical_op: and
-      exclude:
         - 'SYSTEMD_UNIT ^hd-idle\.service$'
         - 'MESSAGE ^probing sd[a-z]+: reads:'
 

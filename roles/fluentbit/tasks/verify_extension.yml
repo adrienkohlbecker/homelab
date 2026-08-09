@@ -24,9 +24,9 @@
         inputs:
       {% for record in fluentbit_verify_args.records %}
           - name: dummy
-            tag: svc.{{ fluentbit_verify_args.name }}.service
+            tag: {{ record._tag | default('svc.' ~ fluentbit_verify_args.name ~ '.service') }}
             dummy: >-
-              {{ record | to_json }}
+              {{ record | dict2items | rejectattr('key', 'equalto', '_tag') | list | items2dict | to_json }}
             samples: 1
       {% endfor %}
 

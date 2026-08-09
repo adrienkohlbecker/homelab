@@ -85,6 +85,16 @@
   tags:
     - tailscale
 
+- name: Install tailscale fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension
+  vars:
+    fluentbit_extension_args:
+      name: tailscale
+  tags:
+    - tailscale
+
 # Single override.conf carrying every tailscaled customization. It (a) clears the
 # stock StateDirectory=tailscale so systemd accepts our /var/lib/tailscale ->
 # /mnt/services/tailscale symlink, (b) orders the daemon after the services-dataset

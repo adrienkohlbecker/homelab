@@ -137,3 +137,61 @@
   changed_when: false
   failed_when: _tailscale_ipv6_fwd.stdout | trim != '1'
   become: true
+
+- name: _verify | Exercise tailscale fluent-bit noise filters
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: tailscale
+      records:
+        - _tag: svc.tailscaled.service
+          MESSAGE: "netcheck: netcheck: UDP is blocked, trying HTTPS"
+          marker: tailscale-udp-https-drop
+        - _tag: svc.tailscaled.service
+          MESSAGE: "netcheck: netcheck: UDP is blocked, trying ICMP"
+          marker: tailscale-udp-icmp-drop
+        - _tag: svc.tailscaled.service
+          MESSAGE: "netmap: suggested exit node:  ()"
+          marker: tailscale-empty-exit-drop
+        - _tag: svc.tailscaled.service
+          MESSAGE: "netcheck: DetectCaptivePortal(found=false)"
+          marker: tailscale-captive-false-drop
+        - _tag: svc.tailscaled.service
+          MESSAGE: "magicsock: disco: node [leV4J] d:abcdef now using 192.0.2.1:41641 mtu=1280 tx=1234abcd"
+          marker: tailscale-path-change-drop
+        - _tag: svc.tailscaled.service
+          MESSAGE: "magicsock: disco: failed to send ping tx=1234 sendto: destination address required"
+          marker: tailscale-disco-ping-drop
+        - _tag: svc.tailscaled.service
+          MESSAGE: "magicsock: derp-12 does not know about peer [leV4J], removing route"
+          marker: tailscale-derp-route-drop
+        - _tag: svc.tailscaled.service
+          MESSAGE: 'control: NetInfo: NetInfo{varies=false ipv6=false udp=true}'
+          marker: tailscale-netinfo-keep
+      expected:
+        - message: 'control: NetInfo: NetInfo{varies=false ipv6=false udp=true}'
+          service: tailscaled
+          fields.marker: tailscale-netinfo-keep
+
+- name: _verify | Assert routine tailscale probe and path records are omitted
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import sys
+
+        output = sys.stdin.read()
+        for marker in sys.argv[1:]:
+            assert marker not in output, (marker, output)
+      - tailscale-udp-https-drop
+      - tailscale-udp-icmp-drop
+      - tailscale-empty-exit-drop
+      - tailscale-captive-false-drop
+      - tailscale-path-change-drop
+      - tailscale-disco-ping-drop
+      - tailscale-derp-route-drop
+    stdin: "{{ fluentbit_verify_result.stdout }}"
+  changed_when: false

@@ -1,0 +1,13 @@
+pipeline:
+  filters:
+    # Keep the final NetInfo result and failures. These exact messages are
+    # intermediate probe attempts or routine path churn retained by journald.
+    - name: grep
+      match: svc.tailscaled.service
+      exclude:
+        - 'MESSAGE ^netcheck: netcheck: UDP is blocked, trying (HTTPS|ICMP)$'
+        - 'MESSAGE ^netmap: suggested exit node:  \(\)$'
+        - 'MESSAGE ^netcheck: DetectCaptivePortal\(found=false\)$'
+        - 'MESSAGE ^magicsock: disco: node \[[^]]+\] d:[^ ]+ now using [^ ]+ mtu=[0-9]+ tx=[^ ]+$'
+        - 'MESSAGE ^magicsock: disco: failed to send ping .* sendto: destination address required$'
+        - 'MESSAGE ^magicsock: derp-[0-9]+ does not know about peer \[[^]]+\], removing route$'
