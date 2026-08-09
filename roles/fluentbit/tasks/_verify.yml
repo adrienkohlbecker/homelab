@@ -80,9 +80,9 @@
   until: _fluentbit_uptime.status == 200
   become: true
 
-- name: _verify | Write Netdata filter fixture  # noqa: require-backup require-validate
+- name: _verify | Write shared filter fixture  # noqa: require-backup require-validate
   copy:
-    dest: /tmp/fluent-bit-netdata-filter-verify.yaml
+    dest: /tmp/fluent-bit-shared-filter-verify.yaml
     mode: "0644"
     content: |
       service:
@@ -122,6 +122,22 @@
             tag: svc.netdata.service
             dummy: '{"MESSAGE":"main: started from ''/usr/libexec/netdata/plugins.d/charts.d.plugin'' with options: 5","SYSTEMD_UNIT":"netdata.service","marker":"netdata-charts-start-drop"}'
             samples: 1
+          - name: dummy
+            tag: svc.cron.service
+            dummy: '{"MESSAGE":"(root) CMD (command -v debian-sa1 > /dev/null && debian-sa1 1 1)","SYSLOG_IDENTIFIER":"CRON","marker":"cron-debian-sa1-drop"}'
+            samples: 1
+          - name: dummy
+            tag: svc.cron.service
+            dummy: '{"MESSAGE":"(root) CMD (cd / && run-parts --report /etc/cron.hourly)","SYSLOG_IDENTIFIER":"CRON","marker":"cron-hourly-keep"}'
+            samples: 1
+          - name: dummy
+            tag: svc.zfs_autosnapshot.service
+            dummy: '{"MESSAGE":"","SYSTEMD_UNIT":"zfs_autosnapshot.service","marker":"zfs-blank-drop"}'
+            samples: 1
+          - name: dummy
+            tag: svc.zfs_autosnapshot.service
+            dummy: '{"MESSAGE":"rsync error: unexplained error","SYSTEMD_UNIT":"zfs_autosnapshot.service","marker":"zfs-error-keep"}'
+            samples: 1
 
         outputs:
           - name: stdout
@@ -129,7 +145,7 @@
             format: json_lines
   become: true
 
-- name: _verify | Run Netdata filter fixture
+- name: _verify | Run shared filter fixture
   command:
     argv:
       - timeout
@@ -137,13 +153,13 @@
       - "4"
       - /opt/fluent-bit/bin/fluent-bit
       - --config
-      - /tmp/fluent-bit-netdata-filter-verify.yaml
-  register: _fluentbit_netdata_filter_result
+      - /tmp/fluent-bit-shared-filter-verify.yaml
+  register: _fluentbit_shared_filter_result
   changed_when: false
-  failed_when: _fluentbit_netdata_filter_result.rc not in [0, 124]
+  failed_when: _fluentbit_shared_filter_result.rc not in [0, 124]
   become: true
 
-- name: _verify | Assert Netdata cold-start noise is omitted and real transitions remain
+- name: _verify | Assert shared noise is omitted and nearby records remain
   command:
     argv:
       - python3
@@ -164,12 +180,16 @@
         assert "netdata-charts-start-drop" not in by_marker, records
         assert by_marker["netdata-warning-clear-keep"]["level"] == "info", records
         assert by_marker["netdata-warning-keep"]["level"] == "error", records
-    stdin: "{{ _fluentbit_netdata_filter_result.stdout }}"
+        assert "cron-debian-sa1-drop" not in by_marker, records
+        assert "zfs-blank-drop" not in by_marker, records
+        assert by_marker["cron-hourly-keep"]["level"] == "info", records
+        assert by_marker["zfs-error-keep"]["level"] == "error", records
+    stdin: "{{ _fluentbit_shared_filter_result.stdout }}"
   changed_when: false
 
-- name: _verify | Remove Netdata filter fixture
+- name: _verify | Remove shared filter fixture
   file:
-    path: /tmp/fluent-bit-netdata-filter-verify.yaml
+    path: /tmp/fluent-bit-shared-filter-verify.yaml
     state: absent
   become: true
 

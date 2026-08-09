@@ -69,6 +69,20 @@ pipeline:
       match: svc.*
       logical_op: and
       exclude:
+        - 'SYSLOG_IDENTIFIER ^CRON$'
+        - 'MESSAGE ^\(root\) CMD \(command -v debian-sa1 > /dev/null && debian-sa1 (1 1|60 2)\)$'
+
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
+        - 'SYSTEMD_UNIT ^zfs_autosnapshot\.service$'
+        - 'MESSAGE ^$'
+
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
         - 'SYSTEMD_UNIT ^hd-idle\.service$'
         - 'MESSAGE ^probing sd[a-z]+: reads:'
 
