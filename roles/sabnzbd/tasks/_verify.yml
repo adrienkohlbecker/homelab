@@ -282,6 +282,22 @@
           CONTAINER_TAG: sabnzbd
           SYSLOG_IDENTIFIER: sabnzbd
           SYSTEMD_UNIT: sabnzbd.service
+          marker: sabnzbd-connected-nearby-keep
+        - MESSAGE: '2099-01-02 03:04:05,679::INFO::[newswrapper:625] 1@example.invalid: Connected using TLSv1.3 (TLS_AES_128_GCM_SHA256)'
+          CONTAINER_TAG: sabnzbd
+          SYSLOG_IDENTIFIER: sabnzbd
+          SYSTEMD_UNIT: sabnzbd.service
+          marker: sabnzbd-connected-routine-token
+        - MESSAGE: '2099-01-02 03:04:05,680::INFO::[downloader:666] 1@example.invalid: Initiating connection'
+          CONTAINER_TAG: sabnzbd
+          SYSLOG_IDENTIFIER: sabnzbd
+          SYSTEMD_UNIT: sabnzbd.service
+          marker: sabnzbd-initiating-routine-token
+        - MESSAGE: '2099-01-02 03:04:05,681::INFO::[newswrapper:229] Connecting 1@example.invalid finished'
+          CONTAINER_TAG: sabnzbd
+          SYSLOG_IDENTIFIER: sabnzbd
+          SYSTEMD_UNIT: sabnzbd.service
+          marker: sabnzbd-finished-routine-token
         - MESSAGE: '2099-01-02 03:04:06,789::WARNING::[__init__:641] Signal 15 caught, saving and exiting...'
           CONTAINER_TAG: sabnzbd
           SYSLOG_IDENTIFIER: sabnzbd
@@ -330,6 +346,10 @@
             - fields.parser_status
             - fields.source
             - fields.source_line
+
+- name: _verify | Routine sabnzbd connections are omitted from the aggregate
+  assert:
+    that: "'routine-token' not in fluentbit_verify_result.stdout"
 
 - name: _verify | Restart fluent-bit after the isolated extension fixture
   systemd:
