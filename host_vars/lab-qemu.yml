@@ -4,13 +4,12 @@
 # and on-demand `testrole.py --machine lab` go through here.
 qemu_test: true
 
-# Keep the lab fixture on the legacy rpool/podman zvol while prod lab and fox
-# still run that backend. The prod 50GB default does not fit the 40GB qemu rpool
-# once the OS and swap partition are present, so shrink only the fixture zvol.
-# Pug now covers the single-disk partition backend; revisit raid5 partition
-# coverage when prod lab is rebuilt.
-podman_storage_backend: zvol
-podman_zvol_size: '{{ "15GB" | human_to_bytes | string }}'
+# chroot.sh creates /dev/md/podman as raid5 over the three p4 members. The
+# configured ext4 geometry matches mdadm's 512K chunk: 512K / 4K = stride 128,
+# across two data disks = stripe-width 256.
+podman_storage_backend: partition
+podman_storage_device: /dev/md/podman
+podman_partition_mkfs_opts: "-E stride=128,stripe-width=256"
 
 # Swap on an mdadm raid1 (/dev/md/swap) across the per-disk p3 partitions
 # (provision.sh + chroot.sh), not the rpool/swap zvol -- the unified mirror
@@ -33,6 +32,10 @@ macvlan_blocks:
   - name: mac_mgmt
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
     vlan: management
+  - name: mac_iot
+    parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
+    vlan: iot
+    podman_network: true
 
 has_transcoding_acceleration: false
 

@@ -158,6 +158,11 @@ locals {
   #   Layouts: apoc (mirror, 2 disks), dozer (mirror, 2 disks),
   #   tank_mouse (4 disks; tank raidz2 + mouse mirror over shared
   #   partitions, matches lab prod). Empty => rpool-only image.
+  # - preserve_meta: retain and validate the three existing p6 tank-special
+  #   members while rebuilding every other rpool-disk partition.
+  # - preserve_meta_fixture: seed the qemu-only destructive fixture before the
+  #   install and restore its pre-existing pool cache after the preservation
+  #   assertions have passed. Must only accompany preserve_meta=true.
   # - image_target: qemu images are harness-verified; hetzner images grow on
   #   first cloud boot and are verified by mise-tasks/packer/hetzner.sh.
   # - qemu_test_image: true only for qemu test fixtures; gates test-only
@@ -170,36 +175,39 @@ locals {
     # The small fixture partition proves the prod backend without carrying the
     # full service-image footprint.
     pug = {
-      disks           = "/dev/vdb"
-      extra_disks     = "/dev/vdc /dev/vdd"
-      disk_sizes      = ["40G", "1G", "1G"]
-      layout          = ""
-      swap_size       = "8G"
-      podman_size     = "4G"
-      meta_size       = ""
-      extra_pools     = "apoc"
-      image_target    = "qemu"
-      qemu_test_image = true
-      zfs_arc_max     = 0
+      disks                 = "/dev/vdb"
+      extra_disks           = "/dev/vdc /dev/vdd"
+      disk_sizes            = ["40G", "1G", "1G"]
+      layout                = ""
+      swap_size             = "8G"
+      podman_size           = "4G"
+      meta_size             = ""
+      extra_pools           = "apoc"
+      preserve_meta         = false
+      preserve_meta_fixture = false
+      image_target          = "qemu"
+      qemu_test_image       = true
+      zfs_arc_max           = 0
     }
-    # lab: mdadm-EFI + 3-disk mirror rpool + dozer mirror + tank raidz2 +
-    # mouse mirror. Matches prod lab's pool shape. The mirror layout mdadm's the
-    # per-disk p3 into raid1 swap (/dev/md/swap) and ZFS-mirrors p6 (meta_size)
-    # into tank's special vdev. podman_size stays empty until prod lab rebuilds:
-    # lab-qemu deliberately keeps rpool/podman zvol coverage while lab/fox still
-    # run that live backend.
+    # lab: exact preserved-p6 geometry + mdadm EFI/swap/podman, 3-disk mirror
+    # rpool, dozer mirror, tank raidz2 + special mirror, and mouse mirror. The
+    # large virtual rpool disks are sparse; their 128G p6 extent deliberately
+    # matches prod so every lab image build destructively exercises the same
+    # preservation contract before it can publish.
     lab = {
-      disks           = "/dev/vdb /dev/vdc /dev/vdd"
-      extra_disks     = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
-      disk_sizes      = ["40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
-      layout          = "mirror"
-      swap_size       = "8G"
-      podman_size     = ""
-      meta_size       = "2G"
-      extra_pools     = "dozer tank_mouse"
-      image_target    = "qemu"
-      qemu_test_image = true
-      zfs_arc_max     = 0
+      disks                 = "/dev/vdb /dev/vdc /dev/vdd"
+      extra_disks           = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
+      disk_sizes            = ["180G", "180G", "180G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
+      layout                = "mirror"
+      swap_size             = "8G"
+      podman_size           = "5G"
+      meta_size             = "128G"
+      extra_pools           = ""
+      preserve_meta         = true
+      preserve_meta_fixture = true
+      image_target          = "qemu"
+      qemu_test_image       = true
+      zfs_arc_max           = 0
     }
     # box: single-disk rpool + a 1G flat `zee` pool. The default push-CI
     # ZFS-on-root fixture. The second pool turns box from rpool-only into a
@@ -227,33 +235,37 @@ locals {
     # 96G. (The earlier 96G existed to host an in-pool 50G zvol with slack; the
     # partition guarantees the 50G directly now.)
     box = {
-      disks           = "/dev/vdb"
-      extra_disks     = "/dev/vdc"
-      disk_sizes      = ["96G", "1G"]
-      layout          = ""
-      swap_size       = "4G"
-      podman_size     = "50G"
-      meta_size       = ""
-      extra_pools     = "zee"
-      image_target    = "qemu"
-      qemu_test_image = true
-      zfs_arc_max     = 0
+      disks                 = "/dev/vdb"
+      extra_disks           = "/dev/vdc"
+      disk_sizes            = ["96G", "1G"]
+      layout                = ""
+      swap_size             = "4G"
+      podman_size           = "50G"
+      meta_size             = ""
+      extra_pools           = "zee"
+      preserve_meta         = false
+      preserve_meta_fixture = false
+      image_target          = "qemu"
+      qemu_test_image       = true
+      zfs_arc_max           = 0
     }
     # hetzner: ZFS-root image for Hetzner Cloud. Small rpool disk — state is MB;
     # chroot.sh's hetzner_growpart.service grows it into cpx22's ~76G on first
     # boot.
     hetzner = {
-      disks           = "/dev/vdb"
-      extra_disks     = ""
-      disk_sizes      = ["20G"]
-      layout          = ""
-      swap_size       = "4G"
-      podman_size     = ""
-      meta_size       = ""
-      extra_pools     = ""
-      image_target    = "hetzner"
-      qemu_test_image = false
-      zfs_arc_max     = 536870912
+      disks                 = "/dev/vdb"
+      extra_disks           = ""
+      disk_sizes            = ["20G"]
+      layout                = ""
+      swap_size             = "4G"
+      podman_size           = ""
+      meta_size             = ""
+      extra_pools           = ""
+      preserve_meta         = false
+      preserve_meta_fixture = false
+      image_target          = "hetzner"
+      qemu_test_image       = false
+      zfs_arc_max           = 536870912
     }
   }
 
@@ -420,6 +432,8 @@ build {
       "PODMAN_SIZE"                     = local.variant_config[source.name].podman_size
       "META_SIZE"                       = local.variant_config[source.name].meta_size
       "EXTRA_POOLS"                     = local.variant_config[source.name].extra_pools
+      "PRESERVE_META"                   = "${local.variant_config[source.name].preserve_meta}"
+      "PRESERVE_META_FIXTURE"           = "${local.variant_config[source.name].preserve_meta_fixture}"
       "UBUNTU_NAME"                     = "${var.ubuntu_name}"
       "UBUNTU_MIRROR"                   = local.build_archive
       "UBUNTU_MIRROR_SECURITY"          = local.build_security
@@ -434,6 +448,20 @@ build {
       # A bare-metal copy-paste run of chroot.sh leaves it unset, so prod never
       # picks up either.
       "QEMU_TEST_IMAGE" = "${local.variant_config[source.name].qemu_test_image}"
+    }
+  }
+
+  provisioner "shell" {
+    only   = ["qemu.lab"]
+    inline = ["sudo -HE /home/vagrant/preserve_meta_fixture.sh finalize"]
+    env = {
+      "DISKS"                 = local.variant_config[source.name].disks
+      "EXTRA_DISKS"           = local.variant_config[source.name].extra_disks
+      "PRESERVE_META"         = "${local.variant_config[source.name].preserve_meta}"
+      "PRESERVE_META_FIXTURE" = "${local.variant_config[source.name].preserve_meta_fixture}"
+      "QEMU_TEST_IMAGE"       = "${local.variant_config[source.name].qemu_test_image}"
+      "SOURCE_NAME"           = "${source.name}"
+      "UBUNTU_NAME"           = "${var.ubuntu_name}"
     }
   }
 

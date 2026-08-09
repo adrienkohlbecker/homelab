@@ -1,9 +1,8 @@
 # box exercises zram + a fresh zvol + the raw-partition swapon/fstab path (it
 # now declares swap_partition over its baked p3 — folding in what was pug's
 # unique coverage); minimal exercises zram-only on ext4 (no zvol, no
-# partition); lab exercises the zvol grow→swapoff→mkswap→swapon resequence (8G
-# baked zvol grown to 16G via host_vars) — the role's only data-destructive
-# path, which box does not reproduce.
+# partition); lab exercises mdadm raid1 swap across the three preserved-layout
+# p3 members.
 machines:
   box:
   minimal:
