@@ -218,6 +218,83 @@ wipe_disk() {
   sgdisk --zap-all "$1"
 }
 
+partition_disk() {
+  local disk="$1"
+
+  # Defensive wipe -- a no-op against packer's fresh qcow2s, but necessary on
+  # ordinary bare metal.
+  wipe_disk "$disk"
+
+  sgdisk -a1 -n1:24K:+1000K -t1:EF02 -c1:bios "$disk" # MBR booting (EF02 = BIOS boot partition)
+  sgdisk -n2:1M:+1G -t2:EF00 -c2:efi "$disk"          # EFI (EF00 = EFI system partition)
+
+  # Swap partition (p3), sized by SWAP_SIZE, on every host. Single-disk hosts
+  # mkswap it directly; mirror hosts mdadm the per-disk p3s into a raid1
+  # (chroot.sh). A real partition is deadlock-free, unlike swap on a zvol.
+  sgdisk "-n3:0:+$SWAP_SIZE" -t3:8200 -c3:swap "$disk" # Swap (8200 = Linux Swap)
+
+  # Dedicated podman store partition (p4). Single-disk hosts carry a plain
+  # ext4 here; mirror hosts mdadm the per-disk p4s into a raid5 (chroot.sh).
+  # 8300 = Linux filesystem.
+  if [ -n "${PODMAN_SIZE:-}" ]; then
+    sgdisk "-n4:0:+$PODMAN_SIZE" -t4:8300 -c4:podman "$disk"
+  fi
+
+  # tank special-vdev member (p6, mirror only). Numbered 6 but carved before
+  # rpool so rpool stays number 5. mdadm-free -- ZFS mirrors the per-disk p6s
+  # into tank's special vdev (create_extra_tank_mouse). BF01 = Solaris /usr &
+  # Mac ZFS.
+  if [ -n "${META_SIZE:-}" ]; then
+    sgdisk "-n6:0:+$META_SIZE" -t6:BF01 -c6:meta "$disk"
+  fi
+
+  sgdisk -n5:0:0 -t5:BF00 -c5:rpool "$disk" # rpool (BF00 = Solaris root), carved last so it grows to end
+  sgdisk -p "$disk"
+}
+
+stop_target_md_arrays() {
+  local disk md_path md_device slave_path slave parent target
+
+  command -v mdadm >/dev/null || return 0
+  for md_path in /sys/block/md*/md; do
+    [ -d "$md_path" ] || continue
+    md_device="/dev/$(basename "$(dirname "$md_path")")"
+    for slave_path in "$(dirname "$md_path")"/slaves/*; do
+      [ -e "$slave_path" ] || continue
+      slave=$(basename "$slave_path")
+      parent=$(lsblk -ndo PKNAME "/dev/$slave" 2>/dev/null || true)
+      for disk in $DISKS; do
+        target=$(basename "$(readlink -f "$disk")")
+        if [ "${parent:-$slave}" = "$target" ]; then
+          mdadm --stop "$md_device"
+          break 2
+        fi
+      done
+    done
+  done
+}
+
+partition_disks() {
+  local partition_function="$1" disk
+
+  # Partition changes can make udev incrementally reassemble an array after an
+  # earlier member is rewritten, leaving a later member busy. Freeze rule
+  # execution across every target disk, stop only arrays backed by those disks,
+  # then publish all completed tables to the kernel as one unit.
+  udevadm control --stop-exec-queue
+  trap 'udevadm control --start-exec-queue' EXIT
+  stop_target_md_arrays
+  for disk in $DISKS; do
+    "$partition_function" "$disk"
+  done
+  udevadm control --start-exec-queue
+  trap - EXIT
+  for disk in $DISKS; do
+    partprobe "$disk"
+  done
+  udevadm settle
+}
+
 PRESERVE_META_STATE_DIR=""
 if [ "$PRESERVE_META_FIXTURE" = true ]; then
   # QEMU virtio exposes 512-byte logical sectors. Scale the live NVMe sector
@@ -363,27 +440,6 @@ partition_disk_preserving_meta() {
   sgdisk "-n4:0:+$PODMAN_SIZE" -t4:8300 -c4:podman "$disk"
   sgdisk -n5:0:0 -t5:BF00 -c5:rpool "$disk"
   sgdisk -p "$disk"
-}
-
-partition_disks_preserving_meta() {
-  local disk
-
-  # A stopped md array can be incrementally reassembled by udev when an earlier
-  # disk's partition table changes, making a later member busy mid-cleanup.
-  # Freeze rule execution across all three tables, stop any lab md arrays, then
-  # publish the completed layouts to the kernel as one unit.
-  udevadm control --stop-exec-queue
-  trap 'udevadm control --start-exec-queue' EXIT
-  mdadm --stop --scan || true
-  for disk in $DISKS; do
-    partition_disk_preserving_meta "$disk"
-  done
-  udevadm control --start-exec-queue
-  trap - EXIT
-  for disk in $DISKS; do
-    partprobe "$disk"
-  done
-  udevadm settle
 }
 
 EXTRA_ZPOOL_OPTS=(
@@ -608,7 +664,7 @@ fi
 
 apt_update
 apt-get install --yes arch-install-scripts debootstrap gdisk zfsutils-linux
-if [ "$PRESERVE_META" = true ]; then
+if [ "$LAYOUT" = mirror ]; then
   apt-get install --yes mdadm
 fi
 
@@ -623,7 +679,7 @@ if [ "$PRESERVE_META" = true ]; then
   # changed. A mismatch on disk three therefore cannot leave disks one and two
   # half-repartitioned.
   capture_preserved_meta
-  partition_disks_preserving_meta
+  partition_disks partition_disk_preserving_meta
   verify_preserved_meta
 
   if [ "$PRESERVE_META_FIXTURE" = true ]; then
@@ -631,42 +687,11 @@ if [ "$PRESERVE_META" = true ]; then
     # exercise the same production cleanup while comparing against the original
     # fixture labels and partition GUIDs.
     "$SCRIPTS_DIR/preserve_meta_fixture.sh" prepare_retry
-    partition_disks_preserving_meta
+    partition_disks partition_disk_preserving_meta
     verify_preserved_meta
   fi
 else
-  for disk in $DISKS; do
-    # Defensive wipe -- a no-op against packer's fresh qcow2s, but necessary on
-    # ordinary bare metal. PRESERVE_META takes the partition-scoped path above.
-    wipe_disk "$disk"
-
-    sgdisk -a1 -n1:24K:+1000K -t1:EF02 -c1:bios "$disk" # MBR booting (EF02 = BIOS boot partition)
-    sgdisk -n2:1M:+1G -t2:EF00 -c2:efi "$disk"          # EFI (EF00 = EFI system partition)
-
-    # Swap partition (p3), sized by SWAP_SIZE, on every host. Single-disk hosts
-    # mkswap it directly; mirror hosts mdadm the per-disk p3s into a raid1
-    # (chroot.sh). A real partition is deadlock-free, unlike swap on a zvol.
-    sgdisk "-n3:0:+$SWAP_SIZE" -t3:8200 -c3:swap "$disk" # Swap (8200 = Linux Swap)
-
-    # Dedicated podman store partition (p4). Single-disk hosts carry a plain
-    # ext4 here; mirror hosts mdadm the per-disk p4s into a raid5 (chroot.sh).
-    # 8300 = Linux filesystem.
-    if [ -n "${PODMAN_SIZE:-}" ]; then
-      sgdisk "-n4:0:+$PODMAN_SIZE" -t4:8300 -c4:podman "$disk"
-    fi
-
-    # tank special-vdev member (p6, mirror only). Numbered 6 but carved before
-    # rpool so rpool stays number 5. mdadm-free -- ZFS mirrors the per-disk p6s
-    # into tank's special vdev (create_extra_tank_mouse). BF01 = Solaris /usr &
-    # Mac ZFS.
-    if [ -n "${META_SIZE:-}" ]; then
-      sgdisk "-n6:0:+$META_SIZE" -t6:BF01 -c6:meta "$disk"
-    fi
-
-    sgdisk -n5:0:0 -t5:BF00 -c5:rpool "$disk" # rpool (BF00 = Solaris root), carved last so it grows to end
-
-    sgdisk -p "$disk"
-  done
+  partition_disks partition_disk
 fi
 
 # Wait for udev to expose every new partition node (/dev/vdbN, ...)
