@@ -80,6 +80,99 @@
   until: _fluentbit_uptime.status == 200
   become: true
 
+- name: _verify | Write Netdata filter fixture  # noqa: require-backup require-validate
+  copy:
+    dest: /tmp/fluent-bit-netdata-filter-verify.yaml
+    mode: "0644"
+    content: |
+      service:
+        flush: 1
+        log_level: error
+        storage.path: /tmp/fluent-bit-netdata-filter-storage
+
+      parsers:
+        - name: nginx_access_custom
+          format: regex
+          regex: '^(?<remote_addr>[^ ]+) - (?<remote_user>[^ ]+) \[(?<time_local>[^\]]+)\] (?<http_host>[^ ]*) "(?:(?<method>\S+)(?: +(?<path>[^"]*?)(?: +(?<protocol>\S+))?)?)?" (?<server_name>[^ ]*) (?<status>\d{3}) (?<body_bytes_sent>\d+) (?<request_length>\d+) (?<request_time>[\d.]+) (?<upstream_response_time>[\d.]+|-) "(?<referer>[^"]*)" "(?<user_agent>[^"]*)" "(?<authelia_user>[^"]*)" (?<ssl_protocol>\S+) (?<ssl_cipher>\S+)$'
+          types: status:integer body_bytes_sent:integer request_length:integer request_time:float
+
+        - name: certbot_file
+          format: regex
+          regex: '/^(?<certbot_timestamp>[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}):(?<certbot_level>DEBUG|INFO|WARNING|ERROR|CRITICAL):(?<certbot_source>[^:]+):(?<certbot_message>.*)$/m'
+
+      includes:
+        - /etc/fluent-bit/filters-pre.yaml
+        - /etc/fluent-bit/filters-post.yaml
+
+      pipeline:
+        inputs:
+          - name: dummy
+            tag: svc.netdata.service
+            dummy: '{"MESSAGE":"ALERT ''netdata_context_missing'' of ''netdata_presence.context_conntrack'' raised from REMOVED to CLEAR.","SYSTEMD_UNIT":"netdata.service","marker":"netdata-removed-clear-drop"}'
+            samples: 1
+          - name: dummy
+            tag: svc.netdata.service
+            dummy: '{"MESSAGE":"ALERT ''go.d:collector_error'' of ''go.d:collector_status'' raised from WARNING to CLEAR.","SYSTEMD_UNIT":"netdata.service","marker":"netdata-warning-clear-keep"}'
+            samples: 1
+          - name: dummy
+            tag: svc.netdata.service
+            dummy: '{"MESSAGE":"ALERT ''go.d:collector_error'' of ''go.d:collector_status'' raised from CLEAR to WARNING.","SYSTEMD_UNIT":"netdata.service","marker":"netdata-warning-keep"}'
+            samples: 1
+          - name: dummy
+            tag: svc.netdata.service
+            dummy: '{"MESSAGE":"main: started from ''/usr/libexec/netdata/plugins.d/charts.d.plugin'' with options: 5","SYSTEMD_UNIT":"netdata.service","marker":"netdata-charts-start-drop"}'
+            samples: 1
+
+        outputs:
+          - name: stdout
+            match: '*'
+            format: json_lines
+  become: true
+
+- name: _verify | Run Netdata filter fixture
+  command:
+    argv:
+      - timeout
+      - --signal=TERM
+      - "4"
+      - /opt/fluent-bit/bin/fluent-bit
+      - --config
+      - /tmp/fluent-bit-netdata-filter-verify.yaml
+  register: _fluentbit_netdata_filter_result
+  changed_when: false
+  failed_when: _fluentbit_netdata_filter_result.rc not in [0, 124]
+  become: true
+
+- name: _verify | Assert Netdata cold-start noise is omitted and real transitions remain
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        records = []
+        for line in sys.stdin:
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+        by_marker = {record.get("fields", {}).get("marker"): record for record in records}
+        assert "netdata-removed-clear-drop" not in by_marker, records
+        assert "netdata-charts-start-drop" not in by_marker, records
+        assert by_marker["netdata-warning-clear-keep"]["level"] == "info", records
+        assert by_marker["netdata-warning-keep"]["level"] == "error", records
+    stdin: "{{ _fluentbit_netdata_filter_result.stdout }}"
+  changed_when: false
+
+- name: _verify | Remove Netdata filter fixture
+  file:
+    path: /tmp/fluent-bit-netdata-filter-verify.yaml
+    state: absent
+  become: true
+
 - name: _verify | Build per-run markers
   set_fact:
     fluentbit_lnav_journald_marker: "verify_journald_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
