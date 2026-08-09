@@ -25,6 +25,7 @@
       - "'-m root' in _conf"
       - "'-M diminishing' in _conf"
       - "'-n standby,q' in _conf"
+      - "'-s (L/../(0[1-7])/7/04:024|S/../../7/02)' in _conf"
     fail_msg: "rendered /etc/smartd.conf missing expected directives:\n{{ _conf }}"
 
 - name: _verify | Count per-device lines in rendered config
