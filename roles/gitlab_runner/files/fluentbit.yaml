@@ -25,6 +25,16 @@ pipeline:
         - level _level
       remove: time
       set: parser_status parsed
+    # Successful coordinator progress reports dominate active-job logs. Keep
+    # retries, incomplete accepts, and final job outcomes.
+    - name: grep
+      match: svc.gitlab_runner.service
+      logical_op: and
+      exclude:
+        - 'SYSLOG_IDENTIFIER ^gitlab-runner$'
+        - 'parser_status ^parsed$'
+        - '_level ^info$'
+        - 'log ^(Appending trace to coordinator\.\.\.ok|Updating job\.\.\.|Submitting job to coordinator\.\.\.ok)$'
     # Taskscaler emits this calculation every ~50 seconds even while idle.
     # Actual scale actions have their own increasing/decreasing/instance-update
     # records, so keep those and omit only the repetitive calculation.

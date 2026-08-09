@@ -32,6 +32,18 @@
         - MESSAGE: '{"level":"info","msg":"gitlab-runner-action","time":"2099-01-02T03:04:05Z","subsystem":"taskscaler","marker":"gitlab-runner-keep"}'
           SYSLOG_IDENTIFIER: gitlab-runner
           SYSTEMD_UNIT: gitlab_runner.service
+        - MESSAGE: '{"level":"info","msg":"Appending trace to coordinator...ok","time":"2099-01-02T03:04:05Z","marker":"gitlab-runner-trace-drop"}'
+          SYSLOG_IDENTIFIER: gitlab-runner
+          SYSTEMD_UNIT: gitlab_runner.service
+        - MESSAGE: '{"level":"info","msg":"Updating job...","time":"2099-01-02T03:04:05Z","marker":"gitlab-runner-update-drop"}'
+          SYSLOG_IDENTIFIER: gitlab-runner
+          SYSTEMD_UNIT: gitlab_runner.service
+        - MESSAGE: '{"level":"info","msg":"Submitting job to coordinator...ok","time":"2099-01-02T03:04:05Z","marker":"gitlab-runner-submit-drop"}'
+          SYSLOG_IDENTIFIER: gitlab-runner
+          SYSTEMD_UNIT: gitlab_runner.service
+        - MESSAGE: '{"level":"info","msg":"Submitting job to coordinator...accepted, but not yet completed","time":"2099-01-02T03:04:05Z","marker":"gitlab-runner-submit-pending-keep"}'
+          SYSLOG_IDENTIFIER: gitlab-runner
+          SYSTEMD_UNIT: gitlab_runner.service
         - MESSAGE: '{"level":"broken"'
           SYSLOG_IDENTIFIER: gitlab-runner
           SYSTEMD_UNIT: gitlab_runner.service
@@ -54,6 +66,11 @@
           service: gitlab-runner
           fields.marker: gitlab-runner-keep
           fields.parser_status: parsed
+        - message: Submitting job to coordinator...accepted, but not yet completed
+          level: info
+          service: gitlab-runner
+          fields.marker: gitlab-runner-submit-pending-keep
+          fields.parser_status: parsed
         - message: '{"level":"broken"'
           level: warn
           service: gitlab-runner
@@ -64,9 +81,13 @@
           _absent:
             - fields.parser_status
 
-- name: _verify | Routine taskscaler calculation was omitted
+- name: _verify | Routine GitLab coordinator chatter was omitted
   assert:
-    that: "'gitlab-runner-drop' not in fluentbit_verify_result.stdout"
+    that:
+      - "'gitlab-runner-drop' not in fluentbit_verify_result.stdout"
+      - "'gitlab-runner-trace-drop' not in fluentbit_verify_result.stdout"
+      - "'gitlab-runner-update-drop' not in fluentbit_verify_result.stdout"
+      - "'gitlab-runner-submit-drop' not in fluentbit_verify_result.stdout"
 
 - name: _verify | Resolve gitlab_runner uid
   command: id -u gitlab_runner
