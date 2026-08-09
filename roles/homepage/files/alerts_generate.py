@@ -270,8 +270,6 @@ def _fetch_one(name: str, query_url: str, click_url: str, authorization: str) ->
         for a in alarms:
             a["transition_id"] = tid_by_key.get((a["name"], a["chart"]), "")
             a["href"] = alarm_href(click_url, name, a)
-        if alarms and not any(a["transition_id"] for a in alarms):
-            log_warn = log_warn or "no transition_id matched any active alarm"
         if log_warn:
             print(f"[{name}] {log_warn}", file=sys.stderr)
             entry["log_warn"] = log_warn

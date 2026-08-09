@@ -120,6 +120,69 @@ class TestHostClient:
 
 
 # ---------------------------------------------------------------------------
+# _fetch_one
+# ---------------------------------------------------------------------------
+
+
+class TestFetchOne:
+    def test_transition_history_miss_uses_alerts_list_without_warning(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        class FakeClient:
+            def __init__(self, query_url: str, authorization: str) -> None:
+                pass
+
+            def alarms(self) -> dict:
+                return {
+                    "alarms": {
+                        "system.cpu": {
+                            "id": 1,
+                            "name": "cpu_high",
+                            "chart": "system.cpu",
+                            "status": "WARNING",
+                        }
+                    }
+                }
+
+            def alert_transitions(self) -> dict:
+                return {"transitions": []}
+
+            def close(self) -> None:
+                pass
+
+        monkeypatch.setattr(ag, "_HostClient", FakeClient)
+
+        result = ag._fetch_one("lab", "https://netdata.lab", "https://netdata.lab", "Basic credential")
+
+        assert "log_warn" not in result
+        assert result["alarms"][0]["href"] == "https://netdata.lab/v2/spaces/lab/rooms/local/alerts"
+        assert capsys.readouterr().err == ""
+
+    def test_transition_parse_failure_remains_visible(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        class FakeClient:
+            def __init__(self, query_url: str, authorization: str) -> None:
+                pass
+
+            def alarms(self) -> dict:
+                return {"alarms": {}}
+
+            def alert_transitions(self) -> dict:
+                raise ValueError("bad payload")
+
+            def close(self) -> None:
+                pass
+
+        monkeypatch.setattr(ag, "_HostClient", FakeClient)
+
+        result = ag._fetch_one("lab", "https://netdata.lab", "https://netdata.lab", "Basic credential")
+
+        assert result["log_warn"] == "alert_transitions parse failed: ValueError: bad payload"
+        assert "alert_transitions parse failed" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
 # normalize
 # ---------------------------------------------------------------------------
 
