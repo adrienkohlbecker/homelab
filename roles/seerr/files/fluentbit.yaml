@@ -60,3 +60,19 @@ pipeline:
         - '_level ^debug$'
         - 'source ^(Jellyfin Sync|Jobs|Download Tracker)$'
         - 'log ^(Title already exists and no changes detected for |Updating existing title: |Starting scheduled job: Download Sync[[:space:]]*$|Found [0-9]+ item\(s\) in progress on (Sonarr|Radarr) server: (sonarr|radarr)[[:space:]]*$)'
+    - name: grep
+      match: svc.seerr.service
+      logical_op: and
+      exclude:
+        - 'CONTAINER_TAG ^.+$'
+        - '_level ^info$'
+        - 'source ^Jellyfin Sync$'
+        - 'log ^(Scan starting|Beginning to process recently added for library: (Movies|Shows)|Recently Added Scan Complete)[[:space:]]*$'
+    - name: grep
+      match: svc.seerr.service
+      logical_op: and
+      exclude:
+        - 'CONTAINER_TAG ^.+$'
+        - '_level ^info$'
+        - 'source ^Jobs$'
+        - 'log ^Starting scheduled job: Jellyfin Recently Added Scan[[:space:]]*$'

@@ -190,18 +190,22 @@
           CONTAINER_TAG: seerr
           SYSLOG_IDENTIFIER: seerr
           SYSTEMD_UNIT: seerr.service
+        - MESSAGE: '2099-01-02T03:04:12.345Z [info][Jobs]: Starting scheduled job: Jellyfin Recently Added Scan'
+          CONTAINER_TAG: seerr
+          SYSLOG_IDENTIFIER: seerr
+          SYSTEMD_UNIT: seerr.service
+          marker: seerr-job-start-routine-token
+        - MESSAGE: '2099-01-02T03:04:13.456Z [info][Jellyfin Sync]: Beginning to process recently added for library: Movies'
+          CONTAINER_TAG: seerr
+          SYSLOG_IDENTIFIER: seerr
+          SYSTEMD_UNIT: seerr.service
+          marker: seerr-library-routine-token
+        - MESSAGE: '2099-01-02T03:04:14.567Z [info][Jellyfin Sync]: Recently Added Scan Complete'
+          CONTAINER_TAG: seerr
+          SYSLOG_IDENTIFIER: seerr
+          SYSTEMD_UNIT: seerr.service
+          marker: seerr-scan-complete-routine-token
       expected:
-        - message: Scan starting
-          level: info
-          service: seerr
-          fields.source: Jellyfin Sync
-          fields.sessionId: verify-session
-          fields.parser_status: parsed
-          _absent:
-            - fields.seerr_timestamp
-            - fields.seerr_level
-            - fields.seerr_metadata
-            - fields.CONTAINER_TAG
         - message: Request failed
           level: error
           fields.source: Jellyfin API
@@ -233,9 +237,11 @@
           fields.source: Jobs
           fields.parser_status: parsed
 
-- name: _verify | Routine seerr debug record is omitted from the aggregate
+- name: _verify | Routine seerr records are omitted from the aggregate
   assert:
-    that: "'routine-token' not in fluentbit_verify_result.stdout"
+    that:
+      - "'routine-token' not in fluentbit_verify_result.stdout"
+      - "'verify-session' not in fluentbit_verify_result.stdout"
 
 # Canonical-shape contract. Unlike radarr (which rewrites config.xml on every
 # shutdown), seerr only writes settings.json when a setting actually changes --
