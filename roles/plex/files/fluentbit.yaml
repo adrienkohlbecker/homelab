@@ -102,6 +102,13 @@ pipeline:
       set: parser_status parsed
 
     - name: modify
+      match: svc.plex.service
+      condition:
+        - key_exists CONTAINER_TAG
+        - key_value_matches log '^(Generated new chapter thumbnails for .+[.]|libusb_init failed)$'
+      set: _level info
+
+    - name: modify
       match: plex.file
       add:
         - source plex_media_server

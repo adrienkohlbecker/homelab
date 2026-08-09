@@ -223,7 +223,7 @@
                 if message == "40-plex-first-run: exited 0.":
                     found["entrypoint"] = record
                 elif message == "libusb_init failed":
-                    found["critical"] = record
+                    found["usb"] = record
                 elif message == "Starting Plex Media Server.":
                     found["plain"] = record
         if len(found) != 3:
@@ -245,9 +245,9 @@
       - records.entrypoint.level == 'info'
       - records.entrypoint.fields.source == 'cont-init.d'
       - records.entrypoint.fields.parser_status == 'parsed'
-      - records.critical.service == 'plex'
-      - records.critical.level == 'fatal'
-      - records.critical.fields.parser_status == 'parsed'
+      - records.usb.service == 'plex'
+      - records.usb.level == 'info'
+      - records.usb.fields.parser_status == 'parsed'
       - records.plain.service == 'plex'
       - records.plain.level == 'info'
       - records.plain.fields.parser_status == 'parsed'
@@ -354,3 +354,50 @@
       - records.plex_crash_uploader.parse_error is not defined
       - records.plex_crash_uploader.fields.plex_timestamp is not defined
       - records.plex_crash_uploader.fields.filepath is not defined
+
+- name: _verify | Stop fluent-bit before the isolated extension fixture
+  systemd:
+    name: fluent-bit
+    state: stopped
+  become: true
+
+- name: _verify | Exercise plex stdout severity overrides
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: plex
+      records:
+        - MESSAGE: Generated new chapter thumbnails for Vagina Panic.
+          CONTAINER_TAG: plex
+          SYSLOG_IDENTIFIER: plex
+          SYSTEMD_UNIT: plex.service
+        - MESSAGE: '[Critical] libusb_init failed'
+          CONTAINER_TAG: plex
+          SYSLOG_IDENTIFIER: plex
+          SYSTEMD_UNIT: plex.service
+        - MESSAGE: 'Critical: Real panic failure'
+          CONTAINER_TAG: plex
+          SYSLOG_IDENTIFIER: plex
+          SYSTEMD_UNIT: plex.service
+      expected:
+        - message: Generated new chapter thumbnails for Vagina Panic.
+          level: info
+          service: plex
+          fields.parser_status: parsed
+        - message: libusb_init failed
+          level: info
+          service: plex
+          fields.source: Critical
+          fields.parser_status: parsed
+        - message: Real panic failure
+          level: fatal
+          service: plex
+          fields.parser_status: parsed
+
+- name: _verify | Restart fluent-bit after the isolated extension fixture
+  systemd:
+    name: fluent-bit
+    state: started
+  become: true
