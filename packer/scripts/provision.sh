@@ -357,15 +357,33 @@ partition_disk_preserving_meta() {
     sgdisk --delete="$number" "$disk"
   done
 
-  partprobe "$disk"
-  udevadm settle
-
   sgdisk -a1 -n1:24K:+1000K -t1:EF02 -c1:bios "$disk"
   sgdisk -n2:1M:+1000M -t2:EF00 -c2:efi "$disk"
   sgdisk "-n3:0:+$SWAP_SIZE" -t3:8200 -c3:swap "$disk"
   sgdisk "-n4:0:+$PODMAN_SIZE" -t4:8300 -c4:podman "$disk"
   sgdisk -n5:0:0 -t5:BF00 -c5:rpool "$disk"
   sgdisk -p "$disk"
+}
+
+partition_disks_preserving_meta() {
+  local disk
+
+  # A stopped md array can be incrementally reassembled by udev when an earlier
+  # disk's partition table changes, making a later member busy mid-cleanup.
+  # Freeze rule execution across all three tables, stop any lab md arrays, then
+  # publish the completed layouts to the kernel as one unit.
+  udevadm control --stop-exec-queue
+  trap 'udevadm control --start-exec-queue' EXIT
+  mdadm --stop --scan || true
+  for disk in $DISKS; do
+    partition_disk_preserving_meta "$disk"
+  done
+  udevadm control --start-exec-queue
+  trap - EXIT
+  for disk in $DISKS; do
+    partprobe "$disk"
+  done
+  udevadm settle
 }
 
 EXTRA_ZPOOL_OPTS=(
@@ -590,6 +608,9 @@ fi
 
 apt_update
 apt-get install --yes arch-install-scripts debootstrap gdisk zfsutils-linux
+if [ "$PRESERVE_META" = true ]; then
+  apt-get install --yes mdadm
+fi
 
 zgenhostid -f
 
@@ -602,20 +623,15 @@ if [ "$PRESERVE_META" = true ]; then
   # changed. A mismatch on disk three therefore cannot leave disks one and two
   # half-repartitioned.
   capture_preserved_meta
-  for disk in $DISKS; do
-    partition_disk_preserving_meta "$disk"
-  done
-  udevadm settle
+  partition_disks_preserving_meta
   verify_preserved_meta
 
   if [ "$PRESERVE_META_FIXTURE" = true ]; then
-    # Exercise the documented retry cleanup against the layout emitted by the
-    # first pass. Both passes use the production function and compare against
-    # the original fixture labels and partition GUIDs.
-    for disk in $DISKS; do
-      partition_disk_preserving_meta "$disk"
-    done
-    udevadm settle
+    # Stamp the documented stopped retry state onto the first-pass layout, then
+    # exercise the same production cleanup while comparing against the original
+    # fixture labels and partition GUIDs.
+    "$SCRIPTS_DIR/preserve_meta_fixture.sh" prepare_retry
+    partition_disks_preserving_meta
     verify_preserved_meta
   fi
 else
