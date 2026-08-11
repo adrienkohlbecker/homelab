@@ -75,6 +75,15 @@
     - subid
     - gitlab_runner
 
+- name: Lab storage datasets
+  hosts: box,lab
+  roles:
+    # Storage dataset producers -- placed before the apps that mount
+    # /mnt/{scratch,data,media}.
+    - scratch
+    - data
+    - media
+
 - name: Lab and Pug
   hosts: box,lab,pug
   roles:
@@ -103,11 +112,6 @@
   hosts: box,lab
   roles:
     - libvirt
-    # Storage dataset producers -- placed before the apps that mount
-    # /mnt/{scratch,data,media}.
-    - scratch
-    - data
-    - media
     - minio
     - influxdb
     - jellyfin
