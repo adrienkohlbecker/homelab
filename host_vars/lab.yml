@@ -36,14 +36,20 @@ static_identity_migration_required_mounts:
   - /mnt/data
   - /mnt/minio
 
-swap_zvol:
-  dataset: rpool/swap
-  size: 16G
+swap_partition:
+  device: /dev/md/swap
 
-# zram is the primary swap; the 16G zvol above is the deadlock-free-by-
+# zram is the primary swap; the 16G RAID1 partition above is the deadlock-free-by-
 # coldness overflow (notes/swap_strategy.md).
 swap_zram:
   size: 8G
+
+podman_storage_backend: partition
+podman_storage_device: /dev/md/podman
+# raid5 geometry, verified by the role: 512K mdadm chunk / 4K ext4 blocks
+# = stride 128; x2 data disks = stripe-width 256. Same values as the
+# fixture (Phase 0); confirm against `mdadm --detail /dev/md/podman`.
+podman_partition_mkfs_opts: "-E stride=128,stripe-width=256"
 
 # Host-native CI fallback runner. It deliberately uses its own token variable so
 # lab cannot accidentally clone fox's project runner token and inherit the wrong
@@ -233,7 +239,7 @@ netdata_collectors:
   - go.d:collector:x509check:host_cert
   - go.d:collector:zfspool:zfspool
 netdata_zfspool_thresholds:
-  rpool: [ 85, 90, 95 ] # 318 GiB => 48GiB, 32GiB, 16GiB
+  rpool: [ 85, 90, 95 ] # 277 GiB => 41GiB, 28GiB, 14GiB
   # tank is the zfs-replication destination for pug + lab autobackup
   # snapshots. The retention plan (--keep-target 10,1d1w,1w1m,1m10y)
   # silently truncates if the next nightly send can't fit, so 85% on
@@ -250,11 +256,6 @@ netdata_diskspace_blocklist:
   - /mnt/eckwersheim
   - /mnt/media
   - /mnt/minio
-  - /mnt/old_bionic
-  - /mnt/old_bionic_boot
-  - /mnt/old_bionic_grub
-  - /mnt/old_services
-  - /mnt/old_vms
   - /mnt/scratch
   - /mnt/services
   - /var/lib/libvirt/images

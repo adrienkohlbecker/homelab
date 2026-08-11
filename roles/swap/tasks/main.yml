@@ -10,10 +10,7 @@
 #     opts: discard   # optional; default below
 #
 # A host can have either, both, or neither -- each backend activates only when
-# its var is set to a non-null value, so a fixture overlay can disable a backend
-# the base host_vars declared by setting it to null (e.g. host_vars/lab-qemu.yml
-# sets `swap_zvol: null` to swap on /dev/md/swap instead of the prod zvol).
-# Zvol gets the conservative
+# its var is set to a non-null value. Zvol gets the conservative
 # properties recommended for ZFS swap: primarycache=metadata +
 # secondarycache=none keep the page cache from also caching pages that
 # are themselves cache eviction targets; logbias=throughput +
