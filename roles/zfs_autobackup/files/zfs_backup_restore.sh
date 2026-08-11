@@ -115,13 +115,23 @@ remote_dataset_exists() {
   ssh -n "$TARGET_SSH" "sudo zfs list -H -o name '$target_dataset'" >/dev/null 2>&1
 }
 
+# A multiplexed session inherits the master connection's cipher and compression.
+# Use a dedicated connection for the already-compressed ZFS stream, preferring
+# hardware-accelerated AES-GCM while retaining the remaining configured ciphers
+# as fallbacks.
+SSH_BULK_OPTIONS=(
+  -o ControlPath=none
+  -o Compression=no
+  -o 'Ciphers=^aes128-gcm@openssh.com'
+)
+
 receive_tree() {
   local source_dataset=$1 target_dataset=$2
   # target_dataset is derived from the validated replica tree.
   # shellcheck disable=SC2029
   sudo zfs send -Rbcv "${source_dataset}@${SNAPSHOT_SUFFIX}" |
     mbuffer -m 256M |
-    ssh "$TARGET_SSH" "sudo zfs recv -su '$target_dataset'"
+    ssh "${SSH_BULK_OPTIONS[@]}" "$TARGET_SSH" "sudo zfs recv -su '$target_dataset'"
 }
 
 REMOTE_HOSTNAME=$(ssh -n "$TARGET_SSH" 'hostnamectl --static')
@@ -184,7 +194,9 @@ if [ "$initial_state" = absent ]; then
 else
   # resume_dataset is constrained to the requested target tree above.
   # shellcheck disable=SC2029
-  sudo zfs send -t "$resume_token" | mbuffer -m 256M | ssh "$TARGET_SSH" "sudo zfs recv -su '$resume_dataset'"
+  sudo zfs send -t "$resume_token" |
+    mbuffer -m 256M |
+    ssh "${SSH_BULK_OPTIONS[@]}" "$TARGET_SSH" "sudo zfs recv -su '$resume_dataset'"
 
   # A resume token covers one filesystem stream, not later members of a
   # recursive replication package. Send only subtrees that did not arrive.

@@ -306,6 +306,10 @@
       Host 127.0.0.1
         IdentityFile ~/.ssh/zfs_restore_test_key
         StrictHostKeyChecking accept-new
+        Compression yes
+        ControlMaster auto
+        ControlPersist 60s
+        ControlPath ~/.ssh/zfs_restore_test_control
 
 - name: _verify | Create the restore origin dataset
   community.general.zfs:
