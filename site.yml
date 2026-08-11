@@ -39,6 +39,7 @@
     - ssh_root
     # Storage & boot substrate -- ZFS datasets/snapshots and the bootloader.
     - zfs
+    - static_identity_migration
     - zfs_autobackup
     - boot
     - zfsbootmenu

@@ -1,0 +1,252 @@
+---
+# Jammy ownership is scoped by service path because several numbers were later
+# reused by different Noble accounts. The migration script also adds the
+# current passwd/group IDs for each named identity before changing any account.
+static_identity_migration_config:
+  required_mounts: "{{ static_identity_migration_required_mounts }}"
+  identities:
+    - name: adguard
+      uid: "{{ static_service_ids.adguard }}"
+      gid: "{{ static_service_ids.adguard }}"
+      old_uids: [ 960 ]
+      old_gids: [ 955 ]
+      paths: [ /mnt/services/adguard ]
+    - name: authelia
+      uid: "{{ static_service_ids.authelia }}"
+      gid: "{{ static_service_ids.authelia }}"
+      old_uids: [ 990 ]
+      old_gids: [ 988 ]
+      paths: [ /mnt/services/authelia, /mnt/services/sqlite/authelia ]
+    - name: bazarr
+      uid: "{{ static_service_ids.bazarr }}"
+      gid: "{{ static_service_ids.bazarr }}"
+      old_uids: [ 973 ]
+      old_gids: []
+      paths: [ /mnt/services/bazarr, /mnt/services/sqlite/bazarr ]
+    - name: compta
+      uid: "{{ legacy_service_ids.compta }}"
+      gid: "{{ legacy_service_ids.compta }}"
+      old_uids: [ 982 ]
+      old_gids: [ 980 ]
+      paths: [ /mnt/services/compta ]
+    - name: csplogger
+      uid: "{{ legacy_service_ids.csplogger }}"
+      gid: "{{ legacy_service_ids.csplogger }}"
+      old_uids: [ 987 ]
+      old_gids: [ 985 ]
+      paths: [ /mnt/services/csplogger ]
+    - name: eaton-ipp
+      uid: "{{ legacy_service_ids['eaton-ipp'] }}"
+      gid: "{{ legacy_service_ids['eaton-ipp'] }}"
+      old_uids: [ 972 ]
+      old_gids: [ 970 ]
+      paths: [ /mnt/services/eaton_ipp ]
+    - name: git
+      uid: "{{ static_service_ids.git }}"
+      gid: "{{ static_service_ids.git }}"
+      old_uids: [ 984 ]
+      old_gids: [ 982 ]
+      paths: [ /mnt/services/gitea, /mnt/services/sqlite/gitea, /home/git ]
+    - name: github_runner
+      uid: "{{ legacy_service_ids.github_runner }}"
+      gid: "{{ legacy_service_ids.github_runner }}"
+      old_uids: [ 964 ]
+      old_gids: [ 961 ]
+      paths: [ /mnt/services/github_runner, /mnt/scratch/homelab_ci ]
+    - name: gitlab_runner
+      uid: "{{ static_service_ids.gitlab_runner }}"
+      gid: "{{ static_service_ids.gitlab_runner }}"
+      old_uids: [ 958 ]
+      old_gids: [ 953 ]
+      paths: [ /mnt/services/gitlab_runner, /mnt/scratch/homelab_ci ]
+    - name: headscale
+      uid: "{{ static_service_ids.headscale }}"
+      gid: "{{ static_service_ids.headscale }}"
+      old_uids: []
+      old_gids: []
+      paths: [ /mnt/services/headscale, /mnt/services/sqlite/headscale ]
+    - name: healthchecks
+      uid: "{{ legacy_service_ids.healthchecks }}"
+      gid: "{{ legacy_service_ids.healthchecks }}"
+      old_uids: [ 978 ]
+      old_gids: [ 976 ]
+      paths: [ /mnt/services/healthchecks, /mnt/services/sqlite/healthchecks ]
+    - name: homeassistant
+      uid: "{{ static_service_ids.homeassistant }}"
+      gid: "{{ static_service_ids.homeassistant }}"
+      old_uids: [ 983 ]
+      old_gids: [ 981 ]
+      paths: [ /mnt/services/homeassistant, /mnt/services/sqlite/homeassistant ]
+    - name: homepage
+      uid: "{{ static_service_ids.homepage }}"
+      gid: "{{ static_service_ids.homepage }}"
+      old_uids: [ 967 ]
+      old_gids: [ 964 ]
+      paths: [ /mnt/services/homepage ]
+    - name: influxdb
+      uid: "{{ static_service_ids.influxdb }}"
+      gid: "{{ static_service_ids.influxdb }}"
+      old_uids: [ 995 ]
+      old_gids: [ 994 ]
+      paths: [ /mnt/services/influxdb ]
+    - name: jellyfin
+      uid: "{{ static_service_ids.jellyfin }}"
+      gid: "{{ static_service_ids.jellyfin }}"
+      old_uids: [ 994 ]
+      old_gids: [ 993 ]
+      paths: [ /mnt/services/jellyfin, /mnt/services/sqlite/jellyfin ]
+    - name: kuma
+      uid: "{{ static_service_ids.kuma }}"
+      gid: "{{ static_service_ids.kuma }}"
+      old_uids: [ 980 ]
+      old_gids: [ 978 ]
+      paths: [ /mnt/services/kuma, /mnt/services/sqlite/kuma ]
+    - name: lidarr
+      uid: "{{ static_service_ids.lidarr }}"
+      gid: "{{ static_service_ids.lidarr }}"
+      old_uids: [ 971 ]
+      old_gids: []
+      paths: [ /mnt/services/lidarr, /mnt/services/sqlite/lidarr ]
+    - name: minio-user
+      uid: "{{ static_service_ids['minio-user'] }}"
+      gid: "{{ static_service_ids['minio-user'] }}"
+      old_uids: [ 996 ]
+      old_gids: [ 995 ]
+      paths: [ /mnt/services/minio, /mnt/minio ]
+    - name: mosquitto
+      uid: "{{ static_service_ids.mosquitto }}"
+      gid: "{{ static_service_ids.mosquitto }}"
+      old_uids: [ 975 ]
+      old_gids: [ 973 ]
+      paths: [ /mnt/services/mosquitto, /mnt/services/sqlite/mosquitto ]
+    - name: nexus
+      uid: "{{ static_service_ids.nexus }}"
+      gid: "{{ static_service_ids.nexus }}"
+      old_uids: [ 968 ]
+      old_gids: [ 966 ]
+      paths: [ /mnt/services/nexus ]
+    - name: openobserve
+      uid: "{{ legacy_service_ids.openobserve }}"
+      gid: "{{ legacy_service_ids.openobserve }}"
+      old_uids: [ 965 ]
+      old_gids: [ 962 ]
+      paths: [ /mnt/services/openobserve, /mnt/services/sqlite/openobserve ]
+    - name: pihole
+      uid: "{{ legacy_service_ids.pihole }}"
+      gid: "{{ legacy_service_ids.pihole }}"
+      old_uids: [ 997 ]
+      old_gids: [ 996 ]
+      paths: [ /mnt/services/pihole ]
+    - name: plex
+      uid: "{{ static_service_ids.plex }}"
+      gid: "{{ static_service_ids.plex }}"
+      old_uids: [ 988 ]
+      old_gids: [ 986 ]
+      paths: [ /mnt/services/plex, /mnt/services/sqlite/plex ]
+    - name: profilarr
+      uid: "{{ static_service_ids.profilarr }}"
+      gid: "{{ static_service_ids.profilarr }}"
+      old_uids: [ 970 ]
+      old_gids: [ 968 ]
+      paths: [ /mnt/services/profilarr, /mnt/services/sqlite/profilarr ]
+    - name: radarr
+      uid: "{{ static_service_ids.radarr }}"
+      gid: "{{ static_service_ids.radarr }}"
+      old_uids: [ 991 ]
+      old_gids: [ 989 ]
+      paths: [ /mnt/services/radarr, /mnt/services/sqlite/radarr ]
+    - name: sabnzbd
+      uid: "{{ static_service_ids.sabnzbd }}"
+      gid: "{{ static_service_ids.sabnzbd }}"
+      old_uids: [ 993 ]
+      old_gids: []
+      paths: [ /mnt/services/sabnzbd, /mnt/services/sqlite/sabnzbd ]
+    - name: seerr
+      uid: "{{ static_service_ids.seerr }}"
+      gid: "{{ static_service_ids.seerr }}"
+      old_uids: [ 961 ]
+      old_gids: [ 957 ]
+      paths: [ /mnt/services/seerr, /mnt/services/sqlite/seerr ]
+    - name: sonarr
+      uid: "{{ static_service_ids.sonarr }}"
+      gid: "{{ static_service_ids.sonarr }}"
+      old_uids: [ 992 ]
+      old_gids: [ 990 ]
+      paths: [ /mnt/services/sonarr, /mnt/services/sqlite/sonarr ]
+    - name: speedtest
+      uid: "{{ static_service_ids.speedtest }}"
+      gid: "{{ static_service_ids.speedtest }}"
+      old_uids: [ 998 ]
+      old_gids: [ 997 ]
+      paths: [ /mnt/services/speedtest ]
+    - name: tautulli
+      uid: "{{ static_service_ids.tautulli }}"
+      gid: "{{ static_service_ids.tautulli }}"
+      old_uids: [ 986 ]
+      old_gids: [ 984 ]
+      paths: [ /mnt/services/tautulli, /mnt/services/sqlite/tautulli ]
+    - name: transmission
+      uid: "{{ static_service_ids.transmission }}"
+      gid: "{{ static_service_ids.transmission }}"
+      old_uids: [ 985 ]
+      old_gids: [ 983 ]
+      paths: [ /mnt/services/transmission ]
+    - name: wolweb
+      uid: "{{ static_service_ids.wolweb }}"
+      gid: "{{ static_service_ids.wolweb }}"
+      old_uids: [ 993, 997 ]
+      old_gids: [ 982, 984 ]
+      paths: [ /mnt/services/wolweb ]
+    - name: z2m
+      uid: "{{ static_service_ids.z2m }}"
+      gid: "{{ static_service_ids.z2m }}"
+      old_uids: [ 974 ]
+      old_gids: [ 972 ]
+      paths: [ /mnt/services/z2m ]
+    - name: zfs_autobackup
+      uid: "{{ static_service_ids.zfs_autobackup }}"
+      gid: "{{ static_service_ids.zfs_autobackup }}"
+      old_uids: [ 997, 999 ]
+      old_gids: [ 986, 987, 989, 999 ]
+      paths: [ /var/lib/zfs_autobackup ]
+
+  # Cross-service trees need explicit semantic mappings. In particular,
+  # /mnt/media/Lidarr still contains an older lidarr uid 990 even though the
+  # final Jammy passwd database later assigned 990 to authelia.
+  paths:
+    - path: /mnt/services
+      gid_map:
+        991: "{{ static_group_ids.media }}"
+    - path: /mnt/services/sqlite
+      gid_map:
+        991: "{{ static_group_ids.media }}"
+    - path: /mnt/scratch
+      uid_map:
+        958: "{{ static_service_ids.gitlab_runner }}"
+        964: "{{ legacy_service_ids.github_runner }}"
+        968: "{{ static_service_ids.nexus }}"
+        985: "{{ static_service_ids.transmission }}"
+        988: "{{ static_service_ids.plex }}"
+        993: "{{ static_service_ids.sabnzbd }}"
+        994: "{{ static_service_ids.jellyfin }}"
+      gid_map:
+        956: "{{ static_group_ids.homelab_ci }}"
+        966: "{{ static_service_ids.nexus }}"
+        991: "{{ static_group_ids.media }}"
+        993: "{{ static_service_ids.jellyfin }}"
+    - path: /mnt/media
+      uid_map:
+        973: "{{ static_service_ids.bazarr }}"
+        985: "{{ static_service_ids.transmission }}"
+        990: "{{ static_service_ids.lidarr }}"
+        991: "{{ static_service_ids.radarr }}"
+        992: "{{ static_service_ids.sonarr }}"
+        993: "{{ static_service_ids.sabnzbd }}"
+        994: "{{ static_service_ids.jellyfin }}"
+      gid_map:
+        985: "{{ static_group_ids.media }}"
+        991: "{{ static_group_ids.media }}"
+        993: "{{ static_service_ids.jellyfin }}"
+    - path: /mnt/data/Software/Unreal Tournament 2004 PC multiplayer + SP ^^nosTEAM^^
+      gid_map:
+        1006: "{{ static_human_ids.operator }}"

@@ -1,0 +1,58 @@
+---
+- name: Check static identity migration marker
+  stat:
+    path: "{{ static_identity_migration_marker }}"
+  register: static_identity_migration_marker_stat
+  tags:
+    - static_identity_migration
+
+- name: Migrate persistent ownership to static identities
+  when:
+    - static_identity_migration_enabled | bool
+    - not static_identity_migration_marker_stat.stat.exists
+  tags:
+    - static_identity_migration
+  block:
+    - name: Stage static identity migration map
+      copy:
+        dest: /run/static_identity_migration.json
+        content: "{{ static_identity_migration_config | to_nice_json }}\n"
+        owner: root
+        group: root
+        mode: "0600"
+        backup: true
+        validate: python3 -m json.tool %s
+      become: true
+
+    - name: Apply static identity ownership migration
+      when: not ansible_check_mode
+      script:
+        cmd: >-
+          migrate_ownership.py
+          --config /run/static_identity_migration.json
+          --marker {{ static_identity_migration_marker }}
+          {{ '--dry-run' if static_identity_migration_dry_run | bool else '' }}
+        executable: python3
+      become: true
+      register: static_identity_migration_result
+
+    - name: Report static identity ownership migration result
+      when: not ansible_check_mode
+      debug:
+        msg: "{{ static_identity_migration_result.stdout | trim }}"
+
+    - name: Report pending static identity ownership migration
+      when: ansible_check_mode
+      debug:
+        msg: >-
+          Persistent ownership will be remapped once before service accounts
+          move to their static IDs.
+      changed_when: true
+
+  always:
+    - name: Remove staged static identity migration map
+      when: not ansible_check_mode
+      file:
+        path: /run/static_identity_migration.json
+        state: absent
+      become: true

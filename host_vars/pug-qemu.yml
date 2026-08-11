@@ -3,6 +3,7 @@
 # is requested -- push CI doesn't fan out to pug, but nightly
 # and on-demand `testrole.py --machine pug` go through here.
 qemu_test: true
+static_identity_migration_enabled: false
 
 # Inherits prod pug's podman partition backend: the rebuilt host and fixture both
 # use /dev/disk/by-partlabel/podman instead of the legacy rpool/podman zvol.

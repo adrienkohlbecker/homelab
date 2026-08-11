@@ -3,6 +3,7 @@
 # is requested -- push CI doesn't fan out to lab, but nightly
 # and on-demand `testrole.py --machine lab` go through here.
 qemu_test: true
+static_identity_migration_enabled: false
 
 # chroot.sh creates /dev/md/podman as raid5 over the three p4 members. The
 # configured ext4 geometry matches mdadm's 512K chunk: 512K / 4K = stride 128,
