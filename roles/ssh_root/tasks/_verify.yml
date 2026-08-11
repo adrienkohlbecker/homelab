@@ -70,6 +70,8 @@
   assert:
     that:
       - "'batchmode yes' in _ssh_root_config.stdout"
+      - "'ciphers aes128-gcm@openssh.com,' in _ssh_root_config.stdout"
+      - "'compression no' in _ssh_root_config.stdout"
       - "'controlmaster auto' in _ssh_root_config.stdout"
       - "'controlpath /root/.ssh/.controlmaster-' in _ssh_root_config.stdout"
       - "'controlpersist 300' in _ssh_root_config.stdout"
