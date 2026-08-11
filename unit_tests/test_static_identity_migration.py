@@ -123,7 +123,7 @@ def test_active_identity_uid_labels_uses_current_named_account(monkeypatch) -> N
 def test_active_processes_reports_source_uid(tmp_path) -> None:
     process = tmp_path / "123"
     process.mkdir()
-    (process / "status").write_text("Name:\tworker\n" "Uid:\t958\t958\t958\t958\n")
+    (process / "status").write_text("Name:\tworker\n" "Uid:\t958\t958\t958\t958\n" "x86_Thread_features:\n" "\n")
 
     assert migrate_ownership.active_processes({958}, proc_root=tmp_path) == [
         migrate_ownership.ActiveProcess(uid=958, pid=123, name="worker")

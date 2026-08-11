@@ -144,9 +144,11 @@ def active_processes(
             # Processes can exit between listing /proc and reading status.
             continue
 
-        fields = {
-            key.rstrip(":"): value.strip() for key, value in (line.split(maxsplit=1) for line in status.splitlines())
-        }
+        fields = {}
+        for line in status.splitlines():
+            key, separator, value = line.partition(":")
+            if separator:
+                fields[key] = value.strip()
         process_uids = {int(value) for value in fields["Uid"].split()}
         active.extend(
             ActiveProcess(
