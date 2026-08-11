@@ -56,3 +56,20 @@
         path: /run/static_identity_migration.json
         state: absent
       become: true
+
+- name: Remove legacy ZFS delegated permissions
+  when:
+    - static_identity_migration_enabled | bool
+    - static_identity_migration_zfs_delegate_uids | length > 0
+  script:
+    cmd: >-
+      migrate_zfs_delegations.py
+      --uids {{ static_identity_migration_zfs_delegate_uids | join(' ') }}
+      {{ '--dry-run' if ansible_check_mode or static_identity_migration_dry_run | bool else '' }}
+    executable: python3
+  check_mode: false
+  become: true
+  register: static_identity_migration_zfs_delegations
+  changed_when: "'legacy delegations found: 0' not in static_identity_migration_zfs_delegations.stdout"
+  tags:
+    - static_identity_migration

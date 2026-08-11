@@ -35,6 +35,7 @@ static_identity_migration_required_mounts:
   - /mnt/media
   - /mnt/data
   - /mnt/minio
+static_identity_migration_zfs_delegate_uids: [ 999 ]
 
 swap_partition:
   device: /dev/md/swap
