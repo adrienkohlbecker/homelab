@@ -160,6 +160,26 @@
       loop_control:
         label: "{{ item.item }}"
 
+    - name: _verify | Read mdmonitor events from this boot
+      command:
+        argv:
+          - journalctl
+          - --unit=mdmonitor.service
+          - --boot
+          - --no-pager
+          - --output=cat
+      changed_when: false
+      become: true
+      register: packer_verify_mdmonitor_journal
+
+    - name: _verify | Mdadm configuration does not request nonexistent spares
+      assert:
+        that: "'SparesMissing event detected' not in packer_verify_mdmonitor_journal.stdout"
+        fail_msg: >-
+          mdmonitor reported a missing spare during boot. The image likely
+          persisted mdadm's transient spares count while an array was building:
+          {{ packer_verify_mdmonitor_journal.stdout }}
+
     - name: _verify | Per-disk "rEFInd (disk N)" NVRAM entries exist
       vars:
         _disk_entries: >-

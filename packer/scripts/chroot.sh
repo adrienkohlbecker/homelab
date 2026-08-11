@@ -424,7 +424,10 @@ else
     # shellcheck disable=SC2086  # word-splitting on PARTITIONS_PODMAN is the point
     mdadm --create /dev/md/podman --name=podman --metadata=1.2 --level=raid5 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_PODMAN
     udevadm settle --timeout=10
-    mdadm --detail --brief /dev/md/podman >>/etc/mdadm/mdadm.conf
+    # RAID5 starts degraded and temporarily reports the rebuilding final member
+    # as a spare. Persisting that transient field makes mdmonitor report a
+    # missing hot spare after the member becomes active.
+    mdadm --detail --brief /dev/md/podman | sed -E 's/ spares=[[:digit:]]+//' >>/etc/mdadm/mdadm.conf
   fi
 fi
 
