@@ -225,11 +225,11 @@
     test_resolvectl_global_protocols: >-
       {{ test_resolvectl.stdout_lines
          | select('search', 'Protocols:') | list | first | default('') }}
-    # Mirror mirrors.yml's split: Nexus-backed LAN cells use the household
-    # AdGuard VIP; AWS and --upstream-mirrors cells use public anycast.
+    # Mirror mirrors.yml's split: local cells use the household AdGuard VIP,
+    # including --upstream-mirrors runs; AWS cells use public anycast.
     test_expected_resolvers: >-
       {{ bootstrap_dns_resolver
-         if nexus_url | length == 0
+         if test_in_aws | default(false) | bool
          else [prod_network.virtual_ips.dns] }}
 
 - name: _verify | DNS-over-TLS is enforced at the configured resolver
