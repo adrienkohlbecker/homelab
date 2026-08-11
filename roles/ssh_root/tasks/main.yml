@@ -62,9 +62,8 @@
   tags:
     - ssh_root
 
-# Only the private key is persisted/restored: openssh_keypair derives and
-# fully manages the .pub file (including its mode), so shipping our own copy
-# just fights the module and breaks idempotence.
+# Only the private key is persisted/restored: the public key is derived data
+# and is normalized below after openssh_keypair recreates it.
 - name: Restore the persisted key
   when:
     - ssh_root_services_mount.rc == 0
@@ -95,6 +94,25 @@
     backend: opensshbin
   become: true
   register: ssh_root_keypair
+  tags:
+    - ssh_root
+
+# The opensshbin backend derives the key material when a restored private key
+# has no matching .pub file, but omits the requested public-file comment.
+# Normalize the derived file so the next keypair invocation sees its desired
+# state instead of repairing the same comment on every converge.
+- name: Normalize the OpenSSH public key
+  when: not (ansible_check_mode and ssh_root_directory.changed)
+  copy:
+    content: "{{ ssh_root_keypair.public_key }} root@{{ inventory_hostname }}\n"
+    dest: /root/.ssh/id_ed25519.pub
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+    validate: ssh-keygen -lf %s
+  become: true
+  register: ssh_root_public_key
   tags:
     - ssh_root
 

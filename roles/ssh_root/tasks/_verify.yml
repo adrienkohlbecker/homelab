@@ -149,6 +149,20 @@
   changed_when: false
   become: true
 
+- name: _verify | Re-run the role after restoring the persisted identity
+  import_role:
+    name: ssh_root
+
+- name: _verify | Restored identity is idempotent
+  assert:
+    that:
+      - not ssh_root_keypair.changed
+      - not ssh_root_public_key.changed
+      - ssh_root_keypair.comment == 'root@' ~ inventory_hostname
+    fail_msg: >-
+      ssh_root still changed after restoring the persisted identity:
+      keypair={{ ssh_root_keypair }} public_key={{ ssh_root_public_key }}
+
 - name: _verify | Preserve the valid root identity for repair
   copy:
     src: /root/.ssh/id_ed25519
