@@ -20,6 +20,7 @@
 - name: Add spouse group
   group:
     name: "{{ spouse_firstname }}"
+    gid: "{{ static_human_ids.spouse }}"
     system: false
   become: true
   tags:
@@ -33,6 +34,7 @@
   # registered below is the intended, live access path.
   user:
     name: "{{ spouse_firstname }}"
+    uid: "{{ static_human_ids.spouse }}"
     group: "{{ spouse_firstname }}"
     createhome: true
     system: false

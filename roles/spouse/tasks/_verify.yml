@@ -11,8 +11,8 @@
       - ansible_facts.getent_passwd[spouse_firstname][4] == '/mnt/data/' ~ spouse_firstname
       # system: false in main.yml gives a stable non-system UID for the arq
       # bucket -- assert it stayed that way.
-      - ansible_facts.getent_passwd[spouse_firstname][1] | int >= 1000
-      - ansible_facts.getent_passwd[spouse_firstname][2] | int >= 1000
+      - ansible_facts.getent_passwd[spouse_firstname][1] | int == static_human_ids.spouse
+      - ansible_facts.getent_passwd[spouse_firstname][2] | int == static_human_ids.spouse
     fail_msg: >-
       Expected nologin shell, /mnt/data/{{ spouse_firstname }} home, non-system UID/GID;
       got: {{ ansible_facts.getent_passwd[spouse_firstname] | default([]) }}
@@ -26,7 +26,7 @@
   assert:
     that:
       # getent_group[group]: [password, gid, members] (0-indexed)
-      - ansible_facts.getent_group[spouse_firstname][1] | int >= 1000
+      - ansible_facts.getent_group[spouse_firstname][1] | int == static_human_ids.spouse
     fail_msg: >-
       Group {{ spouse_firstname }} missing or has system GID
       (got {{ ansible_facts.getent_group[spouse_firstname][1] | default('absent') }}).

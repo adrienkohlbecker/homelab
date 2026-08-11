@@ -12,6 +12,8 @@
       vars:
         service_user_args:
           name: service_user_test
+          # Test-only values below systemd's DynamicUser allocation range.
+          id: 61180
 
     - name: _verify | User record fact is exposed
       assert:
@@ -19,6 +21,8 @@
           - service_user_test_user is defined
           - service_user_test_user.uid is defined
           - service_user_test_user.gid is defined
+          - service_user_test_user.uid == 61180
+          - service_user_test_user.gid == 61180
 
     - name: _verify | Config directory exists with correct ownership
       stat:
@@ -51,6 +55,7 @@
       vars:
         service_user_args:
           name: service-user-test-hyphen
+          id: 61181
           extra_groups:
             - service_user_test_extra_grp
           shared_group: service_user_test_grp

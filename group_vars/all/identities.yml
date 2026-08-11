@@ -1,0 +1,59 @@
+---
+# Stable identities that own persistent homelab data. The service range is
+# outside login.defs automatic allocation (which ends at 60000) and below
+# systemd DynamicUser allocation (which starts at 61184).
+#
+# Never renumber an allocated entry. Add new service identities at the next
+# free value in 60740..60799 and new shared groups in 60804..60899.
+static_service_ids:
+  adguard: 60706
+  authelia: 60707
+  bazarr: 60708
+  git: 60712
+  gitlab_runner: 60714
+  headscale: 60715
+  homeassistant: 60717
+  homepage: 60718
+  influxdb: 60719
+  jellyfin: 60720
+  kuma: 60721
+  lidarr: 60722
+  minio-user: 60723
+  mosquitto: 60724
+  nexus: 60725
+  plex: 60728
+  profilarr: 60729
+  radarr: 60730
+  sabnzbd: 60731
+  seerr: 60732
+  sonarr: 60733
+  speedtest: 60734
+  tautulli: 60735
+  transmission: 60736
+  wolweb: 60737
+  z2m: 60738
+  zfs_autobackup: 60739
+
+# These identities still own restored files but no active role creates them.
+# Reserving their values prevents a future service from making the ownership
+# ambiguous; the lab migration owns any one-time file conversion.
+legacy_service_ids:
+  compta: 60709
+  csplogger: 60710
+  eaton-ipp: 60711
+  github_runner: 60713
+  healthchecks: 60716
+  openobserve: 60726
+  pihole: 60727
+
+static_group_ids:
+  homelab_ci: 60800
+  media: 60801
+  podman_socket: 60802
+  onepassword_cli: 60803
+
+# The operator account is created by the image installer. Ansible creates the
+# spouse account, but both values are part of the persistent-data contract.
+static_human_ids:
+  operator: 1000
+  spouse: 1001

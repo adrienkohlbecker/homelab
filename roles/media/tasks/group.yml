@@ -1,6 +1,7 @@
 - name: Add media group
   group:
     name: media
+    gid: "{{ static_group_ids.media }}"
     system: true
   become: true
   register: media_group

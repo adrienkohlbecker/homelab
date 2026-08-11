@@ -8,6 +8,7 @@
 - name: Add podman-socket group
   group:
     name: podman-socket
+    gid: "{{ static_group_ids.podman_socket }}"
     system: true
   become: true
   tags:

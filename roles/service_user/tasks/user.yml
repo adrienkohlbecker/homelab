@@ -19,6 +19,8 @@
 #                     co-tenant needs world traversal, or tighten to "0700"
 #                     to drop group read (plex does -- Preferences.xml
 #                     carries secrets the shared group shouldn't see).
+#   id                optional test override; production callers resolve their
+#                     required uid/gid from static_service_ids by name.
 #
 # The dict form prevents inter-call leakage at play-vars scope: each
 # import_role pass replaces the whole `service_user_args` value, so a
@@ -43,9 +45,13 @@
       # and (via ansible_var_key below) the <name>_user fact key, so keep it
       # inside the repo's service-name shape. Same guard as linger.
       - service_user_args.name is match('^[a-z_][a-z0-9_-]*$')
+      - >-
+        service_user_args.id is defined or
+        (static_service_ids is defined and service_user_args.name in static_service_ids)
     fail_msg: >-
       service_user_args needs name (a valid identifier matching
-      [a-z_][a-z0-9_-]*); got name={{ service_user_args.name | default('<unset>') }}
+      [a-z_][a-z0-9_-]*) and a static id; got
+      name={{ service_user_args.name | default('<unset>') }}
 
 # Avoid materializing /nonexistent, a sentinel several system tools special-case.
 - name: "Validate home for {{ service_user_args.name }}"
@@ -61,6 +67,10 @@
   set_fact:
     service_user_resolved:
       name: "{{ service_user_args.name }}"
+      id: >-
+        {{ service_user_args.id
+           if service_user_args.id is defined
+           else static_service_ids[service_user_args.name] }}
       extra_groups: >-
         {{
           (service_user_args.extra_groups | default([]))
@@ -76,12 +86,14 @@
 - name: "Add group {{ service_user_args.name }}"
   group:
     name: "{{ service_user_resolved.name }}"
+    gid: "{{ service_user_resolved.id }}"
     system: true
   become: true
 
 - name: "Add user {{ service_user_args.name }}"
   user:
     name: "{{ service_user_resolved.name }}"
+    uid: "{{ service_user_resolved.id }}"
     group: "{{ service_user_resolved.name }}"
     groups: "{{ service_user_resolved.extra_groups }}"
     append: true

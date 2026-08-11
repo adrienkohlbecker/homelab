@@ -59,6 +59,7 @@
 - name: Add podman-socket group
   group:
     name: podman-socket
+    gid: "{{ static_group_ids.podman_socket }}"
     system: true
   register: docker_client_podman_socket_group
   become: true

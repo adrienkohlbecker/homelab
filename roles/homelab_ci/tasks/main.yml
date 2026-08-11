@@ -1,6 +1,7 @@
 - name: Create homelab_ci group
   group:
     name: homelab_ci
+    gid: "{{ static_group_ids.homelab_ci }}"
     state: present
     system: true
   become: true
