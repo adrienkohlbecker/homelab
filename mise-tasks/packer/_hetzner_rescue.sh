@@ -10,8 +10,8 @@
 # EXIT` -> rescue_create -> [write /dev/sda] -> rescue_snapshot "$UBUNTU".
 #
 # Exposes to the caller: RESCUE_IP, RESCUE_ID, the runner-side ssh_rescue()
-# helper, and KEY (path to the ephemeral private key authorized on the rescue
-# server, which ssh_rescue uses to stream onto /dev/sda).
+# and ssh_rescue_bulk() helpers, and KEY (path to the ephemeral private key
+# authorized on the rescue server).
 #
 # Every hcloud verb here blocks on its server action (create/enable-rescue/
 # reset/poweroff/create-image/rebuild/poweron all poll to completion), so the
@@ -42,7 +42,30 @@ RESCUE_RECV='mbuffer -q -m 512M | zstd -dc | dd of=/dev/sda bs=64M conv=sparse s
 # IdentitiesOnly=yes: offer only the ephemeral key, not every identity in a
 # forwarded agent -- else the rescue sshd hits MaxAuthTries before the right
 # one. Uses the RESCUE_IP/KEY/KNOWN globals rescue_init + rescue_create set.
-ssh_rescue() { ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN" -o ConnectTimeout=5 "root@$RESCUE_IP" "$@"; }
+_ssh_rescue() {
+  local -a transport_options=()
+  while [ "${1:-}" != -- ]; do
+    transport_options+=("$1")
+    shift
+  done
+  shift
+
+  ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+    -o UserKnownHostsFile="$KNOWN" -o ConnectTimeout=5 \
+    "${transport_options[@]}" "root@$RESCUE_IP" "$@"
+}
+
+ssh_rescue() { _ssh_rescue -- "$@"; }
+
+# The raw image is already zstd-compressed. Isolate it from any existing SSH
+# master, disable redundant compression, and prefer hardware-accelerated AES.
+ssh_rescue_bulk() {
+  _ssh_rescue \
+    -o ControlPath=none \
+    -o Compression=no \
+    -o 'Ciphers=^aes128-gcm@openssh.com' \
+    -- "$@"
+}
 
 # True when host:22 has a live sshd. Probe with PreferredAuthentications=none:
 # sshd rejects us instantly with "permission denied" without running anything,

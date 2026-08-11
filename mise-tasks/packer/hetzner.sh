@@ -41,9 +41,9 @@ ssh_rescue 'blkdiscard -f /dev/sda || wipefs -a /dev/sda'
 # beats ratio. mbuffer on the send side, when present, smooths the ssh handoff.
 echo "==> streaming $IMG ($(du -h "$IMG" | cut -f1)) onto /dev/sda (this takes a few minutes)"
 if command -v mbuffer >/dev/null; then
-  zstd -1 -T0 -c "$IMG" | mbuffer -m 512M | ssh_rescue "$RESCUE_RECV"
+  zstd -1 -T0 -c "$IMG" | mbuffer -m 512M | ssh_rescue_bulk "$RESCUE_RECV"
 else
-  zstd -1 -T0 -c "$IMG" | ssh_rescue "$RESCUE_RECV"
+  zstd -1 -T0 -c "$IMG" | ssh_rescue_bulk "$RESCUE_RECV"
 fi
 
 # The streamed image's GPT backup header sits at the 20G mark (the image's own

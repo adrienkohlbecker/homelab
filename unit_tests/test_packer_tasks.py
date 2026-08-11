@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_SH = REPO_ROOT / "mise-tasks" / "packer" / "build.sh"
 SEED_DEPS_SH = REPO_ROOT / "mise-tasks" / "packer" / "seed-deps.sh"
+HETZNER_RESCUE_SH = REPO_ROOT / "mise-tasks" / "packer" / "_hetzner_rescue.sh"
 
 
 def _executable(path: Path, content: str) -> None:
@@ -103,3 +105,40 @@ def test_seed_deps_runs_once_per_ubuntu(tmp_path: Path) -> None:
         assert f"--ubuntu {ubuntu}" in call
         assert (destination / "artifact").read_text() == "source\n"
         assert (destination / "seeded").read_text() == "yes\n"
+
+
+def test_hetzner_bulk_ssh_isolates_the_compressed_stream(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    log = tmp_path / "ssh.log"
+    _executable(
+        fake_bin / "ssh",
+        "#!/bin/sh\n"
+        "set -eu\n"
+        "printf '<call>\\n' >>\"$SSH_TEST_LOG\"\n"
+        'printf \'%s\\n\' "$@" >>"$SSH_TEST_LOG"\n',
+    )
+    env = dict(os.environ)
+    env.update(PATH=f"{fake_bin}:{env['PATH']}", SSH_TEST_LOG=str(log))
+    script = f"""
+set -euo pipefail
+source {shlex.quote(str(HETZNER_RESCUE_SH))}
+KEY=/tmp/test_key
+KNOWN=/tmp/test_known_hosts
+RESCUE_IP=192.0.2.1
+ssh_rescue true
+ssh_rescue_bulk receive-image
+"""
+
+    result = subprocess.run(["bash", "-c", script], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode == 0, result.stderr
+    calls = [call.splitlines() for call in log.read_text().split("<call>\n") if call]
+    assert len(calls) == 2
+    control, bulk = calls
+    assert "ControlPath=none" not in control
+    assert "Compression=no" not in control
+    assert "Ciphers=^aes128-gcm@openssh.com" not in control
+    assert "ControlPath=none" in bulk
+    assert "Compression=no" in bulk
+    assert "Ciphers=^aes128-gcm@openssh.com" in bulk
+    assert bulk[-2:] == ["root@192.0.2.1", "receive-image"]
