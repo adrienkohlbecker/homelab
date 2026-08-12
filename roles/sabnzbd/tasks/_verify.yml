@@ -153,12 +153,13 @@
   assert:
     that:
       - "'version_notify = 0' in _apm"
+      - "'ffmpeg_path = /usr/bin' in _apm"
       - sabnzbd_api_key in _apm
       - radarr_api_key in _apm
       - sonarr_api_key in _apm
       - lidarr_api_key in _apm
       - omdb_api_key in _apm
-    fail_msg: "autoProcessMedia.cfg is missing a managed setting or api key (version_notify/sabnzbd/radarr/sonarr/lidarr/omdb)"
+    fail_msg: "autoProcessMedia.cfg is missing a managed setting or api key (version_notify/ffmpeg_path/sabnzbd/radarr/sonarr/lidarr/omdb)"
 
 - name: _verify | Wait for normalized sabnzbd startup record in lnav store
   command:
