@@ -4,11 +4,9 @@
 # lab-class hosts.
 #
 # Bare-metal callers MUST also:
-#  - pre-flight $DISKS. Unless PRESERVE_META=true, every entry is wiped
-#    unconditionally (sgdisk --zap-all + wipefs + blkdiscard + zpool
-#    labelclear); a wrong device path destroys data in seconds. The preserve
-#    path is intentionally lab-specific and validates every p6 before changing
-#    any partition table.
+#  - pre-flight $DISKS. Every entry is wiped unconditionally (sgdisk --zap-all
+#    + wipefs + blkdiscard + zpool labelclear); a wrong device path destroys
+#    data in seconds.
 #  - rotate /home/vagrant/.ssh/authorized_keys (which currently holds
 #    the publicly-known vagrant insecure pubkey) and remove
 #    /etc/sudoers.d/vagrant before the host gets a routable IP. The
@@ -32,9 +30,9 @@
 set -euxo pipefail
 
 # DISKS, EXTRA_DISKS, LAYOUT, SWAP_SIZE, PODMAN_SIZE, META_SIZE, EXTRA_POOLS,
-# PRESERVE_META, PRESERVE_META_FIXTURE, SOURCE_NAME, IMAGE_TARGET,
-# QEMU_TEST_IMAGE, UBUNTU_NAME, and UBUNTU_MIRROR come from packer's
-# shell-provisioner env block. Bare-metal callers export them by hand.
+# SOURCE_NAME, IMAGE_TARGET, QEMU_TEST_IMAGE, UBUNTU_NAME, and UBUNTU_MIRROR
+# come from packer's shell-provisioner env block. Bare-metal callers export
+# them by hand.
 # This script consumes the disk/pool vars and passes the exported install vars
 # through to chroot.sh. The ZBM_*/REFIND_*/UBUNTU_MIRROR_* vars used downstream
 # are documented at the top of chroot.sh.
@@ -42,12 +40,6 @@ set -euxo pipefail
 # Directory holding chroot.sh and optional installer extensions. Packer uploads
 # it to /home/vagrant; bare-metal callers can point it at their staged bundle.
 SCRIPTS_DIR="${SCRIPTS_DIR:-/home/vagrant}"
-PRESERVE_META=${PRESERVE_META:-false}
-PRESERVE_META_FIXTURE=${PRESERVE_META_FIXTURE:-false}
-if [ "$PRESERVE_META" != false ] || [ "$PRESERVE_META_FIXTURE" != false ]; then
-  # shellcheck source=preserve_meta.sh
-  source "$SCRIPTS_DIR/preserve_meta.sh"
-fi
 
 preflight() {
   local name disk
@@ -120,10 +112,6 @@ preflight() {
     fi
     seen_disks[$disk]=1
   done
-
-  if [ "$PRESERVE_META" != false ] || [ "$PRESERVE_META_FIXTURE" != false ]; then
-    preserve_meta_preflight
-  fi
 }
 
 preflight
@@ -235,27 +223,6 @@ stop_target_md_arrays() {
       done
     done
   done
-}
-
-partition_disks() {
-  local partition_function="$1" disk
-
-  # Partition changes can make udev incrementally reassemble an array after an
-  # earlier member is rewritten, leaving a later member busy. Freeze rule
-  # execution across every target disk, stop only arrays backed by those disks,
-  # then publish all completed tables to the kernel as one unit.
-  udevadm control --stop-exec-queue
-  trap 'udevadm control --start-exec-queue' EXIT
-  stop_target_md_arrays
-  for disk in $DISKS; do
-    "$partition_function" "$disk"
-  done
-  udevadm control --start-exec-queue
-  trap - EXIT
-  for disk in $DISKS; do
-    partprobe "$disk"
-  done
-  udevadm settle
 }
 
 EXTRA_ZPOOL_OPTS=(
@@ -486,11 +453,21 @@ fi
 
 zgenhostid -f
 
-if [ "$PRESERVE_META" = true ]; then
-  preserve_meta_partition_disks
-else
-  partition_disks partition_disk
-fi
+# Partition changes can make udev incrementally reassemble an array after an
+# earlier member is rewritten, leaving a later member busy. Freeze rule
+# execution across every target disk, stop only arrays backed by those disks,
+# then publish all completed tables to the kernel as one unit.
+udevadm control --stop-exec-queue
+trap 'udevadm control --start-exec-queue' EXIT
+stop_target_md_arrays
+for disk in $DISKS; do
+  partition_disk "$disk"
+done
+udevadm control --start-exec-queue
+trap - EXIT
+for disk in $DISKS; do
+  partprobe "$disk"
+done
 
 # Wait for udev to expose every new partition node (/dev/vdbN, ...)
 # before zpool create reads them. Replaces a per-iteration `sync; sleep 2`
@@ -617,12 +594,6 @@ unshare --mount --propagation private arch-chroot /mnt bash <"$SCRIPTS_DIR/chroo
 
 if [ "$building_image" = "true" ]; then
   rm /mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
-fi
-
-if [ "$PRESERVE_META" = true ]; then
-  # The complete install, including mdadm creation in chroot.sh, must leave the
-  # three p6 GPT entries and every readable ZFS label unchanged.
-  verify_preserved_meta
 fi
 
 # Create any non-rpool pools while /mnt is still rpool's root so the current

@@ -165,16 +165,6 @@ locals {
   # - zfs_arc_max: optional ARC cap for small-RAM cloud images; 0 disables it.
   # Add an entry whenever a new source "qemu.ubuntu" block joins the
   # build.
-  # Temporary lab migration fixture. Removing PRESERVE_META after the rebuild
-  # means deleting this object and restoring the three referenced lab values;
-  # the runbook records their durable replacements.
-  preserve_meta_fixture = {
-    source_name = "lab"
-    disk_sizes  = ["180G", "180G", "180G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
-    meta_size   = "128G"
-    extra_pools = ""
-  }
-
   variant_config = {
     # pug: single-disk rpool + a dedicated podman partition + apoc mirror.
     # The small fixture partition proves the prod backend without carrying the
@@ -192,20 +182,18 @@ locals {
       qemu_test_image = true
       zfs_arc_max     = 0
     }
-    # lab: exact preserved-p6 geometry + mdadm EFI/swap/podman, 3-disk mirror
-    # rpool, dozer mirror, tank raidz2 + special mirror, and mouse mirror. The
-    # large virtual rpool disks are sparse; their 128G p6 extent deliberately
-    # matches prod so every lab image build destructively exercises the same
-    # preservation contract before it can publish.
+    # lab: mdadm EFI/swap/podman, 3-disk mirror rpool, dozer mirror, tank raidz2
+    # + special mirror, and mouse mirror. Fixture sizes only prove the storage
+    # topology; prod sizing lives in notes/unified_disk_layout.md.
     lab = {
       disks           = "/dev/vdb /dev/vdc /dev/vdd"
       extra_disks     = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
-      disk_sizes      = local.preserve_meta_fixture.disk_sizes
+      disk_sizes      = ["40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
       layout          = "mirror"
       swap_size       = "8G"
       podman_size     = "5G"
-      meta_size       = local.preserve_meta_fixture.meta_size
-      extra_pools     = local.preserve_meta_fixture.extra_pools
+      meta_size       = "2G"
+      extra_pools     = "dozer tank_mouse"
       image_target    = "qemu"
       qemu_test_image = true
       zfs_arc_max     = 0
@@ -429,8 +417,6 @@ build {
       "PODMAN_SIZE"                     = local.variant_config[source.name].podman_size
       "META_SIZE"                       = local.variant_config[source.name].meta_size
       "EXTRA_POOLS"                     = local.variant_config[source.name].extra_pools
-      "PRESERVE_META"                   = "${source.name == local.preserve_meta_fixture.source_name}"
-      "PRESERVE_META_FIXTURE"           = "${source.name == local.preserve_meta_fixture.source_name}"
       "UBUNTU_NAME"                     = "${var.ubuntu_name}"
       "UBUNTU_MIRROR"                   = local.build_archive
       "UBUNTU_MIRROR_SECURITY"          = local.build_security
@@ -445,20 +431,6 @@ build {
       # A bare-metal copy-paste run of chroot.sh leaves it unset, so prod never
       # picks up either.
       "QEMU_TEST_IMAGE" = "${local.variant_config[source.name].qemu_test_image}"
-    }
-  }
-
-  provisioner "shell" {
-    only   = ["qemu.lab"]
-    inline = ["sudo -HE /home/vagrant/preserve_meta_fixture.sh finalize"]
-    env = {
-      "DISKS"                 = local.variant_config[source.name].disks
-      "EXTRA_DISKS"           = local.variant_config[source.name].extra_disks
-      "PRESERVE_META"         = "${source.name == local.preserve_meta_fixture.source_name}"
-      "PRESERVE_META_FIXTURE" = "${source.name == local.preserve_meta_fixture.source_name}"
-      "QEMU_TEST_IMAGE"       = "${local.variant_config[source.name].qemu_test_image}"
-      "SOURCE_NAME"           = "${source.name}"
-      "UBUNTU_NAME"           = "${var.ubuntu_name}"
     }
   }
 

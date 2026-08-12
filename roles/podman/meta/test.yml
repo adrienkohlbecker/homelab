@@ -7,8 +7,8 @@
 # dedicated raw ext4 partition (podman_storage_backend: partition, single disk);
 # minimal has no ZFS so the store stays on the plain root fs with fuse-overlayfs;
 # lab exercises the three-member mdadm raid5 partition backend. No fixture now
-# covers fox's retained rpool/podman zvol backend, which prod lab also retains
-# until its rebuild. box + minimal run on every push.
+# covers fox's retained rpool/podman zvol backend. box + minimal run on every
+# push.
 # pug + lab are heavyweight multi-disk fixtures that never run in CI -- detect
 # drops them from every generated matrix (test/matrix.py ON_DEMAND_MACHINES),
 # push and schedule alike -- so the pug-shaped and raid5 partition backends are
