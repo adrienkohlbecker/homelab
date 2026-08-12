@@ -35,10 +35,11 @@ def test_static_id_namespaces_do_not_collide() -> None:
     service_ids = identities["static_service_ids"]
     legacy_ids = identities["legacy_service_ids"]
     group_ids = identities["static_group_ids"]
+    human_ids = identities["static_human_ids"]
 
-    reserved_service_values = list(service_ids.values()) + list(legacy_ids.values())
-    assert len(reserved_service_values) == len(set(reserved_service_values))
-    assert all(60706 <= value <= 60799 for value in reserved_service_values)
+    reserved_identity_values = list(service_ids.values()) + list(legacy_ids.values()) + [human_ids["spouse"]]
+    assert len(reserved_identity_values) == len(set(reserved_identity_values))
+    assert all(60706 <= value <= 60799 for value in reserved_identity_values)
     assert len(group_ids.values()) == len(set(group_ids.values()))
     assert all(60800 <= value <= 60899 for value in group_ids.values())
 
@@ -46,5 +47,5 @@ def test_static_id_namespaces_do_not_collide() -> None:
 def test_human_ids_are_explicit() -> None:
     assert load_identities()["static_human_ids"] == {
         "operator": 1000,
-        "spouse": 1001,
+        "spouse": 60740,
     }

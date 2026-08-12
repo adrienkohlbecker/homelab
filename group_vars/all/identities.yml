@@ -1,10 +1,10 @@
 ---
-# Stable identities that own persistent homelab data. The service range is
+# Stable identities that own persistent homelab data. The private range is
 # outside login.defs automatic allocation (which ends at 60000) and below
 # systemd DynamicUser allocation (which starts at 61184).
 #
 # Never renumber an allocated entry. Add new service identities at the next
-# free value in 60740..60799 and new shared groups in 60804..60899.
+# free value in 60741..60799 and new shared groups in 60803..60899.
 static_service_ids:
   adguard: 60706
   authelia: 60707
@@ -50,10 +50,9 @@ static_group_ids:
   homelab_ci: 60800
   media: 60801
   podman_socket: 60802
-  onepassword_cli: 60803
 
 # The operator account is created by the image installer. Ansible creates the
 # spouse account, but both values are part of the persistent-data contract.
 static_human_ids:
   operator: 1000
-  spouse: 1001
+  spouse: 60740

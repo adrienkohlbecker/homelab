@@ -331,17 +331,6 @@
   tags:
     - user
 
-- name: Pin 1Password CLI group
-  group:
-    name: onepassword-cli
-    gid: "{{ static_group_ids.onepassword_cli }}"
-    system: true
-    state: present
-  become: true
-  tags:
-    - user
-    - spouse
-
 - name: Install 1Password CLI
   when: not (ansible_check_mode and apt_source_1password_changed)
   apt:
@@ -351,23 +340,3 @@
   become: true
   tags:
     - user
-
-- name: Read 1Password CLI binary state
-  stat:
-    path: /usr/bin/op
-  register: user_onepassword_cli_binary
-  tags:
-    - user
-    - spouse
-
-- name: Pin 1Password CLI binary ownership
-  when: user_onepassword_cli_binary.stat.exists
-  file:
-    path: /usr/bin/op
-    owner: root
-    group: onepassword-cli
-    mode: "2755"
-  become: true
-  tags:
-    - user
-    - spouse
