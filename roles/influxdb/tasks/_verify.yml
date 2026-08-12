@@ -357,6 +357,14 @@
           CONTAINER_TAG: influxdb
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: influxdb.service
+        - MESSAGE: 'ts=2099-01-02T03:04:06Z lvl=warn msg="nats-port argument is deprecated and unused" log_id=drop'
+          CONTAINER_TAG: influxdb
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: influxdb.service
+        - MESSAGE: 'ts=2099-01-02T03:04:07Z lvl=warn msg="nats-port argument rejected" log_id=keep'
+          CONTAINER_TAG: influxdb
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: influxdb.service
       expected:
         - message: influxdb-valid
           level: warn
@@ -367,3 +375,11 @@
           service: influxdb
           _absent:
             - fields.parser_status
+        - message: nats-port argument rejected
+          level: warn
+          service: influxdb
+          fields.log_id: keep
+
+- name: _verify | Deprecated internal InfluxDB argument warning is omitted
+  assert:
+    that: "'nats-port argument is deprecated and unused' not in fluentbit_verify_result.stdout"
