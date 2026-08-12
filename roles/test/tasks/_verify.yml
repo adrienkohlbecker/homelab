@@ -75,12 +75,13 @@
         or ('ports.ubuntu.com' in (test_apt_deb822.content | default('') | b64decode))
     fail_msg: "apt sources don't reference upstream archive/ports"
 
-- name: _verify | Legacy /etc/apt/sources.list is absent on noble+
+- name: _verify | Legacy /etc/apt/sources.list is empty on noble+
   when: ansible_distribution_release != "jammy"
   assert:
     that:
-      - not (test_apt_sources.results[0].stat.exists)
-    fail_msg: "/etc/apt/sources.list should be removed on noble+ (deb822 only)"
+      - test_apt_sources.results[0].stat.exists
+      - test_apt_sources.results[0].stat.size == 0
+    fail_msg: "/etc/apt/sources.list should be empty on noble+ (deb822 only)"
 
 - name: _verify | Stat podman registry mirror config
   stat:
