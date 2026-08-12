@@ -29,6 +29,15 @@ _LOG_FH = None
 _LOG_PATH = None
 _WRAPPER_QEMU_BINARY_ARG = "-qemu-net-wrapper-binary"
 
+# Keep the guest on a synthetic link instead of passt's default host address.
+# Reusing the host address makes a bare-host build shadow lab's 10.123.0.2
+# inside the guest, so nexus.lab.fahm.fr resolves to the guest itself. passt
+# translates this documentation-only address through whichever host/container
+# network it runs in, giving bare-host and CI-contained builds the same shape.
+_PASST_GUEST_ADDRESS = "192.0.2.2"
+_PASST_GUEST_NETMASK = "255.255.255.0"
+_PASST_GUEST_GATEWAY = "192.0.2.1"
+
 # The nameserver passt advertises to the guest over DHCP (-D). This is the lab
 # DNS keepalived VIP (data/network_topology.yml -> virtual_ips.dns): a
 # real, reachable, split-horizon resolver that answers both nexus.lab.fahm.fr
@@ -192,9 +201,9 @@ def _passt_port_args(fwds: list[tuple[str, str, str]]) -> list[str]:
     return out
 
 
-def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> None:
-    """Launch the passt sidecar and block until its socket is listening."""
-    cmd = [
+def _passt_command(sock: str, fwds: list[tuple[str, str, str]]) -> list[str]:
+    """Build the passt sidecar command for one isolated build VM."""
+    return [
         "passt",
         # Foreground so it stays a plain child (no daemon fork).
         "--foreground",
@@ -203,14 +212,23 @@ def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> None:
         "--one-off",
         "--socket",
         sock,
+        "--address",
+        _PASST_GUEST_ADDRESS,
+        "--netmask",
+        _PASST_GUEST_NETMASK,
+        "--gateway",
+        _PASST_GUEST_GATEWAY,
         # Advertise a routable resolver to the guest over DHCP; passt then NATs
-        # the guest's DNS queries out the container bridge to it. See _PASST_DNS
-        # for why passt's default (the container's loopback aardvark) is useless
-        # here and why --dns-forward can't bridge to it.
+        # the guest's DNS queries out through its current host environment.
         "--dns",
         _PASST_DNS,
         *_passt_port_args(fwds),
     ]
+
+
+def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> None:
+    """Launch the passt sidecar and block until its socket is listening."""
+    cmd = _passt_command(sock, fwds)
     # Capture passt's startup banner (which echoes the DHCP-advertised DNS and
     # the bound socket -- the diagnostic for a DNS-path regression) into a log
     # beside ours. We must NOT pass passt `--log-file <path>`: passt's apparmor

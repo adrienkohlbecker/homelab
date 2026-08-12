@@ -83,3 +83,25 @@ def test_passt_port_args_groups_tcp_and_udp() -> None:
         "--udp-ports",
         "127.0.0.1/5300:53",
     ]
+
+
+def test_passt_command_assigns_an_isolated_guest_address() -> None:
+    out = wrapper._passt_command("/tmp/passt.sock", [("tcp", "2222", "22")])
+
+    assert out == [
+        "passt",
+        "--foreground",
+        "--one-off",
+        "--socket",
+        "/tmp/passt.sock",
+        "--address",
+        "192.0.2.2",
+        "--netmask",
+        "255.255.255.0",
+        "--gateway",
+        "192.0.2.1",
+        "--dns",
+        "10.123.1.224",
+        "--tcp-ports",
+        "127.0.0.1/2222:22",
+    ]
