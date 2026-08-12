@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Prune old Hetzner Cloud snapshots, keeping newest 2 + any running server's image"
-#USAGE arg "<selector>" help="Label selector for snapshots to prune (e.g. 'os=ubuntu-zfs,ubuntu=jammy')"
+#USAGE arg "<selector>" help="Label selector for snapshots to prune (e.g. 'os=ubuntu-zfs,ubuntu=noble')"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 

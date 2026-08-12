@@ -2,7 +2,7 @@
 #MISE description="Upload a pre-built ZFS-root disk image to a Hetzner Cloud snapshot. Build the image first with `mise run packer:build hetzner` (qemu/KVM); this streams that raw image onto a throwaway Hetzner rescue server and snapshots it."
 #USAGE arg "[image]" help="Path to the raw rpool disk image (default: the packer:build hetzner artifact for --ubuntu)"
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu codename -- snapshot label + default image path" default="noble"
-#USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
+#USAGE complete "ubuntu" run="printf 'noble\nresolute\n'"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
@@ -23,7 +23,7 @@ rescue_init
 trap rescue_cleanup EXIT
 rescue_create
 
-# The rescue server was created from a stock ubuntu-22.04 image, so /dev/sda
+# The rescue server was created from a stock ubuntu-24.04 image, so /dev/sda
 # already carries that image's GPT (backup header at the true ~76G disk end)
 # and its filesystems. We stream a smaller (20G) raw image onto the front with
 # conv=sparse, which never touches the tail -- leaving a stale backup GPT and

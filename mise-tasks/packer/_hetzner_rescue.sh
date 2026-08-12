@@ -137,7 +137,7 @@ else:
 rescue_create() {
   rescue_reap_orphan
   echo "==> creating temp $TYPE server $SERVER"
-  hcloud server create --name "$SERVER" --type "$TYPE" --image ubuntu-22.04 --ssh-key "$KEYNAME" >/dev/null
+  hcloud server create --name "$SERVER" --type "$TYPE" --image ubuntu-24.04 --ssh-key "$KEYNAME" >/dev/null
   RESCUE_ID=$(hcloud server describe "$SERVER" -o format='{{.ID}}')
   RESCUE_IP=$(hcloud server ip "$SERVER")
   echo "==> server $RESCUE_ID up at $RESCUE_IP"

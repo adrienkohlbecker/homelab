@@ -23,7 +23,7 @@ data "external-raw" "host_arch" {
 
 variable "ubuntu_name" {
   type    = string
-  default = "jammy"
+  default = "noble"
 }
 
 variable "build_directory" {
@@ -86,9 +86,7 @@ locals {
       accelerator  = "kvm"
       zbm_version  = local.versions.zfsbootmenu_release.x86_64.version
       # 4M variants because Ubuntu 24.04 dropped the legacy non-4M
-      # OVMF_{CODE,VARS}.fd from the `ovmf` package; jammy ships both,
-      # noble only the 4M ones. test/arch.py:uefi_code_candidates carries
-      # the same fallback list.
+      # OVMF_{CODE,VARS}.fd from the `ovmf` package.
       efi_firmware_code  = "/usr/share/OVMF/OVMF_CODE_4M.fd"
       efi_firmware_vars  = "/usr/share/OVMF/OVMF_VARS_4M.fd"
       image_format       = "raw"
@@ -398,8 +396,8 @@ build {
     # Resolute ships sudo-rs as the default `sudo` alternative (priority 50 vs
     # classic sudo's 40). sudo-rs silently ignores the SETENV sudoers tag, so
     # `sudo -E` strips the env block below. Switch the alternative back to
-    # classic sudo (which honors SETENV + -E) on resolute only; jammy/noble
-    # ship classic sudo as the default already.
+    # classic sudo (which honors SETENV + -E) on resolute only; noble ships
+    # classic sudo as the default already.
     inline = concat(
       var.ubuntu_name == "resolute" ? ["sudo update-alternatives --set sudo /usr/bin/sudo.ws"] : [],
       ["chmod +x /home/vagrant/*.sh", "sudo -HE /home/vagrant/provision.sh"],

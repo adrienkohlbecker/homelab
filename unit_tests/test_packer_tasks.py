@@ -36,10 +36,10 @@ def _environment(tmp_path: Path, ubuntus: str) -> dict[str, str]:
 def test_usage_specs_make_ubuntu_repeatable() -> None:
     for task in (BUILD_SH, SEED_DEPS_SH):
         assert '#USAGE flag "--ubuntu... <ubuntu>"' in task.read_text()
-        assert 'default="jammy"' in task.read_text()
+        assert 'default="noble"' in task.read_text()
 
 
-@pytest.mark.parametrize("ubuntus", ["jammy", "jammy noble"])
+@pytest.mark.parametrize("ubuntus", ["noble", "noble resolute"])
 def test_build_runs_once_per_ubuntu(tmp_path: Path, ubuntus: str) -> None:
     fake_bin = tmp_path / "bin"
     log = tmp_path / "packer.log"
@@ -88,9 +88,9 @@ def test_seed_deps_runs_once_per_ubuntu(tmp_path: Path) -> None:
         "    shutil.rmtree(dst)\n"
         "os.replace(src, dst)\n",
     )
-    env = _environment(tmp_path, "jammy noble")
+    env = _environment(tmp_path, "noble resolute")
     env["LAUNCH_TEST_LOG"] = str(launch_log)
-    for ubuntu in ("jammy", "noble"):
+    for ubuntu in ("noble", "resolute"):
         source = Path(env["HOMELAB_CI_DIR"]) / ubuntu / "box"
         source.mkdir(parents=True)
         (source / "artifact").write_text("source\n")
@@ -100,7 +100,7 @@ def test_seed_deps_runs_once_per_ubuntu(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     calls = launch_log.read_text().splitlines()
     assert len(calls) == 2
-    for ubuntu, call in zip(("jammy", "noble"), calls, strict=True):
+    for ubuntu, call in zip(("noble", "resolute"), calls, strict=True):
         destination = Path(env["HOMELAB_CI_DIR"]) / ubuntu / "box_deps"
         assert f"--ubuntu {ubuntu}" in call
         assert (destination / "artifact").read_text() == "source\n"

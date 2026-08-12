@@ -377,22 +377,18 @@ export DEBIAN_FRONTEND=noninteractive
 
 # Retry transient apt failures (Nexus restart, packet loss) on the
 # build VM. chroot.sh sets the same on the new install.
-# Acquire::Retries::Delay (apt 2.7+ in noble) adds backoff between
-# attempts so a Nexus restart of a few seconds isn't burned through
-# instantly; apt on jammy retries immediately.
+# Acquire::Retries::Delay adds backoff between attempts so a Nexus restart of
+# a few seconds is not burned through instantly.
 echo 'Acquire::Retries "3";' >/etc/apt/apt.conf.d/80-retries
-if [ "$UBUNTU_NAME" != "jammy" ]; then
-  echo 'Acquire::Retries::Delay "true";' >>/etc/apt/apt.conf.d/80-retries
-fi
+echo 'Acquire::Retries::Delay "true";' >>/etc/apt/apt.conf.d/80-retries
 
 # apt-get update exits 0 even when one component's Packages index fails to
 # download (a Nexus restart, a dropped packet on the build NIC): the partial
 # index then makes the install below fail with a baffling "Unable to locate
 # package" for whatever the missed component held (e.g. universe). Error-Mode
 # =any turns a failed fetch into a non-zero exit; the loop retries with
-# backoff so a brief blip is absorbed instead of poisoning the install. jammy
-# apt can't do Acquire::Retries::Delay (set above), so the inter-attempt wait
-# lives here. Fail loudly only once the attempts are spent.
+# backoff so a brief blip is absorbed instead of poisoning the install. Fail
+# loudly only once the attempts are spent.
 apt_update() {
   local attempt
   for attempt in 1 2 3 4 5; do
@@ -418,16 +414,16 @@ apt_update() {
 cloud-init status --wait || true
 
 # The cloud base image ships a primed /var/lib/apt/lists whose cached base
-# jammy InRelease lets apt-get update record a "Hit" and skip re-fetching the
-# base suite -- but its Packages files aren't all present, so apt rejects the
-# whole base suite and the install below can't locate base packages
+# InRelease lets apt-get update record a "Hit" and skip re-fetching the base
+# suite -- but its Packages files aren't all present, so apt rejects the whole
+# base suite and the install below can't locate base packages
 # (debootstrap, zfsutils-linux, ...). Wipe the dir so update re-fetches every
 # index cleanly -- the same guard write_sources_list applies in chroot.sh.
 find /var/lib/apt/lists -type f -delete
 
 # A live ISO adds a cdrom source that has no Release file once the installer
-# media is copied into RAM. Remove only that entry: jammy cloud images keep
-# their network mirrors in this same file.
+# media is copied into RAM. Remove only that entry so any network mirrors in
+# the same file survive.
 if [ -f /etc/apt/sources.list ]; then
   sed -i '\|^[[:space:]]*deb[[:space:]]\+cdrom:|d' /etc/apt/sources.list
 fi

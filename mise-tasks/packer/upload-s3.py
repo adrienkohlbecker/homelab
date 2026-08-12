@@ -2,8 +2,8 @@
 # MISE description="Bundle a published packer qemu artifact and upload it to the S3 image bucket"
 # USAGE arg "<machine>" help="Packer source/artifact name: box or box_deps"
 # USAGE complete "machine" run="printf 'box\nbox_deps\n'"
-# USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="jammy"
-# USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
+# USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
+# USAGE complete "ubuntu" run="printf 'noble\nresolute\n'"
 # USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
 # USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
 # USAGE flag "--build-id <build_id>" help="Immutable S3 build id; default is pipeline.job in CI or timestamp + current git SHA"
@@ -84,7 +84,7 @@ def default_build_id() -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("machine", choices=sorted(VALID_MACHINES))
-    parser.add_argument("--ubuntu", default=os.environ.get("usage_ubuntu", "jammy"))
+    parser.add_argument("--ubuntu", default=os.environ.get("usage_ubuntu", "noble"))
     parser.add_argument("--bucket", default=os.environ.get("usage_bucket", "homelab-ci-images"))
     parser.add_argument("--region", default=os.environ.get("usage_region", "eu-central-1"))
     parser.add_argument("--build-id", default=os.environ.get("usage_build_id") or default_build_id())

@@ -56,20 +56,16 @@ EOF
 
 # Retry transient apt failures (Nexus restart, packet loss) on the
 # build VM.
-# Acquire::Retries::Delay (apt 2.7+ in noble) adds backoff between
-# attempts so a Nexus restart of a few seconds isn't burned through
-# instantly; apt on jammy retries immediately.
+# Acquire::Retries::Delay adds backoff between attempts so a Nexus restart of
+# a few seconds is not burned through instantly.
 echo 'Acquire::Retries "3";' >/etc/apt/apt.conf.d/80-retries
-if [ "$UBUNTU_NAME" != "jammy" ]; then
-  echo 'Acquire::Retries::Delay "true";' >>/etc/apt/apt.conf.d/80-retries
-fi
+echo 'Acquire::Retries::Delay "true";' >>/etc/apt/apt.conf.d/80-retries
 
 # apt-get update exits 0 even when one component's Packages index fails to
 # download (Nexus restart, dropped packet), leaving a partial cache that makes
 # a later install fail with a baffling "Unable to locate package". Error-Mode
 # =any turns a failed fetch into a non-zero exit; the loop retries with backoff
-# so a brief blip is absorbed (jammy apt can't do Acquire::Retries::Delay set
-# above, so the wait lives here). Same helper as provision.sh's build-VM apt.
+# so a brief blip is absorbed. Same helper as provision.sh's build-VM apt.
 apt_update() {
   local attempt
   for attempt in 1 2 3 4 5; do
@@ -86,15 +82,11 @@ apt_update() {
 # Configure apt. Called twice: once now with the build-time mirror
 # ($UBUNTU_MIRROR, defaults to Nexus), and once at the very end with
 # the upstream pair so the shipped image points at canonical Ubuntu
-# URLs regardless of build-time routing. jammy gets the classic one-line
-# /etc/apt/sources.list; noble+ gets deb822 .sources files, matching
-# both the stock noble layout and what roles/apt converges to.
+# URLs regardless of build-time routing. Supported releases use deb822
+# .sources files, matching both the stock Noble layout and what roles/apt
+# converges to.
 write_sources_list() {
-  if [ "$UBUNTU_NAME" = "jammy" ]; then
-    write_sources_list_legacy "$1" "$2"
-  else
-    write_sources_list_deb822 "$1" "$2"
-  fi
+  write_sources_list_deb822 "$1" "$2"
 
   # apt keys /var/lib/apt/lists/ by mirror URL, so changing the mirror
   # here orphans the cached indices. The frozen base suite's InRelease is
@@ -106,57 +98,6 @@ write_sources_list() {
   # call (debootstrap leaves the dir empty); load-bearing on the upstream
   # rewrite below.
   find /var/lib/apt/lists -type f -delete
-}
-
-write_sources_list_legacy() {
-  # Shape matches roles/apt/templates/sources.list.j2 -- the role
-  # overwrites this file on first apply, so keeping the two byte-similar
-  # makes a `diff` between packer-baked image and post-apply state a
-  # signal that something else moved (mirror substitution, etc).
-  cat <<EOF >/etc/apt/sources.list
-# See http://help.ubuntu.com/community/UpgradeNotes for how to upgrade to
-# newer versions of the distribution.
-deb $1 $UBUNTU_NAME main restricted
-# deb-src $1 $UBUNTU_NAME main restricted
-
-# # Major bug fix updates produced after the final release of the
-# # distribution.
-deb $1 $UBUNTU_NAME-updates main restricted
-# deb-src $1 $UBUNTU_NAME-updates main restricted
-
-# # N.B. software from this repository is ENTIRELY UNSUPPORTED by the Ubuntu
-# # team. Also, please note that software in universe WILL NOT receive any
-# # review or updates from the Ubuntu security team.
-deb $1 $UBUNTU_NAME universe
-# deb-src $1 $UBUNTU_NAME universe
-deb $1 $UBUNTU_NAME-updates universe
-# deb-src $1 $UBUNTU_NAME-updates universe
-
-# # N.B. software from this repository is ENTIRELY UNSUPPORTED by the Ubuntu
-# # team, and may not be under a free licence. Please satisfy yourself as to
-# # your rights to use the software. Also, please note that software in
-# # multiverse WILL NOT receive any review or updates from the Ubuntu
-# # security team.
-deb $1 $UBUNTU_NAME multiverse
-# deb-src $1 $UBUNTU_NAME multiverse
-deb $1 $UBUNTU_NAME-updates multiverse
-# deb-src $1 $UBUNTU_NAME-updates multiverse
-
-# # N.B. software from this repository may not have been tested as
-# # extensively as that contained in the main release, although it includes
-# # newer versions of some applications which may provide useful features.
-# # Also, please note that software in backports WILL NOT receive any review
-# # or updates from the Ubuntu security team.
-deb $1 $UBUNTU_NAME-backports main restricted universe multiverse
-# deb-src $1 $UBUNTU_NAME-backports main restricted universe multiverse
-
-deb $2 $UBUNTU_NAME-security main restricted
-# deb-src $2 $UBUNTU_NAME-security main restricted
-deb $2 $UBUNTU_NAME-security universe
-# deb-src $2 $UBUNTU_NAME-security universe
-deb $2 $UBUNTU_NAME-security multiverse
-# deb-src $2 $UBUNTU_NAME-security multiverse
-EOF
 }
 
 write_sources_list_deb822() {
@@ -278,17 +219,7 @@ apt-mark hold 'grub*'
 dpkg-divert --local --rename --add /usr/sbin/update-initramfs
 ln -s /bin/true /usr/sbin/update-initramfs
 
-# Bootstrap kernel: just linux-generic. On jammy this lands the 5.15 GA
-# kernel, on noble+ a 6.x. Noble+ is fine as-is for the +0:N:1 fake-root
-# uidmap pattern; jammy's 5.15 + ext4 + fuse-overlayfs reports
-# `Native Overlay Diff: false` and falls back to fuse-overlayfs for
-# layered-image copy-up, which fails to chown character devices like
-# /dev/console with `lchown ... input/output error`. The HWE kernel
-# (6.8 on jammy, matches lab/pug's tracked-via-Ubuntu-HWE prod rev) is
-# applied in packer/seed_deps.yml via the `hwe_kernel` role -- baked
-# into box_deps, not box, so the lightweight box variant stays on the
-# GA kernel for roles whose _verify exercises kernel-management
-# machinery (roles/packer) or simply doesn't need HWE.
+# Bootstrap the release GA kernel.
 apt-get install --yes linux-generic
 
 # Install required packages
@@ -577,7 +508,7 @@ initrd=$(printf '%s\n' "${initrd_files[@]}" | sort -V | tail -1)
 
 mkdir -p /boot/efi/EFI/Linux
 
-# jammy/noble ship vmlinuz-* gzipped (dual-format ARM64-Image+PE);
+# Noble ships vmlinuz-* gzipped (dual-format ARM64-Image+PE);
 # EDK2's LoadImage doesn't decompress gzip, so materialise the
 # underlying Image. resolute ships an uncompressed PE32+ EFI stub
 # directly. `gunzip -t` is a cheap format probe.
@@ -705,7 +636,7 @@ else
   done
 fi
 
-# Enable tmp mount. jammy/noble ship tmp.mount as a template under
+# Enable tmp mount. Noble ships tmp.mount as a template under
 # /usr/share/systemd/ and leave it disabled — copy + enable. resolute's
 # systemd ships /usr/lib/systemd/system/tmp.mount and pre-symlinks it into
 # local-fs.target.wants/, so it's enabled out of the box; skip the copy.

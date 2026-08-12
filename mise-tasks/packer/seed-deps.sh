@@ -8,8 +8,8 @@
 # jobs, which run this to produce the published box_deps bundle) the fetch still
 # runs but the blob goes unused. Idempotent: a no-op once present.
 #MISE depends=["test:firmware"]
-#USAGE flag "--ubuntu... <ubuntu>" help="Ubuntu release codename; repeat to seed multiple releases" default="jammy"
-#USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
+#USAGE flag "--ubuntu... <ubuntu>" help="Ubuntu release codename; repeat to seed multiple releases" default="noble"
+#USAGE complete "ubuntu" run="printf 'noble\nresolute\n'"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 umask 002

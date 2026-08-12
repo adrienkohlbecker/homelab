@@ -1,9 +1,4 @@
 {
-  "jammy": {
-    "version": "22.04",
-    "snapshot": "20260810",
-    "sha256_amd64": "6de0c42a98dc9a749917dfef34bf54e3595441bf67d39f103a61341560b3da8e"
-  },
   "noble": {
     "version": "24.04",
     "snapshot": "20260323",

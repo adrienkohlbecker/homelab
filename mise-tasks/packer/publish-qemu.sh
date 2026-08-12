@@ -2,8 +2,8 @@
 #MISE description="Build or seed a qemu fixture image and publish it to the CI image bucket"
 #USAGE arg "<machine>" help="Qemu fixture machine to publish: box or box_deps"
 #USAGE complete "machine" run="printf 'box\nbox_deps\n'"
-#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="jammy"
-#USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
+#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
+#USAGE complete "ubuntu" run="printf 'noble\nresolute\n'"
 #USAGE flag "--promote" help="After upload, write the promoted.json pointer to this build"
 #USAGE flag "--dry-run" help="Build/seed normally, then print the upload plan without writing S3"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
