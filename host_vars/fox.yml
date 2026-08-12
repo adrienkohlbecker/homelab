@@ -212,9 +212,6 @@ subid_users:
 # dropping fsync durability on it just trades a ~5s crash-loss window of
 # rebuildable layers for far less storage-layer CPU under a wide fan-out.
 podman_zvol_sync_disabled: true
-static_identity_migration_enabled: true
-static_identity_migration_required_mounts:
-  - /mnt/services
 
 # Global job ceiling across BOTH runner blocks (config.toml is process-wide) --
 # the fleet umbrella, NOT the per-runner knob. Set to the sum of the two

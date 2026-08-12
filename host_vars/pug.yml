@@ -33,10 +33,6 @@ swap_partition:
 podman_storage_backend: partition
 podman_storage_device: /dev/disk/by-partlabel/podman
 
-static_identity_migration_enabled: true
-static_identity_migration_required_mounts:
-  - /mnt/services
-
 # zram is the primary swap; the partition above is the overflow
 # (notes/swap_strategy.md).
 swap_zram:

@@ -1,6 +1,0 @@
----
-static_identity_migration_enabled: false
-static_identity_migration_dry_run: false
-static_identity_migration_marker: /var/lib/homelab/static_identity_migration_v1
-static_identity_migration_required_mounts: []
-static_identity_migration_zfs_delegate_uids: []

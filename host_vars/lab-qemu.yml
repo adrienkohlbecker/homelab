@@ -3,7 +3,6 @@
 # is requested -- push CI doesn't fan out to lab, but nightly
 # and on-demand `testrole.py --machine lab` go through here.
 qemu_test: true
-static_identity_migration_enabled: false
 
 # Inherits prod lab's podman partition backend: the rebuilt host and fixture
 # both use the same /dev/md/podman RAID5 geometry.
