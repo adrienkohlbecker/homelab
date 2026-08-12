@@ -96,6 +96,14 @@
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: socket_proxy.service
+        - MESSAGE: "[WARNING]  (8) : missing timeouts for backend 'docker-events'.\n   | While not properly invalid, you will certainly encounter various problems"
+          CONTAINER_TAG: socket_proxy
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: socket_proxy.service
+        - MESSAGE: "[WARNING]  (8) : missing timeouts for backend 'dockerbackend'."
+          CONTAINER_TAG: socket_proxy
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: socket_proxy.service
         - MESSAGE: "Proxy dockerbackend stopped (cumulated conns: FE: 0, BE: 1181)."
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
@@ -162,6 +170,10 @@
           level: warn
           fields.process_id: 8
           fields.parser_status: parsed
+        - message: missing timeouts for backend 'dockerbackend'.
+          level: warn
+          fields.process_id: 8
+          fields.parser_status: parsed
         - message: GET /info HTTP/1.1
           level: debug
           fields.client_address: 10.89.0.1
@@ -213,6 +225,7 @@
     that:
       - "'Proxy dockerbackend stopped (cumulated conns: FE: 0, BE: 1181).' not in fluentbit_verify_result.stdout"
       - "'GET /version HTTP/1.1' not in fluentbit_verify_result.stdout"
+      - "\"missing timeouts for backend 'docker-events'.\" not in fluentbit_verify_result.stdout"
 
 - name: _verify | Netdata polling successes are omitted from aggregate
   command:
