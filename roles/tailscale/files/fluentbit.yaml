@@ -5,7 +5,7 @@ pipeline:
     - name: grep
       match: svc.tailscaled.service
       exclude:
-        - 'MESSAGE ^netcheck: netcheck: UDP is blocked, trying (HTTPS|ICMP)$'
+        - 'MESSAGE ^netcheck: (netcheck: )?UDP is blocked, trying (HTTPS|ICMP)$'
         - 'MESSAGE ^netmap: suggested exit node:  \(\)$'
         - 'MESSAGE ^netcheck: DetectCaptivePortal\(found=false\)$'
         - 'MESSAGE ^magicsock: disco: node \[[^]]+\] d:[^ ]+ now using [^ ]+ mtu=[0-9]+ tx=[^ ]+$'

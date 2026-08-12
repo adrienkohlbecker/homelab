@@ -150,7 +150,7 @@
           MESSAGE: "netcheck: netcheck: UDP is blocked, trying HTTPS"
           marker: tailscale-udp-https-drop
         - _tag: svc.tailscaled.service
-          MESSAGE: "netcheck: netcheck: UDP is blocked, trying ICMP"
+          MESSAGE: "netcheck: UDP is blocked, trying ICMP"
           marker: tailscale-udp-icmp-drop
         - _tag: svc.tailscaled.service
           MESSAGE: "netmap: suggested exit node:  ()"
