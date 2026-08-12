@@ -410,10 +410,12 @@ else
   # redundancy at (N-1)/N usable -- the operator accepts a single-disk failure
   # for the reconstructible container store. metadata=1.2 in its default
   # (start-of-device) location -- none of the metadata=1.0 ESP constraints apply
-  # since this is not a boot device. Let mdadm run the initial parity resync (no
-  # --assume-clean): it backgrounds while mkfs proceeds, costs seconds on a fresh
-  # array, and leaves parity consistent so a later `mdadm --action=check` scrub
-  # finds no spurious mismatches. --bitmap=none (like the EFI array): the store
+  # since this is not a boot device. --force makes every supplied member active
+  # from creation instead of constructing a degraded array with a transient
+  # spare. Let mdadm run the initial parity resync (no --assume-clean): it
+  # backgrounds while mkfs proceeds, costs seconds on a fresh array, and leaves
+  # parity consistent so a later `mdadm --action=check` scrub finds no spurious
+  # mismatches. --bitmap=none (like the EFI array): the store
   # is optimized for write throughput -- bypassing ZFS amplification is the whole
   # point -- so we skip the write-intent bitmap's per-stripe logging and accept a
   # full resync on disk replacement (the data is reconstructible regardless). The
@@ -422,12 +424,9 @@ else
   # /dev/md/podman.
   if [ -n "${PARTITIONS_PODMAN:-}" ]; then
     # shellcheck disable=SC2086  # word-splitting on PARTITIONS_PODMAN is the point
-    mdadm --create /dev/md/podman --name=podman --metadata=1.2 --level=raid5 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_PODMAN
+    mdadm --create /dev/md/podman --force --name=podman --metadata=1.2 --level=raid5 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_PODMAN
     udevadm settle --timeout=10
-    # RAID5 starts degraded and temporarily reports the rebuilding final member
-    # as a spare. Persisting that transient field makes mdmonitor report a
-    # missing hot spare after the member becomes active.
-    mdadm --detail --brief /dev/md/podman | sed -E 's/ spares=[[:digit:]]+//' >>/etc/mdadm/mdadm.conf
+    mdadm --detail --brief /dev/md/podman >>/etc/mdadm/mdadm.conf
   fi
 fi
 
