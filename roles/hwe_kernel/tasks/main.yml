@@ -78,15 +78,20 @@
   tags:
     - hwe_kernel
 
-# thermald is a Recommends of linux-generic-hwe-* and ships an
-# /etc/dbus-1/system.d/org.freedesktop.thermald.conf with a
-# `<policy group="power">` rule. Ubuntu doesn't create the `power`
-# group (it's a Debian convention), so dbus-daemon logs "Unknown group
-# 'power' in message bus configuration file" 8× on every boot. Create
-# the group empty -- thermald keeps its root-only access (no users in
-# the group) and the warnings stop.
+# thermald's D-Bus policy grants optional access to the Debian `power` group,
+# which Ubuntu does not create. The package can be present on any supported
+# release, independently of the HWE meta-package, so key the workaround to the
+# policy file rather than the Ubuntu release. The empty group grants no users
+# access and prevents dbus-daemon warning on every configuration reload.
+- name: Probe thermald D-Bus policy
+  stat:
+    path: /usr/share/dbus-1/system.d/org.freedesktop.thermald.conf
+  register: hwe_kernel_thermald_policy
+  tags:
+    - hwe_kernel
+
 - name: Create power group (silence thermald dbus policy warning)
-  when: ansible_distribution_release == "jammy"
+  when: hwe_kernel_thermald_policy.stat.exists
   group:
     name: power
     system: true
