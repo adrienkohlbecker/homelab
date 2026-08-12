@@ -162,11 +162,44 @@ zpool_export_retry() {
   fi
 }
 
+stop_disk_md_arrays() {
+  local disk="$1" md_path md_device slave_path slave parent target
+
+  command -v mdadm >/dev/null || return 0
+  target=$(basename "$(readlink -f "$disk")")
+  for md_path in /sys/block/md*/md; do
+    [ -d "$md_path" ] || continue
+    md_device="/dev/$(basename "$(dirname "$md_path")")"
+    for slave_path in "$(dirname "$md_path")"/slaves/*; do
+      [ -e "$slave_path" ] || continue
+      slave=$(basename "$slave_path")
+      parent=$(lsblk -ndo PKNAME "/dev/$slave" 2>/dev/null || true)
+      if [ "${parent:-$slave}" = "$target" ]; then
+        mdadm --stop "$md_device"
+        break
+      fi
+    done
+  done
+}
+
 wipe_disk() {
-  zpool labelclear -f "$1" || true
-  wipefs -a "$1"
-  blkdiscard -f "$1" || true
-  sgdisk --zap-all "$1"
+  local disk="$1" device type
+
+  stop_disk_md_arrays "$disk"
+  zpool labelclear -f "$disk" || true
+
+  # Whole-disk wipefs removes the partition table, not signatures stored
+  # inside its partitions. Clear those first so stale md superblocks cannot
+  # incrementally reassemble an array while the new tables are published.
+  while read -r device type; do
+    if [ "$type" = part ]; then
+      wipefs --all --force "$device"
+    fi
+  done < <(lsblk --raw --noheadings --paths --output NAME,TYPE "$disk")
+
+  wipefs --all --force "$disk"
+  blkdiscard -f "$disk" || true
+  sgdisk --zap-all "$disk"
 }
 
 partition_disk() {
@@ -201,28 +234,6 @@ partition_disk() {
 
   sgdisk -n5:0:0 -t5:BF00 -c5:rpool "$disk" # rpool (BF00 = Solaris root), carved last so it grows to end
   sgdisk -p "$disk"
-}
-
-stop_target_md_arrays() {
-  local disk md_path md_device slave_path slave parent target
-
-  command -v mdadm >/dev/null || return 0
-  for md_path in /sys/block/md*/md; do
-    [ -d "$md_path" ] || continue
-    md_device="/dev/$(basename "$(dirname "$md_path")")"
-    for slave_path in "$(dirname "$md_path")"/slaves/*; do
-      [ -e "$slave_path" ] || continue
-      slave=$(basename "$slave_path")
-      parent=$(lsblk -ndo PKNAME "/dev/$slave" 2>/dev/null || true)
-      for disk in $DISKS; do
-        target=$(basename "$(readlink -f "$disk")")
-        if [ "${parent:-$slave}" = "$target" ]; then
-          mdadm --stop "$md_device"
-          break 2
-        fi
-      done
-    done
-  done
 }
 
 EXTRA_ZPOOL_OPTS=(
@@ -453,18 +464,9 @@ fi
 
 zgenhostid -f
 
-# Partition changes can make udev incrementally reassemble an array after an
-# earlier member is rewritten, leaving a later member busy. Freeze rule
-# execution across every target disk, stop only arrays backed by those disks,
-# then publish all completed tables to the kernel as one unit.
-udevadm control --stop-exec-queue
-trap 'udevadm control --start-exec-queue' EXIT
-stop_target_md_arrays
 for disk in $DISKS; do
   partition_disk "$disk"
 done
-udevadm control --start-exec-queue
-trap - EXIT
 for disk in $DISKS; do
   partprobe "$disk"
 done
