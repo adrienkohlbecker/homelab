@@ -163,20 +163,7 @@ zpool_export_retry() {
 }
 
 wipe_disks() {
-  local topology device type md disk i
-  local -a md_arrays=() members=()
-
-  topology=$(lsblk --raw --noheadings --paths --output NAME,TYPE,PKNAME "$@")
-  mapfile -t md_arrays < <(awk '$2 ~ /^raid/ && !seen[$1]++ { print $1 }' <<<"$topology")
-
-  # lsblk walks from members toward holders. Stop in reverse so nested arrays
-  # are released topmost-first, then erase each array signature immediately.
-  for ((i = ${#md_arrays[@]} - 1; i >= 0; i--)); do
-    md=${md_arrays[$i]}
-    mdadm --stop "$md"
-    mapfile -t members < <(awk -v md="$md" '$1 == md && $3 != "" && !seen[$3]++ { print $3 }' <<<"$topology")
-    mdadm --zero-superblock "${members[@]}"
-  done
+  local device type disk
 
   for disk in "$@"; do
     zpool labelclear -f "$disk" || true
@@ -449,6 +436,16 @@ apt_update
 apt-get install --yes arch-install-scripts debootstrap gdisk mdadm util-linux zfsutils-linux
 
 zgenhostid -f
+
+# The installer owns every assembled md array. Tear them all down once before
+# partitioning; later wipe_disks calls prepare extra-pool disks after the new
+# EFI, swap, and Podman arrays already exist.
+mapfile -t md_members < <(lsblk --raw --noheadings --paths --output NAME,FSTYPE | awk '$2 == "linux_raid_member" { print $1 }')
+if ((${#md_members[@]})); then
+  mdadm --stop --scan || true
+  mdadm --zero-superblock "${md_members[@]}"
+fi
+unset md_members
 
 # Defensive wipe -- a no-op against fresh Packer qcow2s, but necessary on
 # ordinary bare metal. DISKS is intentionally split into device arguments.
