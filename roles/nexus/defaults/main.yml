@@ -1,10 +1,10 @@
 ---
 # JVM sizing for the Nexus container, passed through INSTALL4J_ADD_VM_PARAMS.
 # Optional + host-overridable (test fixtures shrink it via group_vars/test.yml);
-# the prod lab host uses this default. The 2G heap still remained in the high
-# 80% range and repeatedly triggered MemoryMonitor High/CRITICAL; lab has ample
-# RAM (30Gi, no container memory cap), so 3G leaves working headroom without
-# pressuring the host. -XX:+ExitOnOutOfMemoryError makes a heap-exhausted JVM
-# exit so Restart=always recovers it, instead of limping while status/writable
-# still returns 200.
-nexus_jvm_params: -Xms3G -Xmx3G -XX:MaxDirectMemorySize=512m -XX:+ExitOnOutOfMemoryError
+# the prod lab host uses this default. The 3G heap still reached 89% after the
+# Noble migration and repeatedly triggered MemoryMonitor High warnings; lab has
+# ample RAM (30Gi, no container memory cap), so 4G keeps the observed 2.7G peak
+# below the warning threshold without pressuring the host.
+# -XX:+ExitOnOutOfMemoryError makes a heap-exhausted JVM exit so Restart=always
+# recovers it, instead of limping while status/writable still returns 200.
+nexus_jvm_params: -Xms4G -Xmx4G -XX:MaxDirectMemorySize=512m -XX:+ExitOnOutOfMemoryError
