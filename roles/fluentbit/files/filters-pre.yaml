@@ -6,7 +6,6 @@ pipeline:
       match: svc.*
       exclude:
         - 'MESSAGE ^Printing VRRP as json for process'
-        - 'MESSAGE ^ansible-[A-Za-z0-9._]+ Invoked with'
         - 'MESSAGE ^pam_unix\(cron:session\)'
         - 'MESSAGE ^podman0: port'
         - 'MESSAGE ^veth[0-9]+( |@|: )'
@@ -16,13 +15,45 @@ pipeline:
         - 'MESSAGE which is not our child'
         - 'MESSAGE ^Configuration file /run/systemd/system/netplan-ovs-cleanup\.service is marked world-inaccessible'
         - 'MESSAGE container health_status .*health_status=healthy'
-        - 'MESSAGE ^(Starting|Finished) Generate homepage alerts panel static files'
-        - 'MESSAGE ^homepage_alerts\.service: Deactivated successfully'
+
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
+        - 'SYSLOG_IDENTIFIER ^ansible-[A-Za-z0-9._]+$'
+        - 'MESSAGE ^Invoked with '
+
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
+        - 'SYSTEMD_UNIT ^homepage_alerts\.service$'
+        - 'MESSAGE ^(Starting homepage_alerts\.service - Generate homepage alerts panel static files\.\.\.|Finished homepage_alerts\.service - Generate homepage alerts panel static files\.|homepage_alerts\.service: Deactivated successfully\.)$'
+
+    # Podman removes one-shot healthcheck units concurrently with systemd's
+    # result collection during a container wave. Keep real probe failures but
+    # omit only the resulting ENOENT cleanup race.
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
+        - 'UNIT ^[a-f0-9]{64}\.service$'
+        - 'ERRNO ^2$'
+        - 'MESSAGE ^[a-f0-9]{64}\.service: Failed to open /run/systemd/transient/[a-f0-9]{64}\.service: No such file or directory$'
 
     - name: lua
       match: svc.*
       script: /etc/fluent-bit/podman_events.lua
       call: normalize_podman_event
+
+    # The final healthy/unhealthy event carries the operational result. The
+    # repeated startup probes are retained in journald and add no new state.
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
+        - 'event ^health_status$'
+        - 'health_status ^starting$'
 
     - name: grep
       match: audit
@@ -52,6 +83,16 @@ pipeline:
       exclude:
         - 'SYSTEMD_UNIT ^netdata\.service$'
         - 'MESSAGE ^temperature sensor ''temperature_nct6798-isa-'
+
+    # Netdata logs these exact cancellation/teardown messages during every
+    # orderly reload. Unexpected service failure remains visible through the
+    # unit result and all non-teardown Netdata errors.
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
+        - 'SYSTEMD_UNIT ^netdata\.service$'
+        - 'MESSAGE ^(PARSER: read failed: POLLHUP\.|PARSER: thread cancelled while waiting for data\.|PLUGINSD: buffered reader not OK \(-[0-9]+\)|Failed to delete socket [0-9]+ from nd_poll\(\) - called from poll_events_cleanup\(\) - is the socket already closed\?|stopped after [0-9]+ connects, [0-9]+ disconnects \(max concurrent [0-9]+\), [0-9]+ receptions and [0-9]+ sends)$'
 
     # charts.d deliberately restarts every four hours. Omit only the healthy
     # bootstrap wave; actual alert transitions and plugin failures stay.
@@ -89,6 +130,16 @@ pipeline:
       exclude:
         - 'SYSTEMD_UNIT ^hd-idle\.service$'
         - 'MESSAGE ^probing sd[a-z]+: reads:'
+
+    # These optional ATA extensions fail on part of the current disk mix while
+    # standard SMART health/error/selftest monitoring remains active. Keep
+    # actual disk alerts; omit only the one-time option diagnostics.
+    - name: grep
+      match: svc.*
+      logical_op: and
+      exclude:
+        - 'SYSLOG_IDENTIFIER ^smartd$'
+        - 'MESSAGE ^Device: /dev/disk/by-id/ata-[A-Za-z0-9_.:-]+, (no Extended Comprehensive SMART Error Log, ignoring -l xerror \(override with -T permissive\)|no SCT Error Recovery Control support, ignoring -l scterc|set of SCT Error Recovery Control failed)$'
 
     - name: grep
       match: svc.*

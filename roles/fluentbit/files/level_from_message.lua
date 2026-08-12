@@ -94,6 +94,15 @@ local JOURNAL_LEVELS = {
     [7] = "debug",
 }
 
+-- These native programs log prose or command arguments containing severity
+-- words while assigning the real syslog priority themselves. Scanning their
+-- bodies turns `sudo smartctl -l error` and sensor labels such as `crit` into
+-- false incidents; trust the native priority for these identifiers instead.
+local NATIVE_PRIORITY_ONLY = {
+    sensors = true,
+    sudo = true,
+}
+
 local function match_rule(head, rule)
     if rule.keywords then
         for _, kw in ipairs(rule.keywords) do
@@ -141,6 +150,12 @@ function set_priority(tag, ts, record)
     local msg = record["log"]
     if type(msg) ~= "string" then
         return 0, ts, record
+    end
+
+    local identifier = record["SYSLOG_IDENTIFIER"]
+    if record["CONTAINER_TAG"] == nil and NATIVE_PRIORITY_ONLY[identifier] then
+        record["_level"] = JOURNAL_LEVELS[tonumber(record["PRIORITY"])] or "info"
+        return 1, ts, record
     end
 
     -- Netdata alert names describe the failing component and can contain words

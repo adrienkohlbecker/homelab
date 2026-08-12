@@ -144,27 +144,47 @@ do
     check("host-priority.body-wins", t, "warn")
 end
 
--- 14c. headscale (zerolog) abbreviated INF level right after the timestamp.
+-- 14c. Native command/audit sources whose prose contains option names trust
+--      their real journal priority instead of body keywords.
+do
+    local t = sev(
+        "      ak : PWD=/home/ak ; USER=root ; COMMAND=/usr/sbin/smartctl -l error /dev/nvme0n1",
+        nil,
+        { PRIORITY = "5", SYSLOG_IDENTIFIER = "sudo" }
+    )
+    check("sudo.priority-only", t, "info")
+end
+
+do
+    local t = sev(
+        "Package id 0:  +46.0 C  (high = +80.0 C, crit = +100.0 C)",
+        nil,
+        { PRIORITY = "6", SYSLOG_IDENTIFIER = "sensors" }
+    )
+    check("sensors.priority-only", t, "info")
+end
+
+-- 14d. headscale (zerolog) abbreviated INF level right after the timestamp.
 do
     local t = sev("2026-06-10T08:54:39Z INF Received signal to stop, shutting down gracefully signal=terminated")
     check("headscale.inf", t, "info")
 end
 
--- 14d. headscale WRN -- the abbreviated token must map to warn, not fall
+-- 14e. headscale WRN -- the abbreviated token must map to warn, not fall
 --      through to the info default (the bug the zerolog tokens fix).
 do
     local t = sev("2026-06-10T08:54:40Z WRN Listening without TLS but ServerURL does not start with http://")
     check("headscale.wrn", t, "warn")
 end
 
--- 14e. headscale ERR -- already matched via the "err" keyword; pin it so the
+-- 14f. headscale ERR -- already matched via the "err" keyword; pin it so the
 --      zerolog additions can't regress it.
 do
     local t = sev("2026-06-14T07:26:08Z ERR user msg: node not found code=404")
     check("headscale.err", t, "error")
 end
 
--- 14f. A Netdata recovery remains informational even when its alert name
+-- 14g. A Netdata recovery remains informational even when its alert name
 --      contains the generic error keyword.
 do
     local t = sev(
@@ -175,7 +195,7 @@ do
     check("netdata.clear", t, "info")
 end
 
--- 14g. The exception is unit-scoped and does not create a general way to hide
+-- 14h. The exception is unit-scoped and does not create a general way to hide
 --      error-bearing messages from other services.
 do
     local t = sev(
@@ -186,7 +206,7 @@ do
     check("netdata.clear.unit-scoped", t, "error")
 end
 
--- 14h. A transition into WARNING remains actionable.
+-- 14i. A transition into WARNING remains actionable.
 do
     local t = sev(
         "ALERT 'go.d:collector_error' of 'go.d:collector_status' raised from CLEAR to WARNING.",

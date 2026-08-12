@@ -139,6 +139,62 @@
             dummy: '{"MESSAGE":"rsync error: unexplained error","SYSTEMD_UNIT":"zfs_autosnapshot.service","marker":"zfs-error-keep"}'
             samples: 1
           - name: dummy
+            tag: svc.session-1.scope
+            dummy: '{"MESSAGE":"Invoked with path=/proc/sys/kernel/panic follow=False","SYSLOG_IDENTIFIER":"ansible-stat","marker":"ansible-invoked-drop"}'
+            samples: 1
+          - name: dummy
+            tag: svc.session-1.scope
+            dummy: '{"MESSAGE":"module execution failed","SYSLOG_IDENTIFIER":"ansible-stat","PRIORITY":"3","marker":"ansible-error-keep"}'
+            samples: 1
+          - name: dummy
+            tag: svc.example.service
+            dummy: '{"MESSAGE":"Invoked with harmless nearby text","SYSLOG_IDENTIFIER":"example","marker":"non-ansible-invoked-keep"}'
+            samples: 1
+          - name: dummy
+            tag: svc.homepage_alerts.service
+            dummy: '{"MESSAGE":"Starting homepage_alerts.service - Generate homepage alerts panel static files...","SYSTEMD_UNIT":"homepage_alerts.service","marker":"homepage-start-drop"}'
+            samples: 1
+          - name: dummy
+            tag: svc.homepage_alerts.service
+            dummy: '{"MESSAGE":"Finished homepage_alerts.service - Generate homepage alerts panel static files.","SYSTEMD_UNIT":"homepage_alerts.service","marker":"homepage-finish-drop"}'
+            samples: 1
+          - name: dummy
+            tag: svc.homepage_alerts.service
+            dummy: '{"MESSAGE":"homepage_alerts.service: Failed with result exit-code.","SYSTEMD_UNIT":"homepage_alerts.service","PRIORITY":"3","marker":"homepage-failed-keep"}'
+            samples: 1
+          - name: dummy
+            tag: svc.netdata.service
+            dummy: '{"MESSAGE":"PARSER: thread cancelled while waiting for data.","SYSTEMD_UNIT":"netdata.service","ERRNO":"125","marker":"netdata-shutdown-drop"}'
+            samples: 1
+          - name: dummy
+            tag: svc.netdata.service
+            dummy: '{"MESSAGE":"PARSER: malformed collector data","SYSTEMD_UNIT":"netdata.service","PRIORITY":"3","marker":"netdata-parser-error-keep"}'
+            samples: 1
+          - name: dummy
+            tag: svc.podman.service
+            dummy: '{"MESSAGE":"verbose podman event","SYSLOG_IDENTIFIER":"podman","SYSTEMD_UNIT":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-startup.service","PODMAN_EVENT":"health_status","PODMAN_TYPE":"container","PODMAN_NAME":"fixture","PODMAN_ID":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","PODMAN_HEALTH_STATUS":"starting","marker":"podman-starting-drop"}'
+            samples: 1
+          - name: dummy
+            tag: svc.podman.service
+            dummy: '{"MESSAGE":"verbose podman event","SYSLOG_IDENTIFIER":"podman","SYSTEMD_UNIT":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.service","PODMAN_EVENT":"health_status","PODMAN_TYPE":"container","PODMAN_NAME":"fixture","PODMAN_ID":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","PODMAN_HEALTH_STATUS":"unhealthy","marker":"podman-unhealthy-keep"}'
+            samples: 1
+          - name: dummy
+            tag: svc.init.scope
+            dummy: '{"MESSAGE":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: Failed to open /run/systemd/transient/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: No such file or directory","SYSLOG_IDENTIFIER":"systemd","UNIT":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service","ERRNO":"2","marker":"healthcheck-enoent-drop"}'
+            samples: 1
+          - name: dummy
+            tag: svc.init.scope
+            dummy: '{"MESSAGE":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: Main process exited, code=exited, status=1/FAILURE","SYSLOG_IDENTIFIER":"systemd","UNIT":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service","PRIORITY":"3","marker":"healthcheck-failed-keep"}'
+            samples: 1
+          - name: dummy
+            tag: svc.smartmontools.service
+            dummy: '{"MESSAGE":"Device: /dev/disk/by-id/ata-fixture, no SCT Error Recovery Control support, ignoring -l scterc","SYSLOG_IDENTIFIER":"smartd","marker":"smartd-option-drop"}'
+            samples: 1
+          - name: dummy
+            tag: svc.smartmontools.service
+            dummy: '{"MESSAGE":"Device: /dev/disk/by-id/ata-fixture, Temperature 56 Celsius reached critical limit of 55 Celsius","SYSLOG_IDENTIFIER":"smartd","PRIORITY":"4","marker":"smartd-critical-keep"}'
+            samples: 1
+          - name: dummy
             tag: audit
             dummy: >-
               {"log":"type=SERVICE_START msg=audit(4072368012.092:808): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=homepage_alerts comm=systemd exe=/usr/lib/systemd/systemd hostname=? addr=? terminal=? res=success'","marker":"homepage-audit-success-drop"}
@@ -199,6 +255,20 @@
         assert "zfs-blank-drop" not in by_marker, records
         assert by_marker["cron-hourly-keep"]["level"] == "info", records
         assert by_marker["zfs-error-keep"]["level"] == "error", records
+        assert "ansible-invoked-drop" not in by_marker, records
+        assert by_marker["ansible-error-keep"]["level"] == "error", records
+        assert "non-ansible-invoked-keep" in by_marker, records
+        assert "homepage-start-drop" not in by_marker, records
+        assert "homepage-finish-drop" not in by_marker, records
+        assert by_marker["homepage-failed-keep"]["level"] == "error", records
+        assert "netdata-shutdown-drop" not in by_marker, records
+        assert by_marker["netdata-parser-error-keep"]["level"] == "error", records
+        assert "podman-starting-drop" not in by_marker, records
+        assert by_marker["podman-unhealthy-keep"]["fields"]["health_status"] == "unhealthy", records
+        assert "healthcheck-enoent-drop" not in by_marker, records
+        assert by_marker["healthcheck-failed-keep"]["level"] == "error", records
+        assert "smartd-option-drop" not in by_marker, records
+        assert by_marker["smartd-critical-keep"]["level"] == "fatal", records
         assert "homepage-audit-success-drop" not in by_marker, records
         assert "homepage-audit-failed-keep" in by_marker, records
         assert "unrelated-audit-success-keep" in by_marker, records
