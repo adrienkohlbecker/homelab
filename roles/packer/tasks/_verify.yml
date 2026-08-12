@@ -141,24 +141,10 @@
 - name: _verify | Mdadm-EFI multi-disk assertions
   when: packer_verify_md_efi.stat.exists
   block:
-    - name: _verify | Mdadm --detail --test (clean=0, degraded=1, failed=2)
-      command: mdadm --detail --test {{ item }}
-      changed_when: false
-      failed_when: false
-      become: true
-      loop:
-        - /dev/md/efi
-      register: packer_verify_md_test
-
     - name: _verify | EFI mirror is clean
-      assert:
-        that: item.rc == 0
-        fail_msg: >-
-          mdadm --detail --test {{ item.item }} returned rc={{ item.rc }}
-          — degraded or failed array. stderr: {{ item.stderr }}
-      loop: "{{ packer_verify_md_test.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+      command: mdadm --detail --test /dev/md/efi
+      changed_when: false
+      become: true
 
     - name: _verify | Read mdmonitor events from this boot
       command:
