@@ -71,22 +71,15 @@ def _full_universe_child(
         if not child_id or child_status not in DECIDED_CHILD_STATUSES:
             continue
 
+        # The jobs endpoint returns only the latest attempt of each job unless
+        # include_retried=true is requested, so a name maps 1:1 to its final
+        # verdict.
         jobs = _gl_api_get_all(f"{project_api}/pipelines/{child_id}/jobs", token, token_kind) or []
-        latest_jobs: dict[str, dict] = {}
-        for job in jobs:
-            name = job.get("name")
-            if not name:
-                continue
-            current = latest_jobs.get(name)
-            if current is None or job.get("id", 0) > current.get("id", 0):
-                latest_jobs[name] = job
+        latest_jobs = {job["name"]: job for job in jobs if job.get("name")}
 
         if not expected_names.issubset(latest_jobs):
             continue
-        expected_jobs = [latest_jobs[name] for name in expected_names]
-        if any(job.get("allow_failure") for job in expected_jobs):
-            continue
-        if child_status == "success" and any(job.get("status") != "success" for job in expected_jobs):
+        if any(latest_jobs[name].get("allow_failure") for name in expected_names):
             continue
         return {"id": child_id, "status": child_status}
     return None
