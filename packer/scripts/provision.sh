@@ -446,7 +446,7 @@ if [ -f /etc/apt/sources.list ]; then
 fi
 
 apt_update
-apt-get install --yes arch-install-scripts debootstrap gdisk mdadm zfsutils-linux
+apt-get install --yes arch-install-scripts debootstrap gdisk mdadm util-linux zfsutils-linux
 
 zgenhostid -f
 
@@ -457,8 +457,10 @@ wipe_disks $DISKS
 for disk in $DISKS; do
   partition_disk "$disk"
 done
+# Publish each completed table through util-linux rather than relying on
+# partprobe being present in the live environment.
 for disk in $DISKS; do
-  partprobe "$disk"
+  partx --update "$disk"
 done
 
 # Wait for udev to expose every new partition node (/dev/vdbN, ...)
