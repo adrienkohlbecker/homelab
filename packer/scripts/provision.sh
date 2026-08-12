@@ -162,52 +162,41 @@ zpool_export_retry() {
   fi
 }
 
-stop_disk_md_arrays() {
-  local disk="$1" md_path md_device slave_path slave parent target
+wipe_disks() {
+  local topology device type md disk i
+  local -a md_arrays=() members=()
 
-  command -v mdadm >/dev/null || return 0
-  target=$(basename "$(readlink -f "$disk")")
-  for md_path in /sys/block/md*/md; do
-    [ -d "$md_path" ] || continue
-    md_device="/dev/$(basename "$(dirname "$md_path")")"
-    for slave_path in "$(dirname "$md_path")"/slaves/*; do
-      [ -e "$slave_path" ] || continue
-      slave=$(basename "$slave_path")
-      parent=$(lsblk -ndo PKNAME "/dev/$slave" 2>/dev/null || true)
-      if [ "${parent:-$slave}" = "$target" ]; then
-        mdadm --stop "$md_device"
-        break
-      fi
-    done
+  topology=$(lsblk --raw --noheadings --paths --output NAME,TYPE,PKNAME "$@")
+  mapfile -t md_arrays < <(awk '$2 ~ /^raid/ && !seen[$1]++ { print $1 }' <<<"$topology")
+
+  # lsblk walks from members toward holders. Stop in reverse so nested arrays
+  # are released topmost-first, then erase each array signature immediately.
+  for ((i = ${#md_arrays[@]} - 1; i >= 0; i--)); do
+    md=${md_arrays[$i]}
+    mdadm --stop "$md"
+    mapfile -t members < <(awk -v md="$md" '$1 == md && $3 != "" && !seen[$3]++ { print $3 }' <<<"$topology")
+    mdadm --zero-superblock "${members[@]}"
   done
-}
 
-wipe_disk() {
-  local disk="$1" device type
+  for disk in "$@"; do
+    zpool labelclear -f "$disk" || true
 
-  stop_disk_md_arrays "$disk"
-  zpool labelclear -f "$disk" || true
+    # Whole-disk wipefs removes the partition table, not signatures stored
+    # inside its partitions. Clear those first, then replace the table.
+    while read -r device type; do
+      if [ "$type" = part ]; then
+        wipefs --all --force "$device"
+      fi
+    done < <(lsblk --raw --noheadings --paths --output NAME,TYPE "$disk")
 
-  # Whole-disk wipefs removes the partition table, not signatures stored
-  # inside its partitions. Clear those first so stale md superblocks cannot
-  # incrementally reassemble an array while the new tables are published.
-  while read -r device type; do
-    if [ "$type" = part ]; then
-      wipefs --all --force "$device"
-    fi
-  done < <(lsblk --raw --noheadings --paths --output NAME,TYPE "$disk")
-
-  wipefs --all --force "$disk"
-  blkdiscard -f "$disk" || true
-  sgdisk --zap-all "$disk"
+    wipefs --all --force "$disk"
+    blkdiscard -f "$disk" || true
+    sgdisk --zap-all "$disk"
+  done
 }
 
 partition_disk() {
   local disk="$1"
-
-  # Defensive wipe -- a no-op against packer's fresh qcow2s, but necessary on
-  # ordinary bare metal.
-  wipe_disk "$disk"
 
   sgdisk -a1 -n1:24K:+1000K -t1:EF02 -c1:bios "$disk" # MBR booting (EF02 = BIOS boot partition)
   sgdisk -n2:1M:+1G -t2:EF00 -c2:efi "$disk"          # EFI (EF00 = EFI system partition)
@@ -272,7 +261,7 @@ create_extra_apoc() {
   pop_extra_disks 2 apoc
   local extra_pool_disks=("${POPPED_EXTRA_DISKS[@]}")
   if zpool list -H apoc >/dev/null 2>&1; then return; fi
-  for d in "${extra_pool_disks[@]}"; do wipe_disk "$d"; done
+  wipe_disks "${extra_pool_disks[@]}"
   udevadm settle
   zpool create -f -o autotrim=off "${EXTRA_ZPOOL_OPTS[@]}" apoc mirror "${extra_pool_disks[@]}"
 }
@@ -281,7 +270,7 @@ create_extra_dozer() {
   pop_extra_disks 2 dozer
   local extra_pool_disks=("${POPPED_EXTRA_DISKS[@]}")
   if zpool list -H dozer >/dev/null 2>&1; then return; fi
-  for d in "${extra_pool_disks[@]}"; do wipe_disk "$d"; done
+  wipe_disks "${extra_pool_disks[@]}"
   udevadm settle
   zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" dozer mirror "${extra_pool_disks[@]}"
 }
@@ -290,7 +279,7 @@ create_extra_zee() {
   pop_extra_disks 1 zee
   local disk="${POPPED_EXTRA_DISKS[0]}"
   if zpool list -H zee >/dev/null 2>&1; then return; fi
-  wipe_disk "$disk"
+  wipe_disks "$disk"
   udevadm settle
   zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" zee "$disk"
   zfs create -o canmount=on -o mountpoint=/zee/data zee/data
@@ -300,7 +289,7 @@ create_extra_tank_mouse() {
   pop_extra_disks 4 tank_mouse
   local extra_pool_disks=("${POPPED_EXTRA_DISKS[@]}")
   local tm1=${POPPED_EXTRA_DISKS[0]} tm2=${POPPED_EXTRA_DISKS[1]} tank3=${POPPED_EXTRA_DISKS[2]} tank4=${POPPED_EXTRA_DISKS[3]}
-  for d in "${extra_pool_disks[@]}"; do wipe_disk "$d"; done
+  wipe_disks "${extra_pool_disks[@]}"
   for tm in "$tm1" "$tm2"; do
     sgdisk -n1:0:+1014M -t1:BF01 "$tm"
     sgdisk -n2:0:-8M -t2:BF01 "$tm"
@@ -457,13 +446,14 @@ if [ -f /etc/apt/sources.list ]; then
 fi
 
 apt_update
-apt-get install --yes arch-install-scripts debootstrap gdisk zfsutils-linux
-if [ "$LAYOUT" = mirror ]; then
-  apt-get install --yes mdadm
-fi
+apt-get install --yes arch-install-scripts debootstrap gdisk mdadm zfsutils-linux
 
 zgenhostid -f
 
+# Defensive wipe -- a no-op against fresh Packer qcow2s, but necessary on
+# ordinary bare metal. DISKS is intentionally split into device arguments.
+# shellcheck disable=SC2086
+wipe_disks $DISKS
 for disk in $DISKS; do
   partition_disk "$disk"
 done
