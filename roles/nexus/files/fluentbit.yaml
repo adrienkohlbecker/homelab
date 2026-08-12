@@ -131,6 +131,15 @@ pipeline:
         - message
         - arguments
       set: parser_status parsed
+    # Reconciliation logs one boolean result per blob. A `true` is the routine
+    # success case; retain false results and every other message from the same
+    # logger so an actual mismatch remains visible.
+    - name: grep
+      match: svc.nexus.service
+      logical_op: and
+      exclude:
+        - 'source ^blobstore-reconciliation-log$'
+        - 'log ^.+,true$'
     - name: modify
       match: svc.nexus.service
       condition:
