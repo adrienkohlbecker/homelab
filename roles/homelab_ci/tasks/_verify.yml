@@ -20,7 +20,7 @@
     or homelab_ci_verify_dir.stat.gr_name != 'homelab_ci'
     or homelab_ci_verify_dir.stat.mode != '2775'
 
-- name: _verify | CI artifacts dir has default homelab_ci:rwx ACL
+- name: _verify | CI artifacts dir defaults to owning-group rwx
   command:
     argv:
       - getfacl
@@ -30,32 +30,102 @@
   changed_when: false
   # rwx, not rw: the x is what lets a group member traverse and rmtree another
   # member's published tree during publish.py's atomic swap.
-  failed_when: "'default:group:homelab_ci:rwx' not in homelab_ci_verify_acl.stdout"
+  failed_when: "'default:group::rwx' not in homelab_ci_verify_acl.stdout"
   become: true
 
-# runuser starts a fresh process with supplementary groups from the account
-# database, so the just-added homelab_ci membership is effective here.
-- name: _verify | Operator can create a CI artifact
-  command:
-    argv:
-      - runuser
-      - -u
-      - "{{ ansible_user_id }}"
-      - --
-      - touch
-      - /mnt/scratch/homelab_ci/.operator_write_probe
-  changed_when: true
+- name: _verify | Create a second CI publisher
+  user:
+    name: homelab_ci_verify
+    groups:
+      - homelab_ci
+    append: true
+    create_home: false
+    shell: /usr/sbin/nologin
+    state: present
+    system: true
   become: true
 
-- name: _verify | Operator can remove the CI artifact
-  command:
-    argv:
-      - runuser
-      - -u
-      - "{{ ansible_user_id }}"
-      - --
-      - rm
-      - -f
-      - /mnt/scratch/homelab_ci/.operator_write_probe
-  changed_when: true
-  become: true
+# runuser starts fresh processes with supplementary groups from the account
+# database. Use two identities so this exercises the cross-publisher contract,
+# not merely one owner creating and removing its own file.
+- name: _verify | Cross-publisher artifact access works
+  block:
+    - name: _verify | Operator creates a group-managed artifact directory
+      command:
+        argv:
+          - runuser
+          - -u
+          - "{{ ansible_user_id }}"
+          - --
+          - install
+          - -d
+          - -m
+          - "0770"
+          - /mnt/scratch/homelab_ci/.cross_publisher_probe
+      changed_when: true
+      become: true
+
+    - name: _verify | Operator creates a group-managed artifact
+      command:
+        argv:
+          - runuser
+          - -u
+          - "{{ ansible_user_id }}"
+          - --
+          - install
+          - -m
+          - "0660"
+          - /dev/null
+          - /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
+      changed_when: true
+      become: true
+
+    - name: _verify | Second publisher can read the operator artifact
+      command:
+        argv:
+          - runuser
+          - -u
+          - homelab_ci_verify
+          - --
+          - test
+          - -r
+          - /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
+      changed_when: false
+      become: true
+
+    - name: _verify | Second publisher can remove the operator artifact
+      command:
+        argv:
+          - runuser
+          - -u
+          - homelab_ci_verify
+          - --
+          - rm
+          - /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
+      changed_when: true
+      become: true
+
+    - name: _verify | Second publisher can remove the operator directory
+      command:
+        argv:
+          - runuser
+          - -u
+          - homelab_ci_verify
+          - --
+          - rmdir
+          - /mnt/scratch/homelab_ci/.cross_publisher_probe
+      changed_when: true
+      become: true
+  always:
+    - name: _verify | Remove the cross-publisher probe
+      file:
+        path: /mnt/scratch/homelab_ci/.cross_publisher_probe
+        state: absent
+      become: true
+
+    - name: _verify | Remove the second CI publisher
+      user:
+        name: homelab_ci_verify
+        state: absent
+        remove: false
+      become: true
