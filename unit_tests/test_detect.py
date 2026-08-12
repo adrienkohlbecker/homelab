@@ -611,20 +611,40 @@ class TestIsLocalAncestor:
 
 class TestTreeEquivalentAncestor:
     def test_returns_newest_matching_ancestor(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: ref)
         monkeypatch.setattr(detect, "git_tree", lambda ref: "green_tree")
-        monkeypatch.setattr(
-            detect,
-            "_git",
-            lambda *a, **kw: _fake_git_result("newest other_tree\nrewritten green_tree\nolder green_tree\n"),
-        )
-        assert detect.tree_equivalent_ancestor("old_green", "head") == "rewritten"
+        seen_args: list[str] = []
+
+        def fake_git(*args, **kw):
+            seen_args.extend(args)
+            return _fake_git_result("newest other_tree\nrewritten green_tree\nolder green_tree\n")
+
+        monkeypatch.setattr(detect, "_git", fake_git)
+        result = detect.tree_equivalent_ancestor("old_green", "head", since="2026-01-05T00:00:00Z")
+        assert result == "rewritten"
+        # the scan is bounded to history newer than the pipeline (1-day margin)
+        assert "--since=2026-01-04" in seen_args
 
     def test_none_when_trees_diverge(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: ref)
         monkeypatch.setattr(detect, "git_tree", lambda ref: "green_tree")
         monkeypatch.setattr(detect, "_git", lambda *a, **kw: _fake_git_result("head other_tree\n"))
         assert detect.tree_equivalent_ancestor("old_green", "head") is None
 
+    def test_fetches_unfetched_candidate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # A rewritten-away sha is absent from the local clone; the helper must
+        # fetch it itself rather than rely on a prior caller having done so.
+        fetched: list[str] = []
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: None)
+        monkeypatch.setattr(detect, "git_fetch_commit", lambda sha: fetched.append(sha) or True)
+        monkeypatch.setattr(detect, "git_tree", lambda ref: "green_tree")
+        monkeypatch.setattr(detect, "_git", lambda *a, **kw: _fake_git_result("rewritten green_tree\n"))
+        assert detect.tree_equivalent_ancestor("old_green", "head") == "rewritten"
+        assert fetched == ["old_green"]
+
     def test_none_when_candidate_is_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: None)
+        monkeypatch.setattr(detect, "git_fetch_commit", lambda sha: False)
         monkeypatch.setattr(detect, "git_tree", lambda ref: None)
         monkeypatch.setattr(detect, "_git", lambda *a, **kw: pytest.fail("git log must not run"))
         assert detect.tree_equivalent_ancestor("missing", "head") is None
@@ -725,7 +745,7 @@ class TestNewestGreenPipeline:
         monkeypatch.setattr(detect, "_gl_api_get", mock_api)
         monkeypatch.setattr(detect, "_pipeline_ran_cells", lambda *a, **kw: True)
         monkeypatch.setattr(detect, "is_local_ancestor", lambda sha, head, **kw: sha == "oldgreen")
-        monkeypatch.setattr(detect, "tree_equivalent_ancestor", lambda sha, head: None)
+        monkeypatch.setattr(detect, "tree_equivalent_ancestor", lambda sha, head, **kw: None)
         logs = []
         result = detect.newest_green_pipeline("master", **self._kw(log_fn=logs.append))
         assert result["sha"] == "oldgreen"
@@ -744,7 +764,7 @@ class TestNewestGreenPipeline:
         monkeypatch.setattr(
             detect,
             "tree_equivalent_ancestor",
-            lambda sha, head: "rewritten_green",
+            lambda sha, head, **kw: "rewritten_green",
         )
         logs = []
         result = detect.newest_green_pipeline("master", **self._kw(log_fn=logs.append))

@@ -332,17 +332,29 @@ def is_local_ancestor(sha: str, head: str = "HEAD", *, since: str | None = None,
     return _git("merge-base", "--is-ancestor", sha, head, check=False).returncode == 0
 
 
-def tree_equivalent_ancestor(sha: str, head: str = "HEAD") -> str | None:
+def tree_equivalent_ancestor(sha: str, head: str = "HEAD", *, since: str | None = None) -> str | None:
     """Return the newest ancestor of head whose complete tree matches sha.
 
     A message-only history rewrite changes commit and parent IDs without changing
     the tested snapshot. Matching the complete tree recovers that green snapshot
     without accepting a genuinely divergent pipeline.
+
+    `since` (the candidate pipeline's ``created_at``) bounds the scan: a
+    rewrite's replacement is committed after the pipeline ran, so only history
+    newer than that can hold the match. A rewrite that back-dates committer
+    timestamps falls outside the bound and degrades toward the no-green
+    full-universe path, never to a wrong base.
     """
+    if git_rev_parse(sha) is None:
+        git_fetch_commit(sha)
     tree = git_tree(sha)
     if tree is None:
         return None
-    result = _git("log", "--format=%H %T", head, check=False)
+    log_args = ["log", "--first-parent", "--format=%H %T"]
+    margin = _shallow_since_arg(since) if since else None
+    if margin:
+        log_args.append(f"--since={margin}")
+    result = _git(*log_args, head, check=False)
     if result.returncode != 0:
         return None
     for line in result.stdout.splitlines():
@@ -429,7 +441,7 @@ def newest_green_pipeline(
             if is_local_ancestor(sha, head_sha, since=created, branch=branch):
                 log_fn(f"  green ancestor: {sha[:12]} ({created}, {source})")
                 return pipe
-            equivalent = tree_equivalent_ancestor(sha, head_sha)
+            equivalent = tree_equivalent_ancestor(sha, head_sha, since=created)
             if equivalent:
                 log_fn(f"  green tree-equivalent ancestor: {equivalent[:12]} (pipeline {sha[:12]}, {created})")
                 return {**pipe, "sha": equivalent}
