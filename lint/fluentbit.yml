@@ -3,6 +3,11 @@
 base: lua51
 name: fluentbit
 globals:
+  from_europe_paris:
+    args:
+      - type: any
+      - type: any
+      - type: any
   set_priority:
     args:
       - type: any

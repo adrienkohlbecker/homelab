@@ -36,8 +36,7 @@ local function days_from_civil(year, month, day)
     local year_of_era = year - era * 400
     local shifted_month = month > 2 and month - 3 or month + 9
     local day_of_year = math.floor((153 * shifted_month + 2) / 5) + day - 1
-    local day_of_era =
-        year_of_era * 365 + math.floor(year_of_era / 4) - math.floor(year_of_era / 100) + day_of_year
+    local day_of_era = year_of_era * 365 + math.floor(year_of_era / 4) - math.floor(year_of_era / 100) + day_of_year
     return era * 146097 + day_of_era - 719468
 end
 
@@ -125,7 +124,7 @@ local SOURCES = {
     tautulli_websocket_timestamp = parse_iso,
 }
 
-function from_europe_paris(tag, timestamp, record)
+function from_europe_paris(_tag, timestamp, record)
     for field, parse in pairs(SOURCES) do
         local value = record[field]
         if type(value) == "string" then
