@@ -89,3 +89,30 @@
            product(box_deps_apt_mirror_rewrites) | list }}
       loop_control:
         label: "{{ item.0.path }}: {{ item.1.source }}"
+
+    # Fail closed: the rewrite pairs above only cover URLs derived from
+    # mirror_apt_* vars, so an apt source pointing at Nexus through any other
+    # shape would ship silently and only surface as a strict apt-get update
+    # failure inside an AWS cell. Re-scan and refuse to ship a fixture that
+    # still references the lab. The rewrite's `<file>.<pid>.<ts>~` backups
+    # keep the old URLs by design and fall outside the patterns below.
+    - name: Re-scan for apt sources still pointing at Nexus
+      find:
+        paths: /etc/apt
+        file_type: file
+        recurse: true
+        patterns:
+          - sources.list
+          - "*.list"
+          - "*.sources"
+        contains: "{{ nexus_url | regex_escape }}"
+        read_whole_file: true
+      register: box_deps_apt_sources_leftover
+
+    - name: Assert the shipped fixture is Nexus-free
+      assert:
+        that:
+          - box_deps_apt_sources_leftover.files | length == 0
+        fail_msg: >-
+          Baked apt sources still reference {{ nexus_url }}:
+          {{ box_deps_apt_sources_leftover.files | map(attribute='path') | join(', ') }}
