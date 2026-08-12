@@ -42,30 +42,14 @@ RESCUE_RECV='mbuffer -q -m 512M | zstd -dc | dd of=/dev/sda bs=64M conv=sparse s
 # IdentitiesOnly=yes: offer only the ephemeral key, not every identity in a
 # forwarded agent -- else the rescue sshd hits MaxAuthTries before the right
 # one. Uses the RESCUE_IP/KEY/KNOWN globals rescue_init + rescue_create set.
-_ssh_rescue() {
-  local -a transport_options=()
-  while [ "${1:-}" != -- ]; do
-    transport_options+=("$1")
-    shift
-  done
-  shift
+ssh_rescue() { ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN" -o ConnectTimeout=5 "root@$RESCUE_IP" "$@"; }
 
-  ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
-    -o UserKnownHostsFile="$KNOWN" -o ConnectTimeout=5 \
-    "${transport_options[@]}" "root@$RESCUE_IP" "$@"
-}
-
-ssh_rescue() { _ssh_rescue -- "$@"; }
-
-# The raw image is already zstd-compressed. Isolate it from any existing SSH
-# master, disable redundant compression, and prefer hardware-accelerated AES.
-ssh_rescue_bulk() {
-  _ssh_rescue \
-    -o ControlPath=none \
-    -o Compression=no \
-    -o 'Ciphers=^aes128-gcm@openssh.com' \
-    -- "$@"
-}
+# Bulk-transfer variant for the image stream. -F none skips the user ssh config
+# entirely: the compiled-in defaults already disable connection sharing and
+# compression (the raw image is zstd-compressed), and no config surprise
+# (ProxyCommand, RekeyLimit, ...) can throttle the stream. The cipher prepend
+# prefers hardware-accelerated AES-GCM.
+ssh_rescue_bulk() { ssh -F none -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN" -o ConnectTimeout=5 -o 'Ciphers=^aes128-gcm@openssh.com' "root@$RESCUE_IP" "$@"; }
 
 # True when host:22 has a live sshd. Probe with PreferredAuthentications=none:
 # sshd rejects us instantly with "permission denied" without running anything,

@@ -129,10 +129,9 @@ ssh_rescue_bulk receive-image
     calls = [call.splitlines() for call in log.read_text().split("<call>\n") if call]
     assert len(calls) == 2
     control, bulk = calls
-    assert "ControlPath=none" not in control
-    assert "Compression=no" not in control
-    assert "Ciphers=^aes128-gcm@openssh.com" not in control
-    assert "ControlPath=none" in bulk
-    assert "Compression=no" in bulk
+    # The bulk variant alone must bypass the user ssh config and prefer the
+    # hardware AES cipher, with the remote command still last.
+    assert "-F" not in control
+    assert bulk[bulk.index("-F") + 1] == "none"
     assert "Ciphers=^aes128-gcm@openssh.com" in bulk
     assert bulk[-2:] == ["root@192.0.2.1", "receive-image"]
