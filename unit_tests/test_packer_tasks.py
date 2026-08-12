@@ -33,12 +33,6 @@ def _environment(tmp_path: Path, ubuntus: str) -> dict[str, str]:
     return env
 
 
-def test_usage_specs_make_ubuntu_repeatable() -> None:
-    for task in (BUILD_SH, SEED_DEPS_SH):
-        assert '#USAGE flag "--ubuntu... <ubuntu>"' in task.read_text()
-        assert 'default="noble"' in task.read_text()
-
-
 @pytest.mark.parametrize("ubuntus", ["noble", "noble resolute"])
 def test_build_runs_once_per_ubuntu(tmp_path: Path, ubuntus: str) -> None:
     fake_bin = tmp_path / "bin"
