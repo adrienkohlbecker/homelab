@@ -72,8 +72,8 @@ RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
 # present in this image's qemu 8.2) instead of qemu's libslirp, whose
 # single-threaded userspace stack drops UDP under load and flakes
 # external-DNS _verify. test/machine.py probes for passt + stream support
-# and only uses it when both are present, so a jammy host (qemu 6.2, no
-# passt) or macOS transparently keeps the slirp path. See
+# and only uses it when both are present, so older Linux hosts or macOS
+# transparently keep the slirp path. See
 # notes/ci_qemu_net_passt_migration.md.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git jq xz-utils unzip gpg gpg-agent apt-transport-https \

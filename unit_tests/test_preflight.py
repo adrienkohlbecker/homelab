@@ -58,6 +58,6 @@ def test_qemu_imagedir_missing_on_linux_raises(tmp_path: Path, monkeypatch: pyte
             machine="minimal",
             role="testrole",
             keep_vm=False,
-            ubuntu_name="jammy",
+            ubuntu_name="noble",
             machine_timeout=300,
         )

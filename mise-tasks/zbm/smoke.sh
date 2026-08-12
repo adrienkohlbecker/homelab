@@ -95,7 +95,7 @@ base_cmdline=$(cat "${workdir}/cmdline")
 
 # Must match launch.py's --ubuntu default (test/matrix.py DEFAULT_UBUNTU);
 # passed explicitly so the serial log path below is correct by construction.
-ubuntu=jammy
+ubuntu=noble
 boot_log="test/out/box.${ubuntu}._launch.boot.ansi"
 rm -f "$boot_log"
 ports_file="${workdir}/hostfwds"

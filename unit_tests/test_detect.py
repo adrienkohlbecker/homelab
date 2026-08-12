@@ -1196,7 +1196,7 @@ class TestTargets:
 
 class TestRenderChildPipeline:
     def test_one_job_per_spec(self) -> None:
-        doc = _render_child_doc(["nginx:box", "podman:box:noble"], site_test=False)
+        doc = _render_child_doc(["nginx:box", "podman:box:resolute"], site_test=False)
         assert doc["default"]["tags"] == ["fox-docker-aws"]
         assert "image" not in doc["default"]
         assert doc["stages"] == ["test1", "test2"]
@@ -1206,9 +1206,13 @@ class TestRenderChildPipeline:
         assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
         # No spot retry on the qemu targets.
         assert "retry" not in doc[".cell"]
-        # nginx:box → defaults ubuntu jammy; podman:box:noble → explicit noble.
-        assert doc["nginx:box"]["variables"] == {"ROLE": "nginx", "VARIANT": "box", "UBUNTU": "jammy"}
-        assert doc["podman:box:noble"]["variables"] == {"ROLE": "podman", "VARIANT": "box", "UBUNTU": "noble"}
+        # nginx:box defaults to Noble; podman:box:resolute is explicit.
+        assert doc["nginx:box"]["variables"] == {"ROLE": "nginx", "VARIANT": "box", "UBUNTU": "noble"}
+        assert doc["podman:box:resolute"]["variables"] == {
+            "ROLE": "podman",
+            "VARIANT": "box",
+            "UBUNTU": "resolute",
+        }
         assert doc["nginx:box"]["extends"] == ".cell"
         assert "_site_test:box" not in doc
         assert "_site_check:box" not in doc
@@ -1369,7 +1373,7 @@ class TestRenderChildPipeline:
         # aws_qemu reads from AWS S3 via OIDC -- never the lab MinIO mirror.
         assert "HOMELAB_CI_MINIO_ACCESS_KEY" not in joined
         assert "HOMELAB_CI_S3_ENDPOINT" not in joined
-        assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"' in joined
+        assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-noble}"' in joined
         assert "--upstream-mirrors" not in "\n".join(doc["nginx:box"]["script"])
 
     def test_aws_qemu_site_test_does_not_get_upstream_mirrors(self) -> None:

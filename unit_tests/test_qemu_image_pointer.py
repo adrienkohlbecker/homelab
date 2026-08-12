@@ -42,7 +42,7 @@ hydrate = _load("hydrate_qemu_images", _HYDRATE_PATH)
 
 
 def _args(**overrides: object) -> argparse.Namespace:
-    base: dict[str, object] = {"build_id": "ci-42-gdeadbeef0000", "machine": "box", "ubuntu": "jammy"}
+    base: dict[str, object] = {"build_id": "ci-42-gdeadbeef0000", "machine": "box", "ubuntu": "noble"}
     base.update(overrides)
     return argparse.Namespace(**base)
 
@@ -71,7 +71,7 @@ class TestPointerBody:
         assert body.endswith("\n")
         # sort_keys=True, indent=2
         assert body == (
-            "{\n" '  "build_id": "ci-42-gdeadbeef0000",\n' '  "machine": "box",\n' '  "ubuntu": "jammy"\n' "}\n"
+            "{\n" '  "build_id": "ci-42-gdeadbeef0000",\n' '  "machine": "box",\n' '  "ubuntu": "noble"\n' "}\n"
         )
 
     def test_round_trip(self) -> None:
@@ -86,13 +86,13 @@ class TestPointerBody:
 class TestResolveBuildId:
     def _resolve(self, monkeypatch: pytest.MonkeyPatch, body: str, **arg_overrides: object) -> str:
         monkeypatch.setattr(hydrate, "output", lambda argv, **kw: body)
-        base: dict[str, object] = {"machine": "box", "ubuntu": "jammy"}
+        base: dict[str, object] = {"machine": "box", "ubuntu": "noble"}
         base.update(arg_overrides)
         args = argparse.Namespace(**base)
         return hydrate.resolve_build_id(args)
 
     def test_reads_build_id_from_pointer(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        body = upload.pointer_body(_args(build_id="ci-7-gabc", machine="box", ubuntu="jammy"))
+        body = upload.pointer_body(_args(build_id="ci-7-gabc", machine="box", ubuntu="noble"))
         assert self._resolve(monkeypatch, body) == "ci-7-gabc"
 
     def test_machine_mismatch_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,9 +101,9 @@ class TestResolveBuildId:
             self._resolve(monkeypatch, body, machine="box")
 
     def test_ubuntu_mismatch_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        body = upload.pointer_body(_args(ubuntu="noble"))
+        body = upload.pointer_body(_args(ubuntu="resolute"))
         with pytest.raises(SystemExit, match="ubuntu mismatch"):
-            self._resolve(monkeypatch, body, ubuntu="jammy")
+            self._resolve(monkeypatch, body, ubuntu="noble")
 
     def test_empty_pointer_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         with pytest.raises(SystemExit, match="missing or empty"):

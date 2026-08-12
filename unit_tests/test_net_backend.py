@@ -2,7 +2,7 @@
 
 The probe itself (_passt_available) execs qemu and reads platform/PATH, so
 these patch it out and exercise the decision table around it -- the part that
-decides whether a given environment (CI noble image vs jammy host vs macOS)
+decides whether a given environment supports passt or must fall back to slirp
 ends up on passt or slirp.
 """
 

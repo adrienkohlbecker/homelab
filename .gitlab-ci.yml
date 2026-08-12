@@ -407,7 +407,6 @@ qemu_host_ami:
   parallel:
     matrix:
       - UBUNTU:
-          - jammy
           - noble
           - resolute
 
@@ -418,7 +417,6 @@ qemu_host_ami:
   parallel:
     matrix:
       - UBUNTU:
-          - jammy
           - noble
           - resolute
   needs:

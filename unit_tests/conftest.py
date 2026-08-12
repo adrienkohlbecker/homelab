@@ -53,7 +53,7 @@ def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
             machine="box",
             role="testrole",
             keep_vm=False,
-            ubuntu_name="jammy",
+            ubuntu_name="noble",
             machine_timeout=300,
         )
         # Constructor params go to __init__; anything else is a synthetic

@@ -89,24 +89,24 @@ class TestBuildRoleCells:
     def test_plain_role_one_cell(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "plain")
         cells = matrix.build_role_cells("plain")
-        assert cells == [matrix.TestCell("box", "jammy", "plain")]
+        assert cells == [matrix.TestCell("box", "noble", "plain")]
 
     def test_box_deps_role(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "svc", {"machines": {"box_deps": None}})
         cells = matrix.build_role_cells("svc")
-        assert cells == [matrix.TestCell("box_deps", "jammy", "svc")]
+        assert cells == [matrix.TestCell("box_deps", "noble", "svc")]
 
     def test_minimal_machine_gets_extra_cell(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "cleanup", {"machines": {"box": None, "minimal": None}})
         cells = matrix.build_role_cells("cleanup")
-        assert matrix.TestCell("box", "jammy", "cleanup") in cells
-        assert matrix.TestCell("minimal", "jammy", "cleanup") in cells
+        assert matrix.TestCell("box", "noble", "cleanup") in cells
+        assert matrix.TestCell("minimal", "noble", "cleanup") in cells
         assert len(cells) == 2
 
     def test_release_cells_use_primary_machine(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "netdata", {"machines": {"box_deps": None}, "ubuntu": ["resolute"]})
         cells = matrix.build_role_cells("netdata")
-        assert matrix.TestCell("box_deps", "jammy", "netdata") in cells
+        assert matrix.TestCell("box_deps", "noble", "netdata") in cells
         assert matrix.TestCell("box_deps", "resolute", "netdata") in cells
         assert len(cells) == 2
 
@@ -114,8 +114,6 @@ class TestBuildRoleCells:
         _make_role(roles_tree, "podman", {"machines": {"box": None, "minimal": None}, "ubuntu": ["noble", "resolute"]})
         cells = matrix.build_role_cells("podman")
         expected = [
-            matrix.TestCell("box", "jammy", "podman"),
-            matrix.TestCell("minimal", "jammy", "podman"),
             matrix.TestCell("box", "noble", "podman"),
             matrix.TestCell("minimal", "noble", "podman"),
             matrix.TestCell("box", "resolute", "podman"),
@@ -133,7 +131,7 @@ class TestBuildTestMatrix:
     def test_deduplicates(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "alpha")
         cells = matrix.build_test_matrix(["alpha", "alpha"])
-        assert cells == [matrix.TestCell("box", "jammy", "alpha")]
+        assert cells == [matrix.TestCell("box", "noble", "alpha")]
 
     def test_sorted_by_all_fields(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "beta")
@@ -146,7 +144,7 @@ class TestBuildTestMatrix:
         extra = [matrix.TestCell("box", "resolute", "alpha")]
         cells = matrix.build_test_matrix(["alpha"], extra_cells=extra)
         assert matrix.TestCell("box", "resolute", "alpha") in cells
-        assert matrix.TestCell("box", "jammy", "alpha") in cells
+        assert matrix.TestCell("box", "noble", "alpha") in cells
 
     def test_empty_roles_with_extra(self, roles_tree: Path) -> None:
         cells = matrix.build_test_matrix([], extra_cells=[matrix.TestCell("box", "noble", "foo")])
@@ -161,21 +159,25 @@ class TestBuildTestMatrix:
 class TestSkip:
     def test_skip_for_parses_machine_and_release(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "svc", {"skip": {"minimal": "why", "box_deps:resolute": "why"}})
-        assert matrix.skip_for("svc") == {("minimal", "jammy"), ("box_deps", "resolute")}
+        assert matrix.skip_for("svc") == {("minimal", "noble"), ("box_deps", "resolute")}
 
     def test_skip_for_empty_when_absent(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "svc")
         assert matrix.skip_for("svc") == set()
 
-    def test_build_role_cells_drops_skipped_jammy_cell(self, roles_tree: Path) -> None:
+    def test_build_role_cells_drops_skipped_noble_cell(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "svc", {"machines": {"box": None, "minimal": None}, "skip": {"minimal": "flaky"}})
         cells = matrix.build_role_cells("svc")
-        assert cells == [matrix.TestCell("box", "jammy", "svc")]
+        assert cells == [matrix.TestCell("box", "noble", "svc")]
 
     def test_build_role_cells_drops_skipped_release_cell_only(self, roles_tree: Path) -> None:
-        _make_role(roles_tree, "svc", {"machines": {"box": None}, "ubuntu": ["noble"], "skip": {"box:noble": "flaky"}})
+        _make_role(
+            roles_tree,
+            "svc",
+            {"machines": {"box": None}, "ubuntu": ["resolute"], "skip": {"box:resolute": "flaky"}},
+        )
         cells = matrix.build_role_cells("svc")
-        assert cells == [matrix.TestCell("box", "jammy", "svc")]
+        assert cells == [matrix.TestCell("box", "noble", "svc")]
 
     def test_build_test_matrix_drops_skipped_propagated_extra(self, roles_tree: Path) -> None:
         # A consumer's release cell pushed in via CI fan-out must still drop
@@ -183,7 +185,7 @@ class TestSkip:
         _make_role(roles_tree, "svc", {"machines": {"box": None}, "skip": {"box:resolute": "flaky"}})
         extra = [matrix.TestCell("box", "resolute", "svc")]
         cells = matrix.build_test_matrix(["svc"], extra_cells=extra)
-        assert cells == [matrix.TestCell("box", "jammy", "svc")]
+        assert cells == [matrix.TestCell("box", "noble", "svc")]
 
 
 # ---------------------------------------------------------------------------
@@ -193,21 +195,21 @@ class TestSkip:
 
 class TestCiSpecs:
     def test_cell_to_ci_spec_default_ubuntu(self) -> None:
-        assert matrix.cell_to_ci_spec(matrix.TestCell("box", "jammy", "alpha")) == "alpha:box"
+        assert matrix.cell_to_ci_spec(matrix.TestCell("box", "noble", "alpha")) == "alpha:box"
 
     def test_cell_to_ci_spec_non_default_ubuntu(self) -> None:
         assert matrix.cell_to_ci_spec(matrix.TestCell("box_deps", "resolute", "netdata")) == "netdata:box_deps:resolute"
 
     def test_cells_to_ci_specs_sorted_deduped(self) -> None:
         cells = [
-            matrix.TestCell("box", "jammy", "beta"),
-            matrix.TestCell("box", "jammy", "alpha"),
-            matrix.TestCell("box", "jammy", "alpha"),
+            matrix.TestCell("box", "noble", "beta"),
+            matrix.TestCell("box", "noble", "alpha"),
+            matrix.TestCell("box", "noble", "alpha"),
         ]
         assert matrix.cells_to_ci_specs(cells) == ["alpha:box", "beta:box"]
 
     def test_ci_spec_to_cell_two_parts(self) -> None:
-        assert matrix.ci_spec_to_cell("alpha:box") == matrix.TestCell("box", "jammy", "alpha")
+        assert matrix.ci_spec_to_cell("alpha:box") == matrix.TestCell("box", "noble", "alpha")
 
     def test_ci_spec_to_cell_three_parts(self) -> None:
         assert matrix.ci_spec_to_cell("netdata:box_deps:resolute") == matrix.TestCell("box_deps", "resolute", "netdata")
@@ -230,15 +232,13 @@ class TestDispatchMatrix:
     def test_bare_role_expands(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "alpha", {"machines": {"box": None, "minimal": None}, "ubuntu": ["noble"]})
         cells = matrix._build_dispatch_matrix("alpha")
-        assert matrix.TestCell("box", "jammy", "alpha") in cells
-        assert matrix.TestCell("minimal", "jammy", "alpha") in cells
         assert matrix.TestCell("box", "noble", "alpha") in cells
         assert matrix.TestCell("minimal", "noble", "alpha") in cells
 
     def test_exact_spec_no_escalation(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "alpha", {"machines": {"box": None, "minimal": None}, "ubuntu": ["noble"]})
         cells = matrix._build_dispatch_matrix("alpha:box")
-        assert cells == [matrix.TestCell("box", "jammy", "alpha")]
+        assert cells == [matrix.TestCell("box", "noble", "alpha")]
 
     def test_unknown_role_exits(self, roles_tree: Path) -> None:
         with pytest.raises(SystemExit):
@@ -314,7 +314,7 @@ class TestCli:
                 "matrix",
                 "--json",
                 "--extra",
-                "alpha:box:noble",
+                "alpha:box:resolute",
                 "--",
                 "alpha",
             ],
@@ -327,7 +327,7 @@ class TestCli:
         assert result.returncode == 0
         specs = json.loads(result.stdout)
         assert "alpha:box" in specs
-        assert "alpha:box:noble" in specs
+        assert "alpha:box:resolute" in specs
 
     def test_human_readable(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "alpha")
@@ -340,7 +340,7 @@ class TestCli:
             timeout=30,
         )
         assert result.returncode == 0
-        assert "box\tjammy\talpha" in result.stdout
+        assert "box\tnoble\talpha" in result.stdout
 
     def test_dispatch_mutual_exclusion(self, roles_tree: Path) -> None:
         result = subprocess.run(

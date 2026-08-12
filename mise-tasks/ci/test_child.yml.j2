@@ -59,8 +59,7 @@ stages:
     # under the synchronized cell-launch burst the qemu hosts now run, passt
     # drops the plain systemd-networkd first-boot DHCP too -- a full-matrix
     # re-enable went ~84/138 cells red on the ssh-wait timeout. passt only
-    # engages in CI (macOS
-    # + the jammy host fall back via _passt_available), so this disables it
+    # engages only where _passt_available succeeds, so this disables it
     # fleet-wide without removing the passt code. Drop this line to re-enable
     # once passt's DHCP-under-burst race is fixed (resolve_net_backend reads
     # HOMELAB_NET_BACKEND=slirp).
@@ -93,7 +92,7 @@ stages:
     # box/box_deps boot a promoted S3 image bundle; minimal has none -- the
     # harness downloads its Ubuntu cloud image at runtime
     # (Machine._ensure_minimal_cloudimg), so there is nothing to hydrate for it.
-    - if [ "${VARIANT:-box}" != "minimal" ]; then mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-jammy}"; fi
+    - if [ "${VARIANT:-box}" != "minimal" ]; then mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-noble}"; fi
 {% else %}
     # The lab target boots images straight from /mnt/scratch/homelab_ci (the lab
     # bake writes them there); nothing to authenticate or hydrate here.

@@ -2,8 +2,8 @@
 # MISE description="Download the promoted qemu image bundle from S3 into the local harness cache"
 # USAGE arg "<machine>" help="Promoted qemu image bundle: box or box_deps"
 # USAGE complete "machine" run="printf 'box\nbox_deps\n'"
-# USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="jammy"
-# USAGE complete "ubuntu" run="printf 'jammy\nnoble\nresolute\n'"
+# USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
+# USAGE complete "ubuntu" run="printf 'noble\nresolute\n'"
 # USAGE flag "--force" help="Re-download even when the local marker already matches"
 """Hydrate the local qemu harness image cache from S3.
 
@@ -55,7 +55,7 @@ def output(argv: list[str], **kwargs: Any) -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("machine", choices=sorted(VALID_MACHINES))
-    parser.add_argument("--ubuntu", default=os.environ.get("usage_ubuntu", "jammy"))
+    parser.add_argument("--ubuntu", default=os.environ.get("usage_ubuntu", "noble"))
     parser.add_argument(
         "--force",
         action="store_true",

@@ -59,14 +59,11 @@ def main() -> int:
             if not isinstance(ubuntu, list):
                 errors.append(f"{meta}: ubuntu must be a list, got {type(ubuntu).__name__}")
             else:
-                for codename in ubuntu:
-                    if codename == DEFAULT_UBUNTU:
-                        errors.append(
-                            f"{meta}: ubuntu lists {DEFAULT_UBUNTU!r}, the default release"
-                            " -- omit it (only list extra releases)"
-                        )
-                    elif codename not in UBUNTU_RELEASES:
-                        errors.append(f"{meta}: ubuntu={codename!r} not in {UBUNTU_NAMES}")
+                errors.extend(
+                    f"{meta}: ubuntu={codename!r} not in {UBUNTU_NAMES}"
+                    for codename in ubuntu
+                    if codename not in UBUNTU_RELEASES
+                )
 
         # skip maps machine[:ubuntu] to the reason a known-failing cell is quarantined.
         skip = data.get("skip")

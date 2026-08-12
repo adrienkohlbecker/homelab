@@ -24,11 +24,10 @@ from typing import NamedTuple
 import yaml
 
 UBUNTU_RELEASES: dict[str, str] = {
-    "jammy": "22.04",
     "noble": "24.04",
     "resolute": "26.04",
 }
-DEFAULT_UBUNTU = "jammy"
+DEFAULT_UBUNTU = "noble"
 DEFAULT_MACHINES = {"box": None}
 
 # Machines that only run on demand (`testrole.py --machine`) and the nightly
@@ -89,7 +88,7 @@ def skip_for(role: str) -> set[tuple[str, str]]:
     """(machine, ubuntu) cells this role declares as skipped in CI.
 
     meta/test.yml `skip:` is a mapping of cell-spec -> reason, where a
-    cell-spec is `machine` (the jammy cell) or `machine:codename` (a
+    cell-spec is `machine` (the noble cell) or `machine:codename` (a
     release cell). Skipped cells are dropped from every generated matrix
     (CI detect and testall), so they can't gate a green run. They are NOT
     a substitute for a fix -- `testrole.py <role> --machine <m>` still
@@ -128,7 +127,7 @@ def drop_on_demand_cells(specs: list[str]) -> tuple[list[str], list[str]]:
 def build_role_cells(role: str) -> list[TestCell]:
     """Expand a single role into its test cells.
 
-    - One base cell per machine in machines: (machine, jammy, role)
+    - One base cell per machine in machines: (machine, noble, role)
     - Release cell per (machine, ubuntu) cross-product for each ubuntu
       in meta/test.yml: (machine, codename, role).
 
@@ -138,6 +137,8 @@ def build_role_cells(role: str) -> list[TestCell]:
     skip = skip_for(role)
     cells = [TestCell(m, DEFAULT_UBUNTU, role) for m in machines if (m, DEFAULT_UBUNTU) not in skip]
     for codename in release_ubuntu_for(role):
+        if codename == DEFAULT_UBUNTU:
+            continue
         cells.extend(TestCell(m, codename, role) for m in machines if (m, codename) not in skip)
     return cells
 

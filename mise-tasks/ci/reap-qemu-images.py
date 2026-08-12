@@ -37,7 +37,7 @@ from botocore.exceptions import ClientError
 S3_BUCKET = "homelab-ci-images"
 AWS_REGION = "eu-central-1"
 MACHINES = ("box", "box_deps")
-UBUNTUS = ("jammy", "noble", "resolute")
+UBUNTUS = ("noble", "resolute")
 KEEP_NEWEST = 3
 KEEP_DAYS = 7
 POINTER_NAME = "promoted.json"

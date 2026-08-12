@@ -163,16 +163,12 @@ class TestReadVmHwm:
 
 
 class TestConstants:
-    def test_ubuntu_releases_has_jammy(self) -> None:
-        assert "jammy" in matrix.UBUNTU_RELEASES
-        assert matrix.UBUNTU_RELEASES["jammy"] == "22.04"
-
-    def test_ubuntu_releases_has_noble(self) -> None:
-        assert "noble" in matrix.UBUNTU_RELEASES
+    def test_supported_ubuntu_releases(self) -> None:
+        assert set(matrix.UBUNTU_RELEASES) == {"noble", "resolute"}
         assert matrix.UBUNTU_RELEASES["noble"] == "24.04"
 
-    def test_default_ubuntu_is_jammy(self) -> None:
-        assert matrix.DEFAULT_UBUNTU == "jammy"
+    def test_default_ubuntu_is_noble(self) -> None:
+        assert matrix.DEFAULT_UBUNTU == "noble"
 
     def test_machine_choices_tuple(self) -> None:
         assert isinstance(machine.MACHINE_CHOICES, tuple)
@@ -209,7 +205,7 @@ def test_ensure_booted_reports_early_qemu_exit(
     m = machine_factory(machine="box", role="test")
     m.proc = cast(asyncio.subprocess.Process, SimpleNamespace(returncode=1))
 
-    with pytest.raises(RuntimeError, match=r"qemu wrapper exited with 1.*box\.jammy\.test\.boot\.ansi"):
+    with pytest.raises(RuntimeError, match=r"qemu wrapper exited with 1.*box\.noble\.test\.boot\.ansi"):
         asyncio.run(m.ensure_booted())
 
 

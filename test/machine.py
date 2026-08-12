@@ -146,12 +146,10 @@ def _passt_available(qemu_binary: str) -> bool:
     """True iff passt can back qemu *here*: Linux + `passt` on PATH + a qemu
     that advertises the `stream` netdev (i.e. qemu >= 7.2).
 
-    Deliberately a capability probe, not a uname check: the jammy host
-    (qemu 6.2, no passt) and the noble ci-image (qemu 8.2 + passt) are *both*
-    Linux, so uname can't tell them apart -- but the operator runs the harness
-    directly on the jammy host occasionally and that path must keep using
-    slirp. macOS short-circuits first (passt is Linux-only). Cached because
-    the qemu probe forks a subprocess and the answer is constant per process.
+    Deliberately a capability probe, not a uname check: Linux installations
+    may expose different qemu and passt versions, while macOS cannot use passt
+    at all. Cached because the qemu probe forks a subprocess and the answer is
+    constant per process.
     """
     if platform.system() != "Linux":
         return False
@@ -177,8 +175,8 @@ def resolve_net_backend(qemu_binary: str) -> str:
     qemu's libslirp on the guest-facing hop, killing the SLIRP-under-load UDP
     drops that flake external-DNS _verify in CI (see
     notes/ci_qemu_net_passt_migration.md). It's only usable where
-    `_passt_available` holds, so everywhere else (jammy host, macOS, any image
-    without the passt package) falls back to the unchanged slirp path.
+    `_passt_available` holds, so everywhere else (macOS or an image without
+    the passt package) falls back to the unchanged slirp path.
 
     HOMELAB_NET_BACKEND overrides the probe: `slirp` pins the legacy path,
     `passt` forces it (and errors loudly if unavailable, so a misconfigured
@@ -1479,14 +1477,6 @@ class Machine:
         cell can't reach the LAN Nexus, so it fetches upstream like the converge
         mirrors do (see format_ansible_cmd).
         """
-        # Ubuntu publishes minimal-cloudimg arm64 only from noble onwards;
-        # jammy is amd64-only. Fail loud rather than 404'ing on the curl.
-        if self.arch.cloud_image_suffix == "arm64" and self.ubuntu_name == "jammy":
-            raise RuntimeError(
-                f"Ubuntu does not publish a minimal-cloudimg for {self.ubuntu_name}/arm64. "
-                "Use --ubuntu noble (or later) on arm64 hosts, "
-                "or run --machine minimal on x86_64."
-            )
         name = f"ubuntu-{UBUNTU_RELEASES[self.ubuntu_name]}-minimal-cloudimg-{self.arch.cloud_image_suffix}.img"
         cache = self.imagedir / "cloud-images"
         cache.mkdir(parents=True, exist_ok=True)

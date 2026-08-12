@@ -32,7 +32,7 @@ def test_parallel_role_child_gets_private_stdin(monkeypatch: pytest.MonkeyPatch)
     asyncio.run(
         testall._run_role(
             1,
-            testall.TestCell("box", "jammy", "test"),
+            testall.TestCell("box", "noble", "test"),
             [],
             asyncio.Semaphore(1),
         )
@@ -48,12 +48,12 @@ def test_parallel_role_child_gets_private_stdin(monkeypatch: pytest.MonkeyPatch)
 
 class TestJobResult:
     def test_frozen(self) -> None:
-        jr = testall.JobResult(testall.TestCell("box", "jammy", "nginx"), 12.5, 0, "2026-01-01T00:00:00Z")
+        jr = testall.JobResult(testall.TestCell("box", "noble", "nginx"), 12.5, 0, "2026-01-01T00:00:00Z")
         with pytest.raises(AttributeError):
             jr.exitval = 1  # type: ignore[misc]
 
     def test_peak_kb_default(self) -> None:
-        jr = testall.JobResult(testall.TestCell("box", "jammy", "nginx"), 0.0, 0, "")
+        jr = testall.JobResult(testall.TestCell("box", "noble", "nginx"), 0.0, 0, "")
         assert jr.peak_kb == 0
 
 
@@ -64,7 +64,7 @@ class TestJobResult:
 
 class TestCancelledResult:
     def test_exitval_is_130(self) -> None:
-        r = testall._cancelled_result(testall.TestCell("box", "jammy", "nginx"))
+        r = testall._cancelled_result(testall.TestCell("box", "noble", "nginx"))
         assert r.exitval == 130
         assert r.runtime == 0.0
         assert r.started_at == ""
@@ -84,13 +84,13 @@ class TestJoblogRoundTrip:
         log = tmp_path / "out.tsv"
         monkeypatch.setattr(testall, "LOG_FILE", log)
         results = [
-            testall.JobResult(testall.TestCell("box", "jammy", "nginx"), 12.345, 0, "2026-01-01T00:00:00Z", 512000),
+            testall.JobResult(testall.TestCell("box", "noble", "nginx"), 12.345, 0, "2026-01-01T00:00:00Z", 512000),
             testall.JobResult(testall.TestCell("lab", "noble", "podman"), 60.0, 1, "2026-01-01T01:00:00Z", 0),
         ]
         testall._write_joblog(results)
         prior = testall._read_joblog()
         assert len(prior) == 2
-        assert prior[0].cell == testall.TestCell("box", "jammy", "nginx")
+        assert prior[0].cell == testall.TestCell("box", "noble", "nginx")
         assert prior[0].exitval == 0
         assert prior[0].peak_kb == 512000
         assert prior[1].cell == testall.TestCell("lab", "noble", "podman")
@@ -112,14 +112,14 @@ class TestSetupOutputDir:
         monkeypatch.setattr(testall, "OUT_DIR", out)
         out.mkdir()
         stale_files = [
-            out / f"box.jammy.nginx.{suffix}.ansi"
+            out / f"box.noble.nginx.{suffix}.ansi"
             for suffix in ("output", "journal", "boot", "dmesg", "systemctl-failed")
         ]
         for stale in stale_files:
             stale.write_text("old")
         other = out / "lab.noble.podman.output.ansi"
         other.write_text("keep")
-        plan = [testall.TestCell("box", "jammy", "nginx")]
+        plan = [testall.TestCell("box", "noble", "nginx")]
         testall.setup_output_dir(plan)
         assert all(not stale.exists() for stale in stale_files)
         assert other.exists()
