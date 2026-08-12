@@ -288,6 +288,8 @@
         - message: adguard-valid
           level: error
           service: adguard
+          _not_prefix:
+            time: 2099-
           fields.parser_status: parsed
           fields.source: dnsproxy
           fields.retry: true

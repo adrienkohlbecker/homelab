@@ -333,6 +333,8 @@
         - message: '1@example.invalid: Connected using TLSv1.3'
           level: info
           service: sabnzbd
+          _not_prefix:
+            time: 2099-
           fields.source: newswrapper
           fields.source_line: 424
           fields.parser_status: parsed

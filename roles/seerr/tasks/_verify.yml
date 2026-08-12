@@ -208,6 +208,8 @@
       expected:
         - message: Request failed
           level: error
+          _not_prefix:
+            time: 2099-
           fields.source: Jellyfin API
           fields.error: 500
           fields.parser_status: parsed

@@ -329,6 +329,8 @@
             Exception: homeassistant-valid
           level: fatal
           service: homeassistant
+          _not_prefix:
+            time: 2099-
           fields.parser_status: parsed
           fields.thread: MainThread
           fields.source: homeassistant.verify

@@ -258,6 +258,8 @@
         - message: "Couldn't read '/config/queue.json': No such file or directory (2)"
           level: error
           service: transmission
+          _not_prefix:
+            time: 2099-
           fields.source: utils.cc
           fields.source_line: 144
           fields.parser_status: parsed

@@ -119,6 +119,8 @@
         - message: bazarr-valid
           level: fatal
           service: bazarr
+          _not_prefix:
+            time: 2099-
           fields.parser_status: parsed
           fields.source_line: 42
         - message: bazarr-raw

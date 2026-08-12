@@ -56,6 +56,8 @@
         - message: z2m-valid
           level: warn
           service: z2m
+          _not_prefix:
+            time: 2099-
           fields.parser_status: parsed
           fields.namespace: z2m:mqtt
           fields.exception: trace

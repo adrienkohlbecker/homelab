@@ -347,6 +347,8 @@
         - message: tautulli-info
           level: info
           service: tautulli
+          _not_prefix:
+            time: 2099-
           fields.source: Tautulli WebStart
           fields.thread: MainThread
           fields.parser_status: parsed
