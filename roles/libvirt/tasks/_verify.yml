@@ -5,8 +5,18 @@
 # and dumping it proves the script's real behavior, not just that the
 # file landed on disk.
 
+# libvirtd is socket-activated and exits after 120 idle seconds. Stop the
+# daemon first so the operator probe below proves the managed socket brings it
+# back instead of inheriting a process the converge forced active.
+- name: _verify | Stop libvirtd before the socket-activation probe
+  systemd:
+    name: libvirtd.service
+    state: stopped
+  become: true
+
 # runuser re-reads supplementary groups before invoking virsh, proving the
-# configured libvirt membership grants access to the system daemon.
+# configured libvirt membership grants access to the system daemon and the
+# socket activates libvirtd from a stopped state.
 - name: _verify | Operator reaches the libvirt system daemon
   command:
     argv:

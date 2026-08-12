@@ -112,8 +112,8 @@
 # (10.0) and noble (10.0) lack the driver; resolute (11.x) and any
 # future release have it. The setting moves LIBVIRT_INP / LIBVIRT_FWX
 # / LIBVIRT_PRT chains out of `ip filter`/`ip nat` and into
-# `inet libvirt_*` tables. systemd_unit_restart below picks up the
-# change so libvirtd re-reads network.conf; the network-reload block
+# `inet libvirt_*` tables. The conditional daemon restart below picks up
+# the change so libvirtd re-reads network.conf; the network-reload block
 # at the end re-creates rules under the new backend.
 - name: Configure libvirt to use native nftables firewall backend
   when: ansible_distribution_release not in ["jammy", "noble"]
@@ -139,12 +139,35 @@
     systemd_unit_args:
       src: libvirtd
       condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
-      restart: "{{ libvirt_firewall_backend.changed | default(false) }}"
+      # Ubuntu ships libvirtd with --timeout 120 and active sockets. Keep the
+      # boot-time enablement without force-starting an intentionally idle
+      # daemon on every converge.
+      start: false
+  tags:
+    - libvirt
+
+- name: Enable libvirtd socket
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: libvirtd.socket
+      condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
+  tags:
+    - libvirt
+
+- name: Restart libvirtd for firewall backend change
+  when: libvirt_firewall_backend.changed | default(false) and not ansible_check_mode
+  systemd:
+    name: libvirtd
+    state: restarted
+  become: true
   tags:
     - libvirt
 
 - name: Check the default network is defined
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_started_result.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_socket_started_result.changed))
   command: virsh net-info default
   register: libvirt_default_net
   changed_when: false
@@ -165,7 +188,7 @@
   tags:
     - libvirt
 
-# The check-mode gate uses libvirtd_started_result -- the stable per-unit
+# The check-mode gate uses libvirtd_socket_started_result -- the stable per-unit
 # fact service.yml emits -- which can't rebind if a later systemd_unit call
 # lands between here and the virsh_backup timer below.
 # The whole condition skips the network calls in check mode on a fresh
@@ -175,7 +198,7 @@
 # autostart half -- split into two calls (same reason the pool dance below
 # needs three). state: active first, then autostart on a stateless call.
 - name: Start default network
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_started_result.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_socket_started_result.changed))
   community.libvirt.virt_net:
     name: default
     state: active
@@ -184,7 +207,7 @@
     - libvirt
 
 - name: Autostart default network
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_started_result.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_socket_started_result.changed))
   community.libvirt.virt_net:
     name: default
     autostart: true
@@ -215,7 +238,7 @@
 # `state: present` defines only when absent, so an existing pool is left
 # untouched. virsh_backup's pool-dumpxml captures the definition.
 - name: Declare the default storage pool
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_started_result.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_socket_started_result.changed))
   become: true
   tags:
     - libvirt
