@@ -156,3 +156,13 @@ pipeline:
         - _unit plex.service
         - _identifier plex
       set: parser_status parsed
+
+    # Remote access is intentionally forwarded by the router, not UPnP/NAT-PMP.
+    # Plex retries NAT-PMP hourly; omit only the exact timeout and retain nearby
+    # NAT diagnostics.
+    - name: grep
+      match: plex.file
+      logical_op: and
+      exclude:
+        - 'source ^plex_media_server$'
+        - 'log ^NAT: PMP, timed out waiting for response\.$'

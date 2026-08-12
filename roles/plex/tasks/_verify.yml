@@ -384,6 +384,10 @@
           CONTAINER_TAG: plex
           SYSLOG_IDENTIFIER: plex
           SYSTEMD_UNIT: plex.service
+        - _tag: plex.file
+          log: 'Jul 12, 2026 12:00:03.000 [4d5e] WARN - NAT: PMP, timed out waiting for response.'
+        - _tag: plex.file
+          log: 'Jul 12, 2026 12:00:04.000 [5e6f] WARN - NAT: PMP, mapping failed unexpectedly.'
       expected:
         - message: Generated new chapter thumbnails for Vagina Panic.
           level: info
@@ -398,6 +402,14 @@
           level: fatal
           service: plex
           fields.parser_status: parsed
+        - message: 'NAT: PMP, mapping failed unexpectedly.'
+          level: warn
+          service: plex
+          fields.source: plex_media_server
+
+- name: _verify | Routine Plex NAT-PMP timeout is omitted
+  assert:
+    that: "'NAT: PMP, timed out waiting for response.' not in fluentbit_verify_result.stdout"
 
 - name: _verify | Restart fluent-bit after the isolated extension fixture
   systemd:
