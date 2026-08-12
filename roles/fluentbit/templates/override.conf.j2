@@ -10,6 +10,10 @@
 # build), and the unit timed out after 90s on start. /api/v1/health
 # probed from _verify is the practical alternative.
 [Service]
+# Plex, nzbToMedia, and Tautulli file logs contain local wall-clock timestamps
+# without an offset. Keep the host on UTC while letting Fluent Bit resolve those
+# parser timestamps through the same DST-aware zone as the containers.
+Environment=TZ={{ system_timezone }}
 ExecStart=
 ExecStart=/opt/fluent-bit/bin/fluent-bit --config=/etc/fluent-bit/fluent-bit.yaml
 ExecReload=/bin/kill -s HUP $MAINPID

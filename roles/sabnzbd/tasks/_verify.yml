@@ -258,6 +258,7 @@
       - record.unit == "sabnzbd.service"
       - record.identifier == "nzbtomedia"
       - record.level == "info"
+      - record.time is match('^2026-07-12T10:00:00')
       - record.message == sabnzbd_nzbtomedia_marker ~ " succeeded"
       - record.fields.source == "RADARR"
       - record.fields.parser_status == "parsed"

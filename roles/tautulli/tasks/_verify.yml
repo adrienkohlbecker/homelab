@@ -290,6 +290,7 @@
       - record.unit == "tautulli.service"
       - record.identifier == "tautulli"
       - record.level == "warn"
+      - record.time is match('^2026-07-12T10:00:00')
       - record.message == '{"marker":"' ~ tautulli_websocket_marker ~ '"}'
       - record.fields.thread == "Thread-99 (run)"
       - record.fields.source == "plex_websocket"
