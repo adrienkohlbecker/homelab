@@ -86,21 +86,6 @@ apt_update() {
 # .sources files, matching both the stock Noble layout and what roles/apt
 # converges to.
 write_sources_list() {
-  write_sources_list_deb822 "$1" "$2"
-
-  # apt keys /var/lib/apt/lists/ by mirror URL, so changing the mirror
-  # here orphans the cached indices. The frozen base suite's InRelease is
-  # byte-identical whichever mirror serves it (Nexus just proxies
-  # upstream), so the next apt-get update records a content "Hit", skips
-  # the re-download, then can't open the list file that was never written
-  # under the new URL ("can not open …InRelease"). Drop the cache so each
-  # rewrite re-fetches cleanly under the current URLs. No-op on the first
-  # call (debootstrap leaves the dir empty); load-bearing on the upstream
-  # rewrite below.
-  find /var/lib/apt/lists -type f -delete
-}
-
-write_sources_list_deb822() {
   # Shape matches what roles/apt's deb822_repository tasks render (the
   # module emits fields sorted by parameter name), so a diff between the
   # packer-baked files and the post-apply state highlights real drift
@@ -143,6 +128,17 @@ Suites: $UBUNTU_NAME-security
 Types: deb
 URIs: $2
 EOF
+
+  # apt keys /var/lib/apt/lists/ by mirror URL, so changing the mirror
+  # here orphans the cached indices. The frozen base suite's InRelease is
+  # byte-identical whichever mirror serves it (Nexus just proxies
+  # upstream), so the next apt-get update records a content "Hit", skips
+  # the re-download, then can't open the list file that was never written
+  # under the new URL ("can not open …InRelease"). Drop the cache so each
+  # rewrite re-fetches cleanly under the current URLs. No-op on the first
+  # call (debootstrap leaves the dir empty); load-bearing on the upstream
+  # rewrite below.
+  find /var/lib/apt/lists -type f -delete
 }
 
 write_sources_list "$UBUNTU_MIRROR" "$UBUNTU_MIRROR_SECURITY"
