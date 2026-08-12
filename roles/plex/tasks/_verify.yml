@@ -3,6 +3,20 @@
 # box (cf. the unit having no start: arch gate) — these run everywhere, no
 # stat-only fallback needed.
 
+- name: _verify | Plex declares the timezone used by its offset-less file logs
+  command:
+    argv:
+      - podman
+      - exec
+      - plex
+      - /bin/sh
+      - -c
+      - 'test "$TZ" = "$1"'
+      - verify
+      - Europe/Paris
+  changed_when: false
+  become: true
+
 # Loopback probe through the published port — /identity returns the
 # server's machineIdentifier as XML without auth, proving Plex is up
 # beyond the container's own --sdnotify=healthy gate.

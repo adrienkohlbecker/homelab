@@ -6,9 +6,6 @@ parsers:
   - name: tautulli_websocket_file
     format: regex
     regex: '/\A(?<tautulli_websocket_timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - (?<tautulli_websocket_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)[[:space:]]+:: (?<tautulli_websocket_thread>.*?) : (?<tautulli_websocket_message>[\s\S]*?)[[:space:]]*\z/'
-    time_key: tautulli_websocket_timestamp
-    time_format: '%Y-%m-%d %H:%M:%S'
-    time_system_timezone: true
 
 pipeline:
   inputs:
@@ -69,6 +66,13 @@ pipeline:
       parser: tautulli_websocket_file
       reserve_data: true
       preserve_key: true
+
+    # Tautulli runs with TZ=Europe/Paris but writes no offset to this file.
+    - name: lua
+      match: tautulli.websocket
+      script: /etc/fluent-bit/europe_paris_time.lua
+      call: from_europe_paris
+      time_as_table: true
 
     - name: modify
       match: tautulli.websocket

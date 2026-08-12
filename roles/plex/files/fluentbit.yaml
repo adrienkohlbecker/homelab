@@ -6,9 +6,6 @@ parsers:
   - name: plex_file
     format: regex
     regex: '/^(?<plex_timestamp>[A-Z][a-z]{2} [0-9]{2}, [0-9]{4} [0-9:.]+) \[(?<plex_thread>[0-9A-Fa-f]+)\] (?<plex_level>DEBUG|INFO|WARN|ERROR|FATAL) - (?<plex_message>.*)$/m'
-    time_key: plex_timestamp
-    time_format: '%b %d, %Y %H:%M:%S.%L'
-    time_system_timezone: true
 
 multiline_parsers:
   - name: multiline_plex_file
@@ -132,6 +129,13 @@ pipeline:
       parser: plex_file
       reserve_data: true
       preserve_key: true
+
+    # Plex runs with TZ=Europe/Paris but writes no offset to its file logs.
+    - name: lua
+      match: 'plex.*'
+      script: /etc/fluent-bit/europe_paris_time.lua
+      call: from_europe_paris
+      time_as_table: true
 
     - name: modify
       match: 'plex.*'

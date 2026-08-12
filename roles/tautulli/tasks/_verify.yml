@@ -2,6 +2,20 @@
 # unauthenticated (no api_key needed), so it only proves the container is up
 # and answering HTTP. Type=notify + --sdnotify=healthy means the unit is
 # already active==healthy by converge end; the retries are a safety margin.
+- name: _verify | Tautulli declares the timezone used by its offset-less file log
+  command:
+    argv:
+      - podman
+      - exec
+      - tautulli
+      - /bin/sh
+      - -c
+      - 'test "$TZ" = "$1"'
+      - verify
+      - Europe/Paris
+  changed_when: false
+  become: true
+
 - name: _verify | Tautulli answers /status on its loopback port
   uri:
     url: http://127.0.0.1:{{ service_ports.tautulli }}/status
