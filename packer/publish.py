@@ -72,7 +72,11 @@ def main() -> None:
     # tree so the other homelab_ci identity can remove it on a later publish.
     make_directories_group_manageable(src)
 
-    fd = os.open(lockfile, os.O_RDONLY | os.O_CREAT, 0o644)
+    # 0640, not 0644: flock needs only an open fd, so any account that can
+    # read the file can hold LOCK_EX and wedge publishes plus every cell's
+    # shared acquire. Keep it to the owner and the homelab_ci group the
+    # setgid artifact dir propagates.
+    fd = os.open(lockfile, os.O_RDONLY | os.O_CREAT, 0o640)
     try:
         acquire_exclusive(fd, lockfile, LOCK_TIMEOUT_SEC)
         # Atomic 3-step publish: park the current tree under .outgoing

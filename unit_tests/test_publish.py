@@ -95,6 +95,25 @@ class TestMainAtomicPublish:
 
         assert (dst / "image.qcow2").read_text() == "new"
 
+    def test_created_lock_excludes_others(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "image.qcow2").write_text("new")
+        dst = tmp_path / "dst"
+        lockfile = tmp_path / ".publish-lock"
+
+        monkeypatch.setattr("sys.argv", ["publish.py", str(lockfile), str(src), str(dst)])
+        # flock only needs a readable fd, so a world-readable lockfile would let
+        # any local account take LOCK_EX; pin the umask so the assertion is
+        # about the requested creation mode, not the environment.
+        old_umask = os.umask(0o022)
+        try:
+            pub.main()
+        finally:
+            os.umask(old_umask)
+
+        assert stat.S_IMODE(lockfile.stat().st_mode) == 0o640
+
     def test_grants_group_access_to_published_directories(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
