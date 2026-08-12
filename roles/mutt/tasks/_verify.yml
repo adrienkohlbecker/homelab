@@ -79,15 +79,15 @@
 # input; quitting from within the push buffer skips that paint, so the rendered
 # body would never reach the typescript. The stdin keys land after the paint.
 #
-# Runs under a pty (script) because neomutt needs a terminal; TERM is set so it
-# can initialise curses headlessly. Runs as the connection user (the operator
-# who owns the 0700 Maildir), so no become.
+# Runs under a pty (script) because neomutt needs a terminal; TERM and a fixed
+# terminal geometry let curses initialise and paint the body headlessly. Runs
+# as the connection user (the operator who owns the 0700 Maildir), so no become.
 - name: _verify | The mail-archive wrapper opens and displays a message read-only
   command:
     argv:
       - script
       - -qec
-      - mail-archive -e "push <display-message>"
+      - stty cols 120 rows 40; mail-archive -e "push <display-message>"
       - /tmp/mutt_verify_typescript
     stdin: qq
   environment:
