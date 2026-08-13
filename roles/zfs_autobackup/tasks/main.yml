@@ -116,9 +116,21 @@
     - zfs_backup_local
     - zfs_backup_onsite
     - zfs_backup_offsite
-    - zfs_backup_restore
     - zfs_backup_freshness
   register: zfs_autobackup_scripts
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Copy the restore program
+  copy:
+    src: zfs_backup_restore.py
+    dest: /usr/local/bin/zfs_backup_restore
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+    validate: python3 -m py_compile %s
   become: true
   tags:
     - zfs_autobackup
