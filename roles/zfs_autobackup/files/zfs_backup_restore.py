@@ -244,6 +244,16 @@ def receive(config: Config, send_command: list[str], target: str) -> None:
             # SSH compression so mbuffer reflects the actual bottleneck.
             *SSH_BULK_OPTIONS,
             config.target_ssh,
+            # mbuffer on both ends: the local buffer absorbs zfs send
+            # burstiness, the remote one keeps the ssh pipe draining while
+            # zfs recv stalls on txg syncs (-q: no stats on the non-tty side).
+            # ssh space-joins these words into one remote shell command, so
+            # the pipe is parsed remotely.
+            "mbuffer",
+            "-q",
+            "-m",
+            "256M",
+            "|",
             "sudo",
             "zfs",
             "recv",
