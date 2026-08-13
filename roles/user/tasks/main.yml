@@ -57,7 +57,6 @@
       - tmux
       - tree
       - usbutils
-      - util-linux
       - vim
       - zsh
     cache_valid_time: 3600
