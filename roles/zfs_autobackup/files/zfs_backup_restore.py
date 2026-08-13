@@ -44,6 +44,8 @@ class RestoreError(Exception):
 
 @dataclass(frozen=True)
 class Config:
+    """Validated command-line configuration for one restore."""
+
     target_ssh: str
     replica_dataset: str
     start_suffix: str
@@ -64,15 +66,21 @@ class DatasetPlan:
 
     @property
     def complete(self) -> bool:
+        """Return whether every selected snapshot is durable on the target."""
+
         return self.received_count == len(self.snapshots) and self.resume_token is None
 
 
 def fail(message: str, exit_code: int = 1) -> NoReturn:
+    """Print an operator-facing error and terminate with ``exit_code``."""
+
     print(f"ERROR: {message}", file=sys.stderr)
     raise SystemExit(exit_code)
 
 
 def command_text(command: list[str] | tuple[str, ...]) -> str:
+    """Render an argument vector for diagnostics without executing it."""
+
     return shlex.join(command)
 
 
@@ -82,6 +90,8 @@ def capture(
     check: bool = True,
     stderr: int | TextIO | None = subprocess.PIPE,
 ) -> subprocess.CompletedProcess[str]:
+    """Run a text command and capture stdout, raising on failure by default."""
+
     result = subprocess.run(
         command,
         check=False,
@@ -98,25 +108,37 @@ def capture(
 
 
 def run(command: list[str] | tuple[str, ...]) -> None:
+    """Run a command with inherited stdio and raise if it fails."""
+
     result = subprocess.run(command, check=False)
     if result.returncode:
         raise RestoreError(f"command failed with exit {result.returncode}: {command_text(command)}")
 
 
 def trace(command: list[str]) -> None:
+    """Print a command before running it with inherited stdio."""
+
     print(f"$ {command_text(command)}")
     run(command)
 
 
 def lines(result: subprocess.CompletedProcess[str]) -> list[str]:
+    """Return the non-empty stdout lines from a completed text command."""
+
     return [line for line in result.stdout.splitlines() if line]
 
 
 def ssh_command(config: Config, *command: str) -> list[str]:
+    """Build a non-interactive SSH command for a short remote operation."""
+
+    # Short probes never consume stdin. -n prevents SSH from stealing the
+    # confirmation prompt or a caller's input; streaming receives omit it.
     return ["ssh", "-n", config.target_ssh, *command]
 
 
 def zfs_command(*args: str, sudo: bool = False) -> list[str]:
+    """Build a local ZFS command, optionally elevated through sudo."""
+
     return ["sudo", "zfs", *args] if sudo else ["zfs", *args]
 
 
@@ -126,31 +148,45 @@ def zfs_capture(
     check: bool = True,
     stderr: int | TextIO | None = subprocess.PIPE,
 ) -> subprocess.CompletedProcess[str]:
+    """Run a local ZFS command and capture its text output."""
+
     return capture(zfs_command(*args, sudo=sudo), check=check, stderr=stderr)
 
 
 def zfs_value(*args: str) -> str:
+    """Return a local ZFS command's stdout without surrounding whitespace."""
+
     return zfs_capture(*args).stdout.strip()
 
 
 def remote_zfs_capture(config: Config, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    """Run an elevated ZFS command remotely and capture its text output."""
+
     return capture(ssh_command(config, "sudo", "zfs", *args), check=check)
 
 
 def remote_zfs_value(config: Config, *args: str) -> str:
+    """Return a remote ZFS command's stripped stdout."""
+
     return remote_zfs_capture(config, *args).stdout.strip()
 
 
 def remote_zfs_run(config: Config, *args: str) -> None:
+    """Run an elevated remote ZFS command with inherited stdio."""
+
     run(ssh_command(config, "sudo", "zfs", *args))
 
 
 def parse_config(argv: list[str]) -> Config:
+    """Parse and validate the six positional command-line arguments."""
+
     if len(argv) != 6:
         print(USAGE, file=sys.stderr)
         raise SystemExit(2)
 
     config = Config(*argv)
+    # OpenSSH joins remote argv into a shell command instead of transmitting an
+    # argv vector. Restrict every interpolated value to a shell-safe alphabet.
     if not SSH_DESTINATION.fullmatch(config.target_ssh) or config.target_ssh.startswith("-"):
         fail(f"invalid SSH destination: {config.target_ssh}", 2)
     for label, name in (
@@ -171,6 +207,10 @@ def parse_config(argv: list[str]) -> Config:
 
 
 def selected_snapshots(config: Config, dataset: str) -> list[str]:
+    """Return the inclusive source snapshot range in creation order."""
+
+    # Depth one excludes snapshots belonging to descendant datasets, which
+    # receive their own independent streams and checkpoints.
     result = zfs_capture("list", "-H", "-d", "1", "-t", "snapshot", "-o", "name", "-s", "createtxg", dataset)
     prefix = f"{dataset}@"
     suffixes = [name.removeprefix(prefix) for name in lines(result) if name.startswith(prefix)]
@@ -187,6 +227,8 @@ def selected_snapshots(config: Config, dataset: str) -> list[str]:
 
 
 def build_plans(config: Config) -> list[DatasetPlan]:
+    """Map every replica dataset to its target and selected snapshot history."""
+
     try:
         datasets = lines(zfs_capture("list", "-r", "-H", "-o", "name", config.replica_dataset))
     except RestoreError as error:
@@ -196,6 +238,8 @@ def build_plans(config: Config) -> list[DatasetPlan]:
     for dataset in datasets:
         if not ZFS_NAME.fullmatch(dataset):
             raise RestoreError(f"unsupported dataset name: {dataset}")
+        # A clone depends on its origin snapshot. Reconstructing that graph
+        # cannot be expressed by this protocol's independent dataset streams.
         if zfs_value("get", "-H", "-o", "value", "origin", dataset) != "-":
             raise RestoreError(f"clone datasets are not supported: {dataset}")
         target = config.target_dataset + dataset.removeprefix(config.replica_dataset)
@@ -204,6 +248,8 @@ def build_plans(config: Config) -> list[DatasetPlan]:
 
 
 def preview(config: Config, plans: list[DatasetPlan]) -> None:
+    """Show ZFS dry-run estimates for the selected full and incremental data."""
+
     for plan in plans:
         trace(zfs_command("send", "-nPbpvc", f"{plan.source}@{config.start_suffix}", sudo=True))
         if config.start_suffix != config.end_suffix:
@@ -220,10 +266,14 @@ def preview(config: Config, plans: list[DatasetPlan]) -> None:
 
 
 def snapshot_guid(dataset: str, suffix: str) -> str:
+    """Return the stable ZFS identity of a local snapshot."""
+
     return zfs_value("get", "-H", "-p", "-o", "value", "guid", f"{dataset}@{suffix}")
 
 
 def remote_snapshot_rows(config: Config, target: str) -> list[tuple[str, str]]:
+    """Return a target dataset's direct snapshots and GUIDs in creation order."""
+
     result = remote_zfs_capture(
         config,
         "list",
@@ -239,6 +289,8 @@ def remote_snapshot_rows(config: Config, target: str) -> list[tuple[str, str]]:
         target,
         check=False,
     )
+    # zfs list exits nonzero when the dataset has no snapshots. Its dataset
+    # existence was established by the caller, so an empty result is valid.
     prefix = f"{target}@"
     rows = []
     for snapshot in (name for name in lines(result) if name.startswith(prefix)):
@@ -248,6 +300,10 @@ def remote_snapshot_rows(config: Config, target: str) -> list[tuple[str, str]]:
 
 
 def token_suffix(token: str) -> str:
+    """Return the destination snapshot encoded in a ZFS receive resume token."""
+
+    # zfs send writes the token preview to stderr, so merge both streams before
+    # parsing its structured ``toname`` field.
     result = zfs_capture(
         "send",
         "-nP",
@@ -263,9 +319,13 @@ def token_suffix(token: str) -> str:
 
 
 def inspect_targets(config: Config, plans: list[DatasetPlan]) -> None:
+    """Validate the target tree and attach resumable progress to each plan."""
+
     remote_datasets = set(lines(remote_zfs_capture(config, "list", "-H", "-o", "name")))
     expected_targets = {plan.target for plan in plans}
     target_prefix = f"{config.target_dataset}/"
+    # Refuse foreign descendants rather than silently leaving them beside a
+    # restored tree that is expected to mirror the source hierarchy exactly.
     unexpected = sorted(
         dataset
         for dataset in remote_datasets
@@ -287,6 +347,9 @@ def inspect_targets(config: Config, plans: list[DatasetPlan]) -> None:
             plan.target,
         )
         rows = remote_snapshot_rows(config, plan.target)
+        # Names in exact order prove a prefix; GUIDs prove the names refer to
+        # the same source snapshots rather than unrelated snapshots reused by
+        # name.
         for index, (suffix, remote_guid) in enumerate(rows):
             if index >= len(plan.snapshots) or suffix != plan.snapshots[index]:
                 raise RestoreError(f"{plan.target} is not a prefix of the requested snapshot range")
@@ -295,6 +358,8 @@ def inspect_targets(config: Config, plans: list[DatasetPlan]) -> None:
         plan.received_count = len(rows)
 
         if token == "-":
+            # A dataset with neither a completed snapshot nor a partial receive
+            # cannot be attributed safely to this restore.
             if not rows:
                 raise RestoreError(f"{plan.target} exists without requested snapshots or a resume token")
             continue
@@ -304,6 +369,8 @@ def inspect_targets(config: Config, plans: list[DatasetPlan]) -> None:
             raise RestoreError(f"receive resume token on {plan.target} is outside the requested range")
         plan.resume_token = token
 
+    # Streams are sent serially, so this restore can leave at most one partial
+    # receive. More tokens indicate unrelated or inconsistent target state.
     if sum(plan.resume_token is not None for plan in plans) > 1:
         raise RestoreError(f"multiple receive resume tokens exist below {config.target_dataset}")
     if all(plan.complete for plan in plans):
@@ -313,7 +380,7 @@ def inspect_targets(config: Config, plans: list[DatasetPlan]) -> None:
 
 
 def pipe_commands(commands: list[list[str]]) -> None:
-    """Run a binary stream pipeline and fail if any member fails."""
+    """Run a binary pipeline, wait for every member, and report every failure."""
 
     processes: list[subprocess.Popen[bytes]] = []
     previous_stdout = None
@@ -324,6 +391,8 @@ def pipe_commands(commands: list[list[str]]) -> None:
             stdout=subprocess.PIPE if index < len(commands) - 1 else None,
         )
         if previous_stdout is not None:
+            # The parent must release its duplicate read end. Otherwise an
+            # upstream writer may never observe SIGPIPE when downstream fails.
             previous_stdout.close()
         previous_stdout = process.stdout
         processes.append(process)
@@ -339,12 +408,16 @@ def pipe_commands(commands: list[list[str]]) -> None:
 
 
 def receive(config: Config, send_command: list[str], target: str) -> None:
+    """Stream one ZFS send through mbuffer into a remote resumable receive."""
+
     pipe_commands(
         [
             send_command,
             ["mbuffer", "-m", "256M"],
             [
                 "ssh",
+                # Bulk streams must consume stdin. They also bypass multiplexing
+                # and SSH compression so mbuffer reflects the actual bottleneck.
                 *SSH_BULK_OPTIONS,
                 config.target_ssh,
                 "sudo",
@@ -358,11 +431,14 @@ def receive(config: Config, send_command: list[str], target: str) -> None:
 
 
 def sync_plan(config: Config, plan: DatasetPlan) -> None:
+    """Resume any partial receive, then send each missing snapshot in order."""
+
     index = plan.received_count
     if plan.resume_token:
         print(f"Resuming an interrupted restore into {plan.target}")
         trace(zfs_command("send", "-nP", "-t", plan.resume_token, sudo=True))
         receive(config, zfs_command("send", "-t", plan.resume_token, sudo=True), plan.target)
+        # Completing a token makes its encoded destination snapshot durable.
         index += 1
 
     while index < len(plan.snapshots):
@@ -377,6 +453,8 @@ def sync_plan(config: Config, plan: DatasetPlan) -> None:
 
 
 def verify_endpoints(config: Config, plans: list[DatasetPlan]) -> None:
+    """Require the GUID-matching endpoint snapshot on every target dataset."""
+
     for plan in plans:
         expected = snapshot_guid(plan.source, config.end_suffix)
         result = remote_zfs_capture(
@@ -395,6 +473,8 @@ def verify_endpoints(config: Config, plans: list[DatasetPlan]) -> None:
 
 
 def finalize(config: Config, plans: list[DatasetPlan]) -> None:
+    """Make a verified target writable, mountable, and locally tagged."""
+
     remote_zfs_run(
         config,
         "set",
@@ -419,6 +499,8 @@ def finalize(config: Config, plans: list[DatasetPlan]) -> None:
                 )
             )
         )
+        # A property-based mount check avoids invalid explicit mounts for
+        # datasets whose received configuration uses none, legacy, or off.
         if (
             properties["mountpoint"] not in {"none", "legacy"}
             and properties["canmount"] != "off"
@@ -464,6 +546,8 @@ def finalize(config: Config, plans: list[DatasetPlan]) -> None:
 
 
 def main(argv: list[str]) -> None:
+    """Drive preview, confirmation, validation, transfer, and finalization."""
+
     config = parse_config(argv)
     plans = build_plans(config)
     preview(config, plans)
@@ -480,8 +564,9 @@ def main(argv: list[str]) -> None:
     if reply != "y":
         raise RestoreError("Aborted")
 
-    # The target is inspected exactly once, immediately before transfer. ZFS
-    # recv without -F remains the race guard if it changes after inspection.
+    # Target inspection starts only after confirmation, immediately before
+    # transfer. zfs recv without -F remains the race guard if state changes
+    # between a probe and its stream.
     inspect_targets(config, plans)
     for plan in plans:
         sync_plan(config, plan)
