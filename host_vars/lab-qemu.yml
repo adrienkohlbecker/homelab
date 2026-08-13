@@ -14,12 +14,13 @@ qemu_test: true
 # test/machine.py's qemu_user_net_args) and test/inventory.ini puts
 # lab in [test] so `network.*` is also gsub'd to 10.234 — the parent
 # NIC's subnet then contains every per-host /28 the topology emits.
+qemu_macvlan_parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
 macvlan_blocks:
   - name: mac_mgmt
-    parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
+    parent: "{{ qemu_macvlan_parent }}"
     vlan: management
   - name: mac_iot
-    parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
+    parent: "{{ qemu_macvlan_parent }}"
     vlan: iot
     podman_network: true
 
