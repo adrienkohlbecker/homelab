@@ -1,7 +1,9 @@
 ---
 # Stable identities that own persistent homelab data. The private range is
-# outside login.defs automatic allocation (which ends at 60000) and below
-# systemd DynamicUser allocation (which starts at 61184).
+# outside login.defs automatic allocation (which ends at 60000), above the
+# systemd-homed reservation (60001..60513), and below systemd DynamicUser
+# allocation (which starts at 61184) -- so the usable band is 60514..61183.
+# Allocation started at 60706; 60514..60705 is deliberate unassigned slack.
 #
 # Never renumber an allocated entry. Add new service identities at the next
 # free value in 60741..60799 and new shared groups in 60803..60899.
