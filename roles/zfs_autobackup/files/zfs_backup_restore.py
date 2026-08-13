@@ -125,13 +125,6 @@ def run(command: list[str] | tuple[str, ...]) -> None:
         raise RestoreError(f"command failed with exit {result.returncode}: {command_text(command)}")
 
 
-def trace(command: list[str]) -> None:
-    """Print a command before running it with inherited stdio."""
-
-    print(f"$ {command_text(command)}")
-    run(command)
-
-
 def lines(result: subprocess.CompletedProcess[str]) -> list[str]:
     """Return the non-empty stdout lines from a completed text command."""
 
@@ -252,24 +245,6 @@ def build_plans(config: Config) -> list[DatasetPlan]:
         target = config.target_dataset + dataset.removeprefix(config.replica_dataset)
         plans.append(DatasetPlan(dataset, target, selected_snapshots(config, dataset)))
     return plans
-
-
-def preview(config: Config, plans: list[DatasetPlan]) -> None:
-    """Show ZFS dry-run estimates for the selected full and incremental data."""
-
-    for plan in plans:
-        trace(zfs_command("send", "-nPbpvc", f"{plan.source}@{config.start_suffix}", sudo=True))
-        if config.start_suffix != config.end_suffix:
-            trace(
-                zfs_command(
-                    "send",
-                    "-nPbpvc",
-                    "-I",
-                    f"@{config.start_suffix}",
-                    f"{plan.source}@{config.end_suffix}",
-                    sudo=True,
-                )
-            )
 
 
 def snapshot_guid(dataset: str, suffix: str) -> str:
@@ -483,7 +458,9 @@ def sync_plan(config: Config, plan: DatasetPlan) -> None:
     index = plan.received_count
     if plan.resume_token:
         print(f"Resuming an interrupted restore into {plan.target}")
-        trace(zfs_command("send", "-nP", "-t", plan.resume_token, sudo=True))
+        resume_preview = zfs_command("send", "-nP", "-t", plan.resume_token, sudo=True)
+        print(f"$ {command_text(resume_preview)}")
+        run(resume_preview)
         receive(config, zfs_command("send", "-t", plan.resume_token, sudo=True), plan.target)
         # Completing a token makes its encoded destination snapshot durable.
         index += 1
@@ -593,11 +570,10 @@ def finalize(config: Config, plans: list[DatasetPlan]) -> None:
 
 
 def main(argv: list[str]) -> None:
-    """Drive preview, confirmation, validation, transfer, and finalization."""
+    """Drive confirmation, validation, transfer, and finalization."""
 
     config = parse_config(argv)
     plans = build_plans(config)
-    preview(config, plans)
 
     print()
     print(

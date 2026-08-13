@@ -480,7 +480,8 @@ class TestStreaming:
             resume_token="token_1",
         )
         received = []
-        monkeypatch.setattr(restore, "trace", lambda _command: None)
+        previews = []
+        monkeypatch.setattr(restore, "run", previews.append)
         monkeypatch.setattr(restore, "receive", lambda _config, command, target: received.append((command, target)))
 
         restore.sync_plan(config, plan)
@@ -500,6 +501,7 @@ class TestStreaming:
                 plan.target,
             ),
         ]
+        assert previews == [["sudo", "zfs", "send", "-nP", "-t", "token_1"]]
 
 
 def test_finalize_mounts_only_eligible_datasets_and_restores_local_tags(
