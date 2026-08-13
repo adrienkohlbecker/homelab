@@ -118,12 +118,13 @@ class TestSelectedSnapshots:
 class TestBuildPlans:
     def test_maps_the_replica_tree_to_the_target_tree(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
         source_child = f"{config.replica_dataset}/var"
-        monkeypatch.setattr(
-            restore,
-            "zfs_capture",
-            lambda *args, **kwargs: _completed(f"{config.replica_dataset}\n{source_child}\n"),
-        )
-        monkeypatch.setattr(restore, "zfs_value", lambda *args: "-")
+
+        def capture(*args, **kwargs):
+            if args[0] == "list":
+                return _completed(f"{config.replica_dataset}\n{source_child}\n")
+            return _completed("-")
+
+        monkeypatch.setattr(restore, "zfs_capture", capture)
         monkeypatch.setattr(restore, "selected_snapshots", lambda _config, _dataset: _SNAPSHOTS)
 
         plans = restore.build_plans(config)
@@ -135,8 +136,12 @@ class TestBuildPlans:
         assert all(plan.snapshots == _SNAPSHOTS for plan in plans)
 
     def test_rejects_clone_datasets(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(restore, "zfs_capture", lambda *args, **kwargs: _completed(config.replica_dataset))
-        monkeypatch.setattr(restore, "zfs_value", lambda *args: "pool/origin@snapshot")
+        def capture(*args, **kwargs):
+            if args[0] == "list":
+                return _completed(config.replica_dataset)
+            return _completed("pool/origin@snapshot")
+
+        monkeypatch.setattr(restore, "zfs_capture", capture)
 
         with pytest.raises(restore.RestoreError, match="clone datasets are not supported"):
             restore.build_plans(config)
@@ -227,22 +232,19 @@ class TestInspectTargets:
         rows = rows or {}
         tokens = tokens or {}
         written = written or {}
-        monkeypatch.setattr(
-            restore,
-            "remote_zfs_capture",
-            lambda *args, **kwargs: _completed("\n".join(datasets)),
-        )
         monkeypatch.setattr(restore, "remote_snapshot_rows", lambda _config, target: rows.get(target, []))
 
-        def remote_value(_config, *args):
+        def remote_capture(_config, *args, **kwargs):
+            if args[0] == "list":
+                return _completed("\n".join(datasets))
             property_name, target = args[-2:]
             if property_name == "receive_resume_token":
-                return tokens.get(target, "-")
+                return _completed(tokens.get(target, "-"))
             if property_name == "written":
-                return written.get(target, "0")
+                return _completed(written.get(target, "0"))
             raise AssertionError(f"unexpected remote property: {property_name}")
 
-        monkeypatch.setattr(restore, "remote_zfs_value", remote_value)
+        monkeypatch.setattr(restore, "remote_zfs_capture", remote_capture)
         monkeypatch.setattr(restore, "snapshot_guid", lambda _dataset, suffix: f"guid-{suffix}")
         monkeypatch.setattr(restore, "run", lambda _command: None)
         if token_suffix is not None:

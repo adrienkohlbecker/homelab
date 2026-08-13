@@ -156,22 +156,10 @@ def zfs_capture(
     return capture(zfs_command(*args, sudo=sudo), check=check, stderr=stderr)
 
 
-def zfs_value(*args: str) -> str:
-    """Return a local ZFS command's stdout without surrounding whitespace."""
-
-    return zfs_capture(*args).stdout.strip()
-
-
 def remote_zfs_capture(config: Config, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     """Run an elevated ZFS command remotely and capture its text output."""
 
     return capture(ssh_command(config, "sudo", "zfs", *args), check=check)
-
-
-def remote_zfs_value(config: Config, *args: str) -> str:
-    """Return a remote ZFS command's stripped stdout."""
-
-    return remote_zfs_capture(config, *args).stdout.strip()
 
 
 def remote_zfs_run(config: Config, *args: str) -> None:
@@ -240,7 +228,7 @@ def build_plans(config: Config) -> list[DatasetPlan]:
             raise RestoreError(f"unsupported dataset name: {dataset}")
         # A clone depends on its origin snapshot. Reconstructing that graph
         # cannot be expressed by this protocol's independent dataset streams.
-        if zfs_value("get", "-H", "-o", "value", "origin", dataset) != "-":
+        if zfs_capture("get", "-H", "-o", "value", "origin", dataset).stdout.strip() != "-":
             raise RestoreError(f"clone datasets are not supported: {dataset}")
         target = config.target_dataset + dataset.removeprefix(config.replica_dataset)
         plans.append(DatasetPlan(dataset, target, selected_snapshots(config, dataset)))
@@ -250,7 +238,7 @@ def build_plans(config: Config) -> list[DatasetPlan]:
 def snapshot_guid(dataset: str, suffix: str) -> str:
     """Return the stable ZFS identity of a local snapshot."""
 
-    return zfs_value("get", "-H", "-p", "-o", "value", "guid", f"{dataset}@{suffix}")
+    return zfs_capture("get", "-H", "-p", "-o", "value", "guid", f"{dataset}@{suffix}").stdout.strip()
 
 
 def remote_snapshot_rows(config: Config, target: str) -> list[tuple[str, str]]:
@@ -329,15 +317,9 @@ def inspect_targets(config: Config, plans: list[DatasetPlan]) -> None:
     for plan in plans:
         if plan.target not in remote_datasets:
             continue
-        token = remote_zfs_value(
-            config,
-            "get",
-            "-H",
-            "-o",
-            "value",
-            "receive_resume_token",
-            plan.target,
-        )
+        token = remote_zfs_capture(
+            config, "get", "-H", "-o", "value", "receive_resume_token", plan.target
+        ).stdout.strip()
         rows = remote_snapshot_rows(config, plan.target)
         # Names in exact order prove a prefix; GUIDs prove the names refer to
         # the same source snapshots rather than unrelated snapshots reused by
@@ -386,7 +368,7 @@ def inspect_targets(config: Config, plans: list[DatasetPlan]) -> None:
     for plan in plans:
         if not plan.received_count or plan.resume_token is not None:
             continue
-        written = remote_zfs_value(config, "get", "-H", "-p", "-o", "value", "written", plan.target)
+        written = remote_zfs_capture(config, "get", "-H", "-p", "-o", "value", "written", plan.target).stdout.strip()
         try:
             written_bytes = int(written)
         except ValueError as error:
