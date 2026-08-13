@@ -198,7 +198,7 @@ def parse_config(argv: list[str]) -> Config:
     if (
         not config.mountpoint.startswith("/")
         or ".." in PurePosixPath(config.mountpoint).parts
-        or not re.fullmatch(r"/[A-Za-z0-9_.:/-]+", config.mountpoint, re.ASCII)
+        or not re.fullmatch(r"/[A-Za-z0-9_.:/-]*", config.mountpoint, re.ASCII)
     ):
         fail(f"unsupported target mountpoint: {config.mountpoint}", 2)
     if not SNAPSHOT_SUFFIX.fullmatch(config.start_suffix) or not SNAPSHOT_SUFFIX.fullmatch(config.end_suffix):
