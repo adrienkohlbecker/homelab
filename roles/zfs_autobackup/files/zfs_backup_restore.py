@@ -424,9 +424,25 @@ def inspect_targets(config: Config, plans: list[DatasetPlan]) -> None:
             )
 
 
-def pipe_commands(commands: list[list[str]]) -> None:
-    """Run a binary pipeline, wait for every member, and report every failure."""
+def receive(config: Config, send_command: list[str], target: str) -> None:
+    """Stream one ZFS send through mbuffer into a remote resumable receive."""
 
+    commands = [
+        send_command,
+        ["mbuffer", "-m", "256M"],
+        [
+            "ssh",
+            # Bulk streams must consume stdin. They also bypass multiplexing and
+            # SSH compression so mbuffer reflects the actual bottleneck.
+            *SSH_BULK_OPTIONS,
+            config.target_ssh,
+            "sudo",
+            "zfs",
+            "recv",
+            "-su",
+            target,
+        ],
+    ]
     processes: list[subprocess.Popen[bytes]] = []
     previous_stdout = None
     for index, command in enumerate(commands):
@@ -459,29 +475,6 @@ def pipe_commands(commands: list[list[str]]) -> None:
     ]
     if failures:
         raise RestoreError(f"restore pipeline failed: {'; '.join(failures)}")
-
-
-def receive(config: Config, send_command: list[str], target: str) -> None:
-    """Stream one ZFS send through mbuffer into a remote resumable receive."""
-
-    pipe_commands(
-        [
-            send_command,
-            ["mbuffer", "-m", "256M"],
-            [
-                "ssh",
-                # Bulk streams must consume stdin. They also bypass multiplexing
-                # and SSH compression so mbuffer reflects the actual bottleneck.
-                *SSH_BULK_OPTIONS,
-                config.target_ssh,
-                "sudo",
-                "zfs",
-                "recv",
-                "-su",
-                target,
-            ],
-        ]
-    )
 
 
 def sync_plan(config: Config, plan: DatasetPlan) -> None:

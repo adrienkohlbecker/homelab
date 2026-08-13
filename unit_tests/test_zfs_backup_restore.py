@@ -402,51 +402,74 @@ class TestInspectTargets:
 
 
 class TestStreaming:
-    def test_pipeline_transfers_bytes(self) -> None:
-        restore.pipe_commands(
-            [
-                [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'payload')"],
-                [
+    def test_receive_transfers_bytes_with_an_uncompressed_nonmultiplexed_ssh_stream(
+        self, config, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        commands = []
+        real_popen = subprocess.Popen
+
+        def popen(command, **kwargs):
+            commands.append(command)
+            if command[0] == "zfs":
+                replacement = [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'payload')"]
+            elif command[0] == "mbuffer":
+                replacement = [
+                    sys.executable,
+                    "-c",
+                    "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())",
+                ]
+            else:
+                replacement = [
                     sys.executable,
                     "-c",
                     "import sys; raise SystemExit(sys.stdin.buffer.read() != b'payload')",
-                ],
-            ]
-        )
+                ]
+            return real_popen(replacement, **kwargs)
 
-    def test_pipeline_reports_a_member_failure(self) -> None:
-        with pytest.raises(restore.RestoreError, match=r"exit 7"):
-            restore.pipe_commands([[sys.executable, "-c", "raise SystemExit(7)"]])
-
-    def test_pipeline_wraps_a_missing_executable(self) -> None:
-        with pytest.raises(restore.RestoreError, match="could not start restore pipeline command"):
-            restore.pipe_commands([["/definitely/missing/zfs-restore-command"]])
-
-    def test_receive_builds_an_uncompressed_nonmultiplexed_ssh_stream(
-        self, config, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        pipelines = []
-        monkeypatch.setattr(restore, "pipe_commands", pipelines.append)
+        monkeypatch.setattr(restore.subprocess, "Popen", popen)
 
         restore.receive(config, ["zfs", "send", "pool/src@snapshot"], config.target_dataset)
 
-        assert pipelines == [
+        assert commands == [
+            ["zfs", "send", "pool/src@snapshot"],
+            ["mbuffer", "-m", "256M"],
             [
-                ["zfs", "send", "pool/src@snapshot"],
-                ["mbuffer", "-m", "256M"],
-                [
-                    "ssh",
-                    *restore.SSH_BULK_OPTIONS,
-                    config.target_ssh,
-                    "sudo",
-                    "zfs",
-                    "recv",
-                    "-su",
-                    config.target_dataset,
-                ],
-            ]
+                "ssh",
+                *restore.SSH_BULK_OPTIONS,
+                config.target_ssh,
+                "sudo",
+                "zfs",
+                "recv",
+                "-su",
+                config.target_dataset,
+            ],
         ]
-        assert "-n" not in pipelines[0][-1]
+        assert "-n" not in commands[-1]
+
+    def test_receive_reports_a_pipeline_member_failure(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
+        real_popen = subprocess.Popen
+
+        def popen(command, **kwargs):
+            exit_code = 7 if command[0] == "mbuffer" else 0
+            return real_popen([sys.executable, "-c", f"raise SystemExit({exit_code})"], **kwargs)
+
+        monkeypatch.setattr(restore.subprocess, "Popen", popen)
+
+        with pytest.raises(restore.RestoreError, match=r"mbuffer -m 256M \(exit 7\)"):
+            restore.receive(config, ["zfs", "send", "pool/src@snapshot"], config.target_dataset)
+
+    def test_receive_wraps_a_missing_executable(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
+        real_popen = subprocess.Popen
+
+        def popen(command, **kwargs):
+            if command[0] == "mbuffer":
+                raise FileNotFoundError("missing")
+            return real_popen([sys.executable, "-c", "pass"], **kwargs)
+
+        monkeypatch.setattr(restore.subprocess, "Popen", popen)
+
+        with pytest.raises(restore.RestoreError, match="could not start restore pipeline command mbuffer"):
+            restore.receive(config, ["zfs", "send", "pool/src@snapshot"], config.target_dataset)
 
     def test_sync_resumes_then_sends_the_remaining_incremental(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
         plan = restore.DatasetPlan(
