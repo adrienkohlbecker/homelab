@@ -38,7 +38,7 @@ def config():
         _SNAPSHOTS[0],
         _SNAPSHOTS[-1],
         "rpool/ROOT/jammy",
-        "/",
+        "/mnt/zfs_restore_validation/jammy",
     )
 
 
@@ -65,6 +65,10 @@ class TestParseConfig:
             ["-oProxyCommand=bad", "pool/src", *_SNAPSHOTS[:2], "pool/dst", "/mnt"],
             ["root@lab", "pool/src;bad", *_SNAPSHOTS[:2], "pool/dst", "/mnt"],
             ["root@lab", "pool/src", *_SNAPSHOTS[:2], "pool/dst", "relative"],
+            ["root@lab", "pool/src", *_SNAPSHOTS[:2], "pool/dst", "/"],
+            ["root@lab", "pool/src", *_SNAPSHOTS[:2], "pool/dst", "/mnt//bad"],
+            ["root@lab", "pool/src", *_SNAPSHOTS[:2], "pool/dst", "/mnt/bad/"],
+            ["root@lab", "pool/src", *_SNAPSHOTS[:2], "pool/dst", "/mnt/./bad"],
             ["root@lab", "pool/src", *_SNAPSHOTS[:2], "pool/dst", "/mnt/../bad"],
             ["root@lab", "pool/src", "manual", _SNAPSHOTS[1], "pool/dst", "/mnt"],
         ],
@@ -154,6 +158,60 @@ class TestResumeToken:
         with pytest.raises(restore.RestoreError, match="did not identify a snapshot"):
             restore.token_suffix("token_1")
 
+    def test_preserves_the_zfs_diagnostic_for_an_unusable_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            restore,
+            "zfs_capture",
+            lambda *args, **kwargs: _completed("resume token is corrupt\n", returncode=1),
+        )
+
+        with pytest.raises(restore.RestoreError, match="receive resume token is unusable: resume token is corrupt"):
+            restore.token_suffix("token_1")
+
+
+class TestRemoteSnapshotRows:
+    def test_fetches_names_and_guids_in_one_checked_call(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = []
+
+        def capture(_config, *args, **kwargs):
+            calls.append((args, kwargs))
+            return _completed(
+                f"{config.target_dataset}@{_SNAPSHOTS[0]}\tguid-1\n"
+                f"{config.target_dataset}@{_SNAPSHOTS[1]}\tguid-2\n"
+            )
+
+        monkeypatch.setattr(restore, "remote_zfs_capture", capture)
+
+        assert restore.remote_snapshot_rows(config, config.target_dataset) == [
+            (_SNAPSHOTS[0], "guid-1"),
+            (_SNAPSHOTS[1], "guid-2"),
+        ]
+        assert calls == [
+            (
+                (
+                    "list",
+                    "-H",
+                    "-d",
+                    "1",
+                    "-t",
+                    "snapshot",
+                    "-o",
+                    "name,guid",
+                    "-p",
+                    "-s",
+                    "createtxg",
+                    config.target_dataset,
+                ),
+                {},
+            )
+        ]
+
+    def test_rejects_malformed_remote_output(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(restore, "remote_zfs_capture", lambda *args, **kwargs: _completed("missing-guid\n"))
+
+        with pytest.raises(restore.RestoreError, match="invalid snapshot row"):
+            restore.remote_snapshot_rows(config, config.target_dataset)
+
 
 class TestInspectTargets:
     @staticmethod
@@ -163,17 +221,28 @@ class TestInspectTargets:
         datasets: list[str],
         rows: dict[str, list[tuple[str, str]]] | None = None,
         tokens: dict[str, str] | None = None,
+        written: dict[str, str] | None = None,
         token_suffix: str | None = None,
     ) -> None:
         rows = rows or {}
         tokens = tokens or {}
+        written = written or {}
         monkeypatch.setattr(
             restore,
             "remote_zfs_capture",
             lambda *args, **kwargs: _completed("\n".join(datasets)),
         )
         monkeypatch.setattr(restore, "remote_snapshot_rows", lambda _config, target: rows.get(target, []))
-        monkeypatch.setattr(restore, "remote_zfs_value", lambda _config, *args: tokens.get(args[-1], "-"))
+
+        def remote_value(_config, *args):
+            property_name, target = args[-2:]
+            if property_name == "receive_resume_token":
+                return tokens.get(target, "-")
+            if property_name == "written":
+                return written.get(target, "0")
+            raise AssertionError(f"unexpected remote property: {property_name}")
+
+        monkeypatch.setattr(restore, "remote_zfs_value", remote_value)
         monkeypatch.setattr(restore, "snapshot_guid", lambda _dataset, suffix: f"guid-{suffix}")
         if token_suffix is not None:
             monkeypatch.setattr(restore, "token_suffix", lambda _token: token_suffix)
@@ -201,6 +270,56 @@ class TestInspectTargets:
 
         assert plan.received_count == 1
         assert plan.resume_token == "token_1"
+
+    def test_accepts_an_unchanged_completed_prefix(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
+        plan = restore.DatasetPlan(config.replica_dataset, config.target_dataset, _SNAPSHOTS)
+        self._patch_state(
+            monkeypatch,
+            datasets=[plan.target],
+            rows={plan.target: [(_SNAPSHOTS[0], f"guid-{_SNAPSHOTS[0]}")]},
+            written={plan.target: "0"},
+        )
+
+        restore.inspect_targets(config, [plan])
+
+        assert plan.received_count == 1
+        assert plan.resume_token is None
+
+    def test_rejects_writes_after_a_completed_prefix(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
+        plan = restore.DatasetPlan(config.replica_dataset, config.target_dataset, _SNAPSHOTS)
+        self._patch_state(
+            monkeypatch,
+            datasets=[plan.target],
+            rows={plan.target: [(_SNAPSHOTS[0], f"guid-{_SNAPSHOTS[0]}")]},
+            written={plan.target: "4096"},
+        )
+
+        with pytest.raises(
+            restore.RestoreError,
+            match=rf"sudo zfs rollback {plan.target}@{_SNAPSHOTS[0]}",
+        ):
+            restore.inspect_targets(config, [plan])
+
+    def test_rejects_snapshots_after_a_completed_prefix_with_recursive_rollback_guidance(
+        self, config, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        plan = restore.DatasetPlan(config.replica_dataset, config.target_dataset, _SNAPSHOTS)
+        self._patch_state(
+            monkeypatch,
+            datasets=[plan.target],
+            rows={
+                plan.target: [
+                    (_SNAPSHOTS[0], f"guid-{_SNAPSHOTS[0]}"),
+                    ("local-snapshot", "local-guid"),
+                ]
+            },
+        )
+
+        with pytest.raises(
+            restore.RestoreError,
+            match=rf"sudo zfs rollback -r {plan.target}@{_SNAPSHOTS[0]}",
+        ):
+            restore.inspect_targets(config, [plan])
 
     @pytest.mark.parametrize(
         ("rows", "message"),
@@ -261,6 +380,10 @@ class TestStreaming:
     def test_pipeline_reports_a_member_failure(self) -> None:
         with pytest.raises(restore.RestoreError, match=r"exit 7"):
             restore.pipe_commands([[sys.executable, "-c", "raise SystemExit(7)"]])
+
+    def test_pipeline_wraps_a_missing_executable(self) -> None:
+        with pytest.raises(restore.RestoreError, match="could not start restore pipeline command"):
+            restore.pipe_commands([["/definitely/missing/zfs-restore-command"]])
 
     def test_receive_builds_an_uncompressed_nonmultiplexed_ssh_stream(
         self, config, monkeypatch: pytest.MonkeyPatch

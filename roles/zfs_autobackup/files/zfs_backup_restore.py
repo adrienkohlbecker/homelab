@@ -4,8 +4,9 @@
 The restore protocol deliberately uses one stream per dataset and snapshot.
 That makes every completed snapshot a durable checkpoint: a later invocation
 can validate the target as an exact GUID-matching prefix and continue from the
-next snapshot. A stream interrupted between checkpoints is resumed with its
-ZFS receive token.
+next snapshot, provided the target has no later snapshots or writes. Otherwise
+the restore stops with rollback guidance. A stream interrupted between
+checkpoints is resumed with its ZFS receive token.
 
 Pull replicas override readonly, canmount, and mountpoint locally. ``zfs send
 -bp`` sends the received source properties rather than those holder-local
@@ -15,6 +16,7 @@ has reached END_SUFFIX and its endpoint GUID has been verified.
 
 from __future__ import annotations
 
+import contextlib
 import re
 import shlex
 import subprocess
@@ -23,11 +25,14 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import NoReturn, TextIO
 
-USAGE = "Usage: zfs_backup_restore TARGET_SSH REPLICA_DATASET START_SUFFIX " "END_SUFFIX TARGET_DATASET MOUNTPOINT"
+USAGE = """Usage: zfs_backup_restore TARGET_SSH REPLICA_DATASET START_SUFFIX END_SUFFIX TARGET_DATASET MOUNTPOINT
+Example: zfs_backup_restore ak@lab apoc/lab/rpool/services \\
+  bak-20260801020000 bak-20260813020000 rpool/services /mnt/services"""
 SSH_DESTINATION = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]*@[A-Za-z0-9_.:-]+", re.ASCII)
 ZFS_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/-]*", re.ASCII)
 SNAPSHOT_SUFFIX = re.compile(r"bak-[0-9]{14}", re.ASCII)
 RESUME_TOKEN = re.compile(r"[A-Za-z0-9_-]+", re.ASCII)
+MOUNTPOINT = re.compile(r"/[A-Za-z0-9_.:-]+(?:/[A-Za-z0-9_.:-]+)*", re.ASCII)
 SSH_BULK_OPTIONS = (
     "-o",
     "ControlPath=none",
@@ -92,13 +97,16 @@ def capture(
 ) -> subprocess.CompletedProcess[str]:
     """Run a text command and capture stdout, raising on failure by default."""
 
-    result = subprocess.run(
-        command,
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=stderr,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=stderr,
+            text=True,
+        )
+    except OSError as error:
+        raise RestoreError(f"could not run command {command_text(command)}: {error}") from error
     if check and result.returncode:
         detail = result.stderr.strip() if isinstance(result.stderr, str) else ""
         if detail:
@@ -110,7 +118,10 @@ def capture(
 def run(command: list[str] | tuple[str, ...]) -> None:
     """Run a command with inherited stdio and raise if it fails."""
 
-    result = subprocess.run(command, check=False)
+    try:
+        result = subprocess.run(command, check=False)
+    except OSError as error:
+        raise RestoreError(f"could not run command {command_text(command)}: {error}") from error
     if result.returncode:
         raise RestoreError(f"command failed with exit {result.returncode}: {command_text(command)}")
 
@@ -187,7 +198,7 @@ def parse_config(argv: list[str]) -> Config:
     config = Config(*argv)
     # OpenSSH joins remote argv into a shell command instead of transmitting an
     # argv vector. Restrict every interpolated value to a shell-safe alphabet.
-    if not SSH_DESTINATION.fullmatch(config.target_ssh) or config.target_ssh.startswith("-"):
+    if not SSH_DESTINATION.fullmatch(config.target_ssh):
         fail(f"invalid SSH destination: {config.target_ssh}", 2)
     for label, name in (
         ("replica dataset", config.replica_dataset),
@@ -195,11 +206,8 @@ def parse_config(argv: list[str]) -> Config:
     ):
         if not ZFS_NAME.fullmatch(name):
             fail(f"unsupported {label} name: {name}", 2)
-    if (
-        not config.mountpoint.startswith("/")
-        or ".." in PurePosixPath(config.mountpoint).parts
-        or not re.fullmatch(r"/[A-Za-z0-9_.:/-]*", config.mountpoint, re.ASCII)
-    ):
+    mountpoint = PurePosixPath(config.mountpoint)
+    if ".." in mountpoint.parts or str(mountpoint) != config.mountpoint or not MOUNTPOINT.fullmatch(config.mountpoint):
         fail(f"unsupported target mountpoint: {config.mountpoint}", 2)
     if not SNAPSHOT_SUFFIX.fullmatch(config.start_suffix) or not SNAPSHOT_SUFFIX.fullmatch(config.end_suffix):
         fail("snapshot suffixes must match bak-YYYYMMDDhhmmss", 2)
@@ -283,18 +291,21 @@ def remote_snapshot_rows(config: Config, target: str) -> list[tuple[str, str]]:
         "-t",
         "snapshot",
         "-o",
-        "name",
+        "name,guid",
+        "-p",
         "-s",
         "createtxg",
         target,
-        check=False,
     )
-    # zfs list exits nonzero when the dataset has no snapshots. Its dataset
-    # existence was established by the caller, so an empty result is valid.
     prefix = f"{target}@"
     rows = []
-    for snapshot in (name for name in lines(result) if name.startswith(prefix)):
-        guid = remote_zfs_value(config, "get", "-H", "-p", "-o", "value", "guid", snapshot)
+    for row in lines(result):
+        try:
+            snapshot, guid = row.split("\t", 1)
+        except ValueError as error:
+            raise RestoreError(f"invalid snapshot row returned for {target}: {row}") from error
+        if not snapshot.startswith(prefix):
+            continue
         rows.append((snapshot.removeprefix(prefix), guid))
     return rows
 
@@ -310,8 +321,15 @@ def token_suffix(token: str) -> str:
         "-t",
         token,
         sudo=True,
+        check=False,
         stderr=subprocess.STDOUT,
     )
+    if result.returncode:
+        detail = result.stdout.strip()
+        message = "receive resume token is unusable"
+        if detail:
+            message = f"{message}: {detail}"
+        raise RestoreError(message)
     matches = re.findall(r"toname = .*@([^\s]+)", result.stdout)
     if not matches:
         raise RestoreError("receive resume token preview did not identify a snapshot")
@@ -352,6 +370,12 @@ def inspect_targets(config: Config, plans: list[DatasetPlan]) -> None:
         # name.
         for index, (suffix, remote_guid) in enumerate(rows):
             if index >= len(plan.snapshots) or suffix != plan.snapshots[index]:
+                if index:
+                    checkpoint = f"{plan.target}@{rows[index - 1][0]}"
+                    raise RestoreError(
+                        f"{plan.target} has snapshots outside the requested prefix; on {config.target_ssh}, "
+                        f"unmount the restored tree and run: sudo zfs rollback -r {checkpoint}"
+                    )
                 raise RestoreError(f"{plan.target} is not a prefix of the requested snapshot range")
             if remote_guid != snapshot_guid(plan.source, suffix):
                 raise RestoreError(f"snapshot GUID mismatch for {plan.target}@{suffix}")
@@ -362,6 +386,18 @@ def inspect_targets(config: Config, plans: list[DatasetPlan]) -> None:
             # cannot be attributed safely to this restore.
             if not rows:
                 raise RestoreError(f"{plan.target} exists without requested snapshots or a resume token")
+            if plan.received_count < len(plan.snapshots):
+                written = remote_zfs_value(config, "get", "-H", "-p", "-o", "value", "written", plan.target)
+                try:
+                    written_bytes = int(written)
+                except ValueError as error:
+                    raise RestoreError(f"invalid written value for {plan.target}: {written}") from error
+                if written_bytes:
+                    checkpoint = f"{plan.target}@{rows[-1][0]}"
+                    raise RestoreError(
+                        f"{plan.target} has changes after {checkpoint}; on {config.target_ssh}, "
+                        f"unmount the restored tree and run: sudo zfs rollback {checkpoint}"
+                    )
             continue
         if not RESUME_TOKEN.fullmatch(token) or plan.received_count >= len(plan.snapshots):
             raise RestoreError(f"invalid receive resume state on {plan.target}")
@@ -385,11 +421,22 @@ def pipe_commands(commands: list[list[str]]) -> None:
     processes: list[subprocess.Popen[bytes]] = []
     previous_stdout = None
     for index, command in enumerate(commands):
-        process = subprocess.Popen(
-            command,
-            stdin=previous_stdout,
-            stdout=subprocess.PIPE if index < len(commands) - 1 else None,
-        )
+        try:
+            process = subprocess.Popen(
+                command,
+                stdin=previous_stdout,
+                stdout=subprocess.PIPE if index < len(commands) - 1 else None,
+            )
+        except OSError as error:
+            if previous_stdout is not None:
+                previous_stdout.close()
+            for started_process in processes:
+                # A command may exit between the failed Popen and cleanup.
+                with contextlib.suppress(ProcessLookupError):
+                    started_process.terminate()
+            for started_process in processes:
+                started_process.wait()
+            raise RestoreError(f"could not start restore pipeline command {command_text(command)}: {error}") from error
         if previous_stdout is not None:
             # The parent must release its duplicate read end. Otherwise an
             # upstream writer may never observe SIGPIPE when downstream fails.
