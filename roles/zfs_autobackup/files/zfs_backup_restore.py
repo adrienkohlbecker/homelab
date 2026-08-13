@@ -518,27 +518,6 @@ def finalize(config: Config, plans: list[DatasetPlan]) -> None:
         if properties["autobackup:bak"] == "true":
             remote_zfs_run(config, "set", "autobackup:bak=true", plan.target)
 
-    print()
-    remote_zfs_run(
-        config,
-        "list",
-        "-r",
-        "-o",
-        "name,mountpoint,mounted,readonly",
-        config.target_dataset,
-    )
-    remote_zfs_run(
-        config,
-        "get",
-        "-t",
-        "filesystem",
-        "-r",
-        "-o",
-        "name,value,source",
-        "autobackup:bak",
-        config.target_dataset,
-    )
-
 
 def main(argv: list[str]) -> None:
     """Drive confirmation, validation, transfer, and finalization."""
