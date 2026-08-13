@@ -93,9 +93,9 @@
     # tolerance is the entire reason to use it -- the ext4-on-device assert above
     # proves it's mounted and usable but not that the redundancy is actually
     # intact. A regression that assembled the wrong level (raid0), left the array
-    # degraded (a member missing), or dropped podman_partition_mkfs_opts would
+    # degraded (a member missing), or formatted without the raid geometry would
     # pass the check above yet silently lose fault tolerance or the stripe
-    # geometry. Gated on the resolved device being an md node, so the single-disk
+    # tuning. Gated on the resolved device being an md node, so the single-disk
     # partition fixtures (box) skip it. (Initial-create resync may still be
     # running here -- harmless: all members are active-sync throughout, so the
     # membership/level/failed-count asserts hold; we deliberately don't gate on
@@ -112,14 +112,21 @@
             - mdadm --detail {{ podman_storage_device }}
             - dumpe2fs -h {{ podman_storage_device }}
 
-        - name: _verify | Assert the store is a healthy raid5 with the configured stripe geometry
+        - name: _verify | Assert the store is a healthy raid5 with matching stripe geometry
           vars:
             _detail: "{{ podman_md_probes.results[0].stdout }}"
             _dump: "{{ podman_md_probes.results[1].stdout }}"
-            # Expected geometry from the fixture's mkfs opts (-E stride=N,
-            # stripe-width=M); actual geometry as ext4 recorded it at mkfs time.
-            _want_stride: "{{ podman_partition_mkfs_opts | regex_findall('stride=(\\d+)') | first | default('') }}"
-            _want_stripe: "{{ podman_partition_mkfs_opts | regex_findall('stripe-width=(\\d+)') | first | default('') }}"
+            # Expected geometry from the live array topology: stride * ext4
+            # block = mdadm chunk, stripe-width = stride * data disks (raid5 =
+            # members - 1). mke2fs derives the same values from the device at
+            # mkfs time, so comparing against the array catches both a format
+            # where auto-detection failed (no RAID lines recorded at all) and
+            # a reshaped array whose recorded geometry went stale. Stated
+            # multiplicatively so unparsable probe output fails the comparison
+            # instead of dividing by zero.
+            _chunk_bytes: "{{ (_detail | regex_findall('Chunk Size : (\\d+)K') | first | default('0') | int) * 1024 }}"
+            _raid_devices: "{{ _detail | regex_findall('Raid Devices : (\\d+)') | first | default('0') }}"
+            _block_size: "{{ _dump | regex_findall('Block size:\\s+(\\d+)') | first | default('0') }}"
             _got_stride: "{{ _dump | regex_findall('RAID stride:\\s+(\\d+)') | first | default('') }}"
             _got_stripe: "{{ _dump | regex_findall('RAID stripe width:\\s+(\\d+)') | first | default('') }}"
           assert:
@@ -128,15 +135,13 @@
               - "'Raid Level : raid5' in _detail"
               - "'Failed Devices : 0' in _detail"
               - "'degraded' not in _detail"
-              # ext4 was built with the *configured* raid geometry, not just some
-              # geometry: a typo'd stride/stripe-width or a plain mkfs (which omits
-              # these lines) would diverge -- proves podman_partition_mkfs_opts
-              # reached mkfs intact.
-              - _want_stride != '' and _got_stride == _want_stride
-              - _want_stripe != '' and _got_stripe == _want_stripe
+              - _chunk_bytes | int > 0
+              - _got_stride != '' and (_got_stride | int) * (_block_size | int) == _chunk_bytes | int
+              - _got_stripe != '' and _got_stripe | int == (_got_stride | int) * ((_raid_devices | int) - 1)
             fail_msg: >-
-              The podman store is not a healthy raid5 with the configured stripe
-              geometry (want stride={{ _want_stride }} stripe-width={{ _want_stripe }};
+              The podman store is not a healthy raid5 whose ext4 stripe geometry
+              matches the array (chunk={{ _chunk_bytes }}B x {{ _raid_devices }}
+              members, block={{ _block_size }}B;
               got stride={{ _got_stride }} stripe-width={{ _got_stripe }}).
               mdadm --detail:
               {{ _detail }}

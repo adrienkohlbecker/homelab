@@ -20,8 +20,3 @@ podman_zvol_sync_disabled: false
 #     has been rebuilt with the partition present.
 # Default zvol so an un-rebuilt zfs_root host keeps its existing zvol store.
 podman_storage_backend: zvol
-
-# Extra mkfs.ext4 options for the partition backend, e.g. raid5 geometry
-# tuning ("-E stride=N,stripe-width=M"). Empty for a plain single-disk
-# partition. Creation-time only -- applied by the filesystem module's mkfs.
-podman_partition_mkfs_opts: ""

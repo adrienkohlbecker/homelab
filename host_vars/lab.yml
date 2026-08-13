@@ -36,12 +36,11 @@ swap_partition:
 swap_zram:
   size: 8G
 
+# Three-member mdadm raid5. mke2fs derives the ext4 stride/stripe-width from
+# the array topology at creation; the role's _verify asserts the recorded
+# geometry still matches the live array.
 podman_storage_backend: partition
 podman_storage_device: /dev/md/podman
-# raid5 geometry, verified by the role: 512K mdadm chunk / 4K ext4 blocks
-# = stride 128; x2 data disks = stripe-width 256. Same values as the
-# fixture (Phase 0); confirm against `mdadm --detail /dev/md/podman`.
-podman_partition_mkfs_opts: "-E stride=128,stripe-width=256"
 
 # Host-native CI fallback runner. It deliberately uses its own token variable so
 # lab cannot accidentally clone fox's project runner token and inherit the wrong

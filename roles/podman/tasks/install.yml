@@ -571,14 +571,14 @@
     - podman
 
 # resizefs grows ext4 to fill the device on a deliberately enlarged partition;
-# a no-op on the fixed fixture partition. mkfs opts (podman_partition_mkfs_opts)
-# carry raid5 stride/stripe-width geometry and apply at creation only.
+# a no-op on the fixed fixture partition. On an mdadm device mke2fs derives the
+# raid stride/stripe-width from the array topology itself (libblkid); _verify
+# asserts the recorded geometry matches the live array.
 - name: install | Create ext4 filesystem on the podman partition
   when: podman_storage_backend == 'partition'
   filesystem:
     fstype: ext4
     dev: "{{ podman_storage_device }}"
-    opts: "{{ podman_partition_mkfs_opts }}"
     resizefs: true
   become: true
   tags:
