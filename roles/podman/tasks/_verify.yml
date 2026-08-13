@@ -149,6 +149,32 @@
               dumpe2fs -h:
               {{ _dump }}
 
+        # The asserts above only see a member failure at the next converge;
+        # day-to-day detection is mdmonitor (ships with mdadm, mails root via
+        # the postfix rewrite) plus netdata's md.health presence context.
+        # Assert the mail leg here so a distro or image change that ships
+        # mdmonitor inactive or without a MAILADDR surfaces on the md fixtures.
+        - name: _verify | Read mdmonitor state and mail routing
+          command: "{{ item }}"
+          become: true
+          changed_when: false
+          failed_when: false
+          register: podman_mdmonitor_probes
+          loop:
+            - systemctl is-active mdmonitor.service
+            - grep -E ^MAILADDR /etc/mdadm/mdadm.conf
+
+        - name: _verify | Assert a degraded array would be reported
+          assert:
+            that:
+              - podman_mdmonitor_probes.results[0].stdout | trim == 'active'
+              - podman_mdmonitor_probes.results[1].rc == 0
+            fail_msg: >-
+              mdmonitor is not watching this md host
+              (state={{ podman_mdmonitor_probes.results[0].stdout | trim }},
+              MAILADDR grep rc={{ podman_mdmonitor_probes.results[1].rc }})
+              -- a degraded array would go unreported.
+
 # Confirm the rendered containers.conf carries every pinned key -- catches a
 # template regression in the keys podman info doesn't surface (dns_bind_port,
 # the default network *name*, the seccomp default path, the rootless pasta
