@@ -3,18 +3,20 @@
     database: passwd
     key: "{{ spouse_firstname }}"
 
-- name: _verify | Assert user shell, home, and non-system UID
+- name: _verify | Assert user shell, home, and pinned UID
   assert:
     that:
       # getent_passwd[user]: [password, uid, gid, gecos, home, shell] (0-indexed)
       - ansible_facts.getent_passwd[spouse_firstname][5] == '/usr/sbin/nologin'
       - ansible_facts.getent_passwd[spouse_firstname][4] == '/mnt/data/' ~ spouse_firstname
-      # system: false in main.yml gives a stable non-system UID for the arq
-      # bucket -- assert it stayed that way.
+      # The uid/gid are pinned via static_human_ids (group_vars/all/
+      # identities.yml) so the arq bucket's numeric owners survive a
+      # rebuild -- assert the pin held.
       - ansible_facts.getent_passwd[spouse_firstname][1] | int == static_human_ids.spouse
       - ansible_facts.getent_passwd[spouse_firstname][2] | int == static_human_ids.spouse
     fail_msg: >-
-      Expected nologin shell, /mnt/data/{{ spouse_firstname }} home, non-system UID/GID;
+      Expected nologin shell, /mnt/data/{{ spouse_firstname }} home, pinned UID/GID
+      {{ static_human_ids.spouse }};
       got: {{ ansible_facts.getent_passwd[spouse_firstname] | default([]) }}
 
 - name: _verify | POSIX group exists
@@ -22,13 +24,14 @@
     database: group
     key: "{{ spouse_firstname }}"
 
-- name: _verify | Assert group is non-system
+- name: _verify | Assert group carries the pinned GID
   assert:
     that:
       # getent_group[group]: [password, gid, members] (0-indexed)
       - ansible_facts.getent_group[spouse_firstname][1] | int == static_human_ids.spouse
     fail_msg: >-
-      Group {{ spouse_firstname }} missing or has system GID
+      Group {{ spouse_firstname }} missing or not at the pinned GID
+      {{ static_human_ids.spouse }}
       (got {{ ansible_facts.getent_group[spouse_firstname][1] | default('absent') }}).
 
 - name: _verify | Home directory exists and is owned correctly
