@@ -270,11 +270,9 @@
       stdout={{ zfs_autobackup_verify_gate_nosnap.stdout }},
       stderr={{ zfs_autobackup_verify_gate_nosnap.stderr }})
 
-# Functional round-trip for zfs_backup_restore: build an origin tree, receive
-# it into a replica with the same holder-side overrides as the onsite pull,
-# interrupt the first restore, then let the script resume over loopback SSH.
-# The restored tree must carry the origin properties rather than the holder
-# overrides, and its backup tags must become local.
+# Functional round-trip for zfs_backup_restore. The root target starts at a
+# clean stream boundary while the child has an interrupted full receive, so one
+# run exercises both continuation paths as well as the selected history range.
 - name: _verify | Generate a loopback ssh key for the restore test
   command:
     argv:
@@ -333,8 +331,9 @@
 - name: _verify | Define production-shaped restore snapshot suffixes
   set_fact:
     zfs_autobackup_verify_restore_before_suffix: bak-20000101000000
-    zfs_autobackup_verify_restore_from_suffix: bak-20000102000000
-    zfs_autobackup_verify_restore_suffix: bak-20000103000000
+    zfs_autobackup_verify_restore_start_suffix: bak-20000102000000
+    zfs_autobackup_verify_restore_middle_suffix: bak-20000103000000
+    zfs_autobackup_verify_restore_end_suffix: bak-20000104000000
 
 - name: _verify | Write the pre-cutoff marker
   copy:
@@ -348,11 +347,11 @@
     argv:
       - dd
       - if=/dev/urandom
-      - of=/mnt/zfs_autobackup_restore_source_test/restore_payload.bin
+      - of=/mnt/zfs_autobackup_restore_source_test/child/restore_payload.bin
       - bs=1M
       - count=32
       - status=none
-    creates: /mnt/zfs_autobackup_restore_source_test/restore_payload.bin
+    creates: /mnt/zfs_autobackup_restore_source_test/child/restore_payload.bin
   become: true
 
 - name: _verify | Snapshot the origin tree before the restore cutoff
@@ -372,11 +371,25 @@
 - name: _verify | Snapshot the origin tree at the restore cutoff
   command: >-
     zfs snapshot -r
-    rpool/zfs_autobackup_restore_source_test@{{ zfs_autobackup_verify_restore_from_suffix }}
+    rpool/zfs_autobackup_restore_source_test@{{ zfs_autobackup_verify_restore_start_suffix }}
   changed_when: true
   become: true
 
-- name: _verify | Write the final marker
+- name: _verify | Write the intermediate marker
+  copy:
+    dest: /mnt/zfs_autobackup_restore_source_test/restore_marker.txt
+    content: "intermediate\n"
+    mode: "0644"
+  become: true
+
+- name: _verify | Snapshot an intermediate restore point
+  command: >-
+    zfs snapshot -r
+    rpool/zfs_autobackup_restore_source_test@{{ zfs_autobackup_verify_restore_middle_suffix }}
+  changed_when: true
+  become: true
+
+- name: _verify | Write the endpoint marker
   copy:
     dest: /mnt/zfs_autobackup_restore_source_test/restore_marker.txt
     content: "round-trip\n"
@@ -386,14 +399,14 @@
 - name: _verify | Snapshot the origin tree for the restore stream
   command: >-
     zfs snapshot -r
-    rpool/zfs_autobackup_restore_source_test@{{ zfs_autobackup_verify_restore_suffix }}
+    rpool/zfs_autobackup_restore_source_test@{{ zfs_autobackup_verify_restore_end_suffix }}
   changed_when: true
   become: true
 
 - name: _verify | Receive the origin as a scrubbed pull replica
   shell: |
     set -euo pipefail
-    zfs send -Rc "rpool/zfs_autobackup_restore_source_test@{{ zfs_autobackup_verify_restore_suffix }}" |
+    zfs send -Rc "rpool/zfs_autobackup_restore_source_test@{{ zfs_autobackup_verify_restore_end_suffix }}" |
       zfs recv -u -o readonly=on -o canmount=noauto -o mountpoint=none rpool/zfs_autobackup_restore_replica_test
   args:
     executable: /bin/bash
@@ -416,22 +429,31 @@
     that:
       - zfs_autobackup_verify_replica_properties.stdout_lines == ['on\tlocal', '65536\t65536']
 
-# Truncate the first stream after 8 MiB. recv -s must retain a token and the
-# operator-facing command must recognize and resume it.
-- name: _verify | Interrupt the first restore stream
+# The root has completed its starting snapshot, while the child stops inside
+# that same full stream and retains a resume token.
+- name: _verify | Receive the root through the selected starting snapshot
   shell: |
     set -euo pipefail
-    sudo zfs send -Rbc "rpool/zfs_autobackup_restore_replica_test@{{ zfs_autobackup_verify_restore_suffix }}" |
-      dd bs=1M count=8 status=none |
+    sudo zfs send -bpc "rpool/zfs_autobackup_restore_replica_test@{{ zfs_autobackup_verify_restore_start_suffix }}" |
       ssh {{ ansible_user_id }}@127.0.0.1 sudo zfs recv -su rpool/zfs_autobackup_restore_target_test
   args:
     executable: /bin/bash
   changed_when: true
+
+- name: _verify | Interrupt the child starting-snapshot stream
+  shell: |
+    set -euo pipefail
+    sudo zfs send -bpc "rpool/zfs_autobackup_restore_replica_test/child@{{ zfs_autobackup_verify_restore_start_suffix }}" |
+      dd bs=1M count=8 status=none |
+      ssh {{ ansible_user_id }}@127.0.0.1 sudo zfs recv -su rpool/zfs_autobackup_restore_target_test/child
+  args:
+    executable: /bin/bash
+  changed_when: true
   failed_when: false
-  register: zfs_autobackup_verify_interrupted_restore
+  register: zfs_autobackup_verify_interrupted_child_restore
 
 - name: _verify | Read the interrupted receive token
-  command: zfs get -H -o value receive_resume_token rpool/zfs_autobackup_restore_target_test
+  command: zfs get -H -o value receive_resume_token rpool/zfs_autobackup_restore_target_test/child
   changed_when: false
   register: zfs_autobackup_verify_resume_token
   become: true
@@ -439,18 +461,19 @@
 - name: _verify | Interrupted receive retained resumable state
   assert:
     that:
-      - zfs_autobackup_verify_interrupted_restore.rc != 0
+      - zfs_autobackup_verify_interrupted_child_restore.rc != 0
       - zfs_autobackup_verify_resume_token.stdout != '-'
 
 # Runs as the fixture user, exactly like the operator would on the replica
 # holder: the SSH hop authenticates with the user key, sudo happens inside.
-- name: _verify | Resume the tree over loopback ssh
+- name: _verify | Complete the explicit snapshot range over loopback ssh
   command:
     argv:
       - /usr/local/bin/zfs_backup_restore
       - "{{ ansible_user_id }}@127.0.0.1"
       - rpool/zfs_autobackup_restore_replica_test
-      - "{{ zfs_autobackup_verify_restore_suffix }}"
+      - "{{ zfs_autobackup_verify_restore_start_suffix }}"
+      - "{{ zfs_autobackup_verify_restore_end_suffix }}"
       - rpool/zfs_autobackup_restore_target_test
       - /mnt/zfs_autobackup_restore_target_test
   args:
@@ -458,15 +481,10 @@
   changed_when: true
   register: zfs_autobackup_verify_restore_run
 
-- name: _verify | Read the restored marker
-  command: cat /mnt/zfs_autobackup_restore_target_test/restore_marker.txt
-  changed_when: false
-  register: zfs_autobackup_verify_restore_marker
-  become: true
-
-- name: _verify | Read restored dataset state
+- name: _verify | Read restored state and snapshot history
   shell: |
     set -euo pipefail
+    cat /mnt/zfs_autobackup_restore_target_test/restore_marker.txt
     zfs get -H -o value readonly rpool/zfs_autobackup_restore_target_test
     zfs get -H -o value mounted rpool/zfs_autobackup_restore_target_test
     zfs get -H -o value mountpoint rpool/zfs_autobackup_restore_target_test
@@ -478,24 +496,29 @@
     zfs get -H -p -o value recordsize rpool/zfs_autobackup_restore_target_test/child
     zfs get -H -o value autobackup:bak rpool/zfs_autobackup_restore_target_test/child
     zfs get -H -o source autobackup:bak rpool/zfs_autobackup_restore_target_test/child
+    zfs list -r -t snapshot -H -o name rpool/zfs_autobackup_restore_target_test
   args:
     executable: /bin/bash
   changed_when: false
   register: zfs_autobackup_verify_restore_state
   become: true
 
-- name: _verify | Restore carried the data and reset the pull-scrubbed properties
+- name: _verify | Restore resumed both states and kept exactly the selected range
   assert:
     that:
-      - zfs_autobackup_verify_restore_marker.stdout == 'round-trip'
       - "'Resuming an interrupted restore' in zfs_autobackup_verify_restore_run.stdout"
-      - zfs_autobackup_verify_restore_state.stdout_lines == [
-          'off', 'yes', '/mnt/zfs_autobackup_restore_target_test', 'true', 'local',
-          'off', 'yes', '/mnt/zfs_autobackup_restore_target_test/child', '65536', 'true', 'local']
+      - zfs_autobackup_verify_restore_state.stdout_lines[0:12] == [
+          'round-trip', 'off', 'yes', '/mnt/zfs_autobackup_restore_target_test',
+          'true', 'local', 'off', 'yes', '/mnt/zfs_autobackup_restore_target_test/child',
+          '65536', 'true', 'local']
+      - zfs_autobackup_verify_restore_state.stdout_lines[12:] | length == 6
+      - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_start_suffix ~ '$') | list | length == 2
+      - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_middle_suffix ~ '$') | list | length == 2
+      - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_end_suffix ~ '$') | list | length == 2
+      - zfs_autobackup_verify_restore_before_suffix not in zfs_autobackup_verify_restore_state.stdout
     fail_msg: >-
       restore round-trip state mismatch
-      (marker={{ zfs_autobackup_verify_restore_marker.stdout }},
-      state={{ zfs_autobackup_verify_restore_state.stdout_lines }},
+      (state={{ zfs_autobackup_verify_restore_state.stdout_lines }},
       restore stdout={{ zfs_autobackup_verify_restore_run.stdout }})
 
 - name: _verify | Refuse to restore over the completed target
@@ -504,9 +527,12 @@
       - /usr/local/bin/zfs_backup_restore
       - "{{ ansible_user_id }}@127.0.0.1"
       - rpool/zfs_autobackup_restore_replica_test
-      - "{{ zfs_autobackup_verify_restore_suffix }}"
+      - "{{ zfs_autobackup_verify_restore_start_suffix }}"
+      - "{{ zfs_autobackup_verify_restore_end_suffix }}"
       - rpool/zfs_autobackup_restore_target_test
       - /mnt/zfs_autobackup_restore_target_test
+  args:
+    stdin: "y\n"
   changed_when: false
   failed_when: false
   register: zfs_autobackup_verify_restore_refusal
@@ -515,84 +541,16 @@
   assert:
     that:
       - zfs_autobackup_verify_restore_refusal.rc != 0
-      - "'already exists' in zfs_autobackup_verify_restore_refusal.stderr"
-      - zfs_autobackup_verify_restore_marker.stdout == 'round-trip'
-
-# Cutoff mode starts with a full stream at the selected snapshot, then sends
-# every intermediate snapshot through the requested endpoint for each dataset.
-- name: _verify | Interrupt the cutoff restore base stream
-  shell: |
-    set -euo pipefail
-    sudo zfs send -bc "rpool/zfs_autobackup_restore_replica_test@{{ zfs_autobackup_verify_restore_from_suffix }}" |
-      dd bs=1M count=8 status=none |
-      ssh {{ ansible_user_id }}@127.0.0.1 sudo zfs recv -su rpool/zfs_autobackup_restore_cutoff_target_test
-  args:
-    executable: /bin/bash
-  changed_when: true
-  failed_when: false
-  register: zfs_autobackup_verify_interrupted_cutoff_restore
-
-- name: _verify | Resume the restore from the selected cutoff
-  command:
-    argv:
-      - /usr/local/bin/zfs_backup_restore
-      - --from
-      - "{{ zfs_autobackup_verify_restore_from_suffix }}"
-      - "{{ ansible_user_id }}@127.0.0.1"
-      - rpool/zfs_autobackup_restore_replica_test
-      - "{{ zfs_autobackup_verify_restore_suffix }}"
-      - rpool/zfs_autobackup_restore_cutoff_target_test
-      - /mnt/zfs_autobackup_restore_cutoff_target_test
-  args:
-    stdin: "y\n"
-  changed_when: true
-  register: zfs_autobackup_verify_cutoff_restore_run
-
-- name: _verify | Read cutoff restore state
-  shell: |
-    set -euo pipefail
-    cat /mnt/zfs_autobackup_restore_cutoff_target_test/restore_marker.txt
-    zfs get -H -p -o value recordsize rpool/zfs_autobackup_restore_cutoff_target_test/child
-    zfs list -r -t snapshot -H -o name rpool/zfs_autobackup_restore_cutoff_target_test
-  args:
-    executable: /bin/bash
-  changed_when: false
-  register: zfs_autobackup_verify_cutoff_restore_state
-  become: true
-
-- name: _verify | Cutoff restore excludes older history and keeps the selected range
-  assert:
-    that:
-      - zfs_autobackup_verify_interrupted_cutoff_restore.rc != 0
-      - "'Resuming an interrupted restore' in zfs_autobackup_verify_cutoff_restore_run.stdout"
-      - zfs_autobackup_verify_cutoff_restore_state.stdout_lines[0:2] == ['round-trip', '65536']
-      - >-
-        'rpool/zfs_autobackup_restore_cutoff_target_test@' ~
-        zfs_autobackup_verify_restore_from_suffix in
-        zfs_autobackup_verify_cutoff_restore_state.stdout_lines
-      - >-
-        'rpool/zfs_autobackup_restore_cutoff_target_test@' ~
-        zfs_autobackup_verify_restore_suffix in
-        zfs_autobackup_verify_cutoff_restore_state.stdout_lines
-      - >-
-        'rpool/zfs_autobackup_restore_cutoff_target_test/child@' ~
-        zfs_autobackup_verify_restore_from_suffix in
-        zfs_autobackup_verify_cutoff_restore_state.stdout_lines
-      - >-
-        'rpool/zfs_autobackup_restore_cutoff_target_test/child@' ~
-        zfs_autobackup_verify_restore_suffix in
-        zfs_autobackup_verify_cutoff_restore_state.stdout_lines
-      - zfs_autobackup_verify_restore_before_suffix not in zfs_autobackup_verify_cutoff_restore_state.stdout
+      - "'already contains' in zfs_autobackup_verify_restore_refusal.stderr"
 
 - name: _verify | Restore only the endpoint when it is also the cutoff
   command:
     argv:
       - /usr/local/bin/zfs_backup_restore
-      - --from
-      - "{{ zfs_autobackup_verify_restore_suffix }}"
       - "{{ ansible_user_id }}@127.0.0.1"
       - rpool/zfs_autobackup_restore_replica_test
-      - "{{ zfs_autobackup_verify_restore_suffix }}"
+      - "{{ zfs_autobackup_verify_restore_end_suffix }}"
+      - "{{ zfs_autobackup_verify_restore_end_suffix }}"
       - rpool/zfs_autobackup_restore_single_target_test
       - /mnt/zfs_autobackup_restore_single_target_test
   args:
@@ -612,8 +570,9 @@
     that:
       - zfs_autobackup_verify_single_restore_history.stdout_lines | length == 2
       - zfs_autobackup_verify_restore_before_suffix not in zfs_autobackup_verify_single_restore_history.stdout
-      - zfs_autobackup_verify_restore_from_suffix not in zfs_autobackup_verify_single_restore_history.stdout
-      - zfs_autobackup_verify_single_restore_history.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_suffix ~ '$') | list | length == 2
+      - zfs_autobackup_verify_restore_start_suffix not in zfs_autobackup_verify_single_restore_history.stdout
+      - zfs_autobackup_verify_restore_middle_suffix not in zfs_autobackup_verify_single_restore_history.stdout
+      - zfs_autobackup_verify_single_restore_history.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_end_suffix ~ '$') | list | length == 2
 
 # Functional check for the freshness dead-man switch: cover a fresh fleet,
 # missing snapshots, deliberate retirement, the exact age boundary, and the
