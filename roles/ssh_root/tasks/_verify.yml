@@ -158,7 +158,7 @@
     that:
       - not ssh_root_keypair.changed
       - not ssh_root_public_key.changed
-      - ssh_root_keypair.comment == 'root@' ~ inventory_hostname
+      - ssh_root_keypair.comment == ssh_root_key_comment
     fail_msg: >-
       ssh_root still changed after restoring the persisted identity:
       keypair={{ ssh_root_keypair }} public_key={{ ssh_root_public_key }}

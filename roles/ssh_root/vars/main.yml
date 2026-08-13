@@ -1,0 +1,4 @@
+# The key comment is written by openssh_keypair and re-written by the .pub
+# normalization; a one-sided edit would make the two tasks fight each other
+# into a changed/changed loop, so both (and _verify) read this single value.
+ssh_root_key_comment: root@{{ inventory_hostname }}
