@@ -515,13 +515,10 @@ def test_finalize_mounts_only_eligible_datasets_and_restores_local_tags(
     def properties(_config, *args, **kwargs):
         target = args[-1]
         if target == root.target:
-            return _completed("mountpoint\tnone\ncanmount\ton\nmounted\tno\n")
-        return _completed("mountpoint\t/var\ncanmount\ton\nmounted\tno\n")
+            return _completed("mountpoint\tnone\ncanmount\ton\nmounted\tno\nautobackup:bak\tfalse\n")
+        return _completed("mountpoint\t/var\ncanmount\ton\nmounted\tno\nautobackup:bak\ttrue\n")
 
     monkeypatch.setattr(restore, "remote_zfs_capture", properties)
-    monkeypatch.setattr(
-        restore, "remote_zfs_value", lambda _config, *args: "true" if args[-1] == child.target else "false"
-    )
 
     restore.finalize(config, [root, child])
 

@@ -518,7 +518,7 @@ def finalize(config: Config, plans: list[DatasetPlan]) -> None:
                     "-H",
                     "-o",
                     "property,value",
-                    "mountpoint,canmount,mounted",
+                    "mountpoint,canmount,mounted,autobackup:bak",
                     plan.target,
                 )
             )
@@ -533,18 +533,7 @@ def finalize(config: Config, plans: list[DatasetPlan]) -> None:
             remote_zfs_run(config, "mount", plan.target)
 
         # Received-source tags are invisible to the local snapshot picker.
-        if (
-            remote_zfs_value(
-                config,
-                "get",
-                "-H",
-                "-o",
-                "value",
-                "autobackup:bak",
-                plan.target,
-            )
-            == "true"
-        ):
+        if properties["autobackup:bak"] == "true":
             remote_zfs_run(config, "set", "autobackup:bak=true", plan.target)
 
     print()
