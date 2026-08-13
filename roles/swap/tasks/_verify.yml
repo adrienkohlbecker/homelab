@@ -80,11 +80,41 @@
       (for {{ swap_partition.device }}) not active: {{ _swap_verify_swapon.stdout }}
   become: true
 
+# On the mirror hosts the swap partition is an mdadm raid1 whose redundancy is
+# the reason it exists -- the active-swap assert above proves it's usable but
+# not that the mirror is intact. A regression that assembled the wrong level
+# or left the array degraded would pass swapon yet silently lose fault
+# tolerance. Gated on the resolved device being an md node, so the plain
+# partition fixtures (box) skip it. (Initial-create resync may still be
+# running here -- harmless: all members are active-sync throughout, so the
+# level/failed-count asserts hold; we deliberately don't gate on 'clean' to
+# avoid racing the resync.)
+- name: _verify | Inspect the swap raid array when swap is on mdadm
+  when:
+    - (swap_partition | default(none)) is not none
+    - (_swap_verify_partition_dev.stdout | trim).startswith('/dev/md')
+  block:
+    - name: _verify | Read mdadm detail for the swap array
+      command: mdadm --detail {{ swap_partition.device }}
+      become: true
+      changed_when: false
+      register: _swap_verify_md_detail
+
+    - name: _verify | Assert the swap array is a healthy raid1
+      assert:
+        that:
+          - "'Raid Level : raid1' in _swap_verify_md_detail.stdout"
+          - "'Failed Devices : 0' in _swap_verify_md_detail.stdout"
+          - "'degraded' not in _swap_verify_md_detail.stdout"
+        fail_msg: >-
+          The swap array is not a healthy raid1. mdadm --detail:
+          {{ _swap_verify_md_detail.stdout }}
+
 - name: _verify | Overflow swap priority is below zram
   when:
     - (swap_zram | default(none)) is not none
     - _swap_verify_zram_module.rc == 0
-    - (swap_zvol | default(none)) is not none or (swap_partition | default(none)) is not none
+    - (swap_partition | default(none)) is not none
   vars:
     _overflow_lines: "{{ _swap_verify_swapon.stdout_lines | reject('search', 'zram') | list }}"
     _zram_prio: "{{ swap_zram.priority | default(100) | int }}"
