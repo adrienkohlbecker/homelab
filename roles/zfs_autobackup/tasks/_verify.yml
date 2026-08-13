@@ -543,6 +543,118 @@
       - zfs_autobackup_verify_restore_refusal.rc != 0
       - "'already contains' in zfs_autobackup_verify_restore_refusal.stderr"
 
+- name: _verify | Add a later snapshot to the completed target
+  command: zfs snapshot rpool/zfs_autobackup_restore_target_test@post_restore
+  changed_when: true
+  become: true
+
+- name: _verify | Refuse a completed range with later snapshots
+  command:
+    argv:
+      - /usr/local/bin/zfs_backup_restore
+      - "{{ ansible_user_id }}@127.0.0.1"
+      - rpool/zfs_autobackup_restore_replica_test
+      - "{{ zfs_autobackup_verify_restore_start_suffix }}"
+      - "{{ zfs_autobackup_verify_restore_end_suffix }}"
+      - rpool/zfs_autobackup_restore_target_test
+      - /mnt/zfs_autobackup_restore_target_test
+  args:
+    stdin: "y\n"
+  changed_when: false
+  failed_when: false
+  register: zfs_autobackup_verify_later_snapshot_refusal
+
+- name: _verify | Later snapshot refusal gives no rollback instruction
+  assert:
+    that:
+      - zfs_autobackup_verify_later_snapshot_refusal.rc != 0
+      - "'requested snapshot range and later snapshots' in zfs_autobackup_verify_later_snapshot_refusal.stderr"
+      - "'rollback' not in zfs_autobackup_verify_later_snapshot_refusal.stderr"
+
+- name: _verify | Receive a starting snapshot for the written-drift check
+  shell: |
+    set -euo pipefail
+    sudo zfs send -bpc "rpool/zfs_autobackup_restore_replica_test@{{ zfs_autobackup_verify_restore_start_suffix }}" |
+      ssh {{ ansible_user_id }}@127.0.0.1 sudo zfs recv -su rpool/zfs_autobackup_restore_written_drift_test
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: _verify | Write after the completed starting snapshot
+  shell: |
+    set -euo pipefail
+    zfs set readonly=off canmount=on mountpoint=/mnt/zfs_autobackup_restore_written_drift_test rpool/zfs_autobackup_restore_written_drift_test
+    printf "drift\n" > /mnt/zfs_autobackup_restore_written_drift_test/post_snapshot.txt
+  args:
+    executable: /bin/bash
+  changed_when: true
+  become: true
+
+- name: _verify | Refuse to extend a target with post-snapshot writes
+  command:
+    argv:
+      - /usr/local/bin/zfs_backup_restore
+      - "{{ ansible_user_id }}@127.0.0.1"
+      - rpool/zfs_autobackup_restore_replica_test
+      - "{{ zfs_autobackup_verify_restore_start_suffix }}"
+      - "{{ zfs_autobackup_verify_restore_end_suffix }}"
+      - rpool/zfs_autobackup_restore_written_drift_test
+      - /mnt/zfs_autobackup_restore_written_drift_test
+  args:
+    stdin: "y\n"
+  changed_when: false
+  failed_when: false
+  register: zfs_autobackup_verify_written_drift_refusal
+
+- name: _verify | Written drift refusal reports the non-recursive rollback
+  assert:
+    that:
+      - zfs_autobackup_verify_written_drift_refusal.rc != 0
+      - "'has changes after' in zfs_autobackup_verify_written_drift_refusal.stderr"
+      - >-
+        'sudo zfs rollback rpool/zfs_autobackup_restore_written_drift_test@'
+        ~ zfs_autobackup_verify_restore_start_suffix
+        in zfs_autobackup_verify_written_drift_refusal.stderr
+
+- name: _verify | Receive a starting snapshot for the divergent-history check
+  shell: |
+    set -euo pipefail
+    sudo zfs send -bpc "rpool/zfs_autobackup_restore_replica_test@{{ zfs_autobackup_verify_restore_start_suffix }}" |
+      ssh {{ ansible_user_id }}@127.0.0.1 sudo zfs recv -su rpool/zfs_autobackup_restore_divergent_test
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: _verify | Add a snapshot outside the requested incomplete prefix
+  command: zfs snapshot rpool/zfs_autobackup_restore_divergent_test@local_snapshot
+  changed_when: true
+  become: true
+
+- name: _verify | Refuse to extend the divergent snapshot history
+  command:
+    argv:
+      - /usr/local/bin/zfs_backup_restore
+      - "{{ ansible_user_id }}@127.0.0.1"
+      - rpool/zfs_autobackup_restore_replica_test
+      - "{{ zfs_autobackup_verify_restore_start_suffix }}"
+      - "{{ zfs_autobackup_verify_restore_end_suffix }}"
+      - rpool/zfs_autobackup_restore_divergent_test
+      - /mnt/zfs_autobackup_restore_divergent_test
+  args:
+    stdin: "y\n"
+  changed_when: false
+  failed_when: false
+  register: zfs_autobackup_verify_divergent_history_refusal
+
+- name: _verify | Divergent history reports the recursive rollback
+  assert:
+    that:
+      - zfs_autobackup_verify_divergent_history_refusal.rc != 0
+      - >-
+        'sudo zfs rollback -r rpool/zfs_autobackup_restore_divergent_test@'
+        ~ zfs_autobackup_verify_restore_start_suffix
+        in zfs_autobackup_verify_divergent_history_refusal.stderr
+
 - name: _verify | Restore only the endpoint when it is also the cutoff
   command:
     argv:

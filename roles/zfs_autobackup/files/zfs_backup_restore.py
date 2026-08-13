@@ -4,9 +4,9 @@
 The restore protocol deliberately uses one stream per dataset and snapshot.
 That makes every completed snapshot a durable checkpoint: a later invocation
 can validate the target as an exact GUID-matching prefix and continue from the
-next snapshot, provided the target has no later snapshots or writes. Otherwise
-the restore stops with rollback guidance. A stream interrupted between
-checkpoints is resumed with its ZFS receive token.
+next snapshot, provided the unfinished target has no later snapshots or writes.
+Otherwise the restore stops with a safe refusal or rollback guidance. A stream
+interrupted between checkpoints is resumed with its ZFS receive token.
 
 Pull replicas override readonly, canmount, and mountpoint locally. ``zfs send
 -bp`` sends the received source properties rather than those holder-local
@@ -16,7 +16,6 @@ has reached END_SUFFIX and its endpoint GUID has been verified.
 
 from __future__ import annotations
 
-import contextlib
 import re
 import shlex
 import subprocess
@@ -369,7 +368,12 @@ def inspect_targets(config: Config, plans: list[DatasetPlan]) -> None:
         # the same source snapshots rather than unrelated snapshots reused by
         # name.
         for index, (suffix, remote_guid) in enumerate(rows):
-            if index >= len(plan.snapshots) or suffix != plan.snapshots[index]:
+            if index >= len(plan.snapshots):
+                raise RestoreError(
+                    f"{plan.target} already contains the requested snapshot range and later snapshots "
+                    "-- refusing to overwrite it"
+                )
+            if suffix != plan.snapshots[index]:
                 if index:
                     checkpoint = f"{plan.target}@{rows[index - 1][0]}"
                     raise RestoreError(
@@ -386,18 +390,6 @@ def inspect_targets(config: Config, plans: list[DatasetPlan]) -> None:
             # cannot be attributed safely to this restore.
             if not rows:
                 raise RestoreError(f"{plan.target} exists without requested snapshots or a resume token")
-            if plan.received_count < len(plan.snapshots):
-                written = remote_zfs_value(config, "get", "-H", "-p", "-o", "value", "written", plan.target)
-                try:
-                    written_bytes = int(written)
-                except ValueError as error:
-                    raise RestoreError(f"invalid written value for {plan.target}: {written}") from error
-                if written_bytes:
-                    checkpoint = f"{plan.target}@{rows[-1][0]}"
-                    raise RestoreError(
-                        f"{plan.target} has changes after {checkpoint}; on {config.target_ssh}, "
-                        f"unmount the restored tree and run: sudo zfs rollback {checkpoint}"
-                    )
             continue
         if not RESUME_TOKEN.fullmatch(token) or plan.received_count >= len(plan.snapshots):
             raise RestoreError(f"invalid receive resume state on {plan.target}")
@@ -413,6 +405,23 @@ def inspect_targets(config: Config, plans: list[DatasetPlan]) -> None:
         raise RestoreError(
             f"{config.target_dataset} already contains the requested snapshot range -- refusing to overwrite it"
         )
+    # ``written`` can lag behind writes in the current ZFS transaction group.
+    # Flush them before using the property as a safety gate for finalization.
+    run(ssh_command(config, "sync"))
+    for plan in plans:
+        if not plan.received_count or plan.resume_token is not None:
+            continue
+        written = remote_zfs_value(config, "get", "-H", "-p", "-o", "value", "written", plan.target)
+        try:
+            written_bytes = int(written)
+        except ValueError as error:
+            raise RestoreError(f"invalid written value for {plan.target}: {written}") from error
+        if written_bytes:
+            checkpoint = f"{plan.target}@{plan.snapshots[plan.received_count - 1]}"
+            raise RestoreError(
+                f"{plan.target} has changes after {checkpoint}; on {config.target_ssh}, "
+                f"unmount the restored tree and run: sudo zfs rollback {checkpoint}"
+            )
 
 
 def pipe_commands(commands: list[list[str]]) -> None:
@@ -431,9 +440,7 @@ def pipe_commands(commands: list[list[str]]) -> None:
             if previous_stdout is not None:
                 previous_stdout.close()
             for started_process in processes:
-                # A command may exit between the failed Popen and cleanup.
-                with contextlib.suppress(ProcessLookupError):
-                    started_process.terminate()
+                started_process.terminate()
             for started_process in processes:
                 started_process.wait()
             raise RestoreError(f"could not start restore pipeline command {command_text(command)}: {error}") from error

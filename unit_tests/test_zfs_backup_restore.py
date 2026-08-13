@@ -244,6 +244,7 @@ class TestInspectTargets:
 
         monkeypatch.setattr(restore, "remote_zfs_value", remote_value)
         monkeypatch.setattr(restore, "snapshot_guid", lambda _dataset, suffix: f"guid-{suffix}")
+        monkeypatch.setattr(restore, "run", lambda _command: None)
         if token_suffix is not None:
             monkeypatch.setattr(restore, "token_suffix", lambda _token: token_suffix)
 
@@ -300,7 +301,7 @@ class TestInspectTargets:
         ):
             restore.inspect_targets(config, [plan])
 
-    def test_rejects_snapshots_after_a_completed_prefix_with_recursive_rollback_guidance(
+    def test_rejects_snapshots_after_an_incomplete_prefix_with_recursive_rollback_guidance(
         self, config, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         plan = restore.DatasetPlan(config.replica_dataset, config.target_dataset, _SNAPSHOTS)
@@ -320,6 +321,42 @@ class TestInspectTargets:
             match=rf"sudo zfs rollback -r {plan.target}@{_SNAPSHOTS[0]}",
         ):
             restore.inspect_targets(config, [plan])
+
+    def test_safely_refuses_a_complete_range_with_later_snapshots(
+        self, config, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        plan = restore.DatasetPlan(config.replica_dataset, config.target_dataset, _SNAPSHOTS)
+        rows = [(suffix, f"guid-{suffix}") for suffix in _SNAPSHOTS]
+        rows.append(("local-snapshot", "local-guid"))
+        self._patch_state(monkeypatch, datasets=[plan.target], rows={plan.target: rows})
+
+        with pytest.raises(restore.RestoreError, match="requested snapshot range and later snapshots") as error:
+            restore.inspect_targets(config, [plan])
+
+        assert "rollback" not in str(error.value)
+
+    def test_rejects_writes_on_a_complete_dataset_while_its_tree_is_incomplete(
+        self, config, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        root_plan = restore.DatasetPlan(config.replica_dataset, config.target_dataset, _SNAPSHOTS)
+        child_plan = restore.DatasetPlan(
+            f"{config.replica_dataset}/child",
+            f"{config.target_dataset}/child",
+            _SNAPSHOTS,
+        )
+        root_rows = [(suffix, f"guid-{suffix}") for suffix in _SNAPSHOTS]
+        self._patch_state(
+            monkeypatch,
+            datasets=[root_plan.target],
+            rows={root_plan.target: root_rows},
+            written={root_plan.target: "4096"},
+        )
+
+        with pytest.raises(
+            restore.RestoreError,
+            match=rf"sudo zfs rollback {root_plan.target}@{_SNAPSHOTS[-1]}",
+        ):
+            restore.inspect_targets(config, [root_plan, child_plan])
 
     @pytest.mark.parametrize(
         ("rows", "message"),
