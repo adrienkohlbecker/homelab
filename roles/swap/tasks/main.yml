@@ -1,39 +1,25 @@
 # Manage swap. Two independent declarations, each optional:
 #
-#   swap_zvol:
-#     dataset: rpool/swap
-#     size: 16G
-#     opts: ...   # optional; default below
-#
 #   swap_partition:
 #     device: /dev/disk/by-uuid/00b9e215-...
 #     opts: discard   # optional; default below
 #
+#   swap_zram:
+#     size: 8G
+#
 # A host can have either, both, or neither -- each backend activates only when
-# its var is set to a non-null value. Zvol gets the conservative
-# properties recommended for ZFS swap: primarycache=metadata +
-# secondarycache=none keep the page cache from also caching pages that
-# are themselves cache eviction targets; logbias=throughput +
-# sync=always avoids losing in-flight writes if the host crashes while
-# paging out; com.sun:auto-snapshot=false because snapshotting churning
-# swap blocks is pointless and pins free space. compression=zle (not
-# zstd) because anonymous pages reaching swap are already incompressible
-# from the kernel's POV — zle only collapses runs of zeros (cheap, no
-# CPU cost on the hot paging path) which is the only win available.
+# its var is set to a non-null value.
 #
 # Raw partitions are taken as-is — the role never reformats a device
 # that already carries a swap signature, so pre-existing installer
 # UUIDs survive untouched.
 #
 # Activation goes through `swapon` and tolerates the "already active"
-# error rather than chasing systemd unit names or canonicalising paths.
-# systemd-fstab-generator's unit naming is sensitive to symlink rules
-# and not always what `systemd-escape` produces; canonicalising via
-# readlink fails on hosts where /dev/zvol/ symlinks aren't udev-
-# populated even when the zvol itself works. Treating the "Device or
-# resource busy" stderr as success makes the task idempotent without
-# either of those moving parts. The fstab entry still ensures
-# activation at next boot via the generator.
+# error rather than chasing systemd unit names: systemd-fstab-generator's
+# unit naming is sensitive to symlink rules and not always what
+# `systemd-escape` produces. Treating the "Device or resource busy"
+# stderr as success makes the task idempotent without that moving part.
+# The fstab entry still ensures activation at next boot via the generator.
 
 #######################################################################
 # Input validation
@@ -41,240 +27,11 @@
 - name: Validate swap input schema
   assert:
     that:
-      - (swap_zvol | default(none)) is none or (swap_zvol.dataset is defined and swap_zvol.size is defined)
       - (swap_partition | default(none)) is none or swap_partition.device is defined
       - (swap_zram | default(none)) is none or swap_zram.size is defined
     fail_msg: >-
-      Missing required keys -- swap_zvol needs .dataset + .size,
-      swap_partition needs .device, swap_zram needs .size.
-  tags:
-    - swap
-
-#######################################################################
-# Zvol-backed swap
-#######################################################################
-- name: Read current swap zvol size
-  when: (swap_zvol | default(none)) is not none and zfs_root
-  command: zfs get -Hp -o value volsize {{ swap_zvol.dataset }}
-  register: swap_zvol_current
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: true
-  tags:
-    - swap
-
-# Skip the shrink guard only when the zvol genuinely doesn't exist yet
-# (fresh host: rc=1 "dataset does not exist"). Any *other* `zfs get` failure
-# must halt rather than silently bypass the shrink guard and the swapoff-
-# before-reformat-on-grow below -- both gate on rc == 0.
-- name: Assert the zvol size probe did not error unexpectedly
-  when:
-    - (swap_zvol | default(none)) is not none and zfs_root
-    - swap_zvol_current.rc != 0
-  assert:
-    that: "'does not exist' in swap_zvol_current.stderr"
-    fail_msg: >-
-      `zfs get volsize {{ swap_zvol.dataset }}` failed unexpectedly
-      (rc={{ swap_zvol_current.rc }}): {{ swap_zvol_current.stderr | trim }}.
-      Refusing to proceed -- cannot verify the current size for the shrink
-      guard or the swapoff-before-reformat-on-grow.
-  tags:
-    - swap
-
-# zfs accepts any volsize change including a shrink. Pages residing in
-# the discarded sector range vanish on the spot, and the next paging
-# access panics the host. Safe shrink path: swapoff, resize, mkswap,
-# swapon.
-- name: Refuse to shrink swap zvol
-  when:
-    - (swap_zvol | default(none)) is not none and zfs_root
-    - swap_zvol_current.rc == 0
-  assert:
-    that: (swap_zvol.size | human_to_bytes) >= (swap_zvol_current.stdout | int)
-    fail_msg: >-
-      Refusing to shrink {{ swap_zvol.dataset }} from {{ swap_zvol_current.stdout }}
-      to {{ swap_zvol.size | human_to_bytes }} bytes -- would corrupt live swap.
-      Safe path: swapoff {{ swap_zvol.dataset }}, shrink, mkswap, swapon.
-  tags:
-    - swap
-
-- name: Create swap zvol
-  when: (swap_zvol | default(none)) is not none and zfs_root
-  community.general.zfs:
-    name: "{{ swap_zvol.dataset }}"
-    state: present
-    extra_zfs_properties:
-      volsize: "{{ swap_zvol.size | human_to_bytes | string }}"
-      volblocksize: "4096"
-      compression: zle
-      logbias: throughput
-      sync: always
-      primarycache: metadata
-      secondarycache: none
-      com.sun:auto-snapshot: "false"
-  register: swap_zvol_created
-  become: true
-  tags:
-    - swap
-
-# community.general.zfs creates/grows the zvol, but udev populates the
-# /dev/zvol/<dataset> symlink asynchronously; wait for it so the canonical
-# path can be resolved below. A node that never appears (broken zvol)
-# surfaces here as a bounded, named failure instead of a cryptic mkswap error.
-- name: Wait for the zvol device node
-  when: (swap_zvol | default(none)) is not none and zfs_root and not (ansible_check_mode and swap_zvol_current.rc != 0)
-  wait_for:
-    path: /dev/zvol/{{ swap_zvol.dataset }}
-    timeout: 30
-  become: true
-  tags:
-    - swap
-
-# Resolve the canonical block device once; all subsequent tasks (swapoff,
-# blkid, mkswap, swapon) use the result so they address the same underlying
-# node regardless of symlink state.  Falls back to the symlink path when the
-# zvol does not yet exist (check mode on a fresh host).
-- name: Resolve canonical zvol device path
-  when: (swap_zvol | default(none)) is not none and zfs_root
-  command: readlink -f /dev/zvol/{{ swap_zvol.dataset }}
-  register: _swap_zvol_dev
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: true
-  tags:
-    - swap
-
-# After a zvol grow the old swap header still encodes the original size;
-# swapon would silently use only the old capacity. Deactivate first so
-# mkswap can re-stamp the full volume.
-- name: Deactivate swap before zvol re-format on grow
-  when:
-    - (swap_zvol | default(none)) is not none and zfs_root
-    - swap_zvol_created.changed
-    - swap_zvol_current.rc == 0
-  vars:
-    _zvol_dev: "{{ (_swap_zvol_dev.stdout | default('') | trim) or '/dev/zvol/' + swap_zvol.dataset }}"
-  command: swapoff {{ _zvol_dev }}
-  register: swap_zvol_swapoff
-  changed_when: swap_zvol_swapoff.rc == 0
-  failed_when:
-    - swap_zvol_swapoff.rc != 0
-    - "'No such file or directory' not in swap_zvol_swapoff.stderr"
-    - "'Invalid argument' not in swap_zvol_swapoff.stderr"
-  become: true
-  tags:
-    - swap
-
-# blkid exits 2 with no signature; treat that as "needs mkswap".
-- name: Detect swap signature on zvol
-  when: (swap_zvol | default(none)) is not none and zfs_root
-  vars:
-    _zvol_dev: "{{ (_swap_zvol_dev.stdout | default('') | trim) or '/dev/zvol/' + swap_zvol.dataset }}"
-  command: blkid -p --usages other -s TYPE -o value {{ _zvol_dev }}
-  register: swap_zvol_blkid
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: true
-  tags:
-    - swap
-
-- name: Format swap on zvol
-  when:
-    - (swap_zvol | default(none)) is not none and zfs_root
-    - swap_zvol_blkid.stdout | default('') != 'swap' or swap_zvol_created.changed
-  vars:
-    _zvol_dev: "{{ (_swap_zvol_dev.stdout | default('') | trim) or '/dev/zvol/' + swap_zvol.dataset }}"
-    _zvol_label: "swap-{{ swap_zvol.dataset | replace('/', '-') }}"
-  command: mkswap -f -L {{ _zvol_label }} {{ _zvol_dev }}
-  changed_when: true
-  become: true
-  tags:
-    - swap
-
-- name: Remove stale zvol swap label fstab entry
-  when: (swap_zvol | default(none)) is not none and zfs_root
-  lineinfile:
-    path: /etc/fstab
-    regexp: '^LABEL=swap-{{ swap_zvol.dataset | replace("/", "-") }}[ \t]+none[ \t]+swap[ \t]+'
-    state: absent
-    backup: true
-  become: true
-  tags:
-    - swap
-
-# x-systemd.requires=zfs-volumes.target makes the auto-generated .swap unit
-# wait for ZFS to finish importing pools and exposing zvols at boot.
-- name: Add zvol swap to /etc/fstab
-  when: (swap_zvol | default(none)) is not none and zfs_root
-  mount:
-    path: none
-    src: "/dev/zvol/{{ swap_zvol.dataset }}"
-    fstype: swap
-    opts: "{{ swap_zvol.opts | default('defaults,nofail,pri=10,x-systemd.requires=zfs-volumes.target') }}"
-    state: present
-    backup: true
-  become: true
-  tags:
-    - swap
-
-- name: Activate zvol swap
-  when: (swap_zvol | default(none)) is not none and zfs_root
-  vars:
-    _zvol_opts: "{{ swap_zvol.opts | default('defaults,nofail,pri=10,x-systemd.requires=zfs-volumes.target') }}"
-    _zvol_dev: "{{ (_swap_zvol_dev.stdout | default('') | trim) or '/dev/zvol/' + swap_zvol.dataset }}"
-    _zvol_pri: "{{ _zvol_opts | regex_search('(?:^|,)pri=(\\d+)', '\\1') | first | default('10') }}"
-  command: swapon -p {{ _zvol_pri }} {{ _zvol_dev }}
-  register: swap_zvol_swapon
-  changed_when: swap_zvol_swapon.rc == 0
-  failed_when:
-    - swap_zvol_swapon.rc != 0
-    - "'Device or resource busy' not in swap_zvol_swapon.stderr"
-  become: true
-  tags:
-    - swap
-
-# initramfs-tools auto-selects the largest non-ephemeral swap device as a
-# hibernate resume target. A ZFS zvol appears only after the initramfs loads ZFS
-# and imports rpool, so the local-premount resume script waits 30 seconds for a
-# device that cannot exist yet. These hosts do not hibernate; keep swap, but
-# make the initramfs skip resume probing.
-- name: Disable initramfs hibernate resume for zvol swap  # noqa: require-validate
-  when: (swap_zvol | default(none)) is not none and zfs_root
-  copy:
-    dest: /etc/initramfs-tools/conf.d/resume
-    content: "RESUME=none\n"
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: swap_resume_conf
-  become: true
-  tags:
-    - swap
-
-- name: Rebuild initramfs after resume policy change
-  when:
-    - (swap_zvol | default(none)) is not none and zfs_root
-    - swap_resume_conf.changed
-    - not ansible_check_mode
-  command: update-initramfs -u -k all
-  changed_when: true
-  become: true
-  tags:
-    - swap
-
-- name: Ask to reboot after resume policy change
-  when: (swap_zvol | default(none)) is not none and zfs_root and swap_resume_conf.changed
-  file:
-    path: /var/run/reboot-required
-    state: touch
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+      Missing required keys -- swap_partition needs .device,
+      swap_zram needs .size.
   tags:
     - swap
 
@@ -314,7 +71,7 @@
     fstype: swap
     # opts replaces the default wholesale (not merged): a host overriding it
     # must re-include nofail + pri=10, or boot blocks on a missing device and
-    # the overflow priority drifts. Same applies to swap_zvol.opts above.
+    # the overflow priority drifts.
     opts: "{{ swap_partition.opts | default('defaults,nofail,discard=once,pri=10') }}"
     state: present
     backup: true
@@ -346,12 +103,13 @@
 #######################################################################
 # zram-backed swap (primary, high-priority)
 #######################################################################
-# Compressed-RAM swap fronting the disk/zvol overflow above. swap-priority
-# 100 (set in the generator config) sits above the disk/zvol swap, which
-# the role places at priority 10, so routine paging
-# compresses into RAM and the disk/zvol is reached only under genuine
-# exhaustion. zram is deadlock-free (no ZFS allocation on the page-out
-# path), which is what keeps the zvol cold on the mirror hosts.
+# Compressed-RAM swap fronting the partition overflow above. swap-priority
+# 100 (set in the generator config) sits above the partition swap, which
+# the role places at priority 10, so routine paging compresses into RAM
+# and the disk is reached only under genuine exhaustion. zram is
+# deadlock-free (no ZFS allocation on the page-out path); the overflow
+# lives on a raw partition outside ZFS for the same reason
+# (notes/swap_strategy.md).
 #
 # zram ships in the base kernel-modules package on amd64 (every prod host + the
 # x86 CI fixtures), but the trimmed arm64 cloud kernel on the local minimal/box
@@ -362,10 +120,10 @@
 # (and registers) during the harness's dry-run pass too.
 #
 # Run the probe for *any* swap backend, not just zram: the swappiness task below
-# also reads swap_zram_module.rc, so a zvol/partition-only host (no swap_zram)
+# also reads swap_zram_module.rc, so a partition-only host (no swap_zram)
 # would otherwise hit an undefined .rc on the skipped register.
 - name: Probe for the zram kernel module
-  when: (swap_zram | default(none)) is not none or (swap_zvol | default(none)) is not none or (swap_partition | default(none)) is not none
+  when: (swap_zram | default(none)) is not none or (swap_partition | default(none)) is not none
   command: modinfo -k {{ ansible_kernel }} zram
   changed_when: false
   failed_when: false
@@ -430,10 +188,10 @@
 # vm.swappiness default 100 suits the zram-primary hosts (paging into
 # compressed RAM is cheap, unlike the disk-tuned kernel default of 60). Runs
 # for any swap-carrying host so swap_swappiness isn't silently inert on a
-# zvol/partition-only host (such a host should set a lower value explicitly).
+# partition-only host (such a host should set a lower value explicitly).
 - name: Tune vm.swappiness
   when:
-    - (swap_zram | default(none)) is not none or (swap_zvol | default(none)) is not none or (swap_partition | default(none)) is not none
+    - (swap_zram | default(none)) is not none or (swap_partition | default(none)) is not none
     - swap_zram_module.rc == 0
   ansible.posix.sysctl:
     name: vm.swappiness

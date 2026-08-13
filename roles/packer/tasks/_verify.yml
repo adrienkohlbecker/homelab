@@ -248,8 +248,8 @@
 # --- swap active (universal) ---
 #
 # chroot.sh bakes swap on every variant (sized by SWAP_SIZE): single-disk
-# variants format the 8200 partition, mirror variants the rpool/swap
-# zvol. Either way chroot.sh writes the fstab entry and
+# variants format the 8200 partition, mirror variants the /dev/md/swap
+# raid1. Either way chroot.sh writes the fstab entry and
 # systemd-fstab-generator activates it at boot. We test the live `swapon`
 # state rather than parsing fstab because that exercises the full path
 # (fstab entry + device resolution + mkswap signature + systemd

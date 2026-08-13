@@ -45,10 +45,6 @@ zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set
 podman_storage_backend: partition
 podman_storage_device: /dev/disk/by-partlabel/podman
 
-swap_zvol:
-  dataset: rpool/swap
-  size: 1G
-
 # box's single-disk image bakes a swap partition (p3, GPT label "swap";
 # provision.sh) that chroot.sh already mkswap'd. Declaring it brings that
 # partition under the swap role + _verify -- folding in pug's raw-partition
@@ -57,8 +53,8 @@ swap_zvol:
 swap_partition:
   device: /dev/disk/by-partlabel/swap
 
-# Exercises the zram-primary path in CI: zram is primary, the zvol and the
-# partition above both sit below it as overflow. 3G is deliberately not the
+# Exercises the zram-primary path in CI: zram is primary, the partition
+# above sits below it as overflow. 3G is deliberately not the
 # generator's 2G default on this 4G VM, so the _verify size assertion actually
 # proves the config drove the size.
 swap_zram:
