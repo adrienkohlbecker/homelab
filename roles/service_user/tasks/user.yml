@@ -50,8 +50,9 @@
         (static_service_ids is defined and service_user_args.name in static_service_ids)
     fail_msg: >-
       service_user_args needs name (a valid identifier matching
-      [a-z_][a-z0-9_-]*) and a static id; got
-      name={{ service_user_args.name | default('<unset>') }}
+      [a-z_][a-z0-9_-]*) and a static id -- allocate
+      {{ service_user_args.name | default('<unset>') }} in static_service_ids
+      (group_vars/all/identities.yml) at the next free value per its header.
 
 # Avoid materializing /nonexistent, a sentinel several system tools special-case.
 - name: "Validate home for {{ service_user_args.name }}"
