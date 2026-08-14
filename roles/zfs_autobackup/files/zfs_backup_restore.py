@@ -5,6 +5,8 @@ The restore protocol deliberately treats every dataset independently, using
 one full stream followed by one aggregate incremental stream when needed.
 The target tree must not exist: an interrupted restore is discarded before the
 command is retried, keeping target inspection and recovery explicit.
+Clone relationships are not recreated; clone datasets restore as independent
+filesystems.
 
 Pull replicas override readonly, canmount, and mountpoint locally. ``zfs send
 -bp`` sends the received source properties rather than those holder-local
@@ -215,10 +217,6 @@ def build_plans(config: Config) -> list[DatasetPlan]:
     for dataset in datasets:
         if not ZFS_NAME.fullmatch(dataset):
             raise RestoreError(f"unsupported dataset name: {dataset}")
-        # A clone depends on its origin snapshot. Reconstructing that graph
-        # cannot be expressed by this protocol's independent dataset streams.
-        if zfs_capture("get", "-H", "-o", "value", "origin", dataset).stdout.strip() != "-":
-            raise RestoreError(f"clone datasets are not supported: {dataset}")
         target = config.target_dataset + dataset.removeprefix(config.replica_dataset)
         plans.append(DatasetPlan(dataset, target, selected_snapshots(config, dataset)))
     return plans

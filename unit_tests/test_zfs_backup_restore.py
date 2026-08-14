@@ -120,9 +120,8 @@ class TestBuildPlans:
         source_child = f"{config.replica_dataset}/var"
 
         def capture(*args, **kwargs):
-            if args[0] == "list":
-                return _completed(f"{config.replica_dataset}\n{source_child}\n")
-            return _completed("-")
+            assert args[0] == "list"
+            return _completed(f"{config.replica_dataset}\n{source_child}\n")
 
         monkeypatch.setattr(restore, "zfs_capture", capture)
         monkeypatch.setattr(restore, "selected_snapshots", lambda _config, _dataset: _SNAPSHOTS)
@@ -134,17 +133,6 @@ class TestBuildPlans:
             (source_child, f"{config.target_dataset}/var"),
         ]
         assert all(plan.snapshots == _SNAPSHOTS for plan in plans)
-
-    def test_rejects_clone_datasets(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
-        def capture(*args, **kwargs):
-            if args[0] == "list":
-                return _completed(config.replica_dataset)
-            return _completed("pool/origin@snapshot")
-
-        monkeypatch.setattr(restore, "zfs_capture", capture)
-
-        with pytest.raises(restore.RestoreError, match="clone datasets are not supported"):
-            restore.build_plans(config)
 
 
 class TestInspectTargets:

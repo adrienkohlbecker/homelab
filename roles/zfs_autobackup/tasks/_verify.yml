@@ -429,6 +429,36 @@
     that:
       - zfs_autobackup_verify_replica_properties.stdout_lines == ['on\tlocal', '65536\t65536']
 
+- name: _verify | Create a clone inside the pull replica
+  command:
+    argv:
+      - zfs
+      - clone
+      - -o
+      - autobackup:bak=true
+      - -o
+      - readonly=on
+      - -o
+      - canmount=noauto
+      - -o
+      - mountpoint=none
+      - >-
+        rpool/zfs_autobackup_restore_replica_test/child@{{ zfs_autobackup_verify_restore_start_suffix }}
+      - rpool/zfs_autobackup_restore_replica_test/clone
+  changed_when: true
+  become: true
+
+- name: _verify | Give the replica clone the selected snapshot history
+  command: >-
+    zfs snapshot
+    rpool/zfs_autobackup_restore_replica_test/clone@{{ item }}
+  changed_when: true
+  loop:
+    - "{{ zfs_autobackup_verify_restore_start_suffix }}"
+    - "{{ zfs_autobackup_verify_restore_middle_suffix }}"
+    - "{{ zfs_autobackup_verify_restore_end_suffix }}"
+  become: true
+
 # Build a partial target tree with both a completed dataset and an interrupted
 # receive. The restore must reject every existing target shape uniformly.
 - name: _verify | Receive the root through the selected starting snapshot
@@ -529,6 +559,8 @@
     zfs get -H -p -o value recordsize rpool/zfs_autobackup_restore_target_test/child
     zfs get -H -o value autobackup:bak rpool/zfs_autobackup_restore_target_test/child
     zfs get -H -o source autobackup:bak rpool/zfs_autobackup_restore_target_test/child
+    zfs get -H -o value origin rpool/zfs_autobackup_restore_target_test/clone
+    test -s /mnt/zfs_autobackup_restore_target_test/clone/restore_payload.bin && echo clone-data
     zfs list -r -t snapshot -H -o name rpool/zfs_autobackup_restore_target_test
   args:
     executable: /bin/bash
@@ -543,10 +575,12 @@
           'round-trip', 'off', 'yes', '/mnt/zfs_autobackup_restore_target_test',
           'true', 'local', 'off', 'yes', '/mnt/zfs_autobackup_restore_target_test/child',
           '65536', 'true', 'local']
-      - zfs_autobackup_verify_restore_state.stdout_lines[12:] | length == 6
-      - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_start_suffix ~ '$') | list | length == 2
-      - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_middle_suffix ~ '$') | list | length == 2
-      - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_end_suffix ~ '$') | list | length == 2
+      - zfs_autobackup_verify_restore_state.stdout_lines[12] == '-'
+      - zfs_autobackup_verify_restore_state.stdout_lines[13] == 'clone-data'
+      - zfs_autobackup_verify_restore_state.stdout_lines[14:] | length == 9
+      - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_start_suffix ~ '$') | list | length == 3
+      - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_middle_suffix ~ '$') | list | length == 3
+      - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_end_suffix ~ '$') | list | length == 3
       - zfs_autobackup_verify_restore_before_suffix not in zfs_autobackup_verify_restore_state.stdout
     fail_msg: >-
       restore round-trip state mismatch
@@ -600,11 +634,11 @@
 - name: _verify | Single-snapshot restore contains only the endpoint
   assert:
     that:
-      - zfs_autobackup_verify_single_restore_history.stdout_lines | length == 2
+      - zfs_autobackup_verify_single_restore_history.stdout_lines | length == 3
       - zfs_autobackup_verify_restore_before_suffix not in zfs_autobackup_verify_single_restore_history.stdout
       - zfs_autobackup_verify_restore_start_suffix not in zfs_autobackup_verify_single_restore_history.stdout
       - zfs_autobackup_verify_restore_middle_suffix not in zfs_autobackup_verify_single_restore_history.stdout
-      - zfs_autobackup_verify_single_restore_history.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_end_suffix ~ '$') | list | length == 2
+      - zfs_autobackup_verify_single_restore_history.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_end_suffix ~ '$') | list | length == 3
 
 # Functional check for the freshness dead-man switch: cover a fresh fleet,
 # missing snapshots, deliberate retirement, the exact age boundary, and the
