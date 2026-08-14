@@ -232,7 +232,7 @@ class TestStreaming:
         with pytest.raises(restore.RestoreError, match="could not start restore pipeline command mbuffer"):
             restore.receive(config, ["zfs", "send", "pool/src@snapshot"], config.target_dataset)
 
-    def test_sync_sends_each_selected_snapshot_in_order(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_sync_sends_one_full_and_one_aggregate_incremental(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
         plan = restore.DatasetPlan(config.replica_dataset, config.target_dataset, _SNAPSHOTS)
         received = []
         monkeypatch.setattr(restore, "receive", lambda _config, command, target: received.append((command, target)))
@@ -250,24 +250,26 @@ class TestStreaming:
                     "zfs",
                     "send",
                     "-bpcv",
-                    "-i",
+                    "-I",
                     f"@{_SNAPSHOTS[0]}",
-                    f"{plan.source}@{_SNAPSHOTS[1]}",
-                ],
-                plan.target,
-            ),
-            (
-                [
-                    "sudo",
-                    "zfs",
-                    "send",
-                    "-bpcv",
-                    "-i",
-                    f"@{_SNAPSHOTS[1]}",
                     f"{plan.source}@{_SNAPSHOTS[2]}",
                 ],
                 plan.target,
             ),
+        ]
+
+    def test_sync_sends_only_the_full_stream_for_one_snapshot(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
+        plan = restore.DatasetPlan(config.replica_dataset, config.target_dataset, [_SNAPSHOTS[-1]])
+        received = []
+        monkeypatch.setattr(restore, "receive", lambda _config, command, target: received.append((command, target)))
+
+        restore.sync_plan(config, plan)
+
+        assert received == [
+            (
+                ["sudo", "zfs", "send", "-bpcv", f"{plan.source}@{_SNAPSHOTS[-1]}"],
+                plan.target,
+            )
         ]
 
 

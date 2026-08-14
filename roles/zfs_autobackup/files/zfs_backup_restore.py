@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Restore an explicit snapshot range from a pull replica onto a rebuilt host.
 
-The restore protocol deliberately treats every dataset independently.
+The restore protocol deliberately treats every dataset independently, using
+one full stream followed by one aggregate incremental stream when needed.
 The target tree must not exist: an interrupted restore is discarded before the
 command is retried, keeping target inspection and recovery explicit.
 
@@ -298,15 +299,33 @@ def receive(config: Config, send_command: list[str], target: str) -> None:
 
 
 def sync_plan(config: Config, plan: DatasetPlan) -> None:
-    """Send every selected snapshot to a new destination dataset."""
+    """Send the selected history to a new destination dataset."""
 
-    for index, suffix in enumerate(plan.snapshots):
-        send_command = zfs_command("send", "-bpcv", sudo=True)
-        if index:
-            send_command.extend(("-i", f"@{plan.snapshots[index - 1]}"))
-        send_command.append(f"{plan.source}@{suffix}")
-        print(f"Sending {plan.source}@{suffix} -> {plan.target}")
-        receive(config, send_command, plan.target)
+    start_suffix = plan.snapshots[0]
+    print(f"Sending {plan.source}@{start_suffix} -> {plan.target}")
+    receive(
+        config,
+        zfs_command("send", "-bpcv", f"{plan.source}@{start_suffix}", sudo=True),
+        plan.target,
+    )
+
+    if len(plan.snapshots) == 1:
+        return
+
+    end_suffix = plan.snapshots[-1]
+    print(f"Sending {plan.source}@{start_suffix}..{end_suffix} -> {plan.target}")
+    receive(
+        config,
+        zfs_command(
+            "send",
+            "-bpcv",
+            "-I",
+            f"@{start_suffix}",
+            f"{plan.source}@{end_suffix}",
+            sudo=True,
+        ),
+        plan.target,
+    )
 
 
 def verify_endpoints(config: Config, plans: list[DatasetPlan]) -> None:
