@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """Restore an explicit snapshot range from a pull replica onto a rebuilt host.
 
-The restore protocol deliberately uses one stream per dataset and snapshot.
-That makes every completed snapshot a durable checkpoint: a later invocation
-can validate the target as an exact GUID-matching prefix and continue from the
-next snapshot, provided the unfinished target has no later snapshots or writes.
-Otherwise the restore stops with a safe refusal or rollback guidance. A stream
-interrupted between checkpoints is resumed with its ZFS receive token.
+The restore protocol deliberately treats every dataset independently.
+The target tree must not exist: an interrupted restore is discarded before the
+command is retried, keeping target inspection and recovery explicit.
 
 Pull replicas override readonly, canmount, and mountpoint locally. ``zfs send
 -bp`` sends the received source properties rather than those holder-local
@@ -30,7 +27,6 @@ Example: zfs_backup_restore ak@lab apoc/lab/rpool/services \\
 SSH_DESTINATION = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]*@[A-Za-z0-9_.:-]+", re.ASCII)
 ZFS_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/-]*", re.ASCII)
 SNAPSHOT_SUFFIX = re.compile(r"bak-[0-9]{14}", re.ASCII)
-RESUME_TOKEN = re.compile(r"[A-Za-z0-9_-]+", re.ASCII)
 MOUNTPOINT = re.compile(r"/[A-Za-z0-9_.:-]+(?:/[A-Za-z0-9_.:-]+)*", re.ASCII)
 SSH_BULK_OPTIONS = (
     "-o",
@@ -58,21 +54,13 @@ class Config:
     mountpoint: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class DatasetPlan:
-    """Selected source history and the validated progress of its target."""
+    """Selected source history and its destination dataset."""
 
     source: str
     target: str
     snapshots: list[str]
-    received_count: int = 0
-    resume_token: str | None = None
-
-    @property
-    def complete(self) -> bool:
-        """Return whether every selected snapshot is durable on the target."""
-
-        return self.received_count == len(self.snapshots) and self.resume_token is None
 
 
 def fail(message: str, exit_code: int = 1) -> NoReturn:
@@ -198,7 +186,7 @@ def selected_snapshots(config: Config, dataset: str) -> list[str]:
     """Return the inclusive source snapshot range in creation order."""
 
     # Depth one excludes snapshots belonging to descendant datasets, which
-    # receive their own independent streams and checkpoints.
+    # receive their own dataset streams.
     result = zfs_capture("list", "-H", "-d", "1", "-t", "snapshot", "-o", "name", "-s", "createtxg", dataset)
     prefix = f"{dataset}@"
     suffixes = [name.removeprefix(prefix) for name in lines(result) if name.startswith(prefix)]
@@ -241,148 +229,23 @@ def snapshot_guid(dataset: str, suffix: str) -> str:
     return zfs_capture("get", "-H", "-p", "-o", "value", "guid", f"{dataset}@{suffix}").stdout.strip()
 
 
-def remote_snapshot_rows(config: Config, target: str) -> list[tuple[str, str]]:
-    """Return a target dataset's direct snapshots and GUIDs in creation order."""
-
-    result = remote_zfs_capture(
-        config,
-        "list",
-        "-H",
-        "-d",
-        "1",
-        "-t",
-        "snapshot",
-        "-o",
-        "name,guid",
-        "-p",
-        "-s",
-        "createtxg",
-        target,
-    )
-    prefix = f"{target}@"
-    rows = []
-    for row in lines(result):
-        try:
-            snapshot, guid = row.split("\t", 1)
-        except ValueError as error:
-            raise RestoreError(f"invalid snapshot row returned for {target}: {row}") from error
-        if not snapshot.startswith(prefix):
-            continue
-        rows.append((snapshot.removeprefix(prefix), guid))
-    return rows
-
-
-def token_suffix(token: str) -> str:
-    """Return the destination snapshot encoded in a ZFS receive resume token."""
-
-    # zfs send writes the token preview to stderr, so merge both streams before
-    # parsing its structured ``toname`` field.
-    result = zfs_capture(
-        "send",
-        "-nP",
-        "-t",
-        token,
-        sudo=True,
-        check=False,
-        stderr=subprocess.STDOUT,
-    )
-    if result.returncode:
-        detail = result.stdout.strip()
-        message = "receive resume token is unusable"
-        if detail:
-            message = f"{message}: {detail}"
-        raise RestoreError(message)
-    matches = re.findall(r"toname = .*@([^\s]+)", result.stdout)
-    if not matches:
-        raise RestoreError("receive resume token preview did not identify a snapshot")
-    return matches[-1]
-
-
-def inspect_targets(config: Config, plans: list[DatasetPlan]) -> None:
-    """Validate the target tree and attach resumable progress to each plan."""
+def inspect_targets(config: Config) -> None:
+    """Require the destination tree to be absent before any stream starts."""
 
     remote_datasets = set(lines(remote_zfs_capture(config, "list", "-H", "-o", "name")))
-    expected_targets = {plan.target for plan in plans}
     target_prefix = f"{config.target_dataset}/"
-    # Refuse foreign descendants rather than silently leaving them beside a
-    # restored tree that is expected to mirror the source hierarchy exactly.
-    unexpected = sorted(
-        dataset
-        for dataset in remote_datasets
-        if (dataset == config.target_dataset or dataset.startswith(target_prefix)) and dataset not in expected_targets
+    existing = sorted(
+        dataset for dataset in remote_datasets if dataset == config.target_dataset or dataset.startswith(target_prefix)
     )
-    if unexpected:
-        raise RestoreError(f"unexpected dataset below {config.target_dataset} on {config.target_ssh}: {unexpected[0]}")
-
-    for plan in plans:
-        if plan.target not in remote_datasets:
-            continue
-        token = remote_zfs_capture(
-            config, "get", "-H", "-o", "value", "receive_resume_token", plan.target
-        ).stdout.strip()
-        rows = remote_snapshot_rows(config, plan.target)
-        # Names in exact order prove a prefix; GUIDs prove the names refer to
-        # the same source snapshots rather than unrelated snapshots reused by
-        # name.
-        for index, (suffix, remote_guid) in enumerate(rows):
-            if index >= len(plan.snapshots):
-                raise RestoreError(
-                    f"{plan.target} already contains the requested snapshot range and later snapshots "
-                    "-- refusing to overwrite it"
-                )
-            if suffix != plan.snapshots[index]:
-                if index:
-                    checkpoint = f"{plan.target}@{rows[index - 1][0]}"
-                    raise RestoreError(
-                        f"{plan.target} has snapshots outside the requested prefix; on {config.target_ssh}, "
-                        f"unmount the restored tree and run: sudo zfs rollback -r {checkpoint}"
-                    )
-                raise RestoreError(f"{plan.target} is not a prefix of the requested snapshot range")
-            if remote_guid != snapshot_guid(plan.source, suffix):
-                raise RestoreError(f"snapshot GUID mismatch for {plan.target}@{suffix}")
-        plan.received_count = len(rows)
-
-        if token == "-":
-            # A dataset with neither a completed snapshot nor a partial receive
-            # cannot be attributed safely to this restore.
-            if not rows:
-                raise RestoreError(f"{plan.target} exists without requested snapshots or a resume token")
-            continue
-        if not RESUME_TOKEN.fullmatch(token) or plan.received_count >= len(plan.snapshots):
-            raise RestoreError(f"invalid receive resume state on {plan.target}")
-        if token_suffix(token) != plan.snapshots[plan.received_count]:
-            raise RestoreError(f"receive resume token on {plan.target} is outside the requested range")
-        plan.resume_token = token
-
-    # Streams are sent serially, so this restore can leave at most one partial
-    # receive. More tokens indicate unrelated or inconsistent target state.
-    if sum(plan.resume_token is not None for plan in plans) > 1:
-        raise RestoreError(f"multiple receive resume tokens exist below {config.target_dataset}")
-    if all(plan.complete for plan in plans):
+    if existing:
         raise RestoreError(
-            f"{config.target_dataset} already contains the requested snapshot range -- refusing to overwrite it"
+            f"{config.target_dataset} already exists on {config.target_ssh}; "
+            "remove the incomplete target tree before restoring"
         )
-    # ``written`` can lag behind writes in the current ZFS transaction group.
-    # Flush them before using the property as a safety gate for finalization.
-    run(ssh_command(config, "sync"))
-    for plan in plans:
-        if not plan.received_count or plan.resume_token is not None:
-            continue
-        written = remote_zfs_capture(config, "get", "-H", "-p", "-o", "value", "written", plan.target).stdout.strip()
-        try:
-            written_bytes = int(written)
-        except ValueError as error:
-            raise RestoreError(f"invalid written value for {plan.target}: {written}") from error
-        if written_bytes:
-            checkpoint = f"{plan.target}@{plan.snapshots[plan.received_count - 1]}"
-            raise RestoreError(
-                f"{plan.target} has changes after {checkpoint}; on {config.target_ssh}, "
-                f"unmount the restored tree and run: sudo zfs rollback {checkpoint}"
-            )
 
 
 def receive(config: Config, send_command: list[str], target: str) -> None:
-    """Stream one ZFS send through mbuffer into a remote resumable receive."""
+    """Stream one ZFS send through mbuffer into an unmounted remote receive."""
 
     commands = [
         send_command,
@@ -396,7 +259,7 @@ def receive(config: Config, send_command: list[str], target: str) -> None:
             "sudo",
             "zfs",
             "recv",
-            "-su",
+            "-u",
             target,
         ],
     ]
@@ -435,27 +298,15 @@ def receive(config: Config, send_command: list[str], target: str) -> None:
 
 
 def sync_plan(config: Config, plan: DatasetPlan) -> None:
-    """Resume any partial receive, then send each missing snapshot in order."""
+    """Send every selected snapshot to a new destination dataset."""
 
-    index = plan.received_count
-    if plan.resume_token:
-        print(f"Resuming an interrupted restore into {plan.target}")
-        resume_preview = zfs_command("send", "-nP", "-t", plan.resume_token, sudo=True)
-        print(f"$ {command_text(resume_preview)}")
-        run(resume_preview)
-        receive(config, zfs_command("send", "-t", plan.resume_token, sudo=True), plan.target)
-        # Completing a token makes its encoded destination snapshot durable.
-        index += 1
-
-    while index < len(plan.snapshots):
-        suffix = plan.snapshots[index]
+    for index, suffix in enumerate(plan.snapshots):
         send_command = zfs_command("send", "-bpcv", sudo=True)
         if index:
             send_command.extend(("-i", f"@{plan.snapshots[index - 1]}"))
         send_command.append(f"{plan.source}@{suffix}")
         print(f"Sending {plan.source}@{suffix} -> {plan.target}")
         receive(config, send_command, plan.target)
-        index += 1
 
 
 def verify_endpoints(config: Config, plans: list[DatasetPlan]) -> None:
@@ -540,7 +391,7 @@ def main(argv: list[str]) -> None:
     # Target inspection starts only after confirmation, immediately before
     # transfer. zfs recv without -F remains the race guard if state changes
     # between a probe and its stream.
-    inspect_targets(config, plans)
+    inspect_targets(config)
     for plan in plans:
         sync_plan(config, plan)
     verify_endpoints(config, plans)
