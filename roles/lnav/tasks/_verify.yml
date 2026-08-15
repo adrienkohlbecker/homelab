@@ -258,10 +258,16 @@
   tags:
     - lnav
 
+# The leading record predates any --since bound the tasks below use. It sits
+# first so the ordered-by-time format keeps its old timestamp (later in the
+# file it would be clamped up to its neighbor), giving the relative-bound task
+# an exclusion witness inside a file that still spans the cutoff (lnav refuses
+# to open a file wholly outside the time cutoffs).
 - name: Write lnav-journal verification store
   copy:
     dest: /var/log/fluent-bit/lnav.jsonl
     content: |
+      {"time":"2020-01-01T00:00:00Z","host":"box","service":"lnav_ancient","unit":"lnav_ancient.service","identifier":"lnav_ancient","level":"info","message":"lnav wrapper ancient history","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_ancient.service"}}
       {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_other","unit":"lnav_other.service","identifier":"lnav_other","level":"info","message":"lnav wrapper other unit","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_other.service"}}
       {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"info","message":"lnav wrapper verification","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
       {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"debug","message":"lnav wrapper debug hidden","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
@@ -388,7 +394,12 @@
   tags:
     - lnav
 
-- name: Lnav-journal wrapper accepts bounded normal load
+# The wrapper rewrites the relative bound to an absolute ISO timestamp pinned
+# to one clock; fresh records must still render inside that window while the
+# ancient store record stays hidden, proving lnav accepted the normalized form
+# and actually applied it. `:goto 0` because headless output starts at the
+# current position, and the wrapper opens at `:goto 100%`.
+- name: Lnav-journal bounds records by a relative since bound
   become: true
   become_user: "{{ ansible_user_id }}"
   command:
@@ -399,11 +410,16 @@
       - 20s
       - /usr/local/bin/lnav-journal
       - -n
-      - -N
-      - -C
       - -S
       - 1 hour ago
+      - -c
+      - ':goto 0'
+  register: lnav_journal_since
   changed_when: false
+  failed_when: >-
+    lnav_journal_since.rc != 0 or
+    'lnav wrapper verification' not in lnav_journal_since.stdout or
+    'lnav wrapper ancient history' in lnav_journal_since.stdout
   tags:
     - lnav
 

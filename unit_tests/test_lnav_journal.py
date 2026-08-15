@@ -50,6 +50,14 @@ def test_parse_args_preserves_unknown_lnav_time_syntax() -> None:
     assert parsed[-1] == ["-S", "last blue moon"]
 
 
+def test_normalize_bound_truncates_subsecond_clock() -> None:
+    now = datetime(2026, 7, 12, 12, 0, 0, 123456, tzinfo=UTC)
+
+    parsed = lnav_journal.parse_args(["-S", "1 hours ago"], now)
+
+    assert parsed[-1] == ["-S", "2026-07-12T11:00:00+00:00"]
+
+
 def test_line_count_mode_is_rejected() -> None:
     with pytest.raises(SystemExit):
         lnav_journal.parse_args(["-n", "100"])

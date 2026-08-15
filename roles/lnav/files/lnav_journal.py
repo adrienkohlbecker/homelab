@@ -131,10 +131,17 @@ def first_timestamp(path: Path) -> float | None:
     return None
 
 
+# The one journalctl-style relative grammar shared by parse_bound (file
+# selection) and normalize_bound (bounds handed to lnav), so both always
+# recognize the same forms.
+RELATIVE_BOUND_RE = re.compile(r"(\d+)\s*(seconds?|minutes?|hours?|days?|weeks?)\s+ago")
+NAMED_BOUNDS = ("now", "today", "yesterday")
+
+
 def parse_bound(value: str, now: datetime | None = None) -> float | None:
     now = now or datetime.now().astimezone()
     text = value.strip().lower()
-    relative = re.fullmatch(r"(\d+)\s*(seconds?|minutes?|hours?|days?|weeks?)\s+ago", text)
+    relative = RELATIVE_BOUND_RE.fullmatch(text)
     if relative:
         amount = int(relative.group(1))
         unit = relative.group(2).rstrip("s")
@@ -153,14 +160,13 @@ def parse_bound(value: str, now: datetime | None = None) -> float | None:
 
 def normalize_bound(value: str, now: datetime) -> str:
     text = value.strip().lower()
-    relative = re.fullmatch(r"\d+\s*(seconds?|minutes?|hours?|days?|weeks?)\s+ago", text)
-    if relative is None and text not in ("now", "today", "yesterday"):
+    if RELATIVE_BOUND_RE.fullmatch(text) is None and text not in NAMED_BOUNDS:
         return value
 
     epoch = parse_bound(value, now)
     if epoch is None:
         return value
-    return datetime.fromtimestamp(epoch, tz=now.tzinfo).isoformat()
+    return datetime.fromtimestamp(epoch, tz=now.tzinfo).isoformat(timespec="seconds")
 
 
 def select_logs(
