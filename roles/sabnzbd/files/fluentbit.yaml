@@ -57,7 +57,7 @@ pipeline:
         - 'CONTAINER_TAG ^.+$'
         - '_level ^INFO$'
         - 'source ^(downloader|newswrapper)$'
-        - 'log ^([0-9]+@[^: ]+: (Initiating connection|Connected using TLSv[0-9.]+ \([^)]+\))|Connecting [0-9]+@[^ ]+ finished)[[:space:]]*$'
+        - 'log ^([0-9]+@[^: ]+: (Initiating connection|Connected using TLSv[0-9.]+ \([^)]+\))|Connecting [0-9]+@[^ ]+ finished)[ \t\r]*$'
 
     - name: modify
       match: sabnzbd.nzbtomedia
