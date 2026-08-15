@@ -350,7 +350,7 @@
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: headscale.service
         - _tag: nginx.access
-          log: headscale-latency-success
+          log: headscale-latency-drop
           method: GET
           path: /derp/latency-check
           server_name: headscale.box.example
@@ -389,4 +389,4 @@
 
 - name: _verify | Successful Headscale DERP latency probe was omitted
   assert:
-    that: "'headscale-latency-success' not in fluentbit_verify_result.stdout"
+    that: "'headscale-latency-drop' not in fluentbit_verify_result.stdout"
