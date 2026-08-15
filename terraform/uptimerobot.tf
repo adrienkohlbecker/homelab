@@ -22,11 +22,14 @@ locals {
 resource "uptimerobot_monitor" "headscale" {
   for_each = local.headscale_uptimerobot_monitors
 
-  name     = "Headscale ${upper(each.key)}"
-  type     = "API"
-  url      = "https://headscale.fahm.fr/health"
-  interval = 300
-  timeout  = 30
+  name              = "Headscale ${upper(each.key)}"
+  type              = "KEYWORD"
+  url               = "https://headscale.fahm.fr/health"
+  interval          = 300
+  keyword_type      = "ALERT_EXISTS"
+  keyword_case_type = "CaseSensitive"
+  keyword_value     = "\"status\":\"pass\""
+  timeout           = 30
 
   check_ssl_errors    = true
   follow_redirections = false
@@ -35,14 +38,6 @@ resource "uptimerobot_monitor" "headscale" {
 
   config = {
     ip_version = each.value
-    api_assertions = {
-      logic = "AND"
-      checks = [{
-        property   = "$.status"
-        comparison = "equals"
-        target     = jsonencode("pass")
-      }]
-    }
   }
 
   lifecycle {
