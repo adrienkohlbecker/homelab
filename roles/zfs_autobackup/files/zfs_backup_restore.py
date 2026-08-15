@@ -59,11 +59,10 @@ class Config:
 
 @dataclass(frozen=True)
 class DatasetPlan:
-    """Selected source history and its destination dataset."""
+    """Source dataset and its destination dataset."""
 
     source: str
     target: str
-    snapshots: list[str]
 
 
 def fail(message: str, exit_code: int = 1) -> NoReturn:
@@ -182,31 +181,13 @@ def parse_config(argv: list[str]) -> Config:
         fail(f"unsupported target mountpoint: {config.mountpoint}", 2)
     if not SNAPSHOT_SUFFIX.fullmatch(config.start_suffix) or not SNAPSHOT_SUFFIX.fullmatch(config.end_suffix):
         fail("snapshot suffixes must match bak-YYYYMMDDhhmmss", 2)
+    if config.start_suffix > config.end_suffix:
+        fail("starting snapshot is newer than ending snapshot", 2)
     return config
 
 
-def selected_snapshots(config: Config, dataset: str) -> list[str]:
-    """Return the inclusive source snapshot range in creation order."""
-
-    # Depth one excludes snapshots belonging to descendant datasets, which
-    # receive their own dataset streams.
-    result = zfs_capture("list", "-H", "-d", "1", "-t", "snapshot", "-o", "name", "-s", "createtxg", dataset)
-    prefix = f"{dataset}@"
-    suffixes = [name.removeprefix(prefix) for name in lines(result) if name.startswith(prefix)]
-    if any(not re.fullmatch(r"[A-Za-z0-9_.:-]+", suffix, re.ASCII) for suffix in suffixes):
-        raise RestoreError(f"unsupported snapshot name on {dataset}")
-    try:
-        start = suffixes.index(config.start_suffix)
-        end = suffixes.index(config.end_suffix)
-    except ValueError as error:
-        raise RestoreError(f"snapshot range is incomplete on {dataset}") from error
-    if start > end:
-        raise RestoreError(f"starting snapshot is newer than target snapshot on {dataset}")
-    return suffixes[start : end + 1]
-
-
 def build_plans(config: Config) -> list[DatasetPlan]:
-    """Map every replica dataset to its target and selected snapshot history."""
+    """Map the replica tree and require both range endpoints on every dataset."""
 
     try:
         datasets = lines(zfs_capture("list", "-r", "-H", "-o", "name", config.replica_dataset))
@@ -218,7 +199,21 @@ def build_plans(config: Config) -> list[DatasetPlan]:
         if not ZFS_NAME.fullmatch(dataset):
             raise RestoreError(f"unsupported dataset name: {dataset}")
         target = config.target_dataset + dataset.removeprefix(config.replica_dataset)
-        plans.append(DatasetPlan(dataset, target, selected_snapshots(config, dataset)))
+        plans.append(DatasetPlan(dataset, target))
+
+    suffixes = (
+        (config.start_suffix,)
+        if config.start_suffix == config.end_suffix
+        else (
+            config.start_suffix,
+            config.end_suffix,
+        )
+    )
+    endpoints = [f"{plan.source}@{suffix}" for plan in plans for suffix in suffixes]
+    try:
+        zfs_capture("list", "-H", "-t", "snapshot", "-o", "name", *endpoints)
+    except RestoreError as error:
+        raise RestoreError("snapshot range is incomplete on the replica tree") from error
     return plans
 
 
@@ -299,7 +294,7 @@ def receive(config: Config, send_command: list[str], target: str) -> None:
 def sync_plan(config: Config, plan: DatasetPlan) -> None:
     """Send the selected history to a new destination dataset."""
 
-    start_suffix = plan.snapshots[0]
+    start_suffix = config.start_suffix
     print(f"Sending {plan.source}@{start_suffix} -> {plan.target}")
     receive(
         config,
@@ -307,10 +302,10 @@ def sync_plan(config: Config, plan: DatasetPlan) -> None:
         plan.target,
     )
 
-    if len(plan.snapshots) == 1:
+    if config.start_suffix == config.end_suffix:
         return
 
-    end_suffix = plan.snapshots[-1]
+    end_suffix = config.end_suffix
     print(f"Sending {plan.source}@{start_suffix}..{end_suffix} -> {plan.target}")
     receive(
         config,

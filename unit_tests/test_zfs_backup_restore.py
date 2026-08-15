@@ -1,4 +1,4 @@
-"""Unit tests for the resumable ZFS restore planner and safety checks."""
+"""Unit tests for the ZFS restore planner and safety checks."""
 
 import importlib.util
 import subprocess
@@ -71,6 +71,7 @@ class TestParseConfig:
             ["root@lab", "pool/src", *_SNAPSHOTS[:2], "pool/dst", "/mnt/./bad"],
             ["root@lab", "pool/src", *_SNAPSHOTS[:2], "pool/dst", "/mnt/../bad"],
             ["root@lab", "pool/src", "manual", _SNAPSHOTS[1], "pool/dst", "/mnt"],
+            ["root@lab", "pool/src", _SNAPSHOTS[1], _SNAPSHOTS[0], "pool/dst", "/mnt"],
         ],
     )
     def test_rejects_invalid_or_shell_unsafe_arguments(self, argv: list[str]) -> None:
@@ -80,51 +81,19 @@ class TestParseConfig:
         assert error.value.code == 2
 
 
-class TestSelectedSnapshots:
-    def test_returns_inclusive_range_in_creation_order(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
-        output = "\n".join(
-            [
-                f"{config.replica_dataset}@bak-20260731000000",
-                f"{config.replica_dataset}@{_SNAPSHOTS[0]}",
-                f"{config.replica_dataset}/child@{_SNAPSHOTS[0]}",
-                f"{config.replica_dataset}@{_SNAPSHOTS[1]}",
-                f"{config.replica_dataset}@{_SNAPSHOTS[2]}",
-                f"{config.replica_dataset}@bak-20260804000000",
-            ]
-        )
-        monkeypatch.setattr(restore, "zfs_capture", lambda *args, **kwargs: _completed(output))
-
-        assert restore.selected_snapshots(config, config.replica_dataset) == _SNAPSHOTS
-
-    def test_rejects_missing_or_reversed_ranges(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
-        output = "\n".join(f"{config.replica_dataset}@{suffix}" for suffix in reversed(_SNAPSHOTS))
-        monkeypatch.setattr(restore, "zfs_capture", lambda *args, **kwargs: _completed(output))
-
-        with pytest.raises(restore.RestoreError, match="newer than"):
-            restore.selected_snapshots(config, config.replica_dataset)
-
-        config = restore.Config(
-            config.target_ssh,
-            config.replica_dataset,
-            "bak-20260701000000",
-            config.end_suffix,
-            config.target_dataset,
-            config.mountpoint,
-        )
-        with pytest.raises(restore.RestoreError, match="range is incomplete"):
-            restore.selected_snapshots(config, config.replica_dataset)
-
-
 class TestBuildPlans:
     def test_maps_the_replica_tree_to_the_target_tree(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
         source_child = f"{config.replica_dataset}/var"
+        calls = []
 
         def capture(*args, **kwargs):
+            calls.append(args)
             assert args[0] == "list"
-            return _completed(f"{config.replica_dataset}\n{source_child}\n")
+            if "snapshot" not in args:
+                return _completed(f"{config.replica_dataset}\n{source_child}\n")
+            return _completed()
 
         monkeypatch.setattr(restore, "zfs_capture", capture)
-        monkeypatch.setattr(restore, "selected_snapshots", lambda _config, _dataset: _SNAPSHOTS)
 
         plans = restore.build_plans(config)
 
@@ -132,7 +101,33 @@ class TestBuildPlans:
             (config.replica_dataset, config.target_dataset),
             (source_child, f"{config.target_dataset}/var"),
         ]
-        assert all(plan.snapshots == _SNAPSHOTS for plan in plans)
+        assert calls[-1] == (
+            "list",
+            "-H",
+            "-t",
+            "snapshot",
+            "-o",
+            "name",
+            f"{config.replica_dataset}@{config.start_suffix}",
+            f"{config.replica_dataset}@{config.end_suffix}",
+            f"{source_child}@{config.start_suffix}",
+            f"{source_child}@{config.end_suffix}",
+        )
+
+    def test_rejects_a_missing_endpoint(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = 0
+
+        def capture(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return _completed(config.replica_dataset)
+            raise restore.RestoreError("missing")
+
+        monkeypatch.setattr(restore, "zfs_capture", capture)
+
+        with pytest.raises(restore.RestoreError, match="range is incomplete"):
+            restore.build_plans(config)
 
 
 class TestInspectTargets:
@@ -221,7 +216,7 @@ class TestStreaming:
             restore.receive(config, ["zfs", "send", "pool/src@snapshot"], config.target_dataset)
 
     def test_sync_sends_one_full_and_one_aggregate_incremental(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
-        plan = restore.DatasetPlan(config.replica_dataset, config.target_dataset, _SNAPSHOTS)
+        plan = restore.DatasetPlan(config.replica_dataset, config.target_dataset)
         received = []
         monkeypatch.setattr(restore, "receive", lambda _config, command, target: received.append((command, target)))
 
@@ -247,7 +242,15 @@ class TestStreaming:
         ]
 
     def test_sync_sends_only_the_full_stream_for_one_snapshot(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
-        plan = restore.DatasetPlan(config.replica_dataset, config.target_dataset, [_SNAPSHOTS[-1]])
+        config = restore.Config(
+            config.target_ssh,
+            config.replica_dataset,
+            _SNAPSHOTS[-1],
+            _SNAPSHOTS[-1],
+            config.target_dataset,
+            config.mountpoint,
+        )
+        plan = restore.DatasetPlan(config.replica_dataset, config.target_dataset)
         received = []
         monkeypatch.setattr(restore, "receive", lambda _config, command, target: received.append((command, target)))
 
@@ -264,8 +267,8 @@ class TestStreaming:
 def test_finalize_mounts_only_eligible_datasets_and_restores_local_tags(
     config, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = restore.DatasetPlan(config.replica_dataset, config.target_dataset, _SNAPSHOTS)
-    child = restore.DatasetPlan(f"{config.replica_dataset}/var", f"{config.target_dataset}/var", _SNAPSHOTS)
+    root = restore.DatasetPlan(config.replica_dataset, config.target_dataset)
+    child = restore.DatasetPlan(f"{config.replica_dataset}/var", f"{config.target_dataset}/var")
     commands = []
     monkeypatch.setattr(restore, "remote_zfs_run", lambda _config, *args: commands.append(args))
 
