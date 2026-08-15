@@ -45,11 +45,17 @@ _JSON_KEY_LIMIT = 10
 
 
 def _json_summary(value):
-    encoded = json.dumps(value, separators=(",", ":"), sort_keys=True)
+    try:
+        encoded = json.dumps(value, separators=(",", ":"), sort_keys=True)
+    except (TypeError, ValueError):
+        # The {json,status,url} heuristic can fire on hand-composed dicts whose
+        # payload is not JSON-serializable (datetimes, bytes, mixed-type keys);
+        # showing those untouched beats crashing the stdout callback.
+        return value
     if len(encoded) <= _JSON_DIGEST_THRESHOLD:
         return value
     if isinstance(value, dict):
-        keys = sorted(value)[:_JSON_KEY_LIMIT]
+        keys = sorted(map(str, value))[:_JSON_KEY_LIMIT]
         suffix = ", ..." if len(value) > len(keys) else ""
         shape = f"object with keys: {', '.join(keys)}{suffix}"
     elif isinstance(value, list):
