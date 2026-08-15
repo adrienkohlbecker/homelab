@@ -88,7 +88,7 @@ locals {
   # relay without NAT64 (nginx [::]:443 on fox, DERP STUN on [::]:3478).
   fahm_fr_headscale_records = {
     a_headscale    = { type = "A", name = "headscale.fahm.fr", content = hcloud_primary_ip.fox.ip_address }
-    aaaa_headscale = { type = "AAAA", name = "headscale.fahm.fr", content = hcloud_primary_ip.fox_v6.ip_address }
+    aaaa_headscale = { type = "AAAA", name = "headscale.fahm.fr", content = cidrhost(hcloud_primary_ip.fox_v6.ip_network, 1) }
   }
 
   fahm_fr_records = merge(local.fahm_fr_static_records, local.fahm_fr_host_records, local.fahm_fr_headscale_records)

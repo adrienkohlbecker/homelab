@@ -35,10 +35,11 @@ resource "hcloud_primary_ip" "fox" {
 # Reserved public IPv6 -- same rationale as the IPv4 above. fox is a dual-stack
 # DERP relay + control plane (fox.fahm.fr carries both A and AAAA, see
 # dns_fahm_fr.tf), so IPv6-only tailnet clients reach the relay over 443/nginx
-# and the embedded DERP STUN over 3478. ip_address is a single usable address
-# (Hetzner also hands out the surrounding /64 as ip_network); the AAAA points at
-# ip_address. Reserving it (rather than the server's auto-assigned IPv6) keeps
-# the address stable across rebuilds so the AAAA needn't churn.
+# and the embedded DERP STUN over 3478. Hetzner reserves a /64 as ip_network;
+# fox uses its first host address (::1), derived with cidrhost rather than the
+# unusable network base in ip_address. Reserving the network (rather than using
+# a server-generated allocation) keeps the address stable across rebuilds so
+# the AAAA needn't churn.
 resource "hcloud_primary_ip" "fox_v6" {
   name        = "fox_v6"
   type        = "ipv6"
