@@ -19,6 +19,15 @@ pipeline:
       operation: lift
       nested_under: error
       add_prefix: error_
+    # Error records carry their text under error.message instead of a
+    # top-level message; fold the lifted copy into the message shape so one
+    # promotion block below handles both (a record with both keeps message).
+    - name: modify
+      match: svc.minio.service
+      condition:
+        - key_exists error_message
+        - key_does_not_exist message
+      rename: error_message message
     - name: modify
       match: svc.minio.service
       condition:
@@ -27,17 +36,6 @@ pipeline:
         - key_exists level
       hard_rename:
         - message log
-        - level _level
-      remove: time
-      set: parser_status parsed
-    - name: modify
-      match: svc.minio.service
-      condition:
-        - key_value_matches SYSLOG_IDENTIFIER '^minio$'
-        - key_exists error_message
-        - key_exists level
-      hard_rename:
-        - error_message log
         - level _level
       remove: time
       set: parser_status parsed
