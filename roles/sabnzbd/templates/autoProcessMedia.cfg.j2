@@ -24,7 +24,9 @@
     log_git = 0
     # Set to the directory to search for executables if not in default system path
     sys_path = ""
-    # Set to the directory where your ffmpeg/ffprobe executables are located
+    # Set to the directory where your ffmpeg/ffprobe executables are located.
+    # The universal-package-install Docker Mod apt-installs ffmpeg to /usr/bin;
+    # pin it so check_media's ffprobe lookup doesn't depend on PATH discovery.
     ffmpeg_path = /usr/bin
     # Enable/Disable media file checking using ffprobe.
     check_media = 1
