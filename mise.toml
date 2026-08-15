@@ -46,6 +46,9 @@ TF_VAR_mailgun_api_key = "op://Lab/j6iayri7rcsq27nym5z7u37jgu/password"
 # the HCLOUD_TOKEN job variable. The `tf` task maps _OP -> HCLOUD_TOKEN under
 # `op run --`.
 HCLOUD_TOKEN_OP = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
+# UptimeRobot account API key, resolved only inside the `tf` task's
+# `op run --` wrapper for the Terraform provider.
+UPTIMEROBOT_API_KEY = "op://Lab/2fm4dcx43zxith3mltbtn5lsdq/password"
 # Expose [vars] entries as env so file-based mise-tasks/ scripts can read
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.

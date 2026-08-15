@@ -159,6 +159,23 @@ provider "registry.opentofu.org/hetznercloud/hcloud" {
   ]
 }
 
+provider "registry.opentofu.org/uptimerobot/uptimerobot" {
+  version     = "1.10.0"
+  constraints = "~> 1.10"
+  hashes = [
+    "h1:4ykR4qKWYmb/fSqeWwtdd7sjBKj5PPOeM7Of7mhDbC0=",
+    "zh:12e8d52607d321501cba034347d19af00b9a97342b88101c264e3a69f715778e",
+    "zh:1aeaac84bbf08c67b8872c56d15ce773d1c77ca30834980b8222bce914e3e9be",
+    "zh:2cebeb39025102a6a32d92c20008278d6c4ca0362d5271b443d04b719c4c20a3",
+    "zh:34bec83f803288e649f45bbd43428034c058eada730f466d7089e8248c972c54",
+    "zh:5e401e8288b3cb0c7fdb44e38eaea26ae8354cb863e3035584442c9766e9163c",
+    "zh:75b8fe34fb76cc99a734ebe2bfdd3ef5a5d3e6bf4b7cb585ddcb6ad36063969b",
+    "zh:890df766e9b839623b1f0437355032a3c006226a6c200cd911e15ee1a9014e9f",
+    "zh:a1fbf283d7ffb4f0c00a5a374d30d08a7c0da44d09778df46d8d7654c354f781",
+    "zh:e01492f2fbf9b2bb6b6649fc3c8f66a657821444747a13e4bb01689c96362dbe",
+  ]
+}
+
 provider "registry.opentofu.org/wgebis/mailgun" {
   version     = "0.9.0"
   constraints = "~> 0.9"
