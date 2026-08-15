@@ -100,3 +100,13 @@
   import_tasks: metrics.yml
   tags:
     - netdata
+
+- name: Install netdata fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension
+  vars:
+    fluentbit_extension_args:
+      name: netdata
+  tags:
+    - netdata

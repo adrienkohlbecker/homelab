@@ -158,15 +158,6 @@ function set_priority(tag, ts, record)
         return 1, ts, record
     end
 
-    -- Netdata alert names describe the failing component and can contain words
-    -- such as collector_error even when the event is a successful recovery.
-    -- Scope this override to the native unit and the canonical alert grammar;
-    -- transitions into a non-clear state still use the regular severity scan.
-    if record["SYSTEMD_UNIT"] == "netdata.service" and string.find(msg, "^ALERT .- to CLEAR%.") ~= nil then
-        record["_level"] = "info"
-        return 1, ts, record
-    end
-
     local head = " " .. string.lower(string.sub(msg, 1, 120)) .. " "
 
     local sev_text

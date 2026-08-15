@@ -184,38 +184,6 @@ do
     check("headscale.err", t, "error")
 end
 
--- 14g. A Netdata recovery remains informational even when its alert name
---      contains the generic error keyword.
-do
-    local t = sev(
-        "ALERT 'go.d:collector_error' of 'go.d:collector_status' raised from WARNING to CLEAR.",
-        nil,
-        { SYSTEMD_UNIT = "netdata.service" }
-    )
-    check("netdata.clear", t, "info")
-end
-
--- 14h. The exception is unit-scoped and does not create a general way to hide
---      error-bearing messages from other services.
-do
-    local t = sev(
-        "ALERT 'go.d:collector_error' of 'go.d:collector_status' raised from WARNING to CLEAR.",
-        nil,
-        { SYSTEMD_UNIT = "other.service" }
-    )
-    check("netdata.clear.unit-scoped", t, "error")
-end
-
--- 14i. A transition into WARNING remains actionable.
-do
-    local t = sev(
-        "ALERT 'go.d:collector_error' of 'go.d:collector_status' raised from CLEAR to WARNING.",
-        nil,
-        { SYSTEMD_UNIT = "netdata.service" }
-    )
-    check("netdata.warning", t, "error")
-end
-
 -- 15. nginx.access pre-stamp branch: an upstream modify filter sets
 --     record.severity_text=debug so this filter trusts it and does NOT scan
 --     the URL (which here contains "error") for keywords.
