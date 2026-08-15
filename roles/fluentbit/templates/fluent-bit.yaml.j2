@@ -19,31 +19,10 @@ service:
 # Filters execute in include order. Service roles add literal includes to the
 # manifest so hot reload never depends on wildcard expansion.
 includes:
+  - /etc/fluent-bit/parsers.yaml
   - /etc/fluent-bit/filters-pre.yaml
   - /etc/fluent-bit/services.yaml
   - /etc/fluent-bit/filters-post.yaml
-
-parsers:
-  - name: nginx_access_custom
-    format: regex
-    regex: '^(?<remote_addr>[^ ]+) - (?<remote_user>[^ ]+) \[(?<time_local>[^\]]+)\] (?<http_host>[^ ]*) "(?:(?<method>\S+)(?: +(?<path>[^"]*?)(?: +(?<protocol>\S+))?)?)?" (?<server_name>[^ ]*) (?<status>\d{3}) (?<body_bytes_sent>\d+) (?<request_length>\d+) (?<request_time>[\d.]+) (?<upstream_response_time>[\d.]+|-) "(?<referer>[^"]*)" "(?<user_agent>[^"]*)" "(?<authelia_user>[^"]*)" (?<ssl_protocol>\S+) (?<ssl_cipher>\S+)$'
-    types: status:integer body_bytes_sent:integer request_length:integer request_time:float
-
-  - name: certbot_file
-    format: regex
-    regex: '/^(?<certbot_timestamp>[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}):(?<certbot_level>DEBUG|INFO|WARNING|ERROR|CRITICAL):(?<certbot_source>[^:]+):(?<certbot_message>.*)$/m'
-
-multiline_parsers:
-  - name: multiline_certbot_file
-    type: regex
-    flush_timeout: 1000
-    rules:
-      - state: start_state
-        regex: '/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}:(DEBUG|INFO|WARNING|ERROR|CRITICAL):/'
-        next_state: continuation
-      - state: continuation
-        regex: '/^(?![0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}:(DEBUG|INFO|WARNING|ERROR|CRITICAL):)/'
-        next_state: continuation
 
 pipeline:
   inputs:

@@ -372,12 +372,8 @@
       - records.plex_crash_uploader.fields.plex_timestamp is not defined
       - records.plex_crash_uploader.fields.filepath is not defined
 
-- name: _verify | Stop fluent-bit before the isolated extension fixture
-  systemd:
-    name: fluent-bit
-    state: stopped
-  become: true
-
+# The libusb_init override is asserted end-to-end against the live container
+# journal above; this fixture covers the cases the live container cannot emit.
 - name: _verify | Exercise plex stdout severity overrides
   import_role:
     name: fluentbit
@@ -387,10 +383,6 @@
       name: plex
       records:
         - MESSAGE: Generated new chapter thumbnails for Vagina Panic.
-          CONTAINER_TAG: plex
-          SYSLOG_IDENTIFIER: plex
-          SYSTEMD_UNIT: plex.service
-        - MESSAGE: '[Critical] libusb_init failed'
           CONTAINER_TAG: plex
           SYSLOG_IDENTIFIER: plex
           SYSTEMD_UNIT: plex.service
@@ -407,11 +399,6 @@
           level: info
           service: plex
           fields.parser_status: parsed
-        - message: libusb_init failed
-          level: info
-          service: plex
-          fields.source: Critical
-          fields.parser_status: parsed
         - message: Real panic failure
           level: fatal
           service: plex
@@ -424,9 +411,3 @@
 - name: _verify | Routine Plex NAT-PMP timeout is omitted
   assert:
     that: "'NAT: PMP, timed out waiting for response.' not in fluentbit_verify_result.stdout"
-
-- name: _verify | Restart fluent-bit after the isolated extension fixture
-  systemd:
-    name: fluent-bit
-    state: started
-  become: true

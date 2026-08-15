@@ -313,12 +313,6 @@
       - record.fields.tautulli_websocket_timestamp is not defined
       - record.fields.filepath is not defined
 
-- name: _verify | Stop fluent-bit before the isolated extension fixture
-  systemd:
-    name: fluent-bit
-    state: stopped
-  become: true
-
 - name: _verify | Exercise tautulli fluent-bit record contracts
   import_role:
     name: fluentbit
@@ -378,9 +372,3 @@
             - fields.parser_status
             - fields.source
             - fields.thread
-
-- name: _verify | Restart fluent-bit after the isolated extension fixture
-  systemd:
-    name: fluent-bit
-    state: started
-  become: true

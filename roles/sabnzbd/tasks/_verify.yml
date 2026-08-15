@@ -280,12 +280,6 @@
       - record.fields.nzbtomedia_timestamp is not defined
       - record.fields.filepath is not defined
 
-- name: _verify | Stop fluent-bit before the isolated extension fixture
-  systemd:
-    name: fluent-bit
-    state: stopped
-  become: true
-
 - name: _verify | Exercise sabnzbd fluent-bit record contracts
   import_role:
     name: fluentbit
@@ -368,12 +362,6 @@
 - name: _verify | Routine sabnzbd connections are omitted from the aggregate
   assert:
     that: "'routine-token' not in fluentbit_verify_result.stdout"
-
-- name: _verify | Restart fluent-bit after the isolated extension fixture
-  systemd:
-    name: fluent-bit
-    state: started
-  become: true
 
 # usage_at_start preservation (main.yml's slurp+regex readback) is the role's
 # most fragile mechanism and the HTTP/DB probes can't see it: a broken readback

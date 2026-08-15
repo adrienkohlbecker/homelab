@@ -51,6 +51,7 @@
   loop:
     - /etc/fluent-bit/services
     - /etc/fluent-bit/services.yaml
+    - /etc/fluent-bit/parsers.yaml
     - /etc/fluent-bit/filters-pre.yaml
     - /etc/fluent-bit/filters-post.yaml
     - /etc/fluent-bit/fluent-bit.yaml
@@ -96,206 +97,124 @@
   until: _fluentbit_uptime.status == 200
   become: true
 
-- name: _verify | Write shared filter fixture  # noqa: require-backup require-validate
-  copy:
-    dest: /tmp/fluent-bit-shared-filter-verify.yaml
-    mode: "0644"
-    content: |
-      service:
-        flush: 1
-        log_level: error
-        storage.path: /tmp/fluent-bit-netdata-filter-storage
-
-      parsers:
-        - name: nginx_access_custom
-          format: regex
-          regex: '^(?<remote_addr>[^ ]+) - (?<remote_user>[^ ]+) \[(?<time_local>[^\]]+)\] (?<http_host>[^ ]*) "(?:(?<method>\S+)(?: +(?<path>[^"]*?)(?: +(?<protocol>\S+))?)?)?" (?<server_name>[^ ]*) (?<status>\d{3}) (?<body_bytes_sent>\d+) (?<request_length>\d+) (?<request_time>[\d.]+) (?<upstream_response_time>[\d.]+|-) "(?<referer>[^"]*)" "(?<user_agent>[^"]*)" "(?<authelia_user>[^"]*)" (?<ssl_protocol>\S+) (?<ssl_cipher>\S+)$'
-          types: status:integer body_bytes_sent:integer request_length:integer request_time:float
-
-        - name: certbot_file
-          format: regex
-          regex: '/^(?<certbot_timestamp>[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}):(?<certbot_level>DEBUG|INFO|WARNING|ERROR|CRITICAL):(?<certbot_source>[^:]+):(?<certbot_message>.*)$/m'
-
+# The shared core filters run against the deployed parsers/filters-pre/
+# filters-post files themselves, so this fixture cannot drift from what the
+# daemon actually executes.
+- name: _verify | Exercise shared core filters
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: shared_filters
       includes:
+        - /etc/fluent-bit/parsers.yaml
         - /etc/fluent-bit/filters-pre.yaml
         - /etc/fluent-bit/filters-post.yaml
+      records:
+        - _tag: svc.cron.service
+          MESSAGE: (root) CMD (command -v debian-sa1 > /dev/null && debian-sa1 1 1)
+          SYSLOG_IDENTIFIER: CRON
+          marker: cron-debian-sa1-drop
+        - _tag: svc.cron.service
+          MESSAGE: (root) CMD (cd / && run-parts --report /etc/cron.hourly)
+          SYSLOG_IDENTIFIER: CRON
+          marker: cron-hourly-keep
+        - _tag: svc.zfs_autosnapshot.service
+          MESSAGE: ""
+          SYSTEMD_UNIT: zfs_autosnapshot.service
+          marker: zfs-blank-drop
+        - _tag: svc.zfs_autosnapshot.service
+          MESSAGE: "rsync error: unexplained error"
+          SYSTEMD_UNIT: zfs_autosnapshot.service
+          marker: zfs-error-keep
+        - _tag: svc.session-1.scope
+          MESSAGE: Invoked with path=/proc/sys/kernel/panic follow=False
+          SYSLOG_IDENTIFIER: ansible-stat
+          marker: ansible-invoked-drop
+        - _tag: svc.session-1.scope
+          MESSAGE: module execution failed
+          SYSLOG_IDENTIFIER: ansible-stat
+          PRIORITY: "3"
+          marker: ansible-error-keep
+        - _tag: svc.example.service
+          MESSAGE: Invoked with harmless nearby text
+          SYSLOG_IDENTIFIER: example
+          marker: non-ansible-invoked-keep
+        - _tag: svc.homepage_alerts.service
+          MESSAGE: Starting homepage_alerts.service - Generate homepage alerts panel static files...
+          SYSTEMD_UNIT: homepage_alerts.service
+          marker: homepage-start-drop
+        - _tag: svc.homepage_alerts.service
+          MESSAGE: Finished homepage_alerts.service - Generate homepage alerts panel static files.
+          SYSTEMD_UNIT: homepage_alerts.service
+          marker: homepage-finish-drop
+        - _tag: svc.homepage_alerts.service
+          MESSAGE: "homepage_alerts.service: Failed with result exit-code."
+          SYSTEMD_UNIT: homepage_alerts.service
+          PRIORITY: "3"
+          marker: homepage-failed-keep
+        - _tag: svc.podman.service
+          MESSAGE: verbose podman event
+          SYSLOG_IDENTIFIER: podman
+          SYSTEMD_UNIT: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-startup.service
+          PODMAN_EVENT: health_status
+          PODMAN_TYPE: container
+          PODMAN_NAME: fixture
+          PODMAN_ID: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          PODMAN_HEALTH_STATUS: starting
+          marker: podman-starting-drop
+        - _tag: svc.podman.service
+          MESSAGE: verbose podman event
+          SYSLOG_IDENTIFIER: podman
+          SYSTEMD_UNIT: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.service
+          PODMAN_EVENT: health_status
+          PODMAN_TYPE: container
+          PODMAN_NAME: fixture
+          PODMAN_ID: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          PODMAN_HEALTH_STATUS: unhealthy
+          marker: podman-unhealthy-keep
+        - _tag: svc.init.scope
+          MESSAGE: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: Failed to open /run/systemd/transient/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: No such file or directory"
+          SYSLOG_IDENTIFIER: systemd
+          UNIT: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service
+          ERRNO: "2"
+          marker: healthcheck-enoent-drop
+        - _tag: svc.init.scope
+          MESSAGE: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: Main process exited, code=exited, status=1/FAILURE"
+          SYSLOG_IDENTIFIER: systemd
+          UNIT: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service
+          PRIORITY: "3"
+          marker: healthcheck-failed-keep
+        - _tag: svc.smartmontools.service
+          MESSAGE: "Device: /dev/disk/by-id/ata-fixture, no SCT Error Recovery Control support, ignoring -l scterc"
+          SYSLOG_IDENTIFIER: smartd
+          marker: smartd-option-drop
+        - _tag: svc.smartmontools.service
+          MESSAGE: "Device: /dev/disk/by-id/ata-fixture, Temperature 56 Celsius reached critical limit of 55 Celsius"
+          SYSLOG_IDENTIFIER: smartd
+          PRIORITY: "4"
+          marker: smartd-critical-keep
+      expected:
+        - level: info
+          fields.marker: cron-hourly-keep
+        - level: error
+          fields.marker: zfs-error-keep
+        - level: error
+          fields.marker: ansible-error-keep
+        - fields.marker: non-ansible-invoked-keep
+        - level: error
+          fields.marker: homepage-failed-keep
+        - fields.marker: podman-unhealthy-keep
+          fields.health_status: unhealthy
+        - level: error
+          fields.marker: healthcheck-failed-keep
+        - level: fatal
+          fields.marker: smartd-critical-keep
 
-      pipeline:
-        inputs:
-          - name: dummy
-            tag: svc.netdata.service
-            dummy: '{"MESSAGE":"ALERT ''netdata_context_missing'' of ''netdata_presence.context_conntrack'' raised from REMOVED to CLEAR.","SYSTEMD_UNIT":"netdata.service","marker":"netdata-removed-clear-drop"}'
-            samples: 1
-          - name: dummy
-            tag: svc.netdata.service
-            dummy: '{"MESSAGE":"ALERT ''go.d:collector_error'' of ''go.d:collector_status'' raised from WARNING to CLEAR.","SYSTEMD_UNIT":"netdata.service","marker":"netdata-warning-clear-keep"}'
-            samples: 1
-          - name: dummy
-            tag: svc.netdata.service
-            dummy: '{"MESSAGE":"ALERT ''go.d:collector_error'' of ''go.d:collector_status'' raised from CLEAR to WARNING.","SYSTEMD_UNIT":"netdata.service","marker":"netdata-warning-keep"}'
-            samples: 1
-          - name: dummy
-            tag: svc.netdata.service
-            dummy: '{"MESSAGE":"main: started from ''/usr/libexec/netdata/plugins.d/charts.d.plugin'' with options: 5","SYSTEMD_UNIT":"netdata.service","marker":"netdata-charts-start-drop"}'
-            samples: 1
-          - name: dummy
-            tag: svc.cron.service
-            dummy: '{"MESSAGE":"(root) CMD (command -v debian-sa1 > /dev/null && debian-sa1 1 1)","SYSLOG_IDENTIFIER":"CRON","marker":"cron-debian-sa1-drop"}'
-            samples: 1
-          - name: dummy
-            tag: svc.cron.service
-            dummy: '{"MESSAGE":"(root) CMD (cd / && run-parts --report /etc/cron.hourly)","SYSLOG_IDENTIFIER":"CRON","marker":"cron-hourly-keep"}'
-            samples: 1
-          - name: dummy
-            tag: svc.zfs_autosnapshot.service
-            dummy: '{"MESSAGE":"","SYSTEMD_UNIT":"zfs_autosnapshot.service","marker":"zfs-blank-drop"}'
-            samples: 1
-          - name: dummy
-            tag: svc.zfs_autosnapshot.service
-            dummy: '{"MESSAGE":"rsync error: unexplained error","SYSTEMD_UNIT":"zfs_autosnapshot.service","marker":"zfs-error-keep"}'
-            samples: 1
-          - name: dummy
-            tag: svc.session-1.scope
-            dummy: '{"MESSAGE":"Invoked with path=/proc/sys/kernel/panic follow=False","SYSLOG_IDENTIFIER":"ansible-stat","marker":"ansible-invoked-drop"}'
-            samples: 1
-          - name: dummy
-            tag: svc.session-1.scope
-            dummy: '{"MESSAGE":"module execution failed","SYSLOG_IDENTIFIER":"ansible-stat","PRIORITY":"3","marker":"ansible-error-keep"}'
-            samples: 1
-          - name: dummy
-            tag: svc.example.service
-            dummy: '{"MESSAGE":"Invoked with harmless nearby text","SYSLOG_IDENTIFIER":"example","marker":"non-ansible-invoked-keep"}'
-            samples: 1
-          - name: dummy
-            tag: svc.homepage_alerts.service
-            dummy: '{"MESSAGE":"Starting homepage_alerts.service - Generate homepage alerts panel static files...","SYSTEMD_UNIT":"homepage_alerts.service","marker":"homepage-start-drop"}'
-            samples: 1
-          - name: dummy
-            tag: svc.homepage_alerts.service
-            dummy: '{"MESSAGE":"Finished homepage_alerts.service - Generate homepage alerts panel static files.","SYSTEMD_UNIT":"homepage_alerts.service","marker":"homepage-finish-drop"}'
-            samples: 1
-          - name: dummy
-            tag: svc.homepage_alerts.service
-            dummy: '{"MESSAGE":"homepage_alerts.service: Failed with result exit-code.","SYSTEMD_UNIT":"homepage_alerts.service","PRIORITY":"3","marker":"homepage-failed-keep"}'
-            samples: 1
-          - name: dummy
-            tag: svc.netdata.service
-            dummy: '{"MESSAGE":"PARSER: thread cancelled while waiting for data.","SYSTEMD_UNIT":"netdata.service","ERRNO":"125","marker":"netdata-shutdown-drop"}'
-            samples: 1
-          - name: dummy
-            tag: svc.netdata.service
-            dummy: '{"MESSAGE":"PARSER: malformed collector data","SYSTEMD_UNIT":"netdata.service","PRIORITY":"3","marker":"netdata-parser-error-keep"}'
-            samples: 1
-          - name: dummy
-            tag: svc.podman.service
-            dummy: '{"MESSAGE":"verbose podman event","SYSLOG_IDENTIFIER":"podman","SYSTEMD_UNIT":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-startup.service","PODMAN_EVENT":"health_status","PODMAN_TYPE":"container","PODMAN_NAME":"fixture","PODMAN_ID":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","PODMAN_HEALTH_STATUS":"starting","marker":"podman-starting-drop"}'
-            samples: 1
-          - name: dummy
-            tag: svc.podman.service
-            dummy: '{"MESSAGE":"verbose podman event","SYSLOG_IDENTIFIER":"podman","SYSTEMD_UNIT":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.service","PODMAN_EVENT":"health_status","PODMAN_TYPE":"container","PODMAN_NAME":"fixture","PODMAN_ID":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","PODMAN_HEALTH_STATUS":"unhealthy","marker":"podman-unhealthy-keep"}'
-            samples: 1
-          - name: dummy
-            tag: svc.init.scope
-            dummy: '{"MESSAGE":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: Failed to open /run/systemd/transient/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: No such file or directory","SYSLOG_IDENTIFIER":"systemd","UNIT":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service","ERRNO":"2","marker":"healthcheck-enoent-drop"}'
-            samples: 1
-          - name: dummy
-            tag: svc.init.scope
-            dummy: '{"MESSAGE":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: Main process exited, code=exited, status=1/FAILURE","SYSLOG_IDENTIFIER":"systemd","UNIT":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service","PRIORITY":"3","marker":"healthcheck-failed-keep"}'
-            samples: 1
-          - name: dummy
-            tag: svc.smartmontools.service
-            dummy: '{"MESSAGE":"Device: /dev/disk/by-id/ata-fixture, no SCT Error Recovery Control support, ignoring -l scterc","SYSLOG_IDENTIFIER":"smartd","marker":"smartd-option-drop"}'
-            samples: 1
-          - name: dummy
-            tag: svc.smartmontools.service
-            dummy: '{"MESSAGE":"Device: /dev/disk/by-id/ata-fixture, Temperature 56 Celsius reached critical limit of 55 Celsius","SYSLOG_IDENTIFIER":"smartd","PRIORITY":"4","marker":"smartd-critical-keep"}'
-            samples: 1
-          - name: dummy
-            tag: audit
-            dummy: >-
-              {"log":"type=SERVICE_START msg=audit(4072368012.092:808): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=homepage_alerts comm=systemd exe=/usr/lib/systemd/systemd hostname=? addr=? terminal=? res=success'","marker":"homepage-audit-success-drop"}
-            samples: 1
-          - name: dummy
-            tag: audit
-            dummy: >-
-              {"log":"type=SERVICE_START msg=audit(4072368012.092:809): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=homepage_alerts comm=systemd exe=/usr/lib/systemd/systemd hostname=? addr=? terminal=? res=failed'","marker":"homepage-audit-failed-keep"}
-            samples: 1
-          - name: dummy
-            tag: audit
-            dummy: >-
-              {"log":"type=SERVICE_STOP msg=audit(4072368012.092:810): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=unrelated comm=systemd exe=/usr/lib/systemd/systemd hostname=? addr=? terminal=? res=success'","marker":"unrelated-audit-success-keep"}
-            samples: 1
-
-        outputs:
-          - name: stdout
-            match: '*'
-            format: json_lines
-  become: true
-
-- name: _verify | Run shared filter fixture
-  command:
-    argv:
-      - timeout
-      - --signal=TERM
-      - "4"
-      - /opt/fluent-bit/bin/fluent-bit
-      - --config
-      - /tmp/fluent-bit-shared-filter-verify.yaml
-  register: _fluentbit_shared_filter_result
-  changed_when: false
-  failed_when: _fluentbit_shared_filter_result.rc not in [0, 124]
-  become: true
-
-- name: _verify | Assert shared noise is omitted and nearby records remain
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        records = []
-        for line in sys.stdin:
-            try:
-                records.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-
-        by_marker = {record.get("fields", {}).get("marker"): record for record in records}
-        assert "netdata-removed-clear-drop" not in by_marker, records
-        assert "netdata-charts-start-drop" not in by_marker, records
-        assert by_marker["netdata-warning-clear-keep"]["level"] == "info", records
-        assert by_marker["netdata-warning-keep"]["level"] == "error", records
-        assert "cron-debian-sa1-drop" not in by_marker, records
-        assert "zfs-blank-drop" not in by_marker, records
-        assert by_marker["cron-hourly-keep"]["level"] == "info", records
-        assert by_marker["zfs-error-keep"]["level"] == "error", records
-        assert "ansible-invoked-drop" not in by_marker, records
-        assert by_marker["ansible-error-keep"]["level"] == "error", records
-        assert "non-ansible-invoked-keep" in by_marker, records
-        assert "homepage-start-drop" not in by_marker, records
-        assert "homepage-finish-drop" not in by_marker, records
-        assert by_marker["homepage-failed-keep"]["level"] == "error", records
-        assert "netdata-shutdown-drop" not in by_marker, records
-        assert by_marker["netdata-parser-error-keep"]["level"] == "error", records
-        assert "podman-starting-drop" not in by_marker, records
-        assert by_marker["podman-unhealthy-keep"]["fields"]["health_status"] == "unhealthy", records
-        assert "healthcheck-enoent-drop" not in by_marker, records
-        assert by_marker["healthcheck-failed-keep"]["level"] == "error", records
-        assert "smartd-option-drop" not in by_marker, records
-        assert by_marker["smartd-critical-keep"]["level"] == "fatal", records
-        assert "homepage-audit-success-drop" not in by_marker, records
-        assert "homepage-audit-failed-keep" in by_marker, records
-        assert "unrelated-audit-success-keep" in by_marker, records
-    stdin: "{{ _fluentbit_shared_filter_result.stdout }}"
-  changed_when: false
-
-- name: _verify | Remove shared filter fixture
-  file:
-    path: /tmp/fluent-bit-shared-filter-verify.yaml
-    state: absent
-  become: true
+- name: _verify | Shared core noise was omitted
+  assert:
+    that: "'-drop' not in fluentbit_verify_result.stdout"
 
 - name: _verify | Build per-run markers
   set_fact:
@@ -561,6 +480,9 @@
   loop_control:
     label: "{{ item.item.name }}"
 
+# A bare substring search is not enough here: the ansible task that emits the
+# fixture line is itself journaled ("Invoked with ... tmp-crun.<id> ...") and
+# legitimately retained, so match the exact systemd-identifier record.
 - name: _verify | Crun cleanup | assert successful teardown was excluded
   command:
     argv:

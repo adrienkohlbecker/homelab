@@ -111,6 +111,19 @@
   tags:
     - fluentbit
 
+- name: Install fluent-bit shared parsers  # noqa: require-validate
+  copy:
+    src: parsers.yaml
+    dest: /etc/fluent-bit/parsers.yaml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: fluentbit_parsers
+  tags:
+    - fluentbit
+
 - name: Install fluent-bit pre-service filters  # noqa: require-validate
   copy:
     src: filters-pre.yaml
@@ -187,6 +200,7 @@
     not (ansible_check_mode and
          (fluentbit_apt.changed or fluentbit_lua.changed or
           fluentbit_extension_dir.changed or fluentbit_service_manifest.changed or
+          fluentbit_parsers.changed or
           fluentbit_filters_pre.changed or fluentbit_filters_post.changed))
   tags:
     - fluentbit
@@ -233,6 +247,7 @@
       reload: >-
         {{ (fluentbit_conf.changed or fluentbit_lua.changed or
             fluentbit_extension_dir.changed or fluentbit_service_manifest.changed or
+            fluentbit_parsers.changed or
             fluentbit_filters_pre.changed or fluentbit_filters_post.changed)
            and not (fluentbit_apt.changed or fluent_bit_service_d_override_conf_result.changed) }}
   tags:

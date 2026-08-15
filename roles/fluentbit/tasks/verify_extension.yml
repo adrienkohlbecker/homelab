@@ -1,7 +1,7 @@
 - name: _verify | Validate fluent-bit extension fixture arguments
   assert:
     that:
-      - fluentbit_verify_args.keys() | list | difference(['name', 'records', 'expected']) | length == 0
+      - fluentbit_verify_args.keys() | list | difference(['name', 'unit', 'includes', 'records', 'expected']) | length == 0
       - fluentbit_verify_args.name is string
       - fluentbit_verify_args.records | length > 0
       - fluentbit_verify_args.expected | length > 0
@@ -17,16 +17,17 @@
         storage.path: /tmp/fluent-bit-{{ fluentbit_verify_args.name }}-storage
 
       includes:
-        - /etc/fluent-bit/services/{{ fluentbit_verify_args.name }}.yaml
-        - /etc/fluent-bit/filters-post.yaml
+      {% for include in fluentbit_verify_args.includes | default(['/etc/fluent-bit/services/' ~ fluentbit_verify_args.name ~ '.yaml', '/etc/fluent-bit/filters-post.yaml']) %}
+        - {{ include }}
+      {% endfor %}
 
       pipeline:
         inputs:
       {% for record in fluentbit_verify_args.records %}
           - name: dummy
-            tag: {{ record._tag | default('svc.' ~ fluentbit_verify_args.name ~ '.service') }}
+            tag: {{ record._tag | default('svc.' ~ (fluentbit_verify_args.unit | default(fluentbit_verify_args.name)) ~ '.service') }}
             dummy: >-
-              {{ record | dict2items | rejectattr('key', 'equalto', '_tag') | list | items2dict | to_json }}
+              {{ record | ansible.utils.remove_keys(target=['_tag']) | to_json }}
             samples: 1
       {% endfor %}
 
@@ -36,6 +37,16 @@
             format: json_lines
             json_date_key: time
             json_date_format: iso8601
+  become: true
+
+# Extensions may declare tail inputs on files the live daemon also tails,
+# which would race the fixture instance for the shared offset databases.
+# Stop unconditionally so every caller gets the same isolation; a single
+# restart cycle is harmless for filter-only extensions.
+- name: _verify | Stop fluent-bit around the isolated fixture
+  systemd:
+    name: fluent-bit
+    state: stopped
   become: true
 
 - name: _verify | Run fluent-bit extension fixture
@@ -50,6 +61,12 @@
   register: fluentbit_verify_result
   changed_when: false
   failed_when: fluentbit_verify_result.rc not in [0, 124]
+  become: true
+
+- name: _verify | Restart fluent-bit after the isolated fixture
+  systemd:
+    name: fluent-bit
+    state: started
   become: true
 
 - name: _verify | Assert fluent-bit extension records
