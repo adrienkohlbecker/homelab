@@ -74,3 +74,40 @@ resource "uptimerobot_monitor" "headscale_derp" {
     }
   }
 }
+
+resource "uptimerobot_monitor" "resume" {
+  name              = "Resume"
+  type              = "KEYWORD"
+  url               = "http://adrienkohlbecker.com"
+  interval          = 300
+  keyword_type      = "ALERT_NOT_EXISTS"
+  keyword_case_type = "CaseSensitive"
+  keyword_value     = "Strasbourg"
+  timeout           = 30
+
+  auth_type           = "NONE"
+  follow_redirections = true
+
+  assigned_alert_contacts = [
+    for contact_id in ["2425215", "2470085", "4045448"] : {
+      alert_contact_id = contact_id
+      threshold        = 0
+      recurrence       = 0
+    }
+  ]
+
+  region_data = {
+    regions = ["eu"]
+  }
+
+  # The API reports this HTTP monitor with check_ssl_errors enabled, while the
+  # provider rejects expressing SSL checks for a non-HTTPS URL.
+  lifecycle {
+    ignore_changes = [check_ssl_errors]
+  }
+}
+
+import {
+  to = uptimerobot_monitor.resume
+  id = "778001518"
+}
