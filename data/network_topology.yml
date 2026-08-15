@@ -83,8 +83,8 @@ sites:
       work:    { id: 3, cidr: 10.123.3.0/24, gateway: 10.123.3.1 }
       iot:     { id: 4, cidr: 10.123.4.0/24, gateway: 10.123.4.1 }
       trusted: { id: 5, cidr: 10.123.5.0/24, gateway: 10.123.5.1 }
-      vlan_6: { id: 6, cidr: 10.123.6.0/24, status: reserved }
-      vlan_7: { id: 7, cidr: 10.123.7.0/24, status: reserved }
+      intercom: { id: 6, cidr: 10.123.6.0/24, gateway: 10.123.6.1 }
+      vlan_7:   { id: 7, cidr: 10.123.7.0/24, status: reserved }
   site_8:  { cidr: 10.123.8.0/21,  status: reserved }
   site_16: { cidr: 10.123.16.0/20, status: reserved }
   site_32: { cidr: 10.123.32.0/20, status: reserved }
@@ -186,6 +186,11 @@ static_leases:
   daikin_adrien:           { ip: 10.123.4.28, site: home, vlan: iot }
   daikin_kitchen:          { ip: 10.123.4.29, site: home, vlan: iot }
   daikin_tv:               { ip: 10.123.4.30, site: home, vlan: iot }
+
+  dahua_vto_entrance:  { ip: 10.123.6.10, site: home, vlan: intercom }
+  dahua_vto_apartment: { ip: 10.123.6.11, site: home, vlan: intercom }
+  dahua_scp_ground:    { ip: 10.123.6.12, site: home, vlan: intercom }
+  dahua_scp_upper:     { ip: 10.123.6.13, site: home, vlan: intercom }
 
   # adguard keys its scheduled-blocking client on this IP (roles/adguard).
   adrien_phone: { ip: 10.123.5.10, site: home, vlan: trusted }
