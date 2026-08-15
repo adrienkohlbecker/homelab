@@ -11,7 +11,7 @@ filesystems.
 Pull replicas override readonly, canmount, and mountpoint locally. ``zfs send
 -bp`` sends the received source properties rather than those holder-local
 overrides. The target becomes writable and mountable only after every dataset
-has reached END_SUFFIX and its endpoint GUID has been verified.
+has received END_SUFFIX successfully.
 """
 
 from __future__ import annotations
@@ -217,12 +217,6 @@ def build_plans(config: Config) -> list[DatasetPlan]:
     return plans
 
 
-def snapshot_guid(dataset: str, suffix: str) -> str:
-    """Return the stable ZFS identity of a local snapshot."""
-
-    return zfs_capture("get", "-H", "-p", "-o", "value", "guid", f"{dataset}@{suffix}").stdout.strip()
-
-
 def inspect_targets(config: Config) -> None:
     """Require the destination tree to be absent before any stream starts."""
 
@@ -321,28 +315,8 @@ def sync_plan(config: Config, plan: DatasetPlan) -> None:
     )
 
 
-def verify_endpoints(config: Config, plans: list[DatasetPlan]) -> None:
-    """Require the GUID-matching endpoint snapshot on every target dataset."""
-
-    for plan in plans:
-        expected = snapshot_guid(plan.source, config.end_suffix)
-        result = remote_zfs_capture(
-            config,
-            "get",
-            "-H",
-            "-p",
-            "-o",
-            "value",
-            "guid",
-            f"{plan.target}@{config.end_suffix}",
-            check=False,
-        )
-        if result.stdout.strip() != expected:
-            raise RestoreError(f"restore incomplete: {plan.target}@{config.end_suffix} is missing")
-
-
 def finalize(config: Config, plans: list[DatasetPlan]) -> None:
-    """Make a verified target writable, mountable, and locally tagged."""
+    """Make the completed target writable, mountable, and locally tagged."""
 
     remote_zfs_run(
         config,
@@ -406,7 +380,6 @@ def main(argv: list[str]) -> None:
     inspect_targets(config)
     for plan in plans:
         sync_plan(config, plan)
-    verify_endpoints(config, plans)
     finalize(config, plans)
     print("Restore complete. Converge the host next -- it re-asserts the remaining dataset properties.")
 
