@@ -112,9 +112,9 @@
 # (10.0) and noble (10.0) lack the driver; resolute (11.x) and any
 # future release have it. The setting moves LIBVIRT_INP / LIBVIRT_FWX
 # / LIBVIRT_PRT chains out of `ip filter`/`ip nat` and into
-# `inet libvirt_*` tables. The conditional daemon restart below picks up
-# the change so libvirtd re-reads network.conf; the network-reload block
-# at the end re-creates rules under the new backend.
+# `inet libvirt_*` tables. The service call below start-or-restarts on
+# this register so libvirtd re-reads network.conf; the network-reload
+# block at the end re-creates rules under the new backend.
 - name: Configure libvirt to use native nftables firewall backend
   when: ansible_distribution_release not in ["jammy", "noble"]
   lineinfile:
@@ -141,8 +141,10 @@
       condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
       # Ubuntu ships libvirtd with --timeout 120 and active sockets. Keep the
       # boot-time enablement without force-starting an intentionally idle
-      # daemon on every converge.
-      start: false
+      # daemon on every converge; only a firewall-backend change warrants
+      # bringing it up (started-or-restarted) so it re-reads network.conf.
+      start: "{{ libvirt_firewall_backend.changed | default(false) }}"
+      restart: "{{ libvirt_firewall_backend.changed | default(false) }}"
   tags:
     - libvirt
 
@@ -154,15 +156,6 @@
     systemd_unit_args:
       src: libvirtd.socket
       condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
-  tags:
-    - libvirt
-
-- name: Restart libvirtd for firewall backend change
-  when: libvirt_firewall_backend.changed | default(false) and not ansible_check_mode
-  systemd:
-    name: libvirtd
-    state: restarted
-  become: true
   tags:
     - libvirt
 
