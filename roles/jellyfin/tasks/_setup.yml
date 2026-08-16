@@ -3,15 +3,12 @@
     name: podman
     tasks_from: install
 
-- name: _setup | Create media podman network
+# The full media role (network, group, /mnt/media dataset with the prod
+# owner/group/0775 shape, library dirs) -- so the write probe in _verify
+# exercises the same permissions prod grants, not a hand-rolled fixture.
+- name: _setup | Converge the media role
   import_role:
     name: media
-    tasks_from: network
-
-- name: _setup | Create media group
-  import_role:
-    name: media
-    tasks_from: group
 
 - name: _setup | Install nginx
   import_role:
@@ -31,12 +28,4 @@
     - /mnt/services
     - /mnt/services/sqlite
     - /mnt/scratch
-  become: true
-
-- name: _setup | Create writable media fixture
-  file:
-    path: /mnt/media
-    state: directory
-    group: media
-    mode: "0775"
   become: true
