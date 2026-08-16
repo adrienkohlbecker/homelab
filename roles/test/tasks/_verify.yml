@@ -221,8 +221,14 @@
   changed_when: false
   become: true
 
-- name: _verify | Isolate the Global Protocols line
+- name: _verify | Isolate the Global resolver section
   set_fact:
+    # Everything before the first per-link section: resolved routes queries
+    # to link scopes ahead of the global scope, so a DHCP-supplied per-link
+    # resolver matching anywhere in the full output must not satisfy the
+    # assert -- only the Global block proves the drop-in is authoritative.
+    test_resolvectl_global: >-
+      {{ test_resolvectl.stdout.split('\nLink ') | first }}
     test_resolvectl_global_protocols: >-
       {{ test_resolvectl.stdout_lines
          | select('search', 'Protocols:') | list | first | default('') }}
@@ -237,7 +243,7 @@
     that:
       - "'+DNSOverTLS' in test_resolvectl_global_protocols"
       - >-
-        (test_expected_resolvers | select('in', test_resolvectl.stdout) | list | length)
+        (test_expected_resolvers | select('in', test_resolvectl_global) | list | length)
         == (test_expected_resolvers | length)
     fail_msg: >-
       systemd-resolved isn't enforcing DNS-over-TLS via {{ test_expected_resolvers | join(', ') }};
