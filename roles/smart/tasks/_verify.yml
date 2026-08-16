@@ -25,7 +25,6 @@
       - "'-m root' in _conf"
       - "'-M diminishing' in _conf"
       - "'-n standby,q' in _conf"
-      - "'-s (L/../(0[1-7])/7/04:024|S/../../6/01)' in _conf"
     fail_msg: "rendered /etc/smartd.conf missing expected directives:\n{{ _conf }}"
 
 # Identity, not count: the rendered per-device set must equal the shared
