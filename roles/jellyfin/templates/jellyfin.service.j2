@@ -64,6 +64,10 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/sqlite/jellyfin:/mnt/services/sqlite/jellyfin \
     --volume /var/log/jellyfin:/config/log \
     --volume /mnt/scratch/jellyfin/cache:/cache \
+{# /media is deliberately writable (unlike plex's :ro): library options
+   that write beside media -- trickplay images, downloaded subtitles --
+   are operator-managed in the Jellyfin UI, and those jobs fail on a
+   read-only bind. Writes gate on the shared media group. #}
     --volume /mnt/media:/media \
 {% if has_transcoding_acceleration %}
     --device /dev/dri/renderD128:/dev/dri/renderD128:rw \
