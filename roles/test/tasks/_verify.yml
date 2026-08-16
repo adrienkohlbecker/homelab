@@ -226,12 +226,11 @@
     test_resolvectl_global_protocols: >-
       {{ test_resolvectl.stdout_lines
          | select('search', 'Protocols:') | list | first | default('') }}
-    # Mirror mirrors.yml's split: local cells use the household AdGuard VIP,
-    # including --upstream-mirrors runs; AWS cells use public anycast.
-    test_expected_resolvers: >-
-      {{ bootstrap_dns_resolver
-         if test_in_aws | default(false) | bool
-         else [prod_network.virtual_ips.dns] }}
+    # Same single source mirrors.yml renders into the drop-in
+    # (group_vars/all/main.yml), split back into per-server tokens --
+    # including the #dns.fahm.fr SNI suffix, so a dropped SNI (which
+    # breaks DoT certificate validation) fails here too.
+    test_expected_resolvers: "{{ bootstrap_dot_servers.split() }}"
 
 - name: _verify | DNS-over-TLS is enforced at the configured resolver
   assert:
