@@ -62,7 +62,6 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="jellyfin" \
     --volume /mnt/services/jellyfin:/config \
     --volume /mnt/services/sqlite/jellyfin:/mnt/services/sqlite/jellyfin \
-    --volume /mnt/scratch/jellyfin/cache/transcodes:/config/transcodes \
     --volume /var/log/jellyfin:/config/log \
     --volume /mnt/scratch/jellyfin/cache:/cache \
     --volume /mnt/media:/media \
