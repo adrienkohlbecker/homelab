@@ -159,6 +159,31 @@
   tags:
     - libvirt
 
+# libvirtd.service's [Install] Also= enables the read-only and admin
+# sockets, but enabling doesn't start them -- without an explicit start,
+# read-only clients and virt-admin only work after the next reboot.
+- name: Enable libvirtd read-only socket
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: libvirtd-ro.socket
+      condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
+  tags:
+    - libvirt
+
+- name: Enable libvirtd admin socket
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: libvirtd-admin.socket
+      condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
+  tags:
+    - libvirt
+
 - name: Check the default network is defined
   when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_socket_started_result.changed))
   command: virsh net-info default

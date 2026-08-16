@@ -14,6 +14,32 @@
     state: stopped
   become: true
 
+# Pin down both sides of the activation hand-off before probing: the probe
+# only proves socket activation if the daemon really is stopped and the
+# socket really is the thing listening.
+- name: _verify | Read libvirtd service and socket state
+  systemd:
+    name: "{{ item }}"
+  register: _libvirt_verify_units
+  become: true
+  loop:
+    - libvirtd.service
+    - libvirtd.socket
+    - libvirtd-ro.socket
+    - libvirtd-admin.socket
+
+- name: _verify | Daemon is stopped and all sockets are listening
+  assert:
+    that:
+      - _libvirt_verify_units.results[0].status.ActiveState == 'inactive'
+      - _libvirt_verify_units.results[1].status.ActiveState == 'active'
+      - _libvirt_verify_units.results[2].status.ActiveState == 'active'
+      - _libvirt_verify_units.results[3].status.ActiveState == 'active'
+    fail_msg: >-
+      expected libvirtd.service inactive with all three sockets active, got
+      {{ _libvirt_verify_units.results
+         | map(attribute='status.ActiveState') | list }}
+
 # runuser re-reads supplementary groups before invoking virsh, proving the
 # configured libvirt membership grants access to the system daemon and the
 # socket activates libvirtd from a stopped state.
@@ -30,6 +56,19 @@
       - list
   become: true
   changed_when: false
+
+- name: _verify | Read libvirtd state after the probe
+  systemd:
+    name: libvirtd.service
+  register: _libvirt_verify_activated
+  become: true
+
+- name: _verify | Socket activation started the daemon
+  assert:
+    that: _libvirt_verify_activated.status.ActiveState == 'active'
+    fail_msg: >-
+      libvirtd.service is {{ _libvirt_verify_activated.status.ActiveState }}
+      after a successful virsh connection -- the socket did not activate it.
 
 - name: _verify | Gather default network state
   command: virsh net-info default
