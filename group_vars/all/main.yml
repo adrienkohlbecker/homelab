@@ -89,6 +89,15 @@ cloud_init_managed: false
 # Final sort:      orders the per-host list for stable rendering.
 rotational_disks_by_id: "{{ ansible_devices | dict2items | rejectattr('key', 'match', '^(md|dm-|loop|sr|ram|zd)') | selectattr('value.rotational', 'equalto', '1') | selectattr('value.removable', 'equalto', '0') | selectattr('value.links.ids') | map(attribute='value.links.ids') | map('sort') | map('first') | sort }}"
 
+# SMART-monitored device stems: same chain as rotational_disks_by_id
+# minus the rotational filter (SSDs and NVMe want monitoring too), plus
+# an nvme-/ata- id-prefix select so only real SMART transports render
+# into smartd.conf. removable=0 drops optical drives -- they surface
+# ata- ids but have no SMART to poll. Consumed by
+# roles/smart/templates/smartd.conf.j2 and the role's _verify identity
+# assertion, so the two cannot drift.
+smart_monitored_disks_by_id: "{{ ansible_devices | dict2items | rejectattr('key', 'match', '^(md|dm-|loop|sr|ram|zd)') | selectattr('value.removable', 'equalto', '0') | selectattr('value.links.ids') | map(attribute='value.links.ids') | map('sort') | map('first') | select('match', '^(nvme|ata)-') | sort }}"
+
 ssh_public_keys: |
   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEFQDmZidqILmoI6o9f8KLz+0hJad+Xh4Lm5OLsYDZTa adrien.kohlbecker@gmail.com
 
