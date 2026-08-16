@@ -59,7 +59,7 @@
   tags:
     - jellyfin
 
-- name: Install tmpfiles.d entry for /var/log/jellyfin reaping
+- name: Install tmpfiles.d entries for log and transcode reaping
   when: not ansible_check_mode or jellyfin_user.uid is defined
   template:
     src: jellyfin.tmpfiles.conf.j2

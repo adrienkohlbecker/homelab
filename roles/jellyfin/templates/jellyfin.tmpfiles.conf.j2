@@ -4,5 +4,11 @@
 # mtime-only: the tilde tells tmpfiles to ignore atime, so a file that gets
 # re-read (not rewritten) still ages out on its real write time.
 #
-# Type Path              Mode UID GID Age   Argument
-e      /var/log/jellyfin -    -   -   ~14d  -
+# Reap orphaned transcode segments after 2d. The scratch-backed transcode
+# dir survives restarts (unlike a tmpfs) and Jellyfin only cleans its temp
+# files on graceful session end, so a crash, SIGKILL, or host reboot
+# strands multi-GB HLS segments that nothing else deletes.
+#
+# Type Path                                  Mode UID GID Age   Argument
+e      /var/log/jellyfin                     -    -   -   ~14d  -
+e      /mnt/scratch/jellyfin/cache/transcodes -   -   -   ~2d   -
