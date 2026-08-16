@@ -57,6 +57,26 @@
   become: true
   changed_when: false
 
+# Negative half of the access check: the socket ships 0660 root:libvirt,
+# so a user outside the libvirt group must be refused. Without this, a
+# regression to a world-writable socket would keep the positive probe
+# green while silently opening host-root-equivalent access.
+- name: _verify | Non-member user is denied the system daemon
+  command:
+    argv:
+      - runuser
+      - -u
+      - nobody
+      - --
+      - virsh
+      - -c
+      - qemu:///system
+      - list
+  register: _libvirt_verify_denied
+  changed_when: false
+  failed_when: _libvirt_verify_denied.rc == 0
+  become: true
+
 - name: _verify | Read libvirtd state after the probe
   systemd:
     name: libvirtd.service
