@@ -34,12 +34,13 @@
   tags:
     - libvirt
 
-- name: Reset connection after installing Python libvirt bindings
-  # Mitogen reuses the remote interpreter across tasks. Rebuild its context so
-  # the libvirt modules below can import the newly-installed libvirtmod extension.
-  # reset_connection does not support conditionals, so always take the cheap
-  # reconnect instead of relying on which apt transaction installed the binding.
-  meta: reset_connection
+# The reconnect is only needed on the converge that actually installed the
+# binding; the union covers python3-libvirt arriving transitively via the
+# virtualization-tools transaction. meta: reset_connection ignores task-level
+# conditionals, so gate the dynamic include instead.
+- name: Reset connection if the Python libvirt bindings were installed
+  when: libvirt_apt.changed or libvirt_apt_python.changed
+  include_tasks: reset_connection.yml
   tags:
     - libvirt
 

@@ -1,0 +1,8 @@
+# Mitogen reuses the remote interpreter across tasks. Rebuild its context so
+# the libvirt modules can import the freshly-installed libvirtmod extension.
+# meta: reset_connection ignores a task-level `when:`, so the caller gates the
+# include_tasks that pulls this file in instead.
+- name: Reset connection after installing Python libvirt bindings
+  meta: reset_connection
+  tags:
+    - libvirt
