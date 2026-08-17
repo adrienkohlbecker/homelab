@@ -27,10 +27,9 @@ macvlan_blocks:
 has_transcoding_acceleration: false
 
 # Override prod's lab.yml netplan: it matches by physical NIC MAC, but
-# the QEMU VM ships a single virtio-net with a different MAC, so on
-# noble `netplan apply` brings the only interface down (jammy was
-# lenient and silently no-op'd). Match the QEMU NIC by name like box
-# does.
+# the QEMU VM ships a single virtio-net with a different MAC, so
+# `netplan apply` brings the only interface down. Match the QEMU NIC by
+# name like box does.
 netplan:
   ethernets:
     en:

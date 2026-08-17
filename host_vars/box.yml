@@ -25,7 +25,7 @@ zfs_arc_max: 536870912
 # functional coverage the lab/pug AMIs used to carry. zee/data is the
 # canmount=on member provision.sh creates for the mount-generator; the
 # rpool/ROOT/<release> entry is templated so it works across the
-# jammy/noble/resolute box AMIs. See notes/ci_box_multidisk_drop_lab_pug_amis.md.
+# noble/resolute box AMIs. See notes/ci_box_multidisk_drop_lab_pug_amis.md.
 zfs_trim_pools:
   - rpool
   - zee
