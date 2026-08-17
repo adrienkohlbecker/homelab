@@ -66,6 +66,16 @@
   tags:
     - smart
 
+- name: Install smart fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension
+  vars:
+    fluentbit_extension_args:
+      name: smart
+  tags:
+    - smart
+
 - name: Enable smartmontools service
   import_role:
     name: systemd_unit

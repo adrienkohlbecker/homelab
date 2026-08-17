@@ -1,0 +1,21 @@
+pipeline:
+  filters:
+    # smartd noise retained in the journal but omitted from the operator
+    # aggregate. Every real disk alert stays: SMART failures and NVMe error
+    # counts keep their own severity, and smartd raises temperature limits at
+    # PRIORITY 2, so the aggregate still shows them as fatal.
+    - name: grep
+      match: svc.smartmontools.service
+      exclude:
+        # smartd requests -l xerror and -l scterc on every ata device and says
+        # so once per device lacking the optional extension. Standard SMART
+        # health/error/selftest monitoring stays active on those disks.
+        - 'MESSAGE ^Device: /dev/disk/by-id/ata-[A-Za-z0-9_.:-]+, no Extended Comprehensive SMART Error Log, ignoring -l xerror \(override with -T permissive\)$'
+        - 'MESSAGE ^Device: /dev/disk/by-id/ata-[A-Za-z0-9_.:-]+, no SCT Error Recovery Control support, ignoring -l scterc$'
+        - 'MESSAGE ^Device: /dev/disk/by-id/ata-[A-Za-z0-9_.:-]+, set of SCT Error Recovery Control failed$'
+        # The word "warning" here carries no severity of its own: the first is
+        # the all-clear for an alert already reported at its own priority, the
+        # other two only trace smartd-runner delivering that alert.
+        - 'MESSAGE ^Device: /dev/disk/by-id/[A-Za-z0-9_.:-]+, Temperature [0-9]+ Celsius dropped below [0-9]+ Celsius, warning condition reset after [0-9]+ emails?$'
+        - 'MESSAGE ^Sending warning via /usr/share/smartmontools/smartd-runner to root \.\.\.$'
+        - 'MESSAGE ^Warning via /usr/share/smartmontools/smartd-runner to root: successful$'

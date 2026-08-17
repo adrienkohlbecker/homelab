@@ -178,15 +178,6 @@
           UNIT: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service
           PRIORITY: "3"
           marker: healthcheck-failed-keep
-        - _tag: svc.smartmontools.service
-          MESSAGE: "Device: /dev/disk/by-id/ata-fixture, no SCT Error Recovery Control support, ignoring -l scterc"
-          SYSLOG_IDENTIFIER: smartd
-          marker: smartd-option-drop
-        - _tag: svc.smartmontools.service
-          MESSAGE: "Device: /dev/disk/by-id/ata-fixture, Temperature 56 Celsius reached critical limit of 55 Celsius"
-          SYSLOG_IDENTIFIER: smartd
-          PRIORITY: "4"
-          marker: smartd-critical-keep
       expected:
         - level: info
           fields.marker: cron-hourly-keep
@@ -201,8 +192,6 @@
           fields.health_status: unhealthy
         - level: error
           fields.marker: healthcheck-failed-keep
-        - level: fatal
-          fields.marker: smartd-critical-keep
 
 - name: _verify | Shared core noise was omitted
   assert:

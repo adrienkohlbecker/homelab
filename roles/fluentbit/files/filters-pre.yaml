@@ -82,16 +82,6 @@ pipeline:
         - 'SYSTEMD_UNIT ^hd-idle\.service$'
         - 'MESSAGE ^probing sd[a-z]+: reads:'
 
-    # These optional ATA extensions fail on part of the current disk mix while
-    # standard SMART health/error/selftest monitoring remains active. Keep
-    # actual disk alerts; omit only the one-time option diagnostics.
-    - name: grep
-      match: svc.*
-      logical_op: and
-      exclude:
-        - 'SYSLOG_IDENTIFIER ^smartd$'
-        - 'MESSAGE ^Device: /dev/disk/by-id/ata-[A-Za-z0-9_.:-]+, (no Extended Comprehensive SMART Error Log, ignoring -l xerror \(override with -T permissive\)|no SCT Error Recovery Control support, ignoring -l scterc|set of SCT Error Recovery Control failed)$'
-
     - name: grep
       match: svc.*
       logical_op: and

@@ -2,3 +2,7 @@
   import_role:
     name: netdata
     tasks_from: install
+
+- name: _setup | Install fluent-bit for the smartd noise extension
+  import_role:
+    name: fluentbit
