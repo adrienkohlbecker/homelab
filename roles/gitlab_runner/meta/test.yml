@@ -8,13 +8,3 @@ machines:
   box_deps:
   # Shell-executor fallback path; qemu-only, selected by host_vars/lab.yml.
   lab:
-
-# Release-divergent: the config.toml validate imports tomllib on >= 24.04 and
-# the tomli backport below it (jammy ships python 3.10, no tomllib); the
-# default cell is jammy, so a noble cell exercises the tomllib branch -- the
-# one a noble-based prod host would take.
-ubuntu:
-  - noble
-
-skip:
-  lab:noble: noble TOML-validate coverage rides box_deps:noble; lab only covers shell executor wiring

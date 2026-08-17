@@ -2,15 +2,3 @@
 machines:
   box:
   minimal:
-
-# efibootmgr 18 (noble) reshapes its output twice over jammy's 17: entry lines
-# grow a `\t<device path>` suffix even without -v, and -v moves optional data
-# onto separate `dp:`/`data:` hex lines. efi_entries.py and _verify carry
-# release-divergent parsing for both; the noble cell keeps that covered.
-ubuntu:
-  - noble
-skip:
-  "minimal:noble": >-
-    The grub path manages no EFI NVRAM entries, so the noble escalation buys
-    nothing there -- the release-divergent parsing lives entirely in the box
-    cell's efi_entries path.
