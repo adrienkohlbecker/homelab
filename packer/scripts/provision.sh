@@ -163,15 +163,19 @@ zpool_export_retry() {
 }
 
 wipe_disks() {
-  local device type disk
+  local device devtype disk
 
   for disk in "$@"; do
     zpool labelclear -f "$disk" || true
 
     # Whole-disk wipefs removes the partition table, not signatures stored
     # inside its partitions. Clear those first, then replace the table.
-    while read -r device type; do
-      if [ "$type" = part ]; then
+    # labelclear per partition too: libblkid's zfs_member probe reads only
+    # the front-of-device labels, so a previous install's end-of-device ZFS
+    # labels survive wipefs and stay visible to a later `zpool import -f`.
+    while read -r device devtype; do
+      if [ "$devtype" = part ]; then
+        zpool labelclear -f "$device" || true
         wipefs --all --force "$device"
       fi
     done < <(lsblk --raw --noheadings --paths --output NAME,TYPE "$disk")
@@ -179,6 +183,11 @@ wipe_disks() {
     wipefs --all --force "$disk"
     blkdiscard -f "$disk" || true
     sgdisk --zap-all "$disk"
+    # sgdisk rewrote the on-disk table; drop the kernel's stale entries for it.
+    # partx --update alone only revisits partition numbers present in the new
+    # table, leaving nodes above the new count registered and claimable by a
+    # later zpool/mdadm create.
+    partx --delete "$disk" || true
   done
 }
 
@@ -428,19 +437,37 @@ if [ -f /etc/apt/sources.list ]; then
 fi
 
 apt_update
-apt-get install --yes arch-install-scripts debootstrap gdisk mdadm util-linux zfsutils-linux
+apt-get install --yes arch-install-scripts debootstrap gdisk mdadm zfsutils-linux
+
+# Stop udev's `mdadm --incremental` from re-assembling an array off a stale
+# superblock while the tables below are rewritten. Declarative, so it cannot
+# leak the way a stop-exec-queue trap can if the script exits mid-partition.
+# Live build environment only -- the shipped image's mdadm.conf is written
+# independently by chroot.sh.
+printf 'AUTO -all\n' >/etc/mdadm/mdadm.conf
 
 zgenhostid -f
 
-# The installer owns every assembled md array. Tear them all down once before
-# partitioning; later wipe_disks calls prepare extra-pool disks after the new
-# EFI, swap, and Podman arrays already exist.
-mapfile -t md_members < <(lsblk --raw --noheadings --paths --output NAME,FSTYPE | awk '$2 == "linux_raid_member" { print $1 }')
+# Stale md members on the target disks would let udev's `mdadm --incremental`
+# re-assemble an array mid-partitioning and hold a member busy. Tear those
+# arrays down once before partitioning; later wipe_disks calls prepare
+# extra-pool disks after the new EFI, swap, and Podman arrays already exist.
+#
+# Scoped to the disks this run owns, never `--stop --scan` / an unqualified
+# lsblk: on the bare-metal path the machine may carry arrays on disks the
+# caller deliberately left out of DISKS/EXTRA_DISKS, and zeroing their
+# superblocks is not recoverable.
+# shellcheck disable=SC2086  # word-splitting on the disk lists is the point
+mapfile -t md_members < <(lsblk --raw --noheadings --paths --output NAME,FSTYPE $DISKS $EXTRA_DISKS | awk '$2 == "linux_raid_member" { print $1 }')
 if ((${#md_members[@]})); then
-  mdadm --stop --scan || true
+  # Stop the arrays those members back before clearing them -- mdadm refuses
+  # to zero a superblock while its array is still assembled.
+  mapfile -t md_holders < <(lsblk --raw --noheadings --paths --output NAME,TYPE "${md_members[@]}" | awk '$2 ~ /^raid/ { print $1 }' | sort -u)
+  for md_holder in "${md_holders[@]}"; do
+    mdadm --stop "$md_holder" || true
+  done
   mdadm --zero-superblock "${md_members[@]}"
 fi
-unset md_members
 
 # Defensive wipe -- a no-op against fresh Packer qcow2s, but necessary on
 # ordinary bare metal. DISKS is intentionally split into device arguments.
