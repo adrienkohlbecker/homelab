@@ -55,11 +55,10 @@ locals {
   arch     = local.arch_raw == "arm64" ? "aarch64" : local.arch_raw
   versions = yamldecode(file("${path.cwd}/group_vars/all/versions.yml"))
 
-  # Cloud image pins (snapshot date + sha256) live in ubuntu_images.json.
-  # Bump when refreshing; older snapshots eventually fall out of the
-  # upstream listing (and out of the Nexus proxy cache).
-  ubuntu_images   = jsondecode(file("ubuntu_images.json"))
-  ubuntu_snapshot = local.ubuntu_images[var.ubuntu_name].snapshot
+  # Codename -> Ubuntu version, for the cloud image filename. No snapshot date:
+  # see upstream_cloud_base below for why the build tracks the release symlink.
+  ubuntu_images  = jsondecode(file("ubuntu_images.json"))
+  ubuntu_version = local.ubuntu_images[var.ubuntu_name].version
 
   # Arch-keyed configuration table. Centralizes everything that varies
   # between the supported builds. In this stack arch is a 1:1 proxy for
@@ -262,11 +261,20 @@ locals {
   # Cloud image base URLs. Defaults to the Nexus proxy
   # (`terraform/nexus.tf` raw_proxies "ubuntu-cloud-images"); set
   # `-var upstream_mirrors=true` to bypass it.
-  upstream_cloud_base = "https://cloud-images.ubuntu.com/${var.ubuntu_name}/${local.ubuntu_snapshot}"
-  nexus_cloud_base    = "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images/${var.ubuntu_name}/${local.ubuntu_snapshot}"
+  # The `releases/<codename>/release/` symlink, not a dated directory. The daily
+  # stream (cloud-images.ubuntu.com/<codename>/<date>/) keeps only ~6 snapshots,
+  # so a dated pin there 404s within months and the build breaks without anyone
+  # touching it. This tracks whatever Canonical currently publishes as the
+  # release image; integrity still comes from the SHA256SUMS fetched beside it,
+  # and test/machine.py's minimal image already resolves the same way.
+  #
+  # For a reproducible bake, point these at `releases/<codename>/release-<date>/`
+  # instead -- that tree is archival and goes back to each release's GA.
+  upstream_cloud_base = "https://cloud-images.ubuntu.com/releases/${var.ubuntu_name}/release"
+  nexus_cloud_base    = "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images/releases/${var.ubuntu_name}/release"
   cloud_base          = var.upstream_mirrors ? local.upstream_cloud_base : local.nexus_cloud_base
   cloud_checksum      = "file:${local.cloud_base}/SHA256SUMS"
-  cloud_url           = "${local.cloud_base}/${var.ubuntu_name}-server-cloudimg-${local.arch_cfg.cloud_image_suffix}.img"
+  cloud_url           = "${local.cloud_base}/ubuntu-${local.ubuntu_version}-server-cloudimg-${local.arch_cfg.cloud_image_suffix}.img"
 
   # Apt mirrors. By default the build pulls through the lab Nexus proxy
   # (`group_vars/all.yml` uses the same `repository/ubuntu-*` layout); set
