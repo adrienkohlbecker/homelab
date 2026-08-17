@@ -1,5 +1,0 @@
-# The static config has no release branches. Noble validates the converge-time
-# dry-run against newer unattended-upgrades and release-specific ESM origins;
-# resolute adds no distinct role path.
-ubuntu:
-  - noble

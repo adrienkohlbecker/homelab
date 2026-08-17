@@ -1,4 +1,0 @@
-# Jammy ships resolved in the systemd package; noble covers the role-owned
-# systemd-resolved package install.
-ubuntu:
-  - noble

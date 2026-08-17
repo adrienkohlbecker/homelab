@@ -179,6 +179,17 @@ class TestSkip:
         cells = matrix.build_role_cells("svc")
         assert cells == [matrix.TestCell("box", "noble", "svc")]
 
+    def test_bare_machine_skip_drops_only_that_machines_base_cell(self, roles_tree: Path) -> None:
+        # The bare form is the only correct spelling for the default cell;
+        # lint/test-meta.py rejects the `minimal:noble` spelling that reads as
+        # an escalation skip but lands here identically.
+        _make_role(roles_tree, "svc", {"machines": {"box": None, "minimal": None}, "skip": {"minimal": "flaky"}})
+        assert matrix.build_role_cells("svc") == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "svc")]
+
+    def test_listing_the_default_release_adds_no_duplicate_cell(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "svc", {"machines": {"box": None}, "ubuntu": [matrix.DEFAULT_UBUNTU]})
+        assert matrix.build_role_cells("svc") == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "svc")]
+
     def test_build_test_matrix_drops_skipped_propagated_extra(self, roles_tree: Path) -> None:
         # A consumer's release cell pushed in via CI fan-out must still drop
         # if that consumer skips it.

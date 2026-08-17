@@ -59,11 +59,18 @@ def main() -> int:
             if not isinstance(ubuntu, list):
                 errors.append(f"{meta}: ubuntu must be a list, got {type(ubuntu).__name__}")
             else:
-                errors.extend(
-                    f"{meta}: ubuntu={codename!r} not in {UBUNTU_NAMES}"
-                    for codename in ubuntu
-                    if codename not in UBUNTU_RELEASES
-                )
+                for codename in ubuntu:
+                    # The default release already has a base cell per machine, so
+                    # listing it here expands to nothing. Erroring is what forces
+                    # a ubuntu: block to be re-read after a release promotion --
+                    # otherwise its rationale silently outlives the cell.
+                    if codename == DEFAULT_UBUNTU:
+                        errors.append(
+                            f"{meta}: ubuntu lists {DEFAULT_UBUNTU!r}, the default release"
+                            " -- it expands to no cell, so drop it (list only extra releases)"
+                        )
+                    elif codename not in UBUNTU_RELEASES:
+                        errors.append(f"{meta}: ubuntu={codename!r} not in {UBUNTU_NAMES}")
 
         # skip maps machine[:ubuntu] to the reason a known-failing cell is quarantined.
         skip = data.get("skip")
@@ -80,7 +87,16 @@ def main() -> int:
                     codename = parts[1] if len(parts) == 2 else DEFAULT_UBUNTU
                     if machine not in MACHINE_NAMES:
                         errors.append(f"{meta}: skip {spec!r}: machine {machine!r} not in {MACHINE_NAMES}")
-                    if codename not in UBUNTU_RELEASES:
+                    # `machine:<default>` and bare `machine` name the same cell,
+                    # so the explicit spelling reads as "skip the escalation"
+                    # while silently cancelling the base cell. Demand the bare
+                    # form, which says what it does.
+                    if len(parts) == 2 and parts[1] == DEFAULT_UBUNTU:
+                        errors.append(
+                            f"{meta}: skip {spec!r}: {DEFAULT_UBUNTU!r} is the default release,"
+                            f" so this cancels the base cell -- write {machine!r} if that is intended"
+                        )
+                    elif codename not in UBUNTU_RELEASES:
                         errors.append(f"{meta}: skip {spec!r}: ubuntu {codename!r} not in {UBUNTU_NAMES}")
                     if not reason or not str(reason).strip():
                         errors.append(f"{meta}: skip {spec!r}: needs a non-empty reason")

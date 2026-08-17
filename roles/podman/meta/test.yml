@@ -1,7 +1,6 @@
-# Three distinct per-release install paths: jammy pins podman + its userspace
-# stack from noble-backports; noble installs the same stack natively (no backport
-# pin); resolute drops the iptables compat package and takes the >= 26 branch.
-# Both noble and resolute exercise paths the jammy default cell doesn't.
+# Release-divergent install paths: the default noble cell installs the podman
+# userspace stack natively; resolute drops the iptables compat package and takes
+# the >= 26 branch.
 #
 # Storage backend coverage: box and rebuilt pug put the container store on a
 # dedicated raw ext4 partition (podman_storage_backend: partition, single disk);
@@ -20,5 +19,4 @@ machines:
   pug:
   lab:
 ubuntu:
-  - noble
   - resolute

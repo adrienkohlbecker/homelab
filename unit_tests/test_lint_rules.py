@@ -184,3 +184,41 @@ class TestTestMetaValidation:
         )
         assert result.returncode == 0, f"test-meta.py failed:\n{result.stderr}"
         assert "Validated" in result.stdout
+
+    def _run_against(self, tmp_path: Path, role: str, meta: str) -> subprocess.CompletedProcess[str]:
+        meta_dir = tmp_path / "roles" / role / "meta"
+        meta_dir.mkdir(parents=True)
+        (meta_dir / "test.yml").write_text(meta)
+        return subprocess.run(
+            [sys.executable, str(_ROOT / "mise-tasks" / "lint" / "test-meta.py")],
+            capture_output=True,
+            text=True,
+            cwd=str(tmp_path),
+            timeout=30,
+        )
+
+    def test_ubuntu_listing_the_default_release_is_rejected(self, tmp_path: Path) -> None:
+        # It expands to no cell, so the entry's rationale silently outlives the
+        # cell it describes.
+        result = self._run_against(tmp_path, "svc", "ubuntu:\n  - noble\n")
+        assert result.returncode == 1
+        assert "the default release" in result.stderr
+
+    def test_skip_spelling_out_the_default_release_is_rejected(self, tmp_path: Path) -> None:
+        # `minimal:noble` reads as "skip the escalation" but cancels the base
+        # cell -- this is what silently dropped roles/boot's minimal coverage.
+        result = self._run_against(
+            tmp_path,
+            "svc",
+            'machines:\n  box:\n  minimal:\nskip:\n  "minimal:noble": flaky\n',
+        )
+        assert result.returncode == 1
+        assert "cancels the base cell" in result.stderr
+
+    def test_skip_of_a_non_default_release_is_accepted(self, tmp_path: Path) -> None:
+        result = self._run_against(
+            tmp_path,
+            "svc",
+            'machines:\n  box:\nubuntu:\n  - resolute\nskip:\n  "box:resolute": flaky\n',
+        )
+        assert result.returncode == 0, result.stderr
