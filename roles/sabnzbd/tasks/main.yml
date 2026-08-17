@@ -255,8 +255,6 @@
   vars:
     fluentbit_extension_args:
       name: sabnzbd
-      lua_files:
-        - europe_paris_time.lua
   tags:
     - sabnzbd
 

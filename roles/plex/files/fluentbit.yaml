@@ -130,13 +130,6 @@ pipeline:
       reserve_data: true
       preserve_key: true
 
-    # Plex runs with TZ=Europe/Paris but writes no offset to its file logs.
-    - name: lua
-      match: 'plex.*'
-      script: /etc/fluent-bit/europe_paris_time.lua
-      call: from_europe_paris
-      time_as_table: true
-
     - name: modify
       match: 'plex.*'
       condition: key_does_not_exist plex_message

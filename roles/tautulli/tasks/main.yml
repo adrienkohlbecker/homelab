@@ -148,8 +148,6 @@
   vars:
     fluentbit_extension_args:
       name: tautulli
-      lua_files:
-        - europe_paris_time.lua
   tags:
     - tautulli
 

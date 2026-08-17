@@ -74,13 +74,6 @@ pipeline:
       reserve_data: true
       preserve_key: true
 
-    # SABnzbd/nzbToMedia runs with TZ=Europe/Paris but writes no offset here.
-    - name: lua
-      match: sabnzbd.nzbtomedia
-      script: /etc/fluent-bit/europe_paris_time.lua
-      call: from_europe_paris
-      time_as_table: true
-
     - name: modify
       match: sabnzbd.nzbtomedia
       condition: key_does_not_exist nzbtomedia_message

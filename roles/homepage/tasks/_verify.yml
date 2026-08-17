@@ -190,8 +190,6 @@
         - message: homepage-valid
           level: debug
           service: homepage
-          _not_prefix:
-            time: 2099-
           fields.parser_status: parsed
           fields.source: homepage.verify
         - message: homepage-access

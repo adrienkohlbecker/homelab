@@ -67,13 +67,6 @@ pipeline:
       reserve_data: true
       preserve_key: true
 
-    # Tautulli runs with TZ=Europe/Paris but writes no offset to this file.
-    - name: lua
-      match: tautulli.websocket
-      script: /etc/fluent-bit/europe_paris_time.lua
-      call: from_europe_paris
-      time_as_table: true
-
     - name: modify
       match: tautulli.websocket
       condition: key_does_not_exist tautulli_websocket_message

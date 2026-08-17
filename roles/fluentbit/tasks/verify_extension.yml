@@ -100,12 +100,6 @@
                     if any(value_at(record, item)[0] for item in value):
                         return False
                     continue
-                if path == "_not_prefix":
-                    for item, prefix in value.items():
-                        present, actual = value_at(record, item)
-                        if not present or not isinstance(actual, str) or actual.startswith(prefix):
-                            return False
-                    continue
                 present, actual = value_at(record, path)
                 if not present or actual != value:
                     return False

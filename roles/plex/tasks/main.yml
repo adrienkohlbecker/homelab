@@ -137,8 +137,6 @@
   vars:
     fluentbit_extension_args:
       name: plex
-      lua_files:
-        - europe_paris_time.lua
   tags:
     - plex
 

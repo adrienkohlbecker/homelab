@@ -115,8 +115,6 @@
         - message: profilarr-info
           level: info
           service: profilarr
-          _not_prefix:
-            time: 2099-
           fields.source: app.verify
           fields.parser_status: parsed
           _absent:

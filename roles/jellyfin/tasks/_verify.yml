@@ -366,8 +366,6 @@
         - message: jellyfin-valid
           level: warn
           service: jellyfin
-          _not_prefix:
-            time: 2099-
           fields.parser_status: parsed
           fields.source: Verify
           fields.service: attribute
