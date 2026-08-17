@@ -43,18 +43,20 @@
     path: /mnt/scratch/homelab_ci
     state: directory
     group: homelab_ci
-    mode: "02775"
+    # No world bits: published trees are whole converged root filesystems, and
+    # every consumer (operator, gitlab_runner, the qemu cells) is a group member.
+    mode: "02770"
   become: true
   register: homelab_ci_dir
   tags:
     - homelab_ci
 
-- name: Set default owning-group rwx ACL on homelab_ci
+- name: Set default ACL on homelab_ci
   ansible.posix.acl:
     path: /mnt/scratch/homelab_ci
-    entity: ""
-    etype: group
-    permissions: rwx
+    entity: "{{ item.entity }}"
+    etype: "{{ item.etype }}"
+    permissions: "{{ item.permissions }}"
     default: true
     state: present
   become: true
@@ -63,5 +65,16 @@
   when: >-
     not (ansible_check_mode and
     (homelab_ci_dir.changed or homelab_ci_packages.changed))
+  loop:
+    # Owning group keeps rwx so either publisher can traverse and rmtree the
+    # other's tree. The other class is emptied explicitly: setfacl would
+    # otherwise back-fill it from the directory mode and leak read access to
+    # every local account on the host.
+    - entity: ""
+      etype: group
+      permissions: rwx
+    - entity: ""
+      etype: other
+      permissions: "---"
   tags:
     - homelab_ci

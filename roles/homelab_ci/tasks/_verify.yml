@@ -1,38 +1,3 @@
-- name: _verify | Group homelab_ci exists
-  command:
-    argv:
-      - getent
-      - group
-      - homelab_ci
-  changed_when: false
-  become: true
-
-- name: _verify | CI artifacts dir exists with homelab_ci group and setgid
-  stat:
-    path: /mnt/scratch/homelab_ci
-  register: homelab_ci_verify_dir
-  become: true
-  # stat no longer emits the sgid boolean -- assert the setgid + 775 perms via
-  # the mode string the role declares (02775 -> stat reports '2775').
-  failed_when: >-
-    not homelab_ci_verify_dir.stat.exists
-    or not homelab_ci_verify_dir.stat.isdir
-    or homelab_ci_verify_dir.stat.gr_name != 'homelab_ci'
-    or homelab_ci_verify_dir.stat.mode != '2775'
-
-- name: _verify | CI artifacts dir defaults to owning-group rwx
-  command:
-    argv:
-      - getfacl
-      - --omit-header
-      - /mnt/scratch/homelab_ci
-  register: homelab_ci_verify_acl
-  changed_when: false
-  # rwx, not rw: the x is what lets a group member traverse and rmtree another
-  # member's published tree during publish.py's atomic swap.
-  failed_when: "'default:group::rwx' not in homelab_ci_verify_acl.stdout"
-  become: true
-
 - name: _verify | Create a second CI publisher
   user:
     name: homelab_ci_verify
@@ -45,9 +10,24 @@
     system: true
   become: true
 
+- name: _verify | Create a non-member account
+  user:
+    name: homelab_ci_outsider
+    create_home: false
+    shell: /usr/sbin/nologin
+    state: present
+    system: true
+  become: true
+
 # runuser starts fresh processes with supplementary groups from the account
-# database. Use two identities so this exercises the cross-publisher contract,
-# not merely one owner creating and removing its own file.
+# database, so three identities exercise the real contract: two publishers must
+# be able to manage each other's trees, and a non-member must not see them.
+#
+# The probe creates under umask 077 and never passes an explicit mode. That is
+# what puts the default ACL under test: with it, the kernel ignores the umask
+# and the new objects inherit group rwx; without it the umask applies, the
+# group gets nothing, and the second publisher's steps below fail. Passing
+# `install -m 0770` here would set the group bits directly and pass either way.
 - name: _verify | Cross-publisher artifact access works
   block:
     - name: _verify | Operator creates a group-managed artifact directory
@@ -57,11 +37,9 @@
           - -u
           - "{{ ansible_user_id }}"
           - --
-          - install
-          - -d
-          - -m
-          - "0770"
-          - /mnt/scratch/homelab_ci/.cross_publisher_probe
+          - sh
+          - -c
+          - umask 077; mkdir /mnt/scratch/homelab_ci/.cross_publisher_probe
       changed_when: true
       become: true
 
@@ -72,12 +50,25 @@
           - -u
           - "{{ ansible_user_id }}"
           - --
-          - install
-          - -m
-          - "0660"
-          - /dev/null
-          - /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
+          - sh
+          - -c
+          - umask 077; touch /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
       changed_when: true
+      become: true
+
+    - name: _verify | Non-member cannot reach the operator artifact
+      command:
+        argv:
+          - runuser
+          - -u
+          - homelab_ci_outsider
+          - --
+          - test
+          - -r
+          - /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
+      register: homelab_ci_verify_outsider
+      changed_when: false
+      failed_when: homelab_ci_verify_outsider.rc == 0
       become: true
 
     - name: _verify | Second publisher can read the operator artifact
@@ -123,9 +114,12 @@
         state: absent
       become: true
 
-    - name: _verify | Remove the second CI publisher
+    - name: _verify | Remove the probe accounts
       user:
-        name: homelab_ci_verify
+        name: "{{ item }}"
         state: absent
         remove: false
+      loop:
+        - homelab_ci_verify
+        - homelab_ci_outsider
       become: true
