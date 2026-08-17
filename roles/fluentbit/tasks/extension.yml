@@ -5,7 +5,7 @@
       - fluentbit_extension_args.name is string
       - fluentbit_extension_args.name is match('^[a-z0-9_]+$')
 
-- name: Install fluent-bit service extension  # noqa: require-validate
+- name: Install fluent-bit service extension
   copy:
     src: "{{ playbook_dir }}/roles/{{ fluentbit_extension_args.name }}/files/fluentbit.yaml"
     dest: "/etc/fluent-bit/services/{{ fluentbit_extension_args.name }}.yaml"
@@ -13,6 +13,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
   register: fluentbit_extension_config
   become: true
 
@@ -31,7 +32,7 @@
   register: fluentbit_installed_extensions
   become: true
 
-- name: Configure fluent-bit service extension manifest  # noqa: require-validate
+- name: Configure fluent-bit service extension manifest
   copy:
     content: |
       includes:
@@ -43,6 +44,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
   register: fluentbit_extension_manifest
   become: true
 
