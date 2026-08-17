@@ -32,4 +32,4 @@ pipeline:
       logical_op: and
       exclude:
         - 'CONTAINER_TAG ^.+$'
-        - 'log ^nats-port argument is deprecated and unused$'
+        - 'log \Anats-port argument is deprecated and unused\z'

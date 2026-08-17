@@ -91,7 +91,7 @@ pipeline:
       logical_op: and
       exclude:
         - 'CONTAINER_TAG ^.+$'
-        - 'log ^missing timeouts for backend ''docker-events''\.'
+        - 'log \Amissing timeouts for backend ''docker-events''\.'
     - name: modify
       match: svc.socket_proxy.service
       condition:

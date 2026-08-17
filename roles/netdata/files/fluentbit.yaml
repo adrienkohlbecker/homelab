@@ -15,7 +15,7 @@ pipeline:
         # Netdata logs these exact cancellation/teardown messages during every
         # orderly reload. Unexpected service failure remains visible through
         # the unit result and all non-teardown Netdata errors.
-        - 'MESSAGE ^(PARSER: read failed: POLLHUP\.|PARSER: thread cancelled while waiting for data\.|PLUGINSD: buffered reader not OK \(-[0-9]+\)|Failed to delete socket [0-9]+ from nd_poll\(\) - called from poll_events_cleanup\(\) - is the socket already closed\?|stopped after [0-9]+ connects, [0-9]+ disconnects \(max concurrent [0-9]+\), [0-9]+ receptions and [0-9]+ sends)$'
+        - 'MESSAGE \A(PARSER: read failed: POLLHUP\.|PARSER: thread cancelled while waiting for data\.|PLUGINSD: buffered reader not OK \(-[0-9]+\)|Failed to delete socket [0-9]+ from nd_poll\(\) - called from poll_events_cleanup\(\) - is the socket already closed\?|stopped after [0-9]+ connects, [0-9]+ disconnects \(max concurrent [0-9]+\), [0-9]+ receptions and [0-9]+ sends)\z'
     # Netdata alert names describe the failing component and can contain words
     # such as collector_error even when the event is a successful recovery.
     # The tag scopes this to the native unit; transitions into a non-clear

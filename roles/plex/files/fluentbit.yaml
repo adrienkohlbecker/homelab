@@ -162,4 +162,4 @@ pipeline:
       logical_op: and
       exclude:
         - 'source ^plex_media_server$'
-        - 'log ^NAT: PMP, timed out waiting for response\.$'
+        - 'log \ANAT: PMP, timed out waiting for response\.\z'
