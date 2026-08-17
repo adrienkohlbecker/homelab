@@ -375,6 +375,7 @@
           SYSTEMD_UNIT: plex.service
         - _tag: plex.file
           log: 'Jul 12, 2026 12:00:03.000 [4d5e] WARN - NAT: PMP, timed out waiting for response.'
+          marker: plex-natpmp-drop
         - _tag: plex.file
           log: 'Jul 12, 2026 12:00:04.000 [5e6f] WARN - NAT: PMP, mapping failed unexpectedly.'
       expected:
@@ -393,4 +394,4 @@
 
 - name: _verify | Routine Plex NAT-PMP timeout is omitted
   assert:
-    that: "'NAT: PMP, timed out waiting for response.' not in fluentbit_verify_result.stdout"
+    that: "'-drop' not in fluentbit_verify_result.stdout"

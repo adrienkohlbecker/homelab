@@ -100,6 +100,7 @@
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: socket_proxy.service
+          marker: socket-proxy-docker-events-drop
         - MESSAGE: "[WARNING]  (8) : missing timeouts for backend 'dockerbackend'."
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
@@ -225,7 +226,7 @@
     that:
       - "'Proxy dockerbackend stopped (cumulated conns: FE: 0, BE: 1181).' not in fluentbit_verify_result.stdout"
       - "'GET /version HTTP/1.1' not in fluentbit_verify_result.stdout"
-      - "\"missing timeouts for backend 'docker-events'.\" not in fluentbit_verify_result.stdout"
+      - "'-drop' not in fluentbit_verify_result.stdout"
 
 - name: _verify | Netdata polling successes are omitted from aggregate
   command:
