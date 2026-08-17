@@ -76,6 +76,8 @@ class TestRoleMeta:
         assert matrix.release_ubuntu_for("plain") == []
 
     def test_release_ubuntu_reads_list(self, roles_tree: Path) -> None:
+        # Raw passthrough of whatever meta/test.yml declares, so the codenames
+        # here are data rather than a claim about the current default.
         _make_role(roles_tree, "multi", {"ubuntu": ["noble", "resolute"]})
         assert matrix.release_ubuntu_for("multi") == ["noble", "resolute"]
 
@@ -89,33 +91,33 @@ class TestBuildRoleCells:
     def test_plain_role_one_cell(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "plain")
         cells = matrix.build_role_cells("plain")
-        assert cells == [matrix.TestCell("box", "noble", "plain")]
+        assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "plain")]
 
     def test_box_deps_role(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "svc", {"machines": {"box_deps": None}})
         cells = matrix.build_role_cells("svc")
-        assert cells == [matrix.TestCell("box_deps", "noble", "svc")]
+        assert cells == [matrix.TestCell("box_deps", matrix.DEFAULT_UBUNTU, "svc")]
 
     def test_minimal_machine_gets_extra_cell(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "cleanup", {"machines": {"box": None, "minimal": None}})
         cells = matrix.build_role_cells("cleanup")
-        assert matrix.TestCell("box", "noble", "cleanup") in cells
-        assert matrix.TestCell("minimal", "noble", "cleanup") in cells
+        assert matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "cleanup") in cells
+        assert matrix.TestCell("minimal", matrix.DEFAULT_UBUNTU, "cleanup") in cells
         assert len(cells) == 2
 
     def test_release_cells_use_primary_machine(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "netdata", {"machines": {"box_deps": None}, "ubuntu": ["resolute"]})
         cells = matrix.build_role_cells("netdata")
-        assert matrix.TestCell("box_deps", "noble", "netdata") in cells
+        assert matrix.TestCell("box_deps", matrix.DEFAULT_UBUNTU, "netdata") in cells
         assert matrix.TestCell("box_deps", "resolute", "netdata") in cells
         assert len(cells) == 2
 
     def test_multi_machine_plus_release(self, roles_tree: Path) -> None:
-        _make_role(roles_tree, "podman", {"machines": {"box": None, "minimal": None}, "ubuntu": ["noble", "resolute"]})
+        _make_role(roles_tree, "podman", {"machines": {"box": None, "minimal": None}, "ubuntu": ["resolute"]})
         cells = matrix.build_role_cells("podman")
         expected = [
-            matrix.TestCell("box", "noble", "podman"),
-            matrix.TestCell("minimal", "noble", "podman"),
+            matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "podman"),
+            matrix.TestCell("minimal", matrix.DEFAULT_UBUNTU, "podman"),
             matrix.TestCell("box", "resolute", "podman"),
             matrix.TestCell("minimal", "resolute", "podman"),
         ]
@@ -131,11 +133,11 @@ class TestBuildTestMatrix:
     def test_deduplicates(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "alpha")
         cells = matrix.build_test_matrix(["alpha", "alpha"])
-        assert cells == [matrix.TestCell("box", "noble", "alpha")]
+        assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha")]
 
     def test_sorted_by_all_fields(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "beta")
-        _make_role(roles_tree, "alpha", {"ubuntu": ["noble"]})
+        _make_role(roles_tree, "alpha", {"ubuntu": ["resolute"]})
         cells = matrix.build_test_matrix(["beta", "alpha"])
         assert cells == sorted(cells)
 
@@ -144,11 +146,11 @@ class TestBuildTestMatrix:
         extra = [matrix.TestCell("box", "resolute", "alpha")]
         cells = matrix.build_test_matrix(["alpha"], extra_cells=extra)
         assert matrix.TestCell("box", "resolute", "alpha") in cells
-        assert matrix.TestCell("box", "noble", "alpha") in cells
+        assert matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha") in cells
 
     def test_empty_roles_with_extra(self, roles_tree: Path) -> None:
-        cells = matrix.build_test_matrix([], extra_cells=[matrix.TestCell("box", "noble", "foo")])
-        assert cells == [matrix.TestCell("box", "noble", "foo")]
+        cells = matrix.build_test_matrix([], extra_cells=[matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "foo")])
+        assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "foo")]
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +161,7 @@ class TestBuildTestMatrix:
 class TestSkip:
     def test_skip_for_parses_machine_and_release(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "svc", {"skip": {"minimal": "why", "box_deps:resolute": "why"}})
-        assert matrix.skip_for("svc") == {("minimal", "noble"), ("box_deps", "resolute")}
+        assert matrix.skip_for("svc") == {("minimal", matrix.DEFAULT_UBUNTU), ("box_deps", "resolute")}
 
     def test_skip_for_empty_when_absent(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "svc")
@@ -168,7 +170,7 @@ class TestSkip:
     def test_build_role_cells_drops_skipped_noble_cell(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "svc", {"machines": {"box": None, "minimal": None}, "skip": {"minimal": "flaky"}})
         cells = matrix.build_role_cells("svc")
-        assert cells == [matrix.TestCell("box", "noble", "svc")]
+        assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "svc")]
 
     def test_build_role_cells_drops_skipped_release_cell_only(self, roles_tree: Path) -> None:
         _make_role(
@@ -177,7 +179,7 @@ class TestSkip:
             {"machines": {"box": None}, "ubuntu": ["resolute"], "skip": {"box:resolute": "flaky"}},
         )
         cells = matrix.build_role_cells("svc")
-        assert cells == [matrix.TestCell("box", "noble", "svc")]
+        assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "svc")]
 
     def test_bare_machine_skip_drops_only_that_machines_base_cell(self, roles_tree: Path) -> None:
         # The bare form is the only correct spelling for the default cell;
@@ -196,7 +198,7 @@ class TestSkip:
         _make_role(roles_tree, "svc", {"machines": {"box": None}, "skip": {"box:resolute": "flaky"}})
         extra = [matrix.TestCell("box", "resolute", "svc")]
         cells = matrix.build_test_matrix(["svc"], extra_cells=extra)
-        assert cells == [matrix.TestCell("box", "noble", "svc")]
+        assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "svc")]
 
 
 # ---------------------------------------------------------------------------
@@ -206,21 +208,21 @@ class TestSkip:
 
 class TestCiSpecs:
     def test_cell_to_ci_spec_default_ubuntu(self) -> None:
-        assert matrix.cell_to_ci_spec(matrix.TestCell("box", "noble", "alpha")) == "alpha:box"
+        assert matrix.cell_to_ci_spec(matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha")) == "alpha:box"
 
     def test_cell_to_ci_spec_non_default_ubuntu(self) -> None:
         assert matrix.cell_to_ci_spec(matrix.TestCell("box_deps", "resolute", "netdata")) == "netdata:box_deps:resolute"
 
     def test_cells_to_ci_specs_sorted_deduped(self) -> None:
         cells = [
-            matrix.TestCell("box", "noble", "beta"),
-            matrix.TestCell("box", "noble", "alpha"),
-            matrix.TestCell("box", "noble", "alpha"),
+            matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "beta"),
+            matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha"),
+            matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha"),
         ]
         assert matrix.cells_to_ci_specs(cells) == ["alpha:box", "beta:box"]
 
     def test_ci_spec_to_cell_two_parts(self) -> None:
-        assert matrix.ci_spec_to_cell("alpha:box") == matrix.TestCell("box", "noble", "alpha")
+        assert matrix.ci_spec_to_cell("alpha:box") == matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha")
 
     def test_ci_spec_to_cell_three_parts(self) -> None:
         assert matrix.ci_spec_to_cell("netdata:box_deps:resolute") == matrix.TestCell("box_deps", "resolute", "netdata")
@@ -230,7 +232,7 @@ class TestCiSpecs:
             matrix.ci_spec_to_cell("bad")
 
     def test_roundtrip(self) -> None:
-        cell = matrix.TestCell("box_deps", "noble", "zfs")
+        cell = matrix.TestCell("box_deps", matrix.DEFAULT_UBUNTU, "zfs")
         assert matrix.ci_spec_to_cell(matrix.cell_to_ci_spec(cell)) == cell
 
 
@@ -241,15 +243,15 @@ class TestCiSpecs:
 
 class TestDispatchMatrix:
     def test_bare_role_expands(self, roles_tree: Path) -> None:
-        _make_role(roles_tree, "alpha", {"machines": {"box": None, "minimal": None}, "ubuntu": ["noble"]})
+        _make_role(roles_tree, "alpha", {"machines": {"box": None, "minimal": None}, "ubuntu": ["resolute"]})
         cells = matrix._build_dispatch_matrix("alpha")
-        assert matrix.TestCell("box", "noble", "alpha") in cells
-        assert matrix.TestCell("minimal", "noble", "alpha") in cells
+        assert matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha") in cells
+        assert matrix.TestCell("minimal", matrix.DEFAULT_UBUNTU, "alpha") in cells
 
     def test_exact_spec_no_escalation(self, roles_tree: Path) -> None:
-        _make_role(roles_tree, "alpha", {"machines": {"box": None, "minimal": None}, "ubuntu": ["noble"]})
+        _make_role(roles_tree, "alpha", {"machines": {"box": None, "minimal": None}, "ubuntu": ["resolute"]})
         cells = matrix._build_dispatch_matrix("alpha:box")
-        assert cells == [matrix.TestCell("box", "noble", "alpha")]
+        assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha")]
 
     def test_unknown_role_exits(self, roles_tree: Path) -> None:
         with pytest.raises(SystemExit):
