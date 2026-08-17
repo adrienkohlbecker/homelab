@@ -164,6 +164,27 @@ do
     check("sensors.priority-only", t, "info")
 end
 
+-- 14c-bis. COMM comes from the sending process, SYSLOG_IDENTIFIER from the
+--          writer. A record naming a trusted program it did not come from
+--          must still be scanned, or any local writer could mute itself.
+do
+    local t = sev(
+        "error: authentication failure for root",
+        nil,
+        { PRIORITY = "7", SYSLOG_IDENTIFIER = "sudo", COMM = "attacker" }
+    )
+    check("forged-identifier.body-wins", t, "error")
+end
+
+do
+    local t = sev(
+        "      ak : PWD=/home/ak ; USER=root ; COMMAND=/usr/sbin/smartctl -l error /dev/nvme0n1",
+        nil,
+        { PRIORITY = "5", SYSLOG_IDENTIFIER = "sudo", COMM = "sudo" }
+    )
+    check("sudo.comm-matches", t, "info")
+end
+
 -- 14d. headscale (zerolog) abbreviated INF level right after the timestamp.
 do
     local t = sev("2026-06-10T08:54:39Z INF Received signal to stop, shutting down gracefully signal=terminated")

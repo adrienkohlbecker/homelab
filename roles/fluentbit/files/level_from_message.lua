@@ -152,7 +152,10 @@ function set_priority(tag, ts, record)
         return 0, ts, record
     end
 
-    local identifier = record["SYSLOG_IDENTIFIER"]
+    -- Prefer COMM: journald derives it from the sending process credentials,
+    -- while SYSLOG_IDENTIFIER is chosen by the writer and can name any program.
+    -- Records without COMM are not socket writes, so the fallback is safe.
+    local identifier = record["COMM"] or record["SYSLOG_IDENTIFIER"]
     if record["CONTAINER_TAG"] == nil and NATIVE_PRIORITY_ONLY[identifier] then
         record["_level"] = JOURNAL_LEVELS[tonumber(record["PRIORITY"])] or "info"
         return 1, ts, record
