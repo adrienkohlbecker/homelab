@@ -145,6 +145,23 @@ def mark_keep_reasons(builds: list[Build], promoted: str | None, keep_newest: in
             build.keep_reasons.append(f"younger-than-{keep_days}d")
 
 
+def list_release_prefixes(s3) -> list[str]:
+    """Release codenames actually present in the bucket.
+
+    Read from S3 rather than the supported-release list: a release dropped from
+    UBUNTU_RELEASES would otherwise stop being enumerated and its bundles would
+    become immortal -- retirement has to mean reaped, not orphaned.
+    """
+    releases: list[str] = []
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=S3_BUCKET, Delimiter="/"):
+        for common in page.get("CommonPrefixes", []):
+            release = common["Prefix"].strip("/")
+            if release:
+                releases.append(release)
+    return sorted(releases)
+
+
 def iter_versions(s3, prefix: str) -> Iterable[dict[str, str]]:
     """Yield every object version + delete marker under a prefix."""
     paginator = s3.get_paginator("list_object_versions")
@@ -192,12 +209,17 @@ def main() -> int:
 
     stale: list[Build] = []
     kept: list[Build] = []
-    for ubuntu in UBUNTUS:
+    for ubuntu in list_release_prefixes(s3):
+        # A release no longer in UBUNTU_RELEASES can never be hydrated again, so
+        # nothing under it is worth keeping -- no promoted pointer, no newest-N.
+        retired = ubuntu not in UBUNTUS
+        if retired:
+            print(f"  {ubuntu}: retired release -- reaping every build")
         for machine in MACHINES:
-            promoted = promoted_build(s3, machine, ubuntu)
+            promoted = None if retired else promoted_build(s3, machine, ubuntu)
             builds = [build_stats(s3, machine, ubuntu, build_id) for build_id in list_build_ids(s3, machine, ubuntu)]
             builds.sort(key=lambda build: build.last_modified, reverse=True)
-            mark_keep_reasons(builds, promoted, KEEP_NEWEST, KEEP_DAYS)
+            mark_keep_reasons(builds, promoted, 0 if retired else KEEP_NEWEST, 0 if retired else KEEP_DAYS)
             if promoted and all(build.build_id != promoted for build in builds):
                 print(f"WARN: {ubuntu}/{machine} promotes missing build {promoted}", file=sys.stderr)
             if not builds:
