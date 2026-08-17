@@ -112,19 +112,6 @@
           MESSAGE: "rsync error: unexplained error"
           SYSTEMD_UNIT: zfs_autosnapshot.service
           marker: zfs-error-keep
-        - _tag: svc.session-1.scope
-          MESSAGE: Invoked with path=/proc/sys/kernel/panic follow=False
-          SYSLOG_IDENTIFIER: ansible-stat
-          marker: ansible-invoked-drop
-        - _tag: svc.session-1.scope
-          MESSAGE: module execution failed
-          SYSLOG_IDENTIFIER: ansible-stat
-          PRIORITY: "3"
-          marker: ansible-error-keep
-        - _tag: svc.example.service
-          MESSAGE: Invoked with harmless nearby text
-          SYSLOG_IDENTIFIER: example
-          marker: non-ansible-invoked-keep
         - _tag: svc.init.scope
           MESSAGE: Starting homepage_alerts.service - Generate homepage alerts panel static files...
           SYSLOG_IDENTIFIER: systemd
@@ -193,9 +180,6 @@
           fields.marker: cron-hourly-keep
         - level: error
           fields.marker: zfs-error-keep
-        - level: error
-          fields.marker: ansible-error-keep
-        - fields.marker: non-ansible-invoked-keep
         - level: error
           fields.marker: homepage-failed-keep
         - fields.marker: podman-unhealthy-keep

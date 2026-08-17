@@ -16,13 +16,6 @@ pipeline:
         - 'MESSAGE ^Configuration file /run/systemd/system/netplan-ovs-cleanup\.service is marked world-inaccessible'
         - 'MESSAGE container health_status .*health_status=healthy'
 
-    - name: grep
-      match: svc.*
-      logical_op: and
-      exclude:
-        - 'SYSLOG_IDENTIFIER ^ansible-[A-Za-z0-9._]+$'
-        - 'MESSAGE \AInvoked with '
-
     # systemd logs a unit's own lifecycle from init.scope, so the target unit
     # is named by UNIT, not by SYSTEMD_UNIT (the logging process's unit).
     - name: grep
