@@ -126,9 +126,10 @@
 # --- mdadm-EFI multi-disk variants (lab variant) ---
 #
 # chroot.sh's LAYOUT=mirror branch builds an mdadm RAID1 EFI mirror
-# (/dev/md/efi) across the OS disks (mirror swap is an rpool zvol, not
-# mdadm), and registers per-disk "rEFInd (disk N)" NVRAM entries so the
-# host survives losing any single disk. Detect via /dev/md/efi presence --
+# (/dev/md/efi) across the OS disks, a RAID1 /dev/md/swap, and a RAID5
+# /dev/md/podman when PODMAN_SIZE is set, and registers per-disk
+# "rEFInd (disk N)" NVRAM entries so the host survives losing any single
+# disk. Detect via /dev/md/efi presence --
 # the LAYOUT="" branch (single-disk variants) doesn't create it.
 # Skipping the block on single-disk variants is intentional: the
 # universal rEFInd assertion above already covers them.
@@ -141,10 +142,41 @@
 - name: _verify | Mdadm-EFI multi-disk assertions
   when: packer_verify_md_efi.stat.exists
   block:
-    - name: _verify | EFI mirror is clean
-      command: mdadm --detail --test /dev/md/efi
+    - name: _verify | Enumerate assembled md arrays
+      find:
+        paths: /dev/md
+        file_type: link
+      register: packer_verify_md_arrays
+      become: true
+
+    # Every array, not just efi: the podman raid5 is the one whose creation
+    # carries --force, and a degraded swap or podman array assembles and mounts
+    # silently. rc 0 = clean, 1 = degraded, 2 = failed.
+    - name: _verify | Every assembled md array is clean
+      command: mdadm --detail --test {{ item.path }}
       changed_when: false
       become: true
+      loop: "{{ packer_verify_md_arrays.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: _verify | Read the shipped mdadm config
+      slurp:
+        src: /etc/mdadm/mdadm.conf
+      register: packer_verify_mdadm_conf
+      become: true
+
+    # mdadm --create without --force builds a raid5 degraded, reporting the
+    # rebuilding member as a spare; persisting that transient count makes
+    # mdmonitor report a missing hot spare forever after. --detail --test does
+    # not catch it, so assert on the shipped config directly.
+    - name: _verify | Mdadm config requests no nonexistent spares
+      assert:
+        that: "'spares=' not in (packer_verify_mdadm_conf.content | b64decode)"
+        fail_msg: >-
+          /etc/mdadm/mdadm.conf carries a spares= count, so mdmonitor will
+          report SparesMissing once the array finishes building:
+          {{ packer_verify_mdadm_conf.content | b64decode }}
 
     - name: _verify | Per-disk "rEFInd (disk N)" NVRAM entries exist
       vars:
