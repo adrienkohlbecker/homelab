@@ -375,12 +375,11 @@ export PARTITIONS_EFI PARTITIONS_SWAP PARTITIONS_PODMAN PARTITIONS_META PARTITIO
 
 export DEBIAN_FRONTEND=noninteractive
 
-# Retry transient apt failures (Nexus restart, packet loss) on the
-# build VM. chroot.sh sets the same on the new install.
-# Acquire::Retries::Delay adds backoff between attempts so a Nexus restart of
-# a few seconds is not burned through instantly.
-echo 'Acquire::Retries "3";' >/etc/apt/apt.conf.d/80-retries
-echo 'Acquire::Retries::Delay "true";' >>/etc/apt/apt.conf.d/80-retries
+# apt already retries transient fetch failures (Nexus restart, packet loss)
+# three times with backoff by default -- Acquire::Retries "3", Retries::Delay
+# "true", Retries::Delay::Maximum "30" are apt's own compiled-in values on
+# every release we build, so no drop-in is needed for the per-file case. The
+# coarse absorb (a Nexus restart outlasting those retries) is apt_update below.
 
 # apt-get update exits 0 even when one component's Packages index fails to
 # download (a Nexus restart, a dropped packet on the build NIC): the partial

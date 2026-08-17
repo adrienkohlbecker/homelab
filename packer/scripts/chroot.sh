@@ -54,12 +54,10 @@ ff02::1         ip6-allnodes
 ff02::2         ip6-allrouters
 EOF
 
-# Retry transient apt failures (Nexus restart, packet loss) on the
-# build VM.
-# Acquire::Retries::Delay adds backoff between attempts so a Nexus restart of
-# a few seconds is not burned through instantly.
-echo 'Acquire::Retries "3";' >/etc/apt/apt.conf.d/80-retries
-echo 'Acquire::Retries::Delay "true";' >>/etc/apt/apt.conf.d/80-retries
+# apt already retries transient fetch failures (Nexus restart, packet loss)
+# three times with backoff by default on every release we build, so the new
+# install needs no drop-in for the per-file case. apt_update below is the
+# coarse absorb for a restart that outlasts those retries.
 
 # apt-get update exits 0 even when one component's Packages index fails to
 # download (Nexus restart, dropped packet), leaving a partial cache that makes
