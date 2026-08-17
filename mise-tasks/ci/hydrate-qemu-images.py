@@ -160,6 +160,13 @@ def validate_archive_members(tar: str, bundle: Path, expected_members: list[str]
     listed = output([tar, "--zstd", "-tf", str(bundle)]).splitlines()
     for member in listed:
         validate_member_name(member)
+    # Names alone do not bound where tar writes: a symlink member plus a member
+    # nested beneath it both pass the name check while the second lands outside
+    # the staging dir. A qemu image bundle only ever holds regular files, so
+    # require that -- the verbose listing's first column is the type flag.
+    for line in output([tar, "--zstd", "-tvf", str(bundle)]).splitlines():
+        if not line.startswith("-"):
+            sys.exit(f"archive member is not a regular file: {line!r}")
     expected = set(expected_members)
     actual = set(listed)
     if actual != expected:
@@ -243,7 +250,7 @@ def main() -> int:
 
             print(f"==> extracting {bundle_name}")
             validate_archive_members(tar, bundle_path, manifest["tar_members"])
-            run([tar, "--sparse", "--zstd", "-xf", str(bundle_path), "-C", str(staged)])
+            run([tar, "--sparse", "--zstd", "--no-same-owner", "-xf", str(bundle_path), "-C", str(staged)])
             for member in manifest["tar_members"]:
                 if not (staged / member).is_file():
                     sys.exit(f"bundle did not extract expected member: {member}")
