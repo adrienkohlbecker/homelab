@@ -49,11 +49,17 @@
     state: stopped
   become: true
 
+# --kill-after bounds the wait: without it, a fluent-bit that does not honour
+# SIGTERM leaves timeout blocked forever and the role only fails on the
+# harness's own multi-minute budget, long after the useful output is lost.
+# rc 137 stays fatal -- it means the daemon ignored TERM, which is worth
+# seeing rather than tolerating.
 - name: _verify | Run fluent-bit extension fixture
   command:
     argv:
       - timeout
       - --signal=TERM
+      - --kill-after=5
       - "4"
       - /opt/fluent-bit/bin/fluent-bit
       - --config
@@ -62,6 +68,19 @@
   changed_when: false
   failed_when: fluentbit_verify_result.rc not in [0, 124]
   become: true
+
+# The fixture runs the daemon detached from journald, so the live-daemon Lua
+# error check in the fluentbit role's own _verify cannot see it. A Lua
+# exception leaves records untouched and would otherwise pass unnoticed
+# whenever some other record still satisfies the expectations.
+- name: _verify | Fixture ran without fluent-bit errors
+  assert:
+    that:
+      - "'[error]' not in fluentbit_verify_result.stderr"
+      - "'[error]' not in fluentbit_verify_result.stdout"
+    fail_msg: |-
+      fluent-bit reported errors while running the {{ fluentbit_verify_args.name }} fixture:
+      {{ fluentbit_verify_result.stderr }}
 
 - name: _verify | Restart fluent-bit after the isolated fixture
   systemd:
