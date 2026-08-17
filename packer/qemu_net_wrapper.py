@@ -53,8 +53,10 @@ _PASST_GUEST_GATEWAY = "192.0.2.1"
 # hand the guest a routable resolver instead and let passt NAT its queries out
 # the container bridge -- the guest's DNS to <VIP>:53 then rides the same
 # container -> VIP -> adguard DNAT path the firewall already permits (roles/
-# firewall: "container -> VIP -> container" accept). The passt NIC path only
-# runs in lab CI (a dev-Mac `packer:build` execs slirp untouched), so coupling
+# firewall: "container -> VIP -> container" accept). Every host that takes the
+# passt path is on lab's network -- the lab CI container and a bare-host
+# `packer:build` on lab itself, since _passt_available only holds on Linux with
+# passt installed and qemu >= 7.2; a dev Mac execs slirp untouched. So coupling
 # to lab's resolver here is acceptable.
 _PASST_DNS = "10.123.1.224"
 
@@ -212,12 +214,22 @@ def _passt_command(sock: str, fwds: list[tuple[str, str, str]]) -> list[str]:
         "--one-off",
         "--socket",
         sock,
+        # IPv4 only. passt would otherwise derive the guest's v6 address and
+        # default route from the host interface -- reintroducing on v6 exactly
+        # the host-shadowing this pins away on v4 -- and _PASST_DNS is v4-only,
+        # so a guest preferring AAAA gets a route with no working egress.
+        "--ipv4-only",
         "--address",
         _PASST_GUEST_ADDRESS,
         "--netmask",
         _PASST_GUEST_NETMASK,
         "--gateway",
         _PASST_GUEST_GATEWAY,
+        # The gateway is an addressing anchor only. Without this passt maps it
+        # to the host, handing the build VM every loopback-bound service on the
+        # qemu host at a fixed, DHCP-advertised address. Inbound SSH rides
+        # --tcp-ports on 127.0.0.1 and needs no gateway mapping.
+        "--no-map-gw",
         # Advertise a routable resolver to the guest over DHCP; passt then NATs
         # the guest's DNS queries out through its current host environment.
         "--dns",

@@ -88,20 +88,23 @@ def test_passt_port_args_groups_tcp_and_udp() -> None:
 def test_passt_command_assigns_an_isolated_guest_address() -> None:
     out = wrapper._passt_command("/tmp/passt.sock", [("tcp", "2222", "22")])
 
-    assert out == [
-        "passt",
-        "--foreground",
-        "--one-off",
-        "--socket",
-        "/tmp/passt.sock",
+    # Only the addressing triple -- port rendering has its own test, and a
+    # whole-argv equality would fail on any unrelated flag.
+    start = out.index("--address")
+    assert out[start : start + 6] == [
         "--address",
         "192.0.2.2",
         "--netmask",
         "255.255.255.0",
         "--gateway",
         "192.0.2.1",
-        "--dns",
-        "10.123.1.224",
-        "--tcp-ports",
-        "127.0.0.1/2222:22",
     ]
+
+
+def test_passt_command_isolates_the_guest_from_the_host() -> None:
+    out = wrapper._passt_command("/tmp/passt.sock", [])
+
+    # Without these the guest picks up a host-derived v6 address and a gateway
+    # mapped onto the qemu host's loopback services.
+    assert "--ipv4-only" in out
+    assert "--no-map-gw" in out
