@@ -59,7 +59,7 @@ stages:
     # under the synchronized cell-launch burst the qemu hosts now run, passt
     # drops the plain systemd-networkd first-boot DHCP too -- a full-matrix
     # re-enable went ~84/138 cells red on the ssh-wait timeout. passt only
-    # engages only where _passt_available succeeds, so this disables it
+    # engages where _passt_available succeeds, so this disables it
     # fleet-wide without removing the passt code. Drop this line to re-enable
     # once passt's DHCP-under-burst race is fixed (resolve_net_backend reads
     # HOMELAB_NET_BACKEND=slirp).
