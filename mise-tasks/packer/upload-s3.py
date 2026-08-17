@@ -53,6 +53,11 @@ BUNDLE_NAME = "disks.tar.zst"
 MANIFEST_NAME = "manifest.json"
 POINTER_NAME = "promoted.json"
 S3_CHECKSUM_ALGORITHM = "SHA256"
+# Import the release constants from the test harness so the source of truth
+# stays single. test/ isn't a package, so prepend it to sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
+from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES  # noqa: E402
+
 VALID_MACHINES = {"box", "box_deps"}
 
 
@@ -84,7 +89,13 @@ def default_build_id() -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("machine", choices=sorted(VALID_MACHINES))
-    parser.add_argument("--ubuntu", default=os.environ.get("usage_ubuntu", "noble"))
+    # choices, not just USAGE completion: a stale codename should fail at parse
+    # rather than write a bundle under an S3 prefix nothing will ever read.
+    parser.add_argument(
+        "--ubuntu",
+        choices=sorted(UBUNTU_RELEASES),
+        default=os.environ.get("usage_ubuntu", DEFAULT_UBUNTU),
+    )
     parser.add_argument("--bucket", default=os.environ.get("usage_bucket", "homelab-ci-images"))
     parser.add_argument("--region", default=os.environ.get("usage_region", "eu-central-1"))
     parser.add_argument("--build-id", default=os.environ.get("usage_build_id") or default_build_id())

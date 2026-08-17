@@ -93,9 +93,10 @@ for member in cmdline ssh_host_ed25519_key.pub initramfs-bootmenu.img; do
 done
 base_cmdline=$(cat "${workdir}/cmdline")
 
-# Must match launch.py's --ubuntu default (test/matrix.py DEFAULT_UBUNTU);
-# passed explicitly so the serial log path below is correct by construction.
-ubuntu=noble
+# Read launch.py's --ubuntu default straight from test/matrix.py rather than
+# restating it; passed explicitly below so the serial log path is correct by
+# construction.
+ubuntu=$(python3 -c "import sys; sys.path.insert(0, 'test'); import matrix; print(matrix.DEFAULT_UBUNTU)")
 boot_log="test/out/box.${ubuntu}._launch.boot.ansi"
 rm -f "$boot_log"
 ports_file="${workdir}/hostfwds"

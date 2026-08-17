@@ -2,7 +2,7 @@
 # [MISE] description="Prune old qemu image bundles from the CI S3 bucket"
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["boto3"]
+# dependencies = ["boto3", "pyyaml"]
 # ///
 """Prune old nested-qemu image bundles from S3.
 
@@ -29,15 +29,21 @@ import json
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+# Import the release constants from the test harness so the source of truth
+# stays single. test/ isn't a package, so prepend it to sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
+from matrix import UBUNTU_RELEASES
+
 S3_BUCKET = "homelab-ci-images"
 AWS_REGION = "eu-central-1"
 MACHINES = ("box", "box_deps")
-UBUNTUS = ("noble", "resolute")
+UBUNTUS = tuple(sorted(UBUNTU_RELEASES))
 KEEP_NEWEST = 3
 KEEP_DAYS = 7
 POINTER_NAME = "promoted.json"

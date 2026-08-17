@@ -41,6 +41,11 @@ MARKER_NAME = ".homelab_s3_build_id"
 LOCAL_MANIFEST_NAME = ".homelab_s3_manifest.json"
 S3_BUCKET = "homelab-ci-images"
 AWS_REGION = "eu-central-1"
+# Import the release constants from the test harness so the source of truth
+# stays single. test/ isn't a package, so prepend it to sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
+from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES  # noqa: E402
+
 VALID_MACHINES = {"box", "box_deps"}
 
 
@@ -55,7 +60,13 @@ def output(argv: list[str], **kwargs: Any) -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("machine", choices=sorted(VALID_MACHINES))
-    parser.add_argument("--ubuntu", default=os.environ.get("usage_ubuntu", "noble"))
+    # choices, not just USAGE completion: a stale `--ubuntu jammy` should fail
+    # at parse rather than deep inside an S3 fetch for a prefix that is gone.
+    parser.add_argument(
+        "--ubuntu",
+        choices=sorted(UBUNTU_RELEASES),
+        default=os.environ.get("usage_ubuntu", DEFAULT_UBUNTU),
+    )
     parser.add_argument(
         "--force",
         action="store_true",
