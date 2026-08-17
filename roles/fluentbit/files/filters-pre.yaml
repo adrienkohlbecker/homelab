@@ -23,11 +23,13 @@ pipeline:
         - 'SYSLOG_IDENTIFIER ^ansible-[A-Za-z0-9._]+$'
         - 'MESSAGE ^Invoked with '
 
+    # systemd logs a unit's own lifecycle from init.scope, so the target unit
+    # is named by UNIT, not by SYSTEMD_UNIT (the logging process's unit).
     - name: grep
       match: svc.*
       logical_op: and
       exclude:
-        - 'SYSTEMD_UNIT ^homepage_alerts\.service$'
+        - 'UNIT ^homepage_alerts\.service$'
         - 'MESSAGE ^(Starting homepage_alerts\.service - Generate homepage alerts panel static files\.\.\.|Finished homepage_alerts\.service - Generate homepage alerts panel static files\.|homepage_alerts\.service: Deactivated successfully\.)$'
 
     # Podman removes one-shot healthcheck units concurrently with systemd's

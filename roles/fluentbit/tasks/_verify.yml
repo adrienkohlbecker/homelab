@@ -125,17 +125,25 @@
           MESSAGE: Invoked with harmless nearby text
           SYSLOG_IDENTIFIER: example
           marker: non-ansible-invoked-keep
-        - _tag: svc.homepage_alerts.service
+        - _tag: svc.init.scope
           MESSAGE: Starting homepage_alerts.service - Generate homepage alerts panel static files...
-          SYSTEMD_UNIT: homepage_alerts.service
+          SYSLOG_IDENTIFIER: systemd
+          UNIT: homepage_alerts.service
           marker: homepage-start-drop
-        - _tag: svc.homepage_alerts.service
+        - _tag: svc.init.scope
           MESSAGE: Finished homepage_alerts.service - Generate homepage alerts panel static files.
-          SYSTEMD_UNIT: homepage_alerts.service
+          SYSLOG_IDENTIFIER: systemd
+          UNIT: homepage_alerts.service
           marker: homepage-finish-drop
-        - _tag: svc.homepage_alerts.service
+        - _tag: svc.init.scope
+          MESSAGE: "homepage_alerts.service: Deactivated successfully."
+          SYSLOG_IDENTIFIER: systemd
+          UNIT: homepage_alerts.service
+          marker: homepage-deactivated-drop
+        - _tag: svc.init.scope
           MESSAGE: "homepage_alerts.service: Failed with result exit-code."
-          SYSTEMD_UNIT: homepage_alerts.service
+          SYSLOG_IDENTIFIER: systemd
+          UNIT: homepage_alerts.service
           PRIORITY: "3"
           marker: homepage-failed-keep
         - _tag: svc.podman.service
