@@ -4,11 +4,9 @@
 # foreground upsd) -- fine, the box is torn down afterwards. converge points
 # ups.conf at the real Eaton over SNMP (external_ips.eaton), which nothing
 # answers on the box, and gates the unit start on qemu_test; this swaps in a
-# static dummy-ups so upsd has a UPS to serve. No `mode =` on purpose: jammy's
-# nut 2.7.4 rejects the directive outright, and both defaults serve the static
-# frame deterministically -- 2.7.4 replays the .dev file in a loop, while 2.8+
-# (noble/resolute) defaults to dummy-once, playing it once and holding the
-# final values.
+# static dummy-ups so upsd has a UPS to serve. No `mode =` is needed: the
+# supported NUT releases default to dummy-once, playing the frame once and
+# holding the final values.
 
 # Lock the converged mask contract before the destructive swap below tears it
 # down: under qemu the driver is masked (no UPS to reach), so nut-server's
@@ -16,7 +14,7 @@
 # is roles/nut_monitor's contract, asserted in its own _verify.)
 - name: _verify | Driver unit is masked under qemu (no UPS to reach)
   systemd:
-    name: '{{ "nut-driver.service" if ansible_distribution_release in ["jammy"] else "nut-driver@eaton.service" }}'
+    name: nut-driver@eaton.service
   become: true
   register: nut_server_driver_unit
   changed_when: false
@@ -61,8 +59,7 @@
 # already running". The nut-driver-enumerator.path unit watches ups.conf for
 # changes and can re-activate the service between the config writes above and
 # the manual start below, so stop the enumerator chain first.
-# failed_when:false since the .socket and enumerator units are absent on
-# jammy's 2.7.4.
+# failed_when:false keeps the cleanup tolerant when an optional unit is absent.
 - name: _verify | Stop all NUT units that could respawn upsd
   systemd:
     name: "{{ item }}"
@@ -129,9 +126,9 @@
 
 # The CGI probe must hit the vhost by its real FQDN, not https://localhost/
 # with a Host header: TLS SNI follows the URL host, so a localhost SNI matches
-# no server_name and nginx answers with an unrecognized_name TLS alert. jammy's
-# OpenSSL tolerates that warning, but noble/resolute's OpenSSL 3.x treat it as
-# fatal -- the probe then fails with status -1 (TLSV1_UNRECOGNIZED_NAME).
+# no server_name and nginx answers with an unrecognized_name TLS alert. OpenSSL
+# 3.x treats it as fatal, so the probe then fails with status -1
+# (TLSV1_UNRECOGNIZED_NAME).
 # Mapping the FQDN to loopback makes SNI match the served vhost on every release.
 # Test-only mutation; the box is torn down after.
 - name: _verify | Map the nut vhost FQDN to loopback for SNI-correct probing

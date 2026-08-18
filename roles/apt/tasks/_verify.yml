@@ -1,5 +1,5 @@
 # Assertions for the apt role. Functional checks only:
-# - 80-retries is parsed by apt (retries=3, Delay matches release).
+# - 80-retries is parsed by apt (retries=3 with delayed backoff).
 # - /var/lib/apt/lists/ carries an index file for every configured
 #   (mirror, suite) -- apt's own source of truth, not the prettyprinted
 #   apt-cache policy dump.
@@ -17,15 +17,11 @@
       - '''Acquire::Retries "3";'' in _apt_retries.stdout_lines'
     fail_msg: apt didn't load Acquire::Retries=3 from 80-retries.
 
-- name: _verify | Apt parses Acquire::Retries::Delay on noble+ only
+- name: _verify | Apt parses Acquire::Retries::Delay
   assert:
     that:
-      - >-
-        ('Acquire::Retries::Delay "true";' in _apt_retries.stdout_lines)
-        == (ansible_distribution_release != "jammy")
-    fail_msg: >-
-      Acquire::Retries::Delay presence in apt's parsed config
-      doesn't match release (jammy must omit, noble+ must include).
+      - '''Acquire::Retries::Delay "true";'' in _apt_retries.stdout_lines'
+    fail_msg: apt did not load Acquire::Retries::Delay from 80-retries.
 
 # /var/lib/apt/lists/ filenames encode (mirror, suite, component, arch):
 # `<host>_<path>_dists_<suite>_<component>_binary-<arch>_Packages`.

@@ -399,16 +399,12 @@ NOTIFYFLAG NOPARENT SYSLOG+WALL+EXEC
 # (on bypass and back, load unprotected meanwhile), CAL (battery
 # calibration), and OFF/NOTOFF (UPS load administratively off, then
 # restored) -- exactly 2.8.1's vocabulary, no more (upsmon warns "invalid
-# notify type" per unknown name). 2.7.4 (jammy) predates them all, so the
-# block is release-gated rather than the whole role -- lab must be protected
-# today, not after its noble upgrade.
-{% if ansible_distribution_release not in ["jammy"] %}
+# notify type" per unknown name).
 NOTIFYFLAG BYPASS    SYSLOG+WALL+EXEC
 NOTIFYFLAG NOTBYPASS SYSLOG+WALL+EXEC
 NOTIFYFLAG CAL       SYSLOG+WALL+EXEC
 NOTIFYFLAG OFF       SYSLOG+WALL+EXEC
 NOTIFYFLAG NOTOFF    SYSLOG+WALL+EXEC
-{% endif %}
 #
 # Possible values for the flags:
 #
@@ -436,10 +432,7 @@ NOTIFYFLAG NOTOFF    SYSLOG+WALL+EXEC
 # supplies in such cases, and a zero makes the effect of detected "OFF" state
 # immediate. Built-in default value is 30 (seconds).
 
-{# OFFDURATION is a 2.8 directive; jammy's 2.7.4 parser predates it. #}
-{% if ansible_distribution_release not in ["jammy"] %}
 OFFDURATION 30
-{% endif %}
 
 # --------------------------------------------------------------------------
 # RBWARNTIME - replace battery warning time in seconds
@@ -480,10 +473,8 @@ NOCOMMWARNTIME 300
 # Without the throttle a prolonged comm loss to upsd/the UPS card logs a
 # poll-failure line every POLLFREQ (5s) -- ~17k journal lines a day through
 # fluentbit. 60 cycles = one line every ~5 minutes, matching NOCOMMWARNTIME.
-# The directive is 2.8.1+, so it is release-gated like the NOTIFYFLAG block.
-{% if ansible_distribution_release not in ["jammy"] %}
+# The directive is part of the supported NUT release.
 POLLFAIL_LOG_THROTTLE_MAX 60
-{% endif %}
 
 # --------------------------------------------------------------------------
 # FINALDELAY - last sleep interval before shutting down the system

@@ -44,10 +44,8 @@
   tags:
     - locale
 
-# localectl reads the release-appropriate file -- jammy's systemd-localed
-# is patched to use /etc/default/locale, noble+ uses upstream
-# /etc/locale.conf (tasks/main.yml selects the matching dest) -- so this
-# proves the file we wrote is parseable by systemd and sets the system default.
+# localectl reads /etc/locale.conf, so this proves the file we wrote is
+# parseable by systemd and sets the system default.
 - name: _verify | Read system default locale
   command: localectl status
   register: locale_verify_localectl
@@ -75,7 +73,7 @@
 # matches (see roles/console/tasks/_verify.yml).
 - name: _verify | Read default locale conf
   slurp:
-    src: '{{ "/etc/default/locale" if ansible_distribution_release == "jammy" else "/etc/locale.conf" }}'
+    src: /etc/locale.conf
   register: locale_verify_file
   become: true
   tags:

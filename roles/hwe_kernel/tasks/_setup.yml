@@ -1,32 +1,12 @@
-# Force the starting state that makes converge do real work, so a broken
-# apt task can't pass as a no-op against whatever kernel the baked image ships
-# (box carries the GA linux-generic from packer/scripts/chroot.sh; box_deps
-# already applies the HWE kernel via this role in packer/seed_deps.yml):
-#   - jammy: remove the HWE meta so converge's install registers changed.
-#   - noble: (re)install the HWE meta so converge's removal registers changed.
-#
-# We touch only the meta-package -- dpkg refuses to purge the running kernel
-# image, but the meta is what the role's apt task targets, so flipping it is
-# what makes converge register `changed: true`.
-
-- name: _setup | Remove HWE meta-package (jammy converge reinstalls it)
-  apt:
-    pkg:
-      - linux-generic-hwe-{{ ansible_distribution_version }}
-    state: absent
-    autoremove: true
-    purge: true
-    update_cache: true
-  when: ansible_distribution_release == "jammy"
-  become: true
-
-- name: _setup | Install HWE meta-package (noble converge removes it)
+# Force the opposite starting state so converge must remove the rolling HWE
+# meta-package rather than passing against the baked image as a no-op. We touch
+# only the meta-package; dpkg refuses to purge the running kernel image.
+- name: _setup | Install HWE meta-package (converge removes it)
   apt:
     pkg:
       - linux-generic-hwe-{{ ansible_distribution_version }}
     state: present
     update_cache: true
-  when: ansible_distribution_release != "jammy"
   become: true
 
 # force: false so a machine that genuinely ships thermald keeps its packaged

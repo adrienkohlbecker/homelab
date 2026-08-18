@@ -8,7 +8,5 @@ Acquire::https::Timeout "30";
 # immediately; covers raw `apt-get` calls in this role (pre-warm,
 # _verify) which don't go through the ansible apt module's lock_timeout.
 DPkg::Lock::Timeout "300";
-{% if ansible_distribution_release != "jammy" %}
 Acquire::Retries::Delay "true";
 Acquire::Retries::Delay::Maximum "30";
-{% endif %}

@@ -157,14 +157,10 @@ journald_storage: persistent
 # the only one this role bootstraps.
 influxdb_root_org: home
 
-# jammy's nut 2.7.4 predates the 2.8 primary/secondary role-keyword rename and
-# rejects the new spellings outright ("Unknown upsmon type primary"), which
-# silently strips the monitor privilege from that user. The MONITOR line
-# (roles/nut_monitor upsmon.conf) and upsd.users (roles/nut_server) must agree
-# on the spelling, as must the test fixtures exercising them, so the
-# release-keyed blacklist lives here once. Delete when lab leaves jammy.
-nut_upsmon_keyword_primary: '{{ "master" if ansible_distribution_release in ["jammy"] else "primary" }}'
-nut_upsmon_keyword_secondary: '{{ "slave" if ansible_distribution_release in ["jammy"] else "secondary" }}'
+# The MONITOR line (roles/nut_monitor upsmon.conf) and upsd.users
+# (roles/nut_server) must agree on the NUT 2.8 role-keyword spelling.
+nut_upsmon_keyword_primary: primary
+nut_upsmon_keyword_secondary: secondary
 
 # Ports each host-level service publishes. Single source of truth for unit
 # templates (--publish for loopback-bound podman services, ListenStream= for

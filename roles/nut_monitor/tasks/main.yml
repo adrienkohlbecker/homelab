@@ -218,9 +218,9 @@
 #
 # restart (not `upsmon -c reload`) is deliberate: reload cannot change
 # SHUTDOWNCMD or POWERDOWNFLAG -- the privileged (root) half keeps its
-# startup copy (upsmon split-process model). jammy's 2.7.4 packaged unit
-# also ships no ExecReload. The cost is that a config converge mid-outage
-# drops any in-flight upssched debounce timer; acceptable for a rare event.
+# startup copy (upsmon split-process model). The cost is that a config converge
+# mid-outage drops any in-flight upssched debounce timer; acceptable for a rare
+# event.
 # nut_notify is never a trigger -- upssched exec's it fresh per event, so a
 # script-only change needs nothing.
 - name: Enable nut_monitor service

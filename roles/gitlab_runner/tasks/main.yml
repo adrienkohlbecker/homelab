@@ -89,19 +89,6 @@
           # stays off so useradd doesn't race it.
           home: /mnt/services/gitlab_runner
 
-    # python3-tomli backs the config.toml validate below where stdlib tomllib is
-    # absent (it landed in 3.11; jammy/22.04 ships 3.10). Gate on the Ubuntu
-    # release < noble so noble/resolute and beyond skip the backport (they have
-    # tomllib). apt-idempotent where already present.
-    - name: Install host dependencies for gitlab_runner
-      apt:
-        pkg:
-          - python3-tomli
-        install_recommends: false
-        cache_valid_time: 3600
-      become: true
-      when: ansible_distribution_version is version('24.04', '<')
-
     # checksum: drives re-download on a version bump (sha mismatch forces fetch)
     # and surfaces tampering on the plain-https URL.
     - name: Download gitlab-runner binary
@@ -287,7 +274,7 @@
         group: gitlab_runner
         mode: "0600"
         backup: true
-        validate: python3 -c 'import {{ "tomllib" if ansible_distribution_version is version("24.04", ">=") else "tomli" }} as t, sys; t.load(open(sys.argv[1], "rb"))' %s
+        validate: python3 -c 'import sys,tomllib; tomllib.load(open(sys.argv[1], "rb"))' %s
       become: true
 
     - name: Install gitlab_runner fluent-bit extension

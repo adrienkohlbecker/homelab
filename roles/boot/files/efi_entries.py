@@ -22,7 +22,6 @@ import os
 import re
 import subprocess
 import sys
-from pathlib import Path
 
 # efibootmgr/mdadm talk to firmware NVRAM via efivarfs; a flaky write can hang
 # the process indefinitely, which (under become:+command:) would stall the whole
@@ -38,21 +37,9 @@ def _norm_loader(path):
     return (path or "").replace("/", "\\").lower()
 
 
-def _decode_optional_data(raw):
-    # efibootmgr 17 (jammy) renders the UTF-16LE optional data that --unicode
-    # writes byte by byte on the entry line itself, so each character's null
-    # high-byte prints as a '.' separator: "root" -> "r.o.o.t.". Drop those
-    # null placeholders to recover the plain cmdline. Only decode when the odd
-    # positions are all '.' (the dotted signature) — other entries' optional
-    # data is left untouched.
-    if len(raw) >= 2 and all(c == "." for c in raw[1::2]):
-        return raw[::2]
-    return raw
-
-
 def _decode_data_hex(hexstr):
-    # efibootmgr 18 (noble) instead moves optional data off the entry line onto
-    # an indented "data: xx xx .." hex dump. Decode a --unicode-written UTF-16LE
+    # efibootmgr moves optional data off the entry line onto an indented
+    # "data: xx xx .." hex dump. Decode a --unicode-written UTF-16LE
     # payload back to the plain cmdline; anything that isn't printable UTF-16LE
     # (some firmware entries carry binary blobs) is kept as the raw hex text so
     # comparisons stay stable without pretending to understand it.
@@ -105,7 +92,7 @@ def parse_efibootmgr():
         fp = re.search(r"File\(([^)]+)\)", devpath or "")
         gp = re.search(r"GPT,([0-9a-f-]+)", devpath or "", re.IGNORECASE)
         parts = re.split(r"File\([^)]+\)", devpath or "")
-        optional_data = _decode_optional_data(parts[-1]).strip() if len(parts) > 1 else ""
+        optional_data = parts[-1].strip() if len(parts) > 1 else ""
         entries.append(
             {
                 "num": num,
@@ -168,7 +155,7 @@ def _add_disk(disks, part, index):
     # ESP mirror member carries the md device as a dependent, which would
     # otherwise show up as a second blockdevice. Select by name as a belt-and-
     # braces guard against any extra rows.
-    info = json.loads(run(["lsblk", "-J", "-n", "-d", "-o", "NAME,PKNAME,PARTUUID", part]))
+    info = json.loads(run(["lsblk", "-J", "-n", "-d", "-o", "NAME,PKNAME,PARTN,PARTUUID", part]))
     matched = [b for b in info.get("blockdevices", []) if b.get("name") == partname]
     if len(matched) != 1:
         raise RuntimeError(f"lsblk {part}: could not resolve a unique blockdevice for {partname}")
@@ -177,11 +164,10 @@ def _add_disk(disks, part, index):
         raise RuntimeError(f"lsblk {part}: no parent disk (pkname) — unexpected device stacking")
     if not dev.get("partuuid"):
         raise RuntimeError(f"lsblk {part}: no partuuid")
-    # The partition number is read from sysfs rather than lsblk's PARTN column:
-    # PARTN landed in util-linux 2.38 and the fleet's jammy ships 2.37.2.
-    partnum = Path(f"/sys/class/block/{partname}/partition").read_text().strip()
+    if not dev.get("partn"):
+        raise RuntimeError(f"lsblk {part}: no partition number")
     disks.append(
-        {"index": index, "disk": f"/dev/{dev['pkname']}", "part": int(partnum), "gpt_uuid": dev["partuuid"].lower()}
+        {"index": index, "disk": f"/dev/{dev['pkname']}", "part": int(dev["partn"]), "gpt_uuid": dev["partuuid"].lower()}
     )
 
 

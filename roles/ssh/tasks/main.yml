@@ -106,9 +106,8 @@
   tags:
     - ssh
 
-# RequiredRSASize is not understood by OpenSSH 8.9 (jammy); sshd -t -f would
-# reject the drop-in there. Only deploy on noble+ (Ubuntu 24.04 ships 9.6).
-- name: Configure sshd — noble+ directives
+# Directives supported by every managed host.
+- name: Configure sshd — current directives
   copy:
     src: 02-noble-plus.conf
     dest: /etc/ssh/sshd_config.d/02-noble-plus.conf
@@ -119,7 +118,6 @@
     validate: sshd -t -f %s
   when:
     - not (ansible_check_mode and ssh_apt.changed)
-    - ansible_distribution_major_version | int >= 24
   register: ssh_sshd_config_noble
   become: true
   tags:
@@ -155,10 +153,8 @@
   tags:
     - ssh
 
-# On OpenSSH <= 9.4 (jammy 8.9), duplicate Subsystem sftp is fatal — sshd
-# refuses to start. The drop-in declares our audited Subsystem, so the stock
-# line must be commented out. Noble (9.6+) tolerates duplicates via
-# first-match-wins, but the comment-out is harmless there.
+# The drop-in declares our audited Subsystem, so comment out the stock line to
+# keep ownership unambiguous and avoid duplicate directives.
 - name: Comment out stock sftp Subsystem to avoid duplicate
   lineinfile:
     path: /etc/ssh/sshd_config
@@ -174,8 +170,8 @@
 # `sshd -t` (no -f) re-validates the *merged* live config: the whole Include
 # chain plus the base-file Subsystem edit above. The copy's validate: only
 # sees the drop-in in isolation, so it can't catch the duplicate Subsystem
-# that is fatal on jammy. Keep both — per-file gate on write, merged-config
-# gate before reload.
+# from another file. Keep both — per-file gate on write, merged-config gate
+# before reload.
 - name: Validate sshd config before reload
   when:
     - not (ansible_check_mode and ssh_apt.changed)

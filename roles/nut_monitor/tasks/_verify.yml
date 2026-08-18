@@ -23,8 +23,8 @@
 # (noble/resolute) upsd is socket-activated, so the .socket must be stopped
 # too. The nut-driver-enumerator.path unit watches ups.conf for changes and
 # can re-activate the service, so stop the enumerator chain first.
-# failed_when:false since the .socket and enumerator units are absent on
-# jammy's 2.7.4.
+# failed_when:false keeps this cleanup tolerant of optional units absent from a
+# particular package state.
 - name: _verify | Stop all NUT units that could respawn upsd
   systemd:
     name: "{{ item }}"
@@ -163,9 +163,8 @@
   become: true
 
 # dummy-ups accepts live variable writes via upsrw -- no frame-file rewrite,
-# driver restart, or reconnect window inside the FSD wait. The initial frame's
-# TIMER keeps Jammy's replay loop paused; 2.8's default dummy-once mode holds
-# the value natively. _setup grants the fixture upsmon user actions = SET.
+# driver restart, or reconnect window inside the FSD wait. The dummy-once mode
+# holds the value natively. _setup grants the fixture upsmon user actions = SET.
 - name: _verify | Flip the dummy UPS to on-battery low-battery
   command: upsrw -s "ups.status=OB LB" -u upsmon -p {{ nut_upsmon_password }} {{ nut_monitor_ups }}
   changed_when: false

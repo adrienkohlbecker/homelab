@@ -10,7 +10,6 @@
 # Noble splits resolved into a separate package. Install it here instead of
 # relying on systemd's Recommends or the base-image package selection.
 - name: Install systemd-resolved package
-  when: ansible_distribution_release != "jammy"
   apt:
     name: systemd-resolved
     state: present

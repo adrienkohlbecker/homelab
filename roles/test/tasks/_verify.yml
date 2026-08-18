@@ -14,14 +14,7 @@
          and (test_ecr_registry | default('') | length > 0)
          and (test_ecr_registry_mirrors | default({}) | length > 0) }}
 
-- name: _verify | Read apt sources (jammy legacy)
-  when: ansible_distribution_release == "jammy"
-  slurp:
-    src: /etc/apt/sources.list
-  register: test_apt_legacy
-
-- name: _verify | Read apt sources (noble+ deb822)
-  when: ansible_distribution_release != "jammy"
+- name: _verify | Read apt sources
   slurp:
     src: /etc/apt/sources.list.d/ubuntu.sources
   register: test_apt_deb822
@@ -31,8 +24,7 @@
   assert:
     that:
       - >-
-        nexus_url in (test_apt_legacy.content | default('') | b64decode)
-        or nexus_url in (test_apt_deb822.content | default('') | b64decode)
+        nexus_url in (test_apt_deb822.content | b64decode)
     fail_msg: "apt sources don't reference {{ nexus_url }}"
 
 - name: _verify | Apt points at the in-region EC2 mirror on AWS
@@ -43,9 +35,7 @@
     # amd64 cells render the archive host, arm cells the ports host; both
     # carry the region so the suffix disambiguates a real regional mirror
     # from the public canonical fallback. security rides the same host.
-    _apt_sources: >-
-      {{ (test_apt_legacy.content | default('') | b64decode)
-         ~ (test_apt_deb822.content | default('') | b64decode) }}
+    _apt_sources: "{{ test_apt_deb822.content | b64decode }}"
   assert:
     that:
       - >-
@@ -61,17 +51,14 @@
   assert:
     that:
       - >-
-        ('archive.ubuntu.com' in (test_apt_legacy.content | default('') | b64decode))
-        or ('ports.ubuntu.com' in (test_apt_legacy.content | default('') | b64decode))
-        or ('archive.ubuntu.com' in (test_apt_deb822.content | default('') | b64decode))
-        or ('ports.ubuntu.com' in (test_apt_deb822.content | default('') | b64decode))
+        ('archive.ubuntu.com' in (test_apt_deb822.content | b64decode))
+        or ('ports.ubuntu.com' in (test_apt_deb822.content | b64decode))
     fail_msg: "apt sources don't reference upstream archive/ports"
 
 # Ask apt where it actually reads sources from, rather than stat-ing the file
 # roles/apt just emptied -- that would only restate the converge task. A
 # deb822-only host lists no index target sourced from the legacy file.
 - name: _verify | Read apt index targets
-  when: ansible_distribution_release != "jammy"
   command:
     argv:
       - apt-get
@@ -81,16 +68,15 @@
   register: test_apt_indextargets
   changed_when: false
 
-- name: _verify | Apt reads no sources from the legacy sources.list on noble+
-  when: ansible_distribution_release != "jammy"
+- name: _verify | Apt reads no sources from the legacy sources.list
   assert:
     that:
       - >-
         test_apt_indextargets.stdout_lines
         | select('search', '^/etc/apt/sources.list:') | list | length == 0
     fail_msg: >-
-      apt still indexes entries from /etc/apt/sources.list on noble+ (deb822
-      only): {{ test_apt_indextargets.stdout_lines
+      apt still indexes entries from /etc/apt/sources.list on this deb822-only
+      host: {{ test_apt_indextargets.stdout_lines
       | select('search', '^/etc/apt/sources.list:') | list }}
 
 - name: _verify | Stat podman registry mirror config

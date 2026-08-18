@@ -493,9 +493,7 @@ def main() -> None:
     if not password:
         raise OSError("NETDATA_BASIC_AUTH_PASSWORD_FILE is empty")
     data = collect(hosts, _basic_authorization(username, password))
-    # datetime.timezone.utc, not the datetime.UTC alias: this runs under the
-    # target host's /usr/bin/python3 (3.10 on jammy), where the alias is absent.
-    iso = datetime.datetime.now(tz=datetime.timezone.utc).isoformat(timespec="seconds")  # noqa: UP017
+    iso = datetime.datetime.now(tz=datetime.UTC).isoformat(timespec="seconds")
 
     # No top-level try/except — an exception here (disk full, permission
     # denied, etc.) propagates to Python's default print-traceback-and-exit-1.
