@@ -14,14 +14,6 @@
          and (test_ecr_registry | default('') | length > 0)
          and (test_ecr_registry_mirrors | default({}) | length > 0) }}
 
-- name: _verify | Stat apt sources files
-  stat:
-    path: "{{ item }}"
-  loop:
-    - /etc/apt/sources.list
-    - /etc/apt/sources.list.d/ubuntu.sources
-  register: test_apt_sources
-
 - name: _verify | Read apt sources (jammy legacy)
   when: ansible_distribution_release == "jammy"
   slurp:
@@ -75,13 +67,31 @@
         or ('ports.ubuntu.com' in (test_apt_deb822.content | default('') | b64decode))
     fail_msg: "apt sources don't reference upstream archive/ports"
 
-- name: _verify | Legacy /etc/apt/sources.list is empty on noble+
+# Ask apt where it actually reads sources from, rather than stat-ing the file
+# roles/apt just emptied -- that would only restate the converge task. A
+# deb822-only host lists no index target sourced from the legacy file.
+- name: _verify | Read apt index targets
+  when: ansible_distribution_release != "jammy"
+  command:
+    argv:
+      - apt-get
+      - indextargets
+      - --format
+      - $(SOURCESENTRY)
+  register: test_apt_indextargets
+  changed_when: false
+
+- name: _verify | Apt reads no sources from the legacy sources.list on noble+
   when: ansible_distribution_release != "jammy"
   assert:
     that:
-      - test_apt_sources.results[0].stat.exists
-      - test_apt_sources.results[0].stat.size == 0
-    fail_msg: "/etc/apt/sources.list should be empty on noble+ (deb822 only)"
+      - >-
+        test_apt_indextargets.stdout_lines
+        | select('search', '^/etc/apt/sources.list:') | list | length == 0
+    fail_msg: >-
+      apt still indexes entries from /etc/apt/sources.list on noble+ (deb822
+      only): {{ test_apt_indextargets.stdout_lines
+      | select('search', '^/etc/apt/sources.list:') | list }}
 
 - name: _verify | Stat podman registry mirror config
   stat:
