@@ -83,6 +83,13 @@ sites:
       work:    { id: 3, cidr: 10.123.3.0/24, gateway: 10.123.3.1 }
       iot:     { id: 4, cidr: 10.123.4.0/24, gateway: 10.123.4.1 }
       trusted: { id: 5, cidr: 10.123.5.0/24, gateway: 10.123.5.1 }
+      # Dahua villa intercom: two VTOs (door stations) and two indoor SCP
+      # monitors, on their own VLAN because the device class has a poor CVE
+      # record (pre-auth bypasses, cloud P2P phone-home) and none of it is
+      # patched on our schedule. Zone/firewall policy is UDM-UI state, so the
+      # intent lives in `notes/intercom_vlan.md`: camera-grade tier, no WAN
+      # egress, no inter-VLAN reach except the Home Assistant host it pairs
+      # with, and DNS only to the VIP.
       intercom: { id: 6, cidr: 10.123.6.0/24, gateway: 10.123.6.1 }
       vlan_7:   { id: 7, cidr: 10.123.7.0/24, status: reserved }
   site_8:  { cidr: 10.123.8.0/21,  status: reserved }
