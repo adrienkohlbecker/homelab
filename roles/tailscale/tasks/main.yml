@@ -69,7 +69,7 @@
 # Pin tailscaled's WireGuard underlay port. `tailscale up`/`set` have no port
 # flag -- the listen port is a daemon setting: the apt unit's ExecStart reads
 # --port=${PORT} from this EnvironmentFile. Nodes that share one NAT (lab/pug on
-# the home WAN) pin DISTINCT ports (41641 / 41642) so each maps to its own router
+# the home WAN) pin DISTINCT ports (41644 / 41642) so each maps to its own router
 # port-forward and gets an unambiguous public endpoint -- see tailscale_wan_direct
 # in defaults/main.yml. The package ships PORT="41641", so single-NAT-tenant nodes
 # (fox, bunk) are a no-op at the default.

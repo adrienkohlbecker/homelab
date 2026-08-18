@@ -251,7 +251,7 @@ table inet homelab {
         # exit-node / subnet traffic through fox's DERP. This is the encrypted
         # WireGuard *underlay* arriving on the WAN iface -- the tailscale0 accept
         # above only sees the decapsulated inner packets, never this. lab/pug share
-        # the home WAN, so each pins a distinct tailscale_port (41641 / 41642) with
+        # the home WAN, so each pins a distinct tailscale_port (41644 / 41642) with
         # its own forward. iifname $WAN_IFACE so a LAN-side source can't reach it.
         iifname $WAN_IFACE udp dport {{ tailscale_port }} counter name "tailscale_underlay_accept" accept comment "tailscale direct endpoint (WAN underlay ingress)"
 

@@ -21,8 +21,8 @@ tailscale_advertise_exit_node: false
 # UDP port tailscaled binds for the WireGuard underlay (tailscale's own default is
 # 41641). Pin a DISTINCT port per node when several nodes sit behind ONE NAT
 # (lab/pug share the home WAN): each needs its own forwarded port so its public
-# endpoint is unambiguous -- lab keeps 41641, pug uses 41642. Single-NAT-tenant
-# nodes (fox on its own public IP, bunk at Bonniers) keep the default.
+# endpoint is unambiguous -- lab uses 41644, pug uses 41642. Single-NAT-tenant
+# nodes can keep the default.
 tailscale_port: 41641
 
 # Whether this node has a static router port-forward exposing its tailscaled
