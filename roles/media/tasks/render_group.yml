@@ -11,10 +11,13 @@
     key: render
     fail_key: false
 
+# `is not none`, not `is defined`: fail_key: false still creates the key and
+# maps it to null when the group is absent, so a presence test always passes.
 - name: Assert render group present
   assert:
     that:
-      - getent_group.render is defined
+      - getent_group is defined
+      - getent_group.render is not none
     fail_msg: >-
       /etc/group has no 'render' entry. On a host with
       has_transcoding_acceleration=true, install one of the
