@@ -46,9 +46,6 @@ TF_VAR_mailgun_api_key = "op://Lab/j6iayri7rcsq27nym5z7u37jgu/password"
 # the HCLOUD_TOKEN job variable. The `tf` task maps _OP -> HCLOUD_TOKEN under
 # `op run --`.
 HCLOUD_TOKEN_OP = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
-# UptimeRobot account API key, resolved only inside the `tf` task's
-# `op run --` wrapper for the Terraform provider.
-UPTIMEROBOT_API_KEY = "op://Lab/2fm4dcx43zxith3mltbtn5lsdq/password"
 # Expose [vars] entries as env so file-based mise-tasks/ scripts can read
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
@@ -310,6 +307,13 @@ run = "lint/git_ls_existing.sh '*.toml' | xargs -0 taplo fmt"
 [tasks."tf"]
 description = "tofu (forwards subcommand + args)"
 dir = "{{config_root}}/terraform"
+# UptimeRobot account API key. Task-scoped rather than in the repo-wide [env]:
+# `op run --` resolves every op:// ref in its environment, so a global entry
+# would materialize this key inside unrelated tasks (ha:sync, ci:*) that have no
+# business holding it. Scoping it here also keeps the literal op:// string out of
+# the provider's own UPTIMEROBOT_API_KEY variable, where a direct `tofu` call
+# outside this wrapper would send it upstream as a bearer token.
+env = { TF_VAR_uptimerobot_api_key = "op://Lab/2fm4dcx43zxith3mltbtn5lsdq/password" }
 run = 'HCLOUD_TOKEN="$HCLOUD_TOKEN_OP" op run -- tofu "$@"'
 
 [tasks."ansible"]
