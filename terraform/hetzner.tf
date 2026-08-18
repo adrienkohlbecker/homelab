@@ -25,15 +25,24 @@ resource "hcloud_ssh_key" "laptop" {
 # Reserved public IPv4 -- stable across instance rebuilds and is what
 # headscale.fahm.fr points at (see dns_fahm_fr.tf; fox.fahm.fr itself resolves
 # to the Tailscale CGNAT address). auto_delete = false so deleting the server
-# doesn't drop the IP (and corrupt the terraform state); delete_protection is
-# the API-level guard that auto_delete is not -- it also blocks a `tofu destroy`
-# or a stray console delete, which is what the pinned records below depend on.
+# doesn't drop the IP (and corrupt the terraform state). delete_protection is
+# the API-level guard auto_delete is not, blocking a console or API delete;
+# prevent_destroy covers the `tofu destroy` / `-replace` path client-side.
+#
+# Note the provider reports `server_not_stopped` (422) while reconciling the
+# assignee on an update to these resources, even though the protection change
+# itself succeeds. That surfaces as a failed apply with the flag already set --
+# re-run once the config matches and the resources settle with no diff.
 resource "hcloud_primary_ip" "fox" {
   name              = "fox"
   type              = "ipv4"
   location          = local.hetzner_location
   auto_delete       = false
   delete_protection = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Reserved public IPv6 -- same rationale as the IPv4 above. fox is a dual-stack
@@ -53,6 +62,10 @@ resource "hcloud_primary_ip" "fox_v6" {
   location          = local.hetzner_location
   auto_delete       = false
   delete_protection = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Default-drop inbound (an attached hcloud firewall drops anything not

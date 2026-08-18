@@ -73,21 +73,15 @@ locals {
   # One monitor per (endpoint x IP family): the split is what tells us *which*
   # path broke, since fox is dual-stack and the v6 leg has no in-estate observer
   # (neither the workstation nor lab has IPv6 egress).
-  #
-  # ssl/domain expiry reminders ride headscale_ipv4 alone -- all four monitors
-  # hit the same certificate and the same registrable domain, so enabling them
-  # per-monitor would just fan one reminder out four ways.
   uptimerobot_monitors = {
     headscale_ipv4 = {
-      name                       = "Headscale IPV4"
-      type                       = "KEYWORD"
-      url                        = "https://headscale.fahm.fr/health"
-      ip_version                 = "ipv4Only"
-      keyword_type               = "ALERT_NOT_EXISTS"
-      keyword_case_type          = "CaseSensitive"
-      keyword_value              = "\"status\":\"pass\""
-      ssl_expiration_reminder    = true
-      domain_expiration_reminder = true
+      name              = "Headscale IPV4"
+      type              = "KEYWORD"
+      url               = "https://headscale.fahm.fr/health"
+      ip_version        = "ipv4Only"
+      keyword_type      = "ALERT_NOT_EXISTS"
+      keyword_case_type = "CaseSensitive"
+      keyword_value     = "\"status\":\"pass\""
     }
     headscale_ipv6 = {
       name              = "Headscale IPV6"
@@ -133,10 +127,13 @@ resource "uptimerobot_monitor" "headscale" {
 
   response_time_threshold = try(each.value.response_time_threshold, null)
 
-  check_ssl_errors           = true
-  follow_redirections        = false
-  ssl_expiration_reminder    = try(each.value.ssl_expiration_reminder, false)
-  domain_expiration_reminder = try(each.value.domain_expiration_reminder, false)
+  # No ssl_expiration_reminder / domain_expiration_reminder: the account's
+  # UptimeRobot plan rejects both with 403 "not allowed to use some settings
+  # with your current plan" (009-005), and the whole monitor update fails with
+  # them set. check_ssl_errors still catches an already-invalid certificate;
+  # advance warning of a stalled certbot renewal is simply not available here.
+  check_ssl_errors    = true
+  follow_redirections = false
 
   assigned_alert_contacts = local.uptimerobot_all_alert_contacts
 
@@ -147,8 +144,7 @@ resource "uptimerobot_monitor" "headscale" {
   }
 
   config = {
-    ip_version                 = each.value.ip_version
-    ssl_expiration_period_days = try(each.value.ssl_expiration_reminder, false) ? [1, 7, 14, 30] : null
+    ip_version = each.value.ip_version
   }
 }
 
@@ -167,18 +163,13 @@ resource "uptimerobot_monitor" "resume" {
 
   # https, matching the zone's always_use_https = "on" (zone_settings.tf): over
   # http this measured a 301 rather than the served page, and could not express
-  # an SSL check at all. Cert expiry is the likeliest way a static site goes dark.
-  check_ssl_errors        = true
-  ssl_expiration_reminder = true
+  # an SSL check at all. No expiry reminder -- see the plan note above.
+  check_ssl_errors = true
 
   assigned_alert_contacts = local.uptimerobot_resume_alert_contacts
 
   region_data = {
     regions = ["eu"]
-  }
-
-  config = {
-    ssl_expiration_period_days = [1, 7, 14, 30]
   }
 }
 
