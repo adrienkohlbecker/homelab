@@ -3,9 +3,10 @@
     that:
       - transmission_rpc_password is defined
       - (transmission_rpc_password | default('')) | length > 0
+      - not (transmission_rpc_password | transmission_password_is_salted_hash)
     fail_msg: >-
-      transmission_rpc_password is required (vaulted in
-      group_vars/{prod,test}.yml).
+      transmission_rpc_password must be a plaintext password (vaulted in
+      group_vars/{prod,test}.yml), not Transmission's persisted salted hash.
     quiet: true
   tags:
     - transmission
