@@ -53,12 +53,11 @@
     - transmission
 
 # Transmission salts+hashes rpc-password on first read into `{<salt+sha1>}`
-# form and writes it back on every shutdown. Reading any existing hash
-# here and feeding it into the template (via transmission_rpc_password_hash)
-# keeps the second converge idempotent without committing the random salt
-# to the repo. Empty / non-hash content (first converge, or someone
-# manually replacing with plaintext) falls through to the plaintext
-# template var, which transmission then rehashes on next start.
+# form and writes it back on every shutdown. Reusing an existing hash only
+# when it matches the managed plaintext keeps converges idempotent without
+# preventing password rotation or committing the random salt to the repo.
+# Empty, stale, or non-hash content falls through to the plaintext template
+# var, which transmission then rehashes on next start.
 - name: Read existing transmission rpc-password hash if present
   command: >-
     python3 -c 'import json,sys,os;
@@ -67,13 +66,17 @@
     /mnt/services/transmission/settings.json
   register: transmission_existing_pw
   become: true
+  check_mode: false
   changed_when: false
+  tags:
+    - transmission
 
-- name: Resolve transmission rpc-password (preserve salted hash if already hashed)
+- name: Resolve transmission rpc-password (preserve matching salted hash)
   set_fact:
     _transmission_rpc_password_hash: >-
       {{ transmission_existing_pw.stdout
-         if transmission_existing_pw.stdout.startswith('{')
+         if transmission_existing_pw.stdout
+            | transmission_password_matches(transmission_rpc_password)
          else transmission_rpc_password }}
   tags:
     - transmission
