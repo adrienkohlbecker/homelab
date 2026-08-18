@@ -1,9 +1,33 @@
 - name: Assert fluent-bit extension arguments
   assert:
     that:
-      - fluentbit_extension_args.keys() | list | difference(['name']) | length == 0
+      - fluentbit_extension_args.keys() | list | difference(['name', 'lua_files']) | length == 0
       - fluentbit_extension_args.name is string
       - fluentbit_extension_args.name is match('^[a-z0-9_]+$')
+      - fluentbit_extension_args.lua_files | default([]) is not string
+
+- name: Assert fluent-bit extension Lua filenames
+  assert:
+    that:
+      - item is string
+      - item is match('^[a-z0-9_]+[.]lua$')
+  loop: "{{ fluentbit_extension_args.lua_files | default([]) }}"
+
+# Shared filters live in roles/fluentbit/files/ and are pulled in by name rather
+# than duplicated per service. No validate: the target has no lua interpreter to
+# syntax-check with -- the extension dry-run below is what catches a broken
+# script, since fluent-bit loads every referenced filter at config parse time.
+- name: Install shared Lua dependencies for fluent-bit extension  # noqa: require-validate
+  copy:
+    src: "{{ playbook_dir }}/roles/fluentbit/files/{{ item }}"
+    dest: "/etc/fluent-bit/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  loop: "{{ fluentbit_extension_args.lua_files | default([]) }}"
+  register: fluentbit_extension_shared_lua
+  become: true
 
 - name: Install fluent-bit service extension
   copy:
@@ -55,6 +79,7 @@
     - not ansible_check_mode
     - >-
       fluentbit_extension_config.changed or
+      fluentbit_extension_shared_lua.changed or
       fluentbit_extension_lua_removed.changed or
       fluentbit_extension_manifest.changed
   become: true
@@ -69,5 +94,6 @@
       condition: "{{ not ansible_check_mode }}"
       reload: >-
         {{ fluentbit_extension_config.changed or
+           fluentbit_extension_shared_lua.changed or
            fluentbit_extension_lua_removed.changed or
            fluentbit_extension_manifest.changed }}
