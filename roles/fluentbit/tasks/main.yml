@@ -19,7 +19,6 @@
       uris: "{{ mirror_apt_fluentbit }}/{{ ansible_distribution_release }}"
       suites: "{{ ansible_distribution_release }}"
       components: main
-      filename: fluent-bit
   tags:
     - fluentbit
 

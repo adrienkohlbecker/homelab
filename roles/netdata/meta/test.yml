@@ -1,8 +1,3 @@
-# Release-divergent: the install path branches at major version 26 -- noble
-# takes the apt-repo branch, resolute takes the >= 26 branch.
-# resolute is the only divergent release.
-ubuntu:
-  - resolute
 # _setup.yml imports test/nginx + test/authelia_stub and the _verify path
 # exercises the full nginx+Authelia front (token bypass, redacted access
 # log), so route to box_deps where nginx is pre-baked (packer/seed_deps.yml)
