@@ -166,6 +166,8 @@ _LSBLK3 = {
     }
     for i in range(3)
 }
+
+
 class TestMultiDisk:
     def test_fresh_mirror_expands_per_disk(self, monkeypatch, capsys):
         out = run_check(

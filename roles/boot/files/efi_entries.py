@@ -167,7 +167,12 @@ def _add_disk(disks, part, index):
     if not dev.get("partn"):
         raise RuntimeError(f"lsblk {part}: no partition number")
     disks.append(
-        {"index": index, "disk": f"/dev/{dev['pkname']}", "part": int(dev["partn"]), "gpt_uuid": dev["partuuid"].lower()}
+        {
+            "index": index,
+            "disk": f"/dev/{dev['pkname']}",
+            "part": int(dev["partn"]),
+            "gpt_uuid": dev["partuuid"].lower(),
+        }
     )
 
 
