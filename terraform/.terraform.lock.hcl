@@ -164,6 +164,8 @@ provider "registry.opentofu.org/uptimerobot/uptimerobot" {
   constraints = "~> 1.10"
   hashes = [
     "h1:4ykR4qKWYmb/fSqeWwtdd7sjBKj5PPOeM7Of7mhDbC0=",
+    "h1:cMwJ6oedOC6yv3AY2RCWtizT8+99sQir6CZcQO9BOc8=",
+    "h1:t3JlPHn+AswoC4W01H8ExwK77r/U6EpV0Cp0/k7+5JI=",
     "zh:12e8d52607d321501cba034347d19af00b9a97342b88101c264e3a69f715778e",
     "zh:1aeaac84bbf08c67b8872c56d15ce773d1c77ca30834980b8222bce914e3e9be",
     "zh:2cebeb39025102a6a32d92c20008278d6c4ca0362d5271b443d04b719c4c20a3",
