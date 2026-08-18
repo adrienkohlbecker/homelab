@@ -152,6 +152,10 @@
       # unauthenticated; the scrapers hit it on loopback, so close the
       # public path rather than expose bucket names/sizes.
       location_conf: |
+        # Remote ARQ backups can traverse a DERP relay. Allow a five-minute
+        # gap between body reads rather than terminating a resumable upload
+        # after nginx's 60-second default.
+        client_body_timeout 5m;
         location /minio/v2/metrics/ { deny all; return 404; }
   tags:
     - minio
