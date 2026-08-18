@@ -17,7 +17,6 @@
 #   suites:        apt suite -- e.g. nodistro, or the release codename
 #   components:    optional apt component -- e.g. main, stable; omit for a
 #                  flat repo (trailing-slash suite, no components)
-#   architectures: optional; defaults to the host's arch (arm64/amd64)
 #   pin:           optional { package, version, priority } -> preferences.d/<name>
 #   state:         optional present (default) | absent; absent tombstones the
 #                  source -- removes its .list/.sources, keyring and pin file
@@ -161,7 +160,7 @@
     uris: "{{ apt_source_args.uris }}"
     suites: "{{ apt_source_args.suites }}"
     components: "{{ apt_source_args.components | default(omit) }}"
-    architectures: "{{ apt_source_args.architectures | default('arm64' if ansible_architecture == 'aarch64' else 'amd64') }}"
+    architectures: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
     signed_by: /usr/share/keyrings/{{ apt_source_args.name }}.gpg
     state: "{{ apt_source_args.state | default('present') }}"
   become: true
