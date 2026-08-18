@@ -23,28 +23,36 @@ resource "hcloud_ssh_key" "laptop" {
 }
 
 # Reserved public IPv4 -- stable across instance rebuilds and is what
-# fox.fahm.fr points at (see dns_fahm_fr.tf). auto_delete = false so deleting
-# the server doesn't drop the IP (and corrupt the terraform state).
+# headscale.fahm.fr points at (see dns_fahm_fr.tf; fox.fahm.fr itself resolves
+# to the Tailscale CGNAT address). auto_delete = false so deleting the server
+# doesn't drop the IP (and corrupt the terraform state); delete_protection is
+# the API-level guard that auto_delete is not -- it also blocks a `tofu destroy`
+# or a stray console delete, which is what the pinned records below depend on.
 resource "hcloud_primary_ip" "fox" {
-  name        = "fox"
-  type        = "ipv4"
-  location    = local.hetzner_location
-  auto_delete = false
+  name              = "fox"
+  type              = "ipv4"
+  location          = local.hetzner_location
+  auto_delete       = false
+  delete_protection = true
 }
 
 # Reserved public IPv6 -- same rationale as the IPv4 above. fox is a dual-stack
-# DERP relay + control plane (fox.fahm.fr carries both A and AAAA, see
+# DERP relay + control plane (headscale.fahm.fr carries both A and AAAA, see
 # dns_fahm_fr.tf), so IPv6-only tailnet clients reach the relay over 443/nginx
 # and the embedded DERP STUN over 3478. Hetzner reserves a /64 as ip_network;
 # fox uses its first host address (::1), derived with cidrhost rather than the
 # unusable network base in ip_address. Reserving the network (rather than using
 # a server-generated allocation) keeps the address stable across rebuilds so
 # the AAAA needn't churn.
+#
+# host_vars/fox.yml pins the same ::1 as headscale_derp_ipv6 (headscale cannot
+# auto-detect it behind nginx + the podman bridge) -- rotate the two together.
 resource "hcloud_primary_ip" "fox_v6" {
-  name        = "fox_v6"
-  type        = "ipv6"
-  location    = local.hetzner_location
-  auto_delete = false
+  name              = "fox_v6"
+  type              = "ipv6"
+  location          = local.hetzner_location
+  auto_delete       = false
+  delete_protection = true
 }
 
 # Default-drop inbound (an attached hcloud firewall drops anything not
