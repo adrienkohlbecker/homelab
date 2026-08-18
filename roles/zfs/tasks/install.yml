@@ -1,18 +1,3 @@
-# Jammy ships ZFS 2.1.x; the homelab tracks 2.2.x for its autotrim and
-# encryption fixes. zfs_backport_packages includes the noble-only ABI
-# companions that need an explicit upgrade. The helper exports
-# zfs_backports_updated so main.yml restarts ZED when its binary rolls forward.
-- name: install | Apply zfs backports pin + upgrade (jammy)
-  import_role:
-    name: backports
-    tasks_from: pin
-  vars:
-    backports_args:
-      name: zfs
-      packages: '{{ zfs_backport_packages }}'
-  tags:
-    - zfs
-
 - name: install | Install ZoL
   apt:
     package:

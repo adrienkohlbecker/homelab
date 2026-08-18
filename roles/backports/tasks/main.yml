@@ -1,3 +1,0 @@
-# backports is a helper role accessed only via `tasks_from: pin`.
-# main.yml exists so testrole.py can target this role; the actual
-# logic lives in pin.yml and the verification scenarios in _verify.yml.

@@ -1,25 +1,7 @@
-# On jammy, pin chrony + its noble dependency closure to noble via the
-# backports helper. This role is sequenced first among the backports
-# consumers, so it performs the libc6 jammy→noble flip that zfs/podman
-# then find done. Package list: vars/main.yml; full rationale:
-# notes/jammy_noble_backports.md. No-op on noble (or any non-22.04).
-- name: Apply chrony backports pin + upgrade (jammy)
-  import_role:
-    name: backports
-    tasks_from: pin
-  vars:
-    backports_args:
-      name: ntp
-      packages: '{{ ntp_backport_packages }}'
-  tags:
-    - ntp
-
 # policy_rc_d 101 suppresses the postinst auto-start so chronyd first
 # comes up under the NTS config written below, never the stock
-# unauthenticated-pool config. cache_valid_time is safe here: on jammy
-# the backports upgrade above just refreshed the cache and already
-# pulled chrony to noble (so this is a no-op), and on noble the native
-# candidate is stable.
+# unauthenticated-pool config. cache_valid_time is safe here because the
+# native archive candidate is stable.
 - name: Install chrony
   apt:
     pkg:
@@ -145,13 +127,10 @@
     - ntp
 
 # Enable + start chrony via the systemd_unit helper (chrony ships its own
-# unit, so no install step). Restart -- not just start -- when the
-# backports upgrade moved chrony to the noble binary, the NTS config or
-# DAEMON_OPTS changed, or the stale drop-in was removed, so the running
-# chronyd picks up the new binary/config; otherwise the helper leaves a
-# healthy daemon undisturbed and clears any start-rate-limit a bare
-# state=restarted would trip over. ntp_backports_updated is the bool the
-# backports role records from backports_args.name: ntp.
+# unit, so no install step). Restart -- not just start -- when the NTS config,
+# DAEMON_OPTS, or stale drop-in changes; otherwise the helper leaves a healthy
+# daemon undisturbed and clears any start-rate-limit a bare state=restarted
+# would trip over.
 - name: Enable and start chrony
   import_role:
     name: systemd_unit
@@ -160,6 +139,6 @@
     systemd_unit_args:
       src: chrony
       condition: "{{ not (ansible_check_mode and ntp_chrony_apt.changed) }}"
-      restart: "{{ ntp_backports_updated or ntp_chrony_conf.changed or ntp_chrony_default.changed or (chrony_service_d_override_conf_result.changed | default(false)) }}"
+      restart: "{{ ntp_chrony_conf.changed or ntp_chrony_default.changed or (chrony_service_d_override_conf_result.changed | default(false)) }}"
   tags:
     - ntp

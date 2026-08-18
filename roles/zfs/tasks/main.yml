@@ -295,7 +295,7 @@
   systemd:
     name: zfs-zed
     enabled: true
-    state: '{{ "restarted" if (zfs_backports_updated | default(false) or zfs_zedrc.changed) else "started" }}'
+    state: '{{ "restarted" if zfs_zedrc.changed else "started" }}'
   become: true
   tags:
     - zfs

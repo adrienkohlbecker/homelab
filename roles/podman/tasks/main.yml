@@ -105,11 +105,11 @@
 # socket would otherwise still be served by the stale process. Skipped on a
 # fresh install (podman_apt.changed): the socket task above brings the daemon
 # up with the correct env + binary already in place, nothing stale to recycle.
-- name: Restart podman.service to pick up drop-in or binary changes
+- name: Restart podman.service to pick up drop-in changes
   when:
     - not ansible_check_mode
     - not podman_apt.changed
-    - (podman_service_d_override_conf_result.changed | default(false)) or (podman_backports_updated | default(false))
+    - podman_service_d_override_conf_result.changed | default(false)
   systemd:
     name: podman.service
     state: restarted

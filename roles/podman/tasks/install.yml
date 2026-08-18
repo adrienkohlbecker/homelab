@@ -7,9 +7,8 @@
 # "database graph driver does not match". On ZFS hosts the zvol mount
 # wipes the stale DB, but on non-ZFS hosts (minimal) it persists.
 #
-# The backports import below installs podman on jammy (its upgrade task
-# pulls the noble-pinned packages), so the pre-seed must land before it.
-# The full validated write after apt overwrites this with
+# The pre-seed must land before apt installs podman. The full validated write
+# after apt overwrites this with
 # rootless_storage_path and the fuse-overlayfs shim.
 - name: install | Ensure /etc/containers exists for storage pre-seed
   file:
@@ -34,24 +33,6 @@
     group: root
     force: false
   become: true
-  tags:
-    - podman
-
-# Route podman + its userspace stack through noble on jammy. The
-# full pin list lives in podman_backport_packages so the pin file's
-# `Package:` line and the upgrade task share a single source of
-# truth. The role exports podman_backports_updated (derived from
-# backports_args.name), consumed by main.yml's `Enable podman.socket`
-# task to force a restart when noble's binary replaced jammy's
-# underneath the running daemon.
-- name: install | Apply podman backports pin + upgrade (jammy)
-  import_role:
-    name: backports
-    tasks_from: pin
-  vars:
-    backports_args:
-      name: podman
-      packages: '{{ podman_backport_packages }}'
   tags:
     - podman
 
