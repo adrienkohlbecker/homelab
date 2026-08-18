@@ -25,10 +25,32 @@
           suites: "{{ ansible_distribution_release }}"
           components: stable
 
+    - name: _verify | Standalone — seed a legacy repository file
+      copy:
+        dest: /etc/apt/sources.list.d/docker.list
+        content: >-
+          deb [arch={{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }} signed-by=/usr/share/keyrings/docker.gpg]
+          {{ mirror_apt_docker }} {{ ansible_distribution_release }} stable
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+
     - name: _verify | Standalone — configure the source under test
       import_role:
         name: apt_source
         tasks_from: configure
+
+    - name: _verify | Standalone — stat the legacy repository file
+      stat:
+        path: /etc/apt/sources.list.d/docker.list
+      register: _apt_source_legacy_list
+      become: true
+
+    - name: _verify | Standalone — legacy repository file was removed
+      assert:
+        that:
+          - not _apt_source_legacy_list.stat.exists
 
 - name: _verify | Assert apt_source verify args for {{ apt_source_args.name }}
   assert:

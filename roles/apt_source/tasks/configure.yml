@@ -60,6 +60,9 @@
     paths: /etc/apt/sources.list.d
     patterns: "*.list"
     contains: "signed-by=/usr/share/keyrings/{{ apt_source_args.name }}\\.gpg"
+    # Legacy deb lines start with `deb [arch=...`; search the whole file
+    # instead of applying the regex only at the start of each line.
+    read_whole_file: true
   register: apt_source_legacy_lists
   become: true
 
