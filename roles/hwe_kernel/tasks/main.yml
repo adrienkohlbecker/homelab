@@ -86,6 +86,9 @@
 - name: Probe thermald D-Bus policy
   stat:
     path: /usr/share/dbus-1/system.d/org.freedesktop.thermald.conf
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
   register: hwe_kernel_thermald_policy
   tags:
     - hwe_kernel

@@ -29,11 +29,15 @@
   when: ansible_distribution_release != "jammy"
   become: true
 
+# force: false so a machine that genuinely ships thermald keeps its packaged
+# policy -- the fixture only has to guarantee the file exists, and truncating a
+# real one would leave dbus parsing an empty policy for the life of the VM.
 - name: _setup | Install thermald D-Bus policy fixture
   copy:
     content: ""
     dest: /usr/share/dbus-1/system.d/org.freedesktop.thermald.conf
     mode: "0644"
+    force: false
   become: true
 
 - name: _setup | Remove power group (converge recreates it)

@@ -3,7 +3,7 @@
 # the HWE meta-package to its release-correct end state -- present on jammy
 # (the 6.8 install ran), absent on noble (the rolling-HWE removal ran);
 # neither is a tautology since _setup flipped it -- and (2) the power group
-# required by thermald's D-Bus policy is in place whenever the policy exists.
+# required by thermald's D-Bus policy is in place.
 #
 # No reboot-required sentinel check: on jammy converge's own "Reboot machine
 # under new kernel" task fires (the HWE install is a change), and /var/run is
@@ -46,25 +46,43 @@
       outrun the 2.2.x zfsutils userspace.
   when: ansible_distribution_release != "jammy"
 
+# _setup plants this file unconditionally, so its absence is a broken fixture,
+# not a machine without thermald. Assert it rather than gating the group check on
+# it: gating on converge's own signal would let a path change silence the
+# converge task and this assertion together, and report green.
 - name: _verify | Probe thermald D-Bus policy
   stat:
     path: /usr/share/dbus-1/system.d/org.freedesktop.thermald.conf
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
   register: _hwe_kernel_thermald_policy
 
+- name: _verify | Thermald D-Bus policy is present (_setup contract)
+  assert:
+    that:
+      - _hwe_kernel_thermald_policy.stat.exists
+    fail_msg: >-
+      /usr/share/dbus-1/system.d/org.freedesktop.thermald.conf is missing --
+      _setup.yml plants it, so converge's policy probe had nothing to key on
+      and the power-group task below was never exercised.
+
+# fail_key: false so a missing group comes back as a null value rather than
+# failing the task outright -- that keeps the assert below reachable, and with it
+# the explanation of why the group matters.
 - name: _verify | Probe power group
-  when: _hwe_kernel_thermald_policy.stat.exists
   getent:
     database: group
     key: power
+    fail_key: false
 
 - name: _verify | Power group exists (for thermald dbus policy)
-  when: _hwe_kernel_thermald_policy.stat.exists
   assert:
     that:
       - getent_group is defined
-      - "'power' in getent_group"
+      - getent_group.power is not none
     fail_msg: >-
       power group missing --
-      /etc/dbus-1/system.d/org.freedesktop.thermald.conf's
+      /usr/share/dbus-1/system.d/org.freedesktop.thermald.conf's
       <policy group="power"> rule will log "Unknown group 'power'"
       on every boot.
