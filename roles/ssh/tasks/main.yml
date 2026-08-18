@@ -71,10 +71,13 @@
   tags:
     - ssh
 
-- name: Remove legacy drop-in path
+- name: Remove legacy drop-ins
   file:
-    path: /etc/ssh/sshd_config.d/config.conf
+    path: /etc/ssh/sshd_config.d/{{ item }}
     state: absent
+  loop:
+    - config.conf
+    - 02-noble-plus.conf
   register: ssh_sshd_legacy
   become: true
   tags:
@@ -102,23 +105,6 @@
     validate: sshd -t -f %s
   when: not (ansible_check_mode and ssh_apt.changed)
   register: ssh_sshd_config
-  become: true
-  tags:
-    - ssh
-
-# Directives supported by every managed host.
-- name: Configure sshd — current directives
-  copy:
-    src: 02-noble-plus.conf
-    dest: /etc/ssh/sshd_config.d/02-noble-plus.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: sshd -t -f %s
-  when:
-    - not (ansible_check_mode and ssh_apt.changed)
-  register: ssh_sshd_config_noble
   become: true
   tags:
     - ssh
@@ -176,7 +162,7 @@
   when:
     - not (ansible_check_mode and ssh_apt.changed)
     - >-
-      ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_legacy.changed or ssh_sshd_config_noble.changed
+      ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_legacy.changed
       or (ssh_sshd_config_x11 is defined and ssh_sshd_config_x11 is changed)
       or (ssh_sshd_config_x11_remove is defined and ssh_sshd_config_x11_remove is changed)
   command: sshd -t
@@ -194,7 +180,7 @@
       src: ssh
       condition: "{{ not (ansible_check_mode and ssh_apt.changed) }}"
       reload: >-
-        {{ ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_legacy.changed or ssh_sshd_config_noble.changed
+        {{ ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_legacy.changed
            or (ssh_sshd_config_x11 is defined and ssh_sshd_config_x11 is changed)
            or (ssh_sshd_config_x11_remove is defined and ssh_sshd_config_x11_remove is changed) }}
   tags:
