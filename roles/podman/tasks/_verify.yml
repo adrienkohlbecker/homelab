@@ -6,7 +6,7 @@
 # profile, the podman-socket group, and the prune timer; a rootless pass as
 # the box login user then proves the pasta network connector actually backs
 # a container's egress. Only the test harness invokes it, against the selected
-# --machine (box by default: zfs_root, jammy 5.15 -> the fuse-overlayfs storage
+# --machine (box by default: zfs_root with the native overlay storage
 # path), never prod -- so the group-membership tweak and probe containers below
 # are safe.
 

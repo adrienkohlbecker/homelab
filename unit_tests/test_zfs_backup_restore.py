@@ -18,11 +18,11 @@ def _completed(stdout: str = "", returncode: int = 0, stderr: str = "") -> subpr
 def config():
     return restore.Config(
         "root@lab",
-        "apoc/lab/rpool/ROOT/jammy",
+        "apoc/lab/rpool/ROOT/noble",
         _SNAPSHOTS[0],
         _SNAPSHOTS[-1],
-        "rpool/ROOT/jammy",
-        "/mnt/zfs_restore_validation/jammy",
+        "rpool/ROOT/noble",
+        "/mnt/zfs_restore_validation/noble",
     )
 
 
@@ -287,7 +287,7 @@ class TestStreaming:
                 " | ssh -o ControlPath=none -o Compression=no -o 'Ciphers=^aes128-gcm@openssh.com'"
                 " -o ServerAliveInterval=30 -o ServerAliveCountMax=6 root@lab"
                 " 'mbuffer -q -m 256M | sudo -n zfs recv -s -u"
-                " -o readonly=on -o canmount=noauto -o mountpoint=none rpool/ROOT/jammy'",
+                " -o readonly=on -o canmount=noauto -o mountpoint=none rpool/ROOT/noble'",
             ]
         ]
 

@@ -94,7 +94,7 @@
           {{ apt_source_args.pin.priority }} from {{ apt_source_args.uris }};
           got policy: {{ _apt_source_policy.stdout | default('') }}
 
-# Scoped signed-by keyring on both paths: jammy's apt_key and resolute's
+# Scoped signed-by keyring on both paths: noble's apt_key and resolute's
 # get_url both write /usr/share/keyrings/<name>.gpg, and neither writes the
 # legacy global-trust copy at /etc/apt/trusted.gpg.d/ (which would re-grant
 # the key fleet-wide trust).
@@ -125,7 +125,7 @@
 # consumer's real key (from the tombstone args, which carry the full
 # add-args) with a bogus key_id; the inner rescue records whether it failed,
 # and the assert outside the rescue flips a non-failure into a test failure
-# (a plain assert inside the rescue would itself be swallowed). jammy checks
+# (a plain assert inside the rescue would itself be swallowed). Noble checks
 # via apt_key's id:, resolute via the gpg fingerprint assert. The probe
 # fails at the key step before writing a source; the VM is torn down anyway.
 - name: _verify | Negative fingerprint test ({{ apt_source_tombstone_args.name | default('disabled') }})
@@ -164,7 +164,7 @@
           {{ apt_source_tombstone_args.key_url }} -- the fingerprint/id check
           is not firing (the key would be trusted via TOFU).
 
-# Tombstone path (jammy fixture only; resolute has no test image): when the
+# Tombstone path: when the
 # consumer passes apt_source_tombstone_args, exercise state: absent as the
 # final _verify step on the consumer's own source. The present-contract
 # assertions above have already run and the test VM is torn down afterward,

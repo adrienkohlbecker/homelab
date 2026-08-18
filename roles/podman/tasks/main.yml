@@ -100,7 +100,7 @@
 # podman.service, not the socket — and podman.service is a long-lived active
 # unit (netdata holds a persistent connection over the API socket), so the
 # socket restart above never recycles it. Restart the daemon directly when
-# its drop-in changed or backports swapped the binary under it: apt under
+# its drop-in changed or apt swapped the binary under it: apt under
 # policy_rc_d=101 leaves the running daemon on disk, so the new /run/podman
 # socket would otherwise still be served by the stale process. Skipped on a
 # fresh install (podman_apt.changed): the socket task above brings the daemon

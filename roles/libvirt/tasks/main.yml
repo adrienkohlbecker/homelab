@@ -1,7 +1,7 @@
 - name: Install virtualization tools
   apt:
     pkg:
-      # qemu-kvm was a transitional metapackage in jammy/noble; resolute
+      # qemu-kvm is a transitional metapackage in noble; resolute
       # (26.04) dropped it. qemu-system is the modern replacement (pulls
       # qemu-system-x86 / qemu-system-arm transitively via qemu-system-*).
       - "{{ 'qemu-kvm' if ansible_distribution_major_version | int < 26 else 'qemu-system' }}"
@@ -110,15 +110,15 @@
   tags:
     - libvirt
 
-# libvirt 10.4+ supports a native nftables firewall backend. Jammy
-# (10.0) and noble (10.0) lack the driver; resolute (11.x) and any
+# libvirt 10.4+ supports a native nftables firewall backend. Noble (10.0)
+# lacks the driver; resolute (11.x) and any
 # future release have it. The setting moves LIBVIRT_INP / LIBVIRT_FWX
 # / LIBVIRT_PRT chains out of `ip filter`/`ip nat` and into
 # `inet libvirt_*` tables. The service call below start-or-restarts on
 # this register so libvirtd re-reads network.conf; the network-reload
 # block at the end re-creates rules under the new backend.
 - name: Configure libvirt to use native nftables firewall backend
-  when: ansible_distribution_release not in ["jammy", "noble"]
+  when: ansible_distribution_release != "noble"
   lineinfile:
     path: /etc/libvirt/network.conf
     regexp: '^#?\s*firewall_backend\s*='

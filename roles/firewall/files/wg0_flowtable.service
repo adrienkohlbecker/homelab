@@ -31,9 +31,8 @@
 # is re-evaluated on each start.
 #
 # Not `ExecCondition=/bin/sh -c '... || exit 255'`: systemd docs say
-# exit-255 *should* skip the unit silently, but in practice on jammy's
-# systemd 249 the unit ends up in 'failed' state and `systemctl start
-# --wait` returns non-zero. The static Condition* directives are the
+# exit-255 can leave the unit in 'failed' state and make `systemctl start
+# --wait` return non-zero. The static Condition* directives are the
 # documented "silent skip" mechanism and behave consistently across
 # systemd versions.
 [Unit]
@@ -46,8 +45,8 @@ ConditionPathExists=/sys/class/net/wg0
 Type=oneshot
 RemainAfterExit=yes
 # nft 1.0.9 (noble) rejects a bare `{ devices = {...}; }` add to an existing
-# flowtable with "missing hook and priority"; the block must restate them (nft
-# 1.0.2 on jammy accepts either form). They must stay in sync with the base
+# flowtable with "missing hook and priority"; the block must restate them. They
+# must stay in sync with the base
 # `flowtable bulk` declaration in nftables.conf.j2 -- nft merges wg0 into that
 # flowtable's existing device set ($WAN_IFACE), it does not replace it.
 ExecStart=/usr/sbin/nft add flowtable inet homelab bulk { hook ingress priority filter; devices = { wg0 }; }

@@ -73,7 +73,7 @@ declare -A _systemd_timers_seen
 systemd_timers_update() {
   local f name period installed last age overdue safe now
   declare -A present
-  # $EPOCHSECONDS is a bash 5.0+ built-in; jammy ships bash 5.1, noble 5.2.
+  # $EPOCHSECONDS is a bash 5.0+ built-in; noble ships bash 5.2.
   now=$EPOCHSECONDS
   for f in "${systemd_timers_meta_dir}"/*.conf; do
     [ -f "$f" ] || continue

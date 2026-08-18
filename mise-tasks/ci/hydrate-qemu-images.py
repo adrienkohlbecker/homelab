@@ -60,7 +60,7 @@ def output(argv: list[str], **kwargs: Any) -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("machine", choices=sorted(VALID_MACHINES))
-    # choices, not just USAGE completion: a stale `--ubuntu jammy` should fail
+    # choices, not just USAGE completion: an unsupported codename should fail
     # at parse rather than deep inside an S3 fetch for a prefix that is gone.
     parser.add_argument(
         "--ubuntu",

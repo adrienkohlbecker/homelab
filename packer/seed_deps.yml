@@ -1,8 +1,7 @@
-# Bake the heavy cross-cutting test deps (podman + noble backports,
-# nginx + snakeoil certs, and fluent-bit) into the box_deps variant image so role
-# tests that opt in via roles/<role>/meta/test.yml skip the ~140s of
-# backports-upgrade + podman/nginx/fluent-bit install every _setup.yml
-# hook pays today. Invoked by qemu.pkr.hcl's seed-deps post-processor,
+# Bake the heavy cross-cutting test deps (podman, nginx + snakeoil certs, and
+# fluent-bit) into the box_deps variant image so role tests that opt in via
+# roles/<role>/meta/test.yml skip their installation in every _setup.yml hook.
+# Invoked by qemu.pkr.hcl's seed-deps post-processor,
 # which boots the freshly-built image, runs this playbook against it,
 # and shuts it down cleanly so the shipped artifacts carry the deps.
 - name: Bake homelab test deps into the box_deps variant image
@@ -16,14 +15,14 @@
     # loses external egress through its nested SLIRP-over-slirp4netns NAT
     # after the in-guest reboot below (lab-internal Nexus stays reachable).
     # Point apt at the Nexus mirror up front so neither the HWE install nor
-    # the post-reboot podman/backports step depends on external
+    # the post-reboot podman step depends on external
     # connectivity. The qemu image has no cloud-init, so the rewritten
     # sources.list survives the reboot.
     - name: Configure apt to use the Nexus mirror
       import_role:
         name: apt
 
-    - name: Install podman + noble-backported runtime
+    - name: Install podman runtime
       import_role:
         name: podman
         tasks_from: install

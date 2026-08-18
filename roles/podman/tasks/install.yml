@@ -37,9 +37,8 @@
     - podman
 
 # man-db is dragged in so systemd-analyze's man-page reference check
-# passes when verifying our units; python3-tomli backs the TOML
-# `validate:` on the storage.conf write above (jammy ships python 3.10,
-# whose stdlib has no tomllib).
+# passes when verifying our units; python3-tomli backs the TOML `validate:` on
+# the storage.conf write below.
 #
 # Older releases need iptables: netavark's iptables firewall_driver
 # shells out to /usr/sbin/iptables for --publish port forwarding, and
@@ -54,7 +53,7 @@
 - name: install | Install podman
   apt:
     pkg: "{{ ['podman', 'aardvark-dns', 'netavark', 'passt', 'man-db', 'python3-tomli']
-             + (['iptables'] if ansible_distribution_release in ['jammy', 'noble'] else []) }}"
+             + (['iptables'] if ansible_distribution_release == 'noble' else []) }}"
     policy_rc_d: 101
     cache_valid_time: 3600
     # Cached test images can briefly be ahead of the archive they converge
@@ -137,7 +136,7 @@
 - name: install | Configure podman storage
   vars:
     # Native overlay learned idmapped-mount support in kernel 5.19.
-    # On older kernels (jammy stock = 5.15) a --uidmap container start
+# On kernels older than 5.19, a --uidmap container start
     # falls through to the storage-chown-by-maps copy-up — walk the
     # layer and lchown every file to the host uid — which EIOs on
     # device nodes baked into the layer (dev/console/dev/null in the
@@ -222,8 +221,7 @@
 # - firewall_driver: native nftables, not iptables-nft compat. Lands
 #   netavark's rules in `inet netavark` instead of `ip filter`/
 #   `ip nat`. The driver was added in netavark 1.10 (Jun 2024). Ubuntu
-#   has been frozen on netavark 1.4.0-4 across jammy and noble (the
-#   backport pin doesn't help — noble itself shipped 1.4.0), so the
+#   noble archive is frozen on netavark 1.4.0-4, so the
 #   setting would be silently ignored on those releases. Gate to
 #   resolute+, where the archive is expected to carry 1.10+. Drop
 #   releases from the absent-list as they age out *and* their netavark
@@ -235,9 +233,8 @@
 #   and is inert everywhere else. pasta shares passt's robust UDP
 #   datapath, so a rootless container's outbound DNS/UDP no longer drops
 #   datagrams under load the way slirp4netns does. Needs podman >= 4.4
-#   and the pasta binary: both hold fleet-wide (the backport pin routes
-#   podman 4.9 + passt to jammy, noble ships them natively), so it's
-#   ungated. Takes effect on the next container create -- the runners'
+#   and the pasta binary: both ship natively fleet-wide, so it is ungated.
+#   Takes effect on the next container create -- the runners'
 #   per-job containers pick it up without a daemon restart.
 - name: install | Configure podman containers.conf
   copy:
@@ -253,7 +250,7 @@
       default_subnet = "{{ podman_default_network }}"
       default_subnet_pools = [{"base" = "{{ podman_bridge_pool }}", "size" = 24}]
       dns_bind_port = 5333
-      {% if ansible_distribution_release not in ['jammy', 'noble'] %}
+      {% if ansible_distribution_release != 'noble' %}
       firewall_driver = "nftables"
       {% endif %}
     owner: root
@@ -293,8 +290,7 @@
   tags:
     - podman
 
-# Ubuntu's golang-github-containers-common (0.57.4 -- the newest in either
-# jammy or noble, and already pinned forward by the backport list above)
+# Ubuntu noble's golang-github-containers-common 0.57.4
 # ships a default seccomp profile that predates several syscalls the fleet
 # needs on the HWE 6.x kernel:
 #

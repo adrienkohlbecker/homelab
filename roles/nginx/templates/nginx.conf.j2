@@ -1,8 +1,8 @@
 {# HTTP/2: nginx >= 1.25.1 takes the `http2 on;` directive (set in http{}
-   below) and warns on the legacy `listen ... http2` parameter; jammy/1.18 and
-   noble/1.24 only understand the listen parameter. Blacklist-gate both so a
+   below) and warns on the legacy `listen ... http2` parameter; noble/1.24
+   only understands the listen parameter. Blacklist-gate both so a
    future release flips to the directive automatically. #}
-{% set _http2_listen = ' http2' if ansible_distribution_release in ['jammy', 'noble'] else '' %}
+{% set _http2_listen = ' http2' if ansible_distribution_release == 'noble' else '' %}
 user                 www-data;
 pid                  /run/nginx.pid;
 worker_processes     auto;
@@ -22,7 +22,7 @@ http {
     tcp_nopush             on;
     tcp_nodelay            on;
     server_tokens          off;
-{% if ansible_distribution_release not in ['jammy', 'noble'] %}
+{% if ansible_distribution_release != 'noble' %}
     http2                  on;
 {% endif %}
     log_not_found          off;
@@ -127,13 +127,10 @@ http {
     ssl_ecdh_curve         X25519:prime256v1:secp384r1;
     ssl_ciphers            ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
     ssl_prefer_server_ciphers off;
-{% if ansible_distribution_release not in ['jammy'] %}
     # Honour the client's ChaCha20 preference (phones/tablets without AES-NI
     # are faster on ChaCha20). Also the only lever over the TLSv1.3 suite set,
-    # which ssl_ciphers does not control. Needs nginx >= 1.19.4 (not jammy/1.18);
-    # blacklist-gated so future releases pick it up automatically.
+    # which ssl_ciphers does not control. Needs nginx >= 1.19.4.
     ssl_conf_command       Options PrioritizeChaCha;
-{% endif %}
 
     # OCSP stapling disabled: Let's Encrypt shut down its OCSP responder in 2025
     # (in favor of CRLs), so issued certs no longer carry an OCSP URL and nginx
@@ -173,17 +170,10 @@ http {
 {% if nginx_ipv6 %}
         listen              [::]:443 default_server ssl{{ _http2_listen }};
 {% endif %}
-{% if ansible_distribution_release not in ['jammy'] %}
         # Reject the TLS handshake for absent/unmatched SNI rather than
         # completing it with the host cert and returning 404 — keeps the
-        # real cert off scanners hitting the IP with a bogus SNI. Needs
-        # nginx >= 1.19.4 (not on jammy/1.18); blacklist-gated so future
-        # releases pick it up automatically.
+        # real cert off scanners hitting the IP with a bogus SNI.
         ssl_reject_handshake on;
-{% else %}
-        server_name         _;
-        return              404;
-{% endif %}
     }
 
     # Load configs

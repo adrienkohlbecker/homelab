@@ -125,7 +125,7 @@
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: nexus.service
-        - MESSAGE: '{"level":"INFO","threadName":"qtp2132356553-1528","loggerName":"outboundRequests","formattedMessage":"[12/Jul/2026:08:53:12 +0000] - \"GET https://ports.ubuntu.com/ubuntu-ports/dists/jammy/InRelease HTTP/1.1\" 304 0 312 45 [qtp2132356553-1528]"}'
+        - MESSAGE: '{"level":"INFO","threadName":"qtp2132356553-1528","loggerName":"outboundRequests","formattedMessage":"[12/Jul/2026:08:53:12 +0000] - \"GET https://ports.ubuntu.com/ubuntu-ports/dists/noble/InRelease HTTP/1.1\" 304 0 312 45 [qtp2132356553-1528]"}'
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: nexus.service
@@ -238,13 +238,13 @@
           fields.bytes_sent: 126904
           fields.response_time: 12
           fields.user_agent: Debian APT-HTTP/1.3
-        - message: '[12/Jul/2026:08:53:12 +0000] - "GET https://ports.ubuntu.com/ubuntu-ports/dists/jammy/InRelease HTTP/1.1" 304 0 312 45 [qtp2132356553-1528]'
+        - message: '[12/Jul/2026:08:53:12 +0000] - "GET https://ports.ubuntu.com/ubuntu-ports/dists/noble/InRelease HTTP/1.1" 304 0 312 45 [qtp2132356553-1528]'
           level: debug
           service: nexus
           fields.parser_status: parsed
           fields.source: outboundRequests
           fields.method: GET
-          fields.url: https://ports.ubuntu.com/ubuntu-ports/dists/jammy/InRelease
+          fields.url: https://ports.ubuntu.com/ubuntu-ports/dists/noble/InRelease
           fields.protocol: HTTP/1.1
           fields.status: 304
           fields.bytes_sent: 0

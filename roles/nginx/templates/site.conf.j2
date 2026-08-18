@@ -1,6 +1,6 @@
-{# Jammy and Noble need the legacy listen parameter; newer nginx uses the
+{# Noble needs the legacy listen parameter; newer nginx uses the
    http-scope `http2 on` in nginx.conf.j2. #}
-{% set _http2_listen = ' http2' if ansible_distribution_release in ['jammy', 'noble'] else '' %}
+{% set _http2_listen = ' http2' if ansible_distribution_release == 'noble' else '' %}
 server {
   listen              443 ssl{{ _http2_listen }};
 {% if nginx_ipv6 %}

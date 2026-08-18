@@ -265,9 +265,9 @@
   tags:
     - zfs
 
-# Restart on a backports upgrade so the running zed picks up the
-# noble binary after a jammy→noble flip, or when zed.rc changed so the
-# notification config takes effect; otherwise just ensure it's started
+# Restart after a package upgrade so the running zed picks up the installed
+# binary, or when zed.rc changed so the notification config takes effect;
+# otherwise just ensure it's started
 # (and leave a healthy daemon undisturbed).
 - name: Enable and start zed
   when: not (ansible_check_mode and zfs_apt.changed)

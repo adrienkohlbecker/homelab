@@ -4,7 +4,7 @@
 # is the closest we get -- two assertions:
 #
 #   (1) global flags  '-i 0' (always) and '-s 1' (on releases newer
-#       than jammy/noble) appear in argv. Catches the env-file
+#       than noble) appear in argv. Catches the env-file
 #       parse-failure mode where HD_IDLE_OPTS silently empties.
 #
 #   (2) per-disk -a    for every rotational + non-removable + non-
@@ -32,7 +32,7 @@
   assert:
     that:
       - "'-i 0' in hd_idle_proc.stdout"
-      - "ansible_distribution_release in ['jammy', 'noble'] or '-s 1' in hd_idle_proc.stdout"
+      - "ansible_distribution_release == 'noble' or '-s 1' in hd_idle_proc.stdout"
     fail_msg: >-
       hd-idle running but missing expected flags; HD_IDLE_OPTS may have
       failed to parse from /etc/default/hd-idle.

@@ -15,10 +15,10 @@
 
 # Keep systemd-timesyncd from fighting chrony for the clock. Stopping and
 # masking are independent and both required: a unit can be masked yet still
-# running (masking never stops an already-started instance — the jammy box's
-# steady state), or active with its unit file already gone (the backports flip
-# *removes* timesyncd under policy_rc_d 101, so it lingers active until reboot).
-# noble may never have installed it at all. So query each state and act only
+# running (masking never stops an already-started instance), or active with its
+# unit file already gone after a package transition under policy_rc_d 101, so
+# it lingers active until reboot. Noble may never have installed it at all. So
+# query each state and act only
 # where needed, which keeps the converge idempotent. The systemd module can't
 # act on a removed-but-lingering unit ("Could not find the requested service"),
 # so drive systemctl directly; gating on a file path is unreliable (a bare

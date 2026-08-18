@@ -1,5 +1,5 @@
 # Source is netdata's upstream stable repo (repo.netdata.cloud), which
-# carries the current 2.x series for jammy/noble across amd64 + arm64 +
+# carries the current 2.x series for noble across amd64 + arm64 +
 # armhf. Flat layout (trailing-slash Suites, no Components), signed with
 # Netdatabot's key (6E155DC1…). The apt_preferences pin holds netdata at
 # 2.* so a fresh install lands on the latest 2.x and only a deliberate

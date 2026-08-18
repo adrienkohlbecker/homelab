@@ -117,9 +117,9 @@ if domains=$(virsh list --all --persistent --name); then
     # guest's OpenCore + iCloud activation) that dumpxml records only by
     # path. Read the path with a real XML parser over the dump rather than
     # a regex -- robust to attribute reordering. (`virsh --xpath` would be
-    # the native option but its string() support varies by libvirt version
-    # -- it exits 1 on jammy's 8.0; ElementTree behaves the same on every
-    # release.) `|| nvram=` keeps a parse miss from tripping set -e.
+    # the native option but its string() support varies by libvirt version;
+    # ElementTree behaves consistently.) `|| nvram=` keeps a parse miss from
+    # tripping set -e.
     nvram=$(python3 -c 'import sys, xml.etree.ElementTree as ET; n = ET.parse(sys.argv[1]).find("./os/nvram"); print((n.text or "") if n is not None else "")' "$dest" 2>/dev/null) || nvram=
     [ -n "$nvram" ] && [ -f "$nvram" ] || continue
 

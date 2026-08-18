@@ -221,7 +221,7 @@
 
 # tmpfs /tmp -- the twin of chroot.sh's `systemctl enable tmp.mount` in the
 # baked image, reproduced so an ansible-from-stock-Ubuntu host gets the same
-# RAM-backed /tmp (it pages out to swap under pressure). jammy/noble ship it as
+# RAM-backed /tmp (it pages out to swap under pressure). Noble ships it as
 # a disabled template under /usr/share/systemd/ -- stage it into place first;
 # resolute ships + pre-enables /usr/lib/systemd/system/tmp.mount, so the stage
 # no-ops there. Enabling only takes effect at the next boot (a live /tmp can't

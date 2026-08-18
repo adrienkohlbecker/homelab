@@ -36,7 +36,7 @@
     # below errors ("Could not find the requested service") on a missing
     # unit, and does so even under --check, so gate the mask on the unit
     # actually existing rather than on a host/arch list. Canonical merged-usr
-    # path (/lib -> /usr/lib on all our 22.04+ targets).
+    # path (/lib -> /usr/lib on all supported targets).
     - name: Probe for networkd-dispatcher.service
       stat:
         path: /usr/lib/systemd/system/networkd-dispatcher.service

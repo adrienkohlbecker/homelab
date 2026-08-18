@@ -283,6 +283,5 @@ zfsbootmenu_release:
 # netdata apt repository pin: track the 2.x series (priority 999 in
 # roles/netdata/tasks/install.yml's apt_source pin). A wildcard, not a point
 # release -- netdata ships frequently and the 2.x line is agent/dashboard
-# stable for us. The backport package *name* lists (ntp/podman/zfs) carry no
-# version and stay in their roles' vars/main.yml.
+# stable for us.
 netdata_version: "2.*"  # 2.x series; 2.0 GA 2024-11-07

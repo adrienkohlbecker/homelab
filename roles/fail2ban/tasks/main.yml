@@ -131,8 +131,8 @@
 
 # Per-jail sshd config. `backend = systemd` is scoped here (not in
 # [DEFAULT], see jail.local comment). journalmatch is pinned to
-# `_COMM=sshd` so the filter catches both jammy's `ssh.service` and
-# noble's `ssh.socket` + `ssh@N-.service` template-unit layout — the
+# `_COMM=sshd` so the filter catches both `ssh.service` and the
+# `ssh.socket` + `ssh@N-.service` template-unit layout — the
 # stock filter ANDs on `_SYSTEMD_UNIT=sshd.service` and silently
 # misses the latter.
 - name: Write fail2ban sshd jail

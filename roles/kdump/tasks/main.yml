@@ -15,11 +15,11 @@
 # Operator runbook (reading dumps, ddebs setup, `crash` cheatsheet) is
 # in notes/kdump_runbook.md.
 
-# Stat first because not every kernel exposes all of these. arm64
-# jammy GA (5.15) has no NMI watchdog, so hardlockup_panic and
-# unknown_nmi_panic are absent and `sysctl -p` errors out trying to
-# reload them. Skip the missing ones and only act on what the running
-# kernel actually has. The stat-probe + selectattr pattern is unique
+# Stat first because not every kernel exposes all of these. Some arm64
+# kernels have no NMI watchdog, so hardlockup_panic and unknown_nmi_panic
+# are absent and `sysctl -p` errors out trying to reload them. Skip the
+# missing ones and only act on what the running kernel actually has. The
+# stat-probe + selectattr pattern is unique
 # to this role; peers (e.g. roles/keepalived/tasks/main.yml:19) call
 # ansible.posix.sysctl unconditionally because they target sysctls
 # guaranteed to exist across the kernels we run.
@@ -236,8 +236,8 @@
 #     snippet is dead code there.
 #   - grub-booted hosts (minimal test fixture today, plus any future
 #     grub host): we let the kdump-tools package own its shipped
-#     /etc/default/grub.d/kdump-tools.cfg (crashkernel=512M-:192M
-#     on jammy), and its postinst drives update-grub. The role no
+#     /etc/default/grub.d/kdump-tools.cfg, and its postinst drives
+#     update-grub. The role no
 #     longer writes a parallel /etc/default/grub.d/99-kdump.cfg —
 #     would stack a duplicate crashkernel= and the rightmost-wins
 #     ordering was a footgun across package upgrades.

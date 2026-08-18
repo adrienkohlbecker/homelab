@@ -526,7 +526,7 @@
 # half-answer). apt resolves dependents; if anything still hard-
 # Depends on iptables on a future release, this fails loudly.
 - name: Remove iptables-nft compat layer (resolute+)
-  when: ansible_distribution_release not in ["jammy", "noble"]
+  when: ansible_distribution_release != "noble"
   apt:
     pkg:
       - iptables

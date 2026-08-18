@@ -127,7 +127,7 @@
   failed_when: "('[::]:' ~ service_ports.headscale_stun) not in _headscale_stun_listen.stdout"
   become: true
 
-# netavark's firewall driver is iptables on jammy/noble (see roles/podman
+# netavark's firewall driver is iptables on noble (see roles/podman
 # install.yml), so the v6 DNAT rule lives in the ip6tables nat table. On
 # resolute+ netavark uses the native nftables driver and ip6tables is empty --
 # check the nft ruleset there instead. box_deps (the only machine that runs this
@@ -139,7 +139,7 @@
     executable: /bin/bash
   register: _headscale_stun_dnat
   changed_when: false
-  when: ansible_distribution_release in ['jammy', 'noble']
+  when: ansible_distribution_release == 'noble'
   become: true
 
 - name: _verify | Netavark forwards inbound v6 STUN into the headscale container (nftables)
@@ -148,7 +148,7 @@
     executable: /bin/bash
   register: _headscale_stun_dnat_nft
   changed_when: false
-  when: ansible_distribution_release not in ['jammy', 'noble']
+  when: ansible_distribution_release != 'noble'
   become: true
 
 # OIDC boot test -- _setup stood up a local mockoidc issuer and enabled OIDC for

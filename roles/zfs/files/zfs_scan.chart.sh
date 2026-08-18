@@ -11,7 +11,7 @@
 # without losing coverage outside the scrub window.
 #
 # `zpool status` is read-only and runnable by the netdata user on
-# Ubuntu noble/jammy: openzfs ships /lib/udev/rules.d/90-zfs.rules
+# Ubuntu noble: openzfs ships /lib/udev/rules.d/90-zfs.rules
 # with `MODE="0666"` on /dev/zfs, so libzfs's ZFS_IOC_POOL_STATS
 # ioctl works unprivileged. If a host ever tightens /dev/zfs perms,
 # the check function will catch it via the trial `zpool status` call.

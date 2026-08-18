@@ -2,7 +2,7 @@
 # optional version pin, handling the Ubuntu-major-version fork once.
 #
 # Repository setup forks on Ubuntu major version because apt-key was
-# removed from the default install in resolute (26.04): jammy (< 26) takes
+# removed from the default install in resolute (26.04): noble (< 26) takes
 # apt_key + apt_repository, resolute (>= 26) fetches the key into the same
 # scoped keyring and takes deb822_repository (which needs python3-debian).
 #
@@ -23,7 +23,7 @@
 #   components:    optional apt component -- e.g. main, stable; omit for a
 #                  flat repo (trailing-slash suite, no components)
 #   architectures: optional; defaults to the host's arch (arm64/amd64)
-#   filename:      optional sources.list.d/<filename>.list name on the jammy
+#   filename:      optional sources.list.d/<filename>.list name on the legacy
 #                  path; defaults to <name>, matching the resolute .sources
 #                  name. Set it only to pin a different file (fluentbit ->
 #                  fluent-bit); a stale .list under any other name that
@@ -51,7 +51,7 @@
       # the key is the source's trust anchor; a plaintext fetch is MITM-able.
       - apt_source_args.key_url | default('') is match('https://')
       - apt_source_args.state | default('present') in ['present', 'absent']
-      # single-valued: the jammy repo line space-joins while deb822 splits a
+      # single-valued: the legacy repo line space-joins while deb822 splits a
       # string on commas, so a multi-valued string would diverge across paths.
       - apt_source_args.suites | default('') is not search('[ ,]')
       - apt_source_args.components | default('') is not search('[ ,]')
@@ -66,15 +66,15 @@
   set_fact:
     apt_source_present: "{{ apt_source_args.state | default('present') == 'present' }}"
 
-# Jammy .list filename: default to <name> so it matches the resolute
+# Legacy .list filename: default to <name> so it matches the resolute
 # .sources name and is independent of the mirror URL (apt_repository would
 # otherwise auto-derive an unstable name from the URL). Used by the repo
 # task and the stale-.list sweep below.
-- name: Resolve apt_source jammy filename for {{ apt_source_args.name }}
+- name: Resolve apt_source legacy filename for {{ apt_source_args.name }}
   set_fact:
     apt_source_filename: "{{ apt_source_args.filename | default(apt_source_args.name) }}"
 
-# Ubuntu major version selects the repo mechanism: < 26 (jammy) takes
+# Ubuntu major version selects the repo mechanism: < 26 (noble) takes
 # apt_key + apt_repository, >= 26 (resolute) takes deb822_repository. Resolve
 # it once so every branch gates on a named intent, not a repeated comparison.
 - name: Resolve apt_source repo mechanism for {{ apt_source_args.name }}
@@ -82,7 +82,7 @@
     apt_source_is_deb822: "{{ ansible_distribution_major_version | int >= 26 }}"
 
 # Repo-line architecture: a caller override wins, else map the host arch to
-# apt's naming. One fact so the jammy deb-line and the deb822 task agree.
+# apt's naming. One fact so the legacy deb-line and the deb822 task agree.
 - name: Resolve apt_source architecture for {{ apt_source_args.name }}
   set_fact:
     apt_source_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
@@ -133,7 +133,7 @@
   become: true
   register: apt_source_repo_legacy
 
-# The jammy filename defaults to <name> (matching the resolute .sources
+# The legacy filename defaults to <name> (matching the resolute .sources
 # name), so a host previously converged with apt_repository's URL-derived
 # name -- or one whose mirror URL later changed -- would strand the old
 # .list as a duplicate source. Sweep any other .list that references this
@@ -194,12 +194,12 @@
   become: true
   register: apt_source_resolute_prereqs
 
-# Fetch the key, then dearmor it into the same scoped keyring the jammy path
+# Fetch the key, then dearmor it into the same scoped keyring the legacy path
 # uses, so signed_by= below references a local binary keyring. apt keys the
 # deb822 signed-by file format on its SUFFIX: a .gpg path must hold a BINARY
 # OpenPGP keyring -- an armored key saved verbatim there is rejected as
 # NO_PUBKEY at apt-get update. docker and netdata both serve armored keys, so
-# dearmor to match the binary keyring jammy's apt_key import writes, keeping
+# dearmor to match the binary keyring the apt_key import writes, keeping
 # one shared /usr/share/keyrings/<name>.gpg across both release paths. The
 # armored .asc is the get_url idempotence anchor (force: no -> fetched once);
 # it is inert (apt only reads what signed_by points at) and the tombstone
@@ -229,7 +229,7 @@
 # deb822_repository trusts whatever signed_by serves without checking it
 # against key_id, so re-assert the fingerprint here -- a swapped key on a
 # compromised mirror fails the converge instead of being trusted (TOFU),
-# matching the jammy apt_key id: re-check. Real converge only: command tasks
+# matching the apt_key id: re-check. Real converge only: command tasks
 # skip under --check, and the dry-run preview need not re-verify trust.
 - name: Read repository key fingerprint for {{ apt_source_args.name }}
   when:
@@ -328,7 +328,7 @@
   become: true
 
 # Remove both the binary keyring and the armored .asc the deb822 path stages
-# alongside it (a no-op on the jammy path, which never writes the .asc).
+# alongside it (a no-op on the legacy path, which never writes the .asc).
 - name: Remove keyring for {{ apt_source_args.name }}
   when: not apt_source_present
   file:
@@ -339,7 +339,7 @@
     - asc
   become: true
 
-# Includes the per-branch prereqs (gpg on jammy, python3-debian on resolute)
+# Includes the per-branch prereqs (gpg on noble, python3-debian on resolute)
 # and the signing-key import (apt_key / get_url) so a   first-run key fetch is
 # signalled, and so check mode -- where the repo task is gated out by the
 # prereq install -- still propagates a would-change signal to the caller.

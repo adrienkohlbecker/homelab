@@ -389,7 +389,7 @@ qemu_host_ami:
   script:
     - mise run packer:publish-qemu box --ubuntu "$UBUNTU" --promote
 
-# box_deps: box with podman/nginx/fluent-bit/backports pre-baked. Layers seed_deps.yml onto
+# box_deps: box with podman/nginx/fluent-bit pre-baked. Layers seed_deps.yml onto
 # the box bake from the same pipeline -- each box_deps:<rel> `needs:` its matching
 # box:<rel> job and seeds off the artifact box just published to HOMELAB_CI_DIR
 # (both jobs land on the one lab-shell-qemu host, where that dir persists). So a

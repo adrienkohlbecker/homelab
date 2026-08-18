@@ -28,7 +28,7 @@
 # the reboot and wedges it there — the same "Connection timed out", just
 # one task downstream. A fast local fixture (the box VM) happens to
 # rebuild the sudo context cleanly even without the reset, so it passes
-# either way; the jammy x86_64 CI minimal cell does not, and times out.
+# either way; the x86_64 CI minimal cell does not, and times out.
 # roles/netplan/tasks/apply.yml uses the same reset_connection +
 # wait_for_connection recipe to recover its become tasks across an SSH
 # sever on that same CI fixture (netplan:minimal is green).

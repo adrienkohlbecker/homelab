@@ -1,12 +1,12 @@
-# Release-divergent: the install path branches at major version 26 -- jammy/noble
-# (< 26) take the apt-repo branch, resolute (>= 26) takes the >= 26 branch.
+# Release-divergent: the install path branches at major version 26 -- noble
+# takes the apt-repo branch, resolute takes the >= 26 branch.
 # resolute is the only divergent release.
 ubuntu:
   - resolute
 # _setup.yml imports test/nginx + test/authelia_stub and the _verify path
 # exercises the full nginx+Authelia front (token bypass, redacted access
 # log), so route to box_deps where nginx is pre-baked (packer/seed_deps.yml)
-# to skip the apt-backports + nginx install on every test run. netdata itself
+# to skip the nginx install on every test run. netdata itself
 # isn't pre-baked -- the saving is the shared nginx bringup, same as the
 # the fluentbit consumer of the same _setup pattern.
 machines:

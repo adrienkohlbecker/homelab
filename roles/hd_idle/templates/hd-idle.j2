@@ -13,7 +13,7 @@
 #HD_IDLE_OPTS="-h"
 
 # Newer hd-idle (>= resolute / 26.04, Go rewrite) exits immediately
-# only if START_HD_IDLE=false; older releases (jammy/noble, C 1.05)
+# only if START_HD_IDLE=false; noble's C 1.05 package
 # ignore the variable entirely. Setting it =true is a no-op on both,
 # kept as a defensive sentinel that matches the upstream env-file
 # Debian ships starting with the Go rewrite.
@@ -33,7 +33,7 @@ START_HD_IDLE=true
 #                          powered up after the daemon started get tracked
 #                          (USB hotplug, late-arriving SAS expanders). The
 #                          0 default silently never tracks them.
-#                          Only emitted on releases newer than jammy/noble;
+#                          Only emitted on releases newer than noble;
 #                          older hd-idle packages predate the flag.
 #
 # Options not exactly useful here:
@@ -49,4 +49,4 @@ START_HD_IDLE=true
 #  -h                      Print usage information.
 #
 # Filter chain documented at group_vars/all.yml's rotational_disks_by_id.
-HD_IDLE_OPTS="-i 0{% if ansible_distribution_release not in ['jammy', 'noble'] %} -s 1{% endif %}{% for dev in rotational_disks_by_id %} -a /dev/disk/by-id/{{ dev }} -i 1200{% endfor %}"
+HD_IDLE_OPTS="-i 0{% if ansible_distribution_release != 'noble' %} -s 1{% endif %}{% for dev in rotational_disks_by_id %} -a /dev/disk/by-id/{{ dev }} -i 1200{% endfor %}"
