@@ -72,7 +72,10 @@ fi
 # and device metadata still round-trip through xattrs and remote fake-super.
 # The "*@*:*:*~" exclude drops ansible backup files (backup: true writes
 # <file>.<pid>.<date>@<HH:MM:SS>~) because many contain prior secret values;
-# --delete-excluded also purges copies already present on bunk.
+# --delete-excluded also purges copies already present on bunk. The
+# .config/homelab/vault-pass-* exclude does the same for ansible vault
+# passwords installed on a builder (mise run lab:sync): plaintext keys have no
+# business on the NAS, which sits outside the ansible-managed hardening.
 #
 # --timeout measures rsync-protocol inactivity, not tree-walk duration. The
 # 1800-second bound tolerates bunk's longest legitimate traversal stalls while
@@ -109,6 +112,7 @@ f_trace rsync \
   --exclude /home/ak/.local/share/containers \
   --exclude /var/crash \
   --exclude "*@*:*:*~" \
+  --exclude ".config/homelab/vault-pass-*" \
   "${MOUNTPOINT%/}/.zfs/snapshot/$LAST_SNAPSHOT/" "ak@$OFFSITE_IP:$DESTPATH"
 
 # Record the snapshot now mirrored on bunk so the change-gate above can skip
