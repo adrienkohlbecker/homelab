@@ -1,5 +1,0 @@
-# Release-divergent: resolute+ runs the upsd config validate that noble's nut
-# lacks (tasks/main.yml gates it on the release), so resolute is the only cell
-# exercising that path.
-ubuntu:
-  - resolute

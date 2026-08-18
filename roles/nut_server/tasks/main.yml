@@ -55,13 +55,9 @@
     group: nut
     mode: "0640"
     backup: true
-    # ups.conf's global `maxretry` precedes the first [section], so a parse
-    # needs configparser's allow_unnamed_section (Python 3.13+). Noble's Python
-    # 3.12 lacks it, so skip validation there and enable it on newer releases.
-    validate: "{{ nut_server_ups_validate if ansible_distribution_release != 'noble' else omit }}"
-  vars:
-    nut_server_ups_validate: >-
-      python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True, allow_unnamed_section=True).read("%s")'
+    # Prepend a dummy section so Python 3.12 accepts the global `maxretry`
+    # directive that precedes the first named UPS section.
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(allow_no_value=True).read_string("[__global__]\n" + open(sys.argv[1]).read())' "%s"
   register: nut_server_ups_conf
   become: true
   tags:
