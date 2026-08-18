@@ -56,6 +56,28 @@
   tags:
     - headscale
 
+# The advertised addresses are hardcoded (headscale cannot auto-detect them
+# behind nginx + the podman bridge) and duplicated from the reserved Hetzner
+# primary IPs in terraform/hetzner.tf, so nothing else catches a stale pin. The
+# original failure was precisely this: the AAAA published the /64 network base,
+# an address fox never held, and IPv6-only clients simply could not reach the
+# relay. Nothing inside the estate has IPv6 egress to notice, so assert at
+# converge that the host actually holds what it advertises.
+- name: Assert headscale DERP advertised IPs are held by this host
+  assert:
+    that:
+      - headscale_derp_ipv4 in ansible_all_ipv4_addresses
+      - headscale_derp_ipv6 in ansible_all_ipv6_addresses
+    fail_msg: >-
+      headscale_derp_ipv4 ({{ headscale_derp_ipv4 | default("unset") }}) or
+      headscale_derp_ipv6 ({{ headscale_derp_ipv6 | default("unset") }}) is not
+      configured on this host -- the DERPMap would advertise an address clients
+      cannot reach. Reconcile with the reserved primary IPs in
+      terraform/hetzner.tf (the IPv6 is cidrhost(ip_network, 1), not ip_address).
+  when: headscale_derp_ipv4 is defined and headscale_derp_ipv6 is defined
+  tags:
+    - headscale
+
 - name: Set up headscale system user, group, and config dir
   import_role:
     name: service_user
