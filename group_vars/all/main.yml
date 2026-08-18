@@ -157,11 +157,6 @@ journald_storage: persistent
 # the only one this role bootstraps.
 influxdb_root_org: home
 
-# The MONITOR line (roles/nut_monitor upsmon.conf) and upsd.users
-# (roles/nut_server) must agree on the NUT 2.8 role-keyword spelling.
-nut_upsmon_keyword_primary: primary
-nut_upsmon_keyword_secondary: secondary
-
 # Ports each host-level service publishes. Single source of truth for unit
 # templates (--publish for loopback-bound podman services, ListenStream= for
 # native daemons), nginx proxy_pass, firewall rules, and cross-role consumers
