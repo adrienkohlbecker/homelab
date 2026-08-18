@@ -1,11 +1,36 @@
-"""Shared fixtures for the unit_tests suite."""
+"""Shared fixtures and helpers for the unit_tests suite."""
 
+import importlib.util
+import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import machine
 import pytest
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def load_role_module(relative_path: str) -> ModuleType:
+    """Import a standalone program shipped by a role, by repo-relative path.
+
+    Role programs live under ``roles/<r>/files/`` and are deployed as bare
+    executables, so they are not importable as package members. Registering the
+    module in ``sys.modules`` before executing it lets dataclasses and other
+    consumers of postponed annotations resolve them through the module registry.
+    """
+
+    module_path = _REPO_ROOT / relative_path
+    spec = importlib.util.spec_from_file_location(module_path.stem, module_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
 
 _CONSTRUCTOR_PARAMS = frozenset(
     {
