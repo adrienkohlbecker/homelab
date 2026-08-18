@@ -100,6 +100,14 @@ ExecStart=/usr/bin/podman run \
     --stop-timeout 30 \
     {{ headscale_image }} \
     serve
+# Netavark DNATs STUN to the container address. A replacement can receive a
+# different address while remote clients keep the established UDP conntrack
+# entries alive, leaving their packets pinned to the departed container. Once
+# Type=notify reaches healthy, the new DNAT target is ready; discard only STUN
+# flows so clients immediately rediscover it. The leading dash makes a missing
+# flow benign.
+ExecStartPost=-/usr/sbin/conntrack --delete --family ipv4 --proto udp --dport {{ service_ports.headscale_stun }}
+ExecStartPost=-/usr/sbin/conntrack --delete --family ipv6 --proto udp --dport {{ service_ports.headscale_stun }}
 # ACL-only changes reload via SIGHUP, not a restart: headscale reloads the
 # HuJSON policy on HUP (same as `systemctl reload`), so a policy tweak needn't
 # bounce the control plane + embedded DERP + every client long-poll. Fails soft
