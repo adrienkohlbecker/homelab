@@ -48,22 +48,14 @@ data "uptimerobot_alert_contacts" "active" {
 }
 
 locals {
-  # headscale is fox's control plane and the only remote path into the estate,
-  # so its outages page every channel the account knows about.
-  uptimerobot_all_alert_contacts = [
+  # Every monitor pages every active contact. Derived from the data source
+  # rather than pinned by id: the account's contacts are managed in the UI (each
+  # needs an out-of-band verification tofu cannot drive), so a literal list goes
+  # stale silently -- a contact deleted and recreated keeps the monitor pointing
+  # at a dead id, and a newly added channel is skipped until someone notices.
+  # Adding a contact in the UI is the single control over who gets paged.
+  uptimerobot_alert_contacts = [
     for contact_id in data.uptimerobot_alert_contacts.active.ids : {
-      alert_contact_id = contact_id
-      threshold        = 0
-      recurrence       = 0
-    }
-  ]
-
-  # The resume site deliberately pages a narrower set than the infrastructure
-  # monitors -- it is a personal site, not estate infrastructure, and does not
-  # warrant waking every channel. Pinned by id because these contacts predate
-  # tofu; replace with names once the account's contacts are inventoried.
-  uptimerobot_resume_alert_contacts = [
-    for contact_id in ["2425215", "2470085", "4045448"] : {
       alert_contact_id = contact_id
       threshold        = 0
       recurrence       = 0
@@ -135,7 +127,7 @@ resource "uptimerobot_monitor" "headscale" {
   check_ssl_errors    = true
   follow_redirections = false
 
-  assigned_alert_contacts = local.uptimerobot_all_alert_contacts
+  assigned_alert_contacts = local.uptimerobot_alert_contacts
 
   # fox is in Nuremberg; probing from other continents would blow the 1000ms
   # DERP threshold on round-trip alone and page with no signal about DERP health.
@@ -166,7 +158,7 @@ resource "uptimerobot_monitor" "resume" {
   # an SSL check at all. No expiry reminder -- see the plan note above.
   check_ssl_errors = true
 
-  assigned_alert_contacts = local.uptimerobot_resume_alert_contacts
+  assigned_alert_contacts = local.uptimerobot_alert_contacts
 
   region_data = {
     regions = ["eu"]
