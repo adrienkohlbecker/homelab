@@ -61,6 +61,26 @@
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: nexus.service
+        - MESSAGE: '{"level":"WARN","threadName":"verify-thread","loggerName":"org.sonatype.nexus.Verify","formattedMes'
+          CONTAINER_ID_FULL: '1111111111111111111111111111111111111111111111111111111111111111'
+          CONTAINER_PARTIAL_MESSAGE: 'true'
+          CONTAINER_TAG: nexus
+          PRIORITY: '6'
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
+        - MESSAGE: 'sage":"nexus-partial","throwable":{"className":"java.lang.IllegalStateException","message":"split-bo'
+          CONTAINER_ID_FULL: '1111111111111111111111111111111111111111111111111111111111111111'
+          CONTAINER_PARTIAL_MESSAGE: 'true'
+          CONTAINER_TAG: nexus
+          PRIORITY: '6'
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
+        - MESSAGE: 'om"}}'
+          CONTAINER_ID_FULL: '1111111111111111111111111111111111111111111111111111111111111111'
+          CONTAINER_TAG: nexus
+          PRIORITY: '6'
+          SYSLOG_IDENTIFIER: conmon
+          SYSTEMD_UNIT: nexus.service
         - MESSAGE: '{"level":"ERROR","threadName":"systemd","loggerName":"systemd","formattedMessage":"must-not-parse"}'
           SYSLOG_IDENTIFIER: systemd
           SYSTEMD_UNIT: nexus.service
@@ -146,6 +166,15 @@
           service: nexus
           parse_error: nexus_json
           fields.parser_status: failed
+        - message: nexus-partial
+          level: warn
+          service: nexus
+          fields.parser_status: parsed
+          fields.source: org.sonatype.nexus.Verify
+          fields.exception.className: java.lang.IllegalStateException
+          fields.exception.message: split-boom
+          _absent:
+            - fields.CONTAINER_PARTIAL_MESSAGE
         - message: '{"level":"ERROR","threadName":"systemd","loggerName":"systemd","formattedMessage":"must-not-parse"}'
           service: systemd
           _absent:

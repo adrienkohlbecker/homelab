@@ -12,6 +12,10 @@ parsers:
 
 pipeline:
   filters:
+    - name: lua
+      match: svc.nexus.service
+      script: /etc/fluent-bit/conmon_partial_message.lua
+      call: reassemble_conmon_message
     - name: modify
       match: svc.nexus.service
       condition: key_exists CONTAINER_TAG

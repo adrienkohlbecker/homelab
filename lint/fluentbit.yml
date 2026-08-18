@@ -28,3 +28,8 @@ globals:
       - type: any
       - type: any
       - type: any
+  reassemble_conmon_message:
+    args:
+      - type: any
+      - type: any
+      - type: any
