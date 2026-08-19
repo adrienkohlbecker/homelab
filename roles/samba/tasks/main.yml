@@ -139,8 +139,8 @@
     - samba
 
 # nmbd (NetBIOS name service / LAN browsing) is intentionally not run:
-# clients reach SMB3 directly over TCP 445 and discover shares via the
-# avahi mDNS advert below. Mask it so neither a prior enable (lab ran it
+# clients reach SMB3 directly over TCP 445 and discover shares via Samba's
+# built-in mDNS registration. Mask it so neither a prior enable (lab ran it
 # before this) nor a package reconfigure can bring the legacy NetBIOS
 # listener back. smbd has no dependency on nmbd, so this is safe.
 - name: Mask the unused nmbd service
@@ -153,49 +153,6 @@
     state: stopped
     enabled: false
     masked: true
-  become: true
-  tags:
-    - samba
-
-# Best-effort mDNS advert: avahi-daemon is owned by the `avahi` role (runs
-# just before this one in site.yml). If it isn't running, the advert lands on
-# disk but isn't published -- discovery then depends on avahi being managed
-# elsewhere, not on this role.
-- name: Install avahi smb service
-  template:
-    src: smb.service.j2
-    dest: /etc/avahi/services/smb.service
-    mode: "0644"
-    owner: root
-    group: root
-    backup: true
-    validate: xmllint --noout --dtdvalid /usr/share/avahi/avahi-service.dtd %s
-  become: true
-  register: samba_avahi_smb
-  tags:
-    - samba
-
-# Avahi reloads /etc/avahi/services/* via SIGHUP; reload (not
-# restart) keeps the LAN's mDNS cache warm. Skipped when the unit
-# isn't already active -- samba doesn't own avahi-daemon's
-# lifecycle, so don't conjure it up here.
-- name: Check avahi-daemon state
-  systemd:
-    name: avahi-daemon
-  register: samba_avahi_state
-  failed_when: false
-  changed_when: false
-  become: true
-  tags:
-    - samba
-
-- name: Signal avahi to reload its services dir
-  when:
-    - samba_avahi_smb.changed
-    - samba_avahi_state.status.ActiveState | default('') == 'active'
-  systemd:
-    name: avahi-daemon
-    state: reloaded
   become: true
   tags:
     - samba

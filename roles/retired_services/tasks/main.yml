@@ -1,4 +1,39 @@
 ---
+- name: Remove retired custom Samba mDNS service
+  file:
+    path: /etc/avahi/services/smb.service
+    state: absent
+  register: retired_services_samba_mdns
+  become: true
+  tags:
+    - retired_services
+    - samba
+
+- name: Check Avahi state after Samba mDNS service removal
+  when: retired_services_samba_mdns.changed
+  systemd:
+    name: avahi-daemon
+  register: retired_services_avahi_state
+  failed_when: false
+  changed_when: false
+  become: true
+  tags:
+    - retired_services
+    - samba
+
+- name: Reload Avahi after Samba mDNS service removal
+  when:
+    - not ansible_check_mode
+    - retired_services_samba_mdns.changed
+    - retired_services_avahi_state.status.ActiveState | default('') == 'active'
+  systemd:
+    name: avahi-daemon
+    state: reloaded
+  become: true
+  tags:
+    - retired_services
+    - samba
+
 - name: Remove retired Netdata smartctl collector override
   file:
     path: /etc/netdata/go.d/smartctl.conf

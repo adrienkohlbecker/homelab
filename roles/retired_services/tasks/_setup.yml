@@ -1,4 +1,22 @@
 ---
+- name: _setup | Create legacy Avahi service directory
+  file:
+    path: /etc/avahi/services
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _setup | Create custom Samba mDNS fixture
+  copy:
+    content: retired
+    dest: /etc/avahi/services/smb.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: _setup | Create legacy Netdata collector directory
   file:
     path: /etc/netdata/go.d

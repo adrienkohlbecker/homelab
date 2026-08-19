@@ -13,6 +13,34 @@
   failed_when: samba_nmbd_enabled.stdout != 'masked'
   become: true
 
+- name: _verify | Browse Samba service over mDNS
+  command:
+    argv:
+      - avahi-browse
+      - --terminate
+      - --resolve
+      - _smb._tcp
+  register: samba_mdns_browse
+  changed_when: false
+  failed_when: >-
+    samba_mdns_browse.rc != 0 or
+    samba_mdns_browse.stdout is not search('port = \\[' ~ service_ports.samba ~ '\\]')
+  become: true
+
+- name: _verify | Browse Time Machine service over mDNS
+  command:
+    argv:
+      - avahi-browse
+      - --terminate
+      - --resolve
+      - _adisk._tcp
+  register: samba_time_machine_mdns_browse
+  changed_when: false
+  failed_when: >-
+    samba_time_machine_mdns_browse.rc != 0 or
+    samba_time_machine_mdns_browse.stdout is not search('dk0=adVN=smbtest,adVF=0x82')
+  become: true
+
 # testparm -v dumps the EFFECTIVE value of every parameter (incl. defaults), so
 # this catches a silently-dropped hardening directive: a typo'd `server smb
 # encrypt` would fall back to the default here rather than `required`. Samba

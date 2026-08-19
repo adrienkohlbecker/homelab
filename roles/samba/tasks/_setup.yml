@@ -2,10 +2,7 @@
   apt:
     pkg:
       - avahi-daemon
-      # In prod the avahi role provides these (xmllint + the avahi DTD) before
-      # samba runs; the testrole runs samba alone, so stage them here for the
-      # smb.service validate step.
-      - libxml2-utils
+      - avahi-utils
       # smbclient is a separate package from the samba server; _verify uses it
       # to exercise the live share over the wire.
       - smbclient
