@@ -98,22 +98,15 @@
   tags:
     - ssh
 
-- name: Remove legacy drop-ins
+- name: Remove superseded sshd drop-ins
   file:
     path: /etc/ssh/sshd_config.d/{{ item }}
     state: absent
   loop:
     - config.conf
     - 02-noble-plus.conf
-  register: ssh_sshd_legacy
-  become: true
-  tags:
-    - ssh
-
-- name: Remove packer bootstrap drop-in
-  file:
-    path: /etc/ssh/sshd_config.d/00-no-password-auth.conf
-    state: absent
+    - 00-no-password-auth.conf
+  register: ssh_sshd_dropins_remove
   become: true
   tags:
     - ssh
@@ -189,7 +182,7 @@
   when:
     - not (ansible_check_mode and ssh_apt.changed)
     - >-
-      ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_legacy.changed
+      ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_dropins_remove.changed
       or (ssh_sshd_config_x11 is defined and ssh_sshd_config_x11 is changed)
       or (ssh_sshd_config_x11_remove is defined and ssh_sshd_config_x11_remove is changed)
   command: sshd -t
@@ -205,7 +198,7 @@
     enabled: true
     state: >-
       {{ 'reloaded'
-         if ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_legacy.changed
+         if ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_dropins_remove.changed
             or (ssh_sshd_config_x11 is defined and ssh_sshd_config_x11 is changed)
             or (ssh_sshd_config_x11_remove is defined and ssh_sshd_config_x11_remove is changed)
          else 'started' }}
