@@ -3,6 +3,43 @@
     name: nginx
     tasks_from: test_fixture
 
+- name: _setup | Create GitLab Runner metrics fixture directory
+  file:
+    path: /var/lib/netdata_test
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _setup | Write initial GitLab Runner metrics fixture
+  template:
+    src: _gitlab_runner_metrics.prom.j2
+    dest: /var/lib/netdata_test/gitlab_runner_metrics.prom
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    netdata_gitlab_runner_failure_count: 0
+  become: true
+
+- name: _setup | Serve GitLab Runner metrics fixture
+  import_role:
+    name: nginx
+    tasks_from: conf_d
+  vars:
+    nginx_conf_d_args:
+      name: netdata_gitlab_runner_metrics.conf
+      content: |
+        server {
+            listen 127.0.0.1:{{ service_ports.gitlab_runner }};
+
+            location = /metrics {
+                default_type text/plain;
+                alias /var/lib/netdata_test/gitlab_runner_metrics.prom;
+            }
+        }
+
 # netdata uses nginx_site_args.auth=required. Gate-mode Authelia stub so
 # _verify sees the unauthenticated browser hit redirect to the portal (302).
 - name: _setup | Install authelia stub in gate mode

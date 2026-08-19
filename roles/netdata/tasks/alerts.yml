@@ -13,6 +13,17 @@
   tags:
     - netdata
 
+- name: Configure netdata GitLab Runner failure alert
+  import_role:
+    name: netdata
+    tasks_from: health
+  vars:
+    netdata_args:
+      src: gitlab_runner_alerts.conf
+      dest: gitlab_runner.conf
+  tags:
+    - netdata
+
 - name: Configure netdata alerts
   import_role:
     name: netdata

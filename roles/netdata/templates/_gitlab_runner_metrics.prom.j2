@@ -1,0 +1,9 @@
+# HELP gitlab_runner_failed_jobs_total Total number of failed jobs
+# TYPE gitlab_runner_failed_jobs_total counter
+gitlab_runner_failed_jobs_total{failure_reason="runner_system_failure",mode="traditional",runner="test",runner_name="box-docker-aws"} {{ netdata_gitlab_runner_failure_count }}
+gitlab_runner_failed_jobs_total{failure_reason="image_pull_failure",mode="traditional",runner="test",runner_name="box-docker-aws"} {{ netdata_gitlab_runner_failure_count }}
+gitlab_runner_failed_jobs_total{failure_reason="job_execution_timeout",mode="traditional",runner="test",runner_name="box-docker-aws"} {{ netdata_gitlab_runner_failure_count }}
+gitlab_runner_failed_jobs_total{failure_reason="unknown_failure",mode="traditional",runner="test",runner_name="box-docker-aws"} {{ netdata_gitlab_runner_failure_count }}
+gitlab_runner_failed_jobs_total{failure_reason="script_failure",mode="traditional",runner="test",runner_name="box-docker-aws"} {{ netdata_gitlab_runner_failure_count }}
+gitlab_runner_failed_jobs_total{failure_reason="configuration_error",mode="traditional",runner="test",runner_name="box-docker-aws"} {{ netdata_gitlab_runner_failure_count }}
+gitlab_runner_failed_jobs_total{failure_reason="job_canceled",mode="traditional",runner="test",runner_name="box-docker-aws"} {{ netdata_gitlab_runner_failure_count }}

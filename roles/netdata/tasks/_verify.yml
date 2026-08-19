@@ -400,7 +400,9 @@
 # Health passes register alert fan-outs per chart, so gate the fetch on every
 # instantiation the assertions below consume: the presence/liveness fan-outs
 # against the fresh charts, and the stock systemdunits alarm the sustained-state
-# asserts read (its whole family registers in the same health pass).
+# asserts read (its whole family registers in the same health pass). The four
+# GitLab Runner instances cover every actionable failure reason in Runner 19;
+# the three ordinary job outcomes are asserted absent below.
 - name: _verify | Fetch alarms
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
@@ -408,7 +410,14 @@
   retries: 30
   delay: 2
   vars:
-    _keys: "{{ ((_netdata_alarms.json | default({})).alarms | default({})).keys() | list }}"
+    _alarms: "{{ ((_netdata_alarms.json | default({})).alarms | default({})) }}"
+    _keys: "{{ _alarms.keys() | list }}"
+    _runner_alerts: >-
+      {{
+        _alarms.values()
+        | selectattr('name', 'equalto', 'gitlab_runner_actionable_failure')
+        | list
+      }}
   until: >-
     _netdata_alarms.status == 200
     and _keys | select('search', 'netdata_presence.context_system_cpu.netdata_context_missing') | list | length > 0
@@ -416,6 +425,7 @@
     and _keys | select('search', 'netdata_presence.collector_go_d_collector_fake_plugin_fake_job.netdata_collector_missing') | list | length > 0
     and _keys | select('search', 'liveness_system_cpu') | list | length > 0
     and _keys | select('search', 'systemd_service_unit_failed_state') | list | length > 0
+    and _runner_alerts | length == 4
 
 - name: _verify | Presence alerts instantiated against the new charts
   vars:
@@ -555,6 +565,95 @@
     # configuration assertion above covers the scope template.
     - systemd_slice_unit_failed_state
     - systemd_timer_unit_failed_state
+
+- name: _verify | GitLab Runner alert covers only actionable failure reasons
+  vars:
+    _alarms: "{{ _netdata_alarms.json.alarms.values() | list }}"
+    _alarm: >-
+      {{
+        (_alarms
+         | selectattr('name', 'equalto', 'gitlab_runner_actionable_failure')
+         | selectattr('chart', 'search', 'failure_reason=' ~ item)
+         | first)
+        | default({})
+      }}
+  assert:
+    that:
+      # A fresh unchanged counter has no rate sample, so the alert remains
+      # UNINITIALIZED until the first increment. Existing charts may be CLEAR.
+      - _alarm.status | default('') in ["UNINITIALIZED", "CLEAR"]
+      - _alarm.recipient | default('') == "sysadmin"
+      - _alarm.lookup_method | default('') == "max"
+      - _alarm.lookup_after | default(0) == -300
+      - _alarm.lookup_before | default(0) == 0
+      - _alarm.lookup_dimensions | default('') == "gitlab_runner_failed_jobs_total"
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 0
+    fail_msg: >-
+      Expected a five-minute GitLab Runner failure-rate alert for {{ item }};
+      got {{ _alarm }}
+  loop:
+    - runner_system_failure
+    - image_pull_failure
+    - job_execution_timeout
+    - unknown_failure
+
+- name: _verify | Ordinary GitLab Runner job outcomes have no alerts
+  vars:
+    _keys: "{{ _netdata_alarms.json.alarms.keys() | list }}"
+  assert:
+    that:
+      - _keys | select('search', 'failure_reason=' ~ item ~ '.*gitlab_runner_actionable_failure') | list | length == 0
+    fail_msg: "Unexpected GitLab Runner infrastructure alert for {{ item }}"
+  loop:
+    - script_failure
+    - configuration_error
+    - job_canceled
+
+# The production lookup above intentionally retains a failure for five minutes.
+# This fixture creates its chart during the test, so shorten only the live test
+# copy: Netdata does not evaluate a lookup until its full window has history.
+- name: _verify | Shorten GitLab Runner failure lookup for the live fixture
+  replace:
+    path: /etc/netdata/health.d/gitlab_runner.conf
+    regexp: "lookup: max -5m unaligned"
+    replace: "lookup: max -30s unaligned"
+    backup: true
+  register: _netdata_gitlab_runner_lookup_fixture
+  become: true
+
+- name: _verify | Reload shortened GitLab Runner failure lookup
+  when: _netdata_gitlab_runner_lookup_fixture.changed
+  import_tasks: reload_health.yml
+
+- name: _verify | Increment GitLab Runner failure counters
+  template:
+    src: _gitlab_runner_metrics.prom.j2
+    dest: /var/lib/netdata_test/gitlab_runner_metrics.prom
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  vars:
+    netdata_gitlab_runner_failure_count: 1
+  become: true
+
+- name: _verify | Actionable GitLab Runner counter increments raise warnings
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
+  register: _netdata_runner_failure_alarms
+  retries: 30
+  delay: 2
+  vars:
+    _alarms: "{{ ((_netdata_runner_failure_alarms.json | default({})).alarms | default({})).values() | list }}"
+    _warnings: >-
+      {{
+        _alarms
+        | selectattr('name', 'equalto', 'gitlab_runner_actionable_failure')
+        | selectattr('status', 'equalto', 'WARNING')
+        | list
+      }}
+  until: _netdata_runner_failure_alarms.status == 200 and _warnings | length == 4
 
 # Closes the loop the on-disk un-silence assert (main.yml) can't: prove the
 # reload-health actually propagated the un-silence into a LIVE alarm. The
