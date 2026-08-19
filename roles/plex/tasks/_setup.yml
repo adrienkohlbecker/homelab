@@ -30,5 +30,5 @@
 
 - name: _setup | Fake HW transcoding fixture (no GPU in QEMU)
   import_role:
-    name: test
+    name: media
     tasks_from: fake_render_device

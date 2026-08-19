@@ -4,6 +4,16 @@
 - name: Add media group
   import_tasks: group.yml
 
+# Full-site QEMU tests do not invoke service _setup hooks, so the shared media
+# layer owns the phantom render device used by both media servers.
+- name: Create the QEMU render-device fixture
+  when:
+    - qemu_test
+    - has_transcoding_acceleration
+  import_tasks: fake_render_device.yml
+  tags:
+    - media
+
 - name: Add user to media group
   user:
     name: "{{ ansible_user_id }}"

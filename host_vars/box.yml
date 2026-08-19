@@ -173,7 +173,7 @@ subid_extra_subuid_users:
 # Flipped to true so jellyfin + plex tests exercise the HW-transcoding
 # code path (device passthrough, --group-add wiring, getent lookup) via
 # the fake render group + phantom /dev/dri/renderD128 created by
-# roles/test/tasks/fake_render_device.yml. No real GPU in QEMU — the
+# roles/media/tasks/fake_render_device.yml. No real GPU in QEMU — the
 # runtime VAAPI probe inside the container falls back to software, but
 # the ansible-side machinery and container's view of /dev get covered.
 has_transcoding_acceleration: true

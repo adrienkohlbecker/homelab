@@ -49,16 +49,6 @@
   tags:
     - jellyfin
 
-- name: Create qemu render-device fixture
-  when:
-    - qemu_test
-    - has_transcoding_acceleration
-  import_role:
-    name: test
-    tasks_from: fake_render_device
-  tags:
-    - jellyfin
-
 - name: Install tmpfiles.d entries for log and transcode reaping
   when: not ansible_check_mode or jellyfin_user.uid is defined
   template:
