@@ -50,8 +50,7 @@ podman_storage_device: /dev/disk/by-partlabel/podman
 # partition under the swap role + _verify -- folding in pug's raw-partition
 # swapon/fstab coverage. swap/_setup.yml clears the packer-baked fstab entry
 # (gated on swap_partition) so the role re-adds it cleanly.
-swap_partition:
-  device: /dev/disk/by-partlabel/swap
+swap_partition: /dev/disk/by-partlabel/swap
 
 # Exercises the zram-primary path in CI: zram is primary, the partition
 # above sits below it as overflow. 3G is deliberately not the

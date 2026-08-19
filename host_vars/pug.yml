@@ -27,8 +27,7 @@ macvlan_blocks:
     parent: eth0
     vlan: management
 
-swap_partition:
-  device: /dev/disk/by-partlabel/swap
+swap_partition: /dev/disk/by-partlabel/swap
 
 podman_storage_backend: partition
 podman_storage_device: /dev/disk/by-partlabel/podman

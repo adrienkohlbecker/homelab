@@ -28,8 +28,7 @@ zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set
 zfs_dozer_filesystem: dozer
 zfs_tank_filesystem: tank
 
-swap_partition:
-  device: /dev/md/swap
+swap_partition: /dev/md/swap
 
 # zram is the primary swap; the 16G RAID1 partition above is the deadlock-free-by-
 # coldness overflow (notes/swap_strategy.md).
