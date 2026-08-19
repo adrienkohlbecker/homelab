@@ -67,22 +67,16 @@ locals {
   # (neither the workstation nor lab has IPv6 egress).
   uptimerobot_monitors = {
     headscale_ipv4 = {
-      name              = "Headscale IPV4"
-      type              = "KEYWORD"
-      url               = "https://headscale.fahm.fr/health"
-      ip_version        = "ipv4Only"
-      keyword_type      = "ALERT_NOT_EXISTS"
-      keyword_case_type = "CaseSensitive"
-      keyword_value     = "\"status\":\"pass\""
+      name       = "Headscale IPV4"
+      type       = "HTTP"
+      url        = "https://headscale.fahm.fr/health"
+      ip_version = "ipv4Only"
     }
     headscale_ipv6 = {
-      name              = "Headscale IPV6"
-      type              = "KEYWORD"
-      url               = "https://headscale.fahm.fr/health"
-      ip_version        = "ipv6Only"
-      keyword_type      = "ALERT_NOT_EXISTS"
-      keyword_case_type = "CaseSensitive"
-      keyword_value     = "\"status\":\"pass\""
+      name       = "Headscale IPV6"
+      type       = "HTTP"
+      url        = "https://headscale.fahm.fr/health"
+      ip_version = "ipv6Only"
     }
     derp_ipv4 = {
       name                    = "Headscale DERP latency IPV4"
@@ -109,13 +103,6 @@ resource "uptimerobot_monitor" "headscale" {
   url      = each.value.url
   interval = 300
   timeout  = 30
-
-  # KEYWORD monitors only. ALERT_NOT_EXISTS = "go down when the expected string
-  # is MISSING" -- the healthy body is {"status":"pass"}, so the inverse
-  # (ALERT_EXISTS) would page while headscale is up and stay silent when it dies.
-  keyword_type      = try(each.value.keyword_type, null)
-  keyword_case_type = try(each.value.keyword_case_type, null)
-  keyword_value     = try(each.value.keyword_value, null)
 
   response_time_threshold = try(each.value.response_time_threshold, null)
 
