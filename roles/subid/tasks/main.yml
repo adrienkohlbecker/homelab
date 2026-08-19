@@ -13,36 +13,6 @@
   tags:
     - subid
 
-- name: Resolve gids for subgid extras
-  getent:
-    database: group
-  when: subid_extra_subgid_groups | length > 0
-  become: true
-  tags:
-    - subid
-
-- name: Resolve uids for subuid extras
-  getent:
-    database: passwd
-  when: subid_extra_subuid_users | length > 0
-  become: true
-  tags:
-    - subid
-
-- name: Assert subuid/subgid extra sources exist on the host
-  vars:
-    subid_missing_users: "{{ subid_extra_subuid_users | map(attribute='source_user') | list | difference(ansible_facts.getent_passwd | default({}) | list) }}"
-    subid_missing_groups: "{{ subid_extra_subgid_groups | map(attribute='group') | list | difference(ansible_facts.getent_group | default({}) | list) }}"
-  assert:
-    that:
-      - subid_missing_users | length == 0
-      - subid_missing_groups | length == 0
-    fail_msg: >-
-      subid extra entries reference id sources missing on {{ inventory_hostname }}.
-      Missing passwd users: {{ subid_missing_users }}; missing groups: {{ subid_missing_groups }}.
-  tags:
-    - subid
-
 # 0644 (world-readable) is the Ubuntu default. It must stay readable: rootless
 # tools that set up user namespaces themselves rather than via the setuid
 # newuidmap helper (notably rootlesskit, which backs rootless buildkitd)
@@ -57,10 +27,6 @@
     mode: '0644'
     backup: true
     validate: python3 -c 'import sys; lines = [x.strip() for x in open(sys.argv[1]) if x.strip()]; sys.exit(1 if [x for x in lines if len(x.split(":")) != 3 or not x.split(":")[1].isdigit() or not x.split(":")[2].isdigit()] else 0)' "%s"
-  vars:
-    subid_extras: "{{ subid_extra_subuid_users }}"
-    subid_id_source: "{{ ansible_facts.getent_passwd | default({}) }}"
-    subid_id_key: source_user
   register: subid_subuid_result
   become: true
   tags:
@@ -75,10 +41,6 @@
     mode: '0644'
     backup: true
     validate: python3 -c 'import sys; lines = [x.strip() for x in open(sys.argv[1]) if x.strip()]; sys.exit(1 if [x for x in lines if len(x.split(":")) != 3 or not x.split(":")[1].isdigit() or not x.split(":")[2].isdigit()] else 0)' "%s"
-  vars:
-    subid_extras: "{{ subid_extra_subgid_groups }}"
-    subid_id_source: "{{ ansible_facts.getent_group | default({}) }}"
-    subid_id_key: group
   register: subid_subgid_result
   become: true
   tags:
