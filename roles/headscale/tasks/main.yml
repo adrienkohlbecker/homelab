@@ -115,10 +115,7 @@
     tasks_from: dataset
   vars:
     sqlite_dataset_args:
-      name: headscale
-      owner: headscale
-      group: headscale
-      condition: "{{ not ansible_check_mode or headscale_user.uid is defined }}"
+      user: "{{ headscale_user }}"
       links:
         - /mnt/services/headscale/data/db.sqlite
   tags:

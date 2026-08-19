@@ -25,6 +25,8 @@
           - service_user_test_user is defined
           - service_user_test_user.uid is defined
           - service_user_test_user.gid is defined
+          - service_user_test_user.name == 'service_user_test'
+          - service_user_test_user.config_group == 'service_user_test'
           - service_user_test_user.uid == 61180
           - service_user_test_user.gid == 61180
 
@@ -75,6 +77,8 @@
           - service_user_test_hyphen_user is defined
           - service_user_test_hyphen_user.uid is defined
           - service_user_test_hyphen_user.gid is defined
+          - service_user_test_hyphen_user.name == 'service-user-test-hyphen'
+          - service_user_test_hyphen_user.config_group == 'service_user_test_grp'
           - service_user_test_hyphen_user.gid | string is match('^[0-9]+$')
 
     - name: _verify | Membership reflects shared_group

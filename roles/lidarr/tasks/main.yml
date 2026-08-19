@@ -39,10 +39,7 @@
     tasks_from: dataset
   vars:
     sqlite_dataset_args:
-      name: lidarr
-      owner: lidarr
-      group: media
-      condition: "{{ not ansible_check_mode or lidarr_user.uid is defined }}"
+      user: "{{ lidarr_user }}"
       links:
         - /mnt/services/lidarr/lidarr.db
         - /mnt/services/lidarr/logs.db

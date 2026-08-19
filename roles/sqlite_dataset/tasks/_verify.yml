@@ -1,5 +1,15 @@
 - name: _verify | All sqlite_dataset scenarios
   block:
+    - name: _verify | Provision fixture service user
+      import_role:
+        name: service_user
+        tasks_from: user
+      vars:
+        service_user_args:
+          name: sqlite_dataset_test
+          id: 61182
+          config_dir: false
+
     - name: _verify | Create fixture directories
       file:
         path: "{{ item }}"
@@ -19,9 +29,7 @@
         tasks_from: dataset
       vars:
         sqlite_dataset_args:
-          name: sqlite_dataset_test
-          owner: root
-          group: root
+          user: "{{ sqlite_dataset_test_user }}"
           links:
             - /mnt/services/sqlite_dataset_test/test.db
             - /mnt/services/sqlite_dataset_test/sub/other.db
@@ -65,9 +73,7 @@
         tasks_from: dataset
       vars:
         sqlite_dataset_args:
-          name: sqlite_dataset_test
-          owner: root
-          group: root
+          user: "{{ sqlite_dataset_test_user }}"
           links:
             - /mnt/services/sqlite_dataset_test/test.db
             - /mnt/services/sqlite_dataset_test/sub/other.db
@@ -121,9 +127,7 @@
             tasks_from: dataset
           vars:
             sqlite_dataset_args:
-              name: sqlite_dataset_test
-              owner: root
-              group: root
+              user: "{{ sqlite_dataset_test_user }}"
               links:
                 - /mnt/services/sqlite_dataset_test/real.db
 
@@ -160,9 +164,7 @@
         tasks_from: dataset
       vars:
         sqlite_dataset_args:
-          name: sqlite_dataset_test
-          owner: root
-          group: root
+          user: "{{ sqlite_dataset_test_user }}"
           force: true
           links:
             - /mnt/services/sqlite_dataset_test/forced.db
@@ -185,39 +187,10 @@
       become: true
       failed_when: _sqlite_dataset_forced_target.stat.exists
 
-    # -- Scenario 5: runtime condition false skips filesystem changes -----
-    - name: _verify | Scenario 5 — resolve a false runtime condition
-      set_fact:
-        _sqlite_dataset_condition: false
-
-    - name: _verify | Scenario 5 — apply helper with the runtime condition
-      import_role:
-        name: sqlite_dataset
-        tasks_from: dataset
-      vars:
-        sqlite_dataset_args:
-          name: sqlite_dataset_skip
-          owner: root
-          group: root
-          condition: "{{ _sqlite_dataset_condition }}"
-          links:
-            - /mnt/services/sqlite_dataset_test/skip.db
-
-    - name: _verify | Scenario 5 — stat paths skipped by the condition
-      stat:
-        path: "{{ item }}"
-        follow: false
-      loop:
-        - /mnt/services/sqlite/sqlite_dataset_skip
-        - /mnt/services/sqlite_dataset_test/skip.db
-      register: _sqlite_dataset_skipped
-      become: true
-      failed_when: _sqlite_dataset_skipped.stat.exists
-
-    # -- Scenario 6: force still refuses to clobber a real DB at a dest --
+    # -- Scenario 5: force still refuses to clobber a real DB at a dest --
     # force relaxes only the dangling-target refusal; a real file at the dest
     # must still be protected (snapshot-restore safety).
-    - name: _verify | Scenario 6 — plant a real DB at a force dest
+    - name: _verify | Scenario 5 — plant a real DB at a force dest
       copy:
         content: "FORCE-REAL"
         dest: /mnt/services/sqlite_dataset_test/force_real.db
@@ -226,30 +199,28 @@
         mode: "0640"
       become: true
 
-    - name: _verify | Scenario 6 — force must still refuse the real-file clobber
+    - name: _verify | Scenario 5 — force must still refuse the real-file clobber
       block:
-        - name: _verify | Scenario 6 — attempt force symlink over the real DB
+        - name: _verify | Scenario 5 — attempt force symlink over the real DB
           import_role:
             name: sqlite_dataset
             tasks_from: dataset
           vars:
             sqlite_dataset_args:
-              name: sqlite_dataset_test
-              owner: root
-              group: root
+              user: "{{ sqlite_dataset_test_user }}"
               force: true
               links:
                 - /mnt/services/sqlite_dataset_test/force_real.db
 
-        - name: _verify | Scenario 6 — record wrongly clobbered
+        - name: _verify | Scenario 5 — record wrongly clobbered
           set_fact:
             _sqlite_dataset_force_refused: false
       rescue:
-        - name: _verify | Scenario 6 — record refused (expected)
+        - name: _verify | Scenario 5 — record refused (expected)
           set_fact:
             _sqlite_dataset_force_refused: true
 
-    - name: _verify | Scenario 6 — re-stat the dest
+    - name: _verify | Scenario 5 — re-stat the dest
       stat:
         path: /mnt/services/sqlite_dataset_test/force_real.db
         follow: false
@@ -260,7 +231,7 @@
         or not _sqlite_dataset_force_real.stat.exists
         or _sqlite_dataset_force_real.stat.islnk
 
-    - name: _verify | Scenario 6 — read the surviving dest content
+    - name: _verify | Scenario 5 — read the surviving dest content
       slurp:
         src: /mnt/services/sqlite_dataset_test/force_real.db
       register: _sqlite_dataset_force_real_content
@@ -268,12 +239,25 @@
       failed_when: _sqlite_dataset_force_real_content.content | b64decode != 'FORCE-REAL'
 
   always:
+    - name: _verify | Teardown — remove fixture user
+      user:
+        name: sqlite_dataset_test
+        state: absent
+        remove: true
+        force: true
+      become: true
+
+    - name: _verify | Teardown — remove fixture group
+      group:
+        name: sqlite_dataset_test
+        state: absent
+      become: true
+
     - name: _verify | Teardown — remove test fixtures
       file:
         path: "{{ item }}"
         state: absent
       loop:
         - /mnt/services/sqlite/sqlite_dataset_test
-        - /mnt/services/sqlite/sqlite_dataset_skip
         - /mnt/services/sqlite_dataset_test
       become: true

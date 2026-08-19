@@ -1,27 +1,25 @@
 # Create /mnt/services/sqlite/<name>/ and symlink DBs onto it.
 #
 # Caller passes one dict `sqlite_dataset_args`:
-#   name, owner, group  required directory and ownership
-#   links               required dest paths; parent dirs must already exist
-#   condition           optional bool; gates filesystem changes (default true)
-#   force               optional bool; create dangling links instead of empty
-#                       0640 targets
+#   user   required service_user result; owns the directory and target files
+#   links  required dest paths; parent dirs must already exist
+#   force  optional bool; create dangling links instead of empty 0640 targets
 #
 # Both link modes refuse to replace a real file at a dest. The dict form keeps
 # arguments from leaking between import_role calls.
 
-- name: "Validate inputs for {{ sqlite_dataset_args.name | default('<unset>') }}"
+- name: "Validate inputs for {{ sqlite_dataset_args.user.name | default('<unset>') }}"
   assert:
     quiet: true
     that:
-      - sqlite_dataset_args.name is defined
+      - sqlite_dataset_args.user is defined
+      - sqlite_dataset_args.user.name is defined
       # is string before is match: a non-string name raises an opaque
       # templating error instead of this role's fail_msg (same guard as
       # roles/service_user).
-      - sqlite_dataset_args.name is string
-      - sqlite_dataset_args.name is match('^[a-z_][a-z0-9_-]*$')
-      - sqlite_dataset_args.owner is defined
-      - sqlite_dataset_args.group is defined
+      - sqlite_dataset_args.user.name is string
+      - sqlite_dataset_args.user.name is match('^[a-z_][a-z0-9_-]*$')
+      - sqlite_dataset_args.user.config_group is defined
       - sqlite_dataset_args.links is defined
       - sqlite_dataset_args.links | default([]) | length > 0
       - >-
@@ -33,31 +31,31 @@
         sqlite_dataset_args.links | default([]) | map('basename') | list | unique(case_sensitive=true) | length
         == sqlite_dataset_args.links | default([]) | length
     fail_msg: >-
-      sqlite_dataset_args requires name (a valid identifier matching
-      [a-z_][a-z0-9_-]*), owner, group, and at least one link; links basenames
-      must be non-empty and unique.
+      sqlite_dataset_args requires a service_user result and at least one link;
+      the user name must match [a-z_][a-z0-9_-]* and link basenames must be
+      non-empty and unique.
 
-- name: Pre-create /mnt/services/sqlite/{{ sqlite_dataset_args.name }}
-  when: sqlite_dataset_args.condition | default(true) | bool
+- name: Pre-create /mnt/services/sqlite/{{ sqlite_dataset_args.user.name }}
+  when: not ansible_check_mode or sqlite_dataset_args.user.uid is defined
   file:
-    path: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}"
+    path: "/mnt/services/sqlite/{{ sqlite_dataset_args.user.name }}"
     state: directory
-    owner: "{{ sqlite_dataset_args.owner }}"
-    group: "{{ sqlite_dataset_args.group }}"
+    owner: "{{ sqlite_dataset_args.user.name }}"
+    group: "{{ sqlite_dataset_args.user.config_group }}"
     mode: "0750"
   become: true
 
 # state=touch with preserve timestamps is idempotent: creates the file if
 # absent, leaves an existing DB untouched (no truncation, no mtime bump).
-- name: Pre-create SQLite DB src files for {{ sqlite_dataset_args.name }}
+- name: Pre-create SQLite DB src files for {{ sqlite_dataset_args.user.name }}
   when:
-    - sqlite_dataset_args.condition | default(true) | bool
+    - not ansible_check_mode or sqlite_dataset_args.user.uid is defined
     - not (sqlite_dataset_args.force | default(false) | bool)
   file:
-    path: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ sqlite_dataset_link | basename }}"
+    path: "/mnt/services/sqlite/{{ sqlite_dataset_args.user.name }}/{{ sqlite_dataset_link | basename }}"
     state: touch
-    owner: "{{ sqlite_dataset_args.owner }}"
-    group: "{{ sqlite_dataset_args.group }}"
+    owner: "{{ sqlite_dataset_args.user.name }}"
+    group: "{{ sqlite_dataset_args.user.config_group }}"
     mode: "0640"
     modification_time: preserve
     access_time: preserve
@@ -71,9 +69,9 @@
 # real file is already at a dest so force can never silently replace it.
 - name: >-
     Refuse real files at force destinations; before re-running, move them under
-    {{ '/mnt/services/sqlite/' ~ sqlite_dataset_args.name ~ '/' }}
+    {{ '/mnt/services/sqlite/' ~ sqlite_dataset_args.user.name ~ '/' }}
   when:
-    - sqlite_dataset_args.condition | default(true) | bool
+    - not ansible_check_mode or sqlite_dataset_args.user.uid is defined
     - sqlite_dataset_args.force | default(false) | bool
   stat:
     path: "{{ sqlite_dataset_link }}"
@@ -88,10 +86,10 @@
     label: "{{ sqlite_dataset_link }}"
     loop_var: sqlite_dataset_link
 
-- name: Symlink DBs onto sqlite dataset for {{ sqlite_dataset_args.name }}
-  when: sqlite_dataset_args.condition | default(true) | bool
+- name: Symlink DBs onto sqlite dataset for {{ sqlite_dataset_args.user.name }}
+  when: not ansible_check_mode or sqlite_dataset_args.user.uid is defined
   file:
-    src: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ sqlite_dataset_link | basename }}"
+    src: "/mnt/services/sqlite/{{ sqlite_dataset_args.user.name }}/{{ sqlite_dataset_link | basename }}"
     dest: "{{ sqlite_dataset_link }}"
     state: link
     follow: false

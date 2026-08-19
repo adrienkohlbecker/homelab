@@ -36,10 +36,7 @@
     tasks_from: dataset
   vars:
     sqlite_dataset_args:
-      name: kuma
-      owner: kuma
-      group: kuma
-      condition: "{{ not ansible_check_mode or kuma_user.uid is defined }}"
+      user: "{{ kuma_user }}"
       force: true
       links:
         - /mnt/services/kuma/kuma.db

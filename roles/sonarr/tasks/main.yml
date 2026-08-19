@@ -39,10 +39,7 @@
     tasks_from: dataset
   vars:
     sqlite_dataset_args:
-      name: sonarr
-      owner: sonarr
-      group: media
-      condition: "{{ not ansible_check_mode or sonarr_user.uid is defined }}"
+      user: "{{ sonarr_user }}"
       links:
         - /mnt/services/sonarr/sonarr.db
         - /mnt/services/sonarr/logs.db

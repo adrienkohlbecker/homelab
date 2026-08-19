@@ -16,10 +16,7 @@
     tasks_from: dataset
   vars:
     sqlite_dataset_args:
-      name: profilarr
-      owner: profilarr
-      group: profilarr
-      condition: "{{ not ansible_check_mode or profilarr_user.uid is defined }}"
+      user: "{{ profilarr_user }}"
       links:
         - /mnt/services/profilarr/profilarr.db
   tags:

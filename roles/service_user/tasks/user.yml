@@ -26,9 +26,9 @@
 # previous caller's createhome / extra_groups / etc. can't bleed into
 # the next caller that doesn't explicitly override.
 #
-# Outputs: registers `<name>_user` with changed, uid, and gid (the primary
-# gid as an int -- safe in podman --user / --uidmap). The fact key replaces
-# non-identifier chars in name with '_'
+# Outputs: registers `<name>_user` with changed, name, config_group, uid, and
+# gid (the primary gid as an int -- safe in podman --user / --uidmap). The fact
+# key replaces non-identifier chars in name with '_'
 # (name='foo-bar' -> foo_bar_user). In --check mode on a host where the user
 # does not exist yet the user task only reports the create, so .uid/.gid
 # are undefined. Gate consumers with
@@ -118,7 +118,11 @@
   set_fact:
     "{{ service_user_resolved.name | ansible_var_key }}_user": >-
       {{
-        {'changed': service_user_result.changed}
+        {
+          'changed': service_user_result.changed,
+          'name': service_user_resolved.name,
+          'config_group': service_user_resolved.config_dir_group
+        }
         | combine(
             {'uid': service_user_result.uid, 'gid': service_user_result.group}
             if service_user_result.uid is defined and service_user_result.group is defined

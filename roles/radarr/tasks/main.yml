@@ -40,10 +40,7 @@
     tasks_from: dataset
   vars:
     sqlite_dataset_args:
-      name: radarr
-      owner: radarr
-      group: media
-      condition: "{{ not ansible_check_mode or radarr_user.uid is defined }}"
+      user: "{{ radarr_user }}"
       links:
         - /mnt/services/radarr/radarr.db
         - /mnt/services/radarr/logs.db
