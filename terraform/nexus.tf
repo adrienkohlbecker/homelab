@@ -141,32 +141,6 @@ resource "nexus_repository_apt_proxy" "this" {
   }
 }
 
-resource "nexus_repository_pypi_proxy" "pypi" {
-  name   = "pypi"
-  online = true
-
-  storage {
-    blob_store_name                = "default"
-    strict_content_type_validation = true
-  }
-  negative_cache {
-    enabled = true
-    ttl     = 60
-  }
-  http_client {
-    blocked    = false
-    auto_block = false
-  }
-  proxy {
-    remote_url       = "https://pypi.org/"
-    content_max_age  = 525600
-    metadata_max_age = 60
-  }
-  cleanup {
-    policy_names = local.cleanup_policies
-  }
-}
-
 resource "nexus_repository_raw_proxy" "this" {
   for_each = local.raw_proxies
 

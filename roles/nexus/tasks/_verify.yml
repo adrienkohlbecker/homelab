@@ -380,7 +380,7 @@
   become: true
 
 # End-to-end through the nginx vhost -- the production ingress every fleet
-# host's apt/docker/pypi pulls traverse. The /etc/hosts mapping + validate_certs=false
+# host's apt/docker pulls traverse. The /etc/hosts mapping + validate_certs=false
 # hits local nginx without real DNS; a jinja typo in proxy_pass, a missing
 # proxy_set_header, or a dropped site would surface here.
 #

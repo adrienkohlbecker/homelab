@@ -307,8 +307,6 @@ mirror_gitlab: 'https://{{ nexus_url ~ "/repository/gitlab" if nexus_url else "g
 mirror_raw_githubusercontent: 'https://{{ nexus_url ~ "/repository/raw-githubusercontent" if nexus_url else "raw.githubusercontent.com" }}'
 mirror_minio: 'https://{{ nexus_url ~ "/repository/minio" if nexus_url else "dl.min.io" }}'
 mirror_gitea_dl: 'https://{{ nexus_url ~ "/repository/gitea-dl" if nexus_url else "dl.gitea.com" }}'
-mirror_pypi: 'https://{{ nexus_url ~ "/repository/pypi" if nexus_url else "pypi.org" }}'
-
 ubuntu_mirror: '{{ (ansible_architecture == "aarch64") | ternary(mirror_apt_ubuntu_ports ~ "/", mirror_apt_ubuntu_archive ~ "/") }}'
 ubuntu_mirror_security: '{{ (ansible_architecture == "aarch64") | ternary(mirror_apt_ubuntu_ports ~ "/", mirror_apt_ubuntu_security ~ "/") }}'
 

@@ -45,16 +45,9 @@ RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
         > /etc/apt/sources.list.d/ubuntu.sources; \
     fi
 
-# pip + uv are intentionally NOT routed through the nexus pypi proxy
-# (unlike apt above). uv.lock pins each package's resolved index URL, so
-# resolving against nexus.lab.fahm.fr rewrites those URLs to
-# nexus.lab.fahm.fr/... and `uv sync --locked` then fails against a
-# lockfile authored on dev machines via PyPI -- same package versions,
-# different URLs (the diff is URL/hash fields only). Devs author the lock
-# against PyPI, so CI must resolve against PyPI too or --locked can never
-# pass. uv's wheel cache is pre-warmed below, so dropping the proxy costs
-# no per-run network fetch in the steady state. (pip is unused -- uv is
-# the package manager -- so no /etc/pip.conf either.)
+# uv resolves directly against PyPI because uv.lock pins each package's index
+# URL. The wheel cache is pre-warmed below, so this costs no per-run network
+# fetch in the steady state. pip is unused; uv is the package manager.
 
 # Harness needs qemu-system-x86 + qemu-utils for booting test VMs;
 # openssh-client for talking to the guests; xorriso + cloud-image-utils for the

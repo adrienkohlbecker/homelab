@@ -246,9 +246,9 @@ async def run_test(
                             async with _phase("cloud-init wait"):
                                 await m.ensure_cloud_init()
 
-                        # Mirror setup playbook: apt sources, podman registries,
-                        # /etc/pip.conf, /etc/uv/uv.toml. Routes everything
-                        # through the lab Nexus when nexus_url is set
+                        # Mirror setup playbook: apt sources and podman
+                        # registries. Routes both through the lab Nexus when
+                        # nexus_url is set
                         # (group_vars/test.yml), upstream when --upstream-mirrors
                         # clears it. Skipped when testing a role whose own job
                         # is to configure these things (see

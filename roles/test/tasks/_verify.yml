@@ -1,7 +1,7 @@
 # Assertions for the mirrors fixture (invoked by testrole.py test).
 #
 # Three branches:
-#   - nexus_url set → check apt/podman/pip/uv all point at Nexus, and that
+#   - nexus_url set → check apt/podman point at Nexus, and that
 #     etc_hosts_entries resolves to the configured IPs.
 #   - nexus_url empty and in AWS (test_in_aws: EC2 cell or aws_qemu) → check
 #     the archive uses the in-region EC2 mirror.
@@ -116,40 +116,6 @@
       - (test_ecr_registry ~ '/quay') in (test_registries_content.content | b64decode)
     fail_msg: "registries.conf.d/homelab-mirrors.conf missing or doesn't mirror docker.io+ghcr.io+registry.gitlab.com+quay.io to {{ test_ecr_registry }}"
 
-- name: _verify | Stat pip and uv configs
-  stat:
-    path: "{{ item }}"
-  loop:
-    - /etc/pip.conf
-    - /etc/uv/uv.toml
-  register: test_pip_uv
-
-- name: _verify | Read pip config
-  when:
-    - nexus_url | length > 0
-    - test_pip_uv.results[0].stat.exists
-  slurp:
-    src: /etc/pip.conf
-  register: test_pip_content
-
-- name: _verify | Read uv config
-  when:
-    - nexus_url | length > 0
-    - test_pip_uv.results[1].stat.exists
-  slurp:
-    src: /etc/uv/uv.toml
-  register: test_uv_content
-
-- name: _verify | Pip and uv configs reference Nexus pypi mirror
-  when: nexus_url | length > 0
-  assert:
-    that:
-      - test_pip_uv.results[0].stat.exists
-      - test_pip_uv.results[1].stat.exists
-      - mirror_pypi in (test_pip_content.content | b64decode)
-      - mirror_pypi in (test_uv_content.content | b64decode)
-    fail_msg: "/etc/pip.conf or /etc/uv/uv.toml missing or doesn't reference {{ mirror_pypi }}"
-
 - name: _verify | Resolve etc_hosts_entries to configured IPs
   when:
     - nexus_url | length > 0
@@ -195,17 +161,6 @@
     status_code: [ 200, 401 ]
     timeout: 15
   register: test_podman_mirror
-
-- name: _verify | PyPI mirror serves a known package index
-  when: nexus_url | length > 0
-  uri:
-    # mirror_pypi already carries https://. Probe a package that always exists
-    # rather than the bare /simple/ root (whose response varies by Nexus config).
-    url: "{{ mirror_pypi }}/simple/pip/"
-    validate_certs: false
-    status_code: [ 200, 301, 302 ]
-    timeout: 15
-  register: test_pypi_mirror
 
 # DNS-over-TLS verification: mirrors.yml forces DoT so every query rides TCP
 # (the qemu SLIRP UDP-drop class of flakes). A stat of the drop-in would be a
