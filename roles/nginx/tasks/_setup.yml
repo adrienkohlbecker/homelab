@@ -35,6 +35,9 @@
   import_role:
     name: test
     tasks_from: authelia_stub
+  vars:
+    test_authelia_stub_args:
+      mode: always_200
 
 # Simulate a host provisioned before nginx dropped www-data from ssl-cert, so
 # converge actually exercises install.yml's removal task (and the idempotence

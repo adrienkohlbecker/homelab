@@ -7,7 +7,7 @@
 # Inputs: caller passes a single dict `test_authelia_stub_args` (replaced
 # wholesale per import, so a previous caller's mode can't bleed into the
 # next that doesn't override it):
-#   mode  optional, default 'always_200'. One of:
+#   mode  optional, default 'gate'. One of:
 #     always_200: every auth-request subrequest returns 200, so the site
 #         template's `auth_request /internal/authelia` always admits the
 #         parent. Use when the _verify only cares that the wiring is intact
@@ -36,16 +36,14 @@
 - name: authelia_stub | Assert mode is a known value
   assert:
     that:
-      - (test_authelia_stub_args | default({})).mode | default('always_200') in ['always_200', 'gate', 'authed', 'basic']
+      - (test_authelia_stub_args | default({})).mode | default('gate') in ['always_200', 'gate', 'authed', 'basic']
     fail_msg: >-
       test_authelia_stub_args.mode must be one of always_200/gate/authed/basic; got
-      '{{ (test_authelia_stub_args | default({})).mode | default('always_200') }}'.
-      A typo silently falls through to always_200, so a negative-path auth test
-      would spuriously pass.
+      '{{ (test_authelia_stub_args | default({})).mode | default('gate') }}'.
 
 - name: authelia_stub | Resolve caller defaults
   set_fact:
-    _test_authelia_stub_mode: "{{ (test_authelia_stub_args | default({})).mode | default('always_200') }}"
+    _test_authelia_stub_mode: "{{ (test_authelia_stub_args | default({})).mode | default('gate') }}"
     _test_authelia_stub_user: "{{ (test_authelia_stub_args | default({})).user | default('nginxverifyuser') }}"
 
 - name: authelia_stub | Install nginx fixture for /api/authz/auth-request

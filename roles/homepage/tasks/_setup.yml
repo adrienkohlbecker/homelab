@@ -21,6 +21,9 @@
   import_role:
     name: test
     tasks_from: authelia_stub
+  vars:
+    test_authelia_stub_args:
+      mode: always_200
 
 - name: _setup | Setup dependencies
   shell: |
