@@ -3,18 +3,22 @@
 # (qemu); never site.yml. See notes/swap_strategy.md.
 
 - name: _verify | Read active swap devices with priorities and sizes
-  command: swapon --show=NAME,PRIO,SIZE --noheadings --bytes --raw
+  command: swapon --show=NAME,PRIO,SIZE --bytes --json
   changed_when: false
   become: true
   register: _swap_verify_swapon
 
+- name: _verify | Parse active swap devices
+  set_fact:
+    swap_verify_devices: "{{ (_swap_verify_swapon.stdout | from_json).swapdevices }}"
+
 - name: _verify | Zram swap active at the primary priority
   vars:
-    _zram_lines: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | list }}"
+    _zram_devices: "{{ swap_verify_devices | selectattr('name', 'search', 'zram') | list }}"
   assert:
     that:
-      - _zram_lines | length == 1
-      - _zram_lines[0].split()[1] | int == 100
+      - _zram_devices | length == 1
+      - _zram_devices[0].prio | int == 100
     fail_msg: >-
       zram swap missing or not at priority 100 (partition swap sits at
       priority 10): {{ _swap_verify_swapon.stdout }}
@@ -22,12 +26,12 @@
 # Catches the generator silently falling back to its default size (e.g. a
 # size key the installed version doesn't honor). Expected = min(configured,
 # MemTotal); zram rounds down by a page, so allow a small band.
-# SIZE (field 3, bytes) comes directly from swapon --show --bytes; no slurp needed.
+# SIZE comes directly from swapon --show --bytes; no slurp needed.
 - name: _verify | Zram device sized per config (capped at RAM)
   vars:
-    _zram_line: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | first | default('') }}"
+    _zram_device: "{{ swap_verify_devices | selectattr('name', 'search', 'zram') | first | default({}) }}"
     _expected_mb: "{{ [(swap_zram.size | human_to_bytes) // 1048576, ansible_memtotal_mb] | min }}"
-    _actual_mb: "{{ ((_zram_line.split()[2] | default('0')) | int) // 1048576 }}"
+    _actual_mb: "{{ (_zram_device.size | default(0) | int) // 1048576 }}"
   assert:
     that:
       - _actual_mb | int >= (_expected_mb | float * 0.95) | int
@@ -47,7 +51,7 @@
 - name: _verify | Partition swap device is active
   when: swap_partition is defined
   vars:
-    _names: "{{ _swap_verify_swapon.stdout_lines | map('split') | map('first') | list }}"
+    _names: "{{ swap_verify_devices | map(attribute='name') | list }}"
   assert:
     that:
       - (_swap_verify_partition_dev.stdout | trim) in _names
@@ -88,11 +92,11 @@
 - name: _verify | Overflow swap priority is below zram
   when: swap_partition is defined
   vars:
-    _overflow_lines: "{{ _swap_verify_swapon.stdout_lines | reject('search', 'zram') | list }}"
+    _overflow_devices: "{{ swap_verify_devices | rejectattr('name', 'search', 'zram') | list }}"
   assert:
     that:
-      - _overflow_lines | length >= 1
-      - _overflow_lines | map('split') | map(attribute='1') | map('int') | max < 100
+      - _overflow_devices | length >= 1
+      - _overflow_devices | map(attribute='prio') | map('int') | max < 100
     fail_msg: >-
       Overflow swap priority must be below zram (100), got:
       {{ _swap_verify_swapon.stdout }}
