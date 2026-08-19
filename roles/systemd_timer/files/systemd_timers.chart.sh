@@ -34,16 +34,11 @@ systemd_timers_stamp_dir="${systemd_timers_stamp_dir:-/var/lib/systemd/timers}"
 # `systemctl show LastTriggerUSec`: the stamp survives both reboots and unit
 # reloads, whereas LastTriggerUSec blanks to n/a whenever the .timer is
 # re-enabled -- which every converge that rewrites the unit does -- and would
-# then read as "never fired". No stamp => never fired (the caller falls back
-# to install time). Reads only coreutils, so the collector needs no systemctl
-# and can't be tripped by a transient D-Bus hiccup.
+# then read as "never fired". A missing stamp falls back to install time. The
+# collector needs no systemctl and can't be tripped by a transient D-Bus hiccup.
 
 systemd_timers_check() {
-  # check() always succeeds so charts.d.plugin keeps the module enabled
-  # even when no timers are registered yet. update() handles the empty
-  # case (glob expands to no .conf files -> empty for-loop -> no output).
-  # Reads only coreutils (stat/awk), so there is no external dependency
-  # to probe. The metadata dir is owned by ansible (systemd_timer/install.yml).
+  # Stay enabled while no timers are registered; update() handles an empty dir.
   return 0
 }
 

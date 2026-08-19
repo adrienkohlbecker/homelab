@@ -1,8 +1,5 @@
-# Wire the systemd_timers charts.d collector + its overdue alert into
-# netdata. The collector reads each timer's LastTriggerUSec and emits an
-# `overdue` boolean per timer, with the period-aware threshold (age >
-# 2 * period) computed against the per-timer metadata files written by
-# install.yml.
+# Install the systemd timer freshness collector and overdue alert. It compares
+# persistent trigger-stamp mtimes with the periods written by install.yml.
 - name: Install systemd_timers charts.d collector
   import_role:
     name: netdata
