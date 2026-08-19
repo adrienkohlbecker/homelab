@@ -10,18 +10,6 @@
 # Expected values are hardcoded here, independent of main.yml, so this catches
 # a main.yml regression rather than rubber-stamping whatever it set.
 
-- name: _verify | Dataset exists
-  command:
-    argv:
-      - zfs
-      - list
-      - -H
-      - -o
-      - name
-      - "{{ zfs_dozer_filesystem }}/scratch"
-  changed_when: false
-  become: true
-
 - name: _verify | Mountpoint property set locally with expected value
   command:
     argv:
@@ -40,18 +28,13 @@
     or (scratch_verify_mountpoint.stdout | zfs_source_value).value != '/mnt/scratch'
   become: true
 
-- name: _verify | Dataset mounted at mountpoint
+- name: _verify | Dataset mount contract passes
   command:
     argv:
-      - findmnt
-      - --first-only
-      - --noheadings
-      - --output
-      - SOURCE
+      - /usr/local/bin/zfs_check_mount
+      - "{{ zfs_dozer_filesystem }}/scratch"
       - /mnt/scratch
-  register: scratch_verify_findmnt
   changed_when: false
-  failed_when: scratch_verify_findmnt.stdout | trim != zfs_dozer_filesystem ~ '/scratch'
   become: true
 
 # The property check above proves setuid/devices=off is set local on the
