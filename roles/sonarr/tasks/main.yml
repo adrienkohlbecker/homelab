@@ -1,7 +1,6 @@
 - name: Assert sonarr_api_key is provided
   assert:
     that:
-      - sonarr_api_key is defined
       - (sonarr_api_key | default('')) | length > 0
     fail_msg: >-
       sonarr_api_key is required (vaulted in group_vars/{prod,test}.yml). Without it
