@@ -137,6 +137,24 @@
     mode: "0600"
   become: true
 
+- name: _setup | Create retired root backup identity directory fixture
+  file:
+    path: /mnt/services/ssh_root
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+
+- name: _setup | Create retired root backup identity fixture
+  copy:
+    content: "retired identity\n"
+    dest: /mnt/services/ssh_root/id_ed25519
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+
 - name: _setup | Create retired Speedtest nginx fixture directories
   file:
     path: /etc/nginx/{{ item }}

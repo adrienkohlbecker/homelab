@@ -43,6 +43,13 @@
   failed_when: retired_services_root_ssh_config.stat.exists
   become: true
 
+- name: _verify | Retired root backup identity is absent
+  stat:
+    path: /mnt/services/ssh_root
+  register: retired_services_root_backup_identity
+  failed_when: retired_services_root_backup_identity.stat.exists
+  become: true
+
 - name: _verify | Retired Fluent Bit files are absent
   stat:
     path: "{{ item }}"

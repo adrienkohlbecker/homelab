@@ -207,6 +207,7 @@
   loop:
     - /etc/logrotate.d/zfs_autobackup
     - /root/.ssh/config
+    - /mnt/services/ssh_root
     - /var/lib/zfs_autobackup/.config/systemd
   become: true
   tags:

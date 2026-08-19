@@ -8,18 +8,8 @@
   changed_when: false
   become: true
 
-# Simulate an upgrade plus rebuild: the persisted identity is still at the
-# legacy path while /root/.ssh is fresh. Converge must migrate and restore the
-# same key before deleting the legacy directory.
-- name: _verify | Move the persisted identity to the legacy path
-  command:
-    argv:
-      - mv
-      - /mnt/services/zfs_autobackup
-      - /mnt/services/ssh_root
-  changed_when: true
-  become: true
-
+# Simulate a rebuild: /root/.ssh is fresh while the persisted identity rides
+# the restored services dataset. Converge must restore the same key.
 - name: _verify | Remove the live keypair
   file:
     path: "{{ item }}"
@@ -29,10 +19,10 @@
     - /root/.ssh/id_ed25519.pub
   become: true
 
-- name: _verify | Re-run identity management against the legacy path
+- name: _verify | Re-run identity management against the persisted identity
   import_tasks: identity.yml
 
-- name: _verify | Migrated identity was restored unchanged
+- name: _verify | Persisted identity was restored unchanged
   command:
     argv:
       - cmp
@@ -42,25 +32,16 @@
   changed_when: false
   become: true
 
-- name: _verify | Legacy persistence path was retired
-  stat:
-    path: /mnt/services/ssh_root
-  become: true
-  register: zfs_autobackup_verify_identity_legacy
-  failed_when: zfs_autobackup_verify_identity_legacy.stat.exists
-
-- name: _verify | Re-run identity management after migration
+- name: _verify | Re-run identity management after restoration
   import_tasks: identity.yml
 
-- name: _verify | Migrated identity is idempotent
+- name: _verify | Restored identity is idempotent
   assert:
     that:
       - not zfs_autobackup_identity_keypair.changed
       - not zfs_autobackup_identity_private_key.changed
-      - not (zfs_autobackup_identity_migration.changed | default(false))
-      - not (zfs_autobackup_identity_legacy_remove.changed | default(false))
     fail_msg: >-
-      backup identity still changed after migration: keypair={{ zfs_autobackup_identity_keypair }}
+      backup identity still changed after restoration: keypair={{ zfs_autobackup_identity_keypair }}
       private_key={{ zfs_autobackup_identity_private_key }}
 
 - name: _verify | Preserve the valid backup identity for repair
