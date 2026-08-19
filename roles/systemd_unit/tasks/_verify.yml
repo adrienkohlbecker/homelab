@@ -120,20 +120,6 @@
     state: absent
   become: true
 
-- name: _verify | Cleanup install-path test units
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/systemd/system/systemd_unit_verify_ok.service
-    - /etc/systemd/system/systemd_unit_verify_bad.service
-  become: true
-
-- name: _verify | Daemon-reload after install-path cleanup
-  systemd:
-    daemon_reload: true
-  become: true
-
 # Exercise the copy dispatch (extension-derived): src without .j2 picks the
 # copy module so install.yml reads from files/ rather than templates/. The
 # composed-unit assertions below verify that systemd loaded the copied unit.
@@ -226,19 +212,10 @@
     daemon_reload: true
   become: true
 
-# Remove-path coverage: parallels the install-path block above. Install a
-# fresh fixture so this section is independent of state left by prior
-# scenarios, then exercise the four observable behaviours of
+# Remove-path coverage consumes the valid fixture left by the install-path
+# scenarios, then exercises the four observable behaviours of
 # tasks_from=remove: deletes-on-first-call, idempotent on second call,
 # reports a stop when the file is already absent, and refuses to delete a mask.
-- name: _verify | Install fixture for remove-path tests
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: systemd_unit_verify_ok.service.j2
-
 - name: _verify | Remove via tasks_from=remove
   import_role:
     name: systemd_unit
