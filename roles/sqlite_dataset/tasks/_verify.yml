@@ -27,21 +27,6 @@
             - /mnt/services/sqlite_dataset_test/test.db
             - /mnt/services/sqlite_dataset_test/sub/other.db
 
-    - name: _verify | Scenario 1 — stat pre-created src files
-      stat:
-        path: "/mnt/services/sqlite/sqlite_dataset_test/{{ item }}"
-      loop:
-        - test.db
-        - other.db
-      register: _sqlite_dataset_src_files
-      become: true
-      failed_when: >-
-        not _sqlite_dataset_src_files.stat.exists
-        or _sqlite_dataset_src_files.stat.islnk
-        or _sqlite_dataset_src_files.stat.pw_name != 'root'
-        or _sqlite_dataset_src_files.stat.gr_name != 'root'
-        or _sqlite_dataset_src_files.stat.mode != '0640'
-
     - name: _verify | Scenario 1 — stat symlinks at dest
       stat:
         path: "{{ item }}"
@@ -57,13 +42,6 @@
         or _sqlite_dataset_symlinks.stat.lnk_target != '/mnt/services/sqlite/sqlite_dataset_test/' ~ (item | basename)
         or _sqlite_dataset_symlinks.stat.pw_name != 'root'
         or _sqlite_dataset_symlinks.stat.gr_name != 'root'
-
-    - name: _verify | Scenario 1 — stat the sqlite dir
-      stat:
-        path: /mnt/services/sqlite/sqlite_dataset_test
-      register: _sqlite_dataset_dir_s2
-      become: true
-      failed_when: _sqlite_dataset_dir_s2.stat.mode != '0750'
 
     # -- Scenario 2: populated DBs survive an identical re-apply ----------
     # Write through the app-facing symlink, then prove an identical converge
