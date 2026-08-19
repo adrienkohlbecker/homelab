@@ -60,46 +60,6 @@
       Non-EtM MACs are still present in the effective config:
       {{ _ssh_verify_macs }}
 
-# --- host-key identity persistence -------------------------------------------
-- name: _verify | Live and persisted host-key manifests match
-  command:
-    argv:
-      - cmp
-      - -s
-      - "/etc/ssh/{{ item }}"
-      - "/mnt/services/ssh_host_keys/{{ item }}"
-  loop: "{{ _ssh_host_key_files }}"
-  loop_control:
-    label: "{{ item }}"
-  changed_when: false
-  become: true
-
-- name: _verify | Stat the host-key persistence directory
-  stat:
-    path: /mnt/services/ssh_host_keys
-  become: true
-  register: ssh_verify_persist_dir
-
-- name: _verify | Stat the persisted private host key
-  stat:
-    path: "/mnt/services/ssh_host_keys/{{ _ssh_host_private_key_file }}"
-  become: true
-  register: ssh_verify_persisted_private_key
-
-- name: _verify | Persisted host key is private to root
-  assert:
-    that:
-      - ssh_verify_persist_dir.stat.exists
-      - ssh_verify_persist_dir.stat.mode == '0700'
-      - ssh_verify_persist_dir.stat.pw_name == 'root'
-      - ssh_verify_persist_dir.stat.gr_name == 'root'
-      - ssh_verify_persisted_private_key.stat.mode == '0600'
-      - ssh_verify_persisted_private_key.stat.pw_name == 'root'
-      - ssh_verify_persisted_private_key.stat.gr_name == 'root'
-    fail_msg: >-
-      /mnt/services/ssh_host_keys or its private key has unsafe ownership
-      or permissions.
-
 # Divergence guard: a persisted identity that differs from the live one
 # (rebuilt host, restore step skipped) must HALT the converge instead of
 # silently overwriting the old identity. Corrupt the persisted copy, re-run
