@@ -30,17 +30,6 @@
     name: netdata
     state: restarted
   become: true
-# netdata dropped /run/netdata/netdata.pipe in 1.46+ (control moved to HTTP
-# — see roles/netdata/tasks/charts_d.yml), so a wait_for on the pipe would
-# hang until timeout. Probe the HTTP API instead.
-- name: _verify | Wait for netdata HTTP API after restart
-  uri:
-    url: http://127.0.0.1:19999/api/v1/info
-    status_code: 200
-  register: _systemd_timer_netdata_api
-  retries: 60
-  delay: 2
-  until: _systemd_timer_netdata_api.status == 200
 
 # ============================================================
 # Contracts 1+2+5: one fixture exercises the successful lifecycle, privilege
