@@ -1,5 +1,14 @@
 domain: mhaf.fr
 nexus_url: nexus.lab.fahm.fr
+# DoT servers for the qemu test fixture. Local fixtures use the household
+# AdGuard VIP even when --upstream-mirrors bypasses Nexus; Internet-bound 853
+# is blocked there. AWS cells can reach the public anycast resolvers directly.
+# prod_network keeps the local branch on the live VIP rather than the test
+# subnet derived for the guest.
+test_dot_servers: >-
+  {{ bootstrap_dns_resolver
+     if test_in_aws | default(false) | bool
+     else [prod_network.virtual_ips.dns ~ '#dns.fahm.fr'] }}
 # AWS region the qemu CI cells egress through (the aws_qemu target). Single
 # source for the in-region EC2 apt mirror and ECR; only consulted when
 # test_in_aws is true.

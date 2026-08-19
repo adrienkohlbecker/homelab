@@ -131,20 +131,6 @@ bootstrap_dns_resolver:
   - 1.1.1.1
   - 1.0.0.1
 
-# DoT servers for the qemu test fixture's resolved drop-in (space-joined
-# for the DNS= line; roles/test/tasks/_verify.yml splits it back).
-# Local fixtures resolve through the household AdGuard VIP even when
-# --upstream-mirrors bypasses Nexus: the VIP is their reachable upstream
-# DoT endpoint, while Internet-bound 853 is intentionally blocked. AWS
-# cells have no LAN VIP and open public 853, so they use the public
-# anycast pair. Both ride TCP via DoT, which keeps qemu's SLIRP UDP
-# drops from flaking resolution. prod_network (not network) keeps the
-# LAN branch on the live VIP rather than the gsub'd test subnet.
-bootstrap_dot_servers: >-
-  {{ (bootstrap_dns_resolver | join(' '))
-     if test_in_aws | default(false) | bool
-     else (prod_network.virtual_ips.dns ~ '#dns.fahm.fr') }}
-
 # systemd-journald storage backend. persistent → /var/log/journal/<machine-id>/
 # (rides ZFS snapshots/replication on prod). Override to volatile on transient
 # test/CI machines so /run/log/journal/ is the only journal location.

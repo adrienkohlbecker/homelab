@@ -68,11 +68,9 @@
     test_resolvectl_global_protocols: >-
       {{ test_resolvectl.stdout_lines
          | select('search', 'Protocols:') | list | first | default('') }}
-    # Same single source mirrors.yml renders into the drop-in
-    # (group_vars/all/main.yml), split back into per-server tokens --
-    # including the #dns.fahm.fr SNI suffix, so a dropped SNI (which
-    # breaks DoT certificate validation) fails here too.
-    test_expected_resolvers: "{{ bootstrap_dot_servers.split() }}"
+    # Same typed list main.yml renders into the drop-in, including the
+    # #dns.fahm.fr SNI suffix so a dropped SNI fails here too.
+    test_expected_resolvers: "{{ test_dot_servers }}"
 
 - name: _verify | DNS-over-TLS is enforced at the configured resolver
   assert:
