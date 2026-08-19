@@ -74,12 +74,9 @@
     that:
       - not ssh_root_keypair.changed
       - not ssh_root_private_key.changed
-      - not ssh_root_public_key.changed
-      - ssh_root_keypair.comment == ssh_root_key_comment
     fail_msg: >-
       ssh_root still changed after restoring the persisted identity:
       keypair={{ ssh_root_keypair }} private_key={{ ssh_root_private_key }}
-      public_key={{ ssh_root_public_key }}
 
 - name: _verify | Preserve the valid root identity for repair
   copy:
