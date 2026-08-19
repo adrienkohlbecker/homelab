@@ -9,14 +9,8 @@ After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
 {% endif %}
 
-[Service]
-# The stock unit declares StateDirectory=tailscale, so systemd manages
-# /var/lib/tailscale itself and refuses our symlink to the services dataset
-# ("Not a directory", 238/STATE_DIRECTORY). Clear it: tailscaled then falls back
-# to its --state=/var/lib/tailscale/tailscaled.state, which follows the symlink
-# onto /mnt/services/tailscale so the node identity rides the ZFS backup.
-StateDirectory=
 {% if ansible_default_ipv4.interface is defined and ((tailscale_advertise_routes | length > 0) or (tailscale_advertise_exit_node | bool)) %}
+[Service]
 # Persist UDP GRO forwarding offload on the underlay NIC across reboots. The
 # role also applies this via ethtool on every converge for immediate effect;
 # this ExecStartPost= fires whenever tailscaled starts so the setting survives

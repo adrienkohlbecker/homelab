@@ -17,9 +17,8 @@
     - tailscale
 
 # Keep node identity on the backed-up services dataset so re-imaging does not
-# create a new Headscale node and lose route approvals. The stock unit hardcodes
-# /var/lib/tailscale/tailscaled.state, so symlink that directory; mode 0700
-# protects the node private key.
+# create a new Headscale node and lose route approvals. Mode 0700 protects the
+# node private key.
 - name: Create the tailscale state directory on the services dataset
   file:
     path: /mnt/services/tailscale
@@ -31,20 +30,7 @@
   tags:
     - tailscale
 
-# Plant the link before installing the package so tailscaled can never create
-# identity state on the root filesystem. A legacy real directory fails closed:
-# force permits a dangling source, but does not replace a directory.
-- name: Symlink the tailscale state path onto the services dataset
-  file:
-    src: /mnt/services/tailscale
-    dest: /var/lib/tailscale
-    state: link
-    force: true
-  become: true
-  tags:
-    - tailscale
-
-# Suppress the package postinst start until the state link and systemd drop-in
+# Suppress the package postinst start until the state path and systemd drop-in
 # are ready. The explicit lifecycle task below starts or restarts the daemon.
 - name: Install tailscale
   apt:
@@ -58,16 +44,51 @@
   tags:
     - tailscale
 
-# The underlay port is a daemon setting, not a `tailscale up` flag. Distinct
-# host_vars ports give lab and pug unambiguous forwards behind their shared NAT.
-- name: Pin tailscaled underlay port in /etc/default/tailscaled
+# The underlay port and persistent state path are daemon settings, not
+# `tailscale up` flags. FLAGS follows the stock --state argument, so the direct
+# services-dataset path wins without overriding the package unit.
+- name: Configure tailscaled daemon defaults
   lineinfile:
     path: /etc/default/tailscaled
-    regexp: '^PORT='
-    line: 'PORT="{{ tailscale_port }}"'
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
     backup: true
-  register: tailscale_default_port
+  loop:
+    - regexp: '^PORT='
+      line: 'PORT="{{ tailscale_port }}"'
+    - regexp: '^FLAGS='
+      line: 'FLAGS="--state=/mnt/services/tailscale/tailscaled.state"'
+  register: tailscale_defaults
   when: not (ansible_check_mode and apt_source_tailscale_changed)
+  become: true
+  tags:
+    - tailscale
+
+# Deployed hosts may still have the former /var/lib/tailscale symlink. Stop the
+# daemon after its direct state path is configured, then remove only that link;
+# systemd recreates its stock StateDirectory when the service starts below.
+- name: Inspect the stock tailscale state directory
+  stat:
+    path: /var/lib/tailscale
+  register: tailscale_stock_state
+  become: true
+  tags:
+    - tailscale
+
+- name: Stop tailscaled before replacing its legacy state symlink
+  systemd:
+    name: tailscaled.service
+    state: stopped
+  when: tailscale_stock_state.stat.islnk | default(false)
+  become: true
+  tags:
+    - tailscale
+
+- name: Remove the legacy tailscale state symlink
+  file:
+    path: /var/lib/tailscale
+    state: absent
+  when: tailscale_stock_state.stat.islnk | default(false)
   become: true
   tags:
     - tailscale
@@ -82,10 +103,9 @@
   tags:
     - tailscale
 
-# The drop-in clears stock StateDirectory handling for the state symlink, orders
-# tailscaled after the services mount, quiesces it for snapshots, and persists
-# GRO tuning. Mount ordering prevents a fresh identity being hidden beneath the
-# services dataset.
+# The drop-in orders tailscaled after the services mount, quiesces it for
+# snapshots, and persists GRO tuning. Mount ordering prevents tailscaled from
+# writing identity state to the bare mountpoint during boot.
 - name: Install the tailscaled drop-in
   import_role:
     name: systemd_unit
@@ -116,7 +136,7 @@
   tags:
     - tailscale
 
-# Restart inline when the package, port, or drop-in changed so the current
+# Restart inline when the package, defaults, or drop-in changed so the current
 # daemon configuration is active before register.yml runs `tailscale up`/`set`.
 - name: Enable and start tailscaled
   import_role:
@@ -128,7 +148,7 @@
       condition: "{{ not (ansible_check_mode and apt_source_tailscale_changed) }}"
       restart: >-
         {{ (tailscale_apt.changed | default(false))
-           or (tailscale_default_port.changed | default(false))
+           or (tailscale_defaults.changed | default(false))
            or (tailscaled_service_d_override_conf_result.changed | default(false)) }}
   tags:
     - tailscale
