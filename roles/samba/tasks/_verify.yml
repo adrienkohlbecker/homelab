@@ -58,20 +58,12 @@
       -- the unused printing subsystem could spawn samba-bgqd and write outside
       journald.
 
-- name: _verify | Inspect samba-bgqd process state
+- name: _verify | Printing helper is not running
   command: pgrep -x samba-bgqd
   register: samba_bgqd_process
   changed_when: false
-  failed_when: samba_bgqd_process.rc not in [0, 1]
+  failed_when: samba_bgqd_process.rc != 1
   become: true
-
-- name: _verify | Printing helper is not running
-  assert:
-    that:
-      - samba_bgqd_process.rc == 1
-    fail_msg: >-
-      samba-bgqd is still running despite the disabled printing subsystem
-      (pids={{ samba_bgqd_process.stdout_lines }}).
 
 # NetBIOS is retired: smbd must not announce over NetBIOS and must serve only
 # 445 (no legacy 139 session port). testparm canonicalises the values, so
@@ -104,15 +96,8 @@
   stat:
     path: /srv/smbtest/probe.dat
   register: samba_probe_stat
+  failed_when: not samba_probe_stat.stat.exists
   become: true
-
-- name: _verify | Assert the write reached disk
-  assert:
-    that:
-      - samba_probe_stat.stat.exists
-    fail_msg: >-
-      smbclient put reported success but probe.dat is absent under /srv/smbtest
-      -- the write path (vfs fruit/streams_xattr stack) is broken.
 
 # restrict anonymous = 2 + map to guest = never must refuse an unauthenticated
 # connection -- proves the hardening is enforced, not merely configured.
