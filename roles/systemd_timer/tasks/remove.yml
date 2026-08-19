@@ -4,11 +4,8 @@
 #   user              default 'root'; non-root targets the named user's
 #                     user manager.
 #
-# Idempotent on fresh hosts (no-op if the timer was never installed),
-# so callers can leave a `tasks_from: remove` call in place on host
-# groups that aren't supposed to run the timer (e.g. zfs_autobackup
-# dest hosts). Order matters: stop+remove the timer first so scheduling
-# halts before the service it triggered disappears.
+# Idempotent on fresh hosts. Order matters: stop and remove the timer first so
+# scheduling halts before the service it triggered disappears.
 #
 # Validate name before it flows into unit names and the metadata path.
 - name: remove | Validate name for {{ systemd_timer_args.name | default('<unset>') }}

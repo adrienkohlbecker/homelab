@@ -1,7 +1,7 @@
 # Install a paired <name>.service + <name>.timer. Caller passes `systemd_timer_args`;
-# see CLAUDE.md "Helper roles → systemd_timer" for the full key reference.
+# see notes/helper-roles-reference.md for the full key reference.
 #
-# Non-obvious constraints kept here (everything else is in CLAUDE.md):
+# Non-obvious constraints kept here (everything else is in the reference):
 #   - run_as is only valid when user == 'root'; rejected early so systemd
 #     doesn't see an invalid User= in a user-scope unit.
 #   - environment values must be non-secret: written into the 0644 unit file.

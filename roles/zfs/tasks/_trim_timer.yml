@@ -1,26 +1,6 @@
-# Per-pool wrapper for the include_tasks loop in main.yml. Uses
-# import_role + inline `vars:` (not include_role + set_fact) so the
-# systemd_timer_args dict is bound at task scope and doesn't leak
-# across role boundaries.
-#
-# The leak it avoids: under ansible 2.20 + mitogen, `set_fact:
-# systemd_timer_args:` or `include_role` with `vars: { systemd_timer_args:
-# ... }` leaves the value visible to later tasks in the play -- including
-# inside a sibling role's `import_role: name: systemd_timer` even when
-# that import explicitly passes its own `vars: { systemd_timer_args: ... }`.
-# The leftover value (always the LAST trim iteration -- tank on lab,
-# rpool on pug) silently retargets later systemd_timer calls. Most
-# visibly: zfs_autobackup/dest.yml's "Remove the zfs_autosync timer"
-# task (idempotent no-op on hosts where the timer was never installed)
-# ends up removing zfs_trim_<last-pool> instead, and main.yml's
-# "Schedule the zfs_autosnapshot timer" reinstalls the same name --
-# flapping the per-pool trim timer on every apply.
-#
-# import_role-with-inline-vars is safe here only because
-# systemd_timer/install.yml's nested task names are static: a templated
-# `{{ systemd_timer_args.name }}` on those tasks would resolve at parse
-# time, before `item` is bound, and warn. Keep them static (see
-# roles/systemd_timer/tasks/install.yml).
+# Use a wrapper so every loop iteration binds a fresh systemd_timer_args dict.
+# The nested systemd_timer imports keep static task names because templated
+# names resolve before item is bound.
 - name: _trim_timer | Install zfs_trim timer for {{ item }}
   import_role:
     name: systemd_timer
@@ -34,8 +14,7 @@
       # multi-pool host) instead of all kicking off at 00:05.
       randomized_delay_sec: 3600
       # -w waits for the trim to finish, so the oneshot's exit status reflects
-      # the actual outcome -- a mid-run failure surfaces as a failed unit (and,
-      # via the helper's monitor, as overdue) rather than being lost because the
-      # bare `zpool trim` returns the instant it kicks the operation off. Bounded
-      # by the helper's default TimeoutStartSec=1h, ample for SSD-backed pools.
+      # the actual outcome -- a mid-run failure surfaces as a failed unit rather
+      # than being lost because bare `zpool trim` returns as soon as it starts
+      # the operation. Bounded by the helper's default TimeoutStartSec=1h.
       exec_start: "/sbin/zpool trim -w {{ item }}"
