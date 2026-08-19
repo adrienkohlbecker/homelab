@@ -1,4 +1,6 @@
-- hosts: all
+- name: Configure test mirrors
+  hosts: all
   tasks:
-    - import_role:
+    - name: Run test bootstrap
+      import_role:
         name: test
