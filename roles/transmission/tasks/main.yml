@@ -211,24 +211,3 @@
       auth: required
   tags:
     - transmission
-
-# The LinuxServer image runs /app/blocklist-update.sh daily at 03:00. Its s6
-# environment loads USER/PASS from the unit's USER/FILE__PASS settings for the
-# authenticated RPC call, so the enabled blocklist needs no host-side timer.
-- name: Remove the redundant blocklist refresh timer
-  import_role:
-    name: systemd_timer
-    tasks_from: remove
-  vars:
-    systemd_timer_args:
-      name: transmission_blocklist_update
-  tags:
-    - transmission
-
-- name: Remove the retired /opt/transmission code directory
-  file:
-    path: /opt/transmission
-    state: absent
-  become: true
-  tags:
-    - transmission
