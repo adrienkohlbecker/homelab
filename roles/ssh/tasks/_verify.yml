@@ -28,7 +28,7 @@
       - ssh_verify_effective.stdout is search('(?m)^loglevel VERBOSE$')
       - ssh_verify_effective.stdout is search('(?m)^kbdinteractiveauthentication no$')
       - ssh_verify_effective.stdout is search('(?m)^streamlocalbindunlink yes$')
-      - ssh_verify_effective.stdout is search('(?m)^requiredrsasize 3072$')
+      - ssh_verify_effective.stdout is search('(?m)^pubkeyacceptedalgorithms ssh-ed25519,sk-ssh-ed25519@openssh.com$')
     fail_msg: >-
       sshd effective config is missing expected hardening directives —
       00-hardening.conf may not have landed, or /etc/ssh/sshd_config
