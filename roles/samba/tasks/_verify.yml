@@ -4,6 +4,12 @@
 # cannot. The smbtest share (host_vars/box.yml, valid users = the login user,
 # time_machine: true) is the vehicle.
 
+- name: _verify | Service smbd is active  # noqa: command-instead-of-module -- is-active query, not a state change
+  command: systemctl is-active smbd
+  register: samba_active
+  changed_when: false
+  become: true
+
 # nmbd is masked (NetBIOS retired) -- prove it can't be started, not merely
 # that it's stopped. A masked unit reports `masked` and `is-active` is non-zero.
 - name: _verify | Service nmbd is masked  # noqa: command-instead-of-module -- is-enabled query, not a state change
@@ -90,6 +96,18 @@
     fail_msg: >-
       testparm -v does not report `disable netbios = Yes` / `smb ports = 445`
       -- the NetBIOS-retirement directives were dropped to their defaults.
+
+- name: _verify | Authenticated client can list shares
+  command: smbclient -L localhost -U {{ ansible_user_id }}%{{ samba_password }}
+  register: samba_smbclient_list
+  changed_when: false
+  become: true
+
+- name: _verify | Share smbtest is reachable to its valid user
+  command: smbclient //localhost/smbtest -U {{ ansible_user_id }}%{{ samba_password }} -c ls
+  register: samba_smbclient_share
+  changed_when: false
+  become: true
 
 # A read-only `ls` against a freshly-created empty dir proves little; the share
 # exists to be written to (the Time Machine path). argv form keeps the
