@@ -112,9 +112,9 @@
       import_role:
         name: ssh_root
 
-    - name: _verify | Unreachable when regeneration fails closed
-      set_fact:
-        _ssh_root_regen_guard_tripped: false
+    - name: _verify | Reject a converge that accepted the corrupt identity
+      fail:
+        msg: ssh_root accepted an invalid existing key
 
   rescue:
     - name: _verify | The keypair task failed closed
@@ -137,10 +137,6 @@
         that:
           - _ssh_root_corrupt_after.stat.checksum == _ssh_root_corrupt_before.stat.checksum
 
-    - name: _verify | Record the regeneration guard firing
-      set_fact:
-        _ssh_root_regen_guard_tripped: true
-
   always:
     - name: _verify | Restore the valid root identity copies
       copy:
@@ -160,11 +156,3 @@
         path: /root/.ssh/id_ed25519.verify-backup
         state: absent
       become: true
-
-- name: _verify | Regeneration guard halted the converge
-  assert:
-    that:
-      - _ssh_root_regen_guard_tripped
-    fail_msg: >-
-      re-running ssh_root with an invalid existing key did not fail before
-      replacing the pinned identity.
