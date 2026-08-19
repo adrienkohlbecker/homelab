@@ -149,7 +149,7 @@ samba_shares:
   - name: smbtest
     path: /srv/smbtest
     valid users: "{{ ansible_user_id }}"
-    "fruit:time machine": true
+    "fruit:time machine": "yes"
     "fruit:time machine max size": 1T
 
 # Flipped to true so jellyfin tests exercise the HW-transcoding
