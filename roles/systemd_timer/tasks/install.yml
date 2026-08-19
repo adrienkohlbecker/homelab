@@ -30,7 +30,6 @@
 
 - name: install | Resolve caller defaults for {{ systemd_timer_args.name }}
   set_fact:
-    _systemd_timer_condition: "{{ systemd_timer_args.condition | default(true) }}"
     _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
     # The collector reads system-scope stamps, so user-scope timers cannot be
     # monitored and must not register metadata that would stay overdue forever.
@@ -42,7 +41,6 @@
 # unit template emit something systemd would reject at load time.
 - name: install | Reject run_as on user-scope timer for {{ systemd_timer_args.name }}
   when:
-    - _systemd_timer_condition
     - systemd_timer_args.run_as is defined
   assert:
     quiet: true
@@ -55,7 +53,6 @@
 
 - name: install | Validate environment keys for {{ systemd_timer_args.name }}
   when:
-    - _systemd_timer_condition
     - systemd_timer_args.environment is defined
   assert:
     quiet: true
@@ -84,7 +81,6 @@
       src: service.j2
       dest: "{{ systemd_timer_args.name }}.service"
       user: "{{ _systemd_timer_user }}"
-      condition: "{{ _systemd_timer_condition }}"
 
 - name: install | Install timer unit
   import_role:
@@ -95,7 +91,6 @@
       src: timer.j2
       dest: "{{ systemd_timer_args.name }}.timer"
       user: "{{ _systemd_timer_user }}"
-      condition: "{{ _systemd_timer_condition }}"
 
 # Skip enable+start when systemd_unit just (mock-)wrote either unit file
 # in check-mode — the file isn't actually on disk, so `systemctl enable`
@@ -112,10 +107,9 @@
       src: "{{ systemd_timer_args.name }}.timer"
       user: "{{ _systemd_timer_user }}"
       condition: >-
-        {{ _systemd_timer_condition
-           and not (ansible_check_mode
-                    and (lookup('vars', systemd_timer_args.name ~ '_service_result').changed
-                         or lookup('vars', systemd_timer_args.name ~ '_timer_result').changed)) }}
+        {{ not (ansible_check_mode
+                and (lookup('vars', systemd_timer_args.name ~ '_service_result').changed
+                     or lookup('vars', systemd_timer_args.name ~ '_timer_result').changed)) }}
 
 # --- netdata overdue monitoring -------------------------------------------
 # Register the timer with the netdata systemd_timers collector. Placed after
@@ -134,7 +128,6 @@
 # shift it by an hour, which the 2 * period grace absorbs.
 - name: install | Derive overdue period from on_calendar for {{ systemd_timer_args.name }}
   when:
-    - _systemd_timer_condition
     - _systemd_timer_monitor
     - not ansible_check_mode
   shell: |
@@ -164,7 +157,6 @@
 # root-owned 0755/0644 paths avoid creating its user ahead of the package.
 - name: install | Ensure systemd_timers metadata dir exists
   when:
-    - _systemd_timer_condition
     - _systemd_timer_monitor
   file:
     path: /etc/netdata/charts.d/systemd_timers.d
@@ -179,7 +171,6 @@
 # overdue before its first fire.
 - name: install | Write systemd_timers metadata for {{ systemd_timer_args.name }}
   when:
-    - _systemd_timer_condition
     - _systemd_timer_monitor
     - not ansible_check_mode
   copy:
@@ -194,16 +185,4 @@
     mode: "0644"
     backup: true
     validate: 'sh -c ''. "%s" && test "${period_secs:-0}" -gt 0'''
-  register: _systemd_timer_metadata
   become: true
-
-# Publish one stable result for the paired helper. This stays defined when
-# condition is false so callers can safely chain `.changed` into later work.
-- name: install | Record timer result for {{ systemd_timer_args.name }}
-  set_fact:
-    "{{ systemd_timer_args.name | ansible_var_key }}_result":
-      changed: >-
-        {{ ((lookup('vars', systemd_timer_args.name ~ '_service_result', default={}).changed | default(false))
-            or (lookup('vars', systemd_timer_args.name ~ '_timer_result', default={}).changed | default(false))
-            or (lookup('vars', systemd_timer_args.name ~ '_timer_started_result', default={}).changed | default(false))
-            or (_systemd_timer_metadata.changed | default(false))) | bool }}
