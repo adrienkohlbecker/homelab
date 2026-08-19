@@ -48,7 +48,7 @@ _PHASE_TIMINGS: list[tuple[str, float]] = []
 # resolves via the host resolver chain on-LAN (CI runner, lab dev
 # hosts); off-LAN dev work can pass --upstream-mirrors as the escape
 # hatch.
-_SKIP_MIRRORS_PRELUDE_ROLES = frozenset({"apt", "packer"})
+_SKIP_MIRRORS_PRELUDE_ROLES = frozenset({"apt", "packer", "test"})
 _REMOVED_FLOW_FLAGS = frozenset(
     {
         "--checkmode",

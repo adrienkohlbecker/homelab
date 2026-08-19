@@ -134,5 +134,8 @@ class TestSkipMirrorsPreludeRoles:
     def test_packer_is_skipped(self) -> None:
         assert "packer" in testrole._SKIP_MIRRORS_PRELUDE_ROLES
 
+    def test_test_bootstrap_is_skipped(self) -> None:
+        assert "test" in testrole._SKIP_MIRRORS_PRELUDE_ROLES
+
     def test_nginx_not_skipped(self) -> None:
         assert "nginx" not in testrole._SKIP_MIRRORS_PRELUDE_ROLES
