@@ -118,7 +118,7 @@ smtp_use_tls: "{{ smtp_port | int not in [25, 465] }}"
 email_domain: noreply.{{ domain }}
 
 # User-facing timezone for podman service containers. Host clock
-# stays UTC (see roles/timezone/) so journald/syslog correlate with
+# stays UTC (see roles/locale/) so journald/syslog correlate with
 # external timestamps; containers render user-visible times in local.
 system_timezone: Europe/Paris
 

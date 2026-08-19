@@ -1,8 +1,0 @@
-# The timezone module verifies systemd and RTC state after changing it; exercise
-# libc independently to prove processes resolve the configured timezone.
-
-- name: _verify | Libc timezone is UTC
-  command: date +%Z
-  register: timezone_verify_date
-  changed_when: false
-  failed_when: timezone_verify_date.stdout != 'UTC'

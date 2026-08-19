@@ -1,7 +1,7 @@
-# Functional checks for the locale role. The converge proves apt +
-# locale_gen + the default-locale file write exit cleanly; these verify
-# the role's actual contract: en_US.UTF-8 is *compiled and usable*, and
-# it's the *system default* with no higher-priority override masking it.
+# Functional checks for the locale role. The converge proves the modules and
+# default-locale file write exit cleanly; these verify the role's actual
+# contract: en_US.UTF-8 is compiled, usable, and the unmasked system default,
+# while processes resolve the host timezone as UTC.
 
 - name: _verify | List generated locales
   command: locale -a
@@ -89,5 +89,15 @@
       - _content | regex_findall('^LANGUAGE=', multiline=True) | length == 0
     fail_msg: "the default-locale file should set LANG only; LC_ALL or LANGUAGE was re-added"
     quiet: true
+  tags:
+    - locale
+
+# The timezone module verifies systemd and RTC state after changing it; exercise
+# libc independently to prove processes resolve the configured timezone.
+- name: _verify | Libc timezone is UTC
+  command: date +%Z
+  register: locale_verify_timezone
+  changed_when: false
+  failed_when: locale_verify_timezone.stdout != 'UTC'
   tags:
     - locale

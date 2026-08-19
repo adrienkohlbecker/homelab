@@ -25,7 +25,6 @@
     - wireguard
     - locale
     - console
-    - timezone
     - unattended_upgrades
     - logrotate
     - journald
