@@ -157,28 +157,17 @@
   tags:
     - tailscale
 
-# Subnet router + exit node both need the kernel to forward between the tailnet
-# interface and the LAN. Tailscale owns these forwarding sysctls on routing
-# hosts so the setting follows the feature that consumes it.
-# Gated on actually routing: a pure mesh client (no subnet, no exit node) has no
-# reason to become an IP router.
-- name: Enable IPv4 forwarding for subnet routing / exit node
+# Subnet routers and exit nodes need the kernel to forward between the tailnet
+# interface and the LAN. Pure mesh clients leave forwarding unchanged.
+- name: Enable IP forwarding for subnet routing / exit node
   ansible.posix.sysctl:
-    name: net.ipv4.ip_forward
+    name: "{{ item }}"
     value: "1"
     sysctl_file: /etc/sysctl.d/99-tailscale.conf
     sysctl_set: true
-  when: (tailscale_advertise_routes | length > 0) or (tailscale_advertise_exit_node | bool)
-  become: true
-  tags:
-    - tailscale
-
-- name: Enable IPv6 forwarding for subnet routing / exit node
-  ansible.posix.sysctl:
-    name: net.ipv6.conf.all.forwarding
-    value: "1"
-    sysctl_file: /etc/sysctl.d/99-tailscale.conf
-    sysctl_set: true
+  loop:
+    - net.ipv4.ip_forward
+    - net.ipv6.conf.all.forwarding
   when: (tailscale_advertise_routes | length > 0) or (tailscale_advertise_exit_node | bool)
   become: true
   tags:

@@ -121,21 +121,15 @@
   changed_when: true
   become: true
 
-# The forwarding sysctls are what make the approved subnet route / exit node
-# actually pass traffic -- assert the role set them (live value, not just the
-# file on disk).
-- name: _verify | IPv4 forwarding is enabled
-  command: sysctl -n net.ipv4.ip_forward
-  register: _tailscale_ipv4_fwd
+# Assert the forwarding settings are live, not just present in the sysctl file.
+- name: _verify | IP forwarding is enabled
+  command: sysctl -n {{ item }}
+  loop:
+    - net.ipv4.ip_forward
+    - net.ipv6.conf.all.forwarding
+  register: _tailscale_forwarding
   changed_when: false
-  failed_when: _tailscale_ipv4_fwd.stdout | trim != '1'
-  become: true
-
-- name: _verify | IPv6 forwarding is enabled
-  command: sysctl -n net.ipv6.conf.all.forwarding
-  register: _tailscale_ipv6_fwd
-  changed_when: false
-  failed_when: _tailscale_ipv6_fwd.stdout | trim != '1'
+  failed_when: _tailscale_forwarding.stdout | trim != '1'
   become: true
 
 - name: _verify | Exercise tailscale fluent-bit noise filters
