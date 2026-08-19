@@ -41,6 +41,7 @@
     - refind
     # Service platform -- container runtime and web/TLS front door.
     - podman
+    - subid
     - certbot
     - nginx
     # Observability.
@@ -57,11 +58,6 @@
   roles:
     - headscale
     - fail2ban
-    # subid before gitlab_runner: the runner's rootless podman (Docker
-    # executor socket) needs gitlab_runner's subordinate-id range rendered
-    # first. box gets subid again in the Lab and Pug play below — idempotent,
-    # same host_vars source.
-    - subid
     - gitlab_runner
 
 - name: Lab storage datasets
@@ -94,7 +90,6 @@
     - resolved
     - adguard
     - docker_client
-    - subid
 
 - name: Tailscale mesh
   # Run once after fox's Headscale control plane and the home routers' firewalls.

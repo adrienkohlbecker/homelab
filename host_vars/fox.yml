@@ -196,9 +196,8 @@ netdata_collectors:
 netdata_zfspool_thresholds: {}
 netdata_diskspace_blocklist: []
 
-# gitlab_runner's rootless podman (the Docker executor socket) needs a
-# subordinate-id range; the subid role runs just before gitlab_runner in the
-# fox play (site.yml).
+# gitlab_runner's rootless podman Docker socket needs the subordinate-id range
+# rendered by the base subid role before the service play.
 subid_users:
   - gitlab_runner
 
