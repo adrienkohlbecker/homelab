@@ -68,9 +68,10 @@
 
 # No long-lived auth key. When the node isn't registered yet, mint a single-use,
 # short-expiry pre-auth key directly from the control plane and consume it below
-# in the same play -- the key never touches the vault or disk and is spent within
-# seconds. Identical path for prod (delegated to fox) and the harness (delegated
-# to the converging box, whose _setup stood up a local headscale): both delegate
+# in the same play -- the key only touches the root-only staging file below and
+# is spent within seconds. Identical path for prod (delegated to fox) and the
+# harness (delegated to the converging box, whose _setup stood up a local
+# headscale): both delegate
 # to tailscale_headscale_host and drive `podman exec headscale`. Gated on
 # not-already-registered, so steady-state converges mint nothing and the harness
 # idempotence check stays green; skipped in --check since minting is a
@@ -142,10 +143,6 @@
       register: tailscale_preauth
       changed_when: false
 
-    - name: register | Set the pre-auth key fact
-      set_fact:
-        tailscale_preauth_key: "{{ (tailscale_preauth.stdout | from_json).key }}"
-
     # Hand the key to `tailscale up` via a file rather than --authkey <key> on the
     # command line, where it would be world-readable in /proc/<pid>/cmdline / ps
     # for the duration of the call. Root-only, removed right after registration;
@@ -158,7 +155,7 @@
 
     - name: register | Stage the pre-auth key in a root-only file  # noqa: require-backup
       copy:
-        content: "{{ tailscale_preauth_key }}"
+        content: "{{ (tailscale_preauth.stdout | from_json).key }}"
         dest: "{{ tailscale_authkey_file }}"
         owner: root
         group: root
@@ -182,8 +179,7 @@
         --stateful-filtering={{ tailscale_stateful_filtering | ternary('true', 'false') }}
         --timeout=60s
         --reset
-      register: tailscale_up
-      changed_when: tailscale_up.rc == 0
+      changed_when: true
 
   always:
     # Drop the staged key on success AND failure so it never lingers on disk.
@@ -246,7 +242,6 @@
   when:
     - not ansible_check_mode
     - tailscale_running
-  register: tailscale_set
   changed_when: false
   become: true
   tags:
