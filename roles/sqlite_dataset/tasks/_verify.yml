@@ -148,13 +148,7 @@
         not _sqlite_dataset_clobber_refused
         or not _sqlite_dataset_real.stat.exists
         or _sqlite_dataset_real.stat.islnk
-
-    - name: _verify | Scenario 3 — read the surviving dest content
-      slurp:
-        src: /mnt/services/sqlite_dataset_test/real.db
-      register: _sqlite_dataset_real_content
-      become: true
-      failed_when: _sqlite_dataset_real_content.content | b64decode != 'REAL-DB'
+        or _sqlite_dataset_real.stat.checksum != ('REAL-DB' | hash('sha1'))
 
     # -- Scenario 4: create_target=false plants a dangling symlink --------
     - name: _verify | Scenario 4 — skip target creation on a cold database
