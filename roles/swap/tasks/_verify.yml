@@ -117,17 +117,16 @@
 
 - name: _verify | Read vm.swappiness
   when: _swap_verify_zram_module.rc == 0
-  slurp:
-    src: /proc/sys/vm/swappiness
-  become: true
+  command: sysctl -n vm.swappiness
+  changed_when: false
   register: _swap_verify_swappiness
 
 - name: _verify | Swappiness tuned to the configured value
   when: _swap_verify_zram_module.rc == 0
   assert:
     that:
-      - (_swap_verify_swappiness.content | b64decode | trim | int) == (swap_swappiness | int)
+      - (_swap_verify_swappiness.stdout | trim | int) == (swap_swappiness | int)
     fail_msg: >-
-      vm.swappiness is {{ _swap_verify_swappiness.content | b64decode | trim }},
+      vm.swappiness is {{ _swap_verify_swappiness.stdout | trim }},
       expected {{ swap_swappiness }}.
   become: true
