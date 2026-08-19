@@ -19,12 +19,18 @@ test_ecr_registry_mirrors:
   ghcr.io: github
   registry.gitlab.com: gitlab
   quay.io: quay
-# test_in_aws, not test_backend: aws_qemu cells egress through AWS and can
-# reach ECR, so they mirror there like EC2 cells instead of using LAN Nexus.
-test_use_ecr_registry_mirrors: >-
-  {{ (test_in_aws | default(false) | bool)
-     and (test_ecr_registry | length > 0)
-     and (test_ecr_registry_mirrors | length > 0) }}
+# aws_qemu cells egress through AWS and mirror through ECR. Local cells use
+# Nexus unless --upstream-mirrors clears nexus_url, in which case the empty map
+# suppresses registry configuration entirely.
+test_registry_mirror_base: >-
+  {{ test_ecr_registry
+     if test_in_aws | default(false) | bool
+     else nexus_url ~ '/repository' }}
+test_registry_mirrors: >-
+  {{ test_ecr_registry_mirrors
+     if test_in_aws | default(false) | bool
+     else ({'docker.io': 'docker.io', 'ghcr.io': 'ghcr.io'}
+           if nexus_url | length > 0 else {}) }}
 
 # Test-only placeholder for lab's GitLab shell runner. Prod supplies the real
 # lab token via the prod vault.

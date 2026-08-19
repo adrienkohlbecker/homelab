@@ -41,7 +41,7 @@
     name: apt
 
 - name: mirrors | Ensure /etc/containers/registries.conf.d exists
-  when: (nexus_url | length > 0) or test_use_ecr_registry_mirrors
+  when: test_registry_mirrors | length > 0
   file:
     path: /etc/containers/registries.conf.d
     state: directory
@@ -51,7 +51,7 @@
   become: true
 
 - name: mirrors | Configure podman registry mirrors
-  when: (nexus_url | length > 0) or test_use_ecr_registry_mirrors
+  when: test_registry_mirrors | length > 0
   copy:
     dest: /etc/containers/registries.conf.d/homelab-mirrors.conf
     mode: "0644"
@@ -61,19 +61,17 @@
     # the image namespace and roles/nexus's nginx rewrite moves it ahead of
     # /v2/. A bare Nexus host would address an API that does not exist.
     content: |
-      {% set mirror_base = test_ecr_registry if test_use_ecr_registry_mirrors else nexus_url ~ '/repository' %}
-      {% set registry_mirrors = test_ecr_registry_mirrors if test_use_ecr_registry_mirrors else {'docker.io': 'docker.io', 'ghcr.io': 'ghcr.io'} %}
-      {% for source, prefix in registry_mirrors | dictsort %}
+      {% for source, prefix in test_registry_mirrors | dictsort %}
       [[registry]]
       location = "{{ source }}"
 
       [[registry.mirror]]
-      location = "{{ mirror_base }}/{{ prefix }}"
+      location = "{{ test_registry_mirror_base }}/{{ prefix }}"
       {% endfor %}
   become: true
 
 - name: mirrors | Ensure root containers auth dir exists
-  when: test_use_ecr_registry_mirrors
+  when: test_in_aws | default(false) | bool
   file:
     path: /root/.config/containers
     state: directory
@@ -83,7 +81,7 @@
   become: true
 
 - name: mirrors | Write ECR auth for root podman pulls
-  when: test_use_ecr_registry_mirrors
+  when: test_in_aws | default(false) | bool
   copy:
     dest: /root/.config/containers/auth.json
     mode: "0600"
