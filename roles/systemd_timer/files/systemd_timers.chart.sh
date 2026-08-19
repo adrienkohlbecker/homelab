@@ -37,14 +37,6 @@ systemd_timers_stamp_dir="${systemd_timers_stamp_dir:-/var/lib/systemd/timers}"
 # then read as "never fired". No stamp => never fired (the caller falls back
 # to install time). Reads only coreutils, so the collector needs no systemctl
 # and can't be tripped by a transient D-Bus hiccup.
-_systemd_timers_last_trigger_epoch() {
-  local stamp="${systemd_timers_stamp_dir}/stamp-$1.timer"
-  if [ -f "$stamp" ]; then
-    stat -c %Y "$stamp" 2>/dev/null || printf 0
-  else
-    printf 0
-  fi
-}
 
 systemd_timers_check() {
   # check() always succeeds so charts.d.plugin keeps the module enabled
@@ -100,7 +92,7 @@ EOF
     fi
     safe="${_systemd_timers_seen[$name]}"
     installed=$(stat -c %Y "$f" 2>/dev/null || echo "$now")
-    last=$(_systemd_timers_last_trigger_epoch "$name")
+    last=$(stat -c %Y "${systemd_timers_stamp_dir}/stamp-${name}.timer" 2>/dev/null || printf 0)
     if [ "$last" -gt 0 ]; then
       age=$((now - last))
     else
