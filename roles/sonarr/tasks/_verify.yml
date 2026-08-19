@@ -276,14 +276,6 @@
           SYSLOG_IDENTIFIER: sonarr
           SYSTEMD_UNIT: sonarr.service
           parser_status: forged
-        - MESSAGE: "[Warn] VerifyWarn: sonarr-warn \n"
-          CONTAINER_TAG: sonarr
-          SYSLOG_IDENTIFIER: sonarr
-          SYSTEMD_UNIT: sonarr.service
-        - MESSAGE: "[Error] VerifyError: sonarr-error \n\n[v4.0.15.2941] System.InvalidOperationException: failed\n   at Verify.Run()\n"
-          CONTAINER_TAG: sonarr
-          SYSLOG_IDENTIFIER: sonarr
-          SYSTEMD_UNIT: sonarr.service
         - MESSAGE: "[migrations] no migrations found\n"
           CONTAINER_TAG: sonarr
           SYSLOG_IDENTIFIER: sonarr
@@ -315,14 +307,6 @@
             - fields.sonarr_source
             - fields.CONTAINER_TAG
             - fields.CMDLINE
-        - message: sonarr-warn
-          level: warn
-          fields.source: VerifyWarn
-        - message: sonarr-error
-          level: error
-          fields.source: VerifyError
-          fields.app_version: 4.0.15.2941
-          fields.exception: "System.InvalidOperationException: failed    at Verify.Run()"
         - message: "[migrations] no migrations found"
           level: info
           _absent:
