@@ -37,21 +37,14 @@
       # inside the repo's service-name shape. Same guard as linger.
       - service_user_args.name is match('^[a-z_][a-z0-9_-]*$')
       - static_service_ids is defined and service_user_args.name in static_service_ids
+      # Avoid materializing /nonexistent, a sentinel several system tools special-case.
+      - not (service_user_args.createhome | default(false) | bool) or (service_user_args.home | default('/nonexistent')) != '/nonexistent'
     fail_msg: >-
       service_user_args needs name (a valid identifier matching
       [a-z_][a-z0-9_-]*) and a static id -- allocate
       {{ service_user_args.name | default('<unset>') }} in static_service_ids
-      (group_vars/all/identities.yml) at the next free value per its header.
-
-# Avoid materializing /nonexistent, a sentinel several system tools special-case.
-- name: "Validate home for {{ service_user_args.name }}"
-  assert:
-    quiet: true
-    that:
-      - not (service_user_args.createhome | default(false) | bool) or (service_user_args.home | default('/nonexistent')) != '/nonexistent'
-    fail_msg: >-
-      createhome needs a real home for {{ service_user_args.name }}, not the
-      /nonexistent sentinel.
+      (group_vars/all/identities.yml) at the next free value per its header;
+      createhome also needs a real home instead of /nonexistent.
 
 - name: Resolve caller defaults for {{ service_user_args.name }}
   set_fact:
