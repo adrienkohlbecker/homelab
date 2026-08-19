@@ -18,19 +18,12 @@
   become: true
 
 # The node identity must live on the services dataset, which rides the backup.
-- name: _verify | Node state file lives on the services dataset
+- name: _verify | Node state is stored on the services dataset
   stat:
     path: /mnt/services/tailscale/tailscaled.state
   register: _tailscale_state_file
+  failed_when: not (_tailscale_state_file.stat.exists | default(false))
   become: true
-
-- name: _verify | State is stored on the services dataset
-  assert:
-    that:
-      - _tailscale_state_file.stat.exists | default(false)
-    fail_msg: >-
-      tailscale node identity must ride the backup at
-      /mnt/services/tailscale/tailscaled.state.
 
 - name: _verify | This node appears in headscale's node list
   command: podman exec headscale headscale nodes list -o json
