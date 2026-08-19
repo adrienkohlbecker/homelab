@@ -18,6 +18,19 @@
   failed_when: >-
     _tautulli_api_auth.json.response.result | default('') != 'success'
 
+- name: _verify | Tautulli reaches Plex through podman DNS
+  uri:
+    url: http://127.0.0.1:{{ service_ports.tautulli }}/api/v2?apikey={{ tautulli_api_key }}&cmd=get_server_identity
+    return_content: true
+  register: _tautulli_plex_identity
+  retries: 15
+  delay: 2
+  until:
+    - _tautulli_plex_identity.json.response.result | default('') == 'success'
+    - _tautulli_plex_identity.json.response.data.machine_identifier | default('') == plex_machine_id
+  failed_when: >-
+    _tautulli_plex_identity.json.response.data.version | default('') != 'test'
+
 - name: _verify | Check the retired ini watcher unit files
   stat:
     path: /etc/systemd/system/{{ item }}

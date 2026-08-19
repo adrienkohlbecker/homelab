@@ -43,3 +43,24 @@
   vars:
     sort_ini_args:
       path: /mnt/services/tautulli/config.ini
+
+- name: _setup | Create Plex identity fixture
+  copy:
+    content: '<MediaContainer machineIdentifier="{{ plex_machine_id }}" version="test" />'
+    dest: /tmp/tautulli_plex_identity
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Run Plex identity stub on the media network
+  containers.podman.podman_container:
+    name: plex
+    image: docker.io/library/busybox
+    command: httpd -f -p 32400 -h /www
+    network: media
+    volume:
+      - /tmp/tautulli_plex_identity:/www/identity:ro
+    state: started
+    recreate: true
+  become: true
