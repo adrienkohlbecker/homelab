@@ -1,0 +1,44 @@
+---
+# The DSM package is installed out of band. This entry point owns the package
+# configuration that belongs with Tailscale, then reuses shared registration.
+- name: dsm | Assert the Tailscale package is installed
+  stat:
+    path: "{{ tailscale_bin }}"
+  register: tailscale_dsm_bin
+  failed_when: not tailscale_dsm_bin.stat.exists
+  tags:
+    - tailscale
+
+- name: dsm | Grant Synology routing permissions once
+  command: "{{ tailscale_bin }} configure synology"
+  args:
+    creates: /var/packages/Tailscale/conf/resource.own
+  register: tailscale_dsm_configure
+  become: true
+  tags:
+    - tailscale
+
+# DSM hardcodes tailscaled's underlay port in its package launcher.
+- name: dsm | Pin the underlay port in the package launcher
+  lineinfile:
+    path: /var/packages/Tailscale/scripts/start-stop-status
+    regexp: '^PORT='
+    line: 'PORT="{{ tailscale_port }}"'
+    backup: true
+  register: tailscale_dsm_port
+  become: true
+  tags:
+    - tailscale
+
+- name: dsm | Restart the package after configuration changes
+  command: /usr/syno/bin/synosystemctl restart pkgctl-Tailscale.service
+  when: tailscale_dsm_configure.changed or tailscale_dsm_port.changed
+  changed_when: true
+  become: true
+  tags:
+    - tailscale
+
+- name: dsm | Register against the headscale control plane
+  import_tasks: register.yml
+  tags:
+    - tailscale

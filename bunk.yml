@@ -71,44 +71,11 @@
           become: true
 
     - name: Configure Tailscale
+      import_role:
+        name: tailscale
+        tasks_from: dsm
       tags:
         - tailscale
-      block:
-        # DSM package install is out-of-band; this play owns the bunk-specific
-        # permission/port setup, then reuses the shared headscale registration.
-        - name: Assert the DSM Tailscale package is installed
-          stat:
-            path: "{{ tailscale_bin }}"
-          register: bunk_ts_bin
-          failed_when: not bunk_ts_bin.stat.exists
-
-        - name: Grant the Synology routing permissions for Tailscale (once)
-          command: "{{ tailscale_bin }} configure synology"
-          args:
-            creates: /var/packages/Tailscale/conf/resource.own
-          register: bunk_ts_configure
-          become: true
-
-        # DSM hardcodes tailscaled's underlay port in its package launcher.
-        - name: Pin tailscaled underlay port in the DSM package launcher
-          lineinfile:
-            path: /var/packages/Tailscale/scripts/start-stop-status
-            regexp: '^PORT='
-            line: 'PORT="{{ tailscale_port }}"'
-            backup: true
-          register: bunk_ts_port
-          become: true
-
-        - name: Restart the Tailscale package to apply permissions or port change
-          command: /usr/syno/bin/synosystemctl restart pkgctl-Tailscale.service
-          when: bunk_ts_configure is changed or bunk_ts_port is changed
-          changed_when: true
-          become: true
-
-        - name: Register bunk against the headscale control plane
-          import_role:
-            name: tailscale
-            tasks_from: register
 
     - name: Configure Ghostty terminfo
       tags:

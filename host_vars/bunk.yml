@@ -29,11 +29,11 @@ ssh_public_keys_additional: |
 
 # Tailscale mesh: bunk is the Bonniers subnet router + exit node, enrolled into
 # headscale by the standalone bunk.yml playbook (`mise run ansible:bunk --tags
-# tailscale`), NOT site.yml -- bunk is DSM (no apt), so the tailscale role's
-# install half doesn't apply; the DSM Tailscale package is installed via Package
-# Center (operator runbook) and bunk.yml only registers/advertises/approves. The
-# control-plane constants (tailscale_login_server / _headscale_host /
-# _headscale_user) live in group_vars/prod.yml; these are bunk-specific.
+# tailscale`), NOT site.yml -- bunk is DSM (no apt), so the role uses its DSM
+# entry point. The Tailscale package is installed via Package Center (operator
+# runbook); the role configures and registers it. The control-plane constants
+# (tailscale_login_server / _headscale_host / _headscale_user) live in
+# group_vars/prod.yml; these are bunk-specific.
 tailscale_advertise_routes:
   - 10.123.57.0/24
 tailscale_advertise_exit_node: true
@@ -47,7 +47,7 @@ tailscale_authkey_file: /tmp/tailscale_authkey
 # (1:1 router forward) instead of relaying through fox's DERP. This site has its
 # own WAN, independent of the home mappings (pug 41642, lab 41644).
 # DSM hardcodes the port in the package launcher (not /etc/default/tailscaled as
-# the apt unit does), so bunk.yml patches the start-stop-status script rather
-# than the role's lineinfile path. Requires a manual udp/41643 1:1 forward on the
-# Bonniers router (+ DSM firewall allow if enabled) -- off-fleet, see runbook.
+# the apt unit does), so the DSM role entry point patches start-stop-status.
+# Requires a manual udp/41643 1:1 forward on the Bonniers router (+ DSM firewall
+# allow if enabled) -- off-fleet, see runbook.
 tailscale_port: 41643
