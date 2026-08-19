@@ -65,7 +65,7 @@
     tasks_from: verify_dataset
   vars:
     sqlite_dataset_verify_args:
-      user: "{{ lidarr_user }}"
+      name: lidarr
       databases:
         - lidarr.db
         - logs.db

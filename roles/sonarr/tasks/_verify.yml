@@ -73,7 +73,7 @@
     tasks_from: verify_dataset
   vars:
     sqlite_dataset_verify_args:
-      user: "{{ sonarr_user }}"
+      name: sonarr
       databases:
         - sonarr.db
         - logs.db

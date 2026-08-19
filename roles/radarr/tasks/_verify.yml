@@ -85,7 +85,7 @@
     tasks_from: verify_dataset
   vars:
     sqlite_dataset_verify_args:
-      user: "{{ radarr_user }}"
+      name: radarr
       databases:
         - radarr.db
         - logs.db
