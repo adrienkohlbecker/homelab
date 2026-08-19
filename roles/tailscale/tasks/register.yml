@@ -40,18 +40,6 @@
   tags:
     - tailscale
 
-- name: register | Determine tailscale backend state
-  # tailscaled can return rc=0 with a non-JSON warning banner mid-restart.
-  # Short-circuit before parsing it.
-  set_fact:
-    tailscale_running: >-
-      {{ ((tailscale_status.rc | default(1)) == 0
-         and (tailscale_status.stdout | default('') | trim | length > 0)
-         and (tailscale_status.stdout | default('') | trim).startswith('{')
-         and ((tailscale_status.stdout | from_json).BackendState | default('')) == 'Running') | bool }}
-  tags:
-    - tailscale
-
 # Mint a short-lived, single-use key only for an unregistered node. Control-plane
 # commands run on tailscale_headscale_host; check mode skips their mutations.
 # The node is not ephemeral because subnet routers must survive disconnects, and
@@ -59,10 +47,18 @@
 - name: register | Provision a single-use pre-auth key from the control plane
   when:
     - not ansible_check_mode
-    - not tailscale_running
+    - not _tailscale_running
   become: true
   tags:
     - tailscale
+  vars:
+    # tailscaled can return rc=0 with a non-JSON warning banner mid-restart.
+    # Short-circuit before parsing it.
+    _tailscale_running: >-
+      {{ ((tailscale_status.rc | default(1)) == 0
+         and (tailscale_status.stdout | default('') | trim | length > 0)
+         and (tailscale_status.stdout | default('') | trim).startswith('{')
+         and ((tailscale_status.stdout | from_json).BackendState | default('')) == 'Running') | bool }}
   block:
     # Registration against a fresh control plane must create its own user.
     - name: register | Ensure the headscale user for this node exists
