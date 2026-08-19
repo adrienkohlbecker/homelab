@@ -128,18 +128,13 @@
 
     # --reset clears stale manual flags; --timeout bounds control-plane failure.
     - name: register | Register with headscale and advertise routes / exit node
-      command: >-
-        {{ tailscale_bin }} up
-        --login-server {{ tailscale_login_server }}
-        --authkey file:{{ tailscale_authkey_file }}
-        --advertise-routes={{ tailscale_advertise_routes | join(',') }}
-        {{ tailscale_advertise_exit_node | ternary('--advertise-exit-node', '') }}
-        --accept-routes={{ tailscale_accept_routes | ternary('true', 'false') }}
-        --accept-dns={{ tailscale_accept_dns | ternary('true', 'false') }}
-        --snat-subnet-routes={{ tailscale_snat_subnet_routes | ternary('true', 'false') }}
-        --stateful-filtering={{ tailscale_stateful_filtering | ternary('true', 'false') }}
-        --timeout=60s
-        --reset
+      command:
+        argv: >-
+          {{ [tailscale_bin, 'up',
+              '--login-server', tailscale_login_server,
+              '--authkey', 'file:' + tailscale_authkey_file]
+             + tailscale_preference_args
+             + ['--timeout=60s', '--reset'] }}
       changed_when: true
 
   always:
@@ -162,14 +157,8 @@
 # Reconcile every local preference on live nodes. `tailscale set` cannot report
 # whether it changed a preference, so functional verification proves correctness.
 - name: register | Reconcile routes / exit node / accept-routes / accept-dns
-  command: >-
-    {{ tailscale_bin }} set
-    --advertise-routes={{ tailscale_advertise_routes | join(',') }}
-    --advertise-exit-node={{ tailscale_advertise_exit_node | ternary('true', 'false') }}
-    --accept-routes={{ tailscale_accept_routes | ternary('true', 'false') }}
-    --accept-dns={{ tailscale_accept_dns | ternary('true', 'false') }}
-    --snat-subnet-routes={{ tailscale_snat_subnet_routes | ternary('true', 'false') }}
-    --stateful-filtering={{ tailscale_stateful_filtering | ternary('true', 'false') }}
+  command:
+    argv: "{{ [tailscale_bin, 'set'] + tailscale_preference_args }}"
   when:
     - not ansible_check_mode
     - tailscale_running
