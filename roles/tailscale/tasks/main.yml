@@ -64,35 +64,6 @@
   tags:
     - tailscale
 
-# Deployed hosts may still have the former /var/lib/tailscale symlink. Stop the
-# daemon after its direct state path is configured, then remove only that link;
-# systemd recreates its stock StateDirectory when the service starts below.
-- name: Inspect the stock tailscale state directory
-  stat:
-    path: /var/lib/tailscale
-  register: tailscale_stock_state
-  become: true
-  tags:
-    - tailscale
-
-- name: Stop tailscaled before replacing its legacy state symlink
-  systemd:
-    name: tailscaled.service
-    state: stopped
-  when: tailscale_stock_state.stat.islnk | default(false)
-  become: true
-  tags:
-    - tailscale
-
-- name: Remove the legacy tailscale state symlink
-  file:
-    path: /var/lib/tailscale
-    state: absent
-  when: tailscale_stock_state.stat.islnk | default(false)
-  become: true
-  tags:
-    - tailscale
-
 - name: Install tailscale fluent-bit extension
   import_role:
     name: fluentbit
