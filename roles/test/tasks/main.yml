@@ -1,8 +1,8 @@
-- name: Mirrors | Set hostname and seed /etc/hosts
+- name: Set hostname and seed /etc/hosts
   import_role:
     name: hostname
 
-- name: Mirrors | Create systemd-resolved configuration directory
+- name: Create systemd-resolved configuration directory
   file:
     path: /etc/systemd/resolved.conf.d
     state: directory
@@ -11,7 +11,7 @@
     mode: "0755"
   become: true
 
-- name: Mirrors | Install DNS-over-TLS configuration
+- name: Install DNS-over-TLS configuration
   template:
     src: 10-test-dns-over-tls.conf.j2
     dest: /etc/systemd/resolved.conf.d/10-test-dns-over-tls.conf
@@ -23,18 +23,18 @@
   register: test_resolved_conf
   become: true
 
-- name: Mirrors | Restart systemd-resolved to pick up DoT config
+- name: Restart systemd-resolved to pick up DoT config
   systemd:
     name: systemd-resolved
     state: restarted
   when: test_resolved_conf.changed
   become: true
 
-- name: Mirrors | Configure apt retries and sources
+- name: Configure apt retries and sources
   import_role:
     name: apt
 
-- name: Mirrors | Ensure /etc/containers/registries.conf.d exists
+- name: Ensure /etc/containers/registries.conf.d exists
   when: test_registry_mirrors | length > 0
   file:
     path: /etc/containers/registries.conf.d
@@ -44,7 +44,7 @@
     group: root
   become: true
 
-- name: Mirrors | Configure podman registry mirrors
+- name: Configure podman registry mirrors
   when: test_registry_mirrors | length > 0
   copy:
     dest: /etc/containers/registries.conf.d/homelab-mirrors.conf
@@ -64,7 +64,7 @@
       {% endfor %}
   become: true
 
-- name: Mirrors | Ensure root containers auth dir exists
+- name: Ensure root containers auth dir exists
   when: test_in_aws
   file:
     path: /root/.config/containers
@@ -74,7 +74,7 @@
     group: root
   become: true
 
-- name: Mirrors | Write ECR auth for root podman pulls
+- name: Write ECR auth for root podman pulls
   when: test_in_aws
   copy:
     dest: /root/.config/containers/auth.json
