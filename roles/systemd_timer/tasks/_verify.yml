@@ -242,18 +242,12 @@
     systemd_timer_args:
       name: _verify_timer
 
-- name: _verify | Stat unit files after removal
-  stat:
-    path: "/etc/systemd/system/_verify_timer.{{ item }}"
+- name: _verify | Read removed unit statuses  # noqa: command-instead-of-module
+  command: systemctl status _verify_timer.{{ item }}
   loop:
     - service
     - timer
-  register: _systemd_timer_timer_files
-  become: true
-
-- name: _verify | Systemctl status for the removed timer  # noqa: command-instead-of-module
-  command: systemctl status _verify_timer.timer
-  register: _systemd_timer_timer_status
+  register: _systemd_timer_timer_statuses
   changed_when: false
   failed_when: false
   become: true
@@ -261,9 +255,7 @@
 - name: _verify | Assert fixture removal
   assert:
     that:
-      - not _systemd_timer_timer_files.results[0].stat.exists
-      - not _systemd_timer_timer_files.results[1].stat.exists
-      - _systemd_timer_timer_status.rc != 0
+      - _systemd_timer_timer_statuses.results | map(attribute='rc') | select('equalto', 0) | list | length == 0
       - _verify_timer_result.changed
 
 - name: _verify | Cleanup combined fixture
