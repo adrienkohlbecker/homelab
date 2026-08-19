@@ -20,11 +20,11 @@
 # mtime doubles as "installed_at" so a freshly-installed timer doesn't
 # alarm before its first scheduled fire.
 
-systemd_timers_update_every=60
 systemd_timers_priority=90100
 
-systemd_timers_meta_dir="${systemd_timers_meta_dir:-/etc/netdata/charts.d/systemd_timers.d}"
-systemd_timers_stamp_dir="${systemd_timers_stamp_dir:-/var/lib/systemd/timers}"
+# charts.d.plugin sources charts_d_systemd_timers.conf before invoking this file.
+: "${systemd_timers_update_every:?}"
+: "${systemd_timers_meta_dir:?}"
 
 # Last-fire time = the mtime of the stamp file at
 # /var/lib/systemd/timers/stamp-<name>.timer. System-scope monitored timers
@@ -87,7 +87,7 @@ EOF
     fi
     safe="${_systemd_timers_seen[$name]}"
     installed=$(stat -c %Y "$f" 2>/dev/null || echo "$now")
-    last=$(stat -c %Y "${systemd_timers_stamp_dir}/stamp-${name}.timer" 2>/dev/null || printf 0)
+    last=$(stat -c %Y "/var/lib/systemd/timers/stamp-${name}.timer" 2>/dev/null || printf 0)
     if [ "$last" -gt 0 ]; then
       age=$((now - last))
     else
