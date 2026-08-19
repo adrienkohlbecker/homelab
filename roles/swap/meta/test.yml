@@ -1,6 +1,5 @@
-# box exercises zram plus raw-partition swapon/fstab; minimal exercises
-# zram-only on ext4; lab exercises mdadm raid1 swap across three p3 members.
+# box exercises zram plus raw-partition swapon/fstab; lab exercises mdadm
+# raid1 swap across three p3 members.
 machines:
   box:
-  minimal:
   lab:

@@ -8,18 +8,7 @@
   become: true
   register: _swap_verify_swapon
 
-# The role gates zram on the kernel module being present (the arm64 cloud kernel
-# on the local fixtures ships none). Re-probe here -- _verify is a separate
-# ansible run, so converge's register isn't in scope -- and skip the zram
-# assertions where the module, and therefore the zram swap device, is absent.
-- name: _verify | Probe for the zram kernel module
-  command: modinfo -k {{ ansible_kernel }} zram
-  changed_when: false
-  failed_when: false
-  register: _swap_verify_zram_module
-
 - name: _verify | Zram swap active at the primary priority
-  when: _swap_verify_zram_module.rc == 0
   vars:
     _zram_lines: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | list }}"
   assert:
@@ -35,7 +24,6 @@
 # MemTotal); zram rounds down by a page, so allow a small band.
 # SIZE (field 3, bytes) comes directly from swapon --show --bytes; no slurp needed.
 - name: _verify | Zram device sized per config (capped at RAM)
-  when: _swap_verify_zram_module.rc == 0
   vars:
     _zram_line: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | first | default('') }}"
     _expected_mb: "{{ [(swap_zram.size | human_to_bytes) // 1048576, ansible_memtotal_mb] | min }}"
@@ -98,9 +86,7 @@
           {{ _swap_verify_md_detail.stdout }}
 
 - name: _verify | Overflow swap priority is below zram
-  when:
-    - _swap_verify_zram_module.rc == 0
-    - swap_partition is defined
+  when: swap_partition is defined
   vars:
     _overflow_lines: "{{ _swap_verify_swapon.stdout_lines | reject('search', 'zram') | list }}"
   assert:
@@ -112,13 +98,11 @@
       {{ _swap_verify_swapon.stdout }}
 
 - name: _verify | Read vm.swappiness
-  when: _swap_verify_zram_module.rc == 0
   command: sysctl -n vm.swappiness
   changed_when: false
   register: _swap_verify_swappiness
 
 - name: _verify | Swappiness tuned to the configured value
-  when: _swap_verify_zram_module.rc == 0
   assert:
     that:
       - (_swap_verify_swappiness.stdout | trim | int) == (swap_swappiness | int)

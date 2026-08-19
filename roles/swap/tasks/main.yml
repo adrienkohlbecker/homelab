@@ -96,26 +96,17 @@
 # lives on a raw partition outside ZFS for the same reason
 # (notes/swap_strategy.md).
 #
-# zram ships in the base kernel-modules package on amd64 (every prod host + the
-# x86 CI fixtures), but the trimmed arm64 cloud kernel on the local minimal/box
-# test VMs carries no zram.ko -- the generator then can't create dev-zram0 and
-# the activation below times out waiting for the device. Probe for the module
-# and gate the zram tasks on it: present everywhere it matters, skipped only on
-# the arm64 fixtures that physically lack it. check_mode:false so the probe runs
-# (and registers) during the harness's dry-run pass too.
-#
-- name: Probe for the zram kernel module
+# Fail directly on an unsupported kernel instead of silently skipping the
+# required backend. Run the probe during check mode too.
+- name: Verify the zram kernel module is available
   command: modinfo -k {{ ansible_kernel }} zram
   changed_when: false
-  failed_when: false
   check_mode: false
-  register: swap_zram_module
   become: true
   tags:
     - swap
 
 - name: Install systemd-zram-generator
-  when: swap_zram_module.rc == 0
   apt:
     name: systemd-zram-generator
     state: present
@@ -126,7 +117,6 @@
     - swap
 
 - name: Configure zram swap device
-  when: swap_zram_module.rc == 0
   template:
     src: zram-generator.conf.j2
     dest: /etc/systemd/zram-generator.conf
@@ -150,9 +140,7 @@
 # simulated: the generator hasn't run, so dev-zram0.swap doesn't exist
 # yet and the systemd module would fail looking for it.
 - name: Activate zram swap device
-  when:
-    - swap_zram_module.rc == 0
-    - not (ansible_check_mode and (swap_zram_installed.changed or swap_zram_conf.changed))
+  when: not (ansible_check_mode and (swap_zram_installed.changed or swap_zram_conf.changed))
   systemd:
     name: dev-zram0.swap
     state: "{{ 'restarted' if swap_zram_conf.changed else 'started' }}"
@@ -164,7 +152,6 @@
 # vm.swappiness default 100 suits zram-primary hosts: paging into compressed
 # RAM is cheap, unlike the disk-tuned kernel default of 60.
 - name: Tune vm.swappiness
-  when: swap_zram_module.rc == 0
   ansible.posix.sysctl:
     name: vm.swappiness
     value: "{{ swap_swappiness | string }}"
