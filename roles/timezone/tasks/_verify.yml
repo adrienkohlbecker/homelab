@@ -1,40 +1,17 @@
 # Post-converge checks for the timezone role. Converge success proves the
-# community.general.timezone module exited cleanly; these verify the host is
-# functionally on UTC -- timedatectl (the source systemd and services consult),
-# `date +%Z` (what libc actually resolves through /etc/localtime), and LocalRTC
-# (the RTC-in-UTC pin the module sets via `set-local-rtc 0`, otherwise unchecked).
+# community.general.timezone module exited cleanly; these verify the systemd,
+# RTC, and libc views are functionally on UTC.
 
-- name: _verify | Read timedatectl timezone
-  command: timedatectl show -p Timezone --value
-  register: timezone_verify_timedatectl
+- name: _verify | Systemd timezone and RTC are UTC
+  command: timedatectl show -p Timezone -p LocalRTC
+  register: timezone_verify_systemd
   changed_when: false
-  become: true
+  failed_when: >-
+    'Timezone=Etc/UTC' not in timezone_verify_systemd.stdout_lines or
+    'LocalRTC=no' not in timezone_verify_systemd.stdout_lines
 
-- name: _verify | Timedatectl reports Etc/UTC
-  assert:
-    that: "timezone_verify_timedatectl.stdout == 'Etc/UTC'"
-    fail_msg: "timedatectl reports {{ timezone_verify_timedatectl.stdout }}, not Etc/UTC"
-    quiet: true
-
-- name: _verify | Read RTC interpretation
-  command: timedatectl show -p LocalRTC --value
-  register: timezone_verify_localrtc
-  changed_when: false
-  become: true
-
-- name: _verify | RTC is in UTC (LocalRTC=no)
-  assert:
-    that: "timezone_verify_localrtc.stdout == 'no'"
-    fail_msg: "timedatectl reports LocalRTC={{ timezone_verify_localrtc.stdout }}, RTC not pinned to UTC"
-    quiet: true
-
-- name: _verify | Read resolved zone abbreviation
+- name: _verify | Libc timezone is UTC
   command: date +%Z
   register: timezone_verify_date
   changed_when: false
-
-- name: _verify | Date resolves to UTC
-  assert:
-    that: "timezone_verify_date.stdout == 'UTC'"
-    fail_msg: "date reports zone {{ timezone_verify_date.stdout }}, not UTC"
-    quiet: true
+  failed_when: timezone_verify_date.stdout != 'UTC'
