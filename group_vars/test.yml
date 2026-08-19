@@ -10,6 +10,12 @@ test_ecr_registry_mirrors:
   ghcr.io: github
   registry.gitlab.com: gitlab
   quay.io: quay
+# test_in_aws, not test_backend: aws_qemu cells egress through AWS and can
+# reach ECR, so they mirror there like EC2 cells instead of using LAN Nexus.
+test_use_ecr_registry_mirrors: >-
+  {{ (test_in_aws | default(false) | bool)
+     and (test_ecr_registry | length > 0)
+     and (test_ecr_registry_mirrors | length > 0) }}
 
 # Test-only placeholder for lab's GitLab shell runner. Prod supplies the real
 # lab token via the prod vault.

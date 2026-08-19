@@ -7,13 +7,6 @@
 #     the archive uses the in-region EC2 mirror.
 #   - nexus_url empty and not in AWS → check apt points at upstream.
 
-- name: _verify | Decide whether this cell uses ECR registry mirrors
-  set_fact:
-    test_use_ecr_registry_mirrors: >-
-      {{ (test_in_aws | default(false) | bool)
-         and (test_ecr_registry | default('') | length > 0)
-         and (test_ecr_registry_mirrors | default({}) | length > 0) }}
-
 - name: _verify | Read apt sources
   slurp:
     src: /etc/apt/sources.list.d/ubuntu.sources

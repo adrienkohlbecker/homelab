@@ -41,16 +41,6 @@
   import_role:
     name: apt
 
-- name: mirrors | Decide whether this cell uses ECR registry mirrors
-  set_fact:
-    # test_in_aws, not test_backend: the aws_qemu qemu cell egresses through
-    # AWS and reaches ECR (the controller mints the pull token), so it mirrors
-    # through ECR like the EC2 cells rather than the unreachable LAN Nexus.
-    test_use_ecr_registry_mirrors: >-
-      {{ (test_in_aws | default(false) | bool)
-         and (test_ecr_registry | default('') | length > 0)
-         and (test_ecr_registry_mirrors | default({}) | length > 0) }}
-
 - name: mirrors | Ensure /etc/containers/registries.conf.d exists
   when: (nexus_url | length > 0) or test_use_ecr_registry_mirrors
   file:
