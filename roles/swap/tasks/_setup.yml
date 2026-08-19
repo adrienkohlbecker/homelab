@@ -1,9 +1,6 @@
-# The packer image bakes a swap fstab entry (single-disk layouts by partition
-# UUID; mirror layouts the raid1 /dev/md/swap). When swap_partition is set with
-# a DIFFERENT device path (by-partlabel on pug-qemu, /dev/md/swap on lab-qemu),
-# the role's mount task would add a second fstab line for the same block device.
-# Clean the packer entry so the role exercises its fstab-write + swapon path
-# cleanly.
+# Packer bakes an fstab entry for the same device the role manages. Remove it so
+# the fixture exercises the role's fstab-write and swapon path without creating
+# a duplicate entry through a different device name.
 - name: _setup | Deactivate packer-baked swap
   when: swap_partition is defined
   command: swapoff -a

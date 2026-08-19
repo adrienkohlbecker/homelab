@@ -58,13 +58,9 @@ zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PW
 # Hetzner is resetting this to 0
 boot_efi_timeout: 0
 
-# zram-only swap on this 4G VM: compression roughly doubles usable memory
-# and gives an OOM backstop the stock image lacks. No disk overflow yet --
-# the deadlock-free 8200 partition lands with the ZFS-root cutover (it needs
-# the new image's partition table). Higher swappiness than the fleet default
-# because this is the only RAM-constrained host: lean on cheap compressed swap
-# to keep the working set resident (the local NVMe disk is fast, so this is a
-# small-RAM call, not a slow-disk one). See notes/swap_strategy.md.
+# zram is primary on this 4G VM; the installer-baked sda3 swap partition is its
+# disk overflow. Higher swappiness than the fleet default leans on compressed
+# swap to keep the working set resident. See notes/swap_strategy.md.
 #
 # algorithm=lz4 (the fleet default is zstd): under a full-universe CI fan-out
 # this 2-vCPU host is CPU-bound (CPU PSI ~96%) while it pages hard at

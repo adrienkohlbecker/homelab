@@ -26,8 +26,8 @@ netplan:
       dhcp4: true
       dhcp6: false
 
-# zram-only swap (no zvol, no partition on ext4). 2G deliberately differs
-# from the generator's default so _verify proves the config drove the size.
+# Keep the required input defined for explicit swap runs; minimal is outside the
+# role matrix because its cloud kernel lacks the required zram module.
 swap_zram:
   size: 2G
 
