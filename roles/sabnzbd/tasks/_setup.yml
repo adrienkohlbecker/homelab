@@ -36,10 +36,3 @@
     # creates this on prod); the container won't start without the source.
     - /mnt/media/Other
   become: true
-
-- name: _setup | Stub sort_ini binary
-  file:
-    src: /usr/bin/tail
-    dest: /usr/local/bin/sort_ini
-    state: link
-  become: true

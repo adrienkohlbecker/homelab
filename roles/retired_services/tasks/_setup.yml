@@ -174,3 +174,52 @@
     - plex-crash-uploader.db
     - tautulli-websocket.db
   become: true
+
+- name: _setup | Install legacy SABnzbd ini watcher path fixture
+  copy:
+    content: |
+      [Unit]
+      Description=retired fixture
+
+      [Path]
+      PathChanged=/tmp/retired_sabnzbd_fixture
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/sort_ini_mnt-services-sabnzbd-sabnzbd.ini.path
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Install legacy SABnzbd ini watcher service fixture
+  copy:
+    content: |
+      [Unit]
+      Description=retired fixture
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/true
+    dest: /etc/systemd/system/sort_ini_mnt-services-sabnzbd-sabnzbd.ini.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Enable legacy SABnzbd ini watcher fixture
+  systemd:
+    name: sort_ini_mnt-services-sabnzbd-sabnzbd.ini.path
+    daemon_reload: true
+    enabled: true
+    state: started
+  become: true
+
+- name: _setup | Install retired generic ini canonicalizer fixture
+  copy:
+    content: "#!/bin/sh\nexit 0\n"
+    dest: /usr/local/bin/sort_ini
+    owner: root
+    group: root
+    mode: "0755"
+  become: true

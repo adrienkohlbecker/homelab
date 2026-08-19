@@ -9,8 +9,7 @@ USAGE = "USAGE:\n\tsort_ini.py file.ini"
 
 
 def sort_ini(fname):
-    """sort .ini file: sorts sections and in each section sorts keys.
-    Blank lines and comments are discarded; only suitable for app-rewritten configs."""
+    """Sort sections and keys in an application-rewritten INI file."""
     fname = os.path.realpath(fname)
     try:
         with open(fname, encoding="utf-8") as f:
@@ -44,35 +43,35 @@ def sort_ini(fname):
 
     parts = []
     keys = sorted(sections.keys())
-    for k in keys:
-        vals = sections[k]
-        sks = sorted(vals.keys())
-        if k != "":
-            parts.append(k)
-        for sk in sks:
-            subvals = sorted(vals[sk])
-            if sk != "":
-                parts.append(sk)
-            parts.extend(subvals)
+    for key in keys:
+        subsections = sections[key]
+        subsection_keys = sorted(subsections.keys())
+        if key != "":
+            parts.append(key)
+        for subsection_key in subsection_keys:
+            values = sorted(subsections[subsection_key])
+            if subsection_key != "":
+                parts.append(subsection_key)
+            parts.extend(values)
     sorted_output = "\n".join(parts) + "\n"
 
     normalized = "\n".join(line.strip() for line in original.splitlines() if line.strip()) + "\n"
     if sorted_output == normalized:
         return
 
-    st = os.stat(fname)
-    dirn = os.path.dirname(fname)
-    fd, tmp = tempfile.mkstemp(dir=dirn, prefix=".sort_ini_")
+    file_stat = os.stat(fname)
+    directory = os.path.dirname(fname)
+    fd, temp_path = tempfile.mkstemp(dir=directory, prefix=".sabnzbd_sort_ini_")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            os.fchmod(f.fileno(), stat.S_IMODE(st.st_mode))
-            os.fchown(f.fileno(), st.st_uid, st.st_gid)
+            os.fchmod(f.fileno(), stat.S_IMODE(file_stat.st_mode))
+            os.fchown(f.fileno(), file_stat.st_uid, file_stat.st_gid)
             f.write(sorted_output)
-        os.replace(tmp, fname)
+        os.replace(temp_path, fname)
     except BaseException:
-        # Best-effort cleanup of a temp file that was never installed.
+        # Cleanup is safe because the temporary file was never installed.
         with contextlib.suppress(OSError):
-            os.unlink(tmp)
+            os.unlink(temp_path)
         raise
 
 
@@ -80,5 +79,4 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(USAGE, file=sys.stderr)
         sys.exit(1)
-    else:
-        sort_ini(sys.argv[1])
+    sort_ini(sys.argv[1])

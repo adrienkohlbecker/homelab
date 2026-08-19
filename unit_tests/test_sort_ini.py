@@ -1,10 +1,10 @@
-"""Unit tests for roles/sort_ini/files/sort_ini.py — INI file sorter."""
+"""Unit tests for SABnzbd's INI canonicalizer."""
 
 import subprocess
 import sys
 from pathlib import Path
 
-_SORT_INI_PATH = Path(__file__).resolve().parent.parent / "roles" / "sort_ini" / "files" / "sort_ini.py"
+_SORT_INI_PATH = Path(__file__).resolve().parent.parent / "roles" / "sabnzbd" / "files" / "sort_ini.py"
 
 
 class TestSortIni:

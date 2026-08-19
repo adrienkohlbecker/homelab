@@ -311,12 +311,35 @@
   tags:
     - sabnzbd
 
-- name: Configure ini watcher
+- name: Install sabnzbd ini canonicalizer
+  copy:
+    src: sort_ini.py
+    dest: /usr/local/bin/sabnzbd_sort_ini
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: python3 -m py_compile "%s"
+  become: true
+  tags:
+    - sabnzbd
+
+- name: Install sabnzbd ini canonicalizer service
   import_role:
-    name: sort_ini
-    tasks_from: path
+    name: systemd_unit
+    tasks_from: install
   vars:
-    sort_ini_args:
-      path: /mnt/services/sabnzbd/sabnzbd.ini
+    systemd_unit_args:
+      src: sabnzbd_ini_sort.service.j2
+  tags:
+    - sabnzbd
+
+- name: Manage sabnzbd ini canonicalizer path
+  import_role:
+    name: systemd_unit
+    tasks_from: unit
+  vars:
+    systemd_unit_args:
+      src: sabnzbd_ini_sort.path.j2
   tags:
     - sabnzbd

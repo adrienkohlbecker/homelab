@@ -65,6 +65,37 @@
   tags:
     - retired_services
 
+- name: Retire legacy SABnzbd ini watcher path
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: sort_ini_mnt-services-sabnzbd-sabnzbd.ini.path
+  tags:
+    - retired_services
+    - sabnzbd
+
+- name: Retire legacy SABnzbd ini watcher service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: sort_ini_mnt-services-sabnzbd-sabnzbd.ini.service
+  tags:
+    - retired_services
+    - sabnzbd
+
+- name: Remove retired generic ini canonicalizer
+  file:
+    path: /usr/local/bin/sort_ini
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - sabnzbd
+
 - name: Retire Plex nginx site
   import_role:
     name: nginx

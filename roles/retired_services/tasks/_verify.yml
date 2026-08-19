@@ -24,8 +24,17 @@
     - plex.service
     - speedtest.service
     - tautulli.service
+    - sort_ini_mnt-services-sabnzbd-sabnzbd.ini.path
+    - sort_ini_mnt-services-sabnzbd-sabnzbd.ini.service
     - sort_ini_mnt-services-tautulli-config.ini.path
     - sort_ini_mnt-services-tautulli-config.ini.service
+
+- name: _verify | Retired generic ini canonicalizer is absent
+  stat:
+    path: /usr/local/bin/sort_ini
+  register: retired_services_sort_ini
+  failed_when: retired_services_sort_ini.stat.exists
+  become: true
 
 - name: _verify | Retired Fluent Bit files are absent
   stat:

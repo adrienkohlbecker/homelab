@@ -68,6 +68,51 @@
   register: _sabnzbd_http
   failed_when: _sabnzbd_http.json.queue is not defined
 
+# SABnzbd rewrites the complete INI when a setting changes through the UI.
+# The path unit canonicalizes that serialization so one changed setting stays
+# one changed value in Ansible's template diff. A server edit is the strongest
+# probe because SABnzbd rebuilds and reorders the whole nested server mapping.
+- name: _verify | The sabnzbd ini canonicalizer is installed
+  stat:
+    path: /usr/local/bin/sabnzbd_sort_ini
+  register: _sabnzbd_sort_ini
+  failed_when: >-
+    not _sabnzbd_sort_ini.stat.exists
+    or _sabnzbd_sort_ini.stat.mode != "0755"
+  become: true
+
+- name: _verify | The sabnzbd ini canonicalizer path is active  # noqa: command-instead-of-module
+  command: systemctl is-active sabnzbd_ini_sort.path
+  changed_when: false
+
+- name: _verify | Read canonical ini before a UI-style edit
+  slurp:
+    src: /mnt/services/sabnzbd/sabnzbd.ini
+  register: _sabnzbd_ini_before_ui_edit
+  become: true
+
+- name: _verify | Change one server setting through the SABnzbd API
+  uri:
+    url: >-
+      http://127.0.0.1:{{ service_ports.sabnzbd }}/api?mode=set_config&output=json&apikey={{ sabnzbd_api_key }}&section=servers&name=eu.newsdemon.com&connections=49
+    status_code: 200
+    return_content: true
+  register: _sabnzbd_server_edit
+  failed_when: _sabnzbd_server_edit.json.config.servers[0].connections | int != 49
+
+- name: _verify | Wait for the UI edit to become a one-value ini diff
+  vars:
+    _before: "{{ _sabnzbd_ini_before_ui_edit.content | b64decode }}"
+    _after: "{{ _sabnzbd_ini_after_ui_edit.content | default('') | b64decode }}"
+    _normalized_after: "{{ _after | replace('connections = 49', 'connections = 50') }}"
+  slurp:
+    src: /mnt/services/sabnzbd/sabnzbd.ini
+  register: _sabnzbd_ini_after_ui_edit
+  until: _normalized_after == _before
+  retries: 15
+  delay: 1
+  become: true
+
 # The vhost is `auth: required`, so a cookieless request must be bounced to
 # Authelia rather than proxied through. With the stub in gate mode (see
 # _setup.yml), assert a cookieless GET / lands on nginx's error_page 401 =302
@@ -383,4 +428,5 @@
   assert:
     that:
       - (_ini | regex_search('\\[\\[eu\\.newsdemon\\.com\\]\\][^\\[]*?usage_at_start = (\\d+)', '\\1') | first) == '987654321'
-    fail_msg: "usage_at_start preservation regressed: the readback reset the seeded counter to baseline"
+      - (_ini | regex_search('\\[\\[eu\\.newsdemon\\.com\\]\\][^\\[]*?connections = (\\d+)', '\\1') | first) == '50'
+    fail_msg: "SABnzbd ini readback preservation regressed"

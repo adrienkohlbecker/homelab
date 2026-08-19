@@ -102,7 +102,6 @@
     - minio
     - influxdb
     - jellyfin
-    - sort_ini
     - sabnzbd
     - sonarr
     - radarr
