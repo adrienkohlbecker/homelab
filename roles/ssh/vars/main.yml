@@ -1,4 +1,4 @@
-# Keep aligned with the sole HostKey directive in files/00-hardening.conf.
+# Keep aligned with the sole HostKey directive in templates/00-hardening.conf.j2.
 _ssh_host_private_key_file: ssh_host_ed25519_key
 
 _ssh_host_key_files:
