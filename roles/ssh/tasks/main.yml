@@ -128,7 +128,7 @@
     - ssh
 
 # `sshd -t` (no -f) re-validates the merged live config, including every
-# package and role-owned file. The copy's validate sees only the staged drop-in,
+# package and role-owned file. The template's validate sees only the staged drop-in,
 # so keep this whole-chain gate before reload.
 - name: Validate sshd config before reload
   when:
