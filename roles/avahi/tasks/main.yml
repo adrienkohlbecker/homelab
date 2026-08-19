@@ -31,8 +31,8 @@
 # Continuity-capable Macs and open rapportd/Handoff sessions to them on
 # udp/3722, dropped at the firewall as pure log noise. Samba shares still
 # surface in Finder via the samba role's _smb._tcp advert; the
-# mounted-share icon comes from `fruit:model` in smb.conf (in-band over
-# the SMB AAPL extension), independent of this record. Remove any file
+# mounted-share icon comes from fruit's model response (in-band over the
+# SMB AAPL extension), independent of this record. Remove any file
 # left by a prior converge so the advert disappears on the next reload.
 - name: Remove the avahi device-info service
   file:
