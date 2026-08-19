@@ -1,42 +1,19 @@
-# The validate task below uses `failed_when: rc != 0 or stderr has lines` —
-# intentionally stricter than systemd-analyze's own exit code, so warnings
-# (undefined keys, ordering cycles) also trigger rollback. Ansible's
-# template/copy `validate:` arg would check *before* placing, but it
-# passes the temp path which systemd-analyze can't resolve dependencies
-# against, and on 24.04+ the `:unit` form still doesn't reject warnings.
-#
-# One benign class is filtered before the comparison: "Support for option
-# X has been removed and it is ignored" notices. systemd-analyze loads the
-# transitive dependency closure, so on resolute (systemd 259) it surfaces
-# deprecations in stock Ubuntu units we don't author (e.g. xfs_scrub_all's
-# CPUAccounting=). systemd has *ignored* the option, so there is nothing to
-# fix — and rolling back our unit over a stock unit's deprecation is wrong.
+# Validate after placement so systemd-analyze can resolve dependencies. Treat
+# stderr as failure because it carries warnings despite a zero exit code; only
+# removed-option notices from transitively loaded stock units are benign.
 #
 # Inputs: caller passes a single dict `systemd_unit_args` with keys
 #   src               file under role files/ (copy) or templates/ (.j2 → template)
 #   dest              optional on-disk filename; defaults to src with .j2 stripped
-#   dest_abs          optional absolute on-disk path; takes precedence over
-#                     dest and the for-derived default. Used by absolute-mode
-#                     daemon-config drop-ins.
+#   dest_abs          absolute drop-in path; requires for
 #   for               drop-in only: parent unit (e.g. podman.socket); derives
 #                     dest=<for>.d/override.conf and verify=<for>
 #   user              default 'root'; non-root drives /etc/systemd/user
 #   condition         default true; gates the whole call
 #
-# The dict form prevents inter-call leakage: each import_role pass replaces
-# the whole `systemd_unit_args` value at play-vars scope, so a previous
-# caller's user/start/etc. can't bleed into the next caller's call.
-#
-# `systemd_unit_args.user` (default 'root') selects scope: root installs at
-# /etc/systemd/system and reloads the system manager; any other value
-# installs at /etc/systemd/user (host-wide user-default) and reloads the
-# named user's user manager (which must already be lingered).
-#
-# Module dispatch: derived from src's suffix — *.j2 → template (loaded from
-# the calling role's templates/), anything else → copy (from files/). The
-# role strips .j2 for the on-disk dest. systemd_unit_args.dest overrides
-# the dest path (used by drop-ins to land at <unit>.d/override.conf).
-#
+# Replacing this dict on every import prevents caller arguments leaking between
+# calls. A non-root user selects /etc/systemd/user and its lingered user manager.
+# The src suffix selects template (.j2) or copy; .j2 is stripped on disk.
 - name: install | Validate install args
   assert:
     quiet: true
@@ -53,18 +30,14 @@
       exclusive, for must be a string when set, and dest_abs requires for;
       got {{ systemd_unit_args | default('<unset>') }}
 
-# Two set_fact tasks because ansible's templating engine resolves all
-# keys in a single set_fact concurrently — a key can't read a sibling
-# defined in the same task. Primitives (caller-var defaulting) first,
-# derived facts (scope/dir) second.
+# set_fact keys resolve concurrently, so defaults and their derivatives need
+# separate tasks.
 - name: install | Resolve caller defaults for {{ systemd_unit_args.src }}
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
-    # For dest_abs mode, the identifier used in the per-unit result fact
-    # is the last two path components — same shape relative-dest dropins
-    # produce (journald.conf.d/99-custom.conf → journald_conf_d_99_custom_conf_result,
-    # parallel to podman.socket.d/override.conf → podman_socket_d_override_conf_result).
+    # Preserve two path components so absolute and relative drop-ins produce
+    # the same per-unit result-fact shape.
     _systemd_unit_name: >-
       {{ ((systemd_unit_args.dest_abs | dirname | basename) ~ '/' ~ (systemd_unit_args.dest_abs | basename))
          if systemd_unit_args.dest_abs is defined
@@ -97,26 +70,9 @@
     mode: "0755"
   become: true
 
-# Linger has to be on for user-scope installs: without it the named
-# user's systemd manager isn't running between logins, so daemon-reload
-# (and any later enable/start in service.yml) lands on a manager that
-# vanishes at logout. /var/lib/systemd/linger/<user> is the marker
-# `loginctl enable-linger` creates; a stat is enough and avoids a busctl
-# dependency. Callers wire linger up at user-creation time (roles/user,
-# roles/gitlab_runner) — this check is the guardrail for the next consumer
-# that forgets.
-# Task name references the caller var (systemd_unit_args.user, set
-# at import time via import_role.vars:) rather than the set_fact'd
-# _systemd_unit_user, because role imports eager-render task names before any
-# of this file's set_fact tasks run -- a set_fact'd reference fails
-# "undefined" before we ever get past the import. The caller var
-# is always available because import_role.vars: are part of the
-# import-time scope.
-#
-# Tolerate check mode: the upstream linger task may have reported
-# "would have enabled" without actually creating the sentinel, so a
-# false positive here would block check-mode runs on a fresh host.
-# Real-apply still fail-closes.
+# A user manager must be lingered to survive logout. Task names use the caller
+# var because imports render them before set_fact runs. Check mode may predict
+# linger creation without creating its marker; real applies still fail closed.
 - name: install | Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
   when:
     - _systemd_unit_condition
@@ -126,13 +82,8 @@
   register: _systemd_unit_linger
   failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
 
-# Refuse to overwrite a masked unit. `systemctl mask` creates a /dev/null
-# symlink at the unit's location — the standard "do not start this"
-# lever during incident response. A naive write would clobber the
-# symlink with a regular file and silently unmask, undoing operator
-# intent. Check the same path the verify command targets so drop-ins
-# whose parent unit is masked (dest = <unit>.d/override.conf, verify =
-# the bare unit) are also caught.
+# A mask is operator intent stored as a /dev/null symlink. Check the verify
+# target so a drop-in cannot bypass a masked parent unit.
 - name: install | Stat unit path to detect a pre-existing mask
   when: _systemd_unit_condition
   stat:
@@ -152,9 +103,7 @@
       `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_verify }}`
       before re-running, or --limit the play to skip this role.
 
-# The check above guards the parent/verify unit. When dest_abs is set the
-# write target is a different path (e.g. /etc/systemd/journald.conf.d/99-custom.conf),
-# so we need a second mask check for that specific path.
+# dest_abs writes elsewhere, so guard that path independently.
 - name: install | Stat dest_abs path for pre-existing mask
   when:
     - _systemd_unit_condition
@@ -181,12 +130,8 @@
   vars:
     _systemd_unit_path: "{{ systemd_unit_args.dest_abs | default(_systemd_unit_dir ~ '/' ~ _systemd_unit_name) }}"
   block:
-    # `action:` + `args:` dispatches to copy or template. _module is resolved
-    # task-locally (not via set_fact, which would persist as a host fact and
-    # poison the next call's dispatch). Keeping the install task here means
-    # the validate + rescue logic below is a single source of truth. The
-    # mapping form of `action:` is deprecated in ansible-core 2.23, so the
-    # string form with a separate `args:` block is used.
+    # Keep dispatch task-local so a host fact cannot poison the next call. The
+    # action string form avoids the mapping form deprecated in ansible-core 2.23.
     - name: install | Write the unit file ({{ _module }})
       when: _systemd_unit_condition
       vars:
@@ -202,21 +147,9 @@
       become: true
       register: systemd_unit_file
 
-    # --man=no because Documentation=man:foo(8) refs trigger
-    # `man <topic>` lookups that can fail on minimal images (e.g.
-    # stock nftables.service ships `Documentation=man:nft(8)` and
-    # the test image doesn't have nft's man page installed). The
-    # man-page check is completeness fluff, not syntax/dependency
-    # validation — drop it. `--man=no` works on systemd 249+; the
-    # newer `--no-man` form is 254+ only.
-    #
-    # For user-scope installs (user: <non-root>, /etc/systemd/user) the unit
-    # is verified by path against the default (system) manager context --
-    # --user is intentionally not passed. The path-based load still catches
-    # syntax and common dependency errors (user-scope unit installs rely on
-    # this), and skipping --user avoids surfacing user-manager-only
-    # resolution differences that the strict `stderr != ''` check would turn
-    # into a spurious rollback.
+    # Skip man-page completeness checks that fail on minimal images; --man=no
+    # works on systemd 249+. Verify user units by path in the system context to
+    # avoid user-manager resolution warnings becoming false rollbacks.
     - name: install | Validate unit file
       when: systemd_unit_file.changed
       command:
@@ -228,9 +161,7 @@
           - "{{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}"
       register: systemd_unit_verify
       changed_when: false
-      # Drop benign "has been removed and it is ignored" deprecation notices
-      # (raised against transitively-loaded stock units, not our unit), then
-      # drop blank lines; any line that survives is a real warning/error.
+      # Ignore removed-option notices from stock dependencies and blank lines.
       failed_when: >-
         systemd_unit_verify.rc != 0
         or (systemd_unit_verify.stderr_lines
@@ -246,28 +177,14 @@
       become: true
       become_user: "{{ _systemd_unit_user }}"
 
-    # Expose the install result under a per-unit fact so callers can avoid
-    # the ambiguous shared `systemd_unit` register (which is also the role
-    # name and would be clobbered by a second template/copy call in the
-    # same play). New callers should reference <basename>_<type>_result —
-    # e.g. kuma.service → kuma_service_result, and
-    # podman.socket / podman.service yield distinct facts.
-    # Caller var in the name (same parse-time-vs-runtime reason as the
-    # linger and Write tasks above); body still references the
-    # set_fact'd _systemd_unit_name because by execution time it's set.
+    # Publish a per-unit result so later helper calls cannot clobber it. The
+    # task name uses the import-time caller var; the body can use resolved facts.
     - name: install | Record install result for {{ systemd_unit_args.src }}
       set_fact:
         "{{ _systemd_unit_name | ansible_var_key }}_result": "{{ systemd_unit_file }}"
 
-  # systemd-analyze verify takes a file path, so the unit has to land at
-  # its production location first and is then validated in place. If
-  # validate fails, the broken unit is already on disk and would break
-  # the next daemon-reload for the whole host. The rescue restores the
-  # .backup_file (or deletes the freshly-added unit) to keep the host in
-  # its previous-known-good state. Don't trim this — without it any typo
-  # in a unit template bricks `daemon-reload` host-wide. (Ansible's
-  # template/copy `validate:` arg would let us check before placing, but
-  # it doesn't fail on warnings; see the comment at the top of this file.)
+  # Validation needs the production path. Restore the backup or delete a new
+  # file on failure so one broken unit cannot poison daemon-reload host-wide.
   rescue:
     - name: install | Copy backup file to original  # noqa: require-backup
       when: '"backup_file" in systemd_unit_file'

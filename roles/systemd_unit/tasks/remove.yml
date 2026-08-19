@@ -1,21 +1,13 @@
 # Inputs: caller passes a single dict `systemd_unit_args` with keys
-#   dest              required unless `for` is set; on-disk
-#                     unit filename (e.g. "foo.service").
-#   for               drop-in only: parent unit, derives
-#                     dest=<for>.d/override.conf
+#   dest              exact unit filename; mutually exclusive with for
+#   for               drop-in parent; derives dest=<for>.d/override.conf
 #   dest_abs          drop-in only: absolute path to remove; requires `for`
-#                     and takes precedence over the for-derived default.
 #   user              default 'root'; non-root acts on the named user's
 #                     user manager (linger must already be on).
 #   condition         default true; gates the whole call.
 #
-# Symmetric with install.yml: stops and disables the unit (idempotent
-# on already-gone units), deletes the on-disk file, reloads the daemon
-# only if a file was actually removed, then records the outcome under
-# the same <basename>_<type>_result fact name install.yml uses. Refuses
-# to remove a masked unit (symlink to /dev/null) for the same reason
-# install.yml refuses to overwrite one -- the mask encodes operator
-# intent that a quiet `rm` would silently undo.
+# Stop and disable units, remove their files, reload after deletion, and publish
+# the same per-unit result shape as install. Never remove an operator mask.
 - name: remove | Validate remove args
   assert:
     quiet: true
@@ -49,9 +41,7 @@
       {{ systemd_unit_args.dest_abs
          | default(('/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user') ~ '/' ~ _systemd_unit_name) }}
 
-# Check-mode tolerance on the linger-marker stat: see install.yml.
-# Name references caller var, not set_fact'd _systemd_unit_user, for the
-# parse-time-vs-runtime reason documented in install.yml's linger task.
+# See install.yml for linger check-mode and task-name constraints.
 - name: remove | Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
   when:
     - _systemd_unit_condition
@@ -61,9 +51,7 @@
   register: _systemd_unit_linger
   failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
 
-# Mask check before stop/disable: stop on a masked unit is a no-op
-# (state=stopped + failed_when:false swallows it), but the file delete
-# would clobber the operator's `systemctl mask` and silently unmask.
+# Deleting a /dev/null symlink would silently undo an operator mask.
 - name: remove | Stat unit path to detect a pre-existing mask
   when: _systemd_unit_condition
   stat:
@@ -83,14 +71,8 @@
       `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_name }}`
       before re-running, or --limit the play to skip this role.
 
-# Tolerate "unit not found" (the steady state we want IS "gone"), but
-# surface genuine errors (permissions, D-Bus unreachable). Skipped for a
-# template unit (name@.service): the bare template is never itself running or
-# enabled -- only its instances are, and the caller stops/disables those by
-# instance before removing the template -- and systemd answers stop/disable on
-# a still-present template with "unknown state", which is NOT the tolerated
-# "could not find". Drop-ins are also skipped because their filenames are not
-# units; deleting the file + daemon-reload below is all that's needed.
+# Missing units are already in the desired state. Skip template units and
+# drop-ins: callers stop template instances, while drop-ins have no lifecycle.
 - name: remove | Stop and disable {{ systemd_unit_args.dest_abs | default(systemd_unit_args.dest | default(systemd_unit_args.for | default('?'))) }}
   when:
     - _systemd_unit_condition

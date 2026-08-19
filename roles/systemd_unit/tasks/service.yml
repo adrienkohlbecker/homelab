@@ -4,31 +4,12 @@
 #                     user manager (linger must already be on)
 #   condition         default true; gates the whole call
 #   start             default true; false → enable only, don't touch state
-#   restart           default false; if true and the start didn't change
-#                     state, force `state=restarted`. Drive from upstream
-#                     changes (template/copy register, secret rotation) so
-#                     config drift propagates.
-#   reload            default false; hitless alternative to restart for
-#                     daemons that pick up config via SIGHUP. Mutually
-#                     exclusive with restart in practice.
-#   throttle          default 0 (no limit); forwarded only to the restart
-#                     and reload tasks' `throttle:` -- the reset-failed
-#                     step is deliberately not throttled, so on an HA pair
-#                     both nodes may clear failed state concurrently; only
-#                     the restart/reload state-change serializes. A
-#                     multi-host HA service (adguard on the lab+pug pair) sets
-#                     throttle: 1 so the restart serializes across the batch
-#                     and one node keeps serving.
+#   restart           default false; refresh an already-active unit
+#   reload            default false; hitless alternative when restart is false
+#   throttle          default 0; limits only restart/reload across hosts
 #
-# The dict form prevents inter-call leakage: each import_role pass replaces
-# the whole `systemd_unit_args` value at play-vars scope, so a previous
-# caller's user/start/etc. can't bleed into the next caller's call.
-#
-# `systemd_unit_args.user` (default 'root') selects scope: root acts on
-# the system manager; any other value drives the named user's user
-# manager (linger must already be enabled). Image pulls are the caller
-# role's responsibility (an explicit containers.podman.podman_image task
-# before this `service` call), not this helper's.
+# Replacing this dict on every import prevents argument leakage. Non-root users
+# select a lingered user manager. Image pulls remain the caller's responsibility.
 - name: service | Validate service args
   assert:
     quiet: true
@@ -42,10 +23,8 @@
       systemd_unit_args needs src (exact unit filename);
       got {{ systemd_unit_args | default('<unset>') }}
 
-# Two set_fact tasks because ansible's templating engine resolves all
-# keys in a single set_fact concurrently — a key can't read a sibling
-# defined in the same task. Primitives (caller-var defaulting) first,
-# derived facts (scope) second.
+# set_fact keys resolve concurrently, so defaults and derivatives need separate
+# tasks.
 - name: service | Resolve caller defaults for {{ systemd_unit_args.src }}
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
@@ -60,12 +39,8 @@
       {{ lookup('vars', (systemd_unit_args.src | ansible_var_key) ~ '_result', default={})
          | default({}) }}
 
-# Linger has to be on for user-scope lifecycle ops: without it the named
-# user's systemd manager isn't running between logins, so `systemctl
-# --user enable/start` may appear to succeed via the current session but
-# the unit dies at logout. /var/lib/systemd/linger/<user> is the marker
-# loginctl enable-linger creates -- see install.yml for the longer
-# rationale. Check-mode tolerance: see install.yml.
+# Linger keeps a user manager alive after logout. See install.yml for check-mode
+# and task-name constraints.
 - name: service | Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
   when:
     - _systemd_unit_condition
@@ -85,11 +60,8 @@
   become: true
   become_user: "{{ _systemd_unit_user }}"
 
-# A raw `systemctl --user` (unlike the ansible systemd module, which sets it
-# itself for scope: user) needs XDG_RUNTIME_DIR pointed at the named user's
-# /run/user/<uid> to reach their manager -- without it reenable's reload half
-# errors out. Look the uid up so the reenable below can address the user bus.
-# System scope drives the system manager and needs none of this.
+# Raw `systemctl --user` needs XDG_RUNTIME_DIR to reach the named user manager,
+# unlike the Ansible systemd module.
 - name: service | Resolve uid for the user-scope reenable bus environment
   when:
     - _systemd_unit_condition
@@ -101,19 +73,9 @@
     key: "{{ _systemd_unit_user }}"
   become: true
 
-# `systemctl enable` (what enabled: true runs) only ADDS the symlinks named in
-# the unit's *current* [Install] section -- it never prunes ones that used to be
-# there. So a template that drops a WantedBy= (e.g. a service leaving
-# zfs_autosnapshot.target) leaves a stale .wants symlink on every already-
-# converged host, and the enable above won't clean it up. `reenable` (atomic
-# disable+enable) recreates exactly the current [Install] set, pruning the
-# orphan. Scoped to the converge where the unit file actually changed -- the only
-# time [Install] can have drifted -- so steady-state runs stay a plain idempotent
-# enable. Gated on UnitFileState == enabled so a static / no-[Install] unit
-# (where reenable errors "no installation config") is skipped. The file change
-# already reported changed, so this corrective step is changed_when: false. No
-# command-instead-of-module noqa: reenable has no systemd-module equivalent (cf.
-# the reset-failed command below).
+# `enable` adds current [Install] symlinks but does not prune obsolete ones.
+# Reenable changed, enabled units to rebuild that set; skip static units and
+# steady-state converges. The file write already owns the changed result.
 - name: service | Reenable to prune stale [Install] symlinks on a unit-file change
   when:
     - _systemd_unit_condition
@@ -132,12 +94,8 @@
   become: true
   become_user: "{{ _systemd_unit_user }}"
 
-# install.yml checks for masking before writing the file; service.yml must
-# check independently because a unit can be masked between install and the
-# next converge. The Enable result's LoadState is populated from `systemctl
-# show` (same source as ConditionResult/ActiveState), so this costs no extra
-# task. A masked unit that somehow survived the install guard would produce a
-# raw systemd "Unit is masked" error on the Start task without this check.
+# A unit can be masked after installation. Reuse enable's LoadState to preserve
+# that operator intent without another probe.
 - name: service | Refuse to start a masked unit
   when:
     - _systemd_unit_condition
@@ -150,22 +108,8 @@
       Unmask with `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_name }}`
       before re-running, or --limit the play to skip this role.
 
-# Clear any rate-limit / failed state before starting. A unit that has
-# crashed StartLimitBurst times within StartLimitInterval gets stuck
-# in "Start request repeated too quickly" -- ansible's systemd module
-# would surface that as a fatal error on the next play even though
-# the underlying cause has been fixed. reset-failed is a no-op on
-# healthy units; failed_when=false tolerates the unit not existing
-# yet (e.g. a config-only run that touches an as-yet-uninstalled
-# unit). Gated on imminent start: a unit that's already active isn't
-# rate-limited and isn't about to be (re)started, so the reset-failed
-# is pure overhead -- skip it (68 services x a become command every
-# converge). The Enable result above carries the unit's pre-start
-# ActiveState (the systemd module returns the full `systemctl show`
-# dict, same source the Start task reads ConditionResult from), so the
-# gate reuses it rather than spending an extra task. ActiveState !=
-# 'active' (failed, inactive, activating) or a requested restart means
-# a start is imminent, so clear.
+# Clear rate limits only before an imminent start or restart. Reuse enable's
+# ActiveState to avoid a separate probe; tolerate an as-yet-absent unit.
 - name: service | Reset failed state to clear any rate-limit
   when:
     - _systemd_unit_condition
@@ -182,14 +126,8 @@
   become: true
   become_user: "{{ _systemd_unit_user }}"
 
-# ansible's systemd module reports `changed=true` whenever it issues a
-# state-change command, even if the unit's Condition*=/Assert*= directives
-# cause systemd to skip the actual start (e.g. smartmontools on a VM with
-# no SMART-capable disks: ConditionPathExistsGlob fails, unit stays
-# inactive, but ansible still flags changed). Override `changed` to false
-# in that case so the second converge is idempotent. The result is also
-# the truth — if systemd never executes ExecStart, the unit's runtime
-# state is identical to before.
+# The systemd module reports changed after issuing start even when Condition or
+# Assert skips ExecStart. Reflect the unchanged runtime state for idempotence.
 - name: service | Start the service
   when:
     - _systemd_unit_condition
@@ -225,11 +163,8 @@
   become: true
   become_user: "{{ _systemd_unit_user }}"
 
-# Expose the start result under a stable per-unit fact (mirroring install.yml's
-# <name>_result convention) so callers that start multiple units in the same
-# play don't have to manually capture `systemd_unit_started` before the next
-# service call rebinds it. When start: false the Start task is skipped and
-# systemd_unit_started is undefined; default to changed=false in that case.
+# Preserve each start result across later helper calls; enable-only calls publish
+# changed=false.
 - name: service | Record service result for {{ systemd_unit_args.src }}
   set_fact:
     "{{ _systemd_unit_name | ansible_var_key }}_started_result": "{{ systemd_unit_started | default({'changed': false}) }}"
