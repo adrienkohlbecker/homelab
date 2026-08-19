@@ -147,8 +147,17 @@
 # login. `tailscale set` cannot report whether it changed a preference, so
 # functional verification proves correctness.
 - name: register | Reconcile routes / exit node / accept-routes / accept-dns
+  vars:
+    _tailscale_preference_args:
+      - "--advertise-routes={{ tailscale_advertise_routes | join(',') }}"
+      - "--advertise-exit-node=true"
+      - "--accept-routes={{ tailscale_accept_routes | ternary('true', 'false') }}"
+      # Server nodes keep their host DNS and use conventional SNAT forwarding.
+      - "--accept-dns=false"
+      - "--snat-subnet-routes=true"
+      - "--stateful-filtering=false"
   command:
-    argv: "{{ [tailscale_bin, 'set'] + tailscale_preference_args }}"
+    argv: "{{ [tailscale_bin, 'set'] + _tailscale_preference_args }}"
   when: not ansible_check_mode
   changed_when: false
   become: true
