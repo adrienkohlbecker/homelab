@@ -29,6 +29,8 @@
       - ssh_verify_effective.stdout is search('(?m)^kbdinteractiveauthentication no$')
       - ssh_verify_effective.stdout is search('(?m)^streamlocalbindunlink yes$')
       - ssh_verify_effective.stdout is search('(?m)^pubkeyacceptedalgorithms ssh-ed25519,sk-ssh-ed25519@openssh.com$')
+      - ssh_verify_effective.stdout is search('(?m)^subsystem\s+sftp\s+internal-sftp')
+      - ssh_verify_effective.stdout is search('(?m)^macs (?:[^,\s]+-etm@openssh\.com)(?:,[^,\s]+-etm@openssh\.com)*$')
       - >-
         ssh_verify_effective.stdout_lines
         | select('match', '^hostkey ')
@@ -37,32 +39,6 @@
       sshd effective config is missing expected hardening directives —
       00-hardening.conf may not have landed, or /etc/ssh/sshd_config
       no longer Includes sshd_config.d.
-
-- name: _verify | Subsystem sftp uses internal-sftp
-  assert:
-    that:
-      - ssh_verify_effective.stdout is search('(?m)^subsystem\s+sftp\s+internal-sftp')
-    fail_msg: >-
-      sshd effective config does not show internal-sftp as the sftp
-      subsystem — the drop-in's Subsystem directive may be shadowed.
-
-- name: _verify | Only EtM MACs are enabled
-  vars:
-    _ssh_verify_macs: >-
-      {{ ssh_verify_effective.stdout_lines
-         | select('match', '^macs\s+')
-         | first
-         | regex_replace('^macs\s+', '') }}
-  assert:
-    that:
-      # Every enabled MAC must be an EtM variant. Assert the invariant
-      # positively (no token lacks -etm@) rather than blocklisting specific
-      # non-EtM names — a blocklist passes a plain hmac-sha2-256 that simply
-      # lacks the substring being excluded.
-      - _ssh_verify_macs.split(',') | reject('search', '-etm@') | list | length == 0
-    fail_msg: >-
-      Non-EtM MACs are still present in the effective config:
-      {{ _ssh_verify_macs }}
 
 # Divergence guard: a persisted identity that differs from the live one
 # (rebuilt host, restore step skipped) must HALT the converge instead of
