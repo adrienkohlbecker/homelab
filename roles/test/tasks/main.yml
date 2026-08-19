@@ -76,11 +76,14 @@
 
 - name: Write ECR auth for root podman pulls
   when: test_in_aws
+  # Each cell starts from a fresh overlay, and one token covers the bounded
+  # harness run. Replacing it on every converge only defeats idempotence.
   copy:
     dest: /root/.config/containers/auth.json
     mode: "0600"
     owner: root
     group: root
+    force: false
     content: |
       {
         "auths": {
@@ -90,4 +93,5 @@
         }
       }
     validate: python3 -m json.tool "%s"
+  diff: false
   become: true
