@@ -10,7 +10,6 @@
       become: true
       loop:
         - /mnt/services/sqlite
-        - /mnt/services/sqlite_dataset_test
         - /mnt/services/sqlite_dataset_test/sub
 
     # -- Scenario 1: default symlink mode --------------------------------
