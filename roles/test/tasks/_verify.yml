@@ -1,15 +1,6 @@
-# Assertions for the test bootstrap applied before every role test. Reuse the
-# owner-role verifiers for imported hostname and apt behavior; this file owns
-# only the registry-mirror and DNS-over-TLS contracts added by mirrors.yml.
-- name: _verify | Verify the hostname fixture
-  import_role:
-    name: hostname
-    tasks_from: _verify
-
-- name: _verify | Verify the apt fixture
-  import_role:
-    name: apt
-    tasks_from: _verify
+# Assertions for the registry-mirror and DNS-over-TLS contracts added by the
+# test bootstrap. Imported hostname and apt behavior is covered by each owner
+# role's independent test cell.
 
 - name: _verify | Read podman registry mirror config
   when: (nexus_url | length > 0) or test_use_ecr_registry_mirrors
