@@ -13,28 +13,6 @@
   failed_when: samba_nmbd_enabled.stdout != 'masked'
   become: true
 
-- name: _verify | Dump the running config
-  command: testparm -s
-  register: samba_testparm
-  changed_when: false
-  become: true
-
-# Proves the critical per-share-key fix: the smbtest share renders, and its
-# `valid users` restriction is present (the regression that silently dropped it
-# would leave the share world-accessible with this line absent).
-- name: _verify | Config exposes the share with its valid-users restriction
-  assert:
-    that:
-      - "'[smbtest]' in samba_testparm.stdout"
-      - "'[homes]' in samba_testparm.stdout"
-      - samba_testparm.stdout is search('valid users = ' ~ ansible_user_id)
-      - samba_testparm.stdout is search('fruit:time machine = yes')
-      - samba_testparm.stdout is search('fruit:time machine max size = 1T')
-    fail_msg: >-
-      testparm output is missing the smbtest share, its valid-users line, or a
-      Time Machine directive (enabled / max size) -- per-share key rendering is
-      broken.
-
 # testparm -v dumps the EFFECTIVE value of every parameter (incl. defaults), so
 # this catches a silently-dropped hardening directive: a typo'd `server smb
 # encrypt` would fall back to the default here rather than `required`. Samba
@@ -45,6 +23,22 @@
   register: samba_testparm_verbose
   changed_when: false
   become: true
+
+# Proves the critical per-share-key fix: the smbtest share renders, and its
+# `valid users` restriction is present (the regression that silently dropped it
+# would leave the share world-accessible with this line absent).
+- name: _verify | Config exposes the share with its valid-users restriction
+  assert:
+    that:
+      - "'[smbtest]' in samba_testparm_verbose.stdout"
+      - "'[homes]' in samba_testparm_verbose.stdout"
+      - samba_testparm_verbose.stdout is search('valid users = ' ~ ansible_user_id)
+      - samba_testparm_verbose.stdout is search('fruit:time machine = yes')
+      - samba_testparm_verbose.stdout is search('fruit:time machine max size = 1T')
+    fail_msg: >-
+      testparm output is missing the smbtest share, its valid-users line, or a
+      Time Machine directive (enabled / max size) -- per-share key rendering is
+      broken.
 
 - name: _verify | Mandatory SMB3 encryption is in force
   assert:
