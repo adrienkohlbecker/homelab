@@ -3,6 +3,7 @@
 # - /var/lib/apt/lists/ carries an index file for every configured
 #   (mirror, suite) -- apt's own source of truth, not the prettyprinted
 #   apt-cache policy dump.
+# - apt reads no index target from the retired legacy sources.list.
 # - apt-get update --error-on=any succeeds (turns transient mirror
 #   failures into a hard fail instead of a 0-exit warning).
 
@@ -51,6 +52,28 @@
   loop: "{{ _apt_lists.results }}"
   loop_control:
     label: "{{ item.item.mirror }} {{ item.item.suite }}"
+
+# Query apt's parsed source view rather than stat-ing the file the role emptied.
+- name: _verify | Read apt index targets
+  command:
+    argv:
+      - apt-get
+      - indextargets
+      - --format
+      - $(SOURCESENTRY)
+  register: _apt_indextargets
+  changed_when: false
+
+- name: _verify | Apt reads no sources from the legacy sources.list
+  assert:
+    that:
+      - >-
+        _apt_indextargets.stdout_lines
+        | select('search', '^/etc/apt/sources.list:') | list | length == 0
+    fail_msg: >-
+      apt still indexes entries from /etc/apt/sources.list:
+      {{ _apt_indextargets.stdout_lines
+      | select('search', '^/etc/apt/sources.list:') | list }}
 
 # Functional check: every configured suite serves valid signed metadata.
 # --error-on=any turns transient warnings (one unreachable suite, stale

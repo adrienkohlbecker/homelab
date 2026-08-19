@@ -65,6 +65,6 @@
   loop: "{{ etc_hosts_entries | dict2items }}"
   register: _hostname_etc_hosts_entries
   changed_when: false
-  failed_when:
-    - _hostname_etc_hosts_entries.rc != 0
-    - item.value not in _hostname_etc_hosts_entries.stdout
+  failed_when: >-
+    _hostname_etc_hosts_entries.rc != 0
+    or item.value not in _hostname_etc_hosts_entries.stdout.split()

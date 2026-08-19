@@ -1,76 +1,15 @@
-# Assertions for the mirrors fixture (invoked by testrole.py test).
-#
-# Three branches:
-#   - nexus_url set → check apt/podman point at Nexus, and that
-#     etc_hosts_entries resolves to the configured IPs.
-#   - nexus_url empty and in AWS (test_in_aws: EC2 cell or aws_qemu) → check
-#     the archive uses the in-region EC2 mirror.
-#   - nexus_url empty and not in AWS → check apt points at upstream.
+# Assertions for the test bootstrap applied before every role test. Reuse the
+# owner-role verifiers for imported hostname and apt behavior; this file owns
+# only the registry-mirror and DNS-over-TLS contracts added by mirrors.yml.
+- name: _verify | Verify the hostname fixture
+  import_role:
+    name: hostname
+    tasks_from: _verify
 
-- name: _verify | Read apt sources
-  slurp:
-    src: /etc/apt/sources.list.d/ubuntu.sources
-  register: test_apt_deb822
-
-- name: _verify | Apt sources point at Nexus
-  when: nexus_url | length > 0
-  assert:
-    that:
-      - >-
-        nexus_url in (test_apt_deb822.content | b64decode)
-    fail_msg: "apt sources don't reference {{ nexus_url }}"
-
-- name: _verify | Apt points at the in-region EC2 mirror on AWS
-  when:
-    - not (nexus_url | length > 0)
-    - test_in_aws | default(false) | bool
-  vars:
-    # amd64 cells render the archive host, arm cells the ports host; both
-    # carry the region so the suffix disambiguates a real regional mirror
-    # from the public canonical fallback. security rides the same host.
-    _apt_sources: "{{ test_apt_deb822.content | b64decode }}"
-  assert:
-    that:
-      - >-
-        (test_aws_region ~ '.ec2.archive.ubuntu.com') in _apt_sources
-        or (test_aws_region ~ '.ec2.ports.ubuntu.com') in _apt_sources
-      - "'security.ubuntu.com' not in _apt_sources"
-    fail_msg: "apt should use the in-region EC2 mirror {{ test_aws_region }}.ec2.{archive,ports}.ubuntu.com for archive and security"
-
-- name: _verify | Apt sources point at upstream when no nexus (non-AWS)
-  when:
-    - not (nexus_url | length > 0)
-    - not (test_in_aws | default(false) | bool)
-  assert:
-    that:
-      - >-
-        ('archive.ubuntu.com' in (test_apt_deb822.content | b64decode))
-        or ('ports.ubuntu.com' in (test_apt_deb822.content | b64decode))
-    fail_msg: "apt sources don't reference upstream archive/ports"
-
-# Ask apt where it actually reads sources from, rather than stat-ing the file
-# roles/apt just emptied -- that would only restate the converge task. A
-# deb822-only host lists no index target sourced from the legacy file.
-- name: _verify | Read apt index targets
-  command:
-    argv:
-      - apt-get
-      - indextargets
-      - --format
-      - $(SOURCESENTRY)
-  register: test_apt_indextargets
-  changed_when: false
-
-- name: _verify | Apt reads no sources from the legacy sources.list
-  assert:
-    that:
-      - >-
-        test_apt_indextargets.stdout_lines
-        | select('search', '^/etc/apt/sources.list:') | list | length == 0
-    fail_msg: >-
-      apt still indexes entries from /etc/apt/sources.list on this deb822-only
-      host: {{ test_apt_indextargets.stdout_lines
-      | select('search', '^/etc/apt/sources.list:') | list }}
+- name: _verify | Verify the apt fixture
+  import_role:
+    name: apt
+    tasks_from: _verify
 
 - name: _verify | Read podman registry mirror config
   when: (nexus_url | length > 0) or test_use_ecr_registry_mirrors
