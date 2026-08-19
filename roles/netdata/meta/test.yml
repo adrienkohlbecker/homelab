@@ -1,4 +1,4 @@
-# _setup.yml imports test/nginx + test/authelia_stub and the _verify path
+# _setup.yml imports nginx/test_fixture + nginx/test_authelia_stub and the _verify path
 # exercises the full nginx+Authelia front (token bypass, redacted access
 # log), so route to box_deps where nginx is pre-baked (packer/seed_deps.yml)
 # to skip the nginx install on every test run. netdata itself
