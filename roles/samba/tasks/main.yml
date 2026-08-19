@@ -97,18 +97,26 @@
   tags:
     - samba
 
-- name: Remove superseded named smbd override
-  when: samba_shares | length > 0
+- name: Remove stale smbd overrides
+  when: item.condition
   file:
-    path: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
+    path: "{{ item.path }}"
     state: absent
-  register: samba_smbd_legacy_override_removed
+  loop:
+    # A host that drops all shares must shed the canonical override too.
+    - path: /etc/systemd/system/smbd.service.d/override.conf
+      condition: "{{ samba_shares | length == 0 }}"
+    - path: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
+      condition: true
+  loop_control:
+    label: "{{ item.path }}"
+  register: samba_smbd_overrides_removed
   become: true
   tags:
     - samba
 
-- name: Reload systemd after named smbd override removal
-  when: samba_smbd_legacy_override_removed.changed
+- name: Reload systemd after smbd override removal
+  when: samba_smbd_overrides_removed.changed
   systemd:
     daemon_reload: true
   become: true
@@ -126,31 +134,6 @@
     - smbd_service_d_override_conf_result.changed
   command: systemctl reenable smbd
   changed_when: true
-  become: true
-  tags:
-    - samba
-
-# A host that drops all its shares must shed the override too, or smbd keeps a
-# boot dependency on zfs_mount units that may no longer exist.
-- name: Remove smbd zfs-mount override when no shares
-  when: samba_shares | length == 0
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/systemd/system/smbd.service.d/override.conf
-    - /etc/systemd/system/smbd.service.d/zfs-mounts.conf
-  register: samba_smbd_override_removed
-  become: true
-  tags:
-    - samba
-
-- name: Reload systemd after smbd override removal
-  when:
-    - samba_shares | length == 0
-    - samba_smbd_override_removed.changed
-  systemd:
-    daemon_reload: true
   become: true
   tags:
     - samba
