@@ -34,7 +34,7 @@ f_trace zfs-autobackup \
   --set-properties readonly=on \
   --set-properties mountpoint=none \
   --verbose \
-  --ssh-config /root/.ssh/config \
+  --ssh-config /etc/zfs_autobackup_ssh_config \
   --ssh-source "zfs_autobackup@$SSH_SOURCE" \
   --zfs-compressed \
   bak "$DEST_DATASET"

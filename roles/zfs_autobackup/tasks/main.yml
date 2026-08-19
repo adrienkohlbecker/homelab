@@ -91,6 +91,27 @@
   tags:
     - zfs_autobackup
 
+- name: Configure backup SSH client
+  copy:
+    src: ssh_config
+    dest: /etc/zfs_autobackup_ssh_config
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+    validate: ssh -G -F %s localhost
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Remove the retired root backup SSH config
+  file:
+    path: /root/.ssh/config
+    state: absent
+  become: true
+  tags:
+    - zfs_autobackup
+
 - name: Copy the backup scripts
   copy:
     src: "{{ item }}.sh"

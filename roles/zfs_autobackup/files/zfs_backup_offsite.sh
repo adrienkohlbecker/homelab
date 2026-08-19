@@ -84,6 +84,7 @@ fi
 # The output format preserves dataset context on every update sent through
 # journald and Fluent Bit.
 f_trace rsync \
+  --rsh "ssh -F /etc/zfs_autobackup_ssh_config" \
   --archive \
   --hard-links \
   --xattrs \

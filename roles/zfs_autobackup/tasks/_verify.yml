@@ -12,6 +12,30 @@
       installed={{ zfs_autobackup_verify_version.stdout | trim }},
       expected={{ zfs_autobackup_version }}
 
+- name: _verify | Resolve the backup SSH client configuration
+  command: ssh -G -F /etc/zfs_autobackup_ssh_config localhost
+  register: zfs_autobackup_verify_ssh_config
+  become: true
+  changed_when: false
+
+- name: _verify | Expected backup SSH directives are active
+  assert:
+    that:
+      - "'batchmode yes' in zfs_autobackup_verify_ssh_config.stdout"
+      - "'ciphers aes128-gcm@openssh.com,' in zfs_autobackup_verify_ssh_config.stdout"
+      - "'compression no' in zfs_autobackup_verify_ssh_config.stdout"
+      - "'controlmaster auto' in zfs_autobackup_verify_ssh_config.stdout"
+      - "'controlpath /root/.ssh/.controlmaster-' in zfs_autobackup_verify_ssh_config.stdout"
+      - "'controlpersist 300' in zfs_autobackup_verify_ssh_config.stdout"
+      - "'forwardagent no' in zfs_autobackup_verify_ssh_config.stdout"
+      - "'identityfile ~/.ssh/id_ed25519' in zfs_autobackup_verify_ssh_config.stdout"
+      - "'identitiesonly yes' in zfs_autobackup_verify_ssh_config.stdout"
+      - "'preferredauthentications publickey' in zfs_autobackup_verify_ssh_config.stdout"
+      - "'serveralivecountmax 2' in zfs_autobackup_verify_ssh_config.stdout"
+      - "'serveraliveinterval 30' in zfs_autobackup_verify_ssh_config.stdout"
+      - "'connecttimeout 10' in zfs_autobackup_verify_ssh_config.stdout"
+    fail_msg: "backup SSH config missing expected directives"
+
 # Functional check: converge granted zfs allow on the scratch dataset that
 # _setup tagged; assert the grant landed, then drive a real local backup and
 # confirm a @bak- snapshot appears -- exercising script discovery, the
@@ -150,6 +174,7 @@
     that:
       - "'skipping offsite sync' not in zfs_autobackup_verify_gate_reconcile.stdout"
       - "'rsync' in zfs_autobackup_verify_gate_reconcile.stdout"
+      - "'/etc/zfs_autobackup_ssh_config' in zfs_autobackup_verify_gate_reconcile.stdout"
       - "'--out-format=dataset=rpool/zfs_autobackup_offsite_test' in zfs_autobackup_verify_gate_reconcile.stdout"
       - "'change=%i' in zfs_autobackup_verify_gate_reconcile.stdout"
       - "'path=%n%L' in zfs_autobackup_verify_gate_reconcile.stdout"
