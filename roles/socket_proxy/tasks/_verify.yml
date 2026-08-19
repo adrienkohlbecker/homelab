@@ -100,52 +100,6 @@
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: socket_proxy.service
-        - MESSAGE: '127.0.0.1:40000 [12/Jul/2026:18:17:25.123] dockerfrontend dockerbackend/dockersocket 0/0/0/1/1 200 1234 - - ---- 1/1/1/1/0 0/0 "GET /version HTTP/1.1"'
-          CONTAINER_TAG: socket_proxy
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: socket_proxy.service
-        - MESSAGE: '10.89.0.1:54321 [12/Jul/2026:18:17:26.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 200 4321 - - ---- 2/2/1/1/0 0/0 "GET /info HTTP/1.1"'
-          CONTAINER_TAG: socket_proxy
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: socket_proxy.service
-        - MESSAGE: '10.89.0.1:54322 [12/Jul/2026:18:17:27.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 200 4321 - - ---- 2/2/1/1/0 0/0 "GET /v1.41/info HTTP/1.1"'
-          CONTAINER_TAG: socket_proxy
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: socket_proxy.service
-          marker: socket-proxy-netdata-drop
-        - MESSAGE: '10.89.0.1:54323 [12/Jul/2026:18:17:28.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 200 4321 - - ---- 2/2/1/1/0 0/0 "GET /v1.41/images/json HTTP/1.1"'
-          CONTAINER_TAG: socket_proxy
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: socket_proxy.service
-          marker: socket-proxy-netdata-drop
-        - MESSAGE: '10.89.0.1:54324 [12/Jul/2026:18:17:29.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 200 4321 - - ---- 2/2/1/1/0 0/0 "GET /v1.41/containers/json?all=1&filters=%7B%22health%22%3A%7B%22healthy%22%3Atrue%7D%7D HTTP/1.1"'
-          CONTAINER_TAG: socket_proxy
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: socket_proxy.service
-          marker: socket-proxy-netdata-drop
-        - MESSAGE: '10.89.0.1:54325 [12/Jul/2026:18:17:30.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 200 4321 - - ---- 2/2/1/1/0 0/0 "GET /v1.41/containers/json?all=1&filters=%7B%22health%22%3A%7B%22unhealthy%22%3Atrue%7D%7D HTTP/1.1"'
-          CONTAINER_TAG: socket_proxy
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: socket_proxy.service
-          marker: socket-proxy-netdata-drop
-        - MESSAGE: '10.89.0.1:54326 [12/Jul/2026:18:17:31.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 200 4321 - - ---- 2/2/1/1/0 0/0 "GET /v1.41/containers/json?all=1&filters=%7B%22health%22%3A%7B%22starting%22%3Atrue%7D%7D HTTP/1.1"'
-          CONTAINER_TAG: socket_proxy
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: socket_proxy.service
-          marker: socket-proxy-netdata-drop
-        - MESSAGE: '10.89.0.1:54327 [12/Jul/2026:18:17:32.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 200 4321 - - ---- 2/2/1/1/0 0/0 "GET /v1.41/containers/json?all=1&filters=%7B%22health%22%3A%7B%22none%22%3Atrue%7D%7D HTTP/1.1"'
-          CONTAINER_TAG: socket_proxy
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: socket_proxy.service
-          marker: socket-proxy-netdata-drop
-        - MESSAGE: '10.89.0.1:54328 [12/Jul/2026:18:17:33.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 500 4321 - - ---- 2/2/1/1/0 0/0 "GET /v1.41/info HTTP/1.1"'
-          CONTAINER_TAG: socket_proxy
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: socket_proxy.service
-        - MESSAGE: '10.89.0.1:54329 [12/Jul/2026:18:17:34.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 200 4321 - - ---- 2/2/1/1/0 0/0 "GET /v1.41/containers/json?all=1 HTTP/1.1"'
-          CONTAINER_TAG: socket_proxy
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: socket_proxy.service
         - MESSAGE: socket-proxy-prose
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
@@ -172,38 +126,6 @@
           level: warn
           fields.process_id: 8
           fields.parser_status: parsed
-        - message: GET /info HTTP/1.1
-          level: debug
-          fields.client_address: 10.89.0.1
-          fields.client_port: 54321
-          fields.frontend: dockerfrontend
-          fields.backend: dockerbackend
-          fields.server: dockersocket
-          fields.request_wait_ms: 0
-          fields.queue_wait_ms: 0
-          fields.connect_ms: 0
-          fields.response_ms: 2
-          fields.total_ms: 2
-          fields.status: 200
-          fields.bytes: 4321
-          fields.termination_state: "----"
-          fields.active_connections: 2
-          fields.frontend_connections: 2
-          fields.backend_connections: 1
-          fields.server_connections: 1
-          fields.retries: 0
-          fields.server_queue: 0
-          fields.backend_queue: 0
-          fields.method: GET
-          fields.path: /info
-          fields.protocol: HTTP/1.1
-          fields.parser_status: parsed
-          _absent:
-            - fields.socket_proxy_request
-        - message: GET /v1.41/info HTTP/1.1
-          fields.status: 500
-        - message: GET /v1.41/containers/json?all=1 HTTP/1.1
-          fields.status: 200
         - message: socket-proxy-prose
           service: socket_proxy
           _absent:
@@ -219,7 +141,6 @@
   assert:
     that:
       - "'Proxy dockerbackend stopped (cumulated conns: FE: 0, BE: 1181).' not in fluentbit_verify_result.stdout"
-      - "'GET /version HTTP/1.1' not in fluentbit_verify_result.stdout"
       - "'-drop' not in fluentbit_verify_result.stdout"
 
 - name: _verify | Allowed GET /version returns 200
@@ -303,57 +224,4 @@
     - events
   loop_control:
     label: "/{{ item }}"
-  become: true
-
-- name: _verify | Wait for parsed live HAProxy access record in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                fields = record.get("fields", {})
-                if (
-                    record.get("service") == "socket_proxy"
-                    and record.get("message") == "GET /info HTTP/1.1"
-                    and record.get("level") == "debug"
-                    and fields.get("method") == "GET"
-                    and fields.get("path") == "/info"
-                    and fields.get("status") == 200
-                    and fields.get("parser_status") == "parsed"
-                ):
-                    print(json.dumps(record, sort_keys=True))
-                    sys.exit(0)
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-  register: _socket_proxy_access_record
-  changed_when: false
-  retries: 30
-  delay: 1
-  until: _socket_proxy_access_record.rc == 0
-  become: true
-
-- name: _verify | Wait for the real loopback healthcheck access grammar
-  command:
-    argv:
-      - journalctl
-      - CONTAINER_TAG=socket_proxy
-      - --no-pager
-      - --output=cat
-  register: _socket_proxy_health_journal
-  changed_when: false
-  retries: 35
-  delay: 1
-  until: >-
-    _socket_proxy_health_journal.stdout is search(
-      '127\\.0\\.0\\.1:[0-9]+ .* "GET /version HTTP/1\\.[01]"'
-    )
   become: true

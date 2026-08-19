@@ -3,14 +3,6 @@ parsers:
     format: regex
     regex: '/\A\[(?<socket_proxy_level>ALERT|WARNING|NOTICE|INFO|DEBUG)\][[:space:]]+\((?<socket_proxy_process_id>[0-9]+)\)[[:space:]]+:[[:space:]]+(?<socket_proxy_message>[\s\S]*?)[[:space:]]*\z/'
     types: socket_proxy_process_id:integer
-  - name: socket_proxy_access
-    format: regex
-    regex: '/\A(?<socket_proxy_client_address>[^ ]+):(?<socket_proxy_client_port>[0-9]+) \[[^]]+\] (?<socket_proxy_frontend>[^ ]+) (?<socket_proxy_backend>[^ /]+)\/(?<socket_proxy_server>[^ ]+) (?<socket_proxy_request_wait_ms>-?[0-9]+)\/(?<socket_proxy_queue_wait_ms>-?[0-9]+)\/(?<socket_proxy_connect_ms>-?[0-9]+)\/(?<socket_proxy_response_ms>-?[0-9]+)\/(?<socket_proxy_total_ms>\+?[0-9]+) (?<socket_proxy_status>[0-9]{3}) (?<socket_proxy_bytes>[0-9]+) [^ ]+ [^ ]+ (?<socket_proxy_termination_state>[^ ]+) (?<socket_proxy_active_connections>[0-9]+)\/(?<socket_proxy_frontend_connections>[0-9]+)\/(?<socket_proxy_backend_connections>[0-9]+)\/(?<socket_proxy_server_connections>[0-9]+)\/(?<socket_proxy_retries>[0-9]+) (?<socket_proxy_server_queue>[0-9]+)\/(?<socket_proxy_backend_queue>[0-9]+) "(?<socket_proxy_request>[^"]+)"[[:space:]]*\z/'
-    types: socket_proxy_client_port:integer socket_proxy_request_wait_ms:integer socket_proxy_queue_wait_ms:integer socket_proxy_connect_ms:integer socket_proxy_response_ms:integer socket_proxy_total_ms:integer socket_proxy_status:integer socket_proxy_bytes:integer socket_proxy_active_connections:integer socket_proxy_frontend_connections:integer socket_proxy_backend_connections:integer socket_proxy_server_connections:integer socket_proxy_retries:integer socket_proxy_server_queue:integer socket_proxy_backend_queue:integer
-  - name: socket_proxy_request
-    format: regex
-    regex: '/\A(?<socket_proxy_method>[^ ]+) (?<socket_proxy_path>[^ ]+) (?<socket_proxy_protocol>[^ ]+)\z/'
-
 multiline_parsers:
   - name: multiline_socket_proxy
     type: regex
@@ -34,14 +26,6 @@ pipeline:
       exclude:
         - 'CONTAINER_TAG ^.+$'
         - 'MESSAGE ^Proxy (dockerfrontend|dockerbackend|docker-events) stopped \(cumulated conns: FE: [0-9]+, BE: [0-9]+\)\.[[:space:]]*$'
-    # The in-container healthcheck is the only loopback caller of /version.
-    # Keep consumer /version requests from the Podman network or host gateway.
-    - name: grep
-      match: svc.socket_proxy.service
-      logical_op: and
-      exclude:
-        - 'CONTAINER_TAG ^.+$'
-        - 'MESSAGE ^127\.0\.0\.1:[0-9]+ .* "GET /version HTTP/1\.[01]"[[:space:]]*$'
     - name: multiline
       match: svc.socket_proxy.service
       multiline.parser: multiline_socket_proxy
@@ -58,18 +42,6 @@ pipeline:
       match: svc.socket_proxy.service
       key_name: log
       parser: socket_proxy_haproxy
-      reserve_data: true
-      preserve_key: true
-    - name: parser
-      match: svc.socket_proxy.service
-      key_name: log
-      parser: socket_proxy_access
-      reserve_data: true
-      preserve_key: true
-    - name: parser
-      match: svc.socket_proxy.service
-      key_name: socket_proxy_request
-      parser: socket_proxy_request
       reserve_data: true
       preserve_key: true
     - name: modify
@@ -92,66 +64,3 @@ pipeline:
       exclude:
         - 'CONTAINER_TAG ^.+$'
         - 'log \Amissing timeouts for backend ''docker-events''\.'
-    - name: modify
-      match: svc.socket_proxy.service
-      condition:
-        - key_exists CONTAINER_TAG
-        - key_exists socket_proxy_request
-        - key_exists socket_proxy_status
-        - key_exists socket_proxy_method
-        - key_exists socket_proxy_path
-        - key_exists socket_proxy_protocol
-      hard_rename:
-        - socket_proxy_request log
-        - socket_proxy_client_address client_address
-        - socket_proxy_client_port client_port
-        - socket_proxy_frontend frontend
-        - socket_proxy_backend backend
-        - socket_proxy_server server
-        - socket_proxy_request_wait_ms request_wait_ms
-        - socket_proxy_queue_wait_ms queue_wait_ms
-        - socket_proxy_connect_ms connect_ms
-        - socket_proxy_response_ms response_ms
-        - socket_proxy_total_ms total_ms
-        - socket_proxy_status status
-        - socket_proxy_bytes bytes
-        - socket_proxy_termination_state termination_state
-        - socket_proxy_active_connections active_connections
-        - socket_proxy_frontend_connections frontend_connections
-        - socket_proxy_backend_connections backend_connections
-        - socket_proxy_server_connections server_connections
-        - socket_proxy_retries retries
-        - socket_proxy_server_queue server_queue
-        - socket_proxy_backend_queue backend_queue
-        - socket_proxy_method method
-        - socket_proxy_path path
-        - socket_proxy_protocol protocol
-      set:
-        - _level debug
-        - parser_status parsed
-    # Netdata's docker collector issues these six successful reads every ten
-    # seconds. Keep failures and unfamiliar requests; only omit the repetitive
-    # success path from the operator aggregate.
-    - name: type_converter
-      match: svc.socket_proxy.service
-      int_key: status _socket_proxy_status_text string
-    - name: grep
-      match: svc.socket_proxy.service
-      logical_op: and
-      exclude:
-        - '_socket_proxy_status_text ^200$'
-        - 'method ^GET$'
-        - 'path ^/v[0-9]+[.][0-9]+/(info|images/json|containers/json[?]all=1&filters=%7B%22health%22%3A%7B%22(healthy|unhealthy|starting|none)%22%3Atrue%7D%7D)$'
-    - name: modify
-      match: svc.socket_proxy.service
-      remove: _socket_proxy_status_text
-    - name: modify
-      match: svc.socket_proxy.service
-      condition:
-        - key_exists CONTAINER_TAG
-        - key_value_matches log '^[^ ]+:[0-9]+ \['
-        - key_does_not_exist socket_proxy_method
-      add:
-        - parser_status failed
-        - parse_error socket_proxy_access
-        - _level warn
