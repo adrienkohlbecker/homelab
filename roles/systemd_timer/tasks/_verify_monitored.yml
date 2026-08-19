@@ -8,107 +8,90 @@
 # netdata's multi-arch 2.x repo, so this runs on the arm64 box as well as
 # x86_64.
 #
-# Both fixtures use the same hourly OnCalendar, are stopped so systemd can't
-# fire them and rewrite the stamp underneath us, then have their stamps planted
-# directly: recent => mtime 90m ago (below the two-period overdue threshold),
-# overdue => mtime 3h ago (above it). Faking the stamp keeps the test
-# deterministic while exercising exactly what the collector reads.
+# The fixture uses an hourly OnCalendar and is stopped so systemd cannot rewrite
+# its stamp underneath us. Moving that stamp from 90 minutes old to three hours
+# old exercises both sides of the two-period overdue threshold deterministically.
 
 # ============================================================
 # Contract 3+4: monitored timer + overdue detection via netdata
 # ============================================================
-- name: _verify | Install recent monitored fixture (hourly)
+- name: _verify | Install monitored fixture (hourly)
   import_role:
     name: systemd_timer
     tasks_from: install
   vars:
     systemd_timer_args:
-      name: _verify_timer_recent
-      description: monitored fixture, recent stamp
+      name: _verify_timer_monitored
+      description: monitored timer fixture
       on_calendar: "*-*-* *:00:00"
       exec_start: /bin/true
 
-- name: _verify | Install overdue monitored fixture (hourly)
-  import_role:
-    name: systemd_timer
-    tasks_from: install
-  vars:
-    systemd_timer_args:
-      name: _verify_timer_overdue
-      description: monitored fixture, stale stamp
-      on_calendar: "*-*-* *:00:00"
-      exec_start: /bin/true
-
-# Stop both timers so systemd won't fire them and overwrite the stamps we
-# plant below.
-- name: _verify | Stop fixture timers to freeze their stamps
+- name: _verify | Stop fixture timer to freeze its stamp
   systemd:
-    name: "{{ item }}.timer"
+    name: _verify_timer_monitored.timer
     state: stopped
-  loop:
-    - _verify_timer_recent
-    - _verify_timer_overdue
   become: true
 
 - name: _verify | Plant a 90-minute stamp for the recent fixture
-  command: touch -d "90 minutes ago" /var/lib/systemd/timers/stamp-_verify_timer_recent.timer
-  changed_when: false
-  become: true
-
-- name: _verify | Plant a stale stamp (3h ago) for the overdue fixture
-  command: touch -d "3 hours ago" /var/lib/systemd/timers/stamp-_verify_timer_overdue.timer
+  command: touch -d "90 minutes ago" /var/lib/systemd/timers/stamp-_verify_timer_monitored.timer
   changed_when: false
   become: true
 
 # Charts.d.plugin re-scans the metadata dir each tick (update_every=5s
-# under our override). Wait for both charts to appear in netdata's
-# registry, then check the data API for the expected age + overdue.
-- name: _verify | Wait for both fixture charts to register
+# under our override). Wait for the chart to appear in netdata's registry.
+- name: _verify | Wait for fixture chart to register
   uri:
     # Per-chart endpoint (404 until the chart appears) keeps the response a few
     # hundred bytes. /api/v1/charts returns netdata's whole registry — every
     # per-unit systemdunits chart — and a retried task dumps its full body into
     # the job log, which blew past GitLab's 4 MB trace cap.
-    url: "http://localhost:19999/api/v1/chart?chart={{ item }}"
+    url: http://localhost:19999/api/v1/chart?chart=systemd_timers.verify_timer_monitored
     status_code: 200
-  register: _systemd_timer_charts
+  register: _systemd_timer_chart
   retries: 30
   delay: 2
-  until: _systemd_timer_charts.status == 200
-  loop:
-    - systemd_timers.verify_timer_recent
-    - systemd_timers.verify_timer_overdue
+  until: _systemd_timer_chart.status == 200
 
-- name: _verify | Fixture data reports expected freshness
+- name: _verify | Fixture data reports recent stamp as healthy
   uri:
-    url: "http://localhost:19999/api/v1/data?chart={{ item.chart }}&points=1&after=-30&format=json"
+    url: http://localhost:19999/api/v1/data?chart=systemd_timers.verify_timer_monitored&points=1&after=-30&format=json
     return_content: true
-  register: _systemd_timer_fixture_data
+  register: _systemd_timer_recent_data
   retries: 30
   delay: 2
   until: >-
-    _systemd_timer_fixture_data.status == 200
-    and 'overdue' in (_systemd_timer_fixture_data.json.labels | default([]))
-    and 'age_secs' in (_systemd_timer_fixture_data.json.labels | default([]))
-    and (_systemd_timer_fixture_data.json.data | default([])) | length > 0
-    and _systemd_timer_fixture_data.json.data[0][_systemd_timer_fixture_data.json.labels.index('overdue')] | int == item.overdue
-    and _systemd_timer_fixture_data.json.data[0][_systemd_timer_fixture_data.json.labels.index('age_secs')] | int > item.min_age
-    and _systemd_timer_fixture_data.json.data[0][_systemd_timer_fixture_data.json.labels.index('age_secs')] | int < item.max_age
-  loop:
-    - chart: systemd_timers.verify_timer_recent
-      overdue: 0
-      min_age: 4800
-      max_age: 6600
-    - chart: systemd_timers.verify_timer_overdue
-      overdue: 1
-      min_age: 7200
-      max_age: 14400
-  loop_control:
-    label: "{{ item.chart }}"
+    _systemd_timer_recent_data.status == 200
+    and 'overdue' in (_systemd_timer_recent_data.json.labels | default([]))
+    and 'age_secs' in (_systemd_timer_recent_data.json.labels | default([]))
+    and (_systemd_timer_recent_data.json.data | default([])) | length > 0
+    and _systemd_timer_recent_data.json.data[0][_systemd_timer_recent_data.json.labels.index('overdue')] | int == 0
+    and _systemd_timer_recent_data.json.data[0][_systemd_timer_recent_data.json.labels.index('age_secs')] | int > 4800
+    and _systemd_timer_recent_data.json.data[0][_systemd_timer_recent_data.json.labels.index('age_secs')] | int < 6600
+
+- name: _verify | Plant a stale stamp for the fixture
+  command: touch -d "3 hours ago" /var/lib/systemd/timers/stamp-_verify_timer_monitored.timer
+  changed_when: false
+  become: true
+
+- name: _verify | Fixture data reports stale stamp as overdue
+  uri:
+    url: http://localhost:19999/api/v1/data?chart=systemd_timers.verify_timer_monitored&points=1&after=-30&format=json
+    return_content: true
+  register: _systemd_timer_stale_data
+  retries: 30
+  delay: 2
+  until: >-
+    _systemd_timer_stale_data.status == 200
+    and 'overdue' in (_systemd_timer_stale_data.json.labels | default([]))
+    and 'age_secs' in (_systemd_timer_stale_data.json.labels | default([]))
+    and (_systemd_timer_stale_data.json.data | default([])) | length > 0
+    and _systemd_timer_stale_data.json.data[0][_systemd_timer_stale_data.json.labels.index('overdue')] | int == 1
+    and _systemd_timer_stale_data.json.data[0][_systemd_timer_stale_data.json.labels.index('age_secs')] | int > 7200
+    and _systemd_timer_stale_data.json.data[0][_systemd_timer_stale_data.json.labels.index('age_secs')] | int < 14400
 
 # Alert binds on context systemd.timer_lag; netdata keys the instance
 # as <chart_id>.<template_name>, e.g.
-# systemd_timers.verify_timer_overdue.systemd_timer_overdue.
+# systemd_timers.verify_timer_monitored.systemd_timer_overdue.
 - name: _verify | Wait for overdue alert to register against the fixture
   uri:
     url: http://localhost:19999/api/v1/alarms?all
@@ -119,9 +102,7 @@
   until: >-
     _systemd_timer_alarms.status == 200
     and _systemd_timer_alarms.json.alarms.keys() | list
-        | select('search', 'systemd_timers.verify_timer_recent.systemd_timer_overdue') | list | length > 0
-    and _systemd_timer_alarms.json.alarms.keys() | list
-        | select('search', 'systemd_timers.verify_timer_overdue.systemd_timer_overdue') | list | length > 0
+        | select('search', 'systemd_timers.verify_timer_monitored.systemd_timer_overdue') | list | length > 0
 
 - name: _verify | Assert overdue alert uses an uptime state guard
   vars:
@@ -143,35 +124,22 @@
       35 minutes of host uptime without an up-notification delay. Got:
       {{ _alarm }}
 
-# Cleanup: remove fixtures so a follow-on test run starts clean.
-# Two separate import_role calls instead of a loop — import_role
-# doesn't accept `loop:`, and include_role + loop binds the vars
-# block once (per [[feedback_include_role_loop_vars]]) so {{ item }}
-# inside systemd_timer_args wouldn't re-evaluate per iteration.
-- name: _verify | Remove recent monitored fixture
+# Cleanup: remove the fixture so a follow-on test run starts clean.
+- name: _verify | Remove monitored fixture
   import_role:
     name: systemd_timer
     tasks_from: remove
   vars:
     systemd_timer_args:
-      name: _verify_timer_recent
-- name: _verify | Remove overdue monitored fixture
-  import_role:
-    name: systemd_timer
-    tasks_from: remove
-  vars:
-    systemd_timer_args:
-      name: _verify_timer_overdue
+      name: _verify_timer_monitored
 
 # Asserts both the metadata cleanup and remove.yml's persistent-stamp drop.
 - name: _verify | Stat metadata + stamp files after removal (should NOT exist)
   stat:
     path: "{{ item }}"
   loop:
-    - /etc/netdata/charts.d/systemd_timers.d/_verify_timer_recent.conf
-    - /etc/netdata/charts.d/systemd_timers.d/_verify_timer_overdue.conf
-    - /var/lib/systemd/timers/stamp-_verify_timer_recent.timer
-    - /var/lib/systemd/timers/stamp-_verify_timer_overdue.timer
+    - /etc/netdata/charts.d/systemd_timers.d/_verify_timer_monitored.conf
+    - /var/lib/systemd/timers/stamp-_verify_timer_monitored.timer
   register: _systemd_timer_meta_after
   become: true
 - name: _verify | Assert metadata + stamps cleaned up
