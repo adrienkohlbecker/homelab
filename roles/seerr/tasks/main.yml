@@ -68,24 +68,11 @@
   tags:
     - seerr
 
-# `failed_when: false` on the slurp handles a *missing* file (fresh host); a
-# *corrupt* one (truncated/partial write from a crashed daemon) still parses to
-# an exception in from_json and would wedge every future converge. Treat an
-# unparseable file as fresh ({}) so the render rewrites it from canonical shape,
-# rather than aborting the host's whole converge until manual repair.
-- name: Parse existing settings.json
-  tags:
-    - seerr
-  block:
-    - name: Parse existing settings.json
-      set_fact:
-        seerr_settings_json: "{{ _seerr_settings_b64 | slurp_text(default='{}') | from_json }}"
-  rescue:
-    - name: Treat corrupt settings.json as fresh
-      set_fact:
-        seerr_settings_json: {}
-
+# A missing file is a fresh install; malformed existing JSON must fail closed
+# before the copy can replace daemon-owned settings.
 - name: Render settings.json
+  vars:
+    seerr_settings_json: "{{ _seerr_settings_b64 | slurp_text(default='{}') | from_json }}"
   copy:
     # JSON.stringify(_, null, 1) writes no trailing newline; the template
     # file does. Strip ours so the bytes match what seerr persists.
