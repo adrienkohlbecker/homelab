@@ -401,7 +401,7 @@
 
 # --- sshd password-auth lockdown ---
 #
-# chroot.sh drops /etc/ssh/sshd_config.d/00-no-password-auth.conf to
+# chroot.sh drops /etc/ssh/sshd_config.d/00-hardening.conf to
 # force PasswordAuthentication no on the shipped image. Verify via
 # `sshd -T` (effective-config dump) rather than slurping the snippet
 # directly -- that exercises the whole chain (Include directive in
@@ -423,7 +423,7 @@
       | list | length > 0
     fail_msg: >-
       `sshd -T` does not report `passwordauthentication no` --
-      chroot.sh's sshd_config.d/00-no-password-auth.conf drop-in didn't
+      chroot.sh's sshd_config.d/00-hardening.conf drop-in didn't
       land, or /etc/ssh/sshd_config no longer Includes sshd_config.d.
       The shipped image would accept passwords on any account that
       has one.

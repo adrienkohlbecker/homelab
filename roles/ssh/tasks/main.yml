@@ -98,19 +98,6 @@
   tags:
     - ssh
 
-- name: Remove superseded sshd drop-ins
-  file:
-    path: /etc/ssh/sshd_config.d/{{ item }}
-    state: absent
-  loop:
-    - config.conf
-    - 02-noble-plus.conf
-    - 00-no-password-auth.conf
-  register: ssh_sshd_dropins_remove
-  become: true
-  tags:
-    - ssh
-
 - name: Configure sshd
   copy:
     src: 00-hardening.conf
@@ -187,7 +174,7 @@
   when:
     - not (ansible_check_mode and ssh_apt.changed)
     - >-
-      ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_dropins_remove.changed
+      ssh_sshd_config.changed or ssh_sshd_config_sftp.changed
       or ssh_sshd_config_x11.changed or ssh_sshd_config_x11_remove.changed
   command: sshd -t
   changed_when: false
@@ -202,7 +189,7 @@
     enabled: true
     state: >-
       {{ 'reloaded'
-         if ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_dropins_remove.changed
+         if ssh_sshd_config.changed or ssh_sshd_config_sftp.changed
             or ssh_sshd_config_x11.changed or ssh_sshd_config_x11_remove.changed
          else 'started' }}
   become: true

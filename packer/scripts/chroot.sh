@@ -658,7 +658,7 @@ fi
 # key-only (no password set, see below); other users on the image
 # don't exist. Drop a snippet under sshd_config.d so the override
 # wins even if /etc/ssh/sshd_config is later edited.
-echo 'PasswordAuthentication no' >/etc/ssh/sshd_config.d/00-no-password-auth.conf
+echo 'PasswordAuthentication no' >/etc/ssh/sshd_config.d/00-hardening.conf
 
 # User setup. The qemu fixtures bake a key-only `vagrant` sudoer so the test
 # harness can SSH back in. The hetzner image must NOT bake a login user (the
