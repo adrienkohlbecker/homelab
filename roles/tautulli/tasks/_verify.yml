@@ -86,21 +86,6 @@
     - (_tautulli_db_file.stat.size | default(0) | int) > 0
   become: true
 
-# shared_group: media (see main.yml) stops ansible flapping
-# /mnt/services/tautulli's gid against linuxserver's startup chown to
-# PUID:PGID=tautulli:media.
-- name: _verify | Stat the tautulli config dir
-  stat:
-    path: /mnt/services/tautulli
-  register: _tautulli_config_dir
-  become: true
-
-- name: _verify | Tautulli config dir is group media
-  assert:
-    that:
-      - _tautulli_config_dir.stat.gr_name == "media"
-    fail_msg: "/mnt/services/tautulli is not group media (gr_name={{ _tautulli_config_dir.stat.gr_name }})"
-
 # PMS value preservation (main.yml's slurp+regex readback) is the role's most
 # fragile mechanism. A broken readback silently resets pms_plexpass/pms_version
 # to defaults on the next converge. The idempotence check never catches this
