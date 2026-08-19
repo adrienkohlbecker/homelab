@@ -2,38 +2,23 @@
   import_role:
     name: hostname
 
-- name: mirrors | Ensure systemd-resolved drop-in dir exists
-  file:
-    path: /etc/systemd/resolved.conf.d
-    state: directory
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
-
 # Backend-conditional server selection lives in group_vars/test.yml so _verify
 # asserts against the same typed list this drop-in renders.
-- name: mirrors | Force DNS-over-TLS so all queries ride TCP
-  copy:
-    dest: /etc/systemd/resolved.conf.d/10-test-dns-over-tls.conf
-    mode: "0644"
-    owner: root
-    group: root
-    content: |
-      [Resolve]
-      DNS={{ test_dot_servers | join(' ') }}
-      FallbackDNS=
-      DNSOverTLS=yes
-      Domains=~.
-    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, delimiters=("=",)).read(sys.argv[1])' "%s"
-  register: test_resolved_dot
-  become: true
+- name: mirrors | Install DNS-over-TLS configuration
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: 10-test-dns-over-tls.conf.j2
+      for: systemd-resolved.service
+      dest_abs: /etc/systemd/resolved.conf.d/10-test-dns-over-tls.conf
 
 - name: mirrors | Restart systemd-resolved to pick up DoT config
   systemd:
     name: systemd-resolved
     state: restarted
-  when: test_resolved_dot.changed
+  when: resolved_conf_d_10_test_dns_over_tls_conf_result.changed
   become: true
 
 - name: mirrors | Configure apt retries and sources
