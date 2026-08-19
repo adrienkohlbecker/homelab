@@ -97,8 +97,6 @@ f_trace rsync \
   --partial-dir .rsync-partial \
   --fuzzy \
   "${rsync_progress[@]}" \
-  --devices \
-  --specials \
   -M--fake-super \
   --numeric-ids \
   --stats \
