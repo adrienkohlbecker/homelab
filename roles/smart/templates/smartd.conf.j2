@@ -154,7 +154,7 @@ DEFAULT -a -C 197+ -U 198+ -n standby,q -m root -M exec /usr/share/smartmontools
 {% if not dev | regex_search('^[a-zA-Z0-9_.:-]+$') %}
 {{ _unsafe_device_id | mandatory('device id contains unsafe characters: ' ~ dev) }}
 {% elif dev.startswith('nvme-') %}
-/dev/disk/by-id/{{ dev }} -d nvme,0xffffffff -W 0,60,80 -l error -l selftest
+/dev/disk/by-id/{{ dev }} -d nvme,0xffffffff -W 0,60,80
 {% elif dev.startswith('ata-') %}
 {#- Crucial MX500 firmware spuriously flaps Current_Pending_Sector (197)
     and Offline_Uncorrectable (198) to 1 and back to 0 with no real media
