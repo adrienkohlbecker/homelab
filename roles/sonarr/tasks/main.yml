@@ -40,9 +40,9 @@
   vars:
     sqlite_dataset_args:
       user: "{{ sonarr_user }}"
-      links:
-        - /mnt/services/sonarr/sonarr.db
-        - /mnt/services/sonarr/logs.db
+      databases:
+        - sonarr.db
+        - logs.db
   tags:
     - sonarr
 

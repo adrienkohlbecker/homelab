@@ -30,9 +30,9 @@
       vars:
         sqlite_dataset_args:
           user: "{{ sqlite_dataset_test_user }}"
-          links:
-            - /mnt/services/sqlite_dataset_test/test.db
-            - /mnt/services/sqlite_dataset_test/sub/other.db
+          databases:
+            - test.db
+            - sub/other.db
 
     - name: _verify | Scenario 1 — stat symlinks at dest
       stat:
@@ -74,9 +74,9 @@
       vars:
         sqlite_dataset_args:
           user: "{{ sqlite_dataset_test_user }}"
-          links:
-            - /mnt/services/sqlite_dataset_test/test.db
-            - /mnt/services/sqlite_dataset_test/sub/other.db
+          databases:
+            - test.db
+            - sub/other.db
 
     - name: _verify | Scenario 2 — re-stat src mtime after re-run
       stat:
@@ -128,8 +128,8 @@
           vars:
             sqlite_dataset_args:
               user: "{{ sqlite_dataset_test_user }}"
-              links:
-                - /mnt/services/sqlite_dataset_test/real.db
+              databases:
+                - real.db
 
         - name: _verify | Scenario 3 — record wrongly converted
           set_fact:
@@ -166,8 +166,8 @@
         sqlite_dataset_args:
           user: "{{ sqlite_dataset_test_user }}"
           force: true
-          links:
-            - /mnt/services/sqlite_dataset_test/forced.db
+          databases:
+            - forced.db
 
     - name: _verify | Scenario 4 — stat the dest symlink
       stat:
@@ -209,8 +209,8 @@
             sqlite_dataset_args:
               user: "{{ sqlite_dataset_test_user }}"
               force: true
-              links:
-                - /mnt/services/sqlite_dataset_test/force_real.db
+              databases:
+                - force_real.db
 
         - name: _verify | Scenario 5 — record wrongly clobbered
           set_fact:

@@ -305,9 +305,9 @@
       # library.db.old, and a fresh 10.11 install never creates library.db
       # at all -- re-asserting that symlink would only resurrect a link to
       # the stale pre-migration DB.
-      links:
-        - /mnt/services/jellyfin/data/jellyfin.db
-        - /mnt/services/jellyfin/data/introskipper/introskipper.db
+      databases:
+        - data/jellyfin.db
+        - data/introskipper/introskipper.db
   tags:
     - jellyfin
 

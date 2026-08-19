@@ -38,8 +38,8 @@
     sqlite_dataset_args:
       user: "{{ kuma_user }}"
       force: true
-      links:
-        - /mnt/services/kuma/kuma.db
+      databases:
+        - kuma.db
   tags:
     - kuma
 

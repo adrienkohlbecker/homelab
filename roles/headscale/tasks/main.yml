@@ -116,8 +116,8 @@
   vars:
     sqlite_dataset_args:
       user: "{{ headscale_user }}"
-      links:
-        - /mnt/services/headscale/data/db.sqlite
+      databases:
+        - data/db.sqlite
   tags:
     - headscale
 

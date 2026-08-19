@@ -41,9 +41,9 @@
   vars:
     sqlite_dataset_args:
       user: "{{ radarr_user }}"
-      links:
-        - /mnt/services/radarr/radarr.db
-        - /mnt/services/radarr/logs.db
+      databases:
+        - radarr.db
+        - logs.db
   tags:
     - radarr
 

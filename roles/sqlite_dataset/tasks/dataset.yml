@@ -1,9 +1,10 @@
 # Create /mnt/services/sqlite/<name>/ and symlink DBs onto it.
 #
 # Caller passes one dict `sqlite_dataset_args`:
-#   user   required service_user result; owns the directory and target files
-#   links  required dest paths; parent dirs must already exist
-#   force  optional bool; create dangling links instead of empty 0640 targets
+#   user       required service_user result; owns the directory and target files
+#   databases  required paths relative to /mnt/services/<name>; parent dirs
+#              must already exist
+#   force      optional bool; create dangling links instead of empty 0640 targets
 #
 # Both link modes refuse to replace a real file at a dest. The dict form keeps
 # arguments from leaking between import_role calls.
@@ -20,20 +21,22 @@
       - sqlite_dataset_args.user.name is string
       - sqlite_dataset_args.user.name is match('^[a-z_][a-z0-9_-]*$')
       - sqlite_dataset_args.user.config_group is defined
-      - sqlite_dataset_args.links is defined
-      - sqlite_dataset_args.links | default([]) | length > 0
+      - sqlite_dataset_args.databases is defined
+      - sqlite_dataset_args.databases | default([]) | length > 0
       - >-
-        sqlite_dataset_args.links | default([]) | map('basename') | select('eq', '') | list | length == 0
+        sqlite_dataset_args.databases | default([])
+        | select('match', '^[A-Za-z0-9_-][A-Za-z0-9_.-]*(/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$')
+        | list | length == sqlite_dataset_args.databases | default([]) | length
       # case_sensitive: basenames become files on a case-sensitive fs, so
       # Foo.db and foo.db are distinct; the default case-insensitive unique
       # would wrongly reject them as a collision.
       - >-
-        sqlite_dataset_args.links | default([]) | map('basename') | list | unique(case_sensitive=true) | length
-        == sqlite_dataset_args.links | default([]) | length
+        sqlite_dataset_args.databases | default([]) | map('basename') | list | unique(case_sensitive=true) | length
+        == sqlite_dataset_args.databases | default([]) | length
     fail_msg: >-
-      sqlite_dataset_args requires a service_user result and at least one link;
-      the user name must match [a-z_][a-z0-9_-]* and link basenames must be
-      non-empty and unique.
+      sqlite_dataset_args requires a service_user result and at least one safe
+      service-relative database path; the user name must match
+      [a-z_][a-z0-9_-]* and database basenames must be unique.
 
 - name: Pre-create /mnt/services/sqlite/{{ sqlite_dataset_args.user.name }}
   when: not ansible_check_mode or sqlite_dataset_args.user.uid is defined
@@ -52,7 +55,7 @@
     - not ansible_check_mode or sqlite_dataset_args.user.uid is defined
     - not (sqlite_dataset_args.force | default(false) | bool)
   file:
-    path: "/mnt/services/sqlite/{{ sqlite_dataset_args.user.name }}/{{ sqlite_dataset_link | basename }}"
+    path: "/mnt/services/sqlite/{{ sqlite_dataset_args.user.name }}/{{ sqlite_dataset_database | basename }}"
     state: touch
     owner: "{{ sqlite_dataset_args.user.name }}"
     group: "{{ sqlite_dataset_args.user.config_group }}"
@@ -60,10 +63,10 @@
     modification_time: preserve
     access_time: preserve
   become: true
-  loop: "{{ sqlite_dataset_args.links }}"
+  loop: "{{ sqlite_dataset_args.databases }}"
   loop_control:
-    label: "{{ sqlite_dataset_link }}"
-    loop_var: sqlite_dataset_link
+    label: "{{ sqlite_dataset_database }}"
+    loop_var: sqlite_dataset_database
 
 # force relaxes only the dangling-target refusal. Fail the stat task when a
 # real file is already at a dest so force can never silently replace it.
@@ -74,28 +77,28 @@
     - not ansible_check_mode or sqlite_dataset_args.user.uid is defined
     - sqlite_dataset_args.force | default(false) | bool
   stat:
-    path: "{{ sqlite_dataset_link }}"
+    path: "/mnt/services/{{ sqlite_dataset_args.user.name }}/{{ sqlite_dataset_database }}"
     follow: false
   become: true
   register: sqlite_dataset_force_stat
   failed_when:
     - sqlite_dataset_force_stat.stat.exists
     - not sqlite_dataset_force_stat.stat.islnk
-  loop: "{{ sqlite_dataset_args.links }}"
+  loop: "{{ sqlite_dataset_args.databases }}"
   loop_control:
-    label: "{{ sqlite_dataset_link }}"
-    loop_var: sqlite_dataset_link
+    label: "{{ sqlite_dataset_database }}"
+    loop_var: sqlite_dataset_database
 
 - name: Symlink DBs onto sqlite dataset for {{ sqlite_dataset_args.user.name }}
   when: not ansible_check_mode or sqlite_dataset_args.user.uid is defined
   file:
-    src: "/mnt/services/sqlite/{{ sqlite_dataset_args.user.name }}/{{ sqlite_dataset_link | basename }}"
-    dest: "{{ sqlite_dataset_link }}"
+    src: "/mnt/services/sqlite/{{ sqlite_dataset_args.user.name }}/{{ sqlite_dataset_database | basename }}"
+    dest: "/mnt/services/{{ sqlite_dataset_args.user.name }}/{{ sqlite_dataset_database }}"
     state: link
     follow: false
     force: "{{ sqlite_dataset_args.force | default(false) | bool }}"
   become: true
-  loop: "{{ sqlite_dataset_args.links }}"
+  loop: "{{ sqlite_dataset_args.databases }}"
   loop_control:
-    label: "{{ sqlite_dataset_link }}"
-    loop_var: sqlite_dataset_link
+    label: "{{ sqlite_dataset_database }}"
+    loop_var: sqlite_dataset_database

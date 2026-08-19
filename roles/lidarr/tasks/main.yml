@@ -40,9 +40,9 @@
   vars:
     sqlite_dataset_args:
       user: "{{ lidarr_user }}"
-      links:
-        - /mnt/services/lidarr/lidarr.db
-        - /mnt/services/lidarr/logs.db
+      databases:
+        - lidarr.db
+        - logs.db
   tags:
     - lidarr
 

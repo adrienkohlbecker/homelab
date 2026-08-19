@@ -86,8 +86,8 @@
     sqlite_dataset_args:
       user: "{{ sabnzbd_user }}"
       force: true
-      links:
-        - /mnt/services/sabnzbd/admin/history1.db
+      databases:
+        - admin/history1.db
   tags:
     - sabnzbd
 

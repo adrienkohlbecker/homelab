@@ -17,8 +17,8 @@
   vars:
     sqlite_dataset_args:
       user: "{{ profilarr_user }}"
-      links:
-        - /mnt/services/profilarr/profilarr.db
+      databases:
+        - profilarr.db
   tags:
     - profilarr
 
