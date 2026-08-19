@@ -1,9 +1,5 @@
-# Mesh client (subnet router + exit node) registering against a headscale
-# control plane. This file is the apt-installed half (lab/pug); the actual
-# register -> advertise -> approve sequence -- shared verbatim with the DSM bunk.yml
-# playbook -- lives in tasks/register.yml, imported at the end. No long-lived auth
-# key: register.yml mints a single-use pre-auth key from the control plane and
-# spends it in the same play.
+# Apt-installed Tailscale client. Shared Linux/DSM registration lives in
+# tasks/register.yml.
 
 - name: Configure tailscale apt repository
   import_role:
@@ -20,14 +16,10 @@
   tags:
     - tailscale
 
-# Keep tailscaled's state directory on the services dataset so the node
-# identity -- tailscaled.state (the node key + prefs + advertised routes) -- rides
-# the nightly ZFS backup instead of living only on rpool/ROOT, which a re-image
-# wipes. Without this a rebuilt host re-registers as a NEW node against its
-# headscale and its exit-node / subnet routes need re-approval. The stock apt
-# unit hardcodes --state=/var/lib/tailscale/tailscaled.state, so keep that path
-# but make it a symlink to /mnt/services/tailscale (the repo's state: link idiom,
-# cf. roles/resolved). 0700: tailscaled.state is a secret (the node private key).
+# Keep node identity on the backed-up services dataset so re-imaging does not
+# create a new Headscale node and lose route approvals. The stock unit hardcodes
+# /var/lib/tailscale/tailscaled.state, so symlink that directory; mode 0700
+# protects the node private key.
 - name: Create the tailscale state directory on the services dataset
   file:
     path: /mnt/services/tailscale
@@ -66,13 +58,8 @@
   tags:
     - tailscale
 
-# Pin tailscaled's WireGuard underlay port. `tailscale up`/`set` have no port
-# flag -- the listen port is a daemon setting: the apt unit's ExecStart reads
-# --port=${PORT} from this EnvironmentFile. Nodes that share one NAT (lab/pug on
-# the home WAN) pin DISTINCT ports (41644 / 41642) so each maps to its own router
-# port-forward and gets an unambiguous public endpoint -- see tailscale_wan_direct
-# in defaults/main.yml. The package ships PORT="41641", so single-NAT-tenant nodes
-# (fox, bunk) are a no-op at the default.
+# The underlay port is a daemon setting, not a `tailscale up` flag. Distinct
+# host_vars ports give lab and pug unambiguous forwards behind their shared NAT.
 - name: Pin tailscaled underlay port in /etc/default/tailscaled
   lineinfile:
     path: /etc/default/tailscaled
@@ -95,17 +82,10 @@
   tags:
     - tailscale
 
-# Single override.conf carrying every tailscaled customization. It (a) clears the
-# stock StateDirectory=tailscale so systemd accepts our /var/lib/tailscale ->
-# /mnt/services/tailscale symlink, (b) orders the daemon after the services-dataset
-# mount and binds it to the nightly snapshot target, and (c) persists the GRO
-# offload across reboots (the only conditional line -- routers/exit-nodes only).
-# Requires/After the mount is load-bearing: if tailscaled started before the
-# dataset mounted it would mint a fresh identity into the bare mountpoint on the
-# root fs, which the dataset then mounts over (shadowing it) -- re-registering
-# every boot. PartOf the snapshot target quiesces the daemon during the snapshot
-# so tailscaled.state is captured consistently. Installed before the daemon starts
-# so the StateDirectory clear is in effect on first start.
+# The drop-in clears stock StateDirectory handling for the state symlink, orders
+# tailscaled after the services mount, quiesces it for snapshots, and persists
+# GRO tuning. Mount ordering prevents a fresh identity being hidden beneath the
+# services dataset.
 - name: Install the tailscaled drop-in
   import_role:
     name: systemd_unit
@@ -117,12 +97,8 @@
   tags:
     - tailscale
 
-# PartOf only propagates the snapshot target's *stop* (its pre-snapshot-cmd), not
-# the post-snapshot *start*, and `systemctl enable` doesn't reliably honour a
-# stock unit's drop-in [Install]. Wire the want explicitly so tailscaled comes
-# back up after each nightly snapshot. The target is installed by zfs_autobackup
-# (base play, ahead of tailscale), so gate on its presence: absent on the qemu
-# tailscale fixture (no snapshot machinery there) where add-wants would error.
+# PartOf propagates the snapshot stop but not its subsequent start. Wire the want
+# explicitly when the target exists; the standalone role fixture omits it.
 - name: Check whether the snapshot target is installed
   stat:
     path: /etc/systemd/system/zfs_autosnapshot.target
@@ -173,22 +149,15 @@
   tags:
     - tailscale
 
-# Mint -> register -> reconcile -> approve, shared verbatim with bunk.yml (which
-# import_role: tasks_from: register). Last so the binary + sysctls are in place.
+# Register last so the binary and forwarding settings are ready.
 - name: Register against the headscale control plane
   import_tasks: register.yml
   tags:
     - tailscale
 
-# Tailscale perf best practice for subnet routers / exit nodes on Linux 6.2+:
-# enable UDP GRO forwarding offload on the UNDERLAY NIC -- the physical device
-# that actually receives the WireGuard-encapsulated UDP -- so traffic batches
-# instead of hitting the per-packet path. It must target the physical interface,
-# NOT tailscale0 (a tun device that does no hardware offload). Applied here on
-# every converge for immediate effect; the override.conf drop-in's ExecStartPost=
-# (installed above) persists it across reboots. failed_when:false: drivers that
-# don't support the offload (e.g. qemu virtio on the box fixture) reject it
-# harmlessly. https://tailscale.com/kb/1320/performance-best-practices
+# Enable UDP GRO forwarding on the physical underlay, not tailscale0. The drop-in
+# persists it across reboots; unsupported drivers reject it harmlessly.
+# https://tailscale.com/kb/1320/performance-best-practices
 - name: Enable UDP GRO forwarding offload on the underlay NIC
   command: ethtool -K {{ ansible_default_ipv4.interface }} rx-udp-gro-forwarding on rx-gro-list off
   when:

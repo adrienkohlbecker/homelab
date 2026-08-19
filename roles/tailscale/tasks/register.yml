@@ -1,10 +1,5 @@
-# Shared headscale registration: mint a single-use pre-auth key, register, then
-# reconcile + approve advertised routes. Imported by both tasks/main.yml (lab/pug,
-# apt-installed) and the standalone bunk.yml (DSM, Package-Center install) so the
-# orchestration lives in one place; the two callers differ only in tailscale_bin
-# (CLI path) and tailscale_authkey_file (key staging path -- /run vs /tmp), both
-# resolved from vars. The control-plane pointers differ by environment (prod ->
-# fox, test -> the local headscale box) but flow in identically through group_vars.
+# Shared Linux/DSM Headscale registration: mint a single-use key, register,
+# reconcile local preferences, then approve routes.
 - name: register | Assert required tailscale inputs are set
   assert:
     that:
@@ -22,16 +17,9 @@
   tags:
     - tailscale
 
-# Registration is gated on the backend not already being Running, so a converged
-# node skips `tailscale up` and the harness idempotence check stays green. NB:
-# the gate is liveness-only -- if the advertised routes change later, the reconcile
-# task further down (`tailscale set`) applies them in place on a live node.
-# check_mode: false so the read-only status probe runs during the harness's
-# `--check` phase too (which precedes the apply); otherwise the register is
-# skipped and the set_fact below has no .rc to read. Before the first login (or
-# before the package is even installed, as in the check phase) status exits
-# non-zero -- failed_when:false + the default guards turn that into "not
-# running" rather than a task failure.
+# Skip registration when the backend is Running; `tailscale set` reconciles live
+# nodes later. Run this read-only probe in check mode so its result remains
+# defined, and treat a missing binary or unregistered backend as not running.
 - name: register | Check whether tailscale is already registered and running
   command: "{{ tailscale_bin }} status --json --peers=false"
   register: tailscale_status
@@ -53,10 +41,8 @@
     - tailscale
 
 - name: register | Determine tailscale backend state
-  # The startswith('{') guard is load-bearing: tailscaled can return rc==0 with
-  # non-JSON on stdout (a warning banner mid-restart), and from_json would then
-  # raise and fail the play. Jinja `and` short-circuits, so from_json only runs
-  # once we know rc==0, stdout is non-empty, and it looks like a JSON object.
+  # tailscaled can return rc=0 with a non-JSON warning banner mid-restart.
+  # Short-circuit before parsing it.
   set_fact:
     tailscale_running: >-
       {{ ((tailscale_status.rc | default(1)) == 0
@@ -66,20 +52,10 @@
   tags:
     - tailscale
 
-# No long-lived auth key. When the node isn't registered yet, mint a single-use,
-# short-expiry pre-auth key directly from the control plane and consume it below
-# in the same play -- the key only touches the root-only staging file below and
-# is spent within seconds. Identical path for prod (delegated to fox) and the
-# harness (delegated to the converging box, whose _setup stood up a local
-# headscale): both delegate
-# to tailscale_headscale_host and drive `podman exec headscale`. Gated on
-# not-already-registered, so steady-state converges mint nothing and the harness
-# idempotence check stays green; skipped in --check since minting is a
-# control-plane mutation. NOT --ephemeral (subnet routers must survive going
-# offline); single-use = omit --reusable. 0.26 CLI: --user takes the numeric ID,
-# so resolve it from `users list` by name. delegate_to sits on the commands, not
-# the set_fact -- the fact must land on this host (the registering node), not the
-# delegate.
+# Mint a short-lived, single-use key only for an unregistered node. Control-plane
+# commands run on tailscale_headscale_host; check mode skips their mutations.
+# The node is not ephemeral because subnet routers must survive disconnects, and
+# Headscale 0.26 requires the numeric user ID.
 - name: register | Provision a single-use pre-auth key from the control plane
   when:
     - not ansible_check_mode
@@ -88,21 +64,14 @@
   tags:
     - tailscale
   block:
-    # The registering node must create its own headscale user -- it can't assume
-    # another node was registered first (which would have created it). Without
-    # this, enrolling against a fresh control plane fails with a cryptic "first on
-    # empty list" error at the user-id lookup below.
+    # Registration against a fresh control plane must create its own user.
     - name: register | Ensure the headscale user for this node exists
       command: podman exec headscale headscale users create {{ tailscale_headscale_user }}
       delegate_to: "{{ tailscale_headscale_host }}"
       changed_when: false
       failed_when: false
 
-    # This is also the control-plane reachability gate: it (and `users create`
-    # above) delegate to tailscale_headscale_host, so if headscale isn't up there
-    # -- the common case when lab/pug are converged via `--tags tailscale` before
-    # fox -- the podman exec fails. failed_when:false + the assert below turn that
-    # into a clear "converge fox first" message instead of an opaque podman error.
+    # Convert delegated control-plane failures into the explicit assertion below.
     - name: register | List headscale users to resolve the user id
       command: podman exec headscale headscale users list -o json
       delegate_to: "{{ tailscale_headscale_host }}"
@@ -143,11 +112,7 @@
       register: tailscale_preauth
       changed_when: false
 
-    # Hand the key to `tailscale up` via a file rather than --authkey <key> on the
-    # command line, where it would be world-readable in /proc/<pid>/cmdline / ps
-    # for the duration of the call. Root-only, removed right after registration;
-    # the key is single-use and 5-min-lived regardless. tailscale_authkey_file is
-    # tmpfs /run on lab/pug, /tmp on bunk (DSM has no guaranteed /run tmpfs).
+    # Keep the key out of argv/ps by staging it in a root-only file, then remove it.
     - name: register | Clear any pre-existing authkey file (symlink-attack guard)
       file:
         path: "{{ tailscale_authkey_file }}"
@@ -161,11 +126,7 @@
         group: root
         mode: "0600"
 
-    # --reset so the advertised set on first registration is exactly what we
-    # pass (no stale flags from a prior manual `tailscale up`). --authkey file:
-    # reads the key from the staged file so it never lands in argv/ps.
-    # --timeout bounds the call so a control-plane hiccup can't wedge the
-    # converge.
+    # --reset clears stale manual flags; --timeout bounds control-plane failure.
     - name: register | Register with headscale and advertise routes / exit node
       command: >-
         {{ tailscale_bin }} up
@@ -182,9 +143,7 @@
       changed_when: true
 
   always:
-    # Drop the staged key on success AND failure so it never lingers on disk.
-    # The key is single-use and 5-minute-lived; a failed registration leaves it
-    # unconsumed but it auto-expires on the control plane.
+    # Always remove the staged key; an unconsumed key expires after five minutes.
     - name: register | Remove the staged pre-auth key file
       file:
         path: "{{ tailscale_authkey_file }}"
@@ -221,15 +180,8 @@
   tags:
     - tailscale
 
-# Reconcile preferences on an ALREADY-registered node. `tailscale up` is gated
-# on not-Running, so editing host_vars later would otherwise never take effect
-# on a live node. `tailscale set` applies in place on every Running converge --
-# fast (local prefs write, no control-plane round-trip) and self-healing. All
-# six flags are passed so any drift -- including snat-subnet-routes and
-# stateful-filtering that were absent from the old field-by-field drift check
-# -- is corrected regardless of which flag changed. changed_when:false: like
-# ethtool -K in this role, tailscale set can't distinguish "already correct"
-# from "just corrected"; correctness is verified by _verify.yml's prefs asserts.
+# Reconcile every local preference on live nodes. `tailscale set` cannot report
+# whether it changed a preference, so functional verification proves correctness.
 - name: register | Reconcile routes / exit node / accept-routes / accept-dns
   command: >-
     {{ tailscale_bin }} set
@@ -247,23 +199,9 @@
   tags:
     - tailscale
 
-# Route approval is a second opt-in on the control server, keyed by the node's
-# headscale ID (assigned at registration). Look the node up by its given name
-# (= this host's short hostname) on the headscale host.
-# NB: this is gated on initial registration, local advertised-route drift, or an
-# explicit tailscale_reconcile_headscale_routes repair run, so steady-state
-# converges do not depend on the headscale host being reachable.
-# If `tailscale set` above changed the advertised routes, the client propagates
-# the new set to headscale asynchronously. `approve-routes` is a policy
-# operation (replaces the approved set) that does not require the advertisement
-# to be processed first, so no re-fetch/wait is needed here. Delegated to the
-# headscale host because node IDs only exist on the control server.
-# retries/until: a just-registered node can take a moment to surface in
-# `nodes list` -- `tailscale up` returns once the client authenticates, but over
-# a real prod link (lab/pug -> fox over wg, then a separate delegated query back
-# to fox) the control-plane record can lag the client by a beat, so a single
-# query races and the assert below fires spuriously. Poll until the node shows
-# up.
+# Query Headscale only after registration, advertised-route drift, or an explicit
+# repair, keeping steady-state converges independent of the control plane.
+# A newly registered node can lag `tailscale up`, so poll before resolving its ID.
 - name: register | List headscale nodes (on the control server)
   command: podman exec headscale headscale nodes list -o json
   delegate_to: "{{ tailscale_headscale_host }}"
@@ -282,13 +220,8 @@
   tags:
     - tailscale
 
-# ansible_hostname | lower: headscale sanitizes given_name to lowercase, so an
-# exact-case match would miss a mixed-case host (e.g. DSM reports bunk as
-# "Bunk"). Scope the match to this host's headscale user: prod hosts share one
-# user (servers), and given_name disambiguates within it. A same-named node under
-# a different user must not
-# bind -- approve-routes replaces the whole approved set, so a wrong match is
-# destructive.
+# Headscale lowercases given_name, including DSM's mixed-case hostname. Scope the
+# match by user because approve-routes replaces the complete approved set.
 - name: register | Resolve this host's headscale node
   set_fact:
     tailscale_node_matches: >-
@@ -318,9 +251,7 @@
   tags:
     - tailscale
 
-# approve-routes replaces the whole approved set, so only run it when the
-# current set drifts from desired. Skipped in --check (no node to approve, and
-# approve-routes is a mutation).
+# approve-routes replaces the whole approved set, so run only on drift.
 - name: register | Approve advertised routes + exit node on headscale
   command: >-
     podman exec headscale headscale nodes approve-routes

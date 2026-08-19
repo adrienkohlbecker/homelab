@@ -1,67 +1,39 @@
 ---
-# Optional, host-overridable knobs (defaults/main.yml sits BELOW host_vars in
-# ansible's precedence ladder, so these are safe defaults -- not the masked-
-# input trap that vars/main.yml would be).
-#
-# tailscale_login_server / tailscale_headscale_host are environment constants
-# (prod -> fox, test -> box), so they live in group_vars/{prod,test}, not here:
-# a role default of "fox" would bake one deployment's control-plane host into
-# the generic role. The role asserts both are set (see tasks/main.yml).
+# Host-overridable knobs. Environment-specific control-plane inputs live in
+# group_vars/{prod,test} and are asserted by tasks/register.yml.
 
-# Subnet(s) this node advertises into the tailnet, comma-separated CIDRs (e.g.
-# "10.123.0.0/21"). Optional: a node may instead be a pure exit node
-# (tailscale_advertise_exit_node: true) carrying no subnet route -- the role
-# asserts at least one of the two is set. Empty = advertise no subnet.
+# Comma-separated CIDRs advertised into the tailnet. A pure exit node may leave
+# this empty; the role requires routes or tailscale_advertise_exit_node.
 tailscale_advertise_routes: ""
 
-# Advertise a full-tunnel exit node alongside the subnet route. Off by default;
-# lab/pug turn it on in host_vars (home exit), as does bunk (Bonniers exit).
+# Advertise a full-tunnel exit node alongside the subnet route.
 tailscale_advertise_exit_node: false
 
-# UDP port tailscaled binds for the WireGuard underlay (tailscale's own default is
-# 41641). Pin a DISTINCT port per node when several nodes sit behind ONE NAT
-# (lab/pug share the home WAN): each needs its own forwarded port so its public
-# endpoint is unambiguous -- lab uses 41644, pug uses 41642. Single-NAT-tenant
-# nodes can keep the default.
+# WireGuard underlay port. Nodes behind one NAT need distinct forwarded ports;
+# single-NAT-tenant nodes keep Tailscale's default.
 tailscale_port: 41641
 
 # Roaming clients consume headscale MagicDNS; the server hosts keep their own
 # resolv.conf (adguard/systemd-resolved), so don't let tailscale rewrite it.
 tailscale_accept_dns: false
 
-# Tailscale CLI path. lab/pug use apt's `tailscale` on PATH; bunk (DSM) overrides
-# this in host_vars to the Package-Center install path. tasks/register.yml -- the
-# shared register -> advertise -> approve sequence imported by both this role and
-# the standalone bunk.yml -- drives every client-side CLI call through it.
+# CLI path; bunk overrides this for its DSM Package-Center installation.
 tailscale_bin: tailscale
 
-# Where register.yml stages the single-use pre-auth key for
-# `tailscale up --authkey file:` (kept off argv / ps). /run is tmpfs on lab/pug;
-# bunk (DSM, no guaranteed /run tmpfs) overrides this to /tmp in host_vars.
+# Root-only staging path for `tailscale up --authkey file:`. Bunk overrides this
+# to /tmp because DSM does not guarantee /run is tmpfs.
 tailscale_authkey_file: /run/tailscale_authkey
 
-# Whether this node installs subnet routes advertised by OTHER tailnet nodes
-# (Linux defaults to NOT accepting). Off by default. Enabling it on a node lets
-# it reach remote sites over the mesh (e.g. home hosts reaching bunk's Bonniers
-# /24), but it is all-or-nothing: a node that also sits physically on a subnet
-# another node advertises (lab/pug both advertise 10.123.0.0/18) may then install
-# a tailnet route to its own LAN and hairpin -- see the "subnet-route while
-# physically on that subnet" risk in notes/headscale_mesh_redesign.md. Enable per
-# host only after weighing that.
+# Install routes advertised by other tailnet nodes. This is all-or-nothing and
+# can hairpin a node onto its physical LAN; see notes/headscale_mesh_redesign.md.
 tailscale_accept_routes: false
 
-# Control-plane repair switch for stale Headscale route approvals. Normal
-# steady-state converges avoid depending on Headscale once the local Tailscale
-# prefs already match host_vars; set this true for a one-shot reconciliation when
-# the local advertised routes are correct but Headscale's approved route set is
-# suspected stale.
+# One-shot repair switch for stale Headscale approvals when local advertised
+# routes already match host_vars.
 tailscale_reconcile_headscale_routes: false
 
-# Subnet-router forwarding knobs, surfaced so a Tailscale default-flip can't
-# silently change how lab/pug route LAN traffic (they advertise a subnet they
-# physically sit on -- see the hairpin note above). snat_subnet_routes: SNAT
-# advertised-subnet traffic to the router's own tailnet IP (Tailscale default
-# true); false preserves client source IPs. stateful_filtering: drop inbound to
-# the subnet that the router didn't initiate (Tailscale default false on Linux).
+# Pin subnet-router forwarding semantics instead of inheriting upstream defaults.
+# SNAT hides client source IPs; stateful filtering drops uninitiated inbound
+# subnet traffic.
 tailscale_snat_subnet_routes: true
 tailscale_stateful_filtering: false
