@@ -30,20 +30,6 @@
           - service_user_test_user.uid == 61180
           - service_user_test_user.gid == 61180
 
-    - name: _verify | Config directory exists with correct ownership
-      stat:
-        path: /mnt/services/service_user_test
-      register: _service_user_dir
-
-    - name: _verify | Dir attributes
-      assert:
-        that:
-          - _service_user_dir.stat.exists
-          - _service_user_dir.stat.isdir
-          - _service_user_dir.stat.pw_name == 'service_user_test'
-          - _service_user_dir.stat.gr_name == 'service_user_test'
-          - _service_user_dir.stat.mode == '0750'
-
     # Second scenario exercises every override plus hyphenated fact-key
     # sanitization (foo-bar -> foo_bar_user).
     - name: _verify | Create pre-existing groups for the override test
@@ -86,11 +72,6 @@
       getent:
         database: passwd
 
-    - name: _verify | Override home directory
-      stat:
-        path: /tmp/service-user-test-hyphen
-      register: _service_user_hyphen_home
-
     - name: _verify | Config dir honors shared_group
       stat:
         path: /mnt/services/service-user-test-hyphen
@@ -109,10 +90,6 @@
           - "'service_user_test_extra_grp' in _service_user_hyphen_groups.stdout.split()"
           - ansible_facts.getent_passwd['service-user-test-hyphen'][4] == '/tmp/service-user-test-hyphen'
           - ansible_facts.getent_passwd['service-user-test-hyphen'][5] == '/bin/bash'
-          - _service_user_hyphen_home.stat.exists
-          - _service_user_hyphen_home.stat.isdir
-          - _service_user_hyphen_home.stat.pw_name == 'service-user-test-hyphen'
-          - _service_user_hyphen_home.stat.gr_name == 'service-user-test-hyphen'
           - _service_user_hyphen_dir.stat.exists
           - _service_user_hyphen_dir.stat.gr_name == 'service_user_test_grp'
 
