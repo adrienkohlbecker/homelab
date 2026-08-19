@@ -1,7 +1,6 @@
-# Datasets carved under rpool/services on every zfs_root host. The dict-list
-# shape is consumed by both tasks/main.yml (looped into the zfs/tasks_from:
-# dataset helper) and tasks/_verify.yml (looped into zfs get assertions), so a
-# new dataset is one entry that updates both halves.
+# Datasets carved under rpool/services on every zfs_root host. Both the
+# zfs_dataset helper and _verify.yml consume this list, so one entry updates
+# convergence and verification.
 #
 # The sqlite child carves recordsize=4K for SQLite-heavy services (adguard,
 # HA recorder). Matches SQLite's default page_size=4096 exactly: 1× write
