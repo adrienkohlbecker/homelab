@@ -140,21 +140,20 @@
   tags:
     - tailscale
 
-# Restart (not just start) when the package or port changed, so the daemon runs
-# the current binary and rebinds before register.yml runs `tailscale up`/`set`
-# against the new endpoint. No handler -- the restart is driven inline and must
-# happen before registration, which a handler (end-of-play) can't guarantee.
+# Restart inline when the package, port, or drop-in changed so the current
+# daemon configuration is active before register.yml runs `tailscale up`/`set`.
 - name: Enable and start tailscaled
-  systemd:
-    name: tailscaled
-    enabled: true
-    state: >-
-      {{ 'restarted'
-         if (tailscale_apt.changed | default(false))
-            or (tailscale_default_port.changed | default(false))
-         else 'started' }}
-  when: not (ansible_check_mode and apt_source_tailscale_changed)
-  become: true
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: tailscaled.service
+      condition: "{{ not (ansible_check_mode and apt_source_tailscale_changed) }}"
+      restart: >-
+        {{ (tailscale_apt.changed | default(false))
+           or (tailscale_default_port.changed | default(false))
+           or (tailscaled_service_d_override_conf_result.changed | default(false)) }}
   tags:
     - tailscale
 
