@@ -2,14 +2,10 @@
 # /etc/ssh/sshd_config → sshd_config.d/00-hardening.conf. Reading the
 # drop-in alone would pass even if the Include were missing.
 
-# Query both units so the check holds whether sshd runs as the long-lived
-# ssh.service or the socket-activated ssh.socket + ssh@N-.service. is-active
-# prints one state line per unit; passing requires at least one to be 'active'.
+# The role explicitly enables and starts ssh.service.
 - name: _verify | Sshd is active  # noqa: command-instead-of-module -- is-active query, not a state change
-  command: systemctl is-active ssh.socket ssh.service
-  register: ssh_verify_active
+  command: systemctl is-active ssh.service
   changed_when: false
-  failed_when: "'active' not in ssh_verify_active.stdout_lines"
   become: true
 
 - name: _verify | Read effective sshd config
