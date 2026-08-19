@@ -54,15 +54,6 @@
           createhome: true
           shell: /bin/bash
 
-    - name: _verify | Sanitized fact key exposes the expected record
-      assert:
-        that:
-          - service_user_test_hyphen_user is defined
-          - service_user_test_hyphen_user.name == 'service-user-test-hyphen'
-          - service_user_test_hyphen_user.config_group == 'service_user_test_grp'
-          - service_user_test_hyphen_user.uid == 61181
-          - service_user_test_hyphen_user.gid == 61181
-
     - name: _verify | Membership reflects shared_group
       command: id -nG service-user-test-hyphen
       register: _service_user_hyphen_groups
@@ -80,6 +71,11 @@
     - name: _verify | Override dir + membership attributes
       assert:
         that:
+          - service_user_test_hyphen_user is defined
+          - service_user_test_hyphen_user.name == 'service-user-test-hyphen'
+          - service_user_test_hyphen_user.config_group == 'service_user_test_grp'
+          - service_user_test_hyphen_user.uid == 61181
+          - service_user_test_hyphen_user.gid == 61181
           # getent_passwd[user]: [password, uid, gid, gecos, home, shell]
           - ansible_facts.getent_passwd['service_user_test'][4] == '/nonexistent'
           - ansible_facts.getent_passwd['service_user_test'][5] == '/usr/sbin/nologin'
