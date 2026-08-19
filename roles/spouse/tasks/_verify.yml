@@ -19,21 +19,6 @@
       {{ static_human_ids.spouse }};
       got: {{ ansible_facts.getent_passwd[spouse_firstname] | default([]) }}
 
-- name: _verify | POSIX group exists
-  getent:
-    database: group
-    key: "{{ spouse_firstname }}"
-
-- name: _verify | Assert group carries the pinned GID
-  assert:
-    that:
-      # getent_group[group]: [password, gid, members] (0-indexed)
-      - ansible_facts.getent_group[spouse_firstname][1] | int == static_human_ids.spouse
-    fail_msg: >-
-      Group {{ spouse_firstname }} missing or not at the pinned GID
-      {{ static_human_ids.spouse }}
-      (got {{ ansible_facts.getent_group[spouse_firstname][1] | default('absent') }}).
-
 - name: _verify | Home directory exists and is owned correctly
   stat:
     path: /mnt/data/{{ spouse_firstname }}
@@ -46,6 +31,7 @@
       - spouse_verify_home.stat.exists
       - spouse_verify_home.stat.pw_name == spouse_firstname
       - spouse_verify_home.stat.gr_name == spouse_firstname
+      - spouse_verify_home.stat.gid | int == static_human_ids.spouse
       # 0750 is useradd's HOME_MODE default on Ubuntu; the home is the spouse's
       # private data dir (exported only via [homes] valid users = %S), so assert
       # it stayed owner+own-group, not world-readable.
