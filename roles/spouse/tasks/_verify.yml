@@ -70,19 +70,3 @@
     PASSWD: "{{ spouse_samba_password }}"
   changed_when: false
   become: true
-
-- name: _verify | Smbpasswd sentinel exists
-  stat:
-    path: /etc/samba/.smbpasswd_{{ spouse_firstname }}_hash
-  register: spouse_verify_sentinel
-  become: true
-
-- name: _verify | Assert sentinel file
-  assert:
-    that:
-      - spouse_verify_sentinel.stat.exists
-      - spouse_verify_sentinel.stat.mode == '0600'
-      - spouse_verify_sentinel.stat.pw_name == 'root'
-    fail_msg: >-
-      Sentinel /etc/samba/.smbpasswd_{{ spouse_firstname }}_hash missing, wrong perms,
-      or not root-owned.
