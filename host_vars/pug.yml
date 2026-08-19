@@ -34,8 +34,7 @@ podman_storage_device: /dev/disk/by-partlabel/podman
 
 # zram is the primary swap; the partition above is the overflow
 # (notes/swap_strategy.md).
-swap_zram:
-  size: 8G
+swap_zram_size: 8G
 
 netplan:
   ethernets:

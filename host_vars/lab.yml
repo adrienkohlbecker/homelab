@@ -32,8 +32,7 @@ swap_partition: /dev/md/swap
 
 # zram is the primary swap; the 16G RAID1 partition above is the deadlock-free-by-
 # coldness overflow (notes/swap_strategy.md).
-swap_zram:
-  size: 8G
+swap_zram_size: 8G
 
 # Three-member mdadm raid5. mke2fs derives the ext4 stride/stripe-width from
 # the array topology at creation; the role's _verify asserts the recorded

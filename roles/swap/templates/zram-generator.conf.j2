@@ -20,6 +20,6 @@
 # worst-case incompressible fill (stored ~1:1) from consuming more RAM
 # than the box has.
 zram-fraction = 1.0
-max-zram-size = {{ (swap_zram.size | human_to_bytes) // 1048576 }}
-compression-algorithm = {{ swap_zram.algorithm | default('zstd') }}
+max-zram-size = {{ (swap_zram_size | human_to_bytes) // 1048576 }}
+compression-algorithm = {{ swap_zram_algorithm | default('zstd') }}
 swap-priority = 100

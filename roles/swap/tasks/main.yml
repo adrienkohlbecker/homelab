@@ -8,10 +8,10 @@
 - name: Validate swap input schema
   assert:
     that:
-      - swap_zram is defined and swap_zram.size is defined
+      - swap_zram_size is defined
       - swap_partition is not defined or (swap_partition is string and swap_partition | length > 0)
     fail_msg: >-
-      swap_zram needs .size; swap_partition must be a non-empty device path.
+      swap_zram_size is required; swap_partition must be a non-empty device path.
   tags:
     - swap
 

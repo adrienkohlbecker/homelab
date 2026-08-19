@@ -26,7 +26,7 @@
 - name: _verify | Zram device sized per config (capped at RAM)
   vars:
     _zram_line: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | first | default('') }}"
-    _expected_mb: "{{ [(swap_zram.size | human_to_bytes) // 1048576, ansible_memtotal_mb] | min }}"
+    _expected_mb: "{{ [(swap_zram_size | human_to_bytes) // 1048576, ansible_memtotal_mb] | min }}"
     _actual_mb: "{{ ((_zram_line.split()[2] | default('0')) | int) // 1048576 }}"
   assert:
     that:
@@ -34,7 +34,7 @@
       - _actual_mb | int <= (_expected_mb | float * 1.05) | int
     fail_msg: >-
       zram0 is {{ _actual_mb }} MB, expected ~{{ _expected_mb }} MB (min of
-      configured {{ swap_zram.size }} and MemTotal {{ ansible_memtotal_mb }} MB)
+      configured {{ swap_zram_size }} and MemTotal {{ ansible_memtotal_mb }} MB)
       -- check zram-fraction/max-zram-size in zram-generator.conf.
 
 - name: _verify | Resolve partition device path

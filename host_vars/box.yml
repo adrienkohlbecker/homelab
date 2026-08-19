@@ -56,8 +56,7 @@ swap_partition: /dev/disk/by-partlabel/swap
 # above sits below it as overflow. 3G is deliberately not the
 # generator's 2G default on this 4G VM, so the _verify size assertion actually
 # proves the config drove the size.
-swap_zram:
-  size: 3G
+swap_zram_size: 3G
 
 # Two blocks on the same en* parent: exercises the multi-block iteration
 # in main.yml's loop, distinct MAC seeds across sibling blocks, and two

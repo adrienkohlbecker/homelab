@@ -68,9 +68,8 @@ boot_efi_timeout: 0
 # system time. lz4 is ~5-10x cheaper to (de)compress for a lower ratio (~2.5x
 # vs ~4x here) -- the right trade when CPU, not RAM, is the binding constraint
 # during builds; the disk-overflow partition backstops the lost headroom.
-swap_zram:
-  size: 4G
-  algorithm: lz4
+swap_zram_size: 4G
+swap_zram_algorithm: lz4
 swap_swappiness: 150
 
 # Hetzner VPS has a standard 8250 UART at 0x3f8 (Hetzner serial console).
