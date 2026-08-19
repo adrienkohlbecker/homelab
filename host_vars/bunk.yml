@@ -40,7 +40,7 @@ tailscale_advertise_exit_node: true
 # DSM package binary path (vs lab/pug's apt-installed `tailscale` on PATH).
 tailscale_bin: /var/packages/Tailscale/target/bin/tailscale
 # Stage the pre-auth key under /tmp: DSM has no guaranteed /run tmpfs (the role
-# default). Root-only, single-use, removed right after `tailscale up` consumes it.
+# default). Root-only, single-use, removed right after `tailscale login` consumes it.
 tailscale_authkey_file: /tmp/tailscale_authkey
 # Pin a distinct underlay port so bunk has a stable public endpoint at Bonniers:
 # roaming clients then reach the Bonniers subnet router / exit node DIRECTLY

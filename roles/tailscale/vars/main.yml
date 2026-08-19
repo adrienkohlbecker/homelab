@@ -1,5 +1,5 @@
 ---
-# Shared by initial registration and steady-state preference reconciliation.
+# Steady-state preference reconciliation after login.
 tailscale_preference_args:
   - "--advertise-routes={{ tailscale_advertise_routes | join(',') }}"
   - "--advertise-exit-node={{ tailscale_advertise_exit_node | ternary('true', 'false') }}"

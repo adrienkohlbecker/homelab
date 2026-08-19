@@ -1,5 +1,5 @@
 # End-to-end client test: stand up a real headscale control plane on box, then
-# let the role's `tailscale up` register against it and have the approve-routes
+# let the role's `tailscale login` register against it and have the approve-routes
 # step (delegated back to box) round-trip through the live gRPC API. This proves
 # the full mesh-join path, not just "the package installed".
 #

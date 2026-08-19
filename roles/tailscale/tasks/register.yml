@@ -1,4 +1,4 @@
-# Shared Linux/DSM Headscale registration: mint a single-use key, register,
+# Shared Linux/DSM Headscale registration: mint a single-use key, log in,
 # reconcile local preferences, then approve routes.
 - name: register | Assert required tailscale inputs are set
   assert:
@@ -28,7 +28,7 @@
   check_mode: false
   # Poll until BackendState settles out of 'Starting': a mid-restart converge
   # would otherwise see rc=0 + valid JSON but tailscale_running=false, which
-  # triggers full re-registration (mint + tailscale up --reset) and creates a
+  # triggers full re-registration (mint + tailscale login) and creates a
   # duplicate headscale node entry.
   retries: 5
   delay: 2
@@ -126,15 +126,16 @@
         group: root
         mode: "0600"
 
-    # --reset clears stale manual flags; --timeout bounds control-plane failure.
-    - name: register | Register with headscale and advertise routes / exit node
+    # Authentication and preference reconciliation are deliberately separate:
+    # `tailscale login` joins the control plane, then `tailscale set` below owns
+    # every mutable routing preference.
+    - name: register | Log in to headscale
       command:
         argv: >-
-          {{ [tailscale_bin, 'up',
+          {{ [tailscale_bin, 'login',
               '--login-server', tailscale_login_server,
-              '--authkey', 'file:' + tailscale_authkey_file]
-             + tailscale_preference_args
-             + ['--timeout=60s', '--reset'] }}
+              '--auth-key', 'file:' + tailscale_authkey_file,
+              '--timeout=60s'] }}
       changed_when: true
 
   always:
@@ -154,14 +155,13 @@
   tags:
     - tailscale
 
-# Reconcile every local preference on live nodes. `tailscale set` cannot report
-# whether it changed a preference, so functional verification proves correctness.
+# Reconcile every local preference after an existing session or a successful
+# login. `tailscale set` cannot report whether it changed a preference, so
+# functional verification proves correctness.
 - name: register | Reconcile routes / exit node / accept-routes / accept-dns
   command:
     argv: "{{ [tailscale_bin, 'set'] + tailscale_preference_args }}"
-  when:
-    - not ansible_check_mode
-    - tailscale_running
+  when: not ansible_check_mode
   changed_when: false
   become: true
   tags:
@@ -169,7 +169,7 @@
 
 # Headscale owns the approved-route set, so query it on every real apply and
 # compare the actual approvals directly. A newly registered node can lag
-# `tailscale up`, so poll before resolving its ID.
+# `tailscale login`/`set`, so poll before resolving its ID.
 - name: register | List headscale nodes (on the control server)
   command: podman exec headscale headscale nodes list -o json
   delegate_to: "{{ tailscale_headscale_host }}"

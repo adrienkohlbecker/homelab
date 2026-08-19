@@ -20,7 +20,7 @@ tailscale_accept_dns: false
 # CLI path; bunk overrides this for its DSM Package-Center installation.
 tailscale_bin: tailscale
 
-# Root-only staging path for `tailscale up --authkey file:`. Bunk overrides this
+# Root-only staging path for `tailscale login --auth-key file:`. Bunk overrides this
 # to /tmp because DSM does not guarantee /run is tmpfs.
 tailscale_authkey_file: /run/tailscale_authkey
 
