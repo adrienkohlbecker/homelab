@@ -11,10 +11,8 @@ PartOf=zfs_autosnapshot.target
 
 {% if ansible_default_ipv4.interface is defined and ((tailscale_advertise_routes | length > 0) or (tailscale_advertise_exit_node | bool)) %}
 [Service]
-# Persist UDP GRO forwarding offload on the underlay NIC across reboots. The
-# role also applies this via ethtool on every converge for immediate effect;
-# this ExecStartPost= fires whenever tailscaled starts so the setting survives
-# reboots without waiting for the next ansible run.
+# Apply UDP GRO forwarding offload on the underlay NIC whenever tailscaled
+# starts. This keeps the runtime setting aligned across restarts and reboots.
 # https://tailscale.com/kb/1320/performance-best-practices
 # -prefix: drivers that reject the offload (e.g. qemu virtio) are ignored.
 ExecStartPost=-/usr/sbin/ethtool -K {{ ansible_default_ipv4.interface }} rx-udp-gro-forwarding on rx-gro-list off

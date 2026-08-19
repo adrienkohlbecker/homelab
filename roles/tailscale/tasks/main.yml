@@ -174,17 +174,3 @@
   import_tasks: register.yml
   tags:
     - tailscale
-
-# Enable UDP GRO forwarding on the physical underlay, not tailscale0. The drop-in
-# persists it across reboots; unsupported drivers reject it harmlessly.
-# https://tailscale.com/kb/1320/performance-best-practices
-- name: Enable UDP GRO forwarding offload on the underlay NIC
-  command: ethtool -K {{ ansible_default_ipv4.interface }} rx-udp-gro-forwarding on rx-gro-list off
-  when:
-    - not ansible_check_mode
-    - ansible_default_ipv4.interface is defined
-  changed_when: false
-  failed_when: false
-  become: true
-  tags:
-    - tailscale
