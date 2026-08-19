@@ -64,7 +64,7 @@
       approved={{ _tailscale_node.approved_routes | default([], true) | sort }}
 
 - name: _verify | Read local preferences
-  command: tailscale debug prefs
+  command: tailscale get --json all
   register: _tailscale_prefs
   changed_when: false
   become: true
@@ -74,16 +74,15 @@
     _prefs: "{{ _tailscale_prefs.stdout | from_json }}"
   assert:
     that:
-      - (_prefs.AdvertiseRoutes | default([], true) | sort) == (_tailscale_desired_routes | sort)
-      - (_prefs.RouteAll | default(false) | bool) == (tailscale_accept_routes | bool)
-      - not (_prefs.CorpDNS | default(false) | bool)
+      - ((_prefs['advertise-routes'] | default('', true)).split(',') | sort) == (tailscale_advertise_routes | sort)
+      - _prefs['advertise-exit-node'] | default(false) | bool
+      - (_prefs['accept-routes'] | default(false) | bool) == (tailscale_accept_routes | bool)
+      - not (_prefs['accept-dns'] | default(false) | bool)
+      - _prefs['snat-subnet-routes'] | default(false) | bool
+      - not (_prefs['stateful-filtering'] | default(false) | bool)
     fail_msg: >-
-      Local preferences don't match desired:
-      AdvertiseRoutes={{ _prefs.AdvertiseRoutes | default([], true) | sort }}
-      (want {{ _tailscale_desired_routes | sort }}),
-      RouteAll={{ _prefs.RouteAll | default(false) }}
-      (want {{ tailscale_accept_routes }}), CorpDNS={{ _prefs.CorpDNS | default(false) }}
-      (want false)
+      Local preferences do not match desired server routing policy:
+      {{ _prefs }}
 
 # Assert the forwarding settings are live, not just present in the sysctl file.
 - name: _verify | IP forwarding is enabled
