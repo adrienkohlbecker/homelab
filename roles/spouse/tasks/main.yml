@@ -2,12 +2,9 @@
   assert:
     quiet: true
     that:
-      # spouse_firstname becomes the POSIX user/group name, the /mnt/data/<name>
-      # home, the samba login, the subid_users entry, and the arq-<name> MinIO
-      # bucket -- so it must be a valid identifier (the regex also rejects an
-      # unset/empty value). Same guard as roles/samba + roles/service_user.
-      # default('') so an undefined var fails into fail_msg rather than raising
-      # a raw "undefined variable" jinja error here.
+      # The name crosses POSIX user/group, path, SMB login, and MinIO name
+      # boundaries, so keep it to the shared service-name shape. default('')
+      # also turns an undefined value into the role's fail_msg.
       - spouse_firstname | default('') is match('^[a-z_][a-z0-9_-]*$')
       - spouse_samba_password | default('') | length > 0
     fail_msg: >-
