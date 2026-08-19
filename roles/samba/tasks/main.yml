@@ -36,7 +36,7 @@
       # authenticated user). Structural keys handled by the template are exempt.
       - >-
         samba_shares | map('dict2items') | flatten
-        | rejectattr('key', 'in', ['name', 'path', 'opts', 'time_machine', 'time_machine_max_size'])
+        | rejectattr('key', 'in', ['name', 'path', 'opts'])
         | selectattr('key', 'search', '_') | list | length == 0
     fail_msg: >-
       A samba_shares entry has a directive key containing '_' (e.g. valid_users
