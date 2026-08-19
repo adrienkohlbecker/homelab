@@ -121,26 +121,32 @@
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: socket_proxy.service
+          marker: socket-proxy-netdata-drop
         - MESSAGE: '10.89.0.1:54323 [12/Jul/2026:18:17:28.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 200 4321 - - ---- 2/2/1/1/0 0/0 "GET /v1.41/images/json HTTP/1.1"'
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: socket_proxy.service
+          marker: socket-proxy-netdata-drop
         - MESSAGE: '10.89.0.1:54324 [12/Jul/2026:18:17:29.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 200 4321 - - ---- 2/2/1/1/0 0/0 "GET /v1.41/containers/json?all=1&filters=%7B%22health%22%3A%7B%22healthy%22%3Atrue%7D%7D HTTP/1.1"'
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: socket_proxy.service
+          marker: socket-proxy-netdata-drop
         - MESSAGE: '10.89.0.1:54325 [12/Jul/2026:18:17:30.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 200 4321 - - ---- 2/2/1/1/0 0/0 "GET /v1.41/containers/json?all=1&filters=%7B%22health%22%3A%7B%22unhealthy%22%3Atrue%7D%7D HTTP/1.1"'
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: socket_proxy.service
+          marker: socket-proxy-netdata-drop
         - MESSAGE: '10.89.0.1:54326 [12/Jul/2026:18:17:31.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 200 4321 - - ---- 2/2/1/1/0 0/0 "GET /v1.41/containers/json?all=1&filters=%7B%22health%22%3A%7B%22starting%22%3Atrue%7D%7D HTTP/1.1"'
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: socket_proxy.service
+          marker: socket-proxy-netdata-drop
         - MESSAGE: '10.89.0.1:54327 [12/Jul/2026:18:17:32.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 200 4321 - - ---- 2/2/1/1/0 0/0 "GET /v1.41/containers/json?all=1&filters=%7B%22health%22%3A%7B%22none%22%3Atrue%7D%7D HTTP/1.1"'
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: socket_proxy.service
+          marker: socket-proxy-netdata-drop
         - MESSAGE: '10.89.0.1:54328 [12/Jul/2026:18:17:33.456] dockerfrontend dockerbackend/dockersocket 0/0/0/2/2 500 4321 - - ---- 2/2/1/1/0 0/0 "GET /v1.41/info HTTP/1.1"'
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
@@ -221,43 +227,12 @@
             - fields.parser_status
             - fields.process_id
 
-- name: _verify | Duplicate HAProxy shutdown record is omitted from aggregate
+- name: _verify | Expected socket_proxy noise is omitted from aggregate
   assert:
     that:
       - "'Proxy dockerbackend stopped (cumulated conns: FE: 0, BE: 1181).' not in fluentbit_verify_result.stdout"
       - "'GET /version HTTP/1.1' not in fluentbit_verify_result.stdout"
       - "'-drop' not in fluentbit_verify_result.stdout"
-
-- name: _verify | Netdata polling successes are omitted from aggregate
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        routine_paths = {
-            "/v1.41/info",
-            "/v1.41/images/json",
-            "/v1.41/containers/json?all=1&filters=%7B%22health%22%3A%7B%22healthy%22%3Atrue%7D%7D",
-            "/v1.41/containers/json?all=1&filters=%7B%22health%22%3A%7B%22unhealthy%22%3Atrue%7D%7D",
-            "/v1.41/containers/json?all=1&filters=%7B%22health%22%3A%7B%22starting%22%3Atrue%7D%7D",
-            "/v1.41/containers/json?all=1&filters=%7B%22health%22%3A%7B%22none%22%3Atrue%7D%7D",
-        }
-        for line in sys.stdin:
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            fields = record.get("fields", {})
-            assert not (
-                fields.get("status") == 200
-                and fields.get("method") == "GET"
-                and fields.get("path") in routine_paths
-            ), record
-    stdin: "{{ fluentbit_verify_result.stdout }}"
-  changed_when: false
 
 - name: _verify | Allowed GET /version returns 200
   uri:
