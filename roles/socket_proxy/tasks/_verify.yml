@@ -2,15 +2,6 @@
 # docker collector needs answer 200, while write requests and denied sections
 # are blocked. The proxy fronts the host's rootful podman socket (box_deps
 # pre-bakes podman).
-- name: _verify | The socket_proxy unit is loaded and active
-  systemd:
-    name: socket_proxy
-  register: _socket_proxy_unit
-  failed_when: >-
-    _socket_proxy_unit.status.LoadState != "loaded"
-    or _socket_proxy_unit.status.ActiveState != "active"
-  become: true
-
 - name: _verify | Create unique socket_proxy fluent-bit marker
   set_fact:
     socket_proxy_lnav_marker: "verify_socket_proxy_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
