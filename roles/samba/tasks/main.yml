@@ -93,8 +93,25 @@
     systemd_unit_args:
       src: smbd_zfs_mounts_override.conf.j2
       for: smbd.service
-      dest_abs: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
       condition: "{{ samba_shares | length > 0 }}"
+  tags:
+    - samba
+
+- name: Remove superseded named smbd override
+  when: samba_shares | length > 0
+  file:
+    path: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
+    state: absent
+  register: samba_smbd_legacy_override_removed
+  become: true
+  tags:
+    - samba
+
+- name: Reload systemd after named smbd override removal
+  when: samba_smbd_legacy_override_removed.changed
+  systemd:
+    daemon_reload: true
+  become: true
   tags:
     - samba
 
@@ -106,7 +123,7 @@
   when:
     - not (ansible_check_mode and samba_apt.changed)
     - samba_shares | length > 0
-    - smbd_service_d_zfs_mounts_conf_result.changed
+    - smbd_service_d_override_conf_result.changed
   command: systemctl reenable smbd
   changed_when: true
   become: true
@@ -118,8 +135,11 @@
 - name: Remove smbd zfs-mount override when no shares
   when: samba_shares | length == 0
   file:
-    dest: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
+    path: "{{ item }}"
     state: absent
+  loop:
+    - /etc/systemd/system/smbd.service.d/override.conf
+    - /etc/systemd/system/smbd.service.d/zfs-mounts.conf
   register: samba_smbd_override_removed
   become: true
   tags:

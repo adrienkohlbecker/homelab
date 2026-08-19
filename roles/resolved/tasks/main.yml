@@ -1,9 +1,3 @@
-# Helper writes /etc/systemd/resolved.conf.d/99-custom.conf via the
-# absolute-mode dropin path (sibling of resolved.conf, not under
-# systemd-resolved.service.d/). Helper does: dir creation, backup,
-# write (copy — src has no .j2 suffix), systemd-analyze verify against
-# systemd-resolved.service, daemon-reload. Restart gate downstream
-# reads the per-unit result fact resolved_conf_d_99_custom_conf_result.
 # Numbered 99-: resolved.conf.d/ merges lexicographically, last-wins,
 # so a high number keeps these settings on top of any lower-numbered
 # drop-in a package or cloud-init might land here.
@@ -20,16 +14,30 @@
   tags:
     - resolved
 
-- name: Render resolved.conf.d/99-custom.conf
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      for: systemd-resolved.service
-      dest_abs: /etc/systemd/resolved.conf.d/99-custom.conf
-      src: 99-custom.conf
-      condition: "{{ not (ansible_check_mode and resolved_apt.changed) }}"
+- name: Create resolved configuration directory
+  when: not (ansible_check_mode and resolved_apt.changed)
+  file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - resolved
+
+- name: Install resolved.conf.d/99-custom.conf
+  when: not (ansible_check_mode and resolved_apt.changed)
+  copy:
+    src: 99-custom.conf
+    dest: /etc/systemd/resolved.conf.d/99-custom.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, delimiters=("=",)).read(sys.argv[1])' %s
+  register: resolved_conf_d_99_custom_conf_result
+  become: true
   tags:
     - resolved
 

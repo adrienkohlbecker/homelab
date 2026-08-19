@@ -14,7 +14,6 @@
     quiet: true
     that:
       - systemd_unit_args.for is not defined
-      - systemd_unit_args.dest_abs is not defined
       - systemd_unit_args.user is not defined or systemd_unit_args.user == 'root'
       - _systemd_unit_name is match('^.+\.(service|socket|target|timer|mount|automount|path|slice|scope|device|swap)$')
     fail_msg: >-

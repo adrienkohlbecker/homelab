@@ -4,21 +4,32 @@
 
 # Backend-conditional server selection lives in group_vars/test.yml so _verify
 # asserts against the same typed list this drop-in renders.
+- name: Mirrors | Create systemd-resolved configuration directory
+  file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 - name: Mirrors | Install DNS-over-TLS configuration
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: 10-test-dns-over-tls.conf.j2
-      for: systemd-resolved.service
-      dest_abs: /etc/systemd/resolved.conf.d/10-test-dns-over-tls.conf
+  template:
+    src: 10-test-dns-over-tls.conf.j2
+    dest: /etc/systemd/resolved.conf.d/10-test-dns-over-tls.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, delimiters=("=",)).read(sys.argv[1])' %s
+  register: test_resolved_conf
+  become: true
 
 - name: Mirrors | Restart systemd-resolved to pick up DoT config
   systemd:
     name: systemd-resolved
     state: restarted
-  when: resolved_conf_d_10_test_dns_over_tls_conf_result.changed
+  when: test_resolved_conf.changed
   become: true
 
 - name: Mirrors | Configure apt retries and sources

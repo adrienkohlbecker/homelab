@@ -149,7 +149,7 @@
 
 - name: _verify | The zfs-mount override is installed for a share-bearing host
   stat:
-    path: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
+    path: /etc/systemd/system/smbd.service.d/override.conf
   register: samba_override_stat
   become: true
 

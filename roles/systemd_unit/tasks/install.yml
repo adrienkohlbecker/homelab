@@ -5,7 +5,6 @@
 # Inputs: caller passes a single dict `systemd_unit_args` with keys
 #   src               file under role files/ (copy) or templates/ (.j2 → template)
 #   dest              optional on-disk filename; defaults to src with .j2 stripped
-#   dest_abs          absolute drop-in path; requires for
 #   for               drop-in only: parent unit (e.g. podman.socket); derives
 #                     dest=<for>.d/override.conf and verify=<for>
 #   user              default 'root'; non-root drives /etc/systemd/user
@@ -24,10 +23,10 @@
       - systemd_unit_args.src is string
       - systemd_unit_args.for is not defined or systemd_unit_args.for is string
       - systemd_unit_args.dest is not defined or systemd_unit_args.for is not defined
-      - systemd_unit_args.dest_abs is not defined or systemd_unit_args.for is defined
+      - systemd_unit_args.keys() | difference(['src', 'dest', 'for', 'user', 'condition', 'start', 'restart', 'reload', 'throttle']) | length == 0
     fail_msg: >-
       systemd_unit_args needs src (source filename); dest and for are mutually
-      exclusive, for must be a string when set, and dest_abs requires for;
+      exclusive, for must be a string when set, and no other keys are accepted;
       got {{ systemd_unit_args | default('<unset>') }}
 
 # set_fact keys resolve concurrently, so defaults and their derivatives need
@@ -36,14 +35,10 @@
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
-    # Preserve two path components so absolute and relative drop-ins produce
-    # the same per-unit result-fact shape.
     _systemd_unit_name: >-
-      {{ ((systemd_unit_args.dest_abs | dirname | basename) ~ '/' ~ (systemd_unit_args.dest_abs | basename))
-         if systemd_unit_args.dest_abs is defined
-         else (systemd_unit_args.dest
-               | default((systemd_unit_args.for ~ '.d/override.conf') if systemd_unit_args.for is defined
-                         else (systemd_unit_args.src | regex_replace('\.j2$', '')))) }}
+      {{ systemd_unit_args.dest
+         | default((systemd_unit_args.for ~ '.d/override.conf') if systemd_unit_args.for is defined
+                   else (systemd_unit_args.src | regex_replace('\.j2$', ''))) }}
     _systemd_unit_verify: >-
       {{ systemd_unit_args.for
          if systemd_unit_args.for is defined
@@ -60,10 +55,7 @@
     - _systemd_unit_condition
     - systemd_unit_args.for is defined
   file:
-    path: >-
-      {{ (systemd_unit_args.dest_abs | dirname)
-         if systemd_unit_args.dest_abs is defined
-         else (_systemd_unit_dir ~ '/' ~ systemd_unit_args.for ~ '.d') }}
+    path: "{{ _systemd_unit_dir }}/{{ systemd_unit_args.for }}.d"
     state: directory
     owner: root
     group: root
@@ -103,32 +95,9 @@
       `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_verify }}`
       before re-running, or --limit the play to skip this role.
 
-# dest_abs writes elsewhere, so guard that path independently.
-- name: install | Stat dest_abs path for pre-existing mask
-  when:
-    - _systemd_unit_condition
-    - systemd_unit_args.dest_abs is defined
-  stat:
-    path: "{{ systemd_unit_args.dest_abs }}"
-  register: _systemd_unit_mask_abs
-  become: true
-
-- name: install | Refuse to overwrite masked dest_abs path
-  when:
-    - _systemd_unit_condition
-    - systemd_unit_args.dest_abs is defined
-    - _systemd_unit_mask_abs.stat.islnk | default(false)
-    - _systemd_unit_mask_abs.stat.lnk_target | default('') == '/dev/null'
-  fail:
-    msg: >-
-      Refusing to overwrite {{ systemd_unit_args.dest_abs }}:
-      it is masked (symlink to /dev/null). Unmask with
-      `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_verify }}`
-      before re-running, or --limit the play to skip this role.
-
 - name: install | Install systemd unit
   vars:
-    _systemd_unit_path: "{{ systemd_unit_args.dest_abs | default(_systemd_unit_dir ~ '/' ~ _systemd_unit_name) }}"
+    _systemd_unit_path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
   block:
     # Keep dispatch task-local so a host fact cannot poison the next call. The
     # action string form avoids the mapping form deprecated in ansible-core 2.23.

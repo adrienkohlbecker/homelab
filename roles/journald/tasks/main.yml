@@ -11,26 +11,31 @@
   tags:
     - journald
 
-# Helper writes /etc/systemd/journald.conf.d/99-custom.conf via the
-# absolute-mode dropin path (sibling of journald.conf, not under
-# systemd-journald.service.d/). Helper does: dir creation, backup,
-# write, systemd-analyze verify systemd-journald.service, daemon-
-# reload. The rendered content has tightly constrained Jinja inputs
-# (journald_storage in [volatile, persistent], zfs_root bool) so a
-# format-level validate is redundant. Restart gate downstream reads
-# the per-unit result fact journald_conf_d_99_custom_conf_result.
 # Numbered 99- (not 10-): journald.conf.d/ merges lexicographically,
 # last-wins, so a high number keeps these settings on top of any
 # lower-numbered drop-in a package or cloud-init might land here.
+- name: Create journald configuration directory
+  file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - journald
+
 - name: Render journald.conf.d/99-custom.conf
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      for: systemd-journald.service
-      dest_abs: /etc/systemd/journald.conf.d/99-custom.conf
-      src: 99-custom.conf.j2
+  template:
+    src: 99-custom.conf.j2
+    dest: /etc/systemd/journald.conf.d/99-custom.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, delimiters=("=",)).read(sys.argv[1])' %s
+  register: journald_conf_d_99_custom_conf_result
+  become: true
   tags:
     - journald
 

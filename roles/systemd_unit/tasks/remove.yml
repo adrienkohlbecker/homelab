@@ -1,7 +1,6 @@
 # Inputs: caller passes a single dict `systemd_unit_args` with keys
 #   dest              exact unit filename; mutually exclusive with for
 #   for               drop-in parent; derives dest=<for>.d/override.conf
-#   dest_abs          drop-in only: absolute path to remove; requires `for`
 #   user              default 'root'; non-root acts on the named user's
 #                     user manager (linger must already be on).
 #   condition         default true; gates the whole call.
@@ -16,30 +15,26 @@
       - systemd_unit_args is mapping
       - systemd_unit_args.dest is defined or systemd_unit_args.for is defined
       - systemd_unit_args.dest is not defined or systemd_unit_args.for is not defined
-      - systemd_unit_args.dest_abs is not defined or systemd_unit_args.for is defined
+      - systemd_unit_args.keys() | difference(['dest', 'for', 'user', 'condition']) | length == 0
     fail_msg: >-
-      systemd_unit_args needs exactly one of dest or for, and dest_abs requires for;
+      systemd_unit_args needs exactly one of dest or for and accepts only user
+      and condition as optional keys;
       got dest={{ systemd_unit_args.dest | default('<unset>') }},
-      for={{ systemd_unit_args.for | default('<unset>') }},
-      dest_abs={{ systemd_unit_args.dest_abs | default('<unset>') }}
+      for={{ systemd_unit_args.for | default('<unset>') }}
 
-- name: remove | Resolve caller defaults for {{ systemd_unit_args.dest_abs | default(systemd_unit_args.dest | default(systemd_unit_args.for | default('?'))) }}
+- name: remove | Resolve caller defaults for {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
     _systemd_unit_name: >-
-      {{ ((systemd_unit_args.dest_abs | dirname | basename) ~ '/' ~ (systemd_unit_args.dest_abs | basename))
-         if systemd_unit_args.dest_abs is defined
-         else (systemd_unit_args.dest
-               if systemd_unit_args.dest is defined
-               else systemd_unit_args.for ~ '.d/override.conf') }}
+      {{ systemd_unit_args.dest
+         if systemd_unit_args.dest is defined
+         else systemd_unit_args.for ~ '.d/override.conf' }}
 
-- name: remove | Derive scope for {{ systemd_unit_args.dest_abs | default(systemd_unit_args.dest | default(systemd_unit_args.for | default('?'))) }}
+- name: remove | Derive scope for {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}
   set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
-    _systemd_unit_remove_path: >-
-      {{ systemd_unit_args.dest_abs
-         | default(('/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user') ~ '/' ~ _systemd_unit_name) }}
+    _systemd_unit_remove_path: "{{ ('/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user') }}/{{ _systemd_unit_name }}"
 
 # See install.yml for linger check-mode and task-name constraints.
 - name: remove | Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
@@ -73,7 +68,7 @@
 
 # Missing units are already in the desired state. Skip template units and
 # drop-ins: callers stop template instances, while drop-ins have no lifecycle.
-- name: remove | Stop and disable {{ systemd_unit_args.dest_abs | default(systemd_unit_args.dest | default(systemd_unit_args.for | default('?'))) }}
+- name: remove | Stop and disable {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}
   when:
     - _systemd_unit_condition
     - "'@.' not in _systemd_unit_name"
@@ -110,7 +105,7 @@
 
 # Same fact name install.yml uses, so callers can read `.changed` off
 # `<name>_<type>_result` regardless of which operation just ran.
-- name: remove | Record removal result for {{ systemd_unit_args.dest_abs | default(systemd_unit_args.dest | default(systemd_unit_args.for | default('?'))) }}
+- name: remove | Record removal result for {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}
   set_fact:
     "{{ _systemd_unit_name | ansible_var_key }}_result": >-
       {{ systemd_unit_file
