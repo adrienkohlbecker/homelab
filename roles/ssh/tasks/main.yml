@@ -10,8 +10,8 @@
     - ssh
 
 # --- host-key identity persistence -----------------------------------------
-# The configured Ed25519 and RSA host identities ride rpool/services so a
-# wipe-and-restore rebuild can bring the host identity back and every
+# The configured Ed25519 host identity rides rpool/services so a wipe-and-
+# restore rebuild can bring the host identity back and every
 # known_hosts pin of this host -- operator workstations, lab root's pin the
 # nightly pull authenticates against -- stays valid. Unlike ssh_root's
 # keypair, converge only BACKS UP, never restores: swapping host keys
@@ -29,13 +29,40 @@
   tags:
     - ssh
 
-- name: Check persisted host identities for divergence
+- name: Stat the live host identity
   when: ssh_services_mount.rc == 0
-  include_tasks: _identity_guard.yml
-  loop: "{{ _ssh_host_private_key_files }}"
-  loop_control:
-    loop_var: ssh_host_private_key_file
-    label: "{{ ssh_host_private_key_file }}"
+  stat:
+    path: "/etc/ssh/{{ _ssh_host_private_key_file }}"
+  become: true
+  register: ssh_host_live_identity
+  tags:
+    - ssh
+
+- name: Stat the persisted host identity
+  when: ssh_services_mount.rc == 0
+  stat:
+    path: "/mnt/services/ssh_host_keys/{{ _ssh_host_private_key_file }}"
+  become: true
+  register: ssh_host_persisted_identity
+  tags:
+    - ssh
+
+# A divergent persisted identity means this host was rebuilt without
+# restoring its host key. Halt before the copy loop can destroy the old pin.
+- name: Refuse to overwrite a divergent persisted host identity
+  when:
+    - ssh_services_mount.rc == 0
+    - ssh_host_live_identity.stat.exists
+    - ssh_host_persisted_identity.stat.exists
+    - ssh_host_live_identity.stat.checksum != ssh_host_persisted_identity.stat.checksum
+  fail:
+    msg: >-
+      /mnt/services/ssh_host_keys holds a DIFFERENT {{ _ssh_host_private_key_file }}
+      identity than /etc/ssh. Either restore the persisted identity:
+      sudo cp -a /mnt/services/ssh_host_keys/ssh_host_ed25519_key{,.pub}
+      /etc/ssh/ && sudo systemctl restart ssh -- or adopt the new identity by
+      deleting /mnt/services/ssh_host_keys, then update every known_hosts pin
+      of this host.
   tags:
     - ssh
 

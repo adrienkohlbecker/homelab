@@ -85,27 +85,24 @@
   become: true
   register: ssh_verify_persist_dir
 
-- name: _verify | Stat the persisted private host keys
+- name: _verify | Stat the persisted private host key
   stat:
-    path: "/mnt/services/ssh_host_keys/{{ item }}"
-  loop: "{{ _ssh_host_private_key_files }}"
-  loop_control:
-    label: "{{ item }}"
+    path: "/mnt/services/ssh_host_keys/{{ _ssh_host_private_key_file }}"
   become: true
-  register: ssh_verify_persisted_private_keys
+  register: ssh_verify_persisted_private_key
 
-- name: _verify | Persisted host keys are private to root
+- name: _verify | Persisted host key is private to root
   assert:
     that:
       - ssh_verify_persist_dir.stat.exists
       - ssh_verify_persist_dir.stat.mode == '0700'
       - ssh_verify_persist_dir.stat.pw_name == 'root'
       - ssh_verify_persist_dir.stat.gr_name == 'root'
-      - ssh_verify_persisted_private_keys.results | map(attribute='stat.mode') | unique | list == ['0600']
-      - ssh_verify_persisted_private_keys.results | map(attribute='stat.pw_name') | unique | list == ['root']
-      - ssh_verify_persisted_private_keys.results | map(attribute='stat.gr_name') | unique | list == ['root']
+      - ssh_verify_persisted_private_key.stat.mode == '0600'
+      - ssh_verify_persisted_private_key.stat.pw_name == 'root'
+      - ssh_verify_persisted_private_key.stat.gr_name == 'root'
     fail_msg: >-
-      /mnt/services/ssh_host_keys or its private keys have unsafe ownership
+      /mnt/services/ssh_host_keys or its private key has unsafe ownership
       or permissions.
 
 # Divergence guard: a persisted identity that differs from the live one
