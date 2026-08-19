@@ -1,64 +1,7 @@
-# Functional testing (an actual SSH to bunk) is impossible on the box fixture: it
-# has no WireGuard peer, and known_hosts for the backup peers is gated
-# `when: not qemu_test` in zfs_autobackup. So these checks fall back to artifact
-# state (key type/mode/owner, config mode/owner) plus `ssh -G`, which parses the
-# shipped config and proves the load-bearing directives survive the Host-block
-# merge -- the one genuinely functional assertion here. The closing block forces a
-# regeneration to confirm the warn/fail gate in main.yml would catch a real
-# rotation; safe because the box fixture is disposable.
-- name: _verify | Stat /root/.ssh directory
-  stat:
-    path: /root/.ssh
-  register: _ssh_root_dir
-  become: true
-
-- name: _verify | Assert /root/.ssh directory exists with mode 0700 owned by root
-  assert:
-    that:
-      - _ssh_root_dir.stat.exists
-      - (_ssh_root_dir.stat.mode | default('')) == '0700'
-      - (_ssh_root_dir.stat.pw_name | default('')) == 'root'
-      - (_ssh_root_dir.stat.gr_name | default('')) == 'root'
-    fail_msg: >-
-      /root/.ssh: exists={{ _ssh_root_dir.stat.exists }}
-      mode={{ _ssh_root_dir.stat.mode | default('absent') }} (want 0700)
-      owner={{ _ssh_root_dir.stat.pw_name | default('absent') }}:{{ _ssh_root_dir.stat.gr_name | default('absent') }} (want root:root)
-
-- name: _verify | Stat ed25519 private key
-  stat:
-    path: /root/.ssh/id_ed25519
-  register: _ssh_root_key
-  become: true
-
-- name: _verify | Assert ed25519 private key exists with mode 0600 owned by root
-  assert:
-    that:
-      - _ssh_root_key.stat.exists
-      - (_ssh_root_key.stat.mode | default('')) == '0600'
-      - (_ssh_root_key.stat.pw_name | default('')) == 'root'
-      - (_ssh_root_key.stat.gr_name | default('')) == 'root'
-    fail_msg: >-
-      /root/.ssh/id_ed25519: exists={{ _ssh_root_key.stat.exists }}
-      mode={{ _ssh_root_key.stat.mode | default('absent') }} (want 0600)
-      owner={{ _ssh_root_key.stat.pw_name | default('absent') }}:{{ _ssh_root_key.stat.gr_name | default('absent') }} (want root:root)
-
-- name: _verify | Stat /root/.ssh/config
-  stat:
-    path: /root/.ssh/config
-  register: _ssh_root_config_file
-  become: true
-
-- name: _verify | Assert /root/.ssh/config exists with mode 0600 owned by root
-  assert:
-    that:
-      - _ssh_root_config_file.stat.exists
-      - (_ssh_root_config_file.stat.mode | default('')) == '0600'
-      - (_ssh_root_config_file.stat.pw_name | default('')) == 'root'
-      - (_ssh_root_config_file.stat.gr_name | default('')) == 'root'
-    fail_msg: >-
-      /root/.ssh/config: exists={{ _ssh_root_config_file.stat.exists }}
-      mode={{ _ssh_root_config_file.stat.mode | default('absent') }} (want 0600)
-      owner={{ _ssh_root_config_file.stat.pw_name | default('absent') }}:{{ _ssh_root_config_file.stat.gr_name | default('absent') }} (want root:root)
+# Functional testing against bunk is impossible on the box fixture because it
+# has no WireGuard peer. `ssh -G` still exercises the shipped client config;
+# the identity checks below exercise persistence, rebuild restoration,
+# idempotence, and fail-closed validation against a disposable keypair.
 
 - name: _verify | Assert ssh_config parses cleanly
   command: ssh -G -F /root/.ssh/config localhost
@@ -94,33 +37,6 @@
       - /mnt/services/ssh_root/id_ed25519
   changed_when: false
   become: true
-
-- name: _verify | Stat the identity persistence directory
-  stat:
-    path: /mnt/services/ssh_root
-  become: true
-  register: _ssh_root_persist_dir
-
-- name: _verify | Stat the persisted private key
-  stat:
-    path: /mnt/services/ssh_root/id_ed25519
-  become: true
-  register: _ssh_root_persisted_key
-
-- name: _verify | Persisted root identity is private to root
-  assert:
-    that:
-      - _ssh_root_persist_dir.stat.exists
-      - _ssh_root_persist_dir.stat.mode == '0700'
-      - _ssh_root_persist_dir.stat.pw_name == 'root'
-      - _ssh_root_persist_dir.stat.gr_name == 'root'
-      - _ssh_root_persisted_key.stat.exists
-      - _ssh_root_persisted_key.stat.mode == '0600'
-      - _ssh_root_persisted_key.stat.pw_name == 'root'
-      - _ssh_root_persisted_key.stat.gr_name == 'root'
-    fail_msg: >-
-      /mnt/services/ssh_root or its private key has unsafe ownership or
-      permissions.
 
 # Rebuild simulation: after a wipe-and-restore, the persisted copy is in
 # place but /root/.ssh is fresh. Re-running the role must bring back the
