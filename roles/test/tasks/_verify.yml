@@ -21,7 +21,6 @@
   command: resolvectl status
   register: test_resolvectl
   changed_when: false
-  become: true
 
 - name: _verify | DNS-over-TLS is enforced at the configured resolver
   vars:
@@ -58,7 +57,6 @@
   command: resolvectl query --cache=no wikipedia.org
   register: test_public_resolve
   changed_when: false
-  become: true
   retries: 5
   delay: 3
   until: test_public_resolve.rc == 0
