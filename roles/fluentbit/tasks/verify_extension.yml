@@ -13,6 +13,7 @@
     content: |
       service:
         flush: 1
+        grace: 1
         log_level: error
         storage.path: /tmp/fluent-bit-{{ fluentbit_verify_args.name }}-storage
 
@@ -49,11 +50,9 @@
     state: stopped
   become: true
 
-# --kill-after bounds the wait: without it, a fluent-bit that does not honour
-# SIGTERM leaves timeout blocked forever and the role only fails on the
-# harness's own multi-minute budget, long after the useful output is lost.
-# rc 137 stays fatal -- it means the daemon ignored TERM, which is worth
-# seeing rather than tolerating.
+# The fixture's one-second grace period leaves --kill-after ample margin while
+# still bounding a fluent-bit that does not honour SIGTERM. A forced kill stays
+# fatal so a real shutdown hang is reported rather than tolerated.
 - name: _verify | Run fluent-bit extension fixture
   command:
     argv:
