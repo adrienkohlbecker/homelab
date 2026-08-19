@@ -232,10 +232,17 @@
   until: _socket_proxy_version.status == 200
   become: true
 
-- name: _verify | Allowed GET /_ping returns 200
+- name: _verify | Allowed GET sections return 200
   uri:
-    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/_ping
+    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/{{ item }}
     status_code: 200
+  loop:
+    - _ping
+    - images/json
+    - info
+    - v1.41/containers/json
+  loop_control:
+    label: "/{{ item }}"
   become: true
 
 - name: _verify | Allowed GET /containers/json returns 200
@@ -254,24 +261,6 @@
 - name: _verify | Allowed GET /containers/<id>/stats returns 200 (netdata data-plane)
   uri:
     url: "http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/{{ _socket_proxy_containers.json[0].Id }}/stats?stream=false"
-    status_code: 200
-  become: true
-
-- name: _verify | Allowed GET /images/json returns 200
-  uri:
-    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/images/json
-    status_code: 200
-  become: true
-
-- name: _verify | Allowed GET /info returns 200
-  uri:
-    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/info
-    status_code: 200
-  become: true
-
-- name: _verify | Versioned GET /v1.41/containers/json returns 200
-  uri:
-    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/v1.41/containers/json
     status_code: 200
   become: true
 
@@ -304,19 +293,16 @@
     status_code: 403
   become: true
 
-# A section we never enabled (SECRETS) must be denied too, proving the filter
-# is default-deny rather than allow-all.
-- name: _verify | Denied GET /secrets is blocked (403)
+# SECRETS proves the filter is default-deny; EVENTS is explicitly disabled.
+- name: _verify | Denied GET sections are blocked
   uri:
-    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/secrets
+    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/{{ item }}
     status_code: 403
-  become: true
-
-# EVENTS is explicitly disabled (--env EVENTS=0); verify it is blocked.
-- name: _verify | Disabled GET /events is blocked (403)
-  uri:
-    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/events
-    status_code: 403
+  loop:
+    - secrets
+    - events
+  loop_control:
+    label: "/{{ item }}"
   become: true
 
 - name: _verify | Wait for parsed live HAProxy access record in lnav store
