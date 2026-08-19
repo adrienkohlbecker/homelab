@@ -1,26 +1,10 @@
-# Manage swap. zram is required; a raw-partition overflow device is optional:
+# Manage required zram swap plus an optional preformatted raw-partition
+# overflow device. See notes/swap_strategy.md.
 #
-#   swap_partition: /dev/disk/by-uuid/00b9e215-...
-#
-#   swap_zram:
-#     size: 8G
-#
-# swap_zram is required. swap_partition activates when its var is defined.
-#
-# Raw partitions are taken as-is — the role never reformats a device
-# that already carries a swap signature, so pre-existing installer
-# UUIDs survive untouched.
-#
-# Activation goes through `swapon` and tolerates the "already active"
-# error rather than chasing systemd unit names: systemd-fstab-generator's
-# unit naming is sensitive to symlink rules and not always what
-# `systemd-escape` produces. Treating the "Device or resource busy"
-# stderr as success makes the task idempotent without that moving part.
-# The fstab entry still ensures activation at next boot via the generator.
+# Direct swapon gives immediate activation; the fstab entry persists it.
+# An already-active device reports "Device or resource busy", which is the
+# idempotent success case.
 
-#######################################################################
-# Input validation
-#######################################################################
 - name: Validate swap input schema
   assert:
     that:
@@ -31,9 +15,7 @@
   tags:
     - swap
 
-#######################################################################
 # Raw-partition swap (no formatting; takes the device as-is)
-#######################################################################
 - name: Verify partition carries a swap signature
   when: swap_partition is defined
   command: blkid -p --usages other -s TYPE -o value {{ swap_partition }}
@@ -85,19 +67,8 @@
   tags:
     - swap
 
-#######################################################################
 # zram-backed swap (primary, high-priority)
-#######################################################################
-# Compressed-RAM swap fronting the partition overflow above. swap-priority
-# 100 (set in the generator config) sits above the partition swap, which
-# the role places at priority 10, so routine paging compresses into RAM
-# and the disk is reached only under genuine exhaustion. zram is
-# deadlock-free (no ZFS allocation on the page-out path); the overflow
-# lives on a raw partition outside ZFS for the same reason
-# (notes/swap_strategy.md).
-#
-# Fail directly on an unsupported kernel instead of silently skipping the
-# required backend. Run the probe during check mode too.
+# Probe during check mode so an unsupported kernel fails before activation.
 - name: Verify the zram kernel module is available
   command: modinfo -k {{ ansible_kernel }} zram
   changed_when: false
@@ -130,15 +101,9 @@
   tags:
     - swap
 
-# zram-generator is a systemd generator: daemon-reload re-runs it to
-# (re)build the dev-zram0.swap + systemd-zram-setup@zram0 units from the
-# config. Starting dev-zram0.swap pulls in the setup service (Requires=),
-# which sizes /dev/zram0 and swaps it on. Restart on config change so a
-# resize takes effect.
-#
-# Skipped in check mode when the package install or config write is only
-# simulated: the generator hasn't run, so dev-zram0.swap doesn't exist
-# yet and the systemd module would fail looking for it.
+# daemon-reload reruns the generator; restarting applies configuration changes.
+# Skip a predicted package/config change in check mode because the generated
+# unit does not exist yet.
 - name: Activate zram swap device
   when: not (ansible_check_mode and (swap_zram_installed.changed or swap_zram_conf.changed))
   systemd:
@@ -162,11 +127,8 @@
   tags:
     - swap
 
-# vm.page-cluster controls how many contiguous swap pages are read ahead per
-# fault (2^N pages; default 3 = 8 pages). Disk swap benefits from readahead
-# to amortise seek cost; zram has no seek penalty so each speculative page only
-# costs a decompression cycle. Setting to 0 (1 page per fault) removes that
-# waste on zram-primary hosts.
+# zram has no seek penalty, so disable the disk-oriented swap readahead that
+# would speculatively decompress adjacent pages.
 - name: Tune vm.page-cluster for zram hosts
   ansible.posix.sysctl:
     name: vm.page-cluster
