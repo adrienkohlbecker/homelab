@@ -67,45 +67,17 @@
 
 # Verify both the DB symlinks and populated targets because HTTP health does
 # not exercise routing onto the 4K-recordsize SQLite dataset.
-- name: _verify | Stat the sonarr DB paths
-  stat:
-    path: "/mnt/services/sonarr/{{ item }}"
-    follow: false
-  loop:
-    - sonarr.db
-    - logs.db
-  register: _sonarr_db_links
-  become: true
-
-- name: _verify | Sonarr DBs are symlinks onto the sqlite dataset
-  assert:
-    that:
-      - item.stat.islnk
-      - item.stat.lnk_target == "/mnt/services/sqlite/sonarr/" ~ item.item
-    fail_msg: "{{ item.item }} is not a symlink onto the sqlite dataset (stat={{ item.stat }})"
-  loop: "{{ _sonarr_db_links.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-- name: _verify | Stat the dataset-side sonarr DBs
-  stat:
-    path: "/mnt/services/sqlite/sonarr/{{ item }}"
-  loop:
-    - sonarr.db
-    - logs.db
-  register: _sonarr_db_files
-  become: true
-
-- name: _verify | Sonarr wrote real, non-empty DBs onto the dataset
-  assert:
-    that:
-      - item.stat.exists
-      - not item.stat.islnk
-      - item.stat.size > 0
-    fail_msg: "{{ item.item }} on the dataset is missing or empty (stat={{ item.stat }})"
-  loop: "{{ _sonarr_db_files.results }}"
-  loop_control:
-    label: "{{ item.item }}"
+- name: _verify | Sonarr DBs are populated on the sqlite dataset
+  import_role:
+    name: sqlite_dataset
+    tasks_from: verify_dataset
+  vars:
+    sqlite_dataset_verify_args:
+      user: "{{ sonarr_user }}"
+      databases:
+        - sonarr.db
+        - logs.db
+      require_nonempty: true
 
 # Sonarr rewrites config.xml only on shutdown, beyond the idempotence pass;
 # restart and compare bytes to prevent element-order drift and restart churn.

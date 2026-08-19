@@ -1,0 +1,59 @@
+# Verify that a service's database paths resolve onto its sqlite dataset.
+#
+# Caller passes one dict `sqlite_dataset_verify_args`:
+#   user              required service_user result
+#   databases         required service-relative database paths
+#   require_nonempty  optional bool, default false; require populated targets
+
+- name: "verify_dataset | Validate inputs for {{ sqlite_dataset_verify_args.user.name | default('<unset>') }}"
+  assert:
+    quiet: true
+    that:
+      - sqlite_dataset_verify_args is mapping
+      - sqlite_dataset_verify_args.keys() | difference(['user', 'databases', 'require_nonempty']) | length == 0
+      - sqlite_dataset_verify_args.user is defined
+      - sqlite_dataset_verify_args.user.name is defined
+      - sqlite_dataset_verify_args.user.name is string
+      - sqlite_dataset_verify_args.user.name is match('^[a-z_][a-z0-9_-]*$')
+      - sqlite_dataset_verify_args.databases is defined
+      - sqlite_dataset_verify_args.databases | default([]) | length > 0
+      - sqlite_dataset_verify_args.require_nonempty is not defined or sqlite_dataset_verify_args.require_nonempty is boolean
+      - >-
+        sqlite_dataset_verify_args.databases | default([])
+        | select('match', '^[A-Za-z0-9_-][A-Za-z0-9_.-]*(/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$')
+        | list | length == sqlite_dataset_verify_args.databases | default([]) | length
+    fail_msg: >-
+      sqlite_dataset_verify_args requires a service_user result and at least
+      one safe service-relative database path.
+
+- name: "verify_dataset | Database paths link onto the sqlite dataset for {{ sqlite_dataset_verify_args.user.name }}"
+  stat:
+    path: "/mnt/services/{{ sqlite_dataset_verify_args.user.name }}/{{ sqlite_dataset_database }}"
+    follow: false
+  register: sqlite_dataset_verify_link
+  failed_when: >-
+    not sqlite_dataset_verify_link.stat.exists
+    or not sqlite_dataset_verify_link.stat.islnk
+    or sqlite_dataset_verify_link.stat.lnk_target
+       != '/mnt/services/sqlite/' ~ sqlite_dataset_verify_args.user.name ~ '/' ~ (sqlite_dataset_database | basename)
+  become: true
+  loop: "{{ sqlite_dataset_verify_args.databases }}"
+  loop_control:
+    label: "{{ sqlite_dataset_database }}"
+    loop_var: sqlite_dataset_database
+
+- name: "verify_dataset | Database targets are real files for {{ sqlite_dataset_verify_args.user.name }}"
+  stat:
+    path: "/mnt/services/sqlite/{{ sqlite_dataset_verify_args.user.name }}/{{ sqlite_dataset_database | basename }}"
+    follow: false
+  register: sqlite_dataset_verify_target
+  failed_when: >-
+    not sqlite_dataset_verify_target.stat.exists
+    or sqlite_dataset_verify_target.stat.islnk
+    or (sqlite_dataset_verify_args.require_nonempty | default(false)
+        and sqlite_dataset_verify_target.stat.size | default(0) <= 0)
+  become: true
+  loop: "{{ sqlite_dataset_verify_args.databases }}"
+  loop_control:
+    label: "{{ sqlite_dataset_database }}"
+    loop_var: sqlite_dataset_database
