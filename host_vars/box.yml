@@ -140,11 +140,10 @@ netdata_diskspace_blocklist: []
 homepage_netdata_hosts:
   - box
 
-# Test shares so samba's smb.conf.j2 renders actual [share] blocks and the
-# smbd_zfs_mounts_override.conf.j2 template exercises its loop. Paths don't
-# need to exist for smbd to start (it just can't serve files). The override
-# template gates on the qemu-defaulted zfs_has_*_mount flags, so it renders an
-# empty [Unit] section regardless of paths used here.
+samba_enabled: true
+
+# Test shares so samba's smb.conf.j2 renders actual [share] blocks. The /srv
+# path also proves the snapshot-ordering template ignores non-ZFS shares.
 samba_shares:
   - name: smbtest
     path: /srv/smbtest

@@ -257,6 +257,7 @@ homepage_netdata_hosts:
   - pug
   - fox
 
+samba_enabled: true
 samba_shares:
   # media is deliberately readable+writable by every authenticated SMB user
   # (ak + spouse): a household media library, group-owned via the media group.

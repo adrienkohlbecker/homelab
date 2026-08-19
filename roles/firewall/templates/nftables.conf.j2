@@ -64,7 +64,9 @@ table inet homelab {
     counter input_ssh {}
     counter input_http {}
     counter input_https {}
+{% if samba_enabled | default(false) %}
     counter input_admin_samba {}
+{% endif %}
     counter input_admin_nut {}
     counter input_transmission_tcp {}
     counter input_transmission_udp {}
@@ -280,7 +282,9 @@ table inet homelab {
         tcp dport 22 counter name "input_ssh" accept comment "SSH"
         tcp dport 80 counter name "input_http" accept comment "HTTP"
         tcp dport 443 counter name "input_https" accept comment "HTTPS"
+{% if samba_enabled | default(false) %}
         iifname . ip saddr @lan_admin_pairs tcp dport 445 counter name "input_admin_samba" accept comment "Samba (admin)"
+{% endif %}
         iifname . ip saddr @lan_admin_pairs tcp dport {{ service_ports.nut }} counter name "input_admin_nut" accept comment "nut (admin)"
 
 {% if inventory_hostname == authelia_host %}

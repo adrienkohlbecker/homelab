@@ -1,0 +1,50 @@
+---
+# Retain /var/lib/samba so the passdb remains available for inspection or
+# recovery. The package, active configuration, and systemd wiring are removed.
+- name: Stop retired Samba units
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+    masked: false
+  loop:
+    - smbd.service
+    - nmbd.service
+  become: true
+  tags:
+    - retired_services
+    - samba
+
+- name: Remove retired Samba package
+  apt:
+    name: samba
+    state: absent
+    purge: true
+  become: true
+  tags:
+    - retired_services
+    - samba
+
+- name: Remove retired Samba configuration
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/samba/smb.conf
+    - "/etc/samba/.smbpasswd_{{ ansible_user_id }}_hash"
+    - /etc/systemd/system/smbd.service.d/override.conf
+    - /etc/systemd/system/smbd.service.d/zfs-mounts.conf
+  register: retired_services_samba_files
+  become: true
+  tags:
+    - retired_services
+    - samba
+
+- name: Reload systemd after retired Samba configuration removal
+  when: retired_services_samba_files.changed
+  systemd:
+    daemon_reload: true
+  become: true
+  tags:
+    - retired_services
+    - samba

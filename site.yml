@@ -79,7 +79,6 @@
     - powertop
     - macvlan
     - avahi
-    - samba
     - kdump
     - wolweb
     - keepalived
@@ -98,6 +97,7 @@
 - name: Lab roles
   hosts: box,lab
   roles:
+    - samba
     - libvirt
     - minio
     - influxdb
@@ -144,6 +144,17 @@
         - udm_wol_relay
     - udm_dns_failover
     - udm_wol_relay
+
+- name: Retire Pug Samba
+  hosts: pug
+  tasks:
+    - name: Retire Samba on Pug
+      import_role:
+        name: retired_services
+        tasks_from: samba
+      tags:
+        - retired_services
+        - samba
 
 - name: Decomission services
   hosts: box,lab,pug,fox
