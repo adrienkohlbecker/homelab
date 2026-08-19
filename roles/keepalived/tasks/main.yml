@@ -22,8 +22,7 @@
 #          throttle: 1
 #
 #    The tenant reload above is throttled; THIS role's own base-conf
-#    reload is NOT — it routes through the systemd_unit helper, which has
-#    no throttle, so a `files/keepalived.conf` edit SIGHUPs every peer at
+#    reload is NOT, so a `files/keepalived.conf` edit SIGHUPs every peer at
 #    once. That is tolerable because base-conf edits are rare (a static
 #    file) and SIGHUP-reload is hitless (see _verify branch C: the VIP
 #    does not flap on reload); if a base-conf change ever risks a VRRP
