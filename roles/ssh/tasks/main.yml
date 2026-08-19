@@ -151,31 +151,15 @@
   tags:
     - ssh
 
-# The drop-in declares our audited Subsystem, so comment out the stock line to
-# keep ownership unambiguous and avoid duplicate directives.
-- name: Comment out stock sftp Subsystem to avoid duplicate
-  lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: '^([#\s]*)Subsystem(\s+)sftp(\s+)(.*)$'
-    line: '# Subsystem\2sftp\3\4'
-    backrefs: true
-    backup: true
-  register: ssh_sshd_config_sftp
-  become: true
-  tags:
-    - ssh
-
-# `sshd -t` (no -f) re-validates the *merged* live config: the whole Include
-# chain plus the base-file Subsystem edit above. The copy's validate: only
-# sees the drop-in in isolation, so it can't catch the duplicate Subsystem
-# from another file. Keep both — per-file gate on write, merged-config gate
-# before reload.
+# `sshd -t` (no -f) re-validates the merged live config, including every
+# package and role-owned file. The copy's validate sees only the staged drop-in,
+# so keep this whole-chain gate before reload.
 - name: Validate sshd config before reload
   when:
     - not (ansible_check_mode and ssh_apt.changed)
     - >-
-      ssh_sshd_config.changed or ssh_sshd_config_sftp.changed
-      or ssh_sshd_config_x11.changed or ssh_sshd_config_x11_remove.changed
+      ssh_sshd_config.changed or ssh_sshd_config_x11.changed
+      or ssh_sshd_config_x11_remove.changed
   command: sshd -t
   changed_when: false
   become: true
@@ -189,8 +173,8 @@
     enabled: true
     state: >-
       {{ 'reloaded'
-         if ssh_sshd_config.changed or ssh_sshd_config_sftp.changed
-            or ssh_sshd_config_x11.changed or ssh_sshd_config_x11_remove.changed
+         if ssh_sshd_config.changed or ssh_sshd_config_x11.changed
+            or ssh_sshd_config_x11_remove.changed
          else 'started' }}
   become: true
   tags:
