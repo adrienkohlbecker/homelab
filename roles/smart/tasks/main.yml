@@ -43,16 +43,6 @@
   tags:
     - smart
 
-- name: Install smart fluent-bit extension
-  import_role:
-    name: fluentbit
-    tasks_from: extension
-  vars:
-    fluentbit_extension_args:
-      name: smart
-  tags:
-    - smart
-
 - name: Enable smartmontools service
   when: not (ansible_check_mode and smart_apt.changed)
   systemd:
