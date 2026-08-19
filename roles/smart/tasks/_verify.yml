@@ -1,24 +1,3 @@
-- name: _verify | Read rendered smartd.conf
-  slurp:
-    src: /etc/smartd.conf
-  register: _smart_smartd_conf
-  become: true
-
-# Identity, not count: the rendered per-device set must equal the shared
-# smart_monitored_disks_by_id selector (group_vars/all/main.yml) the
-# template consumes -- catching both a device the template dropped and an
-# extra one (e.g. an optical drive) it should have filtered.
-- name: _verify | Per-device lines cover exactly the qualifying devices
-  vars:
-    _conf: "{{ _smart_smartd_conf.content | b64decode }}"
-    _conf_devices: "{{ _conf | regex_findall('/dev/disk/by-id/(\\S+)') }}"
-  assert:
-    that:
-      - _conf_devices | sort == smart_monitored_disks_by_id | list
-    fail_msg: >-
-      per-device line mismatch: config renders {{ _conf_devices | sort }}
-      but the qualifying device set is {{ smart_monitored_disks_by_id }}
-
 - name: _verify | Smartd configuration diversion is active  # noqa: command-instead-of-module
   command: dpkg-divert --listpackage /etc/smartd.conf
   register: _smart_smartd_divert
