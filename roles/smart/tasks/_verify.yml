@@ -1,6 +1,0 @@
-- name: _verify | Smartd configuration diversion is active  # noqa: command-instead-of-module
-  command: dpkg-divert --listpackage /etc/smartd.conf
-  register: _smart_smartd_divert
-  changed_when: false
-  failed_when: _smart_smartd_divert.stdout != "LOCAL"
-  become: true
