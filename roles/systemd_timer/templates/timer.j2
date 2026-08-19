@@ -4,9 +4,8 @@ Description={{ systemd_timer_args.description | default(systemd_timer_args.name)
 [Timer]
 OnCalendar={{ systemd_timer_args.on_calendar }}
 # Persistent=true catches up missed fires across reboots, but also fires
-# immediately on first enable (no existing stamp). Set persistent: false
-# to suppress that immediate catch-up fire on fresh installs.
-Persistent={{ 'true' if systemd_timer_args.persistent | default(true) else 'false' }}
+# immediately on first enable when no stamp exists.
+Persistent={{ 'true' if systemd_timer_args.persistent | default(false) else 'false' }}
 {% if systemd_timer_args.randomized_delay_sec is defined %}
 RandomizedDelaySec={{ systemd_timer_args.randomized_delay_sec }}
 FixedRandomDelay=yes

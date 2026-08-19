@@ -45,6 +45,5 @@
       # rare slow pull. No randomized spread: the prune is sub-second and the
       # handful of per-user units firing together is negligible.
       on_calendar: "*-*-* 00:20:00"
-      persistent: false
       user: "{{ podman_prune_args.user | default('root') }}"
   when: podman_prune_args.condition | default(true)

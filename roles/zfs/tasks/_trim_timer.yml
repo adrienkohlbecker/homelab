@@ -30,7 +30,6 @@
       name: "zfs_trim_{{ item }}"
       description: "Weekly ZFS trim for {{ item }}"
       on_calendar: "Thu *-*-* 00:05:00"
-      persistent: false
       # Spread the per-pool trims across the fleet (and across pools on a
       # multi-pool host) instead of all kicking off at 00:05.
       randomized_delay_sec: 3600

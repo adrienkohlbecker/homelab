@@ -149,6 +149,7 @@
       # local-only read with no fleet-shared resource, so no randomized spread is
       # needed -- pinning it keeps the schedule deterministic.
       on_calendar: "*-*-* 00:06:00"
+      persistent: true
       exec_start: /usr/local/bin/zfs_health
   tags:
     - zfs
@@ -197,6 +198,7 @@
       name: zfs_scrub
       description: Monthly ZFS scrub
       on_calendar: "Sun *-*-08..14 01:00:00"
+      persistent: true
       exec_start: /usr/local/bin/zfs_scrub
       randomized_delay_sec: 1800
   tags:

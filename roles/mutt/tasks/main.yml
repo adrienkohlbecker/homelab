@@ -209,7 +209,6 @@
       description: Index the getmail archive with notmuch
       # Runs after the 00:10 getmail timer's normal fetch window.
       on_calendar: "*-*-* 00:30:00"
-      persistent: false
       exec_start: /usr/bin/notmuch --config /opt/mutt/notmuch-config new
       run_as: "{{ ansible_user_id }}"
       timeout_start_sec: 30m

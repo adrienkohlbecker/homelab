@@ -82,7 +82,6 @@
       # longest of the small jobs and still finishes long before
       # zfs_autosnapshot at 02:00.
       on_calendar: "*-*-* 00:10:00"
-      persistent: false
       # --getmaildir co-locates oldmail-* state next to the maildir so a
       # $HOME reset doesn't trigger a re-fetch of years of archive.
       # OPERATOR NOTE: when invoking getmail manually from a shell for

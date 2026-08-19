@@ -255,7 +255,6 @@
       # required — systemd's 1min default would let fires drift well past
       # the iframe widget's 60s refreshInterval.
       on_calendar: "*:*:00"
-      persistent: false
       accuracy_sec: 1s
       exec_start: /usr/bin/python3 /opt/homepage_alerts/alerts_generate.py
       run_as: homepage
