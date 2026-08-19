@@ -10,22 +10,35 @@
 # Expected values are hardcoded here, independent of main.yml, so this catches
 # a main.yml regression rather than rubber-stamping whatever it set.
 
-- name: _verify | Mountpoint property set locally with expected value
+- name: _verify | Expected properties set locally
+  vars:
+    scratch_expected_properties:
+      mountpoint: /mnt/scratch
+      'autobackup:bak': 'false'
+      'com.sun:auto-snapshot': 'false'
+      sync: disabled
+      redundant_metadata: most
+      logbias: throughput
+      atime: 'off'
+      setuid: 'off'
+      devices: 'off'
   command:
     argv:
       - zfs
       - get
       - -H
       - -p
+      - -s
+      - local
       - -o
-      - source,value
-      - mountpoint
+      - property,value
+      - "{{ scratch_expected_properties.keys() | join(',') }}"
       - "{{ zfs_dozer_filesystem }}/scratch"
-  register: scratch_verify_mountpoint
+  register: scratch_verify_properties
   changed_when: false
   failed_when: >-
-    (scratch_verify_mountpoint.stdout | zfs_source_value).source != 'local'
-    or (scratch_verify_mountpoint.stdout | zfs_source_value).value != '/mnt/scratch'
+    (scratch_verify_properties.stdout_lines | sort)
+    != (scratch_expected_properties.items() | map('join', '\t') | sort)
   become: true
 
 - name: _verify | Dataset mount contract passes
@@ -55,37 +68,6 @@
   failed_when: >-
     'nosuid' not in scratch_verify_options.stdout
     or 'nodev' not in scratch_verify_options.stdout
-  become: true
-
-- name: _verify | Extra property set locally with expected value
-  vars:
-    scratch_expected_properties:
-      'autobackup:bak': 'false'
-      'com.sun:auto-snapshot': 'false'
-      sync: disabled
-      redundant_metadata: most
-      logbias: throughput
-      atime: 'off'
-      setuid: 'off'
-      devices: 'off'
-  command:
-    argv:
-      - zfs
-      - get
-      - -H
-      - -p
-      - -o
-      - source,value
-      - "{{ item.key }}"
-      - "{{ zfs_dozer_filesystem }}/scratch"
-  register: scratch_verify_prop
-  changed_when: false
-  failed_when: >-
-    (scratch_verify_prop.stdout | zfs_source_value).source != 'local'
-    or (scratch_verify_prop.stdout | zfs_source_value).value != item.value
-  loop: "{{ scratch_expected_properties | dict2items }}"
-  loop_control:
-    label: "{{ zfs_dozer_filesystem }}/scratch {{ item.key }}={{ item.value }}"
   become: true
 
 - name: _verify | Mount status unit is active
