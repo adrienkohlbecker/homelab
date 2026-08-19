@@ -133,9 +133,11 @@
 # (today: lab). Uses a Match User block so only the operator user gets it;
 # other accounts are unaffected even when they SSH into the same host.
 - name: Configure sshd — X11 forwarding for {{ operator_user }}
-  template:
-    src: 10-x11-forwarding.conf.j2
+  copy:
     dest: /etc/ssh/sshd_config.d/10-x11-forwarding.conf
+    content: |
+      Match User {{ operator_user }}
+          X11Forwarding yes
     owner: root
     group: root
     mode: "0644"
@@ -183,8 +185,7 @@
     - not (ansible_check_mode and ssh_apt.changed)
     - >-
       ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_dropins_remove.changed
-      or (ssh_sshd_config_x11 is defined and ssh_sshd_config_x11 is changed)
-      or (ssh_sshd_config_x11_remove is defined and ssh_sshd_config_x11_remove is changed)
+      or ssh_sshd_config_x11.changed or ssh_sshd_config_x11_remove.changed
   command: sshd -t
   changed_when: false
   become: true
@@ -199,8 +200,7 @@
     state: >-
       {{ 'reloaded'
          if ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_dropins_remove.changed
-            or (ssh_sshd_config_x11 is defined and ssh_sshd_config_x11 is changed)
-            or (ssh_sshd_config_x11_remove is defined and ssh_sshd_config_x11_remove is changed)
+            or ssh_sshd_config_x11.changed or ssh_sshd_config_x11_remove.changed
          else 'started' }}
   become: true
   tags:
