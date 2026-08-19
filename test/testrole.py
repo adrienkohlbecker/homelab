@@ -246,13 +246,8 @@ async def run_test(
                             async with _phase("cloud-init wait"):
                                 await m.ensure_cloud_init()
 
-                        # Test bootstrap playbook: apt sources and podman
-                        # registries. Routes both through the lab Nexus when
-                        # nexus_url is set
-                        # (group_vars/test.yml), upstream when --upstream-mirrors
-                        # clears it. Skipped when testing a role whose own job
-                        # is to configure these things (see
-                        # _SKIP_BOOTSTRAP_ROLES).
+                        # Configure shared test prerequisites unless that would
+                        # mask the role's own bootstrap contract.
                         if m.role in _SKIP_BOOTSTRAP_ROLES:
                             print_line(f"Skipping bootstrap: {m.role!r} is the role that configures it")
                         else:

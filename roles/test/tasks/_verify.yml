@@ -4,19 +4,16 @@
     - nexus_url | length > 0
     - not test_in_aws
   uri:
-    # nexus_url is a bare host (the registries.conf mirror location, where podman
-    # supplies the scheme); add https:// for a direct probe. validate_certs:false
-    # -- this checks the mirror *serves*, not its cert, on a throwaway VM.
+    # Podman supplies the scheme for the bare mirror location; the direct probe
+    # needs one explicitly. Certificate trust is outside this fixture's contract.
     url: "https://{{ nexus_url }}/repository/docker.io/v2/"
     validate_certs: false
     # Nexus answers the v2 root 200 (anonymous) or 401 (auth-gated); a 404 means
     # the mirror location the registries.conf points at doesn't exist.
     status_code: [ 200, 401 ]
     timeout: 15
-# DNS-over-TLS verification: main.yml forces DoT so every query rides TCP
-# (the qemu SLIRP UDP-drop class of flakes). A stat of the drop-in would be a
-# tautology -- assert the *running* resolver state instead, scoped to the Global
-# Protocols line (driven by resolved.conf.d/) the way roles/resolved does.
+# Assert the running resolver state, not merely the drop-in written by main.yml.
+# Scope it to the Global block controlled by resolved.conf.d.
 - name: _verify | Read resolvectl status
   command: resolvectl status
   register: test_resolvectl
@@ -24,17 +21,13 @@
 
 - name: _verify | DNS-over-TLS is enforced at the configured resolver
   vars:
-    # Everything before the first per-link section: resolved routes queries
-    # to link scopes ahead of the global scope, so a DHCP-supplied per-link
-    # resolver matching anywhere in the full output must not satisfy the
-    # assert -- only the Global block proves the drop-in is authoritative.
+    # Per-link DHCP resolvers must not satisfy the global drop-in contract.
     _test_resolvectl_global: >-
       {{ test_resolvectl.stdout.split('\nLink ') | first }}
     _test_resolvectl_global_protocols: >-
       {{ _test_resolvectl_global.splitlines()
          | select('search', 'Protocols:') | list | first | default('') }}
-    # Same typed list main.yml renders into the drop-in, including the
-    # #dns.fahm.fr SNI suffix so a dropped SNI fails here too.
+    # Preserve the #dns.fahm.fr SNI suffix in the expected resolver value.
     _test_expected_resolvers: "{{ test_dot_servers }}"
   assert:
     that:
@@ -44,15 +37,10 @@
         == (_test_expected_resolvers | length)
     fail_msg: >-
       systemd-resolved isn't enforcing DNS-over-TLS via {{ _test_expected_resolvers | join(', ') }};
-      the 10-test-dns-over-tls.conf drop-in didn't take effect, so queries can fall
-      back to UDP and revive the SLIRP UDP-drop flakes it exists to prevent. Global
-      Protocols line: {{ _test_resolvectl_global_protocols }}
+      the 10-test-dns-over-tls.conf drop-in didn't take effect, so queries can
+      fall back to UDP. Global Protocols line: {{ _test_resolvectl_global_protocols }}
 
-# Functional proof that public resolution actually works end-to-end: the
-# whole reason for the backend-aware resolver. qemu rides the LAN VIP →
-# household AdGuard → DoH upstreams; AWS rides public DoT directly. Retried
-# because a single DoT handshake can lose the first round trip on a cold
-# resolver. wikipedia.org is a neutral name the household filter lists pass.
+# Prove public resolution end-to-end; retry boundedly for a cold DoT handshake.
 - name: _verify | Resolve a public name over the enforced resolver
   command: resolvectl query --cache=no wikipedia.org
   register: test_public_resolve

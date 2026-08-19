@@ -2,8 +2,6 @@
   import_role:
     name: hostname
 
-# Backend-conditional server selection lives in group_vars/test.yml so _verify
-# asserts against the same typed list this drop-in renders.
 - name: Mirrors | Create systemd-resolved configuration directory
   file:
     path: /etc/systemd/resolved.conf.d
