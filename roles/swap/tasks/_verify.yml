@@ -1,7 +1,6 @@
-# Swap role _verify: assert the live swap topology matches what the role
-# configured -- zram active and primary (highest priority), the partition
-# overflow coexisting below it, and swappiness tuned. testrole.py /
-# testall.py only (qemu); never site.yml. See notes/swap_strategy.md.
+# Swap role _verify: assert zram is active and primary, an optional partition
+# coexists below it, and swappiness is tuned. testrole.py / testall.py only
+# (qemu); never site.yml. See notes/swap_strategy.md.
 
 - name: _verify | Read active swap devices with priorities and sizes
   command: swapon --show=NAME,PRIO,SIZE --noheadings --bytes --raw
@@ -13,20 +12,14 @@
 # on the local fixtures ships none). Re-probe here -- _verify is a separate
 # ansible run, so converge's register isn't in scope -- and skip the zram
 # assertions where the module, and therefore the zram swap device, is absent.
-# Run for any swap backend (mirroring main.yml) so the swappiness checks below,
-# which read _swap_verify_zram_module.rc, never hit an undefined .rc on a
-# partition-only host.
 - name: _verify | Probe for the zram kernel module
-  when: (swap_zram | default(none)) is not none or (swap_partition | default(none)) is not none
   command: modinfo -k {{ ansible_kernel }} zram
   changed_when: false
   failed_when: false
   register: _swap_verify_zram_module
 
 - name: _verify | Zram swap active at the configured (primary) priority
-  when:
-    - (swap_zram | default(none)) is not none
-    - _swap_verify_zram_module.rc == 0
+  when: _swap_verify_zram_module.rc == 0
   vars:
     _zram_lines: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | list }}"
   assert:
@@ -44,9 +37,7 @@
 # MemTotal); zram rounds down by a page, so allow a small band.
 # SIZE (field 3, bytes) comes directly from swapon --show --bytes; no slurp needed.
 - name: _verify | Zram device sized per config (capped at RAM)
-  when:
-    - (swap_zram | default(none)) is not none
-    - _swap_verify_zram_module.rc == 0
+  when: _swap_verify_zram_module.rc == 0
   vars:
     _zram_line: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | first | default('') }}"
     _expected_mb: "{{ [(swap_zram.size | human_to_bytes) // 1048576, ansible_memtotal_mb] | min }}"
@@ -62,14 +53,14 @@
   become: true
 
 - name: _verify | Resolve partition device path
-  when: (swap_partition | default(none)) is not none
+  when: swap_partition is defined
   command: readlink -f {{ swap_partition.device }}
   changed_when: false
   become: true
   register: _swap_verify_partition_dev
 
 - name: _verify | Partition swap device is active
-  when: (swap_partition | default(none)) is not none
+  when: swap_partition is defined
   vars:
     _names: "{{ _swap_verify_swapon.stdout_lines | map('split') | map('first') | list }}"
   assert:
@@ -91,7 +82,7 @@
 # avoid racing the resync.)
 - name: _verify | Inspect the swap raid array when swap is on mdadm
   when:
-    - (swap_partition | default(none)) is not none
+    - swap_partition is defined
     - (_swap_verify_partition_dev.stdout | trim).startswith('/dev/md')
   block:
     - name: _verify | Read mdadm detail for the swap array
@@ -112,9 +103,8 @@
 
 - name: _verify | Overflow swap priority is below zram
   when:
-    - (swap_zram | default(none)) is not none
     - _swap_verify_zram_module.rc == 0
-    - (swap_partition | default(none)) is not none
+    - swap_partition is defined
   vars:
     _overflow_lines: "{{ _swap_verify_swapon.stdout_lines | reject('search', 'zram') | list }}"
     _zram_prio: "{{ swap_zram.priority | default(100) | int }}"
@@ -128,18 +118,14 @@
   become: true
 
 - name: _verify | Read vm.swappiness
-  when:
-    - (swap_zram | default(none)) is not none or (swap_partition | default(none)) is not none
-    - _swap_verify_zram_module.rc == 0
+  when: _swap_verify_zram_module.rc == 0
   slurp:
     src: /proc/sys/vm/swappiness
   become: true
   register: _swap_verify_swappiness
 
 - name: _verify | Swappiness tuned to the configured value
-  when:
-    - (swap_zram | default(none)) is not none or (swap_partition | default(none)) is not none
-    - _swap_verify_zram_module.rc == 0
+  when: _swap_verify_zram_module.rc == 0
   assert:
     that:
       - (_swap_verify_swappiness.content | b64decode | trim | int) == (swap_swappiness | int)

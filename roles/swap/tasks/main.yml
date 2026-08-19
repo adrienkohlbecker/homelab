@@ -1,4 +1,4 @@
-# Manage swap. Two independent declarations, each optional:
+# Manage swap. zram is required; a raw-partition overflow device is optional:
 #
 #   swap_partition:
 #     device: /dev/disk/by-uuid/00b9e215-...
@@ -7,8 +7,7 @@
 #   swap_zram:
 #     size: 8G
 #
-# A host can have either, both, or neither -- each backend activates only when
-# its var is set to a non-null value.
+# swap_zram is required. swap_partition activates when its var is defined.
 #
 # Raw partitions are taken as-is — the role never reformats a device
 # that already carries a swap signature, so pre-existing installer
@@ -27,8 +26,8 @@
 - name: Validate swap input schema
   assert:
     that:
-      - (swap_partition | default(none)) is none or swap_partition.device is defined
-      - (swap_zram | default(none)) is none or swap_zram.size is defined
+      - swap_zram is defined and swap_zram.size is defined
+      - swap_partition is not defined or swap_partition.device is defined
     fail_msg: >-
       Missing required keys -- swap_partition needs .device,
       swap_zram needs .size.
@@ -39,7 +38,7 @@
 # Raw-partition swap (no formatting; takes the device as-is)
 #######################################################################
 - name: Verify partition carries a swap signature
-  when: (swap_partition | default(none)) is not none
+  when: swap_partition is defined
   command: blkid -p --usages other -s TYPE -o value {{ swap_partition.device }}
   register: swap_partition_blkid
   changed_when: false
@@ -50,7 +49,7 @@
     - swap
 
 - name: Assert the partition carries a clean swap signature
-  when: (swap_partition | default(none)) is not none
+  when: swap_partition is defined
   assert:
     that: swap_partition_blkid.stdout | default('') == 'swap'
     fail_msg: >-
@@ -64,7 +63,7 @@
     - swap
 
 - name: Add partition swap to /etc/fstab
-  when: (swap_partition | default(none)) is not none
+  when: swap_partition is defined
   mount:
     path: none
     src: "{{ swap_partition.device }}"
@@ -80,7 +79,7 @@
     - swap
 
 - name: Activate partition swap
-  when: (swap_partition | default(none)) is not none
+  when: swap_partition is defined
   vars:
     _opts: "{{ swap_partition.opts | default('defaults,nofail,discard=once,pri=10') }}"
     _pri: "{{ _opts | regex_search('(?:^|,)pri=(\\d+)', '\\1') | first | default('10') }}"
@@ -119,11 +118,7 @@
 # the arm64 fixtures that physically lack it. check_mode:false so the probe runs
 # (and registers) during the harness's dry-run pass too.
 #
-# Run the probe for *any* swap backend, not just zram: the swappiness task below
-# also reads swap_zram_module.rc, so a partition-only host (no swap_zram)
-# would otherwise hit an undefined .rc on the skipped register.
 - name: Probe for the zram kernel module
-  when: (swap_zram | default(none)) is not none or (swap_partition | default(none)) is not none
   command: modinfo -k {{ ansible_kernel }} zram
   changed_when: false
   failed_when: false
@@ -134,9 +129,7 @@
     - swap
 
 - name: Install systemd-zram-generator
-  when:
-    - (swap_zram | default(none)) is not none
-    - swap_zram_module.rc == 0
+  when: swap_zram_module.rc == 0
   apt:
     name: systemd-zram-generator
     state: present
@@ -147,9 +140,7 @@
     - swap
 
 - name: Configure zram swap device
-  when:
-    - (swap_zram | default(none)) is not none
-    - swap_zram_module.rc == 0
+  when: swap_zram_module.rc == 0
   template:
     src: zram-generator.conf.j2
     dest: /etc/systemd/zram-generator.conf
@@ -174,7 +165,6 @@
 # yet and the systemd module would fail looking for it.
 - name: Activate zram swap device
   when:
-    - (swap_zram | default(none)) is not none
     - swap_zram_module.rc == 0
     - not (ansible_check_mode and (swap_zram_installed.changed or swap_zram_conf.changed))
   systemd:
@@ -185,14 +175,10 @@
   tags:
     - swap
 
-# vm.swappiness default 100 suits the zram-primary hosts (paging into
-# compressed RAM is cheap, unlike the disk-tuned kernel default of 60). Runs
-# for any swap-carrying host so swap_swappiness isn't silently inert on a
-# partition-only host (such a host should set a lower value explicitly).
+# vm.swappiness default 100 suits zram-primary hosts: paging into compressed
+# RAM is cheap, unlike the disk-tuned kernel default of 60.
 - name: Tune vm.swappiness
-  when:
-    - (swap_zram | default(none)) is not none or (swap_partition | default(none)) is not none
-    - swap_zram_module.rc == 0
+  when: swap_zram_module.rc == 0
   ansible.posix.sysctl:
     name: vm.swappiness
     value: "{{ swap_swappiness | string }}"
@@ -209,7 +195,6 @@
 # costs a decompression cycle. Setting to 0 (1 page per fault) removes that
 # waste on zram-primary hosts.
 - name: Tune vm.page-cluster for zram hosts
-  when: (swap_zram | default(none)) is not none
   ansible.posix.sysctl:
     name: vm.page-cluster
     value: "0"

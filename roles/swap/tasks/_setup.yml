@@ -5,13 +5,13 @@
 # Clean the packer entry so the role exercises its fstab-write + swapon path
 # cleanly.
 - name: _setup | Deactivate packer-baked swap
-  when: (swap_partition | default(none)) is not none
+  when: swap_partition is defined
   command: swapoff -a
   changed_when: false
   become: true
 
 - name: _setup | Remove packer-baked swap fstab entry
-  when: (swap_partition | default(none)) is not none
+  when: swap_partition is defined
   lineinfile:
     path: /etc/fstab
     regexp: '\sswap\s'
