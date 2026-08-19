@@ -2,7 +2,7 @@
 # below), the rendered config exposes the configured share with its access
 # restriction, an authenticated client can reach it, and an anonymous client
 # cannot. The smbtest share (host_vars/box.yml, valid users = the login user,
-# fruit:time machine = true) is the vehicle.
+# fruit:time machine = yes) is the vehicle.
 
 # nmbd is masked (NetBIOS retired) -- prove it can't be started, not merely
 # that it's stopped. A masked unit reports `masked` and `is-active` is non-zero.
