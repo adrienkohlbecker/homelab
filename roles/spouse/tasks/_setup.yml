@@ -24,10 +24,6 @@
   copy:
     content: |
       [global]
-         workgroup = WORKGROUP
-         security = user
-         passdb backend = tdbsam
-         map to guest = never
          logging = systemd
 
       [homes]
