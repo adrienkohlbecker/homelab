@@ -1,7 +1,5 @@
-# Negative probe first: confirms /api/v3/* enforces the apikey. Pairs with the
-# auth'd probe below -- together they prove the apikey we templated is both
-# required by sonarr and the one it accepted. Without this, a future bug that
-# disabled apikey enforcement would let the auth'd probe pass on any key.
+# Together the 401 and authenticated probes prove the templated API key is
+# required and active.
 - name: _verify | Sonarr /api/v3/system/status rejects unauth'd requests
   uri:
     url: http://127.0.0.1:{{ service_ports.sonarr }}/api/v3/system/status
@@ -11,8 +9,6 @@
   delay: 2
   until: _sonarr_http_unauth.status == 401
 
-# Authenticated probe -- proves the apikey we templated into config.xml is
-# the one the running container accepted, not just one we wrote to disk.
 # Header form keeps the key out of journald.
 - name: _verify | Sonarr answers /api/v3/system/status with our apikey
   uri:
@@ -28,20 +24,9 @@
     (_sonarr_http.json | default({})) | length == 0
     or (_sonarr_http.json | default({})).authentication | default('') != "external"
 
-# The vhost is `auth: required`, so the real browser access pattern is an
-# Authelia-gated UI -- the API path above is reached intra-stack via
-# sonarr.dns.podman with X-Api-Key, bypassing nginx entirely. With the
-# stub in gate mode (see _setup.yml), assert a cookieless GET / lands on
-# nginx's error_page 401 =302 redirect to the portal. This is the only
-# probe that fails if `auth: required` is dropped from nginx_site_args
-# (the loopback apikey probes stay green without it). Asserting the 302
-# returnUrl (rd=) echoes sonarr's own URL proves SNI routed to sonarr's
-# server_name (not the default vhost) and the request URI survived.
-#
-# Map the vhost FQDN to loopback so SNI matches the served certificate.
-# Probing https://localhost with a Host: header leaves SNI=localhost, which
-# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
-# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+# Probe the Authelia-gated browser path separately from direct API access.
+# Resolve the FQDN to loopback because a Host header on https://localhost
+# leaves SNI=localhost, which OpenSSL rejects for this vhost.
 - name: _verify | Map the sonarr vhost FQDN to loopback for SNI-correct probing
   lineinfile:
     path: /etc/hosts
@@ -58,13 +43,8 @@
   register: _sonarr_nginx_gate
   failed_when: _sonarr_nginx_gate is not authelia_redirects_to('sonarr', inventory_hostname, domain)
 
-# Media-network join probe. Intra-stack peers (bazarr, seerr, sabnzbd) reach
-# sonarr at sonarr.dns.podman:8989 with X-Api-Key, bypassing nginx entirely.
-# The loopback/nginx probes above don't exercise that path -- a dropped
-# `--network media` strands it while leaving them green. Probe from inside the
-# running container: aardvark only answers *.dns.podman when the container
-# actually joined `media`, so a keyless GET returning 401 proves DNS resolution
-# + apikey enforcement over that path.
+# Intra-stack peers use sonarr.dns.podman; a 401 from inside the container
+# proves media-network DNS and API-key enforcement on that path.
 - name: _verify | Sonarr is reachable intra-stack at sonarr.dns.podman over the media network
   command: >-
     podman exec sonarr
@@ -77,10 +57,7 @@
   delay: 2
   until: _sonarr_dns_podman.rc == 0 and _sonarr_dns_podman.stdout == "401"
 
-# Scratch is the pipeline bridge between the download client (sabnzbd) and
-# sonarr's import process. A dropped --volume line strands imports silently --
-# a wife-acceptance-factor failure that only surfaces when new episodes stop
-# appearing. The loopback/API probes above stay green without it.
+# SABnzbd and Sonarr share this category path; HTTP health does not exercise imports.
 - name: _verify | Scratch volume is mounted inside the container
   command: >-
     podman exec sonarr
@@ -88,14 +65,8 @@
   become: true
   changed_when: false
 
-# The sqlite_dataset symlink + matching --volume is the role's whole reason
-# for its non-obvious structure: it lands the DBs (and their -wal/-shm
-# siblings) on the 4K-recordsize sqlite dataset. The HTTP probes above pass
-# whether or not that routing holds -- a dropped symlink or --volume strands
-# the DB at /config inside the container and nothing here would notice.
-# Assert it functionally: the on-disk paths are symlinks onto the dataset,
-# and sonarr wrote real schema through them (the API answering 200 above
-# means migration finished, so the dataset-side files are populated by now).
+# Verify both the DB symlinks and populated targets because HTTP health does
+# not exercise routing onto the 4K-recordsize SQLite dataset.
 - name: _verify | Stat the sonarr DB paths
   stat:
     path: "/mnt/services/sonarr/{{ item }}"
@@ -136,13 +107,8 @@
   loop_control:
     label: "{{ item.item }}"
 
-# config.xml is the role's other fragile contract: sonarr rewrites it on
-# every shutdown, so config.xml.j2's element order + casing must match
-# sonarr's own writeback byte-for-byte or the next converge drifts and
-# restart-churns forever. The idempotence pass can't catch this -- the
-# harness never restarts sonarr between converges, so sonarr never rewrites
-# the file. Force a clean shutdown+restart here, then assert our template
-# still matches what sonarr wrote back.
+# Sonarr rewrites config.xml only on shutdown, beyond the idempotence pass;
+# restart and compare bytes to prevent element-order drift and restart churn.
 - name: _verify | Restart sonarr to force a config.xml writeback
   systemd:
     name: sonarr
