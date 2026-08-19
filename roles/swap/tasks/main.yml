@@ -68,11 +68,33 @@
     - swap
 
 # zram-backed swap (primary, high-priority)
-# Probe during check mode so an unsupported kernel fails before activation.
+# Minimal cloud images omit optional kernel modules; full images already carry
+# zram and skip the extra package.
+- name: Probe for the zram kernel module
+  command: modinfo -k {{ ansible_kernel }} zram
+  register: swap_zram_module
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - swap
+
+- name: Install optional kernel modules when zram is absent
+  when: swap_zram_module.rc != 0
+  apt:
+    name: linux-modules-extra-{{ ansible_kernel }}
+    state: present
+    cache_valid_time: 3600
+  register: swap_zram_modules_installed
+  become: true
+  tags:
+    - swap
+
 - name: Verify the zram kernel module is available
+  when: not (ansible_check_mode and (swap_zram_modules_installed.changed | default(false)))
   command: modinfo -k {{ ansible_kernel }} zram
   changed_when: false
-  check_mode: false
   become: true
   tags:
     - swap

@@ -26,8 +26,8 @@ netplan:
       dhcp4: true
       dhcp6: false
 
-# Keep the required input defined for explicit swap runs; minimal is outside the
-# role matrix because its cloud kernel lacks the required zram module.
+# The role installs the optional kernel-module package omitted by this trimmed
+# cloud image, making minimal the zram-only fixture.
 swap_zram_size: 2G
 
 ssh_public_keys: |
