@@ -14,8 +14,6 @@
 # podman socket is root-owned (0660) and the proxy needs read access.
 [Unit]
 Description=socket_proxy
-After=network-online.target
-Wants=network-online.target
 After=podman.socket
 Requires=podman.socket
 StartLimitIntervalSec=600
