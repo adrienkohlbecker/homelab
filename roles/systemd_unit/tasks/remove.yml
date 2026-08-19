@@ -107,7 +107,7 @@
 # `<name>_<type>_result` regardless of which operation just ran.
 - name: remove | Record removal result for {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}
   set_fact:
-    "{{ _systemd_unit_name | ansible_var_key }}_result": >-
-      {{ systemd_unit_file
-         | combine({'changed': ((_systemd_unit_stop.changed | default(false))
-                                or systemd_unit_file.changed) | bool}) }}
+    "{{ _systemd_unit_name | ansible_var_key }}_result":
+      changed: >-
+        {{ ((_systemd_unit_stop.changed | default(false))
+            or systemd_unit_file.changed) | bool }}

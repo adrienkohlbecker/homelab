@@ -150,7 +150,8 @@
     # task name uses the import-time caller var; the body can use resolved facts.
     - name: install | Record install result for {{ systemd_unit_args.src }}
       set_fact:
-        "{{ _systemd_unit_name | ansible_var_key }}_result": "{{ systemd_unit_file }}"
+        "{{ _systemd_unit_name | ansible_var_key }}_result":
+          changed: "{{ systemd_unit_file.changed }}"
 
   # Validation needs the production path. Restore the backup or delete a new
   # file on failure so one broken unit cannot poison daemon-reload host-wide.
