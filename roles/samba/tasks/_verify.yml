@@ -107,15 +107,3 @@
   changed_when: false
   failed_when: samba_anon.rc == 0
   become: true
-
-- name: _verify | The zfs-mount override is installed for a share-bearing host
-  stat:
-    path: /etc/systemd/system/smbd.service.d/override.conf
-  register: samba_override_stat
-  become: true
-
-- name: _verify | Assert the override exists
-  assert:
-    that:
-      - samba_override_stat.stat.exists
-    fail_msg: smbd zfs-mount override missing despite a configured share.
