@@ -93,33 +93,6 @@
     systemd_unit_args:
       src: smbd_zfs_mounts_override.conf.j2
       for: smbd.service
-      condition: "{{ samba_shares | length > 0 }}"
-  tags:
-    - samba
-
-- name: Remove stale smbd overrides
-  when: item.condition
-  file:
-    path: "{{ item.path }}"
-    state: absent
-  loop:
-    # A host that drops all shares must shed the canonical override too.
-    - path: /etc/systemd/system/smbd.service.d/override.conf
-      condition: "{{ samba_shares | length == 0 }}"
-    - path: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
-      condition: true
-  loop_control:
-    label: "{{ item.path }}"
-  register: samba_smbd_overrides_removed
-  become: true
-  tags:
-    - samba
-
-- name: Reload systemd after smbd override removal
-  when: samba_smbd_overrides_removed.changed
-  systemd:
-    daemon_reload: true
-  become: true
   tags:
     - samba
 
@@ -130,7 +103,6 @@
 - name: Re-enable smbd to pick up new WantedBy targets  # noqa: command-instead-of-module
   when:
     - not (ansible_check_mode and samba_apt.changed)
-    - samba_shares | length > 0
     - smbd_service_d_override_conf_result.changed
   command: systemctl reenable smbd
   changed_when: true
