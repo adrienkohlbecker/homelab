@@ -1,4 +1,20 @@
 ---
+- name: Remove retired smartmontools defaults file
+  file:
+    path: /etc/default/smartmontools
+    state: absent
+  become: true
+  tags:
+    - retired_services
+
+- name: Remove retired smartmontools defaults diversion
+  community.general.dpkg_divert:
+    path: /etc/default/smartmontools
+    state: absent
+  become: true
+  tags:
+    - retired_services
+
 # Speedtest was stateless, so retirement removes its account along with every
 # runnable artifact. Its numeric identity remains reserved in legacy_service_ids.
 - name: Retire Speedtest service

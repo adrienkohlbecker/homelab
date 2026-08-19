@@ -1,4 +1,18 @@
 ---
+- name: _verify | Retired smartmontools defaults file is absent
+  stat:
+    path: /etc/default/smartmontools
+  register: retired_services_smartmontools_defaults
+  failed_when: retired_services_smartmontools_defaults.stat.exists
+  become: true
+
+- name: _verify | Retired smartmontools defaults diversion is absent  # noqa: command-instead-of-module
+  command: dpkg-divert --listpackage /etc/default/smartmontools
+  register: retired_services_smartmontools_diversion
+  changed_when: false
+  failed_when: retired_services_smartmontools_diversion.stdout | trim | length > 0
+  become: true
+
 - name: _verify | Retained Plex and Tautulli data markers remain
   stat:
     path: "{{ item }}/.retired_services_keep"

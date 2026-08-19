@@ -54,18 +54,6 @@
       - "'diversion of /etc/smartd.conf' in _smart_smartd_divert.stdout"
     fail_msg: "dpkg-divert not active for /etc/smartd.conf: {{ _smart_smartd_divert.stdout }}"
 
-- name: _verify | Assert /etc/default/smartmontools dpkg divert is active  # noqa: command-instead-of-module
-  command: dpkg-divert --list /etc/default/smartmontools
-  register: _smart_default_divert
-  changed_when: false
-  become: true
-
-- name: _verify | Assert default divert entry exists
-  assert:
-    that:
-      - "'diversion of /etc/default/smartmontools' in _smart_default_divert.stdout"
-    fail_msg: "dpkg-divert not active for /etc/default/smartmontools: {{ _smart_default_divert.stdout }}"
-
 - name: _verify | Deploy smart netdata collector config
   import_tasks: netdata.yml
 

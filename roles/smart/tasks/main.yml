@@ -43,29 +43,6 @@
   tags:
     - smart
 
-- name: Divert default smartmontools
-  community.general.dpkg_divert:
-    path: /etc/default/smartmontools
-  when: not (ansible_check_mode and smart_apt.changed)
-  become: true
-  tags:
-    - smart
-
-- name: Configure smartmontools
-  copy:
-    src: smartmontools
-    dest: /etc/default/smartmontools
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: sh -n %s
-  when: not (ansible_check_mode and smart_apt.changed)
-  register: smart_smartmontools_cfg
-  become: true
-  tags:
-    - smart
-
 - name: Install smart fluent-bit extension
   import_role:
     name: fluentbit
@@ -82,7 +59,7 @@
     name: smartmontools.service
     enabled: true
     state: >-
-      {{ 'restarted' if smart_apt.changed or smart_smartmontools_cfg.changed
+      {{ 'restarted' if smart_apt.changed
          else 'reloaded' if smart_smartd_cfg.changed
          else 'started' }}
   register: smart_smartmontools_started

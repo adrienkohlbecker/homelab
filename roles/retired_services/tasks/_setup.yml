@@ -1,4 +1,18 @@
 ---
+- name: _setup | Register legacy smartmontools defaults diversion
+  community.general.dpkg_divert:
+    path: /etc/default/smartmontools
+  become: true
+
+- name: _setup | Create legacy smartmontools defaults fixture
+  copy:
+    content: "smartd_opts=\"--interval=1800\"\n"
+    dest: /etc/default/smartmontools
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: _setup | Create retired Speedtest account
   import_role:
     name: service_user
