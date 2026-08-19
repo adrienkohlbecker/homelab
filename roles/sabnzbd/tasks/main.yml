@@ -72,12 +72,12 @@
 # SQLite resolves through to the 4K sqlite dataset before computing WAL/SHM
 # placement.
 #
-# force: true skips target pre-creation and plants a dangling link: sabnzbd
-# creates history1.db *through* it on first start, writing the real DB at the
-# sqlite-dataset target. An empty target is unsafe because sabnzbd treats a
-# 0-byte history1.db as needing reinitialization and rewrites it via
+# create_target: false skips target pre-creation and plants a dangling link:
+# sabnzbd creates history1.db *through* it on first start, writing the real DB
+# at the sqlite-dataset target. An empty target is unsafe because sabnzbd
+# treats a 0-byte history1.db as needing reinitialization and rewrites it via
 # temp+rename, replacing the symlink with a real file -- breaking both the 4K
-# placement and idempotence. (roles/kuma uses force: true for the same reason.)
+# placement and idempotence. (roles/kuma skips creation for the same reason.)
 - name: Place sabnzbd history DB on the sqlite dataset
   import_role:
     name: sqlite_dataset
@@ -85,7 +85,7 @@
   vars:
     sqlite_dataset_args:
       user: "{{ sabnzbd_user }}"
-      force: true
+      create_target: false
       databases:
         - admin/history1.db
   tags:

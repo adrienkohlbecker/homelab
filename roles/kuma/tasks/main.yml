@@ -23,11 +23,11 @@
 # symlink it onto the dedicated 4K-recordsize sqlite dataset so the WAL
 # workload lands there.
 #
-# force: true is load-bearing: kuma must create kuma.db itself
+# create_target: false is load-bearing: kuma must create kuma.db itself
 # on first boot -- it runs the schema bootstrap only when the file is ABSENT.
 # The default mode would plant an empty kuma.db that kuma treats as an
 # already-initialised DB, skips the bootstrap, and dies on `no such table:
-# setting`. So plant the dangling symlink with force: true and let kuma create
+# setting`. So plant the dangling symlink without a target and let kuma create
 # the real DB through it. Jellyfin uses the default pre-creation because it
 # migrates an empty DB cleanly; kuma cannot.
 - name: Place kuma SQLite DB on the sqlite dataset
@@ -37,7 +37,7 @@
   vars:
     sqlite_dataset_args:
       user: "{{ kuma_user }}"
-      force: true
+      create_target: false
       databases:
         - kuma.db
   tags:

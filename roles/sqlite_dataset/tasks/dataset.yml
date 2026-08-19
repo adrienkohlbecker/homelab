@@ -1,13 +1,13 @@
 # Create /mnt/services/sqlite/<name>/ and symlink DBs onto it.
 #
 # Caller passes one dict `sqlite_dataset_args`:
-#   user       required service_user result; owns the directory and target files
-#   databases  required paths relative to /mnt/services/<name>; parent dirs
-#              must already exist
-#   force      optional bool; create dangling links instead of empty 0640 targets
+#   user           required service_user result; owns the directory and targets
+#   databases      required paths relative to /mnt/services/<name>; parent dirs
+#                  must already exist
+#   create_target  optional bool, default true; create empty 0640 target files
 #
-# Both link modes refuse to replace a real file at a dest. The dict form keeps
-# arguments from leaking between import_role calls.
+# The helper always refuses to replace a real file at a destination. The dict
+# form keeps arguments from leaking between import_role calls.
 
 - name: "Validate inputs for {{ sqlite_dataset_args.user.name | default('<unset>') }}"
   assert:
@@ -23,6 +23,7 @@
       - sqlite_dataset_args.user.config_group is defined
       - sqlite_dataset_args.databases is defined
       - sqlite_dataset_args.databases | default([]) | length > 0
+      - sqlite_dataset_args.create_target is not defined or sqlite_dataset_args.create_target is boolean
       - >-
         sqlite_dataset_args.databases | default([])
         | select('match', '^[A-Za-z0-9_-][A-Za-z0-9_.-]*(/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$')
@@ -48,12 +49,30 @@
     mode: "0750"
   become: true
 
+# Check every destination before creating any target, so one unsafe database
+# cannot leave another database half-migrated.
+- name: >-
+    Refuse real files at database destinations; before re-running, move them
+    under {{ '/mnt/services/sqlite/' ~ sqlite_dataset_args.user.name ~ '/' }}
+  stat:
+    path: "/mnt/services/{{ sqlite_dataset_args.user.name }}/{{ sqlite_dataset_database }}"
+    follow: false
+  become: true
+  register: sqlite_dataset_destination
+  failed_when:
+    - sqlite_dataset_destination.stat.exists
+    - not sqlite_dataset_destination.stat.islnk
+  loop: "{{ sqlite_dataset_args.databases }}"
+  loop_control:
+    label: "{{ sqlite_dataset_database }}"
+    loop_var: sqlite_dataset_database
+
 # state=touch with preserve timestamps is idempotent: creates the file if
 # absent, leaves an existing DB untouched (no truncation, no mtime bump).
 - name: Pre-create SQLite DB src files for {{ sqlite_dataset_args.user.name }}
   when:
     - not ansible_check_mode or sqlite_dataset_args.user.uid is defined
-    - not (sqlite_dataset_args.force | default(false) | bool)
+    - sqlite_dataset_args.create_target | default(true) | bool
   file:
     path: "/mnt/services/sqlite/{{ sqlite_dataset_args.user.name }}/{{ sqlite_dataset_database | basename }}"
     state: touch
@@ -68,27 +87,6 @@
     label: "{{ sqlite_dataset_database }}"
     loop_var: sqlite_dataset_database
 
-# force relaxes only the dangling-target refusal. Fail the stat task when a
-# real file is already at a dest so force can never silently replace it.
-- name: >-
-    Refuse real files at force destinations; before re-running, move them under
-    {{ '/mnt/services/sqlite/' ~ sqlite_dataset_args.user.name ~ '/' }}
-  when:
-    - not ansible_check_mode or sqlite_dataset_args.user.uid is defined
-    - sqlite_dataset_args.force | default(false) | bool
-  stat:
-    path: "/mnt/services/{{ sqlite_dataset_args.user.name }}/{{ sqlite_dataset_database }}"
-    follow: false
-  become: true
-  register: sqlite_dataset_force_stat
-  failed_when:
-    - sqlite_dataset_force_stat.stat.exists
-    - not sqlite_dataset_force_stat.stat.islnk
-  loop: "{{ sqlite_dataset_args.databases }}"
-  loop_control:
-    label: "{{ sqlite_dataset_database }}"
-    loop_var: sqlite_dataset_database
-
 - name: Symlink DBs onto sqlite dataset for {{ sqlite_dataset_args.user.name }}
   when: not ansible_check_mode or sqlite_dataset_args.user.uid is defined
   file:
@@ -96,7 +94,7 @@
     dest: "/mnt/services/{{ sqlite_dataset_args.user.name }}/{{ sqlite_dataset_database }}"
     state: link
     follow: false
-    force: "{{ sqlite_dataset_args.force | default(false) | bool }}"
+    force: true
   become: true
   loop: "{{ sqlite_dataset_args.databases }}"
   loop_control:
