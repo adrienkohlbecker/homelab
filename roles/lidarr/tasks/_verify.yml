@@ -20,7 +20,6 @@
     headers:
       X-Api-Key: "{{ lidarr_api_key }}"
     status_code: 200
-    return_content: true
   register: _lidarr_http
   retries: 30
   delay: 2

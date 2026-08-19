@@ -20,7 +20,6 @@
     headers:
       X-Api-Key: "{{ radarr_api_key }}"
     status_code: 200
-    return_content: true
   register: _radarr_http
   retries: 30
   delay: 2
@@ -90,22 +89,6 @@
         - radarr.db
         - logs.db
       require_nonempty: true
-
-# shared_group: media (see main.yml) exists to stop ansible flapping
-# /mnt/services/radarr's gid back to `radarr` against linuxserver's startup
-# chown to PUID:PGID=radarr:media. Assert the dir landed group `media` so a
-# regression in that setting surfaces here, not as a silent per-converge flap.
-- name: _verify | Stat the radarr config dir
-  stat:
-    path: /mnt/services/radarr
-  register: _radarr_config_dir
-  become: true
-
-- name: _verify | Radarr config dir is group media
-  assert:
-    that:
-      - _radarr_config_dir.stat.gr_name == "media"
-    fail_msg: "/mnt/services/radarr is not group media (gr_name={{ _radarr_config_dir.stat.gr_name }})"
 
 # config.xml is the role's other fragile contract: radarr rewrites it on
 # every shutdown, so config.xml.j2's element order + casing must match

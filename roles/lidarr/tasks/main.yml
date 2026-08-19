@@ -1,7 +1,6 @@
 - name: Assert lidarr_api_key is provided
   assert:
     that:
-      - lidarr_api_key is defined
       - (lidarr_api_key | default('')) | length > 0
     fail_msg: >-
       lidarr_api_key is required (vaulted in group_vars/{prod,test}.yml). Without it
