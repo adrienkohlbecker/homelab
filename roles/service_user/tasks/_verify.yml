@@ -69,7 +69,6 @@
           home: /tmp/service-user-test-hyphen
           createhome: true
           shell: /bin/bash
-          config_dir_mode: "0700"
 
     - name: _verify | Sanitized fact key is exposed with a numeric gid
       assert:
@@ -95,7 +94,7 @@
         path: /tmp/service-user-test-hyphen
       register: _service_user_hyphen_home
 
-    - name: _verify | Config dir honors shared_group + config_dir_mode
+    - name: _verify | Config dir honors shared_group
       stat:
         path: /mnt/services/service-user-test-hyphen
       register: _service_user_hyphen_dir
@@ -119,7 +118,6 @@
           - _service_user_hyphen_home.stat.gr_name == 'service-user-test-hyphen'
           - _service_user_hyphen_dir.stat.exists
           - _service_user_hyphen_dir.stat.gr_name == 'service_user_test_grp'
-          - _service_user_hyphen_dir.stat.mode == '0700'
 
   always:
     - name: _verify | Tear down test users

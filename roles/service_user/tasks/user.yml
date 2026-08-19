@@ -13,11 +13,6 @@
 #   config_dir        optional bool, default true; false skips creating and
 #                     owning /mnt/services/<name> -- the caller creates any
 #                     state dirs it needs itself.
-#   config_dir_mode   optional, default "0750"; /mnt/services/<name> holds
-#                     service state (configs, DBs, secrets), so it is
-#                     owner+group only by default. Loosen to "0755" when a
-#                     co-tenant needs world traversal, or tighten to "0700"
-#                     when secret-bearing state must stay owner-only.
 #   id                optional test override; production callers resolve their
 #                     required uid/gid from static_service_ids by name.
 #
@@ -81,7 +76,6 @@
       home: "{{ service_user_args.home | default('/nonexistent') }}"
       config_dir: "{{ service_user_args.config_dir | default(true) }}"
       config_dir_group: "{{ service_user_args.shared_group | default(service_user_args.name) }}"
-      config_dir_mode: "{{ service_user_args.config_dir_mode | default('0750') }}"
 
 - name: "Add group {{ service_user_args.name }}"
   group:
@@ -143,5 +137,5 @@
     state: directory
     owner: "{{ service_user_resolved.name }}"
     group: "{{ service_user_resolved.config_dir_group }}"
-    mode: "{{ service_user_resolved.config_dir_mode }}"
+    mode: "0750"
   become: true
