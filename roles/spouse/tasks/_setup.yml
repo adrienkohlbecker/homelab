@@ -27,11 +27,7 @@
          logging = systemd
 
       [homes]
-         writeable = yes
-         browseable = no
          valid users = %S
-         create mask = 0700
-         directory mask = 0700
     dest: /etc/samba/smb.conf
     owner: root
     group: root
