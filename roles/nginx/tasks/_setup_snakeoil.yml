@@ -1,8 +1,8 @@
 # Lay the Debian snakeoil keypair at the letsencrypt paths nginx.conf.j2
 # references, so the nginx role can validate its config and start in tests
 # without a real certbot-issued cert. Test-only scaffolding (prod issues real
-# certs via certbot): both the nginx role's own _setup and the `test` role's
-# nginx fixture call this, so the placement lives in one spot.
+# certs via certbot): both the nginx role's own _setup and its shared test
+# fixture call this, so the placement lives in one spot.
 #
 # Inputs (single dict, replaced wholesale per import):
 #   nginx_snakeoil_args.fqdn          host FQDN whose live/<fqdn>/ dir to fill.
@@ -12,7 +12,7 @@
 #       than a stat tautology: once converge drops www-data from ssl-cert, a
 #       www-data worker can neither traverse live/ nor read the key, so any HTTPS
 #       probe that still succeeds proves the master loaded the cert as root and
-#       shared the context. The test-role fixture doesn't exercise that removal,
+#       shared the context. The shared fixture doesn't exercise that removal,
 #       so it leaves the default-perms path.
 # In the harness check-mode pass ssl-cert is merely *reported* as
 # would-be-installed, so the source files aren't really on disk -- stat the

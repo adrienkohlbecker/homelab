@@ -1,8 +1,3 @@
-# `testrole.py test` exercises both fixtures end-to-end: the mirrors
-# fixture is applied by the harness's pre-role mirrors playbook
-# (test/playbooks/_mirrors.yml) before site.yml runs; the nginx fixture
-# (snakeoil certs + roles/nginx tasks_from: install) is imported here
-# so the role-under-test pass and the idempotence rerun cover it too.
-# _verify.yml asserts state for both.
-- name: Configure nginx test fixture
-  import_tasks: nginx.yml
+# Operationally empty. The harness applies mirrors.yml as its pre-role
+# bootstrap, and testrole.py test invokes _verify.yml against that live state.
+# Service-specific fixtures live with their owning roles.

@@ -1,0 +1,56 @@
+# Test-only stand-in for Authelia's /api/authz/auth-request endpoint. It lets
+# nginx_site auth contracts run without converging the real Authelia service.
+#
+# Inputs: nginx_test_authelia_stub_args.mode, optional and defaulting to gate:
+#   always_200  admit every request when only the wiring matters
+#   gate        return 401 plus the portal redirect target
+#   authed      admit and return a fixed Remote-User header
+#   basic       admit only the fixed nginxverify:secret credential
+- name: test_authelia_stub | Assert mode is a known value
+  assert:
+    that:
+      - (nginx_test_authelia_stub_args | default({})).mode | default('gate') in ['always_200', 'gate', 'authed', 'basic']
+    fail_msg: >-
+      nginx_test_authelia_stub_args.mode must be one of
+      always_200/gate/authed/basic; got
+      '{{ (nginx_test_authelia_stub_args | default({})).mode | default('gate') }}'.
+
+- name: test_authelia_stub | Resolve caller defaults
+  set_fact:
+    _nginx_test_authelia_stub_mode: >-
+      {{ (nginx_test_authelia_stub_args | default({})).mode | default('gate') }}
+
+- name: test_authelia_stub | Install fixture for /api/authz/auth-request
+  import_tasks: conf_d.yml
+  vars:
+    nginx_conf_d_args:
+      name: test_authelia_stub.conf
+      reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
+      content: |
+        server {
+          listen 127.0.0.1:{{ service_ports.authelia }};
+          server_name _;
+          location = /api/authz/auth-request {
+        {% if _nginx_test_authelia_stub_mode == 'gate' %}
+            # Match Authelia's Location response so nginx's auth_request
+            # redirect returns the browser to the originally requested vhost.
+            add_header Location "https://auth.{{ inventory_hostname }}.{{ domain }}/?rd=$http_x_original_url" always;
+            return 401;
+        {% elif _nginx_test_authelia_stub_mode == 'authed' %}
+            add_header Remote-User "nginxverifyuser" always;
+            return 200 'test_stub_ok';
+        {% elif _nginx_test_authelia_stub_mode == 'basic' %}
+            # Fixed test-only credential: nginxverify:secret.
+            if ($http_authorization != "Basic bmdpbnh2ZXJpZnk6c2VjcmV0") {
+              return 401;
+            }
+            add_header Remote-User "nginxverifyuser" always;
+            return 200 'test_stub_ok';
+        {% else %}
+            return 200 'test_stub_ok';
+        {% endif %}
+          }
+          location / {
+            return 404;
+          }
+        }

@@ -24,11 +24,9 @@
   # The device-proxy sites (marantz, printer, siglent, ups, tubeszb)
   # carry `auth: required`; the auth_request needs something answering
   # on 127.0.0.1:{{ service_ports.authelia }}.
-  import_role:
-    name: test
-    tasks_from: authelia_stub
+  import_tasks: test_authelia_stub.yml
   vars:
-    test_authelia_stub_args:
+    nginx_test_authelia_stub_args:
       mode: always_200
 
 # Simulate a host provisioned before nginx dropped www-data from ssl-cert, so

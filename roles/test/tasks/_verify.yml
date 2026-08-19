@@ -201,16 +201,3 @@
   retries: 5
   delay: 3
   until: test_public_resolve.rc == 0
-
-# Functional liveness over the loopback stub_status drop (roles/nginx install
-# lands it): a plain-HTTP 127.0.0.1 probe sidesteps the SNI trap an
-# https://localhost/ probe hits on OpenSSL 3.x (noble/resolute reject SNI that
-# matches no server_name). The response body proves nginx is serving the
-# configured stub_status endpoint, while the default uri status check requires
-# HTTP 200.
-- name: _verify | Nginx stub_status serves on loopback
-  uri:
-    url: http://127.0.0.1/nginx_status
-    return_content: true
-  register: test_nginx_status
-  failed_when: "'Active connections' not in (test_nginx_status.content | default(''))"

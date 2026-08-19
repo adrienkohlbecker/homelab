@@ -1,7 +1,7 @@
 - name: _setup | Install nginx (for the tail input paths to resolve)
   import_role:
-    name: test
-    tasks_from: nginx
+    name: nginx
+    tasks_from: test_fixture
 
 - name: _setup | Install logrotate
   import_role:

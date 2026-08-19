@@ -165,9 +165,7 @@
 # Re-point the Authelia stub to gate mode (401) so the negative auth path
 # exercises the error_page 401 -> 302 redirect.
 - name: _verify | Install Authelia stub in gate mode
-  import_role:
-    name: test
-    tasks_from: authelia_stub
+  import_tasks: test_authelia_stub.yml
 
 # Bounded readiness probe (fail-fast, per the harness flake contract): the stub
 # re-install reloaded nginx, so poll its endpoint until the gate 401 lands
@@ -330,11 +328,9 @@
 # and location_conf re-emit paths run with auth SUCCEEDING, which the gate-mode
 # tests above can't reach.
 - name: _verify | Switch the Authelia stub to authed mode
-  import_role:
-    name: test
-    tasks_from: authelia_stub
+  import_tasks: test_authelia_stub.yml
   vars:
-    test_authelia_stub_args:
+    nginx_test_authelia_stub_args:
       mode: authed
 
 - name: _verify | Wait for the Authelia authed stub to answer 200
@@ -382,11 +378,9 @@
 # credential. The helper keeps forwarding opt-in so ordinary Token/Bearer apps
 # retain the cookie-only behavior exercised above.
 - name: _verify | Switch the Authelia stub to Basic mode
-  import_role:
-    name: test
-    tasks_from: authelia_stub
+  import_tasks: test_authelia_stub.yml
   vars:
-    test_authelia_stub_args:
+    nginx_test_authelia_stub_args:
       mode: basic
 
 - name: _verify | Configure a Basic-auth service-account vhost
@@ -423,11 +417,9 @@
   delay: 1
 
 - name: _verify | Restore the Authelia stub to authed mode
-  import_role:
-    name: test
-    tasks_from: authelia_stub
+  import_tasks: test_authelia_stub.yml
   vars:
-    test_authelia_stub_args:
+    nginx_test_authelia_stub_args:
       mode: authed
 
 # location_conf: a location-level add_header drops nginx's inherited add_header

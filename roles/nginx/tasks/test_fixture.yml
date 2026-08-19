@@ -1,0 +1,11 @@
+# Lay down snakeoil at the letsencrypt paths nginx.conf.j2 references so the
+# production nginx role can start in tests. The permission hardening used by
+# nginx's own _verify is unnecessary for service-role fixtures.
+- name: test_fixture | Lay down snakeoil certs at letsencrypt paths
+  import_tasks: _setup_snakeoil.yml
+  vars:
+    nginx_snakeoil_args:
+      fqdn: "{{ inventory_hostname }}.{{ domain }}"
+
+- name: test_fixture | Install nginx
+  import_tasks: install.yml

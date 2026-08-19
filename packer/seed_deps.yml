@@ -29,8 +29,8 @@
 
     - name: Install nginx + snakeoil cert at letsencrypt paths
       import_role:
-        name: test
-        tasks_from: nginx
+        name: nginx
+        tasks_from: test_fixture
 
     - name: Install fluent-bit
       import_role:

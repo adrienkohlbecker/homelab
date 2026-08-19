@@ -5,8 +5,8 @@
 
 - name: _setup | Install nginx
   import_role:
-    name: test
-    tasks_from: nginx
+    name: nginx
+    tasks_from: test_fixture
 
 - name: _setup | Install fluent-bit for container-log integration
   import_role:
@@ -19,10 +19,10 @@
 # wiring in nginx without bringing up the full authelia role.
 - name: _setup | Install authelia stub for auth=required tests
   import_role:
-    name: test
-    tasks_from: authelia_stub
+    name: nginx
+    tasks_from: test_authelia_stub
   vars:
-    test_authelia_stub_args:
+    nginx_test_authelia_stub_args:
       mode: always_200
 
 - name: _setup | Setup dependencies
