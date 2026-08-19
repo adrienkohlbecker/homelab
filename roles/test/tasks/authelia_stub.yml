@@ -20,15 +20,12 @@
 #         parent's modern redirect (auth_request_set $redirection_url
 #         $upstream_http_location; error_page 401 =302 $redirection_url) has a
 #         target to 302 to that routes back to the requested vhost.
-#     authed: returns 200 plus a `Remote-User` header (value from `user`),
-#         like Authelia on a successful auth. Lets a test exercise the
+#     authed: returns 200 plus a fixed `Remote-User` header, like Authelia on a
+#         successful auth. Lets a test exercise the
 #         auth-passes path and X-Forwarded-User forwarding to the upstream.
 #     basic: returns 200 only for the fixed `nginxverify:secret` HTTP Basic
 #         credential. Exercises selective Authorization forwarding without a
 #         real Authelia instance.
-#   user  optional, default 'nginxverifyuser'. Remote-User value emitted in
-#         authed mode.
-#
 # Localhost-only. Prod Authelia uses the same port; this fixture is
 # only ever installed by tasks/_setup.yml chains under test/testrole.py,
 # never on prod. The conf.d/ filename is prefixed with `test_` to make
@@ -44,7 +41,6 @@
 - name: authelia_stub | Resolve caller defaults
   set_fact:
     _test_authelia_stub_mode: "{{ (test_authelia_stub_args | default({})).mode | default('gate') }}"
-    _test_authelia_stub_user: "{{ (test_authelia_stub_args | default({})).user | default('nginxverifyuser') }}"
 
 - name: authelia_stub | Install nginx fixture for /api/authz/auth-request
   import_role:
@@ -74,14 +70,14 @@
             # authed: 200 with a Remote-User header, like Authelia on a
             # successful auth, so the parent's auth_request_set $authelia_user
             # populates (exercises X-Forwarded-User forwarding).
-            add_header Remote-User "{{ _test_authelia_stub_user }}" always;
+            add_header Remote-User "nginxverifyuser" always;
             return 200 'test_stub_ok';
         {% elif _test_authelia_stub_mode == 'basic' %}
             # Fixed test-only credential: nginxverify:secret.
             if ($http_authorization != "Basic bmdpbnh2ZXJpZnk6c2VjcmV0") {
               return 401;
             }
-            add_header Remote-User "{{ _test_authelia_stub_user }}" always;
+            add_header Remote-User "nginxverifyuser" always;
             return 200 'test_stub_ok';
         {% else %}
             return 200 'test_stub_ok';
