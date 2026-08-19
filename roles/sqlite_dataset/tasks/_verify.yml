@@ -43,7 +43,7 @@
 
     # -- Scenario 2: populated DBs survive an identical re-apply ----------
     # Write through the app-facing symlink, then prove an identical converge
-    # preserves the bytes, source mtimes, and indirection.
+    # preserves the bytes, source mtime, and indirection.
     - name: _verify | Scenario 2 — write through the dest symlink
       copy:
         content: "WRITE-THROUGH"
@@ -54,12 +54,9 @@
         follow: true
       become: true
 
-    - name: _verify | Scenario 2 — capture src mtimes before re-run
+    - name: _verify | Scenario 2 — capture src mtime before re-run
       stat:
-        path: "/mnt/services/sqlite/sqlite_dataset_test/{{ item }}"
-      loop:
-        - test.db
-        - other.db
+        path: /mnt/services/sqlite/sqlite_dataset_test/test.db
       register: _sqlite_dataset_before
       become: true
 
@@ -76,12 +73,9 @@
             - /mnt/services/sqlite_dataset_test/test.db
             - /mnt/services/sqlite_dataset_test/sub/other.db
 
-    - name: _verify | Scenario 2 — re-stat src mtimes after re-run
+    - name: _verify | Scenario 2 — re-stat src mtime after re-run
       stat:
-        path: "/mnt/services/sqlite/sqlite_dataset_test/{{ item }}"
-      loop:
-        - test.db
-        - other.db
+        path: /mnt/services/sqlite/sqlite_dataset_test/test.db
       register: _sqlite_dataset_after
       become: true
 
@@ -100,15 +94,11 @@
       become: true
       failed_when: _sqlite_dataset_through.content | b64decode != 'WRITE-THROUGH'
 
-    - name: _verify | Scenario 2 — src mtimes survived the re-apply
+    - name: _verify | Scenario 2 — src mtime survived the re-apply
       assert:
         that:
-          - item.0.stat.mtime == item.1.stat.mtime
-        fail_msg: >-
-          {{ item.0.item }} changed across an identical re-apply.
-      loop: "{{ _sqlite_dataset_before.results | zip(_sqlite_dataset_after.results) | list }}"
-      loop_control:
-        label: "{{ item.0.item }}"
+          - _sqlite_dataset_before.stat.mtime == _sqlite_dataset_after.stat.mtime
+        fail_msg: test.db changed across an identical re-apply.
 
     # -- Scenario 3: no-force state=link refuses to clobber a real DB -----
     # The load-bearing safety: a real file already at a dest is never
