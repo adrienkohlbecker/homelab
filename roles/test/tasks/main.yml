@@ -67,7 +67,7 @@
   become: true
 
 - name: Mirrors | Ensure root containers auth dir exists
-  when: test_in_aws | default(false) | bool
+  when: test_in_aws
   file:
     path: /root/.config/containers
     state: directory
@@ -77,7 +77,7 @@
   become: true
 
 - name: Mirrors | Write ECR auth for root podman pulls
-  when: test_in_aws | default(false) | bool
+  when: test_in_aws
   copy:
     dest: /root/.config/containers/auth.json
     mode: "0600"

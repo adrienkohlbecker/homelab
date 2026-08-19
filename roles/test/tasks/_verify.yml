@@ -2,7 +2,7 @@
 - name: _verify | Podman docker.io mirror serves its v2 API
   when:
     - nexus_url | length > 0
-    - not (test_in_aws | default(false) | bool)
+    - not test_in_aws
   uri:
     # nexus_url is a bare host (the registries.conf mirror location, where podman
     # supplies the scheme); add https:// for a direct probe. validate_certs:false
