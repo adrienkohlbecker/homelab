@@ -91,7 +91,7 @@
 
 # openssh_keypair applies its single mode argument to both files. Leave it
 # unset so ssh-keygen creates the pair with its native split modes, then
-# enforce the private key permission independently from the public key below.
+# enforce the private key permission independently.
 - name: Normalize the OpenSSH private key permissions
   when: not (ansible_check_mode and (ssh_root_directory.changed or ssh_root_keypair.changed))
   file:
