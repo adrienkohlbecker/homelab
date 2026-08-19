@@ -36,19 +36,13 @@
     label: "{{ item.dataset }} mountpoint={{ item.mountpoint }}"
   become: true
 
-- name: _verify | Datasets mounted at mountpoint
+- name: _verify | Dataset mount contract passes
   when: zfs_root
   command:
     argv:
-      - findmnt
-      - --first-only
-      - --noheadings
-      - --source
+      - /usr/local/bin/zfs_check_mount
       - "{{ item.dataset }}"
-      - --mountpoint
       - "{{ item.mountpoint }}"
-      - --types
-      - zfs
   changed_when: false
   loop: "{{ services_datasets }}"
   loop_control:
@@ -107,26 +101,6 @@
   loop: "{{ services_datasets }}"
   loop_control:
     label: "{{ item.mountpoint }} owner=root:root"
-
-- name: _verify | Dataset is not readonly
-  when: zfs_root
-  command:
-    argv:
-      - zfs
-      - get
-      - -H
-      - -p
-      - -o
-      - value
-      - readonly
-      - "{{ item.dataset }}"
-  register: services_verify_readonly
-  changed_when: false
-  failed_when: services_verify_readonly.stdout | trim != 'off'
-  loop: "{{ services_datasets }}"
-  loop_control:
-    label: "{{ item.dataset }} readonly=off"
-  become: true
 
 - name: _verify | Mount status units are active
   when: zfs_root
