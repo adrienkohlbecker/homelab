@@ -282,13 +282,11 @@
   tags:
     - tailscale
 
-# default({}) so a fresh system (no node registered yet -- e.g. the --check
-# phase, where `tailscale up` is skipped) yields an empty dict instead of an
-# undefined-var error in the tasks below. ansible_hostname | lower: headscale
-# sanitizes given_name to lowercase, so an exact-case match would miss a node on
-# any mixed-case host (e.g. DSM reports bunk's host as "Bunk"). Scope to this
-# host's headscale user first: prod hosts share one user (servers), so given_name
-# disambiguates within it, but a same-named node under a DIFFERENT user must not
+# ansible_hostname | lower: headscale sanitizes given_name to lowercase, so an
+# exact-case match would miss a mixed-case host (e.g. DSM reports bunk as
+# "Bunk"). Scope the match to this host's headscale user: prod hosts share one
+# user (servers), and given_name disambiguates within it. A same-named node under
+# a different user must not
 # bind -- approve-routes replaces the whole approved set, so a wrong match is
 # destructive.
 - name: register | Resolve this host's headscale node
@@ -296,10 +294,6 @@
     tailscale_node_matches: >-
       {{ (tailscale_nodes.stdout | default('[]', true) | from_json)
          | matching_by_attr({'user.name': tailscale_headscale_user, 'given_name': (ansible_hostname | lower)}) }}
-    tailscale_node: >-
-      {{ (tailscale_nodes.stdout | default('[]', true) | from_json)
-         | matching_by_attr({'user.name': tailscale_headscale_user, 'given_name': (ansible_hostname | lower)})
-         | first | default({}) }}
   when:
     - not ansible_check_mode
     - tailscale_approve_routes_needed
@@ -309,8 +303,8 @@
 - name: register | Fail if this host has no headscale node yet
   assert:
     that:
-      - tailscale_node.id is defined
       - tailscale_node_matches | length == 1
+      - (tailscale_node_matches | first | default({})).id is defined
     fail_msg: >-
       Expected exactly 1 headscale node with given_name
       {{ ansible_hostname | lower }} on {{ tailscale_headscale_host }}, found
@@ -330,13 +324,13 @@
 - name: register | Approve advertised routes + exit node on headscale
   command: >-
     podman exec headscale headscale nodes approve-routes
-    --identifier {{ tailscale_node.id }}
+    --identifier {{ (tailscale_node_matches | first).id }}
     --routes {{ tailscale_desired_routes | join(',') }}
   delegate_to: "{{ tailscale_headscale_host }}"
   when:
     - not ansible_check_mode
     - tailscale_approve_routes_needed
-    - (tailscale_desired_routes | sort) != ((tailscale_node.approved_routes | default([], true)) | sort)
+    - (tailscale_desired_routes | sort) != (((tailscale_node_matches | first).approved_routes | default([], true)) | sort)
   changed_when: true
   become: true
   tags:
