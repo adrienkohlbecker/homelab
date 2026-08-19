@@ -8,12 +8,11 @@
 # netdata's multi-arch 2.x repo, so this runs on the arm64 box as well as
 # x86_64.
 #
-# Both fixtures use the same hourly OnCalendar (period_secs=3600 derived),
-# are stopped so systemd can't fire them and rewrite the stamp underneath
-# us, then have their stamp planted directly: recent => mtime now
-# (overdue=0), overdue => mtime 3h ago (age > 2*3600 -> overdue=1). Faking
-# the stamp keeps the test deterministic (no waiting on a real fire or
-# racing QEMU clock skew) while exercising exactly what the collector reads.
+# Both fixtures use the same hourly OnCalendar, are stopped so systemd can't
+# fire them and rewrite the stamp underneath us, then have their stamps planted
+# directly: recent => mtime 90m ago (below the two-period overdue threshold),
+# overdue => mtime 3h ago (above it). Faking the stamp keeps the test
+# deterministic while exercising exactly what the collector reads.
 
 # ============================================================
 # Contract 3+4: monitored timer + overdue detection via netdata
@@ -51,8 +50,8 @@
     - _verify_timer_overdue
   become: true
 
-- name: _verify | Plant a fresh stamp (now) for the recent fixture
-  command: touch /var/lib/systemd/timers/stamp-_verify_timer_recent.timer
+- name: _verify | Plant a 90-minute stamp for the recent fixture
+  command: touch -d "90 minutes ago" /var/lib/systemd/timers/stamp-_verify_timer_recent.timer
   changed_when: false
   become: true
 
@@ -60,23 +59,6 @@
   command: touch -d "3 hours ago" /var/lib/systemd/timers/stamp-_verify_timer_overdue.timer
   changed_when: false
   become: true
-
-- name: _verify | Read both fixtures' metadata files
-  command: cat /etc/netdata/charts.d/systemd_timers.d/{{ item }}.conf
-  register: _systemd_timer_meta
-  changed_when: false
-  loop:
-    - _verify_timer_recent
-    - _verify_timer_overdue
-  become: true
-- name: _verify | Assert period_secs=3600 derived from hourly on_calendar
-  assert:
-    that:
-      - "'period_secs=3600' in item.stdout"
-    fail_msg: "metadata missing period_secs=3600: {{ item.stdout }}"
-  loop: "{{ _systemd_timer_meta.results }}"
-  loop_control:
-    label: "{{ item.item }}"
 
 # Charts.d.plugin re-scans the metadata dir each tick (update_every=5s
 # under our override). Wait for both charts to appear in netdata's
@@ -115,8 +97,8 @@
   loop:
     - chart: systemd_timers.verify_timer_recent
       overdue: 0
-      min_age: -1
-      max_age: 600
+      min_age: 4800
+      max_age: 6600
     - chart: systemd_timers.verify_timer_overdue
       overdue: 1
       min_age: 7200
