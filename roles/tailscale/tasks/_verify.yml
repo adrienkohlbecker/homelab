@@ -5,7 +5,7 @@
 # pass even if registration silently failed, so assert the round-trip instead.
 
 - name: _verify | Tailscale backend is Running (registered with headscale)
-  command: tailscale status --json
+  command: tailscale status --json --peers=false
   register: _tailscale_status
   changed_when: false
   retries: 5
@@ -13,13 +13,8 @@
   until: >-
     _tailscale_status.rc == 0
     and (_tailscale_status.stdout | from_json).BackendState == 'Running'
-  become: true
-
-- name: _verify | Tailscale interface carries a mesh IP
-  command: tailscale ip -4
-  register: _tailscale_ip
-  changed_when: false
-  failed_when: _tailscale_ip.rc != 0 or (_tailscale_ip.stdout | trim | length == 0)
+    and (((_tailscale_status.stdout | from_json).TailscaleIPs | default([])
+          | select('match', '^[0-9.]+$') | list | length) > 0)
   become: true
 
 # The node identity must live on the services dataset, which rides the backup.
