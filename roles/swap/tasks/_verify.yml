@@ -18,18 +18,17 @@
   failed_when: false
   register: _swap_verify_zram_module
 
-- name: _verify | Zram swap active at the configured (primary) priority
+- name: _verify | Zram swap active at the primary priority
   when: _swap_verify_zram_module.rc == 0
   vars:
     _zram_lines: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | list }}"
   assert:
     that:
       - _zram_lines | length == 1
-      - _zram_lines[0].split()[1] | int == swap_zram.priority | default(100) | int
+      - _zram_lines[0].split()[1] | int == 100
     fail_msg: >-
-      zram swap missing or not at the configured priority (expected
-      {{ swap_zram.priority | default(100) }}, partition swap sits at
-      priority 10 so this is primary): {{ _swap_verify_swapon.stdout }}
+      zram swap missing or not at priority 100 (partition swap sits at
+      priority 10): {{ _swap_verify_swapon.stdout }}
   become: true
 
 # Catches the generator silently falling back to its default size (e.g. a
@@ -107,13 +106,12 @@
     - swap_partition is defined
   vars:
     _overflow_lines: "{{ _swap_verify_swapon.stdout_lines | reject('search', 'zram') | list }}"
-    _zram_prio: "{{ swap_zram.priority | default(100) | int }}"
   assert:
     that:
       - _overflow_lines | length >= 1
-      - _overflow_lines | map('split') | map(attribute='1') | map('int') | max < _zram_prio | int
+      - _overflow_lines | map('split') | map(attribute='1') | map('int') | max < 100
     fail_msg: >-
-      Overflow swap priority must be below zram ({{ _zram_prio }}), got:
+      Overflow swap priority must be below zram (100), got:
       {{ _swap_verify_swapon.stdout }}
   become: true
 

@@ -22,4 +22,4 @@
 zram-fraction = 1.0
 max-zram-size = {{ (swap_zram.size | human_to_bytes) // 1048576 }}
 compression-algorithm = {{ swap_zram.algorithm | default('zstd') }}
-swap-priority = {{ swap_zram.priority | default(100) }}
+swap-priority = 100
