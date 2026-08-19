@@ -156,18 +156,18 @@ do
 end
 
 do
-    local rec = shape("plex.file", {
+    local rec = shape("app.file", {
         host = "lab",
         log = "library scan completed",
-        _service = "plex",
-        _stream = "plex_file",
-        _unit = "plex.service",
-        _identifier = "plex",
+        _service = "app",
+        _stream = "app_file",
+        _unit = "app.service",
+        _identifier = "app",
     }, "info")
-    check("override.service", rec.service, "plex")
-    check("override.stream", rec.stream, "plex_file")
-    check("override.unit", rec.unit, "plex.service")
-    check("override.identifier", rec.identifier, "plex")
+    check("override.service", rec.service, "app")
+    check("override.stream", rec.stream, "app_file")
+    check("override.unit", rec.unit, "app.service")
+    check("override.identifier", rec.identifier, "app")
     check("override.fields.service", rec.fields._service, nil)
     check("override.fields.stream", rec.fields._stream, nil)
     check("override.fields.unit", rec.fields._unit, nil)

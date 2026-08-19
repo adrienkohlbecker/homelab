@@ -149,7 +149,7 @@ table inet homelab {
     # Kernel-offloaded conntrack fastpath. Established TCP/UDP flows
     # that ingress on a listed device skip the forward chain entirely
     # via the ingress hook, which materially cuts CPU on bulk traffic
-    # (BT, plex). Listed devices are limited to $WAN_IFACE — wg0 is
+    # (BT and media streams). Listed devices are limited to $WAN_IFACE — wg0 is
     # attached dynamically by wg0_flowtable.service (tied to
     # wg-quick@wg0's lifecycle) so the firewall can load at boot
     # before the wg iface exists; nft errors out with ENOENT here if
@@ -347,14 +347,12 @@ table inet homelab {
         #           is the DHCP server, lab isn't)
         #   1900  — SSDP/UPnP M-SEARCH (homeassistant doing UPnP
         #           discovery on its podman bridge)
-        #   5351  — NAT-PMP (plex trying to auto-open ports; UDM doesn't
-        #           speak NAT-PMP, port forwards are manual)
         #   10001 — UBNT discovery protocol; UniFi gateway broadcasts
         #           4-byte `01 00 00 00` every ~10s on every VLAN it
         #           has an interface in. ~6k/day. We don't run a UBNT
         #           agent on this host
         #   57621 — Spotify Connect LAN discovery (Adrien's MBP)
-        udp dport { 67, 1900, 5351, 10001, 57621 } counter name "input_silenced" drop comment "input silenced LAN noise"
+        udp dport { 67, 1900, 10001, 57621 } counter name "input_silenced" drop comment "input silenced LAN noise"
 
         # NetBIOS (137 = name service, 138 = datagram) was the #2 catch-all
         # log consumer (~400/day). This host no longer runs nmbd (the samba

@@ -1,1 +1,43 @@
 ---
+- name: _verify | Retained Plex and Tautulli data markers remain
+  stat:
+    path: "{{ item }}/.retired_services_keep"
+  loop:
+    - /mnt/services/plex
+    - /mnt/services/sqlite/plex
+    - /mnt/services/tautulli
+    - /mnt/services/sqlite/tautulli
+  register: retired_services_data_markers
+  failed_when: not retired_services_data_markers.stat.exists
+  become: true
+
+- name: _verify | Gather service facts
+  service_facts:
+  become: true
+
+- name: _verify | Retired units are absent
+  assert:
+    that:
+      - item not in ansible_facts.services
+    fail_msg: "{{ item }} remains known to systemd"
+  loop:
+    - plex.service
+    - tautulli.service
+    - sort_ini_mnt-services-tautulli-config.ini.path
+    - sort_ini_mnt-services-tautulli-config.ini.service
+
+- name: _verify | Retired Fluent Bit files are absent
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/fluent-bit/services/plex.yaml
+    - /etc/fluent-bit/services/tautulli.yaml
+    - /var/lib/fluent-bit/plex.db
+    - /var/lib/fluent-bit/plex.db-shm
+    - /var/lib/fluent-bit/plex.db-wal
+    - /var/lib/fluent-bit/plex-scanner.db
+    - /var/lib/fluent-bit/plex-crash-uploader.db
+    - /var/lib/fluent-bit/tautulli-websocket.db
+  register: retired_services_fluentbit_files
+  failed_when: retired_services_fluentbit_files.stat.exists
+  become: true

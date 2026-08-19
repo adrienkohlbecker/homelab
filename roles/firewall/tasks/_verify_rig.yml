@@ -68,19 +68,19 @@
   changed_when: "'Storing signatures' in firewall_verify_pull.stdout or 'Writing manifest' in firewall_verify_pull.stdout"
   become: true
 
-# Publish 32400:32400 — port is arbitrary; the FORWARD rule scopes by
-# --ctstate DNAT, not by dport. Run busybox httpd on 32400 inside the
-# container to serve a tiny known-content page the probe can grep for.
+# The port is arbitrary; the FORWARD rule scopes by --ctstate DNAT, not by
+# dport. Run busybox httpd on the dedicated fixture port to serve a tiny
+# known-content page the probe can grep for.
 # --cap-add=NET_RAW restores the capability podman 5.x dropped from
 # default_capabilities — the container-egress probe below uses busybox
 # ping (SOCK_RAW), which fails with "permission denied" without it.
-- name: _verify_rig | Run busybox httpd test container with --publish on 32400
+- name: _verify_rig | Run busybox httpd test container with --publish
   command: >
     podman run -d --replace --name firewall_verify_httpd
-      --publish 0.0.0.0:32400:32400
+      --publish 0.0.0.0:{{ _firewall_probe_container_port }}:{{ _firewall_probe_container_port }}
       --cap-add=NET_RAW
       docker.io/library/busybox
-      sh -c 'mkdir -p /www && echo firewall-verify-ok > /www/index.html && exec httpd -f -p 32400 -h /www'
+      sh -c 'mkdir -p /www && echo firewall-verify-ok > /www/index.html && exec httpd -f -p {{ _firewall_probe_container_port }} -h /www'
   changed_when: true
   become: true
 
@@ -168,7 +168,7 @@
   become: true
 
 - name: _verify_rig | Wait for httpd container
-  wait_for: { host: 127.0.0.1, port: 32400, timeout: 30 }
+  wait_for: { host: 127.0.0.1, port: "{{ _firewall_probe_container_port }}", timeout: 30 }
   become: true
 
 - name: _verify_rig | Wait for TCP fixture listener

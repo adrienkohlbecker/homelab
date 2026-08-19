@@ -1,1 +1,132 @@
 ---
+- name: _setup | Create retained service and Fluent Bit fixture directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /mnt/services/plex
+    - /mnt/services/sqlite/plex
+    - /mnt/services/tautulli
+    - /mnt/services/sqlite/tautulli
+    - /var/lib/fluent-bit
+  become: true
+
+- name: _setup | Create retained Plex and Tautulli data markers
+  copy:
+    content: retained
+    dest: "{{ item }}/.retired_services_keep"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - /mnt/services/plex
+    - /mnt/services/sqlite/plex
+    - /mnt/services/tautulli
+    - /mnt/services/sqlite/tautulli
+  become: true
+
+- name: _setup | Install disposable Plex and Tautulli fixture units
+  copy:
+    content: |
+      [Unit]
+      Description=retired fixture
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/true
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/{{ item }}.service
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - plex
+    - tautulli
+  become: true
+
+- name: _setup | Start disposable Plex and Tautulli fixture units
+  systemd:
+    name: "{{ item }}.service"
+    daemon_reload: true
+    enabled: true
+    state: started
+  loop:
+    - plex
+    - tautulli
+  become: true
+
+- name: _setup | Install disposable Tautulli watcher path fixture
+  copy:
+    content: |
+      [Unit]
+      Description=retired fixture
+
+      [Path]
+      PathChanged=/tmp/retired_tautulli_fixture
+      Unit=sort_ini_mnt-services-tautulli-config.ini.service
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/sort_ini_mnt-services-tautulli-config.ini.path
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Install disposable Tautulli watcher service fixture
+  copy:
+    content: |
+      [Unit]
+      Description=retired fixture
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/true
+    dest: /etc/systemd/system/sort_ini_mnt-services-tautulli-config.ini.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Create retired Fluent Bit extension directory
+  file:
+    path: /etc/fluent-bit/services
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _setup | Create retired Fluent Bit extension fixtures
+  copy:
+    content: "service: {{ item }}\n"
+    dest: /etc/fluent-bit/services/{{ item }}.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - plex
+    - tautulli
+  become: true
+
+- name: _setup | Create retired Fluent Bit cursor fixtures
+  copy:
+    content: retired
+    dest: /var/lib/fluent-bit/{{ item }}
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - plex.db
+    - plex.db-shm
+    - plex.db-wal
+    - plex-scanner.db
+    - plex-crash-uploader.db
+    - tautulli-websocket.db
+  become: true

@@ -1,5 +1,5 @@
-# Per-stack podman network so the arr stack + plex/jellyfin can reach
-# each other by name via aardvark-dns (e.g. sonarr→plex.dns.podman) instead
+# Per-stack podman network so the arr stack, Seerr, and Jellyfin can reach
+# each other by name via aardvark-dns instead
 # of round-tripping through nginx/authelia for cross-container API calls.
 # In its own file so a consumer _setup.yml can import just the network via
 # `import_role: name: media, tasks_from: network`. Subnet is left to

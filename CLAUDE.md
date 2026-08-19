@@ -192,7 +192,7 @@ Add `--init` (placed right after `--name`) **only when the image runs the applic
 
 **Do NOT add `--init` when the image already ships its own init** — it is pure redundant clutter there:
 
-- **s6-overlay** — `ENTRYPOINT ["/init"]`. Every `linuxserver/*` image (sonarr/radarr/lidarr/bazarr/sabnzbd/tautulli/transmission, …) and `ghcr.io/home-assistant/home-assistant`.
+- **s6-overlay** — `ENTRYPOINT ["/init"]`. Every `linuxserver/*` image (sonarr/radarr/lidarr/bazarr/sabnzbd/transmission, …) and `ghcr.io/home-assistant/home-assistant`.
 - **dumb-init / tini** — e.g. `louislam/uptime-kuma` (`ENTRYPOINT ["/usr/bin/dumb-init","--"]`).
 - **entrypoint that `exec`s a process supervisor or webserver master** — e.g. `librespeed/speedtest` ends in `exec apache2-foreground`; apache reaps and forwards signals itself.
 

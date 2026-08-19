@@ -2,7 +2,7 @@
 # QEMU maps these guest ports to random localhost ports; AWS exposes the
 # same guest ports directly through the CI cell security group.
 tcp:
-  - 32400 # Plex-style published container DNAT target
+  - 18080 # Published-container DNAT fixture
   - 51413 # Transmission peer port
 udp:
   - 51820 # WireGuard

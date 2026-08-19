@@ -3,8 +3,8 @@
 # in _verify_drops.yml.
 
 # FORWARD/DNAT — published container reachable via wg0 ingress.
-- name: _verify_forward | FORWARD/DNAT — published 32400 reachable via wg0 ingress
-  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://192.0.2.1:32400/
+- name: _verify_forward | FORWARD/DNAT — published container reachable via wg0 ingress
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://192.0.2.1:{{ _firewall_probe_container_port }}/
   register: firewall_verify_container
   changed_when: false
   failed_when: firewall_verify_container.rc != 0 or 'firewall-verify-ok' not in firewall_verify_container.stdout
@@ -13,13 +13,13 @@
 # FORWARD/DNAT WAN-side counterpart — the packet ingresses on the
 # VM's WAN iface via the controller-side endpoint the harness provides
 # (qemu: loopback forward on enp0s2; EC2: the cell's public IP through
-# the security group's 32400/tcp allow). delegate_to:
+# the security group's fixture-port allow). delegate_to:
 # localhost runs the curl on the test runner, so the packet reaches
 # the VM from "outside" exactly the way real WAN traffic does —
 # this rule is unreachable from the netns harness.
-- name: _verify_forward | FORWARD/DNAT — published 32400 reachable from controller via WAN endpoint  # noqa: command-instead-of-module
+- name: _verify_forward | FORWARD/DNAT — published container reachable from controller via WAN endpoint  # noqa: command-instead-of-module
   delegate_to: localhost
-  command: curl --connect-timeout 5 --max-time 10 -s http://{{ wan_probe_host }}:{{ wan_forward_ports.tcp['32400'] }}/
+  command: curl --connect-timeout 5 --max-time 10 -s http://{{ wan_probe_host }}:{{ wan_forward_ports.tcp[_firewall_probe_container_port | string] }}/
   register: firewall_verify_wan_container
   changed_when: false
   failed_when: firewall_verify_wan_container.rc != 0 or 'firewall-verify-ok' not in firewall_verify_wan_container.stdout
@@ -33,13 +33,13 @@
 # through to default DROP; multi-base-chain semantics drops the
 # packet regardless. Re-fired the canonical case here by running a
 # transient busybox on the same `podman` network and curling the
-# bridge gateway IP — netavark's existing --publish 32400 rule
+# bridge gateway IP — netavark's existing published-port rule
 # DNATs that to the long-running httpd container, exercising exactly
 # the iif=podman0/oif=podman0/ct-status-dnat path.
 - name: _verify_forward | FORWARD/DNAT — container → host bridge IP → DNAT'd to container on same bridge
   command: >
     podman run --rm --network podman docker.io/library/busybox
-    wget -q -O - -T 5 http://10.88.0.1:32400/
+    wget -q -O - -T 5 http://10.88.0.1:{{ _firewall_probe_container_port }}/
   register: firewall_verify_container_to_vip
   changed_when: false
   failed_when: firewall_verify_container_to_vip.rc != 0 or 'firewall-verify-ok' not in firewall_verify_container_to_vip.stdout
@@ -86,7 +86,7 @@
     - name: _verify_forward | Cross-bridge DNAT reaches the published container
       command: >
         podman run --rm --network firewall_verify_named docker.io/library/busybox
-        wget -q -O - -T 5 http://{{ _firewall_named_gateway_ip.stdout | trim }}:32400/
+        wget -q -O - -T 5 http://{{ _firewall_named_gateway_ip.stdout | trim }}:{{ _firewall_probe_container_port }}/
       register: _firewall_cross_bridge_dnat
       changed_when: false
       failed_when: _firewall_cross_bridge_dnat.rc != 0 or 'firewall-verify-ok' not in _firewall_cross_bridge_dnat.stdout
@@ -95,7 +95,7 @@
     - name: _verify_forward | Probe direct cross-network container-IP path
       command: >
         podman run --rm --network firewall_verify_named docker.io/library/busybox
-        wget -q -O - -T 3 http://{{ _firewall_default_container_ip.stdout | trim }}:32400/
+        wget -q -O - -T 3 http://{{ _firewall_default_container_ip.stdout | trim }}:{{ _firewall_probe_container_port }}/
       register: _firewall_podman_isolation_probe
       changed_when: false
       failed_when: _firewall_podman_isolation_probe.rc == 0
@@ -163,7 +163,7 @@
       command: >
         ip netns exec extns curl --interface {{ _firewall_probe_tailscale }}
         --connect-timeout 3 --max-time 5 -sf
-        http://{{ _firewall_default_container_ip.stdout | trim }}:32400/
+        http://{{ _firewall_default_container_ip.stdout | trim }}:{{ _firewall_probe_container_port }}/
       register: _firewall_tailscale_forward
       changed_when: false
       failed_when: _firewall_tailscale_forward.rc != 0 or 'firewall-verify-ok' not in _firewall_tailscale_forward.stdout

@@ -3,7 +3,7 @@
 # that own the canonical gid; a dynamic group-create can drift if a
 # package later installs a different fixed gid, silently de-aligning a
 # container's --group-add from /dev/dri's actual owner. Shared by the
-# media-server roles (plex, jellyfin), each importing it under
+# Jellyfin imports it under
 # `when: has_transcoding_acceleration` and reading getent_group.render.
 - name: Getent render group
   getent:

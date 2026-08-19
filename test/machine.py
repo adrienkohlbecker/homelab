@@ -431,8 +431,8 @@ class Machine:
     # -kernel/-initrd/-append and the firmware boot chain is bypassed.
     # None in normal harness operation on all arches and variants.
     _direct_boot: tuple[Path, Path, str] | None
-    # Extra guest ports to forward in addition to the standard three (22,
-    # 32400, 51820). Set by LaunchOptions.extra_hostfwds; populated in
+    # Extra guest ports to forward in addition to the configured probe ports.
+    # Set by LaunchOptions.extra_hostfwds; populated in
     # prepare() as {guest_port: host_port}.
     extra_hostfwd_ports: dict[int, int]
     # Guest NIC backend, resolved once in __init__ (resolve_net_backend):

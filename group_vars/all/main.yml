@@ -210,9 +210,6 @@ service_ports:
   # container.
   nexus: 8082
   nut: 3493
-  # Plex's well-known port, published on 0.0.0.0 for direct native-client
-  # connections (not loopback-only like its siblings); nginx also fronts it.
-  plex: 32400
   # Profilarr (arr custom-format / quality-profile sync), loopback-published;
   # nginx fronts it on the profilarr subdomain behind authelia. The container
   # listens on 6868 internally.
@@ -233,7 +230,6 @@ service_ports:
   socket_proxy: 2375
   sonarr: 8989
   speedtest: 2807
-  tautulli: 8182
   transmission: 9091
   transmission_bt: 51413
   wireguard: 51820

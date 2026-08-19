@@ -17,8 +17,7 @@
 #                     service state (configs, DBs, secrets), so it is
 #                     owner+group only by default. Loosen to "0755" when a
 #                     co-tenant needs world traversal, or tighten to "0700"
-#                     to drop group read (plex does -- Preferences.xml
-#                     carries secrets the shared group shouldn't see).
+#                     when secret-bearing state must stay owner-only.
 #   id                optional test override; production callers resolve their
 #                     required uid/gid from static_service_ids by name.
 #

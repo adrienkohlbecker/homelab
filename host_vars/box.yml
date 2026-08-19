@@ -156,7 +156,7 @@ subid_users:
   # gitlab_runner's rootless podman (Docker executor socket).
   - gitlab_runner
 
-# Flipped to true so jellyfin + plex tests exercise the HW-transcoding
+# Flipped to true so jellyfin tests exercise the HW-transcoding
 # code path (device passthrough, --group-add wiring, getent lookup) via
 # the fake render group + phantom /dev/dri/renderD128 created by
 # roles/media/tasks/fake_render_device.yml. No real GPU in QEMU — the

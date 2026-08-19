@@ -5,10 +5,8 @@
 # (override for cross-host bookmarks like Netdata (pug)); path: defaults to /.
 homepage_bookmarks:
   Media:
-    - { name: Plex,         abbr: PX, sub: plex,         icon: plex }
     - { name: Jellyfin,     abbr: JF, sub: jellyfin,     icon: jellyfin }
     - { name: Seerr,        abbr: SE, sub: seerr,        icon: seerr }
-    - { name: Tautulli,     abbr: TT, sub: tautulli,     icon: tautulli }
     - { name: Sonarr,       abbr: SN, sub: sonarr,       icon: sonarr }
     - { name: Radarr,       abbr: RD, sub: radarr,       icon: radarr }
     - { name: Bazarr,       abbr: BZ, sub: bazarr,       icon: bazarr }

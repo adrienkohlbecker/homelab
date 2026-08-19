@@ -99,7 +99,7 @@
     status_code: 401
   become: true
 
-# Media-network join probe. seerr reaches plex/radarr/sonarr/tautulli over
+# Media-network join probe. seerr reaches radarr, sonarr, and Jellyfin over
 # *.dns.podman on the `media` network; no peer is deployed in the test, so
 # resolve seerr by its own name from inside the container -- aardvark only
 # answers *.dns.podman when the container actually joined `media`, so a dropped
@@ -272,10 +272,10 @@
   become: true
 
 # Populated-state shape contract. The byte-for-byte assert above only ever runs
-# against a fresh, never-connected settings.json -- no Plex/Jellyfin peer is
-# deployed in the test, so the slurp-preserved branches that fire only once the
-# daemon owns data (the multi-line jellyfin libraries loop + SSO fields, a
-# populated migrations ledger, bumped plex lastScan, the wizard-completed flags)
+# against a fresh, never-connected settings.json -- no Jellyfin peer is deployed
+# in the test, so the slurp-preserved branches that fire only once the daemon
+# owns data (the multi-line jellyfin libraries loop + SSO fields, a populated
+# migrations ledger, and the wizard-completed flags)
 # never get exercised here, yet those are the fragile ones. Synthesize a
 # plausible post-bootstrap writeback by injecting daemon-owned values onto the
 # fresh on-disk file (re-slurped above as _seerr_shape_b64), render the
@@ -291,11 +291,6 @@
         mediaServerType: 2
       public:
         initialized: true
-      plex:
-        libraries:
-          - { id: "10", name: Live Music, enabled: true, type: movie, lastScan: 1717000000000 }
-          - { id: "1", name: Movies, enabled: true, type: movie, lastScan: 1717000000000 }
-          - { id: "2", name: TV Shows, enabled: true, type: show, lastScan: 1717000000000 }
       jellyfin:
         ip: jellyfin.dns.podman
         port: 8096
@@ -332,17 +327,19 @@
       - _parsed.jellyfin.ip == 'jellyfin.dns.podman'
       - _parsed.jellyfin.apiKey == 'jelly-test-key'
       - (_parsed.jellyfin.libraries | length) == 2
-      - (_parsed.plex.libraries | length) == 3
-      - _parsed.plex.libraries[0].lastScan == 1717000000000
+      - _parsed.plex.name == ''
+      - _parsed.plex.ip == ''
+      - (_parsed.plex.libraries | length) == 0
+      - (_parsed.tautulli | length) == 0
       - "'0099_synthetic_upgrade' in _parsed.migrations"
       - _parsed.main.mediaServerType == 2
       - _parsed.public.initialized
     fail_msg: >-
       the template did not stably reproduce a populated post-bootstrap
-      settings.json: a daemon-owned field (jellyfin SSO/libraries, plex
-      lastScan, migrations ledger, wizard flags) was dropped, reordered, or
+      settings.json: a daemon-owned field (jellyfin SSO/libraries, migrations
+      ledger, wizard flags) was dropped, reordered, or
       reformatted, which would diff-churn and restart seerr on the converge
-      after the operator connects Plex/Jellyfin.
+      after the operator connects Jellyfin.
 
 # Corrupt-file rescue, end-to-end. main.yml treats an unparseable settings.json
 # as {} (the rescue block) so a truncated/partial write from a crashed daemon

@@ -34,7 +34,7 @@
   "blocklistLanguage": "",
   "blocklistedTags": "",
   "blocklistedTagsLimit": 50,
-{# mediaServerType enum: PLEX=1, JELLYFIN=2, EMBY=3, NOT_CONFIGURED=4. The 4
+{# mediaServerType enum: Jellyfin is 2 and NOT_CONFIGURED is 4. The 4
    default is "unconfigured", routing a fresh install's UI to /setup (see the
    public.initialized block below); slurp preserves the wizard's choice after. #}
   "mediaServerType": {{ (seerr_settings_json | json_query('main.mediaServerType') | default(4, true)) }},
@@ -43,39 +43,14 @@
   "locale": "en",
   "youtubeUrl": ""
  },
-{#
-  plex.libraries[] is daemon-owned once Plex is connected: seerr discovers and
-  rewrites the set (ids/names/types) and bumps each lastScan on every plex scan.
-  Seed the operator's three curated libraries (pre-enabled) for a fresh install,
-  then slurp-preserve so a library add/rename/disable/rescan in Plex doesn't
-  diff-churn and restart seerr on the next converge. Mirrors jellyfin.libraries
-  below; the per-key emit order (id/name/enabled/type/lastScan) matches seerr's
-  own JSON.stringify writeback so the rendered bytes stay stable.
-#}
-{% set _plex_libs = seerr_settings_json | json_query('plex.libraries') | default([
-  {'id': '10', 'name': 'Live Music', 'enabled': true, 'type': 'movie', 'lastScan': 0},
-  {'id': '1', 'name': 'Movies', 'enabled': true, 'type': 'movie', 'lastScan': 0},
-  {'id': '2', 'name': 'TV Shows', 'enabled': true, 'type': 'show', 'lastScan': 0}
-], true) %}
+{# Keep Seerr's built-in disconnected shape. Omitting this schema-owned block
+   makes the daemon add it back on startup and causes byte-level diff churn. #}
  "plex": {
-  "name": "DockerPlex",
-  "ip": "plex.dns.podman",
+  "name": "",
+  "ip": "",
   "port": 32400,
   "useSsl": false,
-  "libraries": [
-{% for _lib in _plex_libs %}
-   {
-    "id": {{ _lib.id | to_json }},
-    "name": {{ _lib.name | to_json }},
-    "enabled": {{ _lib.enabled | string | lower }},
-    "type": {{ _lib.type | to_json }},
-    "lastScan": {{ _lib.lastScan | default(0, true) }}
-   }{% if not loop.last %},{% endif %}
-
-{% endfor %}
-  ],
-  "webAppUrl": "https://plex.{{ inventory_hostname }}.{{ domain }}/web/index.html",
-  "machineId": "{{ plex_machine_id }}"
+  "libraries": []
  },
 {#
   jellyfin is the SSO source. The bootstrap path (server/routes/auth.ts):
@@ -127,13 +102,7 @@
   "serverId": {{ (seerr_settings_json | json_query('jellyfin.serverId') or '') | to_json }},
   "apiKey": {{ (seerr_settings_json | json_query('jellyfin.apiKey') or '') | to_json }}
  },
- "tautulli": {
-  "hostname": "tautulli.dns.podman",
-  "port": 8181,
-  "useSsl": false,
-  "apiKey": "{{ tautulli_api_key }}",
-  "externalUrl": "https://tautulli.{{ inventory_hostname }}.{{ domain }}"
- },
+ "tautulli": {},
  "metadataSettings": {
   "tv": "tmdb",
   "anime": "tmdb"
@@ -306,26 +275,26 @@
   }
  },
 {#
-  Schedule policy: fixed-time batch jobs (full scans, refreshes, cache cleanup)
-  are pinned to <= 00:30 local so they finish well before the 02:00 UTC
+  Schedule policy: active fixed-time batch jobs (full scans, refreshes, cache
+  cleanup) are pinned to <= 00:30 local so they finish well before the 02:00 UTC
   zfs_autosnapshot backup -- even at the winter (CET, +1h) offset, where 00:30
   local = 23:30 UTC. This keeps the nightly backup from interrupting them and
   lets the snapshot capture their completed output. Times are local
-  (--env TZ=Europe/Paris). Continuous poll loops (*/N) are exempt -- they retry
-  and the quiesce stops/resumes them cleanly. See notes/scheduled_jobs_audit.md.
+  (--env TZ=Europe/Paris). Continuous poll loops (*/N) and disconnected
+  integration defaults are exempt. See notes/scheduled_jobs_audit.md.
 #}
  "jobs": {
   "plex-recently-added-scan": {
    "schedule": "0 */5 * * * *"
   },
   "plex-full-scan": {
-   "schedule": "0 0 0 * * *"
+   "schedule": "0 0 3 * * *"
   },
   "plex-watchlist-sync": {
    "schedule": "0 */3 * * * *"
   },
   "plex-refresh-token": {
-   "schedule": "0 30 23 * * *"
+   "schedule": "0 0 5 * * *"
   },
   "radarr-scan": {
    "schedule": "0 10 0 * * *"

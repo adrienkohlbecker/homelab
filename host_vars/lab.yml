@@ -280,12 +280,6 @@ samba_shares:
 
 has_transcoding_acceleration: true
 
-# Extra read-only library roots Plex mounts beyond /mnt/media. These exact
-# /mnt/data paths exist only on lab; the role gates them on zfs_has_data_mount.
-plex_extra_library_binds:
-  - { src: "/mnt/data/MacbookPro/Music/iTunes/iTunes Media/Music", dest: /itunes }
-  - { src: /mnt/data/Musique/Records, dest: /records }
-
 # auth.{{ domain }} is an apex-zone CNAME → lab.{{ domain }} (public DNS), with a
 # local DNS override resolving the LAN clients to lab's internal IP. The
 # per-host wildcard cert covers `*.lab.{{ domain }}` but NOT apex names, so

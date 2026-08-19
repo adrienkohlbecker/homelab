@@ -111,8 +111,6 @@
     - bazarr
     - lidarr
     - seerr
-    - plex
-    - tautulli
     - gitea
     - homelab_ci
     - transmission

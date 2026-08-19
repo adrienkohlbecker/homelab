@@ -52,14 +52,13 @@
 # settings.json is rendered as the full canonical post-merge shape seerr
 # writes on disk -- every key seerr's defaults emit, in seerr's canonical
 # top-level order, with our wired values overriding the bare-defaults
-# where we configure them (plex/radarr/sonarr/tautulli/notifications/
-# network). Without this exact-shape match, seerr re-normalizes on every
+# where we configure them (radarr/sonarr/notifications/network). Without this
+# exact-shape match, seerr re-normalizes on every
 # startup (adds ~20 default keys: sessionSecret, hideBlocklisted, jellyfin
 # block, ntfy, metadataSettings, network.dnsCache, embedPoster per agent,
 # migrations[]; splits our region into discoverRegion/streamingRegion)
-# and ansible would diff-churn forever. Slurp + json_query preserves
-# plex.libraries[].lastScan timestamps across deploys (seerr updates them
-# on each scan; first run defaults to 0 via json_query-on-empty).
+# and ansible would diff-churn forever. Slurp + json_query preserves the
+# daemon-owned Jellyfin and migration state across deploys.
 - name: Load existing settings.json
   slurp:
     src: /mnt/services/seerr/settings.json
@@ -163,7 +162,6 @@
       # an nginx forward-auth gate would double-prompt end users (mirrors
       # jellyfin). The *arr webhook ingress authenticates with the API key.
       proxy_pass: http://127.0.0.1:{{ service_ports.seerr }}/
-      csp_default_src: plex.tv *.plex.tv
-      csp_additional: img-src plex.tv *.plex.tv *.gravatar.com *.tmdb.org {{ nginx_csp_default }}; font-src plex.tv *.plex.tv fonts.gstatic.com {{ nginx_csp_default }}
+      csp_additional: img-src *.gravatar.com *.tmdb.org {{ nginx_csp_default }}; font-src fonts.gstatic.com {{ nginx_csp_default }}
   tags:
     - seerr

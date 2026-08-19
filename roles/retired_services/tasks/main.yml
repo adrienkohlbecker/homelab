@@ -1,4 +1,124 @@
 ---
+# Plex and Tautulli are retired, but their state stays intact for possible
+# inspection or recovery. Their locked users/groups and legacy ID reservations
+# keep the retained files' ownership meaningful; only runnable artifacts and
+# disposable Fluent Bit cursors/container images are removed here.
+- name: Retire Plex service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: plex.service
+  tags:
+    - retired_services
+
+- name: Retire Tautulli service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: tautulli.service
+  tags:
+    - retired_services
+
+- name: Retire Tautulli ini watcher path
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: sort_ini_mnt-services-tautulli-config.ini.path
+  tags:
+    - retired_services
+
+- name: Retire Tautulli ini watcher service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: sort_ini_mnt-services-tautulli-config.ini.service
+  tags:
+    - retired_services
+
+- name: Retire Plex nginx site
+  import_role:
+    name: nginx
+    tasks_from: site_remove
+  vars:
+    nginx_site_remove_args:
+      subdomain: plex
+  tags:
+    - retired_services
+
+- name: Retire Tautulli nginx site
+  import_role:
+    name: nginx
+    tasks_from: site_remove
+  vars:
+    nginx_site_remove_args:
+      subdomain: tautulli
+  tags:
+    - retired_services
+
+- name: Remove Plex and Tautulli Fluent Bit extensions
+  import_role:
+    name: fluentbit
+    tasks_from: extension_remove
+  vars:
+    fluentbit_extension_remove_args:
+      names:
+        - plex
+        - tautulli
+  tags:
+    - retired_services
+
+- name: Find retired Plex and Tautulli Fluent Bit cursors
+  find:
+    paths: /var/lib/fluent-bit
+    patterns:
+      - plex.db*
+      - plex-scanner.db*
+      - plex-crash-uploader.db*
+      - tautulli-websocket.db*
+    file_type: file
+  register: retired_services_media_cursors
+  become: true
+  tags:
+    - retired_services
+
+- name: Remove retired Plex and Tautulli Fluent Bit cursors
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ retired_services_media_cursors.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+  tags:
+    - retired_services
+
+- name: Check whether Podman is installed for retired image cleanup
+  stat:
+    path: /usr/bin/podman
+  register: retired_services_podman
+  tags:
+    - retired_services
+
+- name: Remove retired Plex and Tautulli container images
+  when: retired_services_podman.stat.exists
+  containers.podman.podman_image:
+    name: "{{ item }}"
+    state: absent
+  loop:
+    - docker.io/plexinc/pms-docker:1.43.2.10687-563d026ea
+    - docker.io/linuxserver/tautulli:2.14.2
+  become: true
+  tags:
+    - retired_services
+
 - name: Remove retired zfs_autobackup files
   file:
     path: "{{ item }}"

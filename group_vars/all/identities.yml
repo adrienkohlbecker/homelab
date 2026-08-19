@@ -23,14 +23,12 @@ static_service_ids:
   minio-user: 60723
   mosquitto: 60724
   nexus: 60725
-  plex: 60728
   profilarr: 60729
   radarr: 60730
   sabnzbd: 60731
   seerr: 60732
   sonarr: 60733
   speedtest: 60734
-  tautulli: 60735
   transmission: 60736
   wolweb: 60737
   z2m: 60738
@@ -47,6 +45,8 @@ legacy_service_ids:
   healthchecks: 60716
   openobserve: 60726
   pihole: 60727
+  plex: 60728
+  tautulli: 60735
 
 static_group_ids:
   homelab_ci: 60800

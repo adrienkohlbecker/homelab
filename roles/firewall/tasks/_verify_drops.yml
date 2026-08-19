@@ -31,7 +31,7 @@
   become: true
 
 - name: _verify_drops | Forward — TCP-ACK (no SYN) from extns to a container hits the non-SYN drop
-  command: ip netns exec extns hping3 -A -p 32400 -c 1 --quiet {{ _firewall_probe_container_dest }}
+  command: ip netns exec extns hping3 -A -p {{ _firewall_probe_container_port }} -c 1 --quiet {{ _firewall_probe_container_dest }}
   changed_when: false
   failed_when: false
   become: true
