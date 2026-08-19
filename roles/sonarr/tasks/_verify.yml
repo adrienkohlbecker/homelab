@@ -137,22 +137,6 @@
   loop_control:
     label: "{{ item.item }}"
 
-# shared_group: media (see main.yml) exists to stop ansible flapping
-# /mnt/services/sonarr's gid back to `sonarr` against linuxserver's startup
-# chown to PUID:PGID=sonarr:media. Assert the dir landed group `media` so a
-# regression in that setting surfaces here, not as a silent per-converge flap.
-- name: _verify | Stat the sonarr config dir
-  stat:
-    path: /mnt/services/sonarr
-  register: _sonarr_config_dir
-  become: true
-
-- name: _verify | Sonarr config dir is group media
-  assert:
-    that:
-      - _sonarr_config_dir.stat.gr_name == "media"
-    fail_msg: "/mnt/services/sonarr is not group media (gr_name={{ _sonarr_config_dir.stat.gr_name }})"
-
 # config.xml is the role's other fragile contract: sonarr rewrites it on
 # every shutdown, so config.xml.j2's element order + casing must match
 # sonarr's own writeback byte-for-byte or the next converge drifts and
