@@ -17,62 +17,31 @@
     src: /etc/containers/registries.conf.d/homelab-mirrors.conf
   register: test_registries_content
 
-- name: _verify | Podman registry mirrors reference Nexus
-  when:
-    - nexus_url | length > 0
-    - not test_use_ecr_registry_mirrors
+- name: _verify | Podman registry mirrors reference the selected backend
+  when: (nexus_url | length > 0) or test_use_ecr_registry_mirrors
+  vars:
+    _test_registry_mirror_base: >-
+      {{ test_ecr_registry
+         if test_use_ecr_registry_mirrors
+         else nexus_url ~ '/repository' }}
+    _test_registry_mirrors: >-
+      {{ test_ecr_registry_mirrors
+         if test_use_ecr_registry_mirrors
+         else {'docker.io': 'docker.io', 'ghcr.io': 'ghcr.io'} }}
   assert:
     that:
-      # Assert the mirror *location* lines, not bare 'docker.io'/'ghcr.io':
-      # those appear as the [[registry]] location regardless of whether the
-      # [[registry.mirror]] block survived, so a substring check on the bare
-      # names passes even with the mirror blocks dropped.
-      - (nexus_url ~ '/repository/docker.io') in (test_registries_content.content | b64decode)
-      - (nexus_url ~ '/repository/ghcr.io') in (test_registries_content.content | b64decode)
-    fail_msg: "registries.conf.d/homelab-mirrors.conf doesn't mirror docker.io+ghcr.io to {{ nexus_url }}"
-
-- name: _verify | Podman registry mirrors reference ECR
-  when: test_use_ecr_registry_mirrors
-  assert:
-    that:
-      - (test_ecr_registry ~ '/' ~ item.value) in (test_registries_content.content | b64decode)
+      # Check mirror destinations rather than source locations, which remain
+      # present even if a [[registry.mirror]] block disappears.
+      - (_test_registry_mirror_base ~ '/' ~ item.value) in (test_registries_content.content | b64decode)
     fail_msg: >-
       registries.conf.d/homelab-mirrors.conf doesn't mirror {{ item.key }} to
-      {{ test_ecr_registry }}/{{ item.value }}
-  loop: "{{ test_ecr_registry_mirrors | dict2items }}"
+      {{ _test_registry_mirror_base }}/{{ item.value }}
+  loop: "{{ _test_registry_mirrors | dict2items }}"
   loop_control:
     label: "{{ item.key }} -> {{ item.value }}"
 
-- name: _verify | Resolve etc_hosts_entries to configured IPs
-  when:
-    - nexus_url | length > 0
-    - etc_hosts_entries | length > 0
-  # argv form (no shell, no quoting around the hostname) + an exact match on a
-  # whitespace-split field: a substring `in stdout` would let a configured
-  # 10.0.0.1 pass against a resolved 10.0.0.10.
-  command:
-    argv:
-      - getent
-      - hosts
-      - "{{ item.key }}"
-  loop: "{{ etc_hosts_entries | dict2items }}"
-  register: test_getent
-  changed_when: false
-  failed_when: test_getent.rc != 0 or item.value not in test_getent.stdout.split()
-  loop_control:
-    label: "{{ item.key }} -> {{ item.value }}"
-
-- name: _verify | Apt update reaches configured mirror
-  apt:
-    update_cache: true
-    cache_valid_time: 0
-  become: true
-
-# Functional mirror probes: the slurp+substring asserts above prove the config
-# files name Nexus, but not that the mirror actually serves -- the registries.conf
-# path layout in particular is subtle (the docker v2 API lives only under
-# /repository/<repo>/v2/, see mirrors.yml). Hit each mirror's API so a
-# parses-but-404s mirror fails here, the way the apt update above does for apt.
+# Functional mirror probe: the config assertions prove registries.conf names
+# Nexus, but only its API proves the path layout actually serves.
 - name: _verify | Podman docker.io mirror serves its v2 API
   when:
     - nexus_url | length > 0

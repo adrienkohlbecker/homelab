@@ -51,49 +51,25 @@
     group: root
   become: true
 
-- name: mirrors | Configure podman registry mirrors for Nexus
-  when:
-    - nexus_url | length > 0
-    - not test_use_ecr_registry_mirrors
+- name: mirrors | Configure podman registry mirrors
+  when: (nexus_url | length > 0) or test_use_ecr_registry_mirrors
   copy:
     dest: /etc/containers/registries.conf.d/homelab-mirrors.conf
     mode: "0644"
     owner: root
     group: root
-    # Mirror location includes /repository/<repo>: podman bakes this path
-    # into the image namespace and emits /v2/repository/<repo>/<image>/...
-    # which roles/nexus's nginx rewrite swaps to Nexus's expected
-    # /repository/<repo>/v2/<image>/... layout. The bare-host form
-    # (no path) doesn't work — Nexus's docker v2 API only lives under
-    # /repository/<repo>/v2/, never at the host root.
+    # Nexus locations include /repository/<repo>: podman bakes the path into
+    # the image namespace and roles/nexus's nginx rewrite moves it ahead of
+    # /v2/. A bare Nexus host would address an API that does not exist.
     content: |
-      [[registry]]
-      location = "docker.io"
-
-      [[registry.mirror]]
-      location = "{{ nexus_url }}/repository/docker.io"
-
-      [[registry]]
-      location = "ghcr.io"
-
-      [[registry.mirror]]
-      location = "{{ nexus_url }}/repository/ghcr.io"
-  become: true
-
-- name: mirrors | Configure podman registry mirrors for ECR
-  when: test_use_ecr_registry_mirrors
-  copy:
-    dest: /etc/containers/registries.conf.d/homelab-mirrors.conf
-    mode: "0644"
-    owner: root
-    group: root
-    content: |
-      {% for source, prefix in test_ecr_registry_mirrors | dictsort %}
+      {% set mirror_base = test_ecr_registry if test_use_ecr_registry_mirrors else nexus_url ~ '/repository' %}
+      {% set registry_mirrors = test_ecr_registry_mirrors if test_use_ecr_registry_mirrors else {'docker.io': 'docker.io', 'ghcr.io': 'ghcr.io'} %}
+      {% for source, prefix in registry_mirrors | dictsort %}
       [[registry]]
       location = "{{ source }}"
 
       [[registry.mirror]]
-      location = "{{ test_ecr_registry }}/{{ prefix }}"
+      location = "{{ mirror_base }}/{{ prefix }}"
       {% endfor %}
   become: true
 
