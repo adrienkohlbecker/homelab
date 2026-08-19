@@ -19,17 +19,6 @@
   tags:
     - speedtest
 
-- name: Install speedtest service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: speedtest.service.j2
-      condition: "{{ not ansible_check_mode or speedtest_user.uid is defined }}"
-  tags:
-    - speedtest
-
 - name: Check whether podman is installed
   stat:
     path: /usr/bin/podman
@@ -60,15 +49,15 @@
   tags:
     - speedtest
 
-- name: Enable speedtest service
+- name: Manage speedtest service
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: speedtest.service
-      condition: "{{ not (ansible_check_mode and (speedtest_user.changed or speedtest_service_result.changed)) }}"
-      restart: "{{ speedtest_service_result.changed or speedtest_network.changed }}"
+      src: speedtest.service.j2
+      condition: "{{ not ansible_check_mode or speedtest_user.uid is defined }}"
+      restart: "{{ speedtest_network.changed }}"
   tags:
     - speedtest
 

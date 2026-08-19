@@ -66,25 +66,13 @@
   tags:
     - zfs_autobackup
 
-- name: Add zfs_autosnapshot.target systemd unit
+- name: Manage zfs_autosnapshot.target
   import_role:
     name: systemd_unit
-    tasks_from: install
+    tasks_from: unit
   vars:
     systemd_unit_args:
       src: zfs_autosnapshot.target
-  tags:
-    - zfs_autobackup
-
-- name: Enable zfs_autosnapshot.target
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: zfs_autosnapshot.target
-      condition: "{{ not (ansible_check_mode and zfs_autosnapshot_target_result.changed) }}"
-      restart: "{{ zfs_autosnapshot_target_result.changed }}"
   tags:
     - zfs_autobackup
 

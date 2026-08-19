@@ -285,14 +285,18 @@
         fluentbit_extension_args:
           name: gitlab_runner
 
-    - name: Install gitlab_runner.service
+    - name: Manage gitlab_runner.service
       import_role:
         name: systemd_unit
-        tasks_from: install
+        tasks_from: unit
       vars:
         systemd_unit_args:
           src: gitlab_runner.service.j2
           condition: "{{ not ansible_check_mode or gitlab_runner_user.uid is defined }}"
+          start: "{{ not qemu_test }}"
+          restart: >-
+            {{ gitlab_runner_binary.changed
+               or (gitlab_runner_fleeting_aws_binary.changed | default(false)) }}
 
     # Live registration needs a real gitlab.com runner token -- none exists in
     # the qemu harness, so enable-only under qemu_test and let _verify exercise
@@ -302,20 +306,6 @@
     # setting that genuinely needs a restart (listen_address) comes from the
     # stable service_ports map, so restarting on config would risk a 30-min
     # drain for changes the runner picks up live.
-    - name: Enable and start gitlab_runner.service
-      import_role:
-        name: systemd_unit
-        tasks_from: service
-      vars:
-        systemd_unit_args:
-          src: gitlab_runner.service
-          start: "{{ not qemu_test }}"
-          restart: >-
-            {{ gitlab_runner_service_result.changed
-               or gitlab_runner_binary.changed
-               or (gitlab_runner_fleeting_aws_binary.changed | default(false)) }}
-          condition: "{{ not (ansible_check_mode and (gitlab_runner_service_result.changed or gitlab_runner_user.changed)) }}"
-
     # Bound the rootless runner's user slice so a wide CI fan-out can't exhaust
     # host RAM and swap out a co-tenant control plane (fox: headscale + nginx).
     # The job containers live under user-<uid>.slice (rootless podman), not

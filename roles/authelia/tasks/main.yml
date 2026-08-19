@@ -142,17 +142,6 @@
   tags:
     - authelia
 
-- name: Install authelia service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: authelia.service.j2
-      condition: "{{ not ansible_check_mode or authelia_user.uid is defined }}"
-  tags:
-    - authelia
-
 - name: Pull authelia image
   when: not ansible_check_mode or authelia_podman.stat.exists
   containers.podman.podman_image:
@@ -165,18 +154,16 @@
   tags:
     - authelia
 
-# Restart triggers cover every config + secret rotation path.
-- name: Enable authelia service
+- name: Manage authelia service
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: authelia.service
-      condition: "{{ not (ansible_check_mode and (authelia_service_result.changed or authelia_user.changed)) }}"
+      src: authelia.service.j2
+      condition: "{{ not ansible_check_mode or authelia_user.uid is defined }}"
       restart: >-
-        {{ authelia_service_result.changed
-           or authelia_network.changed
+        {{ authelia_network.changed
            or authelia_config_result.changed
            or authelia_users_result.changed
            or (_authelia_jwt_secret.changed | default(false))

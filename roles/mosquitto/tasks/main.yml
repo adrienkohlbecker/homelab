@@ -97,17 +97,6 @@
   tags:
     - mosquitto
 
-- name: Install mosquitto service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: mosquitto.service.j2
-      condition: "{{ not ansible_check_mode or mosquitto_user.uid is defined }}"
-  tags:
-    - mosquitto
-
 - name: Check whether podman is installed
   stat:
     path: /usr/bin/podman
@@ -127,14 +116,14 @@
   tags:
     - mosquitto
 
-- name: Enable mosquitto service
+- name: Manage mosquitto service
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: mosquitto.service
-      condition: "{{ not (ansible_check_mode and (mosquitto_service_result.changed or mosquitto_user.changed)) }}"
-      restart: "{{ mosquitto_service_result.changed or mosquitto_conf.changed or mosquitto_pwfile.changed }}"
+      src: mosquitto.service.j2
+      condition: "{{ not ansible_check_mode or mosquitto_user.uid is defined }}"
+      restart: "{{ mosquitto_conf.changed or mosquitto_pwfile.changed }}"
   tags:
     - mosquitto

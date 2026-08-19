@@ -3,16 +3,6 @@
 # host-root-equivalent podman-socket group membership. See the .service.j2
 # header for the trust rationale. Deployed wherever podman + netdata co-locate
 # (site.yml), ordered before netdata so its docker collector finds the proxy.
-- name: Install socket_proxy service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: socket_proxy.service.j2
-  tags:
-    - socket_proxy
-
 # socket_proxy sits in the base band, ahead of most podman consumers, so a
 # fresh-host `--check` run reaches the pull before the podman role has actually
 # installed podman (its apt install was only simulated). podman_image would then
@@ -59,14 +49,13 @@
   tags:
     - socket_proxy
 
-- name: Enable socket_proxy service
+- name: Manage socket_proxy service
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: socket_proxy.service
-      condition: "{{ not (ansible_check_mode and socket_proxy_service_result.changed) }}"
-      restart: "{{ socket_proxy_service_result.changed or socket_proxy_network.changed }}"
+      src: socket_proxy.service.j2
+      restart: "{{ socket_proxy_network.changed }}"
   tags:
     - socket_proxy

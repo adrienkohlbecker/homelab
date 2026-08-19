@@ -108,17 +108,6 @@
   tags:
     - homepage
 
-- name: Install homepage service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: homepage.service.j2
-      condition: "{{ not ansible_check_mode or homepage_user.uid is defined }}"
-  tags:
-    - homepage
-
 - name: Check whether podman is installed
   stat:
     path: /usr/bin/podman
@@ -140,15 +129,15 @@
 
 # Homepage hot-reloads YAML config from the bind-mounted dir, so config-file
 # changes don't need a service restart — only the unit template itself does.
-- name: Enable homepage service
+- name: Manage homepage service
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: homepage.service
-      condition: "{{ not (ansible_check_mode and (homepage_service_result.changed or homepage_user.changed)) }}"
-      restart: "{{ homepage_service_result.changed or homepage_network.changed }}"
+      src: homepage.service.j2
+      condition: "{{ not ansible_check_mode or homepage_user.uid is defined }}"
+      restart: "{{ homepage_network.changed }}"
   tags:
     - homepage
 

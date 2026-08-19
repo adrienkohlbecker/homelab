@@ -91,17 +91,6 @@
   tags:
     - z2m
 
-- name: Install z2m service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: z2m.service.j2
-      condition: "{{ not ansible_check_mode or z2m_user.uid is defined }}"
-  tags:
-    - z2m
-
 - name: Check whether podman is installed
   stat:
     path: /usr/bin/podman
@@ -121,15 +110,15 @@
   tags:
     - z2m
 
-- name: Enable z2m service
+- name: Manage z2m service
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: z2m.service
-      condition: "{{ not (ansible_check_mode and (z2m_service_result.changed or z2m_user.changed)) }}"
-      restart: "{{ z2m_service_result.changed or z2m_conf.changed or z2m_secret.changed or z2m_cover_patch.changed }}"
+      src: z2m.service.j2
+      condition: "{{ not ansible_check_mode or z2m_user.uid is defined }}"
+      restart: "{{ z2m_conf.changed or z2m_secret.changed or z2m_cover_patch.changed }}"
       # QEMU has no coordinator, so z2m waits for the serial adapter and never
       # becomes healthy.
       start: "{{ not (qemu_test | bool) }}"

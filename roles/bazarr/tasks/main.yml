@@ -71,17 +71,6 @@
   tags:
     - bazarr
 
-- name: Install bazarr service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: bazarr.service.j2
-      condition: "{{ not ansible_check_mode or bazarr_user.uid is defined }}"
-  tags:
-    - bazarr
-
 - name: Check whether podman is installed
   stat:
     path: /usr/bin/podman
@@ -101,15 +90,15 @@
   tags:
     - bazarr
 
-- name: Enable bazarr service
+- name: Manage bazarr service
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: bazarr.service
-      condition: "{{ not (ansible_check_mode and (bazarr_service_result.changed or bazarr_user.changed)) }}"
-      restart: "{{ bazarr_service_result.changed or bazarr_conf.changed or bazarr_user.changed or media_group.changed }}"
+      src: bazarr.service.j2
+      condition: "{{ not ansible_check_mode or bazarr_user.uid is defined }}"
+      restart: "{{ bazarr_conf.changed or bazarr_user.changed or media_group.changed }}"
   tags:
     - bazarr
 

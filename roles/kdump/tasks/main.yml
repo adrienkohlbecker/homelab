@@ -363,10 +363,10 @@
   tags:
     - kdump
 
-- name: Install NMI watchdog re-arm timer unit
+- name: Manage NMI watchdog re-arm timer unit
   import_role:
     name: systemd_unit
-    tasks_from: install
+    tasks_from: unit
   vars:
     systemd_unit_args:
       src: kdump_nmi_watchdog.timer
@@ -377,13 +377,3 @@
 # Enable + start the timer (not the service). Starting it now, already past
 # OnBootSec, triggers an immediate re-arm; at every subsequent boot it fires
 # 3min in. The service it pulls is the one installed above.
-- name: Enable NMI watchdog re-arm timer
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: kdump_nmi_watchdog.timer
-      condition: "{{ kdump_qemu_kvm_unit.stat.exists }}"
-  tags:
-    - kdump

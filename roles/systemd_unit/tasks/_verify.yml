@@ -1,5 +1,5 @@
-# Tests for the systemd_unit helper's install / remove / service / reenable
-# entrypoints. Each scenario installs a fixture unit, drives the path,
+# Tests for the systemd_unit helper's install / unit / remove entrypoints.
+# Each scenario installs a fixture unit, drives the path,
 # asserts the observable behaviour, and cleans up.
 
 # Install-path coverage: the rescue block fires on any systemd-analyze
@@ -249,21 +249,13 @@
   assert:
     that: not systemd_unit_verify_ok_service_result.changed
 
-- name: _verify | Reinstall fixture for stop-only removal
+- name: _verify | Manage fixture for stop-only removal
   import_role:
     name: systemd_unit
-    tasks_from: install
+    tasks_from: unit
   vars:
     systemd_unit_args:
       src: systemd_unit_verify_ok.service.j2
-
-- name: _verify | Start fixture for stop-only removal
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: systemd_unit_verify_ok.service
 
 - name: _verify | Disable fixture while leaving it active
   systemd:
@@ -338,64 +330,51 @@
     state: absent
   become: true
 
-# --- service.yml coverage ---
-# The service entrypoint (enable, start, restart, reload) is
-# the most-called path (~68 services) and has the most conditional logic.
-# Exercise the core lifecycle: install → start → idempotent re-start →
-# restart-on-change → cleanup.
-
-- name: _verify | Install fixture for service-path tests
+# --- unit.yml coverage ---
+# Exercise the combined lifecycle: install + start, idempotent re-run,
+# caller-requested restart/reload, enable-only, and cleanup.
+- name: _verify | Install and start fixture via tasks_from=unit
   import_role:
     name: systemd_unit
-    tasks_from: install
+    tasks_from: unit
   vars:
     systemd_unit_args:
       src: systemd_unit_verify_ok.service.j2
-
-- name: _verify | Start the fixture via tasks_from=service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: systemd_unit_verify_ok.service
 
 - name: _verify | Unit is active after first start  # noqa: command-instead-of-module
   command: systemctl is-active systemd_unit_verify_ok.service
   changed_when: false
 
-- name: _verify | Re-run service (idempotent — already active, no restart)
+- name: _verify | Re-run unit management idempotently
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: systemd_unit_verify_ok.service
+      src: systemd_unit_verify_ok.service.j2
 
 - name: _verify | Restart fires when requested
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: systemd_unit_verify_ok.service
+      src: systemd_unit_verify_ok.service.j2
       restart: true
 
-# Reload path: drive reload: true while the unit is active (started above) so
-# systemd_unit_started.changed is false and the reload task fires.
 - name: _verify | Reload fires when ExecReload is present
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: systemd_unit_verify_ok.service
+      src: systemd_unit_verify_ok.service.j2
       reload: true
 
 - name: _verify | Enable the copy-path fixture without starting it
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
       src: systemd_unit_verify_copy_ok.service
@@ -415,7 +394,6 @@
 - name: _verify | Enable-only leaves the fixture inactive
   assert:
     that:
-      - not systemd_unit_verify_copy_ok_service_started_result.changed
       - "'UnitFileState=enabled' in _systemd_unit_enable_only_state.stdout_lines"
       - "'ActiveState=inactive' in _systemd_unit_enable_only_state.stdout_lines"
 
@@ -427,7 +405,7 @@
     systemd_unit_args:
       dest: systemd_unit_verify_copy_ok.service
 
-- name: _verify | Cleanup service-path fixture
+- name: _verify | Cleanup unit-path fixture
   import_role:
     name: systemd_unit
     tasks_from: remove
@@ -435,13 +413,21 @@
     systemd_unit_args:
       dest: systemd_unit_verify_ok.service
 
-# --- Reenable follows the current unit's install result ---
+# --- Reenable follows the current unit write ---
 # `systemctl enable` only adds the symlinks named in a unit's *current*
 # [Install]; it never removes ones dropped from the template. So a unit that
 # leaves a target (e.g. a service leaving zfs_autosnapshot.target) keeps a
-# dangling .wants symlink on every already-converged host. service.yml reenables
-# on a unit-file change to prune it. First prove that changing a different unit
-# does not trigger reenable, then change this unit and prove the orphan is gone.
+# dangling .wants symlink on every already-converged host. unit.yml reenables
+# only on its own file change, so prove steady state preserves the planted link
+# before a template change prunes it.
+- name: _verify | Install the fixture for the prune test
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+
 - name: _verify | Plant a legacy target.wants dir for the prune test
   file:
     path: /etc/systemd/system/systemd_unit_verify_stale.target.wants
@@ -458,65 +444,33 @@
     follow: false
   become: true
 
-- name: _verify | Install the fixture fresh so the unit file reports changed
+- name: _verify | Manage the unchanged unit
   import_role:
     name: systemd_unit
-    tasks_from: install
+    tasks_from: unit
   vars:
     systemd_unit_args:
       src: systemd_unit_verify_ok.service.j2
 
-- name: _verify | Reinstall the fixture so its current result reports no change
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: systemd_unit_verify_ok.service.j2
-
-- name: _verify | Install an unrelated unit after the current unit result
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: systemd_unit_verify_copy_ok.service
-
-- name: _verify | Service the unchanged unit after the unrelated install
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: systemd_unit_verify_ok.service
-
-- name: _verify | Stat the legacy link after the unrelated install
+- name: _verify | Stat the legacy link after the unchanged run
   stat:
     path: /etc/systemd/system/systemd_unit_verify_stale.target.wants/systemd_unit_verify_ok.service
     follow: false
   register: _systemd_unit_unrelated_reenable_link
   become: true
 
-- name: _verify | Unrelated unit change did not trigger reenable
+- name: _verify | Unchanged unit did not trigger reenable
   assert:
     that: _systemd_unit_unrelated_reenable_link.stat.islnk | default(false)
 
-- name: _verify | Change the current unit so its install result reports changed
+- name: _verify | Change and manage the current unit
   import_role:
     name: systemd_unit
-    tasks_from: install
+    tasks_from: unit
   vars:
     systemd_unit_verify_suffix: _updated
     systemd_unit_args:
       src: systemd_unit_verify_ok.service.j2
-
-- name: _verify | Enable+start via service so the change-driven reenable fires
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: systemd_unit_verify_ok.service
 
 - name: _verify | Stat the legacy and current enable symlinks
   stat:
@@ -547,14 +501,6 @@
   vars:
     systemd_unit_args:
       dest: systemd_unit_verify_ok.service
-
-- name: _verify | Cleanup unrelated reenable-test unit
-  import_role:
-    name: systemd_unit
-    tasks_from: remove
-  vars:
-    systemd_unit_args:
-      dest: systemd_unit_verify_copy_ok.service
 
 - name: _verify | Cleanup the legacy target.wants dir
   file:

@@ -234,26 +234,13 @@
 # Install via the systemd_unit helper: it validates the rendered unit with
 # systemd-analyze verify in place (rolling back on a bad unit) and reloads the
 # daemon. .mount is not a .service, so the helper's podman pre-pull steps no-op.
-- name: Install the read-only archive bind mount
+- name: Manage the read-only archive bind mount
   import_role:
     name: systemd_unit
-    tasks_from: install
+    tasks_from: unit
   vars:
     systemd_unit_args:
       src: archive.mount.j2
       dest: mnt-services-mutt-archive.mount
-  tags:
-    - mutt
-
-- name: Enable and start the read-only archive bind mount
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: mnt-services-mutt-archive.mount
-      # Remount when the unit's Options/What/Where change: a plain `started`
-      # won't re-apply them to an already-mounted bind.
-      restart: "{{ mnt_services_mutt_archive_mount_result.changed }}"
   tags:
     - mutt

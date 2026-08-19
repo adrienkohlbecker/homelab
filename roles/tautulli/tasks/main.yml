@@ -259,17 +259,6 @@
   tags:
     - tautulli
 
-- name: Install tautulli service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: tautulli.service.j2
-      condition: "{{ not ansible_check_mode or tautulli_user.uid is defined }}"
-  tags:
-    - tautulli
-
 - name: Check whether podman is installed
   stat:
     path: /usr/bin/podman
@@ -289,15 +278,15 @@
   tags:
     - tautulli
 
-- name: Enable tautulli service
+- name: Manage tautulli service
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: tautulli.service
+      src: tautulli.service.j2
       condition: "{{ not ansible_check_mode or tautulli_user.uid is defined }}"
-      restart: "{{ tautulli_service_result.changed or tautulli_conf.changed or tautulli_user.changed or media_group.changed }}"
+      restart: "{{ tautulli_conf.changed or tautulli_user.changed or media_group.changed }}"
   tags:
     - tautulli
 

@@ -121,17 +121,6 @@
   tags:
     - seerr
 
-- name: Install seerr service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: seerr.service.j2
-      condition: "{{ not ansible_check_mode or seerr_user.uid is defined }}"
-  tags:
-    - seerr
-
 - name: Check whether podman is installed
   stat:
     path: /usr/bin/podman
@@ -151,15 +140,15 @@
   tags:
     - seerr
 
-- name: Enable seerr service
+- name: Manage seerr service
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: seerr.service
-      condition: "{{ not (ansible_check_mode and (seerr_service_result.changed or seerr_user.changed)) }}"
-      restart: "{{ seerr_service_result.changed or seerr_settings_result.changed or seerr_user.changed }}"
+      src: seerr.service.j2
+      condition: "{{ not ansible_check_mode or seerr_user.uid is defined }}"
+      restart: "{{ seerr_settings_result.changed or seerr_user.changed }}"
   tags:
     - seerr
 

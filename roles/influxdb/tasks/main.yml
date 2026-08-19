@@ -186,17 +186,6 @@
   tags:
     - influxdb
 
-- name: Install influxdb service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: influxdb.service.j2
-      condition: "{{ not ansible_check_mode or influxdb_user.uid is defined }}"
-  tags:
-    - influxdb
-
 - name: Pull influxdb image
   when: not ansible_check_mode or influxdb_podman.stat.exists
   containers.podman.podman_image:
@@ -209,17 +198,16 @@
   tags:
     - influxdb
 
-- name: Enable influxdb service
+- name: Manage influxdb service
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: influxdb.service
-      condition: "{{ not (ansible_check_mode and (influxdb_service_result.changed or influxdb_user.changed)) }}"
+      src: influxdb.service.j2
+      condition: "{{ not ansible_check_mode or influxdb_user.uid is defined }}"
       restart: >-
-        {{ influxdb_service_result.changed
-           or influxdb_network.changed
+        {{ influxdb_network.changed
            or (_influxdb_root_user_secret.changed | default(false))
            or (_influxdb_root_password_secret.changed | default(false)) }}
   tags:
@@ -244,7 +232,7 @@
   retries: 30
   delay: 2
   until: _influxdb_ready.rc == 0
-  when: not (ansible_check_mode and (influxdb_service_result.changed or influxdb_user.changed))
+  when: not (ansible_check_mode and (systemd_unit_file.changed or influxdb_user.changed))
   become: true
   tags:
     - influxdb

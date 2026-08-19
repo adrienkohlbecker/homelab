@@ -307,22 +307,11 @@
 
 # ---- service install + start ----
 
-- name: Install fan2go systemd unit
+- name: Manage fan2go systemd unit
   when: fan2go_enabled
   import_role:
     name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: fan2go.service
-  tags:
-    - fan2go
-
-- name: Enable and start fan2go service
-  when: fan2go_enabled
-  import_role:
-    name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
       src: fan2go.service
@@ -330,7 +319,6 @@
         {{ fan2go_config.changed | default(false)
            or fan2go_symlink.changed | default(false)
            or fan2go_binary_download.changed | default(false)
-           or fan2go_binary_build.changed | default(false)
-           or fan2go_service_result.changed | default(false) }}
+           or fan2go_binary_build.changed | default(false) }}
   tags:
     - fan2go

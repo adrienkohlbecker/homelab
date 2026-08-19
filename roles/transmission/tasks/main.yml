@@ -169,17 +169,6 @@
   tags:
     - transmission
 
-- name: Install transmission service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: transmission.service.j2
-      condition: "{{ not ansible_check_mode or transmission_user.uid is defined }}"
-  tags:
-    - transmission
-
 - name: Pull transmission image
   when: not ansible_check_mode or transmission_podman.stat.exists
   containers.podman.podman_image:
@@ -192,17 +181,16 @@
   tags:
     - transmission
 
-- name: Enable transmission service
+- name: Manage transmission service
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: transmission.service
-      condition: "{{ not (ansible_check_mode and (transmission_service_result.changed or transmission_user.changed)) }}"
+      src: transmission.service.j2
+      condition: "{{ not ansible_check_mode or transmission_user.uid is defined }}"
       restart: >-
-        {{ transmission_service_result.changed
-           or transmission_conf.changed
+        {{ transmission_conf.changed
            or (_transmission_rpc_password_secret.changed | default(false))
            or transmission_user.changed
            or media_group.changed }}

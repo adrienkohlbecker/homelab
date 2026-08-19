@@ -374,17 +374,6 @@
   tags:
     - homeassistant
 
-- name: Install homeassistant service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: homeassistant.service.j2
-      condition: "{{ not ansible_check_mode or homeassistant_user.uid is defined }}"
-  tags:
-    - homeassistant
-
 # Pull the image before the prestage below so its `podman create` finds it
 # already present rather than doing an unbounded implicit pull mid-task.
 - name: Check whether podman is installed
@@ -457,15 +446,15 @@
   tags:
     - homeassistant
 
-- name: Enable homeassistant service
+- name: Manage homeassistant service
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: homeassistant.service
-      condition: "{{ not (ansible_check_mode and (homeassistant_service_result.changed or homeassistant_user.changed)) }}"
-      restart: "{{ homeassistant_service_result.changed or homeassistant_conf.changed or homeassistant_secrets.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_route_script.changed }}"
+      src: homeassistant.service.j2
+      condition: "{{ not ansible_check_mode or homeassistant_user.uid is defined }}"
+      restart: "{{ homeassistant_conf.changed or homeassistant_secrets.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_route_script.changed }}"
   tags:
     - homeassistant
 

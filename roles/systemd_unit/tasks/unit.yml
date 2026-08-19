@@ -1,0 +1,96 @@
+# Install and manage one repository-owned systemd unit. Drop-ins and
+# package-owned units use tasks_from=install and role-local systemd tasks.
+#
+# Inputs are systemd_unit/install inputs plus:
+#   start             default true; false enables without touching state
+#   restart           default false; restart an already-active unit
+#   reload            default false; reload when restart is false
+#   throttle          default 0; limits lifecycle changes across hosts
+- name: unit | Install unit file
+  import_tasks: install.yml
+
+- name: unit | Validate lifecycle target for {{ systemd_unit_args.src }}
+  assert:
+    quiet: true
+    that:
+      - systemd_unit_args.for is not defined
+      - systemd_unit_args.dest_abs is not defined
+      - systemd_unit_args.user is not defined or systemd_unit_args.user == 'root'
+      - _systemd_unit_name is match('^.+\.(service|socket|target|timer|mount|automount|path|slice|scope|device|swap)$')
+    fail_msg: >-
+      tasks_from=unit manages a complete unit file with a standard systemd
+      suffix; use tasks_from=install for drop-ins. Got
+      {{ systemd_unit_args | default('<unset>') }}
+
+- name: unit | Enable {{ _systemd_unit_name }}
+  when:
+    - _systemd_unit_condition
+    - not (ansible_check_mode and systemd_unit_file.changed)
+  systemd:
+    name: "{{ _systemd_unit_name }}"
+    enabled: true
+    scope: "{{ _systemd_unit_scope }}"
+  register: _systemd_unit_enable
+  become: true
+  become_user: "{{ _systemd_unit_user }}"
+
+# Enable adds current [Install] links without pruning obsolete ones. Rebuild
+# the link set only after changing an already-enabled unit.
+- name: unit | Reenable after an install change for {{ _systemd_unit_name }}
+  when:
+    - _systemd_unit_condition
+    - not ansible_check_mode
+    - systemd_unit_file.changed
+    - _systemd_unit_enable.status.UnitFileState | default('') == 'enabled'
+  command:
+    argv:
+      - systemctl
+      - reenable
+      - "{{ _systemd_unit_name }}"
+  changed_when: false
+  become: true
+
+# Clear a crash-loop rate limit only when the next task will start or restart
+# the unit. A missing failure record is expected and benign.
+- name: unit | Reset failed state for {{ _systemd_unit_name }}
+  when:
+    - _systemd_unit_condition
+    - systemd_unit_args.start | default(true)
+    - not ansible_check_mode
+    - systemd_unit_file.changed or systemd_unit_args.restart | default(false) or _systemd_unit_enable.status.ActiveState | default('inactive') != 'active'
+  command:
+    argv:
+      - systemctl
+      - reset-failed
+      - "{{ _systemd_unit_name }}"
+  changed_when: false
+  failed_when: false
+  become: true
+
+# Start inactive units before considering refresh requests. An active unit is
+# restarted for its own file change or a caller-owned hard change; reload is
+# the hitless fallback. Condition/Assert skips leave runtime state unchanged.
+- name: unit | Apply lifecycle for {{ _systemd_unit_name }}
+  when:
+    - _systemd_unit_condition
+    - systemd_unit_args.start | default(true)
+    - _systemd_unit_enable is not skipped
+  throttle: "{{ systemd_unit_args.throttle | default(0) }}"
+  systemd:
+    name: "{{ _systemd_unit_name }}"
+    state: >-
+      {{ 'started'
+         if _systemd_unit_enable.status.ActiveState | default('inactive') != 'active'
+         else 'restarted'
+         if systemd_unit_file.changed or systemd_unit_args.restart | default(false)
+         else 'reloaded'
+         if systemd_unit_args.reload | default(false)
+         else 'started' }}
+    scope: "{{ _systemd_unit_scope }}"
+  register: systemd_unit_started
+  changed_when:
+    - systemd_unit_started.changed
+    - systemd_unit_started.status.ConditionResult | default('yes') != 'no'
+    - systemd_unit_started.status.AssertResult | default('yes') != 'no'
+  become: true
+  become_user: "{{ _systemd_unit_user }}"

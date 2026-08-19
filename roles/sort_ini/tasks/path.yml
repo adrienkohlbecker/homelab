@@ -11,28 +11,11 @@
       src: sort_ini.service.j2
       dest: sort_ini_{{ sort_ini_escaped_path }}.service
 
-- name: path | Install sort_ini.path
+- name: path | Manage sort_ini.path
   import_role:
     name: systemd_unit
-    tasks_from: install
+    tasks_from: unit
   vars:
     systemd_unit_args:
       src: sort_ini.path.j2
       dest: sort_ini_{{ sort_ini_escaped_path }}.path
-
-- name: path | Record path unit install result
-  # systemd_unit stores the install result as <unit-name>_result through the
-  # ansible_var_key filter. Mirror that key so the check-mode start-skip guard
-  # sees the install result for sort_ini_<escaped>.path.
-  set_fact:
-    _sort_ini_path_unit_changed: "{{ lookup('vars', ('sort_ini_' ~ sort_ini_escaped_path ~ '.path') | ansible_var_key ~ '_result', default={}).changed | default(false) }}"
-
-- name: path | Enable sort_ini.path
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: sort_ini_{{ sort_ini_escaped_path }}.path
-      condition: "{{ not (ansible_check_mode and _sort_ini_path_unit_changed) }}"
-      restart: "{{ _sort_ini_path_unit_changed }}"

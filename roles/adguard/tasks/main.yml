@@ -171,17 +171,6 @@
   tags:
     - adguard
 
-- name: Install adguard service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: adguard.service.j2
-      condition: "{{ not ansible_check_mode or adguard_user.uid is defined }}"
-  tags:
-    - adguard
-
 - name: Check whether podman is installed
   stat:
     path: /usr/bin/podman
@@ -201,15 +190,15 @@
   tags:
     - adguard
 
-- name: Enable adguard service
+- name: Manage adguard service
   import_role:
     name: systemd_unit
-    tasks_from: service
+    tasks_from: unit
   vars:
     systemd_unit_args:
-      src: adguard.service
-      condition: "{{ not (ansible_check_mode and (adguard_service_result.changed or adguard_user.changed)) }}"
-      restart: "{{ adguard_service_result.changed or adguard_network.changed or adguard_config.changed or adguard_tls_certs.changed }}"
+      src: adguard.service.j2
+      condition: "{{ not ansible_check_mode or adguard_user.uid is defined }}"
+      restart: "{{ adguard_network.changed or adguard_config.changed or adguard_tls_certs.changed }}"
       throttle: 1
   tags:
     - adguard
@@ -316,23 +305,13 @@
   tags:
     - adguard
 
-- name: Install DNS reboot guard service
+- name: Manage DNS reboot guard service
   import_role:
     name: systemd_unit
-    tasks_from: install
+    tasks_from: unit
   vars:
     systemd_unit_args:
       src: adguard_reboot_guard.service.j2
-  tags:
-    - adguard
-
-- name: Enable DNS reboot guard
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: adguard_reboot_guard.service
-      restart: "{{ adguard_reboot_guard_service_result.changed or adguard_reboot_guard_script.changed }}"
+      restart: "{{ adguard_reboot_guard_script.changed }}"
   tags:
     - adguard
