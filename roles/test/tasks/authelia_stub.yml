@@ -11,7 +11,7 @@
 #     always_200: every auth-request subrequest returns 200, so the site
 #         template's `auth_request /internal/authelia` always admits the
 #         parent. Use when the _verify only cares that the wiring is intact
-#         and not the gate semantics (homepage today).
+#         and not the gate semantics.
 #     gate: returns 401 unauthenticated, so the parent's error_page 401
 #         -> 302 redirect mapping fires for negative-path probes (the
 #         unauthenticated browser-redirect tests).
