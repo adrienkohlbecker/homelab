@@ -131,21 +131,17 @@
   delay: 2
   until: _radarr_http_postrestart.status == 200
 
-- name: _verify | Render the config.xml our template would write
-  set_fact:
-    _radarr_conf_expected: "{{ lookup('template', 'config.xml.j2') | rstrip_newlines }}"
-
-- name: _verify | Read config.xml back after the writeback
-  slurp:
-    src: /mnt/services/radarr/config.xml
-  register: _radarr_conf_ondisk
+# Re-run the production file contract in check mode after Radarr's writeback.
+# Any predicted change means content, ownership, or mode drifted.
+- name: _verify | Config.xml remains converged after radarr's writeback
+  copy:
+    content: "{{ lookup('template', 'config.xml.j2') | rstrip_newlines }}"
+    dest: /mnt/services/radarr/config.xml
+    owner: radarr
+    group: media
+    mode: "0600"
+  check_mode: true
+  diff: false
+  register: _radarr_conf_check
+  failed_when: _radarr_conf_check.changed
   become: true
-
-- name: _verify | Templated config.xml survives radarr's writeback without drift
-  assert:
-    that:
-      - (_radarr_conf_ondisk | slurp_text(trim=false)) == _radarr_conf_expected
-    fail_msg: >-
-      radarr rewrote config.xml into a form config.xml.j2 no longer matches --
-      its element order/casing drifted from radarr's writeback, so deploying
-      would restart-churn. Re-capture config.xml.j2 from a running instance.

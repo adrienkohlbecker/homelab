@@ -95,24 +95,20 @@
   delay: 2
   until: _lidarr_http_postrestart.status == 200
 
-- name: _verify | Render the config.xml our template would write
-  set_fact:
-    _lidarr_conf_expected: "{{ lookup('template', 'config.xml.j2') | rstrip_newlines }}"
-
-- name: _verify | Read config.xml back after the writeback
-  slurp:
-    src: /mnt/services/lidarr/config.xml
-  register: _lidarr_conf_ondisk
+# Re-run the production file contract in check mode after Lidarr's writeback.
+# Any predicted change means content, ownership, or mode drifted.
+- name: _verify | Config.xml remains converged after lidarr's writeback
+  copy:
+    content: "{{ lookup('template', 'config.xml.j2') | rstrip_newlines }}"
+    dest: /mnt/services/lidarr/config.xml
+    owner: lidarr
+    group: media
+    mode: "0600"
+  check_mode: true
+  diff: false
+  register: _lidarr_conf_check
+  failed_when: _lidarr_conf_check.changed
   become: true
-
-- name: _verify | Templated config.xml survives lidarr's writeback without drift
-  assert:
-    that:
-      - (_lidarr_conf_ondisk | slurp_text(trim=false)) == _lidarr_conf_expected
-    fail_msg: >-
-      lidarr rewrote config.xml into a form config.xml.j2 no longer matches --
-      its element order/casing drifted from lidarr's writeback, so deploying
-      would restart-churn. Re-capture config.xml.j2 from a running instance.
 
 - name: _verify | Wait for normalized lidarr startup record in lnav store
   command:
