@@ -251,16 +251,11 @@
 # to the drivers directory for these users to have write rights in it
 ;   write list = root, @lpadmin
 
-; require transport encryption / signing
-client signing = required
-client ipc signing = required
-client smb encrypt = required
+; require transport encryption / signing from clients
 server signing = required
 server smb encrypt = required
 
-; use modern protocol only
-client ipc min protocol = SMB3_11
-client min protocol = SMB3_11
+; serve modern protocol only
 server min protocol = SMB3_11
 
 ; nmbd is not run (masked by this role) -- no NetBIOS name service or LAN
