@@ -22,6 +22,7 @@
     fail_msg: "{{ item }} remains known to systemd"
   loop:
     - plex.service
+    - speedtest.service
     - tautulli.service
     - sort_ini_mnt-services-tautulli-config.ini.path
     - sort_ini_mnt-services-tautulli-config.ini.service
@@ -31,6 +32,7 @@
     path: "{{ item }}"
   loop:
     - /etc/fluent-bit/services/plex.yaml
+    - /etc/fluent-bit/services/speedtest.yaml
     - /etc/fluent-bit/services/tautulli.yaml
     - /var/lib/fluent-bit/plex.db
     - /var/lib/fluent-bit/plex.db-shm
@@ -40,4 +42,40 @@
     - /var/lib/fluent-bit/tautulli-websocket.db
   register: retired_services_fluentbit_files
   failed_when: retired_services_fluentbit_files.stat.exists
+  become: true
+
+- name: _verify | Retired Speedtest nginx site is absent
+  stat:
+    path: /etc/nginx/{{ item }}/speedtest
+  loop:
+    - sites-available
+    - sites-enabled
+  register: retired_services_speedtest_nginx_files
+  failed_when: retired_services_speedtest_nginx_files.stat.exists
+  become: true
+
+- name: _verify | Retired Speedtest Podman network is absent
+  command:
+    argv:
+      - podman
+      - network
+      - exists
+      - speedtest
+  register: retired_services_speedtest_network
+  changed_when: false
+  failed_when: retired_services_speedtest_network.rc != 1
+  become: true
+
+- name: _verify | Retired Speedtest account and group are absent
+  command:
+    argv:
+      - getent
+      - "{{ item }}"
+      - speedtest
+  loop:
+    - passwd
+    - group
+  register: retired_services_speedtest_identity
+  changed_when: false
+  failed_when: retired_services_speedtest_identity.rc != 2
   become: true

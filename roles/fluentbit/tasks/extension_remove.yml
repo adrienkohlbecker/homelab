@@ -53,7 +53,7 @@
   when: fluentbit_extension_remove_dir.stat.isdir | default(false)
   copy:
     content: |
-      includes:
+      includes:{{ '' if fluentbit_extension_remove_remaining.files else ' []' }}
       {% for extension in fluentbit_extension_remove_remaining.files | map(attribute='path') | sort %}
         - {{ extension }}
       {% endfor %}

@@ -1,4 +1,3 @@
-# Keep a lightweight cell attached to the empty role so future tombstones inherit
-# a ready integration-test target.
+# Podman-backed tombstones exercise network and image cleanup.
 machines:
-  box:
+  box_deps:

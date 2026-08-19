@@ -1,4 +1,14 @@
 ---
+- name: _setup | Create retired Speedtest account
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: speedtest
+      id: 60734
+      config_dir: false
+
 - name: _setup | Create retained service and Fluent Bit fixture directories
   file:
     path: "{{ item }}"
@@ -28,7 +38,7 @@
     - /mnt/services/sqlite/tautulli
   become: true
 
-- name: _setup | Install disposable Plex and Tautulli fixture units
+- name: _setup | Install disposable retired service fixture units
   copy:
     content: |
       [Unit]
@@ -47,10 +57,11 @@
     mode: "0644"
   loop:
     - plex
+    - speedtest
     - tautulli
   become: true
 
-- name: _setup | Start disposable Plex and Tautulli fixture units
+- name: _setup | Start disposable retired service fixture units
   systemd:
     name: "{{ item }}.service"
     daemon_reload: true
@@ -58,6 +69,7 @@
     state: started
   loop:
     - plex
+    - speedtest
     - tautulli
   become: true
 
@@ -112,7 +124,39 @@
     mode: "0644"
   loop:
     - plex
+    - speedtest
     - tautulli
+  become: true
+
+- name: _setup | Create retired Speedtest nginx fixture directories
+  file:
+    path: /etc/nginx/{{ item }}
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - sites-available
+    - sites-enabled
+  become: true
+
+- name: _setup | Create retired Speedtest nginx site fixtures
+  copy:
+    content: "retired\n"
+    dest: /etc/nginx/{{ item }}/speedtest
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - sites-available
+    - sites-enabled
+  become: true
+
+- name: _setup | Create retired Speedtest Podman network
+  containers.podman.podman_network:
+    name: speedtest
+    disable_dns: false
+    state: present
   become: true
 
 - name: _setup | Create retired Fluent Bit cursor fixtures

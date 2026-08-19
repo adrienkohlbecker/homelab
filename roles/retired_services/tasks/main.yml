@@ -1,4 +1,26 @@
 ---
+# Speedtest was stateless, so retirement removes its account along with every
+# runnable artifact. Its numeric identity remains reserved in legacy_service_ids.
+- name: Retire Speedtest service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: speedtest.service
+  tags:
+    - retired_services
+
+- name: Retire Speedtest nginx site
+  import_role:
+    name: nginx
+    tasks_from: site_remove
+  vars:
+    nginx_site_remove_args:
+      subdomain: speedtest
+  tags:
+    - retired_services
+
 # Plex and Tautulli are retired, but their state stays intact for possible
 # inspection or recovery. Their locked users/groups and legacy ID reservations
 # keep the retained files' ownership meaningful; only runnable artifacts and
@@ -63,7 +85,7 @@
   tags:
     - retired_services
 
-- name: Remove Plex and Tautulli Fluent Bit extensions
+- name: Remove retired service Fluent Bit extensions
   import_role:
     name: fluentbit
     tasks_from: extension_remove
@@ -71,6 +93,7 @@
     fluentbit_extension_remove_args:
       names:
         - plex
+        - speedtest
         - tautulli
   tags:
     - retired_services
@@ -107,14 +130,41 @@
   tags:
     - retired_services
 
-- name: Remove retired Plex and Tautulli container images
+- name: Remove retired Speedtest Podman network
+  when: retired_services_podman.stat.exists
+  containers.podman.podman_network:
+    name: speedtest
+    state: absent
+  become: true
+  tags:
+    - retired_services
+
+- name: Remove retired service container images
   when: retired_services_podman.stat.exists
   containers.podman.podman_image:
     name: "{{ item }}"
     state: absent
   loop:
     - docker.io/plexinc/pms-docker:1.43.2.10687-563d026ea
+    - ghcr.io/librespeed/speedtest:6.1.0
     - docker.io/linuxserver/tautulli:2.14.2
+  become: true
+  tags:
+    - retired_services
+
+- name: Remove retired Speedtest account
+  user:
+    name: speedtest
+    state: absent
+    force: true
+  become: true
+  tags:
+    - retired_services
+
+- name: Remove retired Speedtest group
+  group:
+    name: speedtest
+    state: absent
   become: true
   tags:
     - retired_services

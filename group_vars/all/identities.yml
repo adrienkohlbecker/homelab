@@ -28,15 +28,13 @@ static_service_ids:
   sabnzbd: 60731
   seerr: 60732
   sonarr: 60733
-  speedtest: 60734
   transmission: 60736
   wolweb: 60737
   z2m: 60738
   zfs_autobackup: 60739
 
-# These identities still own restored files but no active role creates them.
-# Reserving their values prevents a future service from making the ownership
-# ambiguous; the lab migration owns any one-time file conversion.
+# Retired identities stay reserved so restored or overlooked files cannot gain
+# ambiguous ownership. The lab migration owns any one-time file conversion.
 legacy_service_ids:
   compta: 60709
   csplogger: 60710
@@ -46,6 +44,7 @@ legacy_service_ids:
   openobserve: 60726
   pihole: 60727
   plex: 60728
+  speedtest: 60734
   tautulli: 60735
 
 static_group_ids:

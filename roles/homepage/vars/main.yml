@@ -35,4 +35,3 @@ homepage_bookmarks:
     - { name: Home Assistant, abbr: HA, sub: homeassistant, icon: home-assistant }
     - { name: Zigbee2MQTT,    abbr: Z2, sub: z2m,           icon: zigbee2mqtt }
     - { name: Filebrowser,    abbr: FB, sub: filebrowser,   icon: filebrowser-quantum }
-    - { name: Speedtest,      abbr: ST, sub: speedtest,     icon: librespeed }

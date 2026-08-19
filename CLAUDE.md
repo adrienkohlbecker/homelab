@@ -194,7 +194,7 @@ Add `--init` (placed right after `--name`) **only when the image runs the applic
 
 - **s6-overlay** — `ENTRYPOINT ["/init"]`. Every `linuxserver/*` image (sonarr/radarr/lidarr/bazarr/sabnzbd/transmission, …) and `ghcr.io/home-assistant/home-assistant`.
 - **dumb-init / tini** — e.g. `louislam/uptime-kuma` (`ENTRYPOINT ["/usr/bin/dumb-init","--"]`).
-- **entrypoint that `exec`s a process supervisor or webserver master** — e.g. `librespeed/speedtest` ends in `exec apache2-foreground`; apache reaps and forwards signals itself.
+- **entrypoint that `exec`s a process supervisor or webserver master** — the supervisor reaps children and forwards signals itself.
 
 Verify before deciding, don't guess: `sudo podman image inspect <img> --format '{{json .Config.Entrypoint}}'` on the host (and read the entrypoint script if it's a shell wrapper). A `/init`, a `dumb-init`/`tini`, or a trailing `exec <supervisor>` means skip `--init`.
 
