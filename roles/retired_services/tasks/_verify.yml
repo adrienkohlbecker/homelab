@@ -36,6 +36,13 @@
   failed_when: retired_services_sort_ini.stat.exists
   become: true
 
+- name: _verify | Retired root backup SSH config is absent
+  stat:
+    path: /root/.ssh/config
+  register: retired_services_root_ssh_config
+  failed_when: retired_services_root_ssh_config.stat.exists
+  become: true
+
 - name: _verify | Retired Fluent Bit files are absent
   stat:
     path: "{{ item }}"

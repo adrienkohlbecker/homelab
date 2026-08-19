@@ -206,6 +206,7 @@
     state: absent
   loop:
     - /etc/logrotate.d/zfs_autobackup
+    - /root/.ssh/config
     - /var/lib/zfs_autobackup/.config/systemd
   become: true
   tags:

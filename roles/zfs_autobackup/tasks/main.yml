@@ -109,14 +109,6 @@
   tags:
     - zfs_autobackup
 
-- name: Remove the retired root backup SSH config
-  file:
-    path: /root/.ssh/config
-    state: absent
-  become: true
-  tags:
-    - zfs_autobackup
-
 - name: Copy the backup scripts
   copy:
     src: "{{ item }}.sh"

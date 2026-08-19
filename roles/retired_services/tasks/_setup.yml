@@ -128,6 +128,15 @@
     - tautulli
   become: true
 
+- name: _setup | Create retired root backup SSH config fixture
+  copy:
+    content: "Host *\n    Compression no\n"
+    dest: /root/.ssh/config
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+
 - name: _setup | Create retired Speedtest nginx fixture directories
   file:
     path: /etc/nginx/{{ item }}
