@@ -50,14 +50,14 @@
   # removed device-info advert without flushing the LAN's mDNS cache. A
   # conf change wins both — restart already re-reads the services dir, so
   # the reload is redundant in that case.
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: avahi-daemon.service
-      condition: "{{ not (ansible_check_mode and avahi_apt.changed) }}"
-      restart: "{{ avahi_daemon_conf.changed }}"
-      reload: "{{ avahi_device_info_removed.changed and not avahi_daemon_conf.changed }}"
+  when: not (ansible_check_mode and avahi_apt.changed)
+  systemd:
+    name: avahi-daemon.service
+    enabled: true
+    state: >-
+      {{ 'restarted' if avahi_daemon_conf.changed
+         else 'reloaded' if avahi_device_info_removed.changed
+         else 'started' }}
+  become: true
   tags:
     - avahi

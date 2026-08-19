@@ -91,29 +91,38 @@
 
 # Enable + start (an idempotent liveness assertion: resolved manages
 # /run/systemd/resolve/resolv.conf, so if it's down the host's entire DNS
-# path goes stale) + restart-on-change, via the systemd_unit helper -- which
-# also clears a StartLimitBurst rate-limit lockout (DNS is load-bearing and
-# can crash-loop) and matches the avahi daemon-conf idiom. enabled=true
-# (helper default) pins boot-survival so the symlink target is re-produced
+# path goes stale) + restart-on-change. Clear a StartLimitBurst lockout first
+# because DNS is load-bearing and can crash-loop. enabled=true pins
+# boot-survival so the symlink target is re-produced
 # on every boot, not just while resolved happens to be running.
 #
-# Order is load-bearing: the helper restarts at the end of this import,
-# which sits after the resolv.conf symlink task above -- so the symlink
+# Order is load-bearing: lifecycle management sits after the resolv.conf
+# symlink task above, so the symlink
 # already points at the upstream-servers file before the restart tears down
 # the 127.0.0.53 stub. Without that order there's a window where the stub is
 # dead and /etc/resolv.conf still resolves through the now-black-hole
 # stub-resolv.conf.
+- name: Clear systemd-resolved rate limit
+  when: not ansible_check_mode
+  # A unit with no failed state needs no reset and remains safe to manage.
+  command: systemctl reset-failed systemd-resolved.service
+  changed_when: false
+  failed_when: false
+  become: true
+  tags:
+    - resolved
+
 - name: Enable, start, and restart-on-change systemd-resolved
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: systemd-resolved.service
-      condition: "{{ not (ansible_check_mode and resolved_apt.changed) }}"
-      restart: >-
-        {{ resolved_apt.changed
-           or resolved_conf_d_99_custom_conf_result.changed
-           or resolved_resolv_conf.changed }}
+  when: not (ansible_check_mode and resolved_apt.changed)
+  systemd:
+    name: systemd-resolved.service
+    enabled: true
+    state: >-
+      {{ 'restarted'
+         if resolved_apt.changed
+            or resolved_conf_d_99_custom_conf_result.changed
+            or resolved_resolv_conf.changed
+         else 'started' }}
+  become: true
   tags:
     - resolved

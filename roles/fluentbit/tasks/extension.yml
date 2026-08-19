@@ -85,15 +85,13 @@
   become: true
 
 - name: Reload fluent-bit for service extension
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: fluent-bit.service
-      condition: "{{ not ansible_check_mode }}"
-      reload: >-
-        {{ fluentbit_extension_config.changed or
-           fluentbit_extension_shared_lua.changed or
-           fluentbit_extension_lua_removed.changed or
-           fluentbit_extension_manifest.changed }}
+  when: not ansible_check_mode
+  systemd:
+    name: fluent-bit.service
+    enabled: true
+    state: >-
+      {{ 'reloaded'
+         if fluentbit_extension_config.changed or fluentbit_extension_shared_lua.changed
+            or fluentbit_extension_lua_removed.changed or fluentbit_extension_manifest.changed
+         else 'started' }}
+  become: true

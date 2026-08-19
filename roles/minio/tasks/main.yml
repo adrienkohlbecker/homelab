@@ -111,14 +111,15 @@
     - minio
 
 - name: Enable minio service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: minio.service
-      condition: "{{ not (ansible_check_mode and (minio_deb_changed | default(false) | bool)) }}"
-      restart: "{{ minio_service_d_override_conf_result.changed or minio_cfg.changed or (minio_deb_changed | default(false) | bool) }}"
+  when: not (ansible_check_mode and (minio_deb_changed | default(false) | bool))
+  systemd:
+    name: minio.service
+    enabled: true
+    state: >-
+      {{ 'restarted'
+         if minio_service_d_override_conf_result.changed or minio_cfg.changed or (minio_deb_changed | default(false) | bool)
+         else 'started' }}
+  become: true
   tags:
     - minio
 

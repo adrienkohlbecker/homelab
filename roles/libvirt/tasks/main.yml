@@ -134,30 +134,25 @@
     - libvirt
 
 - name: Enable libvirtd service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: libvirtd.service
-      condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
-      # Ubuntu ships libvirtd with --timeout 120 and active sockets. Keep the
-      # boot-time enablement without force-starting an intentionally idle
-      # daemon on every converge; only a firewall-backend change warrants
-      # bringing it up (started-or-restarted) so it re-reads network.conf.
-      start: "{{ libvirt_firewall_backend.changed | default(false) }}"
-      restart: "{{ libvirt_firewall_backend.changed | default(false) }}"
+  when: not (ansible_check_mode and libvirt_apt.changed)
+  # Ubuntu ships libvirtd with --timeout 120 and active sockets. Keep the
+  # service enabled without force-starting an intentionally idle daemon.
+  systemd:
+    name: libvirtd.service
+    enabled: true
+    state: "{{ 'restarted' if libvirt_firewall_backend.changed | default(false) else omit }}"
+  become: true
   tags:
     - libvirt
 
 - name: Enable libvirtd socket
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: libvirtd.socket
-      condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
+  when: not (ansible_check_mode and libvirt_apt.changed)
+  systemd:
+    name: libvirtd.socket
+    enabled: true
+    state: started
+  register: libvirt_libvirtd_socket_started_result
+  become: true
   tags:
     - libvirt
 
@@ -165,29 +160,27 @@
 # sockets, but enabling doesn't start them -- without an explicit start,
 # read-only clients and virt-admin only work after the next reboot.
 - name: Enable libvirtd read-only socket
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: libvirtd-ro.socket
-      condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
+  when: not (ansible_check_mode and libvirt_apt.changed)
+  systemd:
+    name: libvirtd-ro.socket
+    enabled: true
+    state: started
+  become: true
   tags:
     - libvirt
 
 - name: Enable libvirtd admin socket
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: libvirtd-admin.socket
-      condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
+  when: not (ansible_check_mode and libvirt_apt.changed)
+  systemd:
+    name: libvirtd-admin.socket
+    enabled: true
+    state: started
+  become: true
   tags:
     - libvirt
 
 - name: Check the default network is defined
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_socket_started_result.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirt_libvirtd_socket_started_result.changed))
   command: virsh net-info default
   register: libvirt_default_net
   changed_when: false
@@ -208,9 +201,8 @@
   tags:
     - libvirt
 
-# The check-mode gate uses libvirtd_socket_started_result -- the stable per-unit
-# fact service.yml emits -- which can't rebind if a later systemd_unit call
-# lands between here and the virsh_backup timer below.
+# The check-mode gate uses the registered libvirtd socket result, which cannot
+# be rebound by later systemd operations.
 # The whole condition skips the network calls in check mode on a fresh
 # host where libvirtd / python3-libvirt aren't really installed yet.
 # virt_net's core() returns from its `state:` branch before it reaches the
@@ -218,7 +210,7 @@
 # autostart half -- split into two calls (same reason the pool dance below
 # needs three). state: active first, then autostart on a stateless call.
 - name: Start default network
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_socket_started_result.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirt_libvirtd_socket_started_result.changed))
   community.libvirt.virt_net:
     name: default
     state: active
@@ -227,7 +219,7 @@
     - libvirt
 
 - name: Autostart default network
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_socket_started_result.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirt_libvirtd_socket_started_result.changed))
   community.libvirt.virt_net:
     name: default
     autostart: true
@@ -258,7 +250,7 @@
 # `state: present` defines only when absent, so an existing pool is left
 # untouched. virsh_backup's pool-dumpxml captures the definition.
 - name: Declare the default storage pool
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirtd_socket_started_result.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirt_libvirtd_socket_started_result.changed))
   become: true
   tags:
     - libvirt

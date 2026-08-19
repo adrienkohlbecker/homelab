@@ -172,16 +172,16 @@
     - ssh
 
 - name: Enable and reload sshd
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: ssh.service
-      condition: "{{ not (ansible_check_mode and ssh_apt.changed) }}"
-      reload: >-
-        {{ ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_legacy.changed
-           or (ssh_sshd_config_x11 is defined and ssh_sshd_config_x11 is changed)
-           or (ssh_sshd_config_x11_remove is defined and ssh_sshd_config_x11_remove is changed) }}
+  when: not (ansible_check_mode and ssh_apt.changed)
+  systemd:
+    name: ssh.service
+    enabled: true
+    state: >-
+      {{ 'reloaded'
+         if ssh_sshd_config.changed or ssh_sshd_config_sftp.changed or ssh_sshd_legacy.changed
+            or (ssh_sshd_config_x11 is defined and ssh_sshd_config_x11 is changed)
+            or (ssh_sshd_config_x11_remove is defined and ssh_sshd_config_x11_remove is changed)
+         else 'started' }}
+  become: true
   tags:
     - ssh

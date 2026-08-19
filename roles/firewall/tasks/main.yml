@@ -367,25 +367,24 @@
   tags:
     - firewall
 
-# Apply ruleset + service lifecycle via the systemd_unit helper. The
-# ExecReload drop-in installed above maps `state: reloaded` to atomic
+# The ExecReload drop-in installed above maps `state: reloaded` to atomic
 # `nft -f` (per-table flush+rebuild inside the file replaces only our
 # table; netavark / libvirt / fail2ban tables in iptables-nft compat
-# are untouched). First converge: start fires ExecStart which loads
-# the ruleset, reload is skipped because start already changed state.
-# Re-converge with template or drop-in change: start is a no-op,
-# reload fires ExecReload — no stop/start window. The condition skips
+# are untouched). On an inactive unit, Ansible starts it instead of
+# reloading; otherwise a changed ruleset fires ExecReload with no
+# stop/start window. The condition skips
 # check-mode runs where the apt install reported changed but didn't
 # actually run (nft isn't on disk yet for the unit's ExecStart).
 - name: Apply nftables.service ruleset and lifecycle
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: nftables.service
-      condition: "{{ not (ansible_check_mode and firewall_apt_nftables.changed) }}"
-      reload: "{{ firewall_ruleset.changed or nftables_service_d_override_conf_result.changed }}"
+  when: not (ansible_check_mode and firewall_apt_nftables.changed)
+  systemd:
+    name: nftables.service
+    enabled: true
+    state: >-
+      {{ 'reloaded'
+         if firewall_ruleset.changed or nftables_service_d_override_conf_result.changed
+         else 'started' }}
+  become: true
   tags:
     - firewall
 

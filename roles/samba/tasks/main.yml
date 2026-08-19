@@ -72,14 +72,12 @@
     - samba
 
 - name: Enable smbd service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: smbd.service
-      condition: "{{ not (ansible_check_mode and samba_apt.changed) }}"
-      restart: "{{ samba_cfg.changed }}"
+  when: not (ansible_check_mode and samba_apt.changed)
+  systemd:
+    name: smbd.service
+    enabled: true
+    state: "{{ 'restarted' if samba_cfg.changed else 'started' }}"
+  become: true
   tags:
     - samba
 

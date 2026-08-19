@@ -162,30 +162,15 @@
   tags:
     - nut_monitor
 
-- name: Install the boot-time peer wake unit
+- name: Manage the boot-time peer wake unit
   when: nut_monitor_wake_peers | length > 0
   import_role:
     name: systemd_unit
-    tasks_from: install
+    tasks_from: unit
   vars:
     systemd_unit_args:
       src: nut_wake_peers.service
-  tags:
-    - nut_monitor
-
-# Enable the unit for the next boot without waking peers during convergence;
-# the ONLINE event remains the live recovery path after a short outage.
-- name: Enable the boot-time peer wake
-  when: nut_monitor_wake_peers | length > 0
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: nut_wake_peers.service
-      condition: "{{ not (ansible_check_mode and nut_monitor_apt.changed) }}"
       start: false
-      restart: false
   tags:
     - nut_monitor
 
@@ -224,17 +209,14 @@
 # nut_notify is never a trigger -- upssched exec's it fresh per event, so a
 # script-only change needs nothing.
 - name: Enable nut_monitor service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      # nut-client.service is a symlink to nut-monitor.service (the upsmon
-      # unit); unlike nut-driver, the name doesn't shift across releases, so no
-      # version branch is needed here (cf. nut_server's nut-driver@eaton).
-      src: nut-client.service
-      condition: "{{ not (ansible_check_mode and nut_monitor_apt.changed) }}"
-      start: "{{ not qemu_test }}"
-      restart: "{{ nut_monitor_upsmon_conf.changed or nut_monitor_upssched_conf.changed }}"
+  when: not (ansible_check_mode and nut_monitor_apt.changed)
+  systemd:
+    # nut-client.service is a symlink to nut-monitor.service (the upsmon unit).
+    name: nut-client.service
+    enabled: true
+    state: >-
+      {{ ('restarted' if nut_monitor_upsmon_conf.changed or nut_monitor_upssched_conf.changed else 'started')
+         if not qemu_test else omit }}
+  become: true
   tags:
     - nut_monitor

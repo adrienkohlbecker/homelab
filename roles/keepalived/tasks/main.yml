@@ -271,14 +271,12 @@
           malformed.
 
 - name: Enable keepalived service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: keepalived.service
-      condition: "{{ not (ansible_check_mode and keepalived_apt.changed) and keepalived_confs.matched > 0 }}"
-      reload: "{{ keepalived_base_conf.changed }}"
+  when: not (ansible_check_mode and keepalived_apt.changed) and keepalived_confs.matched > 0
+  systemd:
+    name: keepalived.service
+    enabled: true
+    state: "{{ 'reloaded' if keepalived_base_conf.changed else 'started' }}"
+  become: true
   tags:
     - keepalived
 

@@ -143,20 +143,16 @@
     - nginx
 
 - name: install | Enable nginx service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: nginx.service
-      condition: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
-      # A binary upgrade needs a real restart — `policy_rc_d: 101` on the apt
-      # task blocks the package's own restart, so the new nginx only takes over
-      # when we restart it. Pure config changes (nginx.conf, default-site
-      # removal, the status.conf drop) are picked up hitlessly via SIGHUP, so
-      # reload them instead of dropping in-flight connections. Mutually
-      # exclusive: the restart already reloads config, so skip reload on upgrade.
-      restart: "{{ nginx_apt.changed }}"
-      reload: "{{ (nginx_default_conf.changed or nginx_conf.changed or (nginx_proxy_params.changed | default(false)) or status_conf_result.changed) and not nginx_apt.changed }}"
+  when: not (ansible_check_mode and nginx_apt.changed)
+  systemd:
+    name: nginx.service
+    enabled: true
+    state: >-
+      {{ 'restarted' if nginx_apt.changed
+         else 'reloaded'
+         if nginx_default_conf.changed or nginx_conf.changed
+            or (nginx_proxy_params.changed | default(false)) or status_conf_result.changed
+         else 'started' }}
+  become: true
   tags:
     - nginx

@@ -126,19 +126,18 @@
   tags:
     - ntp
 
-# Enable + start chrony via the systemd_unit helper (chrony ships its own
-# unit, so no install step). Restart -- not just start -- when the NTS config,
-# DAEMON_OPTS, or stale drop-in changes; otherwise the helper leaves a healthy
-# daemon undisturbed and clears any start-rate-limit a bare state=restarted
-# would trip over.
+# Chrony ships its own unit, so the role owns only its lifecycle. Restart --
+# not just start -- when the NTS config, DAEMON_OPTS, or stale drop-in changes;
+# otherwise leave a healthy daemon undisturbed.
 - name: Enable and start chrony
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: chrony.service
-      condition: "{{ not (ansible_check_mode and ntp_chrony_apt.changed) }}"
-      restart: "{{ ntp_chrony_conf.changed or ntp_chrony_default.changed or (chrony_service_d_override_conf_result.changed | default(false)) }}"
+  when: not (ansible_check_mode and ntp_chrony_apt.changed)
+  systemd:
+    name: chrony.service
+    enabled: true
+    state: >-
+      {{ 'restarted'
+         if ntp_chrony_conf.changed or ntp_chrony_default.changed or (chrony_service_d_override_conf_result.changed | default(false))
+         else 'started' }}
+  become: true
   tags:
     - ntp

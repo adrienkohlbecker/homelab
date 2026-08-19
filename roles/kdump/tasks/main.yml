@@ -315,15 +315,15 @@
     - kdump
 
 - name: Enable kdump-tools service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: kdump-tools.service
-      condition: "{{ not (ansible_check_mode and kdump_apt_tools.changed) }}"
-      start: "{{ (kdump_kexec_crash_size.content | default('') | b64decode | trim | default('0', true) | int) > 0 }}"
-      restart: "{{ kdump_tools_cfg.changed }}"
+  when: not (ansible_check_mode and kdump_apt_tools.changed)
+  systemd:
+    name: kdump-tools.service
+    enabled: true
+    state: >-
+      {{ ('restarted' if kdump_tools_cfg.changed else 'started')
+         if (kdump_kexec_crash_size.content | default('') | b64decode | trim | default('0', true) | int) > 0
+         else omit }}
+  become: true
   tags:
     - kdump
 

@@ -249,13 +249,17 @@
 # alerts; the role then writes custom alerts and reload-health hot-loads
 # them. Brief gap is acceptable on a fresh install.
 - name: Enable netdata service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: netdata.service
-      condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
-      restart: "{{ netdata_conf.changed or netdata_charts_d_conf.changed or netdata_cloud_conf.changed or netdata_cloud_unclaim.changed or netdata_health_alarm_notify.changed or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed or netdata_godconf_copy.changed or (netdata_podman_socket_drop.changed | default(false)) }}"
+  when: not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed))
+  systemd:
+    name: netdata.service
+    enabled: true
+    state: >-
+      {{ 'restarted'
+         if netdata_conf.changed or netdata_charts_d_conf.changed or netdata_cloud_conf.changed
+            or netdata_cloud_unclaim.changed or netdata_health_alarm_notify.changed
+            or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed
+            or netdata_godconf_copy.changed or (netdata_podman_socket_drop.changed | default(false))
+         else 'started' }}
+  become: true
   tags:
     - netdata
