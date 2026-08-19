@@ -29,7 +29,7 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
-TimeoutSec=120
+TimeoutStartSec=120
 # Exceed the container's --stop-timeout (120s) so a slow graceful shutdown --
 # during which lidarr writes config.xml back -- finishes before systemd's stop
 # deadline SIGKILLs it and skips the writeback.
@@ -40,6 +40,10 @@ NotifyAccess=all
 SyslogIdentifier=%N
 
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
+# 8686 in the publish and healthcheck lines below is lidarr's fixed
+# in-container listen port -- keep it literal. It is the container side of
+# the publish mapping, not service_ports.lidarr (the host side), even
+# though the two happen to be equal today.
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \
@@ -60,9 +64,9 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/media:/media \
     --volume /mnt/scratch/lidarr:/scratch/lidarr \
     --network media \
-    --publish 127.0.0.1:{{ service_ports.lidarr }}:{{ service_ports.lidarr }}/tcp \
-    --health-cmd         {{ ('http://localhost:' ~ service_ports.lidarr ~ '/ping') | podman_health_curl }} \
-    --health-startup-cmd {{ ('http://localhost:' ~ service_ports.lidarr ~ '/ping') | podman_health_curl }} \
+    --publish 127.0.0.1:{{ service_ports.lidarr }}:8686/tcp \
+    --health-cmd         {{ "http://localhost:8686/ping" | podman_health_curl }} \
+    --health-startup-cmd {{ "http://localhost:8686/ping" | podman_health_curl }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \

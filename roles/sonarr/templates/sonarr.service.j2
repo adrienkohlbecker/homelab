@@ -40,6 +40,10 @@ NotifyAccess=all
 SyslogIdentifier=%N
 
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
+# 8989 in the publish and healthcheck lines below is sonarr's fixed
+# in-container listen port -- keep it literal. It is the container side of
+# the publish mapping, not service_ports.sonarr (the host side), even
+# though the two happen to be equal today.
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \
@@ -65,6 +69,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-cmd {{ "http://localhost:8989/ping" | podman_health_curl }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
+    --health-start-period "100s" \
     --stop-timeout 120 \
     {{ sonarr_image }}
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
