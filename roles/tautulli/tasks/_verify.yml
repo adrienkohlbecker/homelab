@@ -18,6 +18,32 @@
   failed_when: >-
     _tautulli_api_auth.json.response.result | default('') != 'success'
 
+- name: _verify | Check the retired ini watcher unit files
+  stat:
+    path: /etc/systemd/system/{{ item }}
+  loop:
+    - sort_ini_mnt-services-tautulli-config.ini.path
+    - sort_ini_mnt-services-tautulli-config.ini.service
+  register: _tautulli_ini_watcher_files
+  become: true
+
+- name: _verify | Check the retired ini watcher unit state  # noqa: command-instead-of-module -- read-only query must distinguish inactive and missing units
+  command: systemctl is-active {{ item }}
+  loop:
+    - sort_ini_mnt-services-tautulli-config.ini.path
+    - sort_ini_mnt-services-tautulli-config.ini.service
+  register: _tautulli_ini_watcher_units
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | The retired ini watcher is uninstalled
+  assert:
+    that:
+      - _tautulli_ini_watcher_files.results | selectattr('stat.exists') | list | length == 0
+      - _tautulli_ini_watcher_units.results | map(attribute='rc') | select('equalto', 0) | list | length == 0
+    fail_msg: "the retired tautulli sort_ini watcher is still installed or active"
+
 # The vhost is `auth: required`, so a cookieless request must bounce to
 # Authelia. With the stub in gate mode (see _setup.yml), assert a cookieless
 # GET / lands on nginx's 401 =302 redirect to the portal. This is the only
@@ -86,89 +112,83 @@
     - (_tautulli_db_file.stat.size | default(0) | int) > 0
   become: true
 
-# PMS value preservation (main.yml's slurp+regex readback) is the role's most
-# fragile mechanism. A broken readback silently resets pms_plexpass/pms_version
-# to defaults on the next converge. The idempotence check never catches this
-# because the values start at their defaults. Seed a sentinel, re-run the
-# role, and assert the re-render read it back.
-- name: _verify | Seed a sentinel pms_plexpass into config.ini
-  replace:
+# Change one managed setting and several application-owned settings together.
+# The reconverge must stop the daemon before correcting http_proxy, while the
+# daemon's shutdown write and Ansible's selective edits must preserve everything
+# outside the role's settings table.
+- name: _verify | Stop tautulli before seeding mixed config drift
+  systemd:
+    name: tautulli
+    state: stopped
+  become: true
+
+- name: _verify | Seed managed and application-owned config values
+  community.general.ini_file:
     path: /mnt/services/tautulli/config.ini
-    regexp: '^(pms_plexpass = )\d+$'
-    replace: '\g<1>1'
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    owner: tautulli
+    group: media
+    mode: "0600"
+    backup: true
+  loop:
+    - section: General
+      option: http_proxy
+      value: "0"
+    - section: Advanced
+      option: jwt_secret
+      value: 0123456789abcdef0123456789abcdef
+    - section: PMS
+      option: pms_client_id
+      value: tautulli-test-client
+    - section: PMS
+      option: pms_uuid
+      value: fedcba9876543210fedcba9876543210
+    - section: PMS
+      option: pms_version
+      value: 1.40.0.8395-abc123def
+    - section: TautulliTest
+      option: unmanaged_sentinel
+      value: preserve-me
+  loop_control:
+    label: "{{ item.section }}.{{ item.option }}"
   become: true
 
-- name: _verify | Seed a sentinel pms_version into config.ini
-  replace:
-    path: /mnt/services/tautulli/config.ini
-    regexp: '^(pms_version = ).*$'
-    replace: '\g<1>1.40.0.8395-abc123def'
+- name: _verify | Start tautulli with the seeded config values
+  systemd:
+    name: tautulli
+    state: started
   become: true
 
-# Mimic the daemon rewrite the sort_ini watcher reacts to: re-sort config.ini,
-# which strips blank lines and reorders keys. The re-converge below then has to
-# re-render against the sorted file. If the template emits blank lines (e.g. a
-# dropped trim_blocks header), sort_ini strips them, the re-render re-adds them,
-# tautulli_conf reports changed, and the churn-stability assert below fails --
-# catching a regression that restarts the container on every converge.
-- name: _verify | Re-sort config.ini to mimic a daemon rewrite
-  command: /usr/local/bin/sort_ini /mnt/services/tautulli/config.ini
-  changed_when: false
-  become: true
-
-- name: _verify | Re-run the role to exercise the PMS value readback
+- name: _verify | Re-run the role after mixed config drift
   import_role:
     name: tautulli
 
-- name: _verify | Config is churn-stable -- the post-sort re-render made no change
+- name: _verify | The managed config drift was corrected
   assert:
     that:
-      - not tautulli_conf.changed
-    fail_msg: >-
-      config.ini re-rendered with changes after a sort_ini pass: the template
-      likely emits blank lines (a dropped trim_blocks header) that the watcher
-      strips, restarting the container on every converge.
+      - tautulli_conf.changed
+    fail_msg: "tautulli did not correct the seeded http_proxy drift"
 
-- name: _verify | Re-read config.ini after the re-converge
+- name: _verify | Read config after the selective reconverge
   slurp:
     src: /mnt/services/tautulli/config.ini
   register: _tautulli_verify_ini
   become: true
 
-- name: _verify | The seeded pms_plexpass survived the re-render
+- name: _verify | Application-owned values survived the selective reconverge
   vars:
     _ini: "{{ _tautulli_verify_ini.content | b64decode }}"
   assert:
     that:
-      - (_ini | regex_findall('(?m)^pms_plexpass = (\d+)$') | first) == '1'
-    fail_msg: "pms_plexpass preservation regressed: readback reset the seeded value"
-
-- name: _verify | The seeded pms_version survived the re-render
-  vars:
-    _ini: "{{ _tautulli_verify_ini.content | b64decode }}"
-  assert:
-    that:
-      - (_ini | regex_findall('(?m)^pms_version = ([\w.\-]+)$') | first) == '1.40.0.8395-abc123def'
-    fail_msg: "pms_version preservation regressed: readback reset the seeded value"
-
-# The sort_ini path unit watches config.ini for daemon rewrites (Tautulli
-# shuffles INI key order) and re-sorts in place. Assert it is active.
-# The unit name is sort_ini_<escaped>.path where sort_ini derives <escaped> by
-# stripping the leading / and replacing remaining / with - (keeping the .ini
-# dot) -- so hyphens and the dot, not underscores.
-- name: _verify | The sort_ini path watcher is active
-  systemd:
-    name: sort_ini_mnt-services-tautulli-config.ini.path
-    state: started
-  check_mode: true
-  register: _tautulli_sort_ini_path
-  become: true
-
-- name: _verify | Assert the sort_ini path unit is active
-  assert:
-    that:
-      - _tautulli_sort_ini_path.status.ActiveState == "active"
-    fail_msg: "sort_ini path unit is {{ _tautulli_sort_ini_path.status.ActiveState }}, expected active"
+      - _ini is regex('(?m)^http_proxy = 1$')
+      - _ini is regex('(?m)^jwt_secret = 0123456789abcdef0123456789abcdef$')
+      - _ini is regex('(?m)^pms_client_id = tautulli-test-client$')
+      - _ini is regex('(?m)^pms_uuid = fedcba9876543210fedcba9876543210$')
+      - _ini is regex('(?m)^pms_version = 1[.]40[.]0[.]8395-abc123def$')
+      - _ini is regex('(?m)^unmanaged_sentinel = preserve-me$')
+    fail_msg: "tautulli reconverge changed application-owned config values"
 
 - name: _verify | Wait for normalized tautulli startup record in lnav store
   command:

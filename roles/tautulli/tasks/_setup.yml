@@ -32,9 +32,14 @@
     - /mnt/services/sqlite
   become: true
 
-# Install the real sort_ini binary (not a stub): _verify re-sorts config.ini
-# with it to prove the rendered template round-trips through the watcher
-# without churn. A `tail` stub would strip nothing and hide blank-line drift.
-- name: _setup | Install sort_ini binary
+- name: _setup | Install the legacy sort_ini binary
   import_role:
     name: sort_ini
+
+- name: _setup | Install the legacy tautulli ini watcher
+  import_role:
+    name: sort_ini
+    tasks_from: path
+  vars:
+    sort_ini_args:
+      path: /mnt/services/tautulli/config.ini
