@@ -25,15 +25,20 @@
       extra_groups: "{{ gitlab_runner_extra_groups }}"
       home: /mnt/services/gitlab_runner
 
-# Subordinate-id range for gitlab_runner's rootless podman. On prod the
-# subid role runs earlier in site.yml with the user listed in host_vars;
-# the standalone fixture applies it here.
-- name: _setup | Apply subid role for gitlab_runner
-  import_role:
-    name: subid
-  vars:
-    subid_users:
-      - gitlab_runner
+- name: _setup | Seed stale Docker-executor subordinate IDs
+  when: gitlab_runner_executor != 'docker'
+  lineinfile:
+    path: /etc/{{ item }}
+    regexp: '^gitlab_runner:'
+    line: 'gitlab_runner:165536:65536'
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  loop:
+    - subuid
+    - subgid
+  become: true
 
 # Run the podman role's install.yml so the test VM gets the same storage
 # layout prod does: rpool/podman zvol mounted at /var/lib/containers,

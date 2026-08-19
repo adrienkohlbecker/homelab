@@ -152,10 +152,6 @@ samba_shares:
     time_machine: true
     time_machine_max_size: 1T
 
-subid_users:
-  # gitlab_runner's rootless podman (Docker executor socket).
-  - gitlab_runner
-
 # Flipped to true so jellyfin tests exercise the HW-transcoding
 # code path (device passthrough, --group-add wiring, getent lookup) via
 # the fake render group + phantom /dev/dri/renderD128 created by

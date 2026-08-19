@@ -1,3 +1,0 @@
-# Additional users that need delegated subordinate uid/gid ranges. Most hosts
-# need none; host_vars opt in for rootless container users.
-subid_users: []

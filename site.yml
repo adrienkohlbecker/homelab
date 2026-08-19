@@ -41,7 +41,6 @@
     - refind
     # Service platform -- container runtime and web/TLS front door.
     - podman
-    - subid
     - certbot
     - nginx
     # Observability.

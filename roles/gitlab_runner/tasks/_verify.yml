@@ -161,6 +161,20 @@
   changed_when: false
   become: true
 
+- name: _verify | Subordinate ID ranges match the executor
+  command: getsubids{{ ' -g' if item == 'subgid' else '' }} gitlab_runner
+  register: _gitlab_runner_subids
+  changed_when: false
+  failed_when: >-
+    (gitlab_runner_executor == 'docker'
+     and (_gitlab_runner_subids.rc != 0
+          or not (_gitlab_runner_subids.stdout is search('gitlab_runner 165536 65536'))))
+    or (gitlab_runner_executor != 'docker' and _gitlab_runner_subids.rc == 0)
+  loop:
+    - subuid
+    - subgid
+  become: false
+
 - name: _verify | Rootless podman.socket is active under gitlab_runner
   when: gitlab_runner_executor == 'docker'
   systemd:

@@ -196,11 +196,6 @@ netdata_collectors:
 netdata_zfspool_thresholds: {}
 netdata_diskspace_blocklist: []
 
-# gitlab_runner's rootless podman Docker socket needs the subordinate-id range
-# rendered by the base subid role before the service play.
-subid_users:
-  - gitlab_runner
-
 # The rpool/podman zvol here is pure CI scratch -- only container images and
 # the cells' ephemeral overlay layers. Every persistent service (headscale,
 # socket_proxy) keeps its state on /mnt/services bind-mounts, not the zvol, so

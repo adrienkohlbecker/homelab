@@ -1,4 +1,0 @@
-{# 100000 = Ubuntu SUB_UID_MIN (login.defs default); 65536 = 2^16 = one full UID namespace, guarantees non-overlapping per-user ranges. #}
-{% for user in [ansible_user_id] + subid_users %}
-{{ user }}:{{ 100000 + (loop.index0 * 65536) }}:65536
-{% endfor %}
