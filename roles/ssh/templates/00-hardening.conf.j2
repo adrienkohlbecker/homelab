@@ -3,11 +3,6 @@
 HostKey /etc/ssh/ssh_host_ed25519_key
 HostKeyAlgorithms ssh-ed25519
 
-# curve25519 only. The NIST P-curve kex (ecdh-sha2-nistp*) and DH group
-# exchange (diffie-hellman-group-exchange-sha256) are dropped: every client
-# here speaks curve25519, GEX security hinges on an unfiltered moduli file,
-# and the nistp curves carry the well-known seed-provenance concern.
-KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org
 # AEAD ciphers only. The aes*-ctr fallbacks are dropped since every client
 # supports chacha20-poly1305 or AES-GCM.
 Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
