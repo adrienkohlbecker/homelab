@@ -114,28 +114,22 @@
   tags:
     - swap
 
-# vm.swappiness default 100 suits zram-primary hosts: paging into compressed
-# RAM is cheap, unlike the disk-tuned kernel default of 60.
-- name: Tune vm.swappiness
+# Prefer cheap compressed-RAM paging over the disk-tuned swappiness default.
+# Disable disk-oriented readahead because zram has no seek penalty.
+- name: Tune virtual memory policy for zram
   ansible.posix.sysctl:
-    name: vm.swappiness
-    value: "{{ swap_swappiness | string }}"
+    name: "{{ item.name }}"
+    value: "{{ item.value | string }}"
     sysctl_file: /etc/sysctl.d/30-swap.conf
     state: present
     reload: true
-  become: true
-  tags:
-    - swap
-
-# zram has no seek penalty, so disable the disk-oriented swap readahead that
-# would speculatively decompress adjacent pages.
-- name: Tune vm.page-cluster for zram hosts
-  ansible.posix.sysctl:
-    name: vm.page-cluster
-    value: "0"
-    sysctl_file: /etc/sysctl.d/30-swap.conf
-    state: present
-    reload: true
+  loop:
+    - name: vm.swappiness
+      value: "{{ swap_swappiness }}"
+    - name: vm.page-cluster
+      value: 0
+  loop_control:
+    label: "{{ item.name }}={{ item.value }}"
   become: true
   tags:
     - swap
