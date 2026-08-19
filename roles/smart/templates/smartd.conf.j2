@@ -137,8 +137,7 @@
 # -I 9 : Do not log Power_On_Hours changes
 # -d nvme,0xffffffff : use broadcast namespace id instead of namespace pointed to by symlink
 
-# TODO: once all hosts are on noble (smartmontools >= 7.4), simplify DEFAULT to -a
-DEFAULT -H -f -t -l error -l selftest -C 197+ -U 198+ -n standby,q -m root -M exec /usr/share/smartmontools/smartd-runner -M diminishing -o on -S on -s (L/../(0[1-7])/7/04:024|S/../../6/01) -I 194 -I 190 -I 231 -I 9
+DEFAULT -a -C 197+ -U 198+ -n standby,q -m root -M exec /usr/share/smartmontools/smartd-runner -M diminishing -o on -S on -s (L/../(0[1-7])/7/04:024|S/../../6/01) -I 194 -I 190 -I 231 -I 9
 
 {% for dev in smart_monitored_disks_by_id %}
 {% if not dev | regex_search('^[a-zA-Z0-9_.:-]+$') %}
