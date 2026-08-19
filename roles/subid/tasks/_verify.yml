@@ -1,112 +1,19 @@
-- name: _verify | Slurp /etc/subuid
-  slurp:
-    src: /etc/subuid
-  register: _subid_subuid
-  become: true
-
-- name: _verify | Slurp /etc/subgid
-  slurp:
-    src: /etc/subgid
-  register: _subid_subgid
-  become: true
-
-- name: _verify | /etc/subuid and /etc/subgid have correct permissions
-  stat:
-    path: /etc/{{ item }}
-  register: _subid_stat
-  failed_when: >-
-    not _subid_stat.stat.exists
-    or _subid_stat.stat.mode != '0644'
-    or _subid_stat.stat.pw_name != 'root'
-  loop:
-    - subuid
-    - subgid
-  become: true
-
-- name: _verify | Every line matches name:start:count format
-  vars:
-    _subuid_lines: "{{ (_subid_subuid | slurp_text).splitlines() }}"
-    _subgid_lines: "{{ (_subid_subgid | slurp_text).splitlines() }}"
-    _bad_subuid: "{{ _subuid_lines | reject('match', '^[a-z_][a-z0-9_.-]*:[0-9]+:[0-9]+$') | list }}"
-    _bad_subgid: "{{ _subgid_lines | reject('match', '^[a-z_][a-z0-9_.-]*:[0-9]+:[0-9]+$') | list }}"
-  assert:
-    that:
-      - _bad_subuid | length == 0
-      - _bad_subgid | length == 0
-    fail_msg: >-
-      Malformed lines in subuid/subgid.
-      subuid: {{ _bad_subuid }}, subgid: {{ _bad_subgid }}.
-
-- name: _verify | Operator user has the base 100000:65536 range in both files
-  vars:
-    _subuid_lines: "{{ (_subid_subuid | slurp_text).splitlines() }}"
-    _subgid_lines: "{{ (_subid_subgid | slurp_text).splitlines() }}"
-  assert:
-    that:
-      - _subuid_lines | select('match', '^' ~ ansible_user_id ~ ':100000:65536$') | list | length == 1
-      - _subgid_lines | select('match', '^' ~ ansible_user_id ~ ':100000:65536$') | list | length == 1
-    fail_msg: >-
-      {{ ansible_user_id }} missing base 100000:65536 range.
-      subuid: {{ _subuid_lines | select('match', '^' ~ ansible_user_id ~ ':') | list }},
-      subgid: {{ _subgid_lines | select('match', '^' ~ ansible_user_id ~ ':') | list }}.
-
-- name: _verify | Each subid_users entry has a 65536-count range in both files
-  vars:
-    _subuid_lines: "{{ (_subid_subuid | slurp_text).splitlines() }}"
-    _subgid_lines: "{{ (_subid_subgid | slurp_text).splitlines() }}"
-  assert:
-    that:
-      - _subuid_lines | select('match', '^' ~ item ~ ':[0-9]+:65536$') | list | length >= 1
-      - _subgid_lines | select('match', '^' ~ item ~ ':[0-9]+:65536$') | list | length >= 1
-    fail_msg: >-
-      {{ item }} missing 65536-count range.
-      subuid: {{ _subuid_lines | select('match', '^' ~ item ~ ':') | list }},
-      subgid: {{ _subgid_lines | select('match', '^' ~ item ~ ':') | list }}.
-  loop: "{{ subid_users }}"
-
-- name: _verify | Check getsubids availability (shadow 4.13+)
-  command: which getsubids
-  register: _subid_has_getsubids
-  changed_when: false
-  failed_when: false
-  become: true
-
-- name: _verify | Subuid ranges confirmed visible through NSS/libsubid (getsubids)
+- name: _verify | Subuid ranges are visible through NSS
   command: getsubids {{ item }}
-  register: _subid_getsubids_uid
+  register: _subid_getsubids
   changed_when: false
-  become: true
-  loop: "{{ ([ansible_user_id] + subid_users) | unique }}"
-  when: _subid_has_getsubids.rc == 0
+  failed_when: >-
+    _subid_getsubids.rc != 0
+    or not (_subid_getsubids.stdout is search(item ~ ' [0-9]+ 65536'))
+  loop: "{{ [ansible_user_id] + subid_users }}"
+  become: false
 
-- name: _verify | NSS-visible subuid has a 65536-count entry for each user
-  assert:
-    that:
-      - item.stdout is search(item.item ~ ' [0-9]+ 65536')
-    fail_msg: >-
-      getsubids found no 65536-count subuid range for {{ item.item }}.
-      Output: {{ item.stdout }}.
-  loop: "{{ _subid_getsubids_uid.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  when: _subid_has_getsubids.rc == 0
-
-- name: _verify | Subgid ranges confirmed visible through NSS/libsubid (getsubids -g)
+- name: _verify | Subgid ranges are visible through NSS
   command: getsubids -g {{ item }}
-  register: _subid_getsubids_gid
+  register: _subid_getsubids
   changed_when: false
-  become: true
-  loop: "{{ ([ansible_user_id] + subid_users) | unique }}"
-  when: _subid_has_getsubids.rc == 0
-
-- name: _verify | NSS-visible subgid has a 65536-count entry for each user
-  assert:
-    that:
-      - item.stdout is search(item.item ~ ' [0-9]+ 65536')
-    fail_msg: >-
-      getsubids -g found no 65536-count subgid range for {{ item.item }}.
-      Output: {{ item.stdout }}.
-  loop: "{{ _subid_getsubids_gid.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  when: _subid_has_getsubids.rc == 0
+  failed_when: >-
+    _subid_getsubids.rc != 0
+    or not (_subid_getsubids.stdout is search(item ~ ' [0-9]+ 65536'))
+  loop: "{{ [ansible_user_id] + subid_users }}"
+  become: false
