@@ -66,12 +66,10 @@
       `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_name }}`
       before re-running, or --limit the play to skip this role.
 
-# Missing units are already in the desired state. Skip template units and
-# drop-ins: callers stop template instances, while drop-ins have no lifecycle.
+# Missing units are already in the desired state. Drop-ins have no lifecycle.
 - name: remove | Stop and disable {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}
   when:
     - _systemd_unit_condition
-    - "'@.' not in _systemd_unit_name"
     - systemd_unit_args.for is not defined
   systemd:
     name: "{{ _systemd_unit_name }}"
