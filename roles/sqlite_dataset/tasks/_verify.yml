@@ -5,9 +5,10 @@
         name: service_user
         tasks_from: user
       vars:
+        static_service_ids: # noqa: var-naming[no-role-prefix]
+          sqlite_dataset_test: 61182
         service_user_args:
           name: sqlite_dataset_test
-          id: 61182
           config_dir: false
 
     - name: _verify | Create fixture directories

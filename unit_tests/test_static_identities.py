@@ -11,8 +11,8 @@ def load_identities() -> dict:
 
 
 def role_task_files() -> list[Path]:
-    # Skip test scaffolding (_setup.yml, _verify.yml): fixture callers use the
-    # test-only id override and must not force a registry entry.
+    # Skip test scaffolding (_setup.yml, _verify.yml): fixture identities use
+    # scoped registries and must not force a production registry entry.
     return [path for path in (ROOT / "roles").glob("*/tasks/*.yml") if not path.name.startswith("_")]
 
 

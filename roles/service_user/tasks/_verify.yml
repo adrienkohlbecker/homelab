@@ -4,18 +4,20 @@
 # re-run then stats against stale state.
 - name: _verify | All service_user scenarios
   become: true
+  vars:
+    # Resolve through a scoped registry rather than an id override so the
+    # production static_service_ids lookup is exercised end-to-end.
+    # Test-only values below systemd's DynamicUser allocation range. The
+    # global-var shadow is deliberate, hence the var-naming noqa.
+    static_service_ids: # noqa: var-naming[no-role-prefix]
+      service_user_test: 61180
+      service-user-test-hyphen: 61181
   block:
     - name: _verify | Provision a test service user
       import_role:
         name: service_user
         tasks_from: user
       vars:
-        # Resolve through a scoped registry rather than the id override so the
-        # production static_service_ids lookup branch is exercised end-to-end.
-        # Test-only value below systemd's DynamicUser allocation range. The
-        # global-var shadow is deliberate, hence the var-naming noqa.
-        static_service_ids: # noqa: var-naming[no-role-prefix]
-          service_user_test: 61180
         service_user_args:
           name: service_user_test
 
@@ -61,8 +63,6 @@
       vars:
         service_user_args:
           name: service-user-test-hyphen
-          # The test-only id override path (registry bypass for fixtures).
-          id: 61181
           extra_groups:
             - service_user_test_extra_grp
           shared_group: service_user_test_grp

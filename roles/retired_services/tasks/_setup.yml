@@ -18,9 +18,10 @@
     name: service_user
     tasks_from: user
   vars:
+    static_service_ids: # noqa: var-naming[no-role-prefix]
+      speedtest: 60734
     service_user_args:
       name: speedtest
-      id: 60734
       config_dir: false
 
 - name: _setup | Create retained service and Fluent Bit fixture directories
