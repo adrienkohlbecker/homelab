@@ -14,12 +14,18 @@
 #       probe that still succeeds proves the master loaded the cert as root and
 #       shared the context. The test-role fixture doesn't exercise that removal,
 #       so it leaves the default-perms path.
-# The snakeoil keypair only exists once ssl-cert is installed (the caller does
-# that first). In the harness check-mode pass ssl-cert is merely *reported* as
+# In the harness check-mode pass ssl-cert is merely *reported* as
 # would-be-installed, so the source files aren't really on disk -- stat the
 # world-readable public cert and skip the placement when it's absent, mirroring
-# the `creates:` short-circuit the shell version relied on. In a real converge
-# the caller installs ssl-cert before this, so the source is always present.
+# the `creates:` short-circuit the shell version relied on.
+- name: Snakeoil | Install ssl-cert
+  apt:
+    pkg:
+      - ssl-cert
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
 - name: Snakeoil | Check the snakeoil keypair is present
   stat:
     path: /etc/ssl/certs/ssl-cert-snakeoil.pem

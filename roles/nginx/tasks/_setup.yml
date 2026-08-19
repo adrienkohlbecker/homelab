@@ -3,14 +3,6 @@
     name: netdata
     tasks_from: install
 
-- name: _setup | Install dependencies
-  apt:
-    pkg:
-      - ssl-cert
-    install_recommends: false
-    cache_valid_time: 3600
-  become: true
-
 # Lay snakeoil at the letsencrypt paths nginx.conf.j2 references before the
 # nginx install below validates that config. harden_perms mirrors prod certbot
 # perms so the _verify ssl-cert-removal check is functional (see the task file).

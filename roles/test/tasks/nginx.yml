@@ -1,11 +1,3 @@
-- name: nginx | Install ssl-cert
-  apt:
-    pkg:
-      - ssl-cert
-    install_recommends: false
-    cache_valid_time: 3600
-  become: true
-
 # Lay down snakeoil at the letsencrypt paths nginx.conf.j2 references so the
 # prod nginx role can start its service in tests. Shares roles/nginx's snakeoil
 # task; the prod-perms hardening (harden_perms) is only needed for nginx's own
