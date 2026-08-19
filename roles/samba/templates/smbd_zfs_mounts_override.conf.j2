@@ -1,9 +1,7 @@
 {# Order smbd after the zfs_mount_mnt_<name> coordinator unit of every
    /mnt/<name> a share lives on, so smbd never exports an empty mountpoint at
    boot before its dataset is mounted. Derived from samba_shares (not hard-coded)
-   so a new share on a known mount auto-wires its dependency; gated on the
-   per-site zfs_has_<name>_mount flag so test fixtures (all flags false) emit
-   nothing.
+   so a new share on a mount auto-wires its dependency.
 
    Requires= (not Wants=) is deliberate: if the dataset fails to mount we want
    smbd to stay down rather than serve an empty directory on the root pool --
@@ -18,23 +16,14 @@
    runs on box,lab only, and lab's `data` share already pins /mnt/data; pug has
    no spouse and no shares. If a future host homes a user on an /mnt/<x> not in
    samba_shares, add that mount as a share (or extend this derivation). #}
-{% set mount_flags = {
-     'services': zfs_has_services_mount,
-     'scratch': zfs_has_scratch_mount,
-     'media': zfs_has_media_mount,
-     'data': zfs_has_data_mount,
-     'brumath': zfs_has_brumath_mount,
-     'eckwersheim': zfs_has_eckwersheim_mount,
-     'minio': zfs_has_minio_mount,
-   } %}
 {% set seen = [] %}
 [Unit]
-{% for share in samba_shares %}
-{% set top = share.path | regex_replace('^/mnt/', '') | regex_replace('/.*$', '') %}
-{% if top in mount_flags and mount_flags[top] and top not in seen %}
-{% set _ = seen.append(top) %}
-Requires=zfs_mount_mnt_{{ top }}.service
-After=zfs_mount_mnt_{{ top }}.service
+{% for share in samba_shares if share.path is match('^/mnt/[^/]+(?:/|$)') %}
+{% set mountpoint = share.path | regex_replace('^(/mnt/[^/]+).*$', '\\1') %}
+{% if mountpoint not in seen %}
+{% set _ = seen.append(mountpoint) %}
+Requires={{ mountpoint | zfs_mount_unit }}
+After={{ mountpoint | zfs_mount_unit }}
 {% endif %}
 {% endfor %}
 After=zfs_autosnapshot.target
