@@ -290,7 +290,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: headscale
+      src: headscale.service
       condition: "{{ not ansible_check_mode or headscale_user.uid is defined }}"
       restart: "{{ headscale_will_restart }}"
       reload: "{{ headscale_acl_result.changed and not headscale_will_restart }}"

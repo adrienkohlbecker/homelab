@@ -187,7 +187,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: tautulli
+      src: tautulli.service
       condition: "{{ not ansible_check_mode or tautulli_user.uid is defined }}"
       restart: "{{ tautulli_service_result.changed or tautulli_conf.changed or tautulli_user.changed or media_group.changed }}"
   tags:

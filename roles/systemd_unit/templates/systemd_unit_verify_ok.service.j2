@@ -1,5 +1,5 @@
 [Unit]
-Description=systemd_unit_verify_ok
+Description=systemd_unit_verify_ok{{ systemd_unit_verify_suffix | default('') }}
 
 [Service]
 Type=oneshot

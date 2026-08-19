@@ -240,7 +240,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: fluent-bit
+      src: fluent-bit.service
       condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or apt_source_fluentbit_changed)) }}"
       restart: "{{ fluentbit_apt.changed or fluent_bit_service_d_override_conf_result.changed }}"
       reload: >-

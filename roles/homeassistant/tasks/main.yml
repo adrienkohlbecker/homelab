@@ -463,7 +463,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: homeassistant
+      src: homeassistant.service
       condition: "{{ not (ansible_check_mode and (homeassistant_service_result.changed or homeassistant_user.changed)) }}"
       restart: "{{ homeassistant_service_result.changed or homeassistant_conf.changed or homeassistant_secrets.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_route_script.changed }}"
   tags:

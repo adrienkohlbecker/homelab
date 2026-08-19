@@ -55,7 +55,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: avahi-daemon
+      src: avahi-daemon.service
       condition: "{{ not (ansible_check_mode and avahi_apt.changed) }}"
       restart: "{{ avahi_daemon_conf.changed }}"
       reload: "{{ avahi_device_info_removed.changed and not avahi_daemon_conf.changed }}"

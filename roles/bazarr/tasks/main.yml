@@ -107,7 +107,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: bazarr
+      src: bazarr.service
       condition: "{{ not (ansible_check_mode and (bazarr_service_result.changed or bazarr_user.changed)) }}"
       restart: "{{ bazarr_service_result.changed or bazarr_conf.changed or bazarr_user.changed or media_group.changed }}"
   tags:

@@ -207,7 +207,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: adguard
+      src: adguard.service
       condition: "{{ not (ansible_check_mode and (adguard_service_result.changed or adguard_user.changed)) }}"
       restart: "{{ adguard_service_result.changed or adguard_network.changed or adguard_config.changed or adguard_tls_certs.changed }}"
       throttle: 1
@@ -332,7 +332,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: adguard_reboot_guard
+      src: adguard_reboot_guard.service
       restart: "{{ adguard_reboot_guard_service_result.changed or adguard_reboot_guard_script.changed }}"
   tags:
     - adguard

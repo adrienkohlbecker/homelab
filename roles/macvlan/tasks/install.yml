@@ -124,7 +124,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: "{{ macvlan_args.name }}"
+      src: "{{ macvlan_args.name }}.service"
       # Per-unit result fact (systemd_unit exposes <basename>_<type>_result)
       # rather than the shared systemd_unit_file register, which a second unit
       # write in this loop would clobber. See roles/systemd_unit/tasks/install.yml.

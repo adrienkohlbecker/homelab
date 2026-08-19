@@ -56,7 +56,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: hd-idle
+      src: hd-idle.service
       condition: "{{ not (ansible_check_mode and hd_idle_apt.changed) }}"
       restart: >-
         {{ hd_idle_apt.changed or hd_idle_conf.changed

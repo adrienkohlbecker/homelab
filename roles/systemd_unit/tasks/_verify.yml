@@ -293,7 +293,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: systemd_unit_verify_ok.service.j2
+      src: systemd_unit_verify_ok.service
 
 - name: _verify | Disable fixture while leaving it active
   systemd:
@@ -388,7 +388,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: systemd_unit_verify_ok.service.j2
+      src: systemd_unit_verify_ok.service
 
 - name: _verify | Unit is active after first start  # noqa: command-instead-of-module
   command: systemctl is-active systemd_unit_verify_ok.service
@@ -400,7 +400,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: systemd_unit_verify_ok.service.j2
+      src: systemd_unit_verify_ok.service
 
 - name: _verify | Restart fires when requested
   import_role:
@@ -408,7 +408,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: systemd_unit_verify_ok.service.j2
+      src: systemd_unit_verify_ok.service
       restart: true
 
 # Reload path: drive reload: true while the unit is active (started above) so
@@ -419,7 +419,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: systemd_unit_verify_ok.service.j2
+      src: systemd_unit_verify_ok.service
       reload: true
 
 - name: _verify | Enable the copy-path fixture without starting it
@@ -465,17 +465,13 @@
     systemd_unit_args:
       dest: systemd_unit_verify_ok.service
 
-# --- Reenable prunes stale [Install] symlinks on a unit-file change ---
+# --- Reenable follows the current unit's install result ---
 # `systemctl enable` only adds the symlinks named in a unit's *current*
 # [Install]; it never removes ones dropped from the template. So a unit that
 # leaves a target (e.g. a service leaving zfs_autosnapshot.target) keeps a
 # dangling .wants symlink on every already-converged host. service.yml reenables
-# on a unit-file change to prune it. Plant the legacy symlink the way an old
-# `enable` would have (before the unit exists -- a dangling link, exactly the
-# already-converged shape), then a fresh install (reports the file changed) +
-# service. Assert the orphan is gone while the current multi-user.target.wants
-# link survives -- a plain enable would leave the orphan, so this gates the
-# reenable step specifically rather than tautologically checking an absent link.
+# on a unit-file change to prune it. First prove that changing a different unit
+# does not trigger reenable, then change this unit and prove the orphan is gone.
 - name: _verify | Plant a legacy target.wants dir for the prune test
   file:
     path: /etc/systemd/system/systemd_unit_verify_stale.target.wants
@@ -500,13 +496,57 @@
     systemd_unit_args:
       src: systemd_unit_verify_ok.service.j2
 
+- name: _verify | Reinstall the fixture so its current result reports no change
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+
+- name: _verify | Install an unrelated unit after the current unit result
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_copy_ok.service
+
+- name: _verify | Service the unchanged unit after the unrelated install
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service
+
+- name: _verify | Stat the legacy link after the unrelated install
+  stat:
+    path: /etc/systemd/system/systemd_unit_verify_stale.target.wants/systemd_unit_verify_ok.service
+    follow: false
+  register: _systemd_unit_unrelated_reenable_link
+  become: true
+
+- name: _verify | Unrelated unit change did not trigger reenable
+  assert:
+    that: _systemd_unit_unrelated_reenable_link.stat.islnk | default(false)
+
+- name: _verify | Change the current unit so its install result reports changed
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_verify_suffix: _updated
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+
 - name: _verify | Enable+start via service so the change-driven reenable fires
   import_role:
     name: systemd_unit
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: systemd_unit_verify_ok.service.j2
+      src: systemd_unit_verify_ok.service
 
 - name: _verify | Stat the legacy and current enable symlinks
   stat:
@@ -537,6 +577,14 @@
   vars:
     systemd_unit_args:
       dest: systemd_unit_verify_ok.service
+
+- name: _verify | Cleanup unrelated reenable-test unit
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: systemd_unit_verify_copy_ok.service
 
 - name: _verify | Cleanup the legacy target.wants dir
   file:

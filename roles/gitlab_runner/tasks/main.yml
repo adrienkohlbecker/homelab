@@ -308,7 +308,7 @@
         tasks_from: service
       vars:
         systemd_unit_args:
-          src: gitlab_runner.service.j2
+          src: gitlab_runner.service
           start: "{{ not qemu_test }}"
           restart: >-
             {{ gitlab_runner_service_result.changed
