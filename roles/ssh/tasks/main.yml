@@ -23,7 +23,7 @@
   command: /usr/local/bin/zfs_check_mount rpool/services /mnt/services
   register: ssh_services_mount
   changed_when: false
-  failed_when: false
+  failed_when: ssh_services_mount.rc != 0 and not ansible_check_mode
   check_mode: false
   become: true
   tags:
