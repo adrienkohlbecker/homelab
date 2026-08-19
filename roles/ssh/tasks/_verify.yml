@@ -21,6 +21,7 @@
 - name: _verify | Hardening directives are active
   assert:
     that:
+      - ssh_verify_effective.stdout is search('(?m)^addressfamily any$')
       - ssh_verify_effective.stdout is search('(?m)^passwordauthentication no$')
       - ssh_verify_effective.stdout is search('(?m)^permitrootlogin no$')
       - ssh_verify_effective.stdout is search('(?m)^authenticationmethods publickey$')

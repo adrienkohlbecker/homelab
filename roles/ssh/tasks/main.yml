@@ -129,13 +129,16 @@
   tags:
     - ssh
 
-# X11 forwarding drop-in: deployed only on hosts with ssh_x11_forwarding: true
-# (today: lab). Uses a Match User block so only the operator user gets it;
-# other accounts are unaffected even when they SSH into the same host.
+# X11 forwarding drop-in: deployed only when ssh_x11_forwarding is true (today:
+# lab). IPv6 is disabled on that host's loopback interface, so force IPv4 before
+# the user-scoped Match block; otherwise sshd tries ::1 for the X11 socket and
+# never falls back to 127.0.0.1.
 - name: Configure sshd — X11 forwarding for {{ operator_user }}
   copy:
     dest: /etc/ssh/sshd_config.d/10-x11-forwarding.conf
     content: |
+      AddressFamily inet
+
       Match User {{ operator_user }}
           X11Forwarding yes
     owner: root
