@@ -1,29 +1,18 @@
-# Inputs: caller passes a single dict `service_user_args` with keys
-#   name              required; system group + user name and config dir basename
-#   extra_groups      optional list, default []; appended to the user.
-#                     The groups must already exist on the host -- create
-#                     them before this import (e.g. jellyfin imports the
-#                     media/render groups first).
-#   shared_group      optional; appended to the user and used as the config
-#                     dir group. The group must already exist.
-#   createhome        optional bool, default false; usually only true when the
-#                     service writes into $HOME (gitea)
-#   shell             optional, default '/usr/sbin/nologin'
-#   home              optional, default '/nonexistent'
-#   config_dir        optional bool, default true; false skips creating and
-#                     owning /mnt/services/<name> -- the caller creates any
-#                     state dirs it needs itself.
-# The dict form prevents inter-call leakage at play-vars scope: each
-# import_role pass replaces the whole `service_user_args` value, so a
-# previous caller's createhome / extra_groups / etc. can't bleed into
-# the next caller that doesn't explicitly override.
+# `service_user_args` contract:
+#   name          required system group/user name and config-dir basename
+#   extra_groups  optional existing supplementary groups, default []
+#   shared_group  optional existing supplementary/config-dir group
+#   createhome    optional bool, default false
+#   home          optional, default /nonexistent
+#   shell         optional, default /usr/sbin/nologin
+#   config_dir    optional bool, default true; false skips /mnt/services/<name>
 #
-# Outputs: registers `<name>_user` with changed, name, config_group, uid, and
-# gid (the primary gid as an int -- safe in podman --user / --uidmap). The fact
-# key replaces non-identifier chars in name with '_'
-# (name='foo-bar' -> foo_bar_user). In --check mode on a host where the user
-# does not exist yet the user task only reports the create, so .uid/.gid
-# are undefined. Gate consumers with
+# One dict replaces the complete input at each import, preventing optional
+# values from an earlier call leaking into the next call at play-var scope.
+#
+# Publishes `<name>_user` with changed, name, config_group, uid, and gid. The
+# fact key replaces non-identifier characters with `_` (foo-bar -> foo_bar_user).
+# On a fresh host in check mode, uid/gid are undefined; gate consumers with
 # `not ansible_check_mode or <name>_user.uid is defined` so a proper run does
 # not silently skip work if the expected fact is missing.
 - name: "Validate inputs for {{ service_user_args.name | default('<unset>') }}"
