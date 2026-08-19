@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # vim:ft=sh
 # shellcheck shell=bash  # sourced by netdata charts.d.plugin, no shebang
+# Config variables are sourced after this script and before its callbacks run.
+# shellcheck disable=SC2154
 #
 # Netdata charts.d collector: systemd timer freshness.
 #
@@ -21,10 +23,6 @@
 # alarm before its first scheduled fire.
 
 systemd_timers_priority=90100
-
-# charts.d.plugin sources charts_d_systemd_timers.conf before invoking this file.
-: "${systemd_timers_update_every:?}"
-: "${systemd_timers_meta_dir:?}"
 
 # Last-fire time = the mtime of the stamp file at
 # /var/lib/systemd/timers/stamp-<name>.timer. System-scope monitored timers
