@@ -2,8 +2,8 @@
 """
 Full site.yml converge on a box fixture.
 
-Boots a box qemu fixture, configures mirrors (apt/podman/pip via Nexus, or
-upstream when test_in_aws), then runs the real site.yml with --limit box.
+Boots a box qemu fixture, runs the test bootstrap, then runs the real site.yml
+with --limit box.
 Catches role-ordering and cross-role interaction bugs that per-role tests miss.
 
 --check runs the same full site.yml in ansible check mode (a dry run) instead
@@ -119,8 +119,8 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
                             raise RuntimeError(f"systemd is-system-running returned {state!r}")
                         print_line(f"System ready: {state}")
 
-                        print_line("Running mirrors prelude")
-                        await m.ansible_command(str(m.workdir_path / "_mirrors.yml"))
+                        print_line("Running test bootstrap")
+                        await m.ansible_command(str(m.workdir_path / "_bootstrap.yml"))
 
                         staged = m.workdir_path / "site.yml"
                         shutil.copy(Path("site.yml"), staged)

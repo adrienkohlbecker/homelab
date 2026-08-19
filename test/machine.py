@@ -1233,7 +1233,7 @@ class Machine:
                 src.copy_into(self.workdir_path)
 
         # Copy the static role-agnostic playbooks (site / _setup /
-        # _verify / _mirrors) into the workdir so ansible loads
+        # _verify / _bootstrap) into the workdir so ansible loads
         # group_vars/host_vars from this directory and the playbooks
         # reference `{{ _role_under_test }}` injected via -e in
         # format_ansible_cmd. testrole.py decides which hook playbook to

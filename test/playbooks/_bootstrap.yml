@@ -1,4 +1,4 @@
-- name: Configure test mirrors
+- name: Configure test bootstrap
   hosts: all
   tasks:
     - name: Run test bootstrap

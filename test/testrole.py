@@ -42,13 +42,13 @@ _PHASE_TIMINGS: list[tuple[str, float]] = []
 # write_sources_list call), either because the role itself is what
 # transitions that state (apt -> rewrites sources to nexus) or because
 # the role asserts that packer shipped the right thing (packer ->
-# verifies chroot.sh's upstream reset landed). Running the mirrors
+# verifies chroot.sh's upstream reset landed). Running the bootstrap
 # prelude first would rewrite sources to nexus before _verify sees the
 # image, masking both kinds of regression. DNS for nexus.lab.fahm.fr
 # resolves via the host resolver chain on-LAN (CI runner, lab dev
 # hosts); off-LAN dev work can pass --upstream-mirrors as the escape
 # hatch.
-_SKIP_MIRRORS_PRELUDE_ROLES = frozenset({"apt", "packer", "test"})
+_SKIP_BOOTSTRAP_ROLES = frozenset({"apt", "packer", "test"})
 _REMOVED_FLOW_FLAGS = frozenset(
     {
         "--checkmode",
@@ -238,7 +238,7 @@ async def run_test(
 
                         # The vanilla cloud image runs cloud-init's config/final
                         # stages (apt sources, manage_etc_hosts, package installs)
-                        # after sshd comes up, so the mirrors playbook + snapd
+                        # after sshd comes up, so the bootstrap playbook + snapd
                         # purge below would race them. Settle cloud-init first.
                         # Only `minimal` carries a live cloud-init datasource; the
                         # packer images pin NoCloud and would stall the wait.
@@ -246,18 +246,18 @@ async def run_test(
                             async with _phase("cloud-init wait"):
                                 await m.ensure_cloud_init()
 
-                        # Mirror setup playbook: apt sources and podman
+                        # Test bootstrap playbook: apt sources and podman
                         # registries. Routes both through the lab Nexus when
                         # nexus_url is set
                         # (group_vars/test.yml), upstream when --upstream-mirrors
                         # clears it. Skipped when testing a role whose own job
                         # is to configure these things (see
-                        # _SKIP_MIRRORS_PRELUDE_ROLES).
-                        if m.role in _SKIP_MIRRORS_PRELUDE_ROLES:
-                            print_line(f"Skipping mirrors prelude: {m.role!r} is the role that configures it")
+                        # _SKIP_BOOTSTRAP_ROLES).
+                        if m.role in _SKIP_BOOTSTRAP_ROLES:
+                            print_line(f"Skipping bootstrap: {m.role!r} is the role that configures it")
                         else:
-                            async with _phase("mirrors playbook"):
-                                await m.ansible_command(str(m.workdir_path / "_mirrors.yml"))
+                            async with _phase("bootstrap playbook"):
+                                await m.ansible_command(str(m.workdir_path / "_bootstrap.yml"))
 
                         if m.machine == "minimal":
                             # Fixes systemd-analyze validation error:

@@ -47,7 +47,7 @@ def test_check_mode_forwards_flag_and_skips_poweroff(
     asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10, check_mode=True))
 
     assert machine.ansible_calls == [
-        (str(tmp_path / "_mirrors.yml"),),
+        (str(tmp_path / "_bootstrap.yml"),),
         (str(tmp_path / "site.yml"), "--check"),
     ]
     assert machine.ssh_calls == [("systemctl", "is-system-running", "--wait")]
