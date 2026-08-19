@@ -38,7 +38,7 @@
     # the mirror location the registries.conf points at doesn't exist.
     status_code: [ 200, 401 ]
     timeout: 15
-# DNS-over-TLS verification: mirrors.yml forces DoT so every query rides TCP
+# DNS-over-TLS verification: main.yml forces DoT so every query rides TCP
 # (the qemu SLIRP UDP-drop class of flakes). A stat of the drop-in would be a
 # tautology -- assert the *running* resolver state instead, scoped to the Global
 # Protocols line (driven by resolved.conf.d/) the way roles/resolved does.
@@ -48,33 +48,31 @@
   changed_when: false
   become: true
 
-- name: _verify | Isolate the Global resolver section
-  set_fact:
+- name: _verify | DNS-over-TLS is enforced at the configured resolver
+  vars:
     # Everything before the first per-link section: resolved routes queries
     # to link scopes ahead of the global scope, so a DHCP-supplied per-link
     # resolver matching anywhere in the full output must not satisfy the
     # assert -- only the Global block proves the drop-in is authoritative.
-    test_resolvectl_global: >-
+    _test_resolvectl_global: >-
       {{ test_resolvectl.stdout.split('\nLink ') | first }}
-    test_resolvectl_global_protocols: >-
-      {{ test_resolvectl.stdout_lines
+    _test_resolvectl_global_protocols: >-
+      {{ _test_resolvectl_global.splitlines()
          | select('search', 'Protocols:') | list | first | default('') }}
     # Same typed list main.yml renders into the drop-in, including the
     # #dns.fahm.fr SNI suffix so a dropped SNI fails here too.
-    test_expected_resolvers: "{{ test_dot_servers }}"
-
-- name: _verify | DNS-over-TLS is enforced at the configured resolver
+    _test_expected_resolvers: "{{ test_dot_servers }}"
   assert:
     that:
-      - "'+DNSOverTLS' in test_resolvectl_global_protocols"
+      - "'+DNSOverTLS' in _test_resolvectl_global_protocols"
       - >-
-        (test_expected_resolvers | select('in', test_resolvectl_global) | list | length)
-        == (test_expected_resolvers | length)
+        (_test_expected_resolvers | select('in', _test_resolvectl_global) | list | length)
+        == (_test_expected_resolvers | length)
     fail_msg: >-
-      systemd-resolved isn't enforcing DNS-over-TLS via {{ test_expected_resolvers | join(', ') }};
+      systemd-resolved isn't enforcing DNS-over-TLS via {{ _test_expected_resolvers | join(', ') }};
       the 10-test-dns-over-tls.conf drop-in didn't take effect, so queries can fall
       back to UDP and revive the SLIRP UDP-drop flakes it exists to prevent. Global
-      Protocols line: {{ test_resolvectl_global_protocols }}
+      Protocols line: {{ _test_resolvectl_global_protocols }}
 
 # Functional proof that public resolution actually works end-to-end: the
 # whole reason for the backend-aware resolver. qemu rides the LAN VIP →
