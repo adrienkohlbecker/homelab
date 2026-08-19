@@ -378,9 +378,8 @@ def sync_dataset(config: Config, source: str) -> None:
 def remote_properties(config: Config) -> dict[str, dict[str, str]]:
     """Read the finalization properties for the whole restored tree at once.
 
-    Each dataset maps property name to its effective value, plus
-    ``<name>_received`` for the value the stream carried. The two differ while
-    the receive pins from ``receive`` are still in force.
+    Each dataset maps property name to its effective value. The received
+    mountpoint is retained separately because receive pins temporarily hide it.
     """
 
     # -t filesystem,volume: zfs get recurses into snapshots by default, which
@@ -402,7 +401,8 @@ def remote_properties(config: Config) -> dict[str, dict[str, str]]:
         name, property_name, value, received = line.split("\t", 3)
         values = properties.setdefault(name, {})
         values[property_name] = value
-        values[f"{property_name}_received"] = received
+        if property_name == "mountpoint":
+            values["mountpoint_received"] = received
     return properties
 
 

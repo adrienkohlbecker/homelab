@@ -488,13 +488,11 @@ def test_remote_properties_groups_a_recursive_read_by_dataset(config, monkeypatc
             "mountpoint": "none",
             "mountpoint_received": config.mountpoint,
             "canmount": "noauto",
-            "canmount_received": "on",
         },
         child: {
             "mountpoint": "none",
             "mountpoint_received": "-",
             "canmount": "noauto",
-            "canmount_received": "off",
         },
     }
     # Without -t, zfs get recurses into snapshots, which carry none of these.
