@@ -79,13 +79,8 @@
       host: {{ test_apt_indextargets.stdout_lines
       | select('search', '^/etc/apt/sources.list:') | list }}
 
-- name: _verify | Stat podman registry mirror config
-  stat:
-    path: /etc/containers/registries.conf.d/homelab-mirrors.conf
-  register: test_registries
-
 - name: _verify | Read podman registry mirror config
-  when: ((nexus_url | length > 0) or test_use_ecr_registry_mirrors) and test_registries.stat.exists
+  when: (nexus_url | length > 0) or test_use_ecr_registry_mirrors
   slurp:
     src: /etc/containers/registries.conf.d/homelab-mirrors.conf
   register: test_registries_content
@@ -96,25 +91,25 @@
     - not test_use_ecr_registry_mirrors
   assert:
     that:
-      - test_registries.stat.exists
       # Assert the mirror *location* lines, not bare 'docker.io'/'ghcr.io':
       # those appear as the [[registry]] location regardless of whether the
       # [[registry.mirror]] block survived, so a substring check on the bare
       # names passes even with the mirror blocks dropped.
       - (nexus_url ~ '/repository/docker.io') in (test_registries_content.content | b64decode)
       - (nexus_url ~ '/repository/ghcr.io') in (test_registries_content.content | b64decode)
-    fail_msg: "registries.conf.d/homelab-mirrors.conf missing or doesn't mirror docker.io+ghcr.io to {{ nexus_url }}"
+    fail_msg: "registries.conf.d/homelab-mirrors.conf doesn't mirror docker.io+ghcr.io to {{ nexus_url }}"
 
 - name: _verify | Podman registry mirrors reference ECR
   when: test_use_ecr_registry_mirrors
   assert:
     that:
-      - test_registries.stat.exists
-      - (test_ecr_registry ~ '/docker-hub') in (test_registries_content.content | b64decode)
-      - (test_ecr_registry ~ '/github') in (test_registries_content.content | b64decode)
-      - (test_ecr_registry ~ '/gitlab') in (test_registries_content.content | b64decode)
-      - (test_ecr_registry ~ '/quay') in (test_registries_content.content | b64decode)
-    fail_msg: "registries.conf.d/homelab-mirrors.conf missing or doesn't mirror docker.io+ghcr.io+registry.gitlab.com+quay.io to {{ test_ecr_registry }}"
+      - (test_ecr_registry ~ '/' ~ item.value) in (test_registries_content.content | b64decode)
+    fail_msg: >-
+      registries.conf.d/homelab-mirrors.conf doesn't mirror {{ item.key }} to
+      {{ test_ecr_registry }}/{{ item.value }}
+  loop: "{{ test_ecr_registry_mirrors | dict2items }}"
+  loop_control:
+    label: "{{ item.key }} -> {{ item.value }}"
 
 - name: _verify | Resolve etc_hosts_entries to configured IPs
   when:
@@ -160,8 +155,6 @@
     # the mirror location the registries.conf points at doesn't exist.
     status_code: [ 200, 401 ]
     timeout: 15
-  register: test_podman_mirror
-
 # DNS-over-TLS verification: mirrors.yml forces DoT so every query rides TCP
 # (the qemu SLIRP UDP-drop class of flakes). A stat of the drop-in would be a
 # tautology -- assert the *running* resolver state instead, scoped to the Global
