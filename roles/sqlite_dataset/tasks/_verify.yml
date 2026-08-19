@@ -40,8 +40,6 @@
         not _sqlite_dataset_symlinks.stat.exists
         or not _sqlite_dataset_symlinks.stat.islnk
         or _sqlite_dataset_symlinks.stat.lnk_target != '/mnt/services/sqlite/sqlite_dataset_test/' ~ (item | basename)
-        or _sqlite_dataset_symlinks.stat.pw_name != 'root'
-        or _sqlite_dataset_symlinks.stat.gr_name != 'root'
 
     # -- Scenario 2: populated DBs survive an identical re-apply ----------
     # Write through the app-facing symlink, then prove an identical converge

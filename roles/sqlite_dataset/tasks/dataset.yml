@@ -94,8 +94,6 @@
     src: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ sqlite_dataset_link | basename }}"
     dest: "{{ sqlite_dataset_link }}"
     state: link
-    owner: "{{ sqlite_dataset_args.owner }}"
-    group: "{{ sqlite_dataset_args.group }}"
     follow: false
     force: "{{ sqlite_dataset_args.force | default(false) | bool }}"
   become: true
