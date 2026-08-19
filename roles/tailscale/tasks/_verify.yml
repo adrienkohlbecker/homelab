@@ -76,14 +76,14 @@
     that:
       - (_prefs.AdvertiseRoutes | default([], true) | sort) == (_tailscale_desired_routes | sort)
       - (_prefs.RouteAll | default(false) | bool) == (tailscale_accept_routes | bool)
-      - (_prefs.CorpDNS | default(false) | bool) == (tailscale_accept_dns | bool)
+      - not (_prefs.CorpDNS | default(false) | bool)
     fail_msg: >-
       Local preferences don't match desired:
       AdvertiseRoutes={{ _prefs.AdvertiseRoutes | default([], true) | sort }}
       (want {{ _tailscale_desired_routes | sort }}),
       RouteAll={{ _prefs.RouteAll | default(false) }}
       (want {{ tailscale_accept_routes }}), CorpDNS={{ _prefs.CorpDNS | default(false) }}
-      (want {{ tailscale_accept_dns }})
+      (want false)
 
 # Assert the forwarding settings are live, not just present in the sysctl file.
 - name: _verify | IP forwarding is enabled

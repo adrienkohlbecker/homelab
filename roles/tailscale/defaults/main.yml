@@ -7,10 +7,6 @@
 # single-NAT-tenant nodes keep Tailscale's default.
 tailscale_port: 41641
 
-# Roaming clients consume headscale MagicDNS; the server hosts keep their own
-# resolv.conf (adguard/systemd-resolved), so don't let tailscale rewrite it.
-tailscale_accept_dns: false
-
 # CLI path; bunk overrides this for its DSM Package-Center installation.
 tailscale_bin: tailscale
 
@@ -21,9 +17,3 @@ tailscale_authkey_file: /run/tailscale_authkey
 # Install routes advertised by other tailnet nodes. This is all-or-nothing and
 # can hairpin a node onto its physical LAN; see notes/headscale_mesh_redesign.md.
 tailscale_accept_routes: false
-
-# Pin subnet-router forwarding semantics instead of inheriting upstream defaults.
-# SNAT hides client source IPs; stateful filtering drops uninitiated inbound
-# subnet traffic.
-tailscale_snat_subnet_routes: true
-tailscale_stateful_filtering: false
