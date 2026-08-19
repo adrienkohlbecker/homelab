@@ -98,36 +98,20 @@
   delay: 2
   until: _sonarr_http_postrestart.status == 200
 
-- name: _verify | Read config.xml back after the writeback
-  slurp:
-    src: /mnt/services/sonarr/config.xml
-  register: _sonarr_conf_ondisk
+# Re-run the production file contract in check mode after Sonarr's writeback.
+# Any predicted change means content, ownership, or mode drifted.
+- name: _verify | Config.xml remains converged after sonarr's writeback
+  copy:
+    content: "{{ lookup('template', 'config.xml.j2') | rstrip_newlines }}"
+    dest: /mnt/services/sonarr/config.xml
+    owner: sonarr
+    group: media
+    mode: "0600"
+  check_mode: true
+  diff: false
+  register: _sonarr_conf_check
+  failed_when: _sonarr_conf_check.changed
   become: true
-
-- name: _verify | Templated config.xml survives sonarr's writeback without drift
-  assert:
-    that:
-      - (_sonarr_conf_ondisk | slurp_text(trim=false)) == (lookup('template', 'config.xml.j2') | rstrip_newlines)
-    fail_msg: >-
-      sonarr rewrote config.xml into a form config.xml.j2 no longer matches --
-      its element order/casing drifted from sonarr's writeback, so deploying
-      would restart-churn. Re-capture config.xml.j2 from a running instance.
-
-- name: _verify | Config.xml ownership survived writeback
-  stat:
-    path: /mnt/services/sonarr/config.xml
-  register: _sonarr_conf_stat
-  become: true
-
-- name: _verify | Config.xml is still owned sonarr:media mode 0600
-  assert:
-    that:
-      - _sonarr_conf_stat.stat.pw_name == "sonarr"
-      - _sonarr_conf_stat.stat.gr_name == "media"
-      - _sonarr_conf_stat.stat.mode == "0600"
-    fail_msg: >-
-      sonarr's writeback changed config.xml ownership/mode from the ansible-applied
-      sonarr:media 0600 (stat={{ _sonarr_conf_stat.stat }})
 
 - name: _verify | Create unique sonarr fluent-bit marker
   set_fact:
