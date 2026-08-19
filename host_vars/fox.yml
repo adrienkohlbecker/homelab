@@ -145,7 +145,6 @@ headscale_oidc_client_id: headscale
 # fox keeps its own resolv.conf and does not consume MagicDNS.
 tailscale_advertise_routes:
   - 10.123.55.0/24
-tailscale_advertise_exit_node: true
 
 # Pin the lab-hosted dependencies fox consumes to lab's physical IP over wg0.
 # Public DNS for *.lab.fahm.fr now resolves to lab's Tailscale CGNAT address,

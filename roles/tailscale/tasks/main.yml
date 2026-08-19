@@ -153,8 +153,8 @@
   tags:
     - tailscale
 
-# Subnet routers and exit nodes need the kernel to forward between the tailnet
-# interface and the LAN. Pure mesh clients leave forwarding unchanged.
+# Every role consumer is a subnet router and exit node, so forwarding is part of
+# the role contract.
 - name: Enable IP forwarding for subnet routing / exit node
   ansible.posix.sysctl:
     name: "{{ item }}"
@@ -164,7 +164,6 @@
   loop:
     - net.ipv4.ip_forward
     - net.ipv6.conf.all.forwarding
-  when: (tailscale_advertise_routes | length > 0) or (tailscale_advertise_exit_node | bool)
   become: true
   tags:
     - tailscale

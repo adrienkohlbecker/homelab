@@ -9,7 +9,7 @@ After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
 {% endif %}
 
-{% if ansible_default_ipv4.interface is defined and ((tailscale_advertise_routes | length > 0) or (tailscale_advertise_exit_node | bool)) %}
+{% if ansible_default_ipv4.interface is defined %}
 [Service]
 # Apply UDP GRO forwarding offload on the underlay NIC whenever tailscaled
 # starts. This keeps the runtime setting aligned across restarts and reboots.

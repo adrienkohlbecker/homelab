@@ -207,12 +207,11 @@ gitlab_runner_aws_qemu_secret_access_key: TEST_PLACEHOLDER_DO_NOT_USE
 
 # roles/tailscale test config. The control-plane pointers (login_server,
 # headscale_host, headscale_user) are environment constants in group_vars/test.yml;
-# the pre-auth key is minted on-the-fly by main.yml at registration. Only the
-# advertised routes/exit are box-specific -- a throwaway subnet so _verify can
-# assert the advertise + approve round-trip without colliding with the test topology.
+# the pre-auth key is minted on-the-fly by main.yml at registration. The advertised
+# subnet is box-specific so _verify can exercise the approve round-trip without
+# colliding with the test topology.
 tailscale_advertise_routes:
   - 10.99.99.0/24
-tailscale_advertise_exit_node: true
 # Exercise the --accept-routes=true path under the harness (harmless on the
 # single-node test tailnet; the throwaway subnet isn't on box's real interfaces).
 tailscale_accept_routes: true
