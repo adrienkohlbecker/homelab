@@ -1,5 +1,0 @@
-# Mirror the production producer so the fixture gets the real dataset
-# properties, mount unit, and zfs_check_mount dependency before ssh_root runs.
-- name: _setup | Configure the services datasets
-  import_role:
-    name: services

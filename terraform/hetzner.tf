@@ -210,8 +210,8 @@ resource "hcloud_server" "fox" {
   # *configures* the existing login user, it doesn't create it). The SSH key is
   # the same laptop key registered above. Root SSH is locked at the sshd level
   # from first boot via the drop-in below; the `ssh` role's sshd_config (also
-  # PermitRootLogin no) takes over at converge. The `ssh_root` role (root's
-  # outbound keypair) is intentionally not in fox's play.
+  # PermitRootLogin no) takes over at converge. zfs_autobackup separately owns
+  # root's outbound backup keypair; it does not enable inbound root login.
   user_data = <<-EOT
     #cloud-config
     disable_root: true

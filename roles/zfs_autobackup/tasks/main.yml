@@ -32,6 +32,11 @@
   tags:
     - zfs_autobackup
 
+- name: Manage the backup SSH identity
+  import_tasks: identity.yml
+  tags:
+    - zfs_autobackup
+
 - name: Install zfs autobackup dependencies
   apt:
     package:

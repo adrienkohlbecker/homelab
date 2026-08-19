@@ -36,6 +36,9 @@
       - "'connecttimeout 10' in zfs_autobackup_verify_ssh_config.stdout"
     fail_msg: "backup SSH config missing expected directives"
 
+- name: _verify | Exercise backup identity migration and persistence
+  import_tasks: _verify_identity.yml
+
 # Functional check: converge granted zfs allow on the scratch dataset that
 # _setup tagged; assert the grant landed, then drive a real local backup and
 # confirm a @bak- snapshot appears -- exercising script discovery, the

@@ -1,22 +1,15 @@
+# Mirror the production producer so identity migration gets the real services
+# dataset, mount unit, and zfs_check_mount dependency.
+- name: _setup | Configure the services datasets
+  import_role:
+    name: services
+
 # The backup scripts source /usr/local/lib/functions.sh at runtime; in prod
 # the bash base role guarantees it. _verify drives a real backup, so install
 # it here (mirrors roles/zfs/tasks/_setup.yml).
 - name: _setup | Install bash helpers
   import_role:
     name: bash
-
-# zfs_backup_offsite calls zfs_check_mount, which the zfs role installs in prod.
-# _verify drives the offsite change-gate, so install just the binary here -- the
-# same dependency-staging pattern as the bash helpers above, without pulling in
-# the per-mountpoint systemd units.
-- name: _setup | Install zfs_check_mount (zfs_backup_offsite dependency)
-  copy:
-    src: "{{ role_path }}/../zfs/files/zfs_check_mount.sh"
-    dest: /usr/local/bin/zfs_check_mount
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
 
 # A locally-tagged leaf dataset so converge's source.yml grants zfs allow on
 # it and _verify can drive a real local backup. rpool exists on every ZFS

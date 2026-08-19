@@ -32,7 +32,6 @@
     # later zfs policy role.
     - services
     - ssh
-    - ssh_root
     # Storage & boot substrate -- ZFS datasets/snapshots and the bootloader.
     - zfs
     - zfs_autobackup

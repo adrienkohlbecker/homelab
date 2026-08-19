@@ -1,0 +1,200 @@
+# Root's outbound SSH identity authenticates the automated onsite pulls and
+# offsite rsync. The key rides rpool/services so rebuilding a host preserves
+# every peer and bunk pin. Invalid or divergent identities fail closed.
+- name: identity | Create the root SSH directory
+  file:
+    dest: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  register: zfs_autobackup_identity_directory
+  tags:
+    - zfs_autobackup
+
+- name: identity | Check the services dataset mount
+  command: /usr/local/bin/zfs_check_mount rpool/services /mnt/services
+  register: zfs_autobackup_identity_services_mount
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: identity | Stat the persisted identity
+  when: zfs_autobackup_identity_services_mount.rc == 0
+  stat:
+    path: /mnt/services/zfs_autobackup/id_ed25519
+  become: true
+  register: zfs_autobackup_identity_persisted_before
+  tags:
+    - zfs_autobackup
+
+- name: identity | Stat the legacy persisted identity
+  when: zfs_autobackup_identity_services_mount.rc == 0
+  stat:
+    path: /mnt/services/ssh_root/id_ed25519
+  become: true
+  register: zfs_autobackup_identity_legacy
+  tags:
+    - zfs_autobackup
+
+- name: identity | Stat the legacy persistence directory
+  when: zfs_autobackup_identity_services_mount.rc == 0
+  stat:
+    path: /mnt/services/ssh_root
+  become: true
+  register: zfs_autobackup_identity_legacy_dir
+  tags:
+    - zfs_autobackup
+
+- name: identity | Refuse divergent persisted identities
+  when:
+    - zfs_autobackup_identity_services_mount.rc == 0
+    - zfs_autobackup_identity_persisted_before.stat.exists | default(false)
+    - zfs_autobackup_identity_legacy.stat.exists | default(false)
+    - zfs_autobackup_identity_persisted_before.stat.checksum != zfs_autobackup_identity_legacy.stat.checksum
+  fail:
+    msg: >-
+      /mnt/services/zfs_autobackup/id_ed25519 differs from the legacy
+      /mnt/services/ssh_root/id_ed25519; select the authorized identity before
+      converging so no peer pin is silently replaced.
+  tags:
+    - zfs_autobackup
+
+- name: identity | Create the persistence directory
+  when: zfs_autobackup_identity_services_mount.rc == 0
+  file:
+    dest: /mnt/services/zfs_autobackup
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  register: zfs_autobackup_identity_persist_dir
+  tags:
+    - zfs_autobackup
+
+- name: identity | Migrate the legacy persisted identity
+  when:
+    - zfs_autobackup_identity_services_mount.rc == 0
+    - zfs_autobackup_identity_legacy.stat.exists | default(false)
+    - not (zfs_autobackup_identity_persisted_before.stat.exists | default(false))
+    - not (ansible_check_mode and zfs_autobackup_identity_persist_dir.changed)
+  copy:
+    src: /mnt/services/ssh_root/id_ed25519
+    remote_src: true
+    dest: /mnt/services/zfs_autobackup/id_ed25519
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+  become: true
+  register: zfs_autobackup_identity_migration
+  tags:
+    - zfs_autobackup
+
+- name: identity | Stat the migrated persisted identity
+  when: zfs_autobackup_identity_services_mount.rc == 0
+  stat:
+    path: /mnt/services/zfs_autobackup/id_ed25519
+  become: true
+  register: zfs_autobackup_identity_persisted
+  tags:
+    - zfs_autobackup
+
+# Only the private key is persisted/restored; openssh_keypair recreates the
+# derived public key when it is missing.
+- name: identity | Restore the persisted identity
+  when:
+    - zfs_autobackup_identity_services_mount.rc == 0
+    - zfs_autobackup_identity_persisted.stat.exists | default(false)
+    - not (ansible_check_mode and zfs_autobackup_identity_directory.changed)
+  copy:
+    src: /mnt/services/zfs_autobackup/id_ed25519
+    remote_src: true
+    dest: /root/.ssh/id_ed25519
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: identity | Generate an OpenSSH keypair
+  when: >-
+    not (ansible_check_mode and
+    (zfs_autobackup_identity_directory.changed
+    or zfs_autobackup_identity_migration.changed | default(false)))
+  community.crypto.openssh_keypair:
+    path: /root/.ssh/id_ed25519
+    type: ed25519
+    owner: root
+    group: root
+    regenerate: fail
+    backend: opensshbin
+  become: true
+  register: zfs_autobackup_identity_keypair
+  tags:
+    - zfs_autobackup
+
+# openssh_keypair applies its single mode argument to both files. Leave it
+# unset so ssh-keygen creates the pair with its native split modes, then
+# enforce the private key permission independently.
+- name: identity | Normalize the private key permissions
+  when: >-
+    not (ansible_check_mode and
+    (zfs_autobackup_identity_directory.changed
+    or zfs_autobackup_identity_migration.changed | default(false)
+    or zfs_autobackup_identity_keypair.changed | default(false)))
+  file:
+    path: /root/.ssh/id_ed25519
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  register: zfs_autobackup_identity_private_key
+  tags:
+    - zfs_autobackup
+
+# Live -> persisted, idempotent by checksum. A fresh host seeds the persisted
+# copy; afterwards the restore above makes the live key match before this task.
+- name: identity | Persist the identity
+  when:
+    - zfs_autobackup_identity_services_mount.rc == 0
+    - >-
+      not (ansible_check_mode and
+      (zfs_autobackup_identity_directory.changed
+      or zfs_autobackup_identity_persist_dir.changed
+      or zfs_autobackup_identity_migration.changed | default(false)
+      or zfs_autobackup_identity_keypair.changed | default(false)))
+  copy:
+    src: /root/.ssh/id_ed25519
+    remote_src: true
+    dest: /mnt/services/zfs_autobackup/id_ed25519
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: identity | Remove the legacy persistence directory
+  when:
+    - zfs_autobackup_identity_services_mount.rc == 0
+    - zfs_autobackup_identity_legacy_dir.stat.exists | default(false)
+    - >-
+      not (ansible_check_mode and
+      (zfs_autobackup_identity_persist_dir.changed
+      or zfs_autobackup_identity_migration.changed | default(false)))
+  file:
+    path: /mnt/services/ssh_root
+    state: absent
+  become: true
+  register: zfs_autobackup_identity_legacy_remove
+  tags:
+    - zfs_autobackup

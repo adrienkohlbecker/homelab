@@ -1,0 +1,144 @@
+- name: _verify | Live and persisted backup identities match
+  command:
+    argv:
+      - cmp
+      - -s
+      - /root/.ssh/id_ed25519
+      - /mnt/services/zfs_autobackup/id_ed25519
+  changed_when: false
+  become: true
+
+# Simulate an upgrade plus rebuild: the persisted identity is still at the
+# legacy path while /root/.ssh is fresh. Converge must migrate and restore the
+# same key before deleting the legacy directory.
+- name: _verify | Move the persisted identity to the legacy path
+  command:
+    argv:
+      - mv
+      - /mnt/services/zfs_autobackup
+      - /mnt/services/ssh_root
+  changed_when: true
+  become: true
+
+- name: _verify | Remove the live keypair
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /root/.ssh/id_ed25519
+    - /root/.ssh/id_ed25519.pub
+  become: true
+
+- name: _verify | Re-run identity management against the legacy path
+  import_tasks: identity.yml
+
+- name: _verify | Migrated identity was restored unchanged
+  command:
+    argv:
+      - cmp
+      - -s
+      - /root/.ssh/id_ed25519
+      - /mnt/services/zfs_autobackup/id_ed25519
+  changed_when: false
+  become: true
+
+- name: _verify | Legacy persistence path was retired
+  stat:
+    path: /mnt/services/ssh_root
+  become: true
+  register: zfs_autobackup_verify_identity_legacy
+  failed_when: zfs_autobackup_verify_identity_legacy.stat.exists
+
+- name: _verify | Re-run identity management after migration
+  import_tasks: identity.yml
+
+- name: _verify | Migrated identity is idempotent
+  assert:
+    that:
+      - not zfs_autobackup_identity_keypair.changed
+      - not zfs_autobackup_identity_private_key.changed
+      - not (zfs_autobackup_identity_migration.changed | default(false))
+      - not (zfs_autobackup_identity_legacy_remove.changed | default(false))
+    fail_msg: >-
+      backup identity still changed after migration: keypair={{ zfs_autobackup_identity_keypair }}
+      private_key={{ zfs_autobackup_identity_private_key }}
+
+- name: _verify | Preserve the valid backup identity for repair
+  copy:
+    src: /root/.ssh/id_ed25519
+    remote_src: true
+    dest: /root/.ssh/id_ed25519.verify-backup
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+
+- name: _verify | Corrupt both backup identity copies
+  copy:
+    dest: "{{ item }}"
+    content: "not a valid private key\n"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - /root/.ssh/id_ed25519
+    - /mnt/services/zfs_autobackup/id_ed25519
+  become: true
+
+- name: _verify | Stat the corrupt live identity
+  stat:
+    path: /root/.ssh/id_ed25519
+  become: true
+  register: zfs_autobackup_verify_identity_corrupt_before
+
+- name: _verify | Re-run identity management against the corrupt identity
+  block:
+    - name: _verify | Import identity management (must fail before regeneration)
+      import_tasks: identity.yml
+
+    - name: _verify | Reject a converge that accepted the corrupt identity
+      fail:
+        msg: zfs_autobackup accepted an invalid existing key
+
+  rescue:
+    - name: _verify | The keypair task failed closed
+      assert:
+        that:
+          - ansible_failed_task.name is search('Generate an OpenSSH keypair')
+          - ansible_failed_result.msg is search('Unable to read the key')
+        fail_msg: >-
+          Identity management failed in {{ ansible_failed_task.name | default('<unknown>') }},
+          not in the expected openssh_keypair validation.
+
+    - name: _verify | Stat the rejected live identity
+      stat:
+        path: /root/.ssh/id_ed25519
+      become: true
+      register: zfs_autobackup_verify_identity_corrupt_after
+
+    - name: _verify | Invalid identity was rejected without replacement
+      assert:
+        that:
+          - >-
+            zfs_autobackup_verify_identity_corrupt_after.stat.checksum
+            == zfs_autobackup_verify_identity_corrupt_before.stat.checksum
+
+  always:
+    - name: _verify | Restore the valid backup identity copies
+      copy:
+        src: /root/.ssh/id_ed25519.verify-backup
+        remote_src: true
+        dest: "{{ item }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop:
+        - /root/.ssh/id_ed25519
+        - /mnt/services/zfs_autobackup/id_ed25519
+      become: true
+
+    - name: _verify | Remove the identity repair copy
+      file:
+        path: /root/.ssh/id_ed25519.verify-backup
+        state: absent
+      become: true
