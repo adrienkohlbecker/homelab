@@ -112,16 +112,17 @@
       register: tailscale_preauth
       changed_when: false
 
-    # Keep the key out of argv/ps by staging it in a root-only file, then remove it.
-    - name: register | Clear any pre-existing authkey file (symlink-attack guard)
-      file:
-        path: "{{ tailscale_authkey_file }}"
-        state: absent
+    # Keep the key out of argv/ps in a generated root-only file, then remove it.
+    - name: register | Create a temporary authkey file
+      tempfile:
+        state: file
+        prefix: tailscale_authkey.
+      register: tailscale_authkey_temp
 
     - name: register | Stage the pre-auth key in a root-only file  # noqa: require-backup
       copy:
         content: "{{ (tailscale_preauth.stdout | from_json).key }}"
-        dest: "{{ tailscale_authkey_file }}"
+        dest: "{{ tailscale_authkey_temp.path }}"
         owner: root
         group: root
         mode: "0600"
@@ -134,7 +135,7 @@
         argv: >-
           {{ [tailscale_bin, 'login',
               '--login-server', tailscale_login_server,
-              '--auth-key', 'file:' + tailscale_authkey_file,
+              '--auth-key', 'file:' + tailscale_authkey_temp.path,
               '--timeout=60s'] }}
       changed_when: true
 
@@ -142,8 +143,9 @@
     # Always remove the staged key; an unconsumed key expires after five minutes.
     - name: register | Remove the staged pre-auth key file
       file:
-        path: "{{ tailscale_authkey_file }}"
+        path: "{{ tailscale_authkey_temp.path }}"
         state: absent
+      when: tailscale_authkey_temp.path is defined
 
 # Every managed node is a subnet router and exit node, so approve its advertised
 # subnet(s) plus the two exit-node default routes.

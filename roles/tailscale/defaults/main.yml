@@ -10,10 +10,6 @@ tailscale_port: 41641
 # CLI path; bunk overrides this for its DSM Package-Center installation.
 tailscale_bin: tailscale
 
-# Root-only staging path for `tailscale login --auth-key file:`. Bunk overrides this
-# to /tmp because DSM does not guarantee /run is tmpfs.
-tailscale_authkey_file: /run/tailscale_authkey
-
 # Install routes advertised by other tailnet nodes. This is all-or-nothing and
 # can hairpin a node onto its physical LAN; see notes/headscale_mesh_redesign.md.
 tailscale_accept_routes: false
