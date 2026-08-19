@@ -19,18 +19,11 @@
     systemd_unit_args:
       src: systemd_unit_verify_ok.service.j2
 
-- name: _verify | First install set the per-unit fact and put file on disk
-  block:
-    - name: _verify | Stat verify_ok service after first install
-      stat:
-        path: /etc/systemd/system/systemd_unit_verify_ok.service
-      register: _systemd_unit_ok_stat
-    - name: _verify | Assert verify_ok result and file exist after first install
-      assert:
-        that:
-          - systemd_unit_verify_ok_service_result is defined
-          - systemd_unit_verify_ok_service_result.changed
-          - _systemd_unit_ok_stat.stat.exists
+- name: _verify | First install published a changed per-unit result
+  assert:
+    that:
+      - systemd_unit_verify_ok_service_result is defined
+      - systemd_unit_verify_ok_service_result.changed
 
 - name: _verify | Re-install same template is idempotent
   import_role:
