@@ -136,16 +136,16 @@
   delay: 2
   until: >-
     _systemd_timer_alarms.status == 200
-    and (_systemd_timer_alarms.content | from_json).alarms.keys() | list
+    and _systemd_timer_alarms.json.alarms.keys() | list
         | select('search', 'systemd_timers.verify_timer_recent.systemd_timer_overdue') | list | length > 0
-    and (_systemd_timer_alarms.content | from_json).alarms.keys() | list
+    and _systemd_timer_alarms.json.alarms.keys() | list
         | select('search', 'systemd_timers.verify_timer_overdue.systemd_timer_overdue') | list | length > 0
 
 - name: _verify | Assert overdue alert uses an uptime state guard
   vars:
     _alarm: >-
       {{
-        ((_systemd_timer_alarms.content | from_json).alarms.values()
+        (_systemd_timer_alarms.json.alarms.values()
          | selectattr('name', 'equalto', 'systemd_timer_overdue')
          | first)
         | default({})
