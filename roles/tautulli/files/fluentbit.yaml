@@ -1,11 +1,11 @@
 parsers:
   - name: tautulli_console
     format: regex
-    regex: '/\A(?<tautulli_timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - (?<tautulli_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)[[:space:]]+:: (?<tautulli_thread>.*?) : (?:(?<tautulli_source>Tautulli [^:\n]+) :: )?(?<tautulli_message>[\s\S]*?)[[:space:]]*\z/'
+    regex: '/\A(?:\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - (?<tautulli_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)[[:space:]]+:: (?<tautulli_thread>.*?) : (?:(?<tautulli_source>Tautulli [^:\n]+) :: )?(?<tautulli_message>[\s\S]*?)[[:space:]]*\z/'
 
   - name: tautulli_websocket_file
     format: regex
-    regex: '/\A(?<tautulli_websocket_timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - (?<tautulli_websocket_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)[[:space:]]+:: (?<tautulli_websocket_thread>.*?) : (?<tautulli_websocket_message>[\s\S]*?)[[:space:]]*\z/'
+    regex: '/\A(?:\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - (?<tautulli_websocket_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)[[:space:]]+:: (?<tautulli_websocket_thread>.*?) : (?<tautulli_websocket_message>[\s\S]*?)[[:space:]]*\z/'
 
 pipeline:
   inputs:
@@ -48,7 +48,6 @@ pipeline:
         - tautulli_level _level
         - tautulli_thread thread
         - tautulli_source source
-      remove: tautulli_timestamp
       set: parser_status parsed
 
     - name: modify
@@ -82,7 +81,5 @@ pipeline:
         - tautulli_websocket_message log
         - tautulli_websocket_level _level
         - tautulli_websocket_thread thread
-      remove:
-        - tautulli_websocket_timestamp
-        - filepath
+      remove: filepath
       set: parser_status parsed

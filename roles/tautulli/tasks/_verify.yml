@@ -295,7 +295,6 @@
       - record.fields.source == "plex_websocket"
       - record.fields.parser_status == "parsed"
       - record.parse_error is not defined
-      - record.fields.tautulli_websocket_timestamp is not defined
       - record.fields.filepath is not defined
 
 - name: _verify | Exercise tautulli fluent-bit record contracts
@@ -330,7 +329,6 @@
           fields.thread: MainThread
           fields.parser_status: parsed
           _absent:
-            - fields.tautulli_timestamp
             - fields.tautulli_level
             - fields.tautulli_thread
             - fields.tautulli_source
