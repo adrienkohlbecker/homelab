@@ -159,27 +159,6 @@
   tags:
     - tailscale
 
-- name: register | Read current local tailscale preferences
-  command: "{{ tailscale_bin }} debug prefs"
-  when: tailscale_running
-  register: tailscale_prefs
-  changed_when: false
-  check_mode: false
-  become: true
-  tags:
-    - tailscale
-
-- name: register | Determine whether advertised routes need headscale approval
-  set_fact:
-    tailscale_approve_routes_needed: >-
-      {{ (tailscale_desired_routes | length > 0)
-         and ((not tailscale_running)
-              or (tailscale_reconcile_headscale_routes | bool)
-              or ((tailscale_desired_routes | sort)
-                  != (((tailscale_prefs.stdout | default('{}', true) | from_json).AdvertiseRoutes | default([], true)) | sort))) }}
-  tags:
-    - tailscale
-
 # Reconcile every local preference on live nodes. `tailscale set` cannot report
 # whether it changed a preference, so functional verification proves correctness.
 - name: register | Reconcile routes / exit node / accept-routes / accept-dns
@@ -199,17 +178,15 @@
   tags:
     - tailscale
 
-# Query Headscale only after registration, advertised-route drift, or an explicit
-# repair, keeping steady-state converges independent of the control plane.
-# A newly registered node can lag `tailscale up`, so poll before resolving its ID.
+# Headscale owns the approved-route set, so query it on every real apply and
+# compare the actual approvals directly. A newly registered node can lag
+# `tailscale up`, so poll before resolving its ID.
 - name: register | List headscale nodes (on the control server)
   command: podman exec headscale headscale nodes list -o json
   delegate_to: "{{ tailscale_headscale_host }}"
   register: tailscale_nodes
   changed_when: false
-  when:
-    - not ansible_check_mode
-    - tailscale_approve_routes_needed
+  when: not ansible_check_mode
   retries: 15
   delay: 2
   until: >-
@@ -227,9 +204,7 @@
     tailscale_node_matches: >-
       {{ (tailscale_nodes.stdout | default('[]', true) | from_json)
          | matching_by_attr({'user.name': tailscale_headscale_user, 'given_name': (ansible_hostname | lower)}) }}
-  when:
-    - not ansible_check_mode
-    - tailscale_approve_routes_needed
+  when: not ansible_check_mode
   tags:
     - tailscale
 
@@ -245,9 +220,7 @@
       (check tailscaled logs + login-server reachability), or the node joined a
       DIFFERENT control plane (`tailscale down` + re-run). >1 = stale node from
       a prior registration; remove the duplicate via `headscale nodes delete`.
-  when:
-    - not ansible_check_mode
-    - tailscale_approve_routes_needed
+  when: not ansible_check_mode
   tags:
     - tailscale
 
@@ -260,7 +233,6 @@
   delegate_to: "{{ tailscale_headscale_host }}"
   when:
     - not ansible_check_mode
-    - tailscale_approve_routes_needed
     - (tailscale_desired_routes | sort) != (((tailscale_node_matches | first).approved_routes | default([], true)) | sort)
   changed_when: true
   become: true
