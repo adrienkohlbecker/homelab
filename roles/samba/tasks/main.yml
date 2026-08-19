@@ -218,9 +218,7 @@
     - samba
 
 - name: Configure Samba user
-  import_role:
-    name: samba
-    tasks_from: smbpasswd
+  import_tasks: smbpasswd.yml
   vars:
     samba_smbpasswd_args:
       name: "{{ ansible_user_id }}"
