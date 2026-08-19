@@ -151,7 +151,6 @@
   retries: 15
   delay: 2
   until: _socket_proxy_version.status == 200
-  become: true
 
 - name: _verify | Allowed GET sections return 200
   uri:
@@ -164,26 +163,22 @@
     - v1.41/containers/json
   loop_control:
     label: "/{{ item }}"
-  become: true
 
 - name: _verify | Allowed GET /containers/json returns 200
   uri:
     url: http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/json
     status_code: 200
   register: _socket_proxy_containers
-  become: true
 
 - name: _verify | /containers/json body is non-empty (proxy reaches the socket)
   assert:
     that:
       - _socket_proxy_containers.json | length > 0
-  become: true
 
 - name: _verify | Allowed GET /containers/<id>/stats returns 200 (netdata data-plane)
   uri:
     url: "http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/{{ _socket_proxy_containers.json[0].Id }}/stats?stream=false"
     status_code: 200
-  become: true
 
 # POST is denied by default (read-only). A blocked write must 403, not reach
 # the socket -- this is the whole point of the proxy.
@@ -194,14 +189,12 @@
     body_format: json
     body: {"Image": "alpine"}
     status_code: 403
-  become: true
 
 - name: _verify | Write DELETE /containers/test is blocked (403)
   uri:
     url: http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/test
     method: DELETE
     status_code: 403
-  become: true
 
 # SECRETS proves the filter is default-deny; EVENTS is explicitly disabled.
 - name: _verify | Denied GET sections are blocked
@@ -213,4 +206,3 @@
     - events
   loop_control:
     label: "/{{ item }}"
-  become: true
