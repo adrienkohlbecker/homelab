@@ -1,4 +1,11 @@
 ---
+- name: _verify | Retired Netdata smartctl collector override is absent
+  stat:
+    path: /etc/netdata/go.d/smartctl.conf
+  register: retired_services_netdata_smartctl
+  failed_when: retired_services_netdata_smartctl.stat.exists
+  become: true
+
 - name: _verify | Retired smartmontools defaults file is absent
   stat:
     path: /etc/default/smartmontools

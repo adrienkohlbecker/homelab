@@ -15,15 +15,6 @@
   tags:
     - netdata
 
-- name: Install smart metrics
-  import_role:
-    name: smart
-    tasks_from: netdata
-  vars:
-    smart_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
-  tags:
-    - netdata
-
 - name: Install hdparm metrics
   import_role:
     name: hdparm

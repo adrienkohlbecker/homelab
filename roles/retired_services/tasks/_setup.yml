@@ -1,4 +1,25 @@
 ---
+- name: _setup | Create legacy Netdata collector directory
+  file:
+    path: /etc/netdata/go.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _setup | Create legacy Netdata smartctl collector fixture
+  copy:
+    content: |-
+      jobs:
+        - name: smartctl
+          poll_devices_every: 300
+    dest: /etc/netdata/go.d/smartctl.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: _setup | Register legacy smartmontools defaults diversion
   community.general.dpkg_divert:
     path: /etc/default/smartmontools

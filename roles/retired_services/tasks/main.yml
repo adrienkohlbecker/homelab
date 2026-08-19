@@ -1,4 +1,12 @@
 ---
+- name: Remove retired Netdata smartctl collector override
+  file:
+    path: /etc/netdata/go.d/smartctl.conf
+    state: absent
+  become: true
+  tags:
+    - retired_services
+
 - name: Remove retired smartmontools defaults file
   file:
     path: /etc/default/smartmontools

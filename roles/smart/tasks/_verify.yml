@@ -54,31 +54,6 @@
       - "'diversion of /etc/smartd.conf' in _smart_smartd_divert.stdout"
     fail_msg: "dpkg-divert not active for /etc/smartd.conf: {{ _smart_smartd_divert.stdout }}"
 
-- name: _verify | Deploy smart netdata collector config
-  import_tasks: netdata.yml
-
-- name: _verify | Start netdata
-  systemd:
-    name: netdata
-    state: started
-  become: true
-
-- name: _verify | Read deployed smartctl collector config
-  slurp:
-    src: /etc/netdata/go.d/smartctl.conf
-  register: _smart_smartctl_conf
-  become: true
-
-- name: _verify | Assert smartctl collector config is valid
-  vars:
-    _parsed: "{{ _smart_smartctl_conf | slurp_yaml }}"
-  assert:
-    that:
-      - _parsed.jobs | length > 0
-      - _parsed.jobs[0].name == 'smartctl'
-      - _parsed.jobs[0].poll_devices_every == 300
-    fail_msg: "deployed /etc/netdata/go.d/smartctl.conf:\n{{ _smart_smartctl_conf | slurp_text(trim=false) }}"
-
 - name: _verify | Exercise smart fluent-bit extension
   import_role:
     name: fluentbit
