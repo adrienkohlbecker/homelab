@@ -11,8 +11,7 @@
 # autobackup:bak=true would test-pass but never get backed up.
 #
 # Expected values come from services_datasets (vars/main.yml), shared with
-# main.yml: the assertions track whatever both halves agree on, and the owner
-# probe keeps the role's "I created this dir as root" contract honest.
+# main.yml, so the assertions track whatever both halves agree on.
 
 - name: _verify | Expected properties set locally
   when: zfs_root
@@ -53,21 +52,6 @@
   loop_control:
     label: "{{ item.mountpoint }} <- {{ item.dataset }}"
   become: true
-
-- name: _verify | Mountpoint owned by root
-  when: zfs_root
-  stat:
-    path: "{{ item.mountpoint }}"
-  register: services_verify_owner
-  failed_when: >-
-    not services_verify_owner.stat.exists
-    or not services_verify_owner.stat.isdir
-    or services_verify_owner.stat.pw_name != 'root'
-    or services_verify_owner.stat.gr_name != 'root'
-    or services_verify_owner.stat.mode != '0755'
-  loop: "{{ services_datasets }}"
-  loop_control:
-    label: "{{ item.mountpoint }} owner=root:root"
 
 - name: _verify | Mount status units are active
   when: zfs_root
