@@ -258,11 +258,10 @@ def check_target_preflight(config: Config) -> None:
     remote pipe, sudo by reading the binary send stream as password attempts.
     """
 
-    reachable = capture(ssh_command(config, "true"), check=False)
-    if reachable.returncode:
-        raise RestoreError(f"cannot reach {config.target_ssh}: {reachable.stderr.strip()}")
-
-    if capture(ssh_command(config, "command", "-v", "mbuffer"), check=False).returncode:
+    mbuffer = capture(ssh_command(config, "command", "-v", "mbuffer"), check=False)
+    if mbuffer.returncode == 255:
+        raise RestoreError(f"cannot reach {config.target_ssh}: {mbuffer.stderr.strip()}")
+    if mbuffer.returncode:
         raise RestoreError(
             f"mbuffer is missing on {config.target_ssh}; the receive leg buffers there too. "
             "Install it first: sudo apt-get install -y mbuffer"

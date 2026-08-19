@@ -185,18 +185,18 @@ class TestTargetPreflight:
         restore.check_target_preflight(config)
 
     @pytest.mark.parametrize(
-        ("failing", "expected"),
+        ("failing", "returncode", "expected"),
         [
-            pytest.param("true", "cannot reach", id="unreachable"),
-            pytest.param("mbuffer", "mbuffer is missing", id="no_mbuffer"),
-            pytest.param("--version", "passwordless sudo zfs", id="no_passwordless_sudo"),
+            pytest.param("mbuffer", 255, "cannot reach", id="unreachable"),
+            pytest.param("mbuffer", 1, "mbuffer is missing", id="no_mbuffer"),
+            pytest.param("--version", 1, "passwordless sudo zfs", id="no_passwordless_sudo"),
         ],
     )
     def test_rejects_a_target_missing_the_receive_leg(
-        self, config, failing: str, expected: str, monkeypatch: pytest.MonkeyPatch
+        self, config, failing: str, returncode: int, expected: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def capture(command, **kwargs):
-            return _completed(returncode=1, stderr="probe failed") if failing in command else _completed()
+            return _completed(returncode=returncode, stderr="probe failed") if failing in command else _completed()
 
         monkeypatch.setattr(restore, "capture", capture)
 
