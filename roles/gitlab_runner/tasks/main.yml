@@ -366,25 +366,3 @@
             daemon_reload: true
             scope: system
           become: true
-
-    # Tombstones for the retired worker-image-refresh design (a timer that
-    # periodically re-baked a Hetzner *worker* image + an /opt script it drove).
-    # Neither artifact returns. Each removal is idempotent (no-op once gone), so
-    # these stay as tombstones. The
-    # timer remove also clears its netdata systemd_timers metadata -- a leftover
-    # /etc/netdata/charts.d/systemd_timers.d/gitlab_runner_image_refresh.conf
-    # would fire systemd_timer_overdue CRITICAL forever against a timer that no
-    # longer exists.
-    - name: Remove the retired gitlab_runner_image_refresh timer
-      import_role:
-        name: systemd_timer
-        tasks_from: remove
-      vars:
-        systemd_timer_args:
-          name: gitlab_runner_image_refresh
-
-    - name: Remove the retired /opt/gitlab_runner dir
-      file:
-        path: /opt/gitlab_runner
-        state: absent
-      become: true
