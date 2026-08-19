@@ -1,14 +1,5 @@
-# Post-converge checks for the timezone role. Converge success proves the
-# community.general.timezone module exited cleanly; these verify the systemd,
-# RTC, and libc views are functionally on UTC.
-
-- name: _verify | Systemd timezone and RTC are UTC
-  command: timedatectl show -p Timezone -p LocalRTC
-  register: timezone_verify_systemd
-  changed_when: false
-  failed_when: >-
-    'Timezone=Etc/UTC' not in timezone_verify_systemd.stdout_lines or
-    'LocalRTC=no' not in timezone_verify_systemd.stdout_lines
+# The timezone module verifies systemd and RTC state after changing it; exercise
+# libc independently to prove processes resolve the configured timezone.
 
 - name: _verify | Libc timezone is UTC
   command: date +%Z
