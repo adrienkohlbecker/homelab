@@ -2,9 +2,9 @@
 # Host-overridable knobs. Environment-specific control-plane inputs live in
 # group_vars/{prod,test} and are asserted by tasks/register.yml.
 
-# Comma-separated CIDRs advertised into the tailnet. A pure exit node may leave
-# this empty; the role requires routes or tailscale_advertise_exit_node.
-tailscale_advertise_routes: ""
+# CIDRs advertised into the tailnet. A pure exit node may leave this empty; the
+# role requires routes or tailscale_advertise_exit_node.
+tailscale_advertise_routes: []
 
 # Advertise a full-tunnel exit node alongside the subnet route.
 tailscale_advertise_exit_node: false

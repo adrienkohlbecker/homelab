@@ -209,7 +209,8 @@ gitlab_runner_aws_qemu_secret_access_key: TEST_PLACEHOLDER_DO_NOT_USE
 # the pre-auth key is minted on-the-fly by main.yml at registration. Only the
 # advertised routes/exit are box-specific -- a throwaway subnet so _verify can
 # assert the advertise + approve round-trip without colliding with the test topology.
-tailscale_advertise_routes: "10.99.99.0/24"
+tailscale_advertise_routes:
+  - 10.99.99.0/24
 tailscale_advertise_exit_node: true
 # Exercise the --accept-routes=true path under the harness (harmless on the
 # single-node test tailnet; the throwaway subnet isn't on box's real interfaces).

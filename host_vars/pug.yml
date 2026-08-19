@@ -141,7 +141,8 @@ netdata_diskspace_blocklist:
 # Advertise the physical partition. On Trusted WiFi, DHCP's more-specific
 # 10.123.0.0/21 option-121 route wins and the DNS VIP stays local; off-home,
 # this /18 reaches the physical sites without selecting an exit node.
-tailscale_advertise_routes: "10.123.0.0/18"
+tailscale_advertise_routes:
+  - 10.123.0.0/18
 tailscale_advertise_exit_node: true
 # Direct public endpoint for roaming clients (symmetric/CGNAT mobile) so home-exit
 # and subnet traffic lands directly instead of relaying through fox's DERP. pug

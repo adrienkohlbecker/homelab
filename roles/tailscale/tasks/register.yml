@@ -10,7 +10,7 @@
     fail_msg: >-
       tailscale registration needs tailscale_login_server, tailscale_headscale_host
       and tailscale_headscale_user (group_vars/{prod,test}) plus EITHER
-      tailscale_advertise_routes (host_vars, e.g. "10.123.0.0/21") OR
+      tailscale_advertise_routes (host_vars, e.g. ["10.123.0.0/21"]) OR
       tailscale_advertise_exit_node (a pure exit node carries no subnet route).
       The pre-auth key is minted on-the-fly from the control plane at registration
       time, so there's no vaulted long-lived key to set.
@@ -132,7 +132,7 @@
         {{ tailscale_bin }} up
         --login-server {{ tailscale_login_server }}
         --authkey file:{{ tailscale_authkey_file }}
-        --advertise-routes={{ tailscale_advertise_routes }}
+        --advertise-routes={{ tailscale_advertise_routes | join(',') }}
         {{ tailscale_advertise_exit_node | ternary('--advertise-exit-node', '') }}
         --accept-routes={{ tailscale_accept_routes | ternary('true', 'false') }}
         --accept-dns={{ tailscale_accept_dns | ternary('true', 'false') }}
@@ -154,7 +154,7 @@
 - name: register | Compute the desired approved-route set
   set_fact:
     tailscale_desired_routes: >-
-      {{ (tailscale_advertise_routes.split(',') | reject('equalto', '') | list)
+      {{ tailscale_advertise_routes
          + (tailscale_advertise_exit_node | ternary(['0.0.0.0/0', '::/0'], [])) }}
   tags:
     - tailscale
@@ -164,7 +164,7 @@
 - name: register | Reconcile routes / exit node / accept-routes / accept-dns
   command: >-
     {{ tailscale_bin }} set
-    --advertise-routes={{ tailscale_advertise_routes }}
+    --advertise-routes={{ tailscale_advertise_routes | join(',') }}
     --advertise-exit-node={{ tailscale_advertise_exit_node | ternary('true', 'false') }}
     --accept-routes={{ tailscale_accept_routes | ternary('true', 'false') }}
     --accept-dns={{ tailscale_accept_dns | ternary('true', 'false') }}

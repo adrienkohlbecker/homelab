@@ -50,7 +50,7 @@
          | matching_by_attr('given_name', ansible_hostname | lower)
          | first | default({}) }}
     _tailscale_desired_routes: >-
-      {{ (tailscale_advertise_routes.split(',') | reject('equalto', '') | list)
+      {{ tailscale_advertise_routes
          + (tailscale_advertise_exit_node | ternary(['0.0.0.0/0', '::/0'], [])) }}
 
 - name: _verify | The node registered and approved routes match exactly
@@ -102,7 +102,7 @@
 - name: _verify | Reconcile test -- restore original routes
   command: >-
     tailscale set
-    --advertise-routes={{ tailscale_advertise_routes }}
+    --advertise-routes={{ tailscale_advertise_routes | join(',') }}
     --advertise-exit-node={{ tailscale_advertise_exit_node | ternary('true', 'false') }}
     --accept-routes={{ tailscale_accept_routes | ternary('true', 'false') }}
     --accept-dns={{ tailscale_accept_dns | ternary('true', 'false') }}
