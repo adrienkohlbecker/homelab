@@ -10,7 +10,6 @@ TimeoutStartSec={{ systemd_timer_args.timeout_start_sec | default('1h') }}
 TimeoutStopSec=30s
 {% if systemd_timer_args.run_as is defined %}
 User={{ systemd_timer_args.run_as }}
-Group={{ systemd_timer_args.run_as }}
 {% endif %}
 {% if systemd_timer_args.environment is defined %}
 {% for k, v in (systemd_timer_args.environment | dictsort) %}
