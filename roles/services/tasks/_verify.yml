@@ -14,8 +14,11 @@
 # main.yml: the assertions track whatever both halves agree on, and the owner
 # probe keeps the role's "I created this dir as root" contract honest.
 
-- name: _verify | Mountpoint property set locally with expected value
+- name: _verify | Expected properties set locally
   when: zfs_root
+  vars:
+    services_expected_properties: >-
+      {{ {'mountpoint': item.mountpoint} | combine(item.extra_properties) }}
   command:
     argv:
       - zfs
@@ -25,15 +28,17 @@
       - -s
       - local
       - -o
-      - value
-      - mountpoint
+      - property,value
+      - "{{ services_expected_properties.keys() | join(',') }}"
       - "{{ item.dataset }}"
-  register: services_verify_mountpoint
+  register: services_verify_properties
   changed_when: false
-  failed_when: services_verify_mountpoint.stdout | trim != item.mountpoint
+  failed_when: >-
+    (services_verify_properties.stdout_lines | sort)
+    != (services_expected_properties.items() | map('join', '\t') | sort)
   loop: "{{ services_datasets }}"
   loop_control:
-    label: "{{ item.dataset }} mountpoint={{ item.mountpoint }}"
+    label: "{{ item.dataset }}"
   become: true
 
 - name: _verify | Dataset mount contract passes
@@ -47,44 +52,6 @@
   loop: "{{ services_datasets }}"
   loop_control:
     label: "{{ item.mountpoint }} <- {{ item.dataset }}"
-  become: true
-
-- name: _verify | Reset property accumulator
-  when: zfs_root
-  set_fact:
-    services_verify_props: []
-
-- name: _verify | Flatten datasets x expected properties
-  when: zfs_root
-  set_fact:
-    services_verify_props: >-
-      {{ services_verify_props
-         + (item.extra_properties | default({}) | dict2items
-            | map('combine', {'dataset': item.dataset}) | list) }}
-  loop: "{{ services_datasets }}"
-  loop_control:
-    label: "{{ item.dataset }}"
-
-- name: _verify | Extra property set locally with expected value
-  when: zfs_root
-  command:
-    argv:
-      - zfs
-      - get
-      - -H
-      - -p
-      - -s
-      - local
-      - -o
-      - value
-      - "{{ item.key }}"
-      - "{{ item.dataset }}"
-  register: services_verify_prop
-  changed_when: false
-  failed_when: services_verify_prop.stdout | trim != item.value
-  loop: "{{ services_verify_props }}"
-  loop_control:
-    label: "{{ item.dataset }} {{ item.key }}={{ item.value }}"
   become: true
 
 - name: _verify | Mountpoint owned by root
