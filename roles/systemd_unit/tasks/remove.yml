@@ -23,9 +23,10 @@
       - systemd_unit_args is defined
       - systemd_unit_args is mapping
       - systemd_unit_args.dest is defined or systemd_unit_args.for is defined
+      - systemd_unit_args.dest is not defined or systemd_unit_args.for is not defined
       - systemd_unit_args.dest_abs is not defined or systemd_unit_args.for is defined
     fail_msg: >-
-      systemd_unit_args needs dest or for, and dest_abs requires for;
+      systemd_unit_args needs exactly one of dest or for, and dest_abs requires for;
       got dest={{ systemd_unit_args.dest | default('<unset>') }},
       for={{ systemd_unit_args.for | default('<unset>') }},
       dest_abs={{ systemd_unit_args.dest_abs | default('<unset>') }}

@@ -46,10 +46,11 @@
       - systemd_unit_args.src is defined
       - systemd_unit_args.src is string
       - systemd_unit_args.for is not defined or systemd_unit_args.for is string
+      - systemd_unit_args.dest is not defined or systemd_unit_args.for is not defined
       - systemd_unit_args.dest_abs is not defined or systemd_unit_args.for is defined
     fail_msg: >-
-      systemd_unit_args needs src (source filename); for must be a string when
-      set, and dest_abs requires for;
+      systemd_unit_args needs src (source filename); dest and for are mutually
+      exclusive, for must be a string when set, and dest_abs requires for;
       got {{ systemd_unit_args | default('<unset>') }}
 
 # Two set_fact tasks because ansible's templating engine resolves all
