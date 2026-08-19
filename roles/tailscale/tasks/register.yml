@@ -147,15 +147,6 @@
         state: absent
       when: tailscale_authkey_temp.path is defined
 
-# Every managed node is a subnet router and exit node, so approve its advertised
-# subnet(s) plus the two exit-node default routes.
-- name: register | Compute the desired approved-route set
-  set_fact:
-    tailscale_desired_routes: >-
-      {{ tailscale_advertise_routes + ['0.0.0.0/0', '::/0'] }}
-  tags:
-    - tailscale
-
 # Reconcile every local preference after an existing session or a successful
 # login. `tailscale set` cannot report whether it changed a preference, so
 # functional verification proves correctness.
@@ -171,60 +162,56 @@
 # Headscale owns the approved-route set, so query it on every real apply and
 # compare the actual approvals directly. A newly registered node can lag
 # `tailscale login`/`set`, so poll before resolving its ID.
-- name: register | List headscale nodes (on the control server)
-  command: podman exec headscale headscale nodes list -o json
-  delegate_to: "{{ tailscale_headscale_host }}"
-  register: tailscale_nodes
-  changed_when: false
+- name: register | Reconcile approved routes on headscale
   when: not ansible_check_mode
-  retries: 15
-  delay: 2
-  until: >-
-    ((tailscale_nodes.stdout | default('[]', true) | from_json)
-        | matching_by_attr({'user.name': tailscale_headscale_user, 'given_name': (ansible_hostname | lower)})
-        | length > 0)
   become: true
   tags:
     - tailscale
+  vars:
+    tailscale_desired_routes: >-
+      {{ tailscale_advertise_routes + ['0.0.0.0/0', '::/0'] }}
+  block:
+    - name: register | List headscale nodes (on the control server)
+      command: podman exec headscale headscale nodes list -o json
+      delegate_to: "{{ tailscale_headscale_host }}"
+      register: tailscale_nodes
+      changed_when: false
+      retries: 15
+      delay: 2
+      until: >-
+        ((tailscale_nodes.stdout | default('[]', true) | from_json)
+            | matching_by_attr({'user.name': tailscale_headscale_user, 'given_name': (ansible_hostname | lower)})
+            | length > 0)
 
-# Headscale lowercases given_name, including DSM's mixed-case hostname. Scope the
-# match by user because approve-routes replaces the complete approved set.
-- name: register | Resolve this host's headscale node
-  set_fact:
-    tailscale_node_matches: >-
-      {{ (tailscale_nodes.stdout | default('[]', true) | from_json)
-         | matching_by_attr({'user.name': tailscale_headscale_user, 'given_name': (ansible_hostname | lower)}) }}
-  when: not ansible_check_mode
-  tags:
-    - tailscale
+    # Headscale lowercases given_name, including DSM's mixed-case hostname. Scope
+    # the match by user because approve-routes replaces all approved routes.
+    - name: register | Reconcile this host's headscale node
+      vars:
+        tailscale_node_matches: >-
+          {{ (tailscale_nodes.stdout | default('[]', true) | from_json)
+             | matching_by_attr({'user.name': tailscale_headscale_user, 'given_name': (ansible_hostname | lower)}) }}
+      block:
+        - name: register | Fail if this host has no headscale node yet
+          assert:
+            that:
+              - tailscale_node_matches | length == 1
+              - (tailscale_node_matches | first | default({})).id is defined
+            fail_msg: >-
+              Expected exactly 1 headscale node with given_name
+              {{ ansible_hostname | lower }} on {{ tailscale_headscale_host }}, found
+              {{ tailscale_node_matches | length }}. 0 = registration did not complete
+              (check tailscaled logs + login-server reachability), or the node joined a
+              DIFFERENT control plane (`tailscale down` + re-run). >1 = stale node from
+              a prior registration; remove the duplicate via `headscale nodes delete`.
 
-- name: register | Fail if this host has no headscale node yet
-  assert:
-    that:
-      - tailscale_node_matches | length == 1
-      - (tailscale_node_matches | first | default({})).id is defined
-    fail_msg: >-
-      Expected exactly 1 headscale node with given_name
-      {{ ansible_hostname | lower }} on {{ tailscale_headscale_host }}, found
-      {{ tailscale_node_matches | length }}. 0 = registration did not complete
-      (check tailscaled logs + login-server reachability), or the node joined a
-      DIFFERENT control plane (`tailscale down` + re-run). >1 = stale node from
-      a prior registration; remove the duplicate via `headscale nodes delete`.
-  when: not ansible_check_mode
-  tags:
-    - tailscale
-
-# approve-routes replaces the whole approved set, so run only on drift.
-- name: register | Approve advertised routes + exit node on headscale
-  command: >-
-    podman exec headscale headscale nodes approve-routes
-    --identifier {{ (tailscale_node_matches | first).id }}
-    --routes {{ tailscale_desired_routes | join(',') }}
-  delegate_to: "{{ tailscale_headscale_host }}"
-  when:
-    - not ansible_check_mode
-    - (tailscale_desired_routes | sort) != (((tailscale_node_matches | first).approved_routes | default([], true)) | sort)
-  changed_when: true
-  become: true
-  tags:
-    - tailscale
+        # approve-routes replaces the whole approved set, so run only on drift.
+        - name: register | Approve advertised routes + exit node on headscale
+          command: >-
+            podman exec headscale headscale nodes approve-routes
+            --identifier {{ (tailscale_node_matches | first).id }}
+            --routes {{ tailscale_desired_routes | join(',') }}
+          delegate_to: "{{ tailscale_headscale_host }}"
+          when: >-
+            (tailscale_desired_routes | sort)
+            != (((tailscale_node_matches | first).approved_routes | default([], true)) | sort)
+          changed_when: true
