@@ -31,16 +31,14 @@
   changed_when: false
   become: true
 
-- name: _verify | Resolve the registered node + its approved routes
-  set_fact:
+- name: _verify | The node registered and approved routes match exactly
+  vars:
     _tailscale_node: >-
       {{ (_tailscale_nodes.stdout | from_json)
          | matching_by_attr('given_name', ansible_hostname | lower)
          | first | default({}) }}
     _tailscale_desired_routes: >-
       {{ tailscale_advertise_routes + ['0.0.0.0/0', '::/0'] }}
-
-- name: _verify | The node registered and approved routes match exactly
   assert:
     that:
       - _tailscale_node.id is defined
