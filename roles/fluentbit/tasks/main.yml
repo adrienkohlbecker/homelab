@@ -269,6 +269,8 @@
   command:
     argv:
       - sqlite3
+      - -cmd
+      - .timeout 5000
       - /var/lib/fluent-bit/journal.db
       - PRAGMA journal_mode;
   register: fluentbit_journal_db_mode
