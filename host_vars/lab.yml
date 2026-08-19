@@ -261,8 +261,7 @@ samba_shares:
   # media is deliberately readable+writable by every authenticated SMB user
   # (ak + spouse): a household media library, group-owned via the media group.
   # The absent `valid users` is intentional -- don't add one without revisiting
-  # who should reach the library. Inline keys (not an `opts` block) to match the
-  # other shares.
+  # who should reach the library. Inline keys match the other shares.
   - name: media
     path: /mnt/media
     force group: media

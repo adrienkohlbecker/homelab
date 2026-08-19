@@ -312,20 +312,16 @@ path = {{ share.path }}
 {# samba_shares entry schema:
      name             -> [section] header (rendered above)
      path             -> path = (rendered above)
-     opts             -> verbatim multiline escape hatch for raw blocks
      <anything else>  -> rendered here as a literal smb.conf directive, so the
                          key must be the exact parameter name with spaces
                          ("valid users", "force group"), never underscores.
    A share with no `valid users` is reachable by EVERY authenticated SMB user
    (the global default); set it per-share to restrict. Without this loop such
    keys would be dropped and the share would fall back to that default. #}
-{% for key, value in share.items() if key not in ['name', 'path', 'opts'] %}
+{% for key, value in share.items() if key not in ['name', 'path'] %}
 {{ key }} = {{ value }}
 {% endfor %}
 {% if 'writeable' not in share and 'writable' not in share and 'read only' not in share %}
 writeable = yes
-{% endif %}
-{% if 'opts' in share %}
-{{ share.opts }}
 {% endif %}
 {% endfor %}
