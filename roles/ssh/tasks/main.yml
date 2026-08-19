@@ -99,8 +99,8 @@
     - ssh
 
 - name: Configure sshd
-  copy:
-    src: 00-hardening.conf
+  template:
+    src: 00-hardening.conf.j2
     dest: /etc/ssh/sshd_config.d/00-hardening.conf
     owner: root
     group: root
@@ -116,36 +116,12 @@
   tags:
     - ssh
 
-# X11 forwarding drop-in: deployed only when ssh_x11_forwarding is true (today:
-# lab). IPv6 is disabled on that host's loopback interface, so force IPv4 before
-# the user-scoped Match block; otherwise sshd tries ::1 for the X11 socket and
-# never falls back to 127.0.0.1.
-- name: Configure sshd — X11 forwarding for {{ operator_user }}
-  copy:
-    dest: /etc/ssh/sshd_config.d/10-x11-forwarding.conf
-    content: |
-      AddressFamily inet
-
-      Match User {{ operator_user }}
-          X11Forwarding yes
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: sshd -t -f %s
-  when:
-    - ssh_x11_forwarding
-    - not (ansible_check_mode and ssh_apt.changed)
-  register: ssh_sshd_config_x11
-  become: true
-  tags:
-    - ssh
-
-- name: Remove sshd X11 forwarding drop-in
+# The role owns all SSH policy in 00-hardening.conf; keep this path absent.
+# Retire this tombstone after every managed host has converged.
+- name: Remove legacy sshd X11 forwarding drop-in
   file:
     path: /etc/ssh/sshd_config.d/10-x11-forwarding.conf
     state: absent
-  when: not ssh_x11_forwarding
   register: ssh_sshd_config_x11_remove
   become: true
   tags:
@@ -158,8 +134,7 @@
   when:
     - not (ansible_check_mode and ssh_apt.changed)
     - >-
-      ssh_sshd_config.changed or ssh_sshd_config_x11.changed
-      or ssh_sshd_config_x11_remove.changed
+      ssh_sshd_config.changed or ssh_sshd_config_x11_remove.changed
   command: sshd -t
   changed_when: false
   become: true
@@ -173,8 +148,7 @@
     enabled: true
     state: >-
       {{ 'reloaded'
-         if ssh_sshd_config.changed or ssh_sshd_config_x11.changed
-            or ssh_sshd_config_x11_remove.changed
+         if ssh_sshd_config.changed or ssh_sshd_config_x11_remove.changed
          else 'started' }}
   become: true
   tags:

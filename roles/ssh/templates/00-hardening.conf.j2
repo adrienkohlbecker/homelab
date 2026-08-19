@@ -40,9 +40,8 @@ PermitRootLogin no
 # To disable tunneled clear text passwords, change to no here!
 PasswordAuthentication no
 KbdInteractiveAuthentication no
-# X11 forwarding disabled globally; hosts that need it enable it for the
-# operator user only via the ssh_x11_forwarding host_var (deploys a drop-in
-# with a Match User block so other accounts are never exposed).
+# X11 forwarding is disabled globally; the lab host renders a user-scoped
+# override below so other accounts remain unaffected.
 X11Forwarding no
 
 # Bound the unauthenticated login window. With pubkey-only auth there is no
@@ -60,3 +59,12 @@ ClientAliveCountMax 3
 
 # Remove sockets before connecting (used for RemoteForward in gpg forwarding)
 StreamLocalBindUnlink yes
+
+{% if ssh_x11_forwarding | default(false) %}
+# IPv6 is disabled on this host's loopback interface, so force IPv4 before the
+# Match block; otherwise sshd tries ::1 for the X11 socket and never falls back.
+AddressFamily inet
+
+Match User {{ operator_user }}
+    X11Forwarding yes
+{% endif %}
