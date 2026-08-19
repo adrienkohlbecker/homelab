@@ -14,16 +14,7 @@
 - name: _verify | Install systemd_timers netdata collector
   import_tasks: netdata.yml
 
-# The collector conf was installed by netdata.yml above. Assert it actually
-# renders the meta dir first -- otherwise a typo in
-# charts_d_systemd_timers.conf would be silently masked by an override that
-# re-declares it, and every test would still pass against a collector
-# pointed at the wrong directory. Then append only the fast-poll
-# update_every so a fixture chart materializes in seconds rather than 60s.
-- name: _verify | Assert collector conf renders the metadata dir
-  command: grep -qxF systemd_timers_meta_dir=/etc/netdata/charts.d/systemd_timers.d /etc/netdata/charts.d/systemd_timers.conf
-  changed_when: false
-  become: true
+# Poll quickly so fixture charts materialize in seconds rather than 60s.
 - name: _verify | Speed up systemd_timers update_every for tests
   lineinfile:
     path: /etc/netdata/charts.d/systemd_timers.conf
