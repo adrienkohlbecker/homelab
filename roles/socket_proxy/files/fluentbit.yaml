@@ -5,7 +5,7 @@ parsers:
     types: socket_proxy_process_id:integer
   - name: socket_proxy_access
     format: regex
-    regex: '/\A(?<socket_proxy_client_address>[^ ]+):(?<socket_proxy_client_port>[0-9]+) \[(?<socket_proxy_accept_date>[^]]+)\] (?<socket_proxy_frontend>[^ ]+) (?<socket_proxy_backend>[^ /]+)\/(?<socket_proxy_server>[^ ]+) (?<socket_proxy_request_wait_ms>-?[0-9]+)\/(?<socket_proxy_queue_wait_ms>-?[0-9]+)\/(?<socket_proxy_connect_ms>-?[0-9]+)\/(?<socket_proxy_response_ms>-?[0-9]+)\/(?<socket_proxy_total_ms>\+?[0-9]+) (?<socket_proxy_status>[0-9]{3}) (?<socket_proxy_bytes>[0-9]+) (?<socket_proxy_request_cookie>[^ ]+) (?<socket_proxy_response_cookie>[^ ]+) (?<socket_proxy_termination_state>[^ ]+) (?<socket_proxy_active_connections>[0-9]+)\/(?<socket_proxy_frontend_connections>[0-9]+)\/(?<socket_proxy_backend_connections>[0-9]+)\/(?<socket_proxy_server_connections>[0-9]+)\/(?<socket_proxy_retries>[0-9]+) (?<socket_proxy_server_queue>[0-9]+)\/(?<socket_proxy_backend_queue>[0-9]+) "(?<socket_proxy_request>[^"]+)"[[:space:]]*\z/'
+    regex: '/\A(?<socket_proxy_client_address>[^ ]+):(?<socket_proxy_client_port>[0-9]+) \[[^]]+\] (?<socket_proxy_frontend>[^ ]+) (?<socket_proxy_backend>[^ /]+)\/(?<socket_proxy_server>[^ ]+) (?<socket_proxy_request_wait_ms>-?[0-9]+)\/(?<socket_proxy_queue_wait_ms>-?[0-9]+)\/(?<socket_proxy_connect_ms>-?[0-9]+)\/(?<socket_proxy_response_ms>-?[0-9]+)\/(?<socket_proxy_total_ms>\+?[0-9]+) (?<socket_proxy_status>[0-9]{3}) (?<socket_proxy_bytes>[0-9]+) [^ ]+ [^ ]+ (?<socket_proxy_termination_state>[^ ]+) (?<socket_proxy_active_connections>[0-9]+)\/(?<socket_proxy_frontend_connections>[0-9]+)\/(?<socket_proxy_backend_connections>[0-9]+)\/(?<socket_proxy_server_connections>[0-9]+)\/(?<socket_proxy_retries>[0-9]+) (?<socket_proxy_server_queue>[0-9]+)\/(?<socket_proxy_backend_queue>[0-9]+) "(?<socket_proxy_request>[^"]+)"[[:space:]]*\z/'
     types: socket_proxy_client_port:integer socket_proxy_request_wait_ms:integer socket_proxy_queue_wait_ms:integer socket_proxy_connect_ms:integer socket_proxy_response_ms:integer socket_proxy_total_ms:integer socket_proxy_status:integer socket_proxy_bytes:integer socket_proxy_active_connections:integer socket_proxy_frontend_connections:integer socket_proxy_backend_connections:integer socket_proxy_server_connections:integer socket_proxy_retries:integer socket_proxy_server_queue:integer socket_proxy_backend_queue:integer
   - name: socket_proxy_request
     format: regex
@@ -126,10 +126,6 @@ pipeline:
         - socket_proxy_method method
         - socket_proxy_path path
         - socket_proxy_protocol protocol
-      remove:
-        - socket_proxy_accept_date
-        - socket_proxy_request_cookie
-        - socket_proxy_response_cookie
       set:
         - _level debug
         - parser_status parsed

@@ -199,9 +199,6 @@
           fields.protocol: HTTP/1.1
           fields.parser_status: parsed
           _absent:
-            - fields.socket_proxy_accept_date
-            - fields.socket_proxy_request_cookie
-            - fields.socket_proxy_response_cookie
             - fields.socket_proxy_request
         - message: GET /v1.41/info HTTP/1.1
           fields.status: 500
