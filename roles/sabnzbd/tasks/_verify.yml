@@ -36,6 +36,16 @@
   register: _sabnzbd_http
   failed_when: _sabnzbd_http.json.queue is not defined
 
+# A non-empty local_ranges replaces SABnzbd's automatic private-address check,
+# so keep the RFC 1918/ULA ranges and explicitly trust Headscale's CGNAT range.
+- name: _verify | SABnzbd accepts a Tailnet client forwarded by nginx
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.sabnzbd }}/"
+    headers:
+      Host: sabnzbd.{{ inventory_hostname }}.{{ domain }}
+      X-Forwarded-For: 100.64.99.2
+    status_code: 200
+
 # SABnzbd rewrites the complete INI when a setting changes through the UI.
 # Seed that drift here; the later role re-run must canonicalize it before
 # restoring the managed value while preserving the runtime usage counter.
