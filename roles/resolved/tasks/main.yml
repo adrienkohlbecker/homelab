@@ -36,7 +36,7 @@
     mode: "0644"
     backup: true
     validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, delimiters=("=",)).read(sys.argv[1])' %s
-  register: resolved_conf_d_99_custom_conf_result
+  register: resolved_custom_conf
   become: true
   tags:
     - resolved
@@ -82,7 +82,6 @@
     state: link
     force: true
   become: true
-  register: resolved_resolv_conf
   tags:
     - resolved
 
@@ -116,9 +115,7 @@
     enabled: true
     state: >-
       {{ 'restarted'
-         if resolved_apt.changed
-            or resolved_conf_d_99_custom_conf_result.changed
-            or resolved_resolv_conf.changed
+         if resolved_apt.changed or resolved_custom_conf.changed
          else 'started' }}
   become: true
   tags:
