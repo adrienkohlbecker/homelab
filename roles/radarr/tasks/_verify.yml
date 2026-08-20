@@ -59,15 +59,13 @@
 # The --network media join + radarr.dns.podman FQDN is how intra-stack peers
 # (bazarr, seerr, ...) reach radarr with X-Api-Key, bypassing nginx. The
 # loopback/nginx probes above don't exercise it -- a dropped `--network media`
-# strands that path while leaving them green. Probe from a throwaway container
-# on the media network: a keyless GET that must 401 proves aardvark resolves
-# the FQDN, radarr listens, and apikey enforcement is reached over that path
-# (no key on argv keeps it out of the test VM's journald/ps).
+# strands that path while leaving them green. Probe from the running container:
+# a keyless GET that must 401 proves aardvark resolves the FQDN, radarr listens,
+# and apikey enforcement is reached over that path.
 - name: _verify | Radarr is reachable intra-stack at radarr.dns.podman over the media network
   command: >-
-    podman run --rm --network media --entrypoint /usr/bin/curl
-    {{ radarr_image }}
-    -s -o /dev/null -w %{http_code}
+    podman exec radarr
+    curl -s -o /dev/null -w '%{http_code}'
     http://radarr.dns.podman:7878/api/v3/system/status
   become: true
   register: _radarr_dns_podman
