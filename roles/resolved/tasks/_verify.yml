@@ -43,20 +43,13 @@
   register: resolved_verify_listeners
   changed_when: false
 
-- name: _verify | The 127.0.0.53 stub listener is active
+# Avahi is absent from the fixture, so only the DNS stub should be present.
+- name: _verify | The resolver listens only on its intended sockets
   assert:
     that:
       - resolved_verify_listeners.stdout is search('127\.0\.0\.53.*:53')
-    fail_msg: >-
-      systemd-resolved is not listening on 127.0.0.53:53
-      (DNSStubListener=yes did not take effect): {{ resolved_verify_listeners.stdout }}
-
-# Avahi is absent from the fixture, so these ports must be free.
-- name: _verify | The mDNS (5353) and LLMNR (5355) sockets are gone
-  assert:
-    that:
       - "':5353' not in resolved_verify_listeners.stdout"
       - "':5355' not in resolved_verify_listeners.stdout"
     fail_msg: >-
-      systemd-resolved is still bound to :5353 or :5355 (MulticastDNS=no /
-      LLMNR=no did not take effect): {{ resolved_verify_listeners.stdout }}
+      systemd-resolved is not listening on 127.0.0.53:53 or is still bound to
+      :5353/:5355: {{ resolved_verify_listeners.stdout }}
