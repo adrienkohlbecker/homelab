@@ -52,14 +52,19 @@
     - plex.service
     - speedtest.service
     - tautulli.service
+    - sabnzbd_ini_sort.path
+    - sabnzbd_ini_sort.service
     - sort_ini_mnt-services-sabnzbd-sabnzbd.ini.path
     - sort_ini_mnt-services-sabnzbd-sabnzbd.ini.service
     - sort_ini_mnt-services-tautulli-config.ini.path
     - sort_ini_mnt-services-tautulli-config.ini.service
 
-- name: _verify | Retired generic ini canonicalizer is absent
+- name: _verify | Retired ini canonicalizers are absent
   stat:
-    path: /usr/local/bin/sort_ini
+    path: "{{ item }}"
+  loop:
+    - /usr/local/bin/sort_ini
+    - /usr/local/bin/sabnzbd_sort_ini
   register: retired_services_sort_ini
   failed_when: retired_services_sort_ini.stat.exists
   become: true

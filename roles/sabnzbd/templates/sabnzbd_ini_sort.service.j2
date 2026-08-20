@@ -1,9 +1,0 @@
-[Unit]
-Description=Canonicalize SABnzbd configuration
-
-[Service]
-Type=oneshot
-RemainAfterExit=false
-ExecStart=/usr/local/bin/sabnzbd_sort_ini /mnt/services/sabnzbd/sabnzbd.ini
-TimeoutStartSec=60s
-SyslogIdentifier=%N

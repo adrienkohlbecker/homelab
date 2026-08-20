@@ -37,15 +37,8 @@
   failed_when: _sabnzbd_http.json.queue is not defined
 
 # SABnzbd rewrites the complete INI when a setting changes through the UI.
-# The path unit canonicalizes that serialization so one changed setting stays
-# one changed value in Ansible's template diff. A server edit is the strongest
-# probe because SABnzbd rebuilds and reorders the whole nested server mapping.
-- name: _verify | Read canonical ini before a UI-style edit
-  slurp:
-    src: /mnt/services/sabnzbd/sabnzbd.ini
-  register: _sabnzbd_ini_before_ui_edit
-  become: true
-
+# Seed that drift here; the later role re-run must canonicalize it before
+# restoring the managed value while preserving the runtime usage counter.
 - name: _verify | Change one server setting through the SABnzbd API
   uri:
     url: >-
@@ -54,19 +47,6 @@
     return_content: true
   register: _sabnzbd_server_edit
   failed_when: _sabnzbd_server_edit.json.config.servers[0].connections | int != 49
-
-- name: _verify | Wait for the UI edit to become a one-value ini diff
-  vars:
-    _before: "{{ _sabnzbd_ini_before_ui_edit.content | b64decode }}"
-    _after: "{{ _sabnzbd_ini_after_ui_edit.content | default('') | b64decode }}"
-    _normalized_after: "{{ _after | replace('connections = 49', 'connections = 50') }}"
-  slurp:
-    src: /mnt/services/sabnzbd/sabnzbd.ini
-  register: _sabnzbd_ini_after_ui_edit
-  until: _normalized_after == _before
-  retries: 15
-  delay: 1
-  become: true
 
 # The vhost is `auth: required`, so a cookieless request must be bounced to
 # Authelia rather than proxied through. With the stub in gate mode (see
@@ -302,14 +282,10 @@
   assert:
     that: "'routine-token' not in fluentbit_verify_result.stdout"
 
-# usage_at_start preservation (main.yml's slurp+regex readback) is the role's
-# most fragile mechanism and the HTTP/DB probes can't see it: a broken readback
-# silently resets the per-server quota odometer to the template baseline on the
-# next converge. The harness idempotence check never catches it either -- it
-# re-converges before any counter has moved off baseline. Exercise it directly:
-# seed a sentinel counter on disk, re-run the role, and assert the re-render
-# read it back rather than clobbering it. Re-importing the role is out of
-# contract on prod, but _verify is test-only (the host is ephemeral).
+# Exercise both kinds of application-owned drift in one re-converge: the
+# server edit above reordered the INI, while this sentinel changes runtime
+# state that the role must retain. Re-importing the role is out of contract on
+# prod, but _verify is test-only and the host is ephemeral.
 - name: _verify | Seed a sentinel usage_at_start into the on-disk ini
   replace:
     path: /mnt/services/sabnzbd/sabnzbd.ini
@@ -327,11 +303,11 @@
   register: _sabnzbd_usage_ini
   become: true
 
-- name: _verify | The seeded usage_at_start survived the re-render
+- name: _verify | The role restored managed config and preserved runtime state
   vars:
     _ini: "{{ _sabnzbd_usage_ini.content | b64decode }}"
   assert:
     that:
       - (_ini | regex_search('\\[\\[eu\\.newsdemon\\.com\\]\\][^\\[]*?usage_at_start = (\\d+)', '\\1') | first) == '987654321'
       - (_ini | regex_search('\\[\\[eu\\.newsdemon\\.com\\]\\][^\\[]*?connections = (\\d+)', '\\1') | first) == '50'
-    fail_msg: "SABnzbd ini readback preservation regressed"
+    fail_msg: "SABnzbd INI canonicalization or runtime-state preservation regressed"

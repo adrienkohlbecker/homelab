@@ -113,6 +113,17 @@
     - /mnt/scratch/radarr
     - /mnt/scratch/lidarr
 
+# Normalize application rewrites immediately before Ansible compares the
+# managed template, keeping a one-setting drift to a one-setting diff.
+- name: Canonicalize existing sabnzbd.ini
+  when: not ansible_check_mode
+  script: sort_ini.py /mnt/services/sabnzbd/sabnzbd.ini
+  register: sabnzbd_ini_sort
+  changed_when: "'canonicalized' in sabnzbd_ini_sort.stdout"
+  become: true
+  tags:
+    - sabnzbd
+
 # SABnzbd increments each server's usage_at_start -- the byte odometer it
 # pairs with `quota` to compute remaining quota -- as it downloads, then
 # rewrites sabnzbd.ini. A fixed literal in the template would clobber that
@@ -303,38 +314,5 @@
       # not just the *arr apps. Accepted under the single-operator model; the
       # lever to tighten is a narrower network, not the cookie gate.
       auth: required
-  tags:
-    - sabnzbd
-
-- name: Install sabnzbd ini canonicalizer
-  copy:
-    src: sort_ini.py
-    dest: /usr/local/bin/sabnzbd_sort_ini
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-    validate: python3 -m py_compile "%s"
-  become: true
-  tags:
-    - sabnzbd
-
-- name: Install sabnzbd ini canonicalizer service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: sabnzbd_ini_sort.service.j2
-  tags:
-    - sabnzbd
-
-- name: Manage sabnzbd ini canonicalizer path
-  import_role:
-    name: systemd_unit
-    tasks_from: unit
-  vars:
-    systemd_unit_args:
-      src: sabnzbd_ini_sort.path.j2
   tags:
     - sabnzbd

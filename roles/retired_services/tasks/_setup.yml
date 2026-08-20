@@ -288,19 +288,57 @@
     mode: "0644"
   become: true
 
-- name: _setup | Enable legacy SABnzbd ini watcher fixture
+- name: _setup | Install SABnzbd ini canonicalizer path fixture
+  copy:
+    content: |
+      [Unit]
+      Description=retired fixture
+
+      [Path]
+      PathModified=/tmp/retired_sabnzbd_fixture
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/sabnzbd_ini_sort.path
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Install SABnzbd ini canonicalizer service fixture
+  copy:
+    content: |
+      [Unit]
+      Description=retired fixture
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/true
+    dest: /etc/systemd/system/sabnzbd_ini_sort.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Enable SABnzbd ini watcher fixtures
   systemd:
-    name: sort_ini_mnt-services-sabnzbd-sabnzbd.ini.path
+    name: "{{ item }}"
     daemon_reload: true
     enabled: true
     state: started
+  loop:
+    - sort_ini_mnt-services-sabnzbd-sabnzbd.ini.path
+    - sabnzbd_ini_sort.path
   become: true
 
-- name: _setup | Install retired generic ini canonicalizer fixture
+- name: _setup | Install retired ini canonicalizer fixtures
   copy:
     content: "#!/bin/sh\nexit 0\n"
-    dest: /usr/local/bin/sort_ini
+    dest: "{{ item }}"
     owner: root
     group: root
     mode: "0755"
+  loop:
+    - /usr/local/bin/sort_ini
+    - /usr/local/bin/sabnzbd_sort_ini
   become: true

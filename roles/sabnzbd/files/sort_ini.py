@@ -60,6 +60,7 @@ def sort_ini(fname):
             os.fchown(f.fileno(), file_stat.st_uid, file_stat.st_gid)
             f.write(sorted_output)
         os.replace(temp_path, fname)
+        print(f"sort_ini: {fname}: canonicalized")
     except BaseException:
         # Cleanup is safe because the temporary file was never installed.
         with contextlib.suppress(OSError):

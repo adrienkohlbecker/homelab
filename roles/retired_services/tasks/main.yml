@@ -146,10 +146,35 @@
     - retired_services
     - sabnzbd
 
-- name: Remove retired generic ini canonicalizer
+- name: Retire SABnzbd ini canonicalizer path
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: sabnzbd_ini_sort.path
+  tags:
+    - retired_services
+    - sabnzbd
+
+- name: Retire SABnzbd ini canonicalizer service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: sabnzbd_ini_sort.service
+  tags:
+    - retired_services
+    - sabnzbd
+
+- name: Remove retired ini canonicalizers
   file:
-    path: /usr/local/bin/sort_ini
+    path: "{{ item }}"
     state: absent
+  loop:
+    - /usr/local/bin/sort_ini
+    - /usr/local/bin/sabnzbd_sort_ini
   become: true
   tags:
     - retired_services

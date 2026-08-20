@@ -32,10 +32,24 @@ class TestSortIni:
     def test_idempotent(self, tmp_path: Path) -> None:
         ini = tmp_path / "test.ini"
         ini.write_text("[b]\nz = 1\na = 2\n[a]\nx = 3\n")
-        subprocess.run([sys.executable, str(_SORT_INI_PATH), str(ini)], check=True, timeout=30)
+        first_run = subprocess.run(
+            [sys.executable, str(_SORT_INI_PATH), str(ini)],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
         first = ini.read_text()
-        subprocess.run([sys.executable, str(_SORT_INI_PATH), str(ini)], check=True, timeout=30)
+        second_run = subprocess.run(
+            [sys.executable, str(_SORT_INI_PATH), str(ini)],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
         second = ini.read_text()
+        assert "canonicalized" in first_run.stdout
+        assert second_run.stdout == ""
         assert first == second
 
     def test_empty_file(self, tmp_path: Path) -> None:
