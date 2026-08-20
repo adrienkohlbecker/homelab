@@ -11,13 +11,8 @@
 # depend on the (virtual) hardware the qemu fixture presents, so any fixed
 # tunable would be brittle. Result=success is the portable contract.
 
-- name: _verify | Confirm powertop unit is active  # noqa: command-instead-of-module
-  command: systemctl is-active powertop
-  changed_when: false
-  become: true
-
-- name: _verify | Read powertop unit result properties  # noqa: command-instead-of-module
-  command: systemctl show powertop --property=Result,ExecMainStatus
+- name: _verify | Read powertop unit state  # noqa: command-instead-of-module
+  command: systemctl show powertop --property=ActiveState,Result,ExecMainStatus
   register: powertop_show
   changed_when: false
   become: true
@@ -25,6 +20,7 @@
 - name: _verify | Assert --auto-tune ran to completion
   assert:
     that:
+      - "'ActiveState=active' in powertop_show.stdout"
       - "'Result=success' in powertop_show.stdout"
       - "'ExecMainStatus=0' in powertop_show.stdout"
     fail_msg: >-
