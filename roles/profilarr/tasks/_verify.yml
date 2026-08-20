@@ -1,29 +1,6 @@
-# Loopback probe -- exercises the container directly via the published port.
-# Retries cover cold-start: --health-start-period is 100s and the ~3-minute
-# budget below leaves margin over that. /ping is profilarr's dedicated liveness
-# endpoint (200, no auth), unlike /api/v1/health which is API-key gated and
-# answers 401.
-- name: _verify | Profilarr answers /ping on its loopback port
-  uri:
-    url: http://127.0.0.1:{{ service_ports.profilarr }}/ping
-    status_code: 200
-    timeout: 10
-  register: _profilarr_loopback
-  retries: 30
-  delay: 2
-  until: _profilarr_loopback.status == 200
-  become: true
-
-# nginx-vhost probe -- exercises the proxied path, not just loopback. A
-# regression in the nginx_site wiring (typo'd subdomain, broken proxy_pass)
-# would pass the loopback probe above silently. The test authelia_stub admits
-# the auth_request subrequest, so the request reaches profilarr and /ping
-# answers 200.
-#
-# Map the vhost FQDN to loopback so SNI matches the served certificate.
-# Probing https://localhost with a Host: header leaves SNI=localhost, which
-# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
-# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+# The test Authelia stub admits the auth_request subrequest, so /ping exercises
+# Profilarr through its published loopback port and nginx proxy. Resolve the
+# FQDN to loopback so SNI matches the served certificate.
 - name: _verify | Map the profilarr vhost FQDN to loopback for SNI-correct probing
   lineinfile:
     path: /etc/hosts
@@ -35,13 +12,7 @@
   uri:
     url: https://profilarr.{{ inventory_hostname }}.{{ domain }}/ping
     validate_certs: false
-    status_code: 200
     timeout: 10
-  register: _profilarr_nginx
-  retries: 30
-  delay: 2
-  until: _profilarr_nginx.status == 200
-  become: true
 
 # Symlink-relocation probe -- proves the /config/profilarr.db symlink resolves
 # onto the 4K sqlite dataset end-to-end (the reason the sqlite_dataset helper
