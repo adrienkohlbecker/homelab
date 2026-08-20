@@ -1,7 +1,7 @@
 # Mitogen can retain a severed sudo.root context after a reboot, which
 # wedges Ansible's become-elevated boot-id poll. Fire the reboot async,
 # reset the whole connection tree, then wait on the transport-only path.
-# `reboot_args.timeout` defaults to 120 seconds for normal boots.
+# Allow up to four minutes for slower production boots.
 
 - name: Trigger reboot
   become: true
@@ -24,4 +24,4 @@
   wait_for_connection:
     # The probe must not match the still-up pre-reboot connection.
     delay: 15
-    timeout: "{{ (reboot_args | default({})).timeout | default(120) | int }}"
+    timeout: 240

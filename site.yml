@@ -313,9 +313,6 @@
         name: reboot
         tasks_from: reboot
       when: reboot_required.stat.exists
-      vars:
-        reboot_args:
-          timeout: 240
 
     # serial: 1 means this runs per host; pause 2 min after a host is
     # back before the next one goes down, so services resettle before
