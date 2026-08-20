@@ -1,18 +1,12 @@
 # Auto-tune choices depend on VM hardware and rejected sysfs writes do not
 # fail the process, so successful process completion is the portable contract.
 
-- name: _verify | Read powertop unit state  # noqa: command-instead-of-module
+- name: _verify | Confirm --auto-tune completed  # noqa: command-instead-of-module
   command: systemctl show powertop --property=ActiveState,Result,ExecMainStatus
   register: powertop_show
   changed_when: false
+  failed_when: >-
+    'ActiveState=active' not in powertop_show.stdout or
+    'Result=success' not in powertop_show.stdout or
+    'ExecMainStatus=0' not in powertop_show.stdout
   become: true
-
-- name: _verify | Assert --auto-tune ran to completion
-  assert:
-    that:
-      - "'ActiveState=active' in powertop_show.stdout"
-      - "'Result=success' in powertop_show.stdout"
-      - "'ExecMainStatus=0' in powertop_show.stdout"
-    fail_msg: >-
-      powertop.service did not complete cleanly; --auto-tune may have
-      errored. systemctl show output: {{ powertop_show.stdout }}
