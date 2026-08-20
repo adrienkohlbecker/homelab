@@ -18,11 +18,10 @@ def sort_ini(fname):
         print(f"sort_ini: {fname}: not found, skipping", file=sys.stderr)
         return
 
-    lines = original.splitlines()
     section = ""
     subcat = ""
     sections = {}
-    for line in lines:
+    for line in original.splitlines():
         line = line.strip()
         if line:
             if line.startswith("[["):
@@ -32,27 +31,20 @@ def sort_ini(fname):
                 section = line
                 subcat = ""
                 continue
-            if section not in sections:
-                sections[section] = {}
-            if subcat not in sections[section]:
-                sections[section][subcat] = []
-            sections[section][subcat].append(line)
+            sections.setdefault(section, {}).setdefault(subcat, []).append(line)
 
     if not sections:
         return
 
     parts = []
-    keys = sorted(sections.keys())
-    for key in keys:
-        subsections = sections[key]
-        subsection_keys = sorted(subsections.keys())
-        if key != "":
-            parts.append(key)
-        for subsection_key in subsection_keys:
-            values = sorted(subsections[subsection_key])
-            if subsection_key != "":
-                parts.append(subsection_key)
-            parts.extend(values)
+    for section_header in sorted(sections):
+        subsections = sections[section_header]
+        if section_header:
+            parts.append(section_header)
+        for subsection_header in sorted(subsections):
+            if subsection_header:
+                parts.append(subsection_header)
+            parts.extend(sorted(subsections[subsection_header]))
     sorted_output = "\n".join(parts) + "\n"
 
     normalized = "\n".join(line.strip() for line in original.splitlines() if line.strip()) + "\n"
