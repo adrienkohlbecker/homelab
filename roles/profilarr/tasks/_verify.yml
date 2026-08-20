@@ -14,41 +14,28 @@
     validate_certs: false
     timeout: 10
 
-# Symlink-relocation probe -- proves the /config/profilarr.db symlink resolves
-# onto the 4K sqlite dataset end-to-end (the reason the sqlite_dataset helper
-# is wired in). A botched links: target or a clobbered symlink fails here
-# rather than silently landing the DB + WAL on the wrong dataset.
-- name: _verify | Profilarr DB symlink resolves onto the sqlite dataset
-  stat:
-    path: /mnt/services/profilarr/profilarr.db
-    follow: false
-  register: _profilarr_db_link
-  failed_when: >-
-    not _profilarr_db_link.stat.exists
-    or not _profilarr_db_link.stat.islnk
-    or _profilarr_db_link.stat.lnk_target != '/mnt/services/sqlite/profilarr/profilarr.db'
-  become: true
+# HTTP health does not prove that profilarr.db routes onto the 4K-recordsize
+# sqlite dataset or that the application populated it.
+- name: _verify | Profilarr DB is populated on the sqlite dataset
+  import_role:
+    name: sqlite_dataset
+    tasks_from: verify_dataset
+  vars:
+    sqlite_dataset_verify_args:
+      name: profilarr
+      databases:
+        - profilarr.db
+      require_nonempty: true
 
-# Ownership + content probe -- profilarr creates the DB as the in-container
-# PUID/PGID, which must land as the host profilarr user; a PUID/PGID drift would
-# write it under a different host uid silently. The size check proves the
-# container wrote a real DB through the symlink, not the empty placeholder the
-# sqlite_dataset helper pre-creates on a cold host (also profilarr-owned, so it
-# would satisfy the ownership check alone). The world-readable assertion proves
-# --env UMASK=027 took effect -- the DB holds every synced *arr instance's API
-# key, so a silently-ignored UMASK (mode 0644) must fail here, not slip past the
-# owner check. (stat no longer emits the roth boolean, so derive other-read from
-# the mode's last octal digit: read bit set iff digit >= 4.)
-- name: _verify | Profilarr SQLite DB is profilarr-owned, owner-private, non-empty
+# Profilarr must write through its PUID mapping, and its database contains the
+# API keys of every synced instance, so the target must not be world-readable.
+- name: _verify | Profilarr SQLite DB is profilarr-owned and not world-readable
   stat:
     path: /mnt/services/sqlite/profilarr/profilarr.db
   register: _profilarr_db_owner
   failed_when: >-
-    not _profilarr_db_owner.stat.exists
-    or _profilarr_db_owner.stat.islnk
-    or _profilarr_db_owner.stat.pw_name != 'profilarr'
+    _profilarr_db_owner.stat.pw_name != 'profilarr'
     or (_profilarr_db_owner.stat.mode[-1] | int) >= 4
-    or _profilarr_db_owner.stat.size == 0
   become: true
 
 - name: _verify | Exercise profilarr fluent-bit record contracts
