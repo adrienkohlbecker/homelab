@@ -1,25 +1,13 @@
-- name: _verify | Capture boot id before reboot
-  command: cat /proc/sys/kernel/random/boot_id
-  register: _reboot_verify_boot_id_before
-  changed_when: false
-
 - name: _verify | Reboot through the helper
   import_role:
     name: reboot
     tasks_from: reboot
 
-# Become is deliberate: transport-only checks recover without reset_connection,
-# but the stale sudo.root context makes this elevated regression probe time out.
-- name: _verify | Capture boot id after reboot (elevated — exercises the sudo context)
-  command: cat /proc/sys/kernel/random/boot_id
-  register: _reboot_verify_boot_id_after
+# The reboot action verifies that boot_id changed. This separate become probe
+# catches Mitogen retaining a severed sudo.root context across the reboot.
+- name: _verify | Elevated context works after reboot
+  command: id -u
+  register: _reboot_verify_uid
   changed_when: false
+  failed_when: _reboot_verify_uid.stdout | trim != '0'
   become: true
-
-- name: _verify | Boot id changed — the host actually rebooted and came back
-  assert:
-    that:
-      - _reboot_verify_boot_id_after.stdout != _reboot_verify_boot_id_before.stdout
-    fail_msg: >-
-      boot id unchanged after the reboot helper ran — the host did not
-      reboot (before/after = {{ _reboot_verify_boot_id_before.stdout }}).

@@ -1,27 +1,6 @@
-# Mitogen can retain a severed sudo.root context after a reboot, which
-# wedges Ansible's become-elevated boot-id poll. Fire the reboot async,
-# reset the whole connection tree, then wait on the transport-only path.
-# Allow up to four minutes for slower production boots.
-
-- name: Trigger reboot
-  become: true
-  # Give Ansible time to detach the async job before SSH drops.
-  shell: |
-    set -euo pipefail
-    sleep 2
-    systemctl reboot
-  args:
-    executable: /bin/bash
-  async: 60
-  poll: 0
-  changed_when: true
-
-- name: Reset the connection so mitogen rebuilds its context tree
-  # Load-bearing: discard the stale sudo.root child before the next become task.
-  meta: reset_connection
-
-- name: Wait for the host to come back after reboot
-  wait_for_connection:
-    # The probe must not match the still-up pre-reboot connection.
-    delay: 15
-    timeout: 240
+# Mitogen can retain a severed sudo.root context when a become-elevated reboot
+# severs SSH. Elevate only systemctl so Ansible polls through the base context.
+- name: Reboot and wait for the host to return
+  reboot:
+    reboot_command: /usr/bin/sudo -n /usr/bin/systemctl reboot
+    reboot_timeout: 240
