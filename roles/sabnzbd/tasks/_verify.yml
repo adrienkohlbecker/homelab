@@ -141,45 +141,18 @@
   register: _sabnzbd_nginx_gate
   failed_when: _sabnzbd_nginx_gate is not authelia_redirects_to('sabnzbd', inventory_hostname, domain, require_rd=false)
 
-# The history-DB symlink + matching --volume is the role's whole reason for
-# its non-obvious structure: it lands history1.db (and its -wal/-shm
-# siblings) on the 4K-recordsize sqlite dataset. The HTTP probes above pass
-# whether or not that routing holds -- a dropped symlink strands the DB at
-# /config inside the container and nothing else here would notice. Assert it
-# functionally: the on-disk path is a symlink onto the dataset, and SABnzbd
-# wrote a real, non-empty DB through it on first start.
-- name: _verify | Stat the history DB symlink
-  stat:
-    path: /mnt/services/sabnzbd/admin/history1.db
-  register: _sabnzbd_db_link
-  become: true
-
-- name: _verify | History DB is a symlink onto the sqlite dataset
-  assert:
-    that:
-      - _sabnzbd_db_link.stat.islnk
-      - _sabnzbd_db_link.stat.lnk_target == "/mnt/services/sqlite/sabnzbd/history1.db"
-    fail_msg: "history1.db is not a symlink onto the sqlite dataset (stat={{ _sabnzbd_db_link.stat }})"
-
-- name: _verify | Stat the dataset-side history DB
-  stat:
-    path: /mnt/services/sqlite/sabnzbd/history1.db
-  register: _sabnzbd_db_file
-  retries: 15
-  delay: 2
-  until:
-    - _sabnzbd_db_file.stat.exists
-    - not _sabnzbd_db_file.stat.islnk
-    - (_sabnzbd_db_file.stat.size | default(0) | int) > 0
-  become: true
-
-- name: _verify | SABnzbd wrote a real, non-empty history DB onto the dataset
-  assert:
-    that:
-      - _sabnzbd_db_file.stat.exists
-      - not _sabnzbd_db_file.stat.islnk
-      - (_sabnzbd_db_file.stat.size | int) > 0
-    fail_msg: "history1.db on the dataset is missing or empty (stat={{ _sabnzbd_db_file.stat }})"
+# HTTP health does not prove that SABnzbd's hardcoded history DB path routes
+# onto the 4K-recordsize sqlite dataset or that the application populated it.
+- name: _verify | SABnzbd history DB is populated on the sqlite dataset
+  import_role:
+    name: sqlite_dataset
+    tasks_from: verify_dataset
+  vars:
+    sqlite_dataset_verify_args:
+      name: sabnzbd
+      databases:
+        - admin/history1.db
+      require_nonempty: true
 
 # autoProcessMedia.cfg is rendered with no validate: (its repeated subsections
 # break configparser) and carries four cross-role credentials nothing else
