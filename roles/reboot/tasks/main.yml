@@ -7,8 +7,3 @@
 # exercise the helper. A standalone `reboot:box` converge must NOT
 # reboot the box, so the real path is gated behind tasks_from above and
 # never reached here.
-- name: Reboot helper has no standalone converge action
-  debug:
-    msg: >-
-      The reboot role has no standalone converge action. Invoke it with
-      tasks_from=reboot and a reboot_args dict (see tasks/reboot.yml).
