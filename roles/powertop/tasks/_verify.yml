@@ -1,15 +1,5 @@
-# Functional check: the oneshot actually ran and stuck. powertop is a
-# Type=oneshot + RemainAfterExit unit, so "systemctl start returned 0" is
-# a tautology -- a tune that errored could still leave the unit looking
-# handled. Assert it's active (RemainAfterExit held) AND that ExecStart
-# exited cleanly (Result=success, ExecMainStatus=0). powertop --auto-tune
-# returns 0 unless it was denied root, so this proves the process started
-# and didn't crash -- not that every tunable applied (a sysfs write the
-# kernel rejects doesn't fail the process).
-#
-# We don't assert a specific sysfs knob landed -- --auto-tune's choices
-# depend on the (virtual) hardware the qemu fixture presents, so any fixed
-# tunable would be brittle. Result=success is the portable contract.
+# Auto-tune choices depend on VM hardware and rejected sysfs writes do not
+# fail the process, so successful process completion is the portable contract.
 
 - name: _verify | Read powertop unit state  # noqa: command-instead-of-module
   command: systemctl show powertop --property=ActiveState,Result,ExecMainStatus
