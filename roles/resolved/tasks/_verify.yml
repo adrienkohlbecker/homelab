@@ -40,13 +40,11 @@
   register: resolved_verify_resolv_conf
   become: true
 
-- name: _verify | Isolate the nameserver lines
-  set_fact:
+- name: _verify | The resolv.conf nameserver is a non-stub LAN upstream
+  vars:
     resolved_verify_nameservers: >-
       {{ (resolved_verify_resolv_conf.content | b64decode).splitlines()
          | select('match', '^nameserver ') | list }}
-
-- name: _verify | The resolv.conf nameserver is a non-stub LAN upstream
   assert:
     that:
       - resolved_verify_nameservers | length > 0
@@ -101,13 +99,11 @@
   changed_when: false
   become: true
 
-- name: _verify | Isolate the Global Protocols line
-  set_fact:
+- name: _verify | Global mDNS and LLMNR are disabled
+  vars:
     resolved_verify_global_protocols: >-
       {{ resolved_verify_status.stdout_lines
          | select('search', 'Protocols:') | list | first | default('') }}
-
-- name: _verify | Global mDNS and LLMNR are disabled
   assert:
     that:
       - "'-mDNS' in resolved_verify_global_protocols"
