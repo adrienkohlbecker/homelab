@@ -56,19 +56,6 @@
 # The path unit canonicalizes that serialization so one changed setting stays
 # one changed value in Ansible's template diff. A server edit is the strongest
 # probe because SABnzbd rebuilds and reorders the whole nested server mapping.
-- name: _verify | The sabnzbd ini canonicalizer is installed
-  stat:
-    path: /usr/local/bin/sabnzbd_sort_ini
-  register: _sabnzbd_sort_ini
-  failed_when: >-
-    not _sabnzbd_sort_ini.stat.exists
-    or _sabnzbd_sort_ini.stat.mode != "0755"
-  become: true
-
-- name: _verify | The sabnzbd ini canonicalizer path is active  # noqa: command-instead-of-module
-  command: systemctl is-active sabnzbd_ini_sort.path
-  changed_when: false
-
 - name: _verify | Read canonical ini before a UI-style edit
   slurp:
     src: /mnt/services/sabnzbd/sabnzbd.ini
