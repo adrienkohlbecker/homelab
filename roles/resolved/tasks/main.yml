@@ -81,10 +81,8 @@
 # the stub, so /etc/resolv.conf must already use the upstream file.
 - name: Clear systemd-resolved rate limit
   when: not ansible_check_mode
-  # A unit with no failed state needs no reset and remains safe to manage.
   command: systemctl reset-failed systemd-resolved.service
   changed_when: false
-  failed_when: false
   become: true
   tags:
     - resolved
