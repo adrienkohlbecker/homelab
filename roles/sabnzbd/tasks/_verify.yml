@@ -46,6 +46,13 @@
       X-Forwarded-For: 100.64.99.2
     status_code: 200
 
+- name: _verify | SABnzbd accepts the short public hostname
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.sabnzbd }}/"
+    headers:
+      Host: sabnzbd.{{ domain }}
+    status_code: 200
+
 # SABnzbd rewrites the complete INI when a setting changes through the UI.
 # Seed that drift here; the later role re-run must canonicalize it before
 # restoring the managed value while preserving the runtime usage counter.
