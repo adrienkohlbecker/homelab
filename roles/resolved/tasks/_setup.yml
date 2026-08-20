@@ -1,12 +1,6 @@
 # Noble fixture: remove the split package so converge exercises the role-owned
 # install. Preserve a regular resolv.conf first so apt can still resolve package
 # mirrors while systemd-resolved is absent.
-- name: _setup | Read the current upstream resolv.conf
-  slurp:
-    src: /run/systemd/resolve/resolv.conf
-  register: resolved_setup_resolv_conf
-  become: true
-
 - name: _setup | Remove the resolved-managed resolv.conf symlink
   file:
     path: /etc/resolv.conf
@@ -15,11 +9,12 @@
 
 - name: _setup | Preserve upstream DNS while resolved is absent
   copy:
-    content: "{{ resolved_setup_resolv_conf.content | b64decode }}"
+    src: /run/systemd/resolve/resolv.conf
     dest: /etc/resolv.conf
     owner: root
     group: root
     mode: "0644"
+    remote_src: true
   become: true
 
 - name: _setup | Remove the noble systemd-resolved package
