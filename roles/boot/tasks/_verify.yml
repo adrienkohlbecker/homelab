@@ -6,9 +6,9 @@
 # bug on this image and the test box bypasses ZBM entirely.
 - name: _verify | Reboot to apply boot-chain changes
   when: not grub_bootloader and ansible_architecture != 'aarch64'
-  reboot:
-    reboot_timeout: 600
-  become: true
+  import_role:
+    name: reboot
+    tasks_from: reboot
 
 # Verify the hold is in place (dpkg Want=hold) rather than just checking
 # "no grub installed" which is a tautology on test fixtures that never had
