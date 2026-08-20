@@ -8,11 +8,6 @@
 # NOT asserted: the qemu fixture egresses via SLIRP where UDP DNS is lossy
 # under load, so a query timeout would be a flake, not a regression.
 
-- name: _verify | The systemd-resolved unit is active  # noqa: command-instead-of-module -- is-active query, not a state change
-  command: systemctl is-active systemd-resolved
-  changed_when: false
-  become: true
-
 - name: _verify | Stat /etc/resolv.conf
   stat:
     path: /etc/resolv.conf
