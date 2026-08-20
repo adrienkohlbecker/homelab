@@ -21,8 +21,5 @@
       # disk, so enable/start would fail. Skip them in that case. Same guard
       # as smart/hd_idle.
       condition: "{{ not (ansible_check_mode and powertop_apt.changed) }}"
-      # Re-tune when the unit file changes or the powertop package
-      # upgrades (a new version may pick different tunables).
-      restart: "{{ powertop_apt.changed }}"
   tags:
     - powertop
