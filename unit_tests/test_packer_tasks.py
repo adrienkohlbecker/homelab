@@ -67,6 +67,8 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path, ubuntus: str) -> None:
 
     archive_entries = archive_log.read_text().splitlines()
     assert "roles/refind/files/zz-stage-efi-stub" in archive_entries
+    assert "roles/console/files/console-setup" in archive_entries
+    assert "roles/console/files/keyboard" in archive_entries
     assert not any(entry == ".git" or entry.startswith(".git/") for entry in archive_entries)
     assert not any(entry == "notes" or entry.startswith("notes/") for entry in archive_entries)
     assert not any(

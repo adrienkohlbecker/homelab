@@ -150,41 +150,14 @@ update-locale --reset LANG=en_US.UTF-8
 
 ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime
 
-# Configure console
-
-cat <<EOF >/etc/default/console-setup
-# CONFIGURATION FILE FOR SETUPCON
-
-# Consult the console-setup(5) manual page.
-
-ACTIVE_CONSOLES="/dev/tty[1-6]"
-
-CHARMAP="UTF-8"
-
-CODESET="Lat15"
-FONTFACE=""
-FONTSIZE=""
-
-VIDEOMODE=
-
-# The following is an example how to use a braille font
-# FONT='lat9w-08.psf.gz brl-8x8.psf'
-EOF
-
-# Configure keyboard
-
-cat <<EOF >/etc/default/keyboard
-# KEYBOARD CONFIGURATION FILE
-
-# Consult the keyboard(5) manual page.
-
-XKBMODEL="pc105"
-XKBLAYOUT="fr"
-XKBVARIANT=""
-XKBOPTIONS=""
-
-BACKSPACE="guess"
-EOF
+# Install the same console policy the console role owns. These files are static,
+# so the chroot can consume them directly without a template renderer.
+install -m 0644 \
+  "${CHROOT_REPO}/roles/console/files/console-setup" \
+  /etc/default/console-setup
+install -m 0644 \
+  "${CHROOT_REPO}/roles/console/files/keyboard" \
+  /etc/default/keyboard
 
 # Update the repository cache
 
