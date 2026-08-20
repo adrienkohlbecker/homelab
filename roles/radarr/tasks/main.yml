@@ -24,9 +24,8 @@
   vars:
     service_user_args:
       name: radarr
-      # linuxserver/radarr's s6 init recursively chowns /config to
-      # PUID:PGID=radarr:media on every container start. Match it here
-      # so ansible doesn't flap the dir's gid back to `radarr` each run.
+      # Match linuxserver's recursive PUID:PGID chown of /config so Ansible
+      # does not flap the directory group after each container start.
       shared_group: media
   tags:
     - radarr
@@ -47,15 +46,9 @@
     - radarr
 
 - name: Configure radarr
-  # Render via copy:content + rstrip_newlines because radarr rewrites
-  # config.xml on shutdown without a trailing newline; a plain template:
-  # leaves us drifting forever.
-  #
-  # ApiKey is templated (not a FILE__/type=mount secret) because radarr reads
-  # its key only from config.xml -- it has no *_FILE or env override. And
-  # AuthenticationRequired stays Enabled (not DisabledForLocalAddresses): the
-  # podman-network API path (radarr.dns.podman, bypassing nginx/Authelia) must
-  # stay X-Api-Key-gated, so auth can't be relaxed for local addresses.
+  # Radarr writes config.xml without a trailing newline on shutdown. Its API
+  # key has no file/env override, and podman-network peers bypass nginx, so
+  # local-address authentication must remain X-Api-Key-gated.
   copy:
     content: "{{ lookup('template', 'config.xml.j2') | rstrip_newlines }}"
     dest: /mnt/services/radarr/config.xml
@@ -65,12 +58,8 @@
     backup: true
     validate: python3 -c 'import xml.etree.ElementTree as ET, sys; ET.parse(sys.argv[1])' "%s"
   register: radarr_conf
-  # ansible.cfg sets [diff] always=True + verbosity=1, so without this the
-  # rendered <ApiKey> would print to the operator/CI log on write & rotation.
   become: true
-  # On a fresh-host --check run radarr_user + its config dir are only reported
-  # (their creating tasks are guarded), so an unguarded copy with owner=radarr
-  # would fail resolving the not-yet-created user/dir.
+  # A fresh check-mode run has no resolved user or config directory yet.
   when: not ansible_check_mode or radarr_user.uid is defined
   tags:
     - radarr
@@ -114,10 +103,8 @@
     nginx_site_args:
       subdomain: radarr
       proxy_pass: http://127.0.0.1:{{ service_ports.radarr }}/
-      # Browser admin gets forward-auth: radarr's AuthenticationMethod=External
-      # reads the X-Forwarded-User header the site template forwards from
-      # Authelia. Intra-stack peers (bazarr, seerr, etc.) reach radarr via
-      # radarr.dns.podman:7878 carrying X-Api-Key, bypassing nginx entirely.
+      # Browsers use Authelia forward-auth; podman peers bypass nginx with
+      # X-Api-Key at radarr.dns.podman.
       auth: required
   tags:
     - radarr

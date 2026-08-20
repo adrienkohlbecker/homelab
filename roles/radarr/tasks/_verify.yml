@@ -1,7 +1,5 @@
-# Negative probe first: confirms /api/v3/* enforces the apikey. Pairs with the
-# auth'd probe below -- together they prove the apikey we templated is both
-# required by radarr and the one it accepted. Without this, a future bug that
-# disabled apikey enforcement would let the auth'd probe pass on any key.
+# Together the 401 and authenticated probes prove the templated API key is
+# required and active.
 - name: _verify | Radarr /api/v3/system/status rejects unauth'd requests
   uri:
     url: http://127.0.0.1:{{ service_ports.radarr }}/api/v3/system/status
@@ -11,8 +9,6 @@
   delay: 2
   until: _radarr_http_unauth.status == 401
 
-# Authenticated probe -- proves the apikey we templated into config.xml is
-# the one the running container accepted, not just one we wrote to disk.
 # Header form keeps the key out of journald.
 - name: _verify | Radarr answers /api/v3/system/status with our apikey
   uri:
@@ -26,20 +22,9 @@
   until: _radarr_http.status == 200
   failed_when: (_radarr_http.json | default({})) | length == 0
 
-# The vhost is `auth: required`, so the real browser access pattern is an
-# Authelia-gated UI -- the API path above is reached intra-stack via
-# radarr.dns.podman with X-Api-Key, bypassing nginx entirely. With the
-# stub in gate mode (see _setup.yml), assert a cookieless GET / lands on
-# nginx's error_page 401 =302 redirect to the portal. This is the only
-# probe that fails if `auth: required` is dropped from nginx_site_args
-# (the loopback apikey probes stay green without it). Asserting the 302
-# returnUrl (rd=) echoes radarr's own URL proves the request routed to
-# radarr's server_name (not the default vhost) and the request URI survived.
-#
-# Map the vhost FQDN to loopback so SNI matches the served certificate.
-# Probing https://localhost with a Host: header leaves SNI=localhost, which
-# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
-# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+# Probe the Authelia-gated browser path separately from direct API access.
+# Resolve the FQDN to loopback because a Host header on https://localhost
+# leaves SNI=localhost, which OpenSSL rejects for this vhost.
 - name: _verify | Map the radarr vhost FQDN to loopback for SNI-correct probing
   lineinfile:
     path: /etc/hosts
@@ -56,12 +41,8 @@
   register: _radarr_nginx_gate
   failed_when: _radarr_nginx_gate is not authelia_redirects_to('radarr', inventory_hostname, domain)
 
-# The --network media join + radarr.dns.podman FQDN is how intra-stack peers
-# (bazarr, seerr, ...) reach radarr with X-Api-Key, bypassing nginx. The
-# loopback/nginx probes above don't exercise it -- a dropped `--network media`
-# strands that path while leaving them green. Probe from the running container:
-# a keyless GET that must 401 proves aardvark resolves the FQDN, radarr listens,
-# and apikey enforcement is reached over that path.
+# A 401 from radarr.dns.podman inside the container proves media-network DNS,
+# API reachability, and authentication enforcement on the intra-stack path.
 - name: _verify | Radarr is reachable intra-stack at radarr.dns.podman over the media network
   command: >-
     podman exec radarr
@@ -88,13 +69,8 @@
         - logs.db
       require_nonempty: true
 
-# config.xml is the role's other fragile contract: radarr rewrites it on
-# every shutdown, so config.xml.j2's element order + casing must match
-# radarr's own writeback byte-for-byte or the next converge drifts and
-# restart-churns forever. The idempotence pass can't catch this -- the
-# harness never restarts radarr between converges, so radarr never rewrites
-# the file. Force a clean shutdown+restart here, then assert our template
-# still matches what radarr wrote back.
+# Radarr rewrites config.xml only on shutdown, beyond the idempotence pass;
+# restart and compare the production contract to prevent restart churn.
 - name: _verify | Restart radarr to force a config.xml writeback
   systemd:
     name: radarr
