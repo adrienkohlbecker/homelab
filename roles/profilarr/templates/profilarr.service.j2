@@ -32,7 +32,6 @@ ExecStartPre=/bin/rm -f %t/%n.ctr-id
 #   build. ghcr.io/dictionarry-hub/profilarr is a breaking v2 rewrite (DB moves
 #   to /config/data, ORIGIN env required) -- a migration, not a tag bump; the
 #   sqlite_dataset symlink wiring assumes the v1 /config-root profilarr.db.
-# --init: gunicorn runs as PID 1 under gosu in this image; reap its zombies.
 # --health-cmd via python urllib (not curl): python:3.9-slim ships no curl/wget,
 #   so tier-3 urllib is the only in-container probe available.
 # --env UMASK=027: profilarr.db holds every synced *arr instance's API key; 027
@@ -47,7 +46,6 @@ ExecStart=/usr/bin/podman run \
     --rm \
     --name profilarr \
     --security-opt=no-new-privileges \
-    --init \
     --log-driver journald \
     --log-opt tag="profilarr" \
     --env PUID={{ profilarr_user.uid }} \
