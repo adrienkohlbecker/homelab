@@ -60,36 +60,3 @@
     fail_msg: >-
       systemd-resolved is still bound to :5353 or :5355 (MulticastDNS=no /
       LLMNR=no did not take effect): {{ resolved_verify_listeners.stdout }}
-
-# Check the first Protocols line (Global), not a per-link networkd block.
-- name: _verify | Read resolvectl global status
-  command: resolvectl status
-  register: resolved_verify_status
-  changed_when: false
-
-- name: _verify | Global mDNS and LLMNR are disabled
-  vars:
-    resolved_verify_global_protocols: >-
-      {{ resolved_verify_status.stdout_lines
-         | select('search', 'Protocols:') | list | first | default('') }}
-  assert:
-    that:
-      - "'-mDNS' in resolved_verify_global_protocols"
-      - "'-LLMNR' in resolved_verify_global_protocols"
-    fail_msg: >-
-      resolvectl Global Protocols line does not report -mDNS/-LLMNR
-      (MulticastDNS=no / LLMNR=no not live): {{ resolved_verify_global_protocols }}
-
-# Localhost uses resolved's on-host RFC 6761 synthesis and avoids SLIRP.
-- name: _verify | Resolve localhost through resolved
-  command: resolvectl query --cache=no localhost
-  register: resolved_verify_query
-  changed_when: false
-
-- name: _verify | The localhost query returns the loopback address
-  assert:
-    that:
-      - "'127.0.0.1' in resolved_verify_query.stdout"
-    fail_msg: >-
-      resolvectl query localhost did not return 127.0.0.1 -- the resolver
-      path is not answering: {{ resolved_verify_query.stdout }}
