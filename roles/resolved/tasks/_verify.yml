@@ -12,7 +12,6 @@
   stat:
     path: /etc/resolv.conf
   register: resolved_verify_symlink
-  become: true
 
 - name: _verify | The resolv.conf symlink targets the upstream-servers file, not the dead stub
   assert:
@@ -33,7 +32,6 @@
   slurp:
     src: /run/systemd/resolve/resolv.conf
   register: resolved_verify_resolv_conf
-  become: true
 
 - name: _verify | The resolv.conf nameserver is a non-stub LAN upstream
   vars:
@@ -57,7 +55,6 @@
   command: ss -Hlntu
   register: resolved_verify_listeners
   changed_when: false
-  become: true
 
 - name: _verify | The 127.0.0.53 stub listener is gone
   assert:
@@ -92,7 +89,6 @@
   command: resolvectl status
   register: resolved_verify_status
   changed_when: false
-  become: true
 
 - name: _verify | Global mDNS and LLMNR are disabled
   vars:
@@ -115,7 +111,6 @@
   command: resolvectl query --cache=no localhost
   register: resolved_verify_query
   changed_when: false
-  become: true
 
 - name: _verify | The localhost query returns the loopback address
   assert:
