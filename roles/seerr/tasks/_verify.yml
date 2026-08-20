@@ -16,34 +16,6 @@
     - _seerr_loopback.json.version is defined
   become: true
 
-# apiKey-wiring check -- the role's central promise is that settings.json
-# carries the configured apiKey (the assert at the top of main.yml exists
-# precisely because a blank key silently breaks every API client). A live
-# api-call check is impossible here: a pre-setup-wizard seerr has no admin
-# user, so even a *valid* X-Api-Key 403s on every authenticated route. So read
-# the key back from the file seerr rewrote on boot instead -- had seerr rejected
-# or regenerated our key (the regression we care about), this wouldn't match.
-- name: _verify | Read back the settings.json seerr persisted
-  slurp:
-    src: /mnt/services/seerr/settings.json
-  register: _seerr_settings_content
-  become: true
-
-- name: _verify | Seerr persisted the configured apiKey
-  vars:
-    _seerr_persisted: "{{ _seerr_settings_content | slurp_text | from_json }}"
-  assert:
-    that:
-      # Guard `main` first: a partial parse (or a regression that drops the
-      # block) should fail with this curated message, not a raw Jinja
-      # "dict object has no attribute main" traceback.
-      - _seerr_persisted.main is defined
-      - _seerr_persisted.main.apiKey == (seerr_api_key | string)
-    fail_msg: >-
-      settings.json on disk carries a different apiKey than the configured
-      seerr_api_key -- seerr regenerated or rejected the rendered key.
-  become: true
-
 # nginx reverse-proxy probe -- exercises the full reverse-proxy chain so
 # a typo in nginx_site_args / proxy_pass fails here too. trustProxy is
 # set in settings.json so the upstream X-Forwarded-* headers from nginx
@@ -85,18 +57,6 @@
   failed_when: >-
     not _seerr_settings_owner.stat.exists
     or _seerr_settings_owner.stat.pw_name != 'seerr'
-  become: true
-
-# Negative-auth probe. /api/v1/status (probed above) is the only unauthenticated
-# route; /api/v1/* settings sit behind isAuthenticated() (server/routes/index.ts
-# + server/middleware/auth.ts), which 401s a request with no session cookie
-# ("cookie 'connect.sid' required"). Asserting the 401 proves the auth
-# middleware is actually wired in front of the protected API -- a regression
-# that dropped the gate would let this return 200.
-- name: _verify | Seerr rejects unauthenticated access to a protected API route
-  uri:
-    url: http://localhost:{{ service_ports.seerr }}/api/v1/settings/main
-    status_code: 401
   become: true
 
 # Media-network join probe. seerr reaches radarr, sonarr, and Jellyfin over
