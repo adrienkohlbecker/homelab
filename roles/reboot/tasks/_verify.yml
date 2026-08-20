@@ -1,9 +1,8 @@
 # Exercise the reboot helper end to end: capture the boot id, reboot
 # through the helper, then assert the host came back with a *different*
 # boot id. That proves the whole path — async reboot fired, the box
-# actually went down and returned, wait_for_connection re-established
-# the (mitogen) connection, and facts were re-gathered — rather than
-# the reboot module's silent spin-to-timeout this role exists to avoid.
+# actually went down and returned, and wait_for_connection re-established
+# the (mitogen) connection rather than silently spinning to timeout.
 #
 # Not arch-gated: this is a plain reboot with no boot-config change, so
 # it survives on the aarch64 fixture (unlike roles/console + roles/kdump,
@@ -21,8 +20,8 @@
     tasks_from: reboot
 
 # Read the post-reboot boot id through `become` on purpose. The reboot
-# severs SSH; mitogen recovers the transport on its own (wait_for_
-# connection / setup inside the helper are become-less), but the first
+# severs SSH; mitogen recovers the transport through the helper's
+# become-less wait_for_connection, but the first
 # *elevated* task after the reboot is what rebuilds the sudo.root child
 # context — and that is exactly where the helper used to wedge before it
 # learned to reset_connection. A plain (become-less) read here would

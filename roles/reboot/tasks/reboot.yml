@@ -17,13 +17,10 @@
 # meta: reset_connection so mitogen tears down its whole context tree
 # (the now-dead ssh stream AND the stale sudo.root child) and rebuilds
 # from scratch on the next task. wait_for_connection then re-establishes
-# the transport (it tests only the transport, no become), and setup
-# re-gathers facts so callers reading ansible_facts after the reboot see
-# post-reboot values (running kernel, mounts, ...) without a manual
-# setup task.
+# the transport (it tests only the transport, no become).
 #
-# The reset is load-bearing. wait_for_connection + setup are become-less
-# and recover on their own, but without the reset mitogen carries the
+# The reset is load-bearing. wait_for_connection is become-less and
+# recovers on its own, but without the reset mitogen carries the
 # severed sudo.root context into the caller's first become task after
 # the reboot and wedges it there — the same "Connection timed out", just
 # one task downstream. A fast local fixture (the box VM) happens to
@@ -87,6 +84,3 @@
         delay: "{{ _reboot_delay }}"
         timeout: "{{ _reboot_timeout }}"
       throttle: "{{ _reboot_throttle }}"
-
-    - name: Re-gather facts so they reflect the post-reboot state
-      setup:
