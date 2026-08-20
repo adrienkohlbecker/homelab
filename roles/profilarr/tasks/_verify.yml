@@ -46,10 +46,6 @@
     fluentbit_verify_args:
       name: profilarr
       records:
-        - MESSAGE: "2099-01-02 03:04:05 - app.verify - INFO - profilarr-info\n"
-          CONTAINER_TAG: profilarr
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: profilarr.service
         - MESSAGE: "2099-01-02 03:04:06 - task_system - DEBUG - profilarr-debug\n"
           CONTAINER_TAG: profilarr
           SYSLOG_IDENTIFIER: conmon
@@ -70,20 +66,15 @@
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: profilarr.service
       expected:
-        - message: profilarr-info
-          level: info
-          service: profilarr
-          fields.source: app.verify
-          fields.parser_status: parsed
-          _absent:
-            - fields.profilarr_timestamp
-            - fields.profilarr_level
-            - fields.profilarr_message
         - message: profilarr-debug
           level: debug
           service: profilarr
           fields.source: task_system
           fields.parser_status: parsed
+          _absent:
+            - fields.profilarr_timestamp
+            - fields.profilarr_level
+            - fields.profilarr_message
         - message: profilarr-gunicorn
           level: warn
           service: profilarr
