@@ -352,12 +352,13 @@ fi
 echo "$EFI_DEVICE /boot/efi vfat defaults,umask=0077 0 0" >>/etc/fstab
 echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 
-# Pull all available modules into initramfs (rather than just the
-# build host's currently-loaded set) so the shipped image boots on
-# bare-metal hardware whose controllers/NICs the build host didn't
-# happen to have. Costs ~30 MiB qcow2-compressed. Set before the
-# one-and-only build below (postinst-driven builds are diverted above).
-sed -i 's/^MODULES=.*/MODULES=most/' /etc/initramfs-tools/initramfs.conf
+# Pull all available modules into initramfs (rather than just the build host's
+# currently-loaded set) so the shipped image boots on bare-metal hardware whose
+# controllers/NICs the builder didn't have. Install the boot role's canonical
+# conf.d file before the one-and-only build below.
+install -m 0644 \
+  "${CHROOT_REPO}/roles/boot/files/modules_most" \
+  /etc/initramfs-tools/conf.d/modules-most
 
 # Restore the real update-initramfs and generate the initramfs once, now
 # that MODULES=most and every package is in place. -c (not -u): the divert

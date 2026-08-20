@@ -338,8 +338,9 @@
       Baked /etc/default console policy differs from roles/console/files;
       Packer and the console role must install the same bytes.
 
-# chroot.sh sets MODULES=most in /etc/initramfs-tools/initramfs.conf
-# right before the final update-initramfs, so the shipped image
+# chroot.sh installs the boot role's modules-most file under
+# /etc/initramfs-tools/conf.d right before the final update-initramfs, so the
+# shipped image
 # boots on bare-metal hardware whose controllers/NICs the build host
 # didn't happen to have loaded. The real failure mode --
 # "image fails to mount root on a server with hardware X" -- only
@@ -352,9 +353,9 @@
 # upstream scsi modules that initramfs-tools' `most-modules` hook
 # bundles unconditionally; if MODULES=most regressed to MODULES=dep
 # the grep below fails. Asserting the built initrd directly catches
-# regressions in initramfs.conf, in the update-initramfs invocation,
+# regressions in the modules-most file, in the update-initramfs invocation,
 # and in the dpkg trigger ordering (a stale initrd built before the
-# sed would still pass the slurp+grep check).
+# canonical file was installed would still pass a file-content check).
 - name: _verify | Initramfs carries server-class HBA drivers (functional MODULES=most check)
   shell:
     # Plain `grep -E` rather than `grep -qE`: with `set -o pipefail`,
