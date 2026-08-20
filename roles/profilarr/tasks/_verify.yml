@@ -90,10 +90,10 @@
           fields.source: gunicorn
           fields.parser_status: parsed
           _absent:
-            - fields.profilarr_gunicorn_timestamp
+            - fields.profilarr_timestamp
             - fields.profilarr_gunicorn_pid
-            - fields.profilarr_gunicorn_level
-            - fields.profilarr_gunicorn_message
+            - fields.profilarr_level
+            - fields.profilarr_message
         - message: Starting application as user 1000:1000
           level: info
           service: profilarr
