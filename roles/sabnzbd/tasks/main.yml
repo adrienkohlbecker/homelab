@@ -144,13 +144,9 @@
   tags:
     - sabnzbd
 
-# configparser is a smoke test, not SABnzbd's own ConfigObj parser: it
-# catches a jinja/vault typo that yields a malformed ini before SABnzbd
-# silently rewrites it from defaults (losing all server creds) on a parse
-# failure. The [__top__] prepend hosts the file's leading __encoding__ /
-# __version__ keys, which sit above any section. (autoProcessMedia.cfg gets
-# no validate: its repeated [[movie]]/[[tv]]/[[music]] subsections flatten
-# to duplicate-section errors under configparser.)
+# configparser is a smoke test, not SABnzbd's own ConfigObj parser: it catches
+# malformed rendering before SABnzbd silently rewrites the file from defaults.
+# The [__top__] prepend hosts __encoding__ and __version__ above any section.
 - name: Configure sabnzbd.ini
   template:
     src: sabnzbd.ini.j2
@@ -165,6 +161,8 @@
   tags:
     - sabnzbd
 
+# autoProcessMedia.cfg repeats subsection names across parent sections, so its
+# syntax check permits duplicates while still rejecting malformed rendering.
 - name: Configure nzbToMedia (autoProcessMedia.cfg)
   template:
     src: autoProcessMedia.cfg.j2
