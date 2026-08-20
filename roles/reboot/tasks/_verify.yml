@@ -1,14 +1,3 @@
-# Exercise the reboot helper end to end: capture the boot id, reboot
-# through the helper, then assert the host came back with a *different*
-# boot id. That proves the whole path — async reboot fired, the box
-# actually went down and returned, and wait_for_connection re-established
-# the (mitogen) connection rather than silently spinning to timeout.
-#
-# Not arch-gated: this is a plain reboot with no boot-config change, so
-# it survives on the aarch64 fixture (unlike roles/console + roles/kdump,
-# whose aarch64 carve-out is about rebooting *after* a ZBM/refind cmdline
-# write, not the reboot itself).
-
 - name: _verify | Capture boot id before reboot
   command: cat /proc/sys/kernel/random/boot_id
   register: _reboot_verify_boot_id_before
@@ -19,15 +8,8 @@
     name: reboot
     tasks_from: reboot
 
-# Read the post-reboot boot id through `become` on purpose. The reboot
-# severs SSH; mitogen recovers the transport through the helper's
-# become-less wait_for_connection, but the first
-# *elevated* task after the reboot is what rebuilds the sudo.root child
-# context — and that is exactly where the helper used to wedge before it
-# learned to reset_connection. A plain (become-less) read here would
-# recover regardless and pass even with the fix removed, i.e. a
-# tautology. Reading it elevated makes this the real regression guard:
-# without the helper's reset_connection this task times out.
+# Become is deliberate: transport-only checks recover without reset_connection,
+# but the stale sudo.root context makes this elevated regression probe time out.
 - name: _verify | Capture boot id after reboot (elevated — exercises the sudo context)
   command: cat /proc/sys/kernel/random/boot_id
   register: _reboot_verify_boot_id_after

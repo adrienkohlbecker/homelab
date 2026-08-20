@@ -1,38 +1,7 @@
-# Reboot helper — drop-in for ansible's `reboot:` module, which wedges
-# under mitogen (the strategy this repo runs under; see ansible.cfg).
-# Invoke with `import_role: { name: reboot, tasks_from: reboot }` and a
-# `reboot_args` dict. (main.yml is a deliberate no-op so the standalone
-# `reboot:box` CI cell converges without rebooting; tasks/_verify.yml
-# exercises the real path.)
-#
-# The module records the boot id, reboots, reset_connection, then polls
-# the boot id via a *become-elevated* command until it changes. After
-# the SSH sever mitogen reconnects the transport but doesn't cleanly
-# rebuild the elevated sudo.root child context (stderr: "ContextService
-# ()... refcount was 0. shutdown_all called?"), so the poll never sees
-# a fresh boot id and the module spins to its timeout — even though the
-# host is back and SSH-serving within seconds.
-#
-# Instead: fire the reboot fire-and-forget (async, poll: 0), then
-# meta: reset_connection so mitogen tears down its whole context tree
-# (the now-dead ssh stream AND the stale sudo.root child) and rebuilds
-# from scratch on the next task. wait_for_connection then re-establishes
-# the transport (it tests only the transport, no become).
-#
-# The reset is load-bearing. wait_for_connection is become-less and
-# recovers on its own, but without the reset mitogen carries the
-# severed sudo.root context into the caller's first become task after
-# the reboot and wedges it there — the same "Connection timed out", just
-# one task downstream. A fast local fixture (the box VM) happens to
-# rebuild the sudo context cleanly even without the reset, so it passes
-# either way; the x86_64 CI minimal cell does not, and times out.
-# roles/netplan/tasks/apply.yml uses the same reset_connection +
-# wait_for_connection recipe to recover its become tasks across an SSH
-# sever on that same CI fixture (netplan:minimal is green).
-#
-# Inputs: caller passes a single dict `reboot_args` (all keys optional):
-#   timeout    wait_for_connection timeout seconds; default 120. Raise
-#              for slow boots (new kernel, full ZFS import).
+# Mitogen can retain a severed sudo.root context after a reboot, which
+# wedges Ansible's become-elevated boot-id poll. Fire the reboot async,
+# reset the whole connection tree, then wait on the transport-only path.
+# `reboot_args.timeout` defaults to 120 seconds for normal boots.
 
 - name: Trigger reboot
   become: true
@@ -48,9 +17,7 @@
   changed_when: true
 
 - name: Reset the connection so mitogen rebuilds its context tree
-  # Drops mitogen's dead ssh stream + stale sudo.root child so the
-  # caller's first become task post-reboot builds a clean context
-  # instead of inheriting the severed one (see the header rationale).
+  # Load-bearing: discard the stale sudo.root child before the next become task.
   meta: reset_connection
 
 - name: Wait for the host to come back after reboot
