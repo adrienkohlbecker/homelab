@@ -41,17 +41,6 @@
   tags:
     - resolved
 
-# Remove any 10-custom.conf left by an earlier convention: resolved.conf.d
-# merges last-wins, so a stray lower-numbered copy is redundant (99- already
-# supersedes it) and removing it changes no effective config.
-- name: Remove the superseded 10-custom.conf drop-in
-  file:
-    path: /etc/systemd/resolved.conf.d/10-custom.conf
-    state: absent
-  become: true
-  tags:
-    - resolved
-
 # Guard against a dangling /etc/resolv.conf: systemd-resolved writes
 # /run/systemd/resolve/resolv.conf whenever it is running (independent of
 # DNSStubListener), so an absent target means resolved is masked/dead --
