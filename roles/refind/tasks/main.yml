@@ -6,8 +6,6 @@
 - name: Install refind
   apt:
     package:
-      - efibootmgr
-      - mdadm
       - refind
     cache_valid_time: 3600
   register: refind_apt

@@ -48,6 +48,7 @@
       - dosfstools
       - efibootmgr
       - initramfs-tools
+      - mdadm
     cache_valid_time: 3600
   become: true
   tags:
