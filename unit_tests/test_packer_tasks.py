@@ -37,12 +37,23 @@ def _environment(tmp_path: Path, ubuntus: str) -> dict[str, str]:
 def test_build_runs_once_per_ubuntu(tmp_path: Path, ubuntus: str) -> None:
     fake_bin = tmp_path / "bin"
     log = tmp_path / "packer.log"
+    archive_log = tmp_path / "archive.log"
     _executable(
         fake_bin / "packer",
-        "#!/bin/sh\n" "set -eu\n" 'printf "%s\\n" "$*" >>"$PACKER_TEST_LOG"\n',
+        "#!/bin/sh\n"
+        "set -eu\n"
+        'printf "%s\\n" "$*" >>"$PACKER_TEST_LOG"\n'
+        'for arg in "$@"; do\n'
+        '  case "$arg" in build_directory=*) build_directory=${arg#*=} ;; esac\n'
+        "done\n"
+        'tar -tf "$build_directory/homelab-source.tar" >"$PACKER_ARCHIVE_LOG"\n',
     )
     env = _environment(tmp_path, ubuntus)
-    env.update(PATH=f"{fake_bin}:{env['PATH']}", PACKER_TEST_LOG=str(log))
+    env.update(
+        PATH=f"{fake_bin}:{env['PATH']}",
+        PACKER_ARCHIVE_LOG=str(archive_log),
+        PACKER_TEST_LOG=str(log),
+    )
 
     result = subprocess.run(["bash", str(BUILD_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
 
@@ -53,6 +64,16 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path, ubuntus: str) -> None:
         assert f"ubuntu_name={ubuntu}" in call
         assert f"output_directory={env['HOMELAB_CI_DIR']}/{ubuntu}" in call
         assert "-only=qemu.box" in call
+
+    archive_entries = archive_log.read_text().splitlines()
+    assert "roles/refind/files/zz-stage-efi-stub" in archive_entries
+    assert not any(entry == ".git" or entry.startswith(".git/") for entry in archive_entries)
+    assert not any(entry == "notes" or entry.startswith("notes/") for entry in archive_entries)
+    assert not any(
+        entry == "roles/homeassistant/files/ha_gui_config"
+        or entry.startswith("roles/homeassistant/files/ha_gui_config/")
+        for entry in archive_entries
+    )
 
 
 def test_seed_deps_runs_once_per_ubuntu(tmp_path: Path) -> None:

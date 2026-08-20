@@ -400,6 +400,15 @@ build {
     destination = "/home/vagrant/"
   }
 
+  # Git-visible repository snapshot assembled by packer:build. provision.sh
+  # extracts it temporarily into the target root so chroot.sh can consume the
+  # exact same role-owned files as Ansible without installing Ansible there.
+  provisioner "file" {
+    source      = "${var.build_directory}/homelab-source.tar"
+    destination = "/home/vagrant/homelab-source.tar"
+    generated   = true
+  }
+
   provisioner "shell" {
     # Resolute ships sudo-rs as the default `sudo` alternative (priority 50 vs
     # classic sudo's 40). sudo-rs silently ignores the SETENV sudoers tag, so

@@ -6,7 +6,7 @@ set -euxo pipefail
 #   UBUNTU_NAME, UBUNTU_MIRROR, UBUNTU_MIRROR_SECURITY,
 #   UBUNTU_MIRROR_UPSTREAM, UBUNTU_MIRROR_SECURITY_UPSTREAM,
 #   SSH_KEY_PUB, ZBM_VERSION.
-# - Inherited from provision.sh: DISKS, DISKS_COUNT, LAYOUT,
+# - Inherited from provision.sh: DISKS, DISKS_COUNT, LAYOUT, CHROOT_REPO,
 #   PARTITIONS_EFI, PARTITIONS_SWAP, PARTITIONS_PODMAN, HOSTNAME, USERNAME.
 #   PARTITIONS_EFI/SWAP are always set; on a mirror they are mdadm'd into
 #   /dev/md/efi (raid1) and /dev/md/swap (raid1). PARTITIONS_PODMAN is set
@@ -483,48 +483,9 @@ if [ "$ZBM_ARCH" = "aarch64" ]; then
   # so the new initrd is on disk before we copy it. Atomic rename
   # (.new + mv) prevents a power loss mid-write from leaving a
   # half-written kernel image on the ESP.
-  cat <<'HOOK' >/etc/kernel/postinst.d/zz-stage-efi-stub
-#!/bin/bash
-set -euo pipefail
-
-mountpoint -q /boot/efi || exit 0
-
-shopt -s nullglob
-vmlinuz_files=(/boot/vmlinuz-*)
-initrd_files=(/boot/initrd.img-*)
-shopt -u nullglob
-
-[ ${#vmlinuz_files[@]} -gt 0 ] || exit 0
-[ ${#initrd_files[@]} -gt 0 ] || exit 0
-
-vmlinuz=$(printf '%s\n' "${vmlinuz_files[@]}" | sort -V | tail -1)
-initrd=$(printf '%s\n' "${initrd_files[@]}" | sort -V | tail -1)
-
-mkdir -p /boot/efi/EFI/Linux
-
-# Noble ships vmlinuz-* gzipped (dual-format ARM64-Image+PE);
-# EDK2's LoadImage doesn't decompress gzip, so materialise the
-# underlying Image. resolute ships an uncompressed PE32+ EFI stub
-# directly. `gunzip -t` is a cheap format probe.
-if gunzip -t "$vmlinuz" 2>/dev/null; then
-  gunzip -c "$vmlinuz" >/boot/efi/EFI/Linux/vmlinuz.efi.new
-else
-  cp -L "$vmlinuz" /boot/efi/EFI/Linux/vmlinuz.efi.new
-fi
-if cmp -s /boot/efi/EFI/Linux/vmlinuz.efi.new /boot/efi/EFI/Linux/vmlinuz.efi; then
-  rm /boot/efi/EFI/Linux/vmlinuz.efi.new
-else
-  mv -f /boot/efi/EFI/Linux/vmlinuz.efi.new /boot/efi/EFI/Linux/vmlinuz.efi
-fi
-
-cp -L "$initrd" /boot/efi/EFI/Linux/initrd.new
-if cmp -s /boot/efi/EFI/Linux/initrd.new /boot/efi/EFI/Linux/initrd; then
-  rm /boot/efi/EFI/Linux/initrd.new
-else
-  mv -f /boot/efi/EFI/Linux/initrd.new /boot/efi/EFI/Linux/initrd
-fi
-HOOK
-  chmod +x /etc/kernel/postinst.d/zz-stage-efi-stub
+  install -m 0755 \
+    "${CHROOT_REPO}/roles/refind/files/zz-stage-efi-stub" \
+    /etc/kernel/postinst.d/zz-stage-efi-stub
 
   mkdir -p /etc/kernel/postrm.d /etc/initramfs/post-update.d
   ln -sf ../postinst.d/zz-stage-efi-stub /etc/kernel/postrm.d/zz-stage-efi-stub

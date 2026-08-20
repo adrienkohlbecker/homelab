@@ -515,15 +515,27 @@
     - name: _verify | Stat kernel-install hook (regular file)
       stat:
         path: /etc/kernel/postinst.d/zz-stage-efi-stub
+        checksum_algorithm: sha256
       register: packer_verify_hook_postinst
 
-    - name: _verify | Hook is an executable regular file in /etc/kernel/postinst.d
+    - name: _verify | Stat canonical kernel-install hook on the controller
+      stat:
+        path: "{{ playbook_dir }}/roles/refind/files/zz-stage-efi-stub"
+        checksum_algorithm: sha256
+      register: packer_verify_hook_source
+      delegate_to: localhost
+      become: false
+
+    - name: _verify | Hook is the executable canonical role file
       assert:
         that:
           - packer_verify_hook_postinst.stat.exists
           - packer_verify_hook_postinst.stat.isreg
           - packer_verify_hook_postinst.stat.executable
-        fail_msg: "/etc/kernel/postinst.d/zz-stage-efi-stub missing / not a regular executable"
+          - packer_verify_hook_postinst.stat.checksum == packer_verify_hook_source.stat.checksum
+        fail_msg: >-
+          /etc/kernel/postinst.d/zz-stage-efi-stub is missing, not executable,
+          or differs from roles/refind/files/zz-stage-efi-stub
 
     - name: _verify | Stat hook symlinks
       stat:

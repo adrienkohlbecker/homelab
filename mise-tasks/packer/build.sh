@@ -45,6 +45,23 @@ mkdir -p "${base}"
 # is left behind for inspection (cleanup via packer:clean).
 tmp=$(mktemp -d "${HOMELAB_CI_DIR}/.build-XXXXXX")
 
+# Upload the Git-visible working tree as one archive so chroot.sh can consume
+# the same role-owned files Ansible installs. Ignored private clones, caches,
+# build artifacts, and .git stay out; existing uncommitted files stay in so a
+# local Packer build validates the working tree being developed.
+source_archive="${tmp}/homelab-source.tar"
+repo_root=$(git rev-parse --show-toplevel)
+(
+  cd "${repo_root}"
+  git ls-files -z --cached --others --exclude-standard |
+    while IFS= read -r -d '' source_path; do
+      if [ -e "${source_path}" ] || [ -L "${source_path}" ]; then
+        printf '%s\0' "${source_path}"
+      fi
+    done |
+    tar --create --file="${source_archive}" --no-recursion --null --files-from=-
+)
+
 # Surface the qemu_net_wrapper shim's NIC-backend decision log (passt vs slirp,
 # the passt command + advertised DNS, the netdev rewrite) plus passt's own startup
 # banner. packer routes the shim's stderr through Go's logger, which it discards
@@ -114,6 +131,7 @@ packer build \
   packer
 
 if [ "${publish}" = "true" ]; then
+  rm "${source_archive}"
   rmdir "${tmp}"
 else
   rm -rf "${tmp}"

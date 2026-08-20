@@ -40,6 +40,7 @@ set -euxo pipefail
 # Directory holding chroot.sh and optional installer extensions. Packer uploads
 # it to /home/vagrant; bare-metal callers can point it at their staged bundle.
 SCRIPTS_DIR="${SCRIPTS_DIR:-/home/vagrant}"
+HOMELAB_SOURCE_ARCHIVE="${HOMELAB_SOURCE_ARCHIVE:-${SCRIPTS_DIR}/homelab-source.tar}"
 
 preflight() {
   local name disk
@@ -574,6 +575,24 @@ if [ "$building_image" = "true" ]; then
   echo force-unsafe-io >/mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
 fi
 
+# Expose the Git-visible repository snapshot inside the target root. chroot.sh
+# installs role-owned files from this tree, so Packer and Ansible consume the
+# same bytes without Ansible running in the chroot. Always remove the temporary
+# source tree; it is build input, not part of the shipped image.
+if [ ! -f "${HOMELAB_SOURCE_ARCHIVE}" ]; then
+  echo "provision.sh: repository archive not found: ${HOMELAB_SOURCE_ARCHIVE}" >&2
+  exit 1
+fi
+cleanup_chroot_repo() {
+  rm -rf -- /mnt/var/tmp/homelab-source
+}
+trap cleanup_chroot_repo EXIT
+cleanup_chroot_repo
+mkdir -p /mnt/var/tmp/homelab-source
+tar -xf "${HOMELAB_SOURCE_ARCHIVE}" -C /mnt/var/tmp/homelab-source
+CHROOT_REPO=/var/tmp/homelab-source
+export CHROOT_REPO
+
 # Stage the Hetzner cloud-init drop-in for this release so chroot.sh can install
 # it into /etc/cloud/cloud.cfg.d, making the image behave like the stock hcloud
 # image (mirror.hetzner.com apt, Hetzner module set). Under /var/tmp, not /tmp:
@@ -599,11 +618,14 @@ fi
 #
 # Env propagation: arch-chroot inherits the calling shell's env, so
 # packer's UBUNTU_*/ZBM_*/REFIND_NAME/SSH_KEY_PUB (already exported via
-# the shell provisioner env block) flow straight through. Script-local
-# vars must be exported explicitly. DISKS rides as a space-delimited
-# string (not a bash array, which bash refuses to put in env); chroot.sh
-# consumes it the same way via unquoted `for d in $DISKS` word-splitting.
+# the shell provisioner env block) flow straight through. CHROOT_REPO is
+# exported above. DISKS rides as a space-delimited string (not a bash array,
+# which bash refuses to put in env); chroot.sh consumes it the same way via
+# unquoted `for d in $DISKS` word-splitting.
 unshare --mount --propagation private arch-chroot /mnt bash <"$SCRIPTS_DIR/chroot.sh"
+
+cleanup_chroot_repo
+trap - EXIT
 
 if [ "$building_image" = "true" ]; then
   rm /mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
