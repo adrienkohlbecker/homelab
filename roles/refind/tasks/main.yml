@@ -243,12 +243,6 @@
   tags:
     - refind
 
-- name: Set ZBM cmdline fact for refind entries
-  set_fact:
-    refind_zbm_cmdline: "{{ refind_zbm_cmdline_content | slurp_text }}"
-  tags:
-    - refind
-
 - name: Read pool cmdline for aarch64 Linux EFI-stub entry
   when: ansible_architecture == "aarch64"
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
