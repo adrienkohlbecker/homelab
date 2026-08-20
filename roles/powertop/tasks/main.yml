@@ -1,5 +1,4 @@
 - name: Install powertop
-  when: powertop_enabled
   apt:
     pkg:
       - powertop
@@ -11,7 +10,6 @@
     - powertop
 
 - name: Manage powertop service
-  when: powertop_enabled
   import_role:
     name: systemd_unit
     tasks_from: unit
@@ -26,23 +24,5 @@
       # Re-tune when the unit file changes or the powertop package
       # upgrades (a new version may pick different tunables).
       restart: "{{ powertop_apt.changed }}"
-  tags:
-    - powertop
-
-# ---- disabled-host cleanup ----
-# Only acts on a host that previously had powertop enabled and is now opted
-# out: without this the stale unit keeps re-running --auto-tune every boot,
-# defeating the opt-out on exactly the host where a tunable misbehaves. The
-# remove helper stops + disables the unit, deletes it, and daemon-reloads
-# (a no-op where powertop was never installed), and refuses to clobber a
-# masked unit.
-- name: Tear down powertop service when opted out
-  when: not powertop_enabled
-  import_role:
-    name: systemd_unit
-    tasks_from: remove
-  vars:
-    systemd_unit_args:
-      dest: powertop.service
   tags:
     - powertop
