@@ -29,9 +29,7 @@
   import_role:
     name: reboot
     tasks_from: reboot
-  vars:
-    reboot_args:
-      condition: "{{ ansible_architecture != 'aarch64' }}"
+  when: ansible_architecture != 'aarch64'
 
 - name: _verify | Read console-setup config
   slurp:

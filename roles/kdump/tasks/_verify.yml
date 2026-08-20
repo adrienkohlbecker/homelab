@@ -43,9 +43,7 @@
   import_role:
     name: reboot
     tasks_from: reboot
-  vars:
-    reboot_args:
-      condition: "{{ ansible_architecture != 'aarch64' }}"
+  when: ansible_architecture != 'aarch64'
 
 - name: _verify | Crashkernel reservation is non-zero post-reboot
   when: ansible_architecture != 'aarch64'

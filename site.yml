@@ -312,9 +312,9 @@
       import_role:
         name: reboot
         tasks_from: reboot
+      when: reboot_required.stat.exists
       vars:
         reboot_args:
-          condition: "{{ reboot_required.stat.exists }}"
           timeout: 240
 
     # serial: 1 means this runs per host; pause 2 min after a host is

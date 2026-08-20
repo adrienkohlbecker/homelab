@@ -31,38 +31,30 @@
 # sever on that same CI fixture (netplan:minimal is green).
 #
 # Inputs: caller passes a single dict `reboot_args` (all keys optional):
-#   condition  when-gate for the whole block; default true. Pass the
-#              caller guard (reboot_required.stat.exists,
-#              ansible_architecture != 'aarch64', ...).
 #   timeout    wait_for_connection timeout seconds; default 120. Raise
 #              for slow boots (new kernel, full ZFS import).
 
-- name: Reboot the host and wait for it to return
-  when: (reboot_args | default({})).condition | default(true)
-  block:
-    - name: Trigger reboot
-      become: true
-      # Give Ansible time to detach the async job before SSH drops.
-      shell: |
-        set -euo pipefail
-        sleep 2
-        systemctl reboot
-      args:
-        executable: /bin/bash
-      async: 60
-      poll: 0
-      changed_when: false
+- name: Trigger reboot
+  become: true
+  # Give Ansible time to detach the async job before SSH drops.
+  shell: |
+    set -euo pipefail
+    sleep 2
+    systemctl reboot
+  args:
+    executable: /bin/bash
+  async: 60
+  poll: 0
+  changed_when: false
 
-    - name: Reset the connection so mitogen rebuilds its context tree
-      # Drops mitogen's dead ssh stream + stale sudo.root child so the
-      # caller's first become task post-reboot builds a clean context
-      # instead of inheriting the severed one (see the header rationale).
-      # Honours the block-level when:, mirroring the conditional reset in
-      # roles/netplan/tasks/apply.yml.
-      meta: reset_connection
+- name: Reset the connection so mitogen rebuilds its context tree
+  # Drops mitogen's dead ssh stream + stale sudo.root child so the
+  # caller's first become task post-reboot builds a clean context
+  # instead of inheriting the severed one (see the header rationale).
+  meta: reset_connection
 
-    - name: Wait for the host to come back after reboot
-      wait_for_connection:
-        # The probe must not match the still-up pre-reboot connection.
-        delay: 15
-        timeout: "{{ (reboot_args | default({})).timeout | default(120) | int }}"
+- name: Wait for the host to come back after reboot
+  wait_for_connection:
+    # The probe must not match the still-up pre-reboot connection.
+    delay: 15
+    timeout: "{{ (reboot_args | default({})).timeout | default(120) | int }}"
