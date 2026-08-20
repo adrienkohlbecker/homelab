@@ -35,19 +35,3 @@
 - name: _setup | Install keepalived
   import_role:
     name: keepalived
-
-- name: _setup | Configure resolved
-  shell: |
-    set -euo pipefail
-
-    systemctl disable systemd-resolved.service
-    systemctl stop systemd-resolved
-    {
-    {% for resolver in bootstrap_dns_resolver %}
-      echo "nameserver {{ resolver }}"
-    {% endfor %}
-    } > /etc/resolv.conf
-  args:
-    executable: /bin/bash
-    removes: /etc/systemd/system/sysinit.target.wants/systemd-resolved.service
-  become: true

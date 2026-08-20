@@ -41,44 +41,7 @@
   tags:
     - resolved
 
-# Fail before replacing /etc/resolv.conf if resolved is not producing its target.
-- name: Stat the resolved-managed resolv.conf
-  when: not (ansible_check_mode and resolved_apt.changed)
-  stat:
-    path: /run/systemd/resolve/resolv.conf
-  register: resolved_run_resolv_conf
-  become: true
-  tags:
-    - resolved
-
-- name: Assert systemd-resolved is producing its resolv.conf
-  when: not (ansible_check_mode and resolved_apt.changed)
-  assert:
-    that:
-      - resolved_run_resolv_conf.stat.exists
-    fail_msg: >-
-      /run/systemd/resolve/resolv.conf is missing -- systemd-resolved is not
-      running, so symlinking /etc/resolv.conf to it would black-hole DNS.
-      Check `systemctl status systemd-resolved` before re-running.
-  tags:
-    - resolved
-
-# Use the DHCP upstream file because the local stub is disabled. Do not set
-# metadata: file follows symlinks and would rechown the transient /run target.
-- name: Update resolv conf symlink
-  when: not (ansible_check_mode and resolved_apt.changed)
-  file:
-    src: /run/systemd/resolve/resolv.conf
-    dest: /etc/resolv.conf
-    state: link
-    force: true
-  become: true
-  tags:
-    - resolved
-
-# Clear crash-loop limits and keep the service enabled so the /run target
-# survives reboot. Lifecycle stays after the symlink: a config restart disables
-# the stub, so /etc/resolv.conf must already use the upstream file.
+# Clear crash-loop limits before starting the load-bearing resolver service.
 - name: Clear systemd-resolved rate limit
   when: not ansible_check_mode
   command: systemctl reset-failed systemd-resolved.service
@@ -96,6 +59,19 @@
       {{ 'restarted'
          if resolved_apt.changed or resolved_custom_conf.changed
          else 'started' }}
+  become: true
+  tags:
+    - resolved
+
+# Keep the package-standard stub path. Lifecycle comes first so a failed start
+# cannot replace /etc/resolv.conf with a dangling symlink.
+- name: Use the systemd-resolved stub resolver
+  when: not (ansible_check_mode and resolved_apt.changed)
+  file:
+    src: /run/systemd/resolve/stub-resolv.conf
+    dest: /etc/resolv.conf
+    state: link
+    force: true
   become: true
   tags:
     - resolved

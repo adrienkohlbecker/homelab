@@ -6,15 +6,15 @@
     path: /etc/resolv.conf
   register: resolved_verify_symlink
 
-- name: _verify | The resolv.conf symlink targets the upstream-servers file, not the dead stub
+- name: _verify | The resolv.conf symlink targets the local stub
   assert:
     that:
       - resolved_verify_symlink.stat.islnk | default(false)
-      - resolved_verify_symlink.stat.lnk_target == '/run/systemd/resolve/resolv.conf'
+      - resolved_verify_symlink.stat.lnk_target == '/run/systemd/resolve/stub-resolv.conf'
     fail_msg: >-
-      /etc/resolv.conf is not a symlink to /run/systemd/resolve/resolv.conf
-      (got {{ resolved_verify_symlink.stat.lnk_target | default('a regular file') }});
-      with DNSStubListener=no, stub-resolv.conf (127.0.0.53) would be a black hole.
+      /etc/resolv.conf is not a symlink to
+      /run/systemd/resolve/stub-resolv.conf (got
+      {{ resolved_verify_symlink.stat.lnk_target | default('a regular file') }}).
 
 # Read the managed file directly so SLIRP cannot flake the upstream check.
 - name: _verify | Read the resolved-managed resolv.conf
@@ -35,21 +35,21 @@
         | select('search', '127\.0\.0\.53') | list | length == 0
     fail_msg: >-
       /run/systemd/resolve/resolv.conf has no usable upstream nameserver
-      (or still lists the dead 127.0.0.53 stub): {{ resolved_verify_nameservers }}
+      (or lists the local 127.0.0.53 stub): {{ resolved_verify_nameservers }}
 
-# Wire-level proof that DNSStubListener=no took effect.
+# Wire-level proof that the standard stub is available to host clients.
 - name: _verify | List listening TCP/UDP sockets
   command: ss -Hlntu
   register: resolved_verify_listeners
   changed_when: false
 
-- name: _verify | The 127.0.0.53 stub listener is gone
+- name: _verify | The 127.0.0.53 stub listener is active
   assert:
     that:
-      - resolved_verify_listeners.stdout is not search('127\.0\.0\.53')
+      - resolved_verify_listeners.stdout is search('127\.0\.0\.53.*:53')
     fail_msg: >-
-      systemd-resolved is still listening on 127.0.0.53
-      (DNSStubListener=no did not take effect): {{ resolved_verify_listeners.stdout }}
+      systemd-resolved is not listening on 127.0.0.53:53
+      (DNSStubListener=yes did not take effect): {{ resolved_verify_listeners.stdout }}
 
 # Avahi is absent from the fixture, so these ports must be free.
 - name: _verify | The mDNS (5353) and LLMNR (5355) sockets are gone
