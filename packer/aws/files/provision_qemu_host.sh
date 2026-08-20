@@ -31,10 +31,10 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommen
   mdadm \
   ec2-instance-connect
 
-curl -fsSL https://mise.jdx.dev/gpg-key.pub |
+curl -fsSL https://mise.en.dev/gpg-key.pub |
   gpg --dearmor |
   sudo tee /etc/apt/keyrings/mise-archive-keyring.gpg >/dev/null
-echo 'deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.jdx.dev/deb stable main' |
+echo 'deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.en.dev/deb stable main' |
   sudo tee /etc/apt/sources.list.d/mise.list >/dev/null
 sudo apt-get update -qq
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends mise

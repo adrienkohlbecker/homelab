@@ -13,6 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_SH = REPO_ROOT / "mise-tasks" / "packer" / "build.sh"
 SEED_DEPS_SH = REPO_ROOT / "mise-tasks" / "packer" / "seed-deps.sh"
 HETZNER_RESCUE_SH = REPO_ROOT / "mise-tasks" / "packer" / "_hetzner_rescue.sh"
+QEMU_HOST_PROVISION_SH = REPO_ROOT / "packer" / "aws" / "files" / "provision_qemu_host.sh"
 
 
 def _executable(path: Path, content: str) -> None:
@@ -123,6 +124,14 @@ def test_seed_deps_runs_once_per_ubuntu(tmp_path: Path) -> None:
         assert f"--ubuntu {ubuntu}" in call
         assert (destination / "artifact").read_text() == "source\n"
         assert (destination / "seeded").read_text() == "yes\n"
+
+
+def test_qemu_host_uses_canonical_mise_upstream() -> None:
+    provision = QEMU_HOST_PROVISION_SH.read_text()
+
+    assert "https://mise.en.dev/gpg-key.pub" in provision
+    assert "https://mise.en.dev/deb stable main" in provision
+    assert "mise.jdx.dev" not in provision
 
 
 def test_hetzner_bulk_ssh_isolates_the_compressed_stream(tmp_path: Path) -> None:
