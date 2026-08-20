@@ -34,42 +34,24 @@
 #   condition  when-gate for the whole block; default true. Pass the
 #              caller guard (reboot_required.stat.exists,
 #              ansible_architecture != 'aarch64', ...).
-#   pre_delay  seconds to sleep before issuing the reboot so ansible
-#              detaches the async job before SSH drops; default 2.
-#   delay      wait_for_connection delay before the first probe; default
-#              15. Must outlast the window between firing the reboot and
-#              SSH actually going down, else the probe matches the
-#              still-up pre-reboot connection.
 #   timeout    wait_for_connection timeout seconds; default 120. Raise
 #              for slow boots (new kernel, full ZFS import).
-#   throttle   host-parallelism cap; default 1. The reboot is async, so
-#              throttle only serializes the wait phase — for strict
-#              one-host-at-a-time fleet reboots set play-level `serial:`
-#              at the call site (serial is play-scope; it can't live in
-#              a role or block). Canonical: the "Reboot check" play in
-#              site.yml.
 
 - name: Reboot the host and wait for it to return
   when: (reboot_args | default({})).condition | default(true)
-  vars:
-    _ra: "{{ reboot_args | default({}) }}"
-    _reboot_pre_delay: "{{ _ra.pre_delay | default(2) | int }}"
-    _reboot_delay: "{{ _ra.delay | default(15) | int }}"
-    _reboot_timeout: "{{ _ra.timeout | default(120) | int }}"
-    _reboot_throttle: "{{ _ra.throttle | default(1) | int }}"
   block:
     - name: Trigger reboot
       become: true
+      # Give Ansible time to detach the async job before SSH drops.
       shell: |
         set -euo pipefail
-        sleep {{ _reboot_pre_delay }}
+        sleep 2
         systemctl reboot
       args:
         executable: /bin/bash
       async: 60
       poll: 0
       changed_when: false
-      throttle: "{{ _reboot_throttle }}"
 
     - name: Reset the connection so mitogen rebuilds its context tree
       # Drops mitogen's dead ssh stream + stale sudo.root child so the
@@ -81,6 +63,6 @@
 
     - name: Wait for the host to come back after reboot
       wait_for_connection:
-        delay: "{{ _reboot_delay }}"
-        timeout: "{{ _reboot_timeout }}"
-      throttle: "{{ _reboot_throttle }}"
+        # The probe must not match the still-up pre-reboot connection.
+        delay: 15
+        timeout: "{{ (reboot_args | default({})).timeout | default(120) | int }}"
