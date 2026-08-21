@@ -257,7 +257,7 @@
   assert:
     that: _nexus_retired_logs.results | selectattr('stat.exists') | list | length == 0
 
-- name: _verify | Wait for parsed nexus startup output in lnav store
+- name: _verify | Wait for parsed nexus application and audit output in lnav store
   command:
     argv:
       - python3
@@ -266,6 +266,8 @@
         import json
         import sys
 
+        application_seen = False
+        audit_seen = False
         with open(sys.argv[1], encoding="utf-8") as handle:
             for line in handle:
                 try:
@@ -274,56 +276,26 @@
                     continue
                 fields = record.get("fields", {})
                 if (
-                    record.get("service") == "nexus"
-                    and fields.get("parser_status") == "parsed"
-                    and fields.get("source")
-                    and record.get("message")
+                    record.get("service") != "nexus"
+                    or fields.get("parser_status") != "parsed"
+                    or not record.get("message")
                 ):
+                    continue
+                if not application_seen and fields.get("source"):
                     assert "timestamp" not in fields, record
                     assert "formattedMessage" not in fields, record
-                    print(json.dumps(record, sort_keys=True))
+                    application_seen = True
+                if fields.get("audit_domain") and fields.get("event"):
+                    audit_seen = True
+                if application_seen and audit_seen:
                     sys.exit(0)
         sys.exit(1)
       - /var/log/fluent-bit/lnav.jsonl
-  register: _nexus_lnav_record
+  register: _nexus_lnav_records
   changed_when: false
-  retries: 30
+  retries: 60
   delay: 2
-  until: _nexus_lnav_record.rc == 0
-  become: true
-
-- name: _verify | Wait for parsed nexus audit output in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                fields = record.get("fields", {})
-                if (
-                    record.get("service") == "nexus"
-                    and fields.get("parser_status") == "parsed"
-                    and fields.get("audit_domain")
-                    and fields.get("event")
-                    and record.get("message")
-                ):
-                    print(json.dumps(record, sort_keys=True))
-                    sys.exit(0)
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-  register: _nexus_lnav_audit_record
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: _nexus_lnav_audit_record.rc == 0
+  until: _nexus_lnav_records.rc == 0
   become: true
 
 # Nexus creates this path as in-container uid 200. A broken +200 uidmap lands
