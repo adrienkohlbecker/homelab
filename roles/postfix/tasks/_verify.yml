@@ -23,7 +23,6 @@
       smtp_tls_security_level: "{{ 'secure' if (smtp_use_ssl | bool or smtp_use_tls | bool) else 'none' }}"
       smtp_sasl_auth_enable: "yes"
       smtp_tls_mandatory_protocols: ">=TLSv1.2"
-      smtp_tls_mandatory_ciphers: high
       smtp_generic_maps: texthash:/etc/postfix/generic
 
 # -h suppresses parameter names; -x expands $name refs so `myorigin = $mydomain`
