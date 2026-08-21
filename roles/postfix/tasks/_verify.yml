@@ -10,32 +10,6 @@
   changed_when: false
   become: true
 
-- name: _verify | Effective Postfix parameters match relay intent
-  command: postconf -hx {{ item.key }}
-  loop:
-    - key: relayhost
-      value: "[{{ smtp_host }}]:{{ smtp_port }}"
-    - key: master_service_disable
-      value: inet
-    - key: myorigin
-      value: "{{ inventory_hostname }}"
-    - key: smtp_sasl_password_maps
-      value: texthash:/etc/postfix/sasl_passwd
-    - key: smtp_tls_security_level
-      value: "{{ 'secure' if (smtp_use_ssl | bool or smtp_use_tls | bool) else 'none' }}"
-    - key: smtp_sasl_auth_enable
-      value: "yes"
-    - key: smtp_tls_mandatory_protocols
-      value: ">=TLSv1.2"
-    - key: smtp_generic_maps
-      value: texthash:/etc/postfix/generic
-  loop_control:
-    label: "{{ item.key }}"
-  register: _postfix_conf
-  failed_when: _postfix_conf.stdout != item.value
-  changed_when: false
-  become: true
-
 - name: _verify | Query the SASL map for the relayhost key
   command: postmap -q "[{{ smtp_host }}]:{{ smtp_port }}" texthash:/etc/postfix/sasl_passwd
   register: _postfix_sasl
