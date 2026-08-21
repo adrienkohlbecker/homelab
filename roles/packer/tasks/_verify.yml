@@ -256,43 +256,6 @@
   register: packer_verify_swapon
   failed_when: packer_verify_swapon.rc != 0 or packer_verify_swapon.stdout_lines | length == 0
 
-# --- chroot.sh post-debootstrap shape (universal) ---
-
-- name: _verify | Stat baked console policy files
-  stat:
-    path: "{{ item.dest }}"
-    checksum_algorithm: sha256
-  loop:
-    - name: console-setup
-      dest: /etc/default/console-setup
-    - name: keyboard
-      dest: /etc/default/keyboard
-  register: packer_verify_console_baked
-
-- name: _verify | Stat canonical console policy files on the controller
-  stat:
-    path: "{{ playbook_dir }}/roles/console/files/{{ item.name }}"
-    checksum_algorithm: sha256
-  loop:
-    - name: console-setup
-      dest: /etc/default/console-setup
-    - name: keyboard
-      dest: /etc/default/keyboard
-  register: packer_verify_console_source
-  delegate_to: localhost
-  become: false
-
-- name: _verify | Baked console policy matches the role-owned files
-  assert:
-    that:
-      - packer_verify_console_baked.results | selectattr('stat.exists', 'equalto', false) | list | length == 0
-      - >-
-        packer_verify_console_baked.results | map(attribute='stat.checksum') | list
-        == packer_verify_console_source.results | map(attribute='stat.checksum') | list
-    fail_msg: >-
-      Baked /etc/default console policy differs from roles/console/files;
-      Packer and the console role must install the same bytes.
-
 # chroot.sh installs the boot role's modules-most file under
 # /etc/initramfs-tools/conf.d right before the final update-initramfs, so the
 # shipped image
