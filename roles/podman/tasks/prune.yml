@@ -11,9 +11,6 @@
 #                prunes /var/lib/containers/rootless/$USER instead. The
 #                named user must already have linger on — the user manager
 #                has to be alive when the timer ticks.
-#   condition   default true; gates the whole call (use this to skip the
-#                install during check mode when the user was just created).
-#
 # The dict form prevents inter-call leakage at play-vars scope: each
 # import_role pass replaces the whole `podman_prune_args` value, so a
 # previous caller's user can't bleed into the next caller that doesn't
@@ -46,4 +43,3 @@
       # handful of per-user units firing together is negligible.
       on_calendar: "*-*-* 00:20:00"
       user: "{{ podman_prune_args.user | default('root') }}"
-  when: podman_prune_args.condition | default(true)
