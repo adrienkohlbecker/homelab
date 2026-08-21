@@ -216,6 +216,10 @@ maxretry = 3
 # the -h option and/or read the driver's documentation.
 
 [eaton]
+{% if qemu_test | bool %}
+driver = dummy-ups
+port = eaton.dev
+{% else %}
 driver = snmp-ups
 port = {{ external_ips.eaton }}
 # SNMP v1 + the read-only `public` community is deliberate: the UPS sits on
@@ -230,6 +234,7 @@ port = {{ external_ips.eaton }}
 community = public
 snmp_version = v1
 pollfreq = 15
+{% endif %}
 # ignorelb: ignore the UPS's own LB (low-battery) status flag and instead
 # derive "low battery" from the override.* thresholds below -- the point at
 # which this host's upsmon (roles/nut_monitor) shuts it down. The Eaton only

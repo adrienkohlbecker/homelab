@@ -63,6 +63,26 @@
   tags:
     - nut_server
 
+- name: Configure the dummy UPS data for qemu  # noqa: require-validate
+  when:
+    - qemu_test | bool
+    - not (ansible_check_mode and nut_server_apt.changed)
+  copy:
+    dest: /etc/nut/eaton.dev
+    owner: root
+    group: nut
+    mode: "0640"
+    backup: true
+    content: |
+      ups.status: OL
+      battery.charge: 100
+      battery.runtime: 1800
+      ups.mfr: dummy
+      ups.model: evolution500
+  become: true
+  tags:
+    - nut_server
+
 - name: Configure nut upsd.conf  # noqa: require-validate
   when: not (ansible_check_mode and nut_server_apt.changed)
   template:
@@ -118,24 +138,6 @@
   tags:
     - nut_server
 
-# nut-driver is static (WantedBy=nut-server.service), so it can't be
-# `disabled` -- nut-server drags it in on boot regardless. Under qemu_test
-# there is no UPS for snmp-ups to reach (external_ips.eaton answers nothing),
-# so the driver only times out and fails; mask it so nut-server's Wants is
-# skipped instead of starting a doomed driver. Prod is left untouched: this
-# task is qemu-only, so the ordering drop-in and enable below own the driver
-# on prod, and a manual operator mask is respected rather than silently
-# unmasked -- systemd_unit's "refuse to overwrite masked unit" guard then
-# fails the converge instead, surfacing the mask.
-- name: Mask nut-driver when there is no UPS to talk to
-  when: qemu_test | bool and not (ansible_check_mode and nut_server_apt.changed)
-  systemd:
-    name: nut-driver@eaton.service
-    masked: true
-  become: true
-  tags:
-    - nut_server
-
 - name: Order nut-driver after network-online
   when: not qemu_test
   import_role:
@@ -150,9 +152,7 @@
     - nut_server
 
 - name: Enable nut-driver service
-  when:
-    - not qemu_test
-    - not (ansible_check_mode and nut_server_apt.changed)
+  when: not (ansible_check_mode and nut_server_apt.changed)
   systemd:
     name: nut-driver@eaton.service
     enabled: true
@@ -167,10 +167,9 @@
     name: nut-server.service
     enabled: true
     state: >-
-      {{ ('restarted'
-          if nut_server_nut_conf.changed or nut_server_upsd_conf.changed or nut_server_upsd_users.changed
-          else 'started')
-         if not qemu_test else omit }}
+      {{ 'restarted'
+         if nut_server_nut_conf.changed or nut_server_upsd_conf.changed or nut_server_upsd_users.changed
+         else 'started' }}
   become: true
   tags:
     - nut_server
