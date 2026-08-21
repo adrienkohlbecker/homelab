@@ -25,7 +25,6 @@
     mode: "0755"
   loop:
     - /mnt/services
-    - /mnt/services/sqlite
     - /mnt/scratch
     # radarr scopes its bind-mount to /mnt/scratch/radarr (the category dir
     # sabnzbd creates on prod, before radarr starts); the container won't

@@ -30,21 +30,6 @@
   tags:
     - lidarr
 
-# Lidarr hardcodes its DBs under /config; the matching host path mounted in the
-# container lets SQLite resolve each symlink onto the 4K-recordsize dataset.
-- name: Place Lidarr SQLite DBs on the sqlite dataset
-  import_role:
-    name: sqlite_dataset
-    tasks_from: dataset
-  vars:
-    sqlite_dataset_args:
-      user: "{{ lidarr_user }}"
-      databases:
-        - lidarr.db
-        - logs.db
-  tags:
-    - lidarr
-
 - name: Configure lidarr
   # Render via copy:content + rstrip_newlines because lidarr rewrites
   # config.xml on shutdown without a trailing newline; a plain template:

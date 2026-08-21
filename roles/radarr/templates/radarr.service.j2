@@ -10,8 +10,6 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
-After=zfs_mount_mnt_services_sqlite.service
-Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 {% if zfs_has_scratch_mount %}
 After=zfs_mount_mnt_scratch.service
@@ -60,7 +58,6 @@ ExecStart=/usr/bin/podman run \
     --env UMASK=002 \
     --env TZ={{ system_timezone }} \
     --volume /mnt/services/radarr:/config \
-    --volume /mnt/services/sqlite/radarr:/mnt/services/sqlite/radarr \
     --volume /mnt/media:/media \
     --volume /mnt/scratch/radarr:/scratch/radarr \
     --network media \

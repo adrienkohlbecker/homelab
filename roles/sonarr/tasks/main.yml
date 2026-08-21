@@ -31,21 +31,6 @@
   tags:
     - sonarr
 
-# Sonarr hardcodes its DBs under /config; the matching host path mounted in the
-# container lets SQLite resolve each symlink onto the 4K-recordsize dataset.
-- name: Place Sonarr SQLite DBs on the sqlite dataset
-  import_role:
-    name: sqlite_dataset
-    tasks_from: dataset
-  vars:
-    sqlite_dataset_args:
-      user: "{{ sonarr_user }}"
-      databases:
-        - sonarr.db
-        - logs.db
-  tags:
-    - sonarr
-
 - name: Configure sonarr
   # Render via copy:content + rstrip_newlines because sonarr rewrites
   # config.xml on shutdown without a trailing newline; a plain template:

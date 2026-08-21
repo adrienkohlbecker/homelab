@@ -34,7 +34,6 @@
     mode: "0755"
   loop:
     - /mnt/services
-    - /mnt/services/sqlite
     - /mnt/scratch
     # lidarr scopes its bind-mount to /mnt/scratch/lidarr (the category dir
     # sabnzbd creates on prod, before lidarr starts); the container won't

@@ -8,20 +8,6 @@
   tags:
     - profilarr
 
-# Profilarr hardcodes its DB under /config; the matching host path mounted in
-# the container lets SQLite resolve the symlink onto the 4K-recordsize dataset.
-- name: Place Profilarr SQLite DB on the sqlite dataset
-  import_role:
-    name: sqlite_dataset
-    tasks_from: dataset
-  vars:
-    sqlite_dataset_args:
-      user: "{{ profilarr_user }}"
-      databases:
-        - profilarr.db
-  tags:
-    - profilarr
-
 - name: Check whether podman is installed
   stat:
     path: /usr/bin/podman

@@ -56,20 +56,6 @@
   register: _lidarr_nginx_gate
   failed_when: _lidarr_nginx_gate is not authelia_redirects_to('lidarr', inventory_hostname, domain)
 
-# HTTP health does not prove that the hardcoded DB paths route onto the
-# 4K-recordsize sqlite dataset or that the application populated them.
-- name: _verify | Lidarr DBs are populated on the sqlite dataset
-  import_role:
-    name: sqlite_dataset
-    tasks_from: verify_dataset
-  vars:
-    sqlite_dataset_verify_args:
-      name: lidarr
-      databases:
-        - lidarr.db
-        - logs.db
-      require_nonempty: true
-
 # config.xml is the role's other fragile contract: lidarr rewrites it on
 # every shutdown, so config.xml.j2's element order + casing must match
 # lidarr's own writeback byte-for-byte or the next converge drifts and

@@ -14,24 +14,11 @@
     validate_certs: false
     timeout: 10
 
-# HTTP health does not prove that profilarr.db routes onto the 4K-recordsize
-# sqlite dataset or that the application populated it.
-- name: _verify | Profilarr DB is populated on the sqlite dataset
-  import_role:
-    name: sqlite_dataset
-    tasks_from: verify_dataset
-  vars:
-    sqlite_dataset_verify_args:
-      name: profilarr
-      databases:
-        - profilarr.db
-      require_nonempty: true
-
 # Profilarr must write through its PUID mapping, and its database contains the
-# API keys of every synced instance, so the target must not be world-readable.
+# API keys of every synced instance, so the DB must not be world-readable.
 - name: _verify | Profilarr SQLite DB is profilarr-owned and not world-readable
   stat:
-    path: /mnt/services/sqlite/profilarr/profilarr.db
+    path: /mnt/services/profilarr/profilarr.db
   register: _profilarr_db_owner
   failed_when: >-
     _profilarr_db_owner.stat.pw_name != 'profilarr'

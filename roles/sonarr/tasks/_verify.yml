@@ -65,20 +65,6 @@
   become: true
   changed_when: false
 
-# Verify both the DB symlinks and populated targets because HTTP health does
-# not exercise routing onto the 4K-recordsize SQLite dataset.
-- name: _verify | Sonarr DBs are populated on the sqlite dataset
-  import_role:
-    name: sqlite_dataset
-    tasks_from: verify_dataset
-  vars:
-    sqlite_dataset_verify_args:
-      name: sonarr
-      databases:
-        - sonarr.db
-        - logs.db
-      require_nonempty: true
-
 # Sonarr rewrites config.xml only on shutdown, beyond the idempotence pass;
 # restart and compare bytes to prevent element-order drift and restart churn.
 - name: _verify | Restart sonarr to force a config.xml writeback

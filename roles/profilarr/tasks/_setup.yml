@@ -25,9 +25,9 @@
     nginx_test_authelia_stub_args:
       mode: always_200
 
-- name: _setup | Create sqlite dataset parent
+- name: _setup | Create services parent
   file:
-    path: /mnt/services/sqlite
+    path: /mnt/services
     state: directory
     mode: "0755"
   become: true

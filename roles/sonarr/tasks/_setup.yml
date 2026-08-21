@@ -29,7 +29,6 @@
     mode: "0755"
   loop:
     - /mnt/services
-    - /mnt/services/sqlite
     - /mnt/scratch
     # sonarr scopes its bind-mount to /mnt/scratch/sonarr (the category dir
     # sabnzbd creates on prod, before sonarr starts); the container won't

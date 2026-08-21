@@ -30,21 +30,6 @@
   tags:
     - radarr
 
-# Radarr hardcodes its DBs under /config; the matching host path mounted in the
-# container lets SQLite resolve each symlink onto the 4K-recordsize dataset.
-- name: Place Radarr SQLite DBs on the sqlite dataset
-  import_role:
-    name: sqlite_dataset
-    tasks_from: dataset
-  vars:
-    sqlite_dataset_args:
-      user: "{{ radarr_user }}"
-      databases:
-        - radarr.db
-        - logs.db
-  tags:
-    - radarr
-
 - name: Configure radarr
   # Radarr writes config.xml without a trailing newline on shutdown. Its API
   # key has no file/env override, and podman-network peers bypass nginx, so

@@ -55,20 +55,6 @@
   delay: 2
   changed_when: false
 
-# HTTP health does not prove that the hardcoded DB paths route onto the
-# 4K-recordsize sqlite dataset or that the application populated them.
-- name: _verify | Radarr DBs are populated on the sqlite dataset
-  import_role:
-    name: sqlite_dataset
-    tasks_from: verify_dataset
-  vars:
-    sqlite_dataset_verify_args:
-      name: radarr
-      databases:
-        - radarr.db
-        - logs.db
-      require_nonempty: true
-
 # Radarr rewrites config.xml only on shutdown, beyond the idempotence pass;
 # restart and compare the production contract to prevent restart churn.
 - name: _verify | Restart radarr to force a config.xml writeback
