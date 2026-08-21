@@ -5,6 +5,7 @@
       # reboot check, boot, firewall, DNS reboot guard, etc.)
       - update-notifier-common
       - unattended-upgrades
+    policy_rc_d: 101
     cache_valid_time: 3600
     lock_timeout: 300
   become: true
@@ -30,8 +31,9 @@
     - unattended_upgrades
 
 # The qemu test image masks the apt-daily pair during converge. This role owns
-# both the package-list download and unattended-upgrade halves of the pipeline.
-- name: Ensure unattended-upgrades timers are active
+# the shutdown guard plus both the package-list download and unattended-upgrade
+# halves of the pipeline, so activate them only after the managed config lands.
+- name: Ensure unattended-upgrades units are active
   when: not (ansible_check_mode and unattended_upgrades_apt.changed)
   systemd:
     name: "{{ item }}"
@@ -40,6 +42,7 @@
     enabled: true
   become: true
   loop:
+    - unattended-upgrades.service
     - apt-daily.timer
     - apt-daily-upgrade.timer
   tags:
