@@ -85,12 +85,8 @@
   tags:
     - nut_monitor
 
-# nut_notify's wake_peers arm broadcasts on the primary subnet; a degraded
-# default_ipv4 fact (wg/podman/bridge default route) would render a
-# syntactically valid but unwakeable destination that only surfaces
-# mid-outage-recovery. Same guards and derivation as roles/wolweb -- computed
-# from address+netmask because the fact's own `broadcast` key is empty on
-# some NICs (the qemu SLIRP fixture among them).
+# Reject bridge and tunnel routes before deriving the primary LAN broadcast;
+# the fact's own broadcast key is empty on some NICs, including the QEMU fixture.
 - name: Assert default interface is a plausible LAN NIC
   when: nut_monitor_wake_peers | length > 0
   assert:
@@ -139,9 +135,7 @@
   tags:
     - nut_monitor
 
-# The wake leg exists only on hosts late enough in the shutdown ladder to
-# have peers to revive (nut_monitor_wake_peers, host_vars/pug.yml + lab.yml).
-# wakeonlan is the packaged sender nut_notify's wake_peers arm shells out to.
+# Only hosts with peers to revive need the packaged wakeonlan sender.
 - name: Install wakeonlan
   when: nut_monitor_wake_peers | length > 0
   apt:
@@ -164,9 +158,7 @@
   tags:
     - nut_monitor
 
-# Emptying the list must retire the unit too: it fires nut_notify wake_peers
-# on every boot all by itself -- no upssched involved -- so an orphan would
-# keep waking the stale MAC list forever.
+# Emptying the list must remove the boot unit so it cannot wake stale peers.
 - name: Remove the boot-time peer wake unit
   when: nut_monitor_wake_peers | length == 0
   import_role:

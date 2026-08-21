@@ -144,12 +144,7 @@ AT CAL * EXECUTE cal
 AT OFF * EXECUTE off
 AT NOTOFF * EXECUTE notoff
 {% if nut_monitor_wake_peers %}
-{# Wake WoL peers once mains power has been back for 60s -- long enough for
-   switches between this host and the peers to finish booting if they lost
-   power too. ONBATT cancels the timer so a flapping supply never fires a
-   wake mid-outage. Firing when the peers never went down is harmless: a
-   magic packet to a running host is a no-op. nut_notify's wake_peers arm
-   sends the packets via wakeonlan. #}
+{# Delay for network recovery and cancel if mains fails again. #}
 AT ONLINE * START-TIMER wake_peers 60
 AT ONBATT * CANCEL-TIMER wake_peers
 {% endif %}

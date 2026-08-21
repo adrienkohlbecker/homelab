@@ -245,10 +245,7 @@
   become: true
 
 # ---- Wake leg -------------------------------------------------------------
-# host_vars/box.yml wires one MAC so the wake machinery renders in the
-# fixture. converge leaves the unit enabled but unstarted under qemu; start
-# it here: the oneshot runs the same nut_notify wake_peers arm the upssched
-# timer uses (three wakeonlan rounds, ~60s), egressing on the SLIRP NIC.
+# Exercise the boot leg and its real three-round wakeonlan dispatch.
 - name: _verify | Run the boot-time peer wake unit
   systemd:
     name: nut_wake_peers.service

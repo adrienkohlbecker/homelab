@@ -1,10 +1,4 @@
-# Boot-time leg of the peer wake (the upssched ONLINE timer is the other):
-# a host that reboots because the card cut and restored its outlet group
-# wakes peers whose own group was never cut -- e.g. pug halted with power
-# still present after an outage that died between its 5% FSD trigger and
-# Group 2's 2% shed, where BIOS restore-on-AC has nothing to react to and
-# no other machine is left up to send WoL. Firing on every boot is safe: a
-# magic packet to a running host is a no-op.
+# Boot-time recovery leg for outages where no surviving host could send WoL.
 [Unit]
 Description=Wake NUT shutdown-ladder peers after boot
 Wants=network-online.target

@@ -39,13 +39,8 @@ noparent)
   MSG="upsmon parent process died - shutdown impossible"
   ;;
 {% if nut_monitor_wake_peers %}
-# Not a mail event: wake_peers revives WoL peers after mains power returned.
-# Both legs land here -- upssched's timer (60s after ONLINE) and the boot-time
-# nut_wake_peers.service oneshot. Waking a running host is a no-op; three
-# rounds cover switches between this host and the peers that are still
-# booting after an outage, and a failed send (no route yet) must not abort
-# the later rounds. Direct-L2 broadcast for management-VLAN peers, guarded at
-# converge like roles/wolweb; cross-VLAN manual wakes use the UDM UDP/9 relay.
+# Both recovery legs wake peers three times; a failed round must not prevent
+# later packets from landing after the network recovers.
 wake_peers)
   for round in 1 2 3; do
     if [ "$round" -gt 1 ]; then sleep 30; fi

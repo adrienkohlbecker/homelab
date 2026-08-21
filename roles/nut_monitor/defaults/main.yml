@@ -1,6 +1,3 @@
-# MAC addresses to wake via this host's primary-subnet broadcast once mains
-# power has been back for 60s. This is intentionally a direct-L2 recovery leg
-# for management-VLAN peers; cross-VLAN manual wakes go through the UDM UDP/9
-# relay. Empty list disables the upssched timer, drops nut_notify's
-# wake_peers arm and retires the boot-time wake unit.
+# MAC addresses to wake on the primary LAN after mains recovery. Empty disables
+# both the upssched and boot-time recovery legs.
 nut_monitor_wake_peers: []
