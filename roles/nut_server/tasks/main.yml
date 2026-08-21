@@ -46,7 +46,8 @@
   tags:
     - nut_server
 
-- name: Configure nut ups.conf
+# upsdrvctl cannot validate an arbitrary render path; _verify starts the driver.
+- name: Configure nut ups.conf  # noqa: require-validate
   when: not (ansible_check_mode and nut_server_apt.changed)
   template:
     src: ups.conf.j2
@@ -55,9 +56,6 @@
     group: nut
     mode: "0640"
     backup: true
-    # Prepend a dummy section so Python 3.12 accepts the global `maxretry`
-    # directive that precedes the first named UPS section.
-    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(allow_no_value=True).read_string("[__global__]\n" + open(sys.argv[1]).read())' "%s"
   register: nut_server_ups_conf
   become: true
   tags:
@@ -97,7 +95,8 @@
   tags:
     - nut_server
 
-- name: Configure nut upsd.users
+# upsd has no offline checker; _verify starts the server with this file.
+- name: Configure nut upsd.users  # noqa: require-validate
   when: not (ansible_check_mode and nut_server_apt.changed)
   template:
     src: upsd.users.j2
@@ -106,7 +105,6 @@
     group: nut
     mode: "0640"
     backup: true
-    validate: python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True).read("%s")'
   become: true
   register: nut_server_upsd_users
   tags:
