@@ -319,10 +319,14 @@
     - retired_services
     - nginx
 
-- name: Remove retired nginx Diffie-Hellman parameters
+- name: Remove retired nginx files
   file:
-    path: /etc/nginx/dhparam.pem
+    path: "{{ item }}"
     state: absent
+  loop:
+    - /etc/nginx/dhparam.pem
+    - /etc/nginx/conf.d/status.conf
+  register: retired_services_nginx_file_cleanup
   become: true
   tags:
     - retired_services
@@ -354,10 +358,10 @@
   tags:
     - retired_services
 
-- name: Reload nginx after removing retired sites
+- name: Reload nginx after removing retired configuration
   when:
     - not ansible_check_mode
-    - retired_services_nginx_site_cleanup.changed
+    - retired_services_nginx_file_cleanup.changed or retired_services_nginx_site_cleanup.changed
   systemd:
     name: nginx
     state: reloaded

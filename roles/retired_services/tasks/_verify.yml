@@ -125,11 +125,14 @@
     | default('')).split(',')
   become: true
 
-- name: _verify | Retired nginx Diffie-Hellman parameters are absent
+- name: _verify | Retired nginx files are absent
   stat:
-    path: /etc/nginx/dhparam.pem
-  register: retired_services_nginx_dhparam
-  failed_when: retired_services_nginx_dhparam.stat.exists
+    path: "{{ item }}"
+  loop:
+    - /etc/nginx/dhparam.pem
+    - /etc/nginx/conf.d/status.conf
+  register: retired_services_nginx_files
+  failed_when: retired_services_nginx_files.stat.exists
   become: true
 
 - name: _verify | Retired service state is absent

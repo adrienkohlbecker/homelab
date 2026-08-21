@@ -18,17 +18,6 @@
   tags:
     - nginx
 
-# nginx.conf owns stub_status; keep the split drop path absent so it cannot
-# create a duplicate loopback server.
-- name: install | Remove standalone status config
-  file:
-    path: /etc/nginx/conf.d/status.conf
-    state: absent
-  register: nginx_status_conf_cleanup
-  become: true
-  tags:
-    - nginx
-
 # nginx.conf is a complete config, so validate the rendered temporary file
 # before replacing the active configuration.
 - name: install | Configure nginx
@@ -53,7 +42,7 @@
     state: >-
       {{ 'restarted' if nginx_apt.changed
          else 'reloaded'
-         if nginx_default_conf.changed or nginx_status_conf_cleanup.changed or nginx_conf.changed
+         if nginx_default_conf.changed or nginx_conf.changed
          else 'started' }}
   become: true
   tags:

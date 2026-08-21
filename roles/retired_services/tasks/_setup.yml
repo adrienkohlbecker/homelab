@@ -202,13 +202,16 @@
     append: true
   become: true
 
-- name: _setup | Create retired nginx Diffie-Hellman parameters fixture
+- name: _setup | Create retired nginx file fixtures
   copy:
-    content: "retired\n"
-    dest: /etc/nginx/dhparam.pem
+    content: "# retired\n"
+    dest: "{{ item }}"
     owner: root
     group: root
     mode: "0644"
+  loop:
+    - /etc/nginx/dhparam.pem
+    - /etc/nginx/conf.d/status.conf
   become: true
 
 - name: _setup | Create retired service groups
