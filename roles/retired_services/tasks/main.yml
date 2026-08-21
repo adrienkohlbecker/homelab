@@ -310,6 +310,15 @@
     - retired_services
     - nginx
 
+- name: Remove retired nginx Diffie-Hellman parameters
+  file:
+    path: /etc/nginx/dhparam.pem
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - nginx
+
 # Retired numeric identities remain reserved in legacy_service_ids so restored
 # files cannot acquire ambiguous ownership. Runtime accounts and state are gone.
 - name: Retire Speedtest service

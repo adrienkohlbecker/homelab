@@ -37,18 +37,6 @@
   tags:
     - nginx
 
-# ECDHE-only TLS profile (no DHE ciphers in nginx.conf), so nginx reads no
-# Diffie-Hellman group; keep /etc/nginx/dhparam.pem absent. Sequenced after the
-# nginx.conf render above so the ssl_dhparam reference is already gone, and
-# unreferenced by the config either way, so its removal needs no reload.
-- name: install | Remove unused Diffie-Hellman parameters
-  file:
-    path: /etc/nginx/dhparam.pem
-    state: absent
-  become: true
-  tags:
-    - nginx
-
 # Canonical proxy header set, `include`d by every vhost's `location /` (and
 # by server_conf/location_conf snippets that add their own location). A
 # snippet, not a conf.d/ drop: it is location-scope and pulled in explicitly,
