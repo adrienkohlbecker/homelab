@@ -1,7 +1,12 @@
 # The base play invokes this role unconditionally; leave networking untouched
 # on hosts without an Ansible-owned netplan configuration.
+- name: End the netplan role on hosts without managed configuration
+  when: netplan is undefined
+  meta: end_role
+  tags:
+    - netplan
+
 - name: Configure host networking via netplan
-  when: netplan is defined
   tags:
     - netplan
   block:
@@ -21,95 +26,66 @@
         cache_valid_time: 3600
       become: true
 
-    - name: Install rollback script
-      copy:
-        src: netplan_rollback.sh
-        dest: /usr/local/bin/netplan_rollback
-        owner: root
-        group: root
-        mode: "0755"
-        backup: true
-        validate: bash -n %s
+    - name: Inspect the Ansible-managed netplan origin
+      stat:
+        path: /etc/netplan/01-netcfg.yaml
+      register: netplan_managed_config
       become: true
 
-    # systemd_timer requires OnCalendar; this deadline timer is armed at runtime.
-    - name: Install netplan_rollback.service
-      import_role:
-        name: systemd_unit
-        tasks_from: install
-      vars:
-        systemd_unit_args:
-          src: netplan_rollback.service
-
-    - name: Install netplan_rollback.timer
-      import_role:
-        name: systemd_unit
-        tasks_from: install
-      vars:
-        systemd_unit_args:
-          src: netplan_rollback.timer
-
-    # Snapshot before rendering: `netplan apply --state` needs the old config
-    # to remove retired virtual devices, and the timer restores the same copy
-    # if SSH does not reconnect. Keep it unconditional so apply.yml always has
-    # a valid rollback source.
-    - name: Wipe any stale /run/netplan_prev
-      file:
-        path: /run/netplan_prev
-        state: absent
+    - name: Read the Ansible-managed netplan origin
+      when: netplan_managed_config.stat.exists
+      slurp:
+        src: /etc/netplan/01-netcfg.yaml
+      register: netplan_managed_config_content
       become: true
-      changed_when: false
 
-    - name: Snapshot current /etc/netplan to /run/netplan_prev  # noqa: require-backup
-      copy:
-        src: /etc/netplan/
-        dest: /run/netplan_prev/
-        remote_src: true
-        mode: preserve
-        # The snapshot may contain Wi-Fi secrets; do not inherit a lax dir mode.
-        directory_mode: "0700"
-      become: true
-      changed_when: false
-
-    - name: Configure netplan
-      template:
-        src: config.yaml.j2
-        dest: /etc/netplan/01-netcfg.yaml
-        owner: root
-        group: root
-        mode: "0600"
-        backup: true
-        validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-      become: true
-      register: netplan_cfg
-
-    - name: Cleanup config added by installer
-      file:
+    - name: Inspect the installer netplan origin
+      stat:
         path: /etc/netplan/00-installer-config.yaml
-        state: absent
+      register: netplan_installer_config
       become: true
-      register: netplan_cleanup_installer
 
     # Hosts where cloud-init owns networking keep its rendered configuration;
     # their Ansible netplan stanza only layers local overrides on top.
-    - name: Cleanup config added by cloud-init
+    - name: Inspect the cloud-init netplan origin
       when: not cloud_init_managed
-      file:
+      stat:
         path: /etc/netplan/50-cloud-init.yaml
-        state: absent
+      register: netplan_cloud_init_config
       become: true
-      register: netplan_cleanup_cloudinit
 
-    - name: Validate and apply changed netplan configuration
-      when: (netplan_cfg.changed or netplan_cleanup_installer.changed or netplan_cleanup_cloudinit.changed) and not ansible_check_mode
+    - name: Resolve desired and current netplan documents
+      set_fact:
+        netplan_desired_document: >-
+          {{ {'network': {'version': 2} | combine(netplan)} }}
+        netplan_current_document: >-
+          {{ (netplan_managed_config_content.content | b64decode | from_yaml)
+             if netplan_managed_config.stat.exists else {} }}
+      changed_when: false
+
+    - name: Detect changed netplan configuration
+      set_fact:
+        netplan_config_changed: >-
+          {{ netplan_current_document != netplan_desired_document
+             or netplan_installer_config.stat.exists
+             or (not cloud_init_managed
+                 and (netplan_cloud_init_config.stat.exists | default(false))) }}
+      changed_when: netplan_config_changed
+
+    # A conditional import leaks its condition onto reset_connection, which
+    # cannot evaluate task conditions. End the role before the static import.
+    - name: End the netplan role when no transaction should run
+      when: not netplan_config_changed or ansible_check_mode
+      meta: end_role
+
+    # Kept separate so _verify can exercise the automatic rejection path.
+    - name: Apply changed netplan configuration transactionally
+      import_tasks: apply.yml
       become: true
-      block:
-        - name: Validate the netplan schema before applying
-          # The template's `validate:` only checks YAML syntax. `netplan
-          # generate` validates the merged schema without touching a live link.
-          command: netplan generate
-          changed_when: false
-
-        # Kept separate so _verify can exercise the rollback path directly.
-        - name: Apply netplan safely
-          import_tasks: apply.yml
+      vars:
+        netplan_apply_config: "{{ netplan }}"
+        netplan_replace_managed_config: "{{ netplan_managed_config.stat.exists }}"
+        netplan_remove_installer_config: "{{ netplan_installer_config.stat.exists }}"
+        netplan_remove_cloud_init_config: >-
+          {{ not cloud_init_managed
+             and (netplan_cloud_init_config.stat.exists | default(false)) }}

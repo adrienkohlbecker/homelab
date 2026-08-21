@@ -389,6 +389,37 @@
   tags:
     - retired_services
 
+- name: Retire Netplan rollback service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: netplan_rollback.service
+  tags:
+    - retired_services
+    - netplan
+
+- name: Retire Netplan rollback timer
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: netplan_rollback.timer
+  tags:
+    - retired_services
+    - netplan
+
+- name: Remove retired Netplan rollback helper
+  file:
+    path: /usr/local/bin/netplan_rollback
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - netplan
+
 - name: Retire Dovecot service
   import_role:
     name: systemd_unit

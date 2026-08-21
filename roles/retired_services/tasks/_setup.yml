@@ -1,4 +1,31 @@
 ---
+- name: _setup | Install retired Netplan rollback fixtures
+  copy:
+    dest: "{{ item.path }}"
+    content: "{{ item.content }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - path: /etc/systemd/system/netplan_rollback.service
+      mode: "0644"
+      content: |
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/local/bin/netplan_rollback
+    - path: /etc/systemd/system/netplan_rollback.timer
+      mode: "0644"
+      content: |
+        [Timer]
+        OnActiveSec=90
+    - path: /usr/local/bin/netplan_rollback
+      mode: "0755"
+      content: |
+        #!/bin/bash
+        set -euo pipefail
+        exit 0
+  become: true
+
 - name: _setup | Create retired podman socket group
   group:
     name: podman-socket

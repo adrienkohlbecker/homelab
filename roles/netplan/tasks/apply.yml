@@ -1,32 +1,143 @@
-# Shared by the converge and the destructive rollback test. A 90s timer
-# restores /run/netplan_prev unless the SSH canary creates /run/netplan_keep.
+# Shared by converge and the destructive rejection test. Netplan owns the
+# candidate snapshot and restores it unless the transaction is confirmed.
 
-- name: Verify the pre-template snapshot exists before arming rollback
-  # A start-at-task resume or reboot may skip or erase the snapshot; never arm
-  # a rollback without a restore source.
-  stat:
-    path: /run/netplan_prev
-  register: netplan_prev_snapshot
-  failed_when: not (netplan_prev_snapshot.stat.exists and netplan_prev_snapshot.stat.isdir)
+- name: Create a netplan D-Bus configuration transaction
+  command:
+    argv:
+      - busctl
+      - call
+      - io.netplan.Netplan
+      - /io/netplan/Netplan
+      - io.netplan.Netplan
+      - Config
+  register: netplan_dbus_config
+  changed_when: false
 
-- name: Clear stale cancel-marker before arming
-  file:
-    path: /run/netplan_keep
-    state: absent
+- name: Resolve the netplan D-Bus transaction path
+  set_fact:
+    netplan_dbus_path: >-
+      {{ netplan_dbus_config.stdout
+         | regex_search('/io/netplan/Netplan/config/[A-Za-z0-9]+') }}
+  changed_when: false
 
-- name: Arm 90s auto-rollback (timer counts 90s from this restart)
-  # Restarting resets OnActiveSec even if a previous apply armed the timer.
-  systemd:
-    name: netplan_rollback.timer
-    state: restarted
+- name: Assert the netplan D-Bus transaction was created
+  assert:
+    that:
+      - netplan_dbus_path is string
+      - netplan_dbus_path | length > 0
+    fail_msg: "Netplan did not return a D-Bus configuration object"
 
-- name: Apply netplan with --state pointing at the snapshot
+- name: Stage the complete netplan transaction
+  block:
+    - name: Clear the Ansible-managed origin in the netplan transaction
+      when: netplan_replace_managed_config
+      command:
+        argv:
+          - busctl
+          - call
+          - io.netplan.Netplan
+          - "{{ netplan_dbus_path }}"
+          - io.netplan.Netplan.Config
+          - Set
+          - ss
+          - network=null
+          - 01-netcfg
+      register: netplan_clear_managed_result
+      changed_when: true
+      failed_when: >-
+        netplan_clear_managed_result.rc != 0
+        or netplan_clear_managed_result.stdout | trim != 'b true'
+
+    - name: Remove the installer origin from the netplan transaction
+      when: netplan_remove_installer_config
+      command:
+        argv:
+          - busctl
+          - call
+          - io.netplan.Netplan
+          - "{{ netplan_dbus_path }}"
+          - io.netplan.Netplan.Config
+          - Set
+          - ss
+          - network=null
+          - 00-installer-config
+      register: netplan_remove_installer_result
+      changed_when: true
+      failed_when: >-
+        netplan_remove_installer_result.rc != 0
+        or netplan_remove_installer_result.stdout | trim != 'b true'
+
+    - name: Remove the cloud-init origin from the netplan transaction
+      when: netplan_remove_cloud_init_config
+      command:
+        argv:
+          - busctl
+          - call
+          - io.netplan.Netplan
+          - "{{ netplan_dbus_path }}"
+          - io.netplan.Netplan.Config
+          - Set
+          - ss
+          - network=null
+          - 50-cloud-init
+      register: netplan_remove_cloud_init_result
+      changed_when: true
+      failed_when: >-
+        netplan_remove_cloud_init_result.rc != 0
+        or netplan_remove_cloud_init_result.stdout | trim != 'b true'
+
+    - name: Stage the Ansible-managed netplan origin
+      command:
+        argv:
+          - busctl
+          - call
+          - io.netplan.Netplan
+          - "{{ netplan_dbus_path }}"
+          - io.netplan.Netplan.Config
+          - Set
+          - ss
+          - >-
+            network={{ {'version': 2} | combine(netplan_apply_config) | to_json }}
+          - 01-netcfg
+      register: netplan_stage_config_result
+      changed_when: true
+      failed_when: >-
+        netplan_stage_config_result.rc != 0
+        or netplan_stage_config_result.stdout | trim != 'b true'
+
+  rescue:
+    - name: Cancel the incomplete netplan transaction
+      command:
+        argv:
+          - busctl
+          - call
+          - io.netplan.Netplan
+          - "{{ netplan_dbus_path }}"
+          - io.netplan.Netplan.Config
+          - Cancel
+      changed_when: false
+      failed_when: false
+
+    - name: Report the netplan staging failure
+      fail:
+        msg: "Failed to stage the netplan D-Bus transaction"
+
+- name: Start the 90-second netplan trial
   # Detach so a severed SSH connection cannot strand the controller inside
-  # the apply command; the connection canary takes over below.
-  command: netplan apply --state /run/netplan_prev
+  # the D-Bus call; Netplan automatically rejects an unconfirmed trial.
+  command:
+    argv:
+      - busctl
+      - call
+      - io.netplan.Netplan
+      - "{{ netplan_dbus_path }}"
+      - io.netplan.Netplan.Config
+      - Try
+      - u
+      - "90"
   async: 30
   poll: 0
-  register: netplan_apply_async
+  register: netplan_try_async
   changed_when: true
 
 - name: Drop the multiplexed SSH master so the canary forces a fresh handshake
@@ -34,33 +145,40 @@
   # fresh TCP/SSH handshake still fails.
   meta: reset_connection
 
-- name: Wait for SSH to re-establish (canary for the rollback timer)
-  # Fail before the 90s rollback deadline so ansible cannot mistake a restored
-  # connection for successful application of the requested configuration.
+- name: Wait for SSH to re-establish during the netplan trial
+  # Fail before the trial deadline so Ansible cannot mistake an automatically
+  # restored connection for successful application of the candidate.
   wait_for_connection:
     delay: 5
     timeout: 60
 
-- name: Confirm the async netplan apply actually exited 0
-  # SSH may survive a failed netplan command; reap it before cancelling the
-  # rollback so command failure still restores the prior config.
+- name: Confirm the netplan trial started successfully
+  # SSH may survive a rejected candidate, so reap the detached call before
+  # confirming the transaction.
   async_status:
-    jid: "{{ netplan_apply_async.ansible_job_id }}"
-  register: netplan_apply_result
-  until: netplan_apply_result.finished
+    jid: "{{ netplan_try_async.ansible_job_id }}"
+  register: netplan_try_result
+  until: netplan_try_result.finished
   retries: 5
   delay: 3
 
-- name: Touch cancel-marker so the timer no-ops when it fires
-  # This closes the race between a successful canary and stopping the timer.
-  file:
-    path: /run/netplan_keep
-    state: touch
-    mode: "0600"
+- name: Assert the netplan trial is awaiting confirmation
+  assert:
+    that:
+      - netplan_try_result.stdout | trim == 'b true'
+    fail_msg: "Netplan did not enter the trial state"
 
-- name: Stop the rollback timer
-  # Leave /run/netplan_prev for any outstanding --state reader; the next
-  # converge rotates it. A stop error means the timer is wedged and must surface.
-  systemd:
-    name: netplan_rollback.timer
-    state: stopped
+- name: Confirm the netplan transaction
+  command:
+    argv:
+      - busctl
+      - call
+      - io.netplan.Netplan
+      - "{{ netplan_dbus_path }}"
+      - io.netplan.Netplan.Config
+      - Apply
+  register: netplan_apply_result
+  changed_when: true
+  failed_when: >-
+    netplan_apply_result.rc != 0
+    or netplan_apply_result.stdout | trim != 'b true'

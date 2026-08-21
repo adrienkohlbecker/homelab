@@ -1,122 +1,58 @@
-# Exercise the rollback and cancel paths.
-
-- name: _verify | Rollback timer and service not currently running
-  # A successful converge must not leave a pending rollback.
-  systemd:
-    name: "{{ item }}"
-  register: netplan_verify_unit
-  changed_when: false
-  failed_when: netplan_verify_unit.status.ActiveState != "inactive"
-  loop:
-    - netplan_rollback.timer
-    - netplan_rollback.service
-
-# Write the broken config directly because the harness's extra-vars outrank an
-# include_role override. The shared apply path must lose SSH, restore the
-# snapshot at +90s, and recover DHCP.
-- name: _verify rollback | Write a known-broken /etc/netplan directly
-  # A TEST-NET-1 static address replaces the live DHCP lease; merely disabling
-  # DHCP does not make networkd release the existing lease.
-  copy:
-    dest: /etc/netplan/01-netcfg.yaml
-    content: |
-      # _verify-rollback-broken
-      network:
-        version: 2
-        ethernets:
-          en:
-            match:
-              name: "en*"
-            dhcp4: false
-            dhcp6: false
-            addresses: ["192.0.2.99/24"]
-    owner: root
-    group: root
-    mode: "0600"
-    backup: true
-  become: true
-
-- name: _verify rollback | Run the role's apply path against the broken config
+# Exercise Netplan's automatic rejection with a candidate that removes DHCP.
+- name: _verify rejection | Run the apply path against a known-broken config
   become: true
   block:
-    - name: _verify rollback | Apply the broken netplan config (expect SSH loss)
+    - name: _verify rejection | Try the broken netplan config (expect SSH loss)
       import_tasks: apply.yml
+      vars:
+        netplan_apply_config:
+          ethernets:
+            en:
+              match:
+                name: "en*"
+              dhcp4: false
+              dhcp6: false
+              addresses:
+                - 192.0.2.99/24
+        netplan_remove_installer_config: false
+        netplan_remove_cloud_init_config: false
+        netplan_replace_managed_config: true
 
-    - name: _verify rollback | Apply path completed cleanly — rollback was not exercised
-      # Reaching this means the fixture did not exercise rollback.
+    - name: _verify rejection | Trial completed cleanly — rejection was not exercised
       fail:
-        msg: "Expected the apply path's wait_for_connection canary to time out, but it succeeded"
+        msg: "Expected the trial SSH canary to time out, but it succeeded"
 
   rescue:
-    - name: _verify rollback | Wait for SSH to recover after the rollback timer fires
-      # By the time we land here, ~65s of apply.yml's wait_for_connection
-      # has already elapsed. The rollback timer fires at +90s relative to
-      # the apply, so we start probing in ~25s.
+    - name: _verify rejection | Confirm only the SSH canary failed
+      assert:
+        that:
+          - ansible_failed_task.name == 'Wait for SSH to re-establish during the netplan trial'
+        fail_msg: >-
+          The transaction failed before exercising Netplan's automatic rejection
+
+    - name: _verify rejection | Wait for SSH after Netplan restores the config
+      # The canary consumes about 65 seconds of the 90-second trial, so delay
+      # before probing to avoid observing the candidate state in transition.
       wait_for_connection:
         delay: 20
         timeout: 120
 
-- name: _verify rollback | Read /etc/netplan/01-netcfg.yaml
+- name: _verify rejection | Read the restored Ansible-managed origin
   slurp:
     src: /etc/netplan/01-netcfg.yaml
-  register: netplan_verify_rollback_etcfile
+  register: netplan_verify_restored_config
   become: true
 
-- name: _verify rollback | Confirm broken marker is gone from /etc/netplan
+- name: _verify rejection | Confirm Netplan restored the original document
   assert:
     that:
-      - "'_verify-rollback-broken' not in (netplan_verify_rollback_etcfile.content | b64decode)"
+      - >-
+        (netplan_verify_restored_config.content | b64decode | from_yaml)
+        == {'network': {'version': 2} | combine(netplan)}
 
-- name: _verify rollback | Confirm the broken static IP is gone from the live interfaces
-  # The journal logs before apply, so require the live TEST-NET-1 address to
-  # disappear as proof that networkd restored DHCP.
+- name: _verify rejection | Confirm the candidate IP is gone from live interfaces
   command: ip -4 -oneline address show
-  register: netplan_verify_rollback_addrs
+  register: netplan_verify_restored_addrs
   changed_when: false
-  failed_when: "'192.0.2.99' in netplan_verify_rollback_addrs.stdout"
+  failed_when: "'192.0.2.99' in netplan_verify_restored_addrs.stdout"
   become: true
-
-- name: _verify rollback | Confirm the rollback units settled cleanly after firing
-  # A fired timer remains active (elapsed); its oneshot returns to inactive.
-  systemd:
-    name: "{{ item }}"
-  register: netplan_verify_postroll
-  changed_when: false
-  failed_when: >-
-    (item == 'netplan_rollback.timer' and netplan_verify_postroll.status.ActiveState != 'active')
-    or (item == 'netplan_rollback.service' and netplan_verify_postroll.status.ActiveState != 'inactive')
-  loop:
-    - netplan_rollback.timer
-    - netplan_rollback.service
-
-# With the keep marker present, the systemd condition must skip the rollback.
-- name: _verify cancel | Place the cancel-marker
-  file:
-    path: /run/netplan_keep
-    state: touch
-    mode: "0600"
-  become: true
-
-- name: _verify cancel | Start the rollback unit with the cancel-marker present
-  systemd:
-    name: netplan_rollback.service
-    state: started
-  changed_when: false
-  become: true
-
-- name: _verify cancel | Confirm the unit was condition-skipped, not run
-  systemd:
-    name: netplan_rollback.service
-  register: netplan_verify_cancel
-  changed_when: false
-  failed_when: >-
-    netplan_verify_cancel.status.ConditionResult != "no"
-    or netplan_verify_cancel.status.ActiveState != "inactive"
-  become: true
-
-- name: _verify cancel | Clear the cancel-marker
-  file:
-    path: /run/netplan_keep
-    state: absent
-  become: true
-  changed_when: false

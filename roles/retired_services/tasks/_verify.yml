@@ -204,6 +204,17 @@
   failed_when: retired_services_root_ssh_config.stat.exists
   become: true
 
+- name: _verify | Retired Netplan rollback files are absent
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/systemd/system/netplan_rollback.service
+    - /etc/systemd/system/netplan_rollback.timer
+    - /usr/local/bin/netplan_rollback
+  register: retired_services_netplan_rollback_files
+  failed_when: retired_services_netplan_rollback_files.stat.exists
+  become: true
+
 - name: _verify | Retired root backup identity is absent
   stat:
     path: /mnt/services/ssh_root
