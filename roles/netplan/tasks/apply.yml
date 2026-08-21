@@ -114,7 +114,7 @@
     delay: 5
     timeout: 60
 
-- name: Confirm the netplan trial started successfully
+- name: Wait for the netplan trial to enter confirmation state
   # SSH may survive a rejected candidate, so reap the detached call before
   # confirming the transaction.
   async_status:
@@ -123,12 +123,10 @@
   until: netplan_try_result.finished
   retries: 5
   delay: 3
-
-- name: Assert the netplan trial is awaiting confirmation
-  assert:
-    that:
-      - netplan_try_result.stdout | trim == 'b true'
-    fail_msg: "Netplan did not enter the trial state"
+  failed_when: >-
+    netplan_try_result.finished
+    and (netplan_try_result.rc | default(1) != 0
+         or netplan_try_result.stdout | default('') | trim != 'b true')
 
 - name: Confirm the netplan transaction
   command:
