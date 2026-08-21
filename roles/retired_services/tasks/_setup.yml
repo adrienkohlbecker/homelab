@@ -52,6 +52,15 @@
     mode: "0644"
   become: true
 
+- name: _setup | Create retired Mailutils sender-domain fixture
+  copy:
+    content: "address { email-domain example.invalid; };\n"
+    dest: /etc/mailutils.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: _setup | Create retired Speedtest account
   import_role:
     name: service_user

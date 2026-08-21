@@ -1,5 +1,5 @@
-# Rewrite normalized system senders and mailutils senders to an attributable
-# per-host identity at the Mailgun-authorized domain. External recipients never
-# match these lowest-precedence domain rules.
+# Rewrite system and mailutils senders to an attributable per-host identity at
+# the Mailgun-authorized domain. External recipients never match these
+# lowest-precedence domain rules.
 @{{ domain }}          {{ inventory_hostname }}@{{ email_domain }}
-@{{ email_domain }}    {{ inventory_hostname }}@{{ email_domain }}
+@{{ inventory_hostname }}    {{ inventory_hostname }}@{{ email_domain }}

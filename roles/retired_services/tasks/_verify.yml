@@ -27,6 +27,13 @@
   failed_when: retired_services_smartmontools_diversion.stdout | trim | length > 0
   become: true
 
+- name: _verify | Retired Mailutils sender-domain config is absent
+  stat:
+    path: /etc/mailutils.conf
+  register: retired_services_mailutils
+  failed_when: retired_services_mailutils.stat.exists
+  become: true
+
 - name: _verify | Retained Plex and Tautulli data markers remain
   stat:
     path: "{{ item }}/.retired_services_keep"

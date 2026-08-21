@@ -40,8 +40,8 @@
   changed_when: false
   become: true
 
-- name: _verify | Query the sender-rewrite map for the local domain
-  command: postmap -q @{{ domain }} texthash:/etc/postfix/generic
+- name: _verify | Query the sender-rewrite map for the local hostname
+  command: postmap -q @{{ inventory_hostname }} texthash:/etc/postfix/generic
   register: _postfix_generic
   changed_when: false
   become: true
@@ -68,7 +68,7 @@
     fail_msg: >-
       texthash lookup drifted: the SASL map must resolve the relayhost key to
       {{ postfix_smtp_user }}:<password>, and the generic map must rewrite
-      @{{ domain }} to {{ inventory_hostname }}@{{ email_domain }}.
+      @{{ inventory_hostname }} to {{ inventory_hostname }}@{{ email_domain }}.
 
 - name: _verify | Resolve the root and operator aliases
   command: postmap -q {{ item }} hash:/etc/aliases
@@ -79,22 +79,14 @@
   changed_when: false
   become: true
 
-- name: _verify | Read back the mailutils sender domain
-  slurp:
-    src: /etc/mailutils.conf
-  register: _postfix_mailutils
-  become: true
-
-- name: _verify | Aliases resolve to root_email and mailutils sends from email_domain
+- name: _verify | Aliases resolve to root_email
   assert:
     that:
       - _postfix_alias.results[0].stdout == root_email
       - _postfix_alias.results[1].stdout == root_email
-      - ('email-domain ' ~ email_domain) in (_postfix_mailutils.content | b64decode)
     fail_msg: >-
-      alias/mailutils wiring drifted: root and {{ operator_user }} must alias to
-      root_email ({{ root_email }}), and /etc/mailutils.conf must set
-      email-domain {{ email_domain }}. alias lookups:
+      alias wiring drifted: root and {{ operator_user }} must alias to
+      root_email ({{ root_email }}). alias lookups:
       {{ _postfix_alias.results | map(attribute='stdout') | list }}.
 
 # qmgr logs the qualified sender when the message enters the active queue, so
