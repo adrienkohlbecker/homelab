@@ -143,15 +143,3 @@
   register: _mutt_cur
   failed_when: _mutt_cur.matched > 0
   become: true
-
-# The teardown removed the former webmail state directories (stood up in
-# _setup to mimic a converged host).
-- name: _verify | Former webmail state directories are gone
-  stat:
-    path: "{{ item }}"
-  register: _mutt_webmail_state
-  failed_when: _mutt_webmail_state.stat.exists
-  loop:
-    - /mnt/services/webmail
-    - /mnt/services/sqlite/roundcube
-  become: true

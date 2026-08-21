@@ -131,16 +131,22 @@
   failed_when: retired_services_postfix_aliases.stat.exists
   become: true
 
-- name: _verify | Retained Plex and Tautulli data markers remain
+- name: _verify | Retired service state is absent
   stat:
-    path: "{{ item }}/.retired_services_keep"
+    path: "{{ item }}"
   loop:
+    - /mnt/services/healthchecks
+    - /mnt/services/sqlite/healthchecks
+    - /mnt/services/openobserve
+    - /mnt/services/sqlite/openobserve
     - /mnt/services/plex
     - /mnt/services/sqlite/plex
     - /mnt/services/tautulli
     - /mnt/services/sqlite/tautulli
-  register: retired_services_data_markers
-  failed_when: not retired_services_data_markers.stat.exists
+    - /mnt/services/webmail
+    - /mnt/services/sqlite/roundcube
+  register: retired_services_state
+  failed_when: retired_services_state.stat.exists
   become: true
 
 - name: _verify | Gather service facts
@@ -153,7 +159,10 @@
       - item not in ansible_facts.services
     fail_msg: "{{ item }} remains known to systemd"
   loop:
+    - dovecot.service
+    - healthchecks.service
     - plex.service
+    - roundcube.service
     - speedtest.service
     - tautulli.service
     - sabnzbd_ini_sort.path
@@ -240,16 +249,32 @@
   failed_when: retired_services_speedtest_network.rc != 1
   become: true
 
-- name: _verify | Retired Speedtest account and group are absent
+- name: _verify | Retired webmail Podman network is absent
+  command:
+    argv:
+      - podman
+      - network
+      - exists
+      - webmail
+  register: retired_services_webmail_network
+  changed_when: false
+  failed_when: retired_services_webmail_network.rc != 1
+  become: true
+
+- name: _verify | Retired service accounts and groups are absent
   command:
     argv:
       - getent
-      - "{{ item }}"
-      - speedtest
+      - "{{ item.database }}"
+      - "{{ item.name }}"
   loop:
-    - passwd
-    - group
-  register: retired_services_speedtest_identity
+    - { name: plex, database: passwd }
+    - { name: plex, database: group }
+    - { name: speedtest, database: passwd }
+    - { name: speedtest, database: group }
+    - { name: tautulli, database: passwd }
+    - { name: tautulli, database: group }
+  register: retired_services_identities
   changed_when: false
-  failed_when: retired_services_speedtest_identity.rc != 2
+  failed_when: retired_services_identities.rc != 2
   become: true

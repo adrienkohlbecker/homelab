@@ -319,8 +319,8 @@
     - retired_services
     - postfix
 
-# Speedtest was stateless, so retirement removes its account along with every
-# runnable artifact. Its numeric identity remains reserved in legacy_service_ids.
+# Retired numeric identities remain reserved in legacy_service_ids so restored
+# files cannot acquire ambiguous ownership. Runtime accounts and state are gone.
 - name: Retire Speedtest service
   import_role:
     name: systemd_unit
@@ -341,10 +341,36 @@
   tags:
     - retired_services
 
-# Plex and Tautulli are retired, but their state stays intact for possible
-# inspection or recovery. Their locked users/groups and legacy ID reservations
-# keep the retained files' ownership meaningful; only runnable artifacts and
-# disposable Fluent Bit cursors/container images are removed here.
+- name: Retire Healthchecks service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: healthchecks.service
+  tags:
+    - retired_services
+
+- name: Retire Roundcube service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: roundcube.service
+  tags:
+    - retired_services
+
+- name: Retire Dovecot service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: dovecot.service
+  tags:
+    - retired_services
+
 - name: Retire Plex service
   import_role:
     name: systemd_unit
@@ -503,6 +529,26 @@
   tags:
     - retired_services
 
+- name: Retire Healthchecks nginx site
+  import_role:
+    name: nginx
+    tasks_from: site_remove
+  vars:
+    nginx_site_remove_args:
+      subdomain: healthchecks
+  tags:
+    - retired_services
+
+- name: Retire Roundcube nginx site
+  import_role:
+    name: nginx
+    tasks_from: site_remove
+  vars:
+    nginx_site_remove_args:
+      subdomain: roundcube
+  tags:
+    - retired_services
+
 - name: Remove retired service Fluent Bit extensions
   import_role:
     name: fluentbit
@@ -580,6 +626,15 @@
   tags:
     - retired_services
 
+- name: Remove retired webmail Podman network
+  when: retired_services_podman.stat.exists
+  containers.podman.podman_network:
+    name: webmail
+    state: absent
+  become: true
+  tags:
+    - retired_services
+
 - name: Remove retired service container images
   when: retired_services_podman.stat.exists
   containers.podman.podman_image:
@@ -593,19 +648,46 @@
   tags:
     - retired_services
 
-- name: Remove retired Speedtest account
-  user:
-    name: speedtest
+- name: Remove retired service state
+  file:
+    path: "{{ item }}"
     state: absent
-    force: true
+  loop:
+    - /mnt/services/healthchecks
+    - /mnt/services/sqlite/healthchecks
+    - /mnt/services/openobserve
+    - /mnt/services/sqlite/openobserve
+    - /mnt/services/plex
+    - /mnt/services/sqlite/plex
+    - /mnt/services/tautulli
+    - /mnt/services/sqlite/tautulli
+    - /mnt/services/webmail
+    - /mnt/services/sqlite/roundcube
   become: true
   tags:
     - retired_services
 
-- name: Remove retired Speedtest group
-  group:
-    name: speedtest
+- name: Remove retired service accounts
+  user:
+    name: "{{ item }}"
     state: absent
+    force: true
+  loop:
+    - plex
+    - speedtest
+    - tautulli
+  become: true
+  tags:
+    - retired_services
+
+- name: Remove retired service groups
+  group:
+    name: "{{ item }}"
+    state: absent
+  loop:
+    - plex
+    - speedtest
+    - tautulli
   become: true
   tags:
     - retired_services

@@ -216,18 +216,33 @@
     mode: "0644"
   become: true
 
-- name: _setup | Create retired Speedtest account
-  import_role:
-    name: service_user
-    tasks_from: user
-  vars:
-    static_service_ids: # noqa: var-naming[no-role-prefix]
-      speedtest: 60734
-    service_user_args:
-      name: speedtest
-      config_dir: false
+- name: _setup | Create retired service groups
+  group:
+    name: "{{ item.name }}"
+    gid: "{{ item.id }}"
+    state: present
+  loop:
+    - { name: plex, id: 60728 }
+    - { name: speedtest, id: 60734 }
+    - { name: tautulli, id: 60735 }
+  become: true
 
-- name: _setup | Create retained service and Fluent Bit fixture directories
+- name: _setup | Create retired service accounts
+  user:
+    name: "{{ item.name }}"
+    uid: "{{ item.id }}"
+    group: "{{ item.name }}"
+    home: /nonexistent
+    create_home: false
+    shell: /usr/sbin/nologin
+    state: present
+  loop:
+    - { name: plex, id: 60728 }
+    - { name: speedtest, id: 60734 }
+    - { name: tautulli, id: 60735 }
+  become: true
+
+- name: _setup | Create retired state and Fluent Bit fixture directories
   file:
     path: "{{ item }}"
     state: directory
@@ -236,11 +251,17 @@
     mode: "0755"
   loop:
     - /opt/nzbToMedia
+    - /mnt/services/healthchecks
+    - /mnt/services/sqlite/healthchecks
+    - /mnt/services/openobserve
+    - /mnt/services/sqlite/openobserve
     - /mnt/services/plex
     - /mnt/services/sabnzbd
     - /mnt/services/sqlite/plex
     - /mnt/services/tautulli
     - /mnt/services/sqlite/tautulli
+    - /mnt/services/webmail
+    - /mnt/services/sqlite/roundcube
     - /var/lib/fluent-bit
   become: true
 
@@ -257,18 +278,24 @@
     - /mnt/services/sabnzbd/autoProcessMedia.cfg.123.2026-08-21@00:00:00~
   become: true
 
-- name: _setup | Create retained Plex and Tautulli data markers
+- name: _setup | Populate retired state fixtures
   copy:
     content: retained
-    dest: "{{ item }}/.retired_services_keep"
+    dest: "{{ item }}/.retired_services_fixture"
     owner: root
     group: root
     mode: "0600"
   loop:
+    - /mnt/services/healthchecks
+    - /mnt/services/sqlite/healthchecks
+    - /mnt/services/openobserve
+    - /mnt/services/sqlite/openobserve
     - /mnt/services/plex
     - /mnt/services/sqlite/plex
     - /mnt/services/tautulli
     - /mnt/services/sqlite/tautulli
+    - /mnt/services/webmail
+    - /mnt/services/sqlite/roundcube
   become: true
 
 - name: _setup | Install disposable retired service fixture units
@@ -289,7 +316,10 @@
     group: root
     mode: "0644"
   loop:
+    - dovecot
+    - healthchecks
     - plex
+    - roundcube
     - speedtest
     - tautulli
   become: true
@@ -301,7 +331,10 @@
     enabled: true
     state: started
   loop:
+    - dovecot
+    - healthchecks
     - plex
+    - roundcube
     - speedtest
     - tautulli
   become: true
@@ -415,6 +448,13 @@
 - name: _setup | Create retired Speedtest Podman network
   containers.podman.podman_network:
     name: speedtest
+    disable_dns: false
+    state: present
+  become: true
+
+- name: _setup | Create retired webmail Podman network
+  containers.podman.podman_network:
+    name: webmail
     disable_dns: false
     state: present
   become: true
