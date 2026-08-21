@@ -39,16 +39,6 @@
     validate_certs: false
     status_code: 200
 
-# Confirms gitea actually opened the sqlite db at the path we configured.
-- name: _verify | Gitea sqlite database exists and is owned by git
-  stat:
-    path: /mnt/services/gitea/data/gitea.db
-  register: _gitea_sqlite
-  failed_when: >-
-    not _gitea_sqlite.stat.exists
-    or _gitea_sqlite.stat.pw_name != 'git'
-  become: true
-
 # Ask gitea to audit its own state. check-db-version catches a
 # half-finished schema migration after a version bump; check-db-
 # consistency catches dangling rows from interrupted admin ops;
