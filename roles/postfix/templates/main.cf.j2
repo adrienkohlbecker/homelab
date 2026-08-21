@@ -35,8 +35,8 @@ myorigin = $myhostname
 alias_maps = texthash:/etc/postfix/aliases
 alias_database =
 # Not a pure null client (which sets `mydestination =` empty): local delivery is
-# kept so system mail to root/operator resolves through the aliases map, then leaves
-# again to root_email via the relay.
+# kept so system mail to root resolves through the aliases map, then leaves again
+# to root_email via the relay.
 # See http://www.postfix.org/STANDARD_CONFIGURATION_README.html (null client).
 mydestination = $myhostname, localhost
 relayhost = [{{ smtp_host }}]:{{ smtp_port }}

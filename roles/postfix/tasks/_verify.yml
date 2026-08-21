@@ -34,10 +34,6 @@
       map: texthash:/etc/postfix/aliases
       query: root
       expected: "{{ root_email }}"
-    - label: operator alias
-      map: texthash:/etc/postfix/aliases
-      query: "{{ operator_user }}"
-      expected: "{{ root_email }}"
   loop_control:
     label: "{{ item.label }}"
   register: _postfix_map
