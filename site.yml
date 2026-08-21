@@ -25,7 +25,7 @@
     - unattended_upgrades
     - logrotate
     - journald
-    - ntp
+    - chrony
     - postfix
     # Persistent state -- the services dataset producer precedes SSH's identity
     # consumers. It invokes the ZFS helpers directly and does not depend on the

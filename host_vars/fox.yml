@@ -179,7 +179,7 @@ netdata_contexts:
   systemd_service: systemd.service.cpu.utilization
   uptime:          system.uptime
 netdata_collectors:
-  # No chrony: ntp cmdport=0 blocks go.d UDP-only collector (timex alarm covers clock-sync).
+  # No chrony collector: cmdport=0 blocks go.d UDP access (timex alarm covers clock-sync).
   - go.d:collector:docker:local
   - go.d:collector:fail2ban:fail2ban
   - go.d:collector:logind:logind

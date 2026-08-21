@@ -6,36 +6,36 @@
       - chrony
     cache_valid_time: 3600
     policy_rc_d: 101
-  register: ntp_chrony_apt
+  register: chrony_apt
   become: true
   tags:
-    - ntp
+    - chrony
 
 # Installing chrony can leave the removed timesyncd unit active because
 # policy_rc_d suppresses its postinst stop. Query and stop the loaded unit
 # directly; the systemd module cannot act after its unit file is removed.
 - name: Query systemd-timesyncd active state # noqa: command-instead-of-module -- is-active query, not a state change
   command: systemctl is-active systemd-timesyncd
-  register: ntp_timesyncd_active
+  register: chrony_timesyncd_active
   changed_when: false
   failed_when: false
   check_mode: false
   become: true
   tags:
-    - ntp
+    - chrony
 
 - name: Stop systemd-timesyncd (chrony owns the clock) # noqa: command-instead-of-module -- module fails on a removed-but-lingering unit
   command: systemctl stop systemd-timesyncd
-  when: ntp_timesyncd_active.stdout == "active"
+  when: chrony_timesyncd_active.stdout == "active"
   changed_when: true
   become: true
   tags:
-    - ntp
+    - chrony
 
 # AppArmor blocks chronyd from parsing Ansible's temporary file, so _verify
 # exercises the installed configuration through chronyc instead.
 - name: Configure chrony for NTS-only time sync  # noqa: require-validate
-  when: not (ansible_check_mode and ntp_chrony_apt.changed)
+  when: not (ansible_check_mode and chrony_apt.changed)
   copy:
     src: chrony.conf
     dest: /etc/chrony/chrony.conf
@@ -43,20 +43,20 @@
     group: root
     mode: "0644"
     backup: true
-  register: ntp_chrony_conf
+  register: chrony_conf
   become: true
   tags:
-    - ntp
+    - chrony
 
 - name: Enable and start chrony
-  when: not (ansible_check_mode and ntp_chrony_apt.changed)
+  when: not (ansible_check_mode and chrony_apt.changed)
   systemd:
     name: chrony.service
     enabled: true
     state: >-
       {{ 'restarted'
-         if ntp_chrony_conf.changed
+         if chrony_conf.changed
          else 'started' }}
   become: true
   tags:
-    - ntp
+    - chrony

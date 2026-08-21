@@ -4,28 +4,28 @@
   command: chronyc -c authdata
   changed_when: false
   become: true
-  register: ntp_verify_authdata
+  register: chrony_verify_authdata
 
 - name: _verify | At least two sources complete NTS key establishment
   assert:
     that:
-      - ntp_verify_authdata.stdout_lines | length >= 2
-      - ntp_verify_authdata.stdout_lines | select('match', '^[^,]+,(?!NTS,)') | list | length == 0
+      - chrony_verify_authdata.stdout_lines | length >= 2
+      - chrony_verify_authdata.stdout_lines | select('match', '^[^,]+,(?!NTS,)') | list | length == 0
       - >-
-        ntp_verify_authdata.stdout_lines
+        chrony_verify_authdata.stdout_lines
         | select('match', '^[^,]+,NTS,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[1-9][0-9]*,[^,]+$')
         | list
         | length >= 2
     fail_msg: >-
       chrony lacks two NTS sources with negotiated cookies (authdata rows:
-      {{ ntp_verify_authdata.stdout_lines }})
+      {{ chrony_verify_authdata.stdout_lines }})
     success_msg: >-
-      all {{ ntp_verify_authdata.stdout_lines | length }} loaded source(s) use
+      all {{ chrony_verify_authdata.stdout_lines | length }} loaded source(s) use
       NTS and at least two hold negotiated cookies
 
 - name: _verify | Timesyncd is not competing for the clock  # noqa: command-instead-of-module -- is-active query, not a state change
   command: systemctl is-active systemd-timesyncd
   changed_when: false
-  register: ntp_verify_timesyncd
-  failed_when: ntp_verify_timesyncd.stdout == "active"
+  register: chrony_verify_timesyncd
+  failed_when: chrony_verify_timesyncd.stdout == "active"
   become: true

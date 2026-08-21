@@ -208,7 +208,7 @@ netdata_contexts:
   vmstat:          mem.swapio
   zfs:             zfs.arc_size
 netdata_collectors:
-  # No chrony: ntp cmdport=0 blocks go.d UDP-only collector (timex alarm covers clock-sync).
+  # No chrony collector: cmdport=0 blocks go.d UDP access (timex alarm covers clock-sync).
   - go.d:collector:docker:local
   - go.d:collector:intelgpu:intelgpu
   - go.d:collector:logind:logind

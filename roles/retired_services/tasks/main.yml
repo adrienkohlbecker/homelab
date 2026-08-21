@@ -54,7 +54,7 @@
   become: true
   tags:
     - retired_services
-    - ntp
+    - chrony
 
 - name: Check for packaged chrony defaults saved by dpkg
   when: retired_services_chrony_diversion.stdout | length > 0
@@ -64,7 +64,7 @@
   become: true
   tags:
     - retired_services
-    - ntp
+    - chrony
 
 - name: Restore packaged chrony defaults
   when: retired_services_chrony_diversion.stdout | length > 0
@@ -84,7 +84,7 @@
   become: true
   tags:
     - retired_services
-    - ntp
+    - chrony
 
 - name: Remove retired chrony defaults diversion
   when: retired_services_chrony_diversion.stdout | length > 0
@@ -94,7 +94,7 @@
   become: true
   tags:
     - retired_services
-    - ntp
+    - chrony
 
 - name: Remove packaged chrony defaults saved by the retired diversion
   when: retired_services_chrony_diversion.stdout | length > 0
@@ -104,7 +104,7 @@
   become: true
   tags:
     - retired_services
-    - ntp
+    - chrony
 
 - name: Remove retired chrony IPv4 drop-in
   import_role:
@@ -115,7 +115,7 @@
       for: chrony.service
   tags:
     - retired_services
-    - ntp
+    - chrony
 
 - name: Restart chrony after removing retired IPv4 configuration
   when:
@@ -129,7 +129,7 @@
   become: true
   tags:
     - retired_services
-    - ntp
+    - chrony
 
 - name: Inspect the retired timesyncd mask
   stat:
@@ -139,7 +139,7 @@
   become: true
   tags:
     - retired_services
-    - ntp
+    - chrony
 
 - name: Remove the retired timesyncd mask
   when:
@@ -152,7 +152,7 @@
   become: true
   tags:
     - retired_services
-    - ntp
+    - chrony
 
 - name: Reload systemd after removing the retired timesyncd mask
   when: retired_services_timesyncd_unmasked.changed | default(false)
@@ -161,7 +161,7 @@
   become: true
   tags:
     - retired_services
-    - ntp
+    - chrony
 
 - name: Remove retired NUT driver network-ordering drop-in
   import_role:
