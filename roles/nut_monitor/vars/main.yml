@@ -5,3 +5,5 @@
 # files/hosts.conf CGI allowlist and the emailed status link both assume
 # localhost).
 nut_monitor_ups: eaton@localhost
+
+nut_monitor_broadcast: "{{ (ansible_facts.default_ipv4.address + '/' + ansible_facts.default_ipv4.netmask) | ansible.utils.ipaddr('broadcast') }}"
