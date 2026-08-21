@@ -510,13 +510,13 @@
       - _alarm.status | default('') in ["UNINITIALIZED", "CLEAR"]
       - _alarm.recipient | default('') == "sysadmin"
       - _alarm.lookup_method | default('') == "max"
-      - _alarm.lookup_after | default(0) == -300
+      - _alarm.lookup_after | default(0) == -30
       - _alarm.lookup_before | default(0) == 0
       - _alarm.lookup_dimensions | default('') == "gitlab_runner_failed_jobs_total"
       - _alarm.delay_up_duration | default(0) == 0
       - _alarm.delay_down_duration | default(0) == 0
     fail_msg: >-
-      Expected a five-minute GitLab Runner failure-rate alert for {{ item }};
+      Expected a 30-second test GitLab Runner failure-rate alert for {{ item }};
       got {{ _alarm }}
   loop:
     - runner_system_failure
@@ -535,22 +535,6 @@
     - script_failure
     - configuration_error
     - job_canceled
-
-# The production lookup above intentionally retains a failure for five minutes.
-# This fixture creates its chart during the test, so shorten only the live test
-# copy: Netdata does not evaluate a lookup until its full window has history.
-- name: _verify | Shorten GitLab Runner failure lookup for the live fixture
-  replace:
-    path: /etc/netdata/health.d/gitlab_runner.conf
-    regexp: "lookup: max -5m unaligned"
-    replace: "lookup: max -30s unaligned"
-    backup: true
-  register: _netdata_gitlab_runner_lookup_fixture
-  become: true
-
-- name: _verify | Reload shortened GitLab Runner failure lookup
-  when: _netdata_gitlab_runner_lookup_fixture.changed
-  import_tasks: reload_health.yml
 
 - name: _verify | Increment GitLab Runner failure counters
   template:

@@ -13,7 +13,7 @@ template: gitlab_runner_actionable_failure
     type: System
 component: GitLab Runner
 chart labels: failure_reason=!script_failure !configuration_error !job_canceled *
-  lookup: max -5m unaligned of gitlab_runner_failed_jobs_total
+  lookup: max -{{ '30s' if (qemu_test | default(false)) else '5m' }} unaligned of gitlab_runner_failed_jobs_total
    units: failures/s
    every: 10s
     warn: $this > 0

@@ -15,7 +15,7 @@
   import_tasks: health.yml
   vars:
     netdata_args:
-      src: gitlab_runner_alerts.conf
+      src: gitlab_runner_alerts.conf.j2
       dest: gitlab_runner.conf
   tags:
     - netdata
