@@ -17,6 +17,7 @@
       - swtpm
       - swtpm-tools
       - libhugetlbfs-bin
+    policy_rc_d: 101
     cache_valid_time: 3600
   become: true
   register: libvirt_apt
