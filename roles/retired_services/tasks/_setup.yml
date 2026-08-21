@@ -122,6 +122,14 @@
     mode: "0644"
   become: true
 
+- name: _setup | Install retired GNU Mailutils package fixture
+  apt:
+    name: mailutils
+    state: present
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
 - name: _setup | Create retired compiled Postfix aliases fixture
   copy:
     content: retired

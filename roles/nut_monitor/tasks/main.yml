@@ -18,7 +18,7 @@
   tags:
     - nut_monitor
 
-# nut_notify delivers via the bare `mail` binary (mailutils, from the postfix
+# nut_notify delivers via the bare `mail` binary (bsd-mailx, from the postfix
 # role ordered before nut in site.yml). This asserts the binary is PRESENT --
 # not that mail is deliverable: root->operator routing is owned by postfix's
 # aliases.j2 and relay health is the postfix role's concern. Catches the common
@@ -37,7 +37,7 @@
     that:
       - nut_monitor_mail_bin.rc == 0
     fail_msg: >-
-      The `mail` binary is missing. It is provided by mailutils via the
+      The `mail` binary is missing. It is provided by bsd-mailx via the
       postfix role (ordered before nut in site.yml) -- run that role on this
       host first, then re-converge nut_monitor.
   tags:

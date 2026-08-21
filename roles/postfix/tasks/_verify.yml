@@ -68,13 +68,10 @@
 
 # qmgr logs the qualified sender when the message enters the active queue, so
 # this exercise does not depend on the intentionally unavailable relay.
-- name: _verify | Inject a local root-origin probe message
-  command: /usr/sbin/sendmail -i root
+- name: _verify | Inject a local root-origin probe through BSD mailx
+  command: mail -s "postfix _verify sender-qualification probe" root
   args:
-    stdin: |
-      Subject: postfix _verify sender-qualification probe
-
-      probe
+    stdin: "probe\n"
   changed_when: false
   become: true
 

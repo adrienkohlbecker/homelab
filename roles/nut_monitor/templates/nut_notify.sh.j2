@@ -92,7 +92,7 @@ else
 fi
 DATE=$(date --iso-8601=seconds)
 
-# `mail` is provided by mailutils, installed by the postfix role (ordered
+# `mail` is provided by bsd-mailx, installed by the postfix role (ordered
 # before nut in site.yml). RUNTIME is a %s argument, not part of the format
 # string, so a stray %/\ in the value can't corrupt the body.
 printf "%s\n\nStatus Page: https://nut.{{ inventory_hostname }}.{{ domain }}/upsstats.cgi?host=%s\nDate: %s\nStatus: %s\nBattery charge: %s\nRuntime: %s\n\n" \

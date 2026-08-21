@@ -19,14 +19,14 @@
     - postfix
 
 # policy_rc_d: 101 stops dpkg from auto-starting postfix mid-install before its
-# config is templated; it is a harmless no-op for libsasl2-modules/mailutils
+# config is templated; it is a harmless no-op for libsasl2-modules/bsd-mailx
 # (neither ships a daemon to suppress).
-- name: Install postfix, libsasl2 (TLS auth) and mailutils (sending mail)
+- name: Install Postfix, SMTP authentication, and BSD mailx
   apt:
     pkg:
       - postfix
       - libsasl2-modules
-      - mailutils
+      - bsd-mailx
     policy_rc_d: 101
     cache_valid_time: 3600
   register: postfix_apt

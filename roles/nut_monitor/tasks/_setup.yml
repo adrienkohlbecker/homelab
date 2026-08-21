@@ -1,11 +1,11 @@
-# mailutils stands in for the postfix role (ordered before nut_monitor in
+# bsd-mailx stands in for the postfix role (ordered before nut_monitor in
 # site.yml), which provides `mail` on prod -- the converge asserts its
 # presence. _verify's capturing shim still wins over it via PATH.
 - name: _setup | Install dependencies
   apt:
     pkg:
       - nut-server
-      - mailutils
+      - bsd-mailx
     install_recommends: false
     cache_valid_time: 3600
   become: true

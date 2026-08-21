@@ -157,6 +157,17 @@
     - retired_services
     - postfix
 
+- name: Remove retired GNU Mailutils package
+  apt:
+    name: mailutils
+    state: absent
+    autoremove: true
+    purge: true
+  become: true
+  tags:
+    - retired_services
+    - postfix
+
 - name: Remove retired compiled Postfix aliases
   file:
     path: /etc/aliases.db
