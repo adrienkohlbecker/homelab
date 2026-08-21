@@ -154,7 +154,6 @@ skipped import cannot uphold the result-variable contract for its callers.
 | `systemd_unit` | `tasks_from: {install,unit,remove}` | unit/drop-in install results; repository-owned unit lifecycle and removal |
 | `systemd_timer` | `tasks_from: {install,remove}` | paired `.service`+`.timer` units |
 | `nginx_site` | `import_role: name: nginx, tasks_from: site` | vhost with TLS/HSTS/CSP + optional Authelia |
-| `sqlite_dataset` | `tasks_from: {dataset,verify_dataset}` | `/mnt/services/sqlite/<name>/` + symlinked DBs and routing verification |
 | `zfs_dataset` | `tasks_from: dataset` | ZFS filesystem + mount unit, or a plain mountpoint on non-ZFS hosts |
 | `macvlan` | driven by `macvlan_blocks:` in host_vars | ifaces + optional podman networks |
 

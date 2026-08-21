@@ -12,7 +12,7 @@
 #   - system-scope on_calendar schedules must repeat so overdue monitoring can
 #     derive their period; user-scope timers are not monitored.
 #
-# The dict form mirrors systemd_unit / sqlite_dataset / service_user: each
+# The dict form mirrors systemd_unit / service_user: each
 # import_role replaces the whole `systemd_timer_args` value at play-vars
 # scope so a previous caller's args can't bleed into the next call.
 - name: install | Validate required inputs for {{ systemd_timer_args.name | default('<unset>') }}

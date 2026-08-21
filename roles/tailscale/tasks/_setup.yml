@@ -27,17 +27,6 @@
     mode: "0755"
   become: true
 
-# On prod /mnt/services/sqlite is a real recordsize=4K dataset; the box has no
-# such dataset, so stand the parent up as a plain dir for sqlite_dataset.
-- name: _setup | Create /mnt/services/sqlite parent
-  file:
-    path: /mnt/services/sqlite
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
 # Bring up the headscale control plane. server_url points at the plain-http
 # loopback listener (not the https vhost) so the client below can register
 # without trusting the box's snakeoil cert.
