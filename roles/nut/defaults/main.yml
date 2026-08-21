@@ -1,0 +1,12 @@
+# Staged-shutdown thresholds, host-overridable (host_vars/pug.yml rides
+# them down to 5%/180s as the last host in the ladder). With `ignorelb` in
+# ups.conf the driver flags LB -- and this host's upsmon (roles/nut)
+# shuts it down -- when charge drops under nut_battery_charge_low
+# percent OR projected runtime drops under nut_battery_runtime_low
+# seconds, whichever trips first.
+nut_battery_charge_low: 20
+nut_battery_runtime_low: 300
+
+# MAC addresses to wake on the primary LAN after mains recovery. Empty disables
+# both the upssched and boot-time recovery legs.
+nut_wake_peers: []

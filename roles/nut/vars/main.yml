@@ -1,9 +1,9 @@
 # The upsmon system identifier (<upsname>@<host>) this host monitors. A role
 # constant, not a host knob: the MONITOR line in upsmon.conf, the upsc queries
 # in nut_notify and the _verify fixtures all derive from it, and pointing it
-# away from the co-located upsd would half-break the system anyway (nut_server's
+# away from the co-located upsd would half-break the system anyway (nut's
 # files/hosts.conf CGI allowlist and the emailed status link both assume
 # localhost).
-nut_monitor_ups: eaton@localhost
+nut_ups: eaton@localhost
 
-nut_monitor_broadcast: "{{ (ansible_facts.default_ipv4.address + '/' + ansible_facts.default_ipv4.netmask) | ansible.utils.ipaddr('broadcast') }}"
+nut_broadcast: "{{ (ansible_facts.default_ipv4.address + '/' + ansible_facts.default_ipv4.netmask) | ansible.utils.ipaddr('broadcast') }}"

@@ -123,7 +123,7 @@ RUN_AS_USER nut
 # MONITOR su700@server.example.com 1 monuser secretpass secondary
 # MONITOR myups@localhost 1 monuser pass primary	# (or secondary)
 
-MONITOR {{ nut_monitor_ups }} 1 upsmon {{ nut_upsmon_password }} primary
+MONITOR {{ nut_ups }} 1 upsmon {{ nut_upsmon_password }} primary
 
 # --------------------------------------------------------------------------
 # MINSUPPLIES <num>
@@ -573,9 +573,9 @@ FINALDELAY 5
 # specified with a CERTHOST directive.
 
 # TLS (CERTPATH/CERTVERIFY/FORCESSL above) is deliberately left unset: the
-# MONITOR target is loopback (nut_monitor_ups, a role constant in
+# MONITOR target is loopback (nut_ups, a role constant in
 # vars/main.yml), so an encrypted upsd connection would protect nothing.
-# Revisit if nut_monitor_ups ever points at a remote upsd.
+# Revisit if nut_ups ever points at a remote upsd.
 
 # --------------------------------------------------------------------------
 # DEBUG_MIN - specify minimal debugging level for upsmon daemon

@@ -228,7 +228,7 @@ port = {{ external_ips.eaton }}
 # notes/ups_shutdown_ladder.md -- and SNMPv3 would need coordinated reconfig
 # on the device + the daemons, disproportionate for this home threat model.
 # (The card's read/write community is disabled while nothing needs it; if
-# the POWERDOWNFLAG fallback in roles/nut_monitor's upsmon.conf.j2 is ever
+# the POWERDOWNFLAG fallback in roles/nut's upsmon.conf.j2 is ever
 # activated, re-enable it card-side and wire it here, since snmp-ups has a
 # single community for reads and the halt-path SETs.)
 community = public
@@ -237,11 +237,11 @@ pollfreq = 15
 {% endif %}
 # ignorelb: ignore the UPS's own LB (low-battery) status flag and instead
 # derive "low battery" from the override.* thresholds below -- the point at
-# which this host's upsmon (roles/nut_monitor) shuts it down. The Eaton only
+# which this host's upsmon (roles/nut) shuts it down. The Eaton only
 # raises its hardware LB around 5% charge, and the thresholds are per-host on
 # purpose: each host runs its own driver+upsd against the same UPS, so these
 # overrides ARE the staged-shutdown ladder (defaults 20%/300s; pug rides to
-# 5%/180s -- see roles/nut_server/defaults/main.yml and host_vars/pug.yml).
+# 5%/180s -- see roles/nut/defaults/main.yml and host_vars/pug.yml).
 ignorelb
-override.battery.charge.low = {{ nut_server_battery_charge_low }}
-override.battery.runtime.low = {{ nut_server_battery_runtime_low }}
+override.battery.charge.low = {{ nut_battery_charge_low }}
+override.battery.runtime.low = {{ nut_battery_runtime_low }}

@@ -1,0 +1,40 @@
+# Every home host independently polls the Eaton UPS, serves that state through
+# upsd, and monitors the co-located server with upsmon. Keeping the complete NUT
+# chain in one role preserves the staged shutdown ladder without a cross-role
+# ordering contract.
+
+- name: Assert required NUT secrets are set
+  assert:
+    that:
+      - nut_upsmon_password is defined and (nut_upsmon_password | length > 0)
+      - nut_homeassistant_password is defined and (nut_homeassistant_password | length > 0)
+      - nut_winnut_password is defined and (nut_winnut_password | length > 0)
+    fail_msg: >-
+      nut_upsmon_password, nut_homeassistant_password and nut_winnut_password must be set
+      (group_vars/{prod,test}.yml); NUT configuration renders them verbatim.
+  tags:
+    - nut
+
+- name: Install NUT
+  apt:
+    pkg:
+      - nut-snmp
+      - nut-cgi
+      - fcgiwrap
+    cache_valid_time: 3600
+    # Configure and start the full chain only after every NUT file is in place.
+    policy_rc_d: 101
+  become: true
+  register: nut_apt
+  tags:
+    - nut
+
+- name: Configure the NUT server
+  import_tasks: server.yml
+  tags:
+    - nut
+
+- name: Configure the NUT monitor
+  import_tasks: monitor.yml
+  tags:
+    - nut

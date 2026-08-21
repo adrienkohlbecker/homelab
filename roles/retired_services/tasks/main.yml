@@ -172,7 +172,7 @@
       for: nut-driver@eaton.service
   tags:
     - retired_services
-    - nut_server
+    - nut
 
 - name: Remove retired upsset CGI sentinel
   lineinfile:
@@ -186,7 +186,7 @@
   become: true
   tags:
     - retired_services
-    - nut_server
+    - nut
 
 - name: Remove retired podman socket group
   group:

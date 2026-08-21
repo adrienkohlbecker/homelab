@@ -82,8 +82,7 @@
     - kdump
     - wolweb
     - keepalived
-    - nut_server
-    - nut_monitor
+    - nut
     - resolved
     - adguard
     - docker_client

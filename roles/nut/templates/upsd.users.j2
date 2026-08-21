@@ -77,6 +77,10 @@
 [upsmon]
 password = {{ nut_upsmon_password }}
 upsmon primary
+{% if qemu_test | bool %}
+# The integrated role test drives the dummy UPS through its real upsd account.
+actions = SET
+{% endif %}
 
 # HA's NUT integration only reads UPS state -- no actions/instcmds (least
 # privilege: a leaked credential cannot issue SET/INSTCMD against the UPS).

@@ -1,5 +1,5 @@
 # Relay generic WoL clients from operator-controlled VLANs into the target VLANs.
-# wolweb and nut_monitor still send only on their local L2 segment; this UDM
+# wolweb and nut still send only on their local L2 segment; this UDM
 # service is the cross-VLAN bridge for clients that can target the gateway.
 #
 # Role-owned constants, deliberately not host-tunable: udp/9 is the WoL

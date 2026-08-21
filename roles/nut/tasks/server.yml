@@ -1,39 +1,5 @@
-# nut_server runs on every home host (site.yml, all:!bunk:!fox), not just
-# lab: each host independently SNMP-polls the one Eaton UPS and exposes its
-# own upsd, monitored by its own upsmon (roles/nut_monitor, ordered right
-# after this role) — so no host depends on a peer NUT server being up, and
-# the per-host ups.conf low-battery overrides form the staged shutdown
-# ladder (see defaults/main.yml and host_vars/pug.yml). upsd also serves
-# Home Assistant (on lab) + operator `upsc` reads. The nut-monitor unit
-# itself (enablement, upsmon.conf) is entirely nut_monitor's; this role
-# does not touch it.
-
-- name: Assert required nut secrets are set
-  assert:
-    that:
-      - nut_upsmon_password is defined and (nut_upsmon_password | length > 0)
-      - nut_homeassistant_password is defined and (nut_homeassistant_password | length > 0)
-      - nut_winnut_password is defined and (nut_winnut_password | length > 0)
-    fail_msg: >-
-      nut_upsmon_password, nut_homeassistant_password and nut_winnut_password must be set
-      (group_vars/{prod,test}.yml); upsd.users renders them verbatim.
-  tags:
-    - nut_server
-
-- name: Install nut
-  apt:
-    pkg:
-      - nut-snmp
-      - nut-cgi
-      - fcgiwrap
-    cache_valid_time: 3600
-  become: true
-  register: nut_server_apt
-  tags:
-    - nut_server
-
 - name: Configure nut nut.conf  # noqa: require-validate
-  when: not (ansible_check_mode and nut_server_apt.changed)
+  when: not (ansible_check_mode and nut_apt.changed)
   copy:
     src: nut.conf
     dest: /etc/nut/nut.conf
@@ -42,13 +8,13 @@
     group: nut
     mode: "0640"
   become: true
-  register: nut_server_nut_conf
+  register: nut_mode_conf
   tags:
-    - nut_server
+    - nut
 
 # upsdrvctl cannot validate an arbitrary render path; _verify starts the driver.
 - name: Configure nut ups.conf  # noqa: require-validate
-  when: not (ansible_check_mode and nut_server_apt.changed)
+  when: not (ansible_check_mode and nut_apt.changed)
   template:
     src: ups.conf.j2
     dest: /etc/nut/ups.conf
@@ -56,15 +22,15 @@
     group: nut
     mode: "0640"
     backup: true
-  register: nut_server_ups_conf
+  register: nut_ups_conf
   become: true
   tags:
-    - nut_server
+    - nut
 
 - name: Configure the dummy UPS data for qemu  # noqa: require-validate
   when:
     - qemu_test | bool
-    - not (ansible_check_mode and nut_server_apt.changed)
+    - not (ansible_check_mode and nut_apt.changed)
   copy:
     dest: /etc/nut/eaton.dev
     owner: root
@@ -73,16 +39,16 @@
     backup: true
     content: |
       ups.status: OL
-      battery.charge: 100
-      battery.runtime: 1800
+      battery.charge: 42.00
+      battery.runtime: 900.00
       ups.mfr: dummy
       ups.model: evolution500
   become: true
   tags:
-    - nut_server
+    - nut
 
 - name: Configure nut upsd.conf  # noqa: require-validate
-  when: not (ansible_check_mode and nut_server_apt.changed)
+  when: not (ansible_check_mode and nut_apt.changed)
   template:
     src: upsd.conf.j2
     dest: /etc/nut/upsd.conf
@@ -91,13 +57,13 @@
     group: nut
     mode: "0640"
   become: true
-  register: nut_server_upsd_conf
+  register: nut_upsd_conf
   tags:
-    - nut_server
+    - nut
 
 # upsd has no offline checker; _verify starts the server with this file.
 - name: Configure nut upsd.users  # noqa: require-validate
-  when: not (ansible_check_mode and nut_server_apt.changed)
+  when: not (ansible_check_mode and nut_apt.changed)
   template:
     src: upsd.users.j2
     dest: /etc/nut/upsd.users
@@ -106,12 +72,12 @@
     mode: "0640"
     backup: true
   become: true
-  register: nut_server_upsd_users
+  register: nut_upsd_users
   tags:
-    - nut_server
+    - nut
 
 - name: Configure nut hosts.conf  # noqa: require-validate
-  when: not (ansible_check_mode and nut_server_apt.changed)
+  when: not (ansible_check_mode and nut_apt.changed)
   copy:
     src: hosts.conf
     dest: /etc/nut/hosts.conf
@@ -121,30 +87,40 @@
     mode: "0644"
   become: true
   tags:
-    - nut_server
+    - nut
 
 - name: Enable nut-driver service
-  when: not (ansible_check_mode and nut_server_apt.changed)
+  when: not (ansible_check_mode and nut_apt.changed)
   systemd:
     name: nut-driver@eaton.service
     enabled: true
-    state: "{{ 'restarted' if nut_server_nut_conf.changed or nut_server_ups_conf.changed else 'started' }}"
+    state: "{{ 'restarted' if nut_mode_conf.changed or nut_ups_conf.changed else 'started' }}"
   become: true
   tags:
-    - nut_server
+    - nut
 
 - name: Enable nut-server service
-  when: not (ansible_check_mode and nut_server_apt.changed)
+  when: not (ansible_check_mode and nut_apt.changed)
   systemd:
     name: nut-server.service
     enabled: true
     state: >-
       {{ 'restarted'
-         if nut_server_nut_conf.changed or nut_server_upsd_conf.changed or nut_server_upsd_users.changed
+         if nut_mode_conf.changed or nut_upsd_conf.changed or nut_upsd_users.changed
          else 'started' }}
   become: true
   tags:
-    - nut_server
+    - nut
+
+- name: Enable fcgiwrap socket
+  when: not (ansible_check_mode and nut_apt.changed)
+  systemd:
+    name: fcgiwrap.socket
+    enabled: true
+    state: started
+  become: true
+  tags:
+    - nut
 
 - name: Configure nginx
   import_role:
@@ -171,4 +147,4 @@
           fastcgi_param SCRIPT_FILENAME  /usr/lib/cgi-bin/nut$fastcgi_script_name;
         }
   tags:
-    - nut_server
+    - nut

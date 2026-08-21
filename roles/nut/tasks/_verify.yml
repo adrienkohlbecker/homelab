@@ -3,8 +3,8 @@
 # systemd lifecycle as well as the driver -> upsd path.
 - name: _verify | Wait for the dummy UPS to publish OL over upsc
   command: upsc eaton@localhost ups.status
-  register: nut_server_upsc
-  until: '"OL" in nut_server_upsc.stdout'
+  register: nut_upsc
+  until: '"OL" in nut_upsc.stdout'
   retries: 15
   delay: 1
   changed_when: false
@@ -13,15 +13,15 @@
 - name: _verify | Read configured upsd users
   slurp:
     path: /etc/nut/upsd.users
-  register: nut_server_upsd_users_file
+  register: nut_upsd_users_file
   become: true
 
 - name: _verify | WinNUT account is configured as a remote monitor
   assert:
     that:
-      - "'[winnut]' in (nut_server_upsd_users_file.content | b64decode)"
-      - "'password = ' ~ nut_winnut_password in (nut_server_upsd_users_file.content | b64decode)"
-      - "'upsmon secondary' in (nut_server_upsd_users_file.content | b64decode)"
+      - "'[winnut]' in (nut_upsd_users_file.content | b64decode)"
+      - "'password = ' ~ nut_winnut_password in (nut_upsd_users_file.content | b64decode)"
+      - "'upsmon secondary' in (nut_upsd_users_file.content | b64decode)"
     quiet: true
 
 # The CGI probe must hit the vhost by its real FQDN, not https://localhost/
@@ -39,7 +39,7 @@
   become: true
 
 # The CGI status page: nginx 301s / -> /upsstats.cgi, proxied to nut-cgi over
-# the fcgiwrap socket (auto-enabled by the package). The site is auth=required,
+# the role-managed fcgiwrap socket. The site is auth=required,
 # so _setup's authelia_stub (always_200) admits the auth_request subrequest.
 # Snakeoil cert -> validate_certs: false. Broad status_code list lets a
 # transient 502 (fcgiwrap warming) retry; the `until` pins success on a real 200.
@@ -49,8 +49,8 @@
     validate_certs: false
     return_content: true
     status_code: [ 200, 301, 302, 401, 403, 502, 503 ]
-  register: nut_server_cgi
-  until: nut_server_cgi.status is defined and nut_server_cgi.status == 200
+  register: nut_cgi
+  until: nut_cgi.status is defined and nut_cgi.status == 200
   retries: 15
   delay: 2
   become: true
@@ -62,9 +62,9 @@
 - name: _verify | CGI rendered live UPS data (reached upsd, not "unavailable")
   assert:
     that:
-      - "'eaton' in nut_server_cgi.content"
-      - "'unavailable' not in (nut_server_cgi.content | lower)"
-    fail_msg: "upsstats.cgi did not render live UPS data; content was: {{ nut_server_cgi.content | truncate(600) }}"
+      - "'eaton' in nut_cgi.content"
+      - "'unavailable' not in (nut_cgi.content | lower)"
+    fail_msg: "upsstats.cgi did not render live UPS data; content was: {{ nut_cgi.content | truncate(600) }}"
 
 - name: _verify | NUT CGI status image is served
   uri:
@@ -79,3 +79,6 @@
     validate_certs: false
     status_code: 404
   become: true
+
+- name: _verify | Exercise monitoring and shutdown behavior
+  import_tasks: _verify_monitor.yml

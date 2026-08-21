@@ -38,13 +38,13 @@ replbatt)
 noparent)
   MSG="upsmon parent process died - shutdown impossible"
   ;;
-{% if nut_monitor_wake_peers %}
+{% if nut_wake_peers %}
 # Both recovery legs wake peers three times; a failed round must not prevent
 # later packets from landing after the network recovers.
 wake_peers)
   for round in 1 2 3; do
     if [ "$round" -gt 1 ]; then sleep 30; fi
-    wakeonlan -i {{ nut_monitor_broadcast }} {{ nut_monitor_wake_peers | join(' ') }} || true
+    wakeonlan -i {{ nut_broadcast }} {{ nut_wake_peers | join(' ') }} || true
   done
   exit 0
   ;;
@@ -58,7 +58,7 @@ wake_peers)
   ;;
 esac
 
-UPS='{{ nut_monitor_ups }}'
+UPS='{{ nut_ups }}'
 
 # Several of these events (commbad, nocomm, noparent, fsd) fire precisely
 # when upsd/the UPS is unreachable, so query it once and tolerate failure or

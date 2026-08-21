@@ -1,8 +1,0 @@
-# Staged-shutdown thresholds, host-overridable (host_vars/pug.yml rides
-# them down to 5%/180s as the last host in the ladder). With `ignorelb` in
-# ups.conf the driver flags LB -- and this host's upsmon (roles/nut_monitor)
-# shuts it down -- when charge drops under nut_server_battery_charge_low
-# percent OR projected runtime drops under nut_server_battery_runtime_low
-# seconds, whichever trips first.
-nut_server_battery_charge_low: 20
-nut_server_battery_runtime_low: 300

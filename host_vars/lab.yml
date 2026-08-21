@@ -323,5 +323,5 @@ nginx_static_proxies:
 # Group 1 cut-and-restore in any outage deep enough to strand pug (whose
 # Group 2 shed at 2% sits below its 5% FSD trigger), so lab's boot-time
 # wake_peers leg is what brings pug back in that window.
-nut_monitor_wake_peers:
+nut_wake_peers:
   - "{{ mac_addresses.pug }}"

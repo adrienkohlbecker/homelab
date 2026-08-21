@@ -1,3 +1,0 @@
-# MAC addresses to wake on the primary LAN after mains recovery. Empty disables
-# both the upssched and boot-time recovery legs.
-nut_monitor_wake_peers: []

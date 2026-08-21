@@ -13,52 +13,6 @@
       { printf 'ARGS: %s\n' "$*"; cat; } >>/tmp/nut-mail.out
   become: true
 
-# Installing nut-snmp pulls nut-server, which may auto-start the packaged upsd;
-# stop it so our own foreground upsd can bind 127.0.0.1:3493. On nut 2.8
-# (noble/resolute) upsd is socket-activated, so the .socket must be stopped
-# too. The nut-driver-enumerator.path unit watches ups.conf for changes and
-# can re-activate the service, so stop the enumerator chain first.
-# failed_when:false keeps this cleanup tolerant of optional units absent from a
-# particular package state.
-- name: _verify | Stop all NUT units that could respawn upsd
-  systemd:
-    name: "{{ item }}"
-    state: stopped
-  loop:
-    - nut-driver-enumerator.path
-    - nut-driver-enumerator.service
-    - nut-server.socket
-    - nut-server.service
-  failed_when: false
-  become: true
-
-- name: _verify | Start the dummy-ups driver and a fresh upsd
-  shell: |
-    set -euo pipefail
-    upsdrvctl -u root stop 2>/dev/null || true
-    pkill -x upsd 2>/dev/null || true
-    timeout 5 sh -c 'while pgrep -x upsd >/dev/null 2>&1; do sleep 0.2; done' \
-      || { pkill -9 -x upsd 2>/dev/null || true; sleep 0.5; }
-    rm -f /run/nut/upsd.pid 2>/dev/null || true
-    upsdrvctl -u root start eaton
-    upsd -u root
-  args:
-    executable: /bin/bash
-  changed_when: false
-  become: true
-
-# Wait for the real published status, not just rc 0: a freshly-started
-# dummy-ups answers immediately but can briefly report WAIT before its
-# first poll lands.
-- name: _verify | Wait for the dummy UPS to publish its status
-  command: upsc {{ nut_monitor_ups }} ups.status
-  register: nut_monitor_upsc_wait
-  until: '"DISCHRG" in nut_monitor_upsc_wait.stdout'
-  retries: 15
-  delay: 1
-  changed_when: false
-  become: true
-
 # Exercise the REAL dispatch path upsmon uses -- NOTIFYCMD=upssched reading
 # upssched.conf and matching AT rules to CMDSCRIPT=nut_notify -- not just
 # nut_notify in isolation. upssched takes the event from $NOTIFYTYPE/$UPSNAME
@@ -85,7 +39,7 @@
 - name: _verify | Dispatch a real EXECUTE event through upssched to nut_notify
   command: /usr/sbin/upssched
   environment:
-    UPSNAME: "{{ nut_monitor_ups }}"
+    UPSNAME: "{{ nut_ups }}"
     NOTIFYTYPE: LOWBATT
   changed_when: false
   become: true
@@ -99,7 +53,7 @@
 - name: _verify | Live UPS status reached the mail (upsc dump + field extraction)
   command: grep -qF "{{ item }}" /tmp/nut-mail.out
   loop:
-    - "Status: OB DISCHRG"
+    - "Status: OL"
     - "Battery charge: 42.00"
     # 900.00 (float, as the real Eaton reports) must still format to a real
     # HH:MM:SS -- "unknown" here means nut_notify rejected the fractional value.
@@ -114,7 +68,7 @@
 - name: _verify | Dispatch a debounced START-TIMER event through upssched
   command: /usr/sbin/upssched
   environment:
-    UPSNAME: "{{ nut_monitor_ups }}"
+    UPSNAME: "{{ nut_ups }}"
     NOTIFYTYPE: COMMBAD
   changed_when: false
   become: true
@@ -123,8 +77,8 @@
 # The commbad timer runs 30s; 45 bounds it with margin.
 - name: _verify | The debounced event fired after its interval
   command: grep -qF "Communications lost to the UPS" /tmp/nut-mail.out
-  register: nut_monitor_timer_mail
-  until: nut_monitor_timer_mail.rc == 0
+  register: nut_timer_mail
+  until: nut_timer_mail.rc == 0
   retries: 45
   delay: 1
   changed_when: false
@@ -145,7 +99,7 @@
   become: true
 
 # converge leaves the unit enabled but unstarted under qemu (no UPS);
-# start it here against the dummy upsd, on the still-benign OB DISCHRG
+# start it here against the dummy upsd, on the still-benign OL
 # frame, so it is connected and polling before the critical flip below.
 - name: _verify | Start upsmon against the dummy upsd
   systemd:
@@ -154,10 +108,16 @@
   become: true
 
 # dummy-ups accepts live variable writes via upsrw -- no frame-file rewrite,
-# driver restart, or reconnect window inside the FSD wait. The dummy-once mode
-# holds the value natively. _setup grants the fixture upsmon user actions = SET.
+# driver restart, or reconnect window inside the FSD wait. Lowering the battery
+# metrics matters on NUT 2.8.4, which derives LB from the configured thresholds
+# instead of trusting LB in a direct status write. The qemu upsd.users grants
+# actions = SET.
 - name: _verify | Flip the dummy UPS to on-battery low-battery
-  command: upsrw -s "ups.status=OB LB" -u upsmon -p {{ nut_upsmon_password }} {{ nut_monitor_ups }}
+  command: upsrw -s "{{ item }}" -u upsmon -p {{ nut_upsmon_password }} {{ nut_ups }}
+  loop:
+    - battery.charge=1
+    - battery.runtime=60
+    - ups.status=OB
   changed_when: false
   become: true
 
@@ -171,10 +131,10 @@
   become: true
 
 - name: _verify | Upsd published the forced-shutdown status
-  command: upsc {{ nut_monitor_ups }} ups.status
-  register: nut_monitor_fsd_status
+  command: upsc {{ nut_ups }} ups.status
+  register: nut_fsd_status
   changed_when: false
-  failed_when: "'FSD' not in nut_monitor_fsd_status.stdout"
+  failed_when: "'FSD' not in nut_fsd_status.stdout"
   become: true
 
 # The SHUTDOWN NOTIFY rode the real chain (upsmon's nut-user half ->
@@ -185,8 +145,8 @@
 # secondaries receive when they observe the flag.
 - name: _verify | The shutdown notification reached the mail
   command: grep -qF "The system is being shutdown" /tmp/nut-mail.out
-  register: nut_monitor_shutdown_mail
-  until: nut_monitor_shutdown_mail.rc == 0
+  register: nut_shutdown_mail
+  until: nut_shutdown_mail.rc == 0
   retries: 10
   delay: 1
   changed_when: false
@@ -202,8 +162,8 @@
 
 - name: _verify | Stop upsd to simulate an unreachable UPS
   command: pkill -x upsd
-  register: nut_monitor_pkill
-  failed_when: nut_monitor_pkill.rc not in [0, 1]
+  register: nut_pkill
+  failed_when: nut_pkill.rc not in [0, 1]
   changed_when: false
   become: true
 
@@ -263,6 +223,6 @@
   systemd:
     name: nut_wake_peers.service
     state: started
-  register: nut_monitor_wake_restart
-  failed_when: nut_monitor_wake_restart.changed
+  register: nut_wake_restart
+  failed_when: nut_wake_restart.changed
   become: true
