@@ -1,3 +1,6 @@
+# Optional input: nginx_test_fixture_args.authelia_mode installs the auth stub
+# in gate, authed, or basic mode after nginx starts.
+#
 # Lay down snakeoil at the letsencrypt paths nginx.conf.j2 references so the
 # production nginx role can start in tests. The permission hardening used by
 # nginx's own _verify is unnecessary for service-role fixtures.
@@ -9,3 +12,12 @@
 
 - name: test_fixture | Install nginx
   import_tasks: install.yml
+
+- name: test_fixture | Install Authelia stub
+  when: (nginx_test_fixture_args | default({})).authelia_mode is defined
+  import_tasks: test_authelia_stub.yml
+  vars:
+    nginx_test_authelia_stub_args:
+      mode: >-
+        {{ (nginx_test_fixture_args | default({})).authelia_mode
+           | default('gate') }}

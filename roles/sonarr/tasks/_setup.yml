@@ -2,6 +2,9 @@
   import_role:
     name: nginx
     tasks_from: test_fixture
+  vars:
+    nginx_test_fixture_args:
+      authelia_mode: gate
 
 - name: _setup | Install podman
   import_role:
@@ -16,11 +19,6 @@
   import_role:
     name: media
     tasks_from: network
-
-- name: _setup | Install authelia stub in gate mode for auth-enabled tests
-  import_role:
-    name: nginx
-    tasks_from: test_authelia_stub
 
 - name: _setup | Ensure /mnt/services, /mnt/scratch, and /mnt/media exist
   file:

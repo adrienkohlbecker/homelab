@@ -11,11 +11,9 @@
   import_role:
     name: nginx
     tasks_from: test_fixture
-
-- name: _setup | Install authelia stub in gate mode for auth-enabled tests
-  import_role:
-    name: nginx
-    tasks_from: test_authelia_stub
+  vars:
+    nginx_test_fixture_args:
+      authelia_mode: gate
 
 - name: _setup | Create the services dataset mountpoint
   file:

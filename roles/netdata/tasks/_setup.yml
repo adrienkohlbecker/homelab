@@ -2,6 +2,9 @@
   import_role:
     name: nginx
     tasks_from: test_fixture
+  vars:
+    nginx_test_fixture_args:
+      authelia_mode: gate
 
 - name: _setup | Install Postfix collector fixture
   apt:
@@ -60,13 +63,6 @@
     name: nginx
     state: reloaded
   become: true
-
-# netdata uses nginx_site_args.auth=true. Gate-mode Authelia stub so
-# _verify sees the unauthenticated browser hit redirect to the portal (302).
-- name: _setup | Install authelia stub in gate mode
-  import_role:
-    name: nginx
-    tasks_from: test_authelia_stub
 
 - name: _setup | Add keepalived VRRP loopback VIP fixture
   command: ip addr replace 198.51.100.10/32 dev lo

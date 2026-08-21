@@ -2,6 +2,9 @@
   import_role:
     name: nginx
     tasks_from: test_fixture
+  vars:
+    nginx_test_fixture_args:
+      authelia_mode: gate
 
 - name: _setup | Install podman
   import_role:
@@ -11,8 +14,3 @@
 - name: _setup | Install fluent-bit for container-log normalization
   import_role:
     name: fluentbit
-
-- name: _setup | Install authelia stub for auth-enabled tests
-  import_role:
-    name: nginx
-    tasks_from: test_authelia_stub

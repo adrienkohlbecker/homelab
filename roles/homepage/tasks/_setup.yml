@@ -7,23 +7,13 @@
   import_role:
     name: nginx
     tasks_from: test_fixture
+  vars:
+    nginx_test_fixture_args:
+      authelia_mode: authed
 
 - name: _setup | Install fluent-bit for container-log integration
   import_role:
     name: fluentbit
-
-# homepage uses nginx_site_args.auth=true, so the /alerts/ and root
-# locations issue auth_request subrequests to 127.0.0.1:{{ service_ports.authelia }}.
-# Without a real Authelia listening there, _verify HTTP probes fail with 500.
-# The stub admits auth requests with a fixed identity, exercising nginx's
-# auth_request wiring without bringing up the full Authelia role.
-- name: _setup | Install authelia stub for auth-enabled tests
-  import_role:
-    name: nginx
-    tasks_from: test_authelia_stub
-  vars:
-    nginx_test_authelia_stub_args:
-      mode: authed
 
 - name: _setup | Setup dependencies
   shell: |
