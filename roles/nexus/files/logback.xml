@@ -48,20 +48,9 @@
     </encoder>
   </appender>
 
-  <appender name="requestConsole" class="ch.qos.logback.core.ConsoleAppender">
-    <encoder class="ch.qos.logback.classic.encoder.JsonEncoder">
-      <withSequenceNumber>false</withSequenceNumber>
-      <withTimestamp>false</withTimestamp>
-      <withNanoseconds>false</withNanoseconds>
-      <withContext>false</withContext>
-      <withFormattedMessage>true</withFormattedMessage>
-      <withMessage>false</withMessage>
-      <withArguments>false</withArguments>
-    </encoder>
-  </appender>
-  <logger name="org.eclipse.jetty.server.RequestLog" additivity="false">
-    <appender-ref ref="requestConsole"/>
-  </logger>
+  <!-- nginx is the authoritative inbound access log. Keep this logger isolated
+       with no appender so direct health probes do not duplicate that stream. -->
+  <logger name="org.eclipse.jetty.server.RequestLog" additivity="false" />
 
   <appender name="outboundRequestsConsole" class="ch.qos.logback.core.ConsoleAppender">
     <filter class="org.sonatype.nexus.logging.OutboundRequestsLogFilter" />

@@ -1,10 +1,6 @@
 parsers:
   - name: nexus_json
     format: json
-  - name: nexus_access_request
-    format: regex
-    regex: '^(?<remote_addr>\S+) - (?<actor>\S+) \[(?<app_timestamp>[^\]]+)\] "(?<method>\S+) (?<path>\S+) (?<protocol>\S+)" (?<status>\d+) (?<request_content_length>\S+) (?<bytes_sent>\d+) (?<response_time>\d+) "(?<user_agent>[^"]*)" \[(?<request_thread>[^\]]+)\]$'
-    types: status:integer bytes_sent:integer response_time:integer
   - name: nexus_outbound_request
     format: regex
     regex: '^\[(?<app_timestamp>[^\]]+)\] (?<actor>\S+) "(?<method>\S+) (?<url>\S+) (?<protocol>\S+)" (?<status>\d+) (?<bytes_sent>-?\d+) (?<bytes_received>-?\d+) (?<response_time>\d+) \[(?<outbound_thread>[^\]]+)\]$'
@@ -48,19 +44,6 @@ pipeline:
         - 'CONTAINER_TAG ^.+$'
         - 'domain ^repository\.asset$'
         - 'type ^(created|updated-(attribute|downloaded|uploaded))$'
-    - name: grep
-      match: svc.nexus.service
-      logical_op: and
-      exclude:
-        - 'CONTAINER_TAG ^.+$'
-        - 'loggerName ^org\.eclipse\.jetty\.server\.RequestLog$'
-        - 'formattedMessage ^\S+ - \S+ \[[^\]]+\] "GET /service/rest/v1/status/writable HTTP/[0-9.]+" 200 \S+ [0-9]+ [0-9]+ "Wget" \[[^\]]+\]$'
-    - name: parser
-      match: svc.nexus.service
-      key_name: formattedMessage
-      parser: nexus_access_request
-      reserve_data: true
-      preserve_key: true
     - name: parser
       match: svc.nexus.service
       key_name: formattedMessage
@@ -71,7 +54,7 @@ pipeline:
       match: svc.nexus.service
       condition:
         - key_exists CONTAINER_TAG
-        - key_value_matches loggerName '^(org\.eclipse\.jetty\.server\.RequestLog|outboundRequests)$'
+        - key_value_matches loggerName '^outboundRequests$'
         - key_exists method
         - key_exists status
       hard_rename:
@@ -87,7 +70,6 @@ pipeline:
         - arguments
         - level
         - app_timestamp
-        - request_thread
         - outbound_thread
       set:
         - _level debug

@@ -96,11 +96,11 @@
   tags:
     - nexus
 
-# Nexus ships Logback's JsonEncoder, so application, task, replication, access,
-# and outbound-request events can share one structured stdout path. Audit
-# events are already JSON. Manage the complete pinned-image config because
-# Nexus's data-dir override is for logger levels, not appenders; the read-only
-# bind mount below replaces the installation config without modifying the image.
+# Nexus ships Logback's JsonEncoder, so application, task, replication, and
+# outbound-request events can share one structured stdout path. Audit events
+# are already JSON. Manage the complete pinned-image config because Nexus's
+# data-dir override is for logger levels, not appenders; the read-only bind
+# mount below replaces the installation config without modifying the image.
 - name: Configure nexus structured console logging
   when: not ansible_check_mode or nexus_user.uid is defined
   copy:
