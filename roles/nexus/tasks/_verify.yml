@@ -129,9 +129,6 @@
           fields.bytes_sent: 0
           fields.bytes_received: 312
           fields.response_time: 45
-          _absent:
-            - fields.app_timestamp
-            - fields.outbound_thread
         - message: nexus-audit-useful
           level: info
           service: nexus
