@@ -1,13 +1,6 @@
-# Post-converge functional check (harness-only, never site.yml). We can't
-# exercise the live Mailgun relay from the qemu fixture (test/ creds are
-# `changeme`, no outbound), so assert the wiring instead: the config parses with
-# no warnings, the effective postconf parameters are what the template intended,
-# a postmap lookup of the relayhost key against the texthash sasl map resolves to
-# the rendered credential (exercises vault substitution + the map type, not just
-# that a literal appears in the file), the sender-rewrite map resolves, the
-# root/operator aliases resolve to root_email, mailutils sends from email_domain,
-# and -- the one live exercise -- a locally injected `root` message is qualified
-# to root@$mydomain (proves myorigin works, not just that it is set in the file).
+# The qemu fixture has no usable relay credentials, so verify the local wiring:
+# parsing, effective parameters, maps, aliases, mailutils, and sender
+# qualification through a locally injected message.
 - name: _verify | Postfix configuration parses with no warnings
   command: postfix check
   register: _postfix_check
@@ -104,11 +97,8 @@
       email-domain {{ email_domain }}. alias lookups:
       {{ _postfix_alias.results | map(attribute='stdout') | list }}.
 
-# Live exercise of myorigin: a bare `root` sender (the shape cron/smartd/fail2ban
-# use) must be qualified to root@$mydomain. Inject one message and read the
-# qualified envelope sender that qmgr logs to the journal -- that line is written
-# when the message reaches the active queue and persists regardless of the
-# (always-failing, no real Mailgun) delivery attempt, so the check is race-free.
+# qmgr logs the qualified sender when the message enters the active queue, so
+# this exercise does not depend on the intentionally unavailable relay.
 - name: _verify | Inject a local root-origin probe message
   command: /usr/sbin/sendmail -i root
   args:

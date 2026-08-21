@@ -81,9 +81,7 @@ smtp_tls_mandatory_protocols = >=TLSv1.2
 smtp_tls_mandatory_ciphers = high
 smtp_tls_loglevel = 1
 smtp_tls_wrappermode = {{ 'yes' if smtp_use_ssl | bool else 'no' }}
-# Rewrite the outbound sender to a per-host identity at the Mailgun-authorized
-# {{ email_domain }} (the domain the service roles send from) -- the lookup is
-# read at process start (texthash), so no postmap step. See generic.j2.
+# Apply the per-host sender identity from generic.j2 at SMTP delivery.
 smtp_generic_maps = texthash:/etc/postfix/generic
 # Raise the per-message cap to 20 MB (default 10 MB) so a large smartd/journal
 # digest or a fail2ban report with an attachment relays instead of bouncing;
