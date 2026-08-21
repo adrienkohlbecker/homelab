@@ -160,9 +160,7 @@
   become: true
 
 - name: _verify | Install keepalived_vrrp collector fixture
-  import_role:
-    name: netdata
-    tasks_from: charts_d
+  import_tasks: charts_d.yml
   vars:
     netdata_keepalived_vrrp_ip: 198.51.100.10
     netdata_keepalived_vrrp_update_every: 5
@@ -172,9 +170,7 @@
       conf: charts_d_keepalived_vrrp.conf.j2
 
 - name: _verify | Install keepalived_vrrp lost-master alert fixture
-  import_role:
-    name: netdata
-    tasks_from: health
+  import_tasks: health.yml
   vars:
     netdata_args:
       src: keepalived_vrrp_alerts.conf

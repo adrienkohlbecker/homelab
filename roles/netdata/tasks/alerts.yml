@@ -3,9 +3,7 @@
 # configs plus the disks.conf/timex.conf un-silence and their
 # fail-closed asserts. Split out of main.yml for navigability.
 - name: Configure netdata alerts
-  import_role:
-    name: netdata
-    tasks_from: health
+  import_tasks: health.yml
   vars:
     netdata_args:
       src: systemdunits_alerts.conf
@@ -14,9 +12,7 @@
     - netdata
 
 - name: Configure netdata GitLab Runner failure alert
-  import_role:
-    name: netdata
-    tasks_from: health
+  import_tasks: health.yml
   vars:
     netdata_args:
       src: gitlab_runner_alerts.conf
@@ -25,9 +21,7 @@
     - netdata
 
 - name: Configure netdata alerts
-  import_role:
-    name: netdata
-    tasks_from: health
+  import_tasks: health.yml
   vars:
     netdata_args:
       src: zfs_alerts_override.conf.j2
@@ -36,9 +30,7 @@
     - netdata
 
 - name: Configure netdata postfix queue alert
-  import_role:
-    name: netdata
-    tasks_from: health
+  import_tasks: health.yml
   vars:
     netdata_args:
       src: postfix_alerts.conf
@@ -50,9 +42,7 @@
 # runs; gate on the same fail2ban_enabled flag.
 - name: Configure netdata fail2ban ban-count alert
   when: fail2ban_enabled
-  import_role:
-    name: netdata
-    tasks_from: health
+  import_tasks: health.yml
   vars:
     netdata_args:
       src: fail2ban_alerts.conf
@@ -61,9 +51,7 @@
     - netdata
 
 - name: Configure netdata wireguard bunk-peer handshake alert
-  import_role:
-    name: netdata
-    tasks_from: health
+  import_tasks: health.yml
   vars:
     netdata_args:
       src: wireguard_alerts.conf.j2
@@ -75,9 +63,7 @@
 # Deployed only on the designated primary peer: a backup normally has
 # holds_vip=0, so the alarm there would be a permanent false positive.
 - name: Configure netdata keepalived lost-master alert
-  import_role:
-    name: netdata
-    tasks_from: health
+  import_tasks: health.yml
   vars:
     netdata_args:
       src: keepalived_vrrp_alerts.conf
@@ -103,9 +89,7 @@
     - netdata
 
 - name: Configure netdata SMART + NVMe wear alerts
-  import_role:
-    name: netdata
-    tasks_from: health
+  import_tasks: health.yml
   vars:
     netdata_args:
       src: disk_health_alerts.conf
@@ -114,9 +98,7 @@
     - netdata
 
 - name: Configure netdata fluent-bit output-drop alert
-  import_role:
-    name: netdata
-    tasks_from: health
+  import_tasks: health.yml
   vars:
     netdata_args:
       src: fluentbit_alerts.conf
@@ -125,9 +107,7 @@
     - netdata
 
 - name: Configure netdata reboot-required alert
-  import_role:
-    name: netdata
-    tasks_from: health
+  import_tasks: health.yml
   vars:
     netdata_args:
       src: reboot_alerts.conf
@@ -377,9 +357,7 @@
     - netdata
 
 - name: Configure sustained data-collection-failure alert
-  import_role:
-    name: netdata
-    tasks_from: health
+  import_tasks: health.yml
   vars:
     netdata_args:
       src: go_d_plugin_alerts.conf

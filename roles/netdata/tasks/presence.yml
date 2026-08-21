@@ -16,9 +16,7 @@
   become: true
 
 - name: presence | Install netdata_presence charts.d collector
-  import_role:
-    name: netdata
-    tasks_from: charts_d
+  import_tasks: charts_d.yml
   vars:
     netdata_args:
       name: netdata_presence
@@ -27,9 +25,7 @@
       condition: "{{ netdata_presence_condition | default(true) }}"
 
 - name: presence | Configure netdata_presence alerts
-  import_role:
-    name: netdata
-    tasks_from: health
+  import_tasks: health.yml
   vars:
     netdata_args:
       src: netdata_presence_alerts.conf
@@ -39,9 +35,7 @@
 # Per-context $last_collected_t staleness alerts + the shared
 # go.d-collector staleness/failure templates.
 - name: presence | Configure netdata context-liveness alerts
-  import_role:
-    name: netdata
-    tasks_from: health
+  import_tasks: health.yml
   vars:
     netdata_args:
       src: context_liveness.conf.j2

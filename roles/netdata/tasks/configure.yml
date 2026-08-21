@@ -105,9 +105,7 @@
     - netdata
 
 - name: Configure prometheus metrics
-  import_role:
-    name: netdata
-    tasks_from: config
+  import_tasks: config.yml
   vars:
     netdata_args:
       src: prometheus.conf.j2
@@ -128,9 +126,7 @@
     - netdata
 
 - name: Configure postfix metrics
-  import_role:
-    name: netdata
-    tasks_from: config
+  import_tasks: config.yml
   vars:
     netdata_args:
       src: postfix.conf
@@ -141,9 +137,7 @@
     - netdata
 
 - name: Configure docker metrics
-  import_role:
-    name: netdata
-    tasks_from: config
+  import_tasks: config.yml
   vars:
     netdata_args:
       src: docker.conf.j2
@@ -163,9 +157,7 @@
     - netdata
 
 - name: Configure intel gpu metrics
-  import_role:
-    name: netdata
-    tasks_from: config
+  import_tasks: config.yml
   vars:
     netdata_args:
       src: intelgpu.conf

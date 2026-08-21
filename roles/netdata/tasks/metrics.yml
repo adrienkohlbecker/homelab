@@ -43,9 +43,7 @@
     - netdata
 
 - name: Install netdata_presence metrics
-  import_role:
-    name: netdata
-    tasks_from: presence
+  import_tasks: presence.yml
   vars:
     netdata_presence_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
   tags:
@@ -82,9 +80,7 @@
 # DNS VIP bound to a local interface? Gated by host var so non-DNS hosts stay
 # clean; the plugin's own _check is a second guard.
 - name: Install keepalived VRRP metrics
-  import_role:
-    name: netdata
-    tasks_from: charts_d
+  import_tasks: charts_d.yml
   vars:
     netdata_args:
       name: keepalived_vrrp
