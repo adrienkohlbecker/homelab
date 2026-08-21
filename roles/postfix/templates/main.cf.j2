@@ -39,7 +39,6 @@ alias_database =
 # See http://www.postfix.org/STANDARD_CONFIGURATION_README.html (null client).
 mydestination = $myhostname, localhost
 relayhost = [{{ smtp_host }}]:{{ smtp_port }}
-mailbox_size_limit = 0
 # Send-only relay: disable every inet service from master.cf while retaining the
 # local pickup path used by sendmail. IPv6 is disabled at the kernel and Mailgun
 # publishes no AAAA, so pin inet_protocols to ipv4 -- `all` only adds dead AAAA
