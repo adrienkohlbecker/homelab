@@ -26,18 +26,6 @@
   failed_when: podman_operator_prune_state.stat.exists
   become: true
 
-# A real container start proves the whole storage stack (driver and graphroot)
-# actually works -- not just that storage.conf parsed. First run pulls over the
-# qemu SLIRP NAT (TCP), so retry a couple times for a transient registry hiccup.
-- name: _verify | A container actually starts
-  command: podman run --rm {{ podman_probe_image }} true
-  become: true
-  register: podman_run_probe
-  until: podman_run_probe.rc == 0
-  retries: 3
-  delay: 5
-  changed_when: false
-
 - name: _verify | Read podman's effective runtime config
   command: podman info --format json
   become: true
@@ -130,11 +118,17 @@
     disable_dns: false
   become: true
 
+# This is the first rootful container start and may need to pull over the qemu
+# NAT, so tolerate a transient registry failure.
 - name: _verify | Start a named server container on it
   command: >-
     podman run -d --name podman_verify_server
     --network podman_verify_dns {{ podman_probe_image }} sleep 300
   become: true
+  register: podman_dns_server
+  until: podman_dns_server.rc == 0
+  retries: 3
+  delay: 5
   changed_when: true
 
 - name: _verify | A peer resolves it by <name>.dns.podman
