@@ -1,14 +1,6 @@
 # Assertions for state set up by packer/scripts/{provision,chroot}.sh.
 # Run automatically by test/testrole.py after the role-apply +
 # idempotence passes. Add new assertions here as packer code grows.
-#
-# Skipped on the `minimal` variant — that variant boots the upstream
-# Ubuntu cloud image directly and never goes through packer's
-# provision.sh / chroot.sh, so none of the invariants below apply.
-
-- name: _verify | Skip on minimal (no packer-built image to assert against)
-  when: qemu_test_minimal
-  meta: end_play
 
 # --- ESP fundamentals (universal across box / lab / pug) ---
 
