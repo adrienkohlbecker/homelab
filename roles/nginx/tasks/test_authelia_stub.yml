@@ -2,17 +2,16 @@
 # nginx_site auth contracts run without converging the real Authelia service.
 #
 # Inputs: nginx_test_authelia_stub_args.mode, optional and defaulting to gate:
-#   always_200  admit every request when only the wiring matters
 #   gate        return 401 plus the portal redirect target
 #   authed      admit and return a fixed Remote-User header
 #   basic       admit only the fixed nginxverify:secret credential
 - name: test_authelia_stub | Assert mode is a known value
   assert:
     that:
-      - (nginx_test_authelia_stub_args | default({})).mode | default('gate') in ['always_200', 'gate', 'authed', 'basic']
+      - (nginx_test_authelia_stub_args | default({})).mode | default('gate') in ['gate', 'authed', 'basic']
     fail_msg: >-
       nginx_test_authelia_stub_args.mode must be one of
-      always_200/gate/authed/basic; got
+      gate/authed/basic; got
       '{{ (nginx_test_authelia_stub_args | default({})).mode | default('gate') }}'.
 
 - name: test_authelia_stub | Resolve caller defaults
@@ -46,8 +45,6 @@
             return 401;
           }
           add_header Remote-User "nginxverifyuser" always;
-          return 200 'test_stub_ok';
-      {% else %}
           return 200 'test_stub_ok';
       {% endif %}
         }

@@ -15,15 +15,15 @@
 # homepage uses nginx_site_args.auth=true, so the /alerts/ and root
 # locations issue auth_request subrequests to 127.0.0.1:{{ service_ports.authelia }}.
 # Without a real Authelia listening there, _verify HTTP probes fail with 500.
-# The stub returns 200 to every auth-request, exercising the auth_request
-# wiring in nginx without bringing up the full authelia role.
+# The stub admits auth requests with a fixed identity, exercising nginx's
+# auth_request wiring without bringing up the full Authelia role.
 - name: _setup | Install authelia stub for auth-enabled tests
   import_role:
     name: nginx
     tasks_from: test_authelia_stub
   vars:
     nginx_test_authelia_stub_args:
-      mode: always_200
+      mode: authed
 
 - name: _setup | Setup dependencies
   shell: |

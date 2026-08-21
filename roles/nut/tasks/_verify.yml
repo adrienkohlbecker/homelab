@@ -40,7 +40,7 @@
 
 # The CGI status page: nginx 301s / -> /upsstats.cgi, proxied to nut-cgi over
 # the role-managed fcgiwrap socket. The site has auth enabled,
-# so _setup's authelia_stub (always_200) admits the auth_request subrequest.
+# so _setup's Authelia stub admits the auth_request subrequest.
 # Snakeoil cert -> validate_certs: false. Broad status_code list lets a
 # transient 502 (fcgiwrap warming) retry; the `until` pins success on a real 200.
 - name: _verify | NUT CGI status page is served through nginx + fcgiwrap

@@ -9,4 +9,4 @@
     tasks_from: test_authelia_stub
   vars:
     nginx_test_authelia_stub_args:
-      mode: always_200
+      mode: authed

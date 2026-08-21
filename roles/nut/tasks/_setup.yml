@@ -4,11 +4,11 @@
     tasks_from: test_fixture
 
 # nut's nginx site has auth enabled; the stub stands in for Authelia's
-# auth-request endpoint (always_200) so _verify's CGI probe is admitted.
+# auth-request endpoint so _verify's CGI probe is admitted.
 - name: _setup | Install authelia stub for auth-enabled tests
   import_role:
     name: nginx
     tasks_from: test_authelia_stub
   vars:
     nginx_test_authelia_stub_args:
-      mode: always_200
+      mode: authed
