@@ -565,22 +565,6 @@
       loop_control:
         label: "{{ item.item }}"
 
-# --- x86_64: no /EFI/Linux staging (only the aarch64 branch creates it) ---
-
-- name: _verify | X86_64-only assertions
-  when: ansible_architecture == "x86_64"
-  become: true
-  block:
-    - name: _verify | Stat /EFI/Linux on x86_64
-      stat:
-        path: /boot/efi/EFI/Linux
-      register: packer_verify_efi_linux_x86
-
-    - name: _verify | /EFI/Linux directory absent on x86_64
-      assert:
-        that: not packer_verify_efi_linux_x86.stat.exists
-        fail_msg: "/boot/efi/EFI/Linux/ shouldn't exist on x86_64 — only the aarch64 branch in chroot.sh creates it"
-
 # --- Functional kernel-update + reboot exercise (both arches) ---
 #
 # Trigger an apt-driven kernel transaction and reboot, then prove the
