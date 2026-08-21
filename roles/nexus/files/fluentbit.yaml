@@ -61,11 +61,17 @@ pipeline:
       parser: nexus_access_request
       reserve_data: true
       preserve_key: true
+    - name: parser
+      match: svc.nexus.service
+      key_name: formattedMessage
+      parser: nexus_outbound_request
+      reserve_data: true
+      preserve_key: true
     - name: modify
       match: svc.nexus.service
       condition:
         - key_exists CONTAINER_TAG
-        - key_value_matches loggerName '^org\.eclipse\.jetty\.server\.RequestLog$'
+        - key_value_matches loggerName '^(org\.eclipse\.jetty\.server\.RequestLog|outboundRequests)$'
         - key_exists method
         - key_exists status
       hard_rename:
@@ -82,35 +88,6 @@ pipeline:
         - level
         - app_timestamp
         - request_thread
-      set:
-        - _level debug
-        - parser_status parsed
-    - name: parser
-      match: svc.nexus.service
-      key_name: formattedMessage
-      parser: nexus_outbound_request
-      reserve_data: true
-      preserve_key: true
-    - name: modify
-      match: svc.nexus.service
-      condition:
-        - key_exists CONTAINER_TAG
-        - key_value_matches loggerName '^outboundRequests$'
-        - key_exists method
-        - key_exists status
-      hard_rename:
-        - formattedMessage log
-        - threadName thread
-        - loggerName source
-      remove:
-        - sequenceNumber
-        - timestamp
-        - nanoseconds
-        - context
-        - message
-        - arguments
-        - level
-        - app_timestamp
         - outbound_thread
       set:
         - _level debug
