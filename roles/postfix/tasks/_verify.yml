@@ -10,33 +10,38 @@
   changed_when: false
   become: true
 
-- name: _verify | Query the SASL map for the relayhost key
-  command: postmap -q "[{{ smtp_host }}]:{{ smtp_port }}" texthash:/etc/postfix/sasl_passwd
-  register: _postfix_sasl
-  failed_when: _postfix_sasl.stdout != postfix_smtp_user ~ ':' ~ postfix_smtp_password
-  changed_when: false
-  become: true
-
-- name: _verify | Query the sender-rewrite map for the local hostname
-  command: postmap -q @{{ inventory_hostname }} texthash:/etc/postfix/generic
-  register: _postfix_generic
-  failed_when: _postfix_generic.stdout != inventory_hostname ~ '@' ~ email_domain
-  changed_when: false
-  become: true
-
-- name: _verify | Resolve the local aliases
-  command: postmap -q {{ item.key }} texthash:/etc/postfix/aliases
+- name: _verify | Resolve Postfix lookup maps
+  command:
+    argv:
+      - postmap
+      - -q
+      - "{{ item.query }}"
+      - "{{ item.map }}"
   loop:
-    - key: postmaster
-      value: root
-    - key: root
-      value: "{{ root_email }}"
-    - key: "{{ operator_user }}"
-      value: "{{ root_email }}"
+    - label: relay credentials
+      map: texthash:/etc/postfix/sasl_passwd
+      query: "[{{ smtp_host }}]:{{ smtp_port }}"
+      expected: "{{ postfix_smtp_user }}:{{ postfix_smtp_password }}"
+    - label: sender rewrite
+      map: texthash:/etc/postfix/generic
+      query: "@{{ inventory_hostname }}"
+      expected: "{{ inventory_hostname }}@{{ email_domain }}"
+    - label: postmaster alias
+      map: texthash:/etc/postfix/aliases
+      query: postmaster
+      expected: root
+    - label: root alias
+      map: texthash:/etc/postfix/aliases
+      query: root
+      expected: "{{ root_email }}"
+    - label: operator alias
+      map: texthash:/etc/postfix/aliases
+      query: "{{ operator_user }}"
+      expected: "{{ root_email }}"
   loop_control:
-    label: "{{ item.key }}"
-  register: _postfix_alias
-  failed_when: _postfix_alias.stdout != item.value
+    label: "{{ item.label }}"
+  register: _postfix_map
+  failed_when: _postfix_map.stdout != item.expected
   changed_when: false
   become: true
 
