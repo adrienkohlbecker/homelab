@@ -35,19 +35,6 @@
     </encoder>
   </appender>
 
-  <appender name="replicationconsole" class="ch.qos.logback.core.ConsoleAppender">
-    <filter class="org.sonatype.nexus.logging.ReplicationLogsFilter" />
-    <encoder class="ch.qos.logback.classic.encoder.JsonEncoder">
-      <withSequenceNumber>false</withSequenceNumber>
-      <withTimestamp>false</withTimestamp>
-      <withNanoseconds>false</withNanoseconds>
-      <withContext>false</withContext>
-      <withFormattedMessage>true</withFormattedMessage>
-      <withMessage>false</withMessage>
-      <withArguments>false</withArguments>
-    </encoder>
-  </appender>
-
   <!-- nginx is the authoritative inbound access log. Keep this logger isolated
        with no appender so direct health probes do not duplicate that stream. -->
   <logger name="org.eclipse.jetty.server.RequestLog" additivity="false" />
@@ -121,7 +108,6 @@
   <root level="${root.level:-INFO}">
     <appender-ref ref="console"/>
     <appender-ref ref="taskconsole"/>
-    <appender-ref ref="replicationconsole"/>
     <appender-ref ref="metrics"/>
   </root>
 </configuration>

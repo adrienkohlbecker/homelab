@@ -50,10 +50,6 @@
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: nexus.service
-        - MESSAGE: '{"level":"INFO","threadName":"replication-1","loggerName":"org.sonatype.nexus.replication.internal.ReplicationTask","mdc":{"repositoryName":"nexus-releases"},"formattedMessage":"nexus-replication-detail"}'
-          CONTAINER_TAG: nexus
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: nexus.service
         - MESSAGE: '{"level":"INFO","threadName":"qtp2132356553-1528","loggerName":"outboundRequests","formattedMessage":"[12/Jul/2026:08:53:12 +0000] - \"GET https://ports.ubuntu.com/ubuntu-ports/dists/noble/InRelease HTTP/1.1\" 304 0 312 45 [qtp2132356553-1528]"}'
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
@@ -121,12 +117,6 @@
           fields.parser_status: parsed
           fields.source: org.sonatype.nexus.cleanup.internal.task.CleanupTask
           fields.mdc.taskIdAndDate: repository.cleanup-20260712010000008
-        - message: nexus-replication-detail
-          level: info
-          service: nexus
-          fields.parser_status: parsed
-          fields.source: org.sonatype.nexus.replication.internal.ReplicationTask
-          fields.mdc.repositoryName: nexus-releases
         - message: '[12/Jul/2026:08:53:12 +0000] - "GET https://ports.ubuntu.com/ubuntu-ports/dists/noble/InRelease HTTP/1.1" 304 0 312 45 [qtp2132356553-1528]'
           level: debug
           service: nexus
