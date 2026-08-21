@@ -1,5 +1,4 @@
 # Rewrite local senders to an attributable per-host identity at
 # the Mailgun-authorized domain. External recipients never match these
-# lowest-precedence domain rules.
-@{{ domain }}          {{ inventory_hostname }}@{{ email_domain }}
+# lowest-precedence domain rule.
 @{{ inventory_hostname }}    {{ inventory_hostname }}@{{ email_domain }}

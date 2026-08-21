@@ -18,7 +18,7 @@
     - key: master_service_disable
       value: inet
     - key: myorigin
-      value: "{{ domain }}"
+      value: "{{ inventory_hostname }}"
     - key: smtp_sasl_password_maps
       value: texthash:/etc/postfix/sasl_passwd
     - key: smtp_tls_security_level
@@ -82,10 +82,10 @@
   changed_when: false
   become: true
 
-- name: _verify | Probe's envelope sender was qualified to root@domain
+- name: _verify | Probe's envelope sender was qualified with the host name
   command: journalctl -t postfix/qmgr --no-pager
   register: _postfix_qmgr
-  until: ('from=<root@' ~ domain ~ '>') in _postfix_qmgr.stdout
+  until: ('from=<root@' ~ inventory_hostname ~ '>') in _postfix_qmgr.stdout
   retries: 10
   delay: 1
   changed_when: false
