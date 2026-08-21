@@ -12,7 +12,7 @@
     name: nginx
     tasks_from: test_fixture
 
-- name: _setup | Install authelia stub in gate mode for auth=required tests
+- name: _setup | Install authelia stub in gate mode for auth-enabled tests
   import_role:
     name: nginx
     tasks_from: test_authelia_stub

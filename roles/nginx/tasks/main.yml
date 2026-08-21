@@ -20,19 +20,19 @@
   loop:
     - subdomain: marantz
       proxy_pass: "https://{{ external_ips.marantz }}:10443/"
-      auth: required
+      auth: true
     - subdomain: printer
       proxy_pass: "http://{{ external_ips.printer }}:80/"
-      auth: required
+      auth: true
     - subdomain: siglent
       proxy_pass: "http://{{ external_ips.siglent }}:80/"
-      auth: required
+      auth: true
     - subdomain: ups
       proxy_pass: "https://{{ external_ips.eaton }}:443/"
-      auth: required
+      auth: true
     - subdomain: tubeszb
       proxy_pass: "http://{{ external_ips.tubeszb }}:80/"
-      auth: required
+      auth: true
     - subdomain: unifi
       proxy_pass: "https://{{ external_ips.udm }}:443/"
       csp_additional: connect-src api.mapbox.com ui.com *.ui.com {{ nginx_csp_default }}

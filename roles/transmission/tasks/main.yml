@@ -208,6 +208,6 @@
       # Authelia gates the browser UI. The *arr leg uses
       # transmission.dns.podman:9091 over the media podman network
       # with rpc-username/rpc-password, bypassing nginx entirely.
-      auth: required
+      auth: true
   tags:
     - transmission

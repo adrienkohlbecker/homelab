@@ -28,12 +28,9 @@
 #                             that ship a strict nonce-based CSP (Authelia) where
 #                             nginx's blanket CSP would intersect with the upstream's
 #                             and produce stricter-than-either rules in the browser
-#   auth                      optional, default 'none'. Forward-auth via Authelia:
-#                             - 'none'                 — no auth_request (default)
-#                             - 'required'             — every request through /
-#                                                        is auth_request'd; 401 →
-#                                                        302 to the portal with
-#                                                        returnUrl
+#   auth                      optional bool, default false. When true, every
+#                             request through / is auth_request'd via Authelia;
+#                             a 401 redirects to the portal with returnUrl.
 #                             Requires authelia_internal_url to point at a reachable
 #                             /api/authz/auth-request endpoint (defaults to lab's
 #                             local Authelia; pug/bunk need a per-host override if
@@ -101,7 +98,7 @@
 - name: site | Resolve caller defaults
   set_fact:
     _nginx_site_condition: "{{ nginx_site_args.condition | default(true) }}"
-    _nginx_site_auth: "{{ nginx_site_args.auth | default('none') }}"
+    _nginx_site_auth_enabled: "{{ (nginx_site_args.auth | default(false)) | bool }}"
     _nginx_site_auth_request_authorization: "{{ (nginx_site_args.auth_request_authorization | default(false)) | bool }}"
     _nginx_site_enable_http: "{{ (nginx_site_args.enable_http | default(false)) | bool }}"
   tags:
@@ -172,22 +169,22 @@
   when: _nginx_site_enable_http
   assert:
     that:
-      - _nginx_site_auth != 'required'
+      - not _nginx_site_auth_enabled
     fail_msg: >-
-      enable_http serves :80 in cleartext; do not combine it with `auth: required`
+      enable_http serves :80 in cleartext; do not combine it with `auth: true`
       (the forward-auth flow would travel unencrypted).
   tags:
     - nginx_site
 
-- name: site | Assert authelia_internal_url is set when auth is required
-  when: _nginx_site_auth == 'required'
+- name: site | Assert authelia_internal_url is set when auth is enabled
+  when: _nginx_site_auth_enabled
   assert:
     that:
       - authelia_internal_url is defined
       - (authelia_internal_url | default('')) is string
       - (authelia_internal_url | default('')) is match('^https?://')
     fail_msg: >-
-      auth: required needs authelia_internal_url set to the http(s):// URL of a
+      auth: true needs authelia_internal_url set to the http(s):// URL of a
       reachable Authelia /api/authz/auth-request endpoint (group_vars/all sets
       lab's; pug/bunk need a per-host override). It is rendered straight into the
       /internal/authelia proxy_pass, so an unset value would only fail later at
@@ -199,10 +196,10 @@
   when: _nginx_site_auth_request_authorization
   assert:
     that:
-      - _nginx_site_auth == 'required'
+      - _nginx_site_auth_enabled
     fail_msg: >-
       auth_request_authorization only affects Authelia auth subrequests and
-      therefore requires `auth: required`.
+      therefore requires `auth: true`.
   tags:
     - nginx_site
 

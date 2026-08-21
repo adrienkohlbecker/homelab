@@ -165,7 +165,7 @@
     nginx_site_args:
       subdomain: nginxverify
       proxy_pass: http://127.0.0.1:18080/
-      auth: required
+      auth: true
 
 - name: _verify | Unauthenticated navigation redirects to the Authelia portal (302)
   uri:
@@ -240,7 +240,7 @@
       Raw apikey leaked into /var/log/nginx/access.log; expected only
       apikey=REDACTED.
 
-# An auth: required vhost must gate EVERY cookieless
+# An auth-enabled vhost must gate EVERY cookieless
 # request to Authelia, including one carrying its own Authorization header --
 # there is no Authorization-bypass shortcut. Stub is still in gate mode (401), so
 # the request must redirect to the portal (302), not short-circuit to the upstream.
@@ -252,7 +252,7 @@
     nginx_site_args:
       subdomain: nginxverifyempty
       proxy_pass: http://127.0.0.1:18080/
-      auth: required
+      auth: true
 
 - name: _verify | A cookieless Authorization-bearing request is still gated (no bypass)
   uri:
@@ -328,7 +328,7 @@
     nginx_site_args:
       subdomain: nginxverifyauth
       proxy_pass: http://127.0.0.1:18080/
-      auth: required
+      auth: true
 
 - name: _verify | Authenticated browser user is admitted and identity-forwarded
   uri:
@@ -367,7 +367,7 @@
     nginx_site_args:
       subdomain: nginxverifybasic
       proxy_pass: http://127.0.0.1:18080/
-      auth: required
+      auth: true
       auth_request_authorization: true
 
 - name: _verify | Basic-auth service account is admitted
@@ -410,7 +410,7 @@
     nginx_site_args:
       subdomain: nginxverifyloc
       proxy_pass: http://127.0.0.1:18080/
-      auth: required
+      auth: true
       location_conf: |
         add_header X-Verify-Loc "1" always;
 
@@ -883,7 +883,7 @@
         nginx_site_args:
           subdomain: nginxverifybroken
           proxy_pass: http://127.0.0.1:18080/
-          auth: required
+          auth: true
           server_conf: |
             nginx_verify_broken_site_directive on;
 
@@ -925,12 +925,12 @@
           subdomain: nginxverifyhttpauth
           proxy_pass: http://127.0.0.1:18080/
           enable_http: true
-          auth: required
+          auth: true
 
     - name: _verify | Combining enable_http and auth must fail validation (unexpected success)
       fail:
         msg: >-
-          enable_http + auth: required should have failed the site assert
+          enable_http + auth: true should have failed the site assert
           (cleartext :80 would carry the auth flow), but the helper accepted it.
   rescue:
     - name: _verify | The failure was the enable_http/auth assert (not something else)

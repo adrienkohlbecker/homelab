@@ -102,6 +102,6 @@
       # reverse proxy when no native auth is configured, and intra-stack
       # peers reach it as bazarr.dns.podman:{{ service_ports.bazarr }} with
       # apikey. See sonarr's nginx_site_args comment.
-      auth: required
+      auth: true
   tags:
     - bazarr

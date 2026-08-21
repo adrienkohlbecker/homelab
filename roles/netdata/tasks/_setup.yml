@@ -46,7 +46,7 @@
             }
         }
 
-# netdata uses nginx_site_args.auth=required. Gate-mode Authelia stub so
+# netdata uses nginx_site_args.auth=true. Gate-mode Authelia stub so
 # _verify sees the unauthenticated browser hit redirect to the portal (302).
 - name: _setup | Install authelia stub in gate mode
   import_role:

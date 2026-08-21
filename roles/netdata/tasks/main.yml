@@ -79,7 +79,7 @@
       # request. The transition query asks for 10,000 records; a comparable
       # response measured 1.7 MiB on pug, so 4 MiB of proxy buffers keeps the
       # minute poll out of nginx temporary files. See notes/authelia_nginx_gating.md.
-      auth: required
+      auth: true
       auth_request_authorization: true
       location_conf: |
         proxy_buffer_size 16k;

@@ -31,8 +31,7 @@ server {
 {% endset %}
 {{ security_headers }}
 
-{% set _auth_enabled = _nginx_site_auth == 'required' %}
-{% if _auth_enabled %}
+{% if _nginx_site_auth_enabled %}
   # Internal auth subrequest: 200 allows the request; 401 reaches the handler
   # below. The URL is host-configurable for remote Authelia access.
   location /internal/authelia {
@@ -75,7 +74,7 @@ server {
 
 {% endif %}
   location / {
-{% if _auth_enabled %}
+{% if _nginx_site_auth_enabled %}
     auth_request /internal/authelia;
     # Authelia sends Remote-User on every authenticated 200.
     auth_request_set $authelia_user $upstream_http_remote_user;
@@ -98,7 +97,7 @@ server {
 
     # Shared canonical forwarded headers.
     include /etc/nginx/snippets/proxy_params.conf;
-{% if _auth_enabled %}
+{% if _nginx_site_auth_enabled %}
     # The *arr suite reads this when AuthenticationMethod=External.
     proxy_set_header X-Forwarded-User $authelia_user;
 {% endif %}
@@ -134,7 +133,7 @@ server {
     {{ nginx_site_args.location_conf | trim | indent(4) }}
 {% endif %}
   }
-{% if _auth_enabled %}
+{% if _nginx_site_auth_enabled %}
 
   # Redirect navigations to Authelia, but return 401 to XHR/fetch to avoid SPA
   # redirect loops. nginx.conf.j2 derives the choice from Sec-Fetch-Mode; this

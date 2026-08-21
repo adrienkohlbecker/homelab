@@ -12,7 +12,7 @@ homeassistant:
 # shadows the global one and the override never reaches HA discovery.
 
 # Enable the frontend. The listener is published only on 127.0.0.1 (see the
-# --publish in z2m.service.j2) and fronted by nginx with `auth: required`
+# --publish in z2m.service.j2) and fronted by nginx with `auth: true`
 # (Authelia), so `auth_token` is intentionally unset -- it would be a
 # redundant cleartext-in-config second gate behind the real one.
 frontend:

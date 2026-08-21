@@ -133,7 +133,7 @@
       # Authelia is the sole gate: kuma's own login is disabled via the
       # disableAuth seed above (no env knob exists for it), so this vhost
       # auth is what actually protects the dashboard.
-      auth: required
+      auth: true
       # /api/push/<token> is kuma's push-monitor heartbeat endpoint;
       # the token in the URL is the secret. Off-host monitored systems
       # hit it without an Authelia session, so the sibling location

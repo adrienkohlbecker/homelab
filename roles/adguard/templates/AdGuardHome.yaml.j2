@@ -14,7 +14,7 @@ http:
   session_ttl: 30d
 {#
   No app-level users: the admin UI/API is only published on the host
-  loopback and fronted by the Authelia-gated nginx vhost (auth: required
+  loopback and fronted by the Authelia-gated nginx vhost (auth: true
   in tasks/main.yml), which is the sole LAN ingress. Host-local processes
   and every container on the default podman bridge can reach the API
   unauthenticated -- and it controls upstreams/rewrites, so a compromised

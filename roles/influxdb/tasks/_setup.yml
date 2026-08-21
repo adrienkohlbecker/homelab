@@ -15,7 +15,7 @@
 # Stand in for the real Authelia. `gate` mode returns 401 on every
 # auth-request subrequest -- so an unauthenticated browser probe to /
 # follows the site's error_page 401 -> 302 redirect to the portal, which
-# is what the influxdb vhost (auth: required, no token injection) does
+# is what the influxdb vhost (auth: true, no token injection) does
 # for every browser hit. _verify asserts that redirect.
 - name: _setup | Install authelia stub in gate mode
   import_role:

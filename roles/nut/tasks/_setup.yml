@@ -3,9 +3,9 @@
     name: nginx
     tasks_from: test_fixture
 
-# nut's nginx site is auth=required; the stub stands in for Authelia's
+# nut's nginx site has auth enabled; the stub stands in for Authelia's
 # auth-request endpoint (always_200) so _verify's CGI probe is admitted.
-- name: _setup | Install authelia stub for auth=required tests
+- name: _setup | Install authelia stub for auth-enabled tests
   import_role:
     name: nginx
     tasks_from: test_authelia_stub

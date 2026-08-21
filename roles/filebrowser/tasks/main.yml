@@ -89,7 +89,7 @@
   vars:
     nginx_site_args:
       subdomain: filebrowser
-      auth: required
+      auth: true
       # No other site should embed the autoindex — defense-in-depth for the
       # case where attacker-influenced filenames make it onto disk.
       csp_frame_ancestors: "'none'"

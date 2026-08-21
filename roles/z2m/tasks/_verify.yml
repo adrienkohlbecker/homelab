@@ -9,9 +9,9 @@
     state: present
   become: true
 
-# The vhost is `auth: required`, so the browser path goes through Authelia.
+# The vhost has `auth: true`, so the browser path goes through Authelia.
 # A cookieless GET must redirect to the portal -- the only probe that fails if
-# `auth: required` is dropped from nginx_site_args. The returnUrl (rd=) echoing
+# `auth: true` is dropped from nginx_site_args. The returnUrl (rd=) echoing
 # z2m's own URL proves the request routed to z2m's server_name, not the default
 # vhost.
 - name: _verify | Z2M UI gate redirects unauthenticated requests to Authelia

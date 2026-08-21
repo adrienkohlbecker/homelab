@@ -12,7 +12,7 @@
   import_role:
     name: fluentbit
 
-- name: _setup | Install authelia stub for auth=required tests
+- name: _setup | Install authelia stub for auth-enabled tests
   import_role:
     name: nginx
     tasks_from: test_authelia_stub

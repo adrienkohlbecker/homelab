@@ -13,7 +13,7 @@
   until: _kuma_loopback.status == 200
   become: true
 
-# nginx auth-gate probe -- the UI subdomain is `auth: required`, so a
+# nginx auth-gate probe -- the UI subdomain has `auth: true`, so a
 # cookieless GET / has to land on Authelia's 302 redirect chain. Validates
 # both the auth_request wiring and the proxy_pass port.
 #

@@ -106,6 +106,6 @@
       # Authelia. Intra-stack peers (bazarr, seerr, etc.) reach sonarr
       # via sonarr.dns.podman:8989 carrying X-Api-Key, bypassing nginx
       # entirely.
-      auth: required
+      auth: true
   tags:
     - sonarr

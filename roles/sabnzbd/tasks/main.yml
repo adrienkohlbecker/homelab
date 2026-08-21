@@ -199,6 +199,6 @@
       # reachable in cleartext by ANY container on the flat media network,
       # not just the *arr apps. Accepted under the single-operator model; the
       # lever to tighten is a narrower network, not the cookie gate.
-      auth: required
+      auth: true
   tags:
     - sabnzbd

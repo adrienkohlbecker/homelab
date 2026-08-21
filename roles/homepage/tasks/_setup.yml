@@ -12,12 +12,12 @@
   import_role:
     name: fluentbit
 
-# homepage uses nginx_site_args.auth=required, so the /alerts/ and root
+# homepage uses nginx_site_args.auth=true, so the /alerts/ and root
 # locations issue auth_request subrequests to 127.0.0.1:{{ service_ports.authelia }}.
 # Without a real Authelia listening there, _verify HTTP probes fail with 500.
 # The stub returns 200 to every auth-request, exercising the auth_request
 # wiring in nginx without bringing up the full authelia role.
-- name: _setup | Install authelia stub for auth=required tests
+- name: _setup | Install authelia stub for auth-enabled tests
   import_role:
     name: nginx
     tasks_from: test_authelia_stub
