@@ -183,8 +183,8 @@
       # layers) without nginx buffering to disk or capping the body. Cold-
       # cache fetches of upstream proxies (e.g. cdimage.ubuntu.com) can
       # take minutes; the default 60s read timeout cuts them off mid-pull.
-      proxy_buffering: "off"
-      proxy_request_buffering: "off"
+      proxy_buffering: false
+      proxy_request_buffering: false
       client_max_body_size: "0"
       proxy_read_timeout: 3600s
       proxy_send_timeout: 3600s

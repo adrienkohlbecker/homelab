@@ -114,10 +114,10 @@ server {
     proxy_read_timeout {{ nginx_site_args.proxy_read_timeout }};
 {% endif %}
 {% if nginx_site_args.proxy_buffering is defined %}
-    proxy_buffering {{ nginx_site_args.proxy_buffering }};
+    proxy_buffering {{ nginx_site_args.proxy_buffering | ternary('on', 'off') }};
 {% endif %}
 {% if nginx_site_args.proxy_request_buffering is defined %}
-    proxy_request_buffering {{ nginx_site_args.proxy_request_buffering }};
+    proxy_request_buffering {{ nginx_site_args.proxy_request_buffering | ternary('on', 'off') }};
 {% endif %}
 {% if nginx_site_args.client_max_body_size is defined %}
     client_max_body_size {{ nginx_site_args.client_max_body_size }};

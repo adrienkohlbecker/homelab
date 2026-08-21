@@ -499,8 +499,8 @@
     nginx_site_args:
       subdomain: nginxverifybuffering
       proxy_pass: http://127.0.0.1:18080/
-      proxy_buffering: "off"
-      proxy_request_buffering: "off"
+      proxy_buffering: false
+      proxy_request_buffering: false
 
 - name: _verify | The proxy-buffering vhost serves the proxied response
   uri:
