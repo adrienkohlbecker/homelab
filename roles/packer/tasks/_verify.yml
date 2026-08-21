@@ -76,25 +76,27 @@
   register: packer_verify_efibootmgr
   become: true
 
-# chroot.sh registers either a single "rEFInd" entry (single-disk
-# variants) or per-disk "rEFInd (disk N)" entries (multi-disk mdadm-EFI
-# on lab). The disk-N suffix is the survival mechanism: firmware only
-# follows paths it knows about, so losing one disk still leaves the
-# other entries usable. Either shape must be in NVRAM -- the
-# firmware-fallback BOOT<arch>.EFI checked above is a degraded recovery
-# path (kicks in on CMOS clear / BIOS reset), not the everyday loader.
-# A green fallback + missing primary entry would silently force every
-# reboot through the fallback chain.
-- name: _verify | REFInd Boot entry registered in NVRAM
+# The first entry is the everyday boot path. The firmware-fallback
+# BOOT<arch>.EFI checked above is only the degraded recovery path.
+- name: _verify | First BootOrder entry resolves to rEFInd
+  vars:
+    _bo_first: >-
+      {{ (packer_verify_efibootmgr.stdout_lines
+          | select('match', '^BootOrder:')
+          | first | default(''))
+          | regex_replace('^BootOrder:\s*', '')
+          | split(',') | first | default('') }}
+    _bo_first_line: >-
+      {{ packer_verify_efibootmgr.stdout_lines
+         | select('match', '^Boot' ~ _bo_first ~ '\*?\s')
+         | first | default('') }}
   assert:
-    that: >-
-      packer_verify_efibootmgr.stdout
-      is search('^Boot[0-9A-F]{4}\*?\s+rEFInd( \(disk \d+\))?\s', multiline=True)
+    that:
+      - _bo_first | length > 0
+      - "'EFI\\\\refind\\\\' in _bo_first_line"
     fail_msg: >-
-      No NVRAM Boot#### entry labelled "rEFInd" (or "rEFInd (disk N)")
-      — chroot.sh's efibootmgr -c didn't run or didn't land. The
-      firmware-fallback /EFI/BOOT/BOOT<arch>.EFI is a recovery path,
-      not a primary boot loader.
+      First BootOrder entry (Boot{{ _bo_first }}) does not resolve to rEFInd:
+      {{ _bo_first_line }}
 
 # --- mdadm-EFI multi-disk variants (lab variant) ---
 #
@@ -402,30 +404,6 @@
         not packer_verify_efi_linux.stat.exists
         or (packer_verify_efi_linux.stat.size | default(0) | int) == 0
       become: true
-
-    # rEFInd is the firmware Boot#### entry chroot.sh creates on aarch64. The
-    # Linux EFI-stub path is a manual rEFInd stanza whose kernel command line
-    # lives in refind.conf.
-    - name: _verify | First BootOrder entry resolves to rEFInd
-      vars:
-        _bo_first: >-
-          {{ (packer_verify_efibootmgr.stdout_lines
-              | select('match', '^BootOrder:')
-              | first | default(''))
-              | regex_replace('^BootOrder:\s*', '')
-              | split(',') | first | default('') }}
-        _bo_first_line: >-
-          {{ packer_verify_efibootmgr.stdout_lines
-             | select('match', '^Boot' ~ _bo_first ~ '\*?\s')
-             | first | default('') }}
-      assert:
-        that:
-          - _bo_first | length > 0
-          - "'EFI\\\\refind\\\\' in _bo_first_line"
-        fail_msg: >-
-          First BootOrder entry (Boot{{ _bo_first }}) is not the
-          rEFInd loader — default boot would not reach the manual
-          Ubuntu (Linux EFI Stub) entry in refind.conf.
 
     - name: _verify | Kernel-install hook is a regular executable file
       stat:
