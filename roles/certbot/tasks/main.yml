@@ -4,6 +4,7 @@
       - certbot
       - python3-certbot-dns-cloudflare
       - ssl-cert
+    policy_rc_d: 101
     cache_valid_time: 3600
   register: certbot_apt
   become: true
@@ -166,5 +167,15 @@
   when:
     - certbot_cf_creds.changed
     - certbot_cert_stat.stat.exists
+  tags:
+    - certbot
+
+- name: Enable certbot renewal timer
+  when: not (ansible_check_mode and certbot_apt.changed)
+  systemd:
+    name: certbot.timer
+    enabled: true
+    state: started
+  become: true
   tags:
     - certbot
