@@ -19,30 +19,6 @@
   tags:
     - kuma
 
-# Uptime-Kuma writes kuma.db at /app/data root alongside upload assets;
-# symlink it onto the dedicated 4K-recordsize sqlite dataset so the WAL
-# workload lands there.
-#
-# create_target: false is load-bearing: kuma must create kuma.db itself
-# on first boot -- it runs the schema bootstrap only when the file is ABSENT.
-# The default mode would plant an empty kuma.db that kuma treats as an
-# already-initialised DB, skips the bootstrap, and dies on `no such table:
-# setting`. So plant the dangling symlink without a target and let kuma create
-# the real DB through it. Jellyfin uses the default pre-creation because it
-# migrates an empty DB cleanly; kuma cannot.
-- name: Place kuma SQLite DB on the sqlite dataset
-  import_role:
-    name: sqlite_dataset
-    tasks_from: dataset
-  vars:
-    sqlite_dataset_args:
-      user: "{{ kuma_user }}"
-      create_target: false
-      databases:
-        - kuma.db
-  tags:
-    - kuma
-
 - name: Create kuma podman network
   when: not ansible_check_mode
   containers.podman.podman_network:
@@ -122,7 +98,7 @@
 - name: Disable kuma's built-in auth (Authelia fronts it)
   when: not ansible_check_mode
   command: >-
-    sqlite3 -cmd ".timeout 30000" /mnt/services/sqlite/kuma/kuma.db
+    sqlite3 -cmd ".timeout 30000" /mnt/services/kuma/kuma.db
     "INSERT INTO setting (key, value, type)
        SELECT 'disableAuth', 'true', 'general' WHERE EXISTS (SELECT 1 FROM user)
      ON CONFLICT(key) DO UPDATE SET value='true', type='general'

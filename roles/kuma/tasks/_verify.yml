@@ -57,21 +57,6 @@
     or (_kuma_push_bypass.json | default({})).get('msg') != 'Monitor not found or not active.'
   become: true
 
-# Symlink contract -- the role promises /mnt/services/kuma/kuma.db is a
-# symlink onto the dedicated sqlite dataset. A snapshot-restore or a
-# regression in sqlite_dataset could leave a real file at the dest; assert
-# the symlink shape so the drift is loud, not silent.
-- name: _verify | Kuma.db is a symlink onto the sqlite dataset
-  stat:
-    path: /mnt/services/kuma/kuma.db
-    follow: false
-  register: _kuma_symlink
-  failed_when: >-
-    not _kuma_symlink.stat.exists
-    or not _kuma_symlink.stat.islnk
-    or _kuma_symlink.stat.lnk_target != '/mnt/services/sqlite/kuma/kuma.db'
-  become: true
-
 # Uid regression detector -- kuma runs as the kuma host uid directly
 # (tier-1 --user, no uidmap, entrypoint shell wrapper bypassed). kuma.db
 # should land owned by that user. A regression that drops the --user
@@ -79,7 +64,7 @@
 # uid silently; assert ownership so the regression is loud.
 - name: _verify | Kuma sqlite DB is owned by kuma
   stat:
-    path: /mnt/services/sqlite/kuma/kuma.db
+    path: /mnt/services/kuma/kuma.db
   register: _kuma_db_owner
   failed_when: >-
     not _kuma_db_owner.stat.exists
@@ -94,7 +79,7 @@
 # user, so only the safety-critical guard is exercised in-harness.
 - name: _verify | DisableAuth stays unset while the user table is empty
   command: >-
-    sqlite3 -readonly /mnt/services/sqlite/kuma/kuma.db
+    sqlite3 -readonly /mnt/services/kuma/kuma.db
     "SELECT (SELECT count(*) FROM user),
             coalesce((SELECT value FROM setting WHERE key='disableAuth'), 'unset');"
   register: _kuma_disableauth
@@ -104,13 +89,10 @@
     and _kuma_disableauth.stdout.split('|')[1] | trim == 'true'
   become: true
 
-# Functional WAL probe -- the entire point of the dedicated 4K-recordsize
-# sqlite dataset is a WAL workload. A future regression (PRAGMA against
-# a held DB silently no-ops; default journal=delete if WAL isn't forced)
-# would land the file on the right dataset but with the wrong access
-# pattern. Read-only probe, doesn't lock.
+# Functional WAL probe catches a startup regression that leaves the database
+# in the default delete-journal mode. Read-only probe, does not lock.
 - name: _verify | Kuma sqlite is in WAL journal mode
-  command: sqlite3 -readonly /mnt/services/sqlite/kuma/kuma.db 'PRAGMA journal_mode;'
+  command: sqlite3 -readonly /mnt/services/kuma/kuma.db 'PRAGMA journal_mode;'
   register: _kuma_wal
   changed_when: false
   failed_when: _kuma_wal.stdout | trim != 'wal'

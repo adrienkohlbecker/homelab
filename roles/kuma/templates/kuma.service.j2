@@ -10,8 +10,6 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
-After=zfs_mount_mnt_services_sqlite.service
-Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
@@ -63,12 +61,10 @@ ExecStart=/usr/bin/podman run \
        Journald already owns the event timestamp, and the role-owned Fluent Bit
        extension promotes the remaining fields into the common lnav shape. #}
     --env UPTIME_KUMA_LOG_FORMAT=json \
-    {# Pin the data dir: the kuma.db symlink and the /app/data volume below
-       both assume kuma writes its DB at /app/data root. Declaring it makes
-       that load-bearing assumption explicit rather than an image default. #}
+    {# The host-side auth seed and /app/data volume both assume kuma writes its
+       DB at this root. Keep that contract explicit rather than an image default. #}
     --env DATA_DIR=/app/data \
     --volume /mnt/services/kuma:/app/data \
-    --volume /mnt/services/sqlite/kuma:/mnt/services/sqlite/kuma \
     --publish 127.0.0.1:{{ service_ports.kuma }}:3001/tcp \
     {# extra/healthcheck is kuma's own image-shipped liveness script (node),
        chosen over a hand-rolled tier-2 curl probe; UPTIME_KUMA_DB_TYPE above
