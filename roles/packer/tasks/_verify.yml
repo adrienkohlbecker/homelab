@@ -12,50 +12,26 @@
 
 # --- ESP fundamentals (universal across box / lab / pug) ---
 
-- name: _verify | Stat firmware-fallback rEFInd
-  stat:
-    path: /boot/efi/EFI/BOOT/BOOT{{ 'AA64' if ansible_architecture == 'aarch64' else 'X64' }}.EFI
-  register: packer_verify_refind_fallback
-  become: true
-
-- name: _verify | Firmware-fallback rEFInd binary present at /EFI/BOOT/
-  assert:
-    that: packer_verify_refind_fallback.stat.exists
-    fail_msg: "rEFInd firmware-fallback (BOOTAA64.EFI / BOOTX64.EFI) missing — chroot.sh's fallback copy didn't land"
-
-- name: _verify | Stat ZBM unified EFI image
-  stat:
-    path: /boot/efi/EFI/ZBM/VMLINUZ.EFI
-  register: packer_verify_zbm
-  become: true
-
-- name: _verify | ZBM unified EFI image present and non-empty
-  assert:
-    that:
-      - packer_verify_zbm.stat.exists
-      - packer_verify_zbm.stat.size > 0
-    fail_msg: "ZBM unified EFI image missing or empty"
-
-- name: _verify | Stat aarch64 ZBM components
-  when: ansible_architecture == "aarch64"
+- name: _verify | Required boot artifacts are present and non-empty
+  vars:
+    _boot_artifacts:
+      - /boot/efi/EFI/BOOT/BOOT{{ 'AA64' if ansible_architecture == 'aarch64' else 'X64' }}.EFI
+      - /boot/efi/EFI/ZBM/VMLINUZ.EFI
+    _aarch64_boot_artifacts:
+      - /boot/efi/EFI/ZBM/initramfs-bootmenu.img
+      - /boot/efi/EFI/ZBM/vmlinux-bootmenu
   stat:
     path: "{{ item }}"
-  loop:
-    - /boot/efi/EFI/ZBM/initramfs-bootmenu.img
-    - /boot/efi/EFI/ZBM/vmlinux-bootmenu
-  register: packer_verify_zbm_components
+  loop: >-
+    {{ _boot_artifacts
+       + (_aarch64_boot_artifacts if ansible_architecture == 'aarch64' else []) }}
+  register: packer_verify_boot_artifact
+  failed_when: >-
+    not packer_verify_boot_artifact.stat.exists
+    or (packer_verify_boot_artifact.stat.size | default(0) | int) == 0
   become: true
-
-- name: _verify | Aarch64 ZBM components present and non-empty
-  when: ansible_architecture == "aarch64"
-  assert:
-    that:
-      - item.stat.exists
-      - item.stat.size > 0
-    fail_msg: "aarch64 ZBM component missing or empty: {{ item.item }}"
-  loop: "{{ packer_verify_zbm_components.results }}"
   loop_control:
-    label: "{{ item.item }}"
+    label: "{{ item }}"
 
 # --- refind.conf contents ---
 
