@@ -62,21 +62,6 @@
     or _headscale_data_owner.stat.pw_name != 'headscale'
   become: true
 
-# Symlink contract -- the role promises data/db.sqlite is a symlink onto the
-# dedicated sqlite dataset. A snapshot-restore or a sqlite_dataset regression
-# could leave a real file at the dest (DB silently off the 4K dataset); assert
-# the symlink shape so the drift is loud.
-- name: _verify | Headscale db.sqlite is a symlink onto the sqlite dataset
-  stat:
-    path: /mnt/services/headscale/data/db.sqlite
-    follow: false
-  register: _headscale_db_symlink
-  failed_when: >-
-    not _headscale_db_symlink.stat.exists
-    or not _headscale_db_symlink.stat.islnk
-    or _headscale_db_symlink.stat.lnk_target != '/mnt/services/sqlite/headscale/db.sqlite'
-  become: true
-
 # Functional API round-trip -- exercises the real control path end to end:
 # the CLI talks gRPC over the unix socket to the running serve process, which
 # writes to (then reads back from) the SQLite DB. A stat-only "unit active"
@@ -95,17 +80,6 @@
   register: _headscale_user_list
   changed_when: false
   failed_when: "'test-harness' not in _headscale_user_list.stdout"
-  become: true
-
-# Tie the symlink-shape check above to an observed write: the gRPC user-create
-# just wrote through data/db.sqlite (the symlink), so the real DB file must now
-# exist and be non-empty on the dedicated sqlite dataset -- catches a regression
-# that leaves the DB off the 4K dataset even when the symlink stat still passes.
-- name: _verify | The gRPC write landed on the sqlite dataset (real DB on-disk)
-  stat:
-    path: /mnt/services/sqlite/headscale/db.sqlite
-  register: _headscale_db_real
-  failed_when: not _headscale_db_real.stat.exists or _headscale_db_real.stat.size == 0
   become: true
 
 # Dual-stack STUN publish -- fox is a dual-stack relay, so the embedded DERP

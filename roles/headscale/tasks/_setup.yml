@@ -21,18 +21,6 @@
     mode: "0755"
   become: true
 
-# On prod /mnt/services/sqlite is a real ZFS dataset (recordsize=4K) made by
-# the services producer role; the test box has no such dataset, so stand the
-# parent up as a plain dir for the sqlite_dataset helper to populate.
-- name: _setup | Create /mnt/services/sqlite parent
-  file:
-    path: /mnt/services/sqlite
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
 # --- OIDC boot-test fixture -------------------------------------------------
 # Prod points headscale's OIDC at Authelia, which the box VM can't reach. Stand
 # up headscale's built-in `mockoidc` as a local issuer the box CAN reach. The

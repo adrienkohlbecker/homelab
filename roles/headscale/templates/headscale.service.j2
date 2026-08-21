@@ -31,8 +31,6 @@ After=wg-quick@wg0.service
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
-After=zfs_mount_mnt_services_sqlite.service
-Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
@@ -69,11 +67,6 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/headscale/config.yaml:/etc/headscale/config.yaml:ro \
     --volume /mnt/services/headscale/acl.hujson:/etc/headscale/acl.hujson:ro \
     --volume /mnt/services/headscale/data:/var/lib/headscale \
-    {# db.sqlite under data/ is a symlink onto the dedicated 4K-recordsize
-       sqlite dataset; mount that dataset at the same path inside the
-       container so the absolute symlink target resolves (WAL/SHM siblings
-       then also land on the dataset). See roles/sqlite_dataset. #}
-    --volume /mnt/services/sqlite/headscale:/mnt/services/sqlite/headscale \
     --publish 127.0.0.1:{{ service_ports.headscale }}:8080/tcp \
     {# Prometheus metrics (config metrics_listen_addr 0.0.0.0:9090) on host
        loopback for fox's netdata go.d prometheus collector. Unauthenticated,

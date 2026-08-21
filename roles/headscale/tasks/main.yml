@@ -88,10 +88,9 @@
   tags:
     - headscale
 
-# State dir bind-mounted to /var/lib/headscale: the auto-generated noise + DERP
-# private keys and the CLI unix socket land here. The SQLite DB lives on the
-# dedicated sqlite dataset instead (symlinked in below). Owned by the headscale
-# uid (tier-1 --user, no uidmap) so the container writes them directly.
+# State dir bind-mounted to /var/lib/headscale: the SQLite DB, auto-generated
+# noise, DERP private keys, and CLI unix socket all land here. Owned by the
+# headscale uid (tier-1 --user, no uidmap) so the container writes them directly.
 - name: Create headscale data dir
   when: not ansible_check_mode or headscale_user.uid is defined
   file:
@@ -101,23 +100,6 @@
     group: headscale
     mode: "0750"
   become: true
-  tags:
-    - headscale
-
-# Park db.sqlite on the dedicated 4K-recordsize sqlite dataset and symlink
-# data/db.sqlite onto it (config.yaml points headscale at /var/lib/headscale/
-# db.sqlite, i.e. the symlink; the unit mounts the dataset at the same path so
-# it resolves in-container). The helper plants an empty src file first because
-# headscale creates its DB on first boot.
-- name: Place headscale SQLite DB on the sqlite dataset
-  import_role:
-    name: sqlite_dataset
-    tasks_from: dataset
-  vars:
-    sqlite_dataset_args:
-      user: "{{ headscale_user }}"
-      databases:
-        - data/db.sqlite
   tags:
     - headscale
 

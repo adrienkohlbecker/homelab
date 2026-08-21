@@ -83,12 +83,6 @@ database:
   type: sqlite
   sqlite:
     path: /var/lib/headscale/db.sqlite
-    # WAL is load-bearing here, not a default-pin: db.sqlite lives on the
-    # dedicated 4K-recordsize sqlite dataset (roles/sqlite_dataset) precisely so
-    # its WAL/SHM siblings land there too. headscale defaults this on, but the
-    # storage layout *depends* on it -- a default-flip to rollback-journal would
-    # silently break that -- so state it.
-    write_ahead_log: true
 
 # TLS is terminated by nginx (roles/nginx site). Leave headscale's own TLS off.
 tls_letsencrypt_hostname: ""
