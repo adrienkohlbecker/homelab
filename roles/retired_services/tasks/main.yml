@@ -46,6 +46,91 @@
     - retired_services
     - podman
 
+- name: Query retired chrony defaults diversion # noqa: command-instead-of-module -- read-only query
+  command: dpkg-divert --list /etc/default/chrony
+  register: retired_services_chrony_diversion
+  changed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - retired_services
+    - ntp
+
+- name: Check for packaged chrony defaults saved by dpkg
+  when: retired_services_chrony_diversion.stdout | length > 0
+  stat:
+    path: /etc/default/chrony.distrib
+  register: retired_services_chrony_distrib
+  become: true
+  tags:
+    - retired_services
+    - ntp
+
+- name: Restore packaged chrony defaults
+  when: retired_services_chrony_diversion.stdout | length > 0
+  copy:
+    src: >-
+      {{ '/etc/default/chrony.distrib'
+         if retired_services_chrony_distrib.stat.exists
+         else 'chrony.default' }}
+    remote_src: "{{ retired_services_chrony_distrib.stat.exists }}"
+    dest: /etc/default/chrony
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: 'sh -c ''. "%s" && test -n "${DAEMON_OPTS:-}"'''
+  register: retired_services_chrony_default
+  become: true
+  tags:
+    - retired_services
+    - ntp
+
+- name: Remove retired chrony defaults diversion
+  when: retired_services_chrony_diversion.stdout | length > 0
+  community.general.dpkg_divert:
+    path: /etc/default/chrony
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - ntp
+
+- name: Remove packaged chrony defaults saved by the retired diversion
+  when: retired_services_chrony_diversion.stdout | length > 0
+  file:
+    path: /etc/default/chrony.distrib
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - ntp
+
+- name: Remove retired chrony IPv4 drop-in
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      for: chrony.service
+  tags:
+    - retired_services
+    - ntp
+
+- name: Restart chrony after removing retired IPv4 configuration
+  when:
+    - not ansible_check_mode
+    - >-
+      (retired_services_chrony_default.changed | default(false))
+      or chrony_service_d_override_conf_result.changed
+  systemd:
+    name: chrony.service
+    state: restarted
+  become: true
+  tags:
+    - retired_services
+    - ntp
+
 - name: Remove retired NUT driver network-ordering drop-in
   import_role:
     name: systemd_unit

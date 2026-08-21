@@ -60,6 +60,34 @@
     dest: /usr/lib/tmpfiles.d/podman.conf
   become: true
 
+- name: _setup | Install chrony for retired IPv4 fixture
+  apt:
+    name: chrony
+    state: present
+    policy_rc_d: 101
+  become: true
+
+- name: _setup | Register retired chrony defaults diversion
+  community.general.dpkg_divert:
+    path: /etc/default/chrony
+  become: true
+
+- name: _setup | Install retired chrony IPv4 defaults fixture
+  copy:
+    content: 'DAEMON_OPTS="-F 1 -4"'
+    dest: /etc/default/chrony
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Start chrony with retired IPv4 defaults
+  systemd:
+    name: chrony.service
+    enabled: true
+    state: restarted
+  become: true
+
 - name: _setup | Enable retired operator linger fixture
   import_role:
     name: linger

@@ -25,6 +25,25 @@
   failed_when: retired_services_podman_diversion.stdout | trim | length > 0
   become: true
 
+- name: _verify | Packaged chrony defaults are active
+  command: grep -Fx 'DAEMON_OPTS="-F 1"' /etc/default/chrony
+  changed_when: false
+  become: true
+
+- name: _verify | Retired chrony defaults diversion is absent  # noqa: command-instead-of-module
+  command: dpkg-divert --listpackage /etc/default/chrony
+  register: retired_services_chrony_diversion
+  changed_when: false
+  failed_when: retired_services_chrony_diversion.stdout | trim | length > 0
+  become: true
+
+- name: _verify | Chrony no longer runs IPv4-only
+  command: pgrep -a chronyd
+  register: retired_services_chronyd_process
+  changed_when: false
+  failed_when: retired_services_chronyd_process.stdout is search('/chronyd .* -4( |$)')
+  become: true
+
 - name: _verify | Retired podman socket group is absent
   command: getent group podman-socket
   register: retired_services_podman_socket_group

@@ -78,57 +78,8 @@
   tags:
     - ntp
 
-# NTS-KE uses TCP/4460 before NTP packets can be authenticated. fox has
-# repeatedly timed out on the IPv6 path to all configured NTS providers, then
-# synchronized only after chronyd eventually replaced those addresses with
-# IPv4. Force IPv4 at the daemon layer so the NTS-only policy still holds
-# without waiting through broken IPv6 handshakes. The flag has to ride
-# DAEMON_OPTS in /etc/default/chrony: the unit applies that EnvironmentFile
-# after any Environment= directive, so a drop-in assignment loses, and an
-# ExecStart= reset would couple us to the stock line's chronyd-starter.sh
-# wrapper and `!` privilege prefix. Divert the conffile so chrony package
-# upgrades never prompt over our copy.
-- name: Divert chrony defaults
-  community.general.dpkg_divert:
-    path: /etc/default/chrony
-  when: not (ansible_check_mode and ntp_chrony_apt.changed)
-  become: true
-  tags:
-    - ntp
-
-- name: Force chrony NTS to IPv4
-  when: not (ansible_check_mode and ntp_chrony_apt.changed)
-  copy:
-    src: chrony.default
-    dest: /etc/default/chrony
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: 'sh -c ''. "%s" && test -n "${DAEMON_OPTS:-}"'''
-  register: ntp_chrony_default
-  become: true
-  tags:
-    - ntp
-
-# No chrony.service.d drop-in may exist: the IPv4 forcing lives in
-# /etc/default/chrony above, and a leftover override would shadow or fight
-# the unit definition. Converged hosts carry one from when the flag was
-# (ineffectively) delivered via Environment=.
-- name: Remove the chrony IPv4 drop-in
-  import_role:
-    name: systemd_unit
-    tasks_from: remove
-  vars:
-    systemd_unit_args:
-      for: chrony.service
-      condition: "{{ not (ansible_check_mode and ntp_chrony_apt.changed) }}"
-  tags:
-    - ntp
-
-# Chrony ships its own unit, so the role owns only its lifecycle. Restart --
-# not just start -- when the NTS config, DAEMON_OPTS, or stale drop-in changes;
-# otherwise leave a healthy daemon undisturbed.
+# Chrony ships its own unit, so the role owns only its lifecycle. Restart when
+# the NTS config changes; otherwise leave a healthy daemon undisturbed.
 - name: Enable and start chrony
   when: not (ansible_check_mode and ntp_chrony_apt.changed)
   systemd:
@@ -136,7 +87,7 @@
     enabled: true
     state: >-
       {{ 'restarted'
-         if ntp_chrony_conf.changed or ntp_chrony_default.changed or (chrony_service_d_override_conf_result.changed | default(false))
+         if ntp_chrony_conf.changed
          else 'started' }}
   become: true
   tags:
