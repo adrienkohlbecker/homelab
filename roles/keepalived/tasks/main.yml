@@ -231,10 +231,10 @@
   rescue:
     # keepalived -t reads the assembled config in place, so a bad base
     # conf is already on disk; restore the previous version from the
-    # backup the copy above made (mirrors roles/nginx/tasks/conf_d.yml)
-    # so the next SIGHUP-reload can't pick up the broken file. A bad
-    # *tenant* fragment trips the same validate but isn't ours to roll
-    # back (restore is a no-op then) — the fail still aborts the run.
+    # backup the copy above made so the next SIGHUP-reload cannot pick up
+    # the broken file. A bad *tenant* fragment trips the same validate but
+    # is not ours to roll back (restore is a no-op then) — the fail still
+    # aborts the run.
     - name: Restore previous base configuration after failed validation  # noqa: require-backup require-validate
       when: '"backup_file" in keepalived_base_conf'
       copy:

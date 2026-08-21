@@ -30,21 +30,36 @@
   become: true
 
 - name: _setup | Serve GitLab Runner metrics fixture
-  import_role:
-    name: nginx
-    tasks_from: conf_d
-  vars:
-    nginx_conf_d_args:
-      name: netdata_gitlab_runner_metrics.conf
-      content: |
-        server {
-            listen 127.0.0.1:{{ service_ports.gitlab_runner }};
+  copy:
+    dest: /etc/nginx/conf.d/netdata_gitlab_runner_metrics.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    content: |
+      server {
+          listen 127.0.0.1:{{ service_ports.gitlab_runner }};
 
-            location = /metrics {
-                default_type text/plain;
-                alias /var/lib/netdata_test/gitlab_runner_metrics.prom;
-            }
-        }
+          location = /metrics {
+              default_type text/plain;
+              alias /var/lib/netdata_test/gitlab_runner_metrics.prom;
+          }
+      }
+  register: netdata_gitlab_runner_nginx_conf
+  become: true
+
+- name: _setup | Validate GitLab Runner metrics fixture
+  when: netdata_gitlab_runner_nginx_conf.changed
+  command: nginx -t
+  changed_when: false
+  become: true
+
+- name: _setup | Reload nginx for GitLab Runner metrics fixture
+  when: netdata_gitlab_runner_nginx_conf.changed
+  systemd:
+    name: nginx
+    state: reloaded
+  become: true
 
 # netdata uses nginx_site_args.auth=true. Gate-mode Authelia stub so
 # _verify sees the unauthenticated browser hit redirect to the portal (302).

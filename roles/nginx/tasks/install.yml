@@ -18,11 +18,19 @@
   tags:
     - nginx
 
-# Unlike the conf.d/ and sites-available/ snippets (which `nginx -t` can't
-# check in isolation, hence their place-validate-rollback dance), nginx.conf is
-# a complete config: `nginx -t -c %s` validates the rendered temp file in full
-# (its includes/cert paths are absolute and already on disk by this point), so
-# a jinja/vault typo here is caught before it ever lands on the active config.
+# nginx.conf owns stub_status; keep the split drop path absent so it cannot
+# create a duplicate loopback server.
+- name: install | Remove standalone status config
+  file:
+    path: /etc/nginx/conf.d/status.conf
+    state: absent
+  register: nginx_status_conf_cleanup
+  become: true
+  tags:
+    - nginx
+
+# nginx.conf is a complete config, so validate the rendered temporary file
+# before replacing the active configuration.
 - name: install | Configure nginx
   template:
     src: nginx.conf.j2
@@ -37,20 +45,6 @@
   tags:
     - nginx
 
-# stub_status drop is what netdata's web_log collector (and any other
-# in-cluster nginx-stats consumer) reads. Validate-and-rollback shape
-# protects every site on the host from a typo here — a single bad
-# conf.d/ file takes down every nginx vhost on the host.
-- name: install | Enable stub_status
-  import_tasks: conf_d.yml
-  vars:
-    nginx_conf_d_args:
-      name: status.conf
-      src: status.conf
-      reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
-  tags:
-    - nginx
-
 - name: install | Enable nginx service
   when: not (ansible_check_mode and nginx_apt.changed)
   systemd:
@@ -59,7 +53,7 @@
     state: >-
       {{ 'restarted' if nginx_apt.changed
          else 'reloaded'
-         if nginx_default_conf.changed or nginx_conf.changed or status_conf_result.changed
+         if nginx_default_conf.changed or nginx_status_conf_cleanup.changed or nginx_conf.changed
          else 'started' }}
   become: true
   tags:
