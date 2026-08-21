@@ -14,15 +14,6 @@
   tags:
     - podman
 
-- name: Enable the service
-  when: not (ansible_check_mode and podman_apt.changed)
-  systemd:
-    name: podman
-    enabled: true
-  become: true
-  tags:
-    - podman
-
 - name: Enable podman.socket
   when: not (ansible_check_mode and podman_apt.changed)
   systemd:
