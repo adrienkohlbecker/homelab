@@ -29,8 +29,7 @@
 
 - name: Stage the complete netplan transaction
   block:
-    - name: Clear the Ansible-managed origin in the netplan transaction
-      when: netplan_replace_managed_config
+    - name: Remove superseded origins from the netplan transaction
       command:
         argv:
           - busctl
@@ -41,50 +40,13 @@
           - Set
           - ss
           - network=null
-          - 01-netcfg
-      register: netplan_clear_managed_result
+          - "{{ item }}"
+      loop: "{{ netplan_remove_origins }}"
+      register: netplan_remove_origin_result
       changed_when: true
       failed_when: >-
-        netplan_clear_managed_result.rc != 0
-        or netplan_clear_managed_result.stdout | trim != 'b true'
-
-    - name: Remove the installer origin from the netplan transaction
-      when: netplan_remove_installer_config
-      command:
-        argv:
-          - busctl
-          - call
-          - io.netplan.Netplan
-          - "{{ netplan_dbus_path }}"
-          - io.netplan.Netplan.Config
-          - Set
-          - ss
-          - network=null
-          - 00-installer-config
-      register: netplan_remove_installer_result
-      changed_when: true
-      failed_when: >-
-        netplan_remove_installer_result.rc != 0
-        or netplan_remove_installer_result.stdout | trim != 'b true'
-
-    - name: Remove the cloud-init origin from the netplan transaction
-      when: netplan_remove_cloud_init_config
-      command:
-        argv:
-          - busctl
-          - call
-          - io.netplan.Netplan
-          - "{{ netplan_dbus_path }}"
-          - io.netplan.Netplan.Config
-          - Set
-          - ss
-          - network=null
-          - 50-cloud-init
-      register: netplan_remove_cloud_init_result
-      changed_when: true
-      failed_when: >-
-        netplan_remove_cloud_init_result.rc != 0
-        or netplan_remove_cloud_init_result.stdout | trim != 'b true'
+        netplan_remove_origin_result.rc != 0
+        or netplan_remove_origin_result.stdout | trim != 'b true'
 
     - name: Stage the Ansible-managed netplan origin
       command:

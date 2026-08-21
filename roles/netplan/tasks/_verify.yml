@@ -14,9 +14,8 @@
               dhcp6: false
               addresses:
                 - 192.0.2.99/24
-        netplan_remove_installer_config: false
-        netplan_remove_cloud_init_config: false
-        netplan_replace_managed_config: true
+        netplan_remove_origins:
+          - 01-netcfg
 
     - name: _verify rejection | Trial completed cleanly — rejection was not exercised
       fail:

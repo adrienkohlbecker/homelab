@@ -84,8 +84,10 @@
       become: true
       vars:
         netplan_apply_config: "{{ netplan }}"
-        netplan_replace_managed_config: "{{ netplan_managed_config.stat.exists }}"
-        netplan_remove_installer_config: "{{ netplan_installer_config.stat.exists }}"
-        netplan_remove_cloud_init_config: >-
-          {{ not cloud_init_managed
-             and (netplan_cloud_init_config.stat.exists | default(false)) }}
+        netplan_remove_origins: >-
+          {{ (['01-netcfg'] if netplan_managed_config.stat.exists else [])
+             + (['00-installer-config'] if netplan_installer_config.stat.exists else [])
+             + (['50-cloud-init']
+                if not cloud_init_managed
+                   and (netplan_cloud_init_config.stat.exists | default(false))
+                else []) }}
