@@ -637,11 +637,6 @@
 - name: _verify | Kernel-update + reboot exercise
   when: packer_verify_swap_abi.stdout | length > 0
   block:
-    - name: _verify | Capture uname -r before kernel transaction
-      command: uname -r
-      changed_when: false
-      register: packer_verify_uname_before
-
     - name: _verify | Install older specific kernel + modules
       apt:
         name:
@@ -712,10 +707,8 @@
 
     - name: _verify | Boot chain landed on the swapped kernel
       assert:
-        that: >-
-          packer_verify_uname_after.stdout
-          != packer_verify_uname_before.stdout
+        that: packer_verify_uname_after.stdout != ansible_kernel
         fail_msg: >-
-          uname -r is still {{ packer_verify_uname_before.stdout }}
+          uname -r is still {{ ansible_kernel }}
           after reboot — boot chain kept selecting the previous kernel
           even though we installed a different one
