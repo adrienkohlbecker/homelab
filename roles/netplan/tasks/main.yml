@@ -1,22 +1,13 @@
-# Gate the whole role on `netplan is defined`: `meta: end_role` does NOT
-# short-circuit a role invoked via a play's `roles:` keyword (it only ends
-# dynamically-included roles), so it can't carry this gate. Without it the
-# cloud-init cleanup task below would delete the network config of any host
-# that has no `netplan` host var. Every host the base play targets currently
-# defines one (fox included -- see host_vars/fox.yml), but the gate keeps the
-# role safe to apply to a future cloud-init-managed host.
+# The base play invokes this role unconditionally; leave networking untouched
+# on hosts without an Ansible-owned netplan configuration.
 - name: Configure host networking via netplan
   when: netplan is defined
   tags:
     - netplan
   block:
     - name: Assert netplan host var defines at least one device stanza
-      # A `netplan` that renders to `network: {version: 2}` with no
-      # interfaces — whether empty, or a mapping carrying only top-level
-      # keys like `renderer` and no device type — is accepted silently by
-      # netplan: networkd ends up with no .network files in /run and the
-      # host loses configured networking on next apply. Fail loudly before
-      # the template runs.
+      # Netplan accepts a mapping with no device stanzas but generates no
+      # networkd configuration, disconnecting the host on apply.
       assert:
         that:
           - netplan is mapping
@@ -31,12 +22,8 @@
         cache_valid_time: 3600
       become: true
 
-    # Absent on the stripped minimal cloud image; present on every full
-    # Ubuntu install (it ships with systemd-networkd). The systemd module
-    # below errors ("Could not find the requested service") on a missing
-    # unit, and does so even under --check, so gate the mask on the unit
-    # actually existing rather than on a host/arch list. Canonical merged-usr
-    # path (/lib -> /usr/lib on all supported targets).
+    # The minimal cloud image omits this unit, and systemd errors on a missing
+    # service even in check mode.
     - name: Probe for networkd-dispatcher.service
       stat:
         path: /usr/lib/systemd/system/networkd-dispatcher.service
@@ -44,15 +31,8 @@
       become: true
 
     - name: Mask networkd-dispatcher (unused, only emits podman-veth-churn noise)
-      # systemd-networkd emits a D-Bus PropertiesChanged for every link state
-      # change, including podman's ephemeral veth/bridge interfaces. networkd-
-      # dispatcher subscribes to all of them and shells out to `networkctl
-      # status <iface>`, which races and fails ("Interface vethN not found")
-      # once the short-lived veth is gone, and trips a spurious sd_notify
-      # rejection ("reception only permitted for main PID"). We ship zero hooks
-      # in any of its */.d dirs, so the daemon does no useful work on these
-      # hosts — masking removes the noise at the source with nothing lost.
-      # Unmask is the prerequisite if a future role ever drops a dispatcher hook.
+      # No role installs dispatcher hooks; the daemon only races podman's
+      # ephemeral interfaces and emits veth-churn errors.
       when: netplan_networkd_dispatcher.stat.exists
       systemd:
         name: networkd-dispatcher.service
@@ -71,10 +51,7 @@
         validate: bash -n %s
       become: true
 
-    # Installed as raw unit files via systemd_unit, not through the
-    # systemd_timer helper: that helper requires OnCalendar and emits a cadence
-    # job with an [Install] section, whereas this is a runtime-armed deadline
-    # timer (OnActiveSec, no calendar, never enabled) — the helper doesn't fit.
+    # systemd_timer requires OnCalendar; this deadline timer is armed at runtime.
     - name: Install netplan_rollback.service
       import_role:
         name: systemd_unit
@@ -92,12 +69,8 @@
           src: netplan_rollback.timer
 
     - name: Remove stale rollback artifacts from a prior auto-rollback
-      # A fired rollback keeps the presumed-broken config aside as
-      # /etc/netplan.rollback_failed (and, if interrupted mid-swap,
-      # /etc/netplan.restoring) for console recovery. Reaching a healthy
-      # converge means the box recovered, so clear them: prune_ansible_backups
-      # doesn't match these paths, and a future wifis: PSK shouldn't linger in
-      # cleartext outside backup rotation.
+      # A healthy converge no longer needs the console-recovery copies, which
+      # may contain a Wi-Fi PSK and are outside backup rotation.
       file:
         path: "{{ item }}"
         state: absent
@@ -106,16 +79,10 @@
         - /etc/netplan.rollback_failed
         - /etc/netplan.restoring
 
-    # Snapshot BEFORE the template runs so /run/netplan_prev captures the
-    # genuine *previous* /etc/netplan, not the just-rendered new one. Two
-    # downstream consumers read this:
-    #   - `netplan apply --state` reads it to tear down virtual devices
-    #     (the iot VLAN, future bonds/bridges) removed from the new config;
-    #     it does NOT restrict the networkd restart scope.
-    #   - the netplan_rollback.timer mv's it over /etc/netplan if we
-    #     don't reconnect post-apply.
-    # Unconditional so the snapshot is always available; the apply block
-    # below is what's gated on netplan_cfg.changed.
+    # Snapshot before rendering: `netplan apply --state` needs the old config
+    # to remove retired virtual devices, and the timer restores the same copy
+    # if SSH does not reconnect. Keep it unconditional so apply.yml always has
+    # a valid rollback source.
     - name: Wipe any stale /run/netplan_prev
       file:
         path: /run/netplan_prev
@@ -129,9 +96,7 @@
         dest: /run/netplan_prev/
         remote_src: true
         mode: preserve
-        # mode: preserve keeps the 0600 files, but the snapshot dir itself would
-        # otherwise inherit a lax source-dir mode; pin it 0700 so /run/netplan_prev
-        # is no more readable than /etc/netplan (a future wifis: PSK would land here).
+        # The snapshot may contain Wi-Fi secrets; do not inherit a lax dir mode.
         directory_mode: "0700"
       become: true
       changed_when: false

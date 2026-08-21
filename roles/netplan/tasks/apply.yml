@@ -1,19 +1,9 @@
-# Apply path — armed by a 90s netplan_rollback.timer that fires
-# /usr/local/bin/netplan_rollback if /run/netplan_keep is missing.
-# See notes/netplan-safe-apply.md for incident background.
-#
-# Separate file so tasks/_verify.yml can invoke the same apply path
-# directly with a deliberately-broken /etc/netplan to exercise the
-# rollback timer end-to-end. The block-level when:/become:/tags: gating
-# lives in main.yml.
+# Shared by the converge and the destructive rollback test. A 90s timer
+# restores /run/netplan_prev unless the SSH canary creates /run/netplan_keep.
 
 - name: Verify the pre-template snapshot exists before arming rollback
-  # apply.yml feeds /run/netplan_prev to both `netplan apply --state`
-  # and the rollback restore. main.yml snapshots it unconditionally
-  # before the template runs, but a `--start-at-task` resume that skips
-  # those tasks (or a reboot that wiped tmpfs) would leave it missing --
-  # arm nothing and fail loudly rather than apply against a stale/empty
-  # snapshot and feed the rollback garbage.
+  # A start-at-task resume or reboot may skip or erase the snapshot; never arm
+  # a rollback without a restore source.
   stat:
     path: /run/netplan_prev
   register: netplan_prev_snapshot
@@ -25,20 +15,14 @@
     state: absent
 
 - name: Arm 90s auto-rollback (timer counts 90s from this restart)
-  # `state: restarted` resets OnActiveSec=90 even if the timer was
-  # already running from a prior apply within the same window. The
-  # timer runs /usr/local/bin/netplan_rollback when it fires; the
-  # script no-ops if /run/netplan_keep exists (cancelled below).
+  # Restarting resets OnActiveSec even if a previous apply armed the timer.
   systemd:
     name: netplan_rollback.timer
     state: restarted
 
 - name: Apply netplan with --state pointing at the snapshot
-  # async: 30 + poll: 0 hands control back to ansible immediately
-  # so wait_for_connection can take over. If we let `command` block
-  # synchronously, an apply that severs SSH freezes the ansible run
-  # instead of failing fast.
-  # No ansible module exists for `netplan apply`.
+  # Detach so a severed SSH connection cannot strand the controller inside
+  # the apply command; the connection canary takes over below.
   command: netplan apply --state /run/netplan_prev
   async: 30
   poll: 0
@@ -46,10 +30,8 @@
   changed_when: true
 
 - name: Drop the multiplexed SSH master so the canary forces a fresh handshake
-  # ansible.cfg sets ControlPersist; without resetting, wait_for_connection
-  # can answer over the cached master on a brief carrier flap while a fresh
-  # TCP/SSH handshake would fail -- the false-positive the notes warn about,
-  # which would cancel the rollback on a box that is only partially up.
+  # ControlPersist could make the canary pass over a stale connection while a
+  # fresh TCP/SSH handshake still fails.
   meta: reset_connection
 
 - name: Wait for SSH to re-establish (canary for the rollback timer)
@@ -60,12 +42,8 @@
     timeout: 60
 
 - name: Confirm the async netplan apply actually exited 0
-  # wait_for_connection only proves SSH came back, not that netplan
-  # itself succeeded -- a non-fatal apply error (bad matcher, rejected
-  # key) that leaves SSH up would otherwise pass silently, the mid-
-  # apply-halt shape from the 2026-05-10 incident. Reaping before the
-  # cancel below means a failed apply leaves the rollback armed to
-  # restore the prior config.
+  # SSH may survive a failed netplan command; reap it before cancelling the
+  # rollback so command failure still restores the prior config.
   async_status:
     jid: "{{ netplan_apply_async.ansible_job_id }}"
   register: netplan_apply_result
@@ -74,25 +52,15 @@
   delay: 3
 
 - name: Touch cancel-marker so the timer no-ops when it fires
-  # Belt: even if the timer fires between this touch and the stop below,
-  # the marker is now present, so netplan_rollback.service's
-  # ConditionPathExists skips the rollback. The 60s connection wait plus the
-  # async reap remains inside the timer's 90s deadline.
+  # This closes the race between a successful canary and stopping the timer.
   file:
     path: /run/netplan_keep
     state: touch
     mode: "0600"
 
 - name: Stop the rollback timer
-  # Collapses the +90 s wait so `_verify` doesn't have to race the
-  # deadline, and operators don't see a pending timer for a minute
-  # and a half post-apply. /run/netplan_prev is left in place — the
-  # next converge's pre-template snapshot rotates it, and not
-  # removing it here avoids racing with the async netplan apply that
-  # may still be reading it via --state.
-  #
-  # No failed_when: false: reaching here means the canary passed before the
-  # rollback fired, so a stop error means the timer is wedged and must surface.
+  # Leave /run/netplan_prev for any outstanding --state reader; the next
+  # converge rotates it. A stop error means the timer is wedged and must surface.
   systemd:
     name: netplan_rollback.timer
     state: stopped

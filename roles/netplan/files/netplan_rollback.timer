@@ -2,16 +2,10 @@
 Description=Netplan auto-rollback timer (armed by the role's safe-apply path)
 
 [Timer]
-# 90s deadline is intentionally longer than wait_for_connection's
-# 60s in apply.yml so a slow reconnect doesn't trigger spurious revert.
+# Leave 30s after the SSH canary fails before restoring.
 OnActiveSec=90
-# Without this, the default AccuracySec=1min lets the timer fire
-# anywhere in 90-150s, widening the lockout window and blurring the
-# 90-vs-60 margin against wait_for_connection.
+# The one-minute default accuracy would widen the lockout window to 150s.
 AccuracySec=1s
-# Persistent= is deliberately omitted: it would re-run a missed timer at
-# next boot, but /run/netplan_prev (tmpfs) is already gone by then, so a
-# post-boot fire could only abort. There is no [Install]/WantedBy either —
-# the apply path arms this at runtime via `systemctl restart`, it is never
-# enabled, so there is no boot-time activation to persist.
+# Never persist or enable this runtime deadline: its /run snapshot disappears
+# at reboot, leaving nothing safe to restore.
 Unit=netplan_rollback.service
