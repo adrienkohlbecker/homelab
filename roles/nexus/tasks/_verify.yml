@@ -237,18 +237,6 @@
     state: present
   become: true
 
-- name: _verify | Nexus UI answers through the nginx site
-  uri:
-    url: https://nexus.{{ inventory_hostname }}.{{ domain }}/
-    validate_certs: false
-    follow_redirects: none
-    status_code: [ 200, 302, 307 ]
-    timeout: 5
-  register: _nexus_nginx
-  retries: 30
-  delay: 2
-  until: _nexus_nginx.status in [ 200, 302, 307 ]
-
 # Auth uses the bootstrap admin password Nexus writes on first boot -- the
 # setup wizard never runs under test, so the file persists. Test-only.
 - name: _verify | Read the bootstrap admin password
@@ -314,8 +302,9 @@
 
 - name: _verify | Upload a raw object to the default blob store
   uri:
-    url: http://127.0.0.1:{{ service_ports.nexus }}/repository/test_reconciliation/probe-{{ ansible_date_time.epoch }}.txt
+    url: https://nexus.{{ inventory_hostname }}.{{ domain }}/repository/test_reconciliation/probe-{{ ansible_date_time.epoch }}.txt
     method: PUT
+    validate_certs: false
     url_username: admin
     url_password: "{{ _nexus_admin_password.content | b64decode }}"
     force_basic_auth: true
