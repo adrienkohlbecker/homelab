@@ -11,7 +11,6 @@
       assert:
         that:
           - netplan is mapping
-          - netplan | length > 0
           - netplan.keys() | list | intersect(['ethernets', 'modems', 'wifis', 'bonds', 'bridges', 'vlans', 'vrfs', 'tunnels']) | length > 0
         fail_msg: "host_vars must define a `netplan` mapping with at least one device stanza (ethernets/bonds/bridges/vlans/...); see host_vars/lab.yml for the schema"
 
