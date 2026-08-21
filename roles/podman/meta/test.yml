@@ -2,21 +2,14 @@
 # userspace stack natively; resolute drops the iptables compat package and takes
 # the >= 26 branch.
 #
-# Storage backend coverage: box and rebuilt pug put the container store on a
-# dedicated raw ext4 partition (podman_storage_backend: partition, single disk);
-# minimal has no ZFS so the store stays on the plain root fs with fuse-overlayfs;
-# lab exercises the three-member mdadm raid5 partition backend. No fixture now
-# covers fox's retained rpool/podman zvol backend. box + minimal run on every
-# push.
-# pug + lab are heavyweight multi-disk fixtures that never run in CI -- detect
-# drops them from every generated matrix (test/matrix.py ON_DEMAND_MACHINES),
-# push and schedule alike -- so the pug-shaped and raid5 partition backends are
-# covered only by a manual `testrole.py podman --machine {pug,lab}`, not
-# automatically.
+# Storage backend coverage: box uses a dedicated raw ext4 partition; minimal
+# stays on the root filesystem with fuse-overlayfs; lab exercises the
+# three-member mdadm raid5 partition backend. No fixture covers fox's retained
+# rpool/podman zvol backend. box + minimal run on every push; lab is available
+# only through a manual `testrole.py podman --machine lab` run.
 machines:
   box:
   minimal:
-  pug:
   lab:
 ubuntu:
   - resolute
