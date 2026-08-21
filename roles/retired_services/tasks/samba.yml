@@ -11,6 +11,7 @@
     - smbd.service
     - nmbd.service
   become: true
+  failed_when: false
   tags:
     - retired_services
     - samba
