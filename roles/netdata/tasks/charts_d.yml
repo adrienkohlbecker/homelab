@@ -15,10 +15,9 @@
 #   conf        required; file under caller's files/ (or templates/, if the
 #               name ends in .j2) to install as the charts.d conf.
 #   condition   optional bool, default true; gates the whole call
-#   restart     optional bool, default true; restart netdata after a change
 #
-# The dict form prevents inter-call leakage at play-vars scope (see
-# config.yml for the longer rationale; same shape).
+# The whole dict is replaced at each call, so optional values cannot leak from
+# a previous collector import.
 - name: charts_d | Assert required inputs are set
   assert:
     that:
@@ -30,17 +29,10 @@
       netdata_args.script (chart.sh under the caller's files/), and
       netdata_args.conf (charts.d conf under the caller's files/ or templates/)
 
-- name: charts_d | Resolve caller defaults for {{ netdata_args.name }}
-  set_fact:
-    _netdata_charts_d_script: "{{ netdata_args.script }}"
-    _netdata_charts_d_conf: "{{ netdata_args.conf }}"
-    _netdata_charts_d_condition: "{{ netdata_args.condition | default(true) }}"
-    _netdata_charts_d_restart: "{{ netdata_args.restart | default(true) }}"
-
 - name: "charts_d | Install chart.sh for {{ netdata_args.name }}"
-  when: _netdata_charts_d_condition
+  when: netdata_args.condition | default(true)
   copy:
-    src: "{{ _netdata_charts_d_script }}"
+    src: "{{ netdata_args.script }}"
     dest: /usr/libexec/netdata/charts.d/{{ netdata_args.name }}.chart.sh
     owner: root
     group: root
@@ -51,7 +43,7 @@
   become: true
 
 - name: charts_d | Ensure /etc/netdata/charts.d/ exists
-  when: _netdata_charts_d_condition
+  when: netdata_args.condition | default(true)
   file:
     path: /etc/netdata/charts.d
     state: directory
@@ -65,17 +57,17 @@
 # hook fires only on its own template-change, missing chart.sh / package
 # changes that also need a daemon respawn.
 - name: "charts_d | Install charts.d conf for {{ netdata_args.name }}"
-  when: _netdata_charts_d_condition
+  when: netdata_args.condition | default(true)
   vars:
     # default('') so the dynamic `action` resolves even when a caller gates
     # the whole charts_d import out (e.g. the x86_64-only hdparm collector
     # verify): ansible templates the module name to load its arg spec before
-    # honoring `when:`, so an undefined _netdata_charts_d_conf here would
+    # honoring `when:`, so an undefined netdata_args.conf here would
     # raise even though the task itself is skipped.
-    _module: "{{ 'template' if (_netdata_charts_d_conf | default('')).endswith('.j2') else 'copy' }}"
+    _module: "{{ 'template' if (netdata_args.conf | default('')).endswith('.j2') else 'copy' }}"
   action: "{{ _module }}"
   args:
-    src: "{{ _netdata_charts_d_conf }}"
+    src: "{{ netdata_args.conf }}"
     dest: /etc/netdata/charts.d/{{ netdata_args.name }}.conf
     owner: netdata
     group: netdata
@@ -87,8 +79,7 @@
 
 - name: "charts_d | Restart netdata for collector {{ netdata_args.name }}"
   when:
-    - _netdata_charts_d_condition
-    - _netdata_charts_d_restart
+    - netdata_args.condition | default(true)
     - _netdata_charts_d_chart_sh.changed or _netdata_charts_d_conf_result.changed
   systemd:
     name: netdata
@@ -110,7 +101,7 @@
 # /api/v1/info is the functional check.
 - name: charts_d | Wait for netdata HTTP API
   when:
-    - _netdata_charts_d_condition
+    - netdata_args.condition | default(true)
     - _netdata_charts_d_restart_result.changed | default(false)
   uri:
     url: http://127.0.0.1:{{ service_ports.netdata }}/api/v1/info
@@ -119,12 +110,3 @@
   retries: 60
   delay: 2
   until: _netdata_charts_d_api_probe.status == 200
-
-# Expose a per-collector "did anything change" fact so callers can chain
-# downstream restart triggers (e.g. an alerts.conf reload-health gated on
-# the collector being live). Name is sanitized to match the systemd_unit
-# helper's per-unit fact convention.
-- name: charts_d | Record install result for {{ netdata_args.name }}
-  set_fact:
-    "netdata_charts_d_{{ netdata_args.name | ansible_var_key }}_result":
-      changed: "{{ _netdata_charts_d_chart_sh.changed or _netdata_charts_d_conf_result.changed }}"

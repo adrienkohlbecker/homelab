@@ -12,19 +12,12 @@
 #         with no offline parser, so callers usually omit this.
 #
 # Module dispatch mirrors config.yml / systemd_unit/install.yml: *.j2 ->
-# template, anything else -> copy. As in config.yml, the scalar inputs are
-# resolved into _netdata_health_* locals by the set_fact preamble (re-read on
-# every import, so no inter-call leakage); _module and validate stay inline
-# for the same reasons (parse-time task name / pre-`when` module spec, and
-# default(omit) can't survive a fact).
+# template, anything else -> copy. _module and validate stay inline so module
+# dispatch resolves before `when` and no-validate callers can use omit.
 #
-# Accepts `condition` (gate the whole call) and `restart` (gate the reload)
-# like config.yml/charts_d.yml, for a uniform helper contract. The "restart"
-# here is a hitless `netdatacli reload-health`, not a daemon restart -- a
-# health config change hot-loads where a go.d config needs a restart. The
-# role's health files each define their own complete alarm set, so -- unlike
-# a go.d config -- there's no stock health.d/<dest> worth seeding before the
-# overwrite.
+# Accepts `condition` to gate the whole call. Health changes hot-load through
+# `netdatacli reload-health`; unlike a go.d config, there is no stock
+# health.d/<dest> worth seeding before the overwrite.
 - name: health | Ensure netdata directory exists
   when: netdata_args.condition | default(true)
   file:
@@ -57,25 +50,17 @@
       netdata_args.dest must be a bare filename under health.d/
       (got {{ netdata_args.dest }})
 
-- name: health | Resolve caller args for {{ netdata_args.dest }}
-  set_fact:
-    _netdata_health_src: "{{ netdata_args.src }}"
-    _netdata_health_dest: "{{ netdata_args.dest }}"
-    _netdata_health_mode: "{{ netdata_args.mode | default('0644') }}"
-    _netdata_health_condition: "{{ netdata_args.condition | default(true) }}"
-    _netdata_health_restart: "{{ netdata_args.restart | default(true) }}"
-
 - name: health | Setup alert config ({{ _module }})
-  when: _netdata_health_condition
+  when: netdata_args.condition | default(true)
   vars:
-    _module: "{{ 'template' if (_netdata_health_src | default('')).endswith('.j2') else 'copy' }}"
+    _module: "{{ 'template' if (netdata_args.src | default('')).endswith('.j2') else 'copy' }}"
   action: "{{ _module }}"
   args:
-    src: "{{ _netdata_health_src }}"
-    dest: /etc/netdata/health.d/{{ _netdata_health_dest }}
+    src: "{{ netdata_args.src }}"
+    dest: /etc/netdata/health.d/{{ netdata_args.dest }}
     owner: netdata
     group: netdata
-    mode: "{{ _netdata_health_mode }}"
+    mode: "{{ netdata_args.mode | default('0644') }}"
     backup: true
     # validate stays inline with default(omit) -- routing it through a fact
     # would break the no-validate callers (omit via set_fact becomes an
@@ -85,5 +70,5 @@
   become: true
 
 - name: health | Reload health configuration
-  when: _netdata_health_condition and _netdata_health_restart and netdata_alerts_conf.changed
+  when: (netdata_args.condition | default(true)) and netdata_alerts_conf.changed
   import_tasks: reload_health.yml
