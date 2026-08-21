@@ -1,6 +1,5 @@
-# Release-divergent install paths: the default noble cell installs the podman
-# userspace stack natively; resolute drops the iptables compat package and takes
-# the >= 26 branch.
+# Release-divergent install paths: the default noble cell keeps the iptables
+# compatibility package; resolute uses netavark's native nftables driver.
 #
 # Storage coverage: box uses a dedicated raw ext4 partition, minimal stays on
 # the root filesystem, and lab exercises the three-member mdadm raid5 device.

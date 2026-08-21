@@ -108,8 +108,3 @@
     podman_prune_args: {}
   tags:
     - podman
-
-# Podman macvlan networks are owned by the macvlan role now — each
-# entry in host_vars.macvlan_blocks with `podman_network: true` gets
-# its podman network created alongside its host-side iface. See
-# roles/macvlan/tasks/install.yml.

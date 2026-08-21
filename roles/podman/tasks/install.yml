@@ -98,71 +98,12 @@
   tags:
     - podman
 
-# /etc/containers/containers.conf is for user overrides; the package ships
-# defaults at /usr/share/containers/containers.conf and won't create the
-# /etc/ copy. We write a small overlay holding only the keys the homelab
-# pins -- podman layers it over the package defaults. A `copy:` with a
-# templated `content:` (mirroring the storage.conf write above) carries a
-# TOML `validate:` so a jinja/vault typo fails here rather than being
-# silently accepted-then-defaulted by containers/common.
-#
-# [containers]
-# - seccomp_profile: point at the fchmodat2-augmented profile built a few
-#   tasks below. The path is static, so it's written here even though the
-#   file itself is created later in the same converge; podman only reads it
-#   at container (re)create.
-#
-# [network]
-# - network_backend: force netavark. Otherwise podman auto-detects
-#   and stays on CNI when any CNI network already exists; CNI
-#   doesn't wire DNS without the dnsname plugin (deprecated). With
-#   netavark + aardvark-dns container-name resolution Just Works on
-#   user-created networks. Existing CNI hosts need a one-shot
-#   manual `podman system reset --force` to drop leaked iptables
-#   rules.
-# - default_network: pin the default network's *name*. roles/firewall's
-#   _verify attaches a probe container with `--network podman`, so the name
-#   is load-bearing; pinning it keeps that test (and any future name-based
-#   consumer) robust against an upstream default-name change.
-# - default_subnet: pin the *default* podman network's subnet to
-#   podman_default_network. Podman's compiled-in default happens to
-#   equal it today, so the firewall's PODMAN_DEFAULT egress/DNS rules
-#   and adguard's upstream line up by coincidence; pinning makes it
-#   explicit so an upstream change to the built-in default can't
-#   silently move the default network out from under those rules.
-# - default_subnet_pools: shrink the upstream 5-range list to just
-#   podman_bridge_pool. The firewall INPUT accept for aardvark-dns and
-#   homeassistant's trusted_proxies are scoped to that prefix; if podman
-#   ever auto-allocated a named bridge from the wider 10.90.0.0/15
-#   (etc) ranges, container-name DNS would silently fail and HA would
-#   reject X-Forwarded-For from a "stranger" gateway. Pinning to a
-#   single range with size 24 gives us 256 named bridges before
-#   exhaustion (vs. ~7 today) and turns "ran out of pool" into a loud
-#   create-time error rather than a quiet drift into untrusted space.
-#   default_subnet and default_subnet_pools draw from podman_default_network
-#   / podman_bridge_pool (group_vars/all/main.yml).
-# - dns_bind_port: move aardvark-dns off port 53 so it doesn't fight
-#   with services (adguard) that bind on the bridge-gateway interface.
-#   netavark redirects container DNS queries to gateway:5333 via
-#   iptables; nothing on the host changes from the container POV.
-# - firewall_driver: native nftables, not iptables-nft compat. Lands
-#   netavark's rules in `inet netavark` instead of `ip filter`/
-#   `ip nat`. The driver was added in netavark 1.10 (Jun 2024). Ubuntu
-#   noble archive is frozen on netavark 1.4.0-4, so the
-#   setting would be silently ignored on those releases. Gate to
-#   resolute+, where the archive is expected to carry 1.10+. Drop
-#   releases from the absent-list as they age out *and* their netavark
-#   crosses 1.10.
-# - default_rootless_network_cmd: back rootless egress with pasta
-#   instead of the slirp4netns default. Rootless-only key (rootful
-#   podman ignores it), so it's consulted just on the hosts that run
-#   rootless podman -- the CI runner (gitlab_runner) --
-#   and is inert everywhere else. pasta shares passt's robust UDP
-#   datapath, so a rootless container's outbound DNS/UDP no longer drops
-#   datagrams under load the way slirp4netns does. Needs podman >= 4.4
-#   and the pasta binary: both ship natively fleet-wide, so it is ungated.
-#   Takes effect on the next container create -- the runners'
-#   per-job containers pick it up without a daemon restart.
+# Pin the cross-role contracts that cannot follow Podman's defaults: netavark
+# provides service-name DNS; the network name and subnets match firewall,
+# AdGuard and Home Assistant policy; port 5333 avoids AdGuard's port 53; and
+# pasta backs rootless GitLab jobs. Noble's old netavark needs iptables, while
+# newer releases use its native nftables driver. A host carrying legacy CNI
+# state needs a one-time `podman system reset --force` before switching.
 - name: install | Configure podman containers.conf
   copy:
     dest: /etc/containers/containers.conf
@@ -217,33 +158,10 @@
   tags:
     - podman
 
-# Ubuntu noble's golang-github-containers-common 0.57.4
-# ships a default seccomp profile that predates several syscalls the fleet
-# needs on the HWE 6.x kernel:
-#
-#   fchmodat2 (kernel 6.6): GNU tar 1.35+ routes directory chmods through
-#     it; the profile's SCMP_ACT_ERRNO blocks it (EPERM), breaking any
-#     image whose entrypoint extracts+chmods (an apache/php image self-
-#     extracting its webroot 403s the lot). Full writeup:
-#     notes/podman_seccomp_fchmodat2.md.
-#
-#   io_uring_setup/enter/register (kernel 5.1): QEMU aio=io_uring inside
-#     CI job containers needs the syscall family unblocked; without it the
-#     VM exits immediately with "failed to init linux io_uring ring".
-#
-# libseccomp 2.5.3 resolves the names; only the profile's allow-list
-# lacks them, so backporting libseccomp wouldn't help. Derive an augmented
-# profile (live default + missing syscalls) and make it podman's default.
-# Purely additive -- no existing container that already starts can regress.
-# Picked up at the next container (re)create; no daemon reload needed.
-#
-# Gated on `not (ansible_check_mode and podman_apt.changed)`: the stock
-# profile ships with golang-github-containers-common, pulled in by the
-# `Install podman` apt task above. In check mode on a fresh host that apt
-# only *reports*, so the file isn't there yet and the slurp would hard-fail;
-# skip both in that case. Same guard on the slurp and the template so the
-# latter never references an unset podman_seccomp_stock. On a converged host
-# (apt no-op) or any real apply, they run normally.
+# Noble's stock profile lacks fchmodat2 for tar-based entrypoints and the
+# io_uring syscall family needed by QEMU CI. Derive a purely additive profile;
+# see notes/podman_seccomp_fchmodat2.md. A fresh check-mode run only predicts
+# installing the stock profile, so skip until the package has placed it.
 - name: install | Read stock seccomp profile
   when: not (ansible_check_mode and podman_apt.changed)
   slurp:
