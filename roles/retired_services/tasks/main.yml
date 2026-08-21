@@ -55,6 +55,40 @@
     - retired_services
     - podman
 
+- name: Check for operator linger used by the retired podman prune timer
+  stat:
+    path: /var/lib/systemd/linger/{{ ansible_user_id }}
+  register: retired_services_operator_linger
+  become: true
+  tags:
+    - retired_services
+    - podman
+
+- name: Remove retired operator podman prune timer
+  when: retired_services_operator_linger.stat.exists
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: podman_prune
+      user: "{{ ansible_user_id }}"
+  tags:
+    - retired_services
+    - podman
+
+- name: Disable operator linger retired with the podman prune timer
+  import_role:
+    name: linger
+    tasks_from: disable
+  vars:
+    linger_args:
+      name: "{{ ansible_user_id }}"
+      uid: "{{ ansible_user_uid }}"
+  tags:
+    - retired_services
+    - podman
+
 - name: Remove retired custom Samba mDNS service
   file:
     path: /etc/avahi/services/smb.service

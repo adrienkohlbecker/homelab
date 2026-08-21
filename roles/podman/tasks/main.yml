@@ -55,32 +55,29 @@
     - podman
 
 - name: Install podman prune timer
-  import_tasks: prune.yml
-  vars:
-    podman_prune_args: {}
-  tags:
-    - podman
-
-# The per-user prune timer needs a persistent user manager. Podman owns the
-# linger prerequisite so the role stays self-sufficient in every call path.
-- name: Enable linger for the operator user (required by user-scope prune timer)
+  when: podman_prune_enabled
   import_role:
-    name: linger
-    tasks_from: linger
+    name: systemd_timer
+    tasks_from: install
   vars:
-    linger_args:
-      name: "{{ ansible_user_id }}"
-      uid: "{{ ansible_user_uid }}"
+    systemd_timer_args:
+      name: podman_prune
+      description: Prune unused podman containers, images and networks
+      # Keep named images warm and never prune named volumes, which may contain
+      # stopped service state despite the fleet's bind-mount convention.
+      exec_start: /usr/bin/podman system prune -f --filter until=48h
+      on_calendar: "*-*-* 00:20:00"
   tags:
     - podman
 
-# The operator is the pre-existing ansible connection user, so this caller does
-# not need the fresh-user condition used by service-user callers.
-- name: Install user-scope podman prune timer for the operator user
-  import_tasks: prune.yml
+- name: Remove podman prune timer where it is disabled
+  when: not podman_prune_enabled
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
   vars:
-    podman_prune_args:
-      user: "{{ ansible_user_id }}"
+    systemd_timer_args:
+      name: podman_prune
   tags:
     - podman
 

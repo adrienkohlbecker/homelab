@@ -3,7 +3,7 @@
 # containers and reading `podman info`, rather than stat-checking the files
 # it wrote. Two halves: rootful checks (become: true) cover the storage
 # stack, netavark + aardvark-dns, the rendered containers.conf + seccomp
-# profile and the prune timer; a rootless pass as
+# profile; a rootless pass as
 # the box login user then proves the pasta network connector actually backs
 # a container's egress. Only the test harness invokes it, against the selected
 # --machine (box by default: zfs_root with the native overlay storage

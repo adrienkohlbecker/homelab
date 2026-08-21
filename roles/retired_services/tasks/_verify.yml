@@ -25,6 +25,23 @@
   failed_when: retired_services_podman_socket_group.rc != 2
   become: true
 
+- name: _verify | Retired operator podman prune units are absent
+  stat:
+    path: /etc/systemd/user/{{ item }}
+  loop:
+    - podman_prune.service
+    - podman_prune.timer
+  register: retired_services_operator_podman_prune
+  failed_when: retired_services_operator_podman_prune.stat.exists
+  become: true
+
+- name: _verify | Operator linger retired with the podman prune timer is absent
+  stat:
+    path: /var/lib/systemd/linger/{{ ansible_user_id }}
+  register: retired_services_operator_linger
+  failed_when: retired_services_operator_linger.stat.exists
+  become: true
+
 - name: _verify | Retired custom Samba mDNS service is absent
   stat:
     path: /etc/avahi/services/smb.service
