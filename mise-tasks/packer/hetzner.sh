@@ -54,11 +54,12 @@ fi
 echo "==> relocating the GPT backup header to the disk end"
 ssh_rescue 'sgdisk -e /dev/sda'
 
-# Refuse to publish an image that lost the rebuild-only Podman partition. The
-# boot verifier below proves the OS comes up; this structural check proves the
-# storage layout Fox needs after that boot is present and formatted.
+# Refresh the rescue kernel's view after replacing the whole disk, then refuse
+# to publish an image that lost the rebuild-only Podman partition. The boot
+# verifier below proves the OS comes up; this check proves the raw device the
+# Podman role will format on first converge has the required label and size.
 echo "==> verifying the dedicated Podman partition"
 # shellcheck disable=SC2016  # substitutions expand on the rescue host
-ssh_rescue 'test "$(lsblk -dn -o PARTLABEL /dev/sda4)" = podman && test "$(blkid -s TYPE -o value /dev/sda4)" = ext4 && test "$(blockdev --getsize64 /dev/sda4)" -ge 42949672960'
+ssh_rescue 'partprobe /dev/sda && udevadm settle && test "$(lsblk -dn -o PARTLABEL /dev/sda4)" = podman && test "$(blockdev --getsize64 /dev/sda4)" -ge 42949672960 && ! blkid -s TYPE -o value /dev/sda4'
 
 rescue_snapshot "$UBUNTU"
