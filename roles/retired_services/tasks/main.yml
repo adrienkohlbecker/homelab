@@ -46,6 +46,17 @@
     - retired_services
     - podman
 
+- name: Remove retired NUT driver network-ordering drop-in
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      for: nut-driver@eaton.service
+  tags:
+    - retired_services
+    - nut_server
+
 - name: Remove retired podman socket group
   group:
     name: podman-socket

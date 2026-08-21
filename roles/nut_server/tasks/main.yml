@@ -138,19 +138,6 @@
   tags:
     - nut_server
 
-- name: Order nut-driver after network-online
-  when: not qemu_test
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      for: nut-driver@eaton.service
-      src: override_nut_driver.conf
-      condition: "{{ not (ansible_check_mode and nut_server_apt.changed) }}"
-  tags:
-    - nut_server
-
 - name: Enable nut-driver service
   when: not (ansible_check_mode and nut_server_apt.changed)
   systemd:

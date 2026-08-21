@@ -6,6 +6,13 @@
   failed_when: retired_services_podman_socket_dropin.stat.exists
   become: true
 
+- name: _verify | Retired NUT driver drop-in is absent
+  stat:
+    path: /etc/systemd/system/nut-driver@eaton.service.d/override.conf
+  register: retired_services_nut_driver_dropin
+  failed_when: retired_services_nut_driver_dropin.stat.exists
+  become: true
+
 - name: _verify | Packaged podman tmpfiles entry is active
   command: grep -Fx 'D! /run/podman 0700 root root' /usr/lib/tmpfiles.d/podman.conf
   changed_when: false

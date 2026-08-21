@@ -26,6 +26,27 @@
     mode: "0644"
   become: true
 
+- name: _setup | Create retired NUT driver drop-in directory
+  file:
+    path: /etc/systemd/system/nut-driver@eaton.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _setup | Install retired NUT driver drop-in fixture
+  copy:
+    content: |
+      [Unit]
+      Wants=network-online.target
+      After=network-online.target
+    dest: /etc/systemd/system/nut-driver@eaton.service.d/override.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: _setup | Register retired podman tmpfiles diversion
   community.general.dpkg_divert:
     path: /usr/lib/tmpfiles.d/podman.conf
