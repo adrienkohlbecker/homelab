@@ -10,10 +10,6 @@ ConditionPathExists=!/run/netplan_keep
 
 [Service]
 Type=oneshot
-# Keep the oneshot visible as "active (exited)" after a fire so an
-# operator (and _verify) can tell the rollback actually ran, instead
-# of it reverting to inactive — indistinguishable from "never fired".
-RemainAfterExit=yes
 # Type=oneshot disables the start timeout by default (TimeoutStartSec
 # defaults to infinity), so a wedged `netplan apply` inside the rollback
 # would hang the unit forever on the one path with no SSH to intervene.

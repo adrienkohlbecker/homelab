@@ -83,7 +83,7 @@
     state: touch
     mode: "0600"
 
-- name: Stop the rollback timer (suspenders)
+- name: Stop the rollback timer
   # Collapses the +90 s wait so `_verify` doesn't have to race the
   # deadline, and operators don't see a pending timer for a minute
   # and a half post-apply. /run/netplan_prev is left in place — the
@@ -92,10 +92,7 @@
   # may still be reading it via --state.
   #
   # No failed_when: false: reaching here means the canary passed before the
-  # rollback fired, so a stop error means a unit is wedged and must surface.
+  # rollback fired, so a stop error means the timer is wedged and must surface.
   systemd:
-    name: "{{ item }}"
+    name: netplan_rollback.timer
     state: stopped
-  loop:
-    - netplan_rollback.timer
-    - netplan_rollback.service

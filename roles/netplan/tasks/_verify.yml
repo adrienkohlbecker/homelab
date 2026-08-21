@@ -182,14 +182,14 @@
   # was exercised (both inactive then). Post-fire the clean states differ:
   # the timer is active (elapsed) -- it fired once and, unlike the happy
   # path, was never stopped because wait_for_connection errored into the
-  # rescue -- and the service is active (exited via RemainAfterExit). What
-  # must NOT appear is a failed unit (rollback script errored) or one stuck
-  # activating/deactivating.
+  # rescue -- and the oneshot service returned to inactive.
   systemd:
     name: "{{ item }}"
   register: netplan_verify_postroll
   changed_when: false
-  failed_when: netplan_verify_postroll.status.ActiveState in ["failed", "activating", "deactivating"]
+  failed_when: >-
+    (item == 'netplan_rollback.timer' and netplan_verify_postroll.status.ActiveState != 'active')
+    or (item == 'netplan_rollback.service' and netplan_verify_postroll.status.ActiveState != 'inactive')
   loop:
     - netplan_rollback.timer
     - netplan_rollback.service
@@ -201,14 +201,6 @@
 # gate directly: with /run/netplan_keep present, starting the rollback unit
 # must be skipped by ConditionPathExists, never reaching the restore. An
 # inverted condition would roll a healthy box back to the prior config.
-- name: _verify cancel | Reset the rollback service to a clean inactive state
-  # The E2E rollback left it active (exited); a fresh start is what
-  # re-evaluates the condition, so clear that state first.
-  systemd:
-    name: netplan_rollback.service
-    state: stopped
-  become: true
-
 - name: _verify cancel | Place the cancel-marker
   file:
     path: /run/netplan_keep
