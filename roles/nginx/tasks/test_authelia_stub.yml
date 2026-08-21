@@ -71,3 +71,18 @@
     name: nginx
     state: reloaded
   become: true
+
+- name: test_authelia_stub | Wait for the fixture to answer
+  when: not ansible_check_mode
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.authelia }}/api/authz/auth-request"
+    headers: >-
+      {{ {'Authorization': 'Basic bmdpbnh2ZXJpZnk6c2VjcmV0'}
+         if _nginx_test_authelia_stub_mode == 'basic' else {} }}
+    status_code: "{{ 401 if _nginx_test_authelia_stub_mode == 'gate' else 200 }}"
+  register: nginx_test_authelia_stub_ready
+  until: >-
+    nginx_test_authelia_stub_ready.status ==
+    (401 if _nginx_test_authelia_stub_mode == 'gate' else 200)
+  retries: 10
+  delay: 1

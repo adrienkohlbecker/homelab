@@ -138,18 +138,6 @@
 - name: _verify | Install Authelia stub in gate mode
   import_tasks: test_authelia_stub.yml
 
-# Bounded readiness probe (fail-fast, per the harness flake contract): the stub
-# re-install reloaded nginx, so poll its endpoint until the gate 401 lands
-# rather than racing the reload on a slow VM.
-- name: _verify | Wait for the Authelia gate stub to answer 401
-  uri:
-    url: "http://127.0.0.1:{{ service_ports.authelia }}/api/authz/auth-request"
-    status_code: 401
-  register: nginx_verify_gate_ready
-  until: nginx_verify_gate_ready.status == 401
-  retries: 10
-  delay: 1
-
 # Exercises the nginx_site helper end-to-end (assert, template, symlink, the
 # new nginx -t validate-rollback, reload) on top of being the probe target.
 - name: _verify | Configure a transient test vhost via the nginx_site helper
@@ -286,15 +274,6 @@
   vars:
     nginx_test_authelia_stub_args:
       mode: authed
-
-- name: _verify | Wait for the Authelia authed stub to answer 200
-  uri:
-    url: "http://127.0.0.1:{{ service_ports.authelia }}/api/authz/auth-request"
-    status_code: 200
-  register: nginx_verify_authed_ready
-  until: nginx_verify_authed_ready.status == 200
-  retries: 10
-  delay: 1
 
 # When Authelia admits a request, the same vhost forwards Remote-User from the
 # auth subrequest as X-Forwarded-User for the *arr suite's External auth mode.
