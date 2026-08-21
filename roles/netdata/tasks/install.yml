@@ -5,20 +5,6 @@
 # 2.* so a fresh install lands on the latest 2.x and only a deliberate
 # pin bump moves to a future major. See notes/netdata_v2_migration_analysis.md.
 
-# packagecloud and repo.netdata.cloud sanitize to different sources.list.d
-# filenames, so repointing the mirror back upstream leaves the packagecloud
-# list behind on hosts provisioned during the packagecloud window -- it would
-# keep pulling stale 1.46.* metadata alongside the new upstream list. Drop it.
-# No-op on fresh hosts and on test machines.
-- name: install | Drop the stale packagecloud source
-  file:
-    path: /etc/apt/sources.list.d/packagecloud_io_netdata_netdata_ubuntu.list
-    state: absent
-  register: netdata_apt_old_repo_removed
-  become: true
-  tags:
-    - netdata
-
 # Flat repo (no components). The apt_source helper fetches the key into the scoped
 # /usr/share/keyrings/netdata.gpg (not the global trust store), verifies it
 # against key_id, and renders the 2.* pin.
@@ -40,18 +26,8 @@
   tags:
     - netdata
 
-# Re-expose the helper's change signal (plus the netdata-specific packagecloud
-# cleanup) as netdata_apt_repo.changed, which the rest of the role gates its
-# service restarts on.
-- name: install | Track repository changes
-  set_fact:
-    netdata_apt_repo:
-      changed: "{{ apt_source_netdata_changed or netdata_apt_old_repo_removed is changed }}"
-  tags:
-    - netdata
-
 - name: install | Install netdata
-  when: not (ansible_check_mode and netdata_apt_repo.changed)
+  when: not (ansible_check_mode and apt_source_netdata_changed)
   apt:
     pkg:
       - netdata

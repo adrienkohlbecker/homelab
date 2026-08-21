@@ -232,6 +232,15 @@
     - retired_services
     - samba
 
+- name: Remove retired Netdata Packagecloud source
+  file:
+    path: /etc/apt/sources.list.d/packagecloud_io_netdata_netdata_ubuntu.list
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - netdata
+
 - name: Remove retired Netdata smartctl collector override
   file:
     path: /etc/netdata/go.d/smartctl.conf
