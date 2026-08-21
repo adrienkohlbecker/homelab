@@ -14,11 +14,6 @@
     - podman
 
 - name: install | Configure podman storage before apt
-  vars:
-    # Native overlay learned idmapped-mount support in kernel 5.19. Older
-    # kernels use fuse-overlayfs to avoid chown-by-maps failures on image device
-    # nodes when a container starts with --uidmap.
-    _podman_storage_needs_fuse_overlayfs: "{{ ansible_facts.kernel is version('5.19', '<') }}"
   copy:
     dest: /etc/containers/storage.conf
     content: |
@@ -29,11 +24,6 @@
       runroot = "/run/containers/storage"
       graphroot = "/var/lib/containers/storage"
       rootless_storage_path = "/var/lib/containers/rootless/$USER"
-      {% if _podman_storage_needs_fuse_overlayfs %}
-
-      [storage.options.overlay]
-      mount_program = "/usr/bin/fuse-overlayfs"
-      {% endif %}
     mode: "0644"
     owner: root
     group: root
