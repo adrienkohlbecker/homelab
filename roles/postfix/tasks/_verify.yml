@@ -10,85 +10,61 @@
   changed_when: false
   become: true
 
-# Expected effective config, keyed by parameter name. Defined once and reused
-# for both the postconf query and the assertion, so the query order and the
-# checks can't silently drift apart (the failure mode of positional indexing).
-- name: _verify | Build the expected effective-config map
-  set_fact:
-    _postfix_expected:
-      relayhost: "[{{ smtp_host }}]:{{ smtp_port }}"
-      master_service_disable: inet
-      myorigin: "{{ domain }}"
-      smtp_sasl_password_maps: texthash:/etc/postfix/sasl_passwd
-      smtp_tls_security_level: "{{ 'secure' if (smtp_use_ssl | bool or smtp_use_tls | bool) else 'none' }}"
-      smtp_sasl_auth_enable: "yes"
-      smtp_tls_mandatory_protocols: ">=TLSv1.2"
-      smtp_generic_maps: texthash:/etc/postfix/generic
-
-# -h suppresses parameter names; -x expands $name refs so `myorigin = $mydomain`
-# reads back as the literal domain. Output order matches the argument order.
-- name: _verify | Read back effective postfix parameters
-  command: postconf -hx {{ _postfix_expected.keys() | list | join(' ') }}
+- name: _verify | Effective Postfix parameters match relay intent
+  command: postconf -hx {{ item.key }}
+  loop:
+    - key: relayhost
+      value: "[{{ smtp_host }}]:{{ smtp_port }}"
+    - key: master_service_disable
+      value: inet
+    - key: myorigin
+      value: "{{ domain }}"
+    - key: smtp_sasl_password_maps
+      value: texthash:/etc/postfix/sasl_passwd
+    - key: smtp_tls_security_level
+      value: "{{ 'secure' if (smtp_use_ssl | bool or smtp_use_tls | bool) else 'none' }}"
+    - key: smtp_sasl_auth_enable
+      value: "yes"
+    - key: smtp_tls_mandatory_protocols
+      value: ">=TLSv1.2"
+    - key: smtp_generic_maps
+      value: texthash:/etc/postfix/generic
+  loop_control:
+    label: "{{ item.key }}"
   register: _postfix_conf
+  failed_when: _postfix_conf.stdout != item.value
   changed_when: false
   become: true
 
 - name: _verify | Query the SASL map for the relayhost key
   command: postmap -q "[{{ smtp_host }}]:{{ smtp_port }}" texthash:/etc/postfix/sasl_passwd
   register: _postfix_sasl
+  failed_when: _postfix_sasl.stdout != postfix_smtp_user ~ ':' ~ postfix_smtp_password
   changed_when: false
   become: true
 
 - name: _verify | Query the sender-rewrite map for the local hostname
   command: postmap -q @{{ inventory_hostname }} texthash:/etc/postfix/generic
   register: _postfix_generic
+  failed_when: _postfix_generic.stdout != inventory_hostname ~ '@' ~ email_domain
   changed_when: false
   become: true
-
-- name: _verify | Effective config matches the templated relay intent
-  assert:
-    that:
-      - item.1 == item.2
-    fail_msg: >-
-      postfix parameter {{ item.0 }} drifted from the template: expected
-      "{{ item.1 }}", got "{{ item.2 }}".
-  loop: >-
-    {{ _postfix_expected.keys() | list
-       | zip(_postfix_expected.values() | map('string') | list, _postfix_conf.stdout_lines)
-       | list }}
-  loop_control:
-    label: "{{ item.0 }}"
-
-- name: _verify | Credential and sender-rewrite map lookups resolve
-  assert:
-    that:
-      - _postfix_sasl.stdout == postfix_smtp_user ~ ':' ~ postfix_smtp_password
-      - _postfix_generic.stdout == inventory_hostname ~ '@' ~ email_domain
-    fail_msg: >-
-      texthash lookup drifted: the SASL map must resolve the relayhost key to
-      {{ postfix_smtp_user }}:<password>, and the generic map must rewrite
-      @{{ inventory_hostname }} to {{ inventory_hostname }}@{{ email_domain }}.
 
 - name: _verify | Resolve the local aliases
-  command: postmap -q {{ item }} texthash:/etc/postfix/aliases
+  command: postmap -q {{ item.key }} texthash:/etc/postfix/aliases
   loop:
-    - postmaster
-    - root
-    - "{{ operator_user }}"
+    - key: postmaster
+      value: root
+    - key: root
+      value: "{{ root_email }}"
+    - key: "{{ operator_user }}"
+      value: "{{ root_email }}"
+  loop_control:
+    label: "{{ item.key }}"
   register: _postfix_alias
+  failed_when: _postfix_alias.stdout != item.value
   changed_when: false
   become: true
-
-- name: _verify | Aliases resolve to their destinations
-  assert:
-    that:
-      - _postfix_alias.results[0].stdout == 'root'
-      - _postfix_alias.results[1].stdout == root_email
-      - _postfix_alias.results[2].stdout == root_email
-    fail_msg: >-
-      alias wiring drifted: postmaster must alias to root, and root and
-      {{ operator_user }} must alias to root_email ({{ root_email }}). Lookups:
-      {{ _postfix_alias.results | map(attribute='stdout') | list }}.
 
 # qmgr logs the qualified sender when the message enters the active queue, so
 # this exercise does not depend on the intentionally unavailable relay.
