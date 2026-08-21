@@ -22,14 +22,13 @@
 #               role's vars scope before this role sees it). Mutually
 #               exclusive with src.
 #   condition   optional bool, default true; gates the whole call
-#   mode        optional, default '0644'
 #   reload      optional bool, default true; reload nginx after a
 #               successful change. Set false to batch multiple drops
 #               under one explicit reload at the caller.
 #
 # The dict form prevents inter-call leakage at play-vars scope: each
 # import_role pass replaces the whole `nginx_conf_d_args` value, so a
-# previous caller's content/condition/mode can't bleed into the next
+# previous caller's content or condition can't bleed into the next
 # caller that doesn't explicitly override.
 #
 # Exposes a per-name fact `<sanitized_name>_result` (e.g.
@@ -57,22 +56,20 @@
   set_fact:
     _nginx_conf_d_condition: "{{ nginx_conf_d_args.condition | default(true) }}"
     _nginx_conf_d_name: "{{ nginx_conf_d_args.name }}"
-    _nginx_conf_d_mode: "{{ nginx_conf_d_args.mode | default('0644') }}"
     _nginx_conf_d_reload: "{{ nginx_conf_d_args.reload | default(true) }}"
 
 - name: conf_d | Install {{ nginx_conf_d_args.name }}
   when: _nginx_conf_d_condition
   block:
-    - name: conf_d | Write {{ nginx_conf_d_args.name }}
+    - name: conf_d | Write {{ nginx_conf_d_args.name }}  # noqa: require-validate
       copy:
         src: "{{ nginx_conf_d_args.src | default(omit) }}"
         content: "{{ nginx_conf_d_args.content | default(omit) }}"
         dest: "/etc/nginx/conf.d/{{ _nginx_conf_d_name }}"
         owner: root
         group: root
-        mode: "{{ _nginx_conf_d_mode }}"
+        mode: "0644"
         backup: true
-        validate: "{{ nginx_conf_d_args.validate | default(omit) }}"
       become: true
       register: nginx_conf_d
 
