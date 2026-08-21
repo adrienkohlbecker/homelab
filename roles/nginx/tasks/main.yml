@@ -5,40 +5,74 @@
 
 # Device admin UIs keep their own firmware login behind Authelia. UniFi is the
 # exception because another login layer breaks its mobile app and API clients.
-- name: Configure or remove static nginx proxies
-  include_tasks:
-    file: >-
-      {{ (nginx_static_proxy.subdomain in nginx_static_proxies)
-         | ternary('site.yml', 'site_remove.yml') }}
-    apply:
-      tags:
-        - nginx
+- name: Manage static nginx proxies
   vars:
-    nginx_site_args: "{{ nginx_static_proxy }}"
-    nginx_site_remove_args:
-      subdomain: "{{ nginx_static_proxy.subdomain }}"
-  loop:
-    - subdomain: marantz
-      proxy_pass: "https://{{ external_ips.marantz }}:10443/"
-      auth: true
-    - subdomain: printer
-      proxy_pass: "http://{{ external_ips.printer }}:80/"
-      auth: true
-    - subdomain: siglent
-      proxy_pass: "http://{{ external_ips.siglent }}:80/"
-      auth: true
-    - subdomain: ups
-      proxy_pass: "https://{{ external_ips.eaton }}:443/"
-      auth: true
-    - subdomain: tubeszb
-      proxy_pass: "http://{{ external_ips.tubeszb }}:80/"
-      auth: true
-    - subdomain: unifi
-      proxy_pass: "https://{{ external_ips.udm }}:443/"
-      csp_additional: connect-src api.mapbox.com ui.com *.ui.com {{ nginx_csp_default }}
-      csp_default_src: ui.com *.ui.com
-  loop_control:
-    label: "{{ nginx_static_proxy.subdomain }}"
-    loop_var: nginx_static_proxy
+    _nginx_static_proxy_sites:
+      - subdomain: marantz
+        proxy_pass: "https://{{ external_ips.marantz }}:10443/"
+        auth: true
+      - subdomain: printer
+        proxy_pass: "http://{{ external_ips.printer }}:80/"
+        auth: true
+      - subdomain: siglent
+        proxy_pass: "http://{{ external_ips.siglent }}:80/"
+        auth: true
+      - subdomain: ups
+        proxy_pass: "https://{{ external_ips.eaton }}:443/"
+        auth: true
+      - subdomain: tubeszb
+        proxy_pass: "http://{{ external_ips.tubeszb }}:80/"
+        auth: true
+      - subdomain: unifi
+        proxy_pass: "https://{{ external_ips.udm }}:443/"
+        csp_additional: connect-src api.mapbox.com ui.com *.ui.com {{ nginx_csp_default }}
+        csp_default_src: ui.com *.ui.com
+    _nginx_enabled_static_proxy_sites: >-
+      {{ _nginx_static_proxy_sites
+         | selectattr('subdomain', 'in', nginx_static_proxies) | list }}
+    _nginx_disabled_static_proxy_names: >-
+      {{ _nginx_static_proxy_sites
+         | rejectattr('subdomain', 'in', nginx_static_proxies)
+         | map(attribute='subdomain') | list }}
   tags:
     - nginx
+  block:
+    - name: Configure enabled static nginx proxies
+      include_tasks:
+        file: site.yml
+        apply:
+          tags:
+            - nginx
+      vars:
+        nginx_site_args: "{{ nginx_static_proxy }}"
+      loop: "{{ _nginx_enabled_static_proxy_sites }}"
+      loop_control:
+        label: "{{ nginx_static_proxy.subdomain }}"
+        loop_var: nginx_static_proxy
+      tags:
+        - nginx
+
+    - name: Remove disabled static nginx proxies
+      file:
+        path: /etc/nginx/{{ item.1 }}/{{ item.0 }}
+        state: absent
+      loop: >-
+        {{ _nginx_disabled_static_proxy_names
+           | product(['sites-enabled', 'sites-available']) | list }}
+      loop_control:
+        label: "{{ item.0 }} ({{ item.1 }})"
+      become: true
+      register: nginx_static_proxy_cleanup
+      tags:
+        - nginx
+
+    - name: Reload nginx after removing static proxies
+      when:
+        - not ansible_check_mode
+        - nginx_static_proxy_cleanup.changed
+      systemd:
+        name: nginx
+        state: reloaded
+      become: true
+      tags:
+        - nginx

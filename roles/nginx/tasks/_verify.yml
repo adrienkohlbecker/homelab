@@ -633,64 +633,19 @@
   retries: 10
   delay: 1
 
-# Exercise the same contract on the split removal entrypoint while nginxverify
-# still exists. The real removal below must then overwrite this result as changed.
-- name: _verify | Skip removal of an existing vhost
-  import_role:
-    name: nginx
-    tasks_from: site_remove
-  vars:
-    nginx_site_remove_args:
-      subdomain: nginxverify
-      condition: false
-
-- name: _verify | A skipped removal publishes an unchanged result
-  assert:
-    that:
-      - nginxverify_site_result is defined
-      - not nginxverify_site_result.changed
-
-- name: _verify | A skipped removal leaves the vhost enabled
-  stat:
-    path: /etc/nginx/sites-enabled/nginxverify
-  register: nginx_verify_cond_remove_file
-  become: true
-  failed_when: not nginx_verify_cond_remove_file.stat.exists
-
-- name: _verify | Preview removal of an existing vhost and its nginx reload
-  import_role:
-    name: nginx
-    tasks_from: site_remove
-  check_mode: true
-  vars:
-    nginx_site_remove_args:
-      subdomain: nginxverify
-
-- name: _verify | A pending removal previews both the deletion and reload
-  assert:
-    that:
-      - nginxverify_site_result.changed
-      - _nginx_site_remove_reload.changed
-
-- name: _verify | The check-mode removal preview leaves the vhost enabled
-  stat:
-    path: /etc/nginx/sites-enabled/nginxverify
-  register: nginx_verify_check_remove_file
-  become: true
-  failed_when: not nginx_verify_check_remove_file.stat.exists
-
-# Remove the supporting fixtures before the representative helper call so its
-# single reload applies the whole teardown.
-- name: _verify | Remove supporting transient test vhosts
+# Remove every transient vhost in one teardown and reload once.
+- name: _verify | Remove transient test vhosts
   file:
     path: "/etc/nginx/{{ item.1 }}/{{ item.0 }}"
     state: absent
   become: true
   loop: "{{ nginx_verify_supporting_sites | product(['sites-enabled', 'sites-available']) | list }}"
+  register: nginx_verify_site_cleanup
   loop_control:
     label: "{{ item.0 }} ({{ item.1 }})"
   vars:
     nginx_verify_supporting_sites:
+      - nginxverify
       - nginxverifyauth
       - nginxverifybasic
       - nginxverifyloc
@@ -702,33 +657,12 @@
       - nginxverifycsp
       - nginxverifyipv6
 
-- name: _verify | Remove a transient vhost via the nginx site removal helper
-  import_role:
+- name: _verify | Reload nginx after transient vhost teardown
+  when: nginx_verify_site_cleanup.changed
+  systemd:
     name: nginx
-    tasks_from: site_remove
-  vars:
-    nginx_site_remove_args:
-      subdomain: nginxverify
-
-- name: _verify | A real removal publishes a changed result
-  assert:
-    that:
-      - nginxverify_site_result.changed
-
-- name: _verify | The helper removed the vhost config and symlink
-  stat:
-    path: "{{ item }}"
-  register: nginx_verify_removed
-  loop:
-    - /etc/nginx/sites-available/nginxverify
-    - /etc/nginx/sites-enabled/nginxverify
+    state: reloaded
   become: true
-  failed_when: nginx_verify_removed.stat.exists
-
-# No post-removal HTTP probe: a request fired immediately after the reload races
-# nginx's draining old workers (which still hold the removed vhost) and follows
-# their 308 to an https URL the snakeoil cert doesn't cover. The stat above is
-# the deterministic check that the removal contract deleted both files.
 
 # conf_d src: (file) input -- _verify otherwise only drives conf_d with `content`
 # (the broken-drop test). The src branch is exercised in prod by

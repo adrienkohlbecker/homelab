@@ -340,13 +340,28 @@
   tags:
     - retired_services
 
-- name: Retire Speedtest nginx site
-  import_role:
+- name: Remove retired nginx sites
+  file:
+    path: /etc/nginx/{{ item.1 }}/{{ item.0 }}
+    state: absent
+  loop: >-
+    {{ ['speedtest', 'plex', 'tautulli', 'healthchecks', 'roundcube']
+       | product(['sites-enabled', 'sites-available']) | list }}
+  loop_control:
+    label: "{{ item.0 }} ({{ item.1 }})"
+  become: true
+  register: retired_services_nginx_site_cleanup
+  tags:
+    - retired_services
+
+- name: Reload nginx after removing retired sites
+  when:
+    - not ansible_check_mode
+    - retired_services_nginx_site_cleanup.changed
+  systemd:
     name: nginx
-    tasks_from: site_remove
-  vars:
-    nginx_site_remove_args:
-      subdomain: speedtest
+    state: reloaded
+  become: true
   tags:
     - retired_services
 
@@ -517,46 +532,6 @@
   tags:
     - retired_services
     - sabnzbd
-
-- name: Retire Plex nginx site
-  import_role:
-    name: nginx
-    tasks_from: site_remove
-  vars:
-    nginx_site_remove_args:
-      subdomain: plex
-  tags:
-    - retired_services
-
-- name: Retire Tautulli nginx site
-  import_role:
-    name: nginx
-    tasks_from: site_remove
-  vars:
-    nginx_site_remove_args:
-      subdomain: tautulli
-  tags:
-    - retired_services
-
-- name: Retire Healthchecks nginx site
-  import_role:
-    name: nginx
-    tasks_from: site_remove
-  vars:
-    nginx_site_remove_args:
-      subdomain: healthchecks
-  tags:
-    - retired_services
-
-- name: Retire Roundcube nginx site
-  import_role:
-    name: nginx
-    tasks_from: site_remove
-  vars:
-    nginx_site_remove_args:
-      subdomain: roundcube
-  tags:
-    - retired_services
 
 - name: Remove retired service Fluent Bit extensions
   import_role:
