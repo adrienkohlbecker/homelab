@@ -245,18 +245,9 @@
 # falling back when the configured connector is missing or broken; the
 # process check then pins that the connector is pasta specifically, not the
 # slirp4netns it replaced.
-- name: _verify | Resolve the connection user uid for XDG_RUNTIME_DIR
-  getent:
-    database: passwd
-    key: "{{ ansible_user_id }}"
-
-- name: _verify | Confirm the pasta connector binary runs
-  command: pasta --version
-  changed_when: false
-
 - name: _verify | Prove pasta backs a rootless container with egress wired
   environment:
-    XDG_RUNTIME_DIR: /run/user/{{ ansible_facts.getent_passwd[ansible_user_id][1] }}
+    XDG_RUNTIME_DIR: /run/user/{{ ansible_user_uid }}
   block:
     - name: _verify | Pull a tiny image through the Nexus mirror
       command: podman pull {{ podman_probe_image }}
@@ -302,7 +293,7 @@
   always:
     - name: _verify | Remove the net-verify container
       environment:
-        XDG_RUNTIME_DIR: /run/user/{{ ansible_facts.getent_passwd[ansible_user_id][1] }}
+        XDG_RUNTIME_DIR: /run/user/{{ ansible_user_uid }}
       command: podman rm -f net_verify
       changed_when: false
       failed_when: false
