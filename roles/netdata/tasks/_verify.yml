@@ -154,28 +154,6 @@
         version: "2.*"
         priority: 999
 
-- name: _verify | Add loopback VIP fixture for keepalived_vrrp collector
-  command: ip addr replace 198.51.100.10/32 dev lo
-  changed_when: false
-  become: true
-
-- name: _verify | Install keepalived_vrrp collector fixture
-  import_tasks: charts_d.yml
-  vars:
-    netdata_keepalived_vrrp_ip: 198.51.100.10
-    netdata_keepalived_vrrp_update_every: 5
-    netdata_args:
-      name: keepalived_vrrp
-      script: keepalived_vrrp.chart.sh
-      conf: charts_d_keepalived_vrrp.conf.j2
-
-- name: _verify | Install keepalived_vrrp lost-master alert fixture
-  import_tasks: health.yml
-  vars:
-    netdata_args:
-      src: keepalived_vrrp_alerts.conf
-      dest: keepalived_vrrp.conf
-
 - name: _verify | Wait for keepalived_vrrp chart to register
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/charts
@@ -242,40 +220,6 @@
     fail_msg: >-
       Expected keepalived_lost_master to require five minutes without the VIP
       and no notification-only delay. Got: {{ _alarm }}
-
-- name: _verify | Remove keepalived_vrrp alert fixture
-  file:
-    path: /etc/netdata/health.d/keepalived_vrrp.conf
-    state: absent
-  register: _netdata_keepalived_vrrp_alert_cleanup
-  become: true
-
-- name: _verify | Reload health after keepalived_vrrp alert fixture cleanup
-  when: _netdata_keepalived_vrrp_alert_cleanup.changed
-  import_tasks: reload_health.yml
-
-- name: _verify | Remove keepalived_vrrp collector fixture files
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /usr/libexec/netdata/charts.d/keepalived_vrrp.chart.sh
-    - /etc/netdata/charts.d/keepalived_vrrp.conf
-  register: _netdata_keepalived_vrrp_collector_cleanup
-  become: true
-
-- name: _verify | Remove loopback VIP fixture
-  command: ip addr del 198.51.100.10/32 dev lo
-  changed_when: false
-  failed_when: false
-  become: true
-
-- name: _verify | Restart netdata after keepalived_vrrp collector fixture cleanup
-  when: _netdata_keepalived_vrrp_collector_cleanup.changed
-  systemd:
-    name: netdata
-    state: restarted
-  become: true
 
 # Shorten update_every so the test doesn't have to wait a full minute
 # for the first emission. The collector defaults to 60s; 5s lets the

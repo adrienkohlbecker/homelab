@@ -52,3 +52,8 @@
   import_role:
     name: nginx
     tasks_from: test_authelia_stub
+
+- name: _setup | Add keepalived VRRP loopback VIP fixture
+  command: ip addr replace 198.51.100.10/32 dev lo
+  changed_when: false
+  become: true
