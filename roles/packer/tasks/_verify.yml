@@ -380,31 +380,23 @@
       loop_control:
         label: "{{ item }}"
 
-# --- Functional kernel-update + reboot exercise (both arches) ---
+# --- Functional aarch64 kernel-update + reboot exercise ---
 #
 # Trigger an apt-driven kernel transaction and reboot, then prove the
-# firmware boots into a *different* kernel. End-to-end exercise of the
-# live boot chain:
-#   x86_64:  firmware -> rEFInd -> ZBM unified EFI image -> kexec
-#   aarch64: firmware -> rEFInd -> Linux EFI-stub via /EFI/Linux/
+# firmware boots into a *different* kernel through rEFInd and the Linux
+# EFI stub under /EFI/Linux/.
 #
 # Install an older linux-image-X.Y.Z-generic, then hide the running
 # kernel's /boot files behind dotfile names so the "highest kernel"
-# selection skips them (ZBM's glob on x86_64; the postinst.d hook's
-# glob on aarch64). dpkg's "Aborting removal of the running kernel"
-# prerm guard blocks the cleaner apt-purge path, so this is the
-# closest substitute without bypassing dpkg.
+# selection skips them. Re-run the postinst.d hook so /EFI/Linux/
+# restages with the older kernel, then assert the file hashes changed.
+# Dpkg's running-kernel guard blocks the cleaner apt-purge path.
 #
-# aarch64 also re-runs the postinst.d hook (after the hide) so
-# /EFI/Linux/ restages with the older kernel, and asserts the file
-# hashes flipped. That ESP-staging path is the aarch64-only mechanism
-# behind the rEFInd Linux EFI-stub menuentry.
-#
-# ABI discovery runs unconditionally; the reboot exercise is gated on
-# finding a swap target (multiple madison versions can map to the same
-# ABI, so "two versions available" != "two distinct kernels").
+# On aarch64, ABI discovery always runs; the reboot exercise requires a
+# distinct swap target because multiple package versions can map to one ABI.
 
 - name: _verify | Refresh apt cache so madison sees the current archive
+  when: ansible_architecture == "aarch64"
   apt:
     update_cache: true
   become: true
@@ -413,9 +405,9 @@
 # target. Multiple meta-package versions (e.g. 5.15.0.179.163 and
 # 5.15.0.179.164) can resolve to the same linux-image-5.15.0-179-generic
 # package — picking the "second-newest version" without dedup selects
-# the running kernel, the hide step removes the only bootable kernel,
-# and ZBM has nothing to kexec into.
+# the running kernel, and the hide step removes the only bootable kernel.
 - name: _verify | Find a kernel ABI different from the running one
+  when: ansible_architecture == "aarch64"
   shell:
     cmd: |
       set -euo pipefail
@@ -441,7 +433,9 @@
   changed_when: false
 
 - name: _verify | Kernel-swap exercise skipped (no alternative ABI in archive)
-  when: packer_verify_swap_abi.stdout | length == 0
+  when:
+    - ansible_architecture == "aarch64"
+    - packer_verify_swap_abi.stdout | default('') | length == 0
   debug:
     msg: >-
       Only one kernel ABI is available in the archive — skipping the
@@ -449,7 +443,9 @@
       has not yet published a second ABI for this release.
 
 - name: _verify | Kernel-update + reboot exercise
-  when: packer_verify_swap_abi.stdout | length > 0
+  when:
+    - ansible_architecture == "aarch64"
+    - packer_verify_swap_abi.stdout | default('') | length > 0
   block:
     - name: _verify | Install older specific kernel + modules
       apt:
@@ -461,11 +457,8 @@
 
     # dpkg refuses to purge the running kernel ("Aborting removal of
     # the running kernel"). Hide the /boot files behind dotfile names
-    # — shell globs don't match leading dots, so:
-    #   x86_64: ZBM's /boot/vmlinuz-* scan skips the hidden running
-    #           kernel and picks the older one as the new highest.
-    #   aarch64: the postinst.d hook's same glob skips them; we
-    #            re-run the hook below to restage /EFI/Linux/.
+    # — shell globs don't match leading dots, so the hook skips them
+    # when it restages /EFI/Linux/ below.
     - name: _verify | Hide running kernel files from highest-kernel selection
       shell:
         cmd: |
@@ -476,14 +469,12 @@
       changed_when: true
       become: true
 
-    - name: _verify | Re-run the hook to stage the older kernel onto /EFI/Linux/ (aarch64)
-      when: ansible_architecture == "aarch64"
+    - name: _verify | Re-run the hook to stage the older kernel onto /EFI/Linux/
       command: /etc/kernel/postinst.d/zz-stage-efi-stub
       changed_when: true
       become: true
 
-    - name: _verify | Capture /EFI/Linux/{vmlinuz.efi,initrd} hashes after (aarch64)
-      when: ansible_architecture == "aarch64"
+    - name: _verify | Capture /EFI/Linux/{vmlinuz.efi,initrd} hashes after
       stat:
         path: "{{ item }}"
         get_checksum: true
@@ -494,8 +485,7 @@
       register: packer_verify_efi_linux_after
       become: true
 
-    - name: _verify | Hook restaged vmlinuz.efi and initrd onto the ESP (aarch64)
-      when: ansible_architecture == "aarch64"
+    - name: _verify | Hook restaged vmlinuz.efi and initrd onto the ESP
       assert:
         that:
           - >-
