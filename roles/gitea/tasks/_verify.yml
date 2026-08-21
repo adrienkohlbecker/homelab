@@ -39,12 +39,10 @@
     validate_certs: false
     status_code: 200
 
-# Confirms gitea actually opened the sqlite db at the path we configured
-# -- a permissions/mount regression on /mnt/services/sqlite/gitea/ would
-# land here as "no such file" with a unit still active.
+# Confirms gitea actually opened the sqlite db at the path we configured.
 - name: _verify | Gitea sqlite database exists and is owned by git
   stat:
-    path: /mnt/services/sqlite/gitea/gitea.db
+    path: /mnt/services/gitea/data/gitea.db
   register: _gitea_sqlite
   failed_when: >-
     not _gitea_sqlite.stat.exists

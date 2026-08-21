@@ -8,23 +8,6 @@
   tags:
     - authelia
 
-# Separate SQLite path: /mnt/services/sqlite/<svc>
-# is its own ZFS dataset on prod (recordsize/cache tuned for SQLite)
-# while /mnt/services/<svc> holds the YAML config. The harness's
-# zfs_has_services_mount flag still gates the consumer side; on the
-# test fixture both paths are plain dirs.
-- name: Create authelia sqlite directory
-  when: not ansible_check_mode or authelia_user.uid is defined
-  file:
-    dest: /mnt/services/sqlite/authelia
-    state: directory
-    owner: authelia
-    group: authelia
-    mode: "0755"
-  become: true
-  tags:
-    - authelia
-
 - name: Configure authelia
   template:
     src: configuration.yml.j2

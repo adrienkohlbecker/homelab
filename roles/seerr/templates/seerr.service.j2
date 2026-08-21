@@ -10,8 +10,6 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
-After=zfs_mount_mnt_services_sqlite.service
-Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
@@ -62,7 +60,6 @@ ExecStart=/usr/bin/podman run \
     {{ seerr_user | podman_idmap_args(container_uid=1000) | join(" ") }} \
     --env TZ={{ system_timezone }} \
     --volume /mnt/services/seerr:/app/config \
-    --volume /mnt/services/sqlite/seerr:/app/config/db \
     --network media \
     --publish 127.0.0.1:{{ service_ports.seerr }}:5055/tcp \
     --health-cmd         {{ "http://localhost:5055/api/v1/status" | podman_health_wget }} \

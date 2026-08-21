@@ -19,18 +19,6 @@
   tags:
     - bazarr
 
-- name: Create sqlite directory
-  when: not ansible_check_mode or bazarr_user.uid is defined
-  file:
-    dest: /mnt/services/sqlite/bazarr
-    state: directory
-    owner: bazarr
-    group: media
-    mode: "0750"
-  become: true
-  tags:
-    - bazarr
-
 - name: Create bazarr config subdirectory
   when: not ansible_check_mode or bazarr_user.uid is defined
   file:

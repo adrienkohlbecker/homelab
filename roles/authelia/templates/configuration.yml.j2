@@ -156,12 +156,9 @@ regulation:
   find_time: '2m'
   ban_time: '5m'
 
-# SQLite at /db (separate bind mount so the dataset can carry its
-# own ZFS recordsize / snapshot policy independently of the config
-# dir).
 storage:
   local:
-    path: '/db/db.sqlite3'
+    path: '/config/db.sqlite3'
 
 # Authelia checks the system clock against an NTP server at startup and
 # fatals if it is not synchronized accurately enough -- accurate time is

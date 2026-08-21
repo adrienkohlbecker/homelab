@@ -16,8 +16,6 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
-After=zfs_mount_mnt_services_sqlite.service
-Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 {% if zfs_has_media_mount %}
 After=zfs_mount_mnt_media.service
@@ -58,7 +56,6 @@ ExecStart=/usr/bin/podman run \
     --env UMASK=002 \
     --env TZ={{ system_timezone }} \
     --volume /mnt/services/bazarr:/config \
-    --volume /mnt/services/sqlite/bazarr:/config/db \
     --volume /mnt/media:/media \
     --network media \
     --publish 127.0.0.1:{{ service_ports.bazarr }}:{{ service_ports.bazarr }}/tcp \

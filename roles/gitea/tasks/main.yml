@@ -63,7 +63,6 @@
     - /mnt/services/gitea
     - /mnt/services/gitea/custom
     - /mnt/services/gitea/data
-    - /mnt/services/sqlite/gitea
   tags:
     - gitea
 

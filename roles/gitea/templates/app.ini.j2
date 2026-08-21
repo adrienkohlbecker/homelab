@@ -6,7 +6,7 @@ RUN_MODE = prod
 [database]
 DB_TYPE = sqlite3
 NAME = gitea
-PATH = /mnt/services/sqlite/gitea/gitea.db
+PATH = /mnt/services/gitea/data/gitea.db
 SQLITE_JOURNAL_MODE = WAL
 # gitea default is 500ms; under concurrent web + cron + LFS load (the
 # cleanup_actions cron in particular) writers race on the WAL lock and

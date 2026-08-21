@@ -17,12 +17,9 @@
     name: nginx
     tasks_from: test_fixture
 
-- name: _setup | Ensure /mnt/services and /mnt/services/sqlite exist
+- name: _setup | Ensure /mnt/services exists
   file:
-    path: "{{ item }}"
+    path: /mnt/services
     state: directory
     mode: "0755"
-  loop:
-    - /mnt/services
-    - /mnt/services/sqlite
   become: true

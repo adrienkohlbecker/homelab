@@ -33,20 +33,6 @@
   tags:
     - seerr
 
-# Seerr stores its DB in a dedicated directory, so bind that directory directly
-# onto the 4K-recordsize dataset without file-level routing.
-- name: Create sqlite directory
-  when: not ansible_check_mode or seerr_user.uid is defined
-  file:
-    dest: /mnt/services/sqlite/seerr
-    state: directory
-    owner: seerr
-    group: seerr
-    mode: "0750"
-  become: true
-  tags:
-    - seerr
-
 # settings.json is rendered as the full canonical post-merge shape seerr
 # writes on disk -- every key seerr's defaults emit, in seerr's canonical
 # top-level order, with our wired values overriding the bare-defaults
