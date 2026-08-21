@@ -247,12 +247,9 @@
     - /mnt/services/nexus/data/log/request.log
     - /mnt/services/nexus/data/log/outbound-request.log
     - /mnt/services/nexus/data/log/audit/audit.log
-  register: _nexus_retired_logs
+  register: _nexus_retired_log
+  failed_when: _nexus_retired_log.stat.exists
   become: true
-
-- name: _verify | Specialized nexus log files are absent
-  assert:
-    that: _nexus_retired_logs.results | selectattr('stat.exists') | list | length == 0
 
 - name: _verify | Wait for parsed nexus application and audit output in lnav store
   command:
