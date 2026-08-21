@@ -1,0 +1,24 @@
+# Daily podman system-prune. Drops stopped containers, dangling images,
+# unused networks, and build cache; named images stay cached so the next
+# pull is a no-op. Built on the systemd_timer helper so the root-scope timer
+# gets netdata overdue-monitoring, a timeout kill-switch, and journal-priority
+# routing for free.
+#
+# Inputs: caller passes a single dict `podman_prune_args` with key `user`,
+# defaulting to root. A named user selects that user's rootless podman store.
+
+# Keep named images warm and never prune named volumes, which may contain
+# stopped service state despite the fleet's bind-mount convention.
+- name: prune | Install podman_prune timer
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: podman_prune
+      description: Prune unused podman containers, images and networks
+      exec_start: /usr/bin/podman system prune -f --filter until=48h
+      on_calendar: "*-*-* 00:20:00"
+      user: "{{ podman_prune_args.user | default('root') }}"
+  tags:
+    - podman

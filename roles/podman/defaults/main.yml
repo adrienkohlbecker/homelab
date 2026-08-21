@@ -1,5 +1,5 @@
 ---
-podman_prune_enabled: false
+podman_operator_prune_enabled: false
 
 # Set sync=disabled on the rpool/podman zvol. Only safe where the zvol holds
 # nothing but reconstructible state -- container images and ephemeral overlay

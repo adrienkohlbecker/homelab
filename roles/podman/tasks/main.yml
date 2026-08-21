@@ -54,30 +54,80 @@
   tags:
     - podman
 
-- name: Install podman prune timer
-  when: podman_prune_enabled
+- name: Enable linger for the Lab operator prune timer
+  when: podman_operator_prune_enabled
   import_role:
-    name: systemd_timer
-    tasks_from: install
+    name: linger
+    tasks_from: linger
   vars:
-    systemd_timer_args:
-      name: podman_prune
-      description: Prune unused podman containers, images and networks
-      # Keep named images warm and never prune named volumes, which may contain
-      # stopped service state despite the fleet's bind-mount convention.
-      exec_start: /usr/bin/podman system prune -f --filter until=48h
-      on_calendar: "*-*-* 00:20:00"
+    linger_args:
+      name: "{{ ansible_user_id }}"
+      uid: "{{ ansible_user_uid }}"
   tags:
     - podman
 
-- name: Remove podman prune timer where it is disabled
-  when: not podman_prune_enabled
+- name: Install the Lab operator prune timer
+  when: podman_operator_prune_enabled
+  import_tasks: prune.yml
+  vars:
+    podman_prune_args:
+      user: "{{ ansible_user_id }}"
+  tags:
+    - podman
+
+- name: Check for operator linger outside Lab
+  when: not podman_operator_prune_enabled
+  stat:
+    path: /var/lib/systemd/linger/{{ ansible_user_id }}
+  register: podman_operator_linger
+  become: true
+  tags:
+    - podman
+
+- name: Check for operator prune units outside Lab
+  when: not podman_operator_prune_enabled
+  stat:
+    path: /etc/systemd/user/{{ item }}
+  loop:
+    - podman_prune.service
+    - podman_prune.timer
+  register: podman_operator_prune_units
+  become: true
+  tags:
+    - podman
+
+- name: Remove the operator prune timer outside Lab
+  when:
+    - not podman_operator_prune_enabled
+    - podman_operator_linger.stat.exists
+    - podman_operator_prune_units.results | selectattr('stat.exists') | list | length > 0
   import_role:
     name: systemd_timer
     tasks_from: remove
   vars:
     systemd_timer_args:
       name: podman_prune
+      user: "{{ ansible_user_id }}"
+  tags:
+    - podman
+
+- name: Disable operator linger outside Lab
+  when: not podman_operator_prune_enabled
+  import_role:
+    name: linger
+    tasks_from: disable
+  vars:
+    # Keep the manager serving the current login; it stops after logout once
+    # the persistence marker is gone.
+    linger_args:
+      name: "{{ ansible_user_id }}"
+  tags:
+    - podman
+
+- name: Install rootful podman prune timer
+  import_tasks: prune.yml
+  vars:
+    podman_prune_args: {}
   tags:
     - podman
 

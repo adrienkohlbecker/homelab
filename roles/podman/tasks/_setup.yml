@@ -1,0 +1,25 @@
+---
+# Before the operator timer became Lab-only, Podman installed it on every host.
+# Seed that old state outside Lab so converge proves it is retired there.
+- name: _setup | Enable legacy operator linger outside Lab
+  when: not podman_operator_prune_enabled
+  import_role:
+    name: linger
+    tasks_from: linger
+  vars:
+    linger_args:
+      name: "{{ ansible_user_id }}"
+      uid: "{{ ansible_user_uid }}"
+
+- name: _setup | Install legacy operator prune timer outside Lab
+  when: not podman_operator_prune_enabled
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: podman_prune
+      description: Legacy operator podman prune fixture
+      exec_start: /usr/bin/true
+      on_calendar: "*-*-* 00:20:00"
+      user: "{{ ansible_user_id }}"

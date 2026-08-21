@@ -116,27 +116,6 @@
     force: true
   become: true
 
-- name: _setup | Enable retired operator linger fixture
-  import_role:
-    name: linger
-    tasks_from: linger
-  vars:
-    linger_args:
-      name: "{{ ansible_user_id }}"
-      uid: "{{ ansible_user_uid }}"
-
-- name: _setup | Install retired operator podman prune timer fixture
-  import_role:
-    name: systemd_timer
-    tasks_from: install
-  vars:
-    systemd_timer_args:
-      name: podman_prune
-      description: Retired operator podman prune fixture
-      exec_start: /usr/bin/podman system prune -f --filter until=48h
-      on_calendar: "*-*-* 00:20:00"
-      user: "{{ ansible_user_id }}"
-
 - name: _setup | Create legacy Avahi service directory
   file:
     path: /etc/avahi/services

@@ -3,7 +3,7 @@
 # containers and reading `podman info`, rather than stat-checking the files
 # it wrote. Two halves: rootful checks (become: true) cover the storage
 # stack, netavark + aardvark-dns, the rendered containers.conf + seccomp
-# profile; a rootless pass as
+# profile and the rootful prune timer; a rootless pass as
 # the box login user then proves the pasta network connector actually backs
 # a container's egress. Only the test harness invokes it, against the selected
 # --machine (box by default: zfs_root with the native overlay storage
@@ -13,6 +13,35 @@
 - name: _verify | Resolve a tiny probe image
   set_fact:
     podman_probe_image: docker.io/library/busybox
+
+- name: _verify | Rootful prune timer is active
+  systemd:
+    name: podman_prune.timer
+  register: podman_rootful_prune_timer
+  failed_when: podman_rootful_prune_timer.status.ActiveState != 'active'
+  become: true
+
+- name: _verify | Lab operator prune timer is active
+  when: podman_operator_prune_enabled
+  systemd:
+    name: podman_prune.timer
+    scope: user
+  register: podman_operator_prune_timer
+  failed_when: podman_operator_prune_timer.status.ActiveState != 'active'
+  become: true
+  become_user: "{{ ansible_user_id }}"
+
+- name: _verify | Operator prune units are absent outside Lab
+  when: not podman_operator_prune_enabled
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/systemd/user/podman_prune.service
+    - /etc/systemd/user/podman_prune.timer
+    - /var/lib/systemd/linger/{{ ansible_user_id }}
+  register: podman_operator_prune_state
+  failed_when: podman_operator_prune_state.stat.exists
+  become: true
 
 # A real container start proves the whole storage stack (driver and graphroot)
 # actually works -- not just that storage.conf parsed. First run pulls over the

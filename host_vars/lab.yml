@@ -39,7 +39,7 @@ swap_zram_size: 8G
 # geometry still matches the live array.
 podman_storage_backend: partition
 podman_storage_device: /dev/md/podman
-podman_prune_enabled: true
+podman_operator_prune_enabled: true
 
 # Host-native CI fallback runner. It deliberately uses its own token variable so
 # lab cannot accidentally clone fox's project runner token and inherit the wrong
