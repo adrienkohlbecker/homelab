@@ -427,7 +427,7 @@
 - name: _verify | EFI-stub rEFInd-entry assertions (aarch64)
   when: ansible_architecture == "aarch64"
   block:
-    - name: _verify | Stat staged EFI-stub kernel + initrd
+    - name: _verify | Staged EFI-stub kernel + initrd are present and non-empty
       stat:
         path: "{{ item }}"
         checksum_algorithm: sha256
@@ -435,17 +435,10 @@
         - /boot/efi/EFI/Linux/vmlinuz.efi
         - /boot/efi/EFI/Linux/initrd
       register: packer_verify_efi_linux
+      failed_when: >-
+        not packer_verify_efi_linux.stat.exists
+        or (packer_verify_efi_linux.stat.size | default(0) | int) == 0
       become: true
-
-    - name: _verify | Staged kernel + initrd present and non-empty
-      assert:
-        that:
-          - item.stat.exists
-          - item.stat.size > 0
-        fail_msg: "staged {{ item.item }} missing or empty — initial-stage call from chroot.sh failed"
-      loop: "{{ packer_verify_efi_linux.results }}"
-      loop_control:
-        label: "{{ item.item }}"
 
     # rEFInd is the firmware Boot#### entry chroot.sh creates on aarch64. The
     # Linux EFI-stub path is a manual rEFInd stanza whose kernel command line
