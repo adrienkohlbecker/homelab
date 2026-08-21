@@ -309,13 +309,7 @@ tailscale_advertise_routes:
 tailscale_port: 41644
 tailscale_wan_direct: true
 
-nginx_static_proxies:
-  - marantz
-  - printer
-  - siglent
-  - ups
-  - tubeszb
-  - unifi
+nginx_static_proxies_enabled: true
 
 # NUT shutdown-ladder wake (see host_vars/pug.yml for the full ladder and
 # notes/ups_shutdown_ladder.md for the design): lab reboots via the card's

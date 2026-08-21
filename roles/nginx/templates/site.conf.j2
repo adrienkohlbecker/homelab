@@ -116,21 +116,6 @@ server {
     proxy_set_header Authorization      "";
 {% endif %}
 
-{% if nginx_site_args.proxy_send_timeout is defined %}
-    proxy_send_timeout {{ nginx_site_args.proxy_send_timeout }};
-{% endif %}
-{% if nginx_site_args.proxy_read_timeout is defined %}
-    proxy_read_timeout {{ nginx_site_args.proxy_read_timeout }};
-{% endif %}
-{% if nginx_site_args.proxy_buffering is defined %}
-    proxy_buffering {{ nginx_site_args.proxy_buffering | ternary('on', 'off') }};
-{% endif %}
-{% if nginx_site_args.proxy_request_buffering is defined %}
-    proxy_request_buffering {{ nginx_site_args.proxy_request_buffering | ternary('on', 'off') }};
-{% endif %}
-{% if nginx_site_args.client_max_body_size is defined %}
-    client_max_body_size {{ nginx_site_args.client_max_body_size }};
-{% endif %}
 {% endif %}
 {% if nginx_site_args.location_conf is defined %}
     # location_conf may add a header and suppress server-scope inheritance.

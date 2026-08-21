@@ -582,21 +582,6 @@
     nginx_site_args:
       subdomain: jellyfin
       proxy_pass: http://127.0.0.1:{{ service_ports.jellyfin }}/
-      # Jellyfin's reverse-proxy guide recommends 20M for plugin
-      # uploads and custom poster art.
-      client_max_body_size: 20m
-      # Buffering breaks HLS seek latency and stalls /Videos/{id}/stream;
-      # jellyfin's own nginx guide says off. The upstream still streams
-      # to the client; nginx just stops trying to spool full chunks.
-      proxy_buffering: false
-      # Match proxy_buffering off on the request side — plugin/poster
-      # uploads stream directly upstream instead of spooling to
-      # /var/lib/nginx/body/ first.
-      proxy_request_buffering: false
-      # 4K HEVC transcode cold-starts routinely exceed the default 60s
-      # before the first segment leaves ffmpeg; bump the read timeout so
-      # nginx doesn't kill the first request while the backend is alive.
-      proxy_read_timeout: 300s
       # Jellyfin's web UI loads cast_sender.js from gstatic for
       # Chromecast support. Narrow the allow-list to script-src so
       # it doesn't fall through to connect-src/frame-src/img-src via
@@ -607,6 +592,22 @@
       # timeouts a 1-byte/sec PUT can pin a worker for proxy_read_timeout
       # (300s here) per connection. nginx's defaults are 60s; tighten the
       # body side since 30s is plenty for a 20m upload over LAN.
+      location_conf: |
+        # Jellyfin's reverse-proxy guide recommends 20M for plugin
+        # uploads and custom poster art.
+        client_max_body_size 20m;
+        # Buffering breaks HLS seek latency and stalls /Videos/{id}/stream;
+        # jellyfin's own nginx guide says off. The upstream still streams
+        # to the client; nginx just stops trying to spool full chunks.
+        proxy_buffering off;
+        # Match proxy_buffering off on the request side — plugin/poster
+        # uploads stream directly upstream instead of spooling to
+        # /var/lib/nginx/body/ first.
+        proxy_request_buffering off;
+        # 4K HEVC transcode cold-starts routinely exceed the default 60s
+        # before the first segment leaves ffmpeg; bump the read timeout so
+        # nginx doesn't kill the first request while the backend is alive.
+        proxy_read_timeout 300s;
       server_conf: |
         client_body_timeout 30s;
         client_header_timeout 10s;

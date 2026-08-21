@@ -27,17 +27,11 @@
         proxy_pass: "https://{{ external_ips.udm }}:443/"
         csp_additional: connect-src api.mapbox.com ui.com *.ui.com {{ nginx_csp_default }}
         csp_default_src: ui.com *.ui.com
-    _nginx_enabled_static_proxy_sites: >-
-      {{ _nginx_static_proxy_sites
-         | selectattr('subdomain', 'in', nginx_static_proxies) | list }}
-    _nginx_disabled_static_proxy_names: >-
-      {{ _nginx_static_proxy_sites
-         | rejectattr('subdomain', 'in', nginx_static_proxies)
-         | map(attribute='subdomain') | list }}
   tags:
     - nginx
   block:
-    - name: Configure enabled static nginx proxies
+    - name: Configure static nginx proxies
+      when: nginx_static_proxies_enabled | bool
       include_tasks:
         file: site.yml
         apply:
@@ -45,19 +39,20 @@
             - nginx
       vars:
         nginx_site_args: "{{ nginx_static_proxy }}"
-      loop: "{{ _nginx_enabled_static_proxy_sites }}"
+      loop: "{{ _nginx_static_proxy_sites }}"
       loop_control:
         label: "{{ nginx_static_proxy.subdomain }}"
         loop_var: nginx_static_proxy
       tags:
         - nginx
 
-    - name: Remove disabled static nginx proxies
+    - name: Remove static nginx proxies from disabled hosts
+      when: not (nginx_static_proxies_enabled | bool)
       file:
         path: /etc/nginx/{{ item.1 }}/{{ item.0 }}
         state: absent
       loop: >-
-        {{ _nginx_disabled_static_proxy_names
+        {{ _nginx_static_proxy_sites | map(attribute='subdomain') | list
            | product(['sites-enabled', 'sites-available']) | list }}
       loop_control:
         label: "{{ item.0 }} ({{ item.1 }})"

@@ -1,11 +1,6 @@
 # Inputs: caller passes a single dict `nginx_site_args` with keys
 #   subdomain                 required; serves at <subdomain>.<host>.<domain>
 #   proxy_pass                optional; URL to reverse-proxy to (location /)
-#   proxy_buffering           optional bool; nginx proxy_buffering toggle
-#   proxy_request_buffering   optional bool; nginx request-buffering toggle
-#   proxy_send_timeout        optional nginx timeout override
-#   proxy_read_timeout        optional nginx timeout override
-#   client_max_body_size      optional; sets nginx client_max_body_size
 #   enable_http               optional bool, default false; if true, also listen on :80
 #                             and skip the http->https redirect server block.
 #                             Serves :80 in cleartext, so do NOT combine with

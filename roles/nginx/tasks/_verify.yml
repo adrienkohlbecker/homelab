@@ -417,12 +417,13 @@
     nginx_site_args:
       subdomain: nginxverifybody
       proxy_pass: http://127.0.0.1:18080/
-      client_max_body_size: 1k
-      proxy_buffering: false
-      proxy_request_buffering: false
       csp_additional: connect-src api.csptest
       csp_default_src: default.csptest
       csp_frame_ancestors: https://frame.csptest
+      location_conf: |
+        client_max_body_size 1k;
+        proxy_buffering off;
+        proxy_request_buffering off;
 
 - name: _verify | A body over client_max_body_size is rejected with 413
   uri:

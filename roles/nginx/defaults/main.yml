@@ -10,6 +10,6 @@
 # host_vars/<host>.yml wins as intended.
 nginx_ipv6: false
 
-# Device admin UI proxies enabled on this host. The nginx role runs on every
-# managed host, but only lab/pug expose these LAN appliances today.
-nginx_static_proxies: []
+# The nginx role runs on every managed host, but only lab/pug expose the LAN
+# device admin UIs.
+nginx_static_proxies_enabled: false
