@@ -86,17 +86,6 @@
   delay: 2
   until: _homeassistant_http_nginx.status == 200
 
-# /config/zigbee.db must be a symlink to /config/db/zigbee.db inside the
-# container so SQLite's WAL placement lands on the sqlite dataset bind
-# mount, not the main config dataset. The target file itself may not
-# exist (ZHA only writes it once configured); the link should.
-- name: _verify | ZHA zigbee.db symlink resolves inside the container
-  command: podman exec homeassistant readlink /config/zigbee.db
-  register: _homeassistant_zigbee_link
-  changed_when: false
-  failed_when: _homeassistant_zigbee_link.stdout | trim != '/config/db/zigbee.db'
-  become: true
-
 # HA's mac_iot IP isn't pinned (vars/main.yml) — assert it falls inside the
 # network's ip_range (the upper /29 of mac_iot's role-derived block).
 - name: _verify | Homeassistant mac_iot IP is in this host's IoT /29
@@ -280,23 +269,23 @@
 # DBs are absent on first apply before HA writes them -- skip then.
 - name: _verify | Stat sqlite DBs
   stat:
-    path: /mnt/services/sqlite/homeassistant/{{ item }}
+    path: "{{ item }}"
   register: _homeassistant_sqlite_dbs
   loop:
-    - home-assistant_v2.db
-    - zigbee.db
+    - /mnt/services/sqlite/homeassistant/home-assistant_v2.db
+    - /mnt/services/homeassistant/zigbee.db
   loop_control:
-    label: "{{ item }}"
+    label: "{{ item | basename }}"
   become: true
 
 - name: _verify | Sqlite DBs are in WAL mode (when present)
-  command: sqlite3 -readonly /mnt/services/sqlite/homeassistant/{{ item.item }} 'PRAGMA journal_mode;'
+  command: sqlite3 -readonly {{ item.item }} 'PRAGMA journal_mode;'
   register: _homeassistant_sqlite_wal
   changed_when: false
   failed_when: (_homeassistant_sqlite_wal.stdout | trim) != 'wal'
   loop: "{{ _homeassistant_sqlite_dbs.results }}"
   loop_control:
-    label: "{{ item.item }}"
+    label: "{{ item.item | basename }}"
   when: item.stat.exists
   become: true
 

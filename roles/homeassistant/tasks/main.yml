@@ -95,50 +95,6 @@
   tags:
     - homeassistant
 
-# ZHA stores its zigbee.db under /config alongside YAML/automations. The
-# recorder DB already lives on the sqlite dataset via /config/db; pull
-# zigbee.db onto the same dataset by symlinking through /config/db so
-# SQLite resolves the symlink before computing WAL placement. The symlink
-# target is dangling on the host (no /config/db there) but resolves
-# inside the container — force: true bypasses ansible's host-side check.
-- name: Stat ZHA zigbee.db on host
-  stat:
-    path: /mnt/services/homeassistant/zigbee.db
-    follow: false
-  register: homeassistant_zigbee_db_stat
-  become: true
-  tags:
-    - homeassistant
-
-# Guard against `force: true` silently replacing a real ZHA database with
-# a dangling symlink. If zigbee.db already exists as a regular file
-# (e.g. role applied before this symlink task landed, ZHA created its
-# DB at that path), force the operator to manually move it to
-# /mnt/services/sqlite/homeassistant/zigbee.db first.
-- name: Refuse to clobber a real zigbee.db with a symlink
-  assert:
-    that: not (homeassistant_zigbee_db_stat.stat.exists and not homeassistant_zigbee_db_stat.stat.islnk)
-    fail_msg: >-
-      /mnt/services/homeassistant/zigbee.db exists as a regular file; the
-      symlink task would replace it and lose ZHA's database. Move it to
-      /mnt/services/sqlite/homeassistant/zigbee.db (and remove the
-      original) before re-running.
-  tags:
-    - homeassistant
-
-- name: Symlink ZHA zigbee.db onto sqlite dataset
-  file:
-    src: /config/db/zigbee.db
-    dest: /mnt/services/homeassistant/zigbee.db
-    state: link
-    owner: homeassistant
-    group: homeassistant
-    follow: false
-    force: true
-  become: true
-  tags:
-    - homeassistant
-
 # The influxdb integration is configured through HA's UI (not via
 # configuration.yaml); the helper below lands the org / user / bucket /
 # write-auth. It does NOT surface the token (influxd 2.8+ redacts it from
@@ -480,21 +436,21 @@
 # absent (first apply before HA has created them); the second apply
 # after HA's first cold start lands the conversion.
 - name: Read sqlite journal mode
-  command: sqlite3 -readonly /mnt/services/sqlite/homeassistant/{{ item }} 'PRAGMA journal_mode;'
+  command: sqlite3 -readonly {{ item }} 'PRAGMA journal_mode;'
   register: homeassistant_sqlite_pragma
   changed_when: false
   failed_when: false
   become: true
   loop:
-    - home-assistant_v2.db
-    - zigbee.db
+    - /mnt/services/sqlite/homeassistant/home-assistant_v2.db
+    - /mnt/services/homeassistant/zigbee.db
   loop_control:
-    label: "{{ item }}"
+    label: "{{ item | basename }}"
   tags:
     - homeassistant
 
 - name: Convert sqlite to WAL
-  command: sqlite3 /mnt/services/sqlite/homeassistant/{{ item.item }} 'PRAGMA journal_mode=WAL;'
+  command: sqlite3 {{ item.item }} 'PRAGMA journal_mode=WAL;'
   when:
     - item.rc == 0
     - (item.stdout | default('') | trim) not in ['wal', '']
@@ -502,7 +458,7 @@
   become: true
   loop: "{{ homeassistant_sqlite_pragma.results }}"
   loop_control:
-    label: "{{ item.item }}"
+    label: "{{ item.item | basename }}"
   tags:
     - homeassistant
 
