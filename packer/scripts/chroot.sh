@@ -1,6 +1,21 @@
 #!/bin/bash
 set -euxo pipefail
 
+# Package postinsts must not start services inside the incomplete target root.
+# The script explicitly enables the units the shipped image needs after their
+# configuration is in place; remove the temporary policy when the build exits.
+printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
+chmod 0755 /usr/sbin/policy-rc.d
+
+cleanup() {
+  rm -f /usr/sbin/policy-rc.d
+  if [ -n "${tmp:-}" ]; then
+    rm -rf "$tmp"
+  fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
 # Env consumed by this script:
 # - From packer's shell-provisioner env block (qemu.pkr.hcl):
 #   UBUNTU_NAME, UBUNTU_MIRROR, UBUNTU_MIRROR_SECURITY,
@@ -392,7 +407,6 @@ mount /boot/efi
 ZBM_URL="https://gitlab.com/api/v4/projects/83079143/packages/generic/zfsbootmenu/$ZBM_VERSION/zfsbootmenu-$ZBM_VERSION.tar.gz"
 
 tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT INT TERM
 
 apt-get install --yes curl
 curl -fL --retry 3 --retry-connrefused -o "$tmp/zbm.tar.gz" "$ZBM_URL"

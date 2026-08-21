@@ -6,30 +6,37 @@ set -euxo pipefail
 
 sudo install -dm 755 /etc/apt/keyrings
 sudo apt-get update -qq
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-  ca-certificates \
-  curl \
-  git \
-  jq \
-  xz-utils \
-  unzip \
-  gpg \
-  gpg-agent \
-  apt-transport-https \
-  qemu-system-x86 \
-  qemu-utils \
-  ovmf \
-  openssh-client \
-  netcat-openbsd \
-  passt \
-  xorriso \
-  cloud-image-utils \
-  python3-yaml \
-  build-essential \
-  zstd \
-  tar \
-  mdadm \
-  ec2-instance-connect
+(
+  # mdadm's postinst starts its monitoring timers. Keep the image build quiet;
+  # systemd will activate the enabled timers normally when an instance boots.
+  printf '#!/bin/sh\nexit 101\n' | sudo tee /usr/sbin/policy-rc.d >/dev/null
+  sudo chmod 0755 /usr/sbin/policy-rc.d
+  trap 'sudo rm -f /usr/sbin/policy-rc.d' EXIT
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    jq \
+    xz-utils \
+    unzip \
+    gpg \
+    gpg-agent \
+    apt-transport-https \
+    qemu-system-x86 \
+    qemu-utils \
+    ovmf \
+    openssh-client \
+    netcat-openbsd \
+    passt \
+    xorriso \
+    cloud-image-utils \
+    python3-yaml \
+    build-essential \
+    zstd \
+    tar \
+    mdadm \
+    ec2-instance-connect
+)
 
 curl -fsSL https://mise.en.dev/gpg-key.pub |
   gpg --dearmor |

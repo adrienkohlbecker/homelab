@@ -438,7 +438,15 @@ if [ -f /etc/apt/sources.list ]; then
 fi
 
 apt_update
-apt-get install --yes arch-install-scripts debootstrap gdisk mdadm zfsutils-linux
+(
+  # mdadm and zfsutils-linux both start storage units from their package
+  # postinst. Hold those units while the live environment still has its stock
+  # mdadm policy and the target disks may carry stale pool/array metadata.
+  printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
+  chmod 0755 /usr/sbin/policy-rc.d
+  trap 'rm -f /usr/sbin/policy-rc.d' EXIT
+  apt-get install --yes arch-install-scripts debootstrap gdisk mdadm zfsutils-linux
+)
 
 # Stop udev's `mdadm --incremental` from re-assembling an array off a stale
 # superblock while the tables below are rewritten. Declarative, so it cannot
