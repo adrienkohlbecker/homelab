@@ -18,34 +18,6 @@
   tags:
     - nginx
 
-# nginx.conf points ssl_certificate at a single host-FQDN cert serving every
-# vhost (there is no per-vhost ssl_certificate). The certbot role must issue it
-# before nginx validates/starts; in test the snakeoil fixture lays it at the
-# same path (tasks/_setup.yml), so this guards both without a qemu_test gate.
-# Fail here with a clear message rather than letting `nginx -t` choke on the
-# missing file later.
-- name: install | Stat host TLS certificate
-  when: not (ansible_check_mode and nginx_apt.changed)
-  stat:
-    path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
-  register: nginx_host_cert
-  become: true
-  tags:
-    - nginx
-
-- name: install | Assert host TLS certificate exists
-  when: not (ansible_check_mode and nginx_apt.changed)
-  assert:
-    that:
-      - nginx_host_cert.stat.exists
-    fail_msg: >-
-      Missing TLS cert at
-      /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
-      -- nginx serves one host-FQDN cert for every vhost, so run the certbot
-      role first (in test, _setup.yml lays a snakeoil cert here).
-  tags:
-    - nginx
-
 # Unlike the conf.d/ and sites-available/ snippets (which `nginx -t` can't
 # check in isolation, hence their place-validate-rollback dance), nginx.conf is
 # a complete config: `nginx -t -c %s` validates the rendered temp file in full
