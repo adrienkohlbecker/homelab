@@ -1,14 +1,9 @@
-# Functional check of the notify path (upsd -> upsc -> nut_notify -> mail)
-# and, at the end, the forced-shutdown chain through a live upsmon.
-# Test-only and destructive (starts upsd, writes /etc/nut, drops a mail
-# shim) -- fine, the box is torn down afterwards. _setup installs nut-server
-# + the bash functions.sh nut_notify sources; converge enables upsmon but
-# leaves it unstarted under qemu (no UPS), so the notify tests here drive
-# nut_notify directly and the FSD drill starts upsmon deliberately.
+# Functional check of the notification path and the forced-shutdown chain
+# through a live upsmon. The destructive fixture runs only in a throwaway QEMU
+# machine.
 
-# nut_notify calls bare `mail`; functions.sh pins PATH with /usr/local/bin
-# ahead of /usr/bin, so this shim wins and lets us capture the message
-# instead of needing a real MTA on the box.
+# nut_notify puts /usr/local/bin before /usr/bin, so this shim captures mail
+# without installing a real MTA in the fixture.
 - name: _verify | Install a capturing mail shim
   copy:
     dest: /usr/local/bin/mail
