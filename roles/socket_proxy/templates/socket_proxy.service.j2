@@ -2,7 +2,7 @@
 # socket_proxy.service ################################################################
 # Read-only Docker-API proxy in front of the rootful podman socket. netdata's
 # go.d docker collector reads container metrics through this (tcp loopback)
-# instead of joining the podman-socket group, so a netdata compromise can't
+# instead of granting Netdata direct socket access, so a compromise can't
 # reach the container-create API. POST is denied by default (read-only); only
 # the GET sections the collector needs are enabled (CONTAINERS/IMAGES/INFO;
 # VERSION/PING are on by default; EVENTS is explicitly disabled). HAProxy logs

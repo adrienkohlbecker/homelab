@@ -198,38 +198,6 @@
   tags:
     - netdata
 
-# netdata's docker collector reads container stats through the read-only
-# socket_proxy (tcp loopback; see roles/socket_proxy + docker.conf.j2), so it
-# no longer needs rw on /run/podman/podman.sock. Actively drop any
-# podman-socket membership left from before the proxy: gpasswd -d is the only
-# clean "remove from one supplementary group" primitive (the user module can
-# only rewrite the whole list). Gated on actual membership so it's idempotent
-# and a no-op on hosts without the group (e.g. the box test fixture).
-- name: Read the podman-socket group membership
-  getent:
-    database: group
-    key: podman-socket
-    # Don't fail when the group is absent (e.g. the box test fixture); the
-    # key then maps to None and the drop below is skipped.
-    fail_key: false
-  register: netdata_podman_socket_grp
-  become: true
-  tags:
-    - netdata
-
-- name: Drop netdata from the podman-socket group (now reads via socket_proxy)
-  vars:
-    # getent_group[<name>] = [passwd, gid, members]; members CSV at [2]. The
-    # `, true` default replaces the None fail_key gives when the group is absent.
-    _members: "{{ (netdata_podman_socket_grp.ansible_facts.getent_group['podman-socket'] | default(['', '', ''], true))[2] }}"
-  when: "'netdata' in _members.split(',')"
-  command: gpasswd -d netdata podman-socket
-  register: netdata_podman_socket_drop
-  changed_when: true
-  become: true
-  tags:
-    - netdata
-
 - name: Mount debugfs
   mount:
     path: /sys/kernel/debug
@@ -258,7 +226,7 @@
          if netdata_conf.changed or netdata_charts_d_conf.changed or netdata_cloud_conf.changed
             or netdata_cloud_unclaim.changed or netdata_health_alarm_notify.changed
             or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed
-            or netdata_godconf_copy.changed or (netdata_podman_socket_drop.changed | default(false))
+            or netdata_godconf_copy.changed
          else 'started' }}
   become: true
   tags:

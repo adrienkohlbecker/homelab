@@ -1,6 +1,6 @@
 # Read-only Docker-API proxy fronting the rootful podman socket, so netdata's
 # docker collector can read container metrics over tcp loopback without the
-# host-root-equivalent podman-socket group membership. See the .service.j2
+# host-root-equivalent direct socket access. See the .service.j2
 # header for the trust rationale. Deployed wherever podman + netdata co-locate
 # (site.yml), ordered before netdata so its docker collector finds the proxy.
 # socket_proxy sits in the base band, ahead of most podman consumers, so a

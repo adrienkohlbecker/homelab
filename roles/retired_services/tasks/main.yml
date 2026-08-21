@@ -1,4 +1,60 @@
 ---
+- name: Remove retired podman socket drop-in
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      for: podman.socket
+  tags:
+    - retired_services
+    - podman
+
+- name: Restore packaged podman tmpfiles configuration
+  lineinfile:
+    regexp: '^# (.*) /run/podman (.*)$'
+    line: '\1 /run/podman \2'
+    backrefs: true
+    dest: /usr/lib/tmpfiles.d/podman.conf
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - retired_services
+    - podman
+
+- name: Remove retired podman tmpfiles diversion
+  community.general.dpkg_divert:
+    path: /usr/lib/tmpfiles.d/podman.conf
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - podman
+
+- name: Restart podman socket after removing its retired drop-in
+  when:
+    - not ansible_check_mode
+    - podman_socket_d_override_conf_result.changed
+  systemd:
+    name: podman.socket
+    state: restarted
+  become: true
+  tags:
+    - retired_services
+    - podman
+
+- name: Remove retired podman socket group
+  group:
+    name: podman-socket
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - podman
+
 - name: Remove retired custom Samba mDNS service
   file:
     path: /etc/avahi/services/smb.service

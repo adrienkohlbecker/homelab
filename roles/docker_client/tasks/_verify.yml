@@ -2,11 +2,9 @@
 # 1) docker / docker-buildx-plugin / docker-compose-plugin are
 #    installed and runnable (binary exec, not just dpkg state).
 # 2) /etc/profile.d/docker_client.sh fires in a login shell and
-#    exports DOCKER_HOST=unix:///run/podman/podman.sock. docker
+#    exports DOCKER_HOST for the login user's rootless podman socket. docker
 #    itself honoring $DOCKER_HOST is upstream's contract; the
 #    podman role's contract owns whether the socket answers.
-# 3) ansible_user_id resolves to a podman-socket member via nsswitch,
-#    the same group view a fresh login or service start receives.
 
 # docker version returns rc=1 when it can't reach the daemon, even
 # when --format only asks for client fields -- the server query is
@@ -71,25 +69,7 @@
 - name: _verify | DOCKER_HOST resolves to the podman socket
   assert:
     that:
-      - _docker_client_docker_host_env.stdout == 'unix:///run/podman/podman.sock'
+      - _docker_client_docker_host_env.stdout == 'unix:///run/user/' ~ ansible_user_uid ~ '/podman/podman.sock'
     fail_msg: >-
-      Expected DOCKER_HOST=unix:///run/podman/podman.sock,
+      Expected DOCKER_HOST=unix:///run/user/{{ ansible_user_uid }}/podman/podman.sock,
       got {{ _docker_client_docker_host_env.stdout }}
-
-# id -nG <user> resolves the user's groups through nsswitch
-# (/etc/group), the same view a fresh login shell or service start
-# gets. It is an NSS lookup, not a read of the live connection's
-# process credentials.
-- name: _verify | Read ansible_user_id supplementary groups
-  command: id -nG {{ ansible_user_id }}
-  changed_when: false
-  register: _docker_client_ansible_user_groups
-
-- name: _verify | Ansible_user_id resolves to podman-socket member
-  assert:
-    that:
-      - "'podman-socket' in _docker_client_ansible_user_groups.stdout.split()"
-    fail_msg: >-
-      Expected {{ ansible_user_id }} to have podman-socket in its
-      supplementary group set; got
-      {{ _docker_client_ansible_user_groups.stdout | default('') }}

@@ -217,7 +217,7 @@ service_ports:
   seerr: 5055
   # docker-socket-proxy: read-only Docker-API filter (loopback) that fronts
   # /run/podman/podman.sock so netdata's docker collector reads container
-  # metrics without the rw (host-root-equivalent) podman-socket membership.
+  # metrics without direct rw (host-root-equivalent) socket access.
   socket_proxy: 2375
   sonarr: 8989
   transmission: 9091

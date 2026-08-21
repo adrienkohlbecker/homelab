@@ -1,4 +1,30 @@
 ---
+- name: _verify | Retired podman socket drop-in is absent
+  stat:
+    path: /etc/systemd/system/podman.socket.d/override.conf
+  register: retired_services_podman_socket_dropin
+  failed_when: retired_services_podman_socket_dropin.stat.exists
+  become: true
+
+- name: _verify | Packaged podman tmpfiles entry is active
+  command: grep -Fx 'D! /run/podman 0700 root root' /usr/lib/tmpfiles.d/podman.conf
+  changed_when: false
+  become: true
+
+- name: _verify | Retired podman tmpfiles diversion is absent  # noqa: command-instead-of-module
+  command: dpkg-divert --listpackage /usr/lib/tmpfiles.d/podman.conf
+  register: retired_services_podman_diversion
+  changed_when: false
+  failed_when: retired_services_podman_diversion.stdout | trim | length > 0
+  become: true
+
+- name: _verify | Retired podman socket group is absent
+  command: getent group podman-socket
+  register: retired_services_podman_socket_group
+  changed_when: false
+  failed_when: retired_services_podman_socket_group.rc != 2
+  become: true
+
 - name: _verify | Retired custom Samba mDNS service is absent
   stat:
     path: /etc/avahi/services/smb.service

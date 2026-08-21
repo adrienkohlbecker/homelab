@@ -1,4 +1,44 @@
 ---
+- name: _setup | Create retired podman socket group
+  group:
+    name: podman-socket
+    gid: 60802
+    system: true
+  become: true
+
+- name: _setup | Create retired podman socket drop-in directory
+  file:
+    path: /etc/systemd/system/podman.socket.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _setup | Install retired podman socket drop-in fixture
+  copy:
+    content: |
+      [Socket]
+      SocketGroup=podman-socket
+    dest: /etc/systemd/system/podman.socket.d/override.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Register retired podman tmpfiles diversion
+  community.general.dpkg_divert:
+    path: /usr/lib/tmpfiles.d/podman.conf
+  become: true
+
+- name: _setup | Create retired podman tmpfiles fixture
+  lineinfile:
+    regexp: '^(# )?(.*) /run/podman (.*)$'
+    line: '# \2 /run/podman \3'
+    backrefs: true
+    dest: /usr/lib/tmpfiles.d/podman.conf
+  become: true
+
 - name: _setup | Create legacy Avahi service directory
   file:
     path: /etc/avahi/services

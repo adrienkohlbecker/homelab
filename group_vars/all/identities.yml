@@ -50,7 +50,6 @@ legacy_service_ids:
 static_group_ids:
   homelab_ci: 60800
   media: 60801
-  podman_socket: 60802
 
 # The operator account is created by the image installer. Ansible creates the
 # spouse account, but both values are part of the persistent-data contract.

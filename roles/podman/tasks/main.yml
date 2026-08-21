@@ -3,26 +3,6 @@
   tags:
     - podman
 
-- name: Add podman-socket group
-  group:
-    name: podman-socket
-    gid: "{{ static_group_ids.podman_socket }}"
-    system: true
-  become: true
-  tags:
-    - podman
-
-- name: Install podman socket override
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: override_socket.conf
-      for: podman.socket
-  tags:
-    - podman
-
 - name: Install podman service override
   import_role:
     name: systemd_unit
@@ -31,40 +11,6 @@
     systemd_unit_args:
       src: override_service.conf
       for: podman.service
-  tags:
-    - podman
-
-# podman's packaged /usr/lib/tmpfiles.d/podman.conf carries a
-# `D! /run/podman 0700 root root` line that recreates /run/podman as
-# 0700 on every boot. That 0700 blocks podman-socket group members from
-# traversing in to reach the 0660 API socket (SocketGroup, see
-# files/override_socket.conf). So dpkg-divert redirects future package
-# writes to a .distrib sidecar (an apt upgrade can't clobber our edit),
-# and the lineinfile below comments out the /run/podman line so tmpfiles
-# stops resetting it — systemd then auto-creates /run/podman at 0755
-# (traversable) when it activates the socket. A RuntimeDirectory= drop-in
-# can't replace this: the tmpfiles line would still need neutralizing,
-# and RuntimeDirectory on a socket unit risks tearing /run/podman down on
-# restart.
-- name: Divert configuration file
-  community.general.dpkg_divert:
-    path: /usr/lib/tmpfiles.d/podman.conf
-  become: true
-  tags:
-    - podman
-
-- name: Configure tmpfiles.d
-  when: not (ansible_check_mode and podman_apt.changed)
-  lineinfile:
-    regexp: '^(# )?(.*) /run/podman (.*)$'
-    line: '# \2 /run/podman \3'
-    backrefs: true
-    dest: /usr/lib/tmpfiles.d/podman.conf
-    backup: true
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
   tags:
     - podman
 
@@ -82,9 +28,7 @@
   systemd:
     name: podman.socket
     enabled: true
-    # Only the SocketGroup drop-in affects the socket. Daemon changes are
-    # handled by the podman.service task below.
-    state: "{{ 'restarted' if podman_socket_d_override_conf_result.changed | default(false) else 'started' }}"
+    state: started
   become: true
   tags:
     - podman
