@@ -626,8 +626,9 @@ if [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
 datasource_list: [ Hetzner, ConfigDrive, NoCloud, None ]
 EOF
 
-  # Image ships at 20G but deploys onto cpx22's ~76G, leaving rpool's partition
-  # (p5, last on disk) short with the GPT backup header mid-disk.
+  # Image ships at 60G but deploys onto cpx22's ~76G, leaving rpool's partition
+  # (p5, last on disk) short with the GPT backup header mid-disk. The preceding
+  # 40G Podman partition stays fixed while p5 consumes the added capacity.
   # hetzner_growpart.service grows p5 (growpart relocates the backup header) and
   # runs `zpool online -e` once on first boot — late + sentinel-gated so a
   # failure can't wedge the root mount. autoexpand covers any later disk resize.

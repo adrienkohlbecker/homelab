@@ -233,16 +233,17 @@ locals {
       qemu_test_image = true
       zfs_arc_max     = 0
     }
-    # hetzner: ZFS-root image for Hetzner Cloud. Small rpool disk — state is MB;
-    # chroot.sh's hetzner_growpart.service grows it into cpx22's ~76G on first
-    # boot.
+    # hetzner: ZFS-root image for Hetzner Cloud. The 40G Podman partition must
+    # be present in the image because p5 follows it and ZFS cannot be shrunk or
+    # moved on first boot. chroot.sh's hetzner_growpart.service grows p5 into
+    # the cpx22's remaining ~16G on first boot.
     hetzner = {
       disks           = "/dev/vdb"
       extra_disks     = ""
-      disk_sizes      = ["20G"]
+      disk_sizes      = ["60G"]
       layout          = ""
       swap_size       = "4G"
-      podman_size     = ""
+      podman_size     = "40G"
       meta_size       = ""
       extra_pools     = ""
       image_target    = "hetzner"

@@ -25,9 +25,9 @@ rescue_create
 
 # The rescue server was created from a stock ubuntu-24.04 image, so /dev/sda
 # already carries that image's GPT (backup header at the true ~76G disk end)
-# and its filesystems. We stream a smaller (20G) raw image onto the front with
+# and its filesystems. We stream a smaller raw image onto the front with
 # conv=sparse, which never touches the tail -- leaving a stale backup GPT and
-# stale partitions past 20G that disagree with the streamed image's own primary
+# stale partitions past the image end that disagree with its own primary
 # GPT and can block the firmware from booting the snapshot. Discard the whole
 # device first so only the streamed image's structures survive; the in-rescue
 # install path (provision.sh) wipes equivalently before partitioning. Fall back
@@ -46,12 +46,19 @@ else
   zstd -1 -T0 -c "$IMG" | ssh_rescue_bulk "$RESCUE_RECV"
 fi
 
-# The streamed image's GPT backup header sits at the 20G mark (the image's own
-# end), not the true ~76G disk end the firmware expects. Relocate it so the GPT
+# The streamed image's GPT backup header sits at the image's own end, not the
+# true ~76G disk end the firmware expects. Relocate it so the GPT
 # is consistent with the real disk and the firmware boots the snapshot cleanly.
 # hetzner_growpart.service relocates it too, but only after a successful boot --
 # fixing it here keeps a misplaced backup header from blocking that boot.
 echo "==> relocating the GPT backup header to the disk end"
 ssh_rescue 'sgdisk -e /dev/sda'
+
+# Refuse to publish an image that lost the rebuild-only Podman partition. The
+# boot verifier below proves the OS comes up; this structural check proves the
+# storage layout Fox needs after that boot is present and formatted.
+echo "==> verifying the dedicated Podman partition"
+# shellcheck disable=SC2016  # substitutions expand on the rescue host
+ssh_rescue 'test "$(lsblk -dn -o PARTLABEL /dev/sda4)" = podman && test "$(blkid -s TYPE -o value /dev/sda4)" = ext4 && test "$(blockdev --getsize64 /dev/sda4)" -ge 42949672960'
 
 rescue_snapshot "$UBUNTU"
