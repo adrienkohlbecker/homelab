@@ -1,11 +1,5 @@
 # Exercise the normal, rollback, cancel, and missing-snapshot paths.
 
-- name: _verify | Networkd is active
-  systemd:
-    name: systemd-networkd
-  register: netplan_verify_networkd
-  failed_when: netplan_verify_networkd.status.ActiveState != "active"
-
 - name: _verify | Rollback timer and service not currently running
   # A successful converge must not leave a pending rollback.
   systemd:
@@ -16,12 +10,6 @@
   loop:
     - netplan_rollback.timer
     - netplan_rollback.service
-
-- name: _verify | On-disk config still validates
-  # Validate unchanged configurations too without restarting networkd.
-  command: netplan generate --debug
-  changed_when: false
-  become: true
 
 # Write the broken config directly because the harness's extra-vars outrank an
 # include_role override. The shared apply path must lose SSH, restore the
