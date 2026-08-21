@@ -114,6 +114,17 @@
   failed_when: retired_services_postfix_aliases.stat.exists
   become: true
 
+- name: _verify | Retired www-data ssl-cert membership is absent
+  getent:
+    database: group
+    key: ssl-cert
+  register: retired_services_ssl_cert_group
+  failed_when: >-
+    'www-data' in
+    (retired_services_ssl_cert_group.ansible_facts.getent_group['ssl-cert'][2]
+    | default('')).split(',')
+  become: true
+
 - name: _verify | Retired service state is absent
   stat:
     path: "{{ item }}"

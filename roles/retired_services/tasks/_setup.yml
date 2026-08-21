@@ -195,6 +195,13 @@
     mode: "0644"
   become: true
 
+- name: _setup | Add www-data to ssl-cert as a retired membership fixture
+  user:
+    name: www-data
+    groups: ssl-cert
+    append: true
+  become: true
+
 - name: _setup | Create retired service groups
   group:
     name: "{{ item.name }}"

@@ -285,6 +285,31 @@
     - retired_services
     - postfix
 
+# nginx workers inherit the TLS context loaded by the root master and never
+# read certificate files themselves. Keep this migration tombstone so restored
+# hosts cannot regain the obsolete group membership.
+- name: Read ssl-cert group membership
+  getent:
+    database: group
+    key: ssl-cert
+  register: retired_services_ssl_cert_group
+  become: true
+  tags:
+    - retired_services
+    - nginx
+
+- name: Remove retired www-data ssl-cert membership
+  when: >-
+    'www-data' in
+    (retired_services_ssl_cert_group.ansible_facts.getent_group['ssl-cert'][2]
+    | default('')).split(',')
+  command: gpasswd --delete www-data ssl-cert
+  changed_when: true
+  become: true
+  tags:
+    - retired_services
+    - nginx
+
 # Retired numeric identities remain reserved in legacy_service_ids so restored
 # files cannot acquire ambiguous ownership. Runtime accounts and state are gone.
 - name: Retire Speedtest service
