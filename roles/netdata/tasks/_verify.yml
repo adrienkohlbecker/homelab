@@ -115,6 +115,24 @@
       Expected the Postfix alarm to require a sustained queue depth and retain
       only recovery hysteresis.
 
+- name: _verify | Wait for Postfix queue metrics
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=postfix_local.postfix_queue_emails
+    return_content: true
+  register: _netdata_postfix_chart
+  until: _netdata_postfix_chart.status == 200
+  retries: 12
+  delay: 5
+
+- name: _verify | Postfix collector reports the fixture queue
+  assert:
+    that:
+      - _netdata_postfix_chart.json.context == "postfix.qemails"
+      - _netdata_postfix_chart.json.dimensions.emails is defined
+    fail_msg: >-
+      Expected the explicit Postfix collector job to emit its queue chart;
+      got {{ _netdata_postfix_chart.json | default({}) }}.
+
 # netdata is the only flat-repo (trailing-slash suite, no components) + glob-pin
 # ("netdata*") consumer, so the shared apt_source _verify runs here to cover
 # that path: the signing key is scoped (not globally trusted) and the 2.* pin

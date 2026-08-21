@@ -127,6 +127,19 @@
   tags:
     - netdata
 
+- name: Configure postfix metrics
+  import_role:
+    name: netdata
+    tasks_from: config
+  vars:
+    netdata_args:
+      src: postfix.conf
+      dest: go.d/postfix.conf
+      validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
+      condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
+  tags:
+    - netdata
+
 - name: Configure docker metrics
   import_role:
     name: netdata
