@@ -12,13 +12,14 @@ fi
 
 logger -p user.err -t netplan_rollback "auto-rollback firing: restoring previous /etc/netplan"
 # Stage the slow copy beside /etc/netplan, then swap with atomic renames. Keep
-# the source snapshot reusable and the broken config available at the console.
+# the source snapshot reusable and the broken config until recovery succeeds.
 rm -rf /etc/netplan.restoring /etc/netplan.rollback_failed
 cp -a /run/netplan_prev /etc/netplan.restoring
 mv /etc/netplan /etc/netplan.rollback_failed
 mv /etc/netplan.restoring /etc/netplan
 # Use an absolute path on the SSH-dead path rather than systemd's default PATH.
 if /usr/sbin/netplan apply; then
+  rm -rf /etc/netplan.rollback_failed
   logger -t netplan_rollback "rollback apply succeeded"
 else
   logger -p user.err -t netplan_rollback "rollback apply FAILED — console recovery needed"

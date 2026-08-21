@@ -49,17 +49,6 @@
         systemd_unit_args:
           src: netplan_rollback.timer
 
-    - name: Remove stale rollback artifacts from a prior auto-rollback
-      # A healthy converge no longer needs the console-recovery copies, which
-      # may contain a Wi-Fi PSK and are outside backup rotation.
-      file:
-        path: "{{ item }}"
-        state: absent
-      become: true
-      loop:
-        - /etc/netplan.rollback_failed
-        - /etc/netplan.restoring
-
     # Snapshot before rendering: `netplan apply --state` needs the old config
     # to remove retired virtual devices, and the timer restores the same copy
     # if SSH does not reconnect. Keep it unconditional so apply.yml always has
