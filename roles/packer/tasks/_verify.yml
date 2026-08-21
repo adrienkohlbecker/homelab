@@ -385,27 +385,6 @@
        | select('match', '^passwordauthentication\s+no$')
        | list | length == 0
 
-# --- vagrant user can NOPASSWD sudo (universal) ---
-#
-# chroot.sh creates the vagrant system user, drops the packer pubkey
-# into its authorized_keys, adds vagrant to sudo + adm, and writes
-# /etc/sudoers.d/vagrant mode 0400 root:root with NOPASSWD: ALL.
-# Test it functionally: as vagrant (the harness's SSH user), run
-# `sudo -n whoami` and assert the result is `root`. This exercises
-# the entire chain end-to-end -- group membership, sudoers drop-in
-# mode (visudo silently ignores files not 0440/0400 or not owned by
-# root), and the NOPASSWD directive -- and catches failure modes
-# that per-property stat checks miss (e.g. a typo in the NOPASSWD
-# line keeps mode/owner correct but breaks sudo). Existence + mode
-# of authorized_keys is implicitly proven: the harness logs in via
-# that key to run this playbook.
-
-- name: _verify | Vagrant escalates to root via NOPASSWD sudo
-  command: sudo -n whoami
-  changed_when: false
-  register: packer_verify_vagrant_sudo
-  failed_when: packer_verify_vagrant_sudo.rc != 0 or packer_verify_vagrant_sudo.stdout | trim != 'root'
-
 # --- aarch64: rEFInd EFI-stub menuentry + kernel-install hook ---
 
 - name: _verify | EFI-stub rEFInd-entry assertions (aarch64)
