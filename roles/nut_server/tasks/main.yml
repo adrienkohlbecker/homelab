@@ -125,11 +125,12 @@
   tags:
     - nut_server
 
-- name: Configure nut upsset.conf  # noqa: require-validate
+- name: Disable nut upsset CGI
   when: not (ansible_check_mode and nut_server_apt.changed)
-  copy:
-    src: upsset.conf
-    dest: /etc/nut/upsset.conf
+  lineinfile:
+    path: /etc/nut/upsset.conf
+    regexp: ^I_HAVE_SECURED_MY_CGI_DIRECTORY$
+    state: absent
     backup: true
     owner: root
     group: root
@@ -175,13 +176,11 @@
         }
       location_conf: |
         gzip off;
-        root /usr/lib/cgi-bin/nut;
 
-        # Hand only *.cgi requests to fcgiwrap, which exec's SCRIPT_FILENAME
-        # directly -- an unscoped pass would run whatever file an arbitrary
-        # path resolves to under the cgi-bin root. auth_request is inherited
-        # from the enclosing `location /`, so this stays Authelia-gated.
-        location ~ \.cgi$ {
+        # Admit only the read-only status and image programs. auth_request is
+        # inherited from the enclosing `location /`, so both stay
+        # Authelia-gated while the state-changing upsset.cgi remains absent.
+        location ~ ^/(upsstats|upsimage)\.cgi$ {
           include /etc/nginx/fastcgi_params;
 
           fastcgi_pass  unix:/var/run/fcgiwrap.socket;

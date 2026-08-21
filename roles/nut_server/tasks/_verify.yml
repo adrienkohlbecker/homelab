@@ -65,3 +65,17 @@
       - "'eaton' in nut_server_cgi.content"
       - "'unavailable' not in (nut_server_cgi.content | lower)"
     fail_msg: "upsstats.cgi did not render live UPS data; content was: {{ nut_server_cgi.content | truncate(600) }}"
+
+- name: _verify | NUT CGI status image is served
+  uri:
+    url: https://nut.{{ inventory_hostname }}.{{ domain }}/upsimage.cgi?host=eaton@localhost&display=battery.charge
+    validate_certs: false
+    status_code: 200
+  become: true
+
+- name: _verify | NUT control CGI is not exposed
+  uri:
+    url: https://nut.{{ inventory_hostname }}.{{ domain }}/upsset.cgi
+    validate_certs: false
+    status_code: 404
+  become: true
