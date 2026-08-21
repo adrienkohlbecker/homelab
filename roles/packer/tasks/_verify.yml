@@ -469,7 +469,6 @@
     - name: _verify | Capture /EFI/Linux/{vmlinuz.efi,initrd} hashes after
       stat:
         path: "{{ item }}"
-        get_checksum: true
         checksum_algorithm: sha256
       loop:
         - /boot/efi/EFI/Linux/vmlinuz.efi
