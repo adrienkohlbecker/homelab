@@ -167,6 +167,15 @@ def _find_user_netdev(args: list[str]) -> int | None:
     return None
 
 
+def _early_passthrough_reason(override: str, netdev_idx: int | None) -> str | None:
+    """Why this invocation can bypass passt detection, if any."""
+    if override == "slirp":
+        return "forced by override"
+    if netdev_idx is None:
+        return "no user-netdev to rewrite"
+    return None
+
+
 def _parse_netdev_user(value: str) -> tuple[str | None, list[tuple[str, str, str]]]:
     """Pull the netdev id and (proto, host_port, guest_port) host-forwards out
     of a `user,id=...,hostfwd=...` netdev value."""
@@ -291,22 +300,20 @@ def main() -> None:
         f"invoked: real_qemu={real_qemu}, PACKER_NET_BACKEND={override}, "
         f"user-netdev {'found' if netdev_idx is not None else 'absent'}, {len(args)} args"
     )
+    passthrough_reason = _early_passthrough_reason(override, netdev_idx)
+    if passthrough_reason is not None:
+        _log(f"backing build-VM NIC with slirp (passthrough): {passthrough_reason}")
+        os.execv(real_qemu, [real_qemu, *args])
+
+    assert netdev_idx is not None
     usable = _passt_usable(real_qemu)
 
     if override == "passt" and not usable:
         sys.exit("qemu-net-wrapper: PACKER_NET_BACKEND=passt but passt/`-netdev stream` is unusable here")
 
-    # No user-netdev to rewrite (e.g. a `-version` probe), an explicit slirp
-    # override, or passt not usable -> run real qemu untouched (slirp path).
-    if override == "slirp" or not usable or netdev_idx is None:
-        _log(
-            "backing build-VM NIC with slirp (passthrough): "
-            + (
-                "forced by override"
-                if override == "slirp"
-                else "no user-netdev to rewrite" if netdev_idx is None else "passt unusable here"
-            )
-        )
+    # Passt not usable -> run real qemu untouched with packer's slirp netdev.
+    if not usable:
+        _log("backing build-VM NIC with slirp (passthrough): passt unusable here")
         os.execv(real_qemu, [real_qemu, *args])
 
     netid, fwds = _parse_netdev_user(args[netdev_idx + 1])

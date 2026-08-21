@@ -38,6 +38,18 @@ def test_find_user_netdev_none_on_a_version_probe() -> None:
     assert wrapper._find_user_netdev(["-version"]) is None
 
 
+def test_slirp_override_bypasses_passt_detection() -> None:
+    assert wrapper._early_passthrough_reason("slirp", 2) == "forced by override"
+
+
+def test_probe_without_user_netdev_bypasses_passt_detection() -> None:
+    assert wrapper._early_passthrough_reason("auto", None) == "no user-netdev to rewrite"
+
+
+def test_auto_user_netdev_continues_to_passt_detection() -> None:
+    assert wrapper._early_passthrough_reason("auto", 2) is None
+
+
 def test_real_qemu_strips_wrapper_binary_arg(monkeypatch) -> None:
     monkeypatch.setattr(wrapper.shutil, "which", lambda binary: f"/usr/bin/{binary}")
 
