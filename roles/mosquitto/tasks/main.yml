@@ -38,10 +38,8 @@
   tags:
     - mosquitto
 
-# /mnt/services/mosquitto/config holds mosquitto.conf + pwfile;
-# /mnt/services/sqlite/mosquitto is the bind-mounted persistence dir where
-# the broker writes mosquitto.db (its own format, no symlinks -- a plain dir
-# like authelia's, not the symlink-oriented sqlite_dataset helper).
+# Keep the broker's config and native persistence format together under its
+# service state root.
 - name: Create mosquitto config and persistence directories
   when: not ansible_check_mode or mosquitto_user.uid is defined
   file:
@@ -55,7 +53,7 @@
     - mosquitto
   loop:
     - /mnt/services/mosquitto/config
-    - /mnt/services/sqlite/mosquitto
+    - /mnt/services/mosquitto/data
 
 - name: Configure mosquitto passwords
   template:

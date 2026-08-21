@@ -10,8 +10,6 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
-After=zfs_mount_mnt_services_sqlite.service
-Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
@@ -47,7 +45,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="mosquitto" \
     --volume /mnt/services/mosquitto/config:/mosquitto/config \
-    --volume /mnt/services/sqlite/mosquitto:/mosquitto/data \
+    --volume /mnt/services/mosquitto/data:/mosquitto/data \
     --user {{ mosquitto_user.uid }}:{{ mosquitto_user.gid }} \
     --network homeassistant \
     --health-cmd {{ ["mosquitto_sub", "-p", "1880", "-t", "healthcheck", "-E", "-i", "probe", "-W", "3"] | json_argv }} \
