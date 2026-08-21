@@ -22,30 +22,24 @@
   tags:
     - nexus
 
-- name: Create configuration sub-directories
+- name: Create nexus directories
   when: not ansible_check_mode or nexus_user.uid is defined
   file:
-    dest: "{{ item }}"
+    path: "{{ item.path }}"
     state: directory
     owner: nexus
     group: nexus
-    mode: "0755"
+    mode: "{{ item.mode }}"
   become: true
-  with_items:
-    - /mnt/services/nexus/data
-    - /mnt/services/nexus/user
-  tags:
-    - nexus
-
-- name: Create default blob store directory on /mnt/scratch
-  when: not ansible_check_mode or nexus_user.uid is defined
-  file:
-    dest: /mnt/scratch/nexus
-    state: directory
-    owner: nexus
-    group: nexus
-    mode: "0750"
-  become: true
+  loop:
+    - path: /mnt/services/nexus/data
+      mode: "0755"
+    - path: /mnt/services/nexus/user
+      mode: "0755"
+    - path: /mnt/scratch/nexus
+      mode: "0750"
+  loop_control:
+    label: "{{ item.path }}"
   tags:
     - nexus
 
