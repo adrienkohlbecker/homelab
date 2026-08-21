@@ -44,6 +44,14 @@
   failed_when: retired_services_chronyd_process.stdout is search('/chronyd .* -4( |$)')
   become: true
 
+- name: _verify | Retired timesyncd mask is absent
+  stat:
+    path: /etc/systemd/system/systemd-timesyncd.service
+    follow: false
+  register: retired_services_timesyncd_mask
+  failed_when: retired_services_timesyncd_mask.stat.exists
+  become: true
+
 - name: _verify | Retired podman socket group is absent
   command: getent group podman-socket
   register: retired_services_podman_socket_group

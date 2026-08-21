@@ -88,6 +88,14 @@
     state: restarted
   become: true
 
+- name: _setup | Create retired timesyncd mask
+  file:
+    src: /dev/null
+    dest: /etc/systemd/system/systemd-timesyncd.service
+    state: link
+    force: true
+  become: true
+
 - name: _setup | Enable retired operator linger fixture
   import_role:
     name: linger

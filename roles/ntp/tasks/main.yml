@@ -13,17 +13,9 @@
   tags:
     - ntp
 
-# Keep systemd-timesyncd from fighting chrony for the clock. Stopping and
-# masking are independent and both required: a unit can be masked yet still
-# running (masking never stops an already-started instance), or active with its
-# unit file already gone after a package transition under policy_rc_d 101, so
-# it lingers active until reboot. Noble may never have installed it at all. So
-# query each state and act only
-# where needed, which keeps the converge idempotent. The systemd module can't
-# act on a removed-but-lingering unit ("Could not find the requested service"),
-# so drive systemctl directly; gating on a file path is unreliable (a bare
-# /etc/systemd/system/<unit> can pre-exist unmasked). check_mode: false lets
-# the queries populate stdout under the harness's check-mode pass.
+# Installing chrony can leave the removed timesyncd unit active because
+# policy_rc_d suppresses its postinst stop. Query and stop the loaded unit
+# directly; the systemd module cannot act after its unit file is removed.
 - name: Query systemd-timesyncd active state # noqa: command-instead-of-module -- is-active query, not a state change
   command: systemctl is-active systemd-timesyncd
   register: ntp_timesyncd_active
@@ -34,27 +26,9 @@
   tags:
     - ntp
 
-- name: Query systemd-timesyncd enablement state # noqa: command-instead-of-module -- is-enabled query, not a state change
-  command: systemctl is-enabled systemd-timesyncd
-  register: ntp_timesyncd_enabled
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: true
-  tags:
-    - ntp
-
 - name: Stop systemd-timesyncd (chrony owns the clock) # noqa: command-instead-of-module -- module fails on a removed-but-lingering unit
   command: systemctl stop systemd-timesyncd
   when: ntp_timesyncd_active.stdout == "active"
-  changed_when: true
-  become: true
-  tags:
-    - ntp
-
-- name: Mask systemd-timesyncd (pin it off across reboots) # noqa: command-instead-of-module -- module fails on a removed-but-lingering unit
-  command: systemctl mask systemd-timesyncd
-  when: ntp_timesyncd_enabled.stdout != "masked"
   changed_when: true
   become: true
   tags:
