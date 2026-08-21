@@ -67,43 +67,32 @@
 # On ZFS-root hosts, prove /var/lib/containers is actually backed by the
 # dedicated device. graphRoot above only shows the path, not what it sits on --
 # a skipped mount would silently put reconstructible container data back in
-# rpool. The container start above is the functional proof; this pins the
-# storage identity. findmnt --mountpoint requires a real mount, while readlink
-# resolves the by-partlabel or /dev/md symlink to the kernel device it reports.
+# rpool. findmnt resolves by-partlabel and /dev/md aliases before matching, so
+# one query pins the mountpoint, source, and filesystem type together.
 - name: _verify | The podman store is on its dedicated device
   when: zfs_root
-  block:
-    - name: _verify | Read the /var/lib/containers mount source + fstype
-      command: findmnt --noheadings --output SOURCE,FSTYPE --mountpoint /var/lib/containers
-      become: true
-      register: podman_store_mount
-      changed_when: false
+  command:
+    argv:
+      - findmnt
+      - --noheadings
+      - --mountpoint
+      - /var/lib/containers
+      - --source
+      - "{{ podman_storage_device }}"
+      - --types
+      - ext4
+  become: true
+  changed_when: false
 
-    - name: _verify | Resolve the configured podman storage device
-      command: readlink -f {{ podman_storage_device }}
-      become: true
-      register: podman_store_dev
-      changed_when: false
-
-    - name: _verify | Assert /var/lib/containers is ext4 on podman_storage_device
-      vars:
-        _src: "{{ podman_store_mount.stdout.split()[0] }}"
-        _fstype: "{{ podman_store_mount.stdout.split()[1] }}"
-      assert:
-        that:
-          - _fstype == 'ext4'
-          - _src == podman_store_dev.stdout
-        fail_msg: >-
-          /var/lib/containers is {{ _fstype }} on {{ _src }}, expected ext4 on
-          {{ podman_store_dev.stdout }} ({{ podman_storage_device }}).
-
-    # The Packer role owns array shape and monitoring; Podman only needs to prove
-    # its supplied storage device is healthy at the point it is consumed.
-    - name: _verify | The podman raid array is healthy
-      when: podman_store_dev.stdout.startswith('/dev/md')
-      command: mdadm --detail --test {{ podman_storage_device }}
-      become: true
-      changed_when: false
+# The Packer role owns array shape and monitoring; Podman only needs to prove
+# its supplied storage device is healthy at the point it is consumed.
+- name: _verify | The podman raid array is healthy
+  when:
+    - zfs_root
+    - podman_storage_device.startswith('/dev/md')
+  command: mdadm --detail --test {{ podman_storage_device }}
+  become: true
+  changed_when: false
 
 # The seccomp augmentation is the role's reason for shipping a custom profile.
 # The probe workloads do not exercise fchmodat2/io_uring, so assert the
