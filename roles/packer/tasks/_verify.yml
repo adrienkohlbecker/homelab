@@ -141,15 +141,26 @@
 
     # mdadm --create without --force builds a raid5 degraded, reporting the
     # rebuilding member as a spare; persisting that transient count makes
-    # mdmonitor report a missing hot spare forever after. --detail --test does
-    # not catch it, so assert on the shipped config directly.
-    - name: _verify | Mdadm config requests no nonexistent spares
+    # mdmonitor report a missing hot spare forever after. The mail route is the
+    # day-to-day notification path when an array later degrades.
+    - name: _verify | Mdadm config routes alerts and requests no nonexistent spares
+      vars:
+        _mdadm_conf: "{{ packer_verify_mdadm_conf.content | b64decode }}"
       assert:
-        that: "'spares=' not in (packer_verify_mdadm_conf.content | b64decode)"
+        that:
+          - "'spares=' not in _mdadm_conf"
+          - _mdadm_conf is search('(?m)^MAILADDR\\s+\\S+')
         fail_msg: >-
-          /etc/mdadm/mdadm.conf carries a spares= count, so mdmonitor will
-          report SparesMissing once the array finishes building:
-          {{ packer_verify_mdadm_conf.content | b64decode }}
+          /etc/mdadm/mdadm.conf must route alerts without requesting nonexistent
+          spares: {{ _mdadm_conf }}
+
+    - name: _verify | Mdmonitor watches the assembled arrays
+      systemd:
+        name: mdmonitor.service
+      register: packer_verify_mdmonitor
+      changed_when: false
+      failed_when: packer_verify_mdmonitor.status.ActiveState != 'active'
+      become: true
 
     - name: _verify | Per-disk "rEFInd (disk N)" NVRAM entries exist
       vars:

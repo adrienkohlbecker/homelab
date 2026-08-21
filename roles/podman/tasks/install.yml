@@ -543,10 +543,8 @@
   tags:
     - podman
 
-# resizefs grows ext4 to fill the device on a deliberately enlarged partition;
-# a no-op on the fixed fixture partition. On an mdadm device mke2fs derives the
-# raid stride/stripe-width from the array topology itself (libblkid); _verify
-# asserts the recorded geometry matches the live array.
+# resizefs grows ext4 to fill a deliberately enlarged partition and is a no-op
+# on fixed fixtures. On mdadm, mke2fs derives stripe geometry from the array.
 - name: install | Create ext4 filesystem on the podman partition
   when: podman_storage_backend == 'partition'
   filesystem:
