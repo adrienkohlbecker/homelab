@@ -42,10 +42,6 @@
         - MESSAGE: '{"level":"ERROR","threadName":"systemd","loggerName":"systemd","formattedMessage":"must-not-parse"}'
           SYSLOG_IDENTIFIER: systemd
           SYSTEMD_UNIT: nexus.service
-        - MESSAGE: '{"level":"INFO","threadName":"quartz-1-thread-1","loggerName":"org.sonatype.nexus.quartz.internal.task.QuartzTaskInfo","formattedMessage":"Task ''nexus-routine-success'' [assetBlob.cleanup] state change RUNNING -> WAITING (OK)"}'
-          CONTAINER_TAG: nexus
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: nexus.service
         - MESSAGE: '{"level":"ERROR","threadName":"quartz-1-thread-1","loggerName":"org.sonatype.nexus.quartz.internal.task.QuartzTaskInfo","formattedMessage":"Task ''nexus-task-failed'' [assetBlob.cleanup] state change RUNNING -> WAITING (FAILED)"}'
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
@@ -189,7 +185,6 @@
   assert:
     that:
       - "'-drop' not in fluentbit_verify_result.stdout"
-      - "'nexus-routine-success' not in fluentbit_verify_result.stdout"
       - "'nexus-task-failed' in fluentbit_verify_result.stdout"
       - "'nexus-audit-routine' not in fluentbit_verify_result.stdout"
       - "'nexus-audit-asset' not in fluentbit_verify_result.stdout"
@@ -231,15 +226,18 @@
                     or not record.get("message")
                 ):
                     continue
+                assert not (
+                    record.get("level") == "info"
+                    and fields.get("source")
+                    == "org.sonatype.nexus.quartz.internal.task.QuartzTaskInfo"
+                ), record
                 if not application_seen and fields.get("source"):
                     assert "timestamp" not in fields, record
                     assert "formattedMessage" not in fields, record
                     application_seen = True
                 if fields.get("audit_domain") and fields.get("event"):
                     audit_seen = True
-                if application_seen and audit_seen:
-                    sys.exit(0)
-        sys.exit(1)
+        sys.exit(0 if application_seen and audit_seen else 1)
       - /var/log/fluent-bit/lnav.jsonl
   register: _nexus_lnav_records
   changed_when: false

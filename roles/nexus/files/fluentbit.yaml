@@ -27,13 +27,6 @@ pipeline:
       logical_op: and
       exclude:
         - 'CONTAINER_TAG ^.+$'
-        - 'loggerName ^org\.sonatype\.nexus\.quartz\.internal\.task\.QuartzTaskInfo$'
-        - 'formattedMessage ^Task .+ state change (WAITING -> RUNNING|RUNNING -> WAITING \(OK\))$'
-    - name: grep
-      match: svc.nexus.service
-      logical_op: and
-      exclude:
-        - 'CONTAINER_TAG ^.+$'
         - 'initiator ^\*TASK$'
         - 'domain ^tasks$'
         - 'type ^(started|taskstartedrunningevent|finished|blocked|scheduled)$'

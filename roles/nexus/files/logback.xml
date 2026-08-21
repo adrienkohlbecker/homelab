@@ -110,6 +110,7 @@
        collections. Nexus reports this as high heap usage even with low old-gen
        occupancy and no full-GC pressure. Retain errors from the monitor. -->
   <logger name="org.sonatype.nexus.selfhosted.internal.jvm.MemoryMonitor" level="ERROR"/>
+  <logger name="org.sonatype.nexus.quartz.internal.task.QuartzTaskInfo" level="WARN"/>
 
   <root level="${root.level:-INFO}">
     <appender-ref ref="console"/>
