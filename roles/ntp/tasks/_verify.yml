@@ -1,29 +1,27 @@
-# QEMU-only functional checks. NTP reachability can leave tracking temporarily
-# unsynchronised, so verify the authenticated source quorum instead.
-
-- name: _verify | Chronyd answers chronyc (config parsed, daemon healthy)
-  command: chronyc tracking
-  changed_when: false
-  become: true
-
-# authdata exposes the negotiated mode, allowing the check to reject any source
-# that resolved without NTS authentication.
-- name: _verify | Read the per-source authentication mode (CSV)
+# QEMU-only functional checks. authdata proves chronyd is responsive and
+# exposes whether NTS-KE established keys and cookies for each source.
+- name: _verify | Read per-source authentication state (CSV)
   command: chronyc -c authdata
   changed_when: false
   become: true
   register: ntp_verify_authdata
 
-- name: _verify | At least two loaded sources authenticate via NTS
+- name: _verify | At least two sources complete NTS key establishment
   assert:
     that:
       - ntp_verify_authdata.stdout_lines | length >= 2
       - ntp_verify_authdata.stdout_lines | select('match', '^[^,]+,(?!NTS,)') | list | length == 0
+      - >-
+        ntp_verify_authdata.stdout_lines
+        | select('match', '^[^,]+,NTS,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[1-9][0-9]*,[^,]+$')
+        | list
+        | length >= 2
     fail_msg: >-
-      chrony lacks two authenticated NTS sources (authdata rows:
+      chrony lacks two NTS sources with negotiated cookies (authdata rows:
       {{ ntp_verify_authdata.stdout_lines }})
     success_msg: >-
-      all {{ ntp_verify_authdata.stdout_lines | length }} loaded source(s) use NTS
+      all {{ ntp_verify_authdata.stdout_lines | length }} loaded source(s) use
+      NTS and at least two hold negotiated cookies
 
 - name: _verify | Timesyncd is not competing for the clock  # noqa: command-instead-of-module -- is-active query, not a state change
   command: systemctl is-active systemd-timesyncd
