@@ -140,7 +140,7 @@
   tags:
     - netdata
 
-- name: Un-silence out_of_disk_space_time
+- name: Un-silence predictive disk-fill alarms
   when: not (ansible_check_mode and netdata_disks_staged.changed)
   replace:
     path: /etc/netdata/health.d/disks.conf
@@ -152,22 +152,13 @@
     # template's now-`sysadmin` and matches the next `to: silent`
     # downstream (10min_disk_utilization), reporting a phantom change
     # on every rerun.
-    regexp: '(?ms)(^\s*template:\s*out_of_disk_space_time\b(?:(?!^\s*template:).)*?^\s*to:\s*)silent'
+    regexp: '(?ms)(^\s*template:\s*{{ item }}\b(?:(?!^\s*template:).)*?^\s*to:\s*)silent'
     replace: '\1sysadmin'
     backup: true
-  register: netdata_disks_space_unsilenced
-  become: true
-  tags:
-    - netdata
-
-- name: Un-silence out_of_disk_inodes_time
-  when: not (ansible_check_mode and netdata_disks_staged.changed)
-  replace:
-    path: /etc/netdata/health.d/disks.conf
-    regexp: '(?ms)(^\s*template:\s*out_of_disk_inodes_time\b(?:(?!^\s*template:).)*?^\s*to:\s*)silent'
-    replace: '\1sysadmin'
-    backup: true
-  register: netdata_disks_inodes_unsilenced
+  loop:
+    - out_of_disk_space_time
+    - out_of_disk_inodes_time
+  register: netdata_disks_unsilenced
   become: true
   tags:
     - netdata
@@ -208,7 +199,7 @@
   tags:
     - netdata
 
-- name: Lengthen the out_of_disk_space_time down-delay
+- name: Lengthen predictive disk-fill down-delays
   when: not (ansible_check_mode and netdata_disks_staged.changed)
   replace:
     path: /etc/netdata/health.d/disks.conf
@@ -216,31 +207,21 @@
     # `delay: down 15m multiplier 1.2 max 1h` string is shared with the
     # legitimately-silent 10min_disk_utilization/backlog templates, so a
     # global replace would clobber theirs.
-    regexp: '(?ms)(^\s*template:\s*out_of_disk_space_time\b(?:(?!^\s*template:).)*?^\s*delay:\s*)down 15m multiplier 1.2 max 1h'
+    regexp: '(?ms)(^\s*template:\s*{{ item }}\b(?:(?!^\s*template:).)*?^\s*delay:\s*)down 15m multiplier 1.2 max 1h'
     replace: '\1down 1h multiplier 1.5 max 6h'
     backup: true
-  register: netdata_disks_space_delay
-  become: true
-  tags:
-    - netdata
-
-- name: Lengthen the out_of_disk_inodes_time down-delay
-  when: not (ansible_check_mode and netdata_disks_staged.changed)
-  replace:
-    path: /etc/netdata/health.d/disks.conf
-    regexp: '(?ms)(^\s*template:\s*out_of_disk_inodes_time\b(?:(?!^\s*template:).)*?^\s*delay:\s*)down 15m multiplier 1.2 max 1h'
-    replace: '\1down 1h multiplier 1.5 max 6h'
-    backup: true
-  register: netdata_disks_inodes_delay
+  loop:
+    - out_of_disk_space_time
+    - out_of_disk_inodes_time
+  register: netdata_disks_delay
   become: true
   tags:
     - netdata
 
 - name: Reload netdata health after disks.conf edits
   when: >-
-    netdata_disks_staged.changed or netdata_disks_space_unsilenced.changed
-    or netdata_disks_inodes_unsilenced.changed or netdata_disks_rate_window.changed
-    or netdata_disks_space_delay.changed or netdata_disks_inodes_delay.changed
+    netdata_disks_staged.changed or netdata_disks_unsilenced.changed
+    or netdata_disks_rate_window.changed or netdata_disks_delay.changed
   import_tasks: reload_health.yml
   tags:
     - netdata
