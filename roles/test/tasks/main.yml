@@ -51,9 +51,8 @@
     mode: "0644"
     owner: root
     group: root
-    # Nexus locations include /repository/<repo>: podman bakes the path into
-    # the image namespace and roles/nexus's nginx rewrite moves it ahead of
-    # /v2/. A bare Nexus host would address an API that does not exist.
+    # Nexus path-based routing treats the mirror location's repository suffix
+    # as the first image namespace beneath its native /v2/ API.
     content: |
       {% for source, prefix in test_registry_mirrors | dictsort %}
       [[registry]]

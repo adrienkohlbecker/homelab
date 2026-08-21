@@ -188,41 +188,5 @@
       client_max_body_size: "0"
       proxy_read_timeout: 3600s
       proxy_send_timeout: 3600s
-      # Rewrite docker registry v2 URLs from the shape podman generates
-      # (/v2/<repo-prefix-as-image-namespace>/...) to Nexus's actual path
-      # (/repository/<repo>/v2/...). With this, a single nexus.lab.fahm.fr
-      # serves as a docker mirror for any number of nexus_repository_docker_proxy
-      # repos. Without it, podman's mirror config is incompatible with
-      # Nexus's path-based v2 API: podman bakes the location's path into
-      # the image namespace and emits /v2/<path>/<image>/manifests/...
-      # while Nexus expects /repository/<repo>/v2/<image>/manifests/...
-      # The matching mirror config is in roles/test/tasks/main.yml.
-      #
-      # Hosted-docker push (homelab/ci) uses Nexus's native
-      # path-based routing instead and lands at /v2/<repo>/<image>/...
-      # straight through nginx's default location -- Nexus handles the
-      # routing internally based on the first path segment after /v2/.
-      # The block below applies only to proxies still consumed via the
-      # legacy /repository/<repo>/ URL shape.
-      server_conf: |
-        location ~ ^/v2/repository/([^/]+)/(.*)$ {
-          rewrite ^/v2/repository/([^/]+)/(.*)$ /repository/$1/v2/$2 break;
-          proxy_pass http://127.0.0.1:{{ service_ports.nexus }};
-          proxy_http_version 1.1;
-          proxy_set_header Host $host;
-          proxy_set_header X-Real-IP $remote_addr;
-          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-          proxy_set_header X-Forwarded-Proto $scheme;
-          proxy_redirect ~^https?://[^/]+/repository/([^/]+)/v2/(.*)$ https://$host/v2/repository/$1/$2;
-          # Repeated from the nginx_site_args above: the helper renders these
-          # streaming knobs inside `location /`, and nginx locations don't
-          # inherit directives from sibling locations, so this docker-mirror
-          # location needs its own copy.
-          proxy_buffering off;
-          proxy_request_buffering off;
-          client_max_body_size 0;
-          proxy_read_timeout 3600s;
-          proxy_send_timeout 3600s;
-        }
   tags:
     - nexus

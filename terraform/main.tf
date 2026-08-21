@@ -14,7 +14,7 @@ terraform {
     }
     nexus = {
       source  = "datadrivers/nexus"
-      version = "~> 2"
+      version = ">= 2.8, < 3"
     }
     mailgun = {
       source  = "wgebis/mailgun"

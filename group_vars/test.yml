@@ -25,7 +25,7 @@ test_ecr_registry_mirrors:
 test_registry_mirror_base: >-
   {{ test_ecr_registry
      if test_in_aws
-     else nexus_url ~ '/repository' }}
+     else nexus_url }}
 test_registry_mirrors: >-
   {{ test_ecr_registry_mirrors
      if test_in_aws

@@ -198,16 +198,10 @@ resource "nexus_repository_docker_hosted" "this" {
   name   = each.key
   online = true
 
-  # TODO: codify pathEnabled=true once the datadrivers/nexus provider
-  # ships path_based_routing in a release (already on main, not yet in
-  # v2.7.1). Currently toggled manually in the Nexus UI on both repos so
-  # the docker client can push to nexus.lab.fahm.fr/<repo>/<image>:tag
-  # without the /repository/ URL prefix going through an nginx rewrite.
-  # The provider leaves the field alone (it isn't in v2.7.1's schema),
-  # so apply is a no-op and the manual setting persists.
   docker {
-    force_basic_auth = false
-    v1_enabled       = false
+    force_basic_auth   = false
+    path_based_routing = true
+    v1_enabled         = false
   }
   storage {
     blob_store_name                = nexus_blobstore_file.hosted.name
@@ -325,8 +319,9 @@ resource "nexus_repository_docker_proxy" "this" {
   online = true
 
   docker {
-    force_basic_auth = false
-    v1_enabled       = false
+    force_basic_auth   = false
+    path_based_routing = true
+    v1_enabled         = false
   }
   docker_proxy {
     index_type = each.value.index_type

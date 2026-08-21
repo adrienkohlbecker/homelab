@@ -344,13 +344,9 @@
     - _nexus_reconciliation_after.stat.size > (_nexus_reconciliation_before.stat.size | default(0))
   become: true
 
-# The docker-registry mirror is an nginx rewrite (roles/nexus main.yml
-# server_conf): podman emits /v2/repository/<repo>/<image>/... and nginx
-# swaps it to Nexus's /repository/<repo>/v2/<image>/... layout. Prod's docker
-# proxy repos are terraform-created; the qemu fixture has none, so create a
-# throwaway docker hosted repo and prove the rewrite reaches its registry-v2
-# base. Without the rewrite the un-swapped path falls through to `location /`
-# and Nexus 404s it, so a 200/401 (not 404) is the signal the rewrite fired.
+# Production Docker repositories use Nexus's native path-based routing. The
+# qemu fixture has none, so create a throwaway hosted repository with the same
+# setting and prove its /v2/<repository>/ API is reachable through nginx.
 - name: _verify | Create a throwaway docker hosted repo
   uri:
     url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/repositories/docker/hosted
@@ -369,18 +365,15 @@
       docker:
         v1Enabled: false
         forceBasicAuth: true
+        pathEnabled: true
     status_code: [ 201, 400 ]  # 400 == repo already exists on a _verify re-run
     timeout: 5
 
-# The probe gets a 403 (Nexus's docker bearer realm declines admin basic
-# auth) -- the auth outcome doesn't matter. The signal is the response
-# header: Docker-Distribution-Api-Version is set *only* on Nexus's
-# /repository/<repo>/v2/ responses, so its presence proves nginx rewrote
-# /v2/repository/<repo>/ to that path. Without the rewrite the request falls
-# through to `location /`, Nexus 404s it, and the header is absent.
-- name: _verify | Docker-mirror rewrite reaches the repo's registry-v2 base
+# The auth outcome does not matter. Docker-Distribution-Api-Version is present
+# only when Nexus routed the request to the repository's registry-v2 endpoint.
+- name: _verify | Native Docker path reaches the repo's registry-v2 base
   uri:
-    url: https://nexus.{{ inventory_hostname }}.{{ domain }}/v2/repository/test_docker_mirror/
+    url: https://nexus.{{ inventory_hostname }}.{{ domain }}/v2/test_docker_mirror/
     validate_certs: false
     url_username: admin
     url_password: "{{ _nexus_admin_password.content | b64decode }}"
