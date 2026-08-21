@@ -4,8 +4,8 @@
 # community.general.zfs treats a property whose source is not local|received|-
 # as absent, so a value silently inherited from the parent reads back correct
 # while never being set locally. For the sqlite child this is load-bearing: an
-# inherited recordsize would test-pass yet silently defeat the 4K-page tuning
-# the ~10 SQLite consumer roles depend on. `zfs get` source must be `local`,
+# inherited recordsize would test-pass yet silently defeat Home Assistant's
+# 4K-page recorder tuning. `zfs get` source must be `local`,
 # not just right -- zfs-autobackup's picker filters with `-s local`
 # (roles/zfs_autobackup/templates/zfs_autosnapshot.sh.j2:14), so an inherited
 # autobackup:bak=true would test-pass but never get backed up.
