@@ -180,6 +180,48 @@
     - retired_services
     - sabnzbd
 
+- name: Remove retired nzbToMedia installation
+  file:
+    path: /opt/nzbToMedia
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - sabnzbd
+
+- name: Check for retained SABnzbd state
+  stat:
+    path: /mnt/services/sabnzbd
+  register: retired_services_sabnzbd_state
+  become: true
+  tags:
+    - retired_services
+    - sabnzbd
+
+- name: Find retired nzbToMedia configuration files
+  when: retired_services_sabnzbd_state.stat.isdir | default(false)
+  find:
+    paths: /mnt/services/sabnzbd
+    patterns: autoProcessMedia.cfg*
+    file_type: file
+  register: retired_services_nzbtomedia_configs
+  become: true
+  tags:
+    - retired_services
+    - sabnzbd
+
+- name: Remove retired nzbToMedia configuration files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ retired_services_nzbtomedia_configs.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+  tags:
+    - retired_services
+    - sabnzbd
+
 - name: Retire Plex nginx site
   import_role:
     name: nginx
@@ -237,6 +279,29 @@
   become: true
   tags:
     - retired_services
+
+- name: Find retired nzbToMedia Fluent Bit cursors
+  find:
+    paths: /var/lib/fluent-bit
+    patterns: nzbtomedia.db*
+    file_type: file
+  register: retired_services_nzbtomedia_cursors
+  become: true
+  tags:
+    - retired_services
+    - sabnzbd
+
+- name: Remove retired nzbToMedia Fluent Bit cursors
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ retired_services_nzbtomedia_cursors.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+  tags:
+    - retired_services
+    - sabnzbd
 
 - name: Check whether Podman is installed for retired image cleanup
   stat:

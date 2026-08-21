@@ -71,11 +71,26 @@
     group: root
     mode: "0755"
   loop:
+    - /opt/nzbToMedia
     - /mnt/services/plex
+    - /mnt/services/sabnzbd
     - /mnt/services/sqlite/plex
     - /mnt/services/tautulli
     - /mnt/services/sqlite/tautulli
     - /var/lib/fluent-bit
+  become: true
+
+- name: _setup | Create retired nzbToMedia fixtures
+  copy:
+    content: retired
+    dest: "{{ item }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - /opt/nzbToMedia/.installed-12.1.13
+    - /mnt/services/sabnzbd/autoProcessMedia.cfg
+    - /mnt/services/sabnzbd/autoProcessMedia.cfg.123.2026-08-21@00:00:00~
   become: true
 
 - name: _setup | Create retained Plex and Tautulli data markers
@@ -254,6 +269,9 @@
     - plex-scanner.db
     - plex-crash-uploader.db
     - tautulli-websocket.db
+    - nzbtomedia.db
+    - nzbtomedia.db-shm
+    - nzbtomedia.db-wal
   become: true
 
 - name: _setup | Install legacy SABnzbd ini watcher path fixture

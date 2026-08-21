@@ -69,6 +69,17 @@
   failed_when: retired_services_sort_ini.stat.exists
   become: true
 
+- name: _verify | Retired nzbToMedia files are absent
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /opt/nzbToMedia
+    - /mnt/services/sabnzbd/autoProcessMedia.cfg
+    - /mnt/services/sabnzbd/autoProcessMedia.cfg.123.2026-08-21@00:00:00~
+  register: retired_services_nzbtomedia_files
+  failed_when: retired_services_nzbtomedia_files.stat.exists
+  become: true
+
 - name: _verify | Retired root backup SSH config is absent
   stat:
     path: /root/.ssh/config
@@ -96,6 +107,9 @@
     - /var/lib/fluent-bit/plex-scanner.db
     - /var/lib/fluent-bit/plex-crash-uploader.db
     - /var/lib/fluent-bit/tautulli-websocket.db
+    - /var/lib/fluent-bit/nzbtomedia.db
+    - /var/lib/fluent-bit/nzbtomedia.db-shm
+    - /var/lib/fluent-bit/nzbtomedia.db-wal
   register: retired_services_fluentbit_files
   failed_when: retired_services_fluentbit_files.stat.exists
   become: true
