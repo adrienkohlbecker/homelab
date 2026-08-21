@@ -481,6 +481,7 @@
     - name: _verify | Stat staged EFI-stub kernel + initrd
       stat:
         path: "{{ item }}"
+        checksum_algorithm: sha256
       loop:
         - /boot/efi/EFI/Linux/vmlinuz.efi
         - /boot/efi/EFI/Linux/initrd
@@ -641,18 +642,6 @@
       changed_when: false
       register: packer_verify_uname_before
 
-    - name: _verify | Capture /EFI/Linux/{vmlinuz.efi,initrd} hashes before (aarch64)
-      when: ansible_architecture == "aarch64"
-      stat:
-        path: "{{ item }}"
-        get_checksum: true
-        checksum_algorithm: sha256
-      loop:
-        - /boot/efi/EFI/Linux/vmlinuz.efi
-        - /boot/efi/EFI/Linux/initrd
-      register: packer_verify_efi_linux_before
-      become: true
-
     - name: _verify | Install older specific kernel + modules
       apt:
         name:
@@ -702,10 +691,10 @@
         that:
           - >-
             packer_verify_efi_linux_after.results[0].stat.checksum
-            != packer_verify_efi_linux_before.results[0].stat.checksum
+            != packer_verify_efi_linux.results[0].stat.checksum
           - >-
             packer_verify_efi_linux_after.results[1].stat.checksum
-            != packer_verify_efi_linux_before.results[1].stat.checksum
+            != packer_verify_efi_linux.results[1].stat.checksum
         fail_msg: >-
           /EFI/Linux/vmlinuz.efi or /EFI/Linux/initrd unchanged after the
           kernel transaction — postinst.d hook didn't fire (or fired but
