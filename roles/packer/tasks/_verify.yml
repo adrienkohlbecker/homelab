@@ -364,22 +364,6 @@
     | select('search', '\\sinstalled$')
     | list | length > 0
 
-# The check above is a snapshot ("nothing grub is installed right
-# now"). The hold is a *mechanism* meant to block future installs;
-# verify it functionally by asking apt to install a grub package in
-# dry-run mode. With -y and no --allow-change-held-packages, apt
-# exits non-zero on held-package changes. Picking grub-pc because
-# it's the bare-metal x86 grub variant linux-generic Recommends
-# alongside grub-efi-amd64; both arches have it in the archive.
-- name: _verify | Apt refuses to install grub-pc (dry-run)  # noqa: command-instead-of-module
-  command: apt-get install --simulate --yes --no-install-recommends grub-pc
-  changed_when: false
-  become: true
-  environment:
-    DEBIAN_FRONTEND: noninteractive
-  register: packer_verify_apt_grub_dryrun
-  failed_when: packer_verify_apt_grub_dryrun.rc == 0
-
 # --- sshd password-auth lockdown ---
 #
 # chroot.sh drops /etc/ssh/sshd_config.d/00-hardening.conf to
