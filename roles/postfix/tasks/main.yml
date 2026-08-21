@@ -33,37 +33,32 @@
   tags:
     - postfix
 
-# No inline validate: postfix's parsers read the live /etc/postfix directory,
-# not ansible's temporary file. _verify.yml parses the installed configuration
-# and exercises the generic map after converge.
-- name: Install public postfix configuration  # noqa: require-validate
+# Postfix's parsers read the live /etc/postfix directory, not Ansible's
+# temporary files. The self-contained SASL map can still be validated before
+# installation; _verify.yml parses and exercises the installed configuration.
+- name: Install Postfix configuration
   template:
-    src: "{{ item }}.j2"
-    dest: "/etc/postfix/{{ item }}"
+    src: "{{ item.name }}.j2"
+    dest: "/etc/postfix/{{ item.name }}"
     owner: root
     group: root
-    mode: "0644"
+    mode: "{{ item.mode }}"
     backup: true
+    validate: "{{ item.validate | default(omit) }}"
   loop:
-    - main.cf
-    - generic
-    - aliases
+    - name: main.cf
+      mode: "0644"
+    - name: generic
+      mode: "0644"
+    - name: aliases
+      mode: "0644"
+    - name: sasl_passwd
+      mode: "0600"
+      validate: grep -qE '^[^[:space:]]+[[:space:]]+[^[:space:]]+:[^[:space:]]+$' %s
+  loop_control:
+    label: "{{ item.name }}"
   become: true
   register: postfix_cfg
-  tags:
-    - postfix
-
-- name: Install Sasl authentication details
-  template:
-    src: sasl_passwd.j2
-    dest: /etc/postfix/sasl_passwd
-    owner: root
-    group: root
-    mode: "0600"
-    backup: true
-    validate: grep -qE '^[^[:space:]]+[[:space:]]+[^[:space:]]+:[^[:space:]]+$' %s
-  become: true
-  register: postfix_sasl_auth
   tags:
     - postfix
 
@@ -74,7 +69,7 @@
     enabled: true
     state: >-
       {{ 'restarted'
-         if postfix_cfg.changed or postfix_sasl_auth.changed or postfix_apt.changed
+         if postfix_cfg.changed or postfix_apt.changed
          else 'started' }}
   become: true
   tags:
