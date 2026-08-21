@@ -489,24 +489,20 @@
           /etc/kernel/postinst.d/zz-stage-efi-stub is missing, not executable,
           or differs from roles/refind/files/zz-stage-efi-stub
 
-    - name: _verify | Stat hook symlinks
+    - name: _verify | Hook symlinks point at the postinst.d entry
       stat:
         path: "{{ item }}"
       loop:
         - /etc/kernel/postrm.d/zz-stage-efi-stub
         - /etc/initramfs/post-update.d/zz-stage-efi-stub
       register: packer_verify_hook_links
-
-    - name: _verify | Hook symlinks in postrm.d and post-update.d point at the postinst.d entry
-      assert:
-        that:
-          - item.stat.exists
-          - item.stat.islnk
-          - "'postinst.d/zz-stage-efi-stub' in item.stat.lnk_target"
-        fail_msg: "{{ item.item }} not a symlink to /etc/kernel/postinst.d/zz-stage-efi-stub"
-      loop: "{{ packer_verify_hook_links.results }}"
+      failed_when: >-
+        not packer_verify_hook_links.stat.exists
+        or not packer_verify_hook_links.stat.islnk
+        or 'postinst.d/zz-stage-efi-stub'
+           not in (packer_verify_hook_links.stat.lnk_target | default(''))
       loop_control:
-        label: "{{ item.item }}"
+        label: "{{ item }}"
 
 # --- Functional kernel-update + reboot exercise (both arches) ---
 #
