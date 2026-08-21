@@ -158,9 +158,7 @@
 # Exercises the nginx_site helper end-to-end (assert, template, symlink, the
 # new nginx -t validate-rollback, reload) on top of being the probe target.
 - name: _verify | Configure a transient test vhost via the nginx_site helper
-  import_role:
-    name: nginx
-    tasks_from: site
+  import_tasks: site.yml
   vars:
     nginx_site_args:
       subdomain: nginxverify
@@ -245,9 +243,7 @@
 # there is no Authorization-bypass shortcut. Stub is still in gate mode (401), so
 # the request must redirect to the portal (302), not short-circuit to the upstream.
 - name: _verify | Configure a plain auth-required vhost
-  import_role:
-    name: nginx
-    tasks_from: site
+  import_tasks: site.yml
   vars:
     nginx_site_args:
       subdomain: nginxverifyempty
@@ -321,9 +317,7 @@
 # When Authelia admits a request, the vhost forwards Remote-User from the auth
 # subrequest as X-Forwarded-User for the *arr suite's External auth mode.
 - name: _verify | Configure an auth-required vhost for identity forwarding
-  import_role:
-    name: nginx
-    tasks_from: site
+  import_tasks: site.yml
   vars:
     nginx_site_args:
       subdomain: nginxverifyauth
@@ -360,9 +354,7 @@
       mode: basic
 
 - name: _verify | Configure a Basic-auth service-account vhost
-  import_role:
-    name: nginx
-    tasks_from: site
+  import_tasks: site.yml
   vars:
     nginx_site_args:
       subdomain: nginxverifybasic
@@ -403,9 +395,7 @@
 # re-emit regressed, HSTS/CSP would silently vanish from every location_conf
 # site (netdata, minio).
 - name: _verify | Configure a vhost with a location_conf snippet
-  import_role:
-    name: nginx
-    tasks_from: site
+  import_tasks: site.yml
   vars:
     nginx_site_args:
       subdomain: nginxverifyloc
@@ -434,9 +424,7 @@
 # positive contract -- the snippet renders and the added location actually
 # serves -- would otherwise be untested, yet homepage's /alerts/ relies on it.
 - name: _verify | Configure a vhost with a server_conf snippet
-  import_role:
-    name: nginx
-    tasks_from: site
+  import_tasks: site.yml
   vars:
     nginx_site_args:
       subdomain: nginxverifyserverconf
@@ -464,9 +452,7 @@
 # nginx -t gates a typo'd directive name); the 413 below proves the size limit
 # is enforced before the body reaches the upstream. No auth needed.
 - name: _verify | Configure a vhost with body-size limits
-  import_role:
-    name: nginx
-    tasks_from: site
+  import_tasks: site.yml
   vars:
     nginx_site_args:
       subdomain: nginxverifybody
@@ -492,9 +478,7 @@
 # assert AND render into config the helper's nginx -t accepts; the proxied 200
 # confirms the site is live. No auth needed.
 - name: _verify | Configure a vhost with proxy buffering toggled off
-  import_role:
-    name: nginx
-    tasks_from: site
+  import_tasks: site.yml
   vars:
     nginx_site_args:
       subdomain: nginxverifybuffering
@@ -537,9 +521,7 @@
 # rendered header, so a positioning/";" regression on the unifi consumer (the
 # real csp_* user) surfaces here. No auth needed.
 - name: _verify | Configure a vhost with CSP overrides
-  import_role:
-    name: nginx
-    tasks_from: site
+  import_tasks: site.yml
   vars:
     nginx_site_args:
       subdomain: nginxverifycsp
@@ -566,9 +548,7 @@
 # cleartext without a redirect, and that csp_passthrough emits no CSP header
 # (letting the upstream's own through).
 - name: _verify | Configure a plaintext, CSP-passthrough vhost
-  import_role:
-    name: nginx
-    tasks_from: site
+  import_tasks: site.yml
   vars:
     nginx_site_args:
       subdomain: nginxverifyplain
@@ -611,9 +591,7 @@
 # vhost; it becomes the only server on that socket, so a [::1] probe reaches it.
 # No auth -- this exercises the listener, not the auth flow (covered above).
 - name: _verify | Configure an IPv6-enabled vhost
-  import_role:
-    name: nginx
-    tasks_from: site
+  import_tasks: site.yml
   vars:
     nginx_ipv6: true
     nginx_site_args:
@@ -669,9 +647,7 @@
 - name: _verify | Broken site config is validated and rolled back
   block:
     - name: _verify | Configure a deliberately broken site
-      import_role:
-        name: nginx
-        tasks_from: site
+      import_tasks: site.yml
       vars:
         nginx_site_args:
           subdomain: nginxverifybroken
@@ -710,9 +686,7 @@
 - name: _verify | Reject enable_http when combined with auth (assert must fire)
   block:
     - name: _verify | Configure an enable_http + auth vhost (must fail the assert)
-      import_role:
-        name: nginx
-        tasks_from: site
+      import_tasks: site.yml
       vars:
         nginx_site_args:
           subdomain: nginxverifyhttpauth
