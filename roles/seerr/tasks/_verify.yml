@@ -300,3 +300,45 @@
       ledger, wizard flags) was dropped, reordered, or
       reformatted, which would diff-churn and restart seerr on the converge
       after the operator connects Jellyfin.
+
+- name: _verify | Stop seerr through its unit
+  systemd:
+    name: seerr
+    state: stopped
+  become: true
+
+- name: _verify | Clean stop leaves seerr inactive without a failed result
+  command:
+    argv:
+      - systemctl
+      - show
+      - seerr
+      - --property=ActiveState
+      - --property=Result
+  register: _seerr_stopped_state
+  changed_when: false
+  failed_when: >-
+    'ActiveState=inactive' not in _seerr_stopped_state.stdout_lines
+    or 'Result=success' not in _seerr_stopped_state.stdout_lines
+  become: true
+
+- name: _verify | Restart seerr after the clean-stop check
+  systemd:
+    name: seerr
+    state: started
+  become: true
+
+- name: _verify | Seerr becomes healthy after the clean-stop check
+  uri:
+    url: http://localhost:{{ service_ports.seerr }}/api/v1/status
+    status_code: 200
+    return_content: true
+    timeout: 10
+  register: _seerr_restart_loopback
+  retries: 90
+  delay: 2
+  until:
+    - _seerr_restart_loopback.status == 200
+    - _seerr_restart_loopback.json is defined
+    - _seerr_restart_loopback.json.version is defined
+  become: true

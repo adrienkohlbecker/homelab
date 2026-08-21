@@ -33,6 +33,10 @@ RestartSec=5
 Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N
+# podman run propagates seerr's SIGTERM exit status during a clean ExecStop.
+# Accept only that conventional 128+SIGTERM status so manual stops do not leave
+# the unit failed while genuine application failures still surface.
+SuccessExitStatus=143
 
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 # `USER node:node` is baked into the v3 image, so the entrypoint runs as
