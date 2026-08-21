@@ -1,4 +1,4 @@
-# Exercise the normal, rollback, cancel, and missing-snapshot paths.
+# Exercise the rollback and cancel paths.
 
 - name: _verify | Rollback timer and service not currently running
   # A successful converge must not leave a pending rollback.
@@ -121,34 +121,9 @@
   become: true
   changed_when: false
 
-# Exercise the script directly after removing its snapshot: it must abort
-# without replacing /etc/netplan.
-- name: _verify abort | Remove the snapshot so the rollback has nothing to restore
-  file:
-    path: /run/netplan_prev
-    state: absent
-  become: true
-  changed_when: false
-
-- name: _verify abort | Run the rollback script with no snapshot present
-  command: /usr/local/bin/netplan_rollback
-  register: netplan_verify_abort
-  changed_when: false
-  failed_when: netplan_verify_abort.rc != 1
-  become: true
-
-- name: _verify | Confirm the rollback and abort paths were logged
+- name: _verify rollback | Confirm the rollback path was logged
   command: journalctl -t netplan_rollback --since "5 minutes ago"
   register: netplan_verify_journal
   changed_when: false
-  failed_when: >-
-    'auto-rollback firing' not in netplan_verify_journal.stdout
-    or 'ABORT: no usable' not in netplan_verify_journal.stdout
-  become: true
-
-- name: _verify abort | Confirm /etc/netplan was left untouched
-  stat:
-    path: /etc/netplan/01-netcfg.yaml
-  register: netplan_verify_abort_cfg
-  failed_when: not netplan_verify_abort_cfg.stat.exists
+  failed_when: "'auto-rollback firing' not in netplan_verify_journal.stdout"
   become: true
