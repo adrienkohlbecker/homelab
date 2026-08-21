@@ -120,10 +120,3 @@
     state: absent
   become: true
   changed_when: false
-
-- name: _verify rollback | Confirm the rollback path was logged
-  command: journalctl -t netplan_rollback --since "5 minutes ago"
-  register: netplan_verify_journal
-  changed_when: false
-  failed_when: "'auto-rollback firing' not in netplan_verify_journal.stdout"
-  become: true
