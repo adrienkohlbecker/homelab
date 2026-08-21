@@ -60,29 +60,6 @@
 # previous caller's proxy_pass / csp / etc. can't bleed into the next
 # caller that doesn't explicitly override.
 #
-- name: site | Assert required inputs
-  assert:
-    that:
-      - nginx_site_args.subdomain is defined
-      - nginx_site_args.subdomain is string
-      - nginx_site_args.subdomain | length > 0
-    fail_msg: >-
-      nginx_site_args.subdomain is required and must be a non-empty string;
-      got {{ nginx_site_args.subdomain | default('<undefined>') }}.
-  tags:
-    - nginx_site
-
-- name: site | Assert subdomain is a safe DNS label
-  assert:
-    that:
-      - nginx_site_args.subdomain is match('^[A-Za-z0-9-]+$')
-    fail_msg: >-
-      nginx_site_args.subdomain must be a single DNS label ([A-Za-z0-9-]) -- it
-      is interpolated into the on-disk config path and the server_name.
-      Got '{{ nginx_site_args.subdomain }}'.
-  tags:
-    - nginx_site
-
 # Resolve caller defaults once into _nginx_site_* locals so they are not
 # re-spelled at every gate below and in site.conf.j2. Always set them so no
 # stale value leaks into the next nginx_site invocation.
@@ -94,74 +71,33 @@
   tags:
     - nginx_site
 
-- name: site | Assert proxy_pass is a well-formed URL
-  when: nginx_site_args.proxy_pass is defined
+- name: site | Assert site contract
   assert:
     that:
-      - nginx_site_args.proxy_pass is string
-      - nginx_site_args.proxy_pass is match('^https?://')
+      - nginx_site_args.subdomain is defined
+      - nginx_site_args.subdomain is string
+      - nginx_site_args.subdomain | default('') | length > 0
+      - nginx_site_args.subdomain | default('') is match('^[A-Za-z0-9-]+$')
+      - nginx_site_args.proxy_pass is not defined or nginx_site_args.proxy_pass is string
+      - nginx_site_args.proxy_pass is not defined or nginx_site_args.proxy_pass | string is match('^https?://')
       # No space/quote/semicolon and no control/non-ASCII char: it is rendered
       # straight into `proxy_pass ...;`, so any of those changes the directive.
-      - nginx_site_args.proxy_pass is not search('[ ";]')
-      - nginx_site_args.proxy_pass is not search('[^ -~]')
+      - nginx_site_args.proxy_pass is not defined or nginx_site_args.proxy_pass | string is not search('[ ";]')
+      - nginx_site_args.proxy_pass is not defined or nginx_site_args.proxy_pass | string is not search('[^ -~]')
+      - (nginx_site_args.csp_additional | default('') | string) is not search('"')
+      - (nginx_site_args.csp_default_src | default('') | string) is not search('"')
+      - (nginx_site_args.csp_frame_ancestors | default('') | string) is not search('"')
+      - not (_nginx_site_enable_http and _nginx_site_auth_enabled)
+      - not _nginx_site_auth_enabled or authelia_internal_url is defined
+      - not _nginx_site_auth_enabled or (authelia_internal_url | default('')) is string
+      - not _nginx_site_auth_enabled or authelia_internal_url | default('') | string is match('^https?://')
+      - not _nginx_site_auth_request_authorization or _nginx_site_auth_enabled
     fail_msg: >-
-      nginx_site_args.proxy_pass must be an http(s):// URL with no whitespace,
-      quotes or semicolons; got '{{ nginx_site_args.proxy_pass }}'.
-  tags:
-    - nginx_site
-
-- name: site | Assert CSP overrides are injection-safe
-  when:
-    - >-
-      nginx_site_args.csp_additional is defined
-      or nginx_site_args.csp_default_src is defined
-      or nginx_site_args.csp_frame_ancestors is defined
-  assert:
-    that:
-      - (nginx_site_args.csp_additional | default('')) is not search('"')
-      - (nginx_site_args.csp_default_src | default('')) is not search('"')
-      - (nginx_site_args.csp_frame_ancestors | default('')) is not search('"')
-    fail_msg: >-
-      nginx_site_args.csp_* values are rendered inside the add_header
-      Content-Security-Policy "..." string and must not contain a double quote.
-  tags:
-    - nginx_site
-
-- name: site | Assert enable_http is not combined with auth
-  when: _nginx_site_enable_http
-  assert:
-    that:
-      - not _nginx_site_auth_enabled
-    fail_msg: >-
-      enable_http serves :80 in cleartext; do not combine it with `auth: true`
-      (the forward-auth flow would travel unencrypted).
-  tags:
-    - nginx_site
-
-- name: site | Assert authelia_internal_url is set when auth is enabled
-  when: _nginx_site_auth_enabled
-  assert:
-    that:
-      - authelia_internal_url is defined
-      - (authelia_internal_url | default('')) is string
-      - (authelia_internal_url | default('')) is match('^https?://')
-    fail_msg: >-
-      auth: true needs authelia_internal_url set to the http(s):// URL of a
-      reachable Authelia /api/authz/auth-request endpoint (group_vars/all sets
-      lab's; pug/bunk need a per-host override). It is rendered straight into the
-      /internal/authelia proxy_pass, so an unset value would only fail later at
-      `nginx -t` with a generic message.
-  tags:
-    - nginx_site
-
-- name: site | Assert Authorization forwarding is paired with auth
-  when: _nginx_site_auth_request_authorization
-  assert:
-    that:
-      - _nginx_site_auth_enabled
-    fail_msg: >-
-      auth_request_authorization only affects Authelia auth subrequests and
-      therefore requires `auth: true`.
+      Invalid nginx_site_args contract: subdomain must be one safe DNS label;
+      proxy_pass, when set, must be an injection-safe http(s) URL; CSP overrides
+      must not contain double quotes; enable_http cannot be combined with auth;
+      auth needs an http(s) authelia_internal_url; and
+      auth_request_authorization requires auth.
   tags:
     - nginx_site
 

@@ -640,7 +640,7 @@
     - name: _verify | The failure was the enable_http/auth assert (not something else)
       assert:
         that:
-          - "'enable_http' in (ansible_failed_task.name | default(''))"
+          - "'enable_http' in (ansible_failed_result.msg | default(''))"
         fail_msg: >-
           Expected the enable_http/auth incompatibility assert to fail, but a
           different task failed: {{ ansible_failed_task.name | default('<unknown>') }}.
