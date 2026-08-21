@@ -45,45 +45,6 @@
   tags:
     - sabnzbd
 
-# Sabnzbd creates admin/ on first start, but the symlink below needs the
-# parent dir to exist already. Pre-create with matching ownership (the
-# sqlite_dataset helper leaves the dest's parent to the caller).
-- name: Create admin directory
-  when: not ansible_check_mode or sabnzbd_user.uid is defined
-  file:
-    dest: /mnt/services/sabnzbd/admin
-    state: directory
-    owner: sabnzbd
-    group: media
-    mode: "0755"
-  become: true
-  tags:
-    - sabnzbd
-
-# Sabnzbd writes history1.db inside /config/admin/ alongside cookies.dat,
-# server.cert, queue.sav, etc. The helper symlinks only the SQLite DB so
-# SQLite resolves through to the 4K sqlite dataset before computing WAL/SHM
-# placement.
-#
-# create_target: false skips target pre-creation and plants a dangling link:
-# sabnzbd creates history1.db *through* it on first start, writing the real DB
-# at the sqlite-dataset target. An empty target is unsafe because sabnzbd
-# treats a 0-byte history1.db as needing reinitialization and rewrites it via
-# temp+rename, replacing the symlink with a real file -- breaking both the 4K
-# placement and idempotence. (roles/kuma skips creation for the same reason.)
-- name: Place sabnzbd history DB on the sqlite dataset
-  import_role:
-    name: sqlite_dataset
-    tasks_from: dataset
-  vars:
-    sqlite_dataset_args:
-      user: "{{ sabnzbd_user }}"
-      create_target: false
-      databases:
-        - admin/history1.db
-  tags:
-    - sabnzbd
-
 # Per-category download targets: sabnzbd drops completed tv/movie/music
 # jobs here (the [[tv]]/[[movie]]/[[music]] category dirs in sabnzbd.ini)
 # and sonarr/radarr/lidarr import out of them, each mounting only its own

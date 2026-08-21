@@ -10,8 +10,6 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
-After=zfs_mount_mnt_services_sqlite.service
-Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 {% if zfs_has_scratch_mount %}
 After=zfs_mount_mnt_scratch.service
@@ -32,7 +30,7 @@ Delegate=yes
 TimeoutStartSec=180
 # Exceed the container's `--stop-timeout 120` so systemd doesn't SIGKILL the
 # cgroup at the moment podman's graceful-stop window closes -- that race would
-# truncate SABnzbd's flush of history1.db onto the 4K sqlite dataset.
+# truncate SABnzbd's history database flush.
 TimeoutStopSec=150
 RestartSec=5
 Type=notify
@@ -56,7 +54,6 @@ ExecStart=/usr/bin/podman run \
     --env UMASK=002 \
     --env TZ={{ system_timezone }} \
     --volume /mnt/services/sabnzbd:/config \
-    --volume /mnt/services/sqlite/sabnzbd:/mnt/services/sqlite/sabnzbd \
     --volume /mnt/media/Other:/media/Other \
     --volume /mnt/scratch/sabnzbd:/scratch/sabnzbd \
     --volume /mnt/scratch/sonarr:/scratch/sonarr \
