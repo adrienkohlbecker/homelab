@@ -1,10 +1,3 @@
-# nut_notify sources /usr/local/lib/functions.sh from the bash role, which
-# site.yml runs before nut_monitor. testrole.py runs only this role, so the
-# _verify path that executes nut_notify needs the library deployed here.
-- name: _setup | Install bash functions.sh
-  import_role:
-    name: bash
-
 # mailutils stands in for the postfix role (ordered before nut_monitor in
 # site.yml), which provides `mail` on prod -- the converge asserts its
 # presence. _verify's capturing shim still wins over it via PATH.

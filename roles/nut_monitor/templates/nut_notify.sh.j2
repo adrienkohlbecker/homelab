@@ -1,8 +1,8 @@
 #!/bin/bash
-# shellcheck source=../../bash/files/functions.sh
-source /usr/local/lib/functions.sh
-# No f_require_root (unlike zfs_health.sh): upssched exec's this as upsmon's
-# RUN_AS_USER (nut), not root, so a root assertion would abort every dispatch.
+set -euo pipefail
+
+# upssched runs this as nut with no login-shell environment.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 EVENT=${1:-}
 case $EVENT in
@@ -66,9 +66,8 @@ esac
 UPS='{{ nut_monitor_ups }}'
 
 # Several of these events (commbad, nocomm, noparent, fsd) fire precisely
-# when upsd/the UPS is unreachable, and functions.sh runs us under errexit
-# -- so query upsd once (one round-trip against a possibly-flaky link, not
-# three) and tolerate failure, or the notification mail never goes out. The
+# when upsd/the UPS is unreachable, so query it once and tolerate failure or
+# the notification mail never goes out. The
 # here-strings below avoid a SIGPIPE-under-pipefail abort from `| head`.
 UPSC=$(upsc "$UPS" 2>/dev/null || true)
 STAT=$(awk -F': ' '$1=="ups.status"{print $2; exit}' <<<"$UPSC")
