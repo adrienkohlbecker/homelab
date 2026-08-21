@@ -84,23 +84,10 @@
   tags:
     - podman
 
-- name: Check for operator prune units outside Lab
-  when: not podman_operator_prune_enabled
-  stat:
-    path: /etc/systemd/user/{{ item }}
-  loop:
-    - podman_prune.service
-    - podman_prune.timer
-  register: podman_operator_prune_units
-  become: true
-  tags:
-    - podman
-
 - name: Remove the operator prune timer outside Lab
   when:
     - not podman_operator_prune_enabled
     - podman_operator_linger.stat.exists
-    - podman_operator_prune_units.results | selectattr('stat.exists') | list | length > 0
   import_role:
     name: systemd_timer
     tasks_from: remove
