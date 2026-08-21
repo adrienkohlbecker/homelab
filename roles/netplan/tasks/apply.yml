@@ -18,7 +18,6 @@
     netplan_dbus_path: >-
       {{ netplan_dbus_config.stdout
          | regex_search('/io/netplan/Netplan/config/[A-Za-z0-9]+') }}
-  changed_when: false
 
 - name: Assert the netplan D-Bus transaction was created
   assert:
