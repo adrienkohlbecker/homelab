@@ -156,21 +156,6 @@ http {
         https   on;
     }
 
-    # Loopback-only status endpoint consumed by Netdata's nginx collector.
-    server {
-        listen 127.0.0.1:80;
-        server_name 127.0.0.1;
-        keepalive_timeout 0;
-        access_log off;
-
-        allow 127.0.0.1;
-        deny all;
-
-        location /nginx_status {
-            stub_status on;
-        }
-    }
-
     # Default servers for missing Host header, or header not matching configured site
     server {
         listen              80 default_server;
@@ -178,7 +163,18 @@ http {
         listen              [::]:80 default_server;
 {% endif %}
         server_name         _;
-        return              404;
+
+        # Status consumed by Netdata's local nginx collector.
+        location = /nginx_status {
+            access_log off;
+            allow 127.0.0.1;
+            deny all;
+            stub_status on;
+        }
+
+        location / {
+            return 404;
+        }
     }
     server {
         listen              443 default_server ssl{{ _http2_listen }};
