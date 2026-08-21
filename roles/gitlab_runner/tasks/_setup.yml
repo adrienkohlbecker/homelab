@@ -66,6 +66,15 @@
           name: gitlab_runner
           uid: "{{ gitlab_runner_user.uid }}"
 
+    - name: _setup | Install stale rootless podman prune timer
+      import_role:
+        name: podman
+        tasks_from: prune
+      vars:
+        podman_prune_args:
+          name: gitlab_runner_podman_prune
+          user: gitlab_runner
+
     - name: _setup | Enable and start rootless podman.socket
       systemd:
         name: podman.socket
