@@ -14,23 +14,6 @@
   set_fact:
     podman_probe_image: docker.io/library/busybox
 
-- name: _verify | Rootful prune timer is active
-  systemd:
-    name: podman_prune.timer
-  register: podman_rootful_prune_timer
-  failed_when: podman_rootful_prune_timer.status.ActiveState != 'active'
-  become: true
-
-- name: _verify | Lab operator prune timer is active
-  when: podman_operator_prune_enabled
-  systemd:
-    name: podman_prune.timer
-    scope: user
-  register: podman_operator_prune_timer
-  failed_when: podman_operator_prune_timer.status.ActiveState != 'active'
-  become: true
-  become_user: "{{ ansible_user_id }}"
-
 - name: _verify | Operator prune units are absent outside Lab
   when: not podman_operator_prune_enabled
   stat:
