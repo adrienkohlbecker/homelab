@@ -1,7 +1,5 @@
-# policy_rc_d 101 suppresses the postinst auto-start so chronyd first
-# comes up under the NTS config written below, never the stock
-# unauthenticated-pool config. cache_valid_time is safe here because the
-# native archive candidate is stable.
+# Suppress the postinst auto-start so chronyd first loads the managed NTS-only
+# configuration, never the stock unauthenticated pools.
 - name: Install chrony
   apt:
     pkg:
@@ -34,10 +32,8 @@
   tags:
     - ntp
 
-# chronyd is AppArmor-confined to /etc/chrony/ (see
-# /etc/apparmor.d/usr.sbin.chronyd), so its own parser can't read ansible's
-# temp file. The post-converge `chronyc tracking` check confirms the live file
-# parses and establishes authenticated time sync.
+# AppArmor blocks chronyd from parsing Ansible's temporary file, so _verify
+# exercises the installed configuration through chronyc instead.
 - name: Configure chrony for NTS-only time sync  # noqa: require-validate
   when: not (ansible_check_mode and ntp_chrony_apt.changed)
   template:
@@ -52,8 +48,6 @@
   tags:
     - ntp
 
-# Chrony ships its own unit, so the role owns only its lifecycle. Restart when
-# the NTS config changes; otherwise leave a healthy daemon undisturbed.
 - name: Enable and start chrony
   when: not (ansible_check_mode and ntp_chrony_apt.changed)
   systemd:

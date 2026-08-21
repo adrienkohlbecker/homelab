@@ -1,20 +1,13 @@
-# Post-converge functional checks for the ntp role. Invoked only by the
-# test harness (test/testrole.py / testall.py) against a qemu VM, never by
-# site.yml or --tags. Converge success only proves the chrony unit
-# *started*; these confirm chronyd is actually running under the NTS-only
-# config — authenticated sources, no unauthenticated pools, and
-# systemd-timesyncd displaced. Sync state is deliberately NOT asserted:
-# NTS-KE reachability from the qemu fixture isn't guaranteed, so a leap
-# status of "Not synchronised" here is not a failure.
+# QEMU-only functional checks. NTP reachability can leave tracking temporarily
+# unsynchronised, so verify the authenticated source quorum instead.
 
 - name: _verify | Chronyd answers chronyc (config parsed, daemon healthy)
   command: chronyc tracking
   changed_when: false
   become: true
 
-# chronyc -c authdata reports the auth mode chronyd negotiated per source
-# (NTS / SK / "-" for none). Require the configured two-source quorum and
-# reject any source that resolved without NTS authentication.
+# authdata exposes the negotiated mode, allowing the check to reject any source
+# that resolved without NTS authentication.
 - name: _verify | Read the per-source authentication mode (CSV)
   command: chronyc -c authdata
   changed_when: false
