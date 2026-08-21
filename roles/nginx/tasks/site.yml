@@ -46,11 +46,8 @@
 #                             `location /`) nor by the security headers (a
 #                             location declaring its own add_header drops the
 #                             inherited set), and inherits none of `location /`'s
-#                             proxy_set_headers -- re-add `auth_request
-#                             /internal/authelia`, `include /etc/nginx/snippets/proxy_params.conf;`
-#                             for the standard forwarded headers, and any needed
-#                             security headers yourself, or that path is public,
-#                             header-less and forwards Host/X-Forwarded-* wrong.
+#                             proxy headers. Re-add auth, forwarded headers, and
+#                             security headers explicitly where needed.
 #   location_conf             optional snippet inserted in the / location
 #                             block. Whenever it is set, the site's security
 #                             headers are re-emitted at this location level (see
