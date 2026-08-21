@@ -65,34 +65,31 @@
   register: packer_verify_refind_conf
   become: true
 
-- name: _verify | Decode refind.conf once for the asserts below
-  set_fact:
-    packer_verify_refind_conf_text: "{{ packer_verify_refind_conf.content | b64decode }}"
-
 - name: _verify | ZBM menuentries + default_selection + dont_scan_dirs in refind.conf
   vars:
+    _conf: "{{ packer_verify_refind_conf.content | b64decode }}"
     _expected_default_selection: "{{ 'Ubuntu (Linux EFI Stub)' if ansible_architecture == 'aarch64' else 'Ubuntu (ZBM)' }}"
     _expected_dont_scan_dirs: "{{ 'dont_scan_dirs EFI:/EFI/ZBM,EFI:/EFI/Linux' if ansible_architecture == 'aarch64' else 'dont_scan_dirs EFI:/EFI/ZBM' }}"
   assert:
     that:
       - >-
-        'default_selection "' ~ _expected_default_selection ~ '"' in packer_verify_refind_conf_text
+        'default_selection "' ~ _expected_default_selection ~ '"' in _conf
       - >-
-        'menuentry "Ubuntu (ZBM)"' in packer_verify_refind_conf_text
-      - >-
-        ansible_architecture != 'aarch64'
-        or 'menuentry "Ubuntu (Linux EFI Stub)"' in packer_verify_refind_conf_text
+        'menuentry "Ubuntu (ZBM)"' in _conf
       - >-
         ansible_architecture != 'aarch64'
-        or 'loader /EFI/Linux/vmlinuz.efi' in packer_verify_refind_conf_text
+        or 'menuentry "Ubuntu (Linux EFI Stub)"' in _conf
       - >-
         ansible_architecture != 'aarch64'
-        or 'initrd /EFI/Linux/initrd' in packer_verify_refind_conf_text
+        or 'loader /EFI/Linux/vmlinuz.efi' in _conf
       - >-
         ansible_architecture != 'aarch64'
-        or 'root=zfs:rpool/ROOT/' in packer_verify_refind_conf_text
-      - "'/EFI/ZBM' in packer_verify_refind_conf_text"
-      - _expected_dont_scan_dirs in packer_verify_refind_conf_text
+        or 'initrd /EFI/Linux/initrd' in _conf
+      - >-
+        ansible_architecture != 'aarch64'
+        or 'root=zfs:rpool/ROOT/' in _conf
+      - "'/EFI/ZBM' in _conf"
+      - _expected_dont_scan_dirs in _conf
     fail_msg: "refind.conf missing expected ZBM menuentries / default_selection / dont_scan_dirs"
 
 # --- NVRAM Boot entries (rEFInd) ---
