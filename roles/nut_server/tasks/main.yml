@@ -123,20 +123,6 @@
   tags:
     - nut_server
 
-- name: Disable nut upsset CGI
-  when: not (ansible_check_mode and nut_server_apt.changed)
-  lineinfile:
-    path: /etc/nut/upsset.conf
-    regexp: ^I_HAVE_SECURED_MY_CGI_DIRECTORY$
-    state: absent
-    backup: true
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-  tags:
-    - nut_server
-
 - name: Enable nut-driver service
   when: not (ansible_check_mode and nut_server_apt.changed)
   systemd:

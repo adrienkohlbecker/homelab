@@ -47,6 +47,26 @@
     mode: "0644"
   become: true
 
+- name: _setup | Create NUT configuration directory
+  file:
+    path: /etc/nut
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _setup | Install retired upsset CGI sentinel fixture
+  copy:
+    content: |
+      # Retired opt-in for the state-changing CGI.
+      I_HAVE_SECURED_MY_CGI_DIRECTORY
+    dest: /etc/nut/upsset.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: _setup | Register retired podman tmpfiles diversion
   community.general.dpkg_divert:
     path: /usr/lib/tmpfiles.d/podman.conf

@@ -13,6 +13,13 @@
   failed_when: retired_services_nut_driver_dropin.stat.exists
   become: true
 
+- name: _verify | Retired upsset CGI sentinel is absent
+  command: grep -Fx I_HAVE_SECURED_MY_CGI_DIRECTORY /etc/nut/upsset.conf
+  register: retired_services_upsset_sentinel
+  changed_when: false
+  failed_when: retired_services_upsset_sentinel.rc not in [1, 2]
+  become: true
+
 - name: _verify | Packaged podman tmpfiles entry is active
   command: grep -Fx 'D! /run/podman 0700 root root' /usr/lib/tmpfiles.d/podman.conf
   changed_when: false
