@@ -1,9 +1,9 @@
 # Inputs: caller passes a single dict `nginx_site_args` with keys
 #   subdomain                 required; serves at <subdomain>.<host>.<domain>
 #   proxy_pass                optional; URL to reverse-proxy to (location /)
-#   enable_http               optional bool, default false; if true, also listen on :80
-#                             and skip the http->https redirect server block.
-#                             Serves :80 in cleartext, so do NOT combine with
+#   enable_http               optional bool, default false; if true, serve the
+#                             same site on :80 instead of redirecting to HTTPS.
+#                             Cleartext auth is unsafe, so do NOT combine with
 #                             `auth`: the forward-auth flow would travel
 #                             unencrypted. Asserted below.
 #   csp_default_src           optional CSP directive override

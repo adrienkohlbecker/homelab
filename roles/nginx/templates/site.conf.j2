@@ -3,18 +3,21 @@
 {% set _http2_listen = ' http2' if ansible_distribution_release == 'noble' else '' %}
 server {
   listen              443 ssl{{ _http2_listen }};
-{% if nginx_ipv6 %}
-  listen              [::]:443 ssl{{ _http2_listen }};
-{% endif %}
-{% if _nginx_site_enable_http %}
-  # Cleartext upstreams only; auth is rejected because its flow would be exposed.
   listen              80;
 {% if nginx_ipv6 %}
+  listen              [::]:443 ssl{{ _http2_listen }};
   listen              [::]:80;
-{% endif %}
 {% endif %}
 
   server_name         {{ nginx_site_args.subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_site_args.subdomain }}.{{ domain}};
+{% if not _nginx_site_enable_http %}
+
+  # A return-only server rewrite safely redirects the cleartext listener before
+  # location processing while HTTPS requests continue through this block.
+  if ($scheme = http) {
+    return 308 https://$host$request_uri;
+  }
+{% endif %}
 
   # A location with its own add_header inherits none from the server, so reuse
   # this block inside location / when location_conf is present.
@@ -141,15 +144,3 @@ server {
   {{ nginx_site_args.server_conf | trim | indent(2) }}
 {% endif %}
 }
-{% if not _nginx_site_enable_http %}
-
-server {
-    listen      80;
-{% if nginx_ipv6 %}
-    listen      [::]:80;
-{% endif %}
-    server_name {{ nginx_site_args.subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_site_args.subdomain }}.{{ domain}};
-
-    return 308 https://$host$request_uri;
-}
-{% endif %}
