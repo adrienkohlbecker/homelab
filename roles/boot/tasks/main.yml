@@ -49,7 +49,23 @@
       - efibootmgr
       - initramfs-tools
       - mdadm
+    policy_rc_d: 101
     cache_valid_time: 3600
+  register: boot_apt
+  become: true
+  tags:
+    - boot
+
+- name: Enable mdadm monitoring timers
+  when: not (ansible_check_mode and boot_apt.changed)
+  systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - mdcheck_continue.timer
+    - mdcheck_start.timer
+    - mdmonitor-oneshot.timer
   become: true
   tags:
     - boot
