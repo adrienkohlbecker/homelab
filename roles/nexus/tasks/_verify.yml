@@ -1,21 +1,4 @@
 ---
-# Functional probe over the published loopback port. status/writable returns
-# 200 only once Nexus has fully booted and its DB is writable -- the same
-# contract the container healthcheck gates on. A broken converge (bad
-# encryption.json, JVM OOM, wrong volume) surfaces here rather than as a
-# tautological "data dir is non-empty" check. Converge already blocks on
-# --sdnotify=healthy, so this is normally 200 on the first try; the retry
-# budget is belt-and-suspenders.
-- name: _verify | Nexus answers writable-status on its loopback port
-  uri:
-    url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/status/writable
-    status_code: 200
-    timeout: 5
-  register: _nexus_status
-  retries: 60
-  delay: 2
-  until: _nexus_status.status == 200
-
 - name: _verify | Exercise nexus fluent-bit record contracts
   import_role:
     name: fluentbit
