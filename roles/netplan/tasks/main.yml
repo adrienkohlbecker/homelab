@@ -165,23 +165,16 @@
       become: true
       register: netplan_cleanup_cloudinit
 
-    - name: Validate the netplan schema before applying
-      # The template's `validate:` only checks YAML syntax; a misspelled key
-      # (dchp4, use_dns) parses fine but netplan silently drops it and `netplan
-      # apply` still exits 0, leaving the NIC misconfigured -- the 2026-05-10
-      # failure class. `netplan generate` compiles the merged YAML to the
-      # networkd backend and errors loudly on a bad schema without touching a
-      # live link.
-      command: netplan generate
-      become: true
-      changed_when: false
+    - name: Validate and apply changed netplan configuration
       when: (netplan_cfg.changed or netplan_cleanup_installer.changed or netplan_cleanup_cloudinit.changed) and not ansible_check_mode
+      become: true
+      block:
+        - name: Validate the netplan schema before applying
+          # The template's `validate:` only checks YAML syntax. `netplan
+          # generate` validates the merged schema without touching a live link.
+          command: netplan generate
+          changed_when: false
 
-    # Apply tasks extracted to apply.yml so _verify can invoke the same
-    # path with a deliberately-broken /etc/netplan and exercise the
-    # rollback timer end-to-end.
-    # Gated on `not ansible_check_mode` because all of this is destructive.
-    - name: Apply netplan safely
-      import_tasks: apply.yml
-      when: (netplan_cfg.changed or netplan_cleanup_installer.changed or netplan_cleanup_cloudinit.changed) and not ansible_check_mode
-      become: true
+        # Kept separate so _verify can exercise the rollback path directly.
+        - name: Apply netplan safely
+          import_tasks: apply.yml
