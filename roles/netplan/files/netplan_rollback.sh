@@ -7,10 +7,6 @@
 # (snapshot taken pre-template) over /etc/netplan and re-apply.
 set -euo pipefail
 
-# Absolute path: a oneshot inherits only systemd's default PATH, and this
-# is the one script that must not fail to find netplan on the SSH-dead path.
-netplan=/usr/sbin/netplan
-
 # Refuse to touch /etc/netplan unless we have a non-empty snapshot to
 # restore. A missing OR empty snapshot (tmpfs wiped, snapshot died mid-
 # converge, a --start-at-task resume that skipped it, or /etc/netplan was
@@ -33,7 +29,8 @@ rm -rf /etc/netplan.restoring /etc/netplan.rollback_failed
 cp -a /run/netplan_prev /etc/netplan.restoring
 mv /etc/netplan /etc/netplan.rollback_failed
 mv /etc/netplan.restoring /etc/netplan
-if "$netplan" apply; then
+# Use an absolute path on the SSH-dead path rather than systemd's default PATH.
+if /usr/sbin/netplan apply; then
   logger -t netplan_rollback "rollback apply succeeded"
 else
   logger -p user.err -t netplan_rollback "rollback apply FAILED — console recovery needed"
