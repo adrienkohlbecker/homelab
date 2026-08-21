@@ -1,0 +1,38 @@
+# you can disable an alarm notification by setting the 'to' line to: silent
+#
+# Systemd units routinely enter a brief failed or transitional state that is
+# not actionable: the nightly zfs_autosnapshot quiesce stops a set of services
+# for about 80s, and transient units can disappear while their charts settle.
+# Express the grace period in alert state instead of notification scheduling.
+# A new failure must fill the 5m window before warning; once warned, any failed
+# sample or transitional state keeps the alert latched until recovery is real.
+{% set unit_types = [
+  ('service', 'service unit'),
+  ('socket', 'socket unit'),
+  ('target', 'target unit'),
+  ('path', 'path unit'),
+  ('device', 'device unit'),
+  ('mount', 'mount units'),
+  ('automount', 'automount unit'),
+  ('swap', 'swap units'),
+  ('scope', 'scope units'),
+  ('slice', 'slice units'),
+  ('timer', 'timer unit'),
+] %}
+{% for unit_type, description in unit_types %}
+## {{ unit_type | capitalize }} units
+    template: systemd_{{ unit_type }}_unit_failed_state
+          on: systemd.{{ unit_type }}_unit_state
+       class: Errors
+        type: Linux
+   component: Systemd units
+# chart labels: unit_name=!*
+      lookup: average -5m unaligned of failed
+       units: state
+       every: 10s
+        warn: $this == 1 || ($status >= $WARNING && ($this > 0 || $activating == 1 || $deactivating == 1))
+     summary: systemd unit ${label:unit_name} state
+        info: systemd {{ description }} in the failed state
+          to: sysadmin
+
+{% endfor %}

@@ -6,7 +6,7 @@
   import_tasks: health.yml
   vars:
     netdata_args:
-      src: systemdunits_alerts.conf
+      src: systemdunits_alerts.conf.j2
       dest: systemdunits.conf
   tags:
     - netdata
