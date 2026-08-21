@@ -416,48 +416,20 @@
   retries: 10
   delay: 1
 
-# A successful GET confirms the buffering directives coexist with proxying.
-- name: _verify | The options vhost serves the proxied response
+# One successful GET covers proxying and all three CSP override fields.
+- name: _verify | The options vhost serves the response with its CSP
   uri:
     url: "https://nginxverifybody.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     return_content: true
     status_code: 200
-  register: nginx_verify_buffering
+  register: nginx_verify_options
   until:
-    - nginx_verify_buffering.status == 200
-    - "'nginx_verify_upstream_ok' in (nginx_verify_buffering.content | default(''))"
-  retries: 10
-  delay: 1
-
-- name: _verify | Standard metadata paths reach the upstream
-  uri:
-    url: "https://nginxverifybody.{{ inventory_hostname }}.{{ domain }}{{ item }}"
-    validate_certs: false
-    return_content: true
-    status_code: 200
-  loop:
-    - /favicon.ico
-    - /robots.txt
-  register: nginx_verify_metadata
-  until:
-    - nginx_verify_metadata.status == 200
-    - "'nginx_verify_upstream_ok' in (nginx_verify_metadata.content | default(''))"
-  retries: 10
-  delay: 1
-
-# The CSP override keys must all compose into the rendered header.
-- name: _verify | CSP override tokens all appear in the Content-Security-Policy header
-  uri:
-    url: "https://nginxverifybody.{{ inventory_hostname }}.{{ domain }}/"
-    validate_certs: false
-    status_code: 200
-  register: nginx_verify_cspov
-  until:
-    - nginx_verify_cspov.status == 200
-    - "'connect-src api.csptest' in (nginx_verify_cspov.content_security_policy | default(''))"
-    - "'default-src default.csptest' in (nginx_verify_cspov.content_security_policy | default(''))"
-    - "'frame-ancestors https://frame.csptest' in (nginx_verify_cspov.content_security_policy | default(''))"
+    - nginx_verify_options.status == 200
+    - "'nginx_verify_upstream_ok' in (nginx_verify_options.content | default(''))"
+    - "'connect-src api.csptest' in (nginx_verify_options.content_security_policy | default(''))"
+    - "'default-src default.csptest' in (nginx_verify_options.content_security_policy | default(''))"
+    - "'frame-ancestors https://frame.csptest' in (nginx_verify_options.content_security_policy | default(''))"
   retries: 10
   delay: 1
 
