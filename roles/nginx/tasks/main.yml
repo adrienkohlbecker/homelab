@@ -1,7 +1,5 @@
 - name: Install nginx package
-  import_role:
-    name: nginx
-    tasks_from: install
+  import_tasks: install.yml
   tags:
     - nginx
 
