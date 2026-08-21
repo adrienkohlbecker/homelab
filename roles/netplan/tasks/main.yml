@@ -21,24 +21,6 @@
         cache_valid_time: 3600
       become: true
 
-    # The minimal cloud image omits this unit, and systemd errors on a missing
-    # service even in check mode.
-    - name: Probe for networkd-dispatcher.service
-      stat:
-        path: /usr/lib/systemd/system/networkd-dispatcher.service
-      register: netplan_networkd_dispatcher
-      become: true
-
-    - name: Mask networkd-dispatcher (unused, only emits podman-veth-churn noise)
-      # No role installs dispatcher hooks; the daemon only races podman's
-      # ephemeral interfaces and emits veth-churn errors.
-      when: netplan_networkd_dispatcher.stat.exists
-      systemd:
-        name: networkd-dispatcher.service
-        state: stopped
-        masked: true
-      become: true
-
     - name: Install rollback script
       copy:
         src: netplan_rollback.sh
