@@ -185,28 +185,17 @@
 #   defaults inherited by everything under rpool; subtle perf/feature
 #   regressions if missing. Booting masks them all.
 
-- name: _verify | Read source of org.zfsbootmenu:commandline on rpool/ROOT
+# Source must be `local` (set by chroot.sh's `zfs set`), not `-` (never set)
+# or `inherited` (nothing in this stack sets it on a parent). The value varies
+# by image target, so source is the stable signal that chroot wrote it.
+- name: _verify | Org.zfsbootmenu:commandline is set locally on rpool/ROOT
   command: zfs get -H -o source org.zfsbootmenu:commandline rpool/ROOT
   changed_when: false
   become: true
   register: packer_verify_zbm_cmdline_source
-
-- name: _verify | Org.zfsbootmenu:commandline is set locally on rpool/ROOT
-  assert:
-    # Source must be `local` (set by chroot.sh's `zfs set`), not `-`
-    # (never set) or `inherited` (would mean a parent set it, which
-    # nothing in our stack does). The value itself is the empty string
-    # by design, so checking source rather than value is the right
-    # signal -- value="" is indistinguishable from value-not-set when
-    # looking at the value alone.
-    that: packer_verify_zbm_cmdline_source.stdout | trim == 'local'
-    fail_msg: >-
-      org.zfsbootmenu:commandline on rpool/ROOT has source
-      `{{ packer_verify_zbm_cmdline_source.stdout | trim }}` (want
-      `local`) -- chroot.sh's `zfs set org.zfsbootmenu:commandline=`
-      didn't run. ZBM will fall through to a parent dataset's value
-      (or defaults), which can silently change the kernel cmdline at
-      boot.
+  failed_when: >-
+    packer_verify_zbm_cmdline_source.rc != 0
+    or packer_verify_zbm_cmdline_source.stdout | trim != 'local'
 
 # Each property is checked with its own `zpool get`/`zfs get`
 # invocation so the failing iteration names the exact property +
@@ -260,19 +249,11 @@
 # (fstab entry + device resolution + mkswap signature + systemd
 # activation); a broken fstab entry would leave swap inactive at runtime
 # and the kernel would silently OOM under memory pressure instead of paging.
-- name: _verify | Read active swap devices
+- name: _verify | At least one swap device is active
   command: swapon --show=NAME --noheadings
   changed_when: false
   register: packer_verify_swapon
-
-- name: _verify | At least one swap device is active
-  assert:
-    that: packer_verify_swapon.stdout_lines | length > 0
-    fail_msg: >-
-      `swapon --show` reports no active swap -- chroot.sh's fstab swap
-      entry didn't activate at boot (broken device path, missing
-      mkswap signature, or fstab entry dropped). Kernel will OOM under
-      memory pressure with no paging fallback.
+  failed_when: packer_verify_swapon.rc != 0 or packer_verify_swapon.stdout_lines | length == 0
 
 # --- chroot.sh post-debootstrap shape (universal) ---
 
@@ -364,22 +345,13 @@
 - name: _verify | Dpkg install status for grub*
   command: dpkg-query -W -f='${binary:Package} ${db:Status-Status}\n' 'grub*'
   changed_when: false
-  failed_when: false  # exits 1 when the pattern matches nothing
   register: packer_verify_grub_status
-
-- name: _verify | No grub* package is installed
-  assert:
-    that: >-
-      packer_verify_grub_status.stdout_lines
-      | select('search', '\\sinstalled$')
-      | list | length == 0
-    fail_msg: >-
-      A grub-prefixed package is in installed state --
-      chroot.sh's `apt-mark hold 'grub*'` either didn't take effect
-      or a future Recommends pulled in a variant the glob didn't
-      cover. Installed grub will fight rEFInd at boot.
-      Offending: {{ packer_verify_grub_status.stdout_lines
-                    | select('search', '\\sinstalled$') | list }}
+  # dpkg-query exits 1 when the pattern matches nothing; only an installed
+  # grub package is a failure for this invariant.
+  failed_when: >-
+    packer_verify_grub_status.stdout_lines
+    | select('search', '\\sinstalled$')
+    | list | length > 0
 
 # The check above is a snapshot ("nothing grub is installed right
 # now"). The hold is a *mechanism* meant to block future installs;
@@ -391,22 +363,11 @@
 - name: _verify | Apt refuses to install grub-pc (dry-run)  # noqa: command-instead-of-module
   command: apt-get install --simulate --yes --no-install-recommends grub-pc
   changed_when: false
-  failed_when: false
   become: true
   environment:
     DEBIAN_FRONTEND: noninteractive
   register: packer_verify_apt_grub_dryrun
-
-- name: _verify | Apt blocked the dry-run install (rc != 0)
-  assert:
-    that: packer_verify_apt_grub_dryrun.rc != 0
-    fail_msg: >-
-      `apt-get install --simulate -y grub-pc` succeeded (rc=0) --
-      the hold safety net isn't blocking future grub installs.
-      Held packages under -y should error with "Held packages were
-      changed and -y was used without --allow-change-held-packages".
-      stdout: {{ packer_verify_apt_grub_dryrun.stdout }}
-      stderr: {{ packer_verify_apt_grub_dryrun.stderr }}
+  failed_when: packer_verify_apt_grub_dryrun.rc == 0
 
 # --- sshd password-auth lockdown ---
 #
@@ -418,24 +379,16 @@
 # Reading the snippet alone would pass even if /etc/ssh/sshd_config
 # were edited to drop the Include line.
 
-- name: _verify | Read effective sshd config
+- name: _verify | Sshd effective config disables password authentication
   command: sshd -T
   changed_when: false
   become: true
   register: packer_verify_sshd_effective
-
-- name: _verify | Sshd effective config disables password authentication
-  assert:
-    that: >-
-      packer_verify_sshd_effective.stdout_lines
-      | select('match', '^passwordauthentication\s+no$')
-      | list | length > 0
-    fail_msg: >-
-      `sshd -T` does not report `passwordauthentication no` --
-      chroot.sh's sshd_config.d/00-hardening.conf drop-in didn't
-      land, or /etc/ssh/sshd_config no longer Includes sshd_config.d.
-      The shipped image would accept passwords on any account that
-      has one.
+  failed_when: >-
+    packer_verify_sshd_effective.rc != 0
+    or packer_verify_sshd_effective.stdout_lines
+       | select('match', '^passwordauthentication\s+no$')
+       | list | length == 0
 
 # --- vagrant user can NOPASSWD sudo (universal) ---
 #
@@ -455,23 +408,8 @@
 - name: _verify | Vagrant escalates to root via NOPASSWD sudo
   command: sudo -n whoami
   changed_when: false
-  failed_when: false
   register: packer_verify_vagrant_sudo
-
-- name: _verify | NOPASSWD sudo for vagrant returns root
-  assert:
-    that:
-      - packer_verify_vagrant_sudo.rc == 0
-      - packer_verify_vagrant_sudo.stdout | trim == 'root'
-    fail_msg: >-
-      `sudo -n whoami` as vagrant did not return "root"
-      (rc={{ packer_verify_vagrant_sudo.rc }},
-      stdout={{ packer_verify_vagrant_sudo.stdout | trim | default('<empty>', true) }},
-      stderr={{ packer_verify_vagrant_sudo.stderr | trim | default('<empty>', true) }}).
-      chroot.sh's vagrant-user setup regressed: vagrant not in sudo
-      group, /etc/sudoers.d/vagrant missing or wrong mode (visudo
-      ignores non-0440/0400 files silently), or NOPASSWD directive
-      malformed.
+  failed_when: packer_verify_vagrant_sudo.rc != 0 or packer_verify_vagrant_sudo.stdout | trim != 'root'
 
 # --- aarch64: rEFInd EFI-stub menuentry + kernel-install hook ---
 
@@ -700,15 +638,8 @@
         name: reboot
         tasks_from: reboot
 
-    - name: _verify | Capture uname -r after reboot
+    - name: _verify | Boot chain landed on the swapped kernel
       command: uname -r
       changed_when: false
       register: packer_verify_uname_after
-
-    - name: _verify | Boot chain landed on the swapped kernel
-      assert:
-        that: packer_verify_uname_after.stdout != ansible_kernel
-        fail_msg: >-
-          uname -r is still {{ ansible_kernel }}
-          after reboot — boot chain kept selecting the previous kernel
-          even though we installed a different one
+      failed_when: packer_verify_uname_after.rc != 0 or packer_verify_uname_after.stdout == ansible_kernel
