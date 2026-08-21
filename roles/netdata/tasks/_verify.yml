@@ -221,35 +221,6 @@
       Expected keepalived_lost_master to require five minutes without the VIP
       and no notification-only delay. Got: {{ _alarm }}
 
-# Shorten update_every so the test doesn't have to wait a full minute
-# for the first emission. The collector defaults to 60s; 5s lets the
-# `retries: 30, delay: 2` loops below converge in seconds, not minutes.
-- name: _verify | Speed up netdata_presence update_every
-  copy:
-    content: |
-      netdata_presence_update_every=5
-      netdata_presence_startup_grace=0
-      netdata_presence_contexts=(
-        "system_cpu=system.cpu"
-        "ghost=foo.does_not_exist"
-      )
-      netdata_presence_collectors=(
-        "go.d:collector:systemdunits:service-units"
-        "go.d:collector:fake_plugin:fake_job"
-      )
-    dest: /etc/netdata/charts.d/netdata_presence.conf
-    owner: netdata
-    group: netdata
-    mode: "0644"
-    backup: true
-  become: true
-
-- name: _verify | Restart netdata so charts.d rereads netdata_presence.conf
-  systemd:
-    name: netdata
-    state: restarted
-  become: true
-
 # Gate on the charts appearing before the singular /api/v1/chart probes
 # below -- that endpoint 404s for unknown charts, which would fail those
 # tasks outright instead of letting `until:` retry.
@@ -669,24 +640,6 @@
       Expected plugin_data_collection_status to require a sustained 5m failure
       without queued notification delays. Got:
       {{ _alarm }}
-
-# Restore the production conf (update_every back to 60s) so the role
-# leaves no surprise idempotency drift behind.
-- name: _verify | Restore netdata_presence.conf from template
-  template:
-    src: charts_d_netdata_presence.conf.j2
-    dest: /etc/netdata/charts.d/netdata_presence.conf
-    owner: netdata
-    group: netdata
-    mode: "0644"
-    backup: true
-  become: true
-
-- name: _verify | Restart netdata to drop fast-poll override
-  systemd:
-    name: netdata
-    state: restarted
-  become: true
 
 # Map the netdata vhost FQDN to loopback for SNI-correct probing: noble/resolute
 # OpenSSL 3.x rejects SNI=localhost with TLSV1_UNRECOGNIZED_NAME.
