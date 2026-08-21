@@ -92,7 +92,6 @@
     mode: "0600"
     backup: true
     validate: python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "%s"
-  register: nexus_encryption_json
   become: true
   tags:
     - nexus
