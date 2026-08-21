@@ -17,43 +17,22 @@
   changed_when: false
   become: true
 
-- name: _verify | Read the running chrony.conf
-  slurp:
-    src: /etc/chrony/chrony.conf
-  register: ntp_verify_conf
-  become: true
-
-- name: _verify | NTS-only chrony.conf — all 3 servers, no plain pools
-  vars:
-    ntp_verify_conf_text: "{{ ntp_verify_conf['content'] | b64decode }}"
-  assert:
-    that:
-      - "'server time.cloudflare.com iburst nts' in ntp_verify_conf_text"
-      - "'server ptbtime1.ptb.de iburst nts' in ntp_verify_conf_text"
-      - "'server nts.netnod.se iburst nts' in ntp_verify_conf_text"
-      - ntp_verify_conf_text is not search('(?m)^pool ')
-    fail_msg: chrony.conf is not the expected NTS-only config
-    success_msg: chrony.conf pins 3 NTS servers and no unauthenticated pools
-
 # chronyc -c authdata reports the auth mode chronyd negotiated per source
-# (NTS / SK / "-" for none). This proves the running daemon authenticates:
-# a source that resolved but fell back to plaintext, or a stray plaintext
-# source, shows Mode "-" and fails here -- which the config-text grep
-# above can't catch. Sync state is still NOT asserted (NTS-KE reachability
-# from qemu isn't guaranteed); an empty list (nothing resolved yet) passes
-# vacuously, and that's fine -- the file-content assert above is the floor.
+# (NTS / SK / "-" for none). Require the configured two-source quorum and
+# reject any source that resolved without NTS authentication.
 - name: _verify | Read the per-source authentication mode (CSV)
   command: chronyc -c authdata
   changed_when: false
   become: true
   register: ntp_verify_authdata
 
-- name: _verify | Every loaded source authenticates via NTS (no plaintext fallback)
+- name: _verify | At least two loaded sources authenticate via NTS
   assert:
     that:
+      - ntp_verify_authdata.stdout_lines | length >= 2
       - ntp_verify_authdata.stdout_lines | select('match', '^[^,]+,(?!NTS,)') | list | length == 0
     fail_msg: >-
-      a chrony source is not authenticated via NTS (authdata rows:
+      chrony lacks two authenticated NTS sources (authdata rows:
       {{ ntp_verify_authdata.stdout_lines }})
     success_msg: >-
       all {{ ntp_verify_authdata.stdout_lines | length }} loaded source(s) use NTS
