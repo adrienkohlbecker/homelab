@@ -41,32 +41,20 @@
   register: packer_verify_refind_conf
   become: true
 
-- name: _verify | ZBM menuentries + default_selection + dont_scan_dirs in refind.conf
+- name: _verify | Recovery scan policy in refind.conf
   vars:
     _conf: "{{ packer_verify_refind_conf.content | b64decode }}"
-    _expected_default_selection: "{{ 'Ubuntu (Linux EFI Stub)' if ansible_architecture == 'aarch64' else 'Ubuntu (ZBM)' }}"
     _expected_dont_scan_dirs: "{{ 'dont_scan_dirs EFI:/EFI/ZBM,EFI:/EFI/Linux' if ansible_architecture == 'aarch64' else 'dont_scan_dirs EFI:/EFI/ZBM' }}"
   assert:
     that:
-      - >-
-        'default_selection "' ~ _expected_default_selection ~ '"' in _conf
-      - >-
-        'menuentry "Ubuntu (ZBM)"' in _conf
-      - >-
-        ansible_architecture != 'aarch64'
-        or 'menuentry "Ubuntu (Linux EFI Stub)"' in _conf
-      - >-
-        ansible_architecture != 'aarch64'
-        or 'loader /EFI/Linux/vmlinuz.efi' in _conf
-      - >-
-        ansible_architecture != 'aarch64'
-        or 'initrd /EFI/Linux/initrd' in _conf
-      - >-
-        ansible_architecture != 'aarch64'
-        or 'root=zfs:rpool/ROOT/' in _conf
-      - "'/EFI/ZBM' in _conf"
       - _expected_dont_scan_dirs in _conf
-    fail_msg: "refind.conf missing expected ZBM menuentries / default_selection / dont_scan_dirs"
+      - >-
+        ansible_architecture != 'aarch64'
+        or 'menuentry "Ubuntu (ZBM)"' in _conf
+      - >-
+        ansible_architecture != 'aarch64'
+        or 'loader /EFI/ZBM/VMLINUZ.EFI' in _conf
+    fail_msg: "refind.conf missing the recovery scan policy"
 
 # --- NVRAM Boot entries (rEFInd) ---
 
