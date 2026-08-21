@@ -16,8 +16,6 @@
   loop:
     - netplan_rollback.timer
     - netplan_rollback.service
-  loop_control:
-    label: "{{ item }}"
 
 - name: _verify | On-disk config still validates
   # Validate unchanged configurations too without restarting networkd.
@@ -102,8 +100,6 @@
   loop:
     - netplan_rollback.timer
     - netplan_rollback.service
-  loop_control:
-    label: "{{ item }}"
 
 # With the keep marker present, the systemd condition must skip the rollback.
 - name: _verify cancel | Place the cancel-marker
