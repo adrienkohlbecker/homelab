@@ -56,34 +56,6 @@
   changed_when: false
   become: true
 
-# SQLite wiring: the symlinks at /config/data/<name>.db MUST resolve
-# through to the dedicated /mnt/services/sqlite/ dataset (the role's
-# whole reason to exist). Without this assert a regression in the
-# symlink task or the self-pathed bind-mount lands DB writes back on
-# the services dataset silently.
-- name: _verify | Stat jellyfin SQLite symlinks
-  stat:
-    path: "/mnt/services/jellyfin/data/{{ item }}"
-    follow: false
-  register: _jellyfin_symlinks
-  become: true
-  loop:
-    - jellyfin.db
-    - introskipper/introskipper.db
-
-- name: _verify | Assert symlink targets land on sqlite dataset
-  assert:
-    that:
-      - item.stat.islnk
-      - item.stat.lnk_target == '/mnt/services/sqlite/jellyfin/' ~ (item.item | basename)
-    fail_msg: >-
-      /mnt/services/jellyfin/data/{{ item.item }} should be a symlink
-      pointing into /mnt/services/sqlite/jellyfin/, but is
-      {{ 'a regular file' if not item.stat.islnk else 'pointing at ' ~ item.stat.lnk_target }}.
-  loop: "{{ _jellyfin_symlinks.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
 # HW transcoding wiring smoke. On box the device is a phantom set up by
 # media/tasks/fake_render_device.yml (open() returns ENXIO), so anything
 # that actually probes VAAPI would fall back to software. The checks

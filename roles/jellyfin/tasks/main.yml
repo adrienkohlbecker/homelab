@@ -285,32 +285,6 @@
   tags:
     - jellyfin
 
-# The unit's self-pathed --volume /mnt/services/sqlite/jellyfin:/mnt/services/sqlite/jellyfin
-# resolves the symlink targets identically inside the container — do not
-# change the container-side path without updating the service identity that
-# forms the host symlink-target stem.
-- name: Place Jellyfin SQLite DBs on the sqlite dataset
-  import_role:
-    name: sqlite_dataset
-    tasks_from: dataset
-  vars:
-    sqlite_dataset_args:
-      user: "{{ jellyfin_user }}"
-      # Jellyfin creates these DBs on first boot, so the helper plants empty
-      # files before creating the symlinks.
-      #
-      # Only jellyfin.db (the EF Core store) and the Intro Skipper DB are
-      # managed. The legacy library.db is deliberately absent: 10.11
-      # migrates it into jellyfin.db and renames the old file to
-      # library.db.old, and a fresh 10.11 install never creates library.db
-      # at all -- re-asserting that symlink would only resurrect a link to
-      # the stale pre-migration DB.
-      databases:
-        - data/jellyfin.db
-        - data/introskipper/introskipper.db
-  tags:
-    - jellyfin
-
 - name: Check whether podman is installed
   stat:
     path: /usr/bin/podman
