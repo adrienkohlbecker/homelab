@@ -1,5 +1,5 @@
 # The qemu fixture has no usable relay credentials, so verify the local wiring:
-# parsing, effective parameters, maps, aliases, mailutils, and sender
+# parsing, effective parameters, maps, aliases, listener state, and sender
 # qualification through a locally injected message.
 - name: _verify | Postfix configuration parses with no warnings
   command: postfix check
@@ -17,7 +17,7 @@
   set_fact:
     _postfix_expected:
       relayhost: "[{{ smtp_host }}]:{{ smtp_port }}"
-      inet_interfaces: loopback-only
+      master_service_disable: inet
       myorigin: "{{ domain }}"
       smtp_sasl_password_maps: texthash:/etc/postfix/sasl_passwd
       smtp_tls_security_level: "{{ 'secure' if (smtp_use_ssl | bool or smtp_use_tls | bool) else 'none' }}"
@@ -98,6 +98,13 @@
       Subject: postfix _verify sender-qualification probe
 
       probe
+  changed_when: false
+  become: true
+
+- name: _verify | No SMTP listener is exposed
+  command: ss -H -ltn sport = :25
+  register: _postfix_smtp_listener
+  failed_when: _postfix_smtp_listener.stdout | trim | length > 0
   changed_when: false
   become: true
 
