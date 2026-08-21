@@ -52,25 +52,9 @@ http {
     # the legacy application/javascript or proxied JS ships uncompressed.
     gzip_types             text/plain text/css text/xml text/javascript application/json application/javascript application/wasm application/rss+xml application/atom+xml application/manifest+json image/svg+xml;
 
-    # Logging. $request includes the full request line ("GET /path?q=1
-    # HTTP/1.1"), which would leak a credential a site takes as a URL param.
-    # Redact such params from the request line before logging so they don't
-    # land on disk. `apikey` covers SABnzbd's admin key (it takes the key only
-    # as a query param). If another site picks a query-param secret, extend
-    # this map.
-    #
-    # The token class is [^& ] (space included): this matches against $request
-    # -- the full request line, which ends in " HTTP/1.1" -- so the trailing
-    # space must terminate the token too.
-    map $request $request_safe {
-        "~*^(.*?[?&])apikey=[^& ]*(.*)$"  "$1apikey=REDACTED$2";
-        default                            $request;
-    }
-
-    # The same credential must not reach forward-auth in X-Original-URL or
-    # X-Forwarded-Uri: Authelia includes those URLs in its authorization logs.
-    # Preserve the path and other query parameters so the auth decision sees
-    # the same resource shape, replacing only the secret value.
+    # Redact URL credentials once for both the access log and forward-auth
+    # headers. `apikey` covers SABnzbd's query-param-only admin key; preserve
+    # the resource shape and replace only its value.
     map $request_uri $request_uri_safe {
         "~*^(.*?[?&])apikey=[^&]*(.*)$"  "$1apikey=REDACTED$2";
         default                           $request_uri;
@@ -108,7 +92,7 @@ http {
     # lnav's field map and embedded sample. Deploy field changes with a full
     # converge or `--tags nginx,fluentbit`; transient parser misses are retained
     # by Reserve_Data/Preserve_Key and surfaced as parse_error until it reloads.
-    log_format custom      '$remote_addr - $remote_user [$time_local] $host "$request_safe" $server_name $status $body_bytes_sent $request_length $request_time $upstream_response_time "$http_referer" "$http_user_agent" "$authelia_user" $ssl_protocol $ssl_cipher';
+    log_format custom      '$remote_addr - $remote_user [$time_local] $host "$request_method $request_uri_safe $server_protocol" $server_name $status $body_bytes_sent $request_length $request_time $upstream_response_time "$http_referer" "$http_user_agent" "$authelia_user" $ssl_protocol $ssl_cipher';
     access_log             /var/log/nginx/access.log custom buffer=512k flush=5s;
     error_log              stderr warn;
 

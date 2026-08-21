@@ -196,12 +196,9 @@
   retries: 10
   delay: 1
 
-# Access-log credential redaction: nginx logs $request_safe, which rewrites a
-# credential query param (apikey, SABnzbd's admin key) to REDACTED before the
-# request line lands on disk. The request is logged regardless of status, so the
-# gate-mode 302 is enough to exercise it. access_log buffers with flush=5s, so
-# poll (bounded, fail-fast) until the redacted line lands rather than racing the
-# flush on a slow VM.
+# Access-log credential redaction rebuilds the request line from the method,
+# redacted URI, and protocol. The request is logged regardless of status, so
+# the gate-mode 302 exercises it. Poll until the buffered line reaches disk.
 - name: _verify | Fire a request carrying an apikey query param
   uri:
     url: "https://{{ nginx_verify_host }}/?apikey=__nginx_verify_secret__"
