@@ -26,7 +26,6 @@ compatibility_level = 3.6
 
 # TLS parameters
 smtp_tls_CApath=/etc/ssl/certs
-smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
 
 myhostname = {{ inventory_hostname }}
 # Qualify bare local senders (cron/smartd/fail2ban `root`) with the host name;
