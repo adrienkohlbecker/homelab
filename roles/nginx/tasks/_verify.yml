@@ -76,14 +76,9 @@
     line: >-
       127.0.0.1
       {{ nginx_verify_host }}
-      nginxverifyempty.{{ inventory_hostname }}.{{ domain }}
-      nginxverifyauth.{{ inventory_hostname }}.{{ domain }}
       nginxverifybasic.{{ inventory_hostname }}.{{ domain }}
       nginxverifyloc.{{ inventory_hostname }}.{{ domain }}
-      nginxverifyserverconf.{{ inventory_hostname }}.{{ domain }}
       nginxverifybody.{{ inventory_hostname }}.{{ domain }}
-      nginxverifybuffering.{{ inventory_hostname }}.{{ domain }}
-      nginxverifycsp.{{ inventory_hostname }}.{{ domain }}
       nginxverifyplain.{{ inventory_hostname }}.{{ domain }}
   become: true
 
@@ -178,7 +173,7 @@
   register: nginx_verify_unauth
   until:
     - nginx_verify_unauth.status == 302
-    - nginx_verify_unauth is authelia_redirects_to('nginxverifyauth', inventory_hostname, domain, require_rd=false)
+    - nginx_verify_unauth is authelia_redirects_to('nginxverify', inventory_hostname, domain, require_rd=false)
   retries: 10
   delay: 1
 
@@ -238,28 +233,19 @@
       Raw apikey leaked into /var/log/nginx/access.log; expected only
       apikey=REDACTED.
 
-# An auth-enabled vhost must gate EVERY cookieless
-# request to Authelia, including one carrying its own Authorization header --
-# there is no Authorization-bypass shortcut. Stub is still in gate mode (401), so
-# the request must redirect to the portal (302), not short-circuit to the upstream.
-- name: _verify | Configure a plain auth-required vhost
-  import_tasks: site.yml
-  vars:
-    nginx_site_args:
-      subdomain: nginxverifyempty
-      proxy_pass: http://127.0.0.1:18080/
-      auth: true
-
+# An auth-enabled vhost must gate every cookieless request to Authelia,
+# including one carrying its own Authorization header. Stub is still in gate
+# mode (401), so the request must redirect instead of reaching the upstream.
 - name: _verify | A cookieless Authorization-bearing request is still gated (no bypass)
   uri:
-    url: "https://nginxverifyempty.{{ inventory_hostname }}.{{ domain }}/"
+    url: "https://{{ nginx_verify_host }}/"
     headers:
       Authorization: Token should-not-bypass
     validate_certs: false
     follow_redirects: none
     status_code: 302
-  register: nginx_verify_empty_auth
-  until: nginx_verify_empty_auth.status == 302
+  register: nginx_verify_auth_bypass
+  until: nginx_verify_auth_bypass.status == 302
   retries: 10
   delay: 1
 
@@ -314,19 +300,11 @@
   retries: 10
   delay: 1
 
-# When Authelia admits a request, the vhost forwards Remote-User from the auth
-# subrequest as X-Forwarded-User for the *arr suite's External auth mode.
-- name: _verify | Configure an auth-required vhost for identity forwarding
-  import_tasks: site.yml
-  vars:
-    nginx_site_args:
-      subdomain: nginxverifyauth
-      proxy_pass: http://127.0.0.1:18080/
-      auth: true
-
+# When Authelia admits a request, the same vhost forwards Remote-User from the
+# auth subrequest as X-Forwarded-User for the *arr suite's External auth mode.
 - name: _verify | Authenticated browser user is admitted and identity-forwarded
   uri:
-    url: "https://nginxverifyauth.{{ inventory_hostname }}.{{ domain }}/"
+    url: "https://{{ nginx_verify_host }}/"
     validate_certs: false
     status_code: 200
   register: nginx_verify_auth
@@ -390,11 +368,10 @@
     nginx_test_authelia_stub_args:
       mode: authed
 
-# location_conf: a location-level add_header drops nginx's inherited add_header
-# set, so the helper re-emits the security headers inside `location /`. If that
-# re-emit regressed, HSTS/CSP would silently vanish from every location_conf
-# site (netdata, minio).
-- name: _verify | Configure a vhost with a location_conf snippet
+# A location-level add_header drops nginx's inherited add_header set, so the
+# helper re-emits the security headers inside `location /`. A server_conf
+# snippet adds a sibling location at server scope.
+- name: _verify | Configure a vhost with location and server snippets
   import_tasks: site.yml
   vars:
     nginx_site_args:
@@ -403,6 +380,10 @@
       auth: true
       location_conf: |
         add_header X-Verify-Loc "1" always;
+      server_conf: |
+        location = /sidecar {
+          return 200 "server-conf-ok";
+        }
 
 - name: _verify | A location_conf keeps the security headers AND its own header
   uri:
@@ -419,24 +400,9 @@
   retries: 10
   delay: 1
 
-# server_conf adds a sibling location at server scope. The only other use of the
-# key feeds a deliberately-broken directive (the rollback test below), so the
-# positive contract -- the snippet renders and the added location actually
-# serves -- would otherwise be untested, yet homepage's /alerts/ relies on it.
-- name: _verify | Configure a vhost with a server_conf snippet
-  import_tasks: site.yml
-  vars:
-    nginx_site_args:
-      subdomain: nginxverifyserverconf
-      proxy_pass: http://127.0.0.1:18080/
-      server_conf: |
-        location = /sidecar {
-          return 200 "server-conf-ok";
-        }
-
 - name: _verify | A server_conf snippet adds a working sibling location
   uri:
-    url: "https://nginxverifyserverconf.{{ inventory_hostname }}.{{ domain }}/sidecar"
+    url: "https://nginxverifyloc.{{ inventory_hostname }}.{{ domain }}/sidecar"
     validate_certs: false
     return_content: true
     status_code: 200
@@ -447,11 +413,9 @@
   retries: 10
   delay: 1
 
-# The first-class client_max_body_size / client_body_buffer_size keys.
-# Configuring the vhost proves both render into valid config (the helper's
-# nginx -t gates a typo'd directive name); the 413 below proves the size limit
-# is enforced before the body reaches the upstream. No auth needed.
-- name: _verify | Configure a vhost with body-size limits
+# Exercise body limits, buffering booleans, and CSP composition on one
+# auth-less vhost. The helper's nginx -t validates every rendered directive.
+- name: _verify | Configure a vhost with proxy and security options
   import_tasks: site.yml
   vars:
     nginx_site_args:
@@ -459,6 +423,11 @@
       proxy_pass: http://127.0.0.1:18080/
       client_max_body_size: 1k
       client_body_buffer_size: 2k
+      proxy_buffering: false
+      proxy_request_buffering: false
+      csp_additional: connect-src api.csptest
+      csp_default_src: default.csptest
+      csp_frame_ancestors: https://frame.csptest
 
 - name: _verify | A body over client_max_body_size is rejected with 413
   uri:
@@ -472,23 +441,10 @@
   retries: 10
   delay: 1
 
-# proxy_buffering / proxy_request_buffering take the quoted string 'on'/'off' (a
-# bare off is YAML-coerced to the boolean false and renders an invalid
-# `proxy_buffering false;`). The quoted form must pass the new string-toggle
-# assert AND render into config the helper's nginx -t accepts; the proxied 200
-# confirms the site is live. No auth needed.
-- name: _verify | Configure a vhost with proxy buffering toggled off
-  import_tasks: site.yml
-  vars:
-    nginx_site_args:
-      subdomain: nginxverifybuffering
-      proxy_pass: http://127.0.0.1:18080/
-      proxy_buffering: false
-      proxy_request_buffering: false
-
-- name: _verify | The proxy-buffering vhost serves the proxied response
+# A successful GET confirms the buffering directives coexist with proxying.
+- name: _verify | The options vhost serves the proxied response
   uri:
-    url: "https://nginxverifybuffering.{{ inventory_hostname }}.{{ domain }}/"
+    url: "https://nginxverifybody.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     return_content: true
     status_code: 200
@@ -501,7 +457,7 @@
 
 - name: _verify | Standard metadata paths reach the upstream
   uri:
-    url: "https://nginxverifybuffering.{{ inventory_hostname }}.{{ domain }}{{ item }}"
+    url: "https://nginxverifybody.{{ inventory_hostname }}.{{ domain }}{{ item }}"
     validate_certs: false
     return_content: true
     status_code: 200
@@ -515,24 +471,10 @@
   retries: 10
   delay: 1
 
-# The csp_default_src / csp_frame_ancestors / csp_additional keys compose into
-# the Content-Security-Policy header (site.conf.j2). Only
-# csp_passthrough was tested; assert each override token actually lands in the
-# rendered header, so a positioning/";" regression on the unifi consumer (the
-# real csp_* user) surfaces here. No auth needed.
-- name: _verify | Configure a vhost with CSP overrides
-  import_tasks: site.yml
-  vars:
-    nginx_site_args:
-      subdomain: nginxverifycsp
-      proxy_pass: http://127.0.0.1:18080/
-      csp_additional: connect-src api.csptest
-      csp_default_src: default.csptest
-      csp_frame_ancestors: https://frame.csptest
-
+# The CSP override keys must all compose into the rendered header.
 - name: _verify | CSP override tokens all appear in the Content-Security-Policy header
   uri:
-    url: "https://nginxverifycsp.{{ inventory_hostname }}.{{ domain }}/"
+    url: "https://nginxverifybody.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     status_code: 200
   register: nginx_verify_cspov
@@ -624,15 +566,10 @@
   vars:
     nginx_verify_supporting_sites:
       - nginxverify
-      - nginxverifyauth
       - nginxverifybasic
       - nginxverifyloc
-      - nginxverifyserverconf
       - nginxverifyplain
-      - nginxverifyempty
       - nginxverifybody
-      - nginxverifybuffering
-      - nginxverifycsp
       - nginxverifyipv6
 
 - name: _verify | Reload nginx after transient vhost teardown
