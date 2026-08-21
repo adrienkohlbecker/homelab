@@ -54,19 +54,6 @@
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: nexus.service
-        - MESSAGE: '{"level":"INFO","threadName":"quartz-1-thread-1","loggerName":"blobstore-reconciliation-log","mdc":{"blobstore-reconciliation-path":"/nexus-data/blobs/default/reconciliation"},"formattedMessage":"nexus-reconciliation-detail"}'
-          CONTAINER_TAG: nexus
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: nexus.service
-        - MESSAGE: '{"level":"INFO","threadName":"quartz-1-thread-1","loggerName":"blobstore-reconciliation-log","mdc":{"blobstore-reconciliation-path":"/nexus-data/blobs/default/reconciliation"},"formattedMessage":"11111111-1111-1111-1111-111111111111,true"}'
-          CONTAINER_TAG: nexus
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: nexus.service
-          marker: nexus-reconciliation-success-drop
-        - MESSAGE: '{"level":"WARN","threadName":"quartz-1-thread-1","loggerName":"blobstore-reconciliation-log","mdc":{"blobstore-reconciliation-path":"/nexus-data/blobs/default/reconciliation"},"formattedMessage":"22222222-2222-2222-2222-222222222222,false"}'
-          CONTAINER_TAG: nexus
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: nexus.service
         - MESSAGE: '{"level":"INFO","threadName":"qtp2132356553-1528","loggerName":"outboundRequests","formattedMessage":"[12/Jul/2026:08:53:12 +0000] - \"GET https://ports.ubuntu.com/ubuntu-ports/dists/noble/InRelease HTTP/1.1\" 304 0 312 45 [qtp2132356553-1528]"}'
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
@@ -140,16 +127,6 @@
           fields.parser_status: parsed
           fields.source: org.sonatype.nexus.replication.internal.ReplicationTask
           fields.mdc.repositoryName: nexus-releases
-        - message: nexus-reconciliation-detail
-          level: info
-          service: nexus
-          fields.parser_status: parsed
-          fields.source: blobstore-reconciliation-log
-          fields.mdc.blobstore-reconciliation-path: /nexus-data/blobs/default/reconciliation
-        - message: 22222222-2222-2222-2222-222222222222,false
-          level: warn
-          service: nexus
-          fields.source: blobstore-reconciliation-log
         - message: '[12/Jul/2026:08:53:12 +0000] - "GET https://ports.ubuntu.com/ubuntu-ports/dists/noble/InRelease HTTP/1.1" 304 0 312 45 [qtp2132356553-1528]'
           level: debug
           service: nexus
@@ -184,13 +161,12 @@
 - name: _verify | Routine nexus events are omitted
   assert:
     that:
-      - "'-drop' not in fluentbit_verify_result.stdout"
       - "'nexus-task-failed' in fluentbit_verify_result.stdout"
       - "'nexus-audit-routine' not in fluentbit_verify_result.stdout"
       - "'nexus-audit-asset' not in fluentbit_verify_result.stdout"
       - "'nexus-audit-useful' in fluentbit_verify_result.stdout"
 
-- name: _verify | Specialized nexus logs use stdout instead of files
+- name: _verify | Retired nexus log files remain absent
   stat:
     path: "{{ item }}"
   loop:
@@ -283,13 +259,6 @@
   delay: 2
   until: _nexus_nginx.status in [ 200, 302, 307 ]
 
-# The docker-registry mirror is an nginx rewrite (roles/nexus main.yml
-# server_conf): podman emits /v2/repository/<repo>/<image>/... and nginx
-# swaps it to Nexus's /repository/<repo>/v2/<image>/... layout. Prod's docker
-# proxy repos are terraform-created; the qemu fixture has none, so create a
-# throwaway docker hosted repo and prove the rewrite reaches its registry-v2
-# base. Without the rewrite the un-swapped path falls through to `location /`
-# and Nexus 404s it, so a 200/401 (not 404) is the signal the rewrite fired.
 # Auth uses the bootstrap admin password Nexus writes on first boot -- the
 # setup wizard never runs under test, so the file persists. Test-only.
 - name: _verify | Read the bootstrap admin password
@@ -298,6 +267,90 @@
   register: _nexus_admin_password
   become: true
 
+# Nexus consumes the per-blobstore reconciliation file as durable state. Accept
+# the EULA in this disposable VM, upload one object, and prove the dated file
+# grows so replacing this appender with a console stream cannot regress again.
+- name: _verify | Read the disposable instance EULA status
+  uri:
+    url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/system/eula
+    url_username: admin
+    url_password: "{{ _nexus_admin_password.content | b64decode }}"
+    force_basic_auth: true
+    return_content: true
+    status_code: 200
+    timeout: 5
+  register: _nexus_eula
+
+- name: _verify | Accept the EULA on the disposable instance
+  uri:
+    url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/system/eula
+    method: POST
+    url_username: admin
+    url_password: "{{ _nexus_admin_password.content | b64decode }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      accepted: true
+      disclaimer: "{{ _nexus_eula.json.disclaimer }}"
+    status_code: [ 200, 204 ]
+    timeout: 5
+  when: not _nexus_eula.json.accepted
+
+- name: _verify | Create a throwaway raw hosted repo
+  uri:
+    url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/repositories/raw/hosted
+    method: POST
+    url_username: admin
+    url_password: "{{ _nexus_admin_password.content | b64decode }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      name: test_reconciliation
+      online: true
+      storage:
+        blobStoreName: default
+        strictContentTypeValidation: true
+        writePolicy: ALLOW
+      raw:
+        contentDisposition: ATTACHMENT
+    status_code: [ 201, 400 ]
+    timeout: 5
+
+- name: _verify | Record the reconciliation log size before upload
+  stat:
+    path: /mnt/scratch/nexus/reconciliation/{{ ansible_date_time.date }}
+  register: _nexus_reconciliation_before
+  become: true
+
+- name: _verify | Upload a raw object to the default blob store
+  uri:
+    url: http://127.0.0.1:{{ service_ports.nexus }}/repository/test_reconciliation/probe-{{ ansible_date_time.epoch }}.txt
+    method: PUT
+    url_username: admin
+    url_password: "{{ _nexus_admin_password.content | b64decode }}"
+    force_basic_auth: true
+    body: nexus reconciliation probe
+    status_code: [ 201, 204 ]
+    timeout: 5
+
+- name: _verify | Wait for the reconciliation log to record the upload
+  stat:
+    path: /mnt/scratch/nexus/reconciliation/{{ ansible_date_time.date }}
+  register: _nexus_reconciliation_after
+  retries: 10
+  delay: 1
+  until:
+    - _nexus_reconciliation_after.stat.exists
+    - _nexus_reconciliation_after.stat.size > (_nexus_reconciliation_before.stat.size | default(0))
+  become: true
+
+# The docker-registry mirror is an nginx rewrite (roles/nexus main.yml
+# server_conf): podman emits /v2/repository/<repo>/<image>/... and nginx
+# swaps it to Nexus's /repository/<repo>/v2/<image>/... layout. Prod's docker
+# proxy repos are terraform-created; the qemu fixture has none, so create a
+# throwaway docker hosted repo and prove the rewrite reaches its registry-v2
+# base. Without the rewrite the un-swapped path falls through to `location /`
+# and Nexus 404s it, so a 200/401 (not 404) is the signal the rewrite fired.
 - name: _verify | Create a throwaway docker hosted repo
   uri:
     url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/repositories/docker/hosted
