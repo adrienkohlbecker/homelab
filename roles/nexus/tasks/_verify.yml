@@ -227,13 +227,10 @@
             - fields.type
             - fields.initiator
 
-- name: _verify | Successful Nexus reconciliation details are omitted
-  assert:
-    that: "'-drop' not in fluentbit_verify_result.stdout"
-
 - name: _verify | Routine nexus events are omitted
   assert:
     that:
+      - "'-drop' not in fluentbit_verify_result.stdout"
       - "'nexus-routine-success' not in fluentbit_verify_result.stdout"
       - "'nexus-task-failed' in fluentbit_verify_result.stdout"
       - "'nexus-audit-routine' not in fluentbit_verify_result.stdout"
