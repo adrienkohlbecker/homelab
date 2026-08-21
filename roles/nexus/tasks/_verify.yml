@@ -248,118 +248,102 @@
 # Nexus consumes the per-blobstore reconciliation file as durable state. Accept
 # the EULA in this disposable VM, upload one object, and prove the dated file
 # grows so replacing this appender with a console stream cannot regress again.
-- name: _verify | Read the disposable instance EULA status
-  uri:
-    url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/system/eula
-    url_username: admin
-    url_password: "{{ _nexus_admin_password.content | b64decode }}"
-    force_basic_auth: true
-    return_content: true
-    status_code: 200
-    timeout: 5
-  register: _nexus_eula
+- name: _verify | Exercise authenticated Nexus APIs
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: admin
+      url_password: "{{ _nexus_admin_password.content | b64decode }}"
+      force_basic_auth: true
+      timeout: 5
+  block:
+    - name: _verify | Read the disposable instance EULA status
+      uri:
+        url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/system/eula
+        return_content: true
+        status_code: 200
+      register: _nexus_eula
 
-- name: _verify | Accept the EULA on the disposable instance
-  uri:
-    url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/system/eula
-    method: POST
-    url_username: admin
-    url_password: "{{ _nexus_admin_password.content | b64decode }}"
-    force_basic_auth: true
-    body_format: json
-    body:
-      accepted: true
-      disclaimer: "{{ _nexus_eula.json.disclaimer }}"
-    status_code: [ 200, 204 ]
-    timeout: 5
-  when: not _nexus_eula.json.accepted
+    - name: _verify | Accept the EULA on the disposable instance
+      uri:
+        url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/system/eula
+        method: POST
+        body_format: json
+        body:
+          accepted: true
+          disclaimer: "{{ _nexus_eula.json.disclaimer }}"
+        status_code: [ 200, 204 ]
+      when: not _nexus_eula.json.accepted
 
-- name: _verify | Create a throwaway raw hosted repo
-  uri:
-    url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/repositories/raw/hosted
-    method: POST
-    url_username: admin
-    url_password: "{{ _nexus_admin_password.content | b64decode }}"
-    force_basic_auth: true
-    body_format: json
-    body:
-      name: test_reconciliation
-      online: true
-      storage:
-        blobStoreName: default
-        strictContentTypeValidation: true
-        writePolicy: ALLOW
-      raw:
-        contentDisposition: ATTACHMENT
-    status_code: [ 201, 400 ]
-    timeout: 5
+    - name: _verify | Create a throwaway raw hosted repo
+      uri:
+        url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/repositories/raw/hosted
+        method: POST
+        body_format: json
+        body:
+          name: test_reconciliation
+          online: true
+          storage:
+            blobStoreName: default
+            strictContentTypeValidation: true
+            writePolicy: ALLOW
+          raw:
+            contentDisposition: ATTACHMENT
+        status_code: [ 201, 400 ]
 
-- name: _verify | Record the reconciliation log size before upload
-  stat:
-    path: /mnt/scratch/nexus/reconciliation/{{ ansible_date_time.date }}
-  register: _nexus_reconciliation_before
-  become: true
+    - name: _verify | Record the reconciliation log size before upload
+      stat:
+        path: /mnt/scratch/nexus/reconciliation/{{ ansible_date_time.date }}
+      register: _nexus_reconciliation_before
+      become: true
 
-- name: _verify | Upload a raw object to the default blob store
-  uri:
-    url: https://nexus.{{ inventory_hostname }}.{{ domain }}/repository/test_reconciliation/probe-{{ ansible_date_time.epoch }}.txt
-    method: PUT
-    validate_certs: false
-    url_username: admin
-    url_password: "{{ _nexus_admin_password.content | b64decode }}"
-    force_basic_auth: true
-    body: nexus reconciliation probe
-    status_code: [ 201, 204 ]
-    timeout: 5
+    - name: _verify | Upload a raw object to the default blob store
+      uri:
+        url: https://nexus.{{ inventory_hostname }}.{{ domain }}/repository/test_reconciliation/probe-{{ ansible_date_time.epoch }}.txt
+        method: PUT
+        validate_certs: false
+        body: nexus reconciliation probe
+        status_code: [ 201, 204 ]
 
-- name: _verify | Wait for the reconciliation log to record the upload
-  stat:
-    path: /mnt/scratch/nexus/reconciliation/{{ ansible_date_time.date }}
-  register: _nexus_reconciliation_after
-  retries: 10
-  delay: 1
-  until:
-    - _nexus_reconciliation_after.stat.exists
-    - _nexus_reconciliation_after.stat.size > (_nexus_reconciliation_before.stat.size | default(0))
-  become: true
+    - name: _verify | Wait for the reconciliation log to record the upload
+      stat:
+        path: /mnt/scratch/nexus/reconciliation/{{ ansible_date_time.date }}
+      register: _nexus_reconciliation_after
+      retries: 10
+      delay: 1
+      until:
+        - _nexus_reconciliation_after.stat.exists
+        - _nexus_reconciliation_after.stat.size > (_nexus_reconciliation_before.stat.size | default(0))
+      become: true
 
-# Production Docker repositories use Nexus's native path-based routing. The
-# qemu fixture has none, so create a throwaway hosted repository with the same
-# setting and prove its /v2/<repository>/ API is reachable through nginx.
-- name: _verify | Create a throwaway docker hosted repo
-  uri:
-    url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/repositories/docker/hosted
-    method: POST
-    url_username: admin
-    url_password: "{{ _nexus_admin_password.content | b64decode }}"
-    force_basic_auth: true
-    body_format: json
-    body:
-      name: test_docker_mirror
-      online: true
-      storage:
-        blobStoreName: default
-        strictContentTypeValidation: true
-        writePolicy: ALLOW
-      docker:
-        v1Enabled: false
-        forceBasicAuth: true
-        pathEnabled: true
-    status_code: [ 201, 400 ]  # 400 == repo already exists on a _verify re-run
-    timeout: 5
+    # Production Docker repositories use Nexus's native path-based routing. The
+    # qemu fixture has none, so create a throwaway hosted repository with the same
+    # setting and prove its /v2/<repository>/ API is reachable through nginx.
+    - name: _verify | Create a throwaway docker hosted repo
+      uri:
+        url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/repositories/docker/hosted
+        method: POST
+        body_format: json
+        body:
+          name: test_docker_mirror
+          online: true
+          storage:
+            blobStoreName: default
+            strictContentTypeValidation: true
+            writePolicy: ALLOW
+          docker:
+            v1Enabled: false
+            forceBasicAuth: true
+            pathEnabled: true
+        status_code: [ 201, 400 ]  # 400 == repo already exists on a _verify re-run
 
-# The auth outcome does not matter. Docker-Distribution-Api-Version is present
-# only when Nexus routed the request to the repository's registry-v2 endpoint.
-- name: _verify | Native Docker path reaches the repo's registry-v2 base
-  uri:
-    url: https://nexus.{{ inventory_hostname }}.{{ domain }}/v2/test_docker_mirror/
-    validate_certs: false
-    url_username: admin
-    url_password: "{{ _nexus_admin_password.content | b64decode }}"
-    force_basic_auth: true
-    status_code: [ 200, 401, 403 ]  # docker v2 auth challenge; a 404 would mean the rewrite is missing
-    timeout: 5
-  register: _nexus_docker_rewrite
-  retries: 5
-  delay: 2
-  until: (_nexus_docker_rewrite.docker_distribution_api_version | default('')) == 'registry/2.0'
+    # The auth outcome does not matter. Docker-Distribution-Api-Version is present
+    # only when Nexus routed the request to the repository's registry-v2 endpoint.
+    - name: _verify | Native Docker path reaches the repo's registry-v2 base
+      uri:
+        url: https://nexus.{{ inventory_hostname }}.{{ domain }}/v2/test_docker_mirror/
+        validate_certs: false
+        status_code: [ 200, 401, 403 ]  # docker v2 auth challenge; a 404 would mean routing is missing
+      register: _nexus_docker_rewrite
+      retries: 5
+      delay: 2
+      until: (_nexus_docker_rewrite.docker_distribution_api_version | default('')) == 'registry/2.0'
