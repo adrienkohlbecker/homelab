@@ -17,17 +17,10 @@
       - sabnzbd_smtp_username | default('') | length > 0
       - sabnzbd_smtp_password | default('') | length > 0
       - sabnzbd_smtp_from | default('') | length > 0
-      # The *arr/omdb keys render into autoProcessMedia.cfg (nzbToMedia's
-      # handoff to the import apps). A renamed/unset key renders an empty
-      # value there with no parse error -- silently breaking post-processing.
-      - radarr_api_key | default('') | length > 0
-      - sonarr_api_key | default('') | length > 0
-      - lidarr_api_key | default('') | length > 0
-      - omdb_api_key | default('') | length > 0
     fail_msg: >-
       sabnzbd requires its api/nzb keys, the three Usenet provider credentials,
-      SMTP creds, and the radarr/sonarr/lidarr/omdb api keys set in
-      group_vars/host_vars (see group_vars/prod.yml and group_vars/test.yml).
+      and SMTP credentials set in group_vars/host_vars (see
+      group_vars/prod.yml and group_vars/test.yml).
   tags:
     - sabnzbd
 
@@ -172,84 +165,16 @@
   tags:
     - sabnzbd
 
-# autoProcessMedia.cfg repeats subsection names across parent sections, so its
-# syntax check permits duplicates while still rejecting malformed rendering.
-- name: Configure nzbToMedia (autoProcessMedia.cfg)
-  template:
-    src: autoProcessMedia.cfg.j2
-    dest: /mnt/services/sabnzbd/autoProcessMedia.cfg
-    owner: sabnzbd
-    group: media
-    mode: "0600"
-    backup: true
-    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, allow_no_value=True).read_string("[__top__]\n" + open(sys.argv[1]).read())' "%s"
-  register: sabnzbd_media_conf
-  become: true
-  tags:
-    - sabnzbd
-
-# Download scratch dir (the unit bind-mounts /mnt/scratch/sabnzbd) and the
-# nzbToMedia code dir the unarchive below populates -- both sabnzbd:media 0755.
-- name: Create scratch and nzbToMedia directories
+# SABnzbd downloads incomplete jobs here before unpacking them into the
+# category-specific directories shared with the import applications.
+- name: Create incomplete download directory
   when: not ansible_check_mode or sabnzbd_user.uid is defined
   file:
-    dest: "{{ item }}"
+    dest: /mnt/scratch/sabnzbd
     state: directory
     owner: sabnzbd
     group: media
     mode: "0755"
-  become: true
-  loop:
-    - /mnt/scratch/sabnzbd
-    - /opt/nzbToMedia
-  tags:
-    - sabnzbd
-
-# checksum: in get_url integrity-gates the tarball (a git tag is mutable, so
-# the name alone is no guarantee) and drives re-download on a version bump --
-# a sha mismatch re-fetches rather than reusing the stale archive.
-- name: Download nzbToMedia archive
-  when: not ansible_check_mode or sabnzbd_user.uid is defined
-  get_url:
-    url: "{{ sabnzbd_nzbtomedia_url }}"
-    dest: "/opt/nzbToMedia/.nzbToMedia-{{ sabnzbd_nzbtomedia_version }}.tar.gz"
-    checksum: "sha256:{{ sabnzbd_nzbtomedia_sha256 }}"
-    owner: sabnzbd
-    group: media
-    mode: "0644"
-  become: true
-  tags:
-    - sabnzbd
-
-# Version-stamped sentinel gates the extract: the marker name carries the
-# version, so a pin bump removes the match and re-extracts (overwriting the
-# stable-named scripts) while an unchanged version is a no-op. `creates:`
-# short-circuits the extract entirely once the sentinel is present.
-- name: Extract nzbToMedia
-  when: not ansible_check_mode or sabnzbd_user.uid is defined
-  unarchive:
-    src: "/opt/nzbToMedia/.nzbToMedia-{{ sabnzbd_nzbtomedia_version }}.tar.gz"
-    dest: /opt/nzbToMedia
-    remote_src: true
-    extra_opts:
-      - --strip-components=1
-    creates: "/opt/nzbToMedia/.installed-{{ sabnzbd_nzbtomedia_version }}"
-  register: sabnzbd_nzbtomedia_extract
-  become: true
-  become_user: sabnzbd
-  tags:
-    - sabnzbd
-
-- name: Stamp installed nzbToMedia version  # noqa: require-backup
-  when:
-    - not ansible_check_mode or sabnzbd_user.uid is defined
-    - sabnzbd_nzbtomedia_extract is changed
-  file:
-    path: "/opt/nzbToMedia/.installed-{{ sabnzbd_nzbtomedia_version }}"
-    state: touch
-    owner: sabnzbd
-    group: media
-    mode: "0644"
   become: true
   tags:
     - sabnzbd
@@ -291,7 +216,7 @@
     systemd_unit_args:
       src: sabnzbd.service.j2
       condition: "{{ not ansible_check_mode or sabnzbd_user.uid is defined }}"
-      restart: "{{ sabnzbd_conf.changed or sabnzbd_media_conf.changed or sabnzbd_user.changed or media_group.changed }}"
+      restart: "{{ sabnzbd_conf.changed or sabnzbd_user.changed or media_group.changed }}"
   tags:
     - sabnzbd
 
