@@ -5,25 +5,19 @@
 # fixture call this, so the placement lives in one spot.
 #
 # Input: nginx_snakeoil_args.fqdn, the host FQDN whose live/<fqdn>/ dir to fill.
-# In the harness check-mode pass ssl-cert is merely *reported* as
-# would-be-installed, so the source files aren't really on disk -- stat the
-# world-readable public cert and skip the placement when it's absent, mirroring
-# the `creates:` short-circuit the shell version relied on.
+# A fresh check-mode pass predicts the package install without creating its
+# files, so dependent placement waits for a real converge.
 - name: Snakeoil | Install ssl-cert
   apt:
     pkg:
       - ssl-cert
     install_recommends: false
     cache_valid_time: 3600
+  register: nginx_snakeoil_apt
   become: true
 
-- name: Snakeoil | Check the snakeoil keypair is present
-  stat:
-    path: /etc/ssl/certs/ssl-cert-snakeoil.pem
-  register: nginx_snakeoil_src
-
 - name: Snakeoil | Ensure the letsencrypt live dir exists
-  when: nginx_snakeoil_src.stat.exists
+  when: not (ansible_check_mode and nginx_snakeoil_apt.changed)
   file:
     path: /etc/letsencrypt/live/{{ nginx_snakeoil_args.fqdn }}
     state: directory
@@ -33,7 +27,7 @@
   become: true
 
 - name: Snakeoil | Lay down the snakeoil cert files
-  when: nginx_snakeoil_src.stat.exists
+  when: not (ansible_check_mode and nginx_snakeoil_apt.changed)
   copy:
     src: "{{ item.src }}"
     dest: /etc/letsencrypt/live/{{ nginx_snakeoil_args.fqdn }}/{{ item.dest }}
