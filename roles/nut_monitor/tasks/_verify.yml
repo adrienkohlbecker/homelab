@@ -98,10 +98,6 @@
 
 - name: _verify | The upssched-dispatched event reached the mail
   command: grep -qF "UPS is on battery and has a low battery" /tmp/nut-mail.out
-  register: nut_monitor_upssched_mail
-  until: nut_monitor_upssched_mail.rc == 0
-  retries: 5
-  delay: 1
   changed_when: false
   become: true
 
