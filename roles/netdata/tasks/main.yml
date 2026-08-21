@@ -43,28 +43,6 @@
   tags:
     - netdata
 
-- name: Setup shell for netdata user (for console troubleshooting)
-  # Depends on the netdata user/group + /var/lib/netdata, all created by the
-  # package; on a fresh host in check mode the package only "would" install,
-  # so skip rather than fail chowning to a not-yet-existent user. Mirrors the
-  # guard on "Add netdata to ssl-cert group" in install.yml.
-  when: not (ansible_check_mode and netdata_apt.changed)
-  file:
-    path: /var/lib/netdata/.zshrc
-    state: touch
-    access_time: preserve
-    modification_time: preserve
-    # Owned by netdata, not root: netdata chowns /var/lib/netdata to itself
-    # on startup, so a root-owned file here flips back to netdata every
-    # converge (breaks idempotence) and can't durably resist the daemon
-    # anyway.
-    owner: netdata
-    group: netdata
-    mode: "0644"
-  become: true
-  tags:
-    - netdata
-
 - name: Configure nginx
   import_role:
     name: nginx
