@@ -70,23 +70,25 @@
       {{ postfix_smtp_user }}:<password>, and the generic map must rewrite
       @{{ inventory_hostname }} to {{ inventory_hostname }}@{{ email_domain }}.
 
-- name: _verify | Resolve the root and operator aliases
-  command: postmap -q {{ item }} hash:/etc/aliases
+- name: _verify | Resolve the local aliases
+  command: postmap -q {{ item }} texthash:/etc/postfix/aliases
   loop:
+    - postmaster
     - root
     - "{{ operator_user }}"
   register: _postfix_alias
   changed_when: false
   become: true
 
-- name: _verify | Aliases resolve to root_email
+- name: _verify | Aliases resolve to their destinations
   assert:
     that:
-      - _postfix_alias.results[0].stdout == root_email
+      - _postfix_alias.results[0].stdout == 'root'
       - _postfix_alias.results[1].stdout == root_email
+      - _postfix_alias.results[2].stdout == root_email
     fail_msg: >-
-      alias wiring drifted: root and {{ operator_user }} must alias to
-      root_email ({{ root_email }}). alias lookups:
+      alias wiring drifted: postmaster must alias to root, and root and
+      {{ operator_user }} must alias to root_email ({{ root_email }}). Lookups:
       {{ _postfix_alias.results | map(attribute='stdout') | list }}.
 
 # qmgr logs the qualified sender when the message enters the active queue, so

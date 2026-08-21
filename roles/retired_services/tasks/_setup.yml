@@ -61,6 +61,15 @@
     mode: "0644"
   become: true
 
+- name: _setup | Create retired compiled Postfix aliases fixture
+  copy:
+    content: retired
+    dest: /etc/aliases.db
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: _setup | Create retired Speedtest account
   import_role:
     name: service_user

@@ -33,15 +33,15 @@ mydomain = {{ domain }}
 # rather than the default $myhostname, so a system alert is `root@$mydomain` in one
 # step -- the smtp_generic_maps @$mydomain rule then rewrites it to the per-host
 # sender identity. $mydomain is in mydestination, so the matching `root` *recipient*
-# still resolves locally through /etc/aliases. Postfix's recommended setting for a
+# still resolves locally through the aliases map. Postfix's recommended setting for a
 # domain spanning multiple hosts. masquerade_domains below stays as the safety net
 # that folds any FQDN-subdomain straggler (e.g. root@$myhostname) back to $mydomain.
 myorigin = $mydomain
 masquerade_domains = {{ email_domain }} {{ domain }}
-alias_maps = hash:/etc/aliases
-alias_database = hash:/etc/aliases
+alias_maps = texthash:/etc/postfix/aliases
+alias_database =
 # Not a pure null client (which sets `mydestination =` empty): local delivery is
-# kept so system mail to root/operator resolves through /etc/aliases, then leaves
+# kept so system mail to root/operator resolves through the aliases map, then leaves
 # again to root_email via the relay. $mydomain here also captures bounces to the
 # masqueraded `root@$mydomain` sender locally instead of relaying them back out.
 # See http://www.postfix.org/STANDARD_CONFIGURATION_README.html (null client).

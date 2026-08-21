@@ -48,6 +48,7 @@
   loop:
     - main.cf
     - generic
+    - aliases
   become: true
   register: postfix_cfg
   tags:
@@ -77,26 +78,5 @@
          if postfix_cfg.changed or postfix_sasl_auth.changed or postfix_apt.changed
          else 'started' }}
   become: true
-  tags:
-    - postfix
-
-- name: Setup user email aliases  # noqa: require-validate
-  template:
-    src: aliases.j2
-    dest: /etc/aliases
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
-  register: postfix_aliases
-  tags:
-    - postfix
-
-- name: Rebuild aliases database
-  command: newaliases
-  become: true
-  when: postfix_aliases.changed
-  changed_when: true
   tags:
     - postfix

@@ -67,6 +67,15 @@
     - retired_services
     - postfix
 
+- name: Remove retired compiled Postfix aliases
+  file:
+    path: /etc/aliases.db
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - postfix
+
 # Speedtest was stateless, so retirement removes its account along with every
 # runnable artifact. Its numeric identity remains reserved in legacy_service_ids.
 - name: Retire Speedtest service

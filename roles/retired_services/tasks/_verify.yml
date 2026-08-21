@@ -34,6 +34,13 @@
   failed_when: retired_services_mailutils.stat.exists
   become: true
 
+- name: _verify | Retired compiled Postfix aliases are absent
+  stat:
+    path: /etc/aliases.db
+  register: retired_services_postfix_aliases
+  failed_when: retired_services_postfix_aliases.stat.exists
+  become: true
+
 - name: _verify | Retained Plex and Tautulli data markers remain
   stat:
     path: "{{ item }}/.retired_services_keep"
