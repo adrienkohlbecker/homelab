@@ -196,12 +196,11 @@ netdata_collectors:
 netdata_zfspool_thresholds: {}
 netdata_diskspace_blocklist: []
 
-# The rpool/podman zvol here is pure CI scratch -- only container images and
-# the cells' ephemeral overlay layers. Every persistent service (headscale,
-# socket_proxy) keeps its state on /mnt/services bind-mounts, not the zvol, so
-# dropping fsync durability on it just trades a ~5s crash-loss window of
-# rebuildable layers for far less storage-layer CPU under a wide fan-out.
-podman_zvol_sync_disabled: true
+# The Hetzner image carves this rebuild-only partition before rpool. Persistent
+# service state remains under /mnt/services; this ext4 filesystem carries only
+# reconstructible images and rootless runner overlay layers.
+podman_storage_backend: partition
+podman_storage_device: /dev/disk/by-partlabel/podman
 
 # Global job ceiling across BOTH runner blocks (config.toml is process-wide) --
 # the fleet umbrella, NOT the per-runner knob. Set to the sum of the two
