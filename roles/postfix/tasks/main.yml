@@ -1,8 +1,5 @@
-# Required inputs live in group_vars (vaulted in prod.yml) and the role asserts
-# them per CLAUDE.md. A mistyped/empty vault key renders sasl_passwd as
-# `[host]:587 user:` -- postfix accepts it, converges green, then silently fails
-# SASL auth at Mailgun, so every cron/fail2ban/smartd alert is lost. A non-empty
-# check (not just `is defined`) is what catches the empty-string case.
+# Postfix accepts an empty SASL password and fails only when relaying, so reject
+# empty values before system alerts can be silently stranded.
 - name: Assert required postfix relay inputs are set
   assert:
     that:
@@ -15,11 +12,9 @@
       - operator_user | default('') | length > 0
       - domain | default('') | length > 0
     fail_msg: >-
-      One of postfix_smtp_user, postfix_smtp_password, smtp_host, smtp_port,
-      email_domain, root_email, operator_user, domain is unset or empty. Set
-      them in group_vars/{prod,test}.yml (postfix_smtp_password is vaulted); see
-      the task comment for why an empty value is rejected rather than just
-      undefined.
+      Postfix requires non-empty relay credentials and shared mail settings.
+      Set credentials in group_vars/{prod,test}.yml and shared settings in
+      group_vars/all/main.yml.
   tags:
     - postfix
 
