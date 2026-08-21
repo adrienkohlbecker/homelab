@@ -1,7 +1,5 @@
 - name: Install podman package
-  import_role:
-    name: podman
-    tasks_from: install
+  import_tasks: install.yml
   tags:
     - podman
 
