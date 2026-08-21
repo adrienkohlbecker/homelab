@@ -67,8 +67,3 @@ smtp_tls_mandatory_protocols = >=TLSv1.2
 smtp_tls_wrappermode = {{ 'yes' if smtp_use_ssl | bool else 'no' }}
 # Apply the per-host sender identity from generic.j2 at SMTP delivery.
 smtp_generic_maps = texthash:/etc/postfix/generic
-
-# Keep `bounce` so a relay rejection (a lost cron/smartd/fail2ban alert) is
-# itself surfaced to the operator; drop the verbose protocol/policy/data
-# SMTP-transcript classes.
-notify_classes = resource, software, bounce
