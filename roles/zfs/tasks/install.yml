@@ -4,6 +4,7 @@
       - zfsutils-linux
       - zfs-initramfs
       - zfs-zed
+    policy_rc_d: 101
     cache_valid_time: 3600
   register: zfs_apt
   become: true
