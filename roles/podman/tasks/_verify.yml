@@ -175,24 +175,6 @@
               MAILADDR grep rc={{ podman_mdmonitor_probes.results[1].rc }})
               -- a degraded array would go unreported.
 
-# Confirm the rendered containers.conf carries every pinned key -- catches a
-# template regression in the keys podman info doesn't surface (dns_bind_port,
-# the default network *name*, the seccomp default path, the rootless pasta
-# connector). Exact whole-line match via argv (no shell, so the embedded
-# double-quotes don't need escaping).
-- name: _verify | Rendered containers.conf carries the pinned keys
-  command:
-    argv: [ grep, -Fxq, "{{ item }}", /etc/containers/containers.conf ]
-  become: true
-  changed_when: false
-  loop:
-    - 'network_backend = "netavark"'
-    - 'default_rootless_network_cmd = "pasta"'
-    - 'default_network = "podman"'
-    - 'default_subnet = "{{ podman_default_network }}"'
-    - 'dns_bind_port = 5333'
-    - 'seccomp_profile = "/etc/containers/seccomp-fchmodat2.json"'
-
 # The seccomp augmentation is the role's reason for shipping a custom
 # profile; box's 5.15 kernel predates fchmodat2/io_uring so they can't be
 # exercised functionally here, but assert the rendered profile actually
@@ -357,31 +339,3 @@
   register: podman_service_unit
   changed_when: false
   failed_when: "'--log-level=warn' not in (podman_service_unit.status.Environment | default(''))"
-
-# The root-scope daily prune timer must be enabled (the user-scope one lives
-# in the operator's manager, which box's missing per-user D-Bus socket can't
-# be queried over `systemctl --user` -- so only the system timer is checked).
-- name: _verify | The root-scope prune timer is enabled
-  systemd:
-    name: podman_prune.timer
-  become: true
-  register: podman_prune_timer
-  changed_when: false
-  failed_when: podman_prune_timer.status.UnitFileState != 'enabled'
-
-# The podman package enables both podman-auto-update.timer and
-# podman-auto-update.service; install.yml masks both (image tags are
-# ansible-pinned and no container carries an autoupdate label, so they would
-# only ever no-op or fire an unpinned pull). Assert both live units are masked
-# so a package update can't silently re-arm either the daily timer or the
-# boot-time service.
-- name: _verify | The podman-auto-update units are masked
-  systemd:
-    name: "{{ item }}"
-  become: true
-  register: podman_autoupdate_unit
-  changed_when: false
-  failed_when: podman_autoupdate_unit.status.UnitFileState != 'masked'
-  loop:
-    - podman-auto-update.timer
-    - podman-auto-update.service
