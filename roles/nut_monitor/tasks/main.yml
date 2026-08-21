@@ -18,15 +18,6 @@
   tags:
     - nut_monitor
 
-# Delivery is the postfix role's concern; verify its mail frontend is present.
-- name: Check the mail frontend
-  command: mail -f /dev/null
-  register: nut_monitor_mail
-  changed_when: false
-  failed_when: nut_monitor_mail.rc not in [0, 1]
-  tags:
-    - nut_monitor
-
 - name: Install nut
   apt:
     pkg:
