@@ -54,19 +54,12 @@
       register: netplan_cloud_init_config
       become: true
 
-    - name: Resolve desired and current netplan documents
-      set_fact:
-        netplan_desired_document: >-
-          {{ {'network': {'version': 2} | combine(netplan)} }}
-        netplan_current_document: >-
-          {{ (netplan_managed_config_content.content | b64decode | from_yaml)
-             if netplan_managed_config.stat.exists else {} }}
-      changed_when: false
-
     - name: Detect changed netplan configuration
       set_fact:
         netplan_config_changed: >-
-          {{ netplan_current_document != netplan_desired_document
+          {{ ((netplan_managed_config_content.content | b64decode | from_yaml)
+              if netplan_managed_config.stat.exists else {})
+             != {'network': {'version': 2} | combine(netplan)}
              or netplan_installer_config.stat.exists
              or (not cloud_init_managed
                  and (netplan_cloud_init_config.stat.exists | default(false))) }}
