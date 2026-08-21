@@ -98,17 +98,6 @@
         delay: 20
         timeout: 120
 
-- name: _verify rollback | Confirm the rollback timer logged its firing
-  # The rollback script calls `logger -t netplan_rollback "auto-
-  # rollback firing: ..."`. If we recovered SSH but this isn't in the
-  # journal, something else healed the network and the rollback path
-  # wasn't exercised. No built-in ansible module wraps journalctl.
-  command: journalctl -t netplan_rollback --since "5 minutes ago"
-  register: netplan_verify_rollback_journal
-  changed_when: false
-  failed_when: "'auto-rollback firing' not in netplan_verify_rollback_journal.stdout"
-  become: true
-
 - name: _verify rollback | Read /etc/netplan/01-netcfg.yaml
   slurp:
     src: /etc/netplan/01-netcfg.yaml
@@ -211,11 +200,13 @@
   failed_when: netplan_verify_abort.rc != 1
   become: true
 
-- name: _verify abort | Confirm it logged the abort and refused to restore
-  command: journalctl -t netplan_rollback --since "1 minute ago"
-  register: netplan_verify_abort_journal
+- name: _verify | Confirm the rollback and abort paths were logged
+  command: journalctl -t netplan_rollback --since "5 minutes ago"
+  register: netplan_verify_journal
   changed_when: false
-  failed_when: "'ABORT: no usable' not in netplan_verify_abort_journal.stdout"
+  failed_when: >-
+    'auto-rollback firing' not in netplan_verify_journal.stdout
+    or 'ABORT: no usable' not in netplan_verify_journal.stdout
   become: true
 
 - name: _verify abort | Confirm /etc/netplan was left untouched
