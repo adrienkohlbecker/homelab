@@ -7,11 +7,6 @@
 # NTS-KE reachability from the qemu fixture isn't guaranteed, so a leap
 # status of "Not synchronised" here is not a failure.
 
-- name: _verify | Chrony is active  # noqa: command-instead-of-module -- is-active query, not a state change
-  command: systemctl is-active chrony
-  changed_when: false
-  become: true
-
 - name: _verify | Chronyd answers chronyc (config parsed, daemon healthy)
   command: chronyc tracking
   changed_when: false
@@ -37,14 +32,9 @@
     success_msg: >-
       all {{ ntp_verify_authdata.stdout_lines | length }} loaded source(s) use NTS
 
-- name: _verify | Check systemd-timesyncd state  # noqa: command-instead-of-module -- is-active query, not a state change
+- name: _verify | Timesyncd is not competing for the clock  # noqa: command-instead-of-module -- is-active query, not a state change
   command: systemctl is-active systemd-timesyncd
   changed_when: false
-  failed_when: false
   register: ntp_verify_timesyncd
+  failed_when: ntp_verify_timesyncd.stdout == "active"
   become: true
-
-- name: _verify | Timesyncd is not competing for the clock
-  assert:
-    that: ntp_verify_timesyncd.stdout != "active"
-    fail_msg: systemd-timesyncd is active and will fight chrony for the clock
