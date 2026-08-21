@@ -37,7 +37,6 @@ swap_zram_size: 8G
 # Three-member mdadm raid5. mke2fs derives the ext4 stride/stripe-width from
 # the array topology at creation; the role's _verify asserts the recorded
 # geometry still matches the live array.
-podman_storage_backend: partition
 podman_storage_device: /dev/md/podman
 podman_operator_prune_enabled: true
 

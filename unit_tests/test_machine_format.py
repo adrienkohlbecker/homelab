@@ -106,7 +106,6 @@ def test_format_ansible_cmd_default_envelope(
     assert '{"test_in_aws": false}' in cmd
     assert not any("tailscale_wan_direct" in part for part in cmd)
     assert not any("headscale_oidc_" in part for part in cmd)
-    assert not any("podman_zvol_size" in part for part in cmd)
 
 
 def test_format_ansible_cmd_role_fixture_vars(

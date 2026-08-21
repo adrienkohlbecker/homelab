@@ -199,7 +199,6 @@ netdata_diskspace_blocklist: []
 # The Hetzner image carves this rebuild-only partition before rpool. Persistent
 # service state remains under /mnt/services; this ext4 filesystem carries only
 # reconstructible images and rootless runner overlay layers.
-podman_storage_backend: partition
 podman_storage_device: /dev/disk/by-partlabel/podman
 
 # Global job ceiling across BOTH runner blocks (config.toml is process-wide) --

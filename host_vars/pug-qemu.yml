@@ -4,8 +4,8 @@
 # and on-demand `testrole.py --machine pug` go through here.
 qemu_test: true
 
-# Inherits prod pug's podman partition backend: the rebuilt host and fixture both
-# use /dev/disk/by-partlabel/podman instead of the legacy rpool/podman zvol.
+# Inherits prod pug's dedicated Podman device; the rebuilt host and fixture both
+# use /dev/disk/by-partlabel/podman.
 
 # Same block formula as host_vars/pug.yml; only `parent` differs (the
 # QEMU NIC isn't named eth0). See host_vars/lab-qemu.yml for the

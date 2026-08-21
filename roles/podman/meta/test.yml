@@ -2,11 +2,10 @@
 # userspace stack natively; resolute drops the iptables compat package and takes
 # the >= 26 branch.
 #
-# Storage backend coverage: box uses a dedicated raw ext4 partition; minimal
-# stays on the root filesystem; lab exercises the
-# three-member mdadm raid5 partition backend. No fixture covers fox's retained
-# rpool/podman zvol backend. box + minimal run on every push; lab is available
-# only through a manual `testrole.py podman --machine lab` run.
+# Storage coverage: box uses a dedicated raw ext4 partition, minimal stays on
+# the root filesystem, and lab exercises the three-member mdadm raid5 device.
+# box + minimal run on every push; lab is also available through a manual
+# `testrole.py podman --machine lab` run.
 machines:
   box:
   minimal:

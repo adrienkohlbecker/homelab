@@ -29,7 +29,6 @@ macvlan_blocks:
 
 swap_partition: /dev/disk/by-partlabel/swap
 
-podman_storage_backend: partition
 podman_storage_device: /dev/disk/by-partlabel/podman
 
 # zram is the primary swap; the partition above is the overflow

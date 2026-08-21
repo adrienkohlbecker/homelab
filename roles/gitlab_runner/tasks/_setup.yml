@@ -41,10 +41,10 @@
   become: true
 
 # Run the podman role's install.yml so the test VM gets the same storage
-# layout prod does: rpool/podman zvol mounted at /var/lib/containers,
-# /var/lib/containers/rootless with sticky-bit perms, the system
-# storage.conf with the right graphroot. Additive on box_deps (which
-# pre-bakes podman) and the full install path on a plain fixture.
+# layout prod does: the dedicated store mounted at /var/lib/containers,
+# /var/lib/containers/rootless with sticky-bit perms, and the system
+# storage.conf with the right graphroot. Additive on box_deps (which pre-bakes
+# podman) and the full install path on a plain fixture.
 - name: _setup | Install podman with prod-shape storage layout
   import_role:
     name: podman

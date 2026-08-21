@@ -139,12 +139,13 @@ locals {
   #   overflow behind zram (notes/swap_strategy.md). Consumed by provision.sh
   #   as $SWAP_SIZE.
   # - podman_size: per-disk size of the dedicated podman-store partition
-  #   (p4). "" => no podman partition (host keeps the rpool/podman zvol for
-  #   legacy-backend coverage). Single-disk bakes one plain ext4 partition; mirror
-  #   bakes one per rpool disk and chroot.sh mdadm's them into a raid5
-  #   (/dev/md/podman). The podman role formats + mounts it. Fixture sizes only
-  #   prove the mechanism; prod sizes itself at rebuild (notes/runbooks/
-  #   podman_partition_rebuild.md). Consumed by provision.sh as $PODMAN_SIZE.
+  #   (p4). "" => no podman partition, used only by minimal fixtures that keep
+  #   the store on their root filesystem. Single-disk bakes one plain ext4
+  #   partition; mirror bakes one per rpool disk and chroot.sh mdadm's them into
+  #   a raid5 (/dev/md/podman). The podman role formats + mounts it. Fixture
+  #   sizes only prove the mechanism; prod sizes itself at rebuild (notes/
+  #   runbooks/podman_partition_rebuild.md). Consumed by provision.sh as
+  #   $PODMAN_SIZE.
   # - meta_size: per-disk size of tank's special-vdev partition (p6, mirror
   #   only). "" => no meta partition (tank has no special vdev). provision.sh
   #   ZFS-mirrors the per-disk p6s into tank's special vdev; the fixture size
@@ -208,18 +209,14 @@ locals {
     # box_deps is derived from box by `mise run packer:seed-deps`, which boots
     # box with launch.py --commit, applies packer/seed_deps.yml, and publishes
     # the result. It is not a packer source.
-    # box uses the partition podman backend (podman_storage_backend=partition in
-    # host_vars/box.yml): the container store is a dedicated 50G ext4 partition
-    # (p4), not an rpool zvol. box is the only fixture the _site_test cell
+    # box keeps the container store on a dedicated 50G ext4 partition (p4).
+    # box is the only fixture the _site_test cell
     # converges the *whole* fleet onto, and that store must hold every service
     # image plus a storage-chown-by-maps duplicate for each fake-root service
-    # (homeassistant, jellyfin, authelia, ...), hence 50G. With podman out of the
-    # pool, the rpool only carries the OS + the prod producer datasets
-    # (data/media/scratch/minio/services land flat on it here), so it no longer
-    # needs the headroom the old 50G-zvol-inside-rpool layout demanded. vdb is
-    # sized for swap(4G) + podman(50G) + a ~40G rpool; the disk_sizes total stays
-    # 96G. (The earlier 96G existed to host an in-pool 50G zvol with slack; the
-    # partition guarantees the 50G directly now.)
+    # (homeassistant, jellyfin, authelia, ...), hence 50G. rpool carries the OS
+    # plus the prod producer datasets (data/media/scratch/minio/services land
+    # flat on it here). vdb is sized for swap(4G) + podman(50G) + a ~40G rpool;
+    # the disk_sizes total stays 96G.
     box = {
       disks           = "/dev/vdb"
       extra_disks     = "/dev/vdc"

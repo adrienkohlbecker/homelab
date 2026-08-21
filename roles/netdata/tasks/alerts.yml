@@ -142,9 +142,7 @@
 # workloads. On lab/pug the workload is stable enough that the
 # prediction is a useful early warning -- the static disk_space_usage
 # alarm only escalates to CRITICAL at 98% used + <5GB free, which
-# leaves no room to react (the 2026-05-15 /var/lib/containers fill
-# went WARNING -> CRITICAL in ~10s as the zvol passed 98%, with no
-# usable lead time).
+# leaves no room to react when /var/lib/containers fills rapidly.
 #
 # Patching disks.conf rather than re-declaring the templates because
 # the upstream calc depends on $disk_fill_rate (a sibling template);

@@ -269,8 +269,8 @@
 
 # 0755 (up from the 0700 the dir is first created with) lets netdata's
 # disk-space collector traverse to the mountpoint. The value is
-# load-bearing on zfs_root hosts: this task runs before the zvol mount,
-# so on the second converge it sees the zvol's ext4 root, which mkfs
+# load-bearing on zfs_root hosts: this task runs before the dedicated mount,
+# so on the second converge it sees the partition's ext4 root, which mkfs
 # makes 0755 — matching that keeps the task idempotent. Tightening it
 # (e.g. 0711) fights the mkfs default and the task never converges.
 - name: install | Update containers permissions for netdata disk space monitoring
@@ -284,192 +284,20 @@
   tags:
     - podman
 
-# Fail closed on a bad backend value before any of the gated tasks below: every
-# zvol/partition task keys on exact string equality, so a typo (e.g. "partion")
-# would silently skip *both* backends and leave /var/lib/containers on the root
-# filesystem -- podman still works, so the regression is invisible until the disk
-# fills. Assert the value is one of the two known backends up front.
-- name: install | Assert podman_storage_backend is valid
-  assert:
-    that: podman_storage_backend in ['zvol', 'partition']
-    fail_msg: >-
-      podman_storage_backend must be 'zvol' or 'partition';
-      got {{ podman_storage_backend | default('<unset>') }}.
-  tags:
-    - podman
-
-# The size is explicit so the shrink-guard below has a real target. Set it to a
-# volblocksize (8K) multiple: ZFS rounds volsize up to the next 8K, and a
-# rounded-up reported size reads as larger than the request on the next converge,
-# tripping the shrink-guard below with a false positive.
-- name: install | Assert podman_zvol_size is set
-  when: zfs_root and podman_storage_backend == 'zvol'
-  assert:
-    that:
-      - podman_zvol_size is defined
-      - (podman_zvol_size | int) > 0
-    fail_msg: >-
-      podman_zvol_size must be set (bytes) in group_vars/host_vars for
-      zfs_root hosts; got {{ podman_zvol_size | default('<unset>') }}.
-  tags:
-    - podman
-
-# community.general.filesystem with resizefs: true only grows ext4,
-# never shrinks. The `zfs:` task below happily accepts any volsize as
-# a property change -- including a shrink under a live, larger ext4,
-# which silently leaves the fs writing past end-of-device until the
-# next overlay mkdir trips ENOMEM. (Incident 2026-05-17: pihole list
-# update failed with "cannot allocate memory" after the zvol had been
-# shrunk from a manually-grown 50G back to the role's 30G.) Bail before
-# the shrink lands; the only safe path is offline e2fsck + resize2fs +
-# zfs set volsize, then commit the new size here.
-- name: install | Read current podman zvol size
-  when: zfs_root and podman_storage_backend == 'zvol'
-  command: zfs get -Hp -o value volsize rpool/podman
-  register: podman_zvol_current
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: true
-  tags:
-    - podman
-
-# Skip the shrink guard only when the zvol genuinely doesn't exist yet
-# (fresh host: rc=1 "dataset does not exist"). Any *other* `zfs get`
-# failure must stop the play rather than silently bypass the check below.
-- name: install | Assert the zvol size probe did not error unexpectedly
-  when:
-    - zfs_root and podman_storage_backend == 'zvol'
-    - podman_zvol_current.rc != 0
-  assert:
-    that: "'does not exist' in podman_zvol_current.stderr"
-    fail_msg: >-
-      `zfs get volsize rpool/podman` failed unexpectedly
-      (rc={{ podman_zvol_current.rc }}): {{ podman_zvol_current.stderr | trim }}.
-      Refusing to proceed -- cannot verify the current zvol size for the
-      shrink guard.
-  tags:
-    - podman
-
-- name: install | Refuse to shrink podman zvol
-  when:
-    - zfs_root and podman_storage_backend == 'zvol'
-    - podman_zvol_current.rc == 0
-  assert:
-    that: (podman_zvol_size | int) >= (podman_zvol_current.stdout | int)
-    fail_msg: >-
-      Refusing to shrink rpool/podman from {{ podman_zvol_current.stdout }}
-      to {{ podman_zvol_size }} bytes -- would corrupt the ext4 inside. To
-      shrink: stop podman services, umount /var/lib/containers, grow zvol
-      back, e2fsck -fy, resize2fs to target, then shrink zvol.
-  tags:
-    - podman
-
-# Pin the container-store zvol's properties. It carries an ext4 filesystem (its
-# own page cache) for the overlay driver, so ZFS defaults are wrong for it under
-# a wide CI fan-out:
-#   - compression=lz4 (overrides rpool's inherited zstd): every overlay write is
-#     compressed in-kernel; zstd burns ~10x the CPU of lz4 at a similar ratio on
-#     layer data, and on a 2-vCPU host that dominates system time.
-#   - primarycache=metadata (overrides inherited all): ext4 already page-caches
-#     the data, so caching zvol data blocks in ARC too is pure double-caching --
-#     it wastes the (small) ARC and inflates RAM pressure into swap.
-#   - logbias=throughput: bulk write-heavy workload, not latency-sensitive.
-#   - volblocksize=8K, creation-time ONLY (gated on the zvol being absent): it is
-#     read-only, so setting it on an existing zvol fails every converge. ext4
-#     writes 4K blocks; a 16K record (the OpenZFS >=2.2 default) forces a 4x
-#     read-modify-write, worsened by primarycache=metadata keeping those records
-#     out of ARC. 8K halves the amplification and still compresses. Existing 16K
-#     zvols keep working and adopt 8K only on a deliberate destroy+recreate (see
-#     notes/runbooks/fox_podman_zvol_volblocksize_migration.md).
-- name: install | Create podman zvol
-  when: zfs_root and podman_storage_backend == 'zvol'
-  zfs:
-    name: rpool/podman
-    state: present
-    extra_zfs_properties: >-
-      {{
-        {
-          "volsize": podman_zvol_size,
-          "compression": "lz4",
-          "primarycache": "metadata",
-          "logbias": "throughput"
-        } | combine(
-          {"volblocksize": "8K"} if podman_zvol_current.rc != 0 else {}
-        )
-      }}
-  register: podman_zfs_zvol
-  become: true
-  tags:
-    - podman
-
-# Drop the per-file fsync that bottlenecks image extraction: the chown phase
-# of `--uidmap=+0:N:1` (e.g. homeassistant's 1.2 GB image) serializes on
-# lchown -> ext4 journal -> zvol fsync. sync=disabled makes those writes async
-# (ZFS still commits whole txgs atomically, so the pool stays consistent; only
-# the last ~5s of writes are at risk on a crash). Safe in two cases:
-#   - qemu_test: storage is wiped between runs.
-#   - hosts that opt in via podman_zvol_sync_disabled, where the zvol carries
-#     only reconstructible images + overlay layers (service state lives on
-#     /mnt/services bind-mounts) -- see defaults/main.yml.
-- name: install | Disable sync on podman zvol for fast chown
-  when: zfs_root and podman_storage_backend == 'zvol' and (qemu_test or podman_zvol_sync_disabled)
-  zfs:
-    name: rpool/podman
-    state: present
-    extra_zfs_properties:
-      sync: disabled
-  become: true
-  tags:
-    - podman
-
-- name: install | Create ext4 filesystem on podman zvol
-  when: zfs_root and podman_storage_backend == 'zvol' and not (ansible_check_mode and podman_zfs_zvol.changed)
-  filesystem:
-    fstype: ext4
-    dev: /dev/zvol/rpool/podman
-    resizefs: true
-  become: true
-  tags:
-    - podman
-
-- name: install | Mount podman zvol
-  when: zfs_root and podman_storage_backend == 'zvol' and not (ansible_check_mode and podman_zfs_zvol.changed)
-  mount:
-    path: /var/lib/containers
-    src: /dev/zvol/rpool/podman
-    fstype: ext4
-    # x-systemd.requires=zfs-volumes.target gates the mount on ZFS
-    # finishing pool import + zvol exposure. systemd-fstab-generator
-    # already adds an implicit dep on the device unit, but the
-    # explicit target dep removes any reliance on udev winning the
-    # race against systemd's device-wait timeout.
-    opts: defaults,noatime,x-systemd.requires=zfs-volumes.target
-    state: mounted
-    backup: true
-  become: true
-  tags:
-    - podman
-
-# The partition backend (podman_storage_backend == 'partition') puts the
-# container store on a dedicated raw ext4 partition (single-disk) or an mdadm
-# array of them (multi-disk) instead of an rpool zvol -- bypassing ZFS so
-# reconstructible image/overlay data doesn't pay the COW + checksum + ZIL write
-# amplification. The partition/array itself is created by the install layer
-# (packer/scripts for fixtures, notes/runbooks/podman_partition_rebuild.md for
-# prod); the role only formats and mounts it. podman_storage_device is the
-# stable pre-mkfs path: /dev/disk/by-partlabel/podman (single-disk) or
-# /dev/md/podman (mdadm). Unlike the zvol, it pre-exists this converge, so no
-# check-mode guard is needed.
-- name: install | Assert podman_storage_device is set for the partition backend
-  when: podman_storage_backend == 'partition'
+# ZFS-root hosts keep the reconstructible container store outside rpool on a
+# dedicated raw ext4 partition (single-disk) or mdadm array (multi-disk). The
+# install layer creates the device; this role formats and mounts it. Minimal
+# fixtures have zfs_root=false and intentionally keep Podman on the root
+# filesystem.
+- name: install | Assert podman_storage_device is set on ZFS-root hosts
+  when: zfs_root
   assert:
     that:
       - podman_storage_device is defined
       - podman_storage_device | length > 0
     fail_msg: >-
-      podman_storage_backend=partition requires podman_storage_device
-      (the partition or /dev/md path) in host_vars; got
+      ZFS-root hosts require podman_storage_device (the partition or /dev/md
+      path) in host_vars; got
       {{ podman_storage_device | default('<unset>') }}.
   tags:
     - podman
@@ -477,7 +305,7 @@
 # resizefs grows ext4 to fill a deliberately enlarged partition and is a no-op
 # on fixed fixtures. On mdadm, mke2fs derives stripe geometry from the array.
 - name: install | Create ext4 filesystem on the podman partition
-  when: podman_storage_backend == 'partition'
+  when: zfs_root
   filesystem:
     fstype: ext4
     dev: "{{ podman_storage_device }}"
@@ -486,11 +314,10 @@
   tags:
     - podman
 
-# No x-systemd.requires=zfs-volumes.target here (unlike the zvol mount): a raw
-# partition is exposed by udev early, and an mdadm array assembles from
+# A raw partition is exposed by udev early, and an mdadm array assembles from
 # mdadm.conf in the initramfs/udev, both well before local-fs.target.
 - name: install | Mount the podman partition
-  when: podman_storage_backend == 'partition'
+  when: zfs_root
   mount:
     path: /var/lib/containers
     src: "{{ podman_storage_device }}"
@@ -503,8 +330,8 @@
     - podman
 
 # Rootless storage lives under /var/lib/containers/rootless/$USER -- on the
-# podman zvol where zfs_root, else on the plain root filesystem. Created on
-# every podman host (not just zfs_root) so storage.conf's rootless_storage_path
+# dedicated Podman store where zfs_root, else on the plain root filesystem.
+# Created on every podman host so storage.conf's rootless_storage_path
 # always has its parent. Sticky-bit 1777 (like /tmp) lets each user create
 # and own their own subdir without being able to touch anyone else's. The
 # mode is load-bearing — a user needs write+traverse on the parent to create
