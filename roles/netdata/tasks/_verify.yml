@@ -190,37 +190,6 @@
       chart {{ _netdata_keepalived_vrrp_chart.json.id }} context={{ _netdata_keepalived_vrrp_chart.json.context }}
       labels={{ _netdata_keepalived_vrrp_chart.json.chart_labels | default({}) }}
 
-- name: _verify | Keepalived lost-master alert registered against the fixture
-  uri:
-    url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
-  register: _netdata_keepalived_vrrp_alarms
-  retries: 30
-  delay: 2
-  until: >-
-    _netdata_keepalived_vrrp_alarms.status == 200
-    and ((_netdata_keepalived_vrrp_alarms.json | default({})).alarms | default({})).keys() | list
-        | select('search', 'keepalived_vrrp.state.keepalived_lost_master') | list | length > 0
-
-- name: _verify | Keepalived alarm uses sustained VIP absence
-  vars:
-    _alarm: >-
-      {{
-        (_netdata_keepalived_vrrp_alarms.json.alarms
-         ["keepalived_vrrp.state.keepalived_lost_master"])
-        | default({})
-      }}
-  assert:
-    that:
-      - _alarm.recipient | default('') == "sysadmin"
-      - _alarm.lookup_method | default('') == "max"
-      - _alarm.lookup_after | default(0) == -300
-      - _alarm.lookup_dimensions | default('') == "holds_vip"
-      - _alarm.delay_up_duration | default(0) == 0
-      - _alarm.delay_down_duration | default(0) == 0
-    fail_msg: >-
-      Expected keepalived_lost_master to require five minutes without the VIP
-      and no notification-only delay. Got: {{ _alarm }}
-
 # Gate on the charts appearing before the singular /api/v1/chart probes
 # below -- that endpoint 404s for unknown charts, which would fail those
 # tasks outright instead of letting `until:` retry.
@@ -330,9 +299,9 @@
 # instantiation the assertions below consume: the presence/liveness fan-outs
 # against the fresh charts, and the stock systemdunits alarm the sustained-state
 # asserts read (its whole family registers in the same health pass), plus the
-# un-silenced stock disk and collector alarms. The four GitLab Runner instances
-# cover every actionable failure reason in Runner 19; the three ordinary job
-# outcomes are asserted absent below.
+# un-silenced stock disk and collector alarms, and the Keepalived lost-master
+# alarm. The four GitLab Runner instances cover every actionable failure reason
+# in Runner 19; the three ordinary job outcomes are asserted absent below.
 - name: _verify | Fetch alarms
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
@@ -363,8 +332,29 @@
     and _keys | select('search', 'liveness_system_cpu') | list | length > 0
     and _keys | select('search', 'systemd_service_unit_failed_state') | list | length > 0
     and _keys | select('search', 'out_of_disk_space_time') | list | length > 0
+    and 'keepalived_vrrp.state.keepalived_lost_master' in _keys
     and _collector_failure_alerts | length > 0
     and _runner_alerts | length == 4
+
+- name: _verify | Keepalived alarm uses sustained VIP absence
+  vars:
+    _alarm: >-
+      {{
+        (_netdata_alarms.json.alarms
+         ["keepalived_vrrp.state.keepalived_lost_master"])
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - _alarm.lookup_method | default('') == "max"
+      - _alarm.lookup_after | default(0) == -300
+      - _alarm.lookup_dimensions | default('') == "holds_vip"
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 0
+    fail_msg: >-
+      Expected keepalived_lost_master to require five minutes without the VIP
+      and no notification-only delay. Got: {{ _alarm }}
 
 - name: _verify | Presence alerts use readiness and sustained absence
   vars:
