@@ -59,9 +59,20 @@
       - usbutils
       - vim
       - zsh
+    policy_rc_d: 101
     cache_valid_time: 3600
   become: true
   register: user_apt_packages
+  tags:
+    - user
+
+- name: Enable EDAC monitoring service
+  when: not (ansible_check_mode and user_apt_packages.changed)
+  systemd:
+    name: edac.service
+    enabled: true
+    state: started
+  become: true
   tags:
     - user
 

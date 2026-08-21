@@ -20,6 +20,11 @@
   command: sudo -n true
   changed_when: false
 
+- name: _verify | EDAC monitoring service is active  # noqa: command-instead-of-module
+  command: systemctl is-active edac.service
+  changed_when: false
+  become: true
+
 # `mise ls --installed` lists registry entries even when a tool's binary
 # failed to download; .zshrc eval-loads zoxide and atuin unconditionally, so a
 # listed-but-broken binary breaks every fleet shell. Execute the two
