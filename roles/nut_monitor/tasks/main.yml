@@ -139,16 +139,6 @@
   tags:
     - nut_monitor
 
-# Converged hosts still carry the script under its pre-convention hyphenated
-# name; nothing references it once upssched.conf points at nut_notify.
-- name: Remove the stale nut-notify copy
-  file:
-    path: /usr/local/bin/nut-notify
-    state: absent
-  become: true
-  tags:
-    - nut_monitor
-
 # The wake leg exists only on hosts late enough in the shutdown ladder to
 # have peers to revive (nut_monitor_wake_peers, host_vars/pug.yml + lab.yml).
 # wakeonlan is the packaged sender nut_notify's wake_peers arm shells out to.
@@ -185,15 +175,6 @@
   vars:
     systemd_unit_args:
       dest: nut_wake_peers.service
-  tags:
-    - nut_monitor
-
-# The wake sender used to be a bespoke python script; wakeonlan replaced it.
-- name: Remove the retired nut_wake_peers script
-  file:
-    path: /usr/local/bin/nut_wake_peers
-    state: absent
-  become: true
   tags:
     - nut_monitor
 
