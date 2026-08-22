@@ -30,7 +30,7 @@ http {
     types_hash_bucket_size 64;
     client_max_body_size   16M;
 
-    # Default bucket size (64) overflows with our ~46 subdomains × 3 server_names each.
+    # The managed vhost set exceeds nginx's default server-name hash bucket size.
     server_names_hash_bucket_size 128;
 
     # MIME -- absolute path so the install-time `nginx -t -c %s` validate
