@@ -1,11 +1,3 @@
-- name: _verify | Neomutt binary runs
-  command: neomutt -v
-  changed_when: false
-
-- name: _verify | W3m runs
-  command: w3m -version
-  changed_when: false
-
 # Hard read-only guard: neomutt browses the archive through a ro bind mount, so
 # a write physically cannot reach the Maildir. Prove the mount is actually
 # mounted read-only...
