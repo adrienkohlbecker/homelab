@@ -1,27 +1,9 @@
-parsers:
-  - name: mosquitto_text
-    format: regex
-    regex: '/^(?:[0-9]+: )?(?:(?<mosquitto_level>Debug|Error|Notice|Warning): )?(?<mosquitto_message>.*)$/m'
-
 pipeline:
   filters:
-    - name: modify
-      match: svc.mosquitto.service
-      rename: MESSAGE log
+    # The save announcement precedes the write; keep any subsequent failure.
     - name: grep
       match: svc.mosquitto.service
       logical_op: and
       exclude:
-        - 'CONTAINER_TAG ^.+$'
-        - 'log ^([0-9]+: )?Saving in-memory database'
-    - name: parser
-      match: svc.mosquitto.service
-      key_name: log
-      parser: mosquitto_text
-      reserve_data: true
-      preserve_key: true
-    - name: modify
-      match: svc.mosquitto.service
-      hard_rename:
-        - mosquitto_message log
-        - mosquitto_level _level
+        - 'COMM ^mosquitto$'
+        - 'MESSAGE \ASaving in-memory database to /mosquitto/data/+mosquitto\.db\.\z'

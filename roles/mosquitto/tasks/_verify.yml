@@ -18,6 +18,13 @@
   loop_control:
     label: "{{ item.key }}"
 
+- name: _verify | Exercise native broker logging and persistence failures
+  script: verify_logging.py
+  args:
+    executable: python3
+  become: true
+  changed_when: false
+
 - name: _verify | Restart the broker
   systemd:
     name: mosquitto
@@ -61,79 +68,6 @@
   register: mosquitto_badpw
   failed_when: mosquitto_badpw.rc == 0
   changed_when: false
-
-- name: _verify | Exercise mosquitto fluent-bit record contracts
-  import_role:
-    name: fluentbit
-    tasks_from: verify_extension
-  vars:
-    fluentbit_verify_args:
-      name: mosquitto
-      records:
-        - MESSAGE: "4070908800: Warning: mosquitto-valid"
-          CONTAINER_TAG: mosquitto
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: mosquitto.service
-        - MESSAGE: mosquitto-raw
-          CONTAINER_TAG: mosquitto
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: mosquitto.service
-      expected:
-        - message: mosquitto-valid
-          level: warn
-          service: mosquitto
-        - message: mosquitto-raw
-          level: info
-          service: mosquitto
-
-- name: _verify | Set mosquitto fluent-bit journal marker
-  set_fact:
-    mosquitto_lnav_marker: "verify_mosquitto_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
-
-- name: _verify | Write mosquitto record through container stderr
-  command:
-    argv:
-      - podman
-      - exec
-      - mosquitto
-      - /bin/sh
-      - -c
-      - >-
-        printf "%s\n" "4070908800: Warning: {{ mosquitto_lnav_marker }}"
-        > /proc/1/fd/2
-  changed_when: false
-  become: true
-
-- name: _verify | Wait for cleaned mosquitto record in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if (
-                    record.get("service") == "mosquitto"
-                    and sys.argv[2] in record.get("message", "")
-                ):
-                    print(json.dumps(record, sort_keys=True))
-                    sys.exit(0)
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-      - "{{ mosquitto_lnav_marker }}"
-  register: _mosquitto_lnav_record
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: _mosquitto_lnav_record.rc == 0
-  become: true
 
 # Clear the retained test messages so a re-run against a --keep VM starts clean.
 - name: _verify | Clear retained test messages

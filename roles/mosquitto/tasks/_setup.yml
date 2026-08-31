@@ -3,6 +3,6 @@
     name: podman
     tasks_from: install
 
-- name: _setup | Install fluent-bit for container-log normalization
+- name: _setup | Install fluent-bit for broker logging
   import_role:
     name: fluentbit
