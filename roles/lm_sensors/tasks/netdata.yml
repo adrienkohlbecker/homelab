@@ -1,14 +1,8 @@
-# Invoked from roles/netdata/tasks/main.yml after netdata is installed --
-# don't call this before the netdata role has run. lm_sensors_netdata_condition is set
-# by that caller; default it so a standalone import (or _verify) still works.
+# Requires netdata installed. metrics.yml supplies the fresh-install check-mode
+# condition; standalone imports default to enabled.
 
-# The shared netdata `template` helper carries no validate: -- it also writes
-# non-YAML configs (netdata health .conf, logrotate) for other callers -- so
-# validate the relabel input here. A malformed entry would otherwise raise a
-# Jinja error mid-render, or land a config netdata silently accept-then-defaults.
-# We check sensor_relabel directly rather than the rendered template: the
-# template always emits one job (so a `jobs | length` check is tautological),
-# and a missing `sensors` key crashes the render before any parse runs.
+# Check required input fields before rendering; YAML parsing alone cannot
+# validate the collector schema.
 - name: Assert lm_sensors_relabel is well-formed before rendering the collector config
   vars:
     _relabel: "{{ lm_sensors_effective_relabel }}"

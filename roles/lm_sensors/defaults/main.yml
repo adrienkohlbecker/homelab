@@ -1,33 +1,17 @@
-# Optional, host-overridable. Defaults/, not vars/: role vars sit above
-# host_vars in ansible's precedence ladder and would mask per-host
-# overrides. The empty default keeps the role a clean no-op on hosts with
-# no sensors (localhost, minimal, any host that doesn't opt in) -- an empty
-# lm_sensors_modules drives main.yml's removal arm instead of tripping the assert.
-#
-# lm_sensors_modules: hwmon kernel module names to load at boot + live (derive
-#                 per host with `sudo sensors-detect`).
-# lm_sensors_relabel: optional go.d relabel map; consumed only by netdata.yml.
-#                 See roles/lm_sensors/templates/sensors.conf.j2 for the shape.
-# lm_sensors_ignore: optional libsensors `ignore` list for phantom/unconnected
-#                 hwmon inputs -- writes /etc/sensors.d/, hiding them from every
-#                 libsensors reader (incl. netdata's chatty debugfs.plugin).
-#                 Shape: list of {chip: <glob>, features: [<feature>, ...]};
-#                 feature names per `sensors -u <chip>` (e.g. temp3).
-# lm_sensors_limits: optional libsensors `set` list overriding chip alarm
-#                 limits that ship too conservative for our hardware (e.g. a
-#                 super-I/O channel whose default tempN_max sits below the
-#                 CPU's normal load temperature, flapping the kernel alarm bit
-#                 and netdata's debugfs.plugin). Writes /etc/sensors.d/ and is
-#                 applied with `sensors -s` (re-applied at boot by the
-#                 lm-sensors.service the package enables). Shape: list of
-#                 {chip: <name>, set: [{feature: <subfeature>, value: <num>}]};
-#                 subfeature names per `sensors -u <chip>` (e.g. temp7_max).
-# noqa var-naming[no-role-prefix]: lm_sensors_modules/lm_sensors_relabel/lm_sensors_ignore/lm_sensors_limits
-# are the established un-prefixed cross-host interface (set in host_vars), not
-# role-internal vars -- same exemption netdata's metrics installs use.
+# Optional host overrides. Empty module/ignore/limits lists remove their files.
+# Kernel modules to load now and at boot; derive with `sudo sensors-detect`.
 lm_sensors_modules: []
+
+# Netdata go.d relabel map; see templates/sensors.conf.j2 for its shape.
 lm_sensors_relabel: []
+
+# Hide phantom inputs from libsensors readers, including netdata debugfs.plugin.
+# Shape: [{chip: <glob>, features: [<feature>, ...]}]; names from `sensors -u`.
 lm_sensors_ignore: []
+
+# Chip limits applied with `sensors -s`, then at boot by lm-sensors.service.
+# Shape: [{chip: <name>, set: [{feature: <subfeature>, value: <num>}]}].
+# Subfeature names come from `sensors -u` (e.g. temp7_max).
 lm_sensors_limits: []
 
 lm_sensors_qemu_test_modules: "{{ ['dummy'] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
