@@ -165,16 +165,54 @@
       command: mcli ls scoped/{{ minio_users[0].access_key }}
       changed_when: false
 
+    - name: _verify | Exercise IAM drift repair
+      block:
+        - name: _verify | Replace both managed policies with deny-only documents
+          command: mcli admin policy add default {{ item }} /dev/stdin
+          args:
+            stdin: >-
+              {"Version":"2012-10-17","Statement":[{"Effect":"Deny","Action":["s3:*"],"Resource":["arn:aws:s3:::*"]}]}
+          loop:
+            - useronly
+            - admins
+          changed_when: true
+
+        - name: _verify | Drift the user assignment to admins
+          command: mcli admin policy set default admins user={{ minio_users[0].access_key }}
+          changed_when: true
+
+        - name: _verify | Drift denies access to the own bucket
+          command: mcli ls scoped/{{ minio_users[0].access_key }}
+          register: minio_verify_denied
+          changed_when: false
+          failed_when: minio_verify_denied.rc == 0 or 'access denied' not in minio_verify_denied.stderr | lower
+      always:
+        - name: _verify | Reapply data provisioning to repair IAM
+          import_tasks: data.yml
+
+    - name: _verify | Repaired user can list its own bucket
+      command: mcli ls scoped/{{ minio_users[0].access_key }}
+      changed_when: false
+
+    - name: _verify | Repaired user does not retain admin access
+      command: mcli admin user list scoped
+      register: minio_verify_admin_denied
+      changed_when: false
+      failed_when: minio_verify_admin_denied.rc == 0 or 'access denied' not in minio_verify_admin_denied.stderr | lower
+
     - name: _verify | Provisioned bucket is listable
       command: mcli ls default/{{ minio_buckets[0] }}
       changed_when: false
 
-    # Existence only -- this does NOT prove `admins` grants admin:* (a typo'd
-    # action would still register and pass `policy info`); the admin grant is
-    # exercised manually via the OIDC login path (see below).
-    - name: _verify | Admins IAM policy exists
+    # The API must return the intended document after drift repair. OIDC claim
+    # mapping to this policy still requires a manual login (see below).
+    - name: _verify | Admins IAM policy is repaired
       command: mcli admin policy info default admins
+      register: minio_verify_admins_policy
       changed_when: false
+      failed_when: >-
+        minio_verify_admins_policy.rc != 0
+        or (minio_verify_admins_policy.stdout | from_json).Policy != lookup('file', 'admins.json') | from_json
 
 - name: _verify | Inspect nginx upload temporary directory
   stat:
