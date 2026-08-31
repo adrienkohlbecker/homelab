@@ -19,9 +19,7 @@ RestartSec=5
 TimeoutStopSec=45
 KillSignal=SIGTERM
 {% if macos_vm_install_mode %}
-ExecStartPre=/usr/bin/rm -f {{ macos_vm_workdir }}/BaseSystem.overlay.qcow2
-ExecStartPre=/usr/bin/qemu-img create -f qcow2 -F raw -b {{ macos_vm_workdir }}/BaseSystem.img {{ macos_vm_workdir }}/BaseSystem.overlay.qcow2
-ExecStopPost=/usr/bin/rm -f {{ macos_vm_workdir }}/BaseSystem.overlay.qcow2
+Environment=TMPDIR={{ macos_vm_workdir }}
 {% endif %}
 ExecStart={% if macos_vm_cpu_pinset | length > 0 %}/usr/bin/taskset -c {{ macos_vm_cpu_pinset }} {% endif %}/usr/bin/qemu-system-x86_64 \
 {% if macos_vm_domain_type == 'kvm' %}
@@ -47,7 +45,7 @@ ExecStart={% if macos_vm_cpu_pinset | length > 0 %}/usr/bin/taskset -c {{ macos_
   -drive id=OpenCoreBoot,if=none,format=qcow2,file={{ macos_vm_workdir }}/OpenCore.qcow2 \
   -device ide-hd,bus=sata.2,drive=OpenCoreBoot,bootindex=1 \
 {% if macos_vm_install_mode %}
-  -drive id=InstallMedia,if=none,file={{ macos_vm_workdir }}/BaseSystem.overlay.qcow2,format=qcow2 \
+  -drive id=InstallMedia,if=none,file={{ macos_vm_workdir }}/BaseSystem.img,format=raw,snapshot=on \
   -device ide-hd,bus=sata.3,drive=InstallMedia,bootindex=3 \
 {% endif %}
   -drive id=MacZvol,if=none,file={{ macos_vm_disk_source }},format=raw,cache=none,aio=native \
