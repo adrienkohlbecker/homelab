@@ -1,41 +1,15 @@
-{#
-Per-block macvlan iface unit. Rendered once per entry in
-host_vars.macvlan_blocks via roles/macvlan/tasks/install.yml.
-macvlan_args is the loop var from main.yml.
-
-Defaults:
-  host_ip:     macvlan_block | ipmath(0) — slot 0 of the block. This
-               is the block's network address, which is a usable host slot
-               here precisely because the iface is /32 + an explicit route
-               to the whole block (nothing treats the /28 as a subnet).
-  mac_address: stable random_mac seeded by inventory_hostname_<name>
-               so sibling blocks on the same host pick distinct MACs
-               (same seed = same MAC = L2 collision).
-
-Self-healing: the unit BindsTo its own child device (see [Unit]), so a
-manual `ip link delete <name>` (a udev remove) flips it to inactive
-instead of leaving a stale `active` that Type=oneshot + RemainAfterExit
-would otherwise report. A reconverge then recreates the iface (the
-systemd_unit helper starts any non-active unit), or `systemctl restart
-<name>` does it by hand.
-#}
+{# Per-block interface unit; inputs and defaults are documented in tasks/main.yml. #}
 {% set _host_ip = macvlan_args.host_ip | default(macvlan_block | ansible.utils.ipmath(0)) %}
 {% set _mac = macvlan_args.mac_address | default('82:48:10' | random_mac(seed=(inventory_hostname ~ '_' ~ macvlan_args.name))) %}
 [Unit]
 Description={{ macvlan_args.name }} interface setup
-# `ip link add ... link <parent>` needs the parent to already exist; ordering
-# on network.target isn't enough (it says nothing about the parent iface).
-# Bind to the parent's device unit (pulled in + ordered by udev) and skip
-# cleanly if it's absent. BindsTo only tears down on device *removal* (udev),
-# not a link-down, so a hardware NIC / netplan subif won't flap it away.
+# Wait for the parent device; network.target does not guarantee it exists.
+# BindsTo tracks device removal, not carrier changes.
 After=sys-subsystem-net-devices-{{ macvlan_args.parent }}.device
 BindsTo=sys-subsystem-net-devices-{{ macvlan_args.parent }}.device
 ConditionPathExists=/sys/class/net/{{ macvlan_args.parent }}
-# Tie the unit's active state to the child iface it creates: a udev remove
-# (manual `ip link delete`, driver teardown) drops this unit to inactive so
-# a reconverge recreates it. No After= on this one — the unit *creates* the
-# device, so ordering after it would deadlock. Carrier up/down is not a udev
-# remove, so a link flap won't tear the unit down.
+# Child removal makes the unit inactive so reconverge recreates it.
+# No After= here: this unit creates the child, so ordering after it deadlocks.
 BindsTo=sys-subsystem-net-devices-{{ macvlan_args.name }}.device
 
 [Service]
@@ -43,23 +17,16 @@ Type=oneshot
 RemainAfterExit=yes
 SyslogIdentifier=%N
 
-# Clean up any leftover iface before re-creating it. Tolerates "not
-# there" via the `-` prefix. Without this, a previous ExecStart that
-# failed mid-sequence (oneshot semantics put the unit in `failed`
-# without always running ExecStop) leaves the iface around, and the
-# next start hits `RTNETLINK answers: File exists` on `ip link add`.
+# A partial start can leave the iface behind without running ExecStop.
+# Ignore a missing iface during cleanup.
 ExecStartPre=-/bin/ip link delete {{ macvlan_args.name }}
 ExecStart=/bin/ip link add {{ macvlan_args.name }} link {{ macvlan_args.parent }} address {{ _mac }} type macvlan mode bridge
 ExecStart=/bin/ip addr add {{ _host_ip }}/32 dev {{ macvlan_args.name }}
-# Match the parent NIC's ARP-flux mitigation (see roles/macvlan/tasks/install.yml).
-# Set after `ip link add` because /proc/sys/net/ipv4/conf/{{ macvlan_args.name }}/
-# doesn't exist until then, so a sysctl.d drop-in would silently no-op at boot.
+# Match the parent ARP settings after creation, when the child sysctls exist.
 ExecStart=/sbin/sysctl -q -w net.ipv4.conf.{{ macvlan_args.name }}.arp_ignore=1
 ExecStart=/sbin/sysctl -q -w net.ipv4.conf.{{ macvlan_args.name }}.arp_announce=2
 ExecStart=/bin/ip link set {{ macvlan_args.name }} up
-# `src` pins the preferred source for host-originated traffic into the block
-# to this iface's IP (same cross-iface-identity concern as the ARP knobs),
-# instead of the kernel's default source selection.
+# Use the child IP as the source for host-originated traffic into this block.
 ExecStart=/bin/ip route add {{ macvlan_block }} dev {{ macvlan_args.name }} proto static src {{ _host_ip }}
 ExecStop=-/bin/ip link delete {{ macvlan_args.name }}
 

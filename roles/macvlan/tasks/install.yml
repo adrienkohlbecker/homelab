@@ -1,13 +1,9 @@
-# install.yml — per-block setup of one macvlan iface. Called from
-# main.yml via include_tasks in a loop with loop_var=macvlan_args.
-# See tasks/main.yml for the macvlan_args schema.
+# Per-block setup; macvlan_args and its schema come from tasks/main.yml.
 
 - name: install | Validate {{ macvlan_args.name }}
   assert:
     that:
-      # name lands in a systemd unit *filename*, an `ip link` argument, and
-      # a sysctl key — restrict it to a kernel-legal iface name so a typo
-      # can't write a unit outside the unit dir or silently mangle a key.
+      # The name must be safe in a unit filename, ip argument, and sysctl key.
       - macvlan_args.name is string and macvlan_args.name is match('^[a-z][a-z0-9_]*$')
       - macvlan_args.name | length <= 15
       # parent allows a `.` for VLAN subifs (e.g. eth0.4 / iot).
@@ -16,9 +12,7 @@
       - network.hosts[inventory_hostname].site is defined
       - network.hosts[inventory_hostname].slot is defined
       - network.sites[network.hosts[inventory_hostname].site].vlans[macvlan_args.vlan].cidr is defined
-      # host_ip / mac_address feed `ip addr add` / `ip link set address`
-      # inside the oneshot, so a malformed value fails at unit-runtime, not
-      # converge — validate the format here when supplied.
+      # Reject malformed overrides before the unit invokes ip.
       - macvlan_args.host_ip is not defined or (macvlan_args.host_ip | ansible.utils.ipaddr) != false
       - "macvlan_args.mac_address is not defined or (macvlan_args.mac_address is match('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$'))"
     fail_msg: >-
@@ -33,15 +27,10 @@
   when: macvlan_args.podman_network | default(false)
   assert:
     that:
-      # The podman network derives subnet/gateway from the parent's IPv4
-      # fact (see the podman_network task below), so the parent must be a
-      # gathered iface carrying an address — otherwise the network is
-      # created with an empty/garbage CIDR.
+      # Podman derives its subnet and gateway from the parent IPv4 fact.
       - macvlan_args.parent in ansible_facts
       - ansible_facts[macvlan_args.parent].ipv4 is defined
-      # The pool (upper /29 of block) is handed to netavark as an ip_range
-      # *inside* that derived subnet, so the block must sit within the
-      # parent's network — catches a block/parent mismatch at converge.
+      # The container pool must lie within that parent network.
       - >-
         (macvlan_block | ansible.utils.ipaddr('network'))
         | ansible.utils.ipaddr(ansible_facts[macvlan_args.parent].ipv4.network ~ '/' ~ ansible_facts[macvlan_args.parent].ipv4.prefix)
@@ -53,29 +42,15 @@
   tags:
     - macvlan
 
-# Tighten ARP rules on the parent NIC to avoid the macvlan ARP-flux
-# flap: with the defaults (arp_ignore=0, arp_announce=0) both the
-# parent and the macvlan child can reply to ARP requests for any IP
-# in the shared broadcast domain, so the LAN router sees the host's
-# IP bouncing between MACs and flags a duplicate. arp_ignore=1 makes
-# each interface reply only for IPs configured on it; arp_announce=2
-# keeps source-IP selection sane. The matching child-iface sysctls
-# live in the systemd unit since /proc/sys/net/ipv4/conf/<iface>/
-# doesn't exist until after `ip link add`.
-#
-# Idempotent per-parent: multiple macvlan_blocks sharing a parent
-# (rare in practice) re-set the same sysctl values.
+# Restrict ARP replies to this interface's IPs and avoid inappropriate source
+# addresses, so the router does not see an IP alternate between parent and child
+# MACs. The unit applies matching child settings after creating the interface.
 - name: install | ARP sysctls on {{ macvlan_args.parent }}
   ansible.posix.sysctl:
     name: "net.ipv4.conf.{{ macvlan_args.parent }}.{{ item.key }}"
     value: "{{ item.value }}"
-    # Verify against (and -w) the running kernel, not just the persisted
-    # file — the mitigation has to be live on the already-up parent now,
-    # not only after the next reload/reboot.
+    # Apply to the running parent as well as persisting for boot.
     sysctl_set: true
-    # Persist to a role-owned drop-in, not the shared /etc/sysctl.conf, so
-    # the role's sysctl state stays self-contained (matches swap/kdump/
-    # firewall/tailscale).
     sysctl_file: /etc/sysctl.d/30-macvlan.conf
   loop:
     - { key: arp_ignore, value: '1' }
@@ -97,19 +72,8 @@
   tags:
     - macvlan
 
-# Optionally create a podman macvlan network on the same parent, named
-# after the block. Consumers (homeassistant, future per-VLAN services)
-# attach to the network by name via `--network={{ macvlan_args.name }}`
-# without needing to know the parent / subnet / ip_range plumbing.
-#
-# ip_range = upper /29 of the block (lower /29 = host iface + libvirt
-# macvtap VMs; upper /29 = podman containers). parent_subnet /
-# parent_gateway derived from ansible_facts on the parent iface so
-# host_vars carries only the block CIDR.
-#
-# This task runs inline (not via tasks_from: podman) to avoid the
-# macvlan_args dict-shadowing issue when re-importing the same role
-# inside a loop.
+# Reserve the lower /29 for the host and libvirt; Podman gets the upper /29.
+# Keep this inline: re-importing macvlan inside the loop shadows macvlan_args.
 - name: install | Create podman macvlan network {{ macvlan_args.name }}
   when:
     - macvlan_args.podman_network | default(false)
