@@ -5,7 +5,7 @@
 # entry brings up a macvlan child interface (mac_mgmt, mac_iot, …) at
 # a specified IP, on a specified parent NIC.
 #
-# Entry schema (see tasks/install.yml for validation):
+# Entry schema:
 #   name        required; iface name. Also drives the systemd unit
 #               filename ({{name}}.service) and the MAC seed. Use
 #               `mac_<vlan>` (e.g. `mac_mgmt` for the mgmt VLAN,
@@ -42,11 +42,69 @@
 # Hosts that don't trunk any macvlan-bearing VLANs leave macvlan_blocks empty;
 # the role no-ops cleanly.
 
+- name: Validate macvlan block inputs
+  assert:
+    that:
+      # The name must be safe in a unit filename, ip argument, and sysctl key.
+      - macvlan_args.name is string and macvlan_args.name is match('^[a-z][a-z0-9_]*$')
+      - macvlan_args.name | length <= 15
+      # parent allows a `.` for VLAN subifs (e.g. eth0.4 / iot).
+      - macvlan_args.parent is string and macvlan_args.parent is match('^[a-z][a-z0-9_.]*$')
+      - macvlan_args.vlan is string and macvlan_args.vlan is match('^[a-z][a-z0-9_]*$')
+      - network.hosts[inventory_hostname].site is defined
+      - network.hosts[inventory_hostname].slot is defined
+      - network.sites[network.hosts[inventory_hostname].site].vlans[macvlan_args.vlan].cidr is defined
+      # Reject malformed overrides before the unit invokes ip.
+      - macvlan_args.host_ip is not defined or (macvlan_args.host_ip | ansible.utils.ipaddr) != false
+      - "macvlan_args.mac_address is not defined or (macvlan_args.mac_address is match('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$'))"
+    fail_msg: >-
+      macvlan_args invalid for '{{ macvlan_args.name | default('<no name>') }}':
+      name must be a kernel-legal iface name (^[a-z][a-z0-9_]*$, <=15 chars),
+      parent an iface name, vlan a topology VLAN for this host's site, and
+      host_ip/mac_address (if set) a valid IP / MAC.
+  loop: "{{ macvlan_blocks }}"
+  loop_control:
+    loop_var: macvlan_args
+    label: "{{ macvlan_args.name }}"
+  tags:
+    - macvlan
+
 - name: Install iproute2
   apt:
     pkg:
       - iproute2
     cache_valid_time: 3600
+  become: true
+  tags:
+    - macvlan
+
+# Slash-form keys preserve dotted parent names such as eth0.4.
+- name: Configure ARP policy for macvlan parents and children
+  template:
+    src: macvlan_sysctl.conf.j2
+    dest: /etc/sysctl.d/30-macvlan.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: sysctl --dry-run --ignore --load %s
+  become: true
+  tags:
+    - macvlan
+
+# Existing links converge immediately; each unit applies the same file to its
+# child before bringing it up. Udev also applies it when a link appears.
+- name: Apply ARP policy to existing macvlan parents and children
+  ansible.posix.sysctl:
+    name: "net/ipv4/conf/{{ item.0 }}/{{ item.1.key }}"
+    value: "{{ item.1.value }}"
+    sysctl_set: true
+    sysctl_file: /etc/sysctl.d/30-macvlan.conf
+    reload: false
+    ignoreerrors: true # Child keys do not exist until their units create the links.
+  loop: "{{ macvlan_interfaces | product(macvlan_arp_settings | dict2items) | list }}"
+  loop_control:
+    label: "{{ item.0 }}/{{ item.1.key }}"
   become: true
   tags:
     - macvlan

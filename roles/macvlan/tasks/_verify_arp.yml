@@ -1,0 +1,8 @@
+- name: _verify_arp | Assert ARP policy on every parent and child
+  command: >-
+    sysctl -n net/ipv4/conf/{{ item }}/arp_ignore
+    net/ipv4/conf/{{ item }}/arp_announce
+  loop: "{{ macvlan_interfaces }}"
+  register: macvlan_verify_arp
+  changed_when: false
+  failed_when: macvlan_verify_arp.stdout_lines != ['1', '2']

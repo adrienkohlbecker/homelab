@@ -22,9 +22,8 @@ SyslogIdentifier=%N
 ExecStartPre=-/bin/ip link delete {{ macvlan_args.name }}
 ExecStart=/bin/ip link add {{ macvlan_args.name }} link {{ macvlan_args.parent }} address {{ _mac }} type macvlan mode bridge
 ExecStart=/bin/ip addr add {{ _host_ip }}/32 dev {{ macvlan_args.name }}
-# Match the parent ARP settings after creation, when the child sysctls exist.
-ExecStart=/sbin/sysctl -q -w net.ipv4.conf.{{ macvlan_args.name }}.arp_ignore=1
-ExecStart=/sbin/sysctl -q -w net.ipv4.conf.{{ macvlan_args.name }}.arp_announce=2
+# Apply before link-up without racing the asynchronous udev event.
+ExecStart=/usr/lib/systemd/systemd-sysctl --prefix=/net/ipv4/conf/{{ macvlan_args.name }} /etc/sysctl.d/30-macvlan.conf
 ExecStart=/bin/ip link set {{ macvlan_args.name }} up
 # Use the child IP as the source for host-originated traffic into this block.
 ExecStart=/bin/ip route add {{ macvlan_block }} dev {{ macvlan_args.name }} proto static src {{ _host_ip }}

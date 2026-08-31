@@ -5,6 +5,11 @@
 # same macvlan_blocks the role consumed; host_ip / mac_address defaults
 # mirror macvlan_iface.service.j2 so a drifted default is caught too.
 
+- name: _verify | Reboot to exercise boot-time interface and ARP setup
+  import_role:
+    name: reboot
+    tasks_from: reboot
+
 - name: _verify | Assert each iface exists and is UP
   command: ip -br link show {{ item.name }}
   loop: "{{ macvlan_blocks }}"
@@ -52,15 +57,23 @@
   changed_when: false
   failed_when: macvlan_verify_route.stdout | length == 0
 
-# Both parent and child must restrict ARP replies to their own addresses.
-- name: _verify | Assert the ARP-flux sysctls hold on each parent and child
+- name: _verify | Check ARP policy after boot
+  import_tasks: _verify_arp.yml
+
+- name: _verify | Introduce ARP drift on parents and children
   command: >-
-    sysctl -n net.ipv4.conf.{{ item }}.arp_ignore
-    net.ipv4.conf.{{ item }}.arp_announce
-  loop: "{{ (macvlan_blocks | map(attribute='name') | list + macvlan_blocks | map(attribute='parent') | list) | unique }}"
-  register: macvlan_verify_arp
-  changed_when: false
-  failed_when: macvlan_verify_arp.stdout_lines != ['1', '2']
+    sysctl -w net/ipv4/conf/{{ item }}/arp_ignore=0
+    net/ipv4/conf/{{ item }}/arp_announce=0
+  loop: "{{ macvlan_interfaces }}"
+  changed_when: true
+  become: true
+
+- name: _verify | Reconverge without changing persisted policy
+  import_role:
+    name: macvlan
+
+- name: _verify | Check that reconvergence repaired ARP drift
+  import_tasks: _verify_arp.yml
 
 # Existence + driver + parent only; the upper-/29 ip_range is exercised
 # end-to-end by roles/homeassistant/tasks/_verify.yml (a container actually
@@ -136,3 +149,31 @@
   register: macvlan_verify_heal
   changed_when: false
   failed_when: "'UP' not in macvlan_verify_heal.stdout"
+
+- name: _verify | Check ARP policy after child recreation
+  import_tasks: _verify_arp.yml
+
+- name: _verify | Containers can reach the host over each macvlan network
+  vars:
+    _macvlan_block: "{{ network | host_vlan_block(inventory_hostname, item.vlan, site=network.hosts[inventory_hostname].site) }}"
+  command:
+    argv:
+      - podman
+      - run
+      - --rm
+      - --cap-add=NET_RAW
+      - --network
+      - "{{ item.name }}"
+      - docker.io/library/busybox
+      - ping
+      - -c
+      - '1'
+      - -W
+      - '3'
+      - "{{ item.host_ip | default(_macvlan_block | ansible.utils.ipmath(0)) }}"
+  loop: "{{ macvlan_blocks }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.podman_network | default(false)
+  changed_when: false
+  become: true

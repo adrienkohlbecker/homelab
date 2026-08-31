@@ -1,0 +1,4 @@
+macvlan_interfaces: "{{ (macvlan_blocks | map(attribute='name') | list + macvlan_blocks | map(attribute='parent') | list) | unique }}"
+macvlan_arp_settings:
+  arp_ignore: '1'
+  arp_announce: '2'
