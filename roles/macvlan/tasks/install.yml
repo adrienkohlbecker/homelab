@@ -35,21 +35,6 @@
   tags:
     - macvlan
 
-- name: install | Validate topology block for {{ macvlan_args.name }}
-  assert:
-    that:
-      - macvlan_block is string
-      - macvlan_block | ansible.utils.ipaddr != false
-      - macvlan_block == (macvlan_block | ansible.utils.ipaddr('net'))
-      # The podman pool is the upper /29 (ipsubnet(prefix+1, 1)); a /29-or-
-      # smaller block leaves no room for that split.
-      - macvlan_block | ansible.utils.ipaddr('prefix') | int <= 28
-    fail_msg: >-
-      macvlan_args invalid for '{{ macvlan_args.name }}': derived block
-      '{{ macvlan_block }}' must be a CIDR with prefix <=28.
-  tags:
-    - macvlan
-
 - name: install | Validate podman parent facts for {{ macvlan_args.name }}
   when: macvlan_args.podman_network | default(false)
   assert:
@@ -140,7 +125,7 @@
     driver: macvlan
     subnet: "{{ ansible_facts[macvlan_args.parent].ipv4.network }}/{{ ansible_facts[macvlan_args.parent].ipv4.prefix }}"
     gateway: "{{ ansible_facts[macvlan_args.parent].ipv4.network | ansible.utils.ipmath(1) }}"
-    ip_range: "{{ macvlan_block | ansible.utils.ipsubnet(macvlan_block | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
+    ip_range: "{{ macvlan_block | ansible.utils.ipsubnet(29, 1) }}"
     opt:
       parent: "{{ macvlan_args.parent }}"
       # Must match the host child iface's `mode bridge` (macvlan_iface.service.j2)

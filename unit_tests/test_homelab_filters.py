@@ -148,6 +148,23 @@ def test_host_vlan_block_derives_slot_indexed_subnet() -> None:
     assert homelab.host_vlan_block(network, "box", "iot") == "10.123.4.176/28"
 
 
+@pytest.mark.parametrize(
+    ("cidr", "slot", "error"),
+    [
+        ("invalid", 0, ValueError),
+        ("10.123.4.0/29", 0, AnsibleError),
+        ("10.123.4.0/24", 8, AnsibleError),
+    ],
+)
+def test_host_vlan_block_rejects_invalid_subnets(cidr: str, slot: int, error: type[Exception]) -> None:
+    network = {
+        "sites": {"home": {"vlans": {"iot": {"cidr": cidr}}}},
+        "hosts": {"lab": {"slot": slot}},
+    }
+    with pytest.raises(error):
+        homelab.host_vlan_block(network, "lab", "iot")
+
+
 def test_zfs_source_value_parses_tab_separated_source_and_value() -> None:
     assert homelab.zfs_source_value("local\t/mnt/media\n") == {"source": "local", "value": "/mnt/media"}
 
