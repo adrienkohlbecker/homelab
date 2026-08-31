@@ -1,38 +1,20 @@
-# Inputs: caller passes a single dict `linger_args` with keys
-#   name  required; user account to linger (for the ansible SSH user
-#         pass `ansible_user_id`, for service_user-created accounts
-#         pass the literal name). The account must already exist —
-#         loginctl enable-linger errors on an unknown user, so place
-#         this import after the task that creates the user.
-#   uid   required; the user's uid (caller resolves; for the ansible
-#         SSH user pass `ansible_user_uid`, for service_user-created
-#         accounts pass `<svc>_user.uid`)
+# Inputs: replace the whole `linger_args` dict on each call.
+#   name  required; existing account name (after its user-creation task).
+#   uid   required; caller-resolved uid, e.g. <svc>_user.uid.
 #
-# Use the gathered facts (`ansible_user_id` / `ansible_user_uid`), not
-# `ansible_user` — the latter is set by the connection plugin and isn't
-# present in the template context when `vars:` on `import_role` is
-# evaluated, which trips a "'ansible_user' is undefined" warning.
-#
-# Does, in order: enable-linger for <name>, record the bool
-# `<name>_lingered`, and start user@<uid>.service. The explicit start is a
-# hard contract every caller depends on — do not drop it. The load-bearing
-# subtleties (why the start is required, the `<name>_lingered` consumption
-# contract, the creates/removes sentinel, and the dict-arg rationale) live
-# in notes/linger_design.md.
+# For the SSH user, use gathered ansible_user_id / ansible_user_uid;
+# ansible_user may be unavailable when import_role vars are evaluated.
+# Publishes bool <name>_lingered (whether linger state changed), then starts
+# the manager synchronously so downstream user-scope tasks can use it.
+# See notes/linger_design.md for the result and lifecycle rationale.
 - name: linger | Validate inputs for {{ linger_args.name | default('<unset>') }}
   assert:
     that:
       - linger_args.name is defined
       - linger_args.name is string
       - linger_args.name is match('^[a-z_][a-z0-9_-]*$')
-      # Under --check on a not-yet-provisioned host, service_user only
-      # *reports* creating the account, so <svc>_user.uid is still unset
-      # and linger_args.uid resolves undefined. Tolerate that in check mode
-      # only: on a real run this assert requires a uid. The one path that
-      # reaches here undefined is check-mode-on-a-fresh-host, and there the
-      # enable-linger task reports "would change", so the user-manager start
-      # below is skipped by its own check-mode gate — the undefined uid is
-      # never consumed.
+      # Fresh check-mode account creation has no uid; the predicted linger
+      # change below gates the manager start before it consumes that uid.
       - linger_args.uid is defined or ansible_check_mode
       - linger_args.uid is not defined or (linger_args.uid | string is match('^[0-9]+$'))
     quiet: true
@@ -45,8 +27,7 @@
   command:
     argv:
       - loginctl
-      # Fail fast rather than block on a TTY if polkit ever wants
-      # interactive auth (hardened policy, or a non-root become_user).
+      # Fail promptly if polkit requests interactive authentication.
       - --no-ask-password
       - enable-linger
       - "{{ linger_args.name }}"
@@ -54,8 +35,7 @@
   become: true
   register: _linger_enable_result
 
-# The fact key is sanitized because ansible variable names must match
-# [A-Za-z_][A-Za-z0-9_]*. Some upstream daemons hardcode hyphenated names.
+# Sanitize hyphenated account names for Ansible fact keys.
 - name: linger | Record linger result for {{ linger_args.name }}
   set_fact:
     "{{ linger_args.name | ansible_var_key }}_lingered": "{{ _linger_enable_result is changed }}"

@@ -1,3 +1,2 @@
-# linger is a helper role accessed only via `tasks_from: linger`.
-# main.yml exists so testrole.py can target this role; the actual logic
-# lives in linger.yml and the verification scenarios in _verify.yml.
+# Entry points: tasks_from: linger or disable.
+# Empty main lets testrole.py run the scenarios in _verify.yml.

@@ -1,14 +1,5 @@
-# Functional verify: stand up a throwaway system user, drive the helper,
-# assert the linger sentinel + a live user manager, prove a re-run is a
-# no-op, then tear down.
-#
-# The helper's check-mode gate (`when: not (ansible_check_mode and
-# _linger_result.changed)`) is deliberately not exercised here: it only
-# takes its skip path under a real `ansible-playbook --check` run, and the
-# harness never runs _verify under --check. Forcing check mode via the
-# `check_mode: true` task keyword runs the tasks in check mode but leaves
-# `ansible_check_mode` false, so the gate would not take its --check branch
-# — a test built on it would pass for the wrong reason.
+# The harness runs this hook outside --check. Task-level check_mode: true
+# does not set ansible_check_mode, so it cannot exercise the helper's gate.
 - name: _verify | Create fixture user
   user:
     name: linger_test
@@ -40,9 +31,6 @@
       - linger_test_lingered is defined
       - linger_test_lingered
 
-# The user manager being active is the headline behavior callers depend on
-# (a live bus for rootless podman / user-scope timers); failed_when makes
-# the probe its own assertion.
 - name: _verify | User manager is active  # noqa: command-instead-of-module -- is-active query, not a state change
   command: systemctl is-active user@{{ _linger_user.uid }}.service
   register: _linger_active
@@ -50,21 +38,15 @@
   failed_when: _linger_active.stdout | trim != 'active'
   become: true
 
-# An active manager alone doesn't prove the user's runtime environment is
-# live; logind provisions /run/user/<uid> (XDG_RUNTIME_DIR — where rootless
-# podman and user-scope units place their sockets) precisely because linger
-# is on, and user@<uid>.service is ordered after it, so assert it exists.
-# (The per-user dbus socket /run/user/<uid>/bus would be a stronger probe,
-# but it depends on dbus-user-session, which the minimal box fixture lacks.)
+# Probe the runtime directory rather than its bus socket: the minimal
+# fixture lacks dbus-user-session.
 - name: _verify | XDG_RUNTIME_DIR is provisioned
   stat:
     path: /run/user/{{ _linger_user.uid }}
   register: _linger_runtime_dir
   become: true
 
-# Prove it is linger keeping the manager up, not a live login session:
-# the fixture user has never logged in, so loginctl must list no session
-# for it while user@<uid>.service is nonetheless active.
+# No login session should be keeping the fixture manager alive.
 - name: _verify | List active sessions
   command: loginctl list-sessions --no-legend --no-pager
   register: _linger_sessions
@@ -76,9 +58,7 @@
     that:
       - _linger_runtime_dir.stat.exists
       - _linger_runtime_dir.stat.isdir
-      # Exact token match on the whitespace-split output (the USER column is
-      # its own field), so a substring like a hypothetical linger_test_2
-      # can't false-match the way `is search('linger_test')` would.
+      # Match the whole username, not a substring of another account.
       - "'linger_test' not in _linger_sessions.stdout.split()"
 
 - name: _verify | Drive the helper again (idempotence)
@@ -105,8 +85,7 @@
       name: linger_test
       uid: "{{ _linger_user.uid }}"
 
-# disable.yml stops the user manager before dropping the marker; prove the
-# stop actually took effect (is-active returns "inactive" + non-zero here).
+# is-active returns nonzero for an inactive manager.
 - name: _verify | User manager is no longer active after disable  # noqa: command-instead-of-module -- is-active query, not a state change
   command: systemctl is-active user@{{ _linger_user.uid }}.service
   register: _linger_inactive

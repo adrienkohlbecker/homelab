@@ -1,15 +1,10 @@
-# Inputs: caller passes the same `linger_args` dict as linger.yml.
-#   name  required; the user to un-linger.
-#   uid   optional; when given, the user manager is stopped first. Omit it
-#         on a tombstone call where the account may not exist.
+# Inputs: replace the whole `linger_args` dict on each call.
+#   name  required; account name whose linger marker should be removed.
+#   uid   optional; stop its manager first when the marker exists. Omit to
+#         preserve a login session or clean up a potentially absent account.
 #
-# The teardown half of the helper. Idempotent and tombstone-safe: the
-# `removes:` guard skips disable-linger when the marker is already gone
-# (linger never enabled, or the account never existed), so a caller can
-# leave a `tasks_from: disable` call in place on host groups that should
-# not linger the user — same contract as systemd_timer's remove.yml.
-# Order mirrors the enable path in reverse: stop the running manager
-# before dropping the persistence marker.
+# The removes guard makes an absent marker a no-op, even without an account.
+# Publishes the same bool <name>_lingered result as the enable path.
 - name: disable | Validate inputs for {{ linger_args.name | default('<unset>') }}
   assert:
     that:
@@ -28,9 +23,7 @@
   become: true
 
 - name: disable | Stop the user manager for {{ linger_args.name }}
-  # Only stop the manager when linger actually enabled it. On a tombstone
-  # call against a never-lingered user the marker is absent and that uid
-  # may belong to a live login session whose manager we must not kill.
+  # Without a linger marker, the manager may belong to a live login session.
   when: linger_args.uid is defined and _linger_marker.stat.exists
   systemd:
     name: user@{{ linger_args.uid }}.service
@@ -48,9 +41,6 @@
   become: true
   register: _linger_disable_result
 
-# Export the same bool fact as the enable path (true iff this call changed
-# linger state) so the enable/disable pair is fact-symmetric — mirrors
-# systemd_unit recording its result under one name in both install and remove.
 - name: disable | Record linger result for {{ linger_args.name }}
   set_fact:
     "{{ linger_args.name | ansible_var_key }}_lingered": "{{ _linger_disable_result is changed }}"
