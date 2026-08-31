@@ -263,32 +263,6 @@
   tags:
     - user
 
-# zsh completions land in ~/.local/share/mise/completions/_mise (zsh fpath).
-# Create the dir explicitly: mise doesn't auto-create it, and `mise completion
-# zsh >` would fail if the parent is absent.
-- name: Create mise completions directory
-  file:
-    path: "{{ ansible_user_dir }}/.local/share/mise/completions"
-    state: directory
-    owner: "{{ ansible_user_id }}"
-    group: "{{ ansible_user_id }}"
-    mode: "0755"
-  become: true
-  tags:
-    - user
-
-- name: Generate mise zsh completions
-  shell: |
-    set -euo pipefail
-    /usr/bin/mise completion zsh > {{ ansible_user_dir }}/.local/share/mise/completions/_mise
-  args:
-    executable: /bin/bash
-    creates: "{{ ansible_user_dir }}/.local/share/mise/completions/_mise"
-  become: true
-  become_user: "{{ ansible_user_id }}"
-  tags:
-    - user
-
 # Deploy the dotfiles via the repo's own `stow` mise task — single source of
 # truth for the stow flags/package set (see mise.toml in the dotfiles repo)
 # instead of duplicating them here. Runs from ~/.dotfiles so mise finds the

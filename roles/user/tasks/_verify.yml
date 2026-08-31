@@ -39,6 +39,21 @@
     - zoxide
     - atuin
 
+- name: _verify | Remove generated completions to exercise shell bootstrap
+  file:
+    path: "{{ ansible_user_dir }}/.local/share/mise/completions"
+    state: absent
+
+- name: _verify | Interactive shell generates and loads mise completion
+  command:
+    argv:
+      - zsh
+      - -ic
+      - '[[ ${_comps[mise]} == _mise ]] && autoload -Uz +X _mise'
+  environment:
+    TERM: xterm-256color
+  changed_when: false
+
 - name: _verify | Dotfiles deployed (zshrc is a symlink)
   stat:
     path: "{{ ansible_user_dir }}/.zshrc"
