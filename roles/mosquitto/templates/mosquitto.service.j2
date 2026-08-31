@@ -40,6 +40,7 @@ ExecStart=/usr/bin/podman run \
     --detach \
     --replace \
     --rm \
+    --image-volume=ignore \
     --name mosquitto \
     --init \
     --log-driver journald \

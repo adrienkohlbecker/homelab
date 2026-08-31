@@ -1,8 +1,14 @@
+- name: _verify | Record volumes before client runs and broker restart
+  command: podman volume ls --quiet
+  become: true
+  register: mosquitto_volumes_before
+  changed_when: false
+
 # Peer containers exercise the consumer DNS path and every password-file entry.
 # Retained messages must survive the clean shutdown used by ZFS snapshots.
 - name: _verify | Each account publishes a retained message via DNS
   command: >-
-    podman run --rm --network homeassistant {{ mosquitto_image }}
+    podman run --rm --image-volume=ignore --network homeassistant {{ mosquitto_image }}
     mosquitto_pub -h mosquitto.dns.podman -p 1883
     -u {{ item.key | quote }} -P {{ item.value.password | quote }}
     -t {{ ('homelab/verify/' ~ item.key) | quote }} -m ok -r
@@ -33,7 +39,7 @@
 
 - name: _verify | Each account receives its retained message after restart
   command: >-
-    podman run --rm --network homeassistant {{ mosquitto_image }}
+    podman run --rm --image-volume=ignore --network homeassistant {{ mosquitto_image }}
     mosquitto_sub -h mosquitto.dns.podman -p 1883
     -u {{ item.key | quote }} -P {{ item.value.password | quote }}
     -t {{ ('homelab/verify/' ~ item.key) | quote }} -C 1 -W 3
@@ -51,7 +57,7 @@
 
 - name: _verify | Anonymous connection is refused
   command: >-
-    podman run --rm --network homeassistant {{ mosquitto_image }}
+    podman run --rm --image-volume=ignore --network homeassistant {{ mosquitto_image }}
     mosquitto_pub -h mosquitto.dns.podman -p 1883
     -t homelab/verify -m nope
   become: true
@@ -61,7 +67,7 @@
 
 - name: _verify | Wrong password is refused
   command: >-
-    podman run --rm --network homeassistant {{ mosquitto_image }}
+    podman run --rm --image-volume=ignore --network homeassistant {{ mosquitto_image }}
     mosquitto_pub -h mosquitto.dns.podman -p 1883
     -u z2m -P definitely-wrong -t homelab/verify -m nope
   become: true
@@ -72,7 +78,7 @@
 # Clear the retained test messages so a re-run against a --keep VM starts clean.
 - name: _verify | Clear retained test messages
   command: >-
-    podman run --rm --network homeassistant {{ mosquitto_image }}
+    podman run --rm --image-volume=ignore --network homeassistant {{ mosquitto_image }}
     mosquitto_pub -h mosquitto.dns.podman -p 1883
     -u {{ item.key | quote }} -P {{ item.value.password | quote }}
     -t {{ ('homelab/verify/' ~ item.key) | quote }} -r -n
@@ -83,3 +89,10 @@
   loop: "{{ mosquitto_accounts | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
+
+- name: _verify | Broker restart and disposable clients create no volumes
+  command: podman volume ls --quiet
+  become: true
+  register: mosquitto_volumes_after
+  changed_when: false
+  failed_when: mosquitto_volumes_after.stdout_lines | sort != mosquitto_volumes_before.stdout_lines | sort
