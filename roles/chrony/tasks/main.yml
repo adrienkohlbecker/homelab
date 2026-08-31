@@ -11,6 +11,17 @@
   tags:
     - chrony
 
+- name: Configure chrony log compression
+  import_role:
+    name: logrotate
+    tasks_from: compression
+  vars:
+    logrotate_args:
+      item: /etc/logrotate.d/chrony
+      condition: "{{ not (ansible_check_mode and chrony_apt.changed) }}"
+  tags:
+    - chrony
+
 # Installing chrony can leave the removed timesyncd unit active because
 # policy_rc_d suppresses its postinst stop. Query and stop the loaded unit
 # directly; the systemd module cannot act after its unit file is removed.

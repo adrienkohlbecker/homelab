@@ -1,0 +1,18 @@
+- name: _setup | Create an unowned log
+  copy:
+    dest: /tmp/_verify_logrotate_unowned.log
+    content: "unowned log payload\n"
+    mode: "0600"
+  become: true
+
+- name: _setup | Create an unowned rotation policy
+  copy:
+    dest: /etc/logrotate.d/_verify_logrotate_unowned
+    mode: "0644"
+    content: |
+      /tmp/_verify_logrotate_unowned.log {
+        su root root
+        rotate 1
+        compress
+      }
+  become: true

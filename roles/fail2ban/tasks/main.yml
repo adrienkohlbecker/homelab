@@ -14,6 +14,17 @@
   tags:
     - fail2ban
 
+- name: Configure fail2ban log compression
+  import_role:
+    name: logrotate
+    tasks_from: compression
+  vars:
+    logrotate_args:
+      item: /etc/logrotate.d/fail2ban
+      condition: "{{ not (ansible_check_mode and fail2ban_apt.changed) }}"
+  tags:
+    - fail2ban
+
 # Empty / undefined interpolation silently strips ignoreip entries —
 # fail2ban-client -t accepts "ignoreip = 127.0.0.1/8 ::1  " as valid,
 # so a typo'd refactor of either var would lock admin traffic out

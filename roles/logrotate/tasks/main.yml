@@ -21,36 +21,30 @@
   tags:
     - logrotate
 
-- name: Gather list of config files
-  find:
-    paths:
-      - /etc/logrotate.d
-    excludes:
-      - "*.dpkg-dist" # diverted files
-      - "*~" # ansible backups
-  register: logrotate_confs
-  become: true
-  tags:
-    - logrotate
-
-- name: Configure logrotate compression
+# Service roles own their package drop-ins. These files belong to logrotate
+# itself or baseline packages without a dedicated role.
+- name: Configure baseline logrotate compression
   include_tasks:
     file: compression.yml
     apply:
       tags: logrotate
-  # /etc/logrotate.conf lives outside logrotate.d, so append it to the file
-  # list explicitly — except in check mode on a host where logrotate was just
-  # (would-be) installed: nothing's on disk yet, so reading it would fail.
-  # ternary([], [...]) drops it only in that one case.
-  loop: >-
-    {{
-      (logrotate_confs.files | map(attribute='path') | list)
-      + ((ansible_check_mode and logrotate_apt.changed) | ternary([], ['/etc/logrotate.conf']))
-    }}
+  loop:
+    - path: /etc/logrotate.conf
+    - path: /etc/logrotate.d/btmp
+    - path: /etc/logrotate.d/wtmp
+    - path: /etc/logrotate.d/rsyslog
+      optional: true
+    - path: /etc/logrotate.d/ubuntu-pro-client
+      optional: true
+    - path: /etc/logrotate.d/cloud-init
+      optional: true
   loop_control:
-    loop_var: logrotate_compression_path
+    loop_var: logrotate_config
+    label: "{{ logrotate_config.path }}"
   vars:
     logrotate_args:
-      item: "{{ logrotate_compression_path }}"
+      item: "{{ logrotate_config.path }}"
+      optional: "{{ logrotate_config.optional | default(false) }}"
+      condition: "{{ not (ansible_check_mode and logrotate_apt.changed) }}"
   tags:
     - logrotate

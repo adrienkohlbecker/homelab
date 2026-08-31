@@ -11,6 +11,17 @@
   tags:
     - certbot
 
+- name: Configure certbot log compression
+  import_role:
+    name: logrotate
+    tasks_from: compression
+  vars:
+    logrotate_args:
+      item: /etc/logrotate.d/certbot
+      condition: "{{ not (ansible_check_mode and certbot_apt.changed) }}"
+  tags:
+    - certbot
+
 # Relax apt's default 0700 on live/ and archive/ to 0750 with group
 # ssl-cert so non-root consumers (nginx as www-data, netdata) can
 # traverse into <domain>/ to read fullchain.pem. Plain 0755 would

@@ -1,6 +1,7 @@
 # Inputs: caller passes a single dict `logrotate_args` with keys
 #   item        required; path to the logrotate config file to edit
 #   condition   optional bool, default true; gates the whole call
+#   optional    optional bool, default false; skip an absent package config
 #
 # The dict form prevents inter-call leakage at play-vars scope: each
 # import_role pass replaces the whole `logrotate_args` value, so a
@@ -10,10 +11,22 @@
   assert:
     that:
       - logrotate_args.item is defined
-    fail_msg: logrotate_args.item is required (path to the config file to edit)
+      - zfs_root is defined
+    fail_msg: logrotate_args.item and zfs_root are required
+
+- name: compression | Check optional config {{ logrotate_args.item }}
+  when:
+    - logrotate_args.condition | default(true)
+    - logrotate_args.optional | default(false)
+  stat:
+    path: "{{ logrotate_args.item }}"
+  register: logrotate_optional_config
+  become: true
 
 - name: compression | Configure logrotate compression {{ logrotate_args.item }}
-  when: logrotate_args.condition | default(true)
+  when:
+    - logrotate_args.condition | default(true)
+    - not (logrotate_args.optional | default(false)) or logrotate_optional_config.stat.exists
   replace:
     # Disable matches a bare `compress` only; enable matches just the exact line
     # disable writes (disabled_line), so a stray prose comment that merely
@@ -40,16 +53,10 @@
     disable_to: '\1{{ disabled_line }}'
     enable_to: '\1compress'
 
-# Any file the toggle actually changed had a live, uncommented `compress` we just
-# neutralized — by construction that's a package-shipped config, because our own
-# drop-ins (zfs_autobackup, the template helper) render the final compress state
-# directly and so never trigger a change here. That lets us divert without probing
-# dpkg for ownership (no `dpkg -S` + locale-pinned stderr grep). On ZFS we add the
-# diversion so a future apt upgrade writes the package's new config to
-# <item>.dpkg-dist (a logrotate taboo extension, so it is ignored) instead of
-# clobbering our edit; off ZFS we remove it so the package owns the file again.
-# A manually-removed diversion isn't re-added until the next upgrade flips the file
-# back to `compress` (re-disable + re-divert), which is an acceptable self-heal.
+# Callers name package configs; repository templates render compression directly.
+# Divert changed files to .dpkg-dist (ignored by logrotate) so apt upgrades cannot
+# overwrite the edit. Restore package ownership when re-enabling compression.
+# A removed diversion is re-added when an upgrade restores a bare compress line.
 - name: compression | (Un)divert {{ logrotate_args.item }}
   when: logrotate_conf.changed
   community.general.dpkg_divert:

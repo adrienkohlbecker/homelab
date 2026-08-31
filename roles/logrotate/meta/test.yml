@@ -1,6 +1,5 @@
-# compression.yml toggles the bare `compress` directive per zfs_root:
-# ZFS hosts disable it (+ dpkg_divert); ext4 hosts enable it (+ remove
-# divert). The minimal cell exercises the non-ZFS enable path.
+# Exercise rotation with and without compression, diversion creation/removal,
+# and preservation of unowned policies on ZFS and ext4.
 machines:
   box:
   minimal:

@@ -24,6 +24,53 @@
   tags:
     - libvirt
 
+- name: Configure libvirtd log compression
+  import_role:
+    name: logrotate
+    tasks_from: compression
+  vars:
+    logrotate_args:
+      item: /etc/logrotate.d/libvirtd
+      condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
+  tags:
+    - libvirt
+
+# Ubuntu 26.04+ puts these configs in the optional Xen and LXC driver packages.
+- name: Configure libvirtd.libxl log compression
+  import_role:
+    name: logrotate
+    tasks_from: compression
+  vars:
+    logrotate_args:
+      item: /etc/logrotate.d/libvirtd.libxl
+      optional: "{{ ansible_distribution_major_version | int >= 26 }}"
+      condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
+  tags:
+    - libvirt
+
+- name: Configure libvirtd.lxc log compression
+  import_role:
+    name: logrotate
+    tasks_from: compression
+  vars:
+    logrotate_args:
+      item: /etc/logrotate.d/libvirtd.lxc
+      optional: "{{ ansible_distribution_major_version | int >= 26 }}"
+      condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
+  tags:
+    - libvirt
+
+- name: Configure libvirtd.qemu log compression
+  import_role:
+    name: logrotate
+    tasks_from: compression
+  vars:
+    logrotate_args:
+      item: /etc/logrotate.d/libvirtd.qemu
+      condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
+  tags:
+    - libvirt
+
 - name: Install ansible dependencies to run libvirt module
   apt:
     name:
