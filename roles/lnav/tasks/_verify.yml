@@ -65,23 +65,6 @@
   tags:
     - lnav
 
-- name: Lnav format definitions are registered
-  become: true
-  become_user: "{{ ansible_user_id }}"
-  command:
-    argv:
-      - /usr/local/bin/lnav
-      - -m
-      - format
-      - "{{ item }}"
-      - get
-  changed_when: false
-  loop:
-    - fluentbit_lnav
-    - syslog_body_scan
-  tags:
-    - lnav
-
 - name: Lnav format samples match their target formats
   become: true
   become_user: "{{ ansible_user_id }}"
