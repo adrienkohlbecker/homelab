@@ -12,21 +12,6 @@
 # netdata.yml renders + deploys a valid go.d config including the relabel
 # template path.
 
-- name: _verify | Select expected qemu sensor fixture values
-  set_fact:
-    lm_sensors_effective_modules: >-
-      {{ lm_sensors_qemu_test_modules
-         if (qemu_test | bool) else lm_sensors_modules }}
-    lm_sensors_effective_relabel: >-
-      {{ lm_sensors_qemu_test_relabel
-         if (qemu_test | bool) else lm_sensors_relabel }}
-    lm_sensors_effective_ignore: >-
-      {{ lm_sensors_qemu_test_ignore
-         if (qemu_test | bool) else lm_sensors_ignore }}
-    lm_sensors_effective_limits: >-
-      {{ lm_sensors_qemu_test_limits
-         if (qemu_test | bool) else lm_sensors_limits }}
-
 - name: _verify | Read the modules-load.d file
   slurp:
     path: /etc/modules-load.d/lm_sensors.conf

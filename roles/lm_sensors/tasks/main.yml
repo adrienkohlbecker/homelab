@@ -1,20 +1,3 @@
-- name: Select sensor module and relabel inputs for this host
-  set_fact:
-    lm_sensors_effective_modules: >-
-      {{ lm_sensors_qemu_test_modules
-         if (qemu_test | bool) else lm_sensors_modules }}
-    lm_sensors_effective_relabel: >-
-      {{ lm_sensors_qemu_test_relabel
-         if (qemu_test | bool) else lm_sensors_relabel }}
-    lm_sensors_effective_ignore: >-
-      {{ lm_sensors_qemu_test_ignore
-         if (qemu_test | bool) else lm_sensors_ignore }}
-    lm_sensors_effective_limits: >-
-      {{ lm_sensors_qemu_test_limits
-         if (qemu_test | bool) else lm_sensors_limits }}
-  tags:
-    - lm_sensors
-
 - name: Assert lm_sensors_limits is well-formed
   vars:
     _limits: "{{ lm_sensors_effective_limits }}"
