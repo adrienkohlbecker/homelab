@@ -1,3 +1,0 @@
-- name: _verify | Mise binary is installed
-  command: /usr/bin/mise --version
-  changed_when: false
