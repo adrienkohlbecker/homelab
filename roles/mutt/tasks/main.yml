@@ -66,7 +66,7 @@
     group: root
     mode: "0644"
     backup: true
-    validate: "{{ '/usr/bin/notmuch --config %s config list' if not ansible_check_mode else omit }}"
+    validate: /usr/bin/notmuch --config %s config list
   become: true
   tags:
     - mutt
@@ -118,10 +118,7 @@
   tags:
     - mutt
 
-# In check mode on a fresh host, apt reports that neomutt would be installed
-# but does not put the binary on disk, so config validation runs only during
-# real converges. The notmuch config and initial database are in place by now,
-# so virtual-mailboxes can be parsed against a real index.
+# Virtual-mailbox validation needs the notmuch config and initial index.
 - name: Configure neomutt
   template:
     src: muttrc.j2
@@ -130,7 +127,7 @@
     group: root
     mode: "0644"
     backup: true
-    validate: "{{ 'neomutt -n -F %s -Q folder' if not ansible_check_mode else omit }}"
+    validate: neomutt -n -F %s -Q folder
   become: true
   tags:
     - mutt
