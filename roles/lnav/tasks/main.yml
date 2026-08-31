@@ -73,24 +73,16 @@
   tags:
     - lnav
 
-- name: Create lnav formats directory
+- name: Create lnav directories
   file:
-    path: /etc/lnav/formats/homelab
+    path: "{{ item }}"
     state: directory
     owner: root
     group: root
     mode: "0755"
-  become: true
-  tags:
-    - lnav
-
-- name: Create lnav configuration directory
-  file:
-    path: /etc/lnav/configs/homelab
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
+  loop:
+    - /etc/lnav/formats/homelab
+    - /etc/lnav/configs/homelab
   become: true
   tags:
     - lnav
