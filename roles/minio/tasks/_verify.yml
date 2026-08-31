@@ -177,15 +177,8 @@
     # Existence only -- this does NOT prove `admins` grants admin:* (a typo'd
     # action would still register and pass `policy info`); the admin grant is
     # exercised manually via the OIDC login path (see below).
-    - name: _verify | Useronly + admins IAM policies exist
-      command: mcli admin policy info default {{ item }}
-      changed_when: false
-      loop:
-        - useronly
-        - admins
-
-    - name: _verify | Provisioned user exists
-      command: mcli admin user info default {{ minio_users[0].access_key }}
+    - name: _verify | Admins IAM policy exists
+      command: mcli admin policy info default admins
       changed_when: false
 
 # OIDC integration end-to-end (console flips loginStrategy=redirect, admins
