@@ -1,4 +1,16 @@
 ---
+- name: Remove unconfigured management macvlan
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: mac_mgmt.service
+      condition: "{{ macvlan_blocks | selectattr('name', 'equalto', 'mac_mgmt') | list | length == 0 }}"
+  tags:
+    - retired_services
+    - macvlan
+
 - name: Remove retired podman socket drop-in
   import_role:
     name: systemd_unit

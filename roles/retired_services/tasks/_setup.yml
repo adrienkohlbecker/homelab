@@ -1,4 +1,8 @@
 ---
+- name: _setup | Start configured macvlan fixtures
+  import_role:
+    name: macvlan
+
 - name: _setup | Install retired Netplan rollback fixtures
   copy:
     dest: "{{ item.path }}"

@@ -20,13 +20,6 @@ lm_sensors_limits:
       - feature: temp7_max_hyst
         value: 85
 
-# The macvlan role derives the per-host /28 from data/network_topology.yml.
-# pug is slot 1, so its management block resolves to .144/28.
-macvlan_blocks:
-  - name: mac_mgmt
-    parent: eth0
-    vlan: management
-
 swap_partition: /dev/disk/by-partlabel/swap
 
 podman_storage_device: /dev/disk/by-partlabel/podman

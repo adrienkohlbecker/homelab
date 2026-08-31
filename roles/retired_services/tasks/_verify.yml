@@ -293,3 +293,39 @@
   changed_when: false
   failed_when: retired_services_identities.rc != 2
   become: true
+
+- name: _verify | Explicitly configured management macvlan remains UP
+  command: ip -br link show mac_mgmt
+  register: retired_services_mac_mgmt
+  changed_when: false
+  failed_when: "'UP' not in retired_services_mac_mgmt.stdout"
+
+- name: _verify | Retire management macvlan with an empty configuration twice
+  include_role:
+    name: retired_services
+  vars:
+    macvlan_blocks: [] # noqa: var-naming[no-role-prefix] -- macvlan input under test
+  loop:
+    - first removal
+    - repeated removal
+
+- name: _verify | Repeated management macvlan removal is idempotent
+  assert:
+    that: not mac_mgmt_service_result.changed
+
+- name: _verify | Retired management macvlan is absent from the kernel
+  command: ip -j link show
+  register: retired_services_links
+  changed_when: false
+  failed_when: >-
+    retired_services_links.stdout | from_json
+    | selectattr('ifname', 'equalto', 'mac_mgmt') | list | length > 0
+
+- name: _verify | Other configured macvlans remain UP
+  command: ip -br link show {{ item.name }}
+  loop: "{{ macvlan_blocks | rejectattr('name', 'equalto', 'mac_mgmt') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: retired_services_macvlan
+  changed_when: false
+  failed_when: "'UP' not in retired_services_macvlan.stdout"
