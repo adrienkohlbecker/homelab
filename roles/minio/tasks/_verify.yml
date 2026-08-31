@@ -1,29 +1,12 @@
-# S3 API readiness through the nginx proxy chain. /minio/health/live is the
-# unauth-friendly liveness endpoint; once it returns 200 the daemon is
-# parsing requests and the proxy is wired. Retries cover MINIO_VOLUMES init +
-# IAM sub-system load on cold start. ARQ / restic / terraform all reach MinIO
-# via this same SigV4-over-HTTPS path, so it doubles as the readiness gate.
-#
-# Map the vhost FQDN to loopback so SNI matches the served certificate.
-# Probing https://localhost with a Host: header leaves SNI=localhost, which
-# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
-# (status -1); hitting the FQDN directly keeps SNI correct on every release.
-- name: _verify | Map the minio-api vhost FQDN to loopback for SNI-correct probing
+# Use the real vhost names so both TLS SNI and the Host header match nginx.
+- name: _verify | Map the MinIO vhosts to loopback
   lineinfile:
     path: /etc/hosts
-    line: "127.0.0.1 minio-api.{{ inventory_hostname }}.{{ domain }}"
+    line: "127.0.0.1 {{ item }}.{{ inventory_hostname }}.{{ domain }}"
     state: present
-  become: true
-
-- name: _verify | MinIO API answers through nginx
-  uri:
-    url: https://minio-api.{{ inventory_hostname }}.{{ domain }}/minio/health/live
-    validate_certs: false
-    status_code: 200
-  register: minio_verify_api
-  retries: 30
-  delay: 2
-  until: minio_verify_api.status == 200
+  loop:
+    - minio-api
+    - minio
   become: true
 
 - name: _verify | Wait for normalized minio record in lnav store
@@ -111,59 +94,39 @@
           _absent:
             - fields.parser_status
 
-# Console subsystem on the loopback console port. /api/v1/login is the unauth
-# endpoint the SPA hits at boot to learn whether to show the form or redirect
-# to an external IdP -- a 200 + loginStrategy proves the console server is up
-# independent of the OIDC config loading.
-- name: _verify | MinIO console answers /api/v1/login
+# The SPA reads this endpoint to choose between a login form and an IdP redirect.
+- name: _verify | MinIO console returns its login strategy through HTTPS
   uri:
-    url: http://localhost:{{ service_ports.minio_console }}/api/v1/login
+    url: https://minio.{{ inventory_hostname }}.{{ domain }}/api/v1/login
+    validate_certs: false
     status_code: 200
     return_content: true
   register: minio_verify_console
-  failed_when: >-
-    minio_verify_console.status != 200
-    or minio_verify_console.json.loginStrategy is not defined
+  retries: 30
+  delay: 2
+  until: minio_verify_console.status == 200 and minio_verify_console.json.loginStrategy is defined
   become: true
 
-# Map the console FQDN to loopback for the same SNI requirement as the API.
-- name: _verify | Map the minio console vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 minio.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  become: true
-
-- name: _verify | MinIO console reachable through nginx
-  uri:
-    url: https://minio.{{ inventory_hostname }}.{{ domain }}/
-    validate_certs: false
-    status_code: 200
-  become: true
-
-# Data-plane provisioning, exercised through the `default` alias persisted by
-# client.yml.
-# Catches the 403-class regressions a stat on the policy dir can't -- a user
-# created without its policy, a bucket that never got made, a policy file that
-# failed to load.
+# Client access uses the public HTTPS path; the default loopback alias is only
+# for root provisioning and inspection. The fixture certificate is self-signed.
 - name: _verify | Data-plane checks
   become: true
   block:
 
-    # Authenticate AS the provisioned user (not root) and list its own bucket:
-    # proves the useronly policy actually grants own-bucket access, which the
-    # root-alias checks below can't (root reads everything). Import a scoped
-    # alias from the user's creds (same off-argv stdin path client.yml uses).
-    # The bucket is named for the access_key -- the coupling main.yml asserts.
     - name: _verify | Import an alias scoped to the provisioned user
       command: mcli alias import scoped /dev/stdin
       args:
-        stdin: "{{ {'url': 'http://localhost:' ~ service_ports.minio_api, 'accessKey': minio_users[0].access_key, 'secretKey': minio_users[0].secret_key, 'api': 'S3v4', 'path': 'auto'} | to_json }}"
+        stdin: "{{ {'url': 'https://minio-api.' ~ inventory_hostname ~ '.' ~ domain, 'accessKey': minio_users[0].access_key, 'secretKey': minio_users[0].secret_key, 'api': 'S3v4', 'path': 'auto'} | to_json }}"
       changed_when: false
 
-    - name: _verify | Provisioned user can list its own bucket (useronly scope)
-      command: mcli ls scoped/{{ minio_users[0].access_key }}
+    # A signed bucket listing proves readiness of nginx, S3 and IAM together.
+    - name: _verify | Wait for authenticated bucket access through HTTPS
+      command: timeout 10s mcli --insecure ls scoped/{{ minio_users[0].access_key }}
+      register: minio_verify_api
       changed_when: false
+      retries: 30
+      delay: 2
+      until: minio_verify_api.rc == 0
 
     - name: _verify | Exercise IAM drift repair
       block:
@@ -182,7 +145,7 @@
           changed_when: true
 
         - name: _verify | Drift denies access to the own bucket
-          command: mcli ls scoped/{{ minio_users[0].access_key }}
+          command: mcli --insecure ls scoped/{{ minio_users[0].access_key }}
           register: minio_verify_denied
           changed_when: false
           failed_when: minio_verify_denied.rc == 0 or 'access denied' not in minio_verify_denied.stderr | lower
@@ -191,17 +154,18 @@
           import_tasks: data.yml
 
     - name: _verify | Repaired user can list its own bucket
-      command: mcli ls scoped/{{ minio_users[0].access_key }}
+      command: mcli --insecure ls scoped/{{ minio_users[0].access_key }}
       changed_when: false
 
     - name: _verify | Repaired user does not retain admin access
-      command: mcli admin user list scoped
+      command: mcli --insecure admin user list scoped
       register: minio_verify_admin_denied
       changed_when: false
       failed_when: minio_verify_admin_denied.rc == 0 or 'access denied' not in minio_verify_admin_denied.stderr | lower
 
-    - name: _verify | Provisioned bucket is listable
-      command: mcli ls default/{{ minio_buckets[0] }}
+    - name: _verify | Every provisioned bucket is listable
+      command: mcli ls default/{{ item }}
+      loop: "{{ minio_buckets }}"
       changed_when: false
 
     # The API must return the intended document after drift repair. OIDC claim
