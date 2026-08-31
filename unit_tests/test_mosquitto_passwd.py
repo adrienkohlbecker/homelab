@@ -1,9 +1,7 @@
 """Unit tests for the mosquitto_passwd Jinja filter.
 
-The filter hand-builds mosquitto's $7$ PBKDF2-SHA512 pwfile format (passlib
-adapted-base64 re-encoded to standard base64, salt squeezed to mosquitto's
-hardcoded 12-byte SALT_LEN). That re-encoding is subtle and otherwise only
-exercised end-to-end in the qemu harness, so lock the invariants here.
+Lock the $7$ PBKDF2-SHA512 password-file format, deterministic 12-byte salt,
+and padded Base64 encoding; broker acceptance is covered by the QEMU test.
 """
 
 import base64
