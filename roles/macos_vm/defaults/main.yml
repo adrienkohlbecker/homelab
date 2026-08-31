@@ -14,11 +14,6 @@ macos_vm_memory_mib: 12288  # 12 GiB
 # needing nested KVM.
 macos_vm_domain_type: kvm
 
-# SMBIOS profile. iMacPro1,1 supports Sequoia and is the OSX-KVM default.
-# For iMessage/FaceTime, SMBIOS values must be regenerated with GenSMBIOS and
-# pass Apple's validity check (no registered purchase date). See notes/macos-vm-design.md.
-macos_vm_smbios_model: "iMacPro1,1"
-
 # Disk source. The role creates a sparse ZFS volume and passes its /dev/zvol
 # path as a raw block device.
 macos_vm_zvol_parent_datasets:
@@ -39,7 +34,6 @@ macos_vm_mac_address: ""                # auto-generated from inventory_hostname
 
 # Display & input.
 macos_vm_vnc_listen: "127.0.0.1"        # tunnel via SSH; or set to a macvlan child IP (e.g. mac_mgmt's host_ip) to expose on mac_mgmt
-macos_vm_vnc_password: ""               # vault, optional
 macos_vm_vnc_keymap: fr                 # QEMU VNC keymap; keeps AZERTY input aligned with macOS
 
 # Recovery defaults seeded through OpenCore NVRAM. `en-US:1` means English UI
