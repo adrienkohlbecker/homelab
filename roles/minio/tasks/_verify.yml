@@ -176,6 +176,76 @@
       command: mcli admin policy info default admins
       changed_when: false
 
+- name: _verify | Inspect nginx upload temporary directory
+  stat:
+    path: /var/lib/nginx/body
+  register: minio_verify_body_dir
+  become: true
+
+# Denying temporary-file writes makes a buffering regression fail the upload,
+# including files nginx would otherwise unlink before a directory inspection.
+- name: _verify | Upload through nginx without disk buffering
+  become: true
+  block:
+    - name: _verify | Deny writes to nginx upload temporary directory
+      file:
+        path: /var/lib/nginx/body
+        mode: "0555"
+
+    - name: _verify | Round-trip large signed uploads over HTTP/1.1 and HTTP/2
+      command:
+        argv:
+          - python3
+          - -c
+          - |
+            import hashlib
+            import json
+            import pathlib
+            import subprocess
+            import sys
+            import tempfile
+            import uuid
+
+            config = json.load(sys.stdin)
+            credentials = "user = " + json.dumps(config["access_key"] + ":" + config["secret_key"])
+            curl = ["curl", "--silent", "--show-error", "--fail-with-body", "--insecure",
+                    "--max-time", "120", "--aws-sigv4", "aws:amz:us-east-1:s3", "--config", "-"]
+            with tempfile.TemporaryDirectory() as directory:
+                source = pathlib.Path(directory, "upload")
+                payload = bytes(range(256)) * (48 * 1024 * 1024 // 256)
+                source.write_bytes(payload)
+                digest = hashlib.sha256(payload).hexdigest()
+                target = pathlib.Path(directory, "download")
+                for protocol, flags in [
+                    ("1.1", ["--http1.1"]),
+                    ("1.1", ["--http1.1", "--limit-rate", "4M"]),
+                    ("2", ["--http2"]),
+                ]:
+                    url = config["url"] + "/" + config["access_key"] + "/verify_" + uuid.uuid4().hex
+                    try:
+                        result = subprocess.run(
+                            curl + flags + ["--request", "PUT", "--data-binary", "@" + str(source),
+                                            "--header", "x-amz-content-sha256: " + digest,
+                                            "--write-out", "%{http_version}", url],
+                            input=credentials, text=True, stdout=subprocess.PIPE, check=True,
+                        )
+                        assert result.stdout == protocol, result.stdout
+                        subprocess.run(curl + ["--output", str(target), url],
+                                       input=credentials, text=True, check=True)
+                        assert target.read_bytes() == payload, "Upload content changed"
+                        print("48 MiB round-trip passed:", flags, flush=True)
+                    finally:
+                        subprocess.run(curl + ["--request", "DELETE", url],
+                                       input=credentials, text=True, check=True)
+      args:
+        stdin: "{{ minio_users[0] | combine({'url': 'https://minio-api.' ~ inventory_hostname ~ '.' ~ domain}) | to_json }}"
+      changed_when: false
+  always:
+    - name: _verify | Restore nginx upload temporary directory permissions
+      file:
+        path: /var/lib/nginx/body
+        mode: "{{ minio_verify_body_dir.stat.mode }}"
+
 # OIDC login and the admins claim are verified manually on prod. The fixture
 # lacks Authelia, a discovery-host mapping, and a trusted certificate for it.
 # Required OIDC inputs are asserted in main.yml; login behavior is not tested here.
