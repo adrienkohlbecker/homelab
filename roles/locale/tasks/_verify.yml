@@ -1,9 +1,16 @@
-# An unavailable locale can return zero while warning and falling back to C;
-# require a clean UTF-8 result to prove en_US.UTF-8 is compiled and usable.
-- name: _verify | Runtime charmap is UTF-8 without warnings
-  command: locale charmap
-  environment:
-    LC_ALL: en_US.UTF-8
+# Load the file PAM reads, without inherited locale overrides masking it.
+# An unavailable locale can return zero, so reject warnings and non-UTF-8 output.
+- name: _verify | Configured default is unmasked UTF-8
+  shell: |
+    set -euo pipefail
+    unset LANG LANGUAGE "${!LC_@}"
+    set -a
+    source /etc/default/locale
+    test "${LANG-}" = en_US.UTF-8
+    test -z "${LC_ALL+x}${LANGUAGE+x}"
+    locale charmap
+  args:
+    executable: /bin/bash
   register: locale_verify_charmap
   changed_when: false
   failed_when: >-
@@ -21,25 +28,6 @@
     locale_verify_localectl.rc != 0 or
     locale_verify_localectl.stdout | regex_findall('^\s*System Locale:\s+LANG=en_US\.UTF-8$', multiline=True) | length != 1
   become: true
-
-# Guard the LANG-only policy. Use `$` anchors: ansible-core 2.20 mangles `\b`
-# in conditional regexes into backspace escapes.
-- name: _verify | Read default locale conf
-  slurp:
-    src: /etc/locale.conf
-  register: locale_verify_file
-  become: true
-
-- name: _verify | Default-locale file sets LANG only (no LC_ALL/LANGUAGE)
-  vars:
-    _content: "{{ locale_verify_file.content | b64decode }}"
-  assert:
-    that:
-      - _content | regex_findall('^LANG=en_US\.UTF-8$', multiline=True) | length == 1
-      - _content | regex_findall('^LC_ALL=', multiline=True) | length == 0
-      - _content | regex_findall('^LANGUAGE=', multiline=True) | length == 0
-    fail_msg: "the default-locale file should set LANG only; LC_ALL or LANGUAGE was re-added"
-    quiet: true
 
 # Exercise libc independently of the timezone module's systemd/RTC checks.
 - name: _verify | Libc timezone is UTC
