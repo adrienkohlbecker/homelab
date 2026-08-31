@@ -1,38 +1,28 @@
 # {{ ansible_managed }}
-# Read-only viewer for the getmail Gmail "All Mail" archive: a single flat
-# Maildir at /mnt/services/getmail (operator-owned 0700). Launch via the
-# `mail-archive` wrapper, which adds -R so browsing never mutates the
-# irreplaceable archive. See notes/archive/getmail_webmail_design.md.
+# Read-only viewer for getmail's flat Gmail archive; launch with mail-archive.
+# Design: notes/archive/getmail_webmail_design.md.
 
 set mbox_type = Maildir
-# Browse through the read-only bind mount, not the source Maildir: the bind is
-# mounted ro (mnt-services-mutt-archive.mount), so even a forgotten -R or a
-# fat-fingered write physically cannot reach the archive. getmail still writes
-# the real /mnt/services/getmail directly.
+# Use the read-only bind mount; getmail writes /mnt/services/getmail directly.
 set folder    = /mnt/services/mutt/archive
 set spoolfile = /mnt/services/mutt/archive
 # Read-only viewer: no sent/draft folders to write to.
 set record    = ""
 set postponed = ""
 
-# Header cache so reopening the multi-year archive doesn't re-parse every
-# message. On the services dataset (operator-owned), never in $HOME. (No
-# message_cachedir: the body cache only serves IMAP/POP — for a local Maildir
-# the bodies are already on disk, so it would never populate.)
+# Cache parsed headers outside the read-only Maildir and $HOME.
+# message_cachedir only serves IMAP/POP; Maildir bodies are already local.
 set header_cache     = /mnt/services/mutt/headers
 
-# Full-text search over the archive through notmuch. Notmuch indexes the source
-# Maildir but writes only its database under /mnt/services/mutt/notmuch; maildir
-# flag synchronization is disabled in /opt/mutt/notmuch-config, which the
-# mail-archive wrapper exports as NOTMUCH_CONFIG for neomutt's notmuch backend.
+# Notmuch indexes the source Maildir with a separate database and flag sync off.
+# The launcher exports NOTMUCH_CONFIG=/opt/mutt/notmuch-config for this backend.
 set nm_default_url = notmuch:///mnt/services/mutt/notmuch
 set nm_query_type  = messages
 virtual-mailboxes "All Mail Search" "notmuch://?query=tag:archive"
 bind index,pager X change-vfolder
 bind index,pager \eX vfolder-from-query-readonly
 
-# Belt-and-suspenders with the wrapper's -R: never move read mail out of the
-# spool, never flag messages "old", no delete/trash.
+# Reinforce the launcher's -R: no moving, aging, or trashing archived mail.
 set read_only     = yes
 set move          = no
 set mark_old      = no
@@ -42,9 +32,7 @@ unset confirm_append
 # Browsing ergonomics for one big flat archive.
 set sort         = reverse-date-received
 set date_format  = "%Y-%m-%d %H:%M"
-# %D renders the received date via $date_format in local time. (The strftime
-# brace specifier is avoided here because its literal braces collide with
-# Jinja's statement delimiter when this file is templated.)
+# %D uses date_format in local time, avoiding strftime braces that collide with Jinja.
 set index_format = "%4C %Z %D %-25.25F %s"
 set pager_index_lines = 12
 set pager_context     = 3
@@ -52,13 +40,10 @@ set pager_stop        = yes
 set tilde
 set mail_check_stats
 
-# Archived mail predates consistent charset labelling; a message lacking a
-# charset= parameter would otherwise decode as US-ASCII and mojibake (accented
-# names, latin1 bodies). Fall back through the common legacy encodings.
+# Unlabelled legacy mail needs these charset fallbacks instead of US-ASCII.
 set assumed_charset = "utf-8:windows-1252:iso-8859-1"
 
-# Render HTML mail inline (archived Gmail is heavily HTML) via w3m through the
-# mailcap installed alongside this config.
+# Render HTML inline through the managed w3m mailcap.
 set mailcap_path = /opt/mutt/mailcap
 auto_view text/html
 alternative_order text/plain text/enriched text/html

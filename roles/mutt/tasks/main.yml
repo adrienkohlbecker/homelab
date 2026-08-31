@@ -1,10 +1,6 @@
-# Host-local neomutt viewer for the getmail Gmail "All Mail" archive. The
-# getmail role fetches and owns the Maildir at /mnt/services/getmail (0700);
-# this role installs neomutt + a curated read-only config so the operator can
-# browse it from a shell on the host. Replaces the former webmail role (Dovecot
-# + Roundcube + nginx + Authelia). Design: notes/archive/getmail_webmail_design.md.
+# Read-only viewer and search index for getmail's operator-owned Maildir.
+# Design: notes/archive/getmail_webmail_design.md.
 
-# === neomutt archive viewer ====================================================
 - name: Install neomutt, notmuch, and w3m
   apt:
     package:
@@ -27,10 +23,8 @@
   tags:
     - mutt
 
-# neomutt's header cache and notmuch's index live here (operator-owned, on the
-# services dataset) so reopening/searching the multi-year archive doesn't
-# re-parse every message, and nothing lands in the operator's
-# dotfiles-managed $HOME.
+# Keep the header cache and search index on services, outside the read-only
+# archive and the operator's dotfiles-managed $HOME.
 - name: Create neomutt and notmuch state directories and archive mountpoint
   file:
     path: "{{ item }}"
@@ -85,10 +79,8 @@
   tags:
     - mutt
 
-# The bind mount's source must already exist: getmail creates and owns this
-# Maildir ahead of mutt in site.yml (and _setup stands it up for the harness).
-# Assert it directly so a standalone `--tags mutt` run on an unconverged host
-# fails with a clear precondition error rather than a confusing mount failure.
+# getmail creates the source Maildir before mutt in site.yml; _setup supplies it
+# in tests. Report a clear precondition error for standalone --tags mutt runs.
 - name: Stat the getmail archive Maildir
   stat:
     path: /mnt/services/getmail/new
@@ -149,14 +141,7 @@
   tags:
     - mutt
 
-# Hard read-only guard: neomutt browses the archive through a ro bind mount of
-# the getmail Maildir (set as `folder` in muttrc), so a write physically cannot
-# reach the archive even if -R is bypassed. getmail keeps writing the source
-# path directly. The directory loop above creates the mountpoint first.
-
-# Install via the systemd_unit helper: it validates the rendered unit with
-# systemd-analyze verify in place (rolling back on a bad unit) and reloads the
-# daemon. .mount is not a .service, so the helper's podman pre-pull steps no-op.
+# The Maildir view uses a read-only bind; getmail writes the source directly.
 - name: Manage the read-only archive bind mount
   import_role:
     name: systemd_unit
