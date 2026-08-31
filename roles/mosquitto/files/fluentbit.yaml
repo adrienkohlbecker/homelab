@@ -22,8 +22,6 @@ pipeline:
       preserve_key: true
     - name: modify
       match: svc.mosquitto.service
-      hard_rename: mosquitto_message log
-    - name: modify
-      match: svc.mosquitto.service
-      condition: key_exists mosquitto_level
-      hard_rename: mosquitto_level _level
+      hard_rename:
+        - mosquitto_message log
+        - mosquitto_level _level
