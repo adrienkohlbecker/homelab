@@ -2,7 +2,7 @@
   import_tasks: runtime.yml
 
 # Full-site QEMU tests do not invoke service _setup hooks, so the shared media
-# layer owns the phantom render device used by both media servers.
+# layer owns the phantom render device consumed by Jellyfin.
 - name: Create the QEMU render-device fixture
   when:
     - qemu_test
