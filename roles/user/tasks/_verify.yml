@@ -25,19 +25,47 @@
   changed_when: false
   become: true
 
-# `mise ls --installed` lists registry entries even when a tool's binary
-# failed to download; .zshrc eval-loads zoxide and atuin unconditionally, so a
-# listed-but-broken binary breaks every fleet shell. Execute the two
-# load-bearing tools to prove the binaries actually run, not just that mise
-# knows about them.
-- name: _verify | Load-bearing mise tools execute
-  command: /usr/bin/mise exec -- {{ item }} --version
+# Shell startup needs these binaries; verification must not install missing tools.
+- name: _verify | Mise tools execute without installing
   environment:
     HOME: "{{ ansible_user_dir }}"
-  changed_when: false
-  loop:
-    - zoxide
-    - atuin
+    MISE_EXEC_AUTO_INSTALL: "false"
+  block:
+    - name: _verify | Load-bearing mise tools execute
+      command: /usr/bin/mise exec -- {{ item }} --version
+      changed_when: false
+      loop:
+        - zoxide
+        - atuin
+
+    - name: _verify | A missing tool fails without being reinstalled
+      command:
+        argv:
+          - python3
+          - -c
+          - |
+            from pathlib import Path
+            import shutil
+            import subprocess
+            import tempfile
+
+            version = Path(subprocess.check_output(["/usr/bin/mise", "where", "zoxide"], text=True).strip())
+            with tempfile.TemporaryDirectory(dir=version.parent) as temp:
+                saved = Path(temp) / "installed"
+                version.rename(saved)
+                try:
+                    result = subprocess.run(
+                        ["/usr/bin/mise", "exec", "--", "zoxide", "--version"],
+                        capture_output=True, text=True, timeout=60,
+                    )
+                    assert result.returncode != 0, "Missing zoxide unexpectedly executed"
+                    assert not version.exists(), "Verification reinstalled zoxide"
+                finally:
+                    # Discard only a test-triggered reinstall before restoring the original.
+                    if version.exists():
+                        shutil.rmtree(version)
+                    saved.rename(version)
+      changed_when: false
 
 # Keep the mise config linked while a later Stow package conflicts, then repair it.
 - name: _verify | Stow rejects conflicts and recovers incomplete deployment
