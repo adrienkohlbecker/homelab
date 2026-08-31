@@ -203,7 +203,7 @@
       - -c
       - ";SELECT level, host, service, log_body AS message FROM fluentbit_lnav LIMIT 1"
       - -c
-      - ":write-jsonlines-to /tmp/lnav_verify/fluentbit_sql.jsonl"
+      - ":write-jsonlines-to -"
       - -c
       - ":quit"
       - /tmp/lnav_verify/lnav.jsonl
@@ -216,36 +216,14 @@
     - lnav
 
 - name: Lnav fluentbit_lnav SQL output contains shaped fields
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            rows = [json.loads(line) for line in handle if line.strip()]
-
-        if not rows:
-            raise SystemExit("no SQL rows exported")
-
-        row = rows[0]
-        expected = {
-            "level": "warn",
-            "host": "lab",
-            "service": "homeassistant",
-            "message": "connection failed",
-        }
-        mismatches = {
-            key: {"expected": value, "actual": row.get(key)}
-            for key, value in expected.items()
-            if row.get(key) != value
-        }
-        if mismatches:
-            raise SystemExit(json.dumps({"row": row, "mismatches": mismatches}, sort_keys=True))
-      - /tmp/lnav_verify/fluentbit_sql.jsonl
-  changed_when: false
+  vars:
+    expected:
+      level: warn
+      host: lab
+      service: homeassistant
+      message: connection failed
+  assert:
+    that: lnav_fluentbit_sql_export.stdout | from_json == expected
   tags:
     - lnav
 
