@@ -29,12 +29,6 @@
   tags:
     - macvlan
 
-- name: install | Derive topology block for {{ macvlan_args.name }}
-  set_fact:
-    macvlan_block: "{{ network | host_vlan_block(inventory_hostname, macvlan_args.vlan, site=network.hosts[inventory_hostname].site) }}"
-  tags:
-    - macvlan
-
 - name: install | Validate podman parent facts for {{ macvlan_args.name }}
   when: macvlan_args.podman_network | default(false)
   assert:
