@@ -1,6 +1,6 @@
 # Dataset metadata for tank/media, consumed by both tasks/main.yml (fed to
-# the zfs_dataset helper) and tasks/_verify.yml (looped into the
-# zfs get / stat assertions), so a tuning change is one edit that keeps both
+# the zfs_dataset helper) and tasks/_verify.yml (zfs get and filesystem
+# assertions), so a tuning change is one edit that keeps both
 # halves in sync. Mirrors roles/data/vars/main.yml.
 
 # 1 MB recordsize suits large media files; special_small_blocks routes
