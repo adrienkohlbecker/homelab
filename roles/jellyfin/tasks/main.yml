@@ -5,10 +5,11 @@
   tags:
     - jellyfin
 
+# Use the package-owned render GID so --group-add matches the GPU device.
 - name: Lookup render group gid (HW transcoding hosts only)
-  import_role:
-    name: media
-    tasks_from: render_group
+  getent:
+    database: group
+    key: render
   when: has_transcoding_acceleration
   become: true
   tags:
