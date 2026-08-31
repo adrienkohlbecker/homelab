@@ -10,6 +10,7 @@ import re
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import NamedTuple
 
 LNAV = "/usr/local/bin/lnav"
 STORE = Path("/var/log/fluent-bit/lnav.jsonl")
@@ -33,15 +34,16 @@ def fail(message: str) -> None:
     raise SystemExit(2)
 
 
-def option_value(argv: list[str], index: int) -> str:
-    if index + 1 >= len(argv):
-        fail(f"{argv[index]} requires a value")
-    return argv[index + 1]
+class TimeBound(NamedTuple):
+    """A lnav time argument and its epoch, or None for opaque native syntax."""
+
+    value: str
+    epoch: float | None
 
 
 def parse_args(
     argv: list[str], now: datetime | None = None
-) -> tuple[str | None, str | None, bool, list[str], list[str]]:
+) -> tuple[TimeBound | None, TimeBound | None, bool, list[str], list[str]]:
     now = now or datetime.now().astimezone()
     since = None
     until = None
@@ -55,44 +57,30 @@ def parse_args(
         if arg == "--":
             lnav_args.extend(argv[index + 1 :])
             break
-        if arg in ("-S", "--since"):
-            since = option_value(argv, index)
-            lnav_args.extend((arg, normalize_bound(since, now)))
-            index += 2
-            continue
-        if arg.startswith("--since="):
-            since = arg.partition("=")[2]
-            lnav_args.append(f"--since={normalize_bound(since, now)}")
-            index += 1
-            continue
-        if arg in ("-U", "--until"):
-            until = option_value(argv, index)
-            lnav_args.extend((arg, normalize_bound(until, now)))
-            index += 2
-            continue
-        if arg.startswith("--until="):
-            until = arg.partition("=")[2]
-            lnav_args.append(f"--until={normalize_bound(until, now)}")
-            index += 1
-            continue
-        if arg in ("-u", "--unit"):
-            units.append(option_value(argv, index))
-            index += 2
-            continue
-        if arg.startswith("--unit="):
-            units.append(arg.partition("=")[2])
-            index += 1
-            continue
-        if arg == "--all":
+        option, separator, value = arg.partition("=") if arg.startswith("--") else (arg, "", "")
+        if option in ("-S", "--since", "-U", "--until", "-u", "--unit"):
+            if not separator:
+                index += 1
+                if index == len(argv):
+                    fail(f"{arg} requires a value")
+                value = argv[index]
+            if option in ("-u", "--unit"):
+                units.append(value)
+            else:
+                bound = parse_bound(value, now)
+                if option in ("-S", "--since"):
+                    since = bound
+                else:
+                    until = bound
+                lnav_args.extend([f"{option}={bound.value}"] if separator else [option, bound.value])
+        elif arg == "--all":
             include_all = True
-            index += 1
-            continue
-        if arg == "--lines" or arg.startswith("--lines="):
+        elif arg == "--lines" or arg.startswith("--lines="):
             fail("--lines is not supported; use --since/--until to bound the JSONL store")
-        if arg == "-n" and index + 1 < len(argv) and argv[index + 1].isdigit():
+        elif arg == "-n" and index + 1 < len(argv) and argv[index + 1].isdigit():
             fail("-n <count> is not supported; bare -n still enables lnav headless mode")
-
-        lnav_args.append(arg)
+        else:
+            lnav_args.append(arg)
         index += 1
 
     return since, until, include_all, units, lnav_args
@@ -127,60 +115,45 @@ def first_timestamp(path: Path) -> float | None:
                 if line.strip():
                     return parse_timestamp(json.loads(line)["time"])
     except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        # Unknown file bounds keep the file eligible for lnav inspection.
         return None
     return None
 
 
-# The one journalctl-style relative grammar shared by parse_bound (file
-# selection) and normalize_bound (bounds handed to lnav), so both always
-# recognize the same forms.
-RELATIVE_BOUND_RE = re.compile(r"(\d+)\s*(seconds?|minutes?|hours?|days?|weeks?)\s+ago")
-NAMED_BOUNDS = ("now", "today", "yesterday")
-
-
-def parse_bound(value: str, now: datetime | None = None) -> float | None:
-    now = now or datetime.now().astimezone()
+def parse_bound(value: str, now: datetime) -> TimeBound:
+    """Resolve supported bounds once; leave native-only syntax to lnav."""
     text = value.strip().lower()
-    relative = RELATIVE_BOUND_RE.fullmatch(text)
+    relative = re.fullmatch(r"(\d+)\s*(seconds?|minutes?|hours?|days?|weeks?)\s+ago", text)
     if relative:
-        amount = int(relative.group(1))
-        unit = relative.group(2).rstrip("s")
-        seconds = {"second": 1, "minute": 60, "hour": 3600, "day": 86400, "week": 604800}[unit]
-        return (now - timedelta(seconds=amount * seconds)).timestamp()
-    if text == "now":
-        return now.timestamp()
-    if text in ("today", "yesterday"):
+        parsed = now - timedelta(**{relative.group(2).rstrip("s") + "s": int(relative.group(1))})
+    elif text == "now":
+        parsed = now
+    elif text in ("today", "yesterday"):
         midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        return (midnight - timedelta(days=text == "yesterday")).timestamp()
-    try:
-        return parse_timestamp(value)
-    except ValueError:
-        return None
+        parsed = midnight - timedelta(days=text == "yesterday")
+    else:
+        try:
+            return TimeBound(value, parse_timestamp(value))
+        except ValueError:
+            # Native lnav syntax stays opaque, disabling file preselection.
+            return TimeBound(value, None)
 
-
-def normalize_bound(value: str, now: datetime) -> str:
-    text = value.strip().lower()
-    if RELATIVE_BOUND_RE.fullmatch(text) is None and text not in NAMED_BOUNDS:
-        return value
-
-    epoch = parse_bound(value, now)
-    if epoch is None:
-        return value
-    return datetime.fromtimestamp(epoch, tz=now.tzinfo).isoformat(timespec="seconds")
+    # lnav requires second precision; file selection must use the same cutoff.
+    parsed = parsed.replace(microsecond=0)
+    return TimeBound(parsed.isoformat(timespec="seconds"), parsed.timestamp())
 
 
 def select_logs(
     logs: list[Path],
-    since: str | None,
-    until: str | None,
+    since: TimeBound | None,
+    until: TimeBound | None,
     include_all: bool,
-    now: datetime | None = None,
 ) -> list[Path]:
     if include_all or (since is None and until is None):
         return logs if include_all else logs[:1]
 
-    since_epoch = parse_bound(since, now) if since is not None else float("-inf")
-    until_epoch = parse_bound(until, now) if until is not None else float("inf")
+    since_epoch = since.epoch if since is not None else float("-inf")
+    until_epoch = until.epoch if until is not None else float("inf")
     if since_epoch is None or until_epoch is None:
         return logs
 
@@ -214,13 +187,12 @@ def main(argv: list[str]) -> None:
     if argv[:1] and argv[0] in ("-V", "--version", "-h", "--help"):
         os.execv(LNAV, [LNAV, *argv])
 
-    now = datetime.now().astimezone()
-    since, until, include_all, units, lnav_args = parse_args(argv, now)
+    since, until, include_all, units, lnav_args = parse_args(argv)
     logs = discover_logs()
     if not logs or logs[0] != STORE:
         fail(f"normalized store is missing or unreadable: {STORE}")
 
-    logs = select_logs(logs, since, until, include_all, now)
+    logs = select_logs(logs, since, until, include_all)
     if not logs:
         fail("no retained JSONL files overlap the requested time window")
     if units and any(arg.lstrip().startswith(":filter-expr") for arg in lnav_args):

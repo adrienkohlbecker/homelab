@@ -321,6 +321,10 @@
       argv: [/usr/local/bin/lnav-journal, -n, -S, 1 hour ago, -c, ':goto 0']
       present: [lnav wrapper verification]
       absent: [lnav wrapper ancient history]
+    - name: Pass native negative-relative bounds through
+      argv: [/usr/local/bin/lnav-journal, -n, -S, -15m, -c, ':goto 0']
+      present: [lnav wrapper verification]
+      absent: [lnav wrapper ancient history]
     - name: Open the active store at the end with debug hidden
       argv: [/usr/local/bin/lnav-journal, -n]
       present: [lnav wrapper verification]
