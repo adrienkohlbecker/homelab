@@ -1,65 +1,34 @@
-# Functional checks for the locale role. The converge proves the modules and
-# default-locale file write exit cleanly; these verify the role's actual
-# contract: en_US.UTF-8 is compiled, usable, and the unmasked system default,
-# while processes resolve the host timezone as UTC.
-
 # An unavailable locale can return zero while warning and falling back to C;
 # require a clean UTF-8 result to prove en_US.UTF-8 is compiled and usable.
-- name: _verify | Resolve en_US.UTF-8 at runtime
+- name: _verify | Runtime charmap is UTF-8 without warnings
   command: locale charmap
   environment:
     LC_ALL: en_US.UTF-8
   register: locale_verify_charmap
   changed_when: false
+  failed_when: >-
+    locale_verify_charmap.rc != 0 or
+    locale_verify_charmap.stdout != 'UTF-8' or
+    locale_verify_charmap.stderr != ''
   become: true
-  tags:
-    - locale
 
-- name: _verify | Runtime charmap is UTF-8
-  assert:
-    that:
-      - locale_verify_charmap.rc == 0
-      - locale_verify_charmap.stdout == 'UTF-8'
-      - locale_verify_charmap.stderr == ''
-    fail_msg: "`locale charmap` under LC_ALL=en_US.UTF-8 did not return UTF-8 without warnings"
-    quiet: true
-  tags:
-    - locale
-
-# localectl reads /etc/locale.conf, so this proves the file we wrote is
-# parseable by systemd and sets the system default.
-- name: _verify | Read system default locale
+# Exercise systemd's parser; tolerate label spacing but anchor the LANG value.
+- name: _verify | System default locale is LANG=en_US.UTF-8
   command: localectl status
   register: locale_verify_localectl
   changed_when: false
+  failed_when: >-
+    locale_verify_localectl.rc != 0 or
+    locale_verify_localectl.stdout | regex_findall('^\s*System Locale:\s+LANG=en_US\.UTF-8$', multiline=True) | length != 1
   become: true
-  tags:
-    - locale
 
-# Match the `System Locale:` line tolerant of localectl's label
-# alignment (leading indent / spacing is cosmetic and varies across
-# systemd versions); the `$` end-anchor still pins LANG as the only
-# value on that line (extra LC_* land on indented continuation lines).
-- name: _verify | System default locale is LANG=en_US.UTF-8
-  assert:
-    that: locale_verify_localectl.stdout | regex_findall('^\s*System Locale:\s+LANG=en_US\.UTF-8$', multiline=True) | length == 1
-    fail_msg: "localectl System Locale is not LANG=en_US.UTF-8"
-    quiet: true
-  tags:
-    - locale
-
-# Guard the LANG-only choice documented in tasks/main.yml: assert the
-# file carries LANG and nothing else. The `$` end-anchors stand in for
-# `\b` -- under ansible-core 2.20 a `\b` in a quoted regex inside a
-# `that:` conditional is mangled into a backspace escape and never
-# matches (see roles/console/tasks/_verify.yml).
+# Guard the LANG-only policy. Use `$` anchors: ansible-core 2.20 mangles `\b`
+# in conditional regexes into backspace escapes.
 - name: _verify | Read default locale conf
   slurp:
     src: /etc/locale.conf
   register: locale_verify_file
   become: true
-  tags:
-    - locale
 
 - name: _verify | Default-locale file sets LANG only (no LC_ALL/LANGUAGE)
   vars:
@@ -71,15 +40,10 @@
       - _content | regex_findall('^LANGUAGE=', multiline=True) | length == 0
     fail_msg: "the default-locale file should set LANG only; LC_ALL or LANGUAGE was re-added"
     quiet: true
-  tags:
-    - locale
 
-# The timezone module verifies systemd and RTC state after changing it; exercise
-# libc independently to prove processes resolve the configured timezone.
+# Exercise libc independently of the timezone module's systemd/RTC checks.
 - name: _verify | Libc timezone is UTC
   command: date +%Z
   register: locale_verify_timezone
   changed_when: false
-  failed_when: locale_verify_timezone.stdout != 'UTC'
-  tags:
-    - locale
+  failed_when: locale_verify_timezone.rc != 0 or locale_verify_timezone.stdout != 'UTC'
