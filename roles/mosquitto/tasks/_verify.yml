@@ -24,13 +24,6 @@
   loop_control:
     label: "{{ item.key }}"
 
-- name: _verify | Exercise native broker logging and persistence failures
-  script: verify_logging.py
-  args:
-    executable: python3
-  become: true
-  changed_when: false
-
 - name: _verify | Restart the broker
   systemd:
     name: mosquitto
@@ -54,6 +47,39 @@
   loop: "{{ mosquitto_accounts | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
+
+- name: _verify | Broker logs its startup through native syslog
+  command: >-
+    journalctl --boot --no-pager --output=cat --lines=1
+    _SYSTEMD_UNIT=mosquitto.service _COMM=mosquitto _TRANSPORT=syslog PRIORITY=6
+    --grep="^mosquitto version .* running$"
+  become: true
+  register: mosquitto_startup
+  changed_when: false
+  until: mosquitto_startup.rc == 0 and mosquitto_startup.stdout | length > 0
+  retries: 5
+  delay: 2
+
+- name: _verify | Broker startup reaches the lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        expected = dict(service="mosquitto", unit="mosquitto.service", level="info", message=sys.argv[1])
+        with open("/var/log/fluent-bit/lnav.jsonl") as logs:
+            assert any(all(record.get(key) == value for key, value in expected.items())
+                       for record in map(json.loads, logs))
+      - "{{ mosquitto_startup.stdout }}"
+  become: true
+  register: mosquitto_lnav
+  changed_when: false
+  until: mosquitto_lnav.rc == 0
+  retries: 15
+  delay: 2
 
 - name: _verify | Anonymous connection is refused
   command: >-
