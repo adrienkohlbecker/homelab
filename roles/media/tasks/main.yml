@@ -1,8 +1,5 @@
-- name: Create media podman network
-  import_tasks: network.yml
-
-- name: Add media group
-  import_tasks: group.yml
+- name: Set up media runtime
+  import_tasks: runtime.yml
 
 # Full-site QEMU tests do not invoke service _setup hooks, so the shared media
 # layer owns the phantom render device used by both media servers.

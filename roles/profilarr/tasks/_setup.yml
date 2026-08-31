@@ -15,11 +15,6 @@
   import_role:
     name: fluentbit
 
-- name: _setup | Create media podman network
-  import_role:
-    name: media
-    tasks_from: network
-
 - name: _setup | Create services parent
   file:
     path: /mnt/services

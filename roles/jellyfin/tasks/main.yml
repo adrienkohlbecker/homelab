@@ -1,7 +1,7 @@
-- name: Add media group
+- name: Set up media runtime
   import_role:
     name: media
-    tasks_from: group
+    tasks_from: runtime
   tags:
     - jellyfin
 

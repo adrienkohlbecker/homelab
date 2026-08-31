@@ -1,3 +1,10 @@
+- name: Set up media runtime
+  import_role:
+    name: media
+    tasks_from: runtime
+  tags:
+    - profilarr
+
 - name: Set up profilarr system user, group, and config dir
   import_role:
     name: service_user

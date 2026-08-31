@@ -1,0 +1,20 @@
+- name: Add media group
+  group:
+    name: media
+    gid: "{{ static_group_ids.media }}"
+    system: true
+  become: true
+  register: media_group
+  tags:
+    - media
+
+# Stack peers use aardvark-dns; no cross-host consumer depends on the subnet.
+- name: Create media podman network
+  when: not ansible_check_mode
+  containers.podman.podman_network:
+    name: media
+    disable_dns: false
+    state: present
+  become: true
+  tags:
+    - media

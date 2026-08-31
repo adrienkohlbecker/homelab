@@ -1,3 +1,10 @@
+- name: Set up media runtime
+  import_role:
+    name: media
+    tasks_from: runtime
+  tags:
+    - seerr
+
 - name: Assert seerr secrets are provided
   assert:
     # `| string` before `| length`: some of these vault to bare numbers
