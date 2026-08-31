@@ -81,16 +81,6 @@
     timeout: 30
   become: true
 
-- name: storage | Resolve macOS zvol device path
-  when:
-    - not (ansible_check_mode and macos_vm_zvol_current.rc != 0)
-  command: "readlink -f /dev/zvol/{{ macos_vm_zvol_dataset }}"
-  register: macos_vm_zvol_dev
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: true
-
 - name: storage | Install udev rule giving QEMU access to the zvol  # noqa: require-validate
   copy:
     dest: "/etc/udev/rules.d/70-macos-vm-{{ macos_vm_name }}-zvol.rules"
@@ -107,16 +97,6 @@
   when: macos_vm_zvol_udev_rule.changed
   ansible.builtin.command:
     cmd: udevadm control --reload-rules
-  become: true
-  changed_when: true
-
-- name: storage | Trigger udev for the zvol
-  when:
-    - macos_vm_zvol_udev_rule.changed
-    - macos_vm_zvol_dev is defined
-    - macos_vm_zvol_dev.stdout | default('') | trim | length > 0
-  ansible.builtin.command:
-    cmd: "udevadm trigger {{ macos_vm_zvol_dev.stdout | trim }}"
   become: true
   changed_when: true
 
