@@ -60,7 +60,7 @@
     # an out-of-time-order banner, and SQL row 1 must stay the first file line).
     - path: /tmp/lnav_verify/lnav.jsonl
       content: |
-        {"time":"2026-06-08T12:34:56.789Z","host":"lab","service":"homeassistant","unit":"homeassistant.service","identifier":"homeassistant","level":"warn","message":"connection failed","stream":"journald","fields":{"CONTAINER_NAME":"homeassistant","SYSTEMD_UNIT":"homeassistant.service","SYSLOG_IDENTIFIER":"homeassistant"}}
+        {"time":"2026-06-08T12:34:56.789Z","host":"lab","service":"homeassistant","unit":"homeassistant.service","identifier":"homeassistant","level":"warn","message":"connection failed","stream":"journald","fields":{"CONTAINER_NAME":"homeassistant","SYSTEMD_UNIT":"homeassistant.service","SYSLOG_IDENTIFIER":"homeassistant","context":{"retry":3}}}
         {"time":"2026-06-08T12:34:56.500Z","host":"lab","service":"netdata","unit":null,"identifier":null,"level":"info","message":"earlier out-of-order record","stream":"journald","fields":{}}
   tags:
     - lnav
@@ -184,7 +184,10 @@
       - -n
       - -N
       - -c
-      - ";SELECT level, host, service, log_body AS message FROM fluentbit_lnav LIMIT 1"
+      - ";SELECT level, host, service, log_body AS message,
+         json_extract(fields, '$.CONTAINER_NAME') AS container_name,
+         json_extract(fields, '$.context.retry') AS context_retry
+         FROM fluentbit_lnav LIMIT 1"
       - -c
       - ":write-jsonlines-to -"
       - -c
@@ -205,6 +208,8 @@
       host: lab
       service: homeassistant
       message: connection failed
+      container_name: homeassistant
+      context_retry: 3
   assert:
     that: lnav_fluentbit_sql_export.stdout | from_json == expected
   tags:
