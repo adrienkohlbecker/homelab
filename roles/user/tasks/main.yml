@@ -271,7 +271,7 @@
   shell: |
     set -euo pipefail
     /usr/bin/mise trust
-    /usr/bin/mise run stow
+    /usr/bin/mise run --skip-tools stow
   args:
     executable: /bin/bash
     chdir: "{{ ansible_user_dir }}/.dotfiles"

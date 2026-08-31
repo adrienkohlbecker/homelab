@@ -67,7 +67,12 @@
                     saved.rename(version)
       changed_when: false
 
-# Keep the mise config linked while a later Stow package conflicts, then repair it.
+- name: _verify | Locate zoxide for the missing-tool fixture
+  command: /usr/bin/mise where zoxide
+  register: _user_zoxide_path
+  changed_when: false
+
+# Stow must reject conflicts without installing tools ahead of the explicit installer.
 - name: _verify | Stow rejects conflicts and recovers incomplete deployment
   block:
     - name: _verify | Remove the zshrc link
@@ -80,6 +85,11 @@
         dest: "{{ ansible_user_dir }}/.zshrc"
         content: "Stow conflict fixture\n"
         mode: "0644"
+
+    - name: _verify | Remove zoxide to exercise installation during reconverge
+      file:
+        path: "{{ _user_zoxide_path.stdout }}"
+        state: absent
 
     - name: _verify | Converge with the conflict
       import_role:
@@ -94,6 +104,12 @@
         that:
           - ansible_failed_task.name == 'Deploy dotfiles into $HOME (mise stow task)'
           - "'would cause conflicts' in ansible_failed_result.stderr"
+
+    - name: _verify | Stow left tool installation to the installer
+      command: /usr/bin/mise ls --missing --json
+      register: _user_missing_after_stow
+      changed_when: false
+      failed_when: "'zoxide' not in (_user_missing_after_stow.stdout | from_json)"
   always:
     - name: _verify | Remove the conflict
       file:
@@ -104,9 +120,11 @@
       import_role:
         name: user
 
-- name: _verify | Missing-link repair reports a change
+- name: _verify | Link repair and tool installation report changes
   assert:
-    that: user_dotfiles_stow.changed
+    that:
+      - user_dotfiles_stow.changed
+      - user_mise_tools.changed
 
 - name: _verify | Remove generated completions to exercise shell bootstrap
   file:
