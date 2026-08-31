@@ -53,19 +53,6 @@
   tags:
     - mutt
 
-- name: Configure notmuch archive index
-  template:
-    src: notmuch-config.j2
-    dest: /opt/mutt/notmuch-config
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: /usr/bin/notmuch --config %s config list
-  become: true
-  tags:
-    - mutt
-
 - name: Install the mail-archive launcher
   copy:
     src: mail-archive
@@ -101,6 +88,44 @@
   tags:
     - mutt
 
+# Both browsing paths use the read-only bind; getmail writes the source directly.
+- name: Manage the read-only archive bind mount
+  import_role:
+    name: systemd_unit
+    tasks_from: unit
+  vars:
+    systemd_unit_args:
+      src: archive.mount.j2
+      dest: mnt-services-mutt-archive.mount
+  tags:
+    - mutt
+
+- name: Install the notmuch mount guard
+  copy:
+    src: notmuch_pre_new.sh
+    dest: /opt/mutt/pre-new
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - mutt
+
+- name: Configure notmuch archive index
+  template:
+    src: notmuch-config.j2
+    dest: /opt/mutt/notmuch-config
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: /usr/bin/notmuch --config %s config list
+  become: true
+  tags:
+    - mutt
+
 - name: Prime the notmuch archive index
   command: /usr/bin/notmuch --config /opt/mutt/notmuch-config new
   args:
@@ -111,7 +136,6 @@
   tags:
     - mutt
 
-# Virtual-mailbox validation needs the notmuch config and initial index.
 - name: Configure neomutt
   template:
     src: muttrc.j2
@@ -138,17 +162,8 @@
       exec_start: /usr/bin/notmuch --config /opt/mutt/notmuch-config new
       run_as: "{{ ansible_user_id }}"
       timeout_start_sec: 30m
-  tags:
-    - mutt
-
-# The Maildir view uses a read-only bind; getmail writes the source directly.
-- name: Manage the read-only archive bind mount
-  import_role:
-    name: systemd_unit
-    tasks_from: unit
-  vars:
-    systemd_unit_args:
-      src: archive.mount.j2
-      dest: mnt-services-mutt-archive.mount
+      additional_service_directives:
+        - "[Unit]"
+        - RequiresMountsFor=/mnt/services/mutt/archive
   tags:
     - mutt

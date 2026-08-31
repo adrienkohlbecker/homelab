@@ -36,51 +36,80 @@
       <a href="http://muttverify.invalid/">a link</a></p></body></html>
   become: true
 
-- name: _verify | Notmuch indexes the planted archive message
-  command: /usr/bin/notmuch --config /opt/mutt/notmuch-config new
+# Seed through the source path to prove existing index entries and tags survive
+# switching mail_root to the read-only alias, without rebuilding the database.
+- name: _verify | Read the managed notmuch configuration
+  slurp:
+    src: /opt/mutt/notmuch-config
+  register: _mutt_config
+
+- name: _verify | Configure source-path indexing for the migration fixture
+  copy:
+    dest: /tmp/mutt_source_config
+    content: >-
+      {{ (_mutt_config.content | b64decode)
+         | replace('mail_root=/mnt/services/mutt/archive', 'mail_root=/mnt/services/getmail')
+         | replace('hook_dir=/opt/mutt', 'hook_dir=/mnt/services/mutt/notmuch/hooks') }}
+    mode: "0600"
+
+- name: _verify | Index the planted message through the source path
+  command: /usr/bin/notmuch --config /tmp/mutt_source_config new
   changed_when: false
 
-- name: _verify | Notmuch finds the planted archive message
+- name: _verify | Tag the existing index entry
+  command: /usr/bin/notmuch --config /tmp/mutt_source_config tag +migration_probe id:muttverify@example.com
+  changed_when: false
+
+- name: _verify | Refresh the existing index through the managed service
+  systemd:
+    name: mutt_notmuch.service
+    state: started
+  become: true
+
+- name: _verify | Notmuch preserves the existing message and its tag
   command:
     argv:
       - /usr/bin/notmuch
       - --config
       - /opt/mutt/notmuch-config
       - count
-      - subject:"Mutt Verify"
+      - id:muttverify@example.com and tag:migration_probe
   register: _mutt_notmuch_count
   changed_when: false
   failed_when: (_mutt_notmuch_count.stdout | trim) != '1'
+
+- name: _verify | Notmuch resolves the existing message through the read-only mount
+  command: /usr/bin/notmuch --config /opt/mutt/notmuch-config search --output=files id:muttverify@example.com
+  register: _mutt_notmuch_path
+  changed_when: false
+  failed_when: (_mutt_notmuch_path.stdout | trim) != '/mnt/services/mutt/archive/new/1700000000.muttverify.box'
 
 # Exercise the operator launcher under a PTY as the Maildir owner (no become).
 # Quit through stdin: putting qq in the push buffer exits before the pager paints.
 # LINES/COLUMNS override the PTY's initial 0x0 geometry in ncurses; keep the
 # marker unwrapped and the body above the pager fold for the render assertions.
-- name: _verify | The mail-archive wrapper opens and displays a message read-only
+- name: _verify | Maildir and Notmuch views render the HTML message read-only
   command:
     argv:
       - script
       - -qec
-      - mail-archive -e "push <display-message>"
-      - /tmp/mutt_verify_typescript
+      - '{{ item }} -e "push <display-message>"'
+      - /dev/null
     stdin: qq
   environment:
     TERM: xterm
     COLUMNS: "120"
     LINES: "40"
+  loop:
+    - mail-archive
+    - mail-archive -f 'notmuch://?query=id:muttverify@example.com'
+  register: _mutt_view
   changed_when: false
-
-# Require the body marker without raw href= markup to prove HTML rendering.
-# grep -a treats the PTY escape sequences as text.
-- name: _verify | W3m rendered the HTML body inline (marker present)
-  command: grep -qa MUTTVERIFYHTML /tmp/mutt_verify_typescript
-  changed_when: false
-
-- name: _verify | The HTML was parsed by w3m, not shown raw (no href= attribute)
-  command: grep -qa href= /tmp/mutt_verify_typescript
-  register: _mutt_raw_html
-  changed_when: false
-  failed_when: _mutt_raw_html.rc != 1
+  # Require rendered body text without the raw HTML attribute in each view.
+  failed_when: >-
+    _mutt_view.rc != 0
+    or 'MUTTVERIFYHTML' not in _mutt_view.stdout
+    or 'href=' in _mutt_view.stdout
 
 # Read-only browsing must still populate the separate header cache.
 - name: _verify | Neomutt populated its header cache from the archive
@@ -106,3 +135,56 @@
   register: _mutt_cur
   failed_when: _mutt_cur.matched > 0
   become: true
+
+- name: _verify | Indexing requires the protected mount
+  block:
+    - name: _verify | Stop the archive mount
+      systemd:
+        name: mnt-services-mutt-archive.mount
+        state: stopped
+      become: true
+
+    - name: _verify | Manual indexing refuses an absent mount
+      command: /usr/bin/notmuch --config /opt/mutt/notmuch-config new
+      register: _mutt_unmounted
+      changed_when: false
+      failed_when: >-
+        _mutt_unmounted.rc == 0
+        or 'must be mounted read-only' not in _mutt_unmounted.stderr
+
+    - name: _verify | Scheduled indexing restores its mount dependency
+      systemd:
+        name: mutt_notmuch.service
+        state: started
+      become: true
+
+    # Exercise bind remount flags without editing fstab or the mount unit.
+    - name: _verify | Make the archive bind writable
+      command: mount -o remount,bind,rw /mnt/services/mutt/archive # noqa: command-instead-of-module
+      become: true
+      changed_when: false
+
+    - name: _verify | Manual indexing refuses a writable mount
+      command: /usr/bin/notmuch --config /opt/mutt/notmuch-config new
+      register: _mutt_writable
+      changed_when: false
+      failed_when: >-
+        _mutt_writable.rc == 0
+        or 'must be mounted read-only' not in _mutt_writable.stderr
+  always:
+    - name: _verify | Restore the archive mount
+      systemd:
+        name: mnt-services-mutt-archive.mount
+        state: started
+      become: true
+
+    - name: _verify | Restore the read-only bind flag
+      command: mount -o remount,bind,ro /mnt/services/mutt/archive # noqa: command-instead-of-module
+      become: true
+      changed_when: false
+
+- name: _verify | Rejected indexing preserves the existing message and tag
+  command: /usr/bin/notmuch --config /opt/mutt/notmuch-config count tag:migration_probe
+  register: _mutt_preserved
+  changed_when: false
+  failed_when: (_mutt_preserved.stdout | trim) != '1'
