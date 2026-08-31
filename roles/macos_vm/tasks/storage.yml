@@ -39,22 +39,6 @@
       to {{ macos_vm_zvol_size | human_to_bytes }} bytes. Shrinking would corrupt APFS.
       Create a new smaller zvol and reinstall/restore instead.
 
-- name: storage | Create macOS zvol
-  when: macos_vm_zvol_current.rc != 0
-  community.general.zfs:
-    name: "{{ macos_vm_zvol_dataset }}"
-    state: present
-    extra_zfs_properties:
-      volsize: "{{ macos_vm_zvol_size | human_to_bytes | string }}"
-      volblocksize: "{{ macos_vm_zvol_volblocksize | string }}"
-      compression: "{{ macos_vm_zvol_compression }}"
-      volmode: dev
-      refreservation: "0"
-      logbias: throughput
-      redundant_metadata: most
-  become: true
-  register: macos_vm_zvol_created
-
 - name: storage | Read current macOS zvol block size
   when: macos_vm_zvol_current.rc == 0
   ansible.builtin.command:
@@ -74,20 +58,20 @@
       requires {{ macos_vm_zvol_volblocksize | human_to_bytes }} bytes.
       volblocksize is immutable; destroy and recreate the zvol before applying.
 
-- name: storage | Update existing macOS zvol mutable properties
-  when: macos_vm_zvol_current.rc == 0
+- name: storage | Create or update macOS zvol
   community.general.zfs:
     name: "{{ macos_vm_zvol_dataset }}"
     state: present
     extra_zfs_properties:
       volsize: "{{ macos_vm_zvol_size | human_to_bytes | string }}"
+      # Creation-only: the module tries to rewrite properties whose source is default.
+      volblocksize: "{{ macos_vm_zvol_volblocksize if macos_vm_zvol_current.rc != 0 else omit }}"
       compression: "{{ macos_vm_zvol_compression }}"
       volmode: dev
       refreservation: "0"
       logbias: throughput
       redundant_metadata: most
   become: true
-  register: macos_vm_zvol_updated
 
 - name: storage | Wait for macOS zvol device
   when:
