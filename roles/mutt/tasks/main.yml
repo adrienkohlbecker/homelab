@@ -31,7 +31,7 @@
 # services dataset) so reopening/searching the multi-year archive doesn't
 # re-parse every message, and nothing lands in the operator's
 # dotfiles-managed $HOME.
-- name: Create neomutt and notmuch state directories
+- name: Create neomutt and notmuch state directories and archive mountpoint
   file:
     path: "{{ item }}"
     state: directory
@@ -42,6 +42,7 @@
     - /mnt/services/mutt
     - /mnt/services/mutt/headers
     - /mnt/services/mutt/notmuch
+    - /mnt/services/mutt/archive
   become: true
   tags:
     - mutt
@@ -151,17 +152,7 @@
 # Hard read-only guard: neomutt browses the archive through a ro bind mount of
 # the getmail Maildir (set as `folder` in muttrc), so a write physically cannot
 # reach the archive even if -R is bypassed. getmail keeps writing the source
-# path directly. The mountpoint must exist before the unit can mount over it.
-- name: Create the read-only archive mountpoint
-  file:
-    path: /mnt/services/mutt/archive
-    state: directory
-    owner: "{{ ansible_user_id }}"
-    group: "{{ ansible_user_id }}"
-    mode: "0700"
-  become: true
-  tags:
-    - mutt
+# path directly. The directory loop above creates the mountpoint first.
 
 # Install via the systemd_unit helper: it validates the rendered unit with
 # systemd-analyze verify in place (rolling back on a bad unit) and reloads the
