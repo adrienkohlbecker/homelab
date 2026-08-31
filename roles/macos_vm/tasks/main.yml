@@ -37,19 +37,14 @@
   apt:
     pkg:
       - dmg2img
+      - fdisk
+      - mtools
       - ovmf
       - qemu-block-extra
       - qemu-system-x86
       - qemu-utils
     cache_valid_time: 3600
   become: true
-  tags:
-    - macos_vm
-
-- name: Compute OpenCore config image id
-  set_fact:
-    macos_vm_opencore_config_id: >-
-      {{ (macos_vm_opencore_prev_lang_kbd ~ '|' ~ macos_vm_opencore_apple_locale ~ '|' ~ macos_vm_opencore_boot_args) | hash('sha1') }}
   tags:
     - macos_vm
 

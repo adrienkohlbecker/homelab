@@ -1,14 +1,4 @@
-# Downloads:
-#   - OpenCore.qcow2 (19 MiB) — EFI bootloader image. The role fetches a
-#     pristine pinned copy into _artifacts/, then copies it ONCE per VM into
-#     the per-VM workdir. The per-VM copy holds OpenCore NVRAM (incl. iCloud
-#     activation tokens) and must never be overwritten.
-#   - fetch-macOS-v2.py — Apple's swcdn fetcher from OSX-KVM. Run once per VM
-#     to materialise BaseSystem.dmg + .chunklist into the workdir for the
-#     Recovery installer.
-#
-# All three are gated with `creates:` so re-runs are idempotent without
-# changed_when:false lying.
+# Seed OpenCore once; existing per-VM images retain guest identity state.
 
 - name: artifacts | Create artifacts cache dir
   file:
@@ -44,156 +34,20 @@
     mode: "0644"
   become: true
 
-- name: artifacts | Stage OpenCore patch helper
+- name: artifacts | Seed per-VM OpenCore image
   when: not ansible_check_mode
-  copy:
-    src: patch_opencore_config.py
-    dest: "{{ macos_vm_artifacts_dir }}/patch_opencore_config.py"
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-  become: true
-
-- name: artifacts | Create config-patched OpenCore cache image
-  when: not ansible_check_mode
-  ansible.builtin.command:
-    argv:
-      - cp
-      - --reflink=auto
-      - "{{ macos_vm_artifacts_dir }}/OpenCore.qcow2"
-      - "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_config_id }}.qcow2"
-    creates: "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_config_id }}.qcow2"
-  become: true
-  register: macos_vm_opencore_config_image
-
-- name: artifacts | Patch OpenCore config defaults into cache image
-  when: macos_vm_opencore_config_image.changed
-  block:
-    - name: artifacts | Load nbd kernel module
-      modprobe:
-        name: nbd
-        params: max_part=8
-      become: true
-
-    - name: artifacts | Create OpenCore patch mountpoint
-      tempfile:
-        state: directory
-        suffix: macos-vm-opencore
-      become: true
-      register: macos_vm_opencore_mount
-
-    - name: artifacts | Clear OpenCore patch nbd device
-      ansible.builtin.command:
-        argv:
-          - qemu-nbd
-          - --disconnect
-          - "{{ macos_vm_opencore_patch_nbd_device }}"
-      become: true
-      failed_when: false
-      changed_when: false
-
-    - name: artifacts | Attach locale OpenCore image
-      ansible.builtin.command:
-        argv:
-          - qemu-nbd
-          - "--connect={{ macos_vm_opencore_patch_nbd_device }}"
-          - "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_config_id }}.qcow2"
-      become: true
-      changed_when: true
-
-    - name: artifacts | Wait for OpenCore EFI partition
-      wait_for:
-        path: "{{ macos_vm_opencore_patch_nbd_device }}p1"
-        state: present
-        timeout: 10
-
-    - name: artifacts | Mount OpenCore EFI partition
-      ansible.builtin.command:
-        argv:
-          - mount
-          - -o
-          - rw
-          - "{{ macos_vm_opencore_patch_nbd_device }}p1"
-          - "{{ macos_vm_opencore_mount.path }}"
-      become: true
-      changed_when: true
-
-    - name: artifacts | Patch OpenCore recovery locale defaults
-      ansible.builtin.command:
-        argv:
-          - python3
-          - "{{ macos_vm_artifacts_dir }}/patch_opencore_config.py"
-          - "{{ macos_vm_opencore_mount.path }}/EFI/OC/config.plist"
-          - --prev-lang-kbd
-          - "{{ macos_vm_opencore_prev_lang_kbd }}"
-          - --apple-locale
-          - "{{ macos_vm_opencore_apple_locale }}"
-          - --boot-args
-          - "{{ macos_vm_opencore_boot_args }}"
-      become: true
-      register: macos_vm_opencore_config_patch
-      changed_when: "'changed' in macos_vm_opencore_config_patch.stdout"
-
-    - name: artifacts | Flush OpenCore config image writes
-      ansible.builtin.command:
-        argv:
-          - sync
-      become: true
-      changed_when: false
-
-  always:
-    - name: artifacts | Unmount OpenCore patch mountpoint
-      when: macos_vm_opencore_mount.path is defined
-      ansible.builtin.command:
-        argv:
-          - umount
-          - "{{ macos_vm_opencore_mount.path }}"
-      become: true
-      failed_when: false
-      changed_when: false
-
-    - name: artifacts | Detach OpenCore patch image
-      ansible.builtin.command:
-        argv:
-          - qemu-nbd
-          - --disconnect
-          - "{{ macos_vm_opencore_patch_nbd_device }}"
-      become: true
-      failed_when: false
-      changed_when: false
-
-    - name: artifacts | Remove OpenCore patch mountpoint
-      when: macos_vm_opencore_mount.path is defined
-      file:
-        path: "{{ macos_vm_opencore_mount.path }}"
-        state: absent
-      become: true
-
-- name: artifacts | Set config OpenCore cache image ownership
-  when: not ansible_check_mode
-  file:
-    path: "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_config_id }}.qcow2"
-    owner: root
-    group: kvm
-    mode: "0644"
-  become: true
-
-- name: artifacts | Stage per-VM OpenCore.qcow2 working copy  # noqa: require-backup
-  # Copy from the cache only on first install. Once the VM has booted, this
-  # qcow2 holds NVRAM (incl. iCloud activation) — overwriting it logs the
-  # guest out of Apple services. To intentionally re-pristine, delete the
-  # workdir manually first.
-  when:
-    - not ansible_check_mode
-  copy:
-    src: "{{ macos_vm_artifacts_dir }}/OpenCore.{{ macos_vm_opencore_config_id }}.qcow2"
-    dest: "{{ macos_vm_workdir }}/OpenCore.qcow2"
-    remote_src: true
-    owner: root
-    group: kvm
-    mode: "0644"
-    force: false
+  script:
+    cmd: >-
+      seed_opencore.py
+      {{ (macos_vm_artifacts_dir ~ '/OpenCore.qcow2') | quote }}
+      {{ (macos_vm_workdir ~ '/OpenCore.qcow2') | quote }}
+      --prev-lang-kbd={{ macos_vm_opencore_prev_lang_kbd | quote }}
+      --apple-locale={{ macos_vm_opencore_apple_locale | quote }}
+      --boot-args={{ macos_vm_opencore_boot_args | quote }}
+    executable: /usr/bin/python3
+    creates: "{{ macos_vm_workdir }}/OpenCore.qcow2"
+  register: macos_vm_opencore_seed
+  changed_when: "'changed' in macos_vm_opencore_seed.stdout | default('')"
   become: true
 
 - name: artifacts | Check per-VM OVMF vars file

@@ -58,7 +58,6 @@ macos_vm_start_service: false
 # and per-VM working files (one subdir per VM).
 macos_vm_artifacts_dir: /var/lib/libvirt/images/macos-vm/_artifacts
 macos_vm_workdir: "/var/lib/libvirt/images/macos-vm/{{ macos_vm_name }}"
-macos_vm_opencore_patch_nbd_device: /dev/nbd3
 
 # qemu_test keeps install mode off so tests avoid the large recovery image
 # download.
