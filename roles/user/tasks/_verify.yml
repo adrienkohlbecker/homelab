@@ -39,6 +39,47 @@
     - zoxide
     - atuin
 
+# Keep the mise config linked while a later Stow package conflicts, then repair it.
+- name: _verify | Stow rejects conflicts and recovers incomplete deployment
+  block:
+    - name: _verify | Remove the zshrc link
+      file:
+        path: "{{ ansible_user_dir }}/.zshrc"
+        state: absent
+
+    - name: _verify | Create a conflicting zshrc
+      copy:
+        dest: "{{ ansible_user_dir }}/.zshrc"
+        content: "Stow conflict fixture\n"
+        mode: "0644"
+
+    - name: _verify | Converge with the conflict
+      import_role:
+        name: user
+
+    - name: _verify | A conflicting file must fail deployment
+      fail:
+        msg: Stow accepted a conflicting zshrc
+  rescue:
+    - name: _verify | Failure came from the Stow conflict
+      assert:
+        that:
+          - ansible_failed_task.name == 'Deploy dotfiles into $HOME (mise stow task)'
+          - "'would cause conflicts' in ansible_failed_result.stderr"
+  always:
+    - name: _verify | Remove the conflict
+      file:
+        path: "{{ ansible_user_dir }}/.zshrc"
+        state: absent
+
+    - name: _verify | Converge to repair the missing link
+      import_role:
+        name: user
+
+- name: _verify | Missing-link repair reports a change
+  assert:
+    that: user_dotfiles_stow.changed
+
 - name: _verify | Remove generated completions to exercise shell bootstrap
   file:
     path: "{{ ansible_user_dir }}/.local/share/mise/completions"
