@@ -711,6 +711,40 @@
   tags:
     - retired_services
 
+- name: Remove retired Traefik and UniFi log files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/log/traefik
+    - /var/log/unifi
+    - /etc/logrotate.d/unifi
+  become: true
+  tags:
+    - retired_services
+    - logrotate
+
+- name: Remove retired udm_syslog rsyslog drop-in
+  file:
+    path: /etc/rsyslog.d/60-unifi.conf
+    state: absent
+  become: true
+  register: retired_services_rsyslog_unifi_dropin
+  tags:
+    - retired_services
+    - logrotate
+
+# Reload after removing the UDP 5140 input so rsyslog releases the port.
+- name: Reload rsyslog after drop-in removal
+  systemd:
+    name: rsyslog.service
+    state: reloaded
+  become: true
+  when: retired_services_rsyslog_unifi_dropin.changed
+  tags:
+    - retired_services
+    - logrotate
+
 - name: Remove retired zfs_autobackup files
   file:
     path: "{{ item }}"
