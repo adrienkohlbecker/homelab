@@ -51,9 +51,7 @@
   loop:
     - path: /tmp/lnav_verify/syslog
       content: |
-        Jun  8 08:00:00 lab pihole-FTL: WARNING: rate-limiting client 10.0.0.5
-        Jun  8 08:00:01 lab sshd[1234]: error: kex_exchange_identification: Connection closed by remote host
-        Jun  8 08:00:02 lab kernel: info: loaded module xfs
+        Jun  8 08:00:00 lab example[1234]: Plain syslog verification
     # The second record is deliberately 289ms EARLIER than the first: the merged
     # store is written in ingest order, not strict time order, so this exercises
     # the format's `ordered-by-time` (lnav must trust file order and not insert
@@ -80,7 +78,7 @@
   loop:
     - name: fluentbit_lnav
       path: /tmp/lnav_verify/lnav.jsonl
-    - name: syslog_body_scan
+    - name: syslog_log
       path: /tmp/lnav_verify/syslog
   tags:
     - lnav

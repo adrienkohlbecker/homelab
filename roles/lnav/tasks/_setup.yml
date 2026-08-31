@@ -1,7 +1,4 @@
-# Plant an orphaned format file the role no longer manages, so the converge's
-# prune step has something to remove and _verify can confirm it is gone. This
-# mirrors a real retirement (e.g. a parser dropped when its service was
-# decommissioned) leaving a stale file that warns at lnav startup.
+# Seed both a generic orphan and the retired syslog format to exercise pruning.
 - name: Create lnav formats directory for orphan fixture
   file:
     path: /etc/lnav/formats/homelab
@@ -11,13 +8,13 @@
     mode: "0755"
   become: true
 
-- name: Plant an orphaned lnav format file
+- name: Plant orphaned lnav format files
   copy:
-    dest: /etc/lnav/formats/homelab/orphan_retired.json
+    dest: "/etc/lnav/formats/homelab/{{ item }}.json"
     content: |
       {
         "$schema": "https://lnav.org/schemas/format-v1.schema.json",
-        "orphan_retired": {
+        "{{ item }}": {
           "title": "Retired format that must be pruned on converge",
           "regex": { "std": { "pattern": "^(?<body>.*)$" } },
           "value": { "body": { "kind": "string" } },
@@ -27,4 +24,7 @@
     owner: root
     group: root
     mode: "0644"
+  loop:
+    - orphan_retired
+    - syslog_body_scan
   become: true

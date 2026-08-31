@@ -4,4 +4,3 @@
 # hosts on the next converge instead of lingering and warning at lnav startup.
 lnav_format_files:
   - fluentbit_lnav.json
-  - syslog_body_scan.json
