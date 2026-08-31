@@ -258,88 +258,6 @@
   tags:
     - lnav
 
-- name: Lnav history script loads one rotation at a time
-  become: true
-  become_user: "{{ ansible_user_id }}"
-  command:
-    argv:
-      - timeout
-      - -k
-      - 5s
-      - 20s
-      - /usr/local/bin/lnav
-      - -n
-      - -N
-      - -c
-      - "{{ lnav_f9_command }}"
-      - -c
-      - ':goto 0'
-      - /var/log/fluent-bit/lnav.jsonl
-  register: lnav_history_once
-  changed_when: false
-  failed_when: >-
-    lnav_history_once.rc != 0 or
-    'lnav wrapper rotated history' not in lnav_history_once.stdout or
-    'lnav wrapper older history' in lnav_history_once.stdout
-  tags:
-    - lnav
-
-- name: Lnav history script loads another rotation when repeated
-  become: true
-  become_user: "{{ ansible_user_id }}"
-  command:
-    argv:
-      - timeout
-      - -k
-      - 5s
-      - 20s
-      - /usr/local/bin/lnav
-      - -n
-      - -N
-      - -c
-      - "{{ lnav_f9_command }}"
-      - -c
-      - "{{ lnav_f9_command }}"
-      - -c
-      - "{{ lnav_f9_command }}"
-      - -c
-      - ':goto 0'
-      - /var/log/fluent-bit/lnav.jsonl
-  register: lnav_history_repeated
-  changed_when: false
-  failed_when: >-
-    lnav_history_repeated.rc != 0 or
-    'lnav wrapper rotated history' not in lnav_history_repeated.stdout or
-    'lnav wrapper older history' not in lnav_history_repeated.stdout
-  tags:
-    - lnav
-
-- name: Lnav history script preserves the wrapper unit filter
-  become: true
-  become_user: "{{ ansible_user_id }}"
-  command:
-    argv:
-      - timeout
-      - -k
-      - 5s
-      - 20s
-      - /usr/local/bin/lnav-journal
-      - -n
-      - -u
-      - lnav_verify
-      - -c
-      - "{{ lnav_f9_command }}"
-      - -c
-      - ':goto 0'
-  register: lnav_history_unit
-  changed_when: false
-  failed_when: >-
-    lnav_history_unit.rc != 0 or
-    'lnav wrapper filtered history' not in lnav_history_unit.stdout or
-    'lnav wrapper rotated history' in lnav_history_unit.stdout
-  tags:
-    - lnav
-
 - name: Lnav-journal wrapper exposes lnav version without log discovery
   become: true
   become_user: "{{ ansible_user_id }}"
@@ -355,122 +273,69 @@
   tags:
     - lnav
 
-# The wrapper rewrites the relative bound to an absolute ISO timestamp pinned
-# to one clock; fresh records must still render inside that window while the
-# ancient store record stays hidden, proving lnav accepted the normalized form
-# and actually applied it. `:goto 0` because headless output starts at the
-# current position, and the wrapper opens at `:goto 100%`.
-- name: Lnav-journal bounds records by a relative since bound
+# Each case runs in a fresh session; :goto 0 exports the full visible window.
+- name: Verify lnav history and wrapper scenarios
   become: true
   become_user: "{{ ansible_user_id }}"
   command:
-    argv:
-      - timeout
-      - -k
-      - 5s
-      - 20s
-      - /usr/local/bin/lnav-journal
-      - -n
-      - -S
-      - 1 hour ago
-      - -c
-      - ':goto 0'
-  register: lnav_journal_since
+    argv: "{{ ['timeout', '-k', '5s', '20s'] + item.argv }}"
+  register: lnav_case
   changed_when: false
   failed_when: >-
-    lnav_journal_since.rc != 0 or
-    'lnav wrapper verification' not in lnav_journal_since.stdout or
-    'lnav wrapper ancient history' in lnav_journal_since.stdout
-  tags:
-    - lnav
-
-# Batch (-n) run with no -C, so lnav actually executes the wrapper's startup
-# `-c ':goto 100%'` instead of exiting at config-check. Proves the goto command
-# is accepted (an invalid one would fail the run) and the Fluent Bit store still
-# renders its records.
-- name: Lnav-journal opens the Fluent Bit store with goto-end startup command
-  become: true
-  become_user: "{{ ansible_user_id }}"
-  command:
-    argv:
-      - timeout
-      - -k
-      - 5s
-      - 20s
-      - /usr/local/bin/lnav-journal
-      - -n
-  register: lnav_journal_goto
-  changed_when: false
-  failed_when: >-
-    lnav_journal_goto.rc != 0 or
-    'lnav wrapper verification' not in lnav_journal_goto.stdout or
-    'lnav wrapper debug hidden' in lnav_journal_goto.stdout or
-    'lnav wrapper rotated history' in lnav_journal_goto.stdout
-  tags:
-    - lnav
-
-- name: Lnav-journal filters the JSONL store by unit
-  become: true
-  become_user: "{{ ansible_user_id }}"
-  command:
-    argv:
-      - timeout
-      - -k
-      - 5s
-      - 20s
-      - /usr/local/bin/lnav-journal
-      - -n
-      - -u
-      - lnav_verify
-  register: lnav_journal_unit
-  changed_when: false
-  failed_when: >-
-    lnav_journal_unit.rc != 0 or
-    'lnav wrapper verification' not in lnav_journal_unit.stdout or
-    'lnav wrapper other unit' in lnav_journal_unit.stdout
-  tags:
-    - lnav
-
-- name: Lnav-journal opens rotated JSONL history explicitly
-  become: true
-  become_user: "{{ ansible_user_id }}"
-  command:
-    argv:
-      - timeout
-      - -k
-      - 5s
-      - 20s
-      - /usr/local/bin/lnav-journal
-      - -n
-      - --all
-      - -c
-      - ':goto 0'
-  register: lnav_journal_all
-  changed_when: false
-  failed_when: >-
-    lnav_journal_all.rc != 0 or
-    'lnav wrapper verification' not in lnav_journal_all.stdout or
-    'lnav wrapper rotated history' not in lnav_journal_all.stdout
-  tags:
-    - lnav
-
-- name: Lnav-journal allows an explicit debug-level override
-  become: true
-  become_user: "{{ ansible_user_id }}"
-  command:
-    argv:
-      - timeout
-      - -k
-      - 5s
-      - 20s
-      - /usr/local/bin/lnav-journal
-      - -n
-      - -c
-      - ':set-min-log-level debug'
-  register: lnav_journal_debug
-  changed_when: false
-  failed_when: >-
-    lnav_journal_debug.rc != 0 or
-    'lnav wrapper debug hidden' not in lnav_journal_debug.stdout
+    lnav_case.rc != 0 or
+    item.present | reject('in', lnav_case.stdout) | list | length > 0 or
+    item.absent | default([]) | select('in', lnav_case.stdout) | list | length > 0
+  loop:
+    - name: Load one rotation
+      argv:
+        - /usr/local/bin/lnav
+        - -n
+        - -N
+        - -c
+        - "{{ lnav_f9_command }}"
+        - -c
+        - ':goto 0'
+        - /var/log/fluent-bit/lnav.jsonl
+      present: [lnav wrapper rotated history]
+      absent: [lnav wrapper older history]
+    - name: Load remaining rotations and tolerate exhaustion
+      argv:
+        - /usr/local/bin/lnav
+        - -n
+        - -N
+        - -c
+        - "{{ lnav_f9_command }}"
+        - -c
+        - "{{ lnav_f9_command }}"
+        - -c
+        - "{{ lnav_f9_command }}"
+        - -c
+        - ':goto 0'
+        - /var/log/fluent-bit/lnav.jsonl
+      present: [lnav wrapper rotated history, lnav wrapper older history]
+    - name: Preserve unit filter when loading history
+      argv: [/usr/local/bin/lnav-journal, -n, -u, lnav_verify, -c, "{{ lnav_f9_command }}", -c, ':goto 0']
+      present: [lnav wrapper filtered history]
+      absent: [lnav wrapper rotated history]
+    - name: Apply relative time bounds
+      argv: [/usr/local/bin/lnav-journal, -n, -S, 1 hour ago, -c, ':goto 0']
+      present: [lnav wrapper verification]
+      absent: [lnav wrapper ancient history]
+    - name: Open the active store at the end with debug hidden
+      argv: [/usr/local/bin/lnav-journal, -n]
+      present: [lnav wrapper verification]
+      absent: [lnav wrapper debug hidden, lnav wrapper rotated history]
+    - name: Filter by unit
+      argv: [/usr/local/bin/lnav-journal, -n, -u, lnav_verify]
+      present: [lnav wrapper verification]
+      absent: [lnav wrapper other unit]
+    - name: Open all retained history
+      argv: [/usr/local/bin/lnav-journal, -n, --all, -c, ':goto 0']
+      present: [lnav wrapper verification, lnav wrapper rotated history]
+    - name: Override the default debug threshold
+      argv: [/usr/local/bin/lnav-journal, -n, -c, ':set-min-log-level debug']
+      present: [lnav wrapper debug hidden]
+  loop_control:
+    label: "{{ item.name }}"
   tags:
     - lnav
