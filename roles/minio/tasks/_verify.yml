@@ -126,12 +126,7 @@
     or minio_verify_console.json.loginStrategy is not defined
   become: true
 
-# nginx proxy chain for the console subdomain.
-#
-# Map the vhost FQDN to loopback so SNI matches the served certificate.
-# Probing https://localhost with a Host: header leaves SNI=localhost, which
-# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
-# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+# Map the console FQDN to loopback for the same SNI requirement as the API.
 - name: _verify | Map the minio console vhost FQDN to loopback for SNI-correct probing
   lineinfile:
     path: /etc/hosts
@@ -181,14 +176,6 @@
       command: mcli admin policy info default admins
       changed_when: false
 
-# OIDC integration end-to-end (console flips loginStrategy=redirect, admins
-# claim mints STS creds) is verified manually on prod -- on box, the
-# MINIO_IDENTITY_OPENID_CONFIG_URL points at
-# https://auth.box.mhaf.fr/.well-known/openid-configuration, which
-# (a) has no /etc/hosts entry mapping it to 127.0.0.1, and
-# (b) wouldn't pass MinIO's TLS validation against the single-CN snakeoil
-# cert even with a hosts entry. Bringing OIDC under _verify would need a
-# multi-SAN snakeoil cert + system-trust insertion + real Authelia in _setup;
-# not worth the extra ~30s per test run for the regression coverage it adds.
-# The OIDC env vars themselves are rendered by main.yml's template task which
-# fails loudly if minio_oidc_client_secret is undefined.
+# OIDC login and the admins claim are verified manually on prod. The fixture
+# lacks Authelia, a discovery-host mapping, and a trusted certificate for it.
+# Required OIDC inputs are asserted in main.yml; login behavior is not tested here.

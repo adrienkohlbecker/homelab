@@ -207,11 +207,8 @@ macos_vm_opencore_qcow2_sha256: "6ed36c0c2a4206ccc695f6b1a734a1cc6f94d288b0517c7
 macos_vm_fetch_macos_url: "{{ mirror_raw_githubusercontent }}/kholia/OSX-KVM/{{ macos_vm_osx_kvm_commit }}/fetch-macOS-v2.py"
 macos_vm_fetch_macos_sha256: "39ac6d26bd265f5d32198062f515ad15ef93afb7a74e702be2b008090d5bd5f3"
 
-# MinIO server, pinned to the last release before the console SPA and the
-# on-disk IAM layout changed: the nginx sub_filter SSO injection
-# (roles/minio/tasks/main.yml) and the .minio.sys/* idempotence sentinels
-# (tasks/data.yml) both depend on this vintage. A bump needs a console +
-# provisioning re-test, not a bare version change.
+# MinIO's IAM sentinels in roles/minio/tasks/data.yml depend on this server's
+# on-disk layout. A version bump needs console/OIDC and provisioning validation.
 minio_version: "20220526054841.0.0"  # 2022-05-26
 minio_release:
   x86_64:
