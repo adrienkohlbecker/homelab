@@ -3,29 +3,8 @@
 # contract: en_US.UTF-8 is compiled, usable, and the unmasked system default,
 # while processes resolve the host timezone as UTC.
 
-- name: _verify | List generated locales
-  command: locale -a
-  register: locale_verify_available
-  changed_when: false
-  become: true
-  tags:
-    - locale
-
-# locale(1) normalizes the generated name to en_US.utf8 (lowercase, no
-# dash), not the en_US.UTF-8 we asked locale_gen for -- assert against
-# that form. Empty/missing here means locale_gen silently no-op'd.
-- name: _verify | Generated locales include en_US.UTF-8
-  assert:
-    that: "'en_US.utf8' in locale_verify_available.stdout_lines"
-    fail_msg: "en_US.utf8 not in `locale -a` -- locale_gen did not compile it"
-    quiet: true
-  tags:
-    - locale
-
-# `locale -a` listing a locale doesn't prove it's usable -- a broken
-# charmap still lists. Select it and ask glibc to resolve the character
-# map; the C-locale fallback (ANSI_X3.4-1968) or any non-UTF-8 answer
-# means en_US.UTF-8 isn't actually functional.
+# An unavailable locale can return zero while warning and falling back to C;
+# require a clean UTF-8 result to prove en_US.UTF-8 is compiled and usable.
 - name: _verify | Resolve en_US.UTF-8 at runtime
   command: locale charmap
   environment:
@@ -38,8 +17,11 @@
 
 - name: _verify | Runtime charmap is UTF-8
   assert:
-    that: "locale_verify_charmap.stdout == 'UTF-8'"
-    fail_msg: "`locale charmap` under LC_ALL=en_US.UTF-8 returned {{ locale_verify_charmap.stdout }}, not UTF-8 -- locale unusable"
+    that:
+      - locale_verify_charmap.rc == 0
+      - locale_verify_charmap.stdout == 'UTF-8'
+      - locale_verify_charmap.stderr == ''
+    fail_msg: "`locale charmap` under LC_ALL=en_US.UTF-8 did not return UTF-8 without warnings"
     quiet: true
   tags:
     - locale
