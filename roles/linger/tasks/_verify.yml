@@ -28,7 +28,6 @@
   assert:
     that:
       - _linger_sentinel.stat.exists
-      - linger_test_lingered is defined
       - linger_test_lingered
 
 - name: _verify | User manager is active  # noqa: command-instead-of-module -- is-active query, not a state change
@@ -73,7 +72,6 @@
 - name: _verify | Assert the re-run was a no-op
   assert:
     that:
-      - linger_test_lingered is defined
       - not linger_test_lingered
 
 - name: _verify | Drive the disable subtask (also exercises the disable path)
@@ -97,12 +95,8 @@
   stat:
     path: /var/lib/systemd/linger/linger_test
   register: _linger_sentinel_gone
+  failed_when: _linger_sentinel_gone.stat.exists
   become: true
-
-- name: _verify | Assert disable-linger removed the marker
-  assert:
-    that:
-      - not _linger_sentinel_gone.stat.exists
 
 - name: _verify | Remove fixture user
   user:
