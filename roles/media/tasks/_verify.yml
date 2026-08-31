@@ -92,17 +92,14 @@
 
 - name: _verify | Dataset root is writable as operator
   when: zfs_root
-  file:
-    path: /mnt/media/.verify_probe
-    state: touch
-    mode: '0600'
-  changed_when: false
-  become: false
-
-- name: _verify | Remove write probe
-  when: zfs_root
-  file:
-    path: /mnt/media/.verify_probe
-    state: absent
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        from tempfile import TemporaryFile
+        with TemporaryFile(dir="/mnt/media") as probe:
+            probe.write(b"media write probe\n")
+            probe.flush()
   changed_when: false
   become: false
