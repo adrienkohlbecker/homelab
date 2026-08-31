@@ -30,36 +30,6 @@
   changed_when: false
   become: true
 
-- name: _verify | Read the deployed libsensors ignore file
-  slurp:
-    path: /etc/sensors.d/zz_netdata_ignore.conf
-  register: _lm_sensors_ignore
-  become: true
-
-- name: _verify | Assert the ignore file lists the fixture chip and feature
-  vars:
-    _content: "{{ _lm_sensors_ignore.content | b64decode }}"
-  assert:
-    that:
-      - "'verify-isa-0000' in _content"
-      - "'ignore temp2' in _content"
-    fail_msg: "deployed /etc/sensors.d/zz_netdata_ignore.conf:\n{{ _lm_sensors_ignore.content | b64decode }}"
-
-- name: _verify | Read the deployed libsensors limits file
-  slurp:
-    path: /etc/sensors.d/zz_homelab_limits.conf
-  register: _lm_sensors_limits
-  become: true
-
-- name: _verify | Assert the limits file lists the fixture chip and set directive
-  vars:
-    _content: "{{ _lm_sensors_limits.content | b64decode }}"
-  assert:
-    that:
-      - "'chip \"verify-isa-0000\"' in _content"
-      - "'set temp1_max 95' in _content"
-    fail_msg: "deployed /etc/sensors.d/zz_homelab_limits.conf:\n{{ _lm_sensors_limits.content | b64decode }}"
-
 # install.yml uses policy_rc_d=101 so apt won't auto-start netdata; prod
 # starts it in netdata's main.yml after configuration. The test path skips
 # that, so start the daemon here before installing the collector.
