@@ -50,18 +50,6 @@
   changed_when: "'changed' in macos_vm_opencore_seed.stdout | default('')"
   become: true
 
-- name: artifacts | Check per-VM OVMF vars file
-  stat:
-    path: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
-  register: macos_vm_ovmf_vars
-  become: true
-
-- name: artifacts | Check packaged OVMF vars template
-  stat:
-    path: /usr/share/OVMF/OVMF_VARS_4M.fd
-  register: macos_vm_ovmf_vars_pkg
-  become: true
-
 - name: artifacts | Stage fetch-macOS script
   when:
     - macos_vm_install_mode

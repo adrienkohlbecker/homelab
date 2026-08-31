@@ -1,0 +1,100 @@
+- name: _verify | Create firmware guard fixture
+  tempfile:
+    state: directory
+    suffix: macos_vm_firmware
+  register: macos_vm_firmware_fixture
+
+- name: _verify | Reject incompatible firmware without changing a running service
+  block:
+    - name: _verify | Write incompatible firmware
+      copy:
+        content: incompatible firmware fixture
+        dest: "{{ macos_vm_firmware_fixture.path }}/OVMF_VARS.fd"
+        mode: "0644"
+
+    - name: _verify | Install probe service
+      copy:
+        content: |
+          [Service]
+          ExecStart=/usr/bin/sleep infinity
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/macos-vm-firmware_verify.service
+        mode: "0644"
+      become: true
+
+    - name: _verify | Start probe service
+      systemd:
+        name: macos-vm-firmware_verify.service
+        daemon_reload: true
+        state: started
+        enabled: false
+      become: true
+
+    - name: _verify | Read initial service state  # noqa: command-instead-of-module
+      command: systemctl show macos-vm-firmware_verify.service -p MainPID -p ActiveState -p UnitFileState -p ExecMainStartTimestampMonotonic
+      changed_when: false
+      register: macos_vm_probe_before
+
+    - name: _verify | Exercise firmware guard
+      block:
+        - name: _verify | Apply service tasks with incompatible firmware
+          import_role:
+            name: macos_vm
+            tasks_from: service
+          vars:
+            macos_vm_name: firmware_verify
+            macos_vm_workdir: "{{ macos_vm_firmware_fixture.path }}"
+            macos_vm_autostart: true
+            macos_vm_start_service: true
+
+        - name: _verify | Reject an unexpectedly successful converge
+          fail:
+            msg: Incompatible firmware was accepted
+
+      rescue:
+        - name: _verify | Require the firmware guard failure
+          assert:
+            that:
+              - "'Require compatible OVMF vars before changing the service' in ansible_failed_task.name"
+
+    - name: _verify | Read service state after rejection  # noqa: command-instead-of-module
+      command: systemctl show macos-vm-firmware_verify.service -p MainPID -p ActiveState -p UnitFileState -p ExecMainStartTimestampMonotonic
+      changed_when: false
+      register: macos_vm_probe_after
+
+    - name: _verify | Read firmware after rejection
+      slurp:
+        src: "{{ macos_vm_firmware_fixture.path }}/OVMF_VARS.fd"
+      register: macos_vm_probe_firmware
+
+    - name: _verify | Require untouched firmware and running service
+      assert:
+        that:
+          - "'ActiveState=active' in macos_vm_probe_before.stdout"
+          - macos_vm_probe_after.stdout == macos_vm_probe_before.stdout
+          - macos_vm_probe_firmware.content | b64decode == 'incompatible firmware fixture'
+
+  always:
+    - name: _verify | Stop probe service
+      systemd:
+        name: macos-vm-firmware_verify.service
+        state: stopped
+        enabled: false
+      become: true
+
+    - name: _verify | Remove probe unit
+      file:
+        path: /etc/systemd/system/macos-vm-firmware_verify.service
+        state: absent
+      become: true
+
+    - name: _verify | Reload systemd after probe cleanup
+      systemd:
+        daemon_reload: true
+      become: true
+
+    - name: _verify | Remove firmware fixture
+      file:
+        path: "{{ macos_vm_firmware_fixture.path }}"
+        state: absent

@@ -1,80 +1,61 @@
-- name: service | Install firmware and QEMU service
-  block:
-    # A running QEMU process keeps writing its open pflash inode after an
-    # atomic copy replaces the path. Stop it before migrating 2M vars to 4M.
-    - name: service | Check QEMU state before OVMF vars reseed
-      when:
-        - macos_vm_ovmf_vars.stat.exists
-        - macos_vm_ovmf_vars.stat.size != macos_vm_ovmf_vars_pkg.stat.size
-      ansible.builtin.command:
-        argv:
-          - systemctl
-          - is-active
-          - --quiet
-          - "macos-vm-{{ macos_vm_name }}.service"
-      register: macos_vm_qemu_active_before_reseed
-      changed_when: false
-      failed_when: false
-      become: true
+- name: service | Check per-VM OVMF vars file
+  stat:
+    path: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
+  register: macos_vm_ovmf_vars
+  become: true
 
-    - name: service | Stop QEMU before OVMF vars reseed
-      when: macos_vm_qemu_active_before_reseed.rc | default(1) == 0
-      systemd:
-        name: "macos-vm-{{ macos_vm_name }}.service"
-        state: stopped
-      become: true
+- name: service | Check packaged OVMF vars template
+  stat:
+    path: /usr/share/OVMF/OVMF_VARS_4M.fd
+  register: macos_vm_ovmf_vars_pkg
+  become: true
 
-    # pflash CODE and VARS must use the same flash layout. Existing 2M vars
-    # are disposable: device bootindex owns boot order, while OpenCore keeps
-    # the guest identity state that must survive convergence.
-    - name: service | Stage OVMF vars at the 4M layout
-      when:
-        - not macos_vm_ovmf_vars.stat.exists or macos_vm_ovmf_vars.stat.size != macos_vm_ovmf_vars_pkg.stat.size
-        - not (ansible_check_mode and macos_vm_workdir_result.changed)
-      copy:
-        src: /usr/share/OVMF/OVMF_VARS_4M.fd
-        dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
-        remote_src: true
-        owner: root
-        group: kvm
-        mode: "0644"
-        force: "{{ macos_vm_ovmf_vars.stat.exists }}"
-        backup: true
-      register: macos_vm_ovmf_vars_result
-      become: true
+- name: service | Require compatible OVMF vars before changing the service
+  when: not ansible_check_mode or macos_vm_ovmf_vars_pkg.stat.exists
+  assert:
+    that:
+      - macos_vm_ovmf_vars_pkg.stat.exists
+      - not macos_vm_ovmf_vars.stat.exists or macos_vm_ovmf_vars.stat.size == macos_vm_ovmf_vars_pkg.stat.size
+    fail_msg: >-
+      {{ macos_vm_workdir }}/OVMF_VARS.fd must match the packaged
+      /usr/share/OVMF/OVMF_VARS_4M.fd layout. Existing firmware is never
+      overwritten automatically. Stop macos-vm-{{ macos_vm_name }}.service,
+      back up the vars file, and follow the firmware repair procedure in
+      notes/macos-vm-design.md before retrying. Preserve OpenCore.qcow2.
 
-    - name: service | Install QEMU service
-      import_role:
-        name: systemd_unit
-        tasks_from: install
-      vars:
-        systemd_unit_args:
-          src: macos_vm.service.j2
-          dest: "macos-vm-{{ macos_vm_name }}.service"
+- name: service | Seed missing OVMF vars
+  when:
+    - not macos_vm_ovmf_vars.stat.exists
+    - not (ansible_check_mode and (macos_vm_workdir_result.changed or not macos_vm_ovmf_vars_pkg.stat.exists))
+  copy:
+    src: /usr/share/OVMF/OVMF_VARS_4M.fd
+    dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
+    remote_src: true
+    owner: root
+    group: kvm
+    mode: "0644"
+    force: false
+    backup: true
+  register: macos_vm_ovmf_vars_result
+  become: true
 
-    - name: service | Set QEMU service state
-      when: not (ansible_check_mode and (systemd_unit_file.changed | default(false)))
-      systemd:
-        name: "macos-vm-{{ macos_vm_name }}.service"
-        enabled: "{{ macos_vm_autostart }}"
-        state: >-
-          {{ 'started'
-             if macos_vm_qemu_active_before_reseed.rc | default(1) == 0
-             else ('restarted'
-                   if macos_vm_start_service | bool
-                      and (systemd_unit_file.changed | default(false)
-                           or macos_vm_ovmf_vars_result.changed | default(false))
-                   else ('started' if macos_vm_start_service | bool else omit)) }}
-      become: true
+- name: service | Install QEMU service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: macos_vm.service.j2
+      dest: "macos-vm-{{ macos_vm_name }}.service"
 
-  rescue:
-    - name: service | Restore QEMU after failed OVMF migration
-      when: macos_vm_qemu_active_before_reseed.rc | default(1) == 0
-      systemd:
-        name: "macos-vm-{{ macos_vm_name }}.service"
-        state: started
-      become: true
-
-    - name: service | Report failed firmware or unit installation
-      fail:
-        msg: "{{ ansible_failed_result.msg | default('macOS VM firmware or unit installation failed') }}"
+- name: service | Set QEMU service state
+  when: not (ansible_check_mode and (systemd_unit_file.changed | default(false)))
+  systemd:
+    name: "macos-vm-{{ macos_vm_name }}.service"
+    enabled: "{{ macos_vm_autostart }}"
+    state: >-
+      {{ ('restarted'
+          if systemd_unit_file.changed | default(false) or macos_vm_ovmf_vars_result.changed | default(false)
+          else 'started')
+         if macos_vm_start_service | bool else omit }}
+  become: true
