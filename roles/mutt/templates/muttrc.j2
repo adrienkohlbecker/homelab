@@ -15,7 +15,7 @@ set postponed = ""
 set header_cache     = /mnt/services/mutt/headers
 
 # Notmuch reads the same read-only view with a separate database and flag sync off.
-# The launcher exports NOTMUCH_CONFIG=/opt/mutt/notmuch-config for this backend.
+set nm_config_file = /opt/mutt/notmuch-config
 set nm_default_url = notmuch:///mnt/services/mutt/notmuch
 set nm_query_type  = messages
 virtual-mailboxes "All Mail Search" "notmuch://?query=tag:archive"

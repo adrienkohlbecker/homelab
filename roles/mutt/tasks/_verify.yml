@@ -88,7 +88,7 @@
 # Quit through stdin: putting qq in the push buffer exits before the pager paints.
 # LINES/COLUMNS override the PTY's initial 0x0 geometry in ncurses; keep the
 # marker unwrapped and the body above the pager fold for the render assertions.
-- name: _verify | Maildir and Notmuch views render the HTML message read-only
+- name: _verify | Managed config renders Maildir and Notmuch views read-only
   command:
     argv:
       - script
@@ -100,9 +100,12 @@
     TERM: xterm
     COLUMNS: "120"
     LINES: "40"
+    # Config selection must come from muttrc, even with an unrelated environment.
+    NOTMUCH_CONFIG: /dev/null
   loop:
     - mail-archive
     - mail-archive -f 'notmuch://?query=id:muttverify@example.com'
+    - neomutt -n -R -F /opt/mutt/muttrc -f 'notmuch://?query=id:muttverify@example.com'
   register: _mutt_view
   changed_when: false
   # Require rendered body text without the raw HTML attribute in each view.
