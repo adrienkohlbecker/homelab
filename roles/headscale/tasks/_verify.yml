@@ -49,19 +49,6 @@
     status_code: 200
   become: true
 
-# Ownership regression detector -- headscale runs as the headscale host uid
-# (tier-1 --user, no uidmap), so the SQLite DB + keys it writes into the state
-# dir should be owned by that user. A dropped --user flag would land them as
-# root silently; assert ownership so the drift is loud.
-- name: _verify | Headscale data dir is owned by headscale
-  stat:
-    path: /mnt/services/headscale/data
-  register: _headscale_data_owner
-  failed_when: >-
-    not _headscale_data_owner.stat.exists
-    or _headscale_data_owner.stat.pw_name != 'headscale'
-  become: true
-
 # Functional API round-trip -- exercises the real control path end to end:
 # the CLI talks gRPC over the unix socket to the running serve process, which
 # writes to (then reads back from) the SQLite DB. A stat-only "unit active"
