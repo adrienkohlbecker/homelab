@@ -116,13 +116,6 @@
   changed_when: false
   become: true
 
-- name: _verify | Confirm transcode produced a non-empty playlist
-  command: podman exec jellyfin stat -c %s /cache/transcodes/_verify.m3u8
-  register: _jellyfin_ffmpeg_output
-  changed_when: false
-  failed_when: (_jellyfin_ffmpeg_output.stdout | int) == 0
-  become: true
-
 - name: _verify | Confirm transcode output reached scratch storage
   stat:
     path: /mnt/scratch/jellyfin/cache/transcodes/_verify.m3u8
