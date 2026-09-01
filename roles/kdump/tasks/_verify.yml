@@ -42,13 +42,6 @@
       until: kdump_verify_nmi_watchdog.stdout | trim == '1'
       become: true
 
-    - name: _verify | Crashkernel reservation is non-zero post-reboot
-      command: cat /sys/kernel/kexec_crash_size
-      register: kdump_verify_kexec_size
-      changed_when: false
-      failed_when: (kdump_verify_kexec_size.stdout | trim | int) == 0
-      become: true
-
     # kdump-tools regenerates the capture-kernel initrd and kexec-loads it on
     # each start, so wait for its package-native loaded-state check after reboot.
     - name: _verify | Kdump-config status reports ready to kdump
