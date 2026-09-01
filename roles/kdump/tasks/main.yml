@@ -82,20 +82,6 @@
   tags:
     - kdump
 
-# Existing dumps retain their package-owned modes; only correct ownership
-# recursively so old content is protected too.
-- name: Lock down /var/crash contents (recursive)
-  when: not (ansible_check_mode and kdump_apt_tools.changed)
-  file:
-    path: /var/crash
-    state: directory
-    owner: root
-    group: root
-    recurse: true
-  become: true
-  tags:
-    - kdump
-
 # Keep the upstream structure and documentation recognizable while applying
 # the local values atomically. Shell validation protects the sourced config.
 - name: Copy /etc/default/kdump-tools
