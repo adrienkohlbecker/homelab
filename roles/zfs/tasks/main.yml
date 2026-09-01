@@ -209,15 +209,9 @@
   tags:
     - zfs
 
-# Neutralise the distro's own ZFS scrub/trim schedulers so zfs_scrub and the
-# zfs_trim_* timers are the single source of truth. Two delivery mechanisms ship
-# on these hosts, both handled here:
-#   - the legacy /etc/cron.d/zfsutils-linux (the *active* one -- it ran the
-#     monthly scrub), kept explicitly absent; dpkg preserves a locally removed
-#     conffile across package upgrades.
-#   - the zfs-{scrub,trim}-{monthly,weekly}@.timer templates (currently shipped
-#     disabled, masked here defensively so a future preset change can't enable
-#     them).
+# Keep the role-owned scrub and trim timers as the single source of truth.
+# Remove the package cron conffile; dpkg preserves local conffile removal across
+# upgrades. Mask the package timer templates defensively against preset changes.
 - name: Remove distro ZFS scrub/trim cron
   file:
     path: /etc/cron.d/zfsutils-linux
