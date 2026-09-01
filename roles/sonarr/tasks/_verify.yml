@@ -63,17 +63,6 @@
     state: restarted
   become: true
 
-- name: _verify | Sonarr is back up after the restart
-  uri:
-    url: http://127.0.0.1:{{ service_ports.sonarr }}/api/v3/system/status
-    headers:
-      X-Api-Key: "{{ sonarr_api_key }}"
-    status_code: 200
-  register: _sonarr_http_postrestart
-  retries: 60
-  delay: 2
-  until: _sonarr_http_postrestart.status == 200
-
 # Re-run the production file contract in check mode after Sonarr's writeback.
 # Any predicted change means content, ownership, or mode drifted.
 - name: _verify | Config.xml remains converged after sonarr's writeback

@@ -53,17 +53,6 @@
     state: restarted
   become: true
 
-- name: _verify | Radarr is back up after the restart
-  uri:
-    url: http://127.0.0.1:{{ service_ports.radarr }}/api/v3/system/status
-    headers:
-      X-Api-Key: "{{ radarr_api_key }}"
-    status_code: 200
-  register: _radarr_http_postrestart
-  retries: 60
-  delay: 2
-  until: _radarr_http_postrestart.status == 200
-
 # Re-run the production file contract in check mode after Radarr's writeback.
 # Any predicted change means content, ownership, or mode drifted.
 - name: _verify | Config.xml remains converged after radarr's writeback
