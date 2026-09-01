@@ -147,6 +147,18 @@
   changed_when: false
   become: true
 
+- name: _verify | Retired hd-idle diversion is absent  # noqa: command-instead-of-module
+  command: dpkg-divert --listpackage /etc/default/hd-idle
+  register: retired_services_hd_idle_diversion
+  changed_when: false
+  failed_when: retired_services_hd_idle_diversion.stdout | trim | length > 0
+  become: true
+
+- name: _verify | Managed hd-idle conffile was retained
+  command: grep -Fx '# retained hd-idle config' /etc/default/hd-idle
+  changed_when: false
+  become: true
+
 - name: _verify | Retired Mailutils sender-domain config is absent
   stat:
     path: /etc/mailutils.conf

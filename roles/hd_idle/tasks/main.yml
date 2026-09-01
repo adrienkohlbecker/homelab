@@ -20,14 +20,6 @@
   tags:
     - hd_idle
 
-- name: Divert hd-idle configuration
-  community.general.dpkg_divert:
-    path: /etc/default/hd-idle
-  when: not (ansible_check_mode and hd_idle_apt.changed)
-  become: true
-  tags:
-    - hd_idle
-
 - name: Copy hd-idle configuration
   template:
     src: hd-idle.j2

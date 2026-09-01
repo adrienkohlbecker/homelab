@@ -409,6 +409,15 @@
     - retired_services
     - smart
 
+- name: Remove retired hd-idle conffile diversion
+  community.general.dpkg_divert:
+    path: /etc/default/hd-idle
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - hd_idle
+
 - name: Remove retired Mailutils sender-domain config
   file:
     path: /etc/mailutils.conf

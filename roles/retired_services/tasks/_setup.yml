@@ -259,6 +259,20 @@
     mode: "0644"
   become: true
 
+- name: _setup | Register retired hd-idle conffile diversion
+  community.general.dpkg_divert:
+    path: /etc/default/hd-idle
+  become: true
+
+- name: _setup | Install retained hd-idle conffile fixture
+  copy:
+    content: "# retained hd-idle config\n"
+    dest: /etc/default/hd-idle
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: _setup | Create retired Mailutils sender-domain fixture
   copy:
     content: "address { email-domain example.invalid; };\n"
