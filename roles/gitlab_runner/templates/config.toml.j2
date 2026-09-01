@@ -33,16 +33,8 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
 {% if gitlab_runner_executor == 'shell' %}
   shell = "bash"
 {% endif %}
-{% if gitlab_runner_executor == 'docker' %}
-  # Per-runner cap on jobs run directly on this host. Bounds the on-fox CI
-  # footprint independently of the global `concurrent` so a wide pipeline can't
-  # schedule the whole fan-out onto fox. 0 = no per-runner cap (bounded only by
-  # `concurrent`).
-  limit = {{ gitlab_runner_docker_limit }}
-{% else %}
-  # Per-runner cap for host-native qemu jobs on lab.
+  # Bounds this runner independently of the process-wide `concurrent`.
   limit = {{ gitlab_runner_limit }}
-{% endif %}
   # Concurrent new-job requests to GitLab. The default 1 keeps a single request
   # in flight, so when it blocks on a long poll the runner trips its long-polling
   # bottleneck warning (loud once a second runner also polls). 4 is upstream's

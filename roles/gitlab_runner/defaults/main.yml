@@ -18,13 +18,8 @@ gitlab_runner_name_suffix: "{{ 'shell-qemu' if gitlab_runner_executor == 'shell'
 # AWS shell-runner ASG, governed separately (notes/ci_aws_nested_qemu_cells.md).
 gitlab_runner_concurrent: 8
 
-# Per-runner `limit` on the Docker-on-podman runner: caps jobs run directly on
-# the host, independent of the global `concurrent`. 0 = no per-runner cap (the
-# runner is bounded only by `concurrent` -- the single-runner default).
-gitlab_runner_docker_limit: 0
-
-# Per-runner `limit` for non-Docker executors. Docker mode uses the historical
-# gitlab_runner_docker_limit above; shell mode sets this explicitly per host.
+# Per-runner job ceiling, independent of the process-wide `concurrent`. 0 leaves
+# this runner bounded only by `concurrent`.
 gitlab_runner_limit: 0
 
 # Supplementary groups for the gitlab_runner service user. lab's shell runner

@@ -214,7 +214,7 @@ gitlab_runner_concurrent: 82
 # fox. The wide cell fan-out runs on the AWS qemu shell hosts (the ASG), off
 # fox; this only governs small jobs run here. The user-slice memory cap below is
 # the hard RAM guardrail under it.
-gitlab_runner_docker_limit: 16
+gitlab_runner_limit: 16
 
 # Cap the rootless runner's user slice (all job containers + podman) so a wide
 # matrix can't push the 3.7 GiB host into swap and OOM-threaten the co-tenant
