@@ -33,18 +33,12 @@
     validate_certs: false
     status_code: 200
 
-# Ask gitea to audit its own state. check-db-version catches a
-# half-finished schema migration after a version bump; check-db-
-# consistency catches dangling rows from interrupted admin ops;
-# authorized-keys catches a corrupted ~git/.ssh/authorized_keys
-# rewrite (which can silently expose a bash shell at git@ if the
-# command= prefix is lost). Skipping the `paths` check -- it requires
-# Log.RootPath + Repository.ROOT to pre-exist as writable dirs, which
-# the role intentionally doesn't create.
-- name: _verify | Gitea doctor self-checks (db + authorized_keys)
+# Check schema migration and relational consistency; the SSH roundtrip below
+# exercises the authorized_keys consumer path directly.
+- name: _verify | Gitea doctor database checks
   command: >-
     /usr/local/bin/gitea doctor check
-    --run check-db-version,check-db-consistency,authorized-keys
+    --run check-db-version,check-db-consistency
     --config /etc/gitea/app.ini
   environment:
     GITEA_WORK_DIR: /mnt/services/gitea
