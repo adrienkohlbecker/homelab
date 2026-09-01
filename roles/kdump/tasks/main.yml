@@ -185,7 +185,7 @@
   tags:
     - kdump
 
-# Template wholesale rather than lineinfile-per-key — writes are
+# Copy wholesale rather than lineinfile-per-key — writes are
 # atomic (reader between tasks can't see a half-updated file) and
 # the on-disk diff for a multi-key change is one mtime, not several.
 # The template mirrors upstream's structure and docstrings so an
@@ -194,10 +194,10 @@
 # track upstream's shape across kdump-tools versions. validate runs
 # `sh -n` against the rendered file before it lands so quoting bugs
 # don't break the init script's source.
-- name: Template /etc/default/kdump-tools
+- name: Copy /etc/default/kdump-tools
   when: not (ansible_check_mode and kdump_apt_tools.changed)
-  template:
-    src: kdump-tools.j2
+  copy:
+    src: kdump-tools
     dest: /etc/default/kdump-tools
     owner: root
     group: root
