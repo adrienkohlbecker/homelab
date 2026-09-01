@@ -139,6 +139,37 @@
     or 'level: info' not in _headscale_hs_oidc_cfg.stdout
   become: true
 
+- name: _verify | Read headscale container logs
+  command: podman logs headscale
+  register: _headscale_container_logs
+  changed_when: false
+  become: true
+
+- name: _verify | Assert headscale emits zerolog JSON
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        for line in sys.stdin:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if (
+                isinstance(record.get("time"), (int, float))
+                and isinstance(record.get("level"), str)
+                and isinstance(record.get("message"), str)
+            ):
+                sys.exit(0)
+        sys.exit(1)
+  args:
+    stdin: "{{ _headscale_container_logs.stdout }}"
+  changed_when: false
+
 - name: _verify | Wait for normalized headscale record in lnav store
   command:
     argv:
