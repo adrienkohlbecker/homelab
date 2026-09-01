@@ -5,11 +5,15 @@
     divert: /etc/logrotate.d/apt.dpkg-dist
   become: true
 
-- name: _setup | Install retired kdump oops panic sysctl pin
+- name: _setup | Install retired kdump sysctl pins
   copy:
     dest: /etc/sysctl.d/30-kdump.conf
     content: |
       kernel.panic_on_oops=1
+      kernel.softlockup_all_cpu_backtrace=1
+      kernel.hardlockup_all_cpu_backtrace=1
+      kernel.hung_task_all_cpu_backtrace=1
+      kernel.oops_all_cpu_backtrace=1
       kernel.panic=10
     owner: root
     group: root

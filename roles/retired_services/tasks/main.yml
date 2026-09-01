@@ -112,12 +112,20 @@
     - retired_services
     - kdump
 
-- name: Remove retired kdump oops panic sysctl pin
+- name: Remove retired kdump sysctl pins
   ansible.posix.sysctl:
-    name: kernel.panic_on_oops
+    name: "kernel.{{ item }}"
     state: absent
     sysctl_file: /etc/sysctl.d/30-kdump.conf
     reload: false
+  loop:
+    - panic_on_oops
+    - softlockup_all_cpu_backtrace
+    - hardlockup_all_cpu_backtrace
+    - hung_task_all_cpu_backtrace
+    - oops_all_cpu_backtrace
+  loop_control:
+    label: "kernel.{{ item }}"
   become: true
   tags:
     - retired_services

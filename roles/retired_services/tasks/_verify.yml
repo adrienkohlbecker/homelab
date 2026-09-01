@@ -88,11 +88,17 @@
   failed_when: retired_services_smartmontools_defaults.stat.exists
   become: true
 
-- name: _verify | Retired kdump oops panic sysctl pin is absent
-  command: grep -Eq '^kernel[.]panic_on_oops=' /etc/sysctl.d/30-kdump.conf
-  register: retired_services_kdump_oops_panic
+- name: _verify | Retired kdump sysctl pins are absent
+  command: grep -Eq "^kernel[.]{{ item }}=" /etc/sysctl.d/30-kdump.conf
+  loop:
+    - panic_on_oops
+    - softlockup_all_cpu_backtrace
+    - hardlockup_all_cpu_backtrace
+    - hung_task_all_cpu_backtrace
+    - oops_all_cpu_backtrace
+  register: retired_services_kdump_sysctls
   changed_when: false
-  failed_when: retired_services_kdump_oops_panic.rc != 1
+  failed_when: retired_services_kdump_sysctls.rc != 1
   become: true
 
 - name: _verify | Active kdump sysctl entry was preserved
